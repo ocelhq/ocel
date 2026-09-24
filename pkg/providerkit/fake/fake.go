@@ -138,6 +138,10 @@ func (p *Provider) Edges() providerkit.EdgeRegistry { return p.edges }
 
 func (p *Provider) DNS() providerkit.DNSRegistry { return p.dns }
 
+func (p *Provider) Serving(_ context.Context, _ edge.Kind, hostname string) (edge.Kind, error) {
+	return p.edges.answering(hostname), nil
+}
+
 func (p *Provider) Pin(hostname, certificate string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()

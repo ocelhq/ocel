@@ -196,5 +196,6 @@ func (p *Provider) DNS() providerkit.DNSRegistry { return dns{} }
 
 var (
 	_ providerkit.Provider          = (*Provider)(nil)
+	_ providerkit.Diagnoser         = (*Provider)(nil)
 	_ providerkit.ContainerRuntimer = (*Provider)(nil)
 )

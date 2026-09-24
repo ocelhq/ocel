@@ -628,6 +628,7 @@ func (s settling) Remove(ctx context.Context, class providerkit.Class, report pr
 
 var (
 	_ providerkit.Provider          = (*Provider)(nil)
+	_ providerkit.Diagnoser         = (*Provider)(nil)
 	_ providerkit.Warmer            = (*Provider)(nil)
 	_ providerkit.CodeEmbedder      = (*Provider)(nil)
 	_ providerkit.StackInspector    = (*Provider)(nil)

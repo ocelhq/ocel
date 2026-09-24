@@ -120,22 +120,13 @@ func (f frontOf) Kind() edge.Kind { return f.kind }
 
 func (f frontOf) Facts() edge.Facts { return edge.Facts{} }
 
-func TestAProviderThatProbesSuppliesTheResolverInsteadOfTheStandIn(t *testing.T) {
+func TestTheSettleAsksTheProvidersProbeWhichEdgeAnswers(t *testing.T) {
 	t.Parallel()
 
-	front := frontOf{kind: "box"}
-	stand := &answering{kind: "box"}
 	provider := &boxProvider{answers: "box"}
-
-	if resolve := resolving(nil, front, stand); resolve != Resolver(stand) {
-		t.Errorf("a provider that probes nothing = %T, want the stand-in the kit falls back to", resolve)
-	}
-	resolve := resolving(provider, front, stand)
+	resolve := probingFor(provider, frontOf{kind: "box"})
 	if kind, err := resolve.Serving(context.Background(), "shop.example.com"); err != nil || kind != "box" {
 		t.Fatalf("Serving() = %q, %v, want the edge the provider's own probe answered", kind, err)
-	}
-	if stand.asked != 0 {
-		t.Error("the stand-in was asked as well, and it answers from what the kit just bound rather than from what the hostname serves")
 	}
 	if len(provider.asked) != 1 || provider.asked[0] != "shop.example.com" || provider.kinds[0] != "box" {
 		t.Errorf("the provider was asked %v as %v, want the hostname being settled and the edge it is settled onto", provider.asked, provider.kinds)
@@ -146,7 +137,7 @@ func TestTheSettleRefusesAHostnameAnotherEdgeAnswersOn(t *testing.T) {
 	t.Parallel()
 
 	provider := &boxProvider{answers: "cloudfront"}
-	settle, _ := waiting(resolving(provider, frontOf{kind: "box"}, &answering{kind: "box"}), 3)
+	settle, _ := waiting(probingFor(provider, frontOf{kind: "box"}), 3)
 	settle.kind = "box"
 
 	probe, err := settle.await(context.Background(), "shop.example.com", func(string) {})
@@ -247,7 +238,7 @@ func TestAProviderThatDiagnosesItsOwnProbeIsAskedThroughTheKitsResolver(t *testi
 
 	cause := "x509: certificate is valid for parked.example.net, not shop.example.com"
 	provider := diagnosingProvider{boxProvider: &boxProvider{}, cause: cause}
-	settle, _ := waiting(resolving(provider, frontOf{kind: "box"}, &answering{kind: "box"}), 2)
+	settle, _ := waiting(probingFor(provider, frontOf{kind: "box"}), 2)
 	settle.kind = "box"
 
 	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})

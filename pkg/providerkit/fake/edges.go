@@ -95,6 +95,18 @@ func (e *Edges) serving(certificate string) bool {
 	return false
 }
 
+func (e *Edges) answering(hostname string) edge.Kind {
+	e.mu.Lock()
+	fronts := slices.Collect(maps.Values(e.edges))
+	e.mu.Unlock()
+	for _, front := range fronts {
+		if front.answers(hostname) {
+			return front.kind
+		}
+	}
+	return ""
+}
+
 func (e *Edges) Edge(kind edge.Kind) *Edge {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -144,6 +156,15 @@ func (e *Edge) unbound(hostname string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	delete(e.serving, hostname)
+}
+
+func (e *Edge) answers(hostname string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if _, bound := e.serving[hostname]; bound {
+		return true
+	}
+	return e.wildcard != "" && hostname == edge.PreviewWildcard(e.wildcard)
 }
 
 func (e *Edge) Serving(certificate string) bool {

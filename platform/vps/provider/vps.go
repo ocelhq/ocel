@@ -306,7 +306,10 @@ func (p *Provider) ContainerRuntime(_ context.Context, arch string) ([]byte, err
 	return host.ContainerRuntime(arch)
 }
 
-var _ providerkit.Provider = (*Provider)(nil)
+var (
+	_ providerkit.Provider  = (*Provider)(nil)
+	_ providerkit.Diagnoser = (*Provider)(nil)
+)
 
 var (
 	_ providerkit.Prober            = (*Provider)(nil)
