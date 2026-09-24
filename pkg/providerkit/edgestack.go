@@ -68,7 +68,7 @@ func (h *handlers) removalEdge(provider Provider, state EdgeStackState, sel *con
 	return provider.Edges().Open(state.Kind)
 }
 
-func dnsFor(provider Provider, sel *contractv1.EdgeSelection) (edge.DNSWriter, error) {
+func dnsFor(provider Provider, front edge.Edge, sel *contractv1.EdgeSelection) (edge.DNSWriter, error) {
 	kind := DNSKind(sel.GetDns().GetKind())
 	if kind == "" {
 		kind = provider.DNS().Default()
@@ -76,7 +76,7 @@ func dnsFor(provider Provider, sel *contractv1.EdgeSelection) (edge.DNSWriter, e
 	if kind == "" {
 		return nil, nil
 	}
-	return provider.DNS().Open(kind, sel.GetDns().GetZone(), edge.Kind(sel.GetKind()))
+	return provider.DNS().Open(kind, sel.GetDns().GetZone(), front.Kind())
 }
 
 func (h *handlers) openStack(ctx context.Context, class Class, slug string, sel *contractv1.EdgeSelection) (*stackSession, error) {
@@ -103,7 +103,7 @@ func (h *handlers) openStack(ctx context.Context, class Class, slug string, sel 
 	if err != nil {
 		return nil, err
 	}
-	writer, err := dnsFor(provider, sel)
+	writer, err := dnsFor(provider, front, sel)
 	if err != nil {
 		return nil, err
 	}

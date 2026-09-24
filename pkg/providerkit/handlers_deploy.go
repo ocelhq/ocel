@@ -288,7 +288,7 @@ func (r *deployRun) admitDomains(ctx context.Context) error {
 		return err
 	}
 	r.configured = configured
-	writer, err := dnsFor(r.provider, r.selection)
+	writer, err := dnsFor(r.provider, r.front, r.selection)
 	if err != nil {
 		return err
 	}

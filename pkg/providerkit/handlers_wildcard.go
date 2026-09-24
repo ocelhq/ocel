@@ -21,8 +21,7 @@ type wildcards struct {
 	provider Provider
 	records  RecordStore
 	held     Wildcard
-	writer   edge.DNSWriter
-	zone     string
+	sel      *contractv1.EdgeSelection
 	audience *eventSender
 }
 
@@ -36,25 +35,19 @@ func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) 
 	if err != nil {
 		return nil, err
 	}
-	writer, err := dnsFor(provider, sel)
-	if err != nil {
-		return nil, err
-	}
-	return &wildcards{
-		provider: provider,
-		records:  records,
-		held:     held,
-		writer:   writer,
-		zone:     sel.GetDns().GetZone(),
-	}, nil
+	return &wildcards{provider: provider, records: records, held: held, sel: sel}, nil
 }
 
-func (w *wildcards) settler(front edge.Edge) settler {
-	s := newSettler(front, w.writer, w.zone, probingFor(w.provider, front))
+func (w *wildcards) settler(front edge.Edge) (settler, error) {
+	writer, err := dnsFor(w.provider, front, w.sel)
+	if err != nil {
+		return settler{}, err
+	}
+	s := newSettler(front, writer, w.sel.GetDns().GetZone(), probingFor(w.provider, front))
 	if w.audience != nil {
 		s.attend(w.audience)
 	}
-	return s
+	return s, nil
 }
 
 func readWildcard(ctx context.Context, records RecordStore) (Wildcard, error) {
@@ -111,7 +104,10 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, repor
 	if err := w.claimable(front, base); err != nil {
 		return err
 	}
-	settle := w.settler(front)
+	settle, err := w.settler(front)
+	if err != nil {
+		return err
+	}
 	wildcard := edge.PreviewWildcard(base)
 	w.held = Wildcard{
 		BaseDomain: base,
@@ -444,11 +440,15 @@ func (w *wildcards) release(ctx context.Context, report Reporter) error {
 	if err := w.releasable(ctx); err != nil {
 		return err
 	}
+	settle, err := w.settler(front)
+	if err != nil {
+		return err
+	}
 	report.Say("Removing the shared preview entry on " + w.held.Hostname())
 	if err := front.DestroyPreviewWildcard(ctx, w.held.BaseDomain); err != nil {
 		return err
 	}
-	if err := w.settler(front).release(ctx, w.held.Settled.WrittenRecords(), report.Say); err != nil {
+	if err := settle.release(ctx, w.held.Settled.WrittenRecords(), report.Say); err != nil {
 		return err
 	}
 	for _, cert := range w.held.Settled.certificates() {

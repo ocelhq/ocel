@@ -376,3 +376,25 @@ func TestARemovalOpensTheEdgeTheProjectStandsOnRatherThanTheDefault(t *testing.T
 			plan.GetEdgeKind(), fake.KindDirect)
 	}
 }
+
+func TestARemovalOpensItsDNSForTheEdgeTheProjectStandsOnWhenTheConfigNamesNone(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	req := deployRequest()
+	req.Edge = writtenBy("shop.example")
+	req.Edge.Kind = string(fake.KindDirect)
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	opened := len(provider.DNS().(*fake.DNS).Fronts())
+
+	removal := projectRequest()
+	removal.Edge = writtenBy("shop.example")
+	if _, err := client.PlanRemoveProject(context.Background(), removal); err != nil {
+		t.Fatalf("PlanRemoveProject() error = %v", err)
+	}
+	fronts := provider.DNS().(*fake.DNS).Fronts()[opened:]
+	if len(fronts) == 0 || slices.ContainsFunc(fronts, func(front edge.Kind) bool { return front != fake.KindDirect }) {
+		t.Errorf("the removal opened its DNS under %v, want the %s edge the stack stands on", fronts, fake.KindDirect)
+	}
+}
