@@ -45,7 +45,6 @@ const (
 
 const (
 	edgeHandler    = "headers"
-	forwardHandler = "reverse_proxy"
 	refuseHandler  = "static_response"
 	rewriteHandler = "rewrite"
 )
@@ -315,7 +314,7 @@ func forwarding(identity, upstream string) caddyRoute {
 	return caddyRoute{
 		Identity: identity,
 		Handle: []caddyForward{namingTheEdge(), {
-			Handler:   forwardHandler,
+			Handler:   caddyadmin.ForwardHandler,
 			Upstreams: []caddyDial{{Dial: upstream}},
 		}},
 	}
@@ -378,7 +377,7 @@ func connectorForwarding(hostname string) caddyRoute {
 		Handle: []caddyForward{
 			namingTheEdge(),
 			{Handler: rewriteHandler, StripPathPrefix: ConnectorPath},
-			{Handler: forwardHandler, Upstreams: []caddyDial{{Dial: ConnectorDial}}},
+			{Handler: caddyadmin.ForwardHandler, Upstreams: []caddyDial{{Dial: ConnectorDial}}},
 		},
 	}
 }
@@ -728,7 +727,7 @@ func forwardedBy(route caddyRoute) (string, string, error) {
 	switch {
 	case naming.Handler != edgeHandler || !edged || len(naming.Upstreams) > 0 || naming.Status != 0 || len(naming.Headers) > 0:
 		return "", "", misshapen(route.Identity, fmt.Sprintf("a leading %q handler not setting only %s: %s", naming.Handler, EdgeHeader, EdgeName))
-	case forwards.Handler != forwardHandler || forwards.Status != 0 || len(forwards.Headers) > 0 || forwards.Response != nil:
+	case forwards.Handler != caddyadmin.ForwardHandler || forwards.Status != 0 || len(forwards.Headers) > 0 || forwards.Response != nil:
 		return "", "", misshapen(route.Identity, fmt.Sprintf("a terminal %q handler", forwards.Handler))
 	case len(forwards.Upstreams) != 1:
 		return "", "", misshapen(route.Identity, fmt.Sprintf("%d upstreams", len(forwards.Upstreams)))

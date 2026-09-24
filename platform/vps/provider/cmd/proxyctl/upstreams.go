@@ -15,14 +15,15 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 )
 
 const (
-	liveRoot      = "/run/ocel-proxy"
-	upstreamsDir  = "upstreams"
-	liveConfig    = "caddy.json"
-	flipLock      = ".flip"
-	forwardModule = "reverse_proxy"
+	liveRoot     = "/run/ocel-proxy"
+	upstreamsDir = "upstreams"
+	liveConfig   = "caddy.json"
+	flipLock     = ".flip"
 )
 
 const probeTimeout = 5 * time.Second
@@ -58,7 +59,7 @@ func shaping(live string, document []byte) (shaped, error) {
 			for _, handler := range handlers {
 				forwards, _ := handler.(map[string]any)
 				pool, _ := forwards["upstreams"].([]any)
-				if forwards["handler"] != forwardModule || len(pool) != 1 {
+				if forwards["handler"] != caddyadmin.ForwardHandler || len(pool) != 1 {
 					continue
 				}
 				upstream, _ := pool[0].(map[string]any)

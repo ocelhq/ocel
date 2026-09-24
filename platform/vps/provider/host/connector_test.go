@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 )
 
 func connectorConfig() []byte {
@@ -245,7 +247,7 @@ func TestTheProxyForwardsTheConnectorPathAheadOfEverySurface(t *testing.T) {
 		t.Errorf("the connector route forwards %s unstripped, so the connector is asked for a procedure under a prefix it serves nothing at", ConnectorPath)
 	}
 	dialled := first.Handle[len(first.Handle)-1]
-	if dialled.Handler != forwardHandler || len(dialled.Upstreams) != 1 || dialled.Upstreams[0].Dial != ConnectorDial {
+	if dialled.Handler != caddyadmin.ForwardHandler || len(dialled.Upstreams) != 1 || dialled.Upstreams[0].Dial != ConnectorDial {
 		t.Errorf("the connector route dials %v, want %s", dialled.Upstreams, ConnectorDial)
 	}
 

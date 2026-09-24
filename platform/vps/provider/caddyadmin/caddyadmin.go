@@ -14,6 +14,8 @@ const (
 
 const SocketMode = "0600"
 
+const ForwardHandler = "reverse_proxy"
+
 func Listen(socket string) string { return "unix/" + socket + "|" + SocketMode }
 
 func Keeps(document []byte, socket string) error {
