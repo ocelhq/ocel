@@ -106,6 +106,23 @@ func TestRecordsFor(t *testing.T) {
 			t.Fatal("RecordsFor err = nil, want a refusal: nothing to point the hostname at")
 		}
 	})
+
+	t.Run("a localhost name needs no record, since every resolver answers it on loopback", func(t *testing.T) {
+		t.Parallel()
+
+		for _, target := range []DNSTarget{
+			{Kind: frontedKind, Front: "203.0.113.7"},
+			{Kind: unboundKind, ServesUnbound: true},
+		} {
+			got, err := RecordsFor(target, []string{"localhost", "web.localhost", "Web.J-1.LOCALHOST", "shop.app.com"})
+			if err != nil {
+				t.Fatalf("RecordsFor error = %v", err)
+			}
+			if len(got) != 1 || got[0].Name != "shop.app.com" {
+				t.Errorf("RecordsFor on %s = %v, want the one record for shop.app.com: no DNS provider holds a localhost name, so none is owed", target.Kind, got)
+			}
+		}
+	})
 }
 
 func TestRecordsForReadsTheTypeOutOfTheFront(t *testing.T) {
