@@ -5,7 +5,7 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "gen": "buf generate --template buf.gen.go.yaml && buf generate --template buf.gen.console.yaml && pnpm buf generate",
+    "gen": "buf generate --template proto/buf.gen.go.yaml && buf generate --template proto/buf.gen.console.yaml && pnpm buf generate --template proto/buf.gen.yaml",
     "dev:cli": "go tool air",
     "lint": "biome check",
     "format": "biome format --write",
