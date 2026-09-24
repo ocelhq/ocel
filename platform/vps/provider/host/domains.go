@@ -1,6 +1,7 @@
 package host
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"slices"
@@ -171,21 +172,28 @@ func (h *Host) routingTable(ctx context.Context) (RoutingTable, error) {
 	return ReadRoutingTable(held.table)
 }
 
-func (h *Host) proxyInspected(ctx context.Context, class providerkit.Class) error {
+func (h *Host) proxyInspected(ctx context.Context, class providerkit.Class) (bool, error) {
 	held, err := h.pairHeld(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
+	stale := false
 	if held.table != nil {
-		if _, err := ReadRoutingTable(held.table); err != nil {
-			return err
+		table, err := ReadRoutingTable(held.table)
+		if err != nil {
+			return false, err
 		}
+		rendered, err := RenderProxyConfig(table)
+		if err != nil {
+			return false, err
+		}
+		stale = held.config != nil && !bytes.Equal(held.config, rendered)
 	}
 	declared := foreignSource(held.config)
 	if declared == "" {
-		return nil
+		return stale, nil
 	}
-	return providerkit.Refuse(providerkit.CodeInvalid,
+	return false, providerkit.Refuse(providerkit.CodeInvalid,
 		"%s on %s declares %s, which ocel never renders\n"+
 			"Remove %s and run `%s` to render it again from %s",
 		ProxyConfig, h.named(), declared, ProxyConfig, providerkit.BootstrapCommand(class), live.RoutingTable)

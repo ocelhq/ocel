@@ -350,7 +350,8 @@ type Reading struct {
 	Seal     Seal
 	Observed map[string]string
 
-	unelevated bool
+	unelevated  bool
+	rerendering bool
 }
 
 func (r Reading) current(item Item) bool { return r.Observed[item.ID()] == item.Digest() }

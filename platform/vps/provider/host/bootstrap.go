@@ -39,7 +39,7 @@ func (b Bootstrapper) described(ctx context.Context, read Reading) (providerkit.
 		return providerkit.Bootstrap{}, err
 	}
 	if read.standing(KindRoutingTable, live.RoutingTable) || read.standing(KindProxyConfig, ProxyConfig) {
-		if err := b.host.proxyInspected(ctx, read.Class); err != nil {
+		if read.rerendering, err = b.host.proxyInspected(ctx, read.Class); err != nil {
 			return providerkit.Bootstrap{}, err
 		}
 	}
@@ -67,8 +67,12 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
+	read = described.Held.(Reading)
 	groups := providerkit.DeriveGroups(described, b.Catalogue(), req)
 	groups[0].Changes = planned(read)
+	if read.rerendering && groups[0].Action == providerkit.ActionKeep {
+		groups[0].Action, groups[0].Reason = providerkit.ActionUpdate, ""
+	}
 	if groups[0].Reason == "" {
 		groups[0].Reason = bootstrapDocs
 	}
@@ -87,6 +91,8 @@ func planned(read Reading) []providerkit.Change {
 			Slow:   item.Slow,
 		}
 		switch {
+		case read.rerendering && item.Kind == KindProxyConfig:
+			change.Action, change.Reason = providerkit.ActionUpdate, "rendered again from "+live.RoutingTable
 		case read.current(item):
 			change.Action, change.Reason = providerkit.ActionKeep, reasonStanding
 		case read.standing(item.Kind, item.Name):
