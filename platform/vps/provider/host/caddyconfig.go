@@ -1,6 +1,7 @@
 package host
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -380,9 +381,7 @@ func RenderProxyConfig(state RoutingTable) ([]byte, error) {
 		routes = append(routes, connectorForwarding(state.Connector, state.Grace))
 	}
 	claimed := map[claimKey][]string{}
-	for _, claim := range slices.SortedFunc(slices.Values(state.Claims), func(a, b HostClaim) int {
-		return strings.Compare(a.Hostname, b.Hostname)
-	}) {
+	for _, claim := range slices.SortedFunc(slices.Values(state.Claims), byClaimed) {
 		if err := validClaim(claim); err != nil {
 			return nil, err
 		}
@@ -477,9 +476,7 @@ func loadFiles(pins []Pin) (*caddyTLS, error) {
 	}
 	files := make([]caddyLoadFile, 0, len(pins))
 	at := map[string]int{}
-	for _, pin := range slices.SortedFunc(slices.Values(pins), func(a, b Pin) int {
-		return strings.Compare(a.Hostname, b.Hostname)
-	}) {
+	for _, pin := range slices.SortedFunc(slices.Values(pins), byPinned) {
 		if err := validPin(pin); err != nil {
 			return nil, err
 		}
@@ -518,6 +515,14 @@ func validPin(pin Pin) error {
 			pin.Hostname, pin.Path, ProxyPins)
 	}
 	return nil
+}
+
+func byClaimed(a, b HostClaim) int {
+	return strings.Compare(a.Hostname, b.Hostname)
+}
+
+func byPinned(a, b Pin) int {
+	return cmp.Or(strings.Compare(a.Hostname, b.Hostname), strings.Compare(a.Path, b.Path))
 }
 
 func byKey(a, b AppRoute) int {
