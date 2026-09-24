@@ -235,7 +235,7 @@ func TestLiveARollbackOntoAnImageTheBoxHasSweptIsRefusedAndLeavesTheSiteServing(
 	if err == nil {
 		t.Fatal("a rollback onto an image this box no longer holds succeeded, and docker run would then reach for a registry with no credentials on this path")
 	}
-	if !strings.Contains(err.Error(), "deploy again") {
+	if !strings.Contains(err.Error(), "Deploy again") {
 		t.Errorf("the refusal reads %q and never says what to do instead", err)
 	}
 	if served := f.serves(t, vm, "/"); served != "two" {
