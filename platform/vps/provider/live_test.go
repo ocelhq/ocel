@@ -22,6 +22,7 @@ type machine struct {
 	key    string
 	config string
 	known  string
+	dir    string
 }
 
 var suite machine
@@ -44,8 +45,8 @@ func TestMain(m *testing.M) {
 	code = m.Run()
 }
 
-func handed() (machine, error) {
-	vm := machine{
+func handed() (vm machine, err error) {
+	vm = machine{
 		addr: os.Getenv("OCEL_INCUS_ADDR"),
 		user: os.Getenv("OCEL_INCUS_USER"),
 		key:  os.Getenv("OCEL_INCUS_KEY"),
@@ -58,6 +59,12 @@ func handed() (machine, error) {
 	if err != nil {
 		return machine{}, err
 	}
+	vm.dir = dir
+	defer func() {
+		if err != nil {
+			os.RemoveAll(dir)
+		}
+	}()
 	vm.known = filepath.Join(dir, "known_hosts")
 	scanned, err := exec.Command("ssh-keyscan", "-T", "10", vm.addr).Output()
 	if err != nil {
@@ -86,6 +93,7 @@ func (vm machine) hangsUp() {
 	for _, login := range []string{vm.user, deployLogin} {
 		vm.hangsUpAs(login)
 	}
+	os.RemoveAll(vm.dir)
 }
 
 func (vm machine) hangsUpAs(login string) {
