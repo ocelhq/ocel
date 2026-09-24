@@ -1,6 +1,6 @@
 version: v2
 modules:
-  - path: proto
+  - path: .
 deps:
   - buf.build/bufbuild/protovalidate
 lint:
@@ -11,11 +11,11 @@ lint:
     - RPC_REQUEST_RESPONSE_UNIQUE
   ignore_only:
     RPC_REQUEST_STANDARD_NAME:
-      - proto/provider/contract/v1/contract.proto
+      - provider/contract/v1/contract.proto
 breaking:
   use:
     - FILE
   ignore:
-    - proto/common/environment
-    - proto/common/progress
-    - proto/provider
+    - common/environment
+    - common/progress
+    - provider

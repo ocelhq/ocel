@@ -1,4 +1,6 @@
 version: v2
+inputs:
+  - directory: proto
 plugins:
   - local: [go, tool, protoc-gen-go]
     out: pkg/proto
