@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, describe, it } from "bun:test";
 import assert from "node:assert/strict";
+import dgram from "node:dgram";
 import { createServer, type Server } from "node:http";
 import {
   type AuthoritativeResolver,
+  authoritativeLookup,
   emulatorAddress,
   emulatorFetch,
   type FallbackLookup,
@@ -82,6 +84,80 @@ describe("emulatorFetch", () => {
       method: "POST",
       body: "payload",
     });
+  });
+});
+
+describe("authoritativeLookup", () => {
+  function labels(name: string): Buffer {
+    return Buffer.concat([
+      ...name
+        .split(".")
+        .map((label) => Buffer.concat([Buffer.from([label.length]), Buffer.from(label)])),
+      Buffer.from([0]),
+    ]);
+  }
+
+  function record(name: string, type: number, ttl: number, data: Buffer): Buffer {
+    const fixed = Buffer.alloc(10);
+    fixed.writeUInt16BE(type, 0);
+    fixed.writeUInt16BE(1, 2);
+    fixed.writeUInt32BE(ttl, 4);
+    fixed.writeUInt16BE(data.length, 8);
+    return Buffer.concat([labels(name), fixed, data]);
+  }
+
+  function reply(query: Buffer, answer: "absent" | "present"): Buffer {
+    let end = 12;
+    const asked: string[] = [];
+    while (query[end] !== 0) {
+      const length = query[end] ?? 0;
+      asked.push(query.subarray(end + 1, end + 1 + length).toString());
+      end += length + 1;
+    }
+    const type = query.readUInt16BE(end + 1);
+    const header = Buffer.alloc(12);
+    header.writeUInt16BE(query.readUInt16BE(0), 0);
+    header.writeUInt16BE(answer === "absent" ? 0x8403 : 0x8400, 2);
+    header.writeUInt16BE(1, 4);
+    const question = query.subarray(12, end + 5);
+    if (answer === "present" && type === 1) {
+      header.writeUInt16BE(1, 6);
+      return Buffer.concat([
+        header,
+        question,
+        record(asked.join("."), 1, 300, Buffer.from([198, 51, 100, 4])),
+      ]);
+    }
+    header.writeUInt16BE(1, 8);
+    const soa = Buffer.concat([
+      labels("ns.ocel.site"),
+      labels("hostmaster.ocel.site"),
+      Buffer.from([0, 0, 0, 1, 0, 0, 14, 16, 0, 0, 14, 16, 0, 0, 14, 16, 0, 0, 7, 8]),
+    ]);
+    return Buffer.concat([header, question, record("ocel.site", 6, 1800, soa)]);
+  }
+
+  it("asks the zone again after a miss rather than replaying the zone's negative ttl", async () => {
+    let written = false;
+    const socket = dgram.createSocket("udp4");
+    socket.on("message", (query, peer) => {
+      socket.send(reply(query, written ? "present" : "absent"), peer.port, peer.address);
+    });
+    await new Promise<void>((resolve) => socket.bind(0, "127.0.0.1", resolve));
+    const lookup = authoritativeLookup([`127.0.0.1:${socket.address().port}`], async () => []);
+    const ask = () =>
+      new Promise<NodeJS.ErrnoException | string | undefined>((resolve) => {
+        lookup("web-j-1.ocel.site", {}, (error, address) =>
+          resolve(error ?? (address as string | undefined)),
+        );
+      });
+    try {
+      assert.equal(((await ask()) as NodeJS.ErrnoException).code, "ENOTFOUND");
+      written = true;
+      assert.equal(await ask(), "198.51.100.4");
+    } finally {
+      socket.close();
+    }
   });
 });
 
