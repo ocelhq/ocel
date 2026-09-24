@@ -16,9 +16,9 @@ function planOn(lane: Lane, env: NodeJS.ProcessEnv = {}, filter: RunFilter = NO_
   return plan({ fixtures, gaps, lane, releaseCycle, filter, env });
 }
 
-function iacIn(planned: ReturnType<typeof planOn>): string[] {
+function concernIn(concern: Concern, planned: ReturnType<typeof planOn>): string[] {
   return [...planned.cells.map((cell) => cell.name), ...Object.keys(planned.skipped)].filter(
-    (name) => name.startsWith("iac/"),
+    (name) => name.startsWith(`${concern}/`),
   );
 }
 
@@ -44,8 +44,10 @@ describe("the iac concern", () => {
 
   it("plans no iac cell for a run that leaves the concern unnamed", () => {
     for (const lane of IAC_LANES) {
-      expect(iacIn(planOn(lane, {}, { ...NO_FILTER, runSkipped: true }))).toEqual([]);
-      expect(iacIn(planOn(lane, {}, filterFrom({ OCEL_JOURNEY_SKIPS: "run" })))).toEqual([]);
+      expect(concernIn("iac", planOn(lane, {}, { ...NO_FILTER, runSkipped: true }))).toEqual([]);
+      expect(concernIn("iac", planOn(lane, {}, filterFrom({ OCEL_JOURNEY_SKIPS: "run" })))).toEqual(
+        [],
+      );
     }
   });
 
@@ -55,9 +57,9 @@ describe("the iac concern", () => {
       OCEL_JOURNEY_TOUCHED: "iac/with-sst,iac/with-pulumi",
     };
     for (const lane of IAC_LANES) {
-      expect(iacIn(planOn(lane, {}, filterFrom(touched)))).toEqual([]);
+      expect(concernIn("iac", planOn(lane, {}, filterFrom(touched)))).toEqual([]);
       expect(
-        iacIn(planOn(lane, {}, filterFrom({ ...touched, OCEL_JOURNEY_SKIPS: "run" }))),
+        concernIn("iac", planOn(lane, {}, filterFrom({ ...touched, OCEL_JOURNEY_SKIPS: "run" }))),
       ).toEqual([]);
     }
   });
@@ -81,6 +83,15 @@ describe("the iac concern", () => {
         OCEL_JOURNEY_FIXTURES: "iac/with-sst",
       });
       expect(() => planOn("aws", {}, filter)).toThrow(/no fixture named iac\/with-sst/);
+    }
+  });
+});
+
+describe("a pull request's run", () => {
+  it("draws sdk cells when it names no concern", () => {
+    const drawn = filterFrom({ OCEL_JOURNEY_SEED: "42", OCEL_JOURNEY_TOUCHED: "" });
+    for (const lane of ["aws.floci", "dev", "vps.incus"] as const) {
+      expect(concernIn("sdk", planOn(lane, {}, drawn))).not.toEqual([]);
     }
   });
 });

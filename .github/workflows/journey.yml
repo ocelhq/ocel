@@ -201,7 +201,7 @@ jobs:
             concern=$CONCERN
           else
             coverage=sampled
-            concern="deploy lifecycle"
+            concern=
             VARIANTS=
             SKIPS=
           fi
