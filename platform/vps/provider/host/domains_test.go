@@ -783,3 +783,64 @@ func TestAWildcardIsRefusedAsAnOrdinaryClaim(t *testing.T) {
 		t.Errorf("a refused wildcard claim still reached the proxy: %v", stood.commands())
 	}
 }
+
+func flippingBox(t *testing.T, config *string, flipped func(at int) session.Result) *claimBench {
+	t.Helper()
+
+	stood := claimingBox(t, routed())
+	proxied := servesPair(stood.bench, &stood.held, config)
+	flips := 0
+	stood.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, quoted("flip")) {
+			flips++
+			return flipped(flips), true
+		}
+		return proxied(command)
+	}
+	return stood
+}
+
+func TestAReloadThatFailsPutsBackTheExactBytesOfBothFilesAndReloadsThem(t *testing.T) {
+	t.Parallel()
+
+	older := olderRendering(t, routed())
+	config := older
+	stood := flippingBox(t, &config, func(at int) session.Result {
+		if at == 1 {
+			return session.Result{Code: 1, Stderr: "the connection dropped before the reload answered"}
+		}
+		return session.Result{}
+	})
+	table := stood.held
+
+	if err := stood.host().rerender(context.Background()); err == nil {
+		t.Fatal("rerender() over a reload that failed = nil, want the failure")
+	}
+	if stood.held != table || config != older {
+		t.Errorf("a reload that failed left\n%s\n%s\nwant both files byte for byte as they stood: the rendering it failed to reload stays on disk as if current, the next write skips it, and the proxy loads it on its next restart",
+			stood.held, config)
+	}
+	commands := stood.commands()
+	restored := -1
+	for at, command := range commands {
+		if writesProxy(command) {
+			restored = at
+		}
+	}
+	if restored < 0 || !slices.ContainsFunc(commands[restored:], func(command string) bool { return strings.Contains(command, quoted("flip")) }) {
+		t.Errorf("the files were put back and the proxy never reloaded them: a reload whose answer was lost may have loaded the rendering all the same, and the proxy then serves routes no table records: %v", commands)
+	}
+}
+
+func TestAReloadThatFailsTwiceSaysTheProxyMayServeWhatTheFilesNoLongerRecord(t *testing.T) {
+	t.Parallel()
+
+	config := olderRendering(t, routed())
+	stood := flippingBox(t, &config, func(int) session.Result {
+		return session.Result{Code: 1, Stderr: "the connection dropped before the reload answered"}
+	})
+	err := stood.host().rerender(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "may still serve") {
+		t.Errorf("rerender() over a reload that failed and a reload back that failed too = %v, want it to say the proxy may still serve what the restored files no longer record", err)
+	}
+}

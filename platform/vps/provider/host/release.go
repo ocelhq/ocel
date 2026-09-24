@@ -347,7 +347,7 @@ func (h *Host) tableHeld(ctx context.Context) (routingPair, error) {
 const routingRewrites = 5
 
 type composed struct {
-	held    RoutingTable
+	prior   routingPair
 	written tableDigest
 	changed bool
 }
@@ -363,7 +363,7 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 		if err != nil {
 			return composed{}, err
 		}
-		shaped := composed{held: standing, written: held.digest()}
+		shaped := composed{prior: held, written: held.digest()}
 		next, err := compose(standing)
 		if err != nil {
 			return shaped, err
@@ -401,8 +401,16 @@ func (h *Host) writeRouting(ctx context.Context, expected tableDigest, table Rou
 	if err != nil {
 		return "", err
 	}
+	return h.writePair(ctx, expected, routingPair{table: written, config: rendered})
+}
+
+func pairFed(pair routingPair) string {
+	return base64.StdEncoding.EncodeToString(pair.table) + "\n" + base64.StdEncoding.EncodeToString(pair.config) + "\n"
+}
+
+func (h *Host) writePair(ctx context.Context, expected tableDigest, pair routingPair) (tableDigest, error) {
 	elevation, refused := h.elevate(ctx)
-	result, err := h.stream(ctx, stagedWrite(expected), strings.NewReader(string(written)+"\n"+string(rendered)), elevation)
+	result, err := h.stream(ctx, stagedWrite(expected), strings.NewReader(pairFed(pair)), elevation)
 	if err != nil {
 		return "", err
 	}
@@ -436,8 +444,9 @@ func stagedWrite(expected tableDigest) string {
 		`rendered=$(mktemp ` + quoted(ProxyConfig+".XXXXXX") + `)`,
 		`trap 'rm -f "$staged" "$rendered"' EXIT`,
 		`IFS= read -r written`,
-		`printf '%s' "$written" > "$staged"`,
-		`cat > "$rendered"`,
+		`IFS= read -r rendering`,
+		`printf '%s' "$written" | base64 -d > "$staged"`,
+		`printf '%s' "$rendering" | base64 -d > "$rendered"`,
 		"exec 9<" + quoted(routingLock),
 		"flock -x 9",
 		`held=$(sha256sum ` + table + ` | cut -d' ' -f1)`,
