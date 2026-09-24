@@ -269,7 +269,7 @@ func corsHeld(before probeAnswer) (corsPlan, error) {
 	case before.code == "200" && len(before.body) > 0:
 		found := originInAnswer.FindSubmatch(before.body)
 		if found == nil {
-			return corsPlan{said: "a configuration naming no origin at all"}, nil
+			return corsPlan{said: "its CORS configuration names no origin"}, nil
 		}
 		return corsPlan{body: before.body, origin: string(found[1]), read: true}, nil
 	case before.code == "404", bytes.Contains(before.body, []byte("NoSuchCORSConfiguration")):
@@ -279,7 +279,7 @@ func corsHeld(before probeAnswer) (corsPlan, error) {
 		}
 		return corsPlan{body: body, origin: probeOrigin, drop: true, read: true}, nil
 	default:
-		return corsPlan{said: "the store answered " + before.code + " asked what origins it answers"}, nil
+		return corsPlan{said: "GetBucketCors answered " + before.code}, nil
 	}
 }
 
@@ -375,32 +375,32 @@ func probeCleanup(store ExternalStore, root string, answers map[string]probeAnsw
 func lacking(answers map[string]probeAnswer, cors corsPlan) []string {
 	var missing []string
 	if !answeredWith(answers, "conditional-put", storeWrote...) || !answeredWith(answers, "conditional-again", "412") {
-		missing = append(missing, "refuse a second write of a key it already holds (If-None-Match: *), which is how an upload session is claimed exactly once")
+		missing = append(missing, "refuse a second write of a key (If-None-Match: *)")
 	}
 	corsWorks := cors.read &&
 		answeredWith(answers, "cors-put", storeWrote...) && answeredWith(answers, "cors-get", "200") &&
 		strings.Contains(string(answers["cors-get"].body), cors.origin)
 	if !corsWorks {
-		held := "hold a bucket to the origins it answers (PutBucketCors and GetBucketCors), which is how a browser reaches it"
+		held := "set and read CORS (PutBucketCors, GetBucketCors)"
 		if cors.said != "" {
-			held += " — " + cors.said + ", and ocel changes no configuration it could not read back first"
+			held += ": " + cors.said
 		}
 		missing = append(missing, held)
 	}
 	if !answeredWith(answers, "presigned-put", storeWrote...) || !answeredWith(answers, "presigned-get", "200") ||
 		string(answers["presigned-get"].body) != probeBody {
-		missing = append(missing, "serve a presigned url, which is how every byte an app reads or writes reaches it")
+		missing = append(missing, "serve a presigned url")
 	}
 	if !answeredWith(answers, "multipart-create", "200") ||
 		!uploadIDInAnswer.Match(answers["multipart-create"].body) {
-		missing = append(missing, "open a multipart upload, which is how anything larger than 16 MB is sent")
+		missing = append(missing, "open a multipart upload")
 	}
 	return missing
 }
 
 func unprobeable(err error) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
-		"the store option %q cannot be probed as it is written: %v", "bucket", err)
+		"the store option %q cannot be probed: %v", "bucket", err)
 }
 
 func probeExternalStore(store ExternalStore, root string, now time.Time, run probeRunner) (StoreProbe, error) {
@@ -408,7 +408,7 @@ func probeExternalStore(store ExternalStore, root string, now time.Time, run pro
 	if err != nil {
 		return StoreProbe{}, unprobeable(err)
 	}
-	said, err := run("read what browsers the store at "+store.Endpoint+" already answers", probeScript([]probeCall{before}))
+	said, err := run("read CORS on "+store.Endpoint, probeScript([]probeCall{before}))
 	if err != nil {
 		return StoreProbe{}, err
 	}
@@ -428,15 +428,15 @@ func probeExternalStore(store ExternalStore, root string, now time.Time, run pro
 	if err != nil {
 		return StoreProbe{}, errors.Join(probed, unprobeable(err))
 	}
-	_, swept := run("take the probe of "+store.Endpoint+" back down", probeScript(cleanup))
+	_, swept := run("clean up the probe of "+store.Endpoint, probeScript(cleanup))
 	if probed != nil || swept != nil {
 		return StoreProbe{}, errors.Join(probed, swept)
 	}
 
 	if missing := lacking(answers, cors); len(missing) > 0 {
 		return StoreProbe{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"option %q points this project's objects at bucket %s on %s, and that store cannot:\n\n  - %s\n\n"+
-				"Nothing was provisioned. Point the option at a store that serves all of them, or drop it and let the box run a store of its own.",
+			"option %q: bucket %s on %s cannot:\n  - %s\n"+
+				"Point it at a store that can, or remove it to run a store on the box",
 			"bucket", store.Bucket, store.Endpoint, strings.Join(missing, "\n  - "))
 	}
 	return StoreProbe{PostPolicies: answeredWith(answers, "post-policy", storeWrote...)}, nil

@@ -52,7 +52,7 @@ func (r *Records) tier(ctx context.Context, name providerkit.RecordName) (provid
 
 func unbootstrapped(class providerkit.Class) error {
 	return providerkit.Refuse(providerkit.CodeNotReady,
-		"this host has no ocel bootstrap, so there is nowhere to keep a record.\nRun `%s` to write one, then try again",
+		"this host has no ocel bootstrap\nRun `%s`",
 		providerkit.BootstrapCommand(class))
 }
 
@@ -101,7 +101,7 @@ func (r *Records) WritePair(ctx context.Context, first, second providerkit.Recor
 	}
 	if beside != class {
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"%s and %s belong to different classes, and this host writes a pair under one lock",
+			"%s and %s belong to different classes",
 			first.Name, second.Name)
 	}
 	if !stood {
@@ -115,7 +115,7 @@ func (r *Records) WritePair(ctx context.Context, first, second providerkit.Recor
 	left, right, split := strings.Cut(strings.TrimSpace(rendered), "\t")
 	if !split {
 		return providerkit.Refuse(providerkit.CodeDenied,
-			"the records helper answered a pair with %q, and ocel cannot tell what landed", rendered)
+			"the records helper answered a pair with %q", rendered)
 	}
 	if _, err := minted(left); err != nil {
 		return err
@@ -138,7 +138,7 @@ func (r *Records) Remove(ctx context.Context, name providerkit.RecordName, expec
 	}
 	if strings.TrimSpace(rendered) != acknowledged {
 		return providerkit.Refuse(providerkit.CodeDenied,
-			"the records helper took %s and would not say so, so ocel cannot call it gone", name)
+			"the records helper did not confirm removing %s", name)
 	}
 	return nil
 }
@@ -171,7 +171,7 @@ func (r *Records) List(ctx context.Context, under providerkit.RecordName) ([]pro
 		}
 		bytes, err := base64.StdEncoding.DecodeString(columns[2])
 		if err != nil {
-			return nil, providerkit.Refuse(providerkit.CodeDenied, "%s is stored as no record ocel wrote", name)
+			return nil, providerkit.Refuse(providerkit.CodeDenied, "%s is not a record ocel wrote", name)
 		}
 		held = append(held, providerkit.Record{Name: name, Bytes: bytes, Revision: providerkit.Revision(columns[1])})
 	}
@@ -216,7 +216,7 @@ func minted(rendered string) (providerkit.Revision, error) {
 	revision := strings.TrimSpace(rendered)
 	if len(revision) != revisionWidth || strings.Trim(revision, revisionHex) != "" {
 		return "", providerkit.Refuse(providerkit.CodeDenied,
-			"the records helper answered %q where a revision belongs, and a record nothing can compare is a record anything can lose", rendered)
+			"the records helper answered %q, not a revision", rendered)
 	}
 	return providerkit.Revision(revision), nil
 }
@@ -229,12 +229,12 @@ func readRow(rendered string) (providerkit.Revision, []byte, error) {
 	revision, encoded, split := strings.Cut(strings.TrimRight(rendered, "\n"), "\t")
 	if !split {
 		return "", nil, providerkit.Refuse(providerkit.CodeDenied,
-			"the records helper answered a read with %q, which is no record", rendered)
+			"the records helper answered a read with %q", rendered)
 	}
 	bytes, err := base64.StdEncoding.DecodeString(encoded)
 	if err != nil {
 		return "", nil, providerkit.Refuse(providerkit.CodeDenied,
-			"the record read back is stored as no record ocel wrote")
+			"the record read back is not one ocel wrote")
 	}
 	return providerkit.Revision(revision), bytes, nil
 }

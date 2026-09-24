@@ -23,8 +23,7 @@ func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateR
 				return providerkit.Certificate{}, err
 			}
 			if req.Report != nil {
-				req.Report.Say("whether this box's proxy is already refused by the CA for " + req.Hostname +
-					" was not read, so an order the ceiling refuses surfaces on the next deploy rather than here: " + err.Error())
+				req.Report.Say("could not read CA rate limits for " + req.Hostname + ": " + err.Error())
 			}
 		}
 		return providerkit.Certificate{ID: certs.ProxyHandle(req.Hostname)}, nil
@@ -56,7 +55,7 @@ func (p *Provider) InspectCertificate(ctx context.Context, _ edge.Kind, hostname
 	served, ok := certs.Serving(cert.ID)
 	if !ok {
 		return providerkit.CertificateHealth{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"%s is bound to %q, and a certificate on this box is either %s<hostname> the proxy obtained or %s<path> you pinned: reading a handle this box never minted as one it did would report on whatever the proxy happens to serve",
+			"%s is bound to %q, which is neither %s<hostname> nor %s<path>",
 			hostname, cert.ID, certs.ProxyScheme, certs.PinScheme)
 	}
 	return p.servedHealth(ctx, served, hostname, health)

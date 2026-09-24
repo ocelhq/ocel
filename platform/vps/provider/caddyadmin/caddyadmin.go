@@ -23,11 +23,10 @@ func Keeps(document []byte, socket string) error {
 		} `json:"admin"`
 	}
 	if err := json.Unmarshal(document, &read); err != nil {
-		return fmt.Errorf("is not json a proxy could load: %w", err)
+		return fmt.Errorf("is not valid json: %w", err)
 	}
 	wanted := Listen(socket)
-	moving := errors.New("declares no admin endpoint at " + wanted +
-		", and caddy moves the admin endpoint before it validates the rest: a config without one takes the socket this helper is reached through with it and opens a tcp listener in its place, and one that names the socket without the mode leaves the permissions that are the whole of its access control to whatever the proxy happens to default to")
+	moving := errors.New("declares no admin endpoint at " + wanted)
 	if read.Admin == nil || read.Admin.Disabled {
 		return moving
 	}

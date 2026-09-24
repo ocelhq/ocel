@@ -18,10 +18,7 @@ func bootstrapDocument(login string) string {
 	}
 	written.WriteString("\nSudo without a password is a file of its own, written with `visudo -f /etc/sudoers.d/ocel`:\n\n")
 	written.WriteString("  " + login + " ALL=(ALL) NOPASSWD: ALL\n")
-	written.WriteString("\nThat is root, spelled out. A bootstrap creates accounts, installs under /etc, /var/lib\n")
-	written.WriteString("and /usr/local, and locks a password; nothing narrower covers it. Ocel keeps the grant to\n")
-	written.WriteString("the login that bootstraps: what deploys run as is the smaller set `ocel permissions deploy`\n")
-	written.WriteString("prints, and it never holds this one.\n")
+	written.WriteString("\nDeploys run with the smaller set `ocel permissions deploy` prints.\n")
 	return written.String()
 }
 
@@ -31,8 +28,7 @@ func deployDocument() string {
 	for _, grant := range deployGrants() {
 		written.WriteString("\n  " + grant.Name + "\n    " + grant.Detail + "\n")
 	}
-	written.WriteString("\nThe login is the host's, not ocel's: it answers to the keys in its authorized_keys and to\n")
-	written.WriteString("nothing else, and `ocel destroy` takes it with the last class it was created for.\n")
+	written.WriteString("\nIt accepts only the keys in its authorized_keys; `ocel destroy` removes it.\n")
 	return written.String()
 }
 

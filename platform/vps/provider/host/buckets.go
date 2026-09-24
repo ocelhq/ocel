@@ -136,14 +136,14 @@ func (s BucketSpec) calls() ([]storeCall, error) {
 		}
 		if cors != nil {
 			calls = append(calls, storeCall{
-				name: "cors", what: "hold bucket " + s.Bucket + " to the origins it answers",
+				name: "cors", what: "set CORS on bucket " + s.Bucket,
 				method: http.MethodPut,
 				query:  "cors", body: cors, typed: "application/xml", md5: true, allow: []string{"200", "204"},
 			})
 		}
 	}
 	calls = append(calls, storeCall{
-		name: lifecycleCall, what: "have bucket " + s.Bucket + " abandon unfinished uploads",
+		name: lifecycleCall, what: "set the lifecycle of bucket " + s.Bucket,
 		method: http.MethodPut,
 		query:  "lifecycle", body: lifecycle, typed: "application/xml", md5: true, allow: []string{"200", "204", "400", "404", "501"},
 	})
@@ -244,7 +244,7 @@ func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) (BucketStan
 	calls, err := spec.calls()
 	if err != nil {
 		return BucketStanding{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"bucket %s cannot be described to the store: %v", spec.Bucket, err)
+			"cannot encode bucket %s: %v", spec.Bucket, err)
 	}
 	now := time.Now().UTC()
 	var standing BucketStanding

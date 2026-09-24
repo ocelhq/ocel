@@ -79,7 +79,7 @@ func Render(m Manifest) ([]byte, error) {
 	switch providerkit.Class(m.Class) {
 	case providerkit.ClassProduction, providerkit.ClassPreview:
 	default:
-		return nil, fmt.Errorf("the live-value manifest names class %q, and a value is sealed under the key of %s or %s",
+		return nil, fmt.Errorf("the live-value manifest names class %q, want %s or %s",
 			m.Class, providerkit.ClassProduction, providerkit.ClassPreview)
 	}
 	return json.Marshal(m)

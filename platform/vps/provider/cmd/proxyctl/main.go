@@ -139,7 +139,7 @@ func netnsListeners(proc string, out, errs io.Writer) int {
 		held = append(held, found...)
 	}
 	if tables == 0 {
-		fmt.Fprintf(errs, "ocel-proxyctl: neither %s nor %s is there to read, so nothing was learned about what this namespace binds: an empty answer is read as a namespace with nothing bound in it\n",
+		fmt.Fprintf(errs, "ocel-proxyctl: neither %s nor %s exists\n",
 			listeners.TCPPath, listeners.TCP6Path)
 		return exitUnattributable
 	}
@@ -152,7 +152,7 @@ func netnsListeners(proc string, out, errs io.Writer) int {
 func forget(root string, hostnames []string, out, errs io.Writer) int {
 	for _, hostname := range hostnames {
 		if !subject(hostname) {
-			fmt.Fprintf(errs, "ocel-proxyctl: %q is no hostname: forget spends its argument as a directory name under the proxy's certificate store, beside the acme account key that issues for every name on this box\n", hostname)
+			fmt.Fprintf(errs, "ocel-proxyctl: %q is not a hostname\n", hostname)
 			return exitRefused
 		}
 	}
@@ -218,7 +218,7 @@ func serving(at, hostname string, out, errs io.Writer) int {
 	}
 	if err := spoken.Handshake(); err != nil {
 		if !declined(err) {
-			fmt.Fprintf(errs, "ocel-proxyctl: the handshake for %s never finished: %v\n", hostname, err)
+			fmt.Fprintf(errs, "ocel-proxyctl: tls handshake for %s failed: %v\n", hostname, err)
 			return exitUnservable
 		}
 		fmt.Fprintf(errs, "ocel-proxyctl: the proxy served no certificate for %s: %v\n", hostname, err)
@@ -298,7 +298,7 @@ func gating(target, path string, window time.Duration, out, errs io.Writer) int 
 		return exitSilent
 	}
 	fmt.Fprintln(out, status)
-	fmt.Fprintf(errs, "%s answered %s with status %d and never with a 2xx within %s\n", target, path, status, window)
+	fmt.Fprintf(errs, "%s answered %s with status %d, no 2xx within %s\n", target, path, status, window)
 	return exitUnhealthy
 }
 
@@ -317,7 +317,7 @@ func draining(socket, address string, window time.Duration, out, errs io.Writer)
 		}
 		var pool []upstream
 		if err := json.Unmarshal([]byte(read.String()), &pool); err != nil {
-			fmt.Fprintf(errs, "ocel-proxyctl: the proxy's upstreams read as %q rather than the pool a drain is counted from: %v\n",
+			fmt.Fprintf(errs, "ocel-proxyctl: cannot parse the proxy's upstreams %q: %v\n",
 				strings.TrimSpace(read.String()), err)
 			return exitUnattributable
 		}
@@ -328,8 +328,7 @@ func draining(socket, address string, window time.Duration, out, errs io.Writer)
 			}
 		}
 		if held < 0 {
-			fmt.Fprintf(errs, "ocel-proxyctl: %s carries no upstream %s, so nothing here can say whether it is still serving; "+
-				"the retired upstream is declared on the drain server precisely so its count stays readable, and a proxy that drops it from the pool before it is free has changed when an upstream leaves\n",
+			fmt.Fprintf(errs, "ocel-proxyctl: %s has no upstream %s\n",
 				upstreamsPath, address)
 			return exitUnattributable
 		}
@@ -350,7 +349,7 @@ func draining(socket, address string, window time.Duration, out, errs io.Writer)
 func flip(socket, path string, out, errs io.Writer) int {
 	document, err := os.ReadFile(path)
 	if err != nil {
-		fmt.Fprintf(errs, "ocel-proxyctl: %s is no config this host can read: %v\n", path, err)
+		fmt.Fprintf(errs, "ocel-proxyctl: read %s: %v\n", path, err)
 		return exitRefused
 	}
 	if err := caddyadmin.Keeps(document, socket); err != nil {

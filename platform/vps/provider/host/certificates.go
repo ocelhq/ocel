@@ -73,7 +73,7 @@ func (h *Host) paired(ctx context.Context, pin Pin) error {
 	}
 	if strings.TrimSpace(said) == pairMismatched {
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"the key at %s is not the one the certificate at %s was issued for, and the proxy refuses to load a pair that does not match: every hostname pinned to it would stop being served at the next flip. Put the matching key beside the certificate and run this again",
+			"the key at %s does not match the certificate at %s",
 			PinKey(pin.Path), PinCertificate(pin.Path))
 	}
 	return nil
@@ -82,8 +82,8 @@ func (h *Host) paired(ctx context.Context, pin Pin) error {
 func (h *Host) PinnedCertificate(ctx context.Context, path string) ([]byte, error) {
 	if !pinnedUnderProxyPins(path) {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"a pinned certificate on this box is read off %s/<name> alone, and %q is outside it: %s is the one directory bound into the proxy, so a pair anywhere else on this host is a path the proxy cannot open and one this ssh session must not open as root either",
-			ProxyPins, path, ProxyPins)
+			"pinned certificate %q is outside %s",
+			path, ProxyPins)
 	}
 	read, err := h.run(ctx, "read the certificate pinned at "+PinCertificate(path),
 		"cat "+quoted(PinCertificate(path)), nil)
@@ -126,7 +126,7 @@ func (h *Host) ForgetCertificates(ctx context.Context, hostnames []string, repor
 		if removed == "" {
 			continue
 		}
-		report.Detail("Removed " + removed + ": the pair this box's proxy obtained for a hostname it no longer answers")
+		report.Detail("Removed " + removed + ": certificate for a hostname no longer served")
 	}
 	return nil
 }

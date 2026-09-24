@@ -48,7 +48,7 @@ func Parse(r io.Reader) ([]Listener, error) {
 func local(field string) (Listener, error) {
 	written, spelled, split := strings.Cut(field, ":")
 	if !split {
-		return Listener{}, fmt.Errorf("%q names no local address and port a listening socket is read from", field)
+		return Listener{}, fmt.Errorf("%q has no local address and port", field)
 	}
 	port, err := strconv.ParseUint(spelled, 16, 16)
 	if err != nil {
@@ -64,14 +64,14 @@ func local(field string) (Listener, error) {
 func address(written string) (netip.Addr, error) {
 	raw, err := hex.DecodeString(written)
 	if err != nil || (len(raw) != 4 && len(raw) != 16) {
-		return netip.Addr{}, fmt.Errorf("%q is no address a listening socket is bound to", written)
+		return netip.Addr{}, fmt.Errorf("%q is not a socket address", written)
 	}
 	for at := 0; at < len(raw); at += 4 {
 		slices.Reverse(raw[at : at+4])
 	}
 	addr, ok := netip.AddrFromSlice(raw)
 	if !ok {
-		return netip.Addr{}, fmt.Errorf("%q is no address a listening socket is bound to", written)
+		return netip.Addr{}, fmt.Errorf("%q is not a socket address", written)
 	}
 	return addr.Unmap(), nil
 }
@@ -103,7 +103,7 @@ func Read(said string) ([]Listener, error) {
 		}
 		at, err := netip.ParseAddrPort(spelled)
 		if err != nil {
-			return nil, fmt.Errorf("%q is no listening socket ocel asked this host to name: %w", spelled, err)
+			return nil, fmt.Errorf("%q is not a listening socket: %w", spelled, err)
 		}
 		held = append(held, Listener{Addr: at.Addr(), Port: int(at.Port())})
 	}

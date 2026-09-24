@@ -72,7 +72,7 @@ func TestLiveAStandingBoxIsLetThroughAndAnEngineThatDoesNotAnswerIsNot(t *testin
 	if !strings.Contains(err.Error(), "docker") {
 		t.Errorf("PreflightDeploy() = %q, want the engine named", err)
 	}
-	if !strings.Contains(err.Error(), "then run this again") {
+	if !strings.Contains(err.Error(), "`ocel bootstrap") {
 		t.Errorf("PreflightDeploy() = %q, want the remedy named: a refusal an operator cannot act on is a wall", err)
 	}
 }
@@ -130,7 +130,7 @@ func TestLiveADiskWithoutRoomForTheKeepWindowRefusesAndNamesTheGuess(t *testing.
 		t.Fatalf("PreflightDeploy() let a deploy onto %s with %d bytes left, and a disk that fills while an image streams fails mid-transfer", root, keep)
 	}
 	said := err.Error()
-	for _, want := range []string{root, "guessed constant", "Free space on " + root, "then run this again"} {
+	for _, want := range []string{root, "guessed", "Free space on " + root} {
 		if !strings.Contains(said, want) {
 			t.Errorf("PreflightDeploy() = %q, want %q in it", said, want)
 		}
@@ -177,7 +177,7 @@ func TestLiveADiskThatClearsTheFloorIsStillRefusedByWhatThisBoxHolds(t *testing.
 			root, free, int64(host.FirstDeployFloor))
 	}
 	said := err.Error()
-	for _, want := range []string{"image(s) held under " + bulkRepo, "unfilled slot(s) plus the incoming one measures", "Free space on " + root, "then run this again"} {
+	for _, want := range []string{bulkRepo + ": ", "empty slot(s) + incoming =", "Free space on " + root} {
 		if !strings.Contains(said, want) {
 			t.Errorf("PreflightDeploy() = %q, want %q in it", said, want)
 		}
@@ -218,13 +218,13 @@ func TestLiveTheFourProxyStatesAreFourInducedConditionsAndFourMessages(t *testin
 			restore: func() {
 				vm.ssh(t, "sudo docker exec "+host.ProxyContainer+" mv "+quote(host.ProxyAdminSocket+".moved")+" "+quote(host.ProxyAdminSocket))
 			},
-			wants: []string{"no socket at " + host.ProxyAdminSocket},
+			wants: []string{"no admin socket at " + host.ProxyAdminSocket},
 		},
 		{
 			what:    "the admin socket is there and nothing is listening on it",
 			induce:  func() { vm.deafens(t) },
 			restore: func() { vm.hears(t) },
-			wants:   []string{"refused the one read"},
+			wants:   []string{"refused a read"},
 		},
 	} {
 		func() {
@@ -235,7 +235,7 @@ func TestLiveTheFourProxyStatesAreFourInducedConditionsAndFourMessages(t *testin
 				t.Fatalf("PreflightDeploy() let a deploy past a box where %s, and a deploy into a proxy that cannot be flipped is a green deploy nothing routes to", induced.what)
 			}
 			said := err.Error()
-			for _, want := range append(induced.wants, "then run this again") {
+			for _, want := range induced.wants {
 				if !strings.Contains(said, want) {
 					t.Errorf("where %s the refusal is %q, want %q in it: a refusal an operator cannot act on is a wall", induced.what, said, want)
 				}
@@ -314,7 +314,7 @@ func TestLiveAForeignContainerHoldingPortEightyIsRefusedByName(t *testing.T) {
 	if !strings.Contains(err.Error(), foreignContainer) {
 		t.Errorf("PreflightDeploy() = %q, want %q named: a foreign listener is refused by name", err, foreignContainer)
 	}
-	for _, want := range []string{"stop " + foreignContainer, "move it off " + host.RenewalPort, "then run this again"} {
+	for _, want := range []string{"stop it", "move it off " + host.RenewalPort} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("PreflightDeploy() = %q, want %q in it: a refusal an operator cannot act on is a wall", err, want)
 		}

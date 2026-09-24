@@ -11,19 +11,19 @@ import (
 func TestASurveyLineCutShortIsRefusedRatherThanRead(t *testing.T) {
 	t.Parallel()
 
-	for what, line := range map[string]string{
-		"a probe that could not look": kindUnreadable,
-		"a path that pointed away":    kindLink,
-		"a probe naming only a kind":  kindUnreadable + "\t",
+	for what, probe := range map[string]struct{ line, said string }{
+		"a probe that could not look": {kindUnreadable, "could not check"},
+		"a path that pointed away":    {kindLink, "Put a real directory or file"},
+		"a probe naming only a kind":  {kindUnreadable + "\t", "could not check"},
 	} {
-		_, _, err := readSurvey(line + "\n")
+		_, _, err := readSurvey(probe.line + "\n")
 		var refusal providerkit.Refusal
 		if !errors.As(err, &refusal) {
 			t.Errorf("readSurvey over %s = %v, want a refusal rather than a host read as carrying nothing", what, err)
 			continue
 		}
-		if !strings.Contains(refusal.Message, "again") {
-			t.Errorf("readSurvey over %s refused with %q, want it to say what to do about it", what, refusal.Message)
+		if !strings.Contains(refusal.Message, probe.said) {
+			t.Errorf("readSurvey over %s refused with %q, want it to say %q", what, refusal.Message, probe.said)
 		}
 	}
 }

@@ -60,7 +60,7 @@ func networkStanding(spec Container) string {
 	return networkCreating(spec.Class, spec.Project) + "\n" +
 		"if ! docker network connect " + network + " " + quoted(ProxyContainer) + " >/dev/null 2>&1 && " +
 		"! docker network inspect --format " + quoted(membersFormat) + " " + network + " | grep -qx " + quoted(ProxyContainer) + "; then\n" +
-		"printf '%s\\n' " + quoted(ProxyContainer+" is not attached to "+AppNetwork(spec.Class, spec.Project)+" and could not be: the proxy is the one path to an app on this box, and a container it cannot reach is one nothing routes to") + " >&2\n" +
+		"printf '%s\\n' " + quoted(ProxyContainer+" could not join "+AppNetwork(spec.Class, spec.Project)) + " >&2\n" +
 		"exit 1\n" +
 		"fi"
 }
@@ -83,8 +83,8 @@ func (h *Host) joining(ctx context.Context, who string, class providerkit.Class,
 	_, said, err := h.spoke(ctx, "put "+who+" on "+AppNetwork(class, project), command, nil, elevation)
 	if err != nil && strings.Contains(said, poolExhausted) {
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"%s has no subnet left for %s, and every project on this box runs on a network of its own so that the proxy is the one thing that reaches it: %s\n"+
-				"The engine's stock pools allow about thirty networks. Give it more in /etc/docker/daemon.json, as `\"default-address-pools\": [{\"base\": \"10.200.0.0/16\", \"size\": 24}]`, restart it, and run this again",
+			"%s has no subnet left for %s: %s\n"+
+				"Add `\"default-address-pools\": [{\"base\": \"10.200.0.0/16\", \"size\": 24}]` to /etc/docker/daemon.json and restart docker",
 			h.named(), AppNetwork(class, project), said)
 	}
 	return err
@@ -278,18 +278,18 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 		switch {
 		case known && len(note.Handed) > 0:
 			return providerkit.Refuse(providerkit.CodeNotReady,
-				"%s no longer stands on this box, and its deploy handed it %s: a container is handed the values its own deploy resolved, and a promotion carries none of them, so putting one back here would serve %s without them. Run `ocel deploy` to stand it up with its values",
-				spec.Name, strings.Join(note.Handed, ", "), spec.App)
+				"%s is gone from this box and was handed %s, which a promotion cannot carry\nRun `ocel deploy`",
+				spec.Name, strings.Join(note.Handed, ", "))
 		case known:
 			spec.Manifest = note.Live
 		case len(spec.Declared) > 0:
 			return providerkit.Refuse(providerkit.CodeNotReady,
-				"%s no longer stands on this box, and %s declares %s: this box holds no note of what its deploy handed it and which of those it reads live, so putting one back here could serve %s with an empty environment. Run `ocel deploy` to stand it up with its values",
-				spec.Name, spec.App, strings.Join(spec.Declared, ", "), spec.App)
+				"%s is gone from this box, %s declares %s, and no note of its values remains\nRun `ocel deploy`",
+				spec.Name, spec.App, strings.Join(spec.Declared, ", "))
 		default:
 			return providerkit.Refuse(providerkit.CodeNotReady,
-				"%s no longer stands on this box, and this box holds no note of what its deploy handed it: a container is handed the values its own deploy resolved, bindings included, and a promotion carries none of them, so putting one back here could serve %s with an empty environment. Run `ocel deploy` to stand it up with its values",
-				spec.Name, spec.App)
+				"%s is gone from this box and no note of its values remains\nRun `ocel deploy`",
+				spec.Name)
 		}
 	}
 	held, err := handing(spec)

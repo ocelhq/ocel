@@ -24,9 +24,9 @@ const Vendor providerkit.Vendor = "vps"
 
 type Options struct {
 	SSH          Target            `json:"ssh" doc:"The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out."`
-	DeployKey    string            `json:"deployKey,omitempty" doc:"The public key the ocel-deploy login is to answer to, as a path from / or from ~/. Omit it and bootstrap mirrors the keys the login it bootstraps with already answers to."`
+	DeployKey    string            `json:"deployKey,omitempty" doc:"Path to the public key the ocel-deploy login accepts; defaults to the bootstrapping login's keys."`
 	Certificates map[string]string `json:"certificates,omitempty" doc:"Certificates to serve a hostname with, keyed by hostname, valued by the path to the certificate on the machine."`
-	Bucket       ExternalStore     `json:"bucket,omitempty" doc:"An S3-compatible store to keep this project's buckets in, instead of the one a box runs for itself. Each declared bucket becomes a key prefix inside the named bucket."`
+	Bucket       ExternalStore     `json:"bucket,omitempty" doc:"An S3-compatible store to keep this project's buckets in, each as a key prefix."`
 }
 
 type ExternalStore struct {
@@ -35,7 +35,7 @@ type ExternalStore struct {
 	Bucket          string `json:"bucket" doc:"The bucket every declared bucket takes a key prefix inside."`
 	AccessKeyID     string `json:"accessKeyId" doc:"The public half of the credential that reaches the store."`
 	SecretAccessKey string `json:"secretAccessKey" doc:"The secret half of the credential that reaches the store."`
-	PathStyle       bool   `json:"pathStyle,omitempty" doc:"Address buckets as a path segment rather than a subdomain. Stores that serve no wildcard DNS need it."`
+	PathStyle       bool   `json:"pathStyle,omitempty" doc:"Address buckets as a path segment rather than a subdomain."`
 }
 
 func (s ExternalStore) probing() host.ExternalStore {
@@ -63,7 +63,7 @@ func (s ExternalStore) usable() error {
 	} {
 		if strings.TrimSpace(field.value) == "" {
 			return providerkit.Refuse(providerkit.CodeInvalid,
-				"option %q names a store to keep this project's buckets in and leaves %q empty: a store is reached by all of endpoint, region, bucket, accessKeyId and secretAccessKey, or by none of them",
+				"option %q leaves %q empty: set all of endpoint, region, bucket, accessKeyId and secretAccessKey",
 				"bucket", field.name)
 		}
 	}
@@ -178,7 +178,7 @@ func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider
 		return nil, err
 	}
 	if strings.TrimSpace(decoded.SSH.Alias) == "" && strings.TrimSpace(decoded.SSH.Host) == "" {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid, "option %q names no machine: give it an ssh_config alias, or an object with a host", "ssh")
+		return nil, providerkit.Refuse(providerkit.CodeInvalid, "option %q names no machine: give it an ssh_config alias or an object with a host", "ssh")
 	}
 	if port := decoded.SSH.Port; port != 0 && (port < 1 || port > 65535) {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid, "option %q names port %d, which is outside 1-65535", "ssh", port)

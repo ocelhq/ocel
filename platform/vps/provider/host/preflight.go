@@ -26,13 +26,13 @@ func (h *Host) EngineStanding(ctx context.Context) error {
 	}
 	if deniedSocket(result.Stderr) {
 		return providerkit.Refuse(providerkit.CodeDenied,
-			"%s is refused by this host's docker socket, and every byte of the image this deploy built crosses it: %s\n"+
-				"Learning this during the transfer surfaces as a failed image load halfway through. Put the login in the %q group — `ocel bootstrap %s` does it for %s — then run this again",
+			"%s is refused by the docker socket: %s\n"+
+				"Add the login to the %q group; `ocel bootstrap %s` does it for %s",
 			h.named(), spoken(result), dockerGroup, providerkit.ClassProduction, deployUser)
 	}
 	return providerkit.Refuse(providerkit.CodeNotReady,
-		"%s cannot run docker, and this deploy has nothing to load its image into: %s\n"+
-			"Run `ocel bootstrap %s` to install the engine, or install it yourself, then run this again",
+		"%s cannot run docker: %s\n"+
+			"Run `ocel bootstrap %s` or install docker",
 		h.named(), spoken(result), providerkit.ClassProduction)
 }
 
@@ -133,7 +133,7 @@ func occupied(said string) (int64, bool) {
 
 func unread(what, said string) error {
 	return providerkit.Refuse(providerkit.CodeNotReady,
-		"this host answered %q for %s, and a deploy that cannot read what a disk has left refuses rather than fills it mid-transfer", said, what)
+		"this host answered %q for %s", said, what)
 }
 
 func (h *Host) Headroom(ctx context.Context, repositories []string) (Headroom, error) {
@@ -161,9 +161,8 @@ func (h *Host) DiskStanding(ctx context.Context, repositories []string) error {
 		return nil
 	}
 	return providerkit.Refuse(providerkit.CodeNotReady,
-		"%s holds %s free on %s and this deploy wants %s: %s\n"+
-			"A disk that fills while an image is streaming fails mid-transfer and leaves the next reconcile to sweep what landed, so this refuses rather than warns. "+
-			"Free space on %s, or narrow what this box keeps, then run this again",
+		"%s has %s free on %s; this deploy needs %s: %s\n"+
+			"Free space on %s",
 		h.named(), sized(room.Free), room.Root, sized(wanted), arithmetic(room), room.Root)
 }
 
@@ -176,19 +175,19 @@ func arithmetic(room Headroom) string {
 			continue
 		}
 		written = append(written, fmt.Sprintf(
-			"%s, and the plan a preflight is handed carries no size for the image it names, so %s is a guessed constant rather than a measurement",
+			"%s (image size unknown, guessed %s)",
 			measured(repository, held), sized(FirstDeployFloor)))
 	}
-	return strings.Join(written, "; ") + fmt.Sprintf("; plus %s of log each incoming container may keep before the engine rotates it away", sized(LogCeiling))
+	return strings.Join(written, "; ") + fmt.Sprintf("; plus %s of logs per container", sized(LogCeiling))
 }
 
 func measured(repository string, held Held) string {
 	if held.Count == 0 {
-		return "nothing is held under " + repository + " yet"
+		return repository + ": nothing held yet"
 	}
 	return fmt.Sprintf(
-		"the largest of the %d image(s) held under %s is %s, and this box keeps %d, so %d unfilled slot(s) plus the incoming one measures %s",
-		held.Count, repository, sized(held.Largest), KeepWindow, max(KeepWindow-held.Count, 0), sized(held.Measured()))
+		"%s: %d image(s), largest %s, keeping %d, so %d empty slot(s) + incoming = %s",
+		repository, held.Count, sized(held.Largest), KeepWindow, max(KeepWindow-held.Count, 0), sized(held.Measured()))
 }
 
 func keys(held map[string]Held) func(func(string) bool) {
@@ -244,43 +243,43 @@ func (h *Host) proxyTrouble(ctx context.Context, elevation, said string) error {
 	switch {
 	case status == "":
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"no container named %s stands on %s, and every request this deploy's app would answer arrives through it: %s\n"+
-				"Run `ocel bootstrap %s` to put the proxy back, then run this again",
+			"no %s container on %s: %s\n"+
+				"Run `ocel bootstrap %s`",
 			ProxyContainer, h.named(), state, providerkit.ClassProduction)
 	case status == proxyRestarting:
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"%s on %s is restarting rather than running, so it is coming up and falling over rather than standing still: %s\n"+
-				"Read `docker logs %s` for why it will not stay up, then run this again",
+			"%s on %s keeps restarting: %s\n"+
+				"Check `docker logs %s`",
 			ProxyContainer, h.named(), state, ProxyContainer)
 	case status == proxyExited:
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"%s on %s has exited and stayed exited, and deploying into a box whose proxy is down stands a container up that nothing routes to and reports a green deploy: %s\n"+
-				"Run `docker start %s`, or `ocel bootstrap %s` to write it back, then run this again",
+			"%s on %s has exited: %s\n"+
+				"Run `docker start %s` or `ocel bootstrap %s`",
 			ProxyContainer, h.named(), state, ProxyContainer, providerkit.ClassProduction)
 	case status != "running":
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"%s on %s is %s rather than running, and deploying into a box whose proxy is down stands a container up that nothing routes to and reports a green deploy: %s\n"+
-				"Run `docker start %s`, or `ocel bootstrap %s` to write it back, then run this again",
+			"%s on %s is %s, not running: %s\n"+
+				"Run `docker start %s` or `ocel bootstrap %s`",
 			ProxyContainer, h.named(), status, state, ProxyContainer, providerkit.ClassProduction)
 	}
 
 	if _, err := h.ran(ctx, "ask whether the proxy's flip helper stands",
 		words(execCommand("test -x "+quoted(ProxyHelperMount))), nil, elevation); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"%s is running on %s and carries no executable flip helper at %s, which is a bootstrap ocel never finished rather than a proxy that is down: %v\n"+
-				"Run `ocel bootstrap %s` to write the helper back, then run this again",
+			"%s on %s has no executable flip helper at %s: %v\n"+
+				"Run `ocel bootstrap %s`",
 			ProxyContainer, h.named(), ProxyHelperMount, err, providerkit.ClassProduction)
 	}
 	if _, err := h.ran(ctx, "ask whether the proxy's admin socket stands",
 		words(execCommand("test -S "+quoted(ProxyAdminSocket))), nil, elevation); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"%s is running on %s and there is no socket at %s, so the proxy never opened the admin endpoint this deploy flips it through: %v\n"+
-				"Run `ocel bootstrap %s` to write back the configuration that binds it, then run this again",
+			"%s on %s has no admin socket at %s: %v\n"+
+				"Run `ocel bootstrap %s`",
 			ProxyContainer, h.named(), ProxyAdminSocket, err, providerkit.ClassProduction)
 	}
 	return providerkit.Refuse(providerkit.CodeNotReady,
-		"%s is running on %s and %s is there, and the admin endpoint refused the one read this deploy makes of it: %s\n"+
-			"The socket's permissions are the whole of its access control, so check it stands at %s owned by root, then run this again",
+		"%s on %s refused a read on its admin socket %s: %s\n"+
+			"Check the socket is mode %s and owned by root",
 		ProxyContainer, h.named(), ProxyAdminSocket, said, caddySocketMode)
 }
 
@@ -314,8 +313,8 @@ func (h *Host) ServingPortsHeld(ctx context.Context) error {
 		return nil
 	}
 	return providerkit.Refuse(providerkit.CodeNotReady,
-		"%s serves every request on this host through %s, and on a bootstrapped box ports %s are taken by it rather than free: %s",
-		ProxyContainer, ProxyContainer, strings.Join(proxyServing(), " and "), strings.Join(found, "; "))
+		"%s must hold ports %s: %s",
+		ProxyContainer, strings.Join(proxyServing(), " and "), strings.Join(found, "; "))
 }
 
 func (h *Host) portHeld(ctx context.Context, port string) (string, error) {
@@ -325,8 +324,8 @@ func (h *Host) portHeld(ctx context.Context, port string) (string, error) {
 	}
 	foreign := slices.DeleteFunc(slices.Clone(named), func(name string) bool { return name == ProxyContainer })
 	if len(foreign) > 0 {
-		return fmt.Sprintf("port %s on this host is published by %s, which is not %s, so this deploy's routes would be written into a proxy nothing reaches — stop %s or move it off %s, then run this again",
-			port, strings.Join(foreign, ", "), ProxyContainer, strings.Join(foreign, ", "), port), nil
+		return fmt.Sprintf("port %s is published by %s; stop it or move it off %s",
+			port, strings.Join(foreign, ", "), port), nil
 	}
 	if slices.Contains(named, ProxyContainer) {
 		return "", nil
@@ -336,11 +335,11 @@ func (h *Host) portHeld(ctx context.Context, port string) (string, error) {
 		return "", err
 	}
 	if bound := listeners.On(held, portNumber(port)); len(bound) > 0 {
-		return fmt.Sprintf("port %s on this host is bound at %s by something outside this engine and no container publishes it, so %s never took it — stop whatever holds it and run `ocel bootstrap %s`",
-			port, strings.Join(listeners.Lines(bound), ", "), ProxyContainer, providerkit.ClassProduction), nil
+		return fmt.Sprintf("port %s is bound outside docker at %s; stop it and run `ocel bootstrap %s`",
+			port, strings.Join(listeners.Lines(bound), ", "), providerkit.ClassProduction), nil
 	}
-	return fmt.Sprintf("nothing on this host holds port %s, so %s is not serving it — run `ocel bootstrap %s` to put the proxy back",
-		port, ProxyContainer, providerkit.ClassProduction), nil
+	return fmt.Sprintf("nothing holds port %s; run `ocel bootstrap %s`",
+		port, providerkit.ClassProduction), nil
 }
 
 func portNumber(port string) int {

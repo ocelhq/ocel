@@ -43,7 +43,7 @@ func Open(ctx context.Context, target Target) (*Session, error) {
 	}
 	if len(keys) == 0 {
 		return nil, providerkit.Refuse(providerkit.CodeDenied,
-			"%s port %d offered no ssh host key, so there is nothing to trust", dest.Address, dest.Port)
+			"%s port %d offered no ssh host key", dest.Address, dest.Port)
 	}
 	anchor, trust := classify(dest, keys, recorded(ctx, dest))
 	if trust != nil {

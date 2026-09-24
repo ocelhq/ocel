@@ -112,12 +112,12 @@ func listingCalls() []storeCall {
 	page := strconv.Itoa(storePage)
 	return []storeCall{
 		{
-			name: "uploads", what: "read the unfinished uploads a bucket holds",
+			name: "uploads", what: "list unfinished uploads",
 			method: http.MethodGet, query: "uploads&max-uploads=" + page,
 			capture: true, allow: []string{"200", "404"},
 		},
 		{
-			name: "objects", what: "read the objects a bucket holds",
+			name: "objects", what: "list objects",
 			method: http.MethodGet, query: "list-type=2&max-keys=" + page,
 			capture: true, allow: []string{"200", "404"},
 		},
@@ -131,7 +131,7 @@ func uploadsIn(answer probeAnswer) ([]storedUpload, error) {
 	var listed uploadListing
 	if err := xml.Unmarshal(answer.body, &listed); err != nil {
 		return nil, providerkit.Refuse(providerkit.CodeNotReady,
-			"the store answered with unfinished uploads no reader could make sense of: %v", err)
+			"unreadable upload listing from the store: %v", err)
 	}
 	return listed.Uploads, nil
 }
@@ -143,7 +143,7 @@ func objectsIn(answer probeAnswer) ([]string, error) {
 	var listed objectListing
 	if err := xml.Unmarshal(answer.body, &listed); err != nil {
 		return nil, providerkit.Refuse(providerkit.CodeNotReady,
-			"the store answered with a listing no reader could make sense of: %v", err)
+			"unreadable object listing from the store: %v", err)
 	}
 	keys := make([]string, 0, len(listed.Contents))
 	for _, held := range listed.Contents {
@@ -156,7 +156,7 @@ func abortCalls(uploads []storedUpload) []storeCall {
 	calls := make([]storeCall, 0, len(uploads))
 	for i, upload := range uploads {
 		calls = append(calls, storeCall{
-			name: "abort" + strconv.Itoa(i), what: "abandon the unfinished upload of " + upload.Key,
+			name: "abort" + strconv.Itoa(i), what: "abort the upload of " + upload.Key,
 			method: http.MethodDelete, key: upload.Key,
 			query: "uploadId=" + url.QueryEscape(upload.UploadID),
 			allow: []string{"200", "204", "404"},
@@ -175,7 +175,7 @@ func deleteCall(keys []string) (storeCall, error) {
 		return storeCall{}, err
 	}
 	return storeCall{
-		name: "delete", what: "take " + strconv.Itoa(len(keys)) + " objects out of the bucket",
+		name: "delete", what: "delete " + strconv.Itoa(len(keys)) + " objects",
 		method: http.MethodPost, query: "delete", body: body,
 		typed: "application/xml", md5: true, allow: []string{"200"},
 	}, nil
@@ -212,7 +212,7 @@ func removedBucket(spec BucketSpec, clock func() time.Time, run probeRunner) err
 		signature := heldSignature(keys, uploads)
 		if signature == held {
 			return providerkit.Refuse(providerkit.CodeNotReady,
-				"bucket %s still holds %d objects and %d unfinished uploads after the store was asked to take them out",
+				"bucket %s still holds %d objects and %d unfinished uploads after deletion",
 				spec.Bucket, len(keys), len(uploads))
 		}
 		held = signature
@@ -221,7 +221,7 @@ func removedBucket(spec BucketSpec, clock func() time.Time, run probeRunner) err
 			call, err := deleteCall(keys)
 			if err != nil {
 				return providerkit.Refuse(providerkit.CodeInvalid,
-					"the objects bucket %s holds cannot be described to the store: %v", spec.Bucket, err)
+					"cannot encode the deletion for bucket %s: %v", spec.Bucket, err)
 			}
 			calls = append(calls, call)
 		}
@@ -230,7 +230,7 @@ func removedBucket(spec BucketSpec, clock func() time.Time, run probeRunner) err
 		}
 	}
 	if _, err := droveStore(spec, []storeCall{{
-		name: "remove", what: "take bucket " + spec.Bucket + " down",
+		name: "remove", what: "remove bucket " + spec.Bucket,
 		method: http.MethodDelete, allow: []string{"200", "204", "404"},
 	}}, clock(), run); err != nil {
 		return err

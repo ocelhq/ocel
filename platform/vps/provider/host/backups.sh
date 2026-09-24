@@ -27,7 +27,7 @@ room_for() {
   size=$(wc -c <"$dir/$last")
   free=$(df -B1 --output=avail "$dir" | tail -n 1 | tr -d ' ')
   if [ "$free" -lt $((size * 2)) ]; then
-    abort "$dir has $free bytes free and the last dump of $container took $size: a dump is taken with room for two, because a full disk takes the resource down with it"
+    abort "$dir has $free bytes free; the last dump of $container took $size and a dump needs twice that"
   fi
 }
 
@@ -46,16 +46,16 @@ dump_volume() {
   room_for "$dir" "$container" .tar
 
   source=$(docker inspect --format '{{range .Mounts}}{{if eq .Type "volume"}}{{.Source}}{{end}}{{end}}' "$container")
-  [ -n "$source" ] || abort "$container mounts no volume, and a volume dump is a copy of what it mounts"
+  [ -n "$source" ] || abort "$container mounts no volume"
 
   stamp=$(date -u +%Y%m%dT%H%M%SZ)
   partial="$dir/.$stamp.$$.partial"
   docker pause "$container" >/dev/null ||
-    abort "$container would not pause, and a tar of a volume something is still writing to holds whatever it was half-way through"
+    abort "$container would not pause"
   trap 'docker unpause "$container" >/dev/null 2>&1 || true' EXIT INT TERM
   if ! tar -C "$source" -cf "$partial" .; then
     rm -f "$partial"
-    abort "tar of $source for $container failed, and nothing was kept of it"
+    abort "tar of $source for $container failed"
   fi
   docker unpause "$container" >/dev/null 2>&1 || true
   trap - EXIT INT TERM
@@ -76,12 +76,12 @@ dump() {
   partial="$dir/.$stamp.$$.partial"
   if ! docker exec "$container" pg_dump -U "$superuser" -Fc -d "$database" >"$partial"; then
     rm -f "$partial"
-    abort "pg_dump of $database in $container failed, and nothing was kept of it"
+    abort "pg_dump of $database in $container failed"
   fi
   roles="$dir/.$stamp.$$.roles.partial"
   if ! docker exec "$container" pg_dumpall -U "$superuser" --roles-only >"$roles"; then
     rm -f "$partial" "$roles"
-    abort "pg_dumpall of the roles in $container failed, and nothing was kept of it"
+    abort "pg_dumpall of the roles in $container failed"
   fi
   mv -f "$roles" "$dir/$stamp.roles.sql"
   mv -f "$partial" "$dir/$stamp.dump"

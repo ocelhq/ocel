@@ -186,10 +186,8 @@ func (s *standingStores) shaped(resource string, spec host.ResourceContainer) (h
 	}
 	if !reflect.DeepEqual(*s.spec, spec) {
 		return host.ResourceContainer{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"bucket %s asks the store to run as one shape and bucket %s asks it to run as another, "+
-				"and this project keeps every bucket in the one store container, so only one of them can be live. "+
-				"Gate the `vps.bucket` rule on the environment rather than on which bucket it reaches, "+
-				"or patch both buckets the same way",
+			"buckets %s and %s shape the one store container differently\n"+
+				"Gate the `vps.bucket` rule on the environment, or patch both buckets the same way",
 			resource, s.shaper)
 	}
 	return *s.spec, nil
@@ -250,7 +248,7 @@ func (p *Provider) storeCredential(ctx context.Context, ref providerkit.StackRef
 	}
 	if len(opened) == 0 {
 		return storeCredential{}, providerkit.Refuse(providerkit.CodeNotReady,
-			"what this box keeps for %s opens to nothing, so there is no credential to reach the store with. Remove %s on the box and run this again",
+			"the credential kept for %s is empty\nRemove %s on the box",
 			name, host.KeptPath(ref.Class, name))
 	}
 	return storeCredential{sealed: sealed, secret: string(opened)}, nil
@@ -333,7 +331,7 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 func (p *Provider) externalBucket(in resources.Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
 	if declaredPublic(in.Resource.Bucket) {
 		return providerkit.Binding{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"bucket %s asks to be public and this project keeps its objects in the store named by option %q, whose anonymous access is that store's to grant and not ocel's: serve the objects through your app or a signed url, or drop `public` from %s",
+			"bucket %s is public, but option %q names an external store ocel cannot open\nDrop `public` from %s, or serve it through your app or a signed url",
 			in.Resource.Name, "bucket", in.Resource.Name)
 	}
 	prefix := naming.Sanitize(in.Ref.Project) + "/" + naming.Sanitize(in.Ref.Name.Env) + "/" + naming.Sanitize(in.Resource.Name)
@@ -521,7 +519,7 @@ func (p *Provider) removeBucket(ctx context.Context, ref providerkit.StackRef, b
 	if external := p.options.Bucket; external.configured() {
 		if report != nil {
 			report.Say("Leaving bucket " + binding.Name + "'s objects under " +
-				binding.Properties[providerkit.PropertyBucket] + " in the store this project was pointed at")
+				binding.Properties[providerkit.PropertyBucket])
 		}
 		return nil
 	}
@@ -540,7 +538,7 @@ func (p *Provider) dropBucket(ctx context.Context, ref providerkit.StackRef, bin
 	}
 	if held.secret == "" {
 		if report != nil {
-			report.Say("Leaving bucket " + binding.Name + " where it is: this box keeps no credential for " + store)
+			report.Say("Leaving bucket " + binding.Name + ": no credential kept for " + store)
 		}
 		return nil
 	}
@@ -593,7 +591,7 @@ func (p *Provider) lastBucket(ctx context.Context, ref providerkit.StackRef) (bo
 func (p *Provider) removeStore(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
 	store := storeName(ref)
 	if report != nil {
-		report.Say("Taking the store " + store + " down with the last bucket it held")
+		report.Say("Taking the store " + store + " down")
 	}
 	if err := p.host.UnrouteApp(ctx, storeRoute(ref, store).RouteKey); err != nil {
 		return err

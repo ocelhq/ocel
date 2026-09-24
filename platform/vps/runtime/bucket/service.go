@@ -132,8 +132,7 @@ func (s *Service) held(name string) (scope, error) {
 	if granted, ok := s.granted[name]; ok {
 		return granted, nil
 	}
-	return scope{}, connect.NewError(connect.CodePermissionDenied, fmt.Errorf(
-		"this app was granted no bucket called %q, and a deployment reaches the buckets its own code declares and the ones it is granted and nothing else", name))
+	return scope{}, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("this app was granted no bucket called %q", name))
 }
 
 func (s *Service) reach(name, key string) (scope, string, error) {
@@ -151,9 +150,7 @@ func reserved(key string) error {
 	if !strings.HasPrefix(key, constants.ReservedKeyPrefix) {
 		return nil
 	}
-	return connect.NewError(connect.CodePermissionDenied, fmt.Errorf(
-		"%q names a key under %s, which is where the store keeps its own bookkeeping and is no app's to read or write",
-		key, constants.ReservedKeyPrefix))
+	return connect.NewError(connect.CodePermissionDenied, fmt.Errorf("%q is under the reserved prefix %s", key, constants.ReservedKeyPrefix))
 }
 
 func (s *Service) signer(ctx context.Context, audience bucketv1.SignedAudience) (PresignAPI, error) {
@@ -165,7 +162,7 @@ func (s *Service) signer(ctx context.Context, audience bucketv1.SignedAudience) 
 		}
 		if signer == nil || public == "" {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New(
-				"this project has no domain bound, so its store has no address a browser could reach: bind a domain to this project, or keep the bytes behind your app"))
+				"this project has no domain bound, so its store has no public address\nBind a domain to this project"))
 		}
 		return signer, nil
 	}
@@ -187,9 +184,7 @@ func (s *Service) roomToWrite() error {
 		floor = tenth
 	}
 	if free < floor {
-		return connect.NewError(connect.CodeResourceExhausted, fmt.Errorf(
-			"the store volume has %d MiB free and this box keeps %d MiB in hand, so no write is signed until something is deleted or the box's disk grows",
-			free>>20, floor>>20))
+		return connect.NewError(connect.CodeResourceExhausted, fmt.Errorf("the store volume has %d MiB free, below the %d MiB floor", free>>20, floor>>20))
 	}
 	return nil
 }
@@ -377,7 +372,5 @@ func withinMetadataCap(metadata map[string]string) error {
 	if held <= metadataCap {
 		return nil
 	}
-	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-		"this object's metadata is %d bytes across its names and values and a store holds at most %d, so it is refused before anything is signed",
-		held, metadataCap))
+	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("object metadata is %d bytes, over the %d-byte limit", held, metadataCap))
 }

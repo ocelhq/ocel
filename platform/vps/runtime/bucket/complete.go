@@ -108,7 +108,7 @@ func (s *Service) CompleteUpload(ctx context.Context, req *bucketv1.CompleteUplo
 		}
 		if aws.ToInt64(out.ContentLength) != file.Size || aws.ToString(out.ContentType) != file.MimeType {
 			rejected = append(rejected, file.Key)
-			failure = fmt.Sprintf("the object uploaded for %q is not the one that was signed for", file.Key)
+			failure = fmt.Sprintf("the object uploaded for %q does not match what was signed", file.Key)
 			continue
 		}
 		settled[i].State = stateSucceeded

@@ -78,7 +78,7 @@ func Surface(slug string, class edge.Class) string {
 func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	if spec.Slug == "" {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"the %q edge serves a project by slug, and this stack carries none", Kind)
+			"the %q edge needs a project slug; this stack has none", Kind)
 	}
 	next := prior
 	next.Slug = spec.Slug
@@ -160,12 +160,12 @@ func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 		}
 		group.Changes = append(group.Changes,
 			edge.PlanChange{Kind: RouteKind, Name: hostname, Action: edge.PlanDelete,
-				Reason: "the route on this box's proxy claiming " + hostname + " for " + Surface(scope.Slug, scope.Class)},
+				Reason: "proxy route"},
 			e.certificateKept(hostname))
 	}
 	if len(group.Changes) == 0 {
 		group.Action = edge.PlanKeep
-		group.Reason = "this project claims no hostname on this box, and the containers it runs are the release surface's rows rather than the edge's"
+		group.Reason = "no hostname claimed"
 	}
 	return []edge.PlanGroup{group}
 }
@@ -173,10 +173,10 @@ func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 func (e *Edge) certificateKept(hostname string) edge.PlanChange {
 	if path := host.Covering(e.machine.Pins(), hostname); path != "" {
 		return edge.PlanChange{Kind: CertificateKind, Name: certs.PinHandle(path), Action: edge.PlanKeep,
-			Reason: "the pair you placed at " + path + " and renew, which serves " + hostname + " and every other name it covers: ocel never placed it and removes nothing it did not place"}
+			Reason: "pinned at " + path + "; you renew it"}
 	}
 	return edge.PlanChange{Kind: CertificateKind, Name: certs.ProxyHandle(hostname), Action: edge.PlanKeep,
-		Reason: "the certificate this box's proxy obtained for " + hostname + " and renews, which stays in the proxy's own store: ocel placed no key here so it removes none, and a hostname bound again inside the certificate's life is served off it rather than ordered again"}
+		Reason: "the proxy renews it"}
 }
 
 func (e *Edge) PreviewWildcardRemovals(wildcard string) (removed, kept edge.PlanGroup) {
@@ -186,7 +186,7 @@ func (e *Edge) PreviewWildcardRemovals(wildcard string) (removed, kept edge.Plan
 		Action: edge.PlanDelete,
 		Changes: []edge.PlanChange{{
 			Kind: RouteKind, Name: wildcard, Action: edge.PlanDelete,
-			Reason: "the route on this box's proxy claiming " + wildcard,
+			Reason: "proxy route",
 		}},
 	}
 	return removed, e.SharedPreviewRemoval()
@@ -197,6 +197,6 @@ func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
 		Action: edge.PlanKeep,
-		Reason: "the catch-all every unclaimed hostname on this box falls through to is a bootstrap item, and it answers for every project this box serves rather than for this one",
+		Reason: "shared catch-all, kept",
 	}
 }

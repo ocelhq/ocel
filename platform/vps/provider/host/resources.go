@@ -38,7 +38,7 @@ func (h *Host) unhand(ctx context.Context, held handoff) error {
 	defer stop()
 	if _, err := h.owning(taking, "take back "+held.path, "rm -f "+quoted(held.path), nil); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"%s is left standing on %s and holds a resource's credential in plaintext, which no deploy after this one will take back: %v",
+			"could not remove %s on %s, which holds a plaintext credential: %v",
 			held.path, h.named(), err)
 	}
 	return nil
@@ -113,7 +113,7 @@ func unkept(name, said string) ([]byte, error) {
 	kept, err := base64.StdEncoding.DecodeString(strings.TrimSpace(said))
 	if err != nil {
 		return nil, providerkit.Refuse(providerkit.CodeDenied,
-			"what this box keeps for %s is %d bytes that nothing ocel wrote decodes to", name, len(said))
+			"the value kept for %s is %d undecodable bytes", name, len(said))
 	}
 	return kept, nil
 }
@@ -298,7 +298,7 @@ func (h *Host) upgrade(ctx context.Context, spec ResourceContainer, from, digest
 	if _, err := h.ran(ctx, "move "+spec.Resource+" from version "+from+" to "+spec.Volume.Generation,
 		swapCommand(spec, from, digest, held.path, strings.TrimSpace(dumped)), nil, elevation); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"%s could not be moved from version %s to %s and is back on %s with its data as it was: %v",
+			"%s could not move from version %s to %s and is back on %s, data intact: %v",
 			spec.Resource, from, spec.Volume.Generation, from, err)
 	}
 	return nil
@@ -354,7 +354,8 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 	if from != "" {
 		if !strings.HasPrefix(said, "running ") {
 			return providerkit.Refuse(providerkit.CodeNotReady,
-				"%s keeps data that version %s initialised and this deploy declares version %s, and moving it means dumping it from the running server, which is not running: start %s on the box, or put the version back to %s",
+				"%s holds version %s data, this deploy declares %s, and %s is not running to dump it\n"+
+					"Run `docker start %s` or set the version back to %s",
 				spec.Resource, from, spec.Volume.Generation, spec.Name, from)
 		}
 		return h.upgrade(ctx, spec, from, digest, secret, elevation)
@@ -389,7 +390,7 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 	}
 	if spec.Credential.Reassert != nil {
 		argv, stdin := spec.Credential.Reassert(secret)
-		if _, err := h.ran(ctx, "hold "+spec.Resource+" to the credential it was handed",
+		if _, err := h.ran(ctx, "reassert "+spec.Resource+"'s credential",
 			words(append([]string{"docker", "exec", "--interactive", spec.Name}, argv...))+" >/dev/null 2>&1",
 			strings.NewReader(stdin), elevation); err != nil {
 			return err
@@ -418,7 +419,7 @@ func (h *Host) RemoveResource(ctx context.Context, ref ResourceRef) error {
 	if err != nil {
 		return err
 	}
-	_, err = h.ran(ctx, "forget what "+ref.Name+" was held to and the dumps taken of it",
+	_, err = h.ran(ctx, "remove "+ref.Name+"'s kept credential and backups",
 		"rm -f "+quoted(KeptPath(ref.Class, ref.Name))+"\nrm -rf "+quoted(BackupsDir(ref.Class, ref.Name)), nil, elevation)
 	return err
 }

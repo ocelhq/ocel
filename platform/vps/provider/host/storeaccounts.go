@@ -24,7 +24,7 @@ const (
 func StoreSecretHeld(secret string) error {
 	if len(secret) < StoreSecretMin || len(secret) > StoreSecretMax {
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"a store account's secret is %d characters and the store takes between %d and %d, so the account could never be created and no app would reach its buckets",
+			"a store account secret is %d characters; the store takes %d to %d",
 			len(secret), StoreSecretMin, StoreSecretMax)
 	}
 	return nil
@@ -113,12 +113,12 @@ func (a StoreAccount) calls() ([]adminCall, error) {
 	}
 	return []adminCall{
 		{
-			what:   "give " + a.AccessKeyID + " an account of its own on the store",
+			what:   "create store account " + a.AccessKeyID,
 			method: http.MethodPut, action: "add-service-account",
 			body: added, allow: []string{"200", "400"},
 		},
 		{
-			what:   "hold " + a.AccessKeyID + " to the buckets its app declares",
+			what:   "set the policy of store account " + a.AccessKeyID,
 			method: http.MethodPost, action: "update-service-account",
 			query: "accessKey=" + url.QueryEscape(a.AccessKeyID),
 			body:  updated, allow: []string{"200", "204"},
@@ -161,7 +161,7 @@ func StoreAccountKey(env, app string) string {
 
 func (a StoreAccount) revoking() adminCall {
 	return adminCall{
-		what:   "take the account " + a.AccessKeyID + " reached the store under back",
+		what:   "delete store account " + a.AccessKeyID,
 		method: http.MethodDelete, action: "delete-service-account",
 		query: "accessKey=" + url.QueryEscape(a.AccessKeyID),
 		allow: []string{"200", "204", "404"},
@@ -193,7 +193,7 @@ func (h *Host) GrantStoreAccount(ctx context.Context, account StoreAccount) erro
 	calls, err := account.calls()
 	if err != nil {
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"the account %s reaches the store as cannot be described: %v", account.AccessKeyID, err)
+			"cannot encode store account %s: %v", account.AccessKeyID, err)
 	}
 	now := time.Now().UTC()
 	for _, call := range calls {

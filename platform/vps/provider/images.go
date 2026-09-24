@@ -34,7 +34,7 @@ func (l loaded) Has(ctx context.Context, push providerkit.ImagePush) (bool, erro
 func (l loaded) Push(ctx context.Context, push providerkit.ImagePush, report providerkit.Reporter) error {
 	if push.Built == nil {
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"%s's image is loaded straight onto the box, and this release carries no image wrapped in the runtime to load", push.App)
+			"%s: this release carries no built image to load onto the box", push.App)
 	}
 	return l.load(ctx, push, report)
 }
@@ -42,7 +42,7 @@ func (l loaded) Push(ctx context.Context, push providerkit.ImagePush, report pro
 func (l loaded) load(ctx context.Context, push providerkit.ImagePush, report providerkit.Reporter) error {
 	ref, err := name.NewTag(push.Target, name.Insecure)
 	if err != nil {
-		return fmt.Errorf("%q names nowhere the box can hold an image: %w", push.Target, err)
+		return fmt.Errorf("%q is not a valid image tag: %w", push.Target, err)
 	}
 	stream, writer := io.Pipe()
 	go func() { writer.CloseWithError(tarball.Write(ref, push.Built, writer)) }()

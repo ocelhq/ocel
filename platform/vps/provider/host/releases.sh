@@ -20,15 +20,15 @@ verb=$2
 shift 2
 
 case $scope in
-/* | */ | */*/* | *[!a-z0-9/-]*) abort "$scope is no project and app this host keeps releases for" ;;
+/* | */ | */*/* | *[!a-z0-9/-]*) abort "$scope is not a <project>/<app> scope" ;;
 */*) ;;
-*) abort "$scope is no project and app this host keeps releases for" ;;
+*) abort "$scope is not a <project>/<app> scope" ;;
 esac
 project=${scope%/*}
 app=${scope#*/}
 
 root="${OCEL_RELEASES_ROOT:-/var/lib/ocel/releases}"
-[ -d "$root" ] || abort "$root stands as no release window, and ocel bootstrap is what writes one"
+[ -d "$root" ] || abort "$root is missing; run ocel bootstrap"
 
 hold() {
 	mkdir -p "$root/$project/$app"
@@ -38,7 +38,7 @@ hold() {
 
 coordinate() {
 	case $1 in
-	'' | -* | *[!A-Za-z0-9._:/@-]*) abort "$1 is no image coordinate ocel ever wrote" ;;
+	'' | -* | *[!A-Za-z0-9._:/@-]*) abort "$1 is not a valid image coordinate" ;;
 	esac
 }
 
@@ -66,7 +66,7 @@ promote)
 	class=$1
 	ref=$2
 	case $class in
-	'' | *[!a-z0-9-]*) abort "$class is no class this host serves" ;;
+	'' | *[!a-z0-9-]*) abort "$class is not a valid class" ;;
 	esac
 	coordinate "$ref"
 	hold
@@ -82,7 +82,7 @@ forget)
 	[ $# -eq 1 ] || usage
 	class=$1
 	case $class in
-	'' | *[!a-z0-9-]*) abort "$class is no class this host serves" ;;
+	'' | *[!a-z0-9-]*) abort "$class is not a valid class" ;;
 	esac
 	hold
 	rm -f "$root/$project/$app/$class"
@@ -102,7 +102,7 @@ reconcile)
 
 	docker ps --filter "label=ocel.app=$app" --filter "label=ocel.project=$project" --format '{{.Label "ocel.ref"}}' >"$scratch".running
 	while IFS= read -r running; do
-		[ -n "$running" ] || abort "a container on this host carries ocel.project=$project and ocel.app=$app and names no ocel.ref, and ocel removes nothing while it cannot say what is running"
+		[ -n "$running" ] || abort "a container with ocel.project=$project and ocel.app=$app has no ocel.ref"
 		printf '%s\n' "$running" >>"$scratch".desired
 	done <"$scratch".running
 
