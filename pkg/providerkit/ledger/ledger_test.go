@@ -3,6 +3,7 @@ package ledger
 import (
 	"context"
 	"errors"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -107,10 +108,10 @@ func TestClaimTagRefusesASecondClaimant(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 
-	if err := l.claimTag(ctx, edge.Promotion{PromotionID: "p1", Tag: "live"}); err != nil {
+	if _, err := l.claimTag(ctx, edge.Promotion{PromotionID: "p1", Tag: "live"}); err != nil {
 		t.Fatal(err)
 	}
-	err := l.claimTag(ctx, edge.Promotion{PromotionID: "p2", Tag: "live"})
+	_, err := l.claimTag(ctx, edge.Promotion{PromotionID: "p2", Tag: "live"})
 	var refusal ports.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != ports.CodeInvalid {
 		t.Fatalf("a second claim on the same tag = %v, want the tag refused", err)
@@ -124,10 +125,10 @@ func TestClaimTagLetsTheSamePromotionReclaimIt(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 
-	if err := l.claimTag(ctx, edge.Promotion{PromotionID: "p1", Tag: "live"}); err != nil {
+	if _, err := l.claimTag(ctx, edge.Promotion{PromotionID: "p1", Tag: "live"}); err != nil {
 		t.Fatal(err)
 	}
-	if err := l.claimTag(ctx, edge.Promotion{PromotionID: "p1", Tag: "live"}); err != nil {
+	if _, err := l.claimTag(ctx, edge.Promotion{PromotionID: "p1", Tag: "live"}); err != nil {
 		t.Fatalf("the holder reclaiming its own tag = %v, want it allowed", err)
 	}
 }
@@ -286,7 +287,7 @@ func TestATagIsFreedWithThePromotionItNamed(t *testing.T) {
 	if _, err := l.Prune(ctx, 1, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := l.claimTag(ctx, edge.Promotion{PromotionID: "p3", Tag: "live"}); err != nil {
+	if _, err := l.claimTag(ctx, edge.Promotion{PromotionID: "p3", Tag: "live"}); err != nil {
 		t.Fatalf("claim a tag whose promotion was pruned = %v, want it free", err)
 	}
 }
@@ -407,6 +408,133 @@ func TestUnpromotingLeavesAPointerAnotherPromotionHasSinceTaken(t *testing.T) {
 	}
 	if held := activeIn(t, l, ""); held != "p3" {
 		t.Errorf("the pointer holds %q, want p3: taking p2 back must not undo the promotion that followed it", held)
+	}
+
+	if err := l.Unpromote(ctx, "p3", ""); err != nil {
+		t.Fatalf("Unpromote(p3) = %v", err)
+	}
+	if held := activeIn(t, l, ""); held != "p1" {
+		t.Errorf("the pointer holds %q once p3 was taken back too, want p1: p2 was taken back first, so the edge never served it and p1 is what it still serves", held)
+	}
+}
+
+func promoting(t *testing.T, l *Ledger, promotions ...edge.Promotion) {
+	t.Helper()
+	for _, promotion := range promotions {
+		if err := l.Promote(context.Background(), promotion, "", edge.DiscardReporter()); err != nil {
+			t.Fatalf("Promote(%s) = %v", promotion.PromotionID, err)
+		}
+	}
+}
+
+func historyOf(t *testing.T, l *Ledger) []string {
+	t.Helper()
+	entries, err := l.History(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		ids = append(ids, entry.PromotionID)
+	}
+	return ids
+}
+
+func TestARollbackTakenBackWhileALaterPromotionHeldThePointerLeavesTheReleaseItRolledOffServing(t *testing.T) {
+	l, _ := fixture()
+	ctx := context.Background()
+	promoting(t, l, edge.Promotion{PromotionID: "p1"}, edge.Promotion{PromotionID: "p2"}, edge.Promotion{PromotionID: "p3"})
+	promoting(t, l, edge.Promotion{PromotionID: "p2"}, edge.Promotion{PromotionID: "p4"})
+
+	if err := l.Unpromote(ctx, "p2", ""); err != nil {
+		t.Fatalf("Unpromote(p2) = %v", err)
+	}
+	if err := l.Unpromote(ctx, "p4", ""); err != nil {
+		t.Fatalf("Unpromote(p4) = %v", err)
+	}
+	if held := activeIn(t, l, ""); held != "p3" {
+		t.Errorf("the pointer holds %q, want p3: the rollback onto p2 and the promotion of p4 were both taken back, so the edge still serves p3", held)
+	}
+}
+
+func TestARollbackTakenBackKeepsItsPlaceInHistory(t *testing.T) {
+	l, _ := fixture()
+	ctx := context.Background()
+	promoting(t, l, edge.Promotion{PromotionID: "p1", Ts: 1}, edge.Promotion{PromotionID: "p2", Ts: 2}, edge.Promotion{PromotionID: "p3", Ts: 3})
+	promoting(t, l, edge.Promotion{PromotionID: "p2", Ts: 9})
+
+	if err := l.Unpromote(ctx, "p2", ""); err != nil {
+		t.Fatalf("Unpromote(p2) = %v", err)
+	}
+	if got, want := historyOf(t, l), []string{"p3", "p2", "p1"}; !slices.Equal(got, want) {
+		t.Errorf("history reads %v after a rollback onto p2 was taken back, want %v: the next default rollback from p3 is p2, not p1", got, want)
+	}
+	entries, err := l.History(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if entries[1].Ts != 2 {
+		t.Errorf("p2 reads as created at %d, want 2: the rollback that was taken back never served it", entries[1].Ts)
+	}
+}
+
+func TestATagTheEdgeNeverServedIsFreeForTheDeployThatRetriesIt(t *testing.T) {
+	l, _ := fixture()
+	ctx := context.Background()
+	promoting(t, l, edge.Promotion{PromotionID: "p1", Tag: "v1"})
+
+	if err := l.Unpromote(ctx, "p1", ""); err != nil {
+		t.Fatalf("Unpromote(p1) = %v", err)
+	}
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p2", Tag: "v1"}, "", edge.DiscardReporter()); err != nil {
+		t.Fatalf("a retried deploy tagged v1 = %v, want it to claim the tag: p1 was taken back and never served", err)
+	}
+	entries, err := l.History(ctx, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.Tag == "v1" && entry.PromotionID != "p2" {
+			t.Errorf("history still tags %s as v1 beside p2, so `ocel rollback --tag v1` names two releases", entry.PromotionID)
+		}
+	}
+}
+
+func TestARollbackTakenBackKeepsTheTagItsReleaseAlreadyHeld(t *testing.T) {
+	l, _ := fixture()
+	ctx := context.Background()
+	promoting(t, l, edge.Promotion{PromotionID: "p1", Tag: "v1"}, edge.Promotion{PromotionID: "p2"})
+	promoting(t, l, edge.Promotion{PromotionID: "p1", Tag: "v1"})
+
+	if err := l.Unpromote(ctx, "p1", ""); err != nil {
+		t.Fatalf("Unpromote(p1) = %v", err)
+	}
+	var refusal ports.Refusal
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p3", Tag: "v1"}, "", edge.DiscardReporter()); !errors.As(err, &refusal) || refusal.Code != ports.CodeInvalid {
+		t.Errorf("a new deploy tagged v1 = %v, want it refused: v1 still names p1, which served before the rollback onto it was taken back", err)
+	}
+}
+
+func TestAPromotionThatLostThePointerRaceFreesItsTag(t *testing.T) {
+	l, records := fixture()
+	ctx := context.Background()
+	promoting(t, l, edge.Promotion{PromotionID: "p1"})
+	pointer := l.pointerName(edge.DefaultPointer).String()
+	records.racing = func(name string) {
+		if name != pointer {
+			return
+		}
+		records.racing = nil
+		held := records.held[pointer]
+		held.Revision = "another deploy got here"
+		records.held[pointer] = held
+	}
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p2", Tag: "v1"}, "", edge.DiscardReporter()); err == nil {
+		t.Fatal("a promotion onto a moved pointer succeeded")
+	}
+
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p3", Tag: "v1"}, "", edge.DiscardReporter()); err != nil {
+		t.Errorf("re-running the deploy tagged v1 = %v, want the tag free: the refusal told the user to re-run it", err)
 	}
 }
 
