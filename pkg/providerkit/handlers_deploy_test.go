@@ -1324,3 +1324,18 @@ func TestDeployAnnouncesEachAppsOwnHostnameUnderThatApp(t *testing.T) {
 func noteOf(result *progressv1.ResultEvent) string {
 	return strings.Join(result.GetUrlNotes(), "\n")
 }
+
+func TestADeployOpensItsDNSForTheEdgeTheProviderDefaultsTo(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+
+	req := deployRequest()
+	req.Edge = writtenBy("shop.example")
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	fronts := provider.DNS().(*fake.DNS).Fronts()
+	if len(fronts) == 0 || slices.ContainsFunc(fronts, func(front edge.Kind) bool { return front != fake.KindRelay }) {
+		t.Errorf("the deploy opened its DNS under %v, want the %s edge the provider defaults to", fronts, fake.KindRelay)
+	}
+}

@@ -282,6 +282,32 @@ func TestRemovePreviewWildcardTearsItDownAndForgetsIt(t *testing.T) {
 	}
 }
 
+func TestRemovePreviewWildcardOpensItsDNSForTheEdgeThatHoldsIt(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	held := zoned("acme.com")
+	held.Kind = string(fake.KindDirect)
+	if result := usePreviewWildcard(t, client, "preview.acme.com", held); !result.GetSuccess() {
+		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
+	}
+	opened := len(provider.DNS().(*fake.DNS).Fronts())
+
+	stream, err := client.RemovePreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
+		Tier: environmentv1.Tier_TIER_PREVIEW,
+		Edge: zoned("acme.com"),
+	})
+	if err != nil {
+		t.Fatalf("RemovePreviewWildcard() error = %v", err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemovePreviewWildcard() = %q, %v", result.GetError(), err)
+	}
+	fronts := provider.DNS().(*fake.DNS).Fronts()[opened:]
+	if !slices.Equal(fronts, []edge.Kind{fake.KindDirect}) {
+		t.Errorf("the release opened its DNS under %v, want the %s edge that holds the wildcard", fronts, fake.KindDirect)
+	}
+}
+
 func TestRemovePreviewWildcardRefusesWhenNothingRecordsItsHolder(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
