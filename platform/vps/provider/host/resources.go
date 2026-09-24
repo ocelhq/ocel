@@ -369,7 +369,7 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 	if err := h.sweep(ctx, elevation); err != nil {
 		return err
 	}
-	if err := h.joining(ctx, spec.Resource, spec.Class, spec.Project, networkCreating(spec.Class, spec.Project), elevation); err != nil {
+	if err := h.joining(ctx, spec.Resource, spec.Class, spec.Project, networkStanding(spec.Class, spec.Project), elevation); err != nil {
 		return err
 	}
 	if _, err := h.ran(ctx, "keep a volume for "+spec.Resource, volumeCreating(spec), nil, elevation); err != nil {

@@ -54,12 +54,12 @@ func TestStandingAContainerUpPutsItsNetworkAndTheProxyOnItBeforeTheRun(t *testin
 
 	spec := valued()
 	stand := standingWith(t, spec)
-	joined := stand.at(networkStanding(spec))
+	joined := stand.at(networkStanding(spec.Class, spec.Project))
 	ran := stand.at(quoted("run") + " " + quoted("--detach"))
 	if joined < 0 || ran < 0 || joined > ran {
 		t.Fatalf("the network was joined at %d and the container run at %d: a run onto a network that does not stand fails, and one the proxy is not on serves nothing", joined, ran)
 	}
-	script := networkStanding(spec)
+	script := networkStanding(spec.Class, spec.Project)
 	network := quoted(AppNetwork(spec.Class, spec.Project))
 	for what, wanted := range map[string]string{
 		"a create that carries the class label":   quoted(LabelClass + "=" + string(spec.Class)),
@@ -231,5 +231,21 @@ func TestTheProxysNetworkFactReadsItsOwnMembershipAndNotTheNetworksDeploysAttach
 	}
 	if !strings.Contains(ProxyFactTemplate, `index .NetworkSettings.Networks "`+ProxyNetwork+`"`) {
 		t.Errorf("the proxy's facts never ask whether it sits on %s:\n%s", ProxyNetwork, ProxyFactTemplate)
+	}
+}
+
+func TestStandingAResourceUpPutsTheProxyOnItsNetworkBeforeTheRun(t *testing.T) {
+	t.Parallel()
+
+	spec := resourced()
+	stand := machine(nil)
+	if err := stand.host().StandResource(context.Background(), spec, "secret"); err != nil {
+		t.Fatalf("StandResource() = %v", err)
+	}
+	joined := stand.at("docker network connect " + quoted(AppNetwork(spec.Class, spec.Project)) + " " + quoted(ProxyContainer))
+	ran := stand.at(quoted("run") + " " + quoted("--detach"))
+	if joined < 0 || ran < 0 || joined > ran {
+		t.Fatalf("the proxy joined %s at %d and %s ran at %d: a store is routed as soon as it stands, and a proxy off its network resolves no upstream until some app of the project deploys: %v",
+			AppNetwork(spec.Class, spec.Project), joined, spec.Name, ran, stand.commands())
 	}
 }

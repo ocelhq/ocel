@@ -112,7 +112,7 @@ func TestNoNetworkInspectCanNameAContainerToInspectInstead(t *testing.T) {
 		"what a bootstrap creates the proxy network with":     {networkCommand(), ProxyNetwork},
 		"what a bootstrap probes the proxy network with":      {networkProbe(), ProxyNetwork},
 		"what a destroy removes the proxy network with":       {removal{kind: KindNetwork, path: ProxyNetwork}.command(), ProxyNetwork},
-		"what a deploy puts a project's network up with":      {networkStanding(valued()), project},
+		"what a deploy puts a project's network up with":      {networkStanding(valued().Class, valued().Project), project},
 		"what a resource puts a project's network up with":    {networkCreating(valued().Class, valued().Project), project},
 		"what a teardown takes a project's network down with": {networkForgetting(valued().Class, valued().Project), project},
 	}
