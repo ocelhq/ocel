@@ -128,17 +128,14 @@ func detectLanguage(dir string) (language, bool, error) {
 }
 
 func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts initOptions, stdout, stderr io.Writer) error {
-	configPath := filepath.Join(cwd, configFileName(opts))
-	if opts.configPath != "" {
-		configPath = opts.configPath
-		if !filepath.IsAbs(configPath) {
-			configPath = filepath.Join(cwd, configPath)
-		}
+	configPath, err := initConfigPath(cwd, opts)
+	if err != nil {
+		return err
 	}
 	projectDir := filepath.Dir(configPath)
 	name := filepath.Base(configPath)
 
-	slug, err := resolveSlug(projectDir, slug)
+	slug, err = resolveSlug(projectDir, slug)
 	if err != nil {
 		return err
 	}
@@ -157,6 +154,9 @@ func runInit(ctx context.Context, deps cmddeps.Deps, cwd, slug string, opts init
 		return fmt.Errorf("%s already exists", name)
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return fmt.Errorf("check for existing %s: %w", name, err)
+	}
+	if others := projectconfig.Counterparts(configPath); len(others) > 0 {
+		return fmt.Errorf("%s already holds %s, and one project reads one config: keep it, or delete it before writing %s", projectDir, strings.Join(others, " and "), name)
 	}
 
 	if err := os.MkdirAll(projectDir, 0o755); err != nil {
@@ -195,6 +195,26 @@ func languageOfProject(projectDir string, opts initOptions) (language, bool, err
 	return detectLanguage(projectDir)
 }
 
+func initConfigPath(cwd string, opts initOptions) (string, error) {
+	if opts.configPath == "" {
+		return filepath.Join(cwd, configFileName(opts)), nil
+	}
+	path := opts.configPath
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(cwd, path)
+	}
+	name := filepath.Base(path)
+	switch {
+	case !projectconfig.IsConfig(name):
+		return "", fmt.Errorf("%s (from --config / OCEL_CONFIG) is not a config ocel reads — name it %s, %s or %s, with an optional target before the suffix", name, projectconfig.DefaultFileName, projectconfig.YAMLFileName, projectconfig.TSFileName)
+	case opts.ts && !projectconfig.IsProgram(name):
+		return "", fmt.Errorf("--ts writes a TypeScript config, and %s (from --config / OCEL_CONFIG) is not one: name it %s, or drop --ts", name, projectconfig.TSFileName)
+	case opts.yaml && !projectconfig.IsYAML(name):
+		return "", fmt.Errorf("--yaml writes a YAML config, and %s (from --config / OCEL_CONFIG) is not one: name it %s, or drop --yaml", name, projectconfig.YAMLFileName)
+	}
+	return path, nil
+}
+
 func configFileName(opts initOptions) string {
 	switch {
 	case opts.ts:
@@ -227,10 +247,10 @@ func schemaURL() string {
 }
 
 func configTemplate(name, slug, provider string) string {
-	if strings.HasSuffix(name, ".ts") {
+	if projectconfig.IsProgram(name) {
 		return typescriptTemplate(slug, provider)
 	}
-	if strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") {
+	if projectconfig.IsYAML(name) {
 		return yamlTemplate(slug, provider)
 	}
 	return fmt.Sprintf(`{

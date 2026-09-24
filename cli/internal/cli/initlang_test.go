@@ -132,6 +132,82 @@ func TestInitWritesYAMLOnRequest(t *testing.T) {
 	}
 }
 
+func TestInitRefusesToWriteASecondFormOfTheConfig(t *testing.T) {
+	for _, tc := range []struct {
+		existing string
+		opts     initOptions
+		refused  string
+	}{
+		{projectconfig.DefaultFileName, initOptions{provider: "acme", yaml: true}, projectconfig.YAMLFileName},
+		{projectconfig.TSFileName, initOptions{provider: "acme", yaml: true}, projectconfig.YAMLFileName},
+		{"ocel.yml", initOptions{provider: "acme", yaml: true}, projectconfig.YAMLFileName},
+		{projectconfig.YAMLFileName, initOptions{provider: "acme"}, projectconfig.DefaultFileName},
+		{projectconfig.YAMLFileName, initOptions{provider: "acme", ts: true}, projectconfig.TSFileName},
+	} {
+		t.Run(tc.existing+" then "+tc.refused, func(t *testing.T) {
+			dir := manifestDir(t, "go.mod")
+			if err := os.WriteFile(filepath.Join(dir, tc.existing), []byte("{}\n"), 0o644); err != nil {
+				t.Fatalf("write %s: %v", tc.existing, err)
+			}
+			deps := newDeps()
+			stubPackageManager(&deps, nil)
+
+			err := runInit(context.Background(), deps, dir, "acme", tc.opts, &bytes.Buffer{}, &bytes.Buffer{})
+			if err == nil || !strings.Contains(err.Error(), tc.existing) {
+				t.Fatalf("error %v does not name the %s already there", err, tc.existing)
+			}
+			if _, err := os.Stat(filepath.Join(dir, tc.refused)); err == nil {
+				t.Fatalf("wrote %s beside %s", tc.refused, tc.existing)
+			}
+		})
+	}
+}
+
+func TestInitRefusesAFormFlagTheExplicitPathContradicts(t *testing.T) {
+	for _, tc := range []struct {
+		path string
+		opts initOptions
+		want string
+	}{
+		{projectconfig.DefaultFileName, initOptions{provider: "acme", yaml: true}, "--yaml"},
+		{"ocel.aws.yaml", initOptions{provider: "acme", ts: true}, "--ts"},
+		{"config.json", initOptions{provider: "acme"}, "config.json"},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			dir := manifestDir(t, "go.mod")
+			deps := newDeps()
+			stubPackageManager(&deps, nil)
+			tc.opts.configPath = tc.path
+
+			err := runInit(context.Background(), deps, dir, "acme", tc.opts, &bytes.Buffer{}, &bytes.Buffer{})
+			if err == nil || !strings.Contains(err.Error(), tc.want) || !strings.Contains(err.Error(), tc.path) {
+				t.Fatalf("error %v names neither %s nor %s", err, tc.want, tc.path)
+			}
+			if _, err := os.Stat(filepath.Join(dir, tc.path)); err == nil {
+				t.Fatalf("wrote %s", tc.path)
+			}
+		})
+	}
+}
+
+func TestInitWritesYAMLToAnExplicitYAMLPath(t *testing.T) {
+	dir := manifestDir(t, "go.mod")
+	deps := newDeps()
+	stubPackageManager(&deps, nil)
+
+	opts := initOptions{provider: "acme", yaml: true, configPath: "ocel.aws.yml"}
+	if err := runInit(context.Background(), deps, dir, "acme", opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runInit: %v", err)
+	}
+	cfg, err := projectconfig.Resolve(context.Background(), dir, "ocel.aws.yml")
+	if err != nil {
+		t.Fatalf("the config init wrote does not load: %v", err)
+	}
+	if cfg.Slug != "acme" {
+		t.Fatalf("config = %+v", cfg)
+	}
+}
+
 func TestInitRefusesADirectoryOfSeveralLanguages(t *testing.T) {
 	dir := manifestDir(t, "go.mod")
 	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte("\n"), 0o644); err != nil {

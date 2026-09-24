@@ -3,7 +3,6 @@ package configdoc
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 )
 
 type Document struct {
@@ -112,7 +111,7 @@ func (s StringList) checkShape(path string, value any) error {
 	case []any:
 		for i, item := range shaped {
 			if _, ok := item.(string); !ok {
-				return typeError(fmt.Sprintf("%s[%d]", path, i), "a hostname")
+				return typeError(IndexPath(path, i), "a hostname")
 			}
 		}
 		return nil

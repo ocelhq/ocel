@@ -69,12 +69,8 @@ func configBlocks(t *testing.T, root string) []block {
 				open, body = nil, nil
 				continue
 			}
-			info := strings.TrimPrefix(line, "```")
-			if !strings.HasPrefix(info, "json") && !strings.HasPrefix(info, "yaml") {
-				continue
-			}
-			named := fenceTitle.FindStringSubmatch(info)
-			if named == nil {
+			named := fenceTitle.FindStringSubmatch(strings.TrimPrefix(line, "```"))
+			if named == nil || !configTitled(named[1]) {
 				continue
 			}
 			open = &block{page: page, title: named[1]}
@@ -93,13 +89,10 @@ func TestEveryDocumentedConfigValidatesAgainstTheSchema(t *testing.T) {
 	want := schemaID(t, root)
 	shown := 0
 	for _, example := range configBlocks(t, root) {
-		if !configTitled(example.title) {
-			continue
-		}
 		shown++
 		name := example.page + " › " + example.title
-		document := documentOf(t, name, []byte(example.body))
-		named := schemaNamed(name, []byte(example.body), document)
+		document := documentOf(t, name, example.title, []byte(example.body))
+		named := schemaNamed(example.title, []byte(example.body), document)
 		if named != want {
 			t.Errorf("%s names %q, want the committed schema %q", name, named, want)
 		}

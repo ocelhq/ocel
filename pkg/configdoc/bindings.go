@@ -35,11 +35,11 @@ func (Bindings) checkShape(path string, value any) error {
 		}
 		named, ok := object[key].(map[string]any)
 		if !ok {
-			return typeError(joinPath(path, key), "an object of declared name to published name")
+			return typeError(JoinPath(path, key), "an object of declared name to published name")
 		}
 		for _, declared := range slices.Sorted(mapKeys(named)) {
 			if _, spelled := named[declared].(string); !spelled {
-				return typeError(joinPath(joinPath(path, key), declared), "the name the record is published under")
+				return typeError(JoinPath(JoinPath(path, key), declared), "the name the record is published under")
 			}
 		}
 	}

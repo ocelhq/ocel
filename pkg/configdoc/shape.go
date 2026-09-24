@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -17,9 +18,9 @@ var rawMessageType = reflect.TypeOf(json.RawMessage(nil))
 
 func typeError(path, want string) error {
 	if path == "" {
-		return fmt.Errorf("the config must be an object")
+		return fmt.Errorf("%s must be an object", PathName(path))
 	}
-	return fmt.Errorf("%q must be %s", path, want)
+	return fmt.Errorf("%s must be %s", PathName(path), want)
 }
 
 type UnknownKeyError struct {
@@ -76,7 +77,7 @@ func checkValue(path string, target reflect.Type, value any) error {
 			return typeError(path, "a list")
 		}
 		for i, item := range items {
-			if err := checkValue(fmt.Sprintf("%s[%d]", path, i), target.Elem(), item); err != nil {
+			if err := checkValue(IndexPath(path, i), target.Elem(), item); err != nil {
 				return err
 			}
 		}
@@ -87,7 +88,7 @@ func checkValue(path string, target reflect.Type, value any) error {
 			return typeError(path, "an object")
 		}
 		for key, item := range object {
-			if err := checkValue(joinPath(path, key), target.Elem(), item); err != nil {
+			if err := checkValue(JoinPath(path, key), target.Elem(), item); err != nil {
 				return err
 			}
 		}
@@ -135,10 +136,10 @@ func checkObject(path string, target reflect.Type, object map[string]any) error 
 		if object[key] == nil {
 			continue
 		}
-		if err := checkValue(joinPath(path, key), fields[index].kind, object[key]); err != nil {
+		if err := checkValue(JoinPath(path, key), fields[index].kind, object[key]); err != nil {
 			return err
 		}
-		if err := checkPattern(joinPath(path, key), fields[index], object[key]); err != nil {
+		if err := checkPattern(JoinPath(path, key), fields[index], object[key]); err != nil {
 			return err
 		}
 	}
@@ -160,11 +161,22 @@ func checkPattern(path string, field jsonField, value any) error {
 	return nil
 }
 
-func joinPath(path, key string) string {
+func JoinPath(path, key string) string {
 	if path == "" {
 		return key
 	}
 	return path + "." + key
+}
+
+func IndexPath(path string, index int) string {
+	return fmt.Sprintf("%s[%d]", path, index)
+}
+
+func PathName(path string) string {
+	if path == "" {
+		return "the config"
+	}
+	return strconv.Quote(path)
 }
 
 type jsonField struct {
