@@ -459,6 +459,8 @@ func (r removal) command() string {
 	case r.kind == KindNetwork:
 		return "if ! docker network rm " + quoted(r.path) + " >/dev/null 2>&1 && " +
 			"docker network inspect " + quoted(r.path) + " >/dev/null 2>&1; then printf '%s\\n' " + quoted(networkHeld) + "; fi"
+	case r.kind == KindRoutingTable || r.kind == KindProxyConfig:
+		return routingLocked("-x") + "rm -f " + quoted(r.path)
 	case r.shared:
 		return "rmdir " + quoted(r.path) + " 2>/dev/null || printf '%s\\n' " + quoted(dirHeld)
 	default:

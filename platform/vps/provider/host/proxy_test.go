@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
@@ -490,17 +491,76 @@ func seedsIn(t *testing.T) (string, string, Item, Item) {
 	if err := os.Mkdir(bin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	executable(t, filepath.Join(bin, "install"), "#!/bin/sh\neval last=\\${$#}\ncat > \"$last\"\n")
 	executable(t, filepath.Join(bin, "chown"), "#!/bin/sh\nexit 0\n")
 	table, config := routingTableItem(), proxyConfigItem()
 	table.Name, config.Name = filepath.Join(dir, "routing.json"), filepath.Join(dir, "caddy.json")
 	return dir, bin, table, config
 }
 
+func seedScript(table, config Item) string {
+	return strings.ReplaceAll(seedingRouting(table, config), quoted(routingLock), quoted(filepath.Dir(table.Name)))
+}
+
 func seeding(t *testing.T, bin string, table, config Item) {
 	t.Helper()
-	if said, err := writing(t, bin, seedingRouting(table, config)); err != nil {
+	if said, err := writing(t, bin, seedScript(table, config)); err != nil {
 		t.Fatalf("seeding %s and %s = %v: %s", table.Name, config.Name, err, said)
+	}
+}
+
+func TestASeedWaitsOutAWriteHoldingTheLockAndKeepsTheConfigItRendered(t *testing.T) {
+	t.Parallel()
+
+	if _, err := exec.LookPath("flock"); err != nil {
+		t.Skip("no flock on this machine, and the seed under test is the shell one a box runs")
+	}
+	dir, bin, table, config := seedsIn(t)
+	written := string(mustWrite(t, routed()))
+	if err := os.WriteFile(table.Name, []byte(written), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	marks := t.TempDir()
+	acquired, clobbered := filepath.Join(marks, "acquired"), filepath.Join(marks, "clobbered")
+	writer := exec.Command("flock", "-x", dir, "-c",
+		"touch "+quoted(acquired)+"; sleep 0.3; if [ -e "+quoted(config.Name)+" ]; then touch "+quoted(clobbered)+"; fi; "+
+			"printf 'rendered by a deploy' > "+quoted(config.Name))
+	if err := writer.Start(); err != nil {
+		t.Fatal(err)
+	}
+	for range 100 {
+		if _, err := os.Stat(acquired); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	seeding(t, bin, table, config)
+	if err := writer.Wait(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(clobbered); err == nil {
+		t.Error("the seed wrote the placeholder config while a deploy held the lock over the pair, and a deploy that moves its rendering into place before the placeholder lands flips the proxy onto a box that 404s every host")
+	}
+	if got := held(t, config.Name); got != "rendered by a deploy" {
+		t.Errorf("the seed left %s as %q, want what the deploy that held the lock rendered", config.Name, got)
+	}
+	if got := held(t, table.Name); got != written {
+		t.Errorf("the seed rewrote the table as %q", got)
+	}
+}
+
+func TestTheRoutingTableAndItsConfigAreRemovedUnderTheLockEveryWriterTakes(t *testing.T) {
+	t.Parallel()
+
+	for _, removal := range proxyRemovals() {
+		if removal.kind != KindRoutingTable && removal.kind != KindProxyConfig {
+			continue
+		}
+		command := removal.command()
+		locked := strings.Index(command, "exec 9<"+quoted(routingLock)+"\nflock -x 9")
+		if locked < 0 || strings.Index(command, "rm ") < locked {
+			t.Errorf("%s is removed by\n%s\nwhich does not hold %s first, so a deploy mid-write moves a file back beside a removal", removal.path, command, routingLock)
+		}
 	}
 }
 
@@ -1091,7 +1151,7 @@ func TestSomethingOtherThanTheProxysConfigStandingAtItsPathIsRefusedRatherThanCh
 		if err := os.MkdirAll(over.Name, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		said, err := writing(t, bin, seedingRouting(table, config))
+		said, err := writing(t, bin, seedScript(table, config))
 		if err == nil {
 			t.Fatalf("the seed over a directory where %s belongs landed, and the probe reads that path with -f: "+
 				"the write would call it present forever, the survey would call it absent forever, and every apply would report success over a proxy that never serves:\n%s", over.Name, said)
