@@ -56,7 +56,34 @@ export const OVERRIDES = {
     license: "MIT-0",
     reason: "its LICENSE is MIT No Attribution, a text the classifier does not carry",
   },
+  "@img/sharp-libvips-*": {
+    license: "LGPL-3.0-or-later",
+    reason:
+      "an LGPL shared library sharp loads dynamically, shipped unmodified and replaceable, which puts no obligation on our code",
+    texts: ["LGPL-3.0.txt", "GPL-3.0.txt"],
+    files: ["README.md", "versions.json"],
+    source: (manifest, dir) => {
+      const { vips } = JSON.parse(readFileSync(join(dir, "versions.json"), "utf8"));
+      const tag = `https://github.com/lovell/sharp-libvips/tree/v${manifest.version}`;
+      return [
+        `${manifest.name} ${manifest.version} ships libvips ${vips} and the libraries versions.json lists.`,
+        `The corresponding source is the sharp-libvips release v${manifest.version}, ${tag},`,
+        "whose build scripts fetch and build each library at exactly those versions.",
+      ].join("\n");
+    },
+  },
 };
+
+const LICENSES = join(dirname(fileURLToPath(import.meta.url)), "licenses");
+
+export function overrideFor(name) {
+  if (Object.hasOwn(OVERRIDES, name)) return OVERRIDES[name];
+  const [, entry] =
+    Object.entries(OVERRIDES).find(
+      ([key]) => key.endsWith("*") && name.startsWith(key.slice(0, -1)),
+    ) ?? [];
+  return entry;
+}
 
 const LICENSE_FILE = /^(licen[cs]e|copying|unlicense)([-._].*)?$/i;
 const NOTICE_FILE = /^(notices?|third[-_]?party[-_]?notice\w*)([-._].*)?$/i;
@@ -343,16 +370,34 @@ function goComponents(info, packages) {
   return { components, problems: [...problems] };
 }
 
-function npmComponent(dir) {
+export function npmComponent(dir) {
   const manifest = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
-  return {
+  const override = overrideFor(manifest.name);
+  const declared = declaredLicense(manifest);
+  const component = {
     ecosystem: "npm",
     name: manifest.name,
     version: manifest.version,
-    license: declaredLicense(manifest) ?? OVERRIDES[manifest.name]?.license,
+    license: declared ?? override?.license,
     texts: licenseTexts(dir, LICENSE_FILE),
     notices: licenseTexts(dir, NOTICE_FILE),
   };
+  if (override?.source && declared === override.license) {
+    component.accepted = true;
+    for (const name of override.texts) {
+      component.texts.push({ name, text: readFileSync(join(LICENSES, name), "utf8") });
+    }
+    for (const name of override.files) {
+      if (existsSync(join(dir, name))) {
+        component.notices.push({ name, text: readFileSync(join(dir, name), "utf8") });
+      }
+    }
+    component.notices.push({
+      name: "corresponding source",
+      text: override.source(manifest, dir),
+    });
+  }
+  return component;
 }
 
 function walk(dir) {
@@ -479,7 +524,7 @@ export function violations(components) {
     const where = `${component.ecosystem} ${component.name}@${component.version}`;
     if (!component.license) {
       found.push(`${where}: declares no license`);
-    } else if (!permitted(component.license)) {
+    } else if (!component.accepted && !permitted(component.license)) {
       found.push(`${where}: ${component.license} is not on the permissive allowlist`);
     }
   }
@@ -537,7 +582,7 @@ export function render({ binary, target, components, toolchains, goLicense, apac
 
   const noticed = sorted.filter((component) => component.notices.length > 0);
   if (noticed.length > 0) {
-    lines.push("", "", RULE, "NOTICE files", RULE);
+    lines.push("", "", RULE, "Notices and source offers", RULE);
     for (const component of noticed) {
       for (const notice of component.notices) {
         lines.push(

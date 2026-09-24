@@ -1,9 +1,14 @@
 import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import {
   declaredLicense,
   installedDirectory,
+  npmComponent,
   OVERRIDES,
+  overrideFor,
   PERMISSIVE,
   parseBuildInfo,
   permitted,
@@ -138,11 +143,77 @@ describe("violations", () => {
 });
 
 describe("OVERRIDES", () => {
-  it("names a permissive license and says why detection misses it", () => {
+  it("says why each entry is needed, and carries the texts a non-permissive license requires", () => {
     for (const [name, entry] of Object.entries(OVERRIDES)) {
-      assert.ok(PERMISSIVE.has(entry.license), name);
       assert.ok(entry.reason.length > 0, name);
-      assert.deepEqual(Object.keys(entry).sort(), ["license", "reason"], name);
+      if (!PERMISSIVE.has(entry.license)) {
+        assert.ok(entry.texts.length > 0, name);
+        assert.equal(typeof entry.source, "function", name);
+      }
+    }
+  });
+
+  it("matches a trailing wildcard by prefix, and nothing else", () => {
+    assert.equal(overrideFor("@img/sharp-libvips-linux-arm64"), OVERRIDES["@img/sharp-libvips-*"]);
+    assert.equal(overrideFor("@img/sharp-linux-arm64"), undefined);
+    assert.equal(overrideFor("github.com/segmentio/asm"), OVERRIDES["github.com/segmentio/asm"]);
+  });
+});
+
+describe("npmComponent", () => {
+  function fixture(manifest) {
+    const dir = join(mkdtempSync(join(tmpdir(), "ocel-notices-test-")), "pkg");
+    mkdirSync(dir);
+    writeFileSync(join(dir, "package.json"), JSON.stringify(manifest));
+    writeFileSync(join(dir, "versions.json"), JSON.stringify({ vips: "8.18.3" }));
+    writeFileSync(join(dir, "README.md"), "# licensing table\n");
+    return dir;
+  }
+
+  it("accepts libvips under its override with the LGPL and GPL texts and a source pointer", () => {
+    const dir = fixture({
+      name: "@img/sharp-libvips-linux-arm64",
+      version: "1.3.2",
+      license: "LGPL-3.0-or-later",
+    });
+    try {
+      const component = npmComponent(dir);
+      assert.equal(component.accepted, true);
+      assert.deepEqual(violations([component]), []);
+      const texts = component.texts.map((entry) => entry.text).join("\n");
+      assert.match(texts, /GNU LESSER GENERAL PUBLIC LICENSE\s+Version 3/);
+      assert.match(texts, /GNU GENERAL PUBLIC LICENSE\s+Version 3/);
+      const source = component.notices.find((entry) => entry.name === "corresponding source");
+      assert.match(source.text, /libvips 8\.18\.3/);
+      assert.match(source.text, /github\.com\/lovell\/sharp-libvips\/tree\/v1\.3\.2/);
+      assert.ok(component.notices.some((entry) => entry.name === "README.md"));
+      assert.ok(component.notices.some((entry) => entry.name === "versions.json"));
+    } finally {
+      rmSync(dirname(dir), { recursive: true, force: true });
+    }
+  });
+
+  it("still refuses a package under the override that changes its license", () => {
+    const dir = fixture({
+      name: "@img/sharp-libvips-linux-arm64",
+      version: "9.0.0",
+      license: "GPL-3.0-only",
+    });
+    try {
+      const component = npmComponent(dir);
+      assert.equal(component.accepted, undefined);
+      assert.equal(violations([component]).length, 1);
+    } finally {
+      rmSync(dirname(dir), { recursive: true, force: true });
+    }
+  });
+
+  it("leaves LGPL off the allowlist for everything else", () => {
+    const dir = fixture({ name: "vips-lookalike", version: "1.0.0", license: "LGPL-3.0-or-later" });
+    try {
+      assert.equal(violations([npmComponent(dir)]).length, 1);
+    } finally {
+      rmSync(dirname(dir), { recursive: true, force: true });
     }
   });
 });
