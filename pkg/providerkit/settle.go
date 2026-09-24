@@ -2,6 +2,7 @@ package providerkit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -15,22 +16,24 @@ type Resolver interface {
 }
 
 const (
-	settleAttempts   = 12
-	attendedAttempts = 180
-	settleWait       = 5 * time.Second
+	settleBudget   = time.Minute
+	attendedBudget = 15 * time.Minute
+	attemptWindow  = 20 * time.Second
+	settleWait     = 5 * time.Second
 )
 
 type settler struct {
-	kind     edge.Kind
-	unbound  bool
-	writer   edge.DNSWriter
-	zone     string
-	resolve  Resolver
-	attempts int
-	wait     time.Duration
-	sleep    func(context.Context, time.Duration) error
-	now      func() time.Time
-	owed     owedPolicy
+	kind    edge.Kind
+	unbound bool
+	writer  edge.DNSWriter
+	zone    string
+	resolve Resolver
+	budget  time.Duration
+	window  time.Duration
+	wait    time.Duration
+	sleep   func(context.Context, time.Duration) error
+	now     func() time.Time
+	owed    owedPolicy
 }
 
 type owedPolicy struct {
@@ -46,7 +49,7 @@ func attended(sender *eventSender) owedPolicy {
 
 func (s *settler) attend(sender *eventSender) {
 	s.owed = attended(sender)
-	s.attempts = attendedAttempts
+	s.budget = attendedBudget
 }
 
 func unattended(sender *eventSender) owedPolicy {
@@ -57,15 +60,16 @@ func unattended(sender *eventSender) owedPolicy {
 
 func newSettler(front edge.Edge, writer edge.DNSWriter, zone string, resolve Resolver) settler {
 	return settler{
-		kind:     front.Kind(),
-		unbound:  front.Facts().ServesUnbound,
-		writer:   writer,
-		zone:     zone,
-		resolve:  resolve,
-		attempts: settleAttempts,
-		wait:     settleWait,
-		sleep:    sleep,
-		now:      time.Now,
+		kind:    front.Kind(),
+		unbound: front.Facts().ServesUnbound,
+		writer:  writer,
+		zone:    zone,
+		resolve: resolve,
+		budget:  settleBudget,
+		window:  attemptWindow,
+		wait:    settleWait,
+		sleep:   sleep,
+		now:     time.Now,
 	}
 }
 
@@ -183,34 +187,60 @@ func (s settler) release(ctx context.Context, written []edge.Record, say func(st
 }
 
 func (s settler) await(ctx context.Context, hostname string, say func(string)) (Probe, error) {
-	attempts := max(s.attempts, 1)
 	began := s.now()
+	deadline := began.Add(s.budget)
+	bounded, stop := context.WithTimeout(ctx, s.budget)
+	defer stop()
 	var serving edge.Kind
-	for attempt := range attempts {
+	var outlasted string
+	for {
 		var err error
-		if serving, err = s.resolve.Serving(ctx, hostname); err != nil {
+		serving, err = s.attempt(bounded, hostname)
+		switch {
+		case err == nil:
+			outlasted = ""
+		case ctx.Err() != nil:
+			return Probe{At: s.now().Unix(), Edge: serving}, ctx.Err()
+		case bounded.Err() != nil:
+			return Probe{At: s.now().Unix()}, s.unresolved(hostname, "", began, outlasted)
+		case errors.Is(err, context.DeadlineExceeded):
+			serving, outlasted = "", fmt.Sprintf("the last attempt got no answer within %s", s.window)
+		default:
 			return Probe{At: s.now().Unix(), Edge: serving}, err
 		}
 		if serving == s.kind {
 			return Probe{At: s.now().Unix(), OK: true, Edge: serving}, nil
 		}
-		if attempt == attempts-1 {
+		if !s.now().Add(s.wait).Before(deadline) {
 			break
 		}
 		say(fmt.Sprintf("Waiting for %s to answer as the %s edge", hostname, s.kind))
-		if err := s.sleep(ctx, s.wait); err != nil {
-			return Probe{At: s.now().Unix(), Edge: serving}, err
+		if err := s.sleep(bounded, s.wait); err != nil {
+			if ctx.Err() != nil {
+				return Probe{At: s.now().Unix(), Edge: serving}, ctx.Err()
+			}
+			break
 		}
 	}
-	return Probe{At: s.now().Unix(), Edge: serving}, s.unresolved(hostname, serving, began)
+	return Probe{At: s.now().Unix(), Edge: serving}, s.unresolved(hostname, serving, began, outlasted)
 }
 
-func (s settler) unresolved(hostname string, serving edge.Kind, began time.Time) error {
+func (s settler) attempt(ctx context.Context, hostname string) (edge.Kind, error) {
+	asking, stop := context.WithTimeout(ctx, s.window)
+	defer stop()
+	return s.resolve.Serving(asking, hostname)
+}
+
+func (s settler) unresolved(hostname string, serving edge.Kind, began time.Time, outlasted string) error {
 	waited := s.now().Sub(began).Round(time.Second)
 	if serving == "" {
+		cause := s.unreached(hostname)
+		if outlasted != "" {
+			cause = ", and " + outlasted
+		}
 		return Pending(Refuse(CodeNotReady,
 			"%s does not answer as the %s edge yet%s — this run gave up after about %s, and `ocel domain add` picks up where it stopped",
-			hostname, s.kind, s.unreached(hostname), waited))
+			hostname, s.kind, cause, waited))
 	}
 	return Pending(Refuse(CodeNotReady,
 		"%s answers as the %s edge, not the %s one this project deploys to — this run gave up after about %s",

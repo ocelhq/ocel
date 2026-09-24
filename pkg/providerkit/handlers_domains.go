@@ -325,13 +325,8 @@ func (d *hostnames) statusOf(ctx context.Context, host string) (*contractv1.Prod
 }
 
 func (d *hostnames) probe(ctx context.Context, host string) Probe {
-	once := d.settle
-	once.attempts = 1
-	probe, err := once.await(ctx, host, func(string) {})
-	if err != nil {
-		probe.OK = false
-	}
-	return probe
+	serving, err := d.settle.attempt(ctx, host)
+	return Probe{At: d.settle.now().Unix(), OK: err == nil && serving == d.settle.kind, Edge: serving}
 }
 
 func (d *hostnames) pendingOn(host string, cert Certificate, health CertificateHealth, bound bool, probe Probe) string {

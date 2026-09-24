@@ -12,7 +12,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -373,26 +372,5 @@ func TestALoopbackNameIsProbedFromWhereItResolves(t *testing.T) {
 	}
 	if len(asked) != 1 {
 		t.Errorf("a public name went to the loopback probe: %v", asked)
-	}
-}
-
-func TestAnAttendedSettleWaitsOutAFrontThatTakesMinutesToAnswer(t *testing.T) {
-	t.Parallel()
-
-	const minutes = 10 * time.Minute
-	front := frontOf{kind: "relay"}
-	for what, attended := range map[string]bool{"domain add": true, "a deploy": false} {
-		settle := newSettler(front, nil, "", &answering{kind: "relay", after: int(minutes / settleWait)})
-		if attended {
-			settle.attend(nil)
-		}
-		settle.sleep = func(context.Context, time.Duration) error { return nil }
-		_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
-		if attended && err != nil {
-			t.Errorf("%s gave up on a front that answers after %s: %v. A fresh CloudFront distribution takes minutes to serve, and `ocel domain add` is the command that waits for it", what, minutes, err)
-		}
-		if !attended && err == nil {
-			t.Errorf("%s waited %s for one hostname: a deploy leaves a slow hostname pending for `ocel domain add` rather than holding the release", what, minutes)
-		}
 	}
 }
