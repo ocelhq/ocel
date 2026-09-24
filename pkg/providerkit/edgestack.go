@@ -108,11 +108,11 @@ func (h *handlers) openStack(ctx context.Context, class Class, slug string, sel 
 		return nil, err
 	}
 	session := &stackSession{provider: provider, front: front, stack: stack, store: store, state: state}
-	session.settling(writer, sel.GetDns().GetZone())
+	session.installSettler(writer, sel.GetDns().GetZone())
 	return session, nil
 }
 
-func (s *stackSession) settling(writer edge.DNSWriter, zone string) {
+func (s *stackSession) installSettler(writer edge.DNSWriter, zone string) {
 	s.settle = newSettler(s.front, writer, zone,
 		resolving(s.provider, s.front, boundBy(s.front, func() edge.StackState { return s.stack.State() })))
 }

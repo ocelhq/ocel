@@ -20,17 +20,33 @@ const (
 )
 
 type settler struct {
-	kind       edge.Kind
-	unbound    bool
-	writer     edge.DNSWriter
-	zone       string
-	resolve    Resolver
-	attempts   int
-	wait       time.Duration
-	sleep      func(context.Context, time.Duration) error
-	now        func() time.Time
+	kind     edge.Kind
+	unbound  bool
+	writer   edge.DNSWriter
+	zone     string
+	resolve  Resolver
+	attempts int
+	wait     time.Duration
+	sleep    func(context.Context, time.Duration) error
+	now      func() time.Time
+	owed     owedPolicy
+}
+
+type owedPolicy struct {
 	ask        func(headline string, records []edge.Record, notes ...string)
 	unattended bool
+}
+
+func attended(sender *eventSender) owedPolicy {
+	return owedPolicy{ask: func(headline string, records []edge.Record, notes ...string) {
+		sender.send(dnsOwedEvent(headline, records, notes...))
+	}}
+}
+
+func unattended(sender *eventSender) owedPolicy {
+	policy := attended(sender)
+	policy.unattended = true
+	return policy
 }
 
 func newSettler(front edge.Edge, writer edge.DNSWriter, zone string, resolve Resolver) settler {
@@ -136,8 +152,8 @@ func (s settler) write(ctx context.Context, records []edge.Record, headline stri
 	}
 	if s.writer == nil {
 		settled.Owed = records
-		if s.ask != nil {
-			s.ask(headline, records, append(slices.Clone(notes), instructionsOnly)...)
+		if s.owed.ask != nil {
+			s.owed.ask(headline, records, append(slices.Clone(notes), instructionsOnly)...)
 		}
 		return settled, s.waiting(headline, settled.Owed)
 	}
@@ -149,8 +165,8 @@ func (s settler) write(ctx context.Context, records []edge.Record, headline stri
 	if err != nil || len(settled.Owed) == 0 {
 		return settled, err
 	}
-	if s.unattended && s.ask != nil {
-		s.ask(headline, settled.Owed, notes...)
+	if s.owed.unattended && s.owed.ask != nil {
+		s.owed.ask(headline, settled.Owed, notes...)
 	}
 	return settled, s.waiting(headline, settled.Owed)
 }
@@ -166,7 +182,7 @@ func (o owedRecords) Error() string {
 }
 
 func (s settler) waiting(headline string, owed []edge.Record) error {
-	if !s.unattended || len(owed) == 0 {
+	if !s.owed.unattended || len(owed) == 0 {
 		return nil
 	}
 	return Pending(owedRecords{headline: headline, records: owed})
