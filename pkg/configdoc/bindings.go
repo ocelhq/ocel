@@ -35,11 +35,11 @@ func (Bindings) checkShape(path string, value any) error {
 		}
 		named, ok := object[key].(map[string]any)
 		if !ok {
-			return typeError(JoinPath(path, key), "an object of declared name to published name")
+			return typeError(JoinPath(path, key), "an object of declared name to \"@published-name\"")
 		}
 		for _, declared := range slices.Sorted(mapKeys(named)) {
 			if _, spelled := named[declared].(string); !spelled {
-				return typeError(JoinPath(JoinPath(path, key), declared), "the name the record is published under")
+				return typeError(JoinPath(JoinPath(path, key), declared), "\"@\" followed by the name the record is published under")
 			}
 		}
 	}
@@ -51,9 +51,9 @@ func (Bindings) jsonSchema() object {
 	for _, name := range BindableTypes() {
 		properties[name] = object{
 			"type":                 "object",
-			"additionalProperties": object{"type": "string"},
+			"additionalProperties": object{"type": "string", "pattern": `^@\S`},
 			"description": fmt.Sprintf(
-				"Each key is a %s resource this project declares; its value is the name the record is published under.",
+				"Each key is a %s resource this project declares; its value is \"@\" followed by the name the record is published under, such as \"@warehouse\".",
 				name),
 		}
 	}

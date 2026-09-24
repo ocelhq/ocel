@@ -46,7 +46,7 @@ func TestDeployBindsListedBindings(t *testing.T) {
 	t.Run("a listed resource reaches the provider bound to its published record", func(t *testing.T) {
 		t.Setenv(clitest.FakePublishedBindingsEnvVar, "main")
 
-		_, stdout, stderr, err := deployBound(t, `postgres: { main: "main" }`)
+		_, stdout, stderr, err := deployBound(t, `postgres: { main: "@main" }`)
 		if err != nil {
 			t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 		}
@@ -63,7 +63,7 @@ func TestDeployBindsListedBindings(t *testing.T) {
 	t.Run("a listed resource nothing published refuses the deploy by name", func(t *testing.T) {
 		t.Setenv(clitest.FakePublishedBindingsEnvVar, "")
 
-		_, stdout, stderr, err := deployBound(t, `postgres: { main: "main" }`)
+		_, stdout, stderr, err := deployBound(t, `postgres: { main: "@main" }`)
 		if err == nil {
 			t.Fatalf("runDeploy err = nil, want the deploy refused; stdout=%s", stdout.String())
 		}
@@ -87,7 +87,7 @@ func TestDeployBindsListedBindings(t *testing.T) {
 	})
 
 	t.Run("a listed name nothing declares refuses before any provider is reached", func(t *testing.T) {
-		_, stdout, stderr, err := deployBound(t, `postgres: { nowhere: "nowhere" }`)
+		_, stdout, stderr, err := deployBound(t, `postgres: { nowhere: "@nowhere" }`)
 		if err == nil {
 			t.Fatalf("runDeploy err = nil, want the deploy refused; stdout=%s", stdout.String())
 		}

@@ -128,7 +128,7 @@ export const customProvider = bindingProvider<CustomInputs>(
  *
  * The name is this program's own, published for an app's config to bind a
  * declared resource to — `postgres("pulumi-pg-orders", …)` here, and
- * `"bindings": { "postgres": { "orders": "pulumi-pg-orders" } }` in `ocel.json`
+ * `"bindings": { "postgres": { "orders": "@pulumi-pg-orders" } }` in `ocel.json`
  * — and the resource is the postgres fields read off whatever provisioned it,
  * each of them an output this update resolves.
  * `class` defaults to production, `environment` names one preview environment,

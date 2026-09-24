@@ -100,3 +100,14 @@ export const certificatesAsList = awsProvider({
   // @ts-expect-error certificates map a hostname to an arn
   certificates: ["arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234"],
 });
+
+export const bindingToAPublishedRecord = defineConfig({
+  slug: "test-app",
+  bindings: { postgres: { analytics: "@warehouse" } },
+});
+
+export const bindingWithoutItsSigil = defineConfig({
+  slug: "test-app",
+  // @ts-expect-error a published record is written "@name"
+  bindings: { postgres: { analytics: "warehouse" } },
+});

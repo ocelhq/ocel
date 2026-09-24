@@ -611,8 +611,8 @@ export default {
 export default {
   slug: "test-app",
   bindings: {
-    postgres: { orders: "sst-pg-orders", main: "sst-pg-main" },
-    bucket: { uploads: "legacy-uploads" },
+    postgres: { orders: "@sst-pg-orders", main: "@sst-pg-main" },
+    bucket: { uploads: "@legacy-uploads" },
   },
 };
 `,
@@ -633,14 +633,29 @@ export default {
 export default {
   slug: "test-app",
   bindings: {
-    postgres: { orders: "pg-orders" },
-    bucket: { orders: "s3-orders" },
+    postgres: { orders: "@pg-orders" },
+    bucket: { orders: "@s3-orders" },
   },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
 				if len(cfg.Bindings) != 2 {
 					t.Fatalf("Bindings = %v, want both: postgres(\"orders\") and bucket(\"orders\") are different resources", cfg.Bindings)
+				}
+			},
+		},
+		{
+			name: "strips exactly one sigil, so a published name may itself start with @",
+			config: `
+export default {
+  slug: "test-app",
+  bindings: { postgres: { analytics: "@@warehouse" } },
+};
+`,
+			check: func(t *testing.T, root string, cfg *Config) {
+				want := []Binding{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "analytics", External: "@warehouse"}}
+				if !slices.Equal(cfg.Bindings, want) {
+					t.Fatalf("Bindings = %v, want %v", cfg.Bindings, want)
 				}
 			},
 		},
@@ -936,21 +951,51 @@ export default {
 			wantErr: []string{"main"},
 		},
 		{
+			name: "rejects a sigil naming no published record",
+			config: `
+export default {
+  slug: "test-app",
+  bindings: { postgres: { main: "@" } },
+};
+`,
+			wantErr: []string{"bindings.postgres.main", "names no published record"},
+		},
+		{
+			name: "rejects whitespace between the sigil and the published name",
+			config: `
+export default {
+  slug: "test-app",
+  bindings: { postgres: { analytics: "@ warehouse" } },
+};
+`,
+			wantErr: []string{"`bindings.postgres.analytics` is \"@ warehouse\"", "\"@warehouse\""},
+		},
+		{
+			name: "rejects a published name written without its sigil",
+			config: `
+export default {
+  slug: "test-app",
+  bindings: { postgres: { analytics: "warehouse" } },
+};
+`,
+			wantErr: []string{"`bindings.postgres.analytics` is \"warehouse\"", "a published record is written \"@warehouse\""},
+		},
+		{
 			name: "rejects an empty declared name",
 			config: `
 export default {
   slug: "test-app",
-  bindings: { postgres: { "": "orders" } },
+  bindings: { postgres: { "": "@orders" } },
 };
 `,
-			wantErr: []string{"bindings.postgres", "empty name"},
+			wantErr: []string{"bindings.postgres", "empty name", "\"@<name>\""},
 		},
 		{
 			name: "rejects a published name carrying the key separator",
 			config: `
 export default {
   slug: "test-app",
-  bindings: { postgres: { main: "main#db" } },
+  bindings: { postgres: { main: "@main#db" } },
 };
 `,
 			wantErr: []string{"main#db"},
@@ -960,7 +1005,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  bindings: { redis: { cache: "shared-redis" } },
+  bindings: { redis: { cache: "@shared-redis" } },
 };
 `,
 			wantErr: []string{"redis", "postgres", "bucket"},
@@ -970,7 +1015,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  bindings: { container: { worker: "some-worker" } },
+  bindings: { container: { worker: "@some-worker" } },
 };
 `,
 			wantErr: []string{"container", "postgres", "bucket"},

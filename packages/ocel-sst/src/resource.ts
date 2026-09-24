@@ -121,7 +121,7 @@ export const customProvider = bindingProvider<CustomInputs>(
  *
  * The name is this app's own, published for an ocel app's config to bind a
  * declared resource to — `postgres("sst-pg-orders", …)` here, and
- * `"bindings": { "postgres": { "orders": "sst-pg-orders" } }` in `ocel.json` —
+ * `"bindings": { "postgres": { "orders": "@sst-pg-orders" } }` in `ocel.json` —
  * and the resource is either an SST component, whose own binding description is
  * passed through, or the postgres fields written out by hand. `class` defaults to production, `environment` names one preview
  * environment, and `project` is the directory holding `ocel.json`, which is

@@ -75,7 +75,7 @@ const boundPostgres: Pane = {
   "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "shop",
   "provider": "aws",
-  "bindings": { "postgres": { "orders": "orders" } }
+  "bindings": { "postgres": { "orders": "@orders" } }
 }`,
   },
 };

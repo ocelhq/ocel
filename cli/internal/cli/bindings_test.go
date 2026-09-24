@@ -25,7 +25,7 @@ func setUpBindingFixture(t *testing.T) string {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "`+clitest.FixtureSlug+`",
-  bindings: { postgres: { orders: "orders" } },
+  bindings: { postgres: { orders: "@orders" } },
   provider: { aws: {} },
   domains: { preview: "*.preview.acme.com" },
 };

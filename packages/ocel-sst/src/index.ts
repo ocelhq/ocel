@@ -16,7 +16,7 @@ export type {
  * A binding is one resource an app reaches, published under a name of this
  * program's choosing — `bind.postgres("sst-pg-orders", …)` here, and the app's
  * config binds a declared resource to it with
- * `"bindings": { "postgres": { "orders": "sst-pg-orders" } }`. Each
+ * `"bindings": { "postgres": { "orders": "@sst-pg-orders" } }`. Each
  * call is one Pulumi resource, so removing the call removes the published
  * record, and there is one function per ocel binding type an app resolves: a
  * resource ocel cannot type is not bindable by name, and nothing here refuses

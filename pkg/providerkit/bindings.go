@@ -131,7 +131,7 @@ func (r *deployRun) warnShadowed(report Reporter, resources []Resource, publishe
 			"a binding named %q is already published to %s, and this deploy provisions %s beside it. "+
 				"Ocel binds neither to the other on its own: put %q in `bindings` — \"bindings\": { %q: { %q: %q } } — to consume the published record instead",
 			resource.Declared, describeCoordinate(string(r.plan.Class), r.plan.bindingEnvironment()), resource.Name,
-			resource.Declared, string(resource.Type), resource.Declared, resource.Declared))
+			resource.Declared, string(resource.Type), resource.Declared, "@"+resource.Declared))
 	}
 }
 
