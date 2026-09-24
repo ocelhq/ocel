@@ -1,26 +1,16 @@
 import { fixtures } from "./matrix/fixtures";
-import { reclaimRegistry } from "./registry/github";
+import { deletePackages } from "./registry/github";
 import { registryPackages } from "./registry/packages";
+import { readResults } from "./run/results";
+import { runSweep } from "./sweepArgs";
+import { targetNamed } from "./targets";
 
-const USAGE = "pnpm sweep:registry --since <when the lane began pushing, ISO 8601>";
-
-async function main(argv: string[]): Promise<void> {
-  const at = argv.indexOf("--since");
-  const since = new Date(at === -1 ? Number.NaN : (argv[at + 1] ?? Number.NaN));
-  if (Number.isNaN(since.getTime())) {
-    throw new Error(USAGE);
-  }
+runSweep(async (args) => {
   const token = process.env.GH_TOKEN;
   if (!token) {
-    throw new Error("GH_TOKEN carries the token the journey registry's versions are deleted with");
+    throw new Error("GH_TOKEN carries the token the journey registry's packages are deleted with");
   }
-  await reclaimRegistry(registryPackages(fixtures), since, token);
-}
-
-main(process.argv.slice(2)).then(
-  () => {},
-  (error: unknown) => {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    process.exitCode = 1;
-  },
-);
+  const target = targetNamed(args.target).name;
+  const results = args.oneRun ? await readResults(args.runId, target) : [];
+  await deletePackages(registryPackages(fixtures, target, results), token);
+});

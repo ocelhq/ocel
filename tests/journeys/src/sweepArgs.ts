@@ -1,6 +1,8 @@
+import { currentRunIdentity } from "./identity";
+
 export type SweepArgs = { target: string; runId: string; oneRun: boolean };
 
-export const SWEEP_USAGE = "pnpm sweep --target <name> [--own] [--run <id>]";
+export const SWEEP_USAGE = "pnpm sweep[:registry] --target <name> [--own] [--run <id>]";
 
 function flag(argv: string[], name: string): string | undefined {
   const index = argv.indexOf(`--${name}`);
@@ -21,4 +23,16 @@ export function sweepArgs(argv: string[], current: string): SweepArgs {
   }
   const named = flag(argv, "run");
   return { target, runId: named ?? current, oneRun: named !== undefined || argv.includes("--own") };
+}
+
+export function runSweep(sweep: (args: SweepArgs) => Promise<void>): void {
+  Promise.resolve()
+    .then(() => sweep(sweepArgs(process.argv.slice(2), currentRunIdentity())))
+    .then(
+      () => {},
+      (error: unknown) => {
+        process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+        process.exitCode = 1;
+      },
+    );
 }
