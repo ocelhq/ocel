@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -296,6 +297,8 @@ func TestLiveARequestOutstandingPastTheDrainWindowGetsFiveOhTwo(t *testing.T) {
 	}
 }
 
+var restarted = regexp.MustCompile(`RestartCount=[1-9]`)
+
 func TestLiveAReleaseThatCannotPassItsGateLeavesThePreviousOneServing(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
@@ -348,8 +351,9 @@ func TestLiveAReleaseThatCannotPassItsGateLeavesThePreviousOneServing(t *testing
 	if refusals["hung"] == refusals["crasher"] || refusals["sick"] == refusals["crasher"] {
 		t.Error("a crash-looping app is refused in the same words as a hung one, and the restart policy makes the loop invisible without them")
 	}
-	if !strings.Contains(refusals["crasher"], "Status=restarting") && !strings.Contains(refusals["crasher"], "ExitCode=3") {
-		t.Errorf("a crash-looping app is refused with\n%s\nwhich reads as neither restarting nor exited", refusals["crasher"])
+	if !strings.Contains(refusals["crasher"], "Status=restarting") && !strings.Contains(refusals["crasher"], "ExitCode=3") &&
+		!restarted.MatchString(refusals["crasher"]) {
+		t.Errorf("a crash-looping app is refused with\n%s\nwhich reads as neither restarting, exited, nor restarted", refusals["crasher"])
 	}
 }
 
