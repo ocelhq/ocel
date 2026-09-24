@@ -100,7 +100,7 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 
 	var cut cutover
 	var overtaken error
-	if _, err := h.composeProxy(ctx, func(standing RoutingTable) (RoutingTable, error) {
+	if _, err := h.composeRouting(ctx, func(standing RoutingTable) (RoutingTable, error) {
 		if rel.Holding != nil {
 			if overtaken = rel.Holding(ctx); overtaken != nil {
 				return standing, overtaken
@@ -278,12 +278,14 @@ func tellDrain(report providerkit.Reporter, said string) {
 	}
 }
 
-type routingDocument struct {
+type routingPair struct {
 	table  []byte
 	config []byte
 }
 
-func (d routingDocument) digest() string { return contentSum(d.table) }
+func (d routingPair) digest() tableDigest { return tableDigest(contentSum(d.table)) }
+
+type tableDigest string
 
 const (
 	routingMoved = 9
@@ -304,14 +306,14 @@ func pairReading() string {
 	}, "\n")
 }
 
-func (h *Host) routingPair(ctx context.Context) (routingDocument, error) {
+func (h *Host) pairHeld(ctx context.Context) (routingPair, error) {
 	said, err := h.reach(ctx, "read "+live.RoutingTable+" and "+ProxyConfig, pairReading(), nil)
 	if err != nil {
-		return routingDocument{}, err
+		return routingPair{}, err
 	}
 	lines := strings.SplitN(said, "\n", 3)
 	if len(lines) < 3 {
-		return routingDocument{}, providerkit.Refuse(providerkit.CodeNotReady,
+		return routingPair{}, providerkit.Refuse(providerkit.CodeNotReady,
 			"%s and %s on %s read back as %q, not one line for each", live.RoutingTable, ProxyConfig, h.named(), said)
 	}
 	var read [2][]byte
@@ -322,38 +324,38 @@ func (h *Host) routingPair(ctx context.Context) (routingDocument, error) {
 		}
 		decoded, err := base64.StdEncoding.DecodeString(encoded)
 		if err != nil {
-			return routingDocument{}, providerkit.Refuse(providerkit.CodeNotReady,
+			return routingPair{}, providerkit.Refuse(providerkit.CodeNotReady,
 				"%s and %s on %s read back undecodable: %v", live.RoutingTable, ProxyConfig, h.named(), err)
 		}
 		read[at] = decoded
 	}
-	return routingDocument{table: read[0], config: read[1]}, nil
+	return routingPair{table: read[0], config: read[1]}, nil
 }
 
-func (h *Host) routingDocument(ctx context.Context) (routingDocument, error) {
-	held, err := h.routingPair(ctx)
+func (h *Host) tableHeld(ctx context.Context) (routingPair, error) {
+	held, err := h.pairHeld(ctx)
 	if err != nil {
-		return routingDocument{}, err
+		return routingPair{}, err
 	}
 	if held.table == nil {
-		return routingDocument{}, providerkit.Refuse(providerkit.CodeNotReady,
+		return routingPair{}, providerkit.Refuse(providerkit.CodeNotReady,
 			"%s is missing on %s\nRun `ocel bootstrap` for this box's class", live.RoutingTable, h.named())
 	}
 	return held, nil
 }
 
-const proxyRewrites = 5
+const routingRewrites = 5
 
 type composed struct {
 	held    RoutingTable
-	written string
+	written tableDigest
 	changed bool
 }
 
-func (h *Host) composeProxy(ctx context.Context, compose func(RoutingTable) (RoutingTable, error)) (composed, error) {
+func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (RoutingTable, error)) (composed, error) {
 	rewrites := 0
 	for {
-		held, err := h.routingDocument(ctx)
+		held, err := h.tableHeld(ctx)
 		if err != nil {
 			return composed{}, err
 		}
@@ -384,13 +386,13 @@ func (h *Host) composeProxy(ctx context.Context, compose func(RoutingTable) (Rou
 		shaped.written, err = h.writeRouting(ctx, held.digest(), next)
 		shaped.changed = true
 		rewrites++
-		if err == nil || !moved(err) || rewrites >= proxyRewrites {
+		if err == nil || !moved(err) || rewrites >= routingRewrites {
 			return shaped, err
 		}
 	}
 }
 
-func (h *Host) writeRouting(ctx context.Context, expected string, table RoutingTable) (string, error) {
+func (h *Host) writeRouting(ctx context.Context, expected tableDigest, table RoutingTable) (tableDigest, error) {
 	written, err := WriteRoutingTable(table)
 	if err != nil {
 		return "", err
@@ -406,7 +408,7 @@ func (h *Host) writeRouting(ctx context.Context, expected string, table RoutingT
 	}
 	switch result.Code {
 	case 0:
-		return strings.TrimSpace(result.Stdout), nil
+		return tableDigest(strings.TrimSpace(result.Stdout)), nil
 	case routingMoved:
 		return "", providerkit.Refuse(providerkit.CodeBusy,
 			"%s on %s changed during this deploy (%s, expected %s); nothing was written\nRun the deploy again",
@@ -424,7 +426,7 @@ func unelevated(refused, why error) error {
 		"%v\ncould not elevate: %v", why, refused)
 }
 
-func stagedWrite(expected string) string {
+func stagedWrite(expected tableDigest) string {
 	table, config := quoted(live.RoutingTable), quoted(ProxyConfig)
 	return strings.Join([]string{
 		"set -e",
@@ -439,7 +441,7 @@ func stagedWrite(expected string) string {
 		"exec 9<" + quoted(routingLock),
 		"flock -x 9",
 		`held=$(sha256sum ` + table + ` | cut -d' ' -f1)`,
-		`if [ "$held" != ` + quoted(expected) + ` ]; then printf '%s' "$held" >&2; exit ` + strconv.Itoa(routingMoved) + `; fi`,
+		`if [ "$held" != ` + quoted(string(expected)) + ` ]; then printf '%s' "$held" >&2; exit ` + strconv.Itoa(routingMoved) + `; fi`,
 		`chmod --reference=` + table + ` "$staged"`,
 		`chown --reference=` + table + ` "$staged"`,
 		`chmod --reference=` + config + ` "$rendered"`,
@@ -567,7 +569,7 @@ func (h *Host) putBack(ctx context.Context, cut cutover, elevation string) (bool
 	if !cut.composed() {
 		return false, nil
 	}
-	back, err := h.composeProxy(ctx, cut.back)
+	back, err := h.composeRouting(ctx, cut.back)
 	if err != nil || !back.changed {
 		return false, err
 	}
