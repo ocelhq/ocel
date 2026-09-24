@@ -22,6 +22,9 @@ type fakeDaemon struct {
 	created []map[string]any
 	onStart func()
 	racedBy map[string]any
+	listed  []string
+	volumes []string
+	stuck   string
 }
 
 var versionPrefix = regexp.MustCompile(`^/v[0-9.]+`)
@@ -69,7 +72,24 @@ func (f *fakeDaemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	case r.Method == http.MethodGet && path == "/containers/json":
+		listed := []map[string]any{}
+		for _, id := range f.listed {
+			listed = append(listed, map[string]any{"Id": id})
+		}
+		_ = json.NewEncoder(w).Encode(listed)
+	case r.Method == http.MethodGet && path == "/volumes":
+		volumes := []map[string]any{}
+		for _, name := range f.volumes {
+			volumes = append(volumes, map[string]any{"Name": name})
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"Volumes": volumes})
 	case r.Method == http.MethodPost && strings.HasSuffix(path, "/stop"):
+		if f.stuck != "" && path == "/containers/"+f.stuck+"/stop" {
+			w.WriteHeader(http.StatusInternalServerError)
+			_ = json.NewEncoder(w).Encode(map[string]any{"message": "cannot stop container"})
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 	case r.Method == http.MethodDelete:
 		f.mu.Lock()
@@ -229,5 +249,20 @@ func TestRunAdoptsTheContainerAnotherProcessCreatedFirst(t *testing.T) {
 	}
 	if running.ID != "theirs" {
 		t.Fatalf("Run = %+v, want the container that won the name", running)
+	}
+}
+
+func TestWipeTakesEveryContainerAndVolumeEvenWhenOneWillNotStop(t *testing.T) {
+	daemon := &fakeDaemon{listed: []string{"stuck", "free"}, volumes: []string{"ocel-dev-shop-postgres-17"}, stuck: "stuck"}
+	engine := openFake(t, daemon)
+
+	err := engine.Wipe(context.Background(), spec.Labels)
+	if err == nil || !strings.Contains(err.Error(), "stuck") {
+		t.Errorf("Wipe = %v, want the container that would not stop named", err)
+	}
+	for _, taken := range []string{"DELETE /containers/free", "DELETE /volumes/ocel-dev-shop-postgres-17"} {
+		if !daemon.saw(taken) {
+			t.Errorf("calls = %v, want %s: one container that will not stop leaves every other container and every volume of the project behind", daemon.calls, taken)
+		}
 	}
 }

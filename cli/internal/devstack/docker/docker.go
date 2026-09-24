@@ -337,16 +337,14 @@ func (d *daemon) Wipe(ctx context.Context, labels map[string]string) error {
 	if err != nil {
 		return fmt.Errorf("list this project's containers: %w", err)
 	}
+	var failed []error
 	for _, held := range containers.Items {
-		if err := d.Stop(ctx, held.ID); err != nil {
-			return err
-		}
+		failed = append(failed, d.Stop(ctx, held.ID))
 	}
 	volumes, err := d.api.VolumeList(ctx, client.VolumeListOptions{Filters: filters})
 	if err != nil {
-		return fmt.Errorf("list this project's volumes: %w", err)
+		return errors.Join(append(failed, fmt.Errorf("list this project's volumes: %w", err))...)
 	}
-	var failed []error
 	for _, held := range volumes.Items {
 		if _, err := d.api.VolumeRemove(ctx, held.Name, client.VolumeRemoveOptions{Force: true}); err != nil && !cerrdefs.IsNotFound(err) {
 			failed = append(failed, fmt.Errorf("remove the volume %s: %w", held.Name, err))
