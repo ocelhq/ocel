@@ -89,10 +89,11 @@ type deployRun struct {
 	plan       DeployPlan
 	stages     deployStages
 
-	wildcard  Wildcard
-	previewOn string
-	selection *contractv1.EdgeSelection
-	pending   []string
+	wildcard   Wildcard
+	previewOn  string
+	selection  *contractv1.EdgeSelection
+	configured []ConfiguredHost
+	pending    []string
 
 	values    values.Store
 	scope     values.Scope
@@ -282,15 +283,17 @@ func (r *deployRun) admitDomains(ctx context.Context) error {
 		return Refuse(CodeNotReady,
 			"no domains.production declared on the project or any app, so this deploy has nowhere to serve: declare one, and the deploy that reads it settles it")
 	}
+	configured, err := r.configuredHosts()
+	if err != nil {
+		return err
+	}
+	r.configured = configured
 	writer, err := dnsFor(r.provider, r.selection)
 	if err != nil {
 		return err
 	}
-	r.settling(writer, r.selection.GetDns().GetZone())
-	r.settle.unattended = true
-	r.settle.ask = func(headline string, records []edge.Record, notes ...string) {
-		r.sender.send(dnsOwedEvent(headline, records, notes...))
-	}
+	r.installSettler(writer, r.selection.GetDns().GetZone())
+	r.settle.owed = unattended(r.sender)
 	return nil
 }
 
@@ -389,7 +392,7 @@ func (r *deployRun) settleHostnames(ctx context.Context) error {
 	return r.tracked.unit(r.stages.Hostnames, func(u *unitRun) error {
 		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(report Reporter) error {
 			settling := &hostnames{stackSession: r.stackSession}
-			for _, host := range r.configuredHosts() {
+			for _, host := range r.configured {
 				serving := r.state.Host(host.Hostname).Serving()
 				if serving == r.front.Kind() {
 					continue
@@ -414,14 +417,14 @@ func (r *deployRun) settleHostnames(ctx context.Context) error {
 	})
 }
 
-func (r *deployRun) configuredHosts() []ConfiguredHost {
+func (r *deployRun) configuredHosts() ([]ConfiguredHost, error) {
 	owners := r.domainApps()
 	hosts := r.hostnames()
-	configured := make([]ConfiguredHost, 0, len(hosts))
+	declared := make([]*contractv1.ConfiguredHostname, 0, len(hosts))
 	for _, host := range hosts {
-		configured = append(configured, ConfiguredHost{Hostname: host, App: owners[strings.ToLower(host)]})
+		declared = append(declared, &contractv1.ConfiguredHostname{Hostname: host, App: owners[strings.ToLower(host)]})
 	}
-	return configured
+	return productionHosts(declared)
 }
 
 func (r *deployRun) previewBase() (string, error) {
@@ -1235,7 +1238,7 @@ func (r *deployRun) result(promotion edge.Promotion, flip edge.FlipBound) (*prog
 	}
 	for slot, hosts := range r.servedHostnames() {
 		for _, host := range hosts {
-			if r.plan.Class != ClassPreview && !r.state.Ready(host, r.front.Kind()) {
+			if r.world() == hostingProduction && !r.state.Ready(host, r.front.Kind()) {
 				continue
 			}
 			r.outcomes[slot].Urls = append(r.outcomes[slot].Urls, "https://"+host)

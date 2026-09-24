@@ -900,6 +900,21 @@ func TestADeployBindsItsHostnamesOnlyOnceEveryStackItProvisionsStands(t *testing
 	}
 }
 
+func TestADeployDeclaringAWildcardForProductionIsRefusedBeforeItProvisionsAnything(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+
+	req := deployRequest()
+	req.Manifest.Domains[0].Hostnames = []string{"*.shop.example"}
+	_, _, err := deployStream(t, client, req)
+	if code, _ := providerkit.RefusedCode(err); code != providerkit.CodeInvalid || !strings.Contains(err.Error(), "domains.preview") {
+		t.Fatalf("Deploy() = %v, want it refused as invalid: a wildcard belongs to domains.preview", err)
+	}
+	if plans := provider.Releaser().Plans(); len(plans) != 0 {
+		t.Errorf("the refused deploy provisioned %d stacks, want none: the hostname is read before anything is built", len(plans))
+	}
+}
+
 func TestADeployLeavesAHostnameAnotherEdgeServesToDomainAdd(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)

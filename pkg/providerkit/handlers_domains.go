@@ -44,9 +44,7 @@ func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequ
 		if err != nil {
 			return err
 		}
-		session.settle.ask = func(headline string, records []edge.Record, notes ...string) {
-			sender.send(dnsOwedEvent(headline, records, notes...))
-		}
+		session.settle.owed = attended(sender)
 		return session.add(ctx, report)
 	})
 }
