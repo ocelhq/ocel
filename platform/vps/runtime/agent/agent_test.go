@@ -409,7 +409,7 @@ func TestAContainerReadsItsSecretOffTheBoxThroughTheRuntimeAndTheAgent(t *testin
 	})
 
 	manifest := manifestFor(t, "shop", "")
-	run := exec.Command("docker", "run", "--rm", "--pull", "never",
+	run := exec.Command("docker", "run", "--rm", "--pull", "never", "--network", "none",
 		"--mount", "type=bind,src="+socketDir+",dst="+live.SocketDir+",readonly",
 		"--volume", runtimeBinary+":"+providerkit.ContainerRuntimePath+":ro",
 		"--env", live.EnvVar+"="+manifest,
