@@ -1,5 +1,6 @@
 import { fixtures } from "./matrix/fixtures";
-import { reclaimRegistry, registryPackages } from "./registry";
+import { reclaimRegistry } from "./registry/github";
+import { registryPackages } from "./registry/packages";
 
 const USAGE = "pnpm sweep:registry --since <when the lane began pushing, ISO 8601>";
 

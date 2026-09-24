@@ -1,36 +1,11 @@
 import { describe, expect, it } from "bun:test";
-import { fixtures } from "./matrix/fixtures";
-import { fixture } from "./matrix/types";
-import { defaults, registry } from "./matrix/variants";
-import { type PackageVersion, reclaimed, reclaimRegistry, registryPackages } from "./registry";
+import { type PackageVersion, reclaimed, reclaimRegistry } from "./github";
 
 const SINCE = new Date("2026-09-24T10:00:00Z");
 
 function version(id: number, createdAt: string, tags: string[] = []): PackageVersion {
   return { id, created_at: createdAt, metadata: { container: { tags } } };
 }
-
-describe("registryPackages", () => {
-  it("names the one ghcr package every run of the journey pushes into", () => {
-    expect(registryPackages(fixtures)).toEqual([{ org: "ocelhq", name: "journey-vps/web" }]);
-  });
-
-  it("names one package per app a registry cell deploys, however many fixtures share it", () => {
-    const shared = [
-      fixture("deploy/one", { apps: ["web"], checks: [], on: { vps: [registry] } }),
-      fixture("deploy/two", {
-        apps: ["web", "api"],
-        checks: [],
-        on: { vps: [defaults, registry] },
-      }),
-      fixture("deploy/three", { apps: ["worker"], checks: [], on: { vps: [defaults] } }),
-    ];
-    expect(registryPackages(shared)).toEqual([
-      { org: "ocelhq", name: "journey-vps/web" },
-      { org: "ocelhq", name: "journey-vps/api" },
-    ]);
-  });
-});
 
 describe("reclaimed", () => {
   it("deletes nothing when the run pushed nothing", () => {
