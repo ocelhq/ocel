@@ -120,7 +120,7 @@ func (h *Host) Address(ctx context.Context) (string, error) {
 	address := live.Destination().Address
 	if address == "" {
 		return "", providerkit.Refuse(providerkit.CodeNotReady,
-			"%s resolves to no address, and DNS for a hostname served here points at the box itself rather than at a name", h.named())
+			"%s resolves to no address", h.named())
 	}
 	return address, nil
 }
@@ -289,7 +289,7 @@ func (h *Host) refuse(what string, result session.Result) error {
 func spoken(result session.Result) string {
 	said := strings.TrimSpace(result.Stderr)
 	if said == "" {
-		return "it said nothing about why"
+		return "no reason given"
 	}
 	if lines := strings.Split(said, "\n"); len(lines) > saidLines {
 		said = strings.Join(lines[:saidLines], "\n")
@@ -321,14 +321,14 @@ func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 	case KindUnit:
 		if taken.path != LiveService && taken.path != LiveSocketUnit && taken.path != BackupsTimer {
 			return false, providerkit.Refuse(providerkit.CodeInvalid,
-				"%s %s is not ocel's to take: what this host runs stays when ocel goes", taken.kind, taken.path)
+				"%s %s is not ocel's to remove", taken.kind, taken.path)
 		}
 		_, err := h.run(ctx, "remove "+taken.kind+" "+taken.path, taken.command(), nil)
 		return err == nil, err
 	case KindDir, KindFile, KindSealKey, KindProxyConfig:
 		if !strings.HasPrefix(taken.path, "/") {
 			return false, providerkit.Refuse(providerkit.CodeInvalid,
-				"%q names no path on this host, and ocel takes nothing it cannot name in full", taken.path)
+				"%q is not an absolute path", taken.path)
 		}
 		rendered, err := h.run(ctx, "remove "+taken.path, taken.command(), nil)
 		if taken.kind == KindDir && taken.shared {
@@ -337,7 +337,7 @@ func (h *Host) remove(ctx context.Context, taken removal) (bool, error) {
 		return err == nil, err
 	default:
 		return false, providerkit.Refuse(providerkit.CodeInvalid,
-			"%s %s is not ocel's to take: what this host runs stays when ocel goes", taken.kind, taken.path)
+			"%s %s is not ocel's to remove", taken.kind, taken.path)
 	}
 }
 
@@ -536,25 +536,22 @@ func remainder(columns []string, separator, absent string) string {
 	return absent
 }
 
-const unnamedPath = "a path this host did not name"
+const unnamedPath = "(unnamed)"
 
 func couldNotLook(columns []string) error {
 	return providerkit.Refuse(providerkit.CodeNotReady,
-		"this host could not be asked whether %s %s stands: %s.\n"+
-			"Ocel will not read a probe that could not run as a host carrying nothing, because that reading is what makes a deploy write an account, a network or an engine over one that is already there.\n"+
-			"Fix what stopped the probe and run this again",
-		column(columns, 3, "what stands at"),
+		"could not check %s %s on this host: %s",
+		column(columns, 3, "path"),
 		column(columns, 1, unnamedPath),
-		remainder(columns, " ", "the command it runs did not"))
+		remainder(columns, " ", "no reason given"))
 }
 
 func pointedAway(columns []string) error {
 	named := column(columns, 1, unnamedPath)
 	return providerkit.Refuse(providerkit.CodeDenied,
-		"%s is a symbolic link to %s.\n"+
-			"Ocel writes the paths it names and follows nothing to get there, and every mode and owner this host reports for that path is the target's, not the link's.\n"+
-			"Put a real directory or file back at %s and try again",
-		named, remainder(columns, "\t", "somewhere this survey could not read"), named)
+		"%s is a symbolic link to %s\n"+
+			"Put a real directory or file at %s",
+		named, remainder(columns, "\t", "an unreadable target"), named)
 }
 
 func reports(kind, name, mode, owner, sum string) string {
@@ -583,7 +580,7 @@ func readSurvey(rendered string) (map[string]string, Seal, error) {
 		parsed, err := mode(columns[2])
 		if err != nil {
 			return nil, Seal{}, providerkit.Refuse(providerkit.CodeDenied,
-				"the host reported %q as the mode of %s, which is no mode", columns[2], columns[1])
+				"the host reported %q as the mode of %s", columns[2], columns[1])
 		}
 		content := columns[4]
 		if sealed {

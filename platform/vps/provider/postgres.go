@@ -36,7 +36,7 @@ func postgresContainer(in resources.Instruction) (host.ResourceContainer, error)
 	image, pinned := constants.PostgresImage(version)
 	if !pinned {
 		return host.ResourceContainer{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"postgres %s asks for version %q, and a box runs %s: declare one of those",
+			"postgres %s asks for version %q; supported: %s",
 			in.Resource.Name, version, strings.Join(constants.PostgresVersions(), ", "))
 	}
 	return host.ResourceContainer{
@@ -135,7 +135,7 @@ func (p *Provider) heldSecret(ctx context.Context, in resources.Instruction, nam
 	}
 	if len(opened) == 0 {
 		return "", providerkit.Refuse(providerkit.CodeNotReady,
-			"what this box keeps for %s opens to nothing, so there is no credential to bind an app to. Remove %s on the box and run this again",
+			"the credential kept for %s is empty\nRemove %s on the box",
 			in.Resource.Name, host.KeptPath(in.Ref.Class, name))
 	}
 	return string(opened), nil

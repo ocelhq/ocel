@@ -17,8 +17,7 @@ const (
 	healthKey    = "health.path"
 	appLogTail   = "200"
 	noLogOutput  = "(no output)"
-	hijackedFate = "neither shape of long-lived connection survives a deploy and clients of both must reconnect, but they reach that end differently: a websocket is cut at the flip itself, while a server-sent-events stream keeps the retired container occupied for this whole window and is cut when it stops, so an app serving one drains at its ceiling on every deploy"
-	drainCeiling = "requests still running when the window closes are cut with the retired container: a client still waiting for its first byte receives 502, and one already reading a response sees that response truncated"
+	drainCeiling = "open requests get 502 or a truncated response; websockets and server-sent-events reconnect"
 )
 
 type Release struct {
@@ -42,7 +41,7 @@ func containerOf(address string) string {
 func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Reporter) error {
 	if strings.TrimSpace(rel.HealthPath) == "" {
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"release %s onto %s: nothing here names a health check path, and up means a 2xx on the path the wire named rather than on one this provider chose; set %q in your project configuration",
+			"release %s onto %s: no health check path\nSet %q in your project configuration",
 			rel.App, h.named(), healthKey)
 	}
 	elevation, err := h.reachDocker(ctx)
@@ -73,10 +72,10 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 	}
 	held, flipped := flip.held, flip.written
 
-	say(report, "Gating "+rel.Target+rel.HealthPath+", then flipping the proxy onto it")
+	say(report, "Checking "+rel.Target+rel.HealthPath+", then flipping the proxy onto it")
 	if retiring != "" && report != nil {
-		report.Detail(fmt.Sprintf("%s has up to %s to finish what it is still serving, and the deploy returns as soon as it reports nothing in flight. %s. %s",
-			rel.retiredName(), rel.DrainTimeout, drainCeiling, hijackedFate))
+		report.Detail(fmt.Sprintf("%s has %s to drain, then %s",
+			rel.retiredName(), rel.DrainTimeout, drainCeiling))
 	}
 	result, err := h.stream(ctx, words(releaseCommand(rel)), nil, elevation)
 	if err != nil {
@@ -109,13 +108,13 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 }
 
 func (h *Host) serving(rel Release, retired string, why error) error {
-	left := ProxyConfig + " is one write behind the configuration the proxy loaded"
+	left := ProxyConfig + " is one write behind the running proxy"
 	if retired != "" {
-		left = fmt.Sprintf("%s still declares %s forwarding to %s, which is stopped, and a restarted proxy reads this file rather than what the flip loaded",
+		left = fmt.Sprintf("%s still routes %s to the stopped %s",
 			ProxyConfig, proxyDrainServer, rel.retiredName())
 	}
 	return providerkit.Refuse(providerkit.CodeNotReady,
-		"release %s onto %s: the proxy is flipped onto %s and serving it, and only the steady-state configuration that follows the flip did not land: %v\n%s. Nothing was rolled back and nothing is left standing; run this deploy again to write it",
+		"release %s onto %s: flipped onto %s, but the follow-up config write failed: %v\n%s; deploy again",
 		rel.App, h.named(), rel.targetName(), why, left)
 }
 
@@ -127,10 +126,10 @@ func tellDrain(report providerkit.Reporter, said string) {
 		fields := strings.Fields(line)
 		switch {
 		case len(fields) == 3 && fields[0] == caddyadmin.DrainExpired:
-			report.Detail(fmt.Sprintf("%s still held %s request(s) when the drain window closed: %s. %s",
-				fields[1], fields[2], drainCeiling, hijackedFate))
+			report.Detail(fmt.Sprintf("%s still held %s request(s) when the drain window closed: %s",
+				fields[1], fields[2], drainCeiling))
 		case len(fields) == 2 && fields[0] == caddyadmin.Drained:
-			report.Detail(containerOf(fields[1]) + " reported nothing in flight, and is stopped only after that")
+			report.Detail(containerOf(fields[1]) + " reported nothing in flight")
 		}
 	}
 }
@@ -151,7 +150,7 @@ func (h *Host) proxyDocument(ctx context.Context) (proxyDocument, error) {
 	digest, text, split := strings.Cut(rendered, "\n")
 	if !split || strings.TrimSpace(digest) == "" {
 		return proxyDocument{}, providerkit.Refuse(providerkit.CodeNotReady,
-			"%s on %s answered no digest of its own configuration, and a deploy composes its routes onto the file it read rather than onto whatever the file has become",
+			"%s on %s returned no digest",
 			ProxyConfig, h.named())
 	}
 	return proxyDocument{text: text, digest: strings.TrimSpace(digest)}, nil
@@ -222,7 +221,7 @@ func (h *Host) writeProxyDocument(ctx context.Context, expected, document string
 		return strings.TrimSpace(result.Stdout), nil
 	case proxyMoved:
 		return "", providerkit.Refuse(providerkit.CodeBusy,
-			"%s on %s now reads as %s and this deploy composed its routes onto %s, so another deploy or an `ocel domain` on this box rewrote the whole machine's proxy configuration while this one was working. Nothing was written and what that deploy left is still what the proxy serves: run this one again",
+			"%s on %s changed during this deploy (%s, expected %s); nothing was written\nRun the deploy again",
 			ProxyConfig, h.named(), strings.TrimSpace(result.Stderr), expected)
 	default:
 		return "", unelevated(refused, h.refuse("write "+ProxyConfig, result))
@@ -234,7 +233,7 @@ func unelevated(refused, why error) error {
 		return why
 	}
 	return providerkit.Refuse(providerkit.CodeNotReady,
-		"%v\n\nocel ran as this login because it could not elevate: %v", why, refused)
+		"%v\ncould not elevate: %v", why, refused)
 }
 
 func stagedWrite(expected string) string {
@@ -292,27 +291,27 @@ func sparing(ctx context.Context) (context.Context, context.CancelFunc) {
 func (h *Host) stranded(ctx context.Context, rel Release, held proxyDocument, why error) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
-	rolled := ProxyConfig + " was put back as it was"
+	rolled := ProxyConfig + " restored"
 	switch {
 	case moved(why):
-		rolled = ProxyConfig + " was never written and holds what the deploy that moved it wrote"
+		rolled = ProxyConfig + " untouched"
 	default:
 		if _, err := h.writeProxyDocument(ctx, held.digest, held.text); err != nil {
-			rolled = fmt.Sprintf("%s could not be put back either, which is what a restarted proxy would then serve: %v", ProxyConfig, err)
+			rolled = fmt.Sprintf("%s not restored: %v", ProxyConfig, err)
 		}
 	}
-	left := rel.targetName() + " was removed"
+	left := rel.targetName() + " removed"
 	if err := h.RemoveContainer(ctx, rel.targetName()); err != nil {
-		left = fmt.Sprintf("%s is left standing and serving nothing: %v", rel.targetName(), err)
+		left = fmt.Sprintf("%s left standing: %v", rel.targetName(), err)
 	}
 	return providerkit.Refuse(providerkit.CodeNotReady,
-		"release %s onto %s: %s could not be written, so the proxy was never asked to flip and serves what it served before: %v\n%s\n%s",
+		"release %s onto %s: could not write %s; the proxy was not flipped: %v\n%s; %s",
 		rel.App, h.named(), ProxyConfig, why, rolled, left)
 }
 
 func (h *Host) evidence(ctx context.Context, rel Release, outcome, verdict, previous, expected, elevation string) error {
 	if verdict == "" {
-		verdict = "it said nothing about why"
+		verdict = "no reason given"
 	}
 	state := h.said(ctx, stateCommand(rel.targetName()), elevation)
 	logs := h.said(ctx, logCommand(rel.targetName()), elevation)
@@ -323,9 +322,9 @@ func (h *Host) evidence(ctx context.Context, rel Release, outcome, verdict, prev
 	unwound := h.unwind(ctx, rel, previous, expected, elevation)
 
 	return providerkit.Refuse(providerkit.CodeNotReady,
-		"release %s onto %s: the proxy's flip helper %s and %s\n"+
+		"release %s onto %s: the flip helper %s; %s\n"+
 			"%s\n"+
-			"gate: http://%s%s, %s to answer 2xx; the path is %q in your project configuration\n"+
+			"gate: http://%s%s, %s to answer 2xx (set by %q)\n"+
 			"state: %s\n"+
 			"logs (last %s lines): %s",
 		rel.App, h.named(), outcome, unwound.live, verdict,
@@ -357,13 +356,13 @@ func (a aftermath) String() string {
 func (h *Host) unwind(ctx context.Context, rel Release, previous, expected, elevation string) aftermath {
 	ctx, stop := sparing(ctx)
 	defer stop()
-	after := aftermath{live: "the previous release is still the live upstream"}
+	after := aftermath{live: "the previous release is still live"}
 	if err := h.restore(ctx, previous, expected, elevation); err != nil {
-		after.live = "which release is the live upstream is no longer known here"
-		after.left = append(after.left, fmt.Sprintf("%s and the running proxy were not put back, so %s may still be the live upstream and is left standing rather than removed: %v",
-			ProxyConfig, rel.targetName(), err))
+		after.live = "the live release is unknown"
+		after.left = append(after.left, fmt.Sprintf("proxy not restored; %s may be live and was left standing: %v",
+			rel.targetName(), err))
 	} else if err := h.RemoveContainer(ctx, rel.targetName()); err != nil {
-		after.left = append(after.left, fmt.Sprintf("%s is still standing and serving nothing: %v", rel.targetName(), err))
+		after.left = append(after.left, fmt.Sprintf("%s left standing: %v", rel.targetName(), err))
 	}
 	return after
 }

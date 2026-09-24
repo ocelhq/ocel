@@ -16,8 +16,8 @@ const (
 )
 
 const (
-	ProxyRenewal = "the proxy on this box obtained it over http-01 and renews it; ocel issues and renews nothing here"
-	PinRenewal   = "you placed it on this box and you renew it; ocel issues and renews nothing here"
+	ProxyRenewal = "the proxy renews it over http-01"
+	PinRenewal   = "pinned by you; you renew it"
 )
 
 const RenewalWindow = 30 * 24 * time.Hour
@@ -54,12 +54,12 @@ func Parse(what string, block []byte) (Leaf, error) {
 		parsed, err := x509.ParseCertificate(found.Bytes)
 		if err != nil {
 			return Leaf{}, providerkit.Refuse(providerkit.CodeInvalid,
-				"%s holds a certificate block this host cannot read as one: %v", what, err)
+				"%s holds an unreadable certificate block: %v", what, err)
 		}
 		return Leaf{Domains: names(parsed), NotAfter: parsed.NotAfter}, nil
 	}
 	return Leaf{}, providerkit.Refuse(providerkit.CodeInvalid,
-		"%s carries no pem certificate block, and ocel reads the certificate to report on it and never the key beside it", what)
+		"%s has no pem certificate block", what)
 }
 
 func names(parsed *x509.Certificate) []string {
@@ -106,11 +106,11 @@ func Verify(path, hostname string, leaf Leaf, now time.Time) error {
 	switch {
 	case !leaf.Covers(hostname):
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"the certificate pinned for %s at %s covers %s and not %s, and this box serves a hostname only under a certificate that names it",
-			hostname, path, strings.Join(leaf.Domains, ", "), hostname)
+			"the certificate pinned for %s at %s covers only %s",
+			hostname, path, strings.Join(leaf.Domains, ", "))
 	case leaf.Expired(now):
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"the certificate pinned for %s at %s expired on %s, and nothing on this box renews it: you placed it and you replace it",
+			"the certificate pinned for %s at %s expired on %s\nReplace it",
 			hostname, path, leaf.NotAfter.UTC().Format(time.RFC3339))
 	default:
 		return nil

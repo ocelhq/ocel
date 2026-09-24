@@ -78,7 +78,7 @@ func (c credentials) Permissions(tier providerkit.CredentialTier) (edge.Credenti
 		return edge.CredentialDocument{Document: deployDocument()}, nil
 	default:
 		return edge.CredentialDocument{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"a host carries the bootstrap credentials or the deploy credentials; this request named neither")
+			"unknown credential tier: want bootstrap or deploy")
 	}
 }
 
@@ -98,7 +98,7 @@ func (edges) Default() edge.Kind { return box.Kind }
 func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 	if kind != box.Kind {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"this provider serves no edge %q; a machine is fronted by the proxy ocel puts on it, which is the %q edge", kind, box.Kind)
+			"edge %q is not supported; use %q", kind, box.Kind)
 	}
 	return e.provider.box(), nil
 }
@@ -116,7 +116,7 @@ func (dns) Default() providerkit.DNSKind { return "" }
 func (dns) Open(kind providerkit.DNSKind, zone string) (edge.DNSWriter, error) {
 	if kind != dnsCloudflare {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"this provider cannot write DNS records with %q; it writes them with %s", kind, dnsCloudflare)
+			"dns %q is not supported; use %s", kind, dnsCloudflare)
 	}
 	writer, err := cloudflare.NewDNS(zone)
 	if err != nil {

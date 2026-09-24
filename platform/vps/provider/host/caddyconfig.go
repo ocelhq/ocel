@@ -162,7 +162,7 @@ var dnsLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 func PreviewBaseUsable(base string) error {
 	if base == "" {
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"the shared preview entry on this box names no base domain, and a route with no host matcher of its own receives every hostname pointed at this machine, a mistyped production hostname included")
+			"the preview entry on this box has no base domain")
 	}
 	named := strings.ToLower(base)
 	labels := strings.Split(named, ".")
@@ -172,9 +172,8 @@ func PreviewBaseUsable(base string) error {
 	}
 	if !usable {
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"%q is not a base domain this box can hang a preview catch-all under: the route matches %s and nothing else, so the base is a dotted dns name of labels no longer than %d bytes, short enough for %s to fit inside %d. %s is installed beside the catch-all and is the one preview route ocel does order a certificate for, so a base no resolver reads is an acme subject that can never be issued and an order retried for as long as the box stands",
-			base, edge.PreviewWildcard(base), dnsLabelMax, edge.ProbeHostname(edge.PreviewWildcard(base)), dnsNameMax,
-			edge.ProbeHostname(edge.PreviewWildcard(base)))
+			"%q is not a usable preview base: want dotted dns labels of ≤%d bytes, with %s ≤%d bytes",
+			base, dnsLabelMax, edge.ProbeHostname(edge.PreviewWildcard(base)), dnsNameMax)
 	}
 	return nil
 }
@@ -182,7 +181,7 @@ func PreviewBaseUsable(base string) error {
 func Claiming(claims []HostClaim, taken HostClaim) ([]HostClaim, error) {
 	if at := slices.IndexFunc(claims, func(claim HostClaim) bool { return claim.Hostname == taken.Hostname }); at >= 0 && claims[at].Owner != taken.Owner {
 		return nil, providerkit.Refuse(providerkit.CodeBusy,
-			"%s is claimed on this box by %s, and one hostname answers for one surface: unbind it there before %s binds it, or this bind would take a live site off the air with nothing telling the project that lost it",
+			"%s is claimed on this box by %s\nUnbind it there before %s binds it",
 			taken.Hostname, claims[at].Owner, taken.Owner)
 	}
 	kept := slices.DeleteFunc(slices.Clone(claims), func(claim HostClaim) bool { return claim.Hostname == taken.Hostname })
@@ -444,7 +443,7 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 			continue
 		}
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"%s claims %s on this box under %s and runs %s there: a reverse proxy handler is terminal, so whichever app sorted first would answer every one of those hostnames and the rest would be configuration nothing reaches. Declare the hostname under the app that serves it — domains.production on the app rather than on the project — and run this again",
+			"%s claims %s under %s, which runs %s\nDeclare domains.production on the app that serves it, not the project",
 			under.Owner, strings.Join(wide, ", "), under.Pointer, strings.Join(running[under], " and "))
 	}
 	answering := map[string]AppRoute{}
@@ -457,7 +456,7 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 		for _, hostname := range hostnames {
 			if held, taken := answering[hostname]; taken {
 				return nil, providerkit.Refuse(providerkit.CodeInvalid,
-					"%s is claimed on this box and would be forwarded by %s and %s alike: a reverse proxy handler is terminal, so the second of those routes is configuration nothing reaches",
+					"%s would be forwarded by both %s and %s",
 					hostname, held.identity(), route.identity())
 			}
 			answering[hostname] = route
@@ -560,8 +559,8 @@ func pinnedUnderProxyPins(path string) bool {
 func validPin(pin Pin) error {
 	if pin.Hostname == "" || !pinnedUnderProxyPins(pin.Path) {
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"a pinned certificate on this box names host %q at %q, and the proxy loads a pair off %s/<name> alone: %s is the one directory bound into the proxy, and a pair anywhere else on this host is a path the proxy cannot open",
-			pin.Hostname, pin.Path, ProxyPins, ProxyPins)
+			"pinned certificate for %q is at %q, not under %s/",
+			pin.Hostname, pin.Path, ProxyPins)
 	}
 	return nil
 }
@@ -606,7 +605,7 @@ func previewBaseRead(read caddyConfig, entry map[string]string) (string, error) 
 	base := entry[edge.PreviewEntryOwner]
 	if probe := entry[edge.LivenessProbeLabel]; probe != base {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
-			"%s carries a preview catch-all for %q and a liveness probe route for %q, and the two are installed and taken down together: the probe hostname is what `ocel domain use --preview` reads the edge header off, and a catch-all standing without it settles for nobody",
+			"%s has a preview catch-all for %q but a liveness probe route for %q",
 			ProxyConfig, base, probe)
 	}
 	held := read.Apps.HTTP.Servers[proxyServer].Automatic
@@ -621,8 +620,8 @@ func previewBaseRead(read caddyConfig, entry map[string]string) (string, error) 
 	}
 	if !slices.Equal(skipped, wanted) {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
-			"%s keeps %v out of the automatic-https subject collection, and this box's preview entry needs exactly %v out of it: %s is a subject caddy would order a wildcard certificate for, and no dns-01 module on this box can answer that challenge",
-			ProxyConfig, skipped, wanted, edge.PreviewWildcard(base))
+			"%s skips %v from automatic https; the preview entry needs exactly %v",
+			ProxyConfig, skipped, wanted)
 	}
 	return base, nil
 }
@@ -653,7 +652,7 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 	grace, err := time.ParseDuration(read.Apps.HTTP.GracePeriod)
 	if err != nil {
 		return ProxyState{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"%s declares its grace period as %q, and the deploy's drain ceiling and the proxy's are one number",
+			"%s declares an unreadable grace period %q",
 			ProxyConfig, read.Apps.HTTP.GracePeriod)
 	}
 	for _, named := range slices.Sorted(maps.Keys(read.Apps.HTTP.Servers)) {
@@ -667,7 +666,7 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 	}
 	if read.Apps.TLS != nil && len(read.Apps.TLS.Automation) > 0 {
 		return ProxyState{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"%s declares a tls automation policy, and ocel writes none: this box knows every hostname it serves at deploy time, so nothing here needs on-demand issuance, and a catch-all beside an on-demand policy is an unauthenticated acme trigger a stranger drives with a junk subdomain until the box is locked out of its own tls. Caddy only warns about an on-demand policy carrying no permission module and serves anyway, so this is asserted here rather than trusted to be refused",
+			"%s declares a tls automation policy ocel did not write",
 			ProxyConfig)
 	}
 	state := ProxyState{Grace: grace, Pins: pins}
@@ -751,7 +750,7 @@ func forwardedBy(route caddyRoute) (string, string, error) {
 	edged := naming.Response != nil && maps.EqualFunc(naming.Response.Set, map[string][]string{EdgeHeader: {EdgeName}}, slices.Equal)
 	switch {
 	case naming.Handler != edgeHandler || !edged || len(naming.Upstreams) > 0 || naming.Status != 0 || len(naming.Headers) > 0:
-		return "", "", misshapen(route.Identity, fmt.Sprintf("a leading %q handler that does not set %s to %q and nothing else", naming.Handler, EdgeHeader, EdgeName))
+		return "", "", misshapen(route.Identity, fmt.Sprintf("a leading %q handler not setting only %s: %s", naming.Handler, EdgeHeader, EdgeName))
 	case forwards.Handler != forwardHandler || forwards.Status != 0 || len(forwards.Headers) > 0 || forwards.Response != nil:
 		return "", "", misshapen(route.Identity, fmt.Sprintf("a terminal %q handler", forwards.Handler))
 	case len(forwards.Upstreams) != 1:
@@ -763,7 +762,7 @@ func forwardedBy(route caddyRoute) (string, string, error) {
 	if forwards.HealthChecks != nil {
 		health = forwards.HealthChecks.Active.URI
 		if health == "" || !routeEqual(caddyRoute{Handle: []caddyForward{{HealthChecks: forwards.HealthChecks}}}, caddyRoute{Handle: []caddyForward{{HealthChecks: checking(health)}}}) {
-			return "", "", misshapen(route.Identity, "an active health check other than the one a release writes on the app's health path")
+			return "", "", misshapen(route.Identity, "an unexpected active health check")
 		}
 	}
 	return forwards.Upstreams[0].Dial, health, nil
@@ -771,8 +770,8 @@ func forwardedBy(route caddyRoute) (string, string, error) {
 
 func misshapen(named, found string) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
-		"%s forwards %q through %s, and a route ocel writes is a %s handler naming this box's edge ahead of a terminal %s with one upstream: a deploy that rewrites this file whole would take what it found there with it",
-		ProxyConfig, named, found, edgeHandler, forwardHandler)
+		"%s has route %q with %s, which ocel did not write",
+		ProxyConfig, named, found)
 }
 
 func forwardedTo(route caddyRoute) string {
@@ -799,8 +798,8 @@ func validRoute(route AppRoute) error {
 		what, named := field.what, field.named
 		if named == "" || strings.Contains(named, claimSeparator) {
 			return providerkit.Refuse(providerkit.CodeInvalid,
-				"a route on this box names %s %q, and %s tells one surface's route from another's out of the surface, the pointer and the app together",
-				what, named, ProxyConfig)
+				"a route on this box has an invalid %s %q",
+				what, named)
 		}
 	}
 	if route.Upstream == "" {
@@ -809,14 +808,14 @@ func validRoute(route AppRoute) error {
 	}
 	if route.Health != "" && !strings.HasPrefix(route.Health, "/") {
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"the route %s checks health on %q, and the proxy probes a path from / on the upstream it forwards to", route.identity(), route.Health)
+			"the route %s has health path %q, which does not start with /", route.identity(), route.Health)
 	}
 	return nil
 }
 
 func unwritten(what, named string) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
-		"%s carries a %s ocel did not write (%q), and a deploy that rewrites this file whole would take it with it",
+		"%s carries a %s ocel did not write: %q",
 		ProxyConfig, what, named)
 }
 
@@ -828,16 +827,16 @@ func validClaim(claim HostClaim) error {
 	switch {
 	case claim.Hostname == "" || claim.Owner == "" || claim.Pointer == "":
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"a hostname claim on this box names host %q, surface %q and pointer %q, and %s answers which of a surface's routes claims a host out of all three: a box runs many pointers of one app at once and a claim naming none of them belongs to all of them",
-			claim.Hostname, claim.Owner, claim.Pointer, ProxyConfig)
+			"a hostname claim on this box is incomplete: host %q, surface %q, pointer %q",
+			claim.Hostname, claim.Owner, claim.Pointer)
 	case strings.Contains(claim.Hostname, "*"):
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"a hostname claim on this box names %q, and a claim is one hostname the proxy orders one certificate for: a wildcard is a subject no http-01 challenge can answer and a match every hostname pointed at this machine would fall under, so the one wildcard a box serves is the preview base it installs a catch-all for",
+			"a hostname claim on this box names wildcard %q",
 			claim.Hostname)
 	case strings.Contains(claim.Owner, claimSeparator) || strings.Contains(claim.Hostname, claimSeparator) ||
 		strings.Contains(claim.Pointer, claimSeparator) || strings.Contains(claim.App, claimSeparator):
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"the claim of %q by %q under pointer %q and app %q carries %q, which is what separates the surface, the host it claims, the pointer it answers for and the app it was declared under",
+			"the claim of %q by %q under pointer %q and app %q contains %q",
 			claim.Hostname, claim.Owner, claim.Pointer, claim.App, claimSeparator)
 	}
 	return nil
@@ -850,7 +849,7 @@ func seededConfig() (caddyConfig, error) {
 	}
 	if _, seeded := read.Apps.HTTP.Servers[proxyServer]; !seeded {
 		return caddyConfig{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"the baseline config declares no %s server, and every route a deploy renders hangs off it", proxyServer)
+			"the baseline config declares no %s server", proxyServer)
 	}
 	return read, nil
 }
@@ -859,7 +858,7 @@ func parsed(document []byte) (caddyConfig, error) {
 	var read caddyConfig
 	if err := json.Unmarshal(document, &read); err != nil {
 		return caddyConfig{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"%s is not the json a proxy configuration is read out of: %v", ProxyConfig, err)
+			"%s is not valid json: %v", ProxyConfig, err)
 	}
 	return read, nil
 }

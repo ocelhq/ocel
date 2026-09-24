@@ -42,7 +42,7 @@ func main() {
 
 func run(ctx context.Context, command []string, environ []string) int {
 	if len(command) == 0 {
-		return fatal("the image names no command for the runtime to run: it must carry an ENTRYPOINT or CMD")
+		return fatal("the image has no ENTRYPOINT or CMD")
 	}
 	exposed := providerkit.InjectedPortText
 	env := make([]string, 0, len(environ))
@@ -170,9 +170,7 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (pr
 	}
 	secret := values.Value(vars.StoreSecretKey)
 	if secret == "" {
-		return proxy.Served{}, fmt.Errorf(
-			"this deployment binds a bucket and the box handed its runtime no credential for the store at %s, so nothing it wrote could be signed",
-			manifest.Store.Endpoint)
+		return proxy.Served{}, fmt.Errorf("this deployment binds a bucket but has no credential for the store at %s", manifest.Store.Endpoint)
 	}
 	internal := bucket.Store{
 		Endpoint:        manifest.Store.Endpoint,
@@ -251,8 +249,8 @@ func resolve(ctx context.Context, manifest, socket, dir string) (*rt.Values, err
 		return nil, fmt.Errorf("resolve this deployment's live variables: %w", err)
 	}
 	if missing := values.Missing(); len(missing) > 0 {
-		return nil, fmt.Errorf("nothing is stored for %s, which this deployment declares as %s: set it with `ocel env set` and deploy again",
-			strings.Join(missing, ", "), plural(len(missing), "a secret", "secrets"))
+		return nil, fmt.Errorf("no value is set for %s %s\nSet it with `ocel env set` and deploy again",
+			plural(len(missing), "secret", "secrets"), strings.Join(missing, ", "))
 	}
 	if err := values.Project(dir); err != nil {
 		return nil, err

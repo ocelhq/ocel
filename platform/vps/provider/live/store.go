@@ -38,7 +38,7 @@ func KeyPath(root string, class providerkit.Class) string {
 	return filepath.Join(root, string(class), sealKeyFile)
 }
 
-var errReadOnly = errors.New("the box's records are read on the box and written by a deploy alone")
+var errReadOnly = errors.New("the box's records are read-only here")
 
 type Records struct{ Root string }
 
@@ -122,7 +122,7 @@ func row(raw string) (providerkit.Revision, []byte, error) {
 	}
 	body, err := base64.StdEncoding.DecodeString(strings.TrimSpace(encoded))
 	if err != nil {
-		return "", nil, errors.New("the record on disk is stored as no record ocel wrote")
+		return "", nil, errors.New("the record on disk is not in ocel's format")
 	}
 	return providerkit.Revision(revision), body, nil
 }
@@ -130,12 +130,12 @@ func row(raw string) (providerkit.Revision, []byte, error) {
 type Sealer struct{ Root string }
 
 func (Sealer) Seal(context.Context, providerkit.Coordinate, []byte) ([]byte, error) {
-	return nil, errors.New("the box seals a value through its helper alone")
+	return nil, errors.New("the box seals values only through its helper")
 }
 
 func (s Sealer) Open(_ context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
 	if at.Class == "" {
-		return nil, fmt.Errorf("%s names no class, and this box mints one seal key per class", at.Name)
+		return nil, fmt.Errorf("%s names no class", at.Name)
 	}
 	key, err := os.ReadFile(KeyPath(s.Root, at.Class))
 	if err != nil {
@@ -146,10 +146,10 @@ func (s Sealer) Open(_ context.Context, at providerkit.Coordinate, sealed []byte
 
 func Open(key []byte, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
 	if len(key) != sealKeyBytes {
-		return nil, fmt.Errorf("the seal key is %d bytes, and AES-256 is sealed to nothing narrower than %d", len(key), sealKeyBytes)
+		return nil, fmt.Errorf("the seal key is %d bytes, want %d", len(key), sealKeyBytes)
 	}
 	if len(sealed) < sealNonce+sealTag {
-		return nil, errors.New("this value is shorter than a sealed value can be")
+		return nil, errors.New("the sealed value is too short")
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -161,7 +161,7 @@ func Open(key []byte, at providerkit.Coordinate, sealed []byte) ([]byte, error) 
 	}
 	plaintext, err := gcm.Open(nil, sealed[:sealNonce], sealed[sealNonce:], at.AAD())
 	if err != nil {
-		return nil, fmt.Errorf("%s was not sealed at this coordinate, so nothing here opens it", at.Name)
+		return nil, fmt.Errorf("%s was not sealed at this coordinate", at.Name)
 	}
 	return plaintext, nil
 }
@@ -170,7 +170,7 @@ func Located(name providerkit.RecordName) (providerkit.Class, string, error) {
 	class, named := providerkit.ClassOf(name)
 	if !named {
 		return "", "", providerkit.Refuse(providerkit.CodeInvalid,
-			"%s names no class, and this host keeps one record tree per class", name)
+			"%s names no class", name)
 	}
 	encoded, err := EncodeName(name)
 	if err != nil {
@@ -184,7 +184,7 @@ func EncodeName(name providerkit.RecordName) (string, error) {
 	for _, segment := range name {
 		if segment == "" {
 			return "", providerkit.Refuse(providerkit.CodeInvalid,
-				"%s carries an empty segment, and no file on this host answers to it", name)
+				"%s has an empty segment", name)
 		}
 		segments = append(segments, encodeSegment(segment))
 	}
@@ -233,12 +233,12 @@ func decodeSegment(segment string) (string, error) {
 		}
 		if i+2 >= len(segment) {
 			return "", providerkit.Refuse(providerkit.CodeDenied,
-				"the records helper named %q, which is not a name ocel wrote", segment)
+				"the records helper returned %q, which ocel did not write", segment)
 		}
 		value, err := strconv.ParseUint(segment[i+1:i+3], 16, 8)
 		if err != nil {
 			return "", providerkit.Refuse(providerkit.CodeDenied,
-				"the records helper named %q, which is not a name ocel wrote", segment)
+				"the records helper returned %q, which ocel did not write", segment)
 		}
 		written.WriteByte(byte(value))
 		i += 2

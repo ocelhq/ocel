@@ -71,17 +71,17 @@ export interface GcpProviderOptions {
 }
 
 export interface VpsProviderOptions {
-  /** An S3-compatible store to keep this project's buckets in, instead of the one a box runs for itself. Each declared bucket becomes a key prefix inside the named bucket. */
+  /** An S3-compatible store to keep this project's buckets in, each as a key prefix. */
   bucket?: VpsExternalStore;
   /** Certificates to serve a hostname with, keyed by hostname, valued by the path to the certificate on the machine. */
   certificates?: Record<string, string>;
-  /** The public key the ocel-deploy login is to answer to, as a path from / or from ~/. Omit it and bootstrap mirrors the keys the login it bootstraps with already answers to. */
+  /** Path to the public key the ocel-deploy login accepts; defaults to the bootstrapping login's keys. */
   deployKey?: string;
   /** The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out. */
   ssh: string | VpsTarget;
 }
 
-/** An S3-compatible store to keep this project's buckets in, instead of the one a box runs for itself. Each declared bucket becomes a key prefix inside the named bucket. */
+/** An S3-compatible store to keep this project's buckets in, each as a key prefix. */
 export interface VpsExternalStore {
   /** The public half of the credential that reaches the store. */
   accessKeyId: string;
@@ -89,7 +89,7 @@ export interface VpsExternalStore {
   bucket: string;
   /** The address the store answers on. */
   endpoint: string;
-  /** Address buckets as a path segment rather than a subdomain. Stores that serve no wildcard DNS need it. */
+  /** Address buckets as a path segment rather than a subdomain. */
   pathStyle?: boolean;
   /** The region the store signs requests against. */
   region: string;

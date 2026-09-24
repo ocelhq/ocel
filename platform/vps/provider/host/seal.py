@@ -28,7 +28,7 @@ def crypto():
             return ctypes.CDLL(named)
         except OSError:
             continue
-    abort("this host offers no libcrypto, and AES-256-GCM is what a value is sealed with")
+    abort("this host has no libcrypto")
 
 
 def cipher(lib, key, nonce, body, aad, sealing):
@@ -44,10 +44,10 @@ def cipher(lib, key, nonce, body, aad, sealing):
             abort("libcrypto refused an AES-256-GCM key of %d bytes" % len(key))
         moved = ctypes.c_int(0)
         if aad and update(ctypes.c_void_p(ctx), None, ctypes.byref(moved), aad, len(aad)) != 1:
-            abort("libcrypto refused the coordinate this value is bound to")
+            abort("libcrypto refused the coordinate")
         out = ctypes.create_string_buffer(len(body) + 16)
         if body and update(ctypes.c_void_p(ctx), out, ctypes.byref(moved), body, len(body)) != 1:
-            abort("libcrypto refused the body it was handed")
+            abort("libcrypto refused the body")
         written = out.raw[: moved.value]
         return ctx, written
     except BaseException:
@@ -67,7 +67,7 @@ def seal(key, aad, plaintext):
         body += rest.raw[: moved.value]
         tag = ctypes.create_string_buffer(TAG_BYTES)
         if lib.EVP_CIPHER_CTX_ctrl(ctypes.c_void_p(ctx), 0x10, TAG_BYTES, tag) != 1:
-            abort("libcrypto sealed a value and held back its tag")
+            abort("libcrypto returned no tag")
         return nonce + body + tag.raw
     finally:
         lib.EVP_CIPHER_CTX_free(ctypes.c_void_p(ctx))
@@ -75,7 +75,7 @@ def seal(key, aad, plaintext):
 
 def open_(key, aad, sealed):
     if len(sealed) < NONCE_BYTES + TAG_BYTES:
-        abort("this value is shorter than a sealed value can be")
+        abort("value is too short to be sealed")
     nonce = sealed[:NONCE_BYTES]
     tag = sealed[len(sealed) - TAG_BYTES :]
     body = sealed[NONCE_BYTES : len(sealed) - TAG_BYTES]
@@ -83,11 +83,11 @@ def open_(key, aad, sealed):
     ctx, plaintext = cipher(lib, key, nonce, body, aad, False)
     try:
         if lib.EVP_CIPHER_CTX_ctrl(ctypes.c_void_p(ctx), 0x11, TAG_BYTES, tag) != 1:
-            abort("libcrypto would not take the tag this value carries")
+            abort("libcrypto refused the tag")
         moved = ctypes.c_int(0)
         rest = ctypes.create_string_buffer(16)
         if lib.EVP_DecryptFinal_ex(ctypes.c_void_p(ctx), rest, ctypes.byref(moved)) != 1:
-            abort("this value was not sealed at this coordinate, so nothing here opens it")
+            abort("value was not sealed at this coordinate")
         return plaintext + rest.raw[: moved.value]
     finally:
         lib.EVP_CIPHER_CTX_free(ctypes.c_void_p(ctx))
@@ -103,7 +103,7 @@ def coordinate(held, args):
         flag = args.pop(0)
         field = flag[2:] if flag.startswith("--") else ""
         if field not in at or field == "class":
-            abort("%s names no part of a coordinate this helper is given" % flag)
+            abort("%s is not a coordinate flag" % flag)
         if not args:
             abort("%s was given no value" % flag)
         at[field] = args.pop(0)
@@ -116,15 +116,15 @@ def key_of(path):
         with open(path, "rb") as f:
             held = f.read()
     except OSError as err:
-        abort("%s is no key this host can read: %s" % (path, err))
+        abort("cannot read key %s: %s" % (path, err))
     if len(held) != KEY_BYTES:
-        abort("%s is %d bytes, and AES-256 is sealed to nothing narrower than %d" % (path, len(held), KEY_BYTES))
+        abort("%s is %d bytes, want %d" % (path, len(held), KEY_BYTES))
     return held
 
 
 def mint(path):
     if os.path.exists(path):
-        abort("%s stands already, and a key minted over is every value sealed to the old one lost" % path)
+        abort("%s already exists" % path)
     staged = path + ".minting"
     try:
         os.unlink(staged)
@@ -141,7 +141,7 @@ def mint(path):
     try:
         os.link(staged, path)
     except FileExistsError:
-        abort("%s was minted beside this one, and a key minted over is every value sealed to the old one lost" % path)
+        abort("%s was minted concurrently" % path)
     finally:
         os.unlink(staged)
 
@@ -151,16 +151,16 @@ def main(argv):
         abort("usage: seal <class> init|seal|open [coordinate flags]")
     held, verb, rest = argv[0], argv[1], list(argv[2:])
     if not re.fullmatch("[a-z0-9-]+", held):
-        abort("%s is no class this host seals anything to" % held)
+        abort("%s is not a valid class" % held)
     path = os.path.join(SEAL_ROOT, held, "seal.key")
 
     if verb == "init":
         if rest:
-            abort("init takes no coordinate: a key is minted for a class, not for a value")
+            abort("init takes no coordinate")
         mint(path)
         return
     if verb not in ("seal", "open"):
-        abort("%s is no verb this helper answers to" % verb)
+        abort("unknown verb %s" % verb)
 
     aad = coordinate(held, rest)
     key = key_of(path)
@@ -168,7 +168,7 @@ def main(argv):
     try:
         body = base64.b64decode(fed, validate=True)
     except Exception:
-        abort("stdin carried bytes ocel never encodes")
+        abort("stdin is not base64")
     written = seal(key, aad, body) if verb == "seal" else open_(key, aad, body)
     sys.stdout.write(base64.b64encode(written).decode() + "\n")
 

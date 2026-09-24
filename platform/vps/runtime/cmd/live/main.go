@@ -35,7 +35,7 @@ func run(argv []string, errs *os.File) int {
 	classRoot := flags.String("class-root", live.ClassRoot, "where each class keeps its seal key")
 	stateRoot := flags.String("state-root", live.StateRoot, "where each class keeps its records")
 	proc := flags.String("proc", agent.ProcRoot, "the procfs a caller's cgroup is read from")
-	proxyConfig := flags.String("proxy-config", live.ProxyConfig, "the proxy configuration the hostnames this box claims are read from")
+	proxyConfig := flags.String("proxy-config", live.ProxyConfig, "proxy config to read this box's hostnames from")
 	if err := flags.Parse(argv); err != nil {
 		return 2
 	}
@@ -96,7 +96,7 @@ func activated() (net.Listener, error) {
 		return nil, nil
 	}
 	if fds != 1 {
-		return nil, fmt.Errorf("systemd handed over %d sockets, and this agent answers on one", fds)
+		return nil, fmt.Errorf("systemd handed over %d sockets, want 1", fds)
 	}
 	syscall.CloseOnExec(activatedFD)
 	file := os.NewFile(uintptr(activatedFD), "ocel-live.socket")

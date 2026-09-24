@@ -90,8 +90,8 @@ func TestAPreviewWildcardWithNoBaseIsRefusedRatherThanInstalledAsADefaultRoute(t
 	if err == nil {
 		t.Fatal("a preview wildcard naming no base domain was installed, and the route it renders carries no host matcher: it receives every hostname pointed at this machine, a mistyped production hostname included")
 	}
-	if !strings.Contains(err.Error(), "host matcher") {
-		t.Errorf("the refusal reads %q, and it is the empty-host default route it must name", err)
+	if !strings.Contains(err.Error(), "no base domain") {
+		t.Errorf("the refusal reads %q, want the missing base domain named", err)
 	}
 }
 

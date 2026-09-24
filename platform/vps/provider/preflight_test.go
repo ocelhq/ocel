@@ -193,7 +193,7 @@ func TestADiskWithoutRoomForTheWindowRefusesAndNamesTheGuess(t *testing.T) {
 		t.Fatal("PreflightDeploy() let a deploy onto a disk with a kibibyte free, and a disk that fills mid-transfer fails mid-transfer")
 	}
 	said := err.Error()
-	for _, wanted := range []string{"guessed constant", dataRoot, deployedRepo} {
+	for _, wanted := range []string{"guessed", dataRoot, deployedRepo} {
 		if !strings.Contains(said, wanted) {
 			t.Errorf("PreflightDeploy() = %q, want %q in it", said, wanted)
 		}
@@ -254,8 +254,8 @@ func TestTheProxyStatesAreSixDistinctRefusalsAndNoneOfThemSaysOnlyThatItIsDown(t
 		"the container exited":                   "exited",
 		"the container is restarting":            "restarting",
 		"the flip helper is not executable":      host.ProxyHelperMount,
-		"the admin socket is not there":          "no socket at " + host.ProxyAdminSocket,
-		"the admin socket is there and refusing": "refused the one read",
+		"the admin socket is not there":          "no admin socket at " + host.ProxyAdminSocket,
+		"the admin socket is there and refusing": "refused a read",
 	} {
 		if !strings.Contains(said[what], wanted) {
 			t.Errorf("where %s the refusal is %q, want %q in it", what, said[what], wanted)
@@ -286,7 +286,7 @@ func TestAServingPortNothingHoldsIsRefusedBecauseItMustBeTaken(t *testing.T) {
 	if err == nil {
 		t.Fatal("PreflightDeploy() read a free port 80 as fine, and on a bootstrapped box these ports are taken by the proxy rather than free")
 	}
-	if !strings.Contains(err.Error(), "nothing on this host holds port "+host.RenewalPort) {
+	if !strings.Contains(err.Error(), "nothing holds port "+host.RenewalPort) {
 		t.Errorf("PreflightDeploy() = %q, want the port named as one nothing holds", err)
 	}
 }

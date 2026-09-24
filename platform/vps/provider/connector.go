@@ -20,11 +20,11 @@ const connectorCompute = providerkit.ComputeContainer
 func dialable(hostname string) error {
 	if hostname == "" {
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"the ssh destination names no host, and the console has to have an address to dial")
+			"the ssh destination names no host")
 	}
 	if net.ParseIP(hostname) != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"this machine is reached at %s, and the console dials a connector over https at a hostname the proxy on this box holds a certificate for: point a hostname at %s, name it as the ssh host, and run this again",
+			"the ssh host is the address %s; the connector needs a hostname\nPoint a hostname at %s and name it as the ssh host",
 			hostname, hostname)
 	}
 	return nil
@@ -51,7 +51,7 @@ func (p *Provider) DescribeConnectorTarget(ctx context.Context) (providerkit.Con
 	key, err := hostKeyDigest(live.HostKey())
 	if err != nil {
 		return providerkit.ConnectorTarget{}, providerkit.Refuse(providerkit.CodeDenied,
-			"this host's ssh key is what names the target the console keys a connector by, and %s", err)
+			"read this host's ssh key: %s", err)
 	}
 	ns, err := providerkit.NamespaceFromEnv()
 	if err != nil {

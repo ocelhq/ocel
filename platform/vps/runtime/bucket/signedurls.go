@@ -154,7 +154,7 @@ func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv
 		}}, nil
 
 	default:
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("a signed url is asked for as a read, a write or a browser upload"))
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("a signed url must be a read, a write or a browser upload"))
 	}
 }
 

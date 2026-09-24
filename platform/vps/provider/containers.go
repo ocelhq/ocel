@@ -21,11 +21,11 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	}
 	if strings.TrimSpace(app.Image) == "" {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"app %s names no image, and a box runs what a registry coordinate names and nothing else", app.App)
+			"app %s names no image", app.App)
 	}
 	if strings.TrimSpace(app.HealthCheckPath) == "" {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"app %s carries no health check path, and up means a 2xx on the path the wire named rather than on one this provider chose", app.App)
+			"app %s has no health check path", app.App)
 	}
 	physical := host.ContainerName(plan.Ref.Name.String(), app.App, app.Deployment, app.Image)
 	store, err := p.storeSection(ctx, plan)
@@ -46,7 +46,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	for _, owned := range []string{front.HealthPathVar, live.EnvVar} {
 		if _, taken := app.Values.Delivered[owned]; taken {
 			return nil, providerkit.Refuse(providerkit.CodeInvalid,
-				"app %s is handed %s by its deploy, and %s is the name the runtime in front of it reads its own from: rename it", app.App, owned, owned)
+				"app %s sets %s, which ocel's runtime reserves: rename it", app.App, owned)
 		}
 	}
 	if report != nil {

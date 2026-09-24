@@ -176,7 +176,7 @@ func TestTheReachVerdictClaimsOnePathInAndNeverTheInternet(t *testing.T) {
 	if strings.Contains(check.Finding, "reachable") {
 		t.Errorf("finding = %q, and a check that says reachable and means reachable from here would be cited when a certificate silently fails to renew", check.Finding)
 	}
-	if !strings.Contains(check.Finding, "one path in") {
+	if !strings.Contains(check.Finding, "not proof the internet reaches it") {
 		t.Errorf("finding = %q, want exactly what a dial from here demonstrates", check.Finding)
 	}
 }
@@ -251,7 +251,7 @@ func TestTheStockAdminPortBoundInsideTheProxyFails(t *testing.T) {
 	if !strings.Contains(check.Finding, "0.0.0.0:"+host.AdminPort) {
 		t.Errorf("finding = %q, want the bind named", check.Finding)
 	}
-	if !strings.Contains(check.Finding, "shares a network with the proxy") {
+	if !strings.Contains(check.Finding, "every app container") {
 		t.Errorf("finding = %q, want what the exposure reaches named: every container on the shared network", check.Finding)
 	}
 }
@@ -310,7 +310,7 @@ func TestAProxyThatNamedNoSocketAtAllIsNotReadAsACleanNamespace(t *testing.T) {
 		t.Fatalf("verdict = %v (%q), want a failure: a running proxy always holds %s and %s, so a namespace naming nothing is one this box never read rather than one with a clean admin port",
 			check.Verdict, check.Finding, host.RenewalPort, "443")
 	}
-	if !strings.Contains(check.Finding, "no listening socket at all") {
+	if !strings.Contains(check.Finding, "no listening sockets") {
 		t.Errorf("finding = %q, want it to say the proxy named nothing rather than to report the admin port clean", check.Finding)
 	}
 	if check.Fix == "" {

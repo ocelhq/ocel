@@ -51,26 +51,26 @@ func Requirements() []Requirement {
 	return []Requirement{
 		{
 			Name:   "root, or sudo without a password",
-			Detail: "every byte a bootstrap writes it writes as root: the directories under /etc, /var/lib and /usr/local, the deploy login, and the password it locks",
+			Detail: "bootstrap writes under /etc, /var/lib and /usr/local, and creates the deploy login",
 			Met:    func(facts Facts) bool { return facts.Root || facts.Sudo },
 			Unmet: func(_ Facts, principal string) string {
-				return fmt.Sprintf("%s can neither act as root nor run sudo without a password, and bootstrap writes as root throughout.\nGrant passwordless sudo to that login, or point ocel at root, then try again", principal)
+				return fmt.Sprintf("%s is neither root nor has passwordless sudo\nGrant it passwordless sudo, or point ocel at root", principal)
 			},
 		},
 		{
 			Name:   "systemd",
-			Detail: "everything ocel bootstraps onto a host is a systemd unit",
+			Detail: "ocel runs its host services as systemd units",
 			Met:    func(facts Facts) bool { return facts.Systemd },
 			Unmet: func(_ Facts, principal string) string {
-				return fmt.Sprintf("%s runs no systemd, and everything ocel bootstraps onto a host is a systemd unit.\nOcel has nothing to offer this machine", principal)
+				return fmt.Sprintf("%s does not run systemd, which ocel requires", principal)
 			},
 		},
 		{
 			Name:   strings.Join(bootstrapTools, ", "),
-			Detail: "the commands a bootstrap surveys and writes with, on root's PATH",
+			Detail: "on root's PATH",
 			Met:    func(facts Facts) bool { return len(absent(facts.Tools)) == 0 },
 			Unmet: func(facts Facts, principal string) string {
-				return fmt.Sprintf("%s is missing %s, and a bootstrap is those commands and little else.\nInstall what it lacks, then try again", principal, strings.Join(absent(facts.Tools), ", "))
+				return fmt.Sprintf("%s is missing %s\nInstall them", principal, strings.Join(absent(facts.Tools), ", "))
 			},
 		},
 	}

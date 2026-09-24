@@ -802,11 +802,11 @@ func TestARefusalNamesTheLiveUpstreamOnceAndTheAnswerFollowsWhetherTheProxyWasPu
 	t.Parallel()
 
 	rolled := refusedAfter(t, session.Result{})
-	if !strings.Contains(rolled, "the previous release is still the live upstream") {
+	if !strings.Contains(rolled, "the previous release is still live") {
 		t.Errorf("a refusal that put the proxy back reads\n%s\nand never says which release is live", rolled)
 	}
 	stranded := refusedAfter(t, session.Result{Code: 1, Stderr: "the proxy answered nothing over /run/caddy-admin.sock"})
-	if strings.Contains(stranded, "the previous release is still the live upstream") {
+	if strings.Contains(stranded, "the previous release is still live") {
 		t.Errorf("a refusal that could not put the proxy back reads\n%s\nwhich asserts the previous release is live and then corrects itself further down, and a reader meets the false half first", stranded)
 	}
 	if !strings.Contains(stranded, physical) {
@@ -878,7 +878,7 @@ func TestAFlipConfigurationThatCannotBeWrittenBackEitherNamesTheFileARestartWoul
 	t.Parallel()
 
 	stood, said := strandedByWrite(t, session.Result{Code: 1, Stderr: "no space left on device"})
-	if !strings.Contains(said, "could not be put back") || !strings.Contains(said, ProxyConfig) {
+	if !strings.Contains(said, "not restored") || !strings.Contains(said, ProxyConfig) {
 		t.Errorf("a %s that could be neither written nor put back is refused with\n%s\nwhich never says which file a restarted proxy would read", ProxyConfig, said)
 	}
 	if _, err := ReadProxyState([]byte(stood.held)); err != nil {
@@ -951,7 +951,7 @@ func TestAReleaseInterruptedAtTheFlipStillPutsTheProxyBackAndRemovesWhatItStoodU
 	if stood.at("docker rm --force "+quoted(physical)) < 0 {
 		t.Errorf("the interrupted release left %s standing with nothing routing to it: %v", physical, stood.commands())
 	}
-	if !strings.Contains(err.Error(), "the previous release is still the live upstream") {
+	if !strings.Contains(err.Error(), "the previous release is still live") {
 		t.Errorf("the refusal reads %q and does not say the previous release is still live", err)
 	}
 }
@@ -974,7 +974,7 @@ func TestAReleaseInterruptedAtItsFirstWriteStillPutsTheFileBackAndRemovesWhatItS
 	if stood.at("docker rm --force "+quoted(physical)) < 0 {
 		t.Errorf("the interrupted release left %s standing with nothing routing to it: %v", physical, stood.commands())
 	}
-	if !strings.Contains(err.Error(), "was put back as it was") {
+	if !strings.Contains(err.Error(), ProxyConfig+" restored") {
 		t.Errorf("the refusal reads %q, and the stranded write was never put back under the cancelled context", err)
 	}
 }

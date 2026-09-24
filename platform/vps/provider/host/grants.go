@@ -22,40 +22,40 @@ func grants(class providerkit.Class, arch string) []Grant {
 	if keys := written(items, KindFile, authorizedKeys); keys.Name != "" {
 		grants = append(grants, Grant{
 			Name:   "an ssh login as " + held.name,
-			Detail: "a " + held.shell + " shell and the keys in " + keys.Name + ", nothing else. The account holds no password at all: it is locked with `usermod -p '" + lockedPassword + "'`, which sshd still lets past on a key, and no password will ever authenticate it",
+			Detail: "a " + held.shell + " shell and the keys in " + keys.Name + ". No password: locked with `usermod -p '" + lockedPassword + "'`",
 		})
 	}
 	if held.group != "" {
 		grants = append(grants, Grant{
 			Name:   "membership of the " + held.group + " group",
-			Detail: "root on this machine under another name wherever a daemon listens on the " + held.group + " socket: anything in the group can start a container that mounts / and writes anywhere, so a deploy login that can talk to that socket is a login that can become root. Ocel takes it because a deploy is containers and there is no smaller grant that runs them, and the daemon behind that socket is the one bootstrap installs, from the script at " + dockerSource + " run as root, and left serving. A destroy takes the login and leaves the engine and every container on it standing",
+			Detail: "equivalent to root: the group can start a container that mounts /, so this login can become root. No smaller grant runs containers. The daemon is installed by bootstrap from " + dockerSource + "; destroy removes the login and leaves the engine and its containers",
 		})
 	}
 	if !under(items, sudoersRoot) {
 		grants = append(grants, Grant{
 			Name:   "no line in any sudoers file",
-			Detail: "a bootstrap writes " + held.name + " nothing under " + sudoersRoot + ", and every root-owned path below stands as root's",
+			Detail: "bootstrap writes nothing for " + held.name + " under " + sudoersRoot,
 		})
 	}
 	if helper := written(items, KindFile, recordsHelper); helper.Name != "" {
 		grants = append(grants, Grant{
 			Name:   "runs " + helper.Name,
-			Detail: fmt.Sprintf("root's own file at %04o: %s executes it to compare-and-set records under its own tier, and cannot write the helper itself", helper.Mode, held.name),
+			Detail: fmt.Sprintf("root-owned at %04o; %s runs it to compare-and-set its records and cannot write it", helper.Mode, held.name),
 		})
 	}
 	if helper := written(items, KindFile, releasesHelper); helper.Name != "" {
 		grants = append(grants, Grant{
 			Name:   "runs " + helper.Name,
-			Detail: fmt.Sprintf("root's own file at %04o, run under no sudo line at all: %s executes it to name what each app most recently served, to drop that record when a stack is torn down, and to remove the images no window and no running container names. It removes nothing by force and prunes nothing, so an image this host holds for its own reasons is never ocel's to take", helper.Mode, held.name),
+			Detail: fmt.Sprintf("root-owned at %04o, run without sudo; %s runs it to record releases and remove images no release or running container names. It never forces or prunes", helper.Mode, held.name),
 		})
 	}
 	grants = append(grants, sealing(items, class, held)...)
 	if agent := written(items, KindFile, LiveBinary); agent.Name != "" {
 		grants = append(grants, Grant{
 			Name: "no hand in " + LiveSocket,
-			Detail: "root's own agent at " + agent.Name + ", run by systemd under " + LiveService + " and never by " + held.name +
-				": every app container is handed " + LiveSocketDir + " read-only and asks it for the values its own deploy declared. The agent tells containers apart by the process that connects, never by anything the caller says, opens each value under the class key it alone reads, and answers nothing to a process outside a container this engine runs. " +
-				held.name + " neither runs it nor reads through it: a deploy hands a container the names of what it may read, and the values reach the container from the box",
+			Detail: "root's agent at " + agent.Name + ", run by systemd as " + LiveService + ", not by " + held.name +
+				". App containers get " + LiveSocketDir + " read-only; the agent identifies them by connecting process, " +
+				"opens values under the class key, and answers no process outside a container",
 		})
 	}
 	for _, item := range items {
@@ -64,7 +64,7 @@ func grants(class providerkit.Class, arch string) []Grant {
 		}
 		grants = append(grants, Grant{
 			Name:   "owns " + item.Name,
-			Detail: fmt.Sprintf("written at %04o to %s, and nothing but root reads it beside", item.Mode, held.name),
+			Detail: fmt.Sprintf("written at %04o to %s; only root reads it besides", item.Mode, held.name),
 		})
 	}
 	return grants
@@ -79,11 +79,11 @@ func sealing(items []Item, class providerkit.Class, held login) []Grant {
 	return []Grant{{
 		Name: "runs " + SealHelper + " as root, through one line in " + fragment.Name,
 		Detail: "the line is\n\n      " + strings.TrimSpace(string(fragment.Content)) +
-			"\n\n    and it is the whole of what sudo will let " + held.name +
-			" do. The helper seals and opens a value at a coordinate it is given under the " + string(class) + " key alone: sudo matches the class and the verb ahead of the wildcard, so the line mints no key and reaches no other class. It never prints the key, and no other command on this host runs under sudo for " + held.name,
+			"\n\n    the only sudo " + held.name + " has. The helper seals and opens values under the " + string(class) +
+			" key only; it mints no key, reaches no other class, and never prints the key",
 	}, {
 		Name: "no read of " + key.Name,
-		Detail: fmt.Sprintf("root's own at %04o, minted from this machine's own randomness and never off it: %s can ask the helper to seal and to open, and cannot read the %s key either does it with. A key is minted once per class and ocel rotates it for nobody — what it sealed, it alone opens, and `ocel destroy` takes it with the class",
+		Detail: fmt.Sprintf("root-owned at %04o, minted on this machine and never leaves it; %s uses it through the helper and cannot read the %s key. It is never rotated; `ocel destroy` removes it with the class",
 			key.Mode, held.name, SealAlgorithm),
 	}}
 }

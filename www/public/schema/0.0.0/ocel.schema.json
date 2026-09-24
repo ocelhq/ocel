@@ -316,7 +316,7 @@
               "properties": {
                 "bucket": {
                   "additionalProperties": false,
-                  "description": "An S3-compatible store to keep this project's buckets in, instead of the one a box runs for itself. Each declared bucket becomes a key prefix inside the named bucket.",
+                  "description": "An S3-compatible store to keep this project's buckets in, each as a key prefix.",
                   "properties": {
                     "accessKeyId": {
                       "description": "The public half of the credential that reaches the store.",
@@ -331,7 +331,7 @@
                       "type": "string"
                     },
                     "pathStyle": {
-                      "description": "Address buckets as a path segment rather than a subdomain. Stores that serve no wildcard DNS need it.",
+                      "description": "Address buckets as a path segment rather than a subdomain.",
                       "type": "boolean"
                     },
                     "region": {
@@ -361,7 +361,7 @@
                   "type": "object"
                 },
                 "deployKey": {
-                  "description": "The public key the ocel-deploy login is to answer to, as a path from / or from ~/. Omit it and bootstrap mirrors the keys the login it bootstraps with already answers to.",
+                  "description": "Path to the public key the ocel-deploy login accepts; defaults to the bootstrapping login's keys.",
                   "type": "string"
                 },
                 "ssh": {

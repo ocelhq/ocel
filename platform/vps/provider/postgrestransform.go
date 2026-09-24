@@ -74,7 +74,7 @@ func nodePass(modules []string) transformkit.Evaluator {
 	}
 	return transformkit.NodePass{
 		Root: root, Modules: modules,
-		Uninstalled: "Install `@ocel/transforms` as a devDependency and re-run.",
+		Uninstalled: "Install `@ocel/transforms` as a devDependency",
 	}
 }
 
@@ -90,7 +90,7 @@ func decodePatch(patch map[string]any, into any) error {
 
 func unrenderable(kind, resource, surface string, why error) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
-		"a transform patches %s.%s.%s on %s with something a box cannot render: %v",
+		"a transform patch to %s.%s.%s on %s is invalid: %v",
 		transformProvider, kind, surface, resource, why)
 }
 
@@ -129,14 +129,14 @@ func (p *Provider) reshaped(ctx context.Context, in resources.Instruction, kind 
 			}
 		default:
 			return spec, providerkit.Refuse(providerkit.CodeInvalid,
-				"a transform patches %s.%s.%s on %s, and a box stands up a %s and a %s for a %s and nothing else",
+				"a transform patches %s.%s.%s on %s; a box only patches %s and %s for a %s",
 				transformProvider, kind, surface, in.Resource.Name, surfaceContainer, surfaceVolume, kind)
 		}
 	}
 	for key, value := range results[0].Tags {
 		if strings.HasPrefix(key, ownLabelPrefix) {
 			return spec, providerkit.Refuse(providerkit.CodeInvalid,
-				"a transform tags %s with %s, and the %s labels are what a teardown finds it by: rename the tag",
+				"a transform tags %s with %s; the %s prefix is reserved: rename the tag",
 				in.Resource.Name, key, ownLabelPrefix)
 		}
 		if spec.Labels == nil {
@@ -155,7 +155,7 @@ func containerPatched(kind, resource string, spec host.ResourceContainer, patch 
 	if held.Image != "" {
 		if !pinnedImage.MatchString(held.Image) {
 			return spec, providerkit.Refuse(providerkit.CodeInvalid,
-				"a transform runs %s %s as %q, which a registry can move under whoever pulls it: pin it as <image>@sha256:<digest>",
+				"a transform runs %s %s as unpinned image %q: pin it as <image>@sha256:<digest>",
 				kind, resource, held.Image)
 		}
 		spec.Image = held.Image
@@ -163,7 +163,7 @@ func containerPatched(kind, resource string, spec host.ResourceContainer, patch 
 	for _, name := range slices.Sorted(maps.Keys(held.Env)) {
 		if slices.Contains(ownEnv[kind], name) {
 			return spec, providerkit.Refuse(providerkit.CodeInvalid,
-				"a transform hands %s %s the variable %s, and what an app binds to — the credential, the address and where the data is kept — is ocel's to set: drop it",
+				"a transform sets %s %s's %s, which ocel owns: drop it",
 				kind, resource, name)
 		}
 		spec.Env[name] = held.Env[name]

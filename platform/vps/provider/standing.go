@@ -59,8 +59,8 @@ func (p *Provider) CheckStanding(ctx context.Context, req providerkit.StandingRe
 		return []providerkit.StandingCheck{{
 			Subject: host.ProxyContainer,
 			Verdict: providerkit.StandingFail,
-			Finding: fmt.Sprintf("this box's own address could not be read, so nothing here could be judged against it: %v", err),
-			Fix:     "check the machine answers over ssh, then run this again",
+			Finding: fmt.Sprintf("read this box's address: %v", err),
+			Fix:     "check the machine answers over ssh",
 		}}, nil
 	}
 	checks := dnsVerdicts(ctx, p.lookup(), req.Hostnames, address)
@@ -93,7 +93,7 @@ func dnsVerdict(ctx context.Context, look Lookup, hostname, address string, here
 	check := providerkit.StandingCheck{Subject: hostname}
 	if unread != nil {
 		check.Verdict = providerkit.StandingFail
-		check.Finding = fmt.Sprintf("%s could not be read as this box's own address, so where %s points cannot be judged against it: %v", address, hostname, unread)
+		check.Finding = fmt.Sprintf("resolve this box's address %s: %v", address, unread)
 		return check
 	}
 	found, err := look(ctx, hostname)
@@ -101,16 +101,16 @@ func dnsVerdict(ctx context.Context, look Lookup, hostname, address string, here
 	case notResolved(err):
 		check.Verdict = providerkit.StandingOwed
 		check.Finding = fmt.Sprintf("%s does not resolve; the record pointing it at %s is owed", hostname, address)
-		check.Fix = "add the record `ocel domain add` printed, then run this again — ocel writes no DNS"
+		check.Fix = "add the record `ocel domain add` printed"
 		return check
 	case err != nil:
 		check.Verdict = providerkit.StandingFail
-		check.Finding = fmt.Sprintf("%s could not be resolved from here, so nothing was learned about where it points: %v", hostname, err)
+		check.Finding = fmt.Sprintf("resolve %s: %v", hostname, err)
 		return check
 	case len(found) == 0:
 		check.Verdict = providerkit.StandingOwed
 		check.Finding = fmt.Sprintf("%s does not resolve; the record pointing it at %s is owed", hostname, address)
-		check.Fix = "add the record `ocel domain add` printed, then run this again — ocel writes no DNS"
+		check.Fix = "add the record `ocel domain add` printed"
 		return check
 	case pointsHere(found, here):
 		check.Verdict = providerkit.StandingPass
@@ -118,14 +118,14 @@ func dnsVerdict(ctx context.Context, look Lookup, hostname, address string, here
 		return check
 	case loopbackOnly(found):
 		check.Verdict = providerkit.StandingOwed
-		check.Finding = fmt.Sprintf("%s resolves to %s, which every machine answers for itself and nothing off this box can follow to %s; the record pointing it at %s is owed",
-			hostname, spell(found), address, address)
-		check.Fix = "add the record `ocel domain add` printed, then run this again — ocel writes no DNS"
+		check.Finding = fmt.Sprintf("%s resolves to loopback %s; the record pointing it at %s is owed",
+			hostname, spell(found), address)
+		check.Fix = "add the record `ocel domain add` printed"
 		return check
 	default:
 		check.Verdict = providerkit.StandingFail
 		check.Finding = fmt.Sprintf("%s resolves to %s, and this box is %s", hostname, spell(found), spell(here))
-		check.Fix = fmt.Sprintf("point %s at %s in your zone, or ocel serves it from a machine that is not this one", hostname, spell(here))
+		check.Fix = fmt.Sprintf("point %s at %s in your zone", hostname, spell(here))
 		return check
 	}
 }
@@ -161,13 +161,13 @@ func reachVerdict(ctx context.Context, dial Reach, address string) providerkit.S
 	check := providerkit.StandingCheck{Subject: at}
 	if err := dial(ctx, at); err != nil {
 		check.Verdict = providerkit.StandingFail
-		check.Finding = fmt.Sprintf("nothing answered a connection to %s from this machine, and the proxy renews every certificate on this box over http-01 on port %s with no ocel code anywhere near it: %v",
-			at, host.RenewalPort, err)
-		check.Fix = "open port " + host.RenewalPort + " in the firewall or security group your provider puts in front of this machine, and check the proxy is standing: the proxy publishes the port through docker, which writes its own iptables rules ahead of ufw and firewalld, so a firewall on the machine itself neither opens nor closes it"
+		check.Finding = fmt.Sprintf("%s is unreachable, so the proxy cannot renew certificates over http-01: %v",
+			at, err)
+		check.Fix = "open port " + host.RenewalPort + " in your provider's firewall or security group; docker's iptables rules bypass ufw"
 		return check
 	}
 	check.Verdict = providerkit.StandingPass
-	check.Finding = fmt.Sprintf("something listens on port %s, this box's firewall permits it, and a connection from this machine succeeded — that is one path in, not proof the internet reaches it",
+	check.Finding = fmt.Sprintf("port %s answers from this machine (not proof the internet reaches it)",
 		host.RenewalPort)
 	return check
 }
@@ -177,26 +177,26 @@ func (p *Provider) adminVerdict(ctx context.Context) providerkit.StandingCheck {
 	held, err := p.host.ProxyListeners(ctx)
 	if err != nil {
 		check.Verdict = providerkit.StandingFail
-		check.Finding = fmt.Sprintf("what listens inside %s could not be read, so whether the stock admin port is bound is unknown: %v", host.ProxyContainer, err)
-		check.Fix = "check the proxy is running, then run this again"
+		check.Finding = fmt.Sprintf("read listeners inside %s: %v", host.ProxyContainer, err)
+		check.Fix = "check the proxy is running"
 		return check
 	}
 	if len(held) == 0 {
 		check.Verdict = providerkit.StandingFail
-		check.Finding = fmt.Sprintf("%s named no listening socket at all, and a proxy that is serving holds ports %s at minimum, so this is a namespace nothing was read out of rather than one with the stock admin port clean",
+		check.Finding = fmt.Sprintf("%s reports no listening sockets; a serving proxy holds at least %s",
 			host.ProxyContainer, strings.Join(host.ProxyServing(), " and "))
-		check.Fix = "check the proxy is running with its own /proc mounted, then run this again"
+		check.Fix = "check the proxy is running with its own /proc mounted"
 		return check
 	}
 	if bound := listeners.On(held, host.AdminPortNumber); len(bound) > 0 {
 		check.Verdict = providerkit.StandingFail
-		check.Finding = fmt.Sprintf("%s listens on %s inside %s, which is the stock unauthenticated admin api: every app container on this box shares a network with the proxy, so every one of them holds arbitrary replacement of this box's serving configuration",
+		check.Finding = fmt.Sprintf("%s listens on %s inside %s: the admin api is open to every app container",
 			strings.Join(listeners.Lines(bound), ", "), host.AdminPort, host.ProxyContainer)
-		check.Fix = "run `ocel bootstrap production` to put back the configuration that binds the admin endpoint to " + host.ProxyAdminSocket + " and nothing else"
+		check.Fix = "run `ocel bootstrap production` to bind the admin endpoint to " + host.ProxyAdminSocket
 		return check
 	}
 	check.Verdict = providerkit.StandingPass
-	check.Finding = fmt.Sprintf("nothing listens on tcp %s inside %s; the admin endpoint is reached over %s alone",
+	check.Finding = fmt.Sprintf("nothing listens on tcp %s inside %s; admin is on %s only",
 		host.AdminPort, host.ProxyContainer, host.ProxyAdminSocket)
 	return check
 }

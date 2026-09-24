@@ -126,7 +126,7 @@ func (h *Host) InstallPreviewEntry(ctx context.Context, base string) error {
 	return h.reshape(ctx, func(state ProxyState) (ProxyState, error) {
 		if state.PreviewBase != "" && state.PreviewBase != base {
 			return ProxyState{}, providerkit.Refuse(providerkit.CodeBusy,
-				"this box already answers previews on %s, and every preview hostname it serves is a name under that base: take those previews down with `ocel preview rm` and release the base with `ocel domain release --preview` first, or raising %s here takes every live preview off the air with nothing telling the projects that lost them",
+				"this box already answers previews on %s, not %s\nRun `ocel preview rm` and `ocel domain release --preview` first",
 				edge.PreviewWildcard(state.PreviewBase), edge.PreviewWildcard(base))
 		}
 		state.PreviewBase = base
@@ -141,7 +141,7 @@ func (h *Host) RemovePreviewEntry(ctx context.Context, base string) error {
 		}
 		if held := claimedUnder(state.Claims, base); len(held) > 0 {
 			return ProxyState{}, providerkit.Refuse(providerkit.CodeBusy,
-				"this box still claims %s under %s: releasing the base takes the catch-all down and leaves every one of those hostnames routed and renewing, and raising a second base beside them installs a second catch-all over sites that are still live. Take them down with `ocel preview rm` first",
+				"this box still claims %s under %s\nRun `ocel preview rm` first",
 				strings.Join(held, ", "), edge.PreviewWildcard(base))
 		}
 		state.PreviewBase = ""
@@ -191,7 +191,7 @@ func (h *Host) reshape(ctx context.Context, change func(ProxyState) (ProxyState,
 	if err != nil || !shaped.changed {
 		return err
 	}
-	if _, err := h.ran(ctx, "load the hostnames this box claims onto the running proxy",
+	if _, err := h.ran(ctx, "reload the proxy",
 		words(helperCommand("flip", ProxyConfigMount)), nil, elevation); err != nil {
 		return h.reverted(ctx, shaped.held.text, shaped.written, err)
 	}
@@ -201,7 +201,7 @@ func (h *Host) reshape(ctx context.Context, change func(ProxyState) (ProxyState,
 func (h *Host) reverted(ctx context.Context, previous, expected string, why error) error {
 	if _, err := h.writeProxyDocument(ctx, expected, previous); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"%s was written and the running proxy would not take it: %v\n%s could not be put back either, and a restarted proxy serves what this file says: %v",
+			"the running proxy rejected %s: %v\nrestoring %s also failed: %v",
 			ProxyConfig, why, ProxyConfig, err)
 	}
 	return why

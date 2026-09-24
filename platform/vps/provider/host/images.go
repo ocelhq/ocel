@@ -25,7 +25,7 @@ func (h *Host) reachDocker(ctx context.Context) (string, error) {
 	if result.Code != 0 {
 		if !deniedSocket(result.Stderr) {
 			return "", providerkit.Refuse(providerkit.CodeNotReady,
-				"%s cannot run docker, and an image reaches this machine through its daemon: %s",
+				"%s cannot run docker: %s",
 				h.named(), spoken(result))
 		}
 		elevation, err := h.elevate(ctx)
@@ -76,7 +76,7 @@ func (h *Host) PullImage(ctx context.Context, target providerkit.RegistryTarget,
 	}
 	if !held {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
-			"%s pulled from %s and answers to no %s afterwards, so nothing can be released under that coordinate: %s",
+			"%s pulled from %s but holds no %s: %s",
 			h.named(), target.Server, coordinate, strings.TrimSpace(said))
 	}
 	return strings.TrimSpace(said), nil
@@ -129,8 +129,7 @@ func LoginStands(target providerkit.RegistryTarget) error {
 		return nil
 	}
 	return providerkit.Refuse(providerkit.CodeInvalid,
-		"%s is reached with a password and no username to present it under, and a docker login takes both: "+
-			"name `username` beside `password` in the project's `registry`", target.Server)
+		"%s has a password but no username\nSet `username` beside `password` in the project's `registry`", target.Server)
 }
 
 func pull(target providerkit.RegistryTarget, coordinate, digest string) (string, error) {
@@ -160,7 +159,7 @@ func pull(target providerkit.RegistryTarget, coordinate, digest string) (string,
 func pinnedTo(coordinate, digest string) (string, error) {
 	if digest == "" {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
-			"%s pins no digest, and a tag is whatever the registry was last told it is: ocel pulls what this deploy built or nothing",
+			"%s pins no digest",
 			coordinate)
 	}
 	repository := coordinate
@@ -186,7 +185,7 @@ func (h *Host) LoadImage(ctx context.Context, coordinate string, tar io.Reader) 
 	}
 	if !held {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
-			"%s took the image stream and answers to no %s afterwards, so nothing can be released under that coordinate: %s\nwhat the box's engine says about it:\n%s",
+			"%s loaded the image but holds no %s: %s\nengine state:\n%s",
 			h.named(), coordinate, strings.TrimSpace(said), h.said(ctx, loadEvidenceCommand(), elevation))
 	}
 	return strings.TrimSpace(said), nil

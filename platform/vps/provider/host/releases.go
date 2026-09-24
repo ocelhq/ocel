@@ -26,13 +26,13 @@ func Repository(coordinate string) (string, bool) {
 func Scope(project, app string) string { return naming.Sanitize(project) + "/" + app }
 
 func (h *Host) Promote(ctx context.Context, class providerkit.Class, project, app, coordinate string) error {
-	_, err := h.releases(ctx, "record "+coordinate+" as what "+app+" most recently served", "",
+	_, err := h.releases(ctx, "record "+coordinate+" as "+app+"'s release", "",
 		Scope(project, app), "promote", string(class), coordinate)
 	return err
 }
 
 func (h *Host) Forget(ctx context.Context, class providerkit.Class, project, app string) error {
-	_, err := h.releases(ctx, "drop the window "+app+" was served from", "",
+	_, err := h.releases(ctx, "forget "+app+"'s releases", "",
 		Scope(project, app), "forget", string(class))
 	return err
 }
@@ -41,7 +41,7 @@ func (h *Host) Reconcile(ctx context.Context, project, app, coordinate string, r
 	repository, named := Repository(coordinate)
 	if !named {
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"%s runs %s, which names no repository this host can list, and a sweep whose filter and desired set disagree on scope removes the wrong thing", app, coordinate)
+			"%s runs %s, which names no repository and tag", app, coordinate)
 	}
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
@@ -59,7 +59,7 @@ func (h *Host) Reconcile(ctx context.Context, project, app, coordinate string, r
 		if removed == "" {
 			continue
 		}
-		report.Detail("Removed " + removed + ": no release of " + app + " this host keeps names it and nothing runs it")
+		report.Detail("Removed " + removed + ": unused image of " + app)
 	}
 	return nil
 }

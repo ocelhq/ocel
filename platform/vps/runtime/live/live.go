@@ -37,11 +37,11 @@ func (f *socketFetcher) FetchLive(ctx context.Context) (map[string]string, error
 		return nil, fmt.Errorf("read the box's answer: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("the box answered %q asking for this deployment's values: %s", resp.Status, strings.TrimSpace(string(body)))
+		return nil, fmt.Errorf("the box answered %q for this deployment's values: %s", resp.Status, strings.TrimSpace(string(body)))
 	}
 	var answer vars.Answer
 	if err := json.Unmarshal(body, &answer); err != nil {
-		return nil, fmt.Errorf("the box answered something that is not a value set: %w", err)
+		return nil, fmt.Errorf("decode the box's values: %w", err)
 	}
 	return answer.Values, nil
 }
@@ -55,7 +55,7 @@ func (f *socketFetcher) FreeSpace() (uint64, uint64, error) {
 	}
 	resp, err := f.client.Do(req)
 	if err != nil {
-		return 0, 0, fmt.Errorf("ask the box how much room the store's volume has over %s: %w", f.socket, err)
+		return 0, 0, fmt.Errorf("ask the box for the store volume's size over %s: %w", f.socket, err)
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, answerCeiling))
@@ -63,11 +63,11 @@ func (f *socketFetcher) FreeSpace() (uint64, uint64, error) {
 		return 0, 0, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return 0, 0, fmt.Errorf("the box answered %q asking after the store's volume: %s", resp.Status, strings.TrimSpace(string(body)))
+		return 0, 0, fmt.Errorf("the box answered %q for the store volume: %s", resp.Status, strings.TrimSpace(string(body)))
 	}
 	var space vars.Space
 	if err := json.Unmarshal(body, &space); err != nil {
-		return 0, 0, fmt.Errorf("the box answered something that is not a measurement: %w", err)
+		return 0, 0, fmt.Errorf("decode the box's volume size: %w", err)
 	}
 	return space.Free, space.Total, nil
 }

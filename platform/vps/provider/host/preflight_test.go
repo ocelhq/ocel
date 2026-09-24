@@ -72,7 +72,7 @@ func TestAMeasurementUnderTheFloorIsStillHeldToTheFloor(t *testing.T) {
 			room.Needs(), FirstDeployFloor)
 	}
 	said := arithmetic(room)
-	if !strings.Contains(said, "guessed constant") {
+	if !strings.Contains(said, "guessed") {
 		t.Errorf("the refusal says %q, and the number it applied is the floor rather than the measurement it also names", said)
 	}
 }
@@ -97,7 +97,7 @@ func TestAFirstDeployIsProtectedByAConstantThatSaysItIsAGuess(t *testing.T) {
 		t.Fatalf("Needs() = %d, want the floor %d and the log ceiling: with nothing held there is no size to extrapolate", room.Needs(), FirstDeployFloor)
 	}
 	said := arithmetic(room)
-	if !strings.Contains(said, "guessed constant") {
+	if !strings.Contains(said, "guessed") {
 		t.Errorf("the refusal says %q, and a constant that will be wrong for someone has to be named as a guess", said)
 	}
 }

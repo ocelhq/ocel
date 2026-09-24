@@ -161,20 +161,20 @@ func (r RateLimit) Spent(now time.Time) bool {
 
 func (r RateLimit) Refusal(hostname string) error {
 	return providerkit.Refuse(providerkit.CodeBusy,
-		"the certificate authority will not issue for %s yet: %s and %s. %s",
+		"the certificate authority will not issue for %s yet: %s; %s\n%s",
 		hostname, r.counted(), r.resets(), r.advice())
 }
 
 func (r RateLimit) counted() string {
 	switch r.Counts {
 	case CountedAuthorizations:
-		return fmt.Sprintf("%s has failed its %d validation attempts for the last %s",
+		return fmt.Sprintf("%s failed %d validations in %s",
 			r.named(), r.Ceiling, spelledWindow(r.Window))
 	case CountedOrders:
-		return fmt.Sprintf("this box's acme account has placed its %d new orders for the last %s",
+		return fmt.Sprintf("this box placed %d new orders in %s",
 			r.Ceiling, spelledWindow(r.Window))
 	default:
-		return fmt.Sprintf("%s has had its %d certificates for the last %s",
+		return fmt.Sprintf("%s was issued %d certificates in %s",
 			r.named(), r.Ceiling, spelledWindow(r.Window))
 	}
 }
@@ -189,23 +189,22 @@ func (r RateLimit) named() string {
 func (r RateLimit) advice() string {
 	switch r.Counts {
 	case CountedAuthorizations:
-		return "A failed validation is the challenge itself failing rather than a ceiling on how many names this box may hold: the hostname has to resolve to this box and reach it on port 80 before any attempt can succeed. Check the record you pointed at this box, and that nothing in front of it answers /.well-known/acme-challenge/ itself."
+		return "Check the hostname resolves here and port 80 serves /.well-known/acme-challenge/"
 	case CountedOrders:
-		return "Every hostname this box certifies is ordered from the one account, preview and production alike, so this ceiling is box-wide rather than per project and an order counts against it whether it succeeds or fails. Take previews you are done with down with `ocel preview rm`, and order nothing new while the window refills."
+		return "Remove unused previews with `ocel preview rm` and wait for the window to refill"
 	default:
-		return fmt.Sprintf("Every preview hostname on this box counts against %s, and so does every production one, so the ceiling is new branches times apps per project per week rather than deploys. Take previews you are done with down with `ocel preview rm` — that frees the names but not the count, which refills on its own.",
-			r.named())
+		return "Remove unused previews with `ocel preview rm` and wait for the window to refill"
 	}
 }
 
 func (r RateLimit) resets() string {
 	switch {
 	case !r.ResetAt.IsZero():
-		return "the next one can be ordered after " + r.ResetAt.UTC().Format(time.RFC3339)
+		return "retry after " + r.ResetAt.UTC().Format(time.RFC3339)
 	case r.RetryAfter > 0:
-		return "the next one can be ordered in " + r.RetryAfter.String()
+		return "retry in " + r.RetryAfter.String()
 	default:
-		return "it named no time it resets, so nothing here can be ordered until " + spelledWindow(r.Window) + " after the attempt that was refused"
+		return "retry " + spelledWindow(r.Window) + " after the refused attempt"
 	}
 }
 

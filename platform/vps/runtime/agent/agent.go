@@ -49,7 +49,7 @@ type peer struct {
 func PeerPID(conn net.Conn) (int, error) {
 	over, ok := conn.(*net.UnixConn)
 	if !ok {
-		return 0, fmt.Errorf("the connection came over %s, and a caller is known by its unix peer credentials alone", conn.RemoteAddr().Network())
+		return 0, fmt.Errorf("the connection came over %s, not a unix socket", conn.RemoteAddr().Network())
 	}
 	raw, err := over.SyscallConn()
 	if err != nil {
@@ -152,7 +152,7 @@ func (s *Server) manifestOf(w http.ResponseWriter, r *http.Request) (live.Manife
 	defer cancel()
 	raw, err := s.Inspect.Manifest(inspecting, container)
 	if err != nil {
-		http.Error(w, "the box could not read what the caller's container was handed: "+err.Error(), http.StatusBadGateway)
+		http.Error(w, "read the caller's container: "+err.Error(), http.StatusBadGateway)
 		return live.Manifest{}, false
 	}
 	if raw == "" {
@@ -165,7 +165,7 @@ func (s *Server) manifestOf(w http.ResponseWriter, r *http.Request) (live.Manife
 		return live.Manifest{}, false
 	}
 	if !manifest.Live() {
-		http.Error(w, "the caller's container carries a manifest naming nothing live", http.StatusNotFound)
+		http.Error(w, "the caller's manifest names nothing live", http.StatusNotFound)
 		return live.Manifest{}, false
 	}
 	return manifest, true
@@ -217,7 +217,7 @@ func (s *Server) containerOf(pid int) (string, error) {
 	}
 	container, found := ContainerID(string(cgroup))
 	if !found {
-		return "", errors.New("the caller is not a process in a container this box's engine runs")
+		return "", errors.New("the caller is not in a container on this box")
 	}
 	return container, nil
 }
@@ -281,7 +281,7 @@ func (d *Docker) Space(ctx context.Context, volume string) (uint64, uint64, erro
 		return 0, 0, fmt.Errorf("read what the daemon says about volume %s: %w", volume, err)
 	}
 	if inspected.Mountpoint == "" {
-		return 0, 0, fmt.Errorf("the daemon places volume %s nowhere on this box's filesystem", volume)
+		return 0, 0, fmt.Errorf("the daemon reports no mountpoint for volume %s", volume)
 	}
 	var stat unix.Statfs_t
 	if err := unix.Statfs(inspected.Mountpoint, &stat); err != nil {
@@ -369,7 +369,7 @@ func (s Store) storeBase(manifest live.Manifest) string {
 func (s Store) storeSecret(ctx context.Context, manifest live.Manifest) (string, error) {
 	sealed, err := base64.StdEncoding.DecodeString(manifest.Store.Sealed)
 	if err != nil {
-		return "", fmt.Errorf("the manifest carries a %s that nothing ocel sealed encodes to", live.StoreSecretName)
+		return "", fmt.Errorf("the manifest's %s is not valid base64", live.StoreSecretName)
 	}
 	opened, err := (live.Sealer{Root: s.ClassRoot}).Open(ctx, manifest.StoreCoordinate(), sealed)
 	if err != nil {

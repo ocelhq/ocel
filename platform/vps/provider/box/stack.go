@@ -84,15 +84,15 @@ func (s *stack) standing(ctx context.Context, app, pointer string, promotion edg
 	}
 	if !found {
 		return standing{}, false, providerkit.Refuse(providerkit.CodeInvalid,
-			"promote %s: the deployments ledger holds no record for %s/%s, so nothing names what this box would put in front of %s; re-run the deploy that built it",
-			promotion.PromotionID, app, identity, app)
+			"promote %s: no deployment record for %s/%s\nRe-run the deploy that built it",
+			promotion.PromotionID, app, identity)
 	}
 	if record.Physical == "" {
 		return standing{}, false, nil
 	}
 	if record.Image == "" || record.HealthPath == "" {
 		return standing{}, false, providerkit.Refuse(providerkit.CodeInvalid,
-			"promote %s: the deployment record for %s/%s names the container %s and no image (%q) or health path (%q), and a release gates the container it re-points at on the path the wire named",
+			"promote %s: the record for %s/%s (container %s) lacks an image (%q) or health path (%q)",
 			promotion.PromotionID, app, identity, record.Physical, record.Image, record.HealthPath)
 	}
 	held, err := s.e.machine.HoldsImage(ctx, record.Image)
@@ -101,8 +101,8 @@ func (s *stack) standing(ctx context.Context, app, pointer string, promotion edg
 	}
 	if !held {
 		return standing{}, false, providerkit.Refuse(providerkit.CodeNotReady,
-			"promote %s: this box no longer holds %s, which %s/%s was released from, so there is nothing here to put back in front of %s and %s still serves what it served before. The box keeps the last few releases of an app and this one has fallen out of that window: deploy again",
-			promotion.PromotionID, record.Image, app, identity, app, app)
+			"promote %s: this box no longer holds %s for %s/%s; %s is unchanged\nDeploy again",
+			promotion.PromotionID, record.Image, app, identity, app)
 	}
 	return standing{key: s.routeKey(pointer, app), app: app, record: record}, true, nil
 }
@@ -122,7 +122,7 @@ func declaredBy(record edge.DeploymentRecord) []string {
 func (s *stack) serve(ctx context.Context, held standing, report edge.Reporter) error {
 	record := held.record
 	if report != nil {
-		report.Say("Standing " + held.app + " back up as " + record.Physical + " from the image this host already holds")
+		report.Say("Standing " + held.app + " back up as " + record.Physical)
 	}
 	if err := s.e.machine.StandUp(ctx, host.Container{
 		Name: record.Physical, Project: s.state.Slug, App: held.app, Image: record.Image, Class: s.state.Class,

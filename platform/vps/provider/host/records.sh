@@ -18,22 +18,22 @@ verb=$2
 shift 2
 
 case $class in
-'' | *[!a-z0-9-]*) abort "$class is no class this host keeps records for" ;;
+'' | *[!a-z0-9-]*) abort "$class is not a valid class" ;;
 esac
 
 dir="${OCEL_RECORDS_ROOT:-/var/lib/ocel}/$class/records"
-[ -d "$dir" ] || abort "$dir stands as no record tier, and ocel bootstrap is what writes one"
+[ -d "$dir" ] || abort "$dir is missing; run ocel bootstrap"
 
 ours() {
 	if [ -L "$1" ]; then
-		abort "$1 is a symlink, and ocel neither reads, writes nor hands ownership through a name it did not create"
+		abort "$1 is a symlink"
 	fi
 	case $1 in
-	*/../* | */..) abort "$1 climbs out of $dir, and ocel keeps records nowhere else" ;;
+	*/../* | */..) abort "$1 climbs out of $dir" ;;
 	esac
 	case $1 in
 	"$dir"/*) ;;
-	*) abort "$1 stands outside $dir, and ocel keeps records nowhere else" ;;
+	*) abort "$1 is outside $dir" ;;
 	esac
 }
 
@@ -44,7 +44,7 @@ belongs() {
 	while [ "$p" != "$dir" ]; do
 		ours "$p"
 		chown -h --reference="$dir" "$p" ||
-			abort "$p was written as root and could not be handed to whoever owns $dir, which is the login every deploy after this one reads it as"
+			abort "could not hand $p to the owner of $dir"
 		p=$(dirname "$p")
 	done
 }
@@ -62,20 +62,20 @@ readrev() {
 	held=
 	[ -f "$1" ] || return 0
 	held=$(head -n1 "$1")
-	[ -n "$held" ] || abort "$1 names no revision, and ocel overwrites nothing it cannot compare"
+	[ -n "$held" ] || abort "$1 names no revision"
 }
 
 mint() {
 	rev=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
-	[ ${#rev} -eq 32 ] || abort "this host minted no revision, and a record nothing can compare is a record anything can lose"
+	[ ${#rev} -eq 32 ] || abort "could not mint a revision"
 	case $rev in
-	*[!0-9a-f]*) abort "this host minted no revision, and a record nothing can compare is a record anything can lose" ;;
+	*[!0-9a-f]*) abort "could not mint a revision" ;;
 	esac
 }
 
 checked() {
 	case $1 in
-	*[!A-Za-z0-9+/=]*) abort "a record body arrived as bytes ocel never encodes" ;;
+	*[!A-Za-z0-9+/=]*) abort "a record body is not base64" ;;
 	esac
 }
 
@@ -130,8 +130,8 @@ pair)
 	[ "$held" = "$2" ] || exit 4
 	readrev "$second"
 	[ "$held" = "$4" ] || exit 4
-	IFS= read -r one || abort "a pair arrived carrying one body, and ocel writes no half it was never given"
-	IFS= read -r two || abort "a pair arrived carrying one body, and ocel writes no half it was never given"
+	IFS= read -r one || abort "a pair carried one body, want two"
+	IFS= read -r two || abort "a pair carried one body, want two"
 	checked "$one"
 	checked "$two"
 	mint

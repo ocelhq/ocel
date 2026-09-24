@@ -1100,7 +1100,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	if !strings.Contains(reported, lifecycleHostname) {
 		t.Fatalf("`ocel domain status` names no hostname at all, so it is no window a certificate claim could be read out of:\n%s", reported)
 	}
-	for _, want := range []string{"proxy:" + lifecycleHostname, "no expiry reported", "ocel issues and renews nothing here", lifecycleHostname + " A " + run.vm.addr} {
+	for _, want := range []string{"proxy:" + lifecycleHostname, "no expiry reported", "the proxy renews it over http-01", lifecycleHostname + " A " + run.vm.addr} {
 		if !strings.Contains(reported, want) {
 			t.Errorf("`ocel domain status` never said %q: what serves a hostname on a box, and who renews it, is the whole of what this command owes:\n%s", want, reported)
 		}
