@@ -40,6 +40,40 @@ jobs:
       - name: Reclaim the boxes nothing is using
         run: scripts/ec2.sh sweep
 
+  gce:
+    name: gce
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Name the project this sweep may touch
+        env:
+          PROJECT: ${{ vars.GCP_LIVE_PROJECT }}
+          WIF: ${{ vars.GCP_WIF_PROVIDER }}
+          ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+        run: |
+          set -euo pipefail
+          for named in PROJECT WIF ACCOUNT; do
+            if [ -z "${!named}" ]; then
+              echo "the repository variable behind $named is unset" >&2
+              exit 1
+            fi
+          done
+
+      - name: Take the identity the nightly acts as
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ vars.GCP_LIVE_PROJECT }}
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Reclaim the boxes nothing is using
+        run: scripts/gce.sh sweep
+
   journeys:
     name: journeys
     runs-on: ubuntu-latest
