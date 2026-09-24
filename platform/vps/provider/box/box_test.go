@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -484,6 +485,51 @@ func TestAPromotionInterruptedBeforeItsFlipStillPutsThePointerBack(t *testing.T)
 	}
 	if active := activePromotion(t, stack); active != "p1" {
 		t.Errorf("after a promotion interrupted before its flip the pointer stands at %q, want p1: the interrupt that stopped the release is the context the unwind ran under", active)
+	}
+}
+
+func TestAPromotionOvertakenWhileItGatedNeverFlipsTheBoxAwayFromTheOneThatOvertookIt(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	records := fake.NewRecords()
+	front := edgeOver(stood, records)
+	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
+		Version: "test", Class: edge.ClassProduction, Slug: slug,
+	}, edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	for identity, physical := range map[string]string{"b1": "shop-web-1111", "b2": "shop-web-2222", "b3": "shop-web-3333"} {
+		staged(t, stack, "web", identity, physical)
+	}
+	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
+		t.Fatalf("Promote(p1): %v", err)
+	}
+	stood.releasing = func(rel host.Release) error {
+		stood.releasing = nil
+		overtaking := kitledger.New(records, edge.ClassProduction, slug)
+		if err := overtaking.Promote(context.Background(), edge.Promotion{PromotionID: "p3", Builds: map[string]string{"web": "b3"}}, "", edge.DiscardReporter()); err != nil {
+			t.Fatalf("Promote(p3): %v", err)
+		}
+		if rel.Holding == nil {
+			return nil
+		}
+		if err := rel.Holding(context.Background()); err != nil {
+			return host.Unserved{Err: err}
+		}
+		return nil
+	}
+
+	err = promoted(t, stack, "p2", "web", "b2")
+	if err == nil {
+		t.Fatal("a promotion overtaken while it gated flipped the box onto a release the ledger no longer names")
+	}
+	if !strings.Contains(err.Error(), "p3") {
+		t.Errorf("the refusal reads %q and never names the promotion that overtook it", err)
+	}
+	if active := activePromotion(t, stack); active != "p3" {
+		t.Errorf("the pointer stands at %q, want p3, the promotion that overtook p2", active)
 	}
 }
 

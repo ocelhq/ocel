@@ -100,7 +100,28 @@ func (s *stack) serve(ctx context.Context, pointer string, promotion edge.Promot
 		Apps:          apps,
 		DeployTimeout: host.DeployWindow,
 		DrainTimeout:  host.DrainWindow,
+		Holding:       func(ctx context.Context) error { return s.holding(ctx, pointer, promotion.PromotionID) },
 	}, report)
+}
+
+func (s *stack) holding(ctx context.Context, pointer, promotionID string) error {
+	holder, err := s.ledger().Holder(ctx, pointer)
+	if err != nil {
+		return err
+	}
+	if holder == promotionID {
+		return nil
+	}
+	return providerkit.Refuse(providerkit.CodeBusy,
+		"promotion %s no longer holds %s, which now names %s: another deploy moved it while this one gated, and this deploy stopped rather than flip the box onto a release the ledger no longer names. Re-run this deploy once the other one has finished if its release should serve",
+		promotionID, named(pointer), holderOr(holder))
+}
+
+func holderOr(holder string) string {
+	if holder == "" {
+		return "nothing"
+	}
+	return holder
 }
 
 func (s *stack) standing(ctx context.Context, app, pointer string, promotion edge.Promotion) (standing, bool, error) {

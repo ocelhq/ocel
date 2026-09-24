@@ -1370,3 +1370,34 @@ func TestAStoppedRetireeAReleaseLeftDeclaredIsClearedByTheNextReleaseOnTheBox(t 
 		})
 	}
 }
+
+func TestAReleaseWhosePromotionWasOvertakenWhileItGatedWritesNothing(t *testing.T) {
+	t.Parallel()
+
+	before := configFor(t, retired)
+	stood := benchedOn(t, before, session.Result{}, session.Result{})
+	rel := aRelease()
+	rel.Holding = func(context.Context) error {
+		return providerkit.Refuse(providerkit.CodeBusy, "promotion p2 no longer holds production: p3 took it")
+	}
+
+	err := stood.host().Release(context.Background(), rel, nil)
+	if err == nil {
+		t.Fatal("a release whose promotion was overtaken released successfully")
+	}
+	if !unserved(err) {
+		t.Errorf("an overtaken release refused with %v, which does not say it never flipped, and the ledger then keeps it in line to serve", err)
+	}
+	if !strings.Contains(err.Error(), "p3 took it") {
+		t.Errorf("an overtaken release is refused with\n%s\nand never says what overtook it", err)
+	}
+	if stood.after(-1, writesProxy) >= 0 || stood.cutover() >= 0 {
+		t.Errorf("an overtaken release still wrote or flipped the proxy: %v", stood.commands())
+	}
+	if stood.held != before {
+		t.Errorf("an overtaken release left %s changed", ProxyConfig)
+	}
+	if stood.at("docker rm --force "+quoted(physical)) < 0 {
+		t.Errorf("an overtaken release left %s standing with nothing routing to it: %v", physical, stood.commands())
+	}
+}
