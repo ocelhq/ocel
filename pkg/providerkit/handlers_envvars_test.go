@@ -107,7 +107,11 @@ func TestSetGetAndRevealAnswerAcrossTheWire(t *testing.T) {
 		Cells: []*envvarsv1.Coordinate{cell("DATABASE_URL"), cell("NOTHING_HERE")},
 	})
 	if err != nil || len(revealed.GetValues()) != 1 || revealed.GetValues()[0].GetValue() != "postgres://one" {
-		t.Fatalf("RevealValues() revealed %d values, %v, want DATABASE_URL's alone and as it was set", len(revealed.GetValues()), err)
+		keys := make([]string, 0, len(revealed.GetValues()))
+		for _, value := range revealed.GetValues() {
+			keys = append(keys, value.GetMetadata().GetCoordinate().GetKey())
+		}
+		t.Fatalf("RevealValues() revealed %q, %v, want DATABASE_URL's alone and as it was set", keys, err)
 	}
 }
 

@@ -98,7 +98,11 @@ func computeOf(t *testing.T, manifest *contractv1.Manifest, app string) string {
 			return candidate.GetCompute()
 		}
 	}
-	t.Fatalf("manifest carries no app %q among its %d apps", app, len(manifest.GetApps()))
+	names := make([]string, 0, len(manifest.GetApps()))
+	for _, candidate := range manifest.GetApps() {
+		names = append(names, candidate.GetName())
+	}
+	t.Fatalf("manifest carries no app %q among its apps %q", app, names)
 	return ""
 }
 

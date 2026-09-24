@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,6 +14,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/types/descriptorpb"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -98,7 +101,7 @@ func assertMatchesFixture(t *testing.T, got *bindingsv1.Binding, typ bindingsv1.
 	t.Helper()
 	want := bindingFixture(t, typ)
 	if !proto.Equal(got, want) {
-		t.Errorf("producer emitted a %s binding %q unequal to the checked-in record %s — the consumer suite parses that fixture, so a divergence here is cross-language drift", typ, got.GetName(), fixtureFile(typ))
+		t.Errorf("producer emitted a %s binding that differs from the checked-in record %s at %s — the consumer suite parses that fixture, so a divergence here is cross-language drift", typ, fixtureFile(typ), strings.Join(differingFields(got.ProtoReflect(), want.ProtoReflect(), ""), "; "))
 	}
 
 	payload, err := providerkit.EncodeBinding(got)
@@ -108,6 +111,28 @@ func assertMatchesFixture(t *testing.T, got *bindingsv1.Binding, typ bindingsv1.
 	if wantBytes := canonicalJSON(t, fixtureBytes(t, typ)); !bytes.Equal(canonicalJSON(t, payload), wantBytes) {
 		t.Errorf("app payload = %s, want the checked-in fixture byte for byte %s", payload, wantBytes)
 	}
+}
+
+func differingFields(got, want protoreflect.Message, prefix string) []string {
+	var paths []string
+	fields := got.Descriptor().Fields()
+	for i := range fields.Len() {
+		field := fields.Get(i)
+		path := prefix + string(field.Name())
+		gotValue, wantValue := got.Get(field), want.Get(field)
+		switch {
+		case gotValue.Equal(wantValue):
+		case field.Message() != nil && !field.IsList() && !field.IsMap() && got.Has(field) && want.Has(field):
+			paths = append(paths, differingFields(gotValue.Message(), wantValue.Message(), path+".")...)
+		case field.Options().(*descriptorpb.FieldOptions).GetDebugRedact():
+			paths = append(paths, path+" (redacted)")
+		case field.Message() != nil || field.IsList() || field.IsMap():
+			paths = append(paths, path)
+		default:
+			paths = append(paths, fmt.Sprintf("%s = %v, want %v", path, gotValue.Interface(), wantValue.Interface()))
+		}
+	}
+	return paths
 }
 
 func TestPostgresProducerEmitsTheFixture(t *testing.T) {
