@@ -62,19 +62,45 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	if err := s.ledger().Promote(ctx, promotion, pointer, report); err != nil {
 		return err
 	}
+	err := s.serve(ctx, pointer, promotion, ready, report)
+	var unserved host.Unserved
+	if !errors.As(err, &unserved) {
+		return err
+	}
+	if undo := s.ledger().Unpromote(ctx, promotion.PromotionID, pointer); undo != nil {
+		return errors.Join(err, fmt.Errorf("the ledger still points %s at %s, which this box never served: %w",
+			named(pointer), promotion.PromotionID, undo))
+	}
+	return err
+}
+
+func (s *stack) serve(ctx context.Context, pointer string, promotion edge.Promotion, ready []standing, report edge.Reporter) error {
 	claims, err := s.previewClaims(ctx, pointer, slices.Sorted(maps.Keys(promotion.Builds)))
 	if err != nil {
-		return err
+		return host.Unserved{Err: err}
 	}
 	if err := s.claim(ctx, claims); err != nil {
-		return err
+		return host.Unserved{Err: err}
 	}
+	if len(ready) == 0 {
+		return nil
+	}
+	apps := make([]host.AppRelease, 0, len(ready))
 	for _, held := range ready {
-		if err := s.serve(ctx, held, report); err != nil {
-			return err
+		if err := s.standUp(ctx, held, report); err != nil {
+			return host.Unserved{Err: err}
 		}
+		apps = append(apps, host.AppRelease{
+			RouteKey:   held.key,
+			Target:     held.record.Physical + ":" + providerkit.InjectedPortText,
+			HealthPath: held.record.HealthPath,
+		})
 	}
-	return nil
+	return s.e.machine.Release(ctx, host.Release{
+		Apps:          apps,
+		DeployTimeout: host.DeployWindow,
+		DrainTimeout:  host.DrainWindow,
+	}, report)
 }
 
 func (s *stack) standing(ctx context.Context, app, pointer string, promotion edge.Promotion) (standing, bool, error) {
@@ -120,7 +146,7 @@ func declaredBy(record edge.DeploymentRecord) []string {
 	return declared
 }
 
-func (s *stack) serve(ctx context.Context, held standing, report edge.Reporter) error {
+func (s *stack) standUp(ctx context.Context, held standing, report edge.Reporter) error {
 	record := held.record
 	if report != nil {
 		report.Say("Standing " + held.app + " back up as " + record.Physical)
@@ -131,21 +157,7 @@ func (s *stack) serve(ctx context.Context, held standing, report edge.Reporter) 
 	}); err != nil {
 		return err
 	}
-	if err := s.e.machine.Promote(ctx, s.state.Class, s.state.Slug, held.app, record.Image); err != nil {
-		return err
-	}
-	retiring, err := s.e.machine.Serving(ctx, held.key)
-	if err != nil {
-		return err
-	}
-	return s.e.machine.Release(ctx, host.Release{
-		RouteKey:      held.key,
-		Target:        record.Physical + ":" + providerkit.InjectedPortText,
-		Retire:        retiring,
-		HealthPath:    record.HealthPath,
-		DeployTimeout: host.DeployWindow,
-		DrainTimeout:  host.DrainWindow,
-	}, report)
+	return s.e.machine.Promote(ctx, s.state.Class, s.state.Slug, held.app, record.Image)
 }
 
 func (s *stack) previewSite() edge.PreviewSite {

@@ -22,96 +22,207 @@ const (
 )
 
 type Release struct {
-	RouteKey
-	Target        string
-	Retire        string
-	HealthPath    string
+	Apps          []AppRelease
 	DeployTimeout time.Duration
 	DrainTimeout  time.Duration
 }
 
-func (r Release) targetName() string { return containerOf(r.Target) }
+type AppRelease struct {
+	RouteKey
+	Target     string
+	HealthPath string
+}
 
-func (r Release) retiredName() string { return containerOf(r.Retire) }
+func (a AppRelease) path() string { return "/" + strings.TrimPrefix(a.HealthPath, "/") }
+
+func (a AppRelease) route() AppRoute {
+	return AppRoute{RouteKey: a.RouteKey, Upstream: a.Target, Health: a.path()}
+}
+
+func (a AppRelease) gate() string { return a.Target + a.path() }
+
+func (a AppRelease) name() string { return containerOf(a.Target) }
+
+func (r Release) apps() string {
+	named := make([]string, 0, len(r.Apps))
+	for _, app := range r.Apps {
+		named = append(named, app.App)
+	}
+	return strings.Join(named, ", ")
+}
+
+func (r Release) names() string {
+	named := make([]string, 0, len(r.Apps))
+	for _, app := range r.Apps {
+		named = append(named, app.name())
+	}
+	return strings.Join(named, ", ")
+}
 
 func containerOf(address string) string {
 	name, _, _ := strings.Cut(address, ":")
 	return name
 }
 
+func containersOf(addresses []string) string {
+	named := make([]string, 0, len(addresses))
+	for _, address := range addresses {
+		named = append(named, containerOf(address))
+	}
+	return strings.Join(named, ", ")
+}
+
+type Unserved struct{ Err error }
+
+func (u Unserved) Error() string { return u.Err.Error() }
+
+func (u Unserved) Unwrap() error { return u.Err }
+
 func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Reporter) error {
-	if strings.TrimSpace(rel.HealthPath) == "" {
-		return providerkit.Refuse(providerkit.CodeInvalid,
-			"release %s onto %s: no health check path\nSet %q in your project configuration",
-			rel.App, h.named(), healthKey)
+	for _, app := range rel.Apps {
+		if strings.TrimSpace(app.HealthPath) == "" {
+			return Unserved{providerkit.Refuse(providerkit.CodeInvalid,
+				"release %s onto %s: no health check path\nSet %q in your project configuration",
+				app.App, h.named(), healthKey)}
+		}
+	}
+	if len(rel.Apps) == 0 {
+		return nil
 	}
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
-		return err
+		return Unserved{err}
 	}
-	retiring := rel.Retire
-	if rel.Retire == rel.Target {
-		retiring = ""
-	}
-	compose := func(standing ProxyState) ProxyState {
-		standing.Grace = rel.DrainTimeout
-		standing.Routes = Routing(standing.Routes, AppRoute{RouteKey: rel.RouteKey, Upstream: rel.Target, Health: rel.HealthPath})
-		return standing
-	}
-	flip, err := h.composeProxy(ctx, func(standing ProxyState) (ProxyState, error) {
-		standing = compose(standing)
-		if retiring != "" && !slices.Contains(standing.Retiring, retiring) {
-			standing.Retiring = append(standing.Retiring, retiring)
-		}
-		return standing, nil
-	})
-	if err != nil {
-		return h.stranded(ctx, rel, flip.held, err)
-	}
-	held, flipped := flip.held, flip.written
 
-	say(report, "Checking "+rel.Target+rel.HealthPath+", then flipping the proxy onto it")
-	if retiring != "" && report != nil {
-		report.Detail(fmt.Sprintf("%s has %s to drain, then %s",
-			rel.retiredName(), rel.DrainTimeout, drainCeiling))
+	gates := make([]string, 0, len(rel.Apps))
+	for _, app := range rel.Apps {
+		gates = append(gates, app.gate())
 	}
-	result, err := h.stream(ctx, words(releaseCommand(rel)), nil, elevation)
+	say(report, "Checking "+strings.Join(gates, ", ")+", then flipping the proxy")
+	gated, err := h.stream(ctx, words(gateCommand(rel.DeployTimeout, gates)), nil, elevation)
 	if err != nil {
-		return h.evidence(ctx, rel, "never came back with an exit code", err.Error(), held.text, flipped, elevation)
+		return h.ungated(ctx, rel, "never came back with an exit code", err.Error(), "", elevation)
 	}
-	if result.Code != 0 {
-		return h.evidence(ctx, rel, fmt.Sprintf("exited %d", result.Code), strings.TrimSpace(result.Stderr), held.text, flipped, elevation)
+	if gated.Code != 0 {
+		return h.ungated(ctx, rel, fmt.Sprintf("exited %d", gated.Code), strings.TrimSpace(gated.Stderr), gated.Stdout, elevation)
 	}
-	tellDrain(report, result.Stdout)
-	if retiring != "" {
-		say(report, "Stopping "+rel.retiredName())
-		if err := h.StopContainer(ctx, rel.retiredName()); err != nil {
+
+	var cut cutover
+	if _, err := h.composeProxy(ctx, func(standing ProxyState) (ProxyState, error) {
+		cut = cutting(rel, standing)
+		return cut.flip(standing), nil
+	}); err != nil {
+		return h.stranded(ctx, rel, cut, err, elevation)
+	}
+
+	if report != nil {
+		for _, retiree := range cut.retiring {
+			report.Detail(fmt.Sprintf("%s has %s to drain, then %s",
+				containerOf(retiree), rel.DrainTimeout, drainCeiling))
+		}
+	}
+	flipped, err := h.stream(ctx, words(flipCommand(rel.DrainTimeout, cut.retiring)), nil, elevation)
+	if err != nil {
+		return h.unflipped(ctx, rel, cut, "never came back with an exit code", err.Error(), elevation)
+	}
+	if flipped.Code != 0 {
+		return h.unflipped(ctx, rel, cut, fmt.Sprintf("exited %d", flipped.Code), strings.TrimSpace(flipped.Stderr), elevation)
+	}
+	tellDrain(report, flipped.Stdout)
+	for _, retiree := range cut.retiring {
+		say(report, "Stopping "+containerOf(retiree))
+		if err := h.StopContainer(ctx, containerOf(retiree)); err != nil {
 			return err
 		}
 	}
-	if _, err := h.composeProxy(ctx, func(standing ProxyState) (ProxyState, error) {
-		standing = compose(standing)
-		standing.Retiring = slices.DeleteFunc(standing.Retiring, func(held string) bool { return held == retiring })
-		return standing, nil
-	}); err != nil {
-		return h.serving(rel, retiring, err)
+	if _, err := h.composeProxy(ctx, cut.settle); err != nil {
+		return h.serving(rel, cut.retiring, err)
 	}
 	if _, err := h.ran(ctx, "reload the proxy's steady-state configuration",
 		words(helperCommand("flip", ProxyConfigMount)), nil, elevation); err != nil {
-		return h.serving(rel, retiring, err)
+		return h.serving(rel, cut.retiring, err)
 	}
 	return nil
 }
 
-func (h *Host) serving(rel Release, retired string, why error) error {
+type cutover struct {
+	rel      Release
+	prior    []AppRoute
+	retiring []string
+}
+
+func cutting(rel Release, standing ProxyState) cutover {
+	cut := cutover{rel: rel}
+	for _, app := range rel.Apps {
+		at := slices.IndexFunc(standing.Routes, func(route AppRoute) bool { return route.RouteKey == app.RouteKey })
+		if at < 0 {
+			continue
+		}
+		cut.prior = append(cut.prior, standing.Routes[at])
+		if upstream := standing.Routes[at].Upstream; upstream != app.Target {
+			cut.retiring = append(cut.retiring, upstream)
+		}
+	}
+	slices.Sort(cut.retiring)
+	cut.retiring = slices.Compact(cut.retiring)
+	return cut
+}
+
+func (c cutover) composed() bool { return len(c.rel.Apps) > 0 }
+
+func (c cutover) routed(standing ProxyState) ProxyState {
+	standing.Grace = c.rel.DrainTimeout
+	for _, app := range c.rel.Apps {
+		standing.Routes = Routing(standing.Routes, app.route())
+	}
+	return standing
+}
+
+func (c cutover) flip(standing ProxyState) ProxyState {
+	standing = c.routed(standing)
+	for _, retiree := range c.retiring {
+		if !slices.Contains(standing.Retiring, retiree) {
+			standing.Retiring = append(standing.Retiring, retiree)
+		}
+	}
+	return standing
+}
+
+func (c cutover) released(retiring []string) []string {
+	return slices.DeleteFunc(slices.Clone(retiring), func(held string) bool { return slices.Contains(c.retiring, held) })
+}
+
+func (c cutover) settle(standing ProxyState) (ProxyState, error) {
+	standing = c.routed(standing)
+	standing.Retiring = c.released(standing.Retiring)
+	return standing, nil
+}
+
+func (c cutover) back(standing ProxyState) (ProxyState, error) {
+	for _, app := range c.rel.Apps {
+		ours := func(route AppRoute) bool { return route.RouteKey == app.RouteKey }
+		at := slices.IndexFunc(standing.Routes, ours)
+		if at < 0 || standing.Routes[at].Upstream != app.Target {
+			continue
+		}
+		standing.Routes = Unrouting(standing.Routes, ours)
+		if was := slices.IndexFunc(c.prior, ours); was >= 0 {
+			standing.Routes = append(standing.Routes, c.prior[was])
+		}
+	}
+	standing.Retiring = c.released(standing.Retiring)
+	return standing, nil
+}
+
+func (h *Host) serving(rel Release, retired []string, why error) error {
 	left := ProxyConfig + " is one write behind the running proxy"
-	if retired != "" {
+	if len(retired) > 0 {
 		left = fmt.Sprintf("%s still routes %s to the stopped %s",
-			ProxyConfig, proxyDrainServer, rel.retiredName())
+			ProxyConfig, proxyDrainServer, containersOf(retired))
 	}
 	return providerkit.Refuse(providerkit.CodeNotReady,
 		"release %s onto %s: flipped onto %s, but the follow-up config write failed: %v\n%s; deploy again",
-		rel.App, h.named(), rel.targetName(), why, left)
+		rel.apps(), h.named(), rel.names(), why, left)
 }
 
 func tellDrain(report providerkit.Reporter, said string) {
@@ -249,17 +360,19 @@ func helperCommand(argv ...string) []string {
 	return append([]string{"docker", "exec", ProxyContainer, ProxyHelperMount}, argv...)
 }
 
-func releaseCommand(rel Release) []string {
-	argv := helperCommand("deploy",
-		"--target", rel.Target,
-		"--health-check-path", rel.HealthPath,
-		"--deploy-timeout", seconds(rel.DeployTimeout),
-		"--drain-timeout", seconds(rel.DrainTimeout),
-		"--config", ProxyConfigMount)
-	if rel.Retire != "" && rel.Retire != rel.Target {
-		argv = append(argv, "--retire", rel.Retire)
+func gateCommand(window time.Duration, gates []string) []string {
+	return helperCommand(append([]string{"gate", "--deploy-timeout", seconds(window)}, gates...)...)
+}
+
+func flipCommand(window time.Duration, retiring []string) []string {
+	argv := []string{"flip"}
+	if len(retiring) > 0 {
+		argv = append(argv, "--drain-timeout", seconds(window))
+		for _, retiree := range retiring {
+			argv = append(argv, "--retire", retiree)
+		}
 	}
-	return argv
+	return helperCommand(append(argv, ProxyConfigMount)...)
 }
 
 func seconds(window time.Duration) string {
@@ -272,81 +385,105 @@ func sparing(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), unwindWindow)
 }
 
-func (h *Host) stranded(ctx context.Context, rel Release, held proxyDocument, why error) error {
+func (h *Host) ungated(ctx context.Context, rel Release, outcome, verdict, said, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
-	rolled := ProxyConfig + " restored"
-	switch {
-	case moved(why):
-		rolled = ProxyConfig + " untouched"
-	default:
-		if _, err := h.writeProxyDocument(ctx, held.digest, held.text); err != nil {
-			rolled = fmt.Sprintf("%s not restored: %v", ProxyConfig, err)
-		}
-	}
-	left := rel.targetName() + " removed"
-	if err := h.RemoveContainer(ctx, rel.targetName()); err != nil {
-		left = fmt.Sprintf("%s left standing: %v", rel.targetName(), err)
-	}
-	return providerkit.Refuse(providerkit.CodeNotReady,
-		"release %s onto %s: could not write %s; the proxy was not flipped: %v\n%s; %s",
-		rel.App, h.named(), ProxyConfig, why, rolled, left)
-}
-
-func (h *Host) evidence(ctx context.Context, rel Release, outcome, verdict, previous, expected, elevation string) error {
 	if verdict == "" {
 		verdict = "no reason given"
 	}
-	state := h.said(ctx, stateCommand(rel.targetName()), elevation)
-	logs := h.said(ctx, logCommand(rel.targetName()), elevation)
-	if logs == "" {
-		logs = noLogOutput
+	failed := rel.Apps
+	for line := range strings.Lines(said) {
+		fields := strings.Fields(line)
+		if len(fields) != 2 || fields[0] != caddyadmin.Ungated {
+			continue
+		}
+		if at := slices.IndexFunc(rel.Apps, func(app AppRelease) bool { return app.gate() == fields[1] }); at >= 0 {
+			failed = rel.Apps[at : at+1]
+		}
 	}
-
-	unwound := h.unwind(ctx, rel, previous, expected, elevation)
-
-	return providerkit.Refuse(providerkit.CodeNotReady,
-		"release %s onto %s: the flip helper %s; %s\n"+
-			"%s\n"+
-			"gate: http://%s%s, %s to answer 2xx (set by %q)\n"+
-			"state: %s\n"+
-			"logs (last %s lines): %s",
-		rel.App, h.named(), outcome, unwound.live, verdict,
-		rel.Target, rel.HealthPath, rel.DeployTimeout, healthKey,
-		state, appLogTail, logs+unwound.String())
-}
-
-func (h *Host) restore(ctx context.Context, previous, expected, elevation string) error {
-	if _, err := h.writeProxyDocument(ctx, expected, previous); err != nil {
-		return err
+	var evidence strings.Builder
+	for _, app := range failed {
+		state := h.said(ctx, stateCommand(app.name()), elevation)
+		logs := h.said(ctx, logCommand(app.name()), elevation)
+		if logs == "" {
+			logs = noLogOutput
+		}
+		fmt.Fprintf(&evidence, "\ngate: http://%s, %s to answer 2xx (set by %q)\nstate: %s\nlogs (last %s lines): %s",
+			app.gate(), rel.DeployTimeout, healthKey, state, appLogTail, logs)
 	}
-	_, err := h.ran(ctx, "put the proxy back onto the previous release",
-		words(helperCommand("flip", ProxyConfigMount)), nil, elevation)
-	return err
+	return Unserved{providerkit.Refuse(providerkit.CodeNotReady,
+		"release %s onto %s: the gate %s; the previous release is still live\n%s%s%s",
+		rel.apps(), h.named(), outcome, verdict, evidence.String(), h.discard(ctx, rel))}
 }
 
-type aftermath struct {
-	live string
-	left []string
-}
-
-func (a aftermath) String() string {
-	if len(a.left) == 0 {
-		return ""
-	}
-	return "\n" + strings.Join(a.left, "\n")
-}
-
-func (h *Host) unwind(ctx context.Context, rel Release, previous, expected, elevation string) aftermath {
+func (h *Host) stranded(ctx context.Context, rel Release, cut cutover, why error, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
-	after := aftermath{live: "the previous release is still live"}
-	if err := h.restore(ctx, previous, expected, elevation); err != nil {
-		after.live = "the live release is unknown"
-		after.left = append(after.left, fmt.Sprintf("proxy not restored; %s may be live and was left standing: %v",
-			rel.targetName(), err))
-	} else if err := h.RemoveContainer(ctx, rel.targetName()); err != nil {
-		after.left = append(after.left, fmt.Sprintf("%s left standing: %v", rel.targetName(), err))
+	code := providerkit.CodeNotReady
+	rolled := ProxyConfig + " untouched"
+	if moved(why) {
+		code = providerkit.CodeBusy
+	} else if restored, err := h.putBack(ctx, cut, elevation); err != nil {
+		return providerkit.Refuse(code,
+			"release %s onto %s: could not write %s: %v\n%s not restored: %v\n%s left standing",
+			rel.apps(), h.named(), ProxyConfig, why, ProxyConfig, err, rel.names())
+	} else if restored {
+		rolled = ProxyConfig + " restored"
 	}
-	return after
+	return Unserved{providerkit.Refuse(code,
+		"release %s onto %s: could not write %s; the proxy was not flipped: %v\n%s%s",
+		rel.apps(), h.named(), ProxyConfig, why, rolled, h.discard(ctx, rel))}
+}
+
+func (h *Host) unflipped(ctx context.Context, rel Release, cut cutover, outcome, verdict, elevation string) error {
+	ctx, stop := sparing(ctx)
+	defer stop()
+	if verdict == "" {
+		verdict = "no reason given"
+	}
+	if _, err := h.putBack(ctx, cut, elevation); err != nil {
+		return providerkit.Refuse(providerkit.CodeNotReady,
+			"release %s onto %s: the flip helper %s; the live release is unknown\n%s\nproxy not restored; %s may be live and were left standing: %v",
+			rel.apps(), h.named(), outcome, verdict, rel.names(), err)
+	}
+	return Unserved{providerkit.Refuse(providerkit.CodeNotReady,
+		"release %s onto %s: the flip helper %s; the previous release is still live\n%s%s",
+		rel.apps(), h.named(), outcome, verdict, h.discard(ctx, rel))}
+}
+
+func (h *Host) putBack(ctx context.Context, cut cutover, elevation string) (bool, error) {
+	if !cut.composed() {
+		return false, nil
+	}
+	back, err := h.composeProxy(ctx, cut.back)
+	if err != nil || !back.changed {
+		return false, err
+	}
+	_, err = h.ran(ctx, "put the proxy back onto the previous release",
+		words(helperCommand("flip", ProxyConfigMount)), nil, elevation)
+	return true, err
+}
+
+func (h *Host) discard(ctx context.Context, rel Release) string {
+	state, _, err := h.proxyState(ctx)
+	if err != nil {
+		return fmt.Sprintf("\n%s left standing: %s could not be read to tell whether the proxy routes to them: %v",
+			rel.names(), ProxyConfig, err)
+	}
+	live := slices.Clone(state.Retiring)
+	for _, route := range state.Routes {
+		live = append(live, route.Upstream)
+	}
+	var left strings.Builder
+	for _, app := range rel.Apps {
+		if slices.Contains(live, app.Target) {
+			continue
+		}
+		if err := h.RemoveContainer(ctx, app.name()); err != nil {
+			fmt.Fprintf(&left, "\n%s left standing: %v", app.name(), err)
+			continue
+		}
+		fmt.Fprintf(&left, "\n%s removed", app.name())
+	}
+	return left.String()
 }

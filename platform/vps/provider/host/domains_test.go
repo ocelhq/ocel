@@ -516,10 +516,7 @@ func TestAClaimSurvivesTheReleaseThatRewritesTheWholeFile(t *testing.T) {
 	stood := claimingBox(t, state)
 
 	rel := Release{
-		RouteKey:      keyed("web"),
-		Target:        "shop-web-3333:" + providerkit.InjectedPortText,
-		Retire:        "shop-web-2222:" + providerkit.InjectedPortText,
-		HealthPath:    "/healthz",
+		Apps:          []AppRelease{{RouteKey: keyed("web"), Target: "shop-web-3333:" + providerkit.InjectedPortText, HealthPath: "/healthz"}},
 		DeployTimeout: DeployWindow,
 		DrainTimeout:  DrainWindow,
 	}
@@ -573,10 +570,7 @@ func TestADeployOfOneProjectLeavesAnotherProjectsRouteWhereItFoundIt(t *testing.
 	stood := claimingBox(t, twoProjects())
 	blog := RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}
 	if err := stood.host().Release(context.Background(), Release{
-		RouteKey:      blog,
-		Target:        "blog-web-4444:" + providerkit.InjectedPortText,
-		Retire:        "blog-web-3333:" + providerkit.InjectedPortText,
-		HealthPath:    "/healthz",
+		Apps:          []AppRelease{{RouteKey: blog, Target: "blog-web-4444:" + providerkit.InjectedPortText, HealthPath: "/healthz"}},
 		DeployTimeout: DeployWindow,
 		DrainTimeout:  DrainWindow,
 	}, nil); err != nil {

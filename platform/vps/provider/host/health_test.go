@@ -101,7 +101,7 @@ func TestAHealthCheckOtherThanTheOneAReleaseWritesIsRefusedAsNotOcels(t *testing
 func TestAReleaseWritesTheHealthPathItGatedOnIntoTheRouteItFlipsTo(t *testing.T) {
 	t.Parallel()
 
-	stood, err := released(t, aRelease(), session.Result{}, nil)
+	stood, err := released(t, aRelease(), session.Result{}, session.Result{}, nil)
 	if err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
@@ -109,10 +109,10 @@ func TestAReleaseWritesTheHealthPathItGatedOnIntoTheRouteItFlipsTo(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(state.Routes) != 1 || state.Routes[0].Health != aRelease().HealthPath {
-		t.Errorf("the release left the route as %+v, want it probing %s: the path the deploy gated on is the one the proxy keeps checking", state.Routes, aRelease().HealthPath)
+	if len(state.Routes) != 1 || state.Routes[0].Health != aRelease().Apps[0].HealthPath {
+		t.Errorf("the release left the route as %+v, want it probing %s: the path the deploy gated on is the one the proxy keeps checking", state.Routes, aRelease().Apps[0].HealthPath)
 	}
-	if _, err := stood.host().Serving(context.Background(), aRelease().RouteKey); err != nil {
+	if _, err := stood.host().Serving(context.Background(), aRelease().Apps[0].RouteKey); err != nil {
 		t.Errorf("Serving() over the released configuration = %v", err)
 	}
 }

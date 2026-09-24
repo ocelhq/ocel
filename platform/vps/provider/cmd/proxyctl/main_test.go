@@ -117,7 +117,7 @@ func TestTheDrainReadAsksTheOneEndpointThatCountsWhatIsStillInFlight(t *testing.
 func TestTheDrainReadIsAVerbTheHelperCarriesRatherThanOneTheCallerSpells(t *testing.T) {
 	_, _ = served(t)
 
-	for _, verb := range []string{"drain", "gate"} {
+	for _, verb := range []string{"drain", "deploy"} {
 		code, _, errs := ran(t, verb, "127.0.0.1:1", "/up", "1")
 		if code == 0 {
 			t.Errorf("the helper answered %q, a verb no host code spells", verb)
@@ -301,7 +301,7 @@ func TestTheDrainReturnsTheMomentTheRetiredUpstreamReportsNothingInFlight(t *tes
 	}
 
 	var out, errs strings.Builder
-	if code := draining(socket, "old:8080", 30*time.Second, &out, &errs); code != 0 {
+	if code := draining(socket, []string{"old:8080"}, 30*time.Second, &out, &errs); code != 0 {
 		t.Fatalf("draining an upstream that finishes its request = %d, %q", code, errs.String())
 	}
 	if asked := held.asked(); len(asked) != 3 {
@@ -319,7 +319,7 @@ func TestADrainThatExpiresIsNotAFailureAndCarriesTheCountStillInFlight(t *testin
 	held.body = `[{"address":"old:8080","num_requests":3}]`
 
 	var out, errs strings.Builder
-	if code := draining(socket, "old:8080", time.Second, &out, &errs); code != 0 {
+	if code := draining(socket, []string{"old:8080"}, time.Second, &out, &errs); code != 0 {
 		t.Fatalf("draining past the window = %d, want it borne as a warning: the new release is serving", code)
 	}
 	printed := strings.TrimSpace(out.String())
@@ -338,7 +338,7 @@ func TestARetiredUpstreamAbsentFromThePoolIsABrokenCompositionRatherThanADrain(t
 	_, socket := served(t)
 
 	var out, errs strings.Builder
-	code := draining(socket, "old:8080", time.Second, &out, &errs)
+	code := draining(socket, []string{"old:8080"}, time.Second, &out, &errs)
 	if code == 0 {
 		t.Fatal("an upstream the proxy never reported read as drained, and a proxy upgrade that drops a retired upstream from the pool would stop old containers under live requests forever")
 	}
@@ -360,79 +360,130 @@ func loads(asked []string) int {
 	return count
 }
 
-func TestTheComposedCallGatesBeforeItEverReachesTheProxy(t *testing.T) {
-	held, socket := served(t)
-	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET|0600"}}`)
-
-	code, _, errs := ran(t, "deploy", "--target", "127.0.0.1:1", "--health-check-path", "/up",
-		"--deploy-timeout", "1", "--drain-timeout", "1", "--config", config, "--retire", "old:8080")
-	if code != exitSilent {
-		t.Fatalf("deploying against a target that never answered = %d, want %d: %q", code, exitSilent, errs)
-	}
-	if asked := held.asked(); len(asked) != 0 {
-		t.Errorf("a failed gate still reached the proxy with %v, and no flip is attempted when the gate does not pass", asked)
-	}
-}
-
-func TestAConfigTheProxyRejectsFailsTheComposedCallWithWhatTheProxySaid(t *testing.T) {
-	held, socket := served(t)
-	held.status, held.body = http.StatusBadRequest, "loading config: unknown module http.handlers.nonsense"
-	target := refusing(t, 0)
-	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET|0600"}}`)
-
-	code, _, errs := ran(t, "deploy", "--target", target, "--health-check-path", "/up",
-		"--deploy-timeout", "5", "--drain-timeout", "1", "--config", config, "--retire", "old:8080")
-	if code != exitRefused {
-		t.Fatalf("deploying a config the proxy rejected = %d, want %d", code, exitRefused)
-	}
-	if !strings.Contains(errs, "http.handlers.nonsense") {
-		t.Errorf("the composed call failed with %q, and caddy's 400 names the offending field", errs)
-	}
-	if asked := held.asked(); loads(asked) != 1 || len(asked) != 1 {
-		t.Errorf("the composed call asked %v, want the load and nothing after it: a rejected config drains nothing", asked)
-	}
-}
-
-func TestOneCallGatesFlipsAndDrainsAndItsExitCodeIsTheWholeAnswer(t *testing.T) {
+func TestTheDrainCountsEveryRetiredUpstreamOffTheSameReadAndNamesEachOutcome(t *testing.T) {
 	held, socket := served(t)
 	held.queue = []string{
-		`[{"address":"old:8080","num_requests":1}]`,
-		`[{"address":"old:8080","num_requests":0}]`,
+		`[{"address":"old-web:8080","num_requests":1},{"address":"old-api:8080","num_requests":2}]`,
+		`[{"address":"old-web:8080","num_requests":0},{"address":"old-api:8080","num_requests":2}]`,
 	}
-	target := refusing(t, 2)
-	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET|0600"}}`)
 
-	code, out, errs := ran(t, "deploy", "--target", target, "--health-check-path", "/up",
-		"--deploy-timeout", "10", "--drain-timeout", "10", "--config", config, "--retire", "old:8080")
-	if code != 0 {
-		t.Fatalf("deploy = %d, %q %q", code, out, errs)
+	var out, errs strings.Builder
+	if code := draining(socket, []string{"old-web:8080", "old-api:8080"}, time.Second, &out, &errs); code != 0 {
+		t.Fatalf("draining two retired upstreams = %d, %q", code, errs.String())
 	}
-	asked := held.asked()
-	if len(asked) < 2 || asked[0] != "POST "+loadPath {
-		t.Fatalf("the composed call asked %v, want the flip first: the drain reads the pool the flip installed", asked)
+	printed := out.String()
+	if !strings.Contains(printed, caddyadmin.Drained+" old-web:8080\n") {
+		t.Errorf("the drain printed %q and never that old-web read zero", printed)
 	}
-	if loads(asked) != 1 {
-		t.Errorf("the composed call posted %d configs, want exactly one", loads(asked))
+	if !strings.Contains(printed, caddyadmin.DrainExpired+" old-api:8080 2\n") {
+		t.Errorf("the drain printed %q and never that old-api still held two requests when the window closed", printed)
 	}
-	for _, after := range asked[1:] {
-		if after != "GET "+upstreamsPath {
-			t.Errorf("the composed call asked %q after the flip, want nothing but the drain read", after)
+	if asked := held.asked(); len(asked) < 2 || slices.ContainsFunc(asked, func(one string) bool { return one != "GET "+upstreamsPath }) {
+		t.Errorf("the drain asked %v, want one pool read per poll whatever the number of retired upstreams", asked)
+	}
+}
+
+func TestTheGateNeverReachesTheProxy(t *testing.T) {
+	held, _ := served(t)
+
+	code, _, errs := ran(t, "gate", "--deploy-timeout", "1", "127.0.0.1:1/up")
+	if code != exitSilent {
+		t.Fatalf("gating a target that never answered = %d, want %d: %q", code, exitSilent, errs)
+	}
+	if asked := held.asked(); len(asked) != 0 {
+		t.Errorf("the gate reached the proxy with %v, and nothing is flipped until every target has passed", asked)
+	}
+}
+
+func TestTheGatePassesOnlyWhenEveryTargetAnswersAndNamesTheOneThatDidNot(t *testing.T) {
+	up := refusing(t, 0)
+
+	code, out, errs := ran(t, "gate", "--deploy-timeout", "2", up+"/up", "127.0.0.1:1/up")
+	if code != exitSilent {
+		t.Fatalf("gating two targets, one silent = %d, want %d: %q", code, exitSilent, errs)
+	}
+	if !strings.Contains(out, caddyadmin.Ungated+" 127.0.0.1:1/up\n") {
+		t.Errorf("the gate printed %q and never named the target that failed it: the deploy reads that container's logs and state, and no other", out)
+	}
+	if strings.Contains(out, caddyadmin.Ungated+" "+up) {
+		t.Errorf("the gate printed %q, naming a target that passed", out)
+	}
+
+	if code, out, errs := ran(t, "gate", "--deploy-timeout", "2", up+"/up", refusing(t, 1)+"/up"); code != 0 {
+		t.Errorf("gating two targets that both come up = %d, %q %q", code, out, errs)
+	}
+}
+
+func TestAGateNamesNoTargetItCannotProbe(t *testing.T) {
+	for what, argv := range map[string][]string{
+		"no target":             {"gate", "--deploy-timeout", "1"},
+		"a target with no path": {"gate", "--deploy-timeout", "1", "127.0.0.1:1"},
+		"no window":             {"gate", "127.0.0.1:1/up"},
+	} {
+		if code, _, _ := ran(t, argv...); code != exitRefused {
+			t.Errorf("gating %s = %d, want the usage refusal", what, code)
 		}
 	}
 }
 
-func TestAFirstDeployWithNothingToRetireDrainsNothingAtAll(t *testing.T) {
+func TestAConfigTheProxyRejectsDrainsNothing(t *testing.T) {
 	held, socket := served(t)
-	target := refusing(t, 0)
+	held.status, held.body = http.StatusBadRequest, "loading config: unknown module http.handlers.nonsense"
 	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET|0600"}}`)
 
-	code, _, errs := ran(t, "deploy", "--target", target, "--health-check-path", "/up",
-		"--deploy-timeout", "5", "--drain-timeout", "5", "--config", config)
+	code, _, errs := ran(t, "flip", "--drain-timeout", "1", "--retire", "old:8080", config)
+	if code != exitRefused {
+		t.Fatalf("flipping onto a config the proxy rejected = %d, want %d", code, exitRefused)
+	}
+	if !strings.Contains(errs, "http.handlers.nonsense") {
+		t.Errorf("the flip failed with %q, and caddy's 400 names the offending field", errs)
+	}
+	if asked := held.asked(); loads(asked) != 1 || len(asked) != 1 {
+		t.Errorf("the flip asked %v, want the load and nothing after it: a rejected config drains nothing", asked)
+	}
+}
+
+func TestOneFlipPostsOnceThenDrainsEveryUpstreamItRetired(t *testing.T) {
+	held, socket := served(t)
+	held.queue = []string{
+		`[{"address":"old-web:8080","num_requests":1},{"address":"old-api:8080","num_requests":0}]`,
+		`[{"address":"old-web:8080","num_requests":0},{"address":"old-api:8080","num_requests":0}]`,
+	}
+	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET|0600"}}`)
+
+	code, out, errs := ran(t, "flip", "--drain-timeout", "10", "--retire", "old-web:8080", "--retire", "old-api:8080", config)
 	if code != 0 {
-		t.Fatalf("deploying with nothing to retire = %d, %q", code, errs)
+		t.Fatalf("flip = %d, %q %q", code, out, errs)
+	}
+	asked := held.asked()
+	if len(asked) < 2 || asked[0] != "POST "+loadPath {
+		t.Fatalf("the flip asked %v, want the post first: the drain reads the pool the post installed", asked)
+	}
+	if loads(asked) != 1 {
+		t.Errorf("the flip posted %d configs, want exactly one whatever the number of apps it moves", loads(asked))
+	}
+	for _, after := range asked[1:] {
+		if after != "GET "+upstreamsPath {
+			t.Errorf("the flip asked %q after the post, want nothing but the drain read", after)
+		}
+	}
+	for _, retired := range []string{"old-web:8080", "old-api:8080"} {
+		if !strings.Contains(out, caddyadmin.Drained+" "+retired) {
+			t.Errorf("the flip printed %q and never that %s drained", out, retired)
+		}
+	}
+}
+
+func TestAFlipWithNothingToRetireDrainsNothingAtAll(t *testing.T) {
+	held, socket := served(t)
+	config := configFile(t, socket, `{"admin":{"listen":"unix/SOCKET|0600"}}`)
+
+	code, _, errs := ran(t, "flip", config)
+	if code != 0 {
+		t.Fatalf("flipping with nothing to retire = %d, %q", code, errs)
 	}
 	if asked := held.asked(); len(asked) != 1 || asked[0] != "POST "+loadPath {
-		t.Errorf("a first deploy asked %v, want the flip alone: there is no retired upstream to count", asked)
+		t.Errorf("a flip retiring nothing asked %v, want the post alone: there is no retired upstream to count", asked)
 	}
 }
 
@@ -829,7 +880,7 @@ func TestTheProxysDataDirectoryReachesOnlyTheVerbThatForgetsAPair(t *testing.T) 
 }
 
 func TestNoVerbThatAnswersWhatACertificateIsCanReachTheDataDirectory(t *testing.T) {
-	for _, verb := range []string{"leaf", "upstreams", "config", "listeners", "flip", "deploy"} {
+	for _, verb := range []string{"leaf", "upstreams", "config", "listeners", "flip", "gate"} {
 		if slices.Contains(dataTakers(t), verb) {
 			t.Errorf("%s is handed %s, and an expiry read off the proxy's storage rather than off the served leaf breaks on the version bump that rearranges it", verb, proxyData)
 		}

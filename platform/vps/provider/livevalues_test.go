@@ -218,7 +218,7 @@ func TestLiveAReleaseThatFallsOverKeepsNoEnvFileAndSaysNothingOfWhatWasInIt(t *t
 	}
 	physical := broken[0].Physical
 
-	refusal := releasing(p, release{physical: physical, address: physical + ":" + providerkit.InjectedPortText}, "", 5*time.Second, nil)
+	refusal := releasing(p, release{physical: physical, address: physical + ":" + providerkit.InjectedPortText}, 5*time.Second, nil)
 	if refusal == nil {
 		t.Fatal("a release of the crash-looping fixture passed its gate")
 	}
