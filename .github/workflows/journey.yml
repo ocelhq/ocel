@@ -826,10 +826,12 @@ jobs:
             echo "OCEL_VPS_IDENTITY_FILE=$OCEL_EC2_KEY"
           } >> "$GITHUB_ENV"
 
-      - name: Mark when this lane begins pushing to the journey registry
+      - name: Reclaim journey images a run that died left in the registry
         id: registry
         if: ${{ env.REGISTRY_PUSHES == 'true' }}
-        run: echo "since=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm --filter @ocel-tests/journeys sweep:registry --target vps
 
       - name: Run the journey
         env:
@@ -838,11 +840,10 @@ jobs:
         run: pnpm --filter @ocel-tests/journeys journey
 
       - name: No journey image left in the registry
-        if: ${{ always() && steps.registry.outputs.since != '' }}
+        if: ${{ always() && steps.registry.outcome == 'success' }}
         env:
           GH_TOKEN: ${{ github.token }}
-          SINCE: ${{ steps.registry.outputs.since }}
-        run: pnpm --filter @ocel-tests/journeys sweep:registry --since "$SINCE"
+        run: pnpm --filter @ocel-tests/journeys sweep:registry --target vps --own
 
       - name: Record that what vps reads has passed
         if: ${{ needs.binary.outputs.real != 'true' }}

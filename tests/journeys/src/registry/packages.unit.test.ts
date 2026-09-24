@@ -2,11 +2,22 @@ import { describe, expect, it } from "bun:test";
 import { fixtures } from "../matrix/fixtures";
 import { fixture } from "../matrix/types";
 import { defaults, registry } from "../matrix/variants";
+import type { StepResult } from "../run/results";
 import { registryPackages } from "./packages";
+
+function result(cell: string, title: string, outcome: StepResult["outcome"]): StepResult {
+  return { cell, title, outcome, startTime: 0, duration: 1 };
+}
 
 describe("registryPackages", () => {
   it("names the one ghcr package every run of the journey pushes into", () => {
-    expect(registryPackages(fixtures)).toEqual([{ org: "ocelhq", name: "journey-vps/web" }]);
+    expect(registryPackages(fixtures, "vps")).toEqual([
+      { org: "ocelhq", name: "journey-vps/web", deployed: false },
+    ]);
+  });
+
+  it("names nothing on a target no registry cell runs on", () => {
+    expect(registryPackages(fixtures, "aws")).toEqual([]);
   });
 
   it("names one package per app a registry cell deploys, however many fixtures share it", () => {
@@ -19,9 +30,9 @@ describe("registryPackages", () => {
       }),
       fixture("deploy/three", { apps: ["worker"], checks: [], on: { vps: [defaults] } }),
     ];
-    expect(registryPackages(shared)).toEqual([
-      { org: "ocelhq", name: "journey-vps/web" },
-      { org: "ocelhq", name: "journey-vps/api" },
+    expect(registryPackages(shared, "vps")).toEqual([
+      { org: "ocelhq", name: "journey-vps/web", deployed: false },
+      { org: "ocelhq", name: "journey-vps/api", deployed: false },
     ]);
   });
 
@@ -29,6 +40,29 @@ describe("registryPackages", () => {
     const shouting = [
       fixture("deploy/one", { apps: ["Api_Server"], checks: [], on: { vps: [registry] } }),
     ];
-    expect(registryPackages(shouting)).toEqual([{ org: "ocelhq", name: "journey-vps/api-server" }]);
+    expect(registryPackages(shouting, "vps")).toEqual([
+      { org: "ocelhq", name: "journey-vps/api-server", deployed: false },
+    ]);
+  });
+
+  it("marks deployed the package of each app a registry cell passed its deploy step with", () => {
+    const pair = [
+      fixture("deploy/two", {
+        apps: ["web", "api"],
+        checks: [],
+        on: { vps: [defaults, registry] },
+      }),
+    ];
+    const results = [
+      result("deploy/two/web", "deploy", "passed"),
+      result("deploy/two/api", "deploy", "passed"),
+      result("deploy/two-registry/web", "deploy", "passed"),
+      result("deploy/two-registry/api", "deploy", "failed"),
+      result("deploy/two-registry/api", "destroy", "passed"),
+    ];
+    expect(registryPackages(pair, "vps", results)).toEqual([
+      { org: "ocelhq", name: "journey-vps/web", deployed: true },
+      { org: "ocelhq", name: "journey-vps/api", deployed: false },
+    ]);
   });
 });
