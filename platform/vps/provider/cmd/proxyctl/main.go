@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -47,7 +48,10 @@ const (
 
 const adminTimeout = 30 * time.Second
 
-const caddyBinary = "caddy"
+const (
+	caddyBinary = "caddy"
+	helperName  = "ocel-proxyctl"
+)
 
 var becomingCaddy = syscall.Exec
 
@@ -90,6 +94,11 @@ func run(data, proc, live string, argv []string, out, errs io.Writer) int {
 			return usage(errs)
 		}
 		return serve(live, rest[0], errs)
+	case "idle":
+		if len(rest) == 0 {
+			return usage(errs)
+		}
+		return idle(proc, live, rest, out, errs)
 	case "upstreams":
 		if len(rest) != 0 {
 			return usage(errs)
@@ -129,6 +138,7 @@ func usage(errs io.Writer) int {
 	fmt.Fprintln(errs, "usage: ocel-proxyctl serve <config> | upstreams | config <path> | leaf <hostname> |")
 	fmt.Fprintln(errs, "       probe <hostname> |")
 	fmt.Fprintln(errs, "       listeners |")
+	fmt.Fprintln(errs, "       idle <host:port>... |")
 	fmt.Fprintln(errs, "       forget <hostname>... |")
 	fmt.Fprintln(errs, "       gate --deploy-timeout <seconds> <host:port/path>... |")
 	fmt.Fprintln(errs, "       flip [--drain-timeout <seconds> --retire <host:port>...] <config>")
@@ -341,31 +351,105 @@ func gate(argv []string, out, errs io.Writer) int {
 	return 0
 }
 
-func flipping(socket, live string, argv []string, out, errs io.Writer) int {
+type flipCall struct {
+	config  string
+	retired []string
+	window  time.Duration
+}
+
+func flipCalled(argv []string, errs io.Writer) (flipCall, int) {
 	flags := flag.NewFlagSet("flip", flag.ContinueOnError)
 	flags.SetOutput(errs)
 	var retiring addresses
 	flags.Var(&retiring, "retire", "")
 	drainTimeout := flags.Int("drain-timeout", 0, "")
 	if err := flags.Parse(argv); err != nil {
-		return usage(errs)
+		return flipCall{}, usage(errs)
 	}
 	if flags.NArg() != 1 || (len(retiring) > 0 && *drainTimeout <= 0) {
-		return usage(errs)
+		return flipCall{}, usage(errs)
 	}
-	retired := make([]string, 0, len(retiring))
+	call := flipCall{config: flags.Arg(0), window: time.Duration(*drainTimeout) * time.Second}
 	for _, address := range retiring {
 		keyed, err := dialled(address)
 		if err != nil {
 			fmt.Fprintf(errs, "ocel-proxyctl: --retire %v\n", err)
-			return exitRefused
+			return flipCall{}, exitRefused
 		}
-		retired = append(retired, keyed)
+		call.retired = append(call.retired, keyed)
 	}
-	if code := flip(socket, live, flags.Arg(0), out, errs); code != 0 || len(retired) == 0 {
+	return call, 0
+}
+
+func flipping(socket, live string, argv []string, out, errs io.Writer) int {
+	call, code := flipCalled(argv, errs)
+	if code != 0 {
 		return code
 	}
-	return draining(socket, retired, time.Duration(*drainTimeout)*time.Second, out, errs)
+	if code := flip(socket, live, call.config, out, errs); code != 0 || len(call.retired) == 0 {
+		return code
+	}
+	return draining(socket, call.retired, call.window, out, errs)
+}
+
+func idle(proc, live string, targets []string, out, errs io.Writer) int {
+	keyed := make([]string, 0, len(targets))
+	for _, target := range targets {
+		address, err := dialled(target)
+		if err != nil {
+			fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
+			return exitRefused
+		}
+		keyed = append(keyed, address)
+	}
+	routed, err := routedTo(live)
+	if err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
+		return exitRefused
+	}
+	retired, err := retiredBy(proc)
+	if err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
+		return exitUnattributable
+	}
+	for at, target := range targets {
+		if !routed[keyed[at]] && !retired[keyed[at]] {
+			fmt.Fprintln(out, target)
+		}
+	}
+	return 0
+}
+
+func retiredBy(proc string) (map[string]bool, error) {
+	entries, err := os.ReadDir(proc)
+	if err != nil {
+		return nil, err
+	}
+	retired := map[string]bool{}
+	for _, entry := range entries {
+		if _, err := strconv.Atoi(entry.Name()); err != nil {
+			continue
+		}
+		read, err := os.ReadFile(filepath.Join(proc, entry.Name(), "cmdline"))
+		if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ESRCH) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		argv := strings.Split(strings.TrimSuffix(string(read), "\x00"), "\x00")
+		if len(argv) < 2 || filepath.Base(argv[0]) != helperName || argv[1] != "flip" {
+			continue
+		}
+		call, code := flipCalled(argv[2:], io.Discard)
+		if code != 0 {
+			continue
+		}
+		for _, address := range call.retired {
+			retired[address] = true
+		}
+	}
+	return retired, nil
 }
 
 func gating(target, path string, window time.Duration, out, errs io.Writer) int {

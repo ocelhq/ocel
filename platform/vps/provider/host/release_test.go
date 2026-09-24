@@ -99,6 +99,17 @@ func gates(command string) bool { return strings.Contains(command, quoted("gate"
 
 func flips(command string) bool { return strings.Contains(command, quoted("flip")) }
 
+func idles(command string) bool { return strings.Contains(command, quoted("idle")) }
+
+func everyIdle(command string) session.Result {
+	_, asked, _ := strings.Cut(command, quoted("idle"))
+	var idle strings.Builder
+	for _, target := range strings.Fields(asked) {
+		fmt.Fprintln(&idle, strings.Trim(target, "'"))
+	}
+	return session.Result{Stdout: idle.String()}
+}
+
 type flipped struct {
 	*bench
 	held string
@@ -159,6 +170,8 @@ func benchedOn(t *testing.T, held string, gate, cutover session.Result) *flipped
 		switch {
 		case gates(command):
 			return gate, true
+		case idles(command):
+			return everyIdle(command), true
 		case flips(command):
 			answered := session.Result{}
 			once.Do(func() { answered = cutover })
@@ -1288,6 +1301,57 @@ func TestAReleaseWhosePromotionWasOvertakenWhileItGatedWritesNothing(t *testing.
 	}
 	if stood.at("docker rm --force "+quoted(physical)) < 0 {
 		t.Errorf("an overtaken release left %s standing with nothing routing to it: %v", physical, stood.commands())
+	}
+}
+
+func TestAFailedReleaseLeavesATargetAnotherReleaseIsStillDrainingForThatReleaseToStop(t *testing.T) {
+	t.Parallel()
+
+	for what, answer := range map[string][2]session.Result{
+		"a gate that read a status": {{Code: 3, Stderr: "answered /healthz with status 500"}, {}},
+		"a flip":                    {{}, {Code: 2, Stderr: "the proxy answered /load with 400"}},
+	} {
+		t.Run(what, func(t *testing.T) {
+			t.Parallel()
+
+			stood := benched(t, answer[0], answer[1])
+			answered := stood.answer
+			stood.answer = func(command string) (session.Result, bool) {
+				if idles(command) {
+					return session.Result{}, true
+				}
+				return answered(command)
+			}
+			if err := stood.host().Release(context.Background(), aRelease(), nil); err == nil {
+				t.Fatalf("a release failing at %s released successfully", what)
+			}
+			if stood.at("docker rm --force "+quoted(physical)) >= 0 {
+				t.Errorf("a release failing at %s removed %s while the proxy said a flip was still draining it: the requests that flip is waiting out are cut, and the release that retired it stops it once they finish", what, physical)
+			}
+		})
+	}
+}
+
+func TestAFailedReleaseThatCannotAskWhetherItsTargetIsIdleRemovesNothingAndSaysSo(t *testing.T) {
+	t.Parallel()
+
+	stood := benched(t, session.Result{Code: 3, Stderr: "answered /healthz with status 500"}, session.Result{})
+	answered := stood.answer
+	stood.answer = func(command string) (session.Result, bool) {
+		if idles(command) {
+			return session.Result{Code: 5, Stderr: "permission denied reading /proc"}, true
+		}
+		return answered(command)
+	}
+	err := stood.host().Release(context.Background(), aRelease(), nil)
+	if err == nil {
+		t.Fatal("a release whose gate failed released successfully")
+	}
+	if stood.at("docker rm --force "+quoted(physical)) >= 0 {
+		t.Errorf("the release removed %s without knowing whether a flip was still draining it", physical)
+	}
+	if !strings.Contains(err.Error(), physical+" left standing") || !strings.Contains(err.Error(), "permission denied reading /proc") {
+		t.Errorf("the refusal reads\n%s\nand never names %s as left standing or why", err, physical)
 	}
 }
 
