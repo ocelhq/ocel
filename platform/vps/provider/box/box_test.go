@@ -112,6 +112,9 @@ func (m *machine) Serving(_ context.Context, key host.RouteKey) (string, error) 
 }
 
 func (m *machine) Release(_ context.Context, rel host.Release, _ providerkit.Reporter) error {
+	if len(rel.Apps) == 0 {
+		return nil
+	}
 	m.releases = append(m.releases, rel)
 	onto := make([]string, 0, len(rel.Apps))
 	for _, app := range rel.Apps {

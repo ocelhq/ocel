@@ -1401,3 +1401,15 @@ func TestAReleaseWhosePromotionWasOvertakenWhileItGatedWritesNothing(t *testing.
 		t.Errorf("an overtaken release left %s standing with nothing routing to it: %v", physical, stood.commands())
 	}
 }
+
+func TestAReleaseOfNoAppsTouchesNothing(t *testing.T) {
+	t.Parallel()
+
+	stood := benched(t, session.Result{}, session.Result{})
+	if err := stood.host().Release(context.Background(), Release{DeployTimeout: 30 * time.Second, DrainTimeout: 30 * time.Second}, nil); err != nil {
+		t.Fatalf("Release() of no apps = %v", err)
+	}
+	if ran := stood.commands(); len(ran) != 0 {
+		t.Errorf("a release of no apps ran %v on the box: a promotion whose apps stand nowhere on this box has nothing here to put in front", ran)
+	}
+}

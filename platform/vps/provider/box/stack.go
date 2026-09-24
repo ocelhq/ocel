@@ -82,9 +82,6 @@ func (s *stack) serve(ctx context.Context, pointer string, promotion edge.Promot
 	if err := s.claim(ctx, claims); err != nil {
 		return host.Unserved{Err: err}
 	}
-	if len(ready) == 0 {
-		return nil
-	}
 	apps := make([]host.AppRelease, 0, len(ready))
 	for _, held := range ready {
 		if err := s.standUp(ctx, held, report); err != nil {
