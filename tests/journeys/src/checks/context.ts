@@ -7,6 +7,7 @@ export const INITIAL_GREETING = "journey-hello";
 export const REDEPLOY_GREETING = "redeployed";
 export const SECRET_TOKEN = "journey-secret-never-in-a-body";
 export const REDACTED = "<redacted>";
+export const REGISTRY_TOKEN_ENV = "OCEL_JOURNEY_REGISTRY_TOKEN";
 
 export const OCEL_SVG_BYTES = 365;
 export const LARGE_RESPONSE_BYTES = 5 * 1024 * 1024;
@@ -31,8 +32,9 @@ export type Check = {
 const PASSWORD_IN_URL = /(:\/\/[^\s/@:]+:)[^\s/@]+@/g;
 const PASSWORD_IN_JSON = /("password"\s*:\s*)"(?:[^"\\]|\\.)*"/g;
 
-export function redact(text: string): string {
-  return text
+export function redact(text: string, env: NodeJS.ProcessEnv = process.env): string {
+  const token = env[REGISTRY_TOKEN_ENV];
+  return (token ? text.split(token).join(REDACTED) : text)
     .split(SECRET_TOKEN)
     .join(REDACTED)
     .replace(PASSWORD_IN_URL, `$1${REDACTED}@`)

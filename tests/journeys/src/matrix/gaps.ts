@@ -8,7 +8,7 @@ import {
 import { check, step } from "../steps";
 import { deploy, lifecycle, sdk } from "./fixtures";
 import type { Gap } from "./types";
-import { apiGateway, cloudflare, container, defaults } from "./variants";
+import { apiGateway, cloudflare, container, defaults, registry } from "./variants";
 
 const DEPLOY_NEXT_BEARING = [deploy.next, deploy.workspace];
 const SDK_NEXT_BEARING = [sdk.next, sdk.workspace];
@@ -191,6 +191,19 @@ export const gaps: Gap[] = [
         on: ["aws.floci"],
         fixtures: EVERY_NEXT_BEARING,
         variants: [defaults],
+        fails: [step.deploy],
+        skipsCell: true,
+      },
+    ],
+  },
+  {
+    id: "no-registry-on-incus",
+    reason:
+      "the incus lane runs on every push, and only a real run carries the token that may push to the journey registry",
+    where: [
+      {
+        on: ["vps.incus"],
+        variants: [registry],
         fails: [step.deploy],
         skipsCell: true,
       },

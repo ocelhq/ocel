@@ -19,7 +19,7 @@ import {
 import { evidence } from "./evidence";
 import { deploy, sdk } from "./matrix/fixtures";
 import type { Fixture, Variant } from "./matrix/types";
-import { cloudflare, container, defaults } from "./matrix/variants";
+import { cloudflare, container, defaults, registry } from "./matrix/variants";
 import type { CellUnderTest } from "./run/cellRun";
 
 const TS_BASE = "./ocel.config.ts";
@@ -133,6 +133,30 @@ describe("overlayFor", () => {
     });
   });
 
+  it("pushes a vps registry cell as the user the run names, under the token's variable", () => {
+    expect(
+      overlayFor(cell(deploy.node, registry), "vps", {
+        OCEL_JOURNEY_REGISTRY_USER: "octocat",
+        OCEL_JOURNEY_REGISTRY_TOKEN: "ghs_never-written",
+      }),
+    ).toEqual({
+      base: VPS_BASE,
+      slug: "j-1-deploy-node",
+      hostnames: { web: "web-j-1-deploy-node.localhost" },
+      registry: {
+        server: "ghcr.io/ocelhq/journey-vps",
+        username: "octocat",
+        password: "OCEL_JOURNEY_REGISTRY_TOKEN",
+      },
+    });
+  });
+
+  it("refuses a vps registry cell when the run names no user to push as", () => {
+    expect(() => overlayFor(cell(deploy.node, registry), "vps", {})).toThrow(
+      /OCEL_JOURNEY_REGISTRY_USER/,
+    );
+  });
+
   it("renames a dev cell and nothing else", () => {
     expect(
       overlayFor(cell(deploy.node), "dev", {
@@ -213,6 +237,16 @@ export default defineConfig({
     ).toContain(
       `  provider: { name: "aws", options: { ...(base.provider as { options?: object } | undefined)?.options, varsKey: "arn:aws:kms:key/k" } },`,
     );
+  });
+
+  it("pushes to the registry the cell names", () => {
+    expect(
+      renderConfig({
+        base: TS_BASE,
+        slug: "s",
+        registry: { server: "ghcr.io/acme/j", username: "octocat", password: "TOKEN" },
+      }),
+    ).toContain(`  registry: {"server":"ghcr.io/acme/j","username":"octocat","password":"TOKEN"},`);
   });
 
   it("imports each edge from where the product ships it", () => {
@@ -319,6 +353,18 @@ describe("renderJsonConfig", () => {
         },
       ],
     });
+  });
+
+  it("writes the registry the cell pushes to as data", () => {
+    expect(
+      JSON.parse(
+        renderJsonConfig(COMMENTED_JSON_BASE, {
+          base: "./ocel.json",
+          slug: "j-1-go",
+          registry: { server: "ghcr.io/acme/j", username: "octocat", password: "TOKEN" },
+        }),
+      ).registry,
+    ).toEqual({ server: "ghcr.io/acme/j", username: "octocat", password: "TOKEN" });
   });
 
   it("keeps the options the fixture's own provider carries", () => {

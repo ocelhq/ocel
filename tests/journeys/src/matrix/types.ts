@@ -1,9 +1,9 @@
-import type { Compute } from "ocel/config";
+import type { Compute, RegistryConfig } from "ocel/config";
 import type { Check } from "../checks/context";
 import type { ExternalStack } from "../stacks";
 import type { TestSelector } from "../steps";
 
-export type { Compute };
+export type { Compute, RegistryConfig };
 
 export type TargetName = "dev" | "aws" | "vps" | "gcp";
 
@@ -44,7 +44,7 @@ export type Phase = "deploy" | "verify" | "redeploy" | "rollback" | "destroy";
 
 export const DEFAULT_VARIANT = "default";
 
-export type ConfigDelta = { compute?: Compute; edge?: Edge };
+export type ConfigDelta = { compute?: Compute; edge?: Edge; registry?: RegistryConfig };
 
 export type Variant = { name: string; offeredOn: TargetName[]; config: ConfigDelta };
 
