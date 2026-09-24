@@ -349,6 +349,8 @@ type Reading struct {
 	Stamp    Stamp
 	Seal     Seal
 	Observed map[string]string
+
+	unelevated bool
 }
 
 func (r Reading) current(item Item) bool { return r.Observed[item.ID()] == item.Digest() }
@@ -366,6 +368,9 @@ func (r Reading) settled() bool {
 	items := r.Items()
 	if !r.Present || r.Stamp.State != StateComplete || !r.Stamp.records(items) {
 		return false
+	}
+	if r.unelevated {
+		return true
 	}
 	if r.Seal.Fingerprint == "" || r.Seal.Fingerprint != r.Stamp.Seal.Fingerprint {
 		return false
@@ -391,7 +396,13 @@ func (h *Host) Observe(ctx context.Context, class providerkit.Class) (Reading, e
 	if err != nil {
 		return Reading{}, err
 	}
-	return h.read(ctx, class, keys, drawing{ask: h.reach})
+	_, denied := h.elevate(ctx)
+	read, err := h.read(ctx, class, keys, drawing{ask: h.reach})
+	if err != nil {
+		return Reading{}, err
+	}
+	read.unelevated = denied != nil
+	return read, nil
 }
 
 func (h *Host) Own(ctx context.Context, class providerkit.Class) (Reading, error) {
