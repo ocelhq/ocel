@@ -72,6 +72,9 @@ every provider archive of that release on every platform. Commit it. Every machi
 every CI run then fetches the same bytes, and a CLI of another version is refused until
 you run `ocel lock` again.
 
+A project holding no `ocel.lock` gets one the first time a command fetches its providers.
+A `--dry` run writes none: it pins the providers for that run alone.
+
 ## discovery.paths
 
 The folders discovery runs to collect your resource declarations.

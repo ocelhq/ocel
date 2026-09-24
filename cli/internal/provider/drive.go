@@ -16,12 +16,20 @@ import (
 )
 
 func Drive(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, trust Trust, fn func(*Runner) error) error {
+	return drive(ctx, cfg, stdout, stderr, trust, pinToLock, fn)
+}
+
+func DriveDry(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, trust Trust, fn func(*Runner) error) error {
+	return drive(ctx, cfg, stdout, stderr, trust, pinInMemory, fn)
+}
+
+func drive(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, trust Trust, pinning pinning, fn func(*Runner) error) error {
 	return driveTrusting(ctx, trust, func() error {
-		return driveOnce(ctx, cfg, stdout, stderr, fn)
+		return driveOnce(ctx, cfg, stdout, stderr, pinning, fn)
 	})
 }
 
-func driveOnce(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, fn func(*Runner) error) error {
+func driveOnce(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, pinning pinning, fn func(*Runner) error) error {
 	if err := node.Ensure(cfg.Dir); err != nil {
 		return err
 	}
@@ -31,7 +39,7 @@ func driveOnce(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io
 		return err
 	}
 
-	binPath, err := Locate(ctx, cfg.Dir, desc.Name)
+	binPath, err := locateProvider(ctx, cfg.Dir, desc.Name, pinning)
 	if err != nil {
 		return err
 	}
