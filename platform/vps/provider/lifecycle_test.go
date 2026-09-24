@@ -1032,6 +1032,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 		t.Errorf("`ocel deploy --dry` drew %s's image row without the create the engine's own answer decides, so the row is drawn off the plan rather than off what this box holds:\n%s", lifecycleApp, drawn)
 	}
 
+	written := run.vm.proxyLogBytes(t)
 	deployed := run.deploying(t, "deploy", "--yes")
 	if !strings.Contains(deployed, "Deployed") {
 		t.Fatalf("`ocel deploy --yes` finished without deploying:\n%s", deployed)
@@ -1074,35 +1075,36 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	if !strings.Contains(deployed, lifecycleApp) {
 		t.Fatalf("the deploy transcript never even names %s, so it is no window a leaked value could have appeared in:\n%s", lifecycleApp, deployed)
 	}
-	for _, want := range []string{lifecycleHostname + " does not answer as the box edge yet", "`ocel domain add`"} {
-		if !strings.Contains(deployed, want) {
-			t.Errorf("the deploy never said %q, and a hostname it bound but could not reach is left to `ocel domain add`, not to another deploy:\n%s", want, deployed)
+	if !strings.Contains(deployed, "https://"+lifecycleHostname) {
+		t.Errorf("the deploy printed no url for %s, and a localhost name is probed on the box it resolves on, so nothing but the box itself stands between the bind and serving:\n%s", lifecycleHostname, deployed)
+	}
+	for _, left := range []string{"does not answer as the box edge yet", "`ocel domain add`"} {
+		if strings.Contains(deployed, left) {
+			t.Errorf("the deploy said %q and left %s pending, though the box it probes from is the one machine where that name resolves to the box:\n%s", left, lifecycleHostname, deployed)
 		}
 	}
 	if strings.Contains(deployed, "has no DNS writer configured") {
 		t.Errorf("the deploy owed a record for %s, and no DNS provider holds a localhost name:\n%s", lifecycleHostname, deployed)
 	}
 
-	written := run.vm.proxyLogBytes(t)
-	owed := run.refused(t, "domain", "add")
-	if !strings.Contains(owed, lifecycleHostname+" does not answer as the box edge yet") {
-		t.Errorf("`ocel domain add` never said %s does not answer yet, and a box's dns story is the honesty of its probe:\n%s", lifecycleHostname, owed)
-	}
-	run.trusting(t)
 	bound := run.deploying(t, "domain", "add")
 	if !strings.Contains(bound, "Serving "+lifecycleHostname) {
-		t.Fatalf("`ocel domain add` never settled %s once this machine trusted the root the box issues from:\n%s", lifecycleHostname, bound)
+		t.Fatalf("`ocel domain add` after a deploy that settled %s did not report it serving, and this machine has not been handed the root the box issues from:\n%s", lifecycleHostname, bound)
 	}
+	run.trusting(t)
 	run.serving(t, lifecycleHostname, "one")
 
 	reported := run.deploying(t, "domain", "status")
 	if !strings.Contains(reported, lifecycleHostname) {
 		t.Fatalf("`ocel domain status` names no hostname at all, so it is no window a certificate claim could be read out of:\n%s", reported)
 	}
-	for _, want := range []string{"proxy:" + lifecycleHostname, "no expiry reported", "the proxy renews it over http-01", lifecycleHostname + " A " + run.vm.addr} {
+	for _, want := range []string{"proxy:" + lifecycleHostname, "no expiry reported", "the proxy renews it over http-01"} {
 		if !strings.Contains(reported, want) {
 			t.Errorf("`ocel domain status` never said %q: what serves a hostname on a box, and who renews it, is the whole of what this command owes:\n%s", want, reported)
 		}
+	}
+	if owed := lifecycleHostname + " A " + run.vm.addr; strings.Contains(reported, owed) {
+		t.Errorf("`ocel domain status` owes %q, and no DNS provider can hold a localhost name: a record nobody can write leaves the hostname pending forever:\n%s", owed, reported)
 	}
 	loaded, err := json.Marshal(run.vm.loadedProxyConfig(t))
 	if err != nil {

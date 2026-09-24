@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { REDACTED } from "../checks/context";
-import { boxLane, issuedByTheBox, recordFile, slugsOf, ssh } from "./vps";
+import { boxLane, recordFile, slugsOf, ssh, unsettled } from "./vps";
 
 const IDENTITY = "/nonexistent/ocel-journey-identity";
 
@@ -18,15 +18,23 @@ describe("boxLane", () => {
   });
 });
 
-describe("issuedByTheBox", () => {
-  it("reads a localhost zone as one the box issues for itself", () => {
-    expect(issuedByTheBox("localhost")).toBe(true);
-    expect(issuedByTheBox("boxes.localhost")).toBe(true);
+describe("unsettled", () => {
+  it("passes a deploy that printed a url for every hostname it declares", () => {
+    const said = "Done in 1m\n\n    web  https://web-j-1-deploy-python.localhost\n";
+    expect(unsettled(said, ["web-j-1-deploy-python.localhost"])).toEqual([]);
   });
 
-  it("leaves a public zone to the certificate authority that answers for it", () => {
-    expect(issuedByTheBox("journeys.example")).toBe(false);
-    expect(issuedByTheBox("notlocalhost")).toBe(false);
+  it("names the hostnames the deploy left pending", () => {
+    const said =
+      "Done in 2m\n\n    web-j-1-deploy-python.localhost does not answer as the box edge yet — `ocel domain add` picks up where it stopped\n";
+    expect(unsettled(said, ["web-j-1-deploy-python.localhost"])).toEqual([
+      "web-j-1-deploy-python.localhost",
+    ]);
+  });
+
+  it("does not read one hostname's url as another's that it prefixes", () => {
+    const said = "    web  https://web.localhost.example\n";
+    expect(unsettled(said, ["web.localhost"])).toEqual(["web.localhost"]);
   });
 });
 

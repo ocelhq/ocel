@@ -1,7 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { HARNESS_ONLY_ENV } from "@ocel-tests/shared/env";
 import { migrates, setsEnv, setsSecret } from "../checks";
@@ -23,15 +22,10 @@ import { migrateCommand } from "../workspace";
 import { type Gateway, openGateway } from "./gateway";
 import type { Deployment, ReleaseCycle, Sweeper, Target } from "./types";
 
-const DEFAULT_ZONE = "localhost";
 const DEPLOY_LOGIN = "ocel-deploy";
 const INCUS_MARKER = "/dev/virtio-ports/org.linuxcontainers.incus";
 const PROJECT_RECORDS = "/var/lib/ocel/production/records/projects/production";
-const PROXY_ROOT = "/var/lib/ocel/proxy/data/caddy/pki/authorities/local/root.crt";
 const NO_RECORDS_TIER = "no-records-tier";
-const ROOT_WAIT_MS = 180_000;
-const ROOT_FIRST_WAIT_MS = 500;
-const ROOT_LONGEST_WAIT_MS = 5_000;
 const CONTAINER_APP_ROOT = "/app";
 const CONTAINER_LIVE_DIR = "/ocel/live";
 
@@ -60,8 +54,10 @@ export function boxLane(said: string): Lane {
   );
 }
 
-export function issuedByTheBox(zone: string): boolean {
-  return zone === DEFAULT_ZONE || zone.endsWith(`.${DEFAULT_ZONE}`);
+export function unsettled(said: string, hostnames: string[]): string[] {
+  return hostnames.filter(
+    (hostname) => !new RegExp(`https://${hostname.replaceAll(".", "\\.")}(?![\\w.-])`).test(said),
+  );
 }
 
 export function recordFile(slug: string): string {
@@ -196,8 +192,16 @@ export class VpsTarget implements Target, ReleaseCycle {
     if (setsSecret(cell.fixture.checks)) {
       await drive("env-secret", ["env", "set", `SECRET_TOKEN=${SECRET_TOKEN}`]);
     }
-    await drive("deploy", ["deploy", "--yes"]);
-    await this.bindDomains(cell, session);
+    const deployed = await drive("deploy", ["deploy", "--yes"]);
+    const pending = unsettled(`${deployed.stdout}\n${deployed.stderr}`, [
+      ...this.hostnamesOf(cell).values(),
+    ]);
+    if (pending.length > 0) {
+      throw new Error(
+        `the deploy printed no url for ${pending.join(", ")}, so it left a declared hostname ` +
+          "pending instead of settling it",
+      );
+    }
     if (migrates(cell.fixture.checks)) {
       await this.migrateInPlace(cell);
     }
@@ -288,30 +292,6 @@ export class VpsTarget implements Target, ReleaseCycle {
     return dir;
   }
 
-  private async trusted(cell: CellUnderTest): Promise<string | undefined> {
-    if (!issuedByTheBox(this.zone())) {
-      return undefined;
-    }
-    const target = this.box();
-    const deadline = Date.now() + ROOT_WAIT_MS;
-    let wait = ROOT_FIRST_WAIT_MS;
-    while (true) {
-      const root = await ssh(target, target.user, `sudo cat ${PROXY_ROOT} 2>/dev/null || true`);
-      if (root.includes("BEGIN CERTIFICATE")) {
-        await cell.evidence.write("deploy", "proxy-root.pem", root);
-        return path.join(cell.evidence.dir, "deploy", "proxy-root.pem");
-      }
-      if (Date.now() >= deadline) {
-        throw new Error(
-          `${PROXY_ROOT} holds no issuing root ${ROOT_WAIT_MS / 1000}s after the deploy, and every ` +
-            `hostname on ${this.zone()} is settled against a certificate this box issues itself`,
-        );
-      }
-      await delay(wait);
-      wait = Math.min(wait * 2, ROOT_LONGEST_WAIT_MS);
-    }
-  }
-
   private async migrateInPlace(cell: CellUnderTest): Promise<void> {
     const target = this.box();
     const app = cell.fixture.apps[0];
@@ -339,22 +319,6 @@ export class VpsTarget implements Target, ReleaseCycle {
         migrateCommand().join(" "),
     );
     await cell.evidence.write("deploy", "migrate.log", redact(said));
-  }
-
-  private async bindDomains(cell: CellUnderTest, session: BoxSession): Promise<void> {
-    const root = await this.trusted(cell);
-    await runOcel(
-      cell,
-      session.dir,
-      "deploy",
-      "domain-add",
-      ["--config", journeyConfigIn(session.dir), "domain", "add"],
-      {
-        ...session.env,
-        HTTPS_PROXY: session.gateway.tunnelUrl,
-        ...(root ? { SSL_CERT_FILE: root } : {}),
-      },
-    );
   }
 
   private hostnamesOf(cell: CellUnderTest): Map<string, string> {
@@ -414,7 +378,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     }
     const session: BoxSession = {
       dir: await workTree(cell, "vps"),
-      gateway: await openGateway(this.box().host),
+      gateway: openGateway(this.box().host),
       env: this.boxEnv(DEPLOY_LOGIN),
     };
     this.sessions.set(cell.slug, session);

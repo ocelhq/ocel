@@ -19,6 +19,7 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const probeCeiling = 15 * time.Second
@@ -311,5 +312,72 @@ func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheBoxAsItsEdge(t *testi
 	}
 	if kind != boxedge.Kind {
 		t.Errorf("Serving() over a hostname a project on the box claims and routes = %q, want %q: the box names the edge only on the route nothing claims, so the first bind on a project already deployed probes its own app, reads no header and burns every attempt before refusing", kind, boxedge.Kind)
+	}
+}
+
+func probedOnTheBox(t *testing.T, answer session.Result) (*vps.Provider, *box) {
+	t.Helper()
+
+	machine := &box{refuses: func(command string) (session.Result, bool) {
+		if strings.Contains(command, "ocel-proxyctl' 'probe'") {
+			return answer, true
+		}
+		return session.Result{}, false
+	}}
+	p := vps.ProviderOver(
+		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
+		func(context.Context) (host.Conn, error) { return machine, nil },
+	)
+	p.Probing(&http.Client{Transport: &http.Transport{
+		DialContext: func(context.Context, string, string) (net.Conn, error) {
+			t.Error("a .localhost name was dialled from the operator's machine, where RFC 6761 resolves it to this machine's own loopback and never to the box")
+			return nil, errors.New("dialled from here")
+		},
+	}})
+	return p, machine
+}
+
+func TestALocalhostNameIsProbedOnTheBoxItResolvesOn(t *testing.T) {
+	t.Parallel()
+
+	p, machine := probedOnTheBox(t, session.Result{Stdout: string(boxedge.Kind) + "\n"})
+
+	kind, err := p.Serving(context.Background(), boxedge.Kind, "web.localhost")
+	if err != nil {
+		t.Fatalf("Serving() = %v", err)
+	}
+	if kind != boxedge.Kind {
+		t.Errorf("Serving() = %q, want %q read off the box's own proxy", kind, boxedge.Kind)
+	}
+	if machine.at("ocel-proxyctl' 'probe' 'web.localhost'") < 0 {
+		t.Errorf("the box was never asked to probe web.localhost: %v", machine.commands())
+	}
+}
+
+func TestALocalhostNameTheBoxCannotReachKeepsConvergingAndSaysWhy(t *testing.T) {
+	t.Parallel()
+
+	p, _ := probedOnTheBox(t, session.Result{Code: 3,
+		Stderr: "ocel-proxyctl: web.localhost answered nothing from inside the proxy: tls: failed to verify certificate: x509: certificate signed by unknown authority"})
+
+	kind, err := p.Serving(context.Background(), boxedge.Kind, "web.localhost")
+	if err != nil {
+		t.Fatalf("Serving() = %v, want it reported unserved: the proxy obtains the name's certificate in the background after the bind", err)
+	}
+	if kind != "" {
+		t.Errorf("Serving() = %q, want nothing", kind)
+	}
+	if cause := p.Unreached("web.localhost"); !strings.Contains(cause, "x509") {
+		t.Errorf("Unreached() = %q, want what stopped the probe on the box", cause)
+	}
+}
+
+func TestALocalhostProbeTheBoxRefusesIsAnError(t *testing.T) {
+	t.Parallel()
+
+	p, _ := probedOnTheBox(t, session.Result{Code: 2, Stderr: "ocel-proxyctl: the proxy answered nothing over /run/caddy-admin.sock"})
+
+	if _, err := p.Serving(context.Background(), boxedge.Kind, "web.localhost"); err == nil {
+		t.Error("Serving() = nil over a proxy that could not be asked at all, and the settle burns a minute on a box whose proxy is down")
 	}
 }

@@ -149,3 +149,27 @@ func (h *Host) ServedCertificate(ctx context.Context, hostname string) ([]byte, 
 		return nil, h.refuse("read what the proxy serves for "+hostname, result)
 	}
 }
+
+type Answer struct {
+	Edge      string
+	Unreached string
+}
+
+func (h *Host) ServedEdge(ctx context.Context, hostname string) (Answer, error) {
+	elevation, err := h.reachDocker(ctx)
+	if err != nil {
+		return Answer{}, err
+	}
+	result, err := h.stream(ctx, words(helperCommand("probe", hostname)), nil, elevation)
+	if err != nil {
+		return Answer{}, err
+	}
+	switch result.Code {
+	case 0:
+		return Answer{Edge: strings.TrimSpace(result.Stdout)}, nil
+	case proxyServesNoCertificate:
+		return Answer{Unreached: spoken(result)}, nil
+	default:
+		return Answer{}, h.refuse("probe "+hostname+" from inside the proxy", result)
+	}
+}
