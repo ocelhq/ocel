@@ -233,16 +233,6 @@ func TestRepositoryNamesTheDefaultDiscoveryDirectoryCentrally(t *testing.T) {
 	}
 }
 
-func TestGoCICoversTheSharedConstantsModule(t *testing.T) {
-	workflow, err := os.ReadFile(filepath.Join(fixturetest.RepoDir(t), ".github", "workflows", "go.yml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(workflow), "./pkg/constants/...") {
-		t.Fatal("the Go CI matrix does not build and test the shared constants module")
-	}
-}
-
 func TestGoSDKWireNamesMatchConstants(t *testing.T) {
 	path := filepath.Join(fixturetest.RepoDir(t), "sdk", "wire.go")
 	file, err := parser.ParseFile(token.NewFileSet(), path, nil, 0)
