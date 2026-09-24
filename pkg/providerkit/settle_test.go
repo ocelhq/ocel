@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,14 +27,17 @@ func (a *answering) Serving(context.Context, string) (edge.Kind, error) {
 
 func waiting(resolve Resolver, attempts int) (settler, *int) {
 	slept := 0
+	clock := time.Unix(1700000000, 0)
 	return settler{
-		kind:     "relay",
-		resolve:  resolve,
-		attempts: attempts,
-		wait:     time.Second,
-		now:      func() time.Time { return time.Unix(1700000000, 0) },
-		sleep: func(context.Context, time.Duration) error {
+		kind:    "relay",
+		resolve: resolve,
+		budget:  time.Duration(attempts) * time.Second,
+		window:  time.Second,
+		wait:    time.Second,
+		now:     func() time.Time { return clock },
+		sleep: func(_ context.Context, d time.Duration) error {
 			slept++
+			clock = clock.Add(d)
 			return nil
 		},
 	}, &slept
@@ -159,37 +163,119 @@ func TestTheSettleRefusesAHostnameAnotherEdgeAnswersOn(t *testing.T) {
 type slowly struct {
 	clock *time.Time
 	cost  time.Duration
+	asked *int
 }
 
 func (s slowly) Serving(context.Context, string) (edge.Kind, error) {
+	*s.asked++
 	*s.clock = s.clock.Add(s.cost)
 	return "", nil
 }
 
-func TestTheSettleReportsTheTimeItSpentRatherThanTheTimeItPlannedTo(t *testing.T) {
-	t.Parallel()
-
+func onTheClock(resolve func(*time.Time) Resolver, budget time.Duration) settler {
 	clock := time.Unix(1700000000, 0)
-	settle := settler{
-		kind:     "box",
-		resolve:  slowly{clock: &clock, cost: 15 * time.Second},
-		attempts: 4,
-		wait:     5 * time.Second,
-		now:      func() time.Time { return clock },
+	return settler{
+		kind:    "box",
+		resolve: resolve(&clock),
+		budget:  budget,
+		window:  attemptWindow,
+		wait:    5 * time.Second,
+		now:     func() time.Time { return clock },
 		sleep: func(_ context.Context, d time.Duration) error {
 			clock = clock.Add(d)
 			return nil
 		},
 	}
+}
+
+func TestADeployGivesUpOnceItsMinuteHasPassedHoweverLongEachAttemptTakes(t *testing.T) {
+	t.Parallel()
+
+	var asked int
+	settle := onTheClock(func(clock *time.Time) Resolver {
+		return slowly{clock: clock, cost: 15 * time.Second, asked: &asked}
+	}, settleBudget)
 
 	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
 	var refusal Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("await() = %v, want a refusal", err)
 	}
-	if !strings.Contains(refusal.Message, "1m15s") {
-		t.Errorf("await() refused with %q, want the 1m15s it actually spent: a resolver that reaches the hostname costs a request per attempt, and the sleeps between them are no longer the whole of the wait",
-			refusal.Message)
+	if asked != 3 {
+		t.Errorf("await() asked %d time(s), want the 3 that begin inside the minute: attempts at 0s, 20s and 40s each cost 15s, and a fourth at 60s would start past the bound the deploy reports", asked)
+	}
+	if !strings.Contains(refusal.Message, "55s") {
+		t.Errorf("await() refused with %q, want the 55s it actually spent", refusal.Message)
+	}
+}
+
+func TestAnAttendedSettleWaitsOutAFrontThatTakesMinutesToAnswer(t *testing.T) {
+	t.Parallel()
+
+	const minutes = 10 * time.Minute
+	for what, budget := range map[string]time.Duration{"domain add": attendedBudget, "a deploy": settleBudget} {
+		settle := onTheClock(func(clock *time.Time) Resolver {
+			return answeringAfter{clock: clock, at: clock.Add(minutes), kind: "box"}
+		}, budget)
+		_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
+		if budget == attendedBudget && err != nil {
+			t.Errorf("%s gave up on a front that answers after %s: %v. A fresh CloudFront distribution takes minutes to serve, and `ocel domain add` is the command that waits for it", what, minutes, err)
+		}
+		if budget == settleBudget && err == nil {
+			t.Errorf("%s waited %s for one hostname: a deploy leaves a slow hostname pending for `ocel domain add` rather than holding the release", what, minutes)
+		}
+	}
+}
+
+type answeringAfter struct {
+	clock *time.Time
+	at    time.Time
+	kind  edge.Kind
+}
+
+func (a answeringAfter) Serving(context.Context, string) (edge.Kind, error) {
+	if a.clock.Before(a.at) {
+		return "", nil
+	}
+	return a.kind, nil
+}
+
+type hanging struct{ asked *atomic.Int32 }
+
+func (h hanging) Serving(ctx context.Context, _ string) (edge.Kind, error) {
+	h.asked.Add(1)
+	<-ctx.Done()
+	return "", ctx.Err()
+}
+
+func TestAProbeThatNeverReturnsIsCutOffAtEachAttemptAndTheSettleAtItsDeadline(t *testing.T) {
+	t.Parallel()
+
+	var asked atomic.Int32
+	settle := settler{
+		kind:    "box",
+		resolve: hanging{asked: &asked},
+		budget:  300 * time.Millisecond,
+		window:  50 * time.Millisecond,
+		wait:    10 * time.Millisecond,
+		now:     time.Now,
+		sleep:   sleep,
+	}
+
+	began := time.Now()
+	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
+	if spent := time.Since(began); spent > 2*time.Second {
+		t.Fatalf("await() returned after %s, want it held to its 300ms deadline", spent)
+	}
+	var pending pending
+	if !errors.As(err, &pending) {
+		t.Fatalf("await() = %v, want the hostname left pending when its wait runs out, not the run failed", err)
+	}
+	if asked.Load() < 2 {
+		t.Errorf("the probe was asked %d time(s), want each hung attempt cut off so the next one runs", asked.Load())
+	}
+	if !strings.Contains(err.Error(), "50ms") {
+		t.Errorf("await() said %q, want it to name the attempt that outlasted its window", err)
 	}
 }
 
