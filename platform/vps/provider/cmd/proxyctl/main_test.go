@@ -479,11 +479,11 @@ func TestTheProxyIsStartedOnTheShapeEveryFlipLoadsAndNothingItAutosaved(t *testi
 	}
 	t.Setenv("PATH", bin)
 	var started []string
-	starting = func(_ string, argv []string, _ []string) error {
+	becomingCaddy = func(_ string, argv []string, _ []string) error {
 		started = argv
 		return nil
 	}
-	t.Cleanup(func() { starting = syscall.Exec })
+	t.Cleanup(func() { becomingCaddy = syscall.Exec })
 
 	var out, errs strings.Builder
 	run(t.TempDir(), t.TempDir(), live, []string{"serve", config}, &out, &errs)

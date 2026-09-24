@@ -49,7 +49,7 @@ const adminTimeout = 30 * time.Second
 
 const caddyBinary = "caddy"
 
-var starting = syscall.Exec
+var becomingCaddy = syscall.Exec
 
 const (
 	gateInterval  = 250 * time.Millisecond
@@ -515,7 +515,7 @@ func serve(live, path string, errs io.Writer) int {
 		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
 		return exitRefused
 	}
-	if err := starting(caddy, []string{caddyBinary, "run", "--config", started}, os.Environ()); err != nil {
+	if err := becomingCaddy(caddy, []string{caddyBinary, "run", "--config", started}, os.Environ()); err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: exec %s: %v\n", caddy, err)
 		return exitRefused
 	}
