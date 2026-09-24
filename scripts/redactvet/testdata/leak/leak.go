@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"google.golang.org/protobuf/encoding/prototext"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/reflect/protoreflect"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -129,4 +131,29 @@ func fields(req *contractv1.DeployRequest) string {
 
 func clean(runtime *contractv1.Runtime, tier fmt.Stringer, n int) string {
 	return fmt.Sprintf("%v %s %d %s", runtime, tier, n, runtime.String())
+}
+
+func generic(m proto.Message, r protoreflect.ProtoMessage) string {
+	return fmt.Sprint(m, r) // want `proto.Message renders` `protoreflect.ProtoMessage renders`
+}
+
+func cloned(req *contractv1.DeployRequest) string {
+	return prototext.Format(proto.Clone(req)) // want `proto.Message renders`
+}
+
+type heldGeneric struct {
+	Exposed proto.Message
+	sealed  proto.Message
+}
+
+func genericField(h heldGeneric) string {
+	return fmt.Sprint(h) // want `heldGeneric renders`
+}
+
+type sealedGeneric struct {
+	m proto.Message
+}
+
+func genericSealed(s sealedGeneric) string {
+	return fmt.Sprint(s)
 }
