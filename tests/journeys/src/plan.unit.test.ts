@@ -140,8 +140,8 @@ describe("the steps a cell walks through", () => {
   });
 
   it("fits an external stack's checks around the lifecycle at the points it names", () => {
-    const stacked = one("sdk/with-sst", { redeploys: true, stack: new ProbeStack() });
-    expect(titlesOf(planOf([stacked]), "sdk/with-sst")).toEqual([
+    const stacked = one("iac/with-sst", { redeploys: true, stack: new ProbeStack() });
+    expect(titlesOf(planOf([stacked], { filter: { concerns: ["iac"] } }), "iac/with-sst")).toEqual([
       "ocel refuses before the stack publishes",
       "after publish · records",
       "deploy",

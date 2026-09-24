@@ -1,5 +1,5 @@
 {
-  "name": "@ocel-fixtures/sdk-with-pulumi",
+  "name": "@ocel-fixtures/iac-with-pulumi",
   "version": "0.0.0",
   "private": true,
   "type": "module",

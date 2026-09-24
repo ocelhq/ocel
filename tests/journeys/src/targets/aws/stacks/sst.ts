@@ -61,7 +61,7 @@ export class SstStack extends AwsStack {
       ...(await recordedStages(cliAt(await this.world.endpoint()))),
     ]);
     const dir = await copyTree(
-      fixtureDir("sdk/with-sst"),
+      fixtureDir("iac/with-sst"),
       treeDir(runId, "aws", "stack-sweep-with-sst"),
     );
     try {

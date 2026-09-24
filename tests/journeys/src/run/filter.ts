@@ -1,4 +1,4 @@
-import { CONCERNS, type Concern } from "../matrix/types";
+import { CONCERNS, type Concern, UNNAMED_CONCERNS } from "../matrix/types";
 import type { RunFilter } from "../plan";
 import { COVERAGES, type Coverage, type Draw } from "../sample";
 
@@ -12,7 +12,7 @@ function listed(value: string | undefined, separators: RegExp): string[] {
 export function concernsNamed(asked: string | undefined): Concern[] {
   const named = listed(asked, /[\s,]+/);
   if (named.length === 0) {
-    return CONCERNS;
+    return UNNAMED_CONCERNS;
   }
   const unknown = named.filter((name) => !(CONCERNS as string[]).includes(name));
   if (unknown.length > 0) {

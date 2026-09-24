@@ -87,7 +87,7 @@ function runOf(
   called: Called,
   over: { keep?: boolean; prepareFailure?: string; standing?: boolean; written?: Called } = {},
 ) {
-  const stacked = fixture("sdk/with-sst", {
+  const stacked = fixture("iac/with-sst", {
     apps: ["web"],
     checks: [],
     stack: new RecordingStack(called),
@@ -114,7 +114,7 @@ describe("a cell run", () => {
 
   it("names the cell a target deploys by its slug", () => {
     const run = runOf([]);
-    expect(run.slug).toBe("j-1-sdk-with-sst");
+    expect(run.slug).toBe("j-1-iac-with-sst");
   });
 
   it("refuses a check before the cell is deployed", () => {
@@ -180,7 +180,7 @@ describe("a cell run", () => {
     await run.checkStack(check);
     await run.deploy();
     await run.checkStack(check, run.verifying("web", "verify"));
-    expect(seen).toEqual(["j-1-sdk-with-sst unserved", "j-1-sdk-with-sst web"]);
+    expect(seen).toEqual(["j-1-iac-with-sst unserved", "j-1-iac-with-sst web"]);
   });
 
   it("touches nothing when the process could not be prepared", async () => {
@@ -188,7 +188,7 @@ describe("a cell run", () => {
     const run = runOf(called);
     const target = targetFor(called);
     const failing = new CellRun({
-      cell: { name: "sdk/with-sst", fixture: run.fixture, variant: defaults },
+      cell: { name: "iac/with-sst", fixture: run.fixture, variant: defaults },
       target: {
         ...target,
         prepareProcess: async () => {
@@ -208,7 +208,7 @@ describe("a cell run", () => {
 
   it("fails a destroy that leaves the cell standing", async () => {
     const run = runOf([], { standing: true });
-    await expect(run.destroy()).rejects.toThrow(/j-1-sdk-with-sst still exists on aws/);
+    await expect(run.destroy()).rejects.toThrow(/j-1-iac-with-sst still exists on aws/);
   });
 
   it("destroys the stack once, and never for a cell kept standing", async () => {

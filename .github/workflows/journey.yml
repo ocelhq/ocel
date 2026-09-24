@@ -46,8 +46,8 @@ on:
         type: choice
         options: [every-cell, sampled]
       concern:
-        description: "Concerns each lane covers, space separated: deploy asks whether the app runs there, lifecycle whether a release can be replaced and rolled back there, sdk whether its resources do."
-        default: "deploy lifecycle sdk"
+        description: "Concerns each lane covers, space separated: deploy asks whether the app runs there, lifecycle whether a release can be replaced and rolled back there, sdk whether its resources do, iac whether it binds to what an SST or Pulumi stack stands up. Empty covers every one but iac, which runs only when named here, and then only with skips set to run: the gap list skips every iac cell on aws (#856, #857)."
+        default: ""
         type: string
       fixtures:
         description: "Fixtures each lane runs, space separated, each named <concern>/<name>. Empty runs every one of the concerns picked."
@@ -150,7 +150,7 @@ jobs:
           elif [ "$ACTION" = labeled ] && [ "$LABEL" = journey:real ]; then
             real=true
             TARGETS="aws vps"
-            CONCERN="deploy lifecycle sdk"
+            CONCERN=
             FIXTURES=
           fi
 
@@ -198,7 +198,7 @@ jobs:
 
           if [ "$real" = true ]; then
             coverage=${COVERAGE:-every-cell}
-            concern=${CONCERN:-deploy lifecycle sdk}
+            concern=$CONCERN
           else
             coverage=sampled
             concern="deploy lifecycle"

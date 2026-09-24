@@ -1,6 +1,5 @@
 import {
   type Cell,
-  CONCERNS,
   type Concern,
   cellName,
   type Fixture,
@@ -11,6 +10,7 @@ import {
   sampleGroupOf,
   type TargetName,
   targetOfLane,
+  UNNAMED_CONCERNS,
 } from "./matrix/types";
 import { type Coverage, type Draw, sample } from "./sample";
 import { phasesOf, stepsOf } from "./steps";
@@ -26,7 +26,7 @@ export type RunFilter = {
 };
 
 export const NO_FILTER: RunFilter = {
-  concerns: CONCERNS,
+  concerns: UNNAMED_CONCERNS,
   fixtures: [],
   variants: [],
   coverage: "every-cell",
