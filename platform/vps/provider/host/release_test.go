@@ -1338,6 +1338,47 @@ func TestEveryFailureAfterTheFlipSaysTheFlipTookAndStillFinishesWhatItCan(t *tes
 	}
 }
 
+func TestARetireeAlreadyGoneFromTheBoxIsNoStopTheReleaseFailedToMake(t *testing.T) {
+	t.Parallel()
+
+	for what, running := range map[string]string{
+		"says it is gone":          retiring + " gone\n",
+		"says it is not running":   retiring + " false\n",
+		"says it is still running": retiring + " true\n",
+		"never says":               "",
+	} {
+		t.Run(what, func(t *testing.T) {
+			t.Parallel()
+
+			stood := benched(t, session.Result{}, session.Result{})
+			proxied := stood.answer
+			stood.answer = func(command string) (session.Result, bool) {
+				switch {
+				case command == "docker stop "+quoted(retiring)+" >/dev/null":
+					return session.Result{Code: 1, Stderr: "Error response from daemon: No such container: " + retiring}, true
+				case strings.Contains(command, ".State.Running"):
+					return session.Result{Stdout: running}, true
+				}
+				return proxied(command)
+			}
+
+			err := stood.host().Release(context.Background(), aRelease(), nil)
+			settled := !strings.HasSuffix(running, " true\n") && running != ""
+			if settled && err != nil {
+				t.Errorf("a release whose refused stop of %s was followed by a box that %s = %v, want it served: a container that is not running is the end the stop was for",
+					retiring, what, err)
+			}
+			if !settled && (err == nil || !strings.Contains(err.Error(), "still running")) {
+				t.Errorf("a release whose refused stop of %s was followed by a box that %s = %v, want it to name %s as still running",
+					retiring, what, err, retiring)
+			}
+			if slices.Contains(stood.state(t).Retiring, retired) {
+				t.Errorf("the steady state still declares %s retiring after a release whose box %s", retired, what)
+			}
+		})
+	}
+}
+
 func TestAStoppedRetireeAReleaseLeftDeclaredIsClearedByTheNextReleaseOnTheBox(t *testing.T) {
 	t.Parallel()
 

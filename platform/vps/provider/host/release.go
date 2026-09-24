@@ -133,11 +133,19 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 func (h *Host) settle(ctx context.Context, rel Release, cut cutover, report providerkit.Reporter, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
-	var failed []string
+	var failed, unstopped []string
+	refused := map[string]error{}
 	for _, retiree := range cut.retiring {
 		say(report, "Stopping "+containerOf(retiree))
 		if err := h.StopContainer(ctx, containerOf(retiree)); err != nil {
-			failed = append(failed, fmt.Sprintf("%s was drained and unrouted but not stopped, so it is still running: %v", containerOf(retiree), err))
+			unstopped = append(unstopped, retiree)
+			refused[retiree] = err
+		}
+	}
+	settled := h.stopped(ctx, unstopped, elevation)
+	for _, retiree := range unstopped {
+		if !slices.Contains(settled, retiree) {
+			failed = append(failed, fmt.Sprintf("%s was drained and unrouted but not stopped, so it is still running: %v", containerOf(retiree), refused[retiree]))
 		}
 	}
 	if _, err := h.composeProxy(ctx, func(standing ProxyState) (ProxyState, error) {
