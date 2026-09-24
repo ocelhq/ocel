@@ -113,8 +113,7 @@ func (h *handlers) openStack(ctx context.Context, class Class, slug string, sel 
 }
 
 func (s *stackSession) installSettler(writer edge.DNSWriter, zone string) {
-	s.settle = newSettler(s.front, writer, zone,
-		resolving(s.provider, s.front, boundBy(s.front, func() edge.StackState { return s.stack.State() })))
+	s.settle = newSettler(s.front, writer, zone, probingFor(s.provider, s.front))
 }
 
 func (s *stackSession) checkpoint(ctx context.Context) error {

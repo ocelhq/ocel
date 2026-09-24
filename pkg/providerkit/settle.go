@@ -77,12 +77,8 @@ type Diagnoser interface {
 	Unreached(hostname string) string
 }
 
-func resolving(provider Provider, front edge.Edge, stand Resolver) Resolver {
-	prober, ok := provider.(Prober)
-	if !ok {
-		return stand
-	}
-	return probing{prober: prober, kind: front.Kind()}
+func probingFor(provider Provider, front edge.Edge) Resolver {
+	return probing{prober: provider, kind: front.Kind()}
 }
 
 type probing struct {
@@ -100,24 +96,6 @@ func (p probing) Unreached(hostname string) string {
 		return ""
 	}
 	return diagnoser.Unreached(hostname)
-}
-
-func boundBy(front edge.Edge, state func() edge.StackState) Resolver {
-	return boundResolver{kind: front.Kind(), unbound: front.Facts().ServesUnbound, state: state}
-}
-
-type boundResolver struct {
-	kind    edge.Kind
-	unbound bool
-	state   func() edge.StackState
-}
-
-func (r boundResolver) Serving(_ context.Context, hostname string) (edge.Kind, error) {
-	held := r.state()
-	if edge.Pointable(edge.TargetOf(r.kind, r.unbound, held), held.Bound, hostname) {
-		return r.kind, nil
-	}
-	return "", nil
 }
 
 func sleep(ctx context.Context, d time.Duration) error {

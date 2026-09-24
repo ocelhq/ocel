@@ -22,6 +22,8 @@ type Provider interface {
 	Credentials() Credentials
 	Edges() EdgeRegistry
 	DNS() DNSRegistry
+
+	Prober
 }
 
 type Warmer interface {

@@ -50,16 +50,12 @@ func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) 
 }
 
 func (w *wildcards) settler(front edge.Edge) settler {
-	s := newSettler(front, w.writer, w.zone, resolving(w.provider, front, servedResolver{kind: front.Kind()}))
+	s := newSettler(front, w.writer, w.zone, probingFor(w.provider, front))
 	if w.attended != nil {
 		s.attend(w.attended)
 	}
 	return s
 }
-
-type servedResolver struct{ kind edge.Kind }
-
-func (r servedResolver) Serving(context.Context, string) (edge.Kind, error) { return r.kind, nil }
 
 func readWildcard(ctx context.Context, records RecordStore) (Wildcard, error) {
 	name := WildcardRecord(ClassPreview)
