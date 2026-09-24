@@ -15,12 +15,12 @@ production needs a bigger database than a preview, every resource needs the org'
 still provisions all of it; you change how, as reviewable rules in your repo. This is a
 smaller step than owning the infrastructure, and it is usually enough.
 
-**Bindings — [with-sst](../with-sst), [with-pulumi](../with-pulumi).** You need full control of
-some infrastructure, so your own IaC tool provisions it and Ocel turns consumer. Which tool
-that is decides nothing: the app consuming the infrastructure is the same app either way,
-and so is what Ocel asks of you. Ocel never gives away deploying the app itself — that is
-the one thing it always provisions, and transforms are how you shape it even here, which is
-why a shared-VPC setup needs both rungs at once.
+**Bindings — [with-sst](../../iac/with-sst), [with-pulumi](../../iac/with-pulumi).** You need
+full control of some infrastructure, so your own IaC tool provisions it and Ocel turns
+consumer. Which tool that is decides nothing: the app consuming the infrastructure is the same
+app either way, and so is what Ocel asks of you. Ocel never gives away deploying the app itself
+— that is the one thing it always provisions, and transforms are how you shape it even here,
+which is why a shared-VPC setup needs both rungs at once.
 
 The app on this rung is modeled on the [express](../express) example, with a `postgres`
 resource; what it adds is `ocel.json` and `transforms/defaults.transform.ts`. The module is

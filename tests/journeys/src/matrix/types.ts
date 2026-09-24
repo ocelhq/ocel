@@ -34,9 +34,15 @@ export function laneNamed(name: string): Lane {
   return name as Lane;
 }
 
-export type Concern = "deploy" | "lifecycle" | "sdk";
+export type Concern = "deploy" | "lifecycle" | "sdk" | "iac";
 
-export const CONCERNS: Concern[] = ["deploy", "lifecycle", "sdk"];
+export const CONCERNS: Concern[] = ["deploy", "lifecycle", "sdk", "iac"];
+
+const NAMED_ONLY: Concern[] = ["iac"];
+
+export const UNNAMED_CONCERNS: Concern[] = CONCERNS.filter(
+  (concern) => !NAMED_ONLY.includes(concern),
+);
 
 export type Edge = "cloudfront" | "api-gateway" | "cloudflare";
 

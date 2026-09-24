@@ -1,5 +1,5 @@
 {
-  "name": "@ocel-fixtures/sdk-with-sst",
+  "name": "@ocel-fixtures/iac-with-sst",
   "version": "0.0.0",
   "private": true,
   "type": "module",

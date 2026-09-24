@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { filterFrom } from "./filter";
 
 describe("the concerns a run asks for", () => {
-  it("is every concern when nothing names one", () => {
+  it("is every concern but iac when nothing names one", () => {
     expect(filterFrom({}).concerns).toEqual(["deploy", "lifecycle", "sdk"]);
     expect(filterFrom({ OCEL_JOURNEY_CONCERN: "  " }).concerns).toEqual([
       "deploy",
@@ -15,6 +15,15 @@ describe("the concerns a run asks for", () => {
     expect(filterFrom({ OCEL_JOURNEY_CONCERN: "sdk deploy" }).concerns).toEqual(["deploy", "sdk"]);
     expect(filterFrom({ OCEL_JOURNEY_CONCERN: "deploy,sdk" }).concerns).toEqual(["deploy", "sdk"]);
     expect(filterFrom({ OCEL_JOURNEY_CONCERN: "lifecycle" }).concerns).toEqual(["lifecycle"]);
+  });
+
+  it("runs iac only when it is named", () => {
+    expect(filterFrom({ OCEL_JOURNEY_CONCERN: "iac" }).concerns).toEqual(["iac"]);
+    expect(filterFrom({ OCEL_JOURNEY_CONCERN: "iac sdk deploy" }).concerns).toEqual([
+      "deploy",
+      "sdk",
+      "iac",
+    ]);
   });
 
   it("refuses a name that is no concern", () => {

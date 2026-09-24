@@ -103,7 +103,7 @@ describe("a cell with an external stack", () => {
     async sweep() {}
   }
 
-  const stacked = fixture("sdk/with-sst", {
+  const stacked = fixture("iac/with-sst", {
     apps: ["web"],
     checks: [{ title: "ping", run: said("check ping") }],
     stack: new RecordingStack(),

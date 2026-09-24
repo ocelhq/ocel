@@ -150,14 +150,17 @@ export const sdk = {
     checks: BINDING_CHECKS,
     on: { aws: [container, apiGateway], vps: [defaults] },
   }),
-  withSst: fixture("sdk/with-sst", {
+};
+
+export const iac = {
+  withSst: fixture("iac/with-sst", {
     apps: ["web"],
     redeploys: true,
     checks: BINDING_CHECKS,
     stack: new SstStack(awsWorld),
     on: { aws: [container, apiGateway] },
   }),
-  withPulumi: fixture("sdk/with-pulumi", {
+  withPulumi: fixture("iac/with-pulumi", {
     apps: ["web"],
     redeploys: true,
     checks: BINDING_CHECKS,
@@ -170,4 +173,5 @@ export const fixtures: Fixture[] = [
   ...Object.values(deploy),
   ...Object.values(lifecycle),
   ...Object.values(sdk),
+  ...Object.values(iac),
 ];

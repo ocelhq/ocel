@@ -7,7 +7,7 @@ import {
 } from "../checks";
 import { REGISTRY_TOKEN_ENV, REGISTRY_USER_ENV } from "../registry/settings";
 import { check, step } from "../steps";
-import { deploy, lifecycle, sdk } from "./fixtures";
+import { deploy, iac, lifecycle, sdk } from "./fixtures";
 import type { Gap } from "./types";
 import { apiGateway, cloudflare, container, defaults, registry } from "./variants";
 
@@ -47,7 +47,7 @@ export const gaps: Gap[] = [
     reason: "@ocel/sst reads $util off globalThis, which SST 3.19 does not set",
     issue: 857,
     where: [
-      { on: ["aws", "aws.floci"], fixtures: [sdk.withSst], fails: [step.deploy], skipsCell: true },
+      { on: ["aws", "aws.floci"], fixtures: [iac.withSst], fails: [step.deploy], skipsCell: true },
     ],
   },
   {
@@ -57,7 +57,7 @@ export const gaps: Gap[] = [
     where: [
       {
         on: ["aws", "aws.floci"],
-        fixtures: [sdk.withPulumi],
+        fixtures: [iac.withPulumi],
         fails: [step.deploy],
         skipsCell: true,
       },

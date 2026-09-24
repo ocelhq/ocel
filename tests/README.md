@@ -18,9 +18,10 @@ and the targets and variants it runs on. A fixture belongs to one concern: `depl
 whether a runtime runs on a target at all, and its apps under `fixtures/deploy/` declare no
 resources; `lifecycle` asks whether a release can be replaced and rolled back there, from
 `fixtures/lifecycle/`; `sdk` asks whether what an app declares is provisioned, bound and
-usable, from `fixtures/sdk/`. The harness starts nothing but the `ocel` binary; bring up
-what the target needs first. For `dev` that is a docker daemon, which `ocel dev` runs a
-declared postgres and bucket in:
+usable, from `fixtures/sdk/`; `iac` asks whether an app binds to what an SST or Pulumi stack
+provisions beside it, from `fixtures/iac/`, and runs only when a run names it. The harness
+starts nothing but the `ocel` binary; bring up what the target needs first. For `dev` that
+is a docker daemon, which `ocel dev` runs a declared postgres and bucket in:
 
 ```
 node scripts/snapshot.mjs
@@ -42,7 +43,7 @@ scripts/floci.sh destroy ocel-journeys
 ```
 
 One emulator serves every edge. `OCEL_JOURNEY_CONCERN` narrows a run to the concerns it
-names, space or comma separated, and unset covers every one; `OCEL_JOURNEY_FIXTURES`
+names, space or comma separated, and unset covers every one but `iac`; `OCEL_JOURNEY_FIXTURES`
 narrows it further to fixtures named `<concern>/<name>`. `OCEL_JOURNEY_VARIANTS` narrows a
 run to the variants it names (`default` among them), `OCEL_JOURNEY_COVERAGE=every-cell` runs
 every cell rather than a sampled subset, and `OCEL_JOURNEY_SKIPS=run` drives the cells the gap
@@ -103,10 +104,13 @@ left behind, and only projects the harness named.
 
 `--shard <index>/<total>` is accepted and validated by `cell`; it selects nothing yet.
 
-A pull request runs the `deploy` and `lifecycle` buckets; a full run — workflow dispatch,
-or the `journey:real` label — runs all three, `lifecycle` cells first. Either way it spreads
-each edge of a fixture group over one member of that group, and runs every cell of a member
-whose directory the diff touches. To reproduce a pull request's pick on a laptop:
+A pull request runs the `deploy` and `lifecycle` buckets; a full run — workflow dispatch, or
+the `journey:real` label — runs `deploy`, `lifecycle` and `sdk`, `lifecycle` cells first.
+`iac` stands up real SST and Pulumi stacks, so only a workflow dispatch that names it runs it,
+and only with `skips=run`: the gap list skips every `iac` cell on `aws` and `aws.floci` (#856,
+#857). Either way it spreads each edge of a fixture group over one member of that group, and
+runs every cell of a member whose directory the diff touches. To reproduce a pull request's
+pick on a laptop:
 
 ```
 OCEL_JOURNEY_CONCERN="deploy lifecycle" OCEL_JOURNEY_SEED=<pull request number> \

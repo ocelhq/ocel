@@ -97,7 +97,7 @@ export class PulumiStack extends AwsStack {
 
   async sweep(runId: string): Promise<void> {
     const dir = await copyTree(
-      fixtureDir("sdk/with-pulumi"),
+      fixtureDir("iac/with-pulumi"),
       treeDir(runId, "aws", "stack-sweep-with-pulumi"),
     );
     try {

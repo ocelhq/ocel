@@ -1284,6 +1284,92 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  tests/fixtures/iac/with-pulumi:
+    dependencies:
+      '@ocel/pulumi':
+        specifier: workspace:^
+        version: link:../../../../packages/ocel-pulumi
+      '@pulumi/aws':
+        specifier: ~7.41.0
+        version: 7.41.0(ts-node@10.9.2(@types/node@20.19.43)(typescript@5.9.3))(typescript@5.9.3)
+      '@pulumi/pulumi':
+        specifier: ~3.252.0
+        version: 3.252.0(ts-node@10.9.2(@types/node@20.19.43)(typescript@5.9.3))(typescript@5.9.3)
+      express:
+        specifier: ~5.0.0
+        version: 5.0.1
+      ocel:
+        specifier: workspace:^
+        version: link:../../../../packages/ocel
+      pg:
+        specifier: ^8.22.0
+        version: 8.22.0
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@ocel/transforms':
+        specifier: workspace:^
+        version: link:../../../../packages/ocel-transforms
+      '@types/express':
+        specifier: ~5.0.0
+        version: 5.0.6
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      '@types/pg':
+        specifier: ^8.20.0
+        version: 8.20.0
+      ts-node:
+        specifier: ^10.9.2
+        version: 10.9.2(@types/node@20.19.43)(typescript@5.9.3)
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.0
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
+  tests/fixtures/iac/with-sst:
+    dependencies:
+      '@ocel/sst':
+        specifier: workspace:^
+        version: link:../../../../packages/ocel-sst
+      express:
+        specifier: ~5.0.0
+        version: 5.0.1
+      ocel:
+        specifier: workspace:^
+        version: link:../../../../packages/ocel
+      pg:
+        specifier: ^8.22.0
+        version: 8.22.0
+      sst:
+        specifier: ^3.17.10
+        version: 3.19.3
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+    devDependencies:
+      '@ocel/transforms':
+        specifier: workspace:^
+        version: link:../../../../packages/ocel-transforms
+      '@types/express':
+        specifier: ~5.0.0
+        version: 5.0.6
+      '@types/node':
+        specifier: ^20
+        version: 20.19.43
+      '@types/pg':
+        specifier: ^8.20.0
+        version: 8.20.0
+      tsx:
+        specifier: ^4.19.2
+        version: 4.23.0
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
   tests/fixtures/lifecycle/next:
     dependencies:
       better-sqlite3:
@@ -1397,92 +1483,6 @@ importers:
       '@types/better-sqlite3':
         specifier: ^7.6.13
         version: 7.6.13
-      '@types/express':
-        specifier: ~5.0.0
-        version: 5.0.6
-      '@types/node':
-        specifier: ^20
-        version: 20.19.43
-      '@types/pg':
-        specifier: ^8.20.0
-        version: 8.20.0
-      tsx:
-        specifier: ^4.19.2
-        version: 4.23.0
-      typescript:
-        specifier: ^5
-        version: 5.9.3
-
-  tests/fixtures/sdk/with-pulumi:
-    dependencies:
-      '@ocel/pulumi':
-        specifier: workspace:^
-        version: link:../../../../packages/ocel-pulumi
-      '@pulumi/aws':
-        specifier: ~7.41.0
-        version: 7.41.0(ts-node@10.9.2(@types/node@20.19.43)(typescript@5.9.3))(typescript@5.9.3)
-      '@pulumi/pulumi':
-        specifier: ~3.252.0
-        version: 3.252.0(ts-node@10.9.2(@types/node@20.19.43)(typescript@5.9.3))(typescript@5.9.3)
-      express:
-        specifier: ~5.0.0
-        version: 5.0.1
-      ocel:
-        specifier: workspace:^
-        version: link:../../../../packages/ocel
-      pg:
-        specifier: ^8.22.0
-        version: 8.22.0
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-    devDependencies:
-      '@ocel/transforms':
-        specifier: workspace:^
-        version: link:../../../../packages/ocel-transforms
-      '@types/express':
-        specifier: ~5.0.0
-        version: 5.0.6
-      '@types/node':
-        specifier: ^20
-        version: 20.19.43
-      '@types/pg':
-        specifier: ^8.20.0
-        version: 8.20.0
-      ts-node:
-        specifier: ^10.9.2
-        version: 10.9.2(@types/node@20.19.43)(typescript@5.9.3)
-      tsx:
-        specifier: ^4.19.2
-        version: 4.23.0
-      typescript:
-        specifier: ^5
-        version: 5.9.3
-
-  tests/fixtures/sdk/with-sst:
-    dependencies:
-      '@ocel/sst':
-        specifier: workspace:^
-        version: link:../../../../packages/ocel-sst
-      express:
-        specifier: ~5.0.0
-        version: 5.0.1
-      ocel:
-        specifier: workspace:^
-        version: link:../../../../packages/ocel
-      pg:
-        specifier: ^8.22.0
-        version: 8.22.0
-      sst:
-        specifier: ^3.17.10
-        version: 3.19.3
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-    devDependencies:
-      '@ocel/transforms':
-        specifier: workspace:^
-        version: link:../../../../packages/ocel-transforms
       '@types/express':
         specifier: ~5.0.0
         version: 5.0.6
