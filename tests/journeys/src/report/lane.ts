@@ -43,7 +43,9 @@ function main(argv: string[]) {
   const lane = laneNamed(named);
   const filter = filterFrom(process.env);
   const releaseCycle = hasReleaseCycle(targetNamed(targetOfLane(lane)));
-  process.stdout.write(laneTable(plan({ fixtures, gaps, lane, releaseCycle, filter }), filter));
+  process.stdout.write(
+    laneTable(plan({ fixtures, gaps, lane, releaseCycle, filter, env: process.env }), filter),
+  );
 }
 
 try {

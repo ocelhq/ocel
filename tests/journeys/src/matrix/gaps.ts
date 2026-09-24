@@ -5,6 +5,7 @@ import {
   nextCacheChecks,
   nextDataCacheChecks,
 } from "../checks";
+import { REGISTRY_TOKEN_ENV, REGISTRY_USER_ENV } from "../registry/settings";
 import { check, step } from "../steps";
 import { deploy, lifecycle, sdk } from "./fixtures";
 import type { Gap } from "./types";
@@ -197,13 +198,14 @@ export const gaps: Gap[] = [
     ],
   },
   {
-    id: "no-registry-on-incus",
+    id: "no-registry-credentials",
     reason:
-      "the incus lane runs on every push, and only a real run carries the token that may push to the journey registry",
+      "only a run handed the user and token that may push to the journey registry can deploy through it",
     where: [
       {
-        on: ["vps.incus"],
+        on: ["vps", "vps.incus"],
         variants: [registry],
+        whileUnset: [REGISTRY_USER_ENV, REGISTRY_TOKEN_ENV],
         fails: [step.deploy],
         skipsCell: true,
       },

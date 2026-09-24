@@ -90,6 +90,7 @@ export type GapScope = {
   on: Lane[];
   fixtures?: Fixture[];
   variants?: Variant[];
+  whileUnset?: string[];
   fails: TestSelector[];
   skipsCell?: true;
 };

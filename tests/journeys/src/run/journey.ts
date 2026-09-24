@@ -89,7 +89,14 @@ export async function runJourney(target: Target, filter: RunFilter): Promise<num
   await rm(cellsDir(runId, target.name), { recursive: true, force: true });
 
   const lane = await target.detectLane();
-  const planned = plan({ fixtures, gaps, lane, releaseCycle: hasReleaseCycle(target), filter });
+  const planned = plan({
+    fixtures,
+    gaps,
+    lane,
+    releaseCycle: hasReleaseCycle(target),
+    filter,
+    env: process.env,
+  });
   logSkipped(target, planned);
   const files = await writeCellFiles(runId, target, planned);
   const workers = laneWorkers(target);
