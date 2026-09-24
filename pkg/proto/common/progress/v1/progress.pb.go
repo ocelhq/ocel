@@ -1092,7 +1092,7 @@ type ResultEvent struct {
 	Functions   []*FunctionOutput      `protobuf:"bytes,4,rep,name=functions,proto3" json:"functions,omitempty"`
 	PromotionId string                 `protobuf:"bytes,6,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
 	FlipBound   *FlipBound             `protobuf:"bytes,7,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
-	UrlNote     string                 `protobuf:"bytes,8,opt,name=url_note,json=urlNote,proto3" json:"url_note,omitempty"`
+	UrlNotes    []string               `protobuf:"bytes,8,rep,name=url_notes,json=urlNotes,proto3" json:"url_notes,omitempty"`
 	// One entry per app the apply covered, in manifest order whatever order they finished in.
 	Apps []*AppResult `protobuf:"bytes,9,rep,name=apps,proto3" json:"apps,omitempty"`
 	// The request was refused: the stream's own error is the verdict, and this envelope
@@ -1175,11 +1175,11 @@ func (x *ResultEvent) GetFlipBound() *FlipBound {
 	return nil
 }
 
-func (x *ResultEvent) GetUrlNote() string {
+func (x *ResultEvent) GetUrlNotes() []string {
 	if x != nil {
-		return x.UrlNote
+		return x.UrlNotes
 	}
-	return ""
+	return nil
 }
 
 func (x *ResultEvent) GetApps() []*AppResult {
@@ -1432,7 +1432,7 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\x03app\x18\x01 \x01(\tR\x03app\x128\n" +
 	"\aoutcome\x18\x02 \x01(\x0e2\x1e.common.progress.v1.AppOutcomeR\aoutcome\x12\x14\n" +
 	"\x05error\x18\x03 \x01(\tR\x05error\x12\x12\n" +
-	"\x04urls\x18\x04 \x03(\tR\x04urls\"\xc7\x03\n" +
+	"\x04urls\x18\x04 \x03(\tR\x04urls\"\xc9\x03\n" +
 	"\vResultEvent\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x127\n" +
@@ -1440,8 +1440,8 @@ const file_common_progress_v1_progress_proto_rawDesc = "" +
 	"\tfunctions\x18\x04 \x03(\v2\".common.progress.v1.FunctionOutputR\tfunctions\x12!\n" +
 	"\fpromotion_id\x18\x06 \x01(\tR\vpromotionId\x12<\n" +
 	"\n" +
-	"flip_bound\x18\a \x01(\v2\x1d.common.progress.v1.FlipBoundR\tflipBound\x12\x19\n" +
-	"\burl_note\x18\b \x01(\tR\aurlNote\x121\n" +
+	"flip_bound\x18\a \x01(\v2\x1d.common.progress.v1.FlipBoundR\tflipBound\x12\x1b\n" +
+	"\turl_notes\x18\b \x03(\tR\burlNotes\x121\n" +
 	"\x04apps\x18\t \x03(\v2\x1d.common.progress.v1.AppResultR\x04apps\x12\x18\n" +
 	"\arefused\x18\n" +
 	" \x01(\bR\arefused\x12D\n" +

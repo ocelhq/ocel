@@ -538,10 +538,10 @@ func (p *projector) result(m protoreflect.Message) []string {
 		if urls := p.appURLBlock(ev.GetApps()); len(urls) > 0 {
 			out = append(out, append([]string{""}, urls...)...)
 		}
-		if note := ev.GetUrlNote(); note != "" {
+		if notes := ev.GetUrlNotes(); len(notes) > 0 {
 			out = append(out, "")
-			for _, line := range strings.Split(note, "\n") {
-				out = append(out, blockIndent+line)
+			for _, note := range notes {
+				out = append(out, blockIndent+note)
 			}
 		}
 		if note := FlipNote(ev.GetFlipBound()); note != "" {

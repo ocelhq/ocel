@@ -276,7 +276,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 		if err := publishServiceMap(cfg, manifest, env, "", out.promotionID, out.bindings); err != nil {
 			return err
 		}
-		ui.Deployed(fmt.Sprintf("Preview %s is up", env.GetIdentity()), out.urlNote, out.flip, out.bindings, out.functions)
+		ui.Deployed(fmt.Sprintf("Preview %s is up", env.GetIdentity()), out.urlNotes, out.flip, out.bindings, out.functions)
 		return nil
 	})
 }

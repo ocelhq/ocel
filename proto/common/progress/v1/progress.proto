@@ -173,7 +173,7 @@ message ResultEvent {
 
   FlipBound flip_bound = 7;
 
-  string url_note = 8;
+  repeated string url_notes = 8;
 
   // One entry per app the apply covered, in manifest order whatever order they finished in.
   repeated AppResult apps = 9;

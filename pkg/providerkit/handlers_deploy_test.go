@@ -847,9 +847,9 @@ func TestTheFirstDeploySettlesAHostnameItsDNSWriterPoints(t *testing.T) {
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	if !slices.Equal(servedURLs(result), []string{"https://shop.example"}) || result.GetUrlNote() != "" {
+	if !slices.Equal(servedURLs(result), []string{"https://shop.example"}) || noteOf(result) != "" {
 		t.Errorf("the first deploy returned urls %v and the note %q, want the hostname it settled printed: nothing was owed, so nothing waits on anyone",
-			servedURLs(result), result.GetUrlNote())
+			servedURLs(result), noteOf(result))
 	}
 }
 
@@ -866,8 +866,8 @@ func TestTheFirstDeploySettlesALocalhostNameWithNoDNSWriter(t *testing.T) {
 	if owed := owedRecordsIn(events); len(owed) != 0 {
 		t.Errorf("the deploy owed %v, want nothing: a localhost name resolves without any record", owed)
 	}
-	if want := []string{"https://web-j-1-deploy-python.localhost"}; !slices.Equal(servedURLs(result), want) || result.GetUrlNote() != "" {
-		t.Errorf("the deploy printed %v with the note %q, want %v", servedURLs(result), result.GetUrlNote(), want)
+	if want := []string{"https://web-j-1-deploy-python.localhost"}; !slices.Equal(servedURLs(result), want) || noteOf(result) != "" {
+		t.Errorf("the deploy printed %v with the note %q, want %v", servedURLs(result), noteOf(result), want)
 	}
 }
 
@@ -930,7 +930,7 @@ func TestADeployLeavesAHostnameAnotherEdgeServesToDomainAdd(t *testing.T) {
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() on the %s edge = %q", fake.KindDirect, result.GetError())
 	}
-	note := result.GetUrlNote()
+	note := noteOf(result)
 	if !strings.Contains(note, "shop.example") || !strings.Contains(note, string(fake.KindRelay)) || !strings.Contains(note, "`ocel domain add`") {
 		t.Errorf("the note = %q, want it naming the hostname, the edge that still serves it, and that `ocel domain add` moves it", note)
 	}
@@ -993,7 +993,7 @@ func TestADeployRefusedForAReasonNoWaitingFixesFailsWithThatReason(t *testing.T)
 	req.Edge = writtenBy("shop.example")
 	result, events := deploy(t, client, req)
 	if result.GetSuccess() {
-		t.Fatalf("Deploy() succeeded with the note %q, want it failed: a missing load balancer waits on `ocel bootstrap`, not on `ocel domain add`", result.GetUrlNote())
+		t.Fatalf("Deploy() succeeded with the note %q, want it failed: a missing load balancer waits on `ocel bootstrap`, not on `ocel domain add`", noteOf(result))
 	}
 	if !strings.Contains(result.GetError(), refusal) {
 		t.Errorf("Deploy() = %q, want the refusal's own remedy", result.GetError())
@@ -1015,8 +1015,8 @@ func TestADeployWhoseCertificateIsStillIssuingLeavesItToDomainAdd(t *testing.T) 
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed: an issuance still in flight holds back the hostname, not the release", result.GetError())
 	}
-	if !strings.Contains(result.GetUrlNote(), "the certificate is still validating") {
-		t.Errorf("the note = %q, want it naming the issuance it waits on", result.GetUrlNote())
+	if !strings.Contains(noteOf(result), "the certificate is still validating") {
+		t.Errorf("the note = %q, want it naming the issuance it waits on", noteOf(result))
 	}
 }
 
@@ -1032,9 +1032,9 @@ func TestADeployWhoseCertificateWaitsOnYouLeavesItToDomainAdd(t *testing.T) {
 	if owed := owedRecordsIn(events); !slices.Contains(owed, "_acme.shop.example CNAME") {
 		t.Errorf("the deploy owed %v, want the record that proves the certificate", owed)
 	}
-	if len(servedURLs(result)) != 0 || !strings.Contains(result.GetUrlNote(), "Prove you own shop.example") {
+	if len(servedURLs(result)) != 0 || !strings.Contains(noteOf(result), "Prove you own shop.example") {
 		t.Errorf("the deploy printed %v with the note %q, want no url and a note naming the proof it waits on",
-			servedURLs(result), result.GetUrlNote())
+			servedURLs(result), noteOf(result))
 	}
 }
 
@@ -1062,7 +1062,7 @@ func TestDeployOwingRecordsSucceedsAndLeavesTheHostnameToDomainAdd(t *testing.T)
 	if owed := owedRecordsIn(events); !slices.Contains(owed, "shop.example CNAME") {
 		t.Errorf("the deploy owed %v, want the record that points shop.example at the edge, told the way domain add tells it", owed)
 	}
-	note := result.GetUrlNote()
+	note := noteOf(result)
 	if !strings.Contains(note, "shop.example") || !strings.Contains(note, "ocel domain add") || strings.Contains(note, "deploy again") {
 		t.Errorf("the note = %q, want it naming the hostname, what is owed and that `ocel domain add` resumes it — never another deploy", note)
 	}
@@ -1315,4 +1315,8 @@ func TestDeployAnnouncesEachAppsOwnHostnameUnderThatApp(t *testing.T) {
 	if got := servedAppURLs(result, "admin"); !slices.Equal(got, []string{"https://admin.shop.example"}) {
 		t.Errorf("admin carries %v, want the hostname admin itself declares", got)
 	}
+}
+
+func noteOf(result *progressv1.ResultEvent) string {
+	return strings.Join(result.GetUrlNotes(), "\n")
 }

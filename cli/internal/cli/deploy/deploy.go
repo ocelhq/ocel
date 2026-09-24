@@ -166,7 +166,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 		if err := publishServiceMap(cfg, manifest, env, opts.tag, out.promotionID, out.bindings); err != nil {
 			return err
 		}
-		ui.Deployed("Deployed", out.urlNote, out.flip, out.bindings, out.functions)
+		ui.Deployed("Deployed", out.urlNotes, out.flip, out.bindings, out.functions)
 		return nil
 	})
 }
