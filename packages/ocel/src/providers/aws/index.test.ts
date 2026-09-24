@@ -3,10 +3,9 @@ import { defineConfig } from "../../config.js";
 import awsProvider from "./index";
 
 describe("awsProvider", () => {
-  it("returns a descriptor naming the provider, carrying the given options", () => {
+  it("returns its options keyed by the provider, carrying the given options", () => {
     expect(awsProvider({ region: "us-east-1" })).toEqual({
-      name: "aws",
-      options: { region: "us-east-1" },
+      aws: { region: "us-east-1" },
     });
   });
 
@@ -31,8 +30,7 @@ describe("awsProvider", () => {
         },
       }),
     ).toEqual({
-      name: "aws",
-      options: {
+      aws: {
         certificates: {
           "app.acme.com": "arn:aws:acm:us-east-1:111122223333:certificate/abcd-1234",
         },
@@ -42,27 +40,24 @@ describe("awsProvider", () => {
 
   it("carries the arn of a key the account brought through to the provider", () => {
     expect(awsProvider({ varsKey: "arn:aws:kms:eu-west-1:111122223333:key/abcd-1234" })).toEqual({
-      name: "aws",
-      options: { varsKey: "arn:aws:kms:eu-west-1:111122223333:key/abcd-1234" },
+      aws: { varsKey: "arn:aws:kms:eu-west-1:111122223333:key/abcd-1234" },
     });
   });
 
   it("defaults options to an empty object when called with none", () => {
     expect(awsProvider()).toEqual({
-      name: "aws",
-      options: {},
+      aws: {},
     });
   });
 
-  it("type-checks as a `provider` field and serializes to { name, options }", () => {
+  it("type-checks as a `provider` field and serializes to its options keyed by aws", () => {
     const config = defineConfig({
       slug: "test-app",
       provider: awsProvider({ region: "us-east-1" }),
     });
 
     expect(JSON.parse(JSON.stringify(config.provider))).toEqual({
-      name: "aws",
-      options: { region: "us-east-1" },
+      aws: { region: "us-east-1" },
     });
   });
 });

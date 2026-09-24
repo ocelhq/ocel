@@ -26,7 +26,7 @@ func setUpBindingFixture(t *testing.T) string {
 export default {
   slug: "`+clitest.FixtureSlug+`",
   bindings: { postgres: { orders: "orders" } },
-  provider: { name: "aws", options: {} },
+  provider: { aws: {} },
   domains: { preview: "*.preview.acme.com" },
 };
 `)

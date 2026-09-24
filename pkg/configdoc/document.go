@@ -11,9 +11,9 @@ type Document struct {
 	Bindings      Bindings             `json:"bindings,omitempty" doc:"Resources this project declares that ocel binds to a record your own infrastructure published, instead of provisioning them itself. Keyed by resource type, then by the name the app declares; the value is the name the record is published under. A name nothing has published refuses the deploy."`
 	Transforms    StringList           `json:"transforms,omitempty" doc:"Transform modules applied while provisioning, in order — later modules win where their patches collide. Each is a path to a module whose default export is a defineTransform(...) result, keyed by the provider it patches."`
 	Discovery     *DiscoveryConfig     `json:"discovery,omitempty" doc:"Where the resources an app declares are found."`
-	Provider      *ProviderDescriptor  `json:"provider,omitempty" doc:"The provider ocel deploy provisions into."`
-	Edge          *EdgeDescriptor      `json:"edge,omitempty" doc:"The edge in front of the origin. Omit it and the provider fronts the deployment with its own default edge."`
-	DNS           *DnsDescriptor       `json:"dns,omitempty" doc:"Where the project's hostname records are written."`
+	Provider      *ProviderDescriptor  `json:"provider,omitempty" doc:"The provider ocel deploy provisions into, keyed by its identifier and holding its options. A provider that needs no options may be named alone."`
+	Edge          *EdgeDescriptor      `json:"edge,omitempty" doc:"The edge in front of the origin, keyed by its identifier and holding its options, or named alone. Omit it and the provider fronts the deployment with its own default edge."`
+	DNS           *DnsDescriptor       `json:"dns,omitempty" doc:"Where the project's hostname records are written, keyed by the DNS service's identifier and holding its options, or named alone."`
 	AllowDegraded []string             `json:"allowDegraded,omitempty" doc:"The needs this project waives rather than have a deploy refused over." enum:"edge-middleware,edge-runtime,ppr-resume,edge-cache,streaming"`
 	Apps          []AppConfig          `json:"apps,omitempty" doc:"The apps this project deploys. Left off, ocel detects one at the project root."`
 	Domains       *ProjectDomainConfig `json:"domains,omitempty" doc:"The hostnames this project is served on."`
@@ -22,20 +22,6 @@ type Document struct {
 
 type DiscoveryConfig struct {
 	Paths []string `json:"paths,omitempty" doc:"The directories holding infrastructure declarations, relative to the config. Left off, ocel reads the default discovery directory."`
-}
-
-type ProviderDescriptor struct {
-	Name    string          `json:"name" doc:"The provider's name — the one ocel fetches, runs and deploys through."`
-	Options json.RawMessage `json:"options,omitempty" doc:"The options this provider takes. The provider itself is what checks them."`
-}
-
-type EdgeDescriptor struct {
-	Kind string `json:"kind" doc:"The edge the project's hostnames are served from."`
-}
-
-type DnsDescriptor struct {
-	Kind string `json:"kind" doc:"The DNS the project's records are written into."`
-	Zone string `json:"zone,omitempty" doc:"The zone the records are written into. Omit it and ocel picks the zone that covers the hostname."`
 }
 
 type AppConfig struct {

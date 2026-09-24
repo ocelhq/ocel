@@ -11,7 +11,7 @@ import (
 
 func TestProviderConfigCarriesTheProjectTransformModules(t *testing.T) {
 	modules := []string{"./transforms/network.transform.ts"}
-	config, err := providerConfig(&projectconfig.Config{Transforms: modules}, &projectconfig.ProviderDescriptor{Name: "aws"})
+	config, err := providerConfig(&projectconfig.Config{Transforms: modules}, &projectconfig.ProviderDescriptor{ID: "aws"})
 	if err != nil {
 		t.Fatalf("providerConfig: %v", err)
 	}
@@ -22,7 +22,7 @@ func TestProviderConfigCarriesTheProjectTransformModules(t *testing.T) {
 
 func TestProviderConfigCarriesTheDescriptorOptionsOpaquely(t *testing.T) {
 	config, err := providerConfig(&projectconfig.Config{}, &projectconfig.ProviderDescriptor{
-		Name:    "aws",
+		ID:      "aws",
 		Options: json.RawMessage(`{"region":"us-east-1"}`),
 	})
 	if err != nil {
@@ -35,7 +35,7 @@ func TestProviderConfigCarriesTheDescriptorOptionsOpaquely(t *testing.T) {
 
 func TestProviderConfigRefusesOptionsThatAreNotAJSONObject(t *testing.T) {
 	_, err := providerConfig(&projectconfig.Config{}, &projectconfig.ProviderDescriptor{
-		Name:    "aws",
+		ID:      "aws",
 		Options: json.RawMessage(`["us-east-1"]`),
 	})
 	if err == nil {
@@ -48,7 +48,7 @@ func TestProviderConfigRefusesOptionsThatAreNotAJSONObject(t *testing.T) {
 
 func TestProviderConfigLeavesAnUnconfiguredProviderWithoutOptions(t *testing.T) {
 	config, err := providerConfig(&projectconfig.Config{}, &projectconfig.ProviderDescriptor{
-		Name:    "aws",
+		ID:      "aws",
 		Options: json.RawMessage(`{}`),
 	})
 	if err != nil {

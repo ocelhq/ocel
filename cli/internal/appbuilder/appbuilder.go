@@ -171,7 +171,7 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 	req := builderRequest{
 		OutDir:        outputDir,
 		ProjectRoot:   cfg.Dir,
-		EdgeKind:      string(cfg.EdgeKind()),
+		EdgeKind:      string(cfg.EdgeID()),
 		AllowDegraded: cfg.AllowDegraded,
 		Apps:          make([]appInput, 0, len(cfg.Apps)),
 	}

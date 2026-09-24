@@ -138,7 +138,7 @@ export function renderConfig(overlay: Overlay): string {
   const fields = [`  ...base,`, `  slug: ${JSON.stringify(overlay.slug)},`];
   if (overlay.varsKey) {
     fields.push(
-      `  provider: { name: "aws", options: { ...(base.provider as { options?: object } | undefined)?.options, varsKey: ${JSON.stringify(overlay.varsKey)} } },`,
+      `  provider: { aws: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.aws : {}), varsKey: ${JSON.stringify(overlay.varsKey)} } },`,
     );
   }
   if (overlay.edge) {
@@ -165,7 +165,7 @@ export function renderConfig(overlay: Overlay): string {
 type App = Record<string, unknown> & { name?: string };
 
 type Document = Record<string, unknown> & {
-  provider?: { name?: string; options?: Record<string, unknown> };
+  provider?: string | Record<string, Record<string, unknown> | null> | null;
   apps?: App[];
 };
 
@@ -189,16 +189,15 @@ export function renderJsonConfig(base: string, overlay: Overlay): string {
   const read = JSON.parse(stripJsonComments(base)) as Document;
   const written: Document = { ...read, slug: overlay.slug };
   if (overlay.varsKey) {
-    written.provider = {
-      name: "aws",
-      options: { ...read.provider?.options, varsKey: overlay.varsKey },
-    };
+    const options =
+      read.provider !== null && typeof read.provider === "object" ? read.provider.aws : undefined;
+    written.provider = { aws: { ...options, varsKey: overlay.varsKey } };
   }
   if (overlay.edge) {
-    written.edge = { kind: overlay.edge };
+    written.edge = overlay.edge;
   }
   if (overlay.dns) {
-    written.dns = { kind: overlay.dns };
+    written.dns = overlay.dns;
   }
   if (overlay.registry) {
     written.registry = overlay.registry;

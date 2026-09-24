@@ -16,7 +16,7 @@ func TestBuildingAGoProjectUnpacksNoNodeBundle(t *testing.T) {
 	clitest.WriteFile(t, filepath.Join(root, "go.mod"), "module fixture\n\ngo 1.24\n")
 	clitest.WriteFile(t, filepath.Join(root, "ocel.json"), `{
   "slug": "go-shop",
-  "provider": { "name": "aws", "options": {} }
+  "provider": { "aws": {} }
 }
 `)
 

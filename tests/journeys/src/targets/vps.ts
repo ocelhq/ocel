@@ -277,8 +277,7 @@ export class VpsTarget implements Target, ReleaseCycle {
         {
           slug,
           provider: {
-            name: "vps",
-            options: {
+            vps: {
               ssh: { host: target.host, user: login, identityFile: target.identityFile },
             },
           },

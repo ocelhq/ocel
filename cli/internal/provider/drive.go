@@ -33,7 +33,7 @@ func drive(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Wri
 		return err
 	}
 
-	binPath, err := locateProvider(ctx, cfg.Dir, desc.Name, mode)
+	binPath, err := locateProvider(ctx, cfg.Dir, desc.ID, mode)
 	if err != nil {
 		return err
 	}
@@ -60,7 +60,7 @@ func driveOnce(ctx context.Context, cfg *projectconfig.Config, desc *projectconf
 		Stderr:         stderr,
 		Env:            env,
 		ProviderConfig: providerConfig,
-		ProviderName:   desc.Name,
+		ProviderName:   desc.ID,
 	})
 	if err != nil {
 		return fmt.Errorf("spawn provider: %w", err)
@@ -80,7 +80,7 @@ func providerConfig(cfg *projectconfig.Config, desc *projectconfig.ProviderDescr
 	}
 	options := &structpb.Struct{}
 	if err := protojson.Unmarshal(desc.Options, options); err != nil {
-		return nil, fmt.Errorf("the config configures provider %q with \"options\" that are not an object: %w", desc.Name, err)
+		return nil, fmt.Errorf("the config configures provider %q with options that are not an object: %w", desc.ID, err)
 	}
 	config.Options = options
 	return config, nil

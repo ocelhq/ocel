@@ -9,5 +9,5 @@ export type { GcpProviderOptions };
  * the provider runs in: `gcloud auth application-default login`.
  */
 export default function gcpProvider(options: GcpProviderOptions): ProviderDescriptor {
-  return { name: "gcp", options };
+  return { gcp: options };
 }

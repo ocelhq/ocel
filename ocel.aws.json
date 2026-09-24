@@ -1,11 +1,10 @@
 {
   "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "ocelhq",
-  "edge": { "kind": "cloudflare" },
-  "dns": { "kind": "cloudflare" },
+  "edge": "cloudflare",
+  "dns": "cloudflare",
   "provider": {
-    "name": "aws",
-    "options": { "region": "${OCEL_AWS_REGION}", "varsKey": "${OCEL_AWS_VARS_KEY}" }
+    "aws": { "region": "${OCEL_AWS_REGION}", "varsKey": "${OCEL_AWS_VARS_KEY}" }
   },
   "apps": [
     { "name": "www", "path": "./www", "domains": { "production": "ocel.dev" } },

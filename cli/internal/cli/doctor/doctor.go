@@ -278,12 +278,12 @@ func appsText(cfg *projectconfig.Config) string {
 }
 
 func providerText(descriptor *projectconfig.ProviderDescriptor) string {
-	return "provider " + descriptor.Name + " " + version.Version
+	return "provider " + descriptor.ID + " " + version.Version
 }
 
 func edgeText(cfg *projectconfig.Config) string {
-	if kind := cfg.EdgeKind(); kind != "" {
-		return "edge " + string(kind)
+	if id := cfg.EdgeID(); id != "" {
+		return "edge " + string(id)
 	}
 	return "provider default edge"
 }
@@ -465,8 +465,8 @@ func credentialSections(cfg *projectconfig.Config, got *answers) []section {
 		take(identity.GetProvider()),
 	)}
 	if scope := identity.GetEdgeScope(); scope != "" {
-		kind := string(cfg.EdgeKind())
-		sections = append(sections, holder(titleOr(kind, "Edge"), scope, take(kind)))
+		edgeID := string(cfg.EdgeID())
+		sections = append(sections, holder(titleOr(edgeID, "Edge"), scope, take(edgeID)))
 	}
 
 	for i, problem := range got.problems {

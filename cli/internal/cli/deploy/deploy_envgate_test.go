@@ -40,7 +40,7 @@ func writeAppsConfig(t *testing.T, root, apps string) {
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  provider: { name: "aws", options: {} },
+  provider: { aws: {} },
   apps: [`+apps+`],
 };
 `)

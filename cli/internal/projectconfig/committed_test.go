@@ -359,7 +359,7 @@ func TestTheGoFixtureDeploysFromJSONAlone(t *testing.T) {
 	if cfg.Path != filepath.Join(dir, projectconfig.DefaultFileName) {
 		t.Fatalf("path = %q", cfg.Path)
 	}
-	if cfg.Provider == nil || cfg.Provider.Name != "aws" {
+	if cfg.Provider == nil || cfg.Provider.ID != "aws" {
 		t.Fatalf("provider = %+v", cfg.Provider)
 	}
 	if len(cfg.Apps) != 1 || cfg.Apps[0].Runtime.Name != "go" {
@@ -380,7 +380,7 @@ func TestTheRustFixtureDeploysFromJSONAlone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve the rust fixture with no node on PATH: %v", err)
 	}
-	if cfg.Provider == nil || cfg.Provider.Name != "aws" {
+	if cfg.Provider == nil || cfg.Provider.ID != "aws" {
 		t.Fatalf("provider = %+v", cfg.Provider)
 	}
 	if len(cfg.Apps) != 1 || cfg.Apps[0].Runtime.Name != "rust" {

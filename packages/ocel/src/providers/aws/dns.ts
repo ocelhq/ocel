@@ -11,5 +11,5 @@ export interface Route53Options {
 
 /** Declares Route 53 as the DNS the project's records are written into. */
 export function route53(options: Route53Options = {}): DnsDescriptor {
-  return { kind: "route53", ...options };
+  return { route53: options };
 }

@@ -33,7 +33,7 @@ type awsish struct {
 func TestDecodeReadsTheVendorsOwnType(t *testing.T) {
 	t.Parallel()
 
-	got, err := Decode[awsish](Options{"region": "eu-west-1", "retries": 3})
+	got, err := Decode[awsish]("aws", Options{"region": "eu-west-1", "retries": 3})
 	if err != nil {
 		t.Fatalf("Decode() error = %v", err)
 	}
@@ -45,7 +45,7 @@ func TestDecodeReadsTheVendorsOwnType(t *testing.T) {
 func TestDecodeRefusesAnUnknownOption(t *testing.T) {
 	t.Parallel()
 
-	_, err := Decode[awsish](Options{"region": "eu-west-1", "regoin": "typo"})
+	_, err := Decode[awsish]("aws", Options{"region": "eu-west-1", "regoin": "typo"})
 	var refusal Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("Decode() error = %v, want a Refusal", err)
@@ -68,12 +68,12 @@ func TestDecodeRefusesANestedUnknownOptionByItsPath(t *testing.T) {
 		SSH ssh `json:"ssh"`
 	}
 
-	_, err := Decode[nested](Options{"ssh": map[string]any{"hostt": "example.com"}})
+	_, err := Decode[nested]("vps", Options{"ssh": map[string]any{"hostt": "example.com"}})
 	var refusal Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("Decode() error = %v, want a Refusal", err)
 	}
-	if !strings.Contains(refusal.Message, "provider.options.ssh.hostt") {
+	if !strings.Contains(refusal.Message, "provider.vps.ssh.hostt") {
 		t.Errorf("Refusal.Message = %q, want the option's path in the config", refusal.Message)
 	}
 }
@@ -81,7 +81,7 @@ func TestDecodeRefusesANestedUnknownOptionByItsPath(t *testing.T) {
 func TestDecodeRefusesAnOptionOfTheWrongType(t *testing.T) {
 	t.Parallel()
 
-	_, err := Decode[awsish](Options{"region": 42})
+	_, err := Decode[awsish]("aws", Options{"region": 42})
 	var refusal Refusal
 	if !errors.As(err, &refusal) {
 		t.Fatalf("Decode() error = %v, want a Refusal", err)
@@ -94,7 +94,7 @@ func TestDecodeRefusesAnOptionOfTheWrongType(t *testing.T) {
 func TestDecodeAcceptsNoOptionsAtAll(t *testing.T) {
 	t.Parallel()
 
-	if _, err := Decode[awsish](nil); err != nil {
+	if _, err := Decode[awsish]("aws", nil); err != nil {
 		t.Fatalf("Decode(nil) error = %v, want the zero value", err)
 	}
 }

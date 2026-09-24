@@ -30,16 +30,16 @@ type Discovery struct {
 }
 
 type ProviderDescriptor struct {
-	Name    string
+	ID      string
 	Options json.RawMessage
 }
 
 type EdgeDescriptor struct {
-	Kind string
+	ID string
 }
 
 type DNSDescriptor struct {
-	Kind string
+	ID   string
 	Zone string
 }
 
@@ -95,16 +95,16 @@ type Config struct {
 	Path          string
 }
 
-func (c *Config) EdgeKind() edge.Kind {
+func (c *Config) EdgeID() edge.Kind {
 	if c.Edge == nil {
 		return ""
 	}
-	return edge.Kind(c.Edge.Kind)
+	return edge.Kind(c.Edge.ID)
 }
 
 func (c *Config) RequireProvider() (*ProviderDescriptor, error) {
 	if c.Provider == nil {
-		return nil, fmt.Errorf("no provider configured in %s — add `\"provider\": { \"name\": … }` naming the provider this project deploys through", filepath.Base(c.Path))
+		return nil, fmt.Errorf("no provider configured in %s — add `\"provider\": { \"<id>\": { … } }` keyed by the provider this project deploys through, one of %s", filepath.Base(c.Path), strings.Join(configdoc.ProviderIDs(), ", "))
 	}
 	return c.Provider, nil
 }
@@ -119,19 +119,12 @@ func normalize(doc *configdoc.Document, configPath string) (*Config, error) {
 
 	var provider *ProviderDescriptor
 	if doc.Provider != nil {
-		if strings.TrimSpace(doc.Provider.Name) == "" {
-			return nil, fmt.Errorf("%s configures a provider with no \"name\" — name the provider this project deploys into", configPath)
-		}
-		options := doc.Provider.Options
-		if len(options) == 0 || string(options) == "null" {
-			options = json.RawMessage("{}")
-		}
-		provider = &ProviderDescriptor{Name: doc.Provider.Name, Options: options}
+		provider = &ProviderDescriptor{ID: doc.Provider.ID, Options: doc.Provider.Options}
 	}
 
-	edgeDescriptor, err := normalizeEdge(doc.Edge)
-	if err != nil {
-		return nil, fmt.Errorf("%s has an invalid \"edge\": %w", configPath, err)
+	var edgeDescriptor *EdgeDescriptor
+	if doc.Edge != nil {
+		edgeDescriptor = &EdgeDescriptor{ID: doc.Edge.ID}
 	}
 
 	dns, err := normalizeDNS(doc.DNS, edgeDescriptor)
@@ -346,27 +339,14 @@ func knownNeeds() []string {
 
 const route53UnderCloudflare = "route53 cannot write the records a Cloudflare edge answers on — pair a cloudflare edge with cloudflare dns, or drop the edge"
 
-func normalizeEdge(raw *configdoc.EdgeDescriptor) (*EdgeDescriptor, error) {
-	if raw == nil {
-		return nil, nil
-	}
-	if strings.TrimSpace(raw.Kind) == "" {
-		return nil, errors.New("`edge` names the edge the project's hostnames are served from, such as `{ \"kind\": \"cloudflare\" }` — omit it for the provider's default edge")
-	}
-	return &EdgeDescriptor{Kind: raw.Kind}, nil
-}
-
 func normalizeDNS(raw *configdoc.DnsDescriptor, edgeDescriptor *EdgeDescriptor) (*DNSDescriptor, error) {
 	if raw == nil {
 		return nil, nil
 	}
-	if strings.TrimSpace(raw.Kind) == "" {
-		return nil, errors.New("`dns` names where the project's records are written, such as `{ \"kind\": \"cloudflare\" }` or `{ \"kind\": \"route53\" }`")
-	}
-	if raw.Kind == "route53" && edgeDescriptor != nil && edgeDescriptor.Kind == "cloudflare" {
+	if raw.ID == "route53" && edgeDescriptor != nil && edgeDescriptor.ID == "cloudflare" {
 		return nil, errors.New(route53UnderCloudflare)
 	}
-	return &DNSDescriptor{Kind: raw.Kind, Zone: raw.Zone}, nil
+	return &DNSDescriptor{ID: raw.ID, Zone: raw.Options.Zone}, nil
 }
 
 func normalizeAllowDegraded(raw []string) ([]string, error) {

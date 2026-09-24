@@ -14,11 +14,13 @@ const read = (path) => JSON.parse(readFileSync(path, "utf8"));
 
 const SCHEMA_URL = `https://ocel.dev/schema/${VERSION}/ocel.schema.json`;
 
-function providerVariants() {
+const SELECTORS_OUT = join(root, "pkg", "configdoc", "selectors.json");
+
+function providerFragments() {
   const platform = join(root, "platform");
-  const vendors = readdirSync(platform, { withFileTypes: true })
+  return readdirSync(platform, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => join(platform, entry.name, "provider", "schema.options.json"))
+    .map((entry) => join(platform, entry.name, "provider", "schema.provider.json"))
     .filter((path) => {
       try {
         readFileSync(path);
@@ -26,16 +28,14 @@ function providerVariants() {
       } catch {
         return false;
       }
-    });
-  return vendors
+    })
     .map(read)
     .map(qualified)
-    .sort((a, b) => a.properties.name.const.localeCompare(b.properties.name.const));
+    .sort((a, b) => a.id.localeCompare(b.id));
 }
 
-function qualified(variant) {
-  const name = variant.properties.name.const;
-  const prefix = name[0].toUpperCase() + name.slice(1);
+function qualified(fragment) {
+  const prefix = fragment.id[0].toUpperCase() + fragment.id.slice(1);
   const rename = (node) => {
     if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) {
@@ -47,19 +47,57 @@ function qualified(variant) {
     }
     for (const value of Object.values(node)) rename(value);
   };
-  rename(variant.properties.options);
-  return variant;
+  rename(fragment.options);
+  return fragment;
+}
+
+function keyed(selector, entries) {
+  const [spelled, object] = selector.oneOf;
+  const shorthand = entries.filter(([, options]) => !options.required?.length).map(([id]) => id);
+  return {
+    ...selector,
+    oneOf: [
+      { ...spelled, enum: shorthand },
+      { ...object, additionalProperties: false, properties: Object.fromEntries(entries) },
+    ],
+  };
+}
+
+function servedBy(fragments, field, selector) {
+  const ids = [...new Set(fragments.flatMap((fragment) => fragment[field]))].sort();
+  const options = selector.oneOf[1].additionalProperties;
+  return keyed(
+    selector,
+    ids.map((id) => [id, options]),
+  );
 }
 
 function schema() {
   const core = read(join(root, "pkg", "configdoc", "schema.core.json"));
-  const variants = providerVariants();
-  const merged = { $id: SCHEMA_URL, ...core };
-  merged.properties = {
-    ...core.properties,
-    provider: { description: core.properties.provider.description, oneOf: variants },
+  const fragments = providerFragments();
+  const { provider, edge, dns } = core.properties;
+  return {
+    $id: SCHEMA_URL,
+    ...core,
+    properties: {
+      ...core.properties,
+      provider: keyed(
+        provider,
+        fragments.map((fragment) => [fragment.id, fragment.options]),
+      ),
+      edge: servedBy(fragments, "edges", edge),
+      dns: servedBy(fragments, "dns", dns),
+    },
   };
-  return merged;
+}
+
+function selectors(merged) {
+  const selection = (selector) => ({
+    ids: Object.keys(selector.oneOf[1].properties),
+    shorthand: selector.oneOf[0].enum,
+  });
+  const { provider, edge, dns } = merged.properties;
+  return { provider: selection(provider), edge: selection(edge), dns: selection(dns) };
 }
 
 const RESERVED = new Set(["OcelConfig"]);
@@ -70,10 +108,9 @@ class Emitter {
   }
 
   type(node, indent = "") {
-    if (node.$ref) return node.$ref;
     if (node.const !== undefined) return JSON.stringify(node.const);
     if (node.enum) return node.enum.map((value) => JSON.stringify(value)).join(" | ");
-    if (node.oneOf) return node.oneOf.map((one) => this.type(one, indent)).join(" | ");
+    if (node.oneOf) return this.union(node, indent);
     switch (node.type) {
       case "string":
         return "string";
@@ -96,7 +133,49 @@ class Emitter {
     return rendered.includes(" | ") ? `(${rendered})` : rendered;
   }
 
+  union(node, indent) {
+    if (!node.title || RESERVED.has(node.title)) {
+      return node.oneOf.map((one) => this.type(one, indent)).join(" | ");
+    }
+    if (!this.interfaces.has(node.title)) {
+      this.interfaces.set(node.title, "");
+      const union = node.oneOf.map((one) => this.type(one, "")).join("\n  | ");
+      this.interfaces.set(node.title, `${doc(node)}export type ${node.title} =\n  | ${union};\n`);
+    }
+    return node.title;
+  }
+
+  exclusive(node, indent) {
+    const inner = `${indent}  `;
+    const ids = Object.keys(node.properties);
+    return ids
+      .map((id) => {
+        const lines = ids.map((other) =>
+          other === id
+            ? `${inner}${quoted(id)}: ${this.type(node.properties[id], inner)};`
+            : `${inner}${quoted(other)}?: never;`,
+        );
+        return `{\n${lines.join("\n")}\n${indent}}`;
+      })
+      .join(" | ");
+  }
+
   object(node, indent) {
+    if (node.maxProperties === 1 && node.properties) return this.exclusive(node, indent);
+    if (
+      node.properties &&
+      Object.keys(node.properties).length === 0 &&
+      node.additionalProperties === false
+    ) {
+      if (!node.title) return "Record<string, never>";
+      if (!this.interfaces.has(node.title)) {
+        this.interfaces.set(
+          node.title,
+          `${doc(node)}export type ${node.title} = Record<string, never>;\n`,
+        );
+      }
+      return node.title;
+    }
     if (!node.properties) {
       const values = node.additionalProperties;
       return values && values !== true
@@ -126,13 +205,16 @@ class Emitter {
   declare(name, node) {
     if (this.interfaces.has(name)) return;
     this.interfaces.set(name, "");
-    const doc = node.description ? `/** ${node.description} */\n` : "";
-    this.interfaces.set(name, `${doc}export interface ${name} ${this.body(node, "")}\n`);
+    this.interfaces.set(name, `${doc(node)}export interface ${name} ${this.body(node, "")}\n`);
   }
 
   render() {
     return [...this.interfaces.values()].join("\n");
   }
+}
+
+function doc(node) {
+  return node.description ? `/** ${node.description} */\n` : "";
 }
 
 function quoted(key) {
@@ -141,24 +223,10 @@ function quoted(key) {
 
 function types(merged) {
   const emitter = new Emitter();
-  const provider = merged.properties.provider;
-  const descriptor = provider.oneOf.map((variant) => emitter.type(variant, "")).join("\n  | ");
-  const config = emitter.body(
-    {
-      ...merged,
-      properties: {
-        ...merged.properties,
-        provider: { description: provider.description, $ref: "ProviderDescriptor" },
-      },
-    },
-    "",
-  );
+  const config = emitter.body(merged, "");
 
   const header = [
     "// generated by scripts/schema/build.mjs from the committed JSON Schema; do not edit",
-    "",
-    `/** ${provider.description} */`,
-    `export type ProviderDescriptor =\n  | ${descriptor};`,
     "",
     `/** The project configuration \`ocel deploy\` reads, whether written as ${"`ocel.json`"}, as ${"`ocel.yaml`"} or as ${"`ocel.config.ts`"}. */`,
     `export interface OcelConfig ${config}`,
@@ -173,7 +241,8 @@ mkdirSync(dirname(SCHEMA_OUT), { recursive: true });
 writeFileSync(SCHEMA_OUT, `${JSON.stringify(merged, null, 2)}\n`);
 mkdirSync(dirname(TYPES_OUT), { recursive: true });
 writeFileSync(TYPES_OUT, types(merged));
-execFileSync("pnpm", ["exec", "biome", "format", "--write", SCHEMA_OUT, TYPES_OUT], {
+writeFileSync(SELECTORS_OUT, `${JSON.stringify(selectors(merged), null, 2)}\n`);
+execFileSync("pnpm", ["exec", "biome", "format", "--write", SCHEMA_OUT, TYPES_OUT, SELECTORS_OUT], {
   cwd: root,
   stdio: "inherit",
 });

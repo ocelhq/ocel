@@ -308,10 +308,10 @@ func TestTheIdentityNamesTheVendorTheProviderNamesItself(t *testing.T) {
 }
 
 func TestAVarsKeyThatNamesNoKMSKeyIsRefused(t *testing.T) {
-	if _, err := providerkit.Decode[Options](providerkit.Options{"varsKey": "arn:aws:kms:eu-west-1:111122223333:key/abcd"}); err != nil {
+	if _, err := providerkit.Decode[Options](Vendor, providerkit.Options{"varsKey": "arn:aws:kms:eu-west-1:111122223333:key/abcd"}); err != nil {
 		t.Fatalf("a kms key arn was refused: %v", err)
 	}
-	_, err := providerkit.Decode[Options](providerkit.Options{"varsKey": "arn:aws:s3:::a-bucket"})
+	_, err := providerkit.Decode[Options](Vendor, providerkit.Options{"varsKey": "arn:aws:s3:::a-bucket"})
 	if err == nil {
 		t.Fatal("a varsKey that names no kms key was taken")
 	}

@@ -250,7 +250,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 	})
 
 	t.Run("the selected edge stands beside the stacks, in its own vocabulary", func(t *testing.T) {
-		root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: { kind: \"cloudflare\" },\n")
+		root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: \"cloudflare\",\n")
 		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
 		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "mixed")
 
@@ -279,7 +279,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 	})
 
 	t.Run("credentials the plan cannot reach stop the run before it prints half a plan", func(t *testing.T) {
-		root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: { kind: \"cloudflare\" },\n")
+		root, journal, deps := clitest.SetUpEdgeFixture(t, "  edge: \"cloudflare\",\n")
 		t.Setenv(clitest.FakeEnabledFeaturesEnvVar, "isr")
 		t.Setenv(clitest.FakeBootstrapPlanEnvVar, "edge-credentials")
 
@@ -660,7 +660,7 @@ func TestBootstrapCarriesAutoHeal(t *testing.T) {
 
 func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 	t.Run("a cloudflare project told to apply nothing is told what its edge pulls in", func(t *testing.T) {
-		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: { kind: \"cloudflare\" },\n")
+		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: \"cloudflare\",\n")
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true, Dry: true, Features: noFeatures, FeaturesDeclared: true}
@@ -688,7 +688,7 @@ func TestBootstrapSaysWhatItAppliedBeyondWhatWasAsked(t *testing.T) {
 	})
 
 	t.Run("a set that names everything applied says nothing", func(t *testing.T) {
-		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: { kind: \"cloudflare\" },\n")
+		root, _, deps := clitest.SetUpEdgeFixture(t, "  edge: \"cloudflare\",\n")
 
 		var stdout, stderr bytes.Buffer
 		opts := Options{Yes: true, Dry: true, Features: "isr,cloudflare-edge", FeaturesDeclared: true}

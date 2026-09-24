@@ -120,7 +120,7 @@ func SetUpDeployFixture(t *testing.T) (root, sockPath string) {
 	WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "`+FixtureSlug+`",
-  provider: { name: "aws", options: {} },
+  provider: { aws: {} },
   domains: { preview: "*.preview.acme.com" },
 };
 `)
@@ -233,7 +233,7 @@ func WriteUsageMonorepo(t *testing.T, root string) {
 	WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "`+FixtureSlug+`",
-  provider: { name: "aws", options: {} },
+  provider: { aws: {} },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", framework: "node" }],
 };
@@ -295,7 +295,7 @@ func writeEdgeConfig(t *testing.T, root, declaration string) {
 	WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "`+FixtureSlug+`",
-  provider: { name: "aws", options: {} },
+  provider: { aws: {} },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", framework: "node" }],
 `+declaration+`};

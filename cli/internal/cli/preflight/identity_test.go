@@ -15,7 +15,7 @@ import (
 func TestIdentityEvent(t *testing.T) {
 	t.Parallel()
 
-	cfg := &projectconfig.Config{Slug: "acme", Edge: &projectconfig.EdgeDescriptor{Kind: "cloudflare"}}
+	cfg := &projectconfig.Config{Slug: "acme", Edge: &projectconfig.EdgeDescriptor{ID: "cloudflare"}}
 
 	t.Run("names the project, the tier and both parties", func(t *testing.T) {
 		t.Parallel()

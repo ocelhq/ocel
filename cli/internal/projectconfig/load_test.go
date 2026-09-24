@@ -25,7 +25,7 @@ func TestResolveReadsJSONWithoutNode(t *testing.T) {
 	write(t, filepath.Join(dir, DefaultFileName), `{
   // the provider this project deploys into
   "slug": "go-only",
-  "provider": { "name": "aws", "options": { "region": "eu-west-2" } },
+  "provider": { "aws": { "region": "eu-west-2" } },
   "apps": [{ "name": "web", "path": "./server", "framework": "go" }],
 }`)
 
@@ -36,7 +36,7 @@ func TestResolveReadsJSONWithoutNode(t *testing.T) {
 	if cfg.Slug != "go-only" {
 		t.Fatalf("slug = %q", cfg.Slug)
 	}
-	if cfg.Provider == nil || cfg.Provider.Name != "aws" {
+	if cfg.Provider == nil || cfg.Provider.ID != "aws" {
 		t.Fatalf("provider = %+v", cfg.Provider)
 	}
 	if string(cfg.Provider.Options) != `{"region":"eu-west-2"}` {
@@ -182,5 +182,50 @@ func TestFindProjectRootIgnoresTheScratchDirectory(t *testing.T) {
 	}
 	if found != root {
 		t.Fatalf("root = %q, want %q — a scratch directory no longer anchors the walk", found, root)
+	}
+}
+
+func TestResolveRefusesTheSameSelectorsInEveryForm(t *testing.T) {
+	cases := []struct {
+		name string
+		json string
+		yaml string
+		ts   string
+		want string
+	}{
+		{
+			name: "a provider keyed twice",
+			json: `{"slug":"acme","provider":{"aws":{},"vps":{"ssh":"box"}}}`,
+			yaml: "slug: acme\nprovider:\n  aws: {}\n  vps:\n    ssh: box\n",
+			ts:   `export default { slug: "acme", provider: { aws: {}, vps: { ssh: "box" } } };`,
+			want: `"provider" is keyed by aws and vps, and a project has one provider — keep one of aws, gcp, vps`,
+		},
+		{
+			name: "an edge nobody fronts with",
+			json: `{"slug":"acme","edge":"fastly"}`,
+			yaml: "slug: acme\nedge: fastly\n",
+			ts:   `export default { slug: "acme", edge: "fastly" };`,
+			want: `"edge" names "fastly", and ocel knows no such edge — name one of alb, api-gateway, box, cloudflare, cloudfront, direct`,
+		},
+		{
+			name: "a dns keyed by nothing ocel writes with",
+			json: `{"slug":"acme","dns":{"gandi":{}}}`,
+			yaml: "slug: acme\ndns:\n  gandi: {}\n",
+			ts:   `export default { slug: "acme", dns: { gandi: {} } };`,
+			want: `"dns" names "gandi", and ocel knows no such DNS service — name one of cloudflare, route53`,
+		},
+	}
+	for _, c := range cases {
+		for name, contents := range map[string]string{DefaultFileName: c.json, YAMLFileName: c.yaml, TSFileName: c.ts} {
+			t.Run(c.name+" in "+name, func(t *testing.T) {
+				dir := t.TempDir()
+				write(t, filepath.Join(dir, name), contents)
+
+				_, err := Resolve(context.Background(), dir, "")
+				if err == nil || !strings.Contains(err.Error(), c.want) {
+					t.Fatalf("error %v, want %q", err, c.want)
+				}
+			})
+		}
 	}
 }

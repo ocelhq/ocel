@@ -3,6 +3,6 @@
   "slug": "with-sst",
   "bindings": { "postgres": { "orders": "orders" } },
   "transforms": ["./transforms/network.transform.ts"],
-  "provider": { "name": "aws" },
+  "provider": "aws",
   "apps": [{ "name": "web", "path": "." }]
 }

@@ -9,6 +9,6 @@ import type { EdgeDescriptor } from "./config.js";
 export type CloudflareEdgeOptions = Record<string, never>;
 
 /** Declares Cloudflare as the edge the project's hostnames are served from. */
-export function cloudflare(_options: CloudflareEdgeOptions = {}): EdgeDescriptor {
-  return { kind: "cloudflare" };
+export function cloudflare(options: CloudflareEdgeOptions = {}): EdgeDescriptor {
+  return { cloudflare: options };
 }

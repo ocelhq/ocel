@@ -30,6 +30,8 @@ const fakeProviderModeEnvVar = "OCEL_TEST_FAKE_PROVIDER_MODE"
 
 const fakeProviderSockEnvVar = "OCEL_TEST_FAKE_PROVIDER_SOCK"
 
+const fakeProviderVendorEnvVar = "OCEL_TEST_FAKE_PROVIDER_VENDOR"
+
 const fakeProviderGrandchildPidFileEnvVar = "OCEL_TEST_FAKE_PROVIDER_GRANDCHILD_PIDFILE"
 
 const fakeProviderKnownHostsEnvVar = "OCEL_TEST_FAKE_PROVIDER_KNOWN_HOSTS"
@@ -162,7 +164,7 @@ type fakeOptions struct {
 func (s *fakeProviderServer) Configure(_ context.Context, req *contractv1.ConfigureRequest) (*contractv1.ConfigureResponse, error) {
 	switch s.mode {
 	case "reject-config":
-		if _, err := providerkit.Decode[fakeOptions](providerkit.Options(req.GetConfig().GetOptions().AsMap())); err != nil {
+		if _, err := providerkit.Decode[fakeOptions](providerkit.Vendor(os.Getenv(fakeProviderVendorEnvVar)), providerkit.Options(req.GetConfig().GetOptions().AsMap())); err != nil {
 			return nil, providerkit.RefusalError(err)
 		}
 	case "refuse-config":

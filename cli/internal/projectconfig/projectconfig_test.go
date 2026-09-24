@@ -193,19 +193,19 @@ export default {
 			},
 		},
 		{
-			name: "parses the provider descriptor",
+			name: "parses the provider keyed by its identifier",
 			config: `
 export default {
   slug: "test-app",
-  provider: { name: "aws", options: { region: "us-east-1" } },
+  provider: { aws: { region: "us-east-1" } },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
 				if cfg.Provider == nil {
 					t.Fatal("Provider = nil, want a descriptor")
 				}
-				if cfg.Provider.Name != "aws" {
-					t.Fatalf("Provider.Name = %q, want %q", cfg.Provider.Name, "aws")
+				if cfg.Provider.ID != "aws" {
+					t.Fatalf("Provider.ID = %q, want %q", cfg.Provider.ID, "aws")
 				}
 				if got, want := string(cfg.Provider.Options), `{"region":"us-east-1"}`; got != want {
 					t.Fatalf("Provider.Options = %s, want %s", got, want)
@@ -213,11 +213,11 @@ export default {
 			},
 		},
 		{
-			name: "defaults the provider options to an empty object",
+			name: "defaults the options of a provider named alone to an empty object",
 			config: `
 export default {
   slug: "test-app",
-  provider: { name: "aws" },
+  provider: "aws",
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
@@ -341,7 +341,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  provider: { name: "aws", options: { region: "eu-west-2" } },
+  provider: { aws: { region: "eu-west-2" } },
   registry: { server: "ghcr.io", password: "GHCR_TOKEN" },
 };
 `,
@@ -668,63 +668,49 @@ export default {
 				if cfg.Edge != nil {
 					t.Fatalf("Edge = %v, want an omitted edge to name nothing", cfg.Edge)
 				}
-				if got := cfg.EdgeKind(); got != "" {
-					t.Fatalf("EdgeKind() = %q, want nothing: the provider chooses when the config names no edge", got)
+				if got := cfg.EdgeID(); got != "" {
+					t.Fatalf("EdgeID() = %q, want nothing: the provider chooses when the config names no edge", got)
 				}
 			},
 		},
 		{
-			name: "forwards an edge this CLI has never heard of",
+			name: "parses a cloudflare edge keyed by its identifier",
 			config: `
 export default {
   slug: "test-app",
-  edge: { kind: "fastly" },
+  edge: { cloudflare: {} },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
-				if got := cfg.EdgeKind(); got != "fastly" {
-					t.Fatalf("EdgeKind() = %q, want fastly: the provider, not the CLI, says which edges exist", got)
+				if cfg.Edge == nil || cfg.Edge.ID != "cloudflare" {
+					t.Fatalf("Edge = %v, want cloudflare", cfg.Edge)
 				}
 			},
 		},
 		{
-			name: "parses a cloudflare edge marker that carries options",
+			name: "parses a cloudflare edge named alone",
 			config: `
 export default {
   slug: "test-app",
-  edge: { kind: "cloudflare" },
+  edge: "cloudflare",
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
-				if cfg.Edge == nil || cfg.Edge.Kind != "cloudflare" {
-					t.Fatalf("Edge = %v, want kind cloudflare", cfg.Edge)
+				if got := cfg.EdgeID(); got != "cloudflare" {
+					t.Fatalf("EdgeID() = %q, want cloudflare", got)
 				}
 			},
 		},
 		{
-			name: "parses a cloudflare edge marker that names only its kind",
+			name: "parses a dns and the zone under its identifier",
 			config: `
 export default {
   slug: "test-app",
-  edge: { kind: "cloudflare" },
+  dns: { route53: { zone: "Z123" } },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
-				if cfg.Edge == nil || cfg.Edge.Kind != "cloudflare" {
-					t.Fatalf("Edge = %v, want kind cloudflare", cfg.Edge)
-				}
-			},
-		},
-		{
-			name: "parses a dns marker and its zone",
-			config: `
-export default {
-  slug: "test-app",
-  dns: { kind: "route53", zone: "Z123" },
-};
-`,
-			check: func(t *testing.T, root string, cfg *Config) {
-				if cfg.DNS == nil || cfg.DNS.Kind != "route53" || cfg.DNS.Zone != "Z123" {
+				if cfg.DNS == nil || cfg.DNS.ID != "route53" || cfg.DNS.Zone != "Z123" {
 					t.Fatalf("DNS = %v, want route53 in zone Z123", cfg.DNS)
 				}
 			},
@@ -748,12 +734,12 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  edge: { kind: "cloudflare" },
-  dns: { kind: "cloudflare" },
+  edge: "cloudflare",
+  dns: "cloudflare",
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
-				if cfg.DNS == nil || cfg.DNS.Kind != "cloudflare" {
+				if cfg.DNS == nil || cfg.DNS.ID != "cloudflare" {
 					t.Fatalf("DNS = %v, want cloudflare", cfg.DNS)
 				}
 			},
@@ -763,12 +749,12 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  edge: { kind: "api-gateway" },
-  dns: { kind: "route53" },
+  edge: { "api-gateway": {} },
+  dns: { route53: {} },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
-				if cfg.DNS == nil || cfg.DNS.Kind != "route53" {
+				if cfg.DNS == nil || cfg.DNS.ID != "route53" {
 					t.Fatalf("DNS = %v, want route53", cfg.DNS)
 				}
 			},
@@ -990,24 +976,44 @@ export default {
 			wantErr: []string{"container", "postgres", "bucket"},
 		},
 		{
-			name: "names the edge spellings when the edge is not a marker",
+			name: "names the edges when the edge is neither a name nor keyed by one",
 			config: `
 export default {
   slug: "test-app",
   edge: true,
 };
 `,
-			wantErr: []string{`"edge" must be an object`},
+			wantErr: []string{`"edge" must be an object keyed by one of`, "cloudflare", "cloudfront"},
 		},
 		{
-			name: "rejects an edge object carrying no kind",
+			name: "rejects an edge keyed by nothing",
 			config: `
 export default {
   slug: "test-app",
   edge: {},
 };
 `,
-			wantErr: []string{`has an invalid "edge"`, `{ "kind": "cloudflare" }`},
+			wantErr: []string{`"edge" is keyed by nothing`, "cloudflare"},
+		},
+		{
+			name: "rejects an edge keyed by two",
+			config: `
+export default {
+  slug: "test-app",
+  edge: { cloudflare: {}, cloudfront: {} },
+};
+`,
+			wantErr: []string{`"edge" is keyed by cloudflare and cloudfront`, "one edge"},
+		},
+		{
+			name: "rejects an edge no provider fronts with",
+			config: `
+export default {
+  slug: "test-app",
+  edge: "fastly",
+};
+`,
+			wantErr: []string{`"fastly"`, "cloudflare, cloudfront"},
 		},
 		{
 			name: "refuses an edge turned off outright",
@@ -1017,17 +1023,37 @@ export default {
   edge: false,
 };
 `,
-			wantErr: []string{`"edge" must be an object`},
+			wantErr: []string{`"edge" must be an object keyed by one of`},
 		},
 		{
-			name: "names the two dns spellings when the dns is not a marker",
+			name: "rejects a provider named alone that cannot go without its options",
+			config: `
+export default {
+  slug: "test-app",
+  provider: "gcp",
+};
+`,
+			wantErr: []string{`"provider" names "gcp" with no options`, `{ "gcp": { … } }`},
+		},
+		{
+			name: "rejects a provider nobody ships",
+			config: `
+export default {
+  slug: "test-app",
+  provider: { azure: {} },
+};
+`,
+			wantErr: []string{`"azure"`, "aws, gcp, vps"},
+		},
+		{
+			name: "names the dns services when the dns is a bare zone",
 			config: `
 export default {
   slug: "test-app",
   dns: "acme.com",
 };
 `,
-			wantErr: []string{`"dns" must be an object`},
+			wantErr: []string{`"dns" names "acme.com"`, "cloudflare, route53"},
 		},
 		{
 			name: "lists the known needs when one is unknown",
@@ -1117,8 +1143,8 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  edge: { kind: "cloudflare" },
-  dns: { kind: "route53" },
+  edge: "cloudflare",
+  dns: { route53: {} },
 };
 `,
 			wantErr: []string{`has an invalid "dns"`, "route53", "cloudflare"},
@@ -1579,14 +1605,14 @@ func TestConfigRequireProvider(t *testing.T) {
 	t.Run("returns the descriptor when the provider is present", func(t *testing.T) {
 		t.Parallel()
 
-		cfg := &Config{Provider: &ProviderDescriptor{Name: "aws", Options: []byte(`{}`)}}
+		cfg := &Config{Provider: &ProviderDescriptor{ID: "aws", Options: []byte(`{}`)}}
 
 		provider, err := cfg.RequireProvider()
 		if err != nil {
 			t.Fatalf("RequireProvider: %v", err)
 		}
-		if provider.Name != "aws" {
-			t.Fatalf("Name = %q, want %q", provider.Name, "aws")
+		if provider.ID != "aws" {
+			t.Fatalf("ID = %q, want %q", provider.ID, "aws")
 		}
 	})
 }
@@ -1833,7 +1859,7 @@ func TestTwoConfigsInOneDirDoNotShareABundle(t *testing.T) {
 	}
 }
 
-func TestEdgeKind(t *testing.T) {
+func TestEdgeID(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -1842,14 +1868,13 @@ func TestEdgeKind(t *testing.T) {
 		want   edge.Kind
 	}{
 		{name: "a config that names no edge leaves the choice to the provider", config: Config{}, want: ""},
-		{name: "a config that names one is fronted by that one", config: Config{Edge: &EdgeDescriptor{Kind: "cloudflare"}}, want: edge.Kind("cloudflare")},
-		{name: "a config that names an edge this CLI does not know carries it anyway", config: Config{Edge: &EdgeDescriptor{Kind: "fastly"}}, want: "fastly"},
+		{name: "a config that names one is fronted by that one", config: Config{Edge: &EdgeDescriptor{ID: "cloudflare"}}, want: edge.Kind("cloudflare")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			if got := tc.config.EdgeKind(); got != tc.want {
-				t.Errorf("EdgeKind() = %q, want %q", got, tc.want)
+			if got := tc.config.EdgeID(); got != tc.want {
+				t.Errorf("EdgeID() = %q, want %q", got, tc.want)
 			}
 		})
 	}

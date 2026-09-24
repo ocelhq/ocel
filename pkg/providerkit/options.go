@@ -11,8 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/configdoc"
 )
 
-const optionsPath = "provider.options"
-
 type Options map[string]any
 
 type Settings struct {
@@ -33,7 +31,7 @@ func RefuseTransforms(vendor Vendor, transforms []string) error {
 		strings.Join(listed, ", "), vendor)
 }
 
-func Decode[T any](options Options) (T, error) {
+func Decode[T any](vendor Vendor, options Options) (T, error) {
 	var into T
 	raw, err := json.Marshal(map[string]any(options))
 	if err != nil {
@@ -43,7 +41,7 @@ func Decode[T any](options Options) (T, error) {
 	if err := json.Unmarshal(raw, &spelled); err != nil {
 		return into, Refuse(CodeInvalid, "options are not representable: %v", err)
 	}
-	if err := checkOptions(into, spelled); err != nil {
+	if err := checkOptions(vendor, into, spelled); err != nil {
 		var unknown configdoc.UnknownKeyError
 		if errors.As(err, &unknown) {
 			return into, Refuse(CodeUnknownOption, "%s", err)
@@ -58,11 +56,11 @@ func Decode[T any](options Options) (T, error) {
 	return into, nil
 }
 
-func checkOptions(into any, spelled any) error {
+func checkOptions(vendor Vendor, into any, spelled any) error {
 	if spelled == nil {
 		return nil
 	}
-	return configdoc.Check(optionsPath, into, spelled)
+	return configdoc.Check(configdoc.JoinPath("provider", string(vendor)), into, spelled)
 }
 
 func decodeProblem(err error) string {

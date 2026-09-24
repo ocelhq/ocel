@@ -13,7 +13,7 @@ Credentials come from the shell, the same ones `aws sts get-caller-identity` ans
 {
   "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "my-app",
-  "provider": { "name": "aws", "options": { "region": "eu-west-1" } },
+  "provider": { "aws": { "region": "eu-west-1" } },
   "apps": [{ "name": "web", "path": "." }]
 }
 ```
@@ -43,8 +43,8 @@ bought independently:
 {
   "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "my-app",
-  "provider": { "name": "aws" },
-  "edge": { "kind": "cloudfront" },
+  "provider": "aws",
+  "edge": "cloudfront",
   "apps": [{ "name": "web", "path": "." }]
 }
 ```

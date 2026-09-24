@@ -38,7 +38,7 @@ Name it in `ocel.json`:
 {
   "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "shop",
-  "provider": { "name": "aws" },
+  "provider": "aws",
   "bindings": ["orders"],
   "apps": [{ "name": "api", "path": "." }]
 }

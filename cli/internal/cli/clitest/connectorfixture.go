@@ -25,7 +25,7 @@ func SetUpConnectorFixture(t *testing.T, fingerprint, hostname string) string {
 	root := t.TempDir()
 	WriteFile(t, filepath.Join(root, "ocel.vps.json"), `{
   "slug": "`+FixtureSlug+`",
-  "provider": { "name": "vps", "options": { "ssh": "`+hostname+`" } }
+  "provider": { "vps": { "ssh": "`+hostname+`" } }
 }
 `)
 

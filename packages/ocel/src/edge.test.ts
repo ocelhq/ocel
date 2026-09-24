@@ -6,6 +6,6 @@ const roundTrip = (value: unknown) => JSON.parse(JSON.stringify(value));
 
 describe("cloudflare", () => {
   it("serialises to the cloudflare edge descriptor", () => {
-    expect(roundTrip(cloudflare())).toEqual({ kind: "cloudflare" });
+    expect(roundTrip(cloudflare())).toEqual({ cloudflare: {} });
   });
 });

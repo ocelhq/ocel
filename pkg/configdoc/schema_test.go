@@ -2,6 +2,7 @@ package configdoc
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -38,49 +39,57 @@ func TestCoreSchemaDescribesTheDocument(t *testing.T) {
 	}
 }
 
-func TestOptionsSchemaNamesTheProvider(t *testing.T) {
+func TestProviderSchemaCarriesTheOptionsAndWhatTheProviderFrontsAndWritesWith(t *testing.T) {
 	type options struct {
 		Region string `json:"region,omitempty" doc:"The region to deploy into."`
 	}
-	generated, err := OptionsSchema("acme", options{})
+	generated, err := ProviderSchema("acme", options{}, []string{"relay", "direct"}, []string{"acme-dns"})
 	if err != nil {
-		t.Fatalf("options schema: %v", err)
+		t.Fatalf("provider schema: %v", err)
 	}
-	var variant struct {
-		Properties struct {
-			Name struct {
-				Const string `json:"const"`
-			} `json:"name"`
-			Options struct {
-				Properties map[string]struct {
-					Type        string `json:"type"`
-					Description string `json:"description"`
-				} `json:"properties"`
-				AdditionalProperties bool `json:"additionalProperties"`
-			} `json:"options"`
-		} `json:"properties"`
+	var fragment struct {
+		ID      string `json:"id"`
+		Options struct {
+			Title      string `json:"title"`
+			Properties map[string]struct {
+				Type        string `json:"type"`
+				Description string `json:"description"`
+			} `json:"properties"`
+			AdditionalProperties bool `json:"additionalProperties"`
+		} `json:"options"`
+		Edges []string `json:"edges"`
+		DNS   []string `json:"dns"`
 	}
-	if err := json.Unmarshal(generated, &variant); err != nil {
+	if err := json.Unmarshal(generated, &fragment); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if variant.Properties.Name.Const != "acme" {
-		t.Fatalf("name const = %q", variant.Properties.Name.Const)
+	if fragment.ID != "acme" {
+		t.Fatalf("id = %q", fragment.ID)
 	}
-	region := variant.Properties.Options.Properties["region"]
+	if fragment.Options.Title != "AcmeProviderOptions" {
+		t.Errorf("options title = %q, want AcmeProviderOptions", fragment.Options.Title)
+	}
+	region := fragment.Options.Properties["region"]
 	if region.Type != "string" || region.Description != "The region to deploy into." {
 		t.Fatalf("region = %+v", region)
 	}
-	if variant.Properties.Options.AdditionalProperties {
+	if fragment.Options.AdditionalProperties {
 		t.Fatal("options accept keys the provider does not declare")
+	}
+	if !slices.Equal(fragment.Edges, []string{"direct", "relay"}) {
+		t.Errorf("edges = %v, want the provider's edges in order", fragment.Edges)
+	}
+	if !slices.Equal(fragment.DNS, []string{"acme-dns"}) {
+		t.Errorf("dns = %v", fragment.DNS)
 	}
 }
 
-func TestOptionsSchemaRefusesAnUnnamedProvider(t *testing.T) {
+func TestProviderSchemaRefusesAnUnidentifiedProvider(t *testing.T) {
 	type options struct {
 		Region string `json:"region,omitempty"`
 	}
-	if _, err := OptionsSchema("", options{}); err == nil {
-		t.Fatal("options schema for an unnamed provider = nil error, want a refusal")
+	if _, err := ProviderSchema[string, string]("", options{}, nil, nil); err == nil {
+		t.Fatal("provider schema for an unidentified provider = nil error, want a refusal")
 	}
 }
 
@@ -89,7 +98,7 @@ type patterned struct {
 }
 
 func TestAPatternReachesTheGeneratedSchema(t *testing.T) {
-	generated, err := OptionsSchema("aws", patterned{})
+	generated, err := ProviderSchema[string, string]("aws", patterned{}, nil, nil)
 	if err != nil {
 		t.Fatalf("options schema: %v", err)
 	}
@@ -107,14 +116,14 @@ func TestAPatternReachesTheGeneratedSchema(t *testing.T) {
 
 func TestAValueIsCheckedAgainstItsPattern(t *testing.T) {
 	held := map[string]any{"key": "arn:aws:kms:eu-west-1:111122223333:key/abcd"}
-	if err := Check("provider.options", patterned{}, held); err != nil {
+	if err := Check("provider.aws", patterned{}, held); err != nil {
 		t.Fatalf("a key that matches its pattern was refused: %v", err)
 	}
-	err := Check("provider.options", patterned{}, map[string]any{"key": "abcd"})
+	err := Check("provider.aws", patterned{}, map[string]any{"key": "abcd"})
 	if err == nil {
 		t.Fatal("a key that does not match its pattern was taken")
 	}
-	if !strings.Contains(err.Error(), "provider.options.key") || !strings.Contains(err.Error(), "^arn:aws:kms:") {
+	if !strings.Contains(err.Error(), "provider.aws.key") || !strings.Contains(err.Error(), "^arn:aws:kms:") {
 		t.Errorf("error = %q, want it to name the key and the pattern", err)
 	}
 }

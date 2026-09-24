@@ -8,7 +8,7 @@ import (
 
 const CoreSchemaFile = "schema.core.json"
 
-const OptionsSchemaFile = "schema.options.json"
+const ProviderSchemaFile = "schema.provider.json"
 
 const updateEnvVar = "OCEL_UPDATE_SCHEMA"
 

@@ -3,10 +3,9 @@ import { defineConfig } from "../../config.js";
 import vpsProvider from "./index";
 
 describe("vpsProvider", () => {
-  it("returns a descriptor naming the provider, carrying an ssh_config alias through", () => {
+  it("returns its options keyed by the provider, carrying an ssh_config alias through", () => {
     expect(vpsProvider({ ssh: "prod-box" })).toEqual({
-      name: "vps",
-      options: { ssh: "prod-box" },
+      vps: { ssh: "prod-box" },
     });
   });
 
@@ -21,8 +20,7 @@ describe("vpsProvider", () => {
         },
       }),
     ).toEqual({
-      name: "vps",
-      options: {
+      vps: {
         ssh: {
           host: "203.0.113.10",
           port: 2222,
@@ -35,8 +33,7 @@ describe("vpsProvider", () => {
 
   it("carries the public key the deploy login is to answer to", () => {
     expect(vpsProvider({ ssh: "prod-box", deployKey: "~/.ssh/ocel-deploy.pub" })).toEqual({
-      name: "vps",
-      options: { ssh: "prod-box", deployKey: "~/.ssh/ocel-deploy.pub" },
+      vps: { ssh: "prod-box", deployKey: "~/.ssh/ocel-deploy.pub" },
     });
   });
 
@@ -47,20 +44,18 @@ describe("vpsProvider", () => {
     });
 
     expect(JSON.parse(JSON.stringify(config.provider))).toEqual({
-      name: "vps",
-      options: { ssh: { host: "203.0.113.10" } },
+      vps: { ssh: { host: "203.0.113.10" } },
     });
   });
 
-  it("type-checks as a `provider` field and serializes to { name, options }", () => {
+  it("type-checks as a `provider` field and serializes to its options keyed by vps", () => {
     const config = defineConfig({
       slug: "test-app",
       provider: vpsProvider({ ssh: { host: "203.0.113.10", user: "deploy" } }),
     });
 
     expect(JSON.parse(JSON.stringify(config.provider))).toEqual({
-      name: "vps",
-      options: { ssh: { host: "203.0.113.10", user: "deploy" } },
+      vps: { ssh: { host: "203.0.113.10", user: "deploy" } },
     });
   });
 });

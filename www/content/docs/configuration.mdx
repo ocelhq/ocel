@@ -9,7 +9,7 @@ Every option lives in `ocel.json`, at the root of your project. `ocel init` writ
 {
   "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "my-app",
-  "provider": { "name": "aws" },
+  "provider": "aws",
   "apps": [{ "name": "web", "path": "." }]
 }
 ```
@@ -19,6 +19,10 @@ version of the schema the CLI that wrote the file ships; `ocel init` fills it in
 
 `slug` is the project's identity in your provider account. Every stack and resource ocel
 creates is keyed on it, so changing it forks a new project.
+
+`provider`, `edge` and `dns` each name one choice: an object keyed by its identifier and
+holding its options, such as `{ "aws": { "region": "us-east-1" } }`, or the identifier alone
+when it needs none, as `"aws"` is above.
 
 The file is JSON with comments and trailing commas allowed, so a variant you are not using
 can sit beside the one you are.
@@ -31,8 +35,7 @@ default and error is the one this page describes. `ocel init --yaml` writes it.
 ```yaml title="ocel.yaml"
 # yaml-language-server: $schema=https://ocel.dev/schema/0.0.0/ocel.schema.json
 slug: my-app
-provider:
-  name: aws
+provider: aws
 apps:
   - name: web
     path: .
@@ -56,8 +59,7 @@ rather than deploying a config with a hole in it. Write `$$` for a literal dolla
   "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "my-app",
   "provider": {
-    "name": "vps",
-    "options": { "ssh": { "host": "${DEPLOY_HOST}", "user": "deploy" } }
+    "vps": { "ssh": { "host": "${DEPLOY_HOST}", "user": "deploy" } }
   }
 }
 ```
