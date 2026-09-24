@@ -79,7 +79,7 @@ func proxyStanding(t *testing.T) standingProxy {
 	}
 	stood := standingProxy{name: name, network: network, dir: dir, pins: pins, helper: helper, here: func(written string) string {
 		return strings.NewReplacer(ProxyPins, pins, proxyRoot, dir, live.RoutingTable, table, ProxyHelper, helper,
-			quoted(ProxyContainer), quoted(name), quoted(ProxyNetwork), quoted(network), `"`+ProxyNetwork+`"`, `"`+network+`"`).Replace(written)
+			quoted(ProxyContainer), quoted(name), quoted(ProxyNetwork), quoted(network), `"`+ProxyNetwork+`"`, `"`+network+`"`, routingLock, dir).Replace(written)
 	}}
 
 	taken(t, name)

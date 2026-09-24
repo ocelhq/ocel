@@ -3,6 +3,7 @@ package host
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -14,7 +15,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -168,6 +168,8 @@ func (b *bench) rendered(command string) session.Result {
 		return session.Result{Stdout: "0\n"}
 	case command == "uname -m":
 		return session.Result{Stdout: b.facts.Arch + "\n"}
+	case readsProxy(command):
+		return session.Result{Stdout: pairSaid(string(routingTableItem().Content), string(proxyConfigItem().Content))}
 	case strings.Contains(command, "for p in"):
 		for class, items := range b.stands {
 			if strings.Contains(command, quoted(StampPath(class))) {
@@ -230,6 +232,12 @@ func TestASurveyedHostReadsBackAsTheItemsThatStandOnIt(t *testing.T) {
 
 func settledOn(t *testing.T, class providerkit.Class) *bench {
 	t.Helper()
+	seeded := string(routingTableItem().Content)
+	return settledHolding(t, class, &seeded, nil)
+}
+
+func settledHolding(t *testing.T, class providerkit.Class, table, config *string) *bench {
+	t.Helper()
 
 	keys := []byte(aKey + "\n")
 	items := Items(class, keys, ArchAMD64)
@@ -252,8 +260,7 @@ func settledOn(t *testing.T, class providerkit.Class) *bench {
 		t.Fatal(err)
 	}
 	stood := machine(map[providerkit.Class][]Item{class: append(standing, stamp)})
-	seeded := string(routingTableItem().Content)
-	proxied := servesProxy(stood, &seeded)
+	proxied := servesPair(stood, table, config)
 	stood.answer = func(command string) (session.Result, bool) {
 		if command == "cat ~/.ssh/authorized_keys 2>/dev/null" {
 			return session.Result{Stdout: aKey + "\n"}, true
@@ -338,15 +345,11 @@ func digested(document string) string {
 }
 
 func readsProxy(command string) bool {
-	return strings.Contains(command, "sha256sum "+quoted(live.RoutingTable)+" | cut")
+	return strings.Contains(command, "flock -s 9")
 }
 
 func writesProxy(command string) bool {
 	return strings.Contains(command, `IFS= read -r written`)
-}
-
-func readsConfig(command string) bool {
-	return command == "cat "+quoted(ProxyConfig)
 }
 
 func expectedDigest(command string) string {
@@ -358,6 +361,11 @@ func expectedDigest(command string) string {
 func tableOf(fed string) string {
 	table, _, _ := strings.Cut(fed, "\n")
 	return table
+}
+
+func configOf(fed string) string {
+	_, config, _ := strings.Cut(fed, "\n")
+	return config
 }
 
 func renderedFrom(document string) string {
@@ -372,7 +380,21 @@ func renderedFrom(document string) string {
 	return string(rendered)
 }
 
+func pairSaid(table, config string) string {
+	line := func(held string) string {
+		if held == "" {
+			return "\n"
+		}
+		return "+" + base64.StdEncoding.EncodeToString([]byte(held)) + "\n"
+	}
+	return line(table) + line(config)
+}
+
 func servesProxy(b *bench, held *string) func(string) (session.Result, bool) {
+	return servesPair(b, held, nil)
+}
+
+func servesPair(b *bench, held, config *string) func(string) (session.Result, bool) {
 	return func(command string) (session.Result, bool) {
 		b.mu.Lock()
 		defer b.mu.Unlock()
@@ -382,11 +404,15 @@ func servesProxy(b *bench, held *string) func(string) (session.Result, bool) {
 				return session.Result{Code: routingMoved, Stderr: digested(*held)}, true
 			}
 			*held = tableOf(b.fed[len(b.fed)-1])
+			if config != nil {
+				*config = configOf(b.fed[len(b.fed)-1])
+			}
 			return session.Result{Stdout: digested(*held)}, true
 		case readsProxy(command):
-			return session.Result{Stdout: digested(*held) + "\n" + *held}, true
-		case readsConfig(command):
-			return session.Result{Stdout: renderedFrom(*held)}, true
+			if config != nil {
+				return session.Result{Stdout: pairSaid(*held, *config)}, true
+			}
+			return session.Result{Stdout: pairSaid(*held, renderedFrom(*held))}, true
 		default:
 			return session.Result{}, false
 		}

@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"strings"
 
@@ -167,37 +168,41 @@ func (h *Host) routingTable(ctx context.Context) (RoutingTable, error) {
 	if err != nil {
 		return RoutingTable{}, err
 	}
-	return ReadRoutingTable([]byte(held.text))
+	return ReadRoutingTable(held.table)
 }
 
-func (h *Host) proxyRendered(ctx context.Context, class providerkit.Class) error {
-	table, err := h.routingTable(ctx)
+func (h *Host) proxyInspected(ctx context.Context, class providerkit.Class) error {
+	held, err := h.routingPair(ctx)
 	if err != nil {
 		return err
 	}
-	want, err := RenderProxyConfig(table)
-	if err != nil {
-		return err
+	if held.table != nil {
+		if _, err := ReadRoutingTable(held.table); err != nil {
+			return err
+		}
 	}
-	held, err := h.reach(ctx, "read "+ProxyConfig, "cat "+quoted(ProxyConfig), nil)
-	if err != nil {
-		return err
+	if !onDemand(held.config) {
+		return nil
 	}
-	if held != string(want) {
-		return providerkit.Refuse(providerkit.CodeInvalid,
-			"%s on %s is not what ocel renders from %s, so the proxy may serve what no deploy wrote\n"+
-				"Put back what ocel wrote, or remove %s and run `%s` to start this box's routes over",
-			ProxyConfig, h.named(), live.RoutingTable, live.RoutingTable, providerkit.BootstrapCommand(class))
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"%s on %s declares a tls automation policy ocel never renders, so the proxy may order certificates for any name it is asked for\n"+
+			"Remove %s and run `%s` to render it again from %s",
+		ProxyConfig, h.named(), ProxyConfig, providerkit.BootstrapCommand(class), live.RoutingTable)
+}
+
+func onDemand(config []byte) bool {
+	var read struct {
+		Apps struct {
+			TLS struct {
+				Automation json.RawMessage `json:"automation"`
+			} `json:"tls"`
+		} `json:"apps"`
 	}
-	return nil
+	return json.Unmarshal(config, &read) == nil && len(read.Apps.TLS.Automation) > 0
 }
 
 func (h *Host) reshape(ctx context.Context, change func(RoutingTable) (RoutingTable, error)) error {
-	elevation, err := h.reachDocker(ctx)
-	if err != nil {
-		return err
-	}
-	shaped, err := h.composeProxy(ctx, func(standing RoutingTable) (RoutingTable, error) {
+	return h.recomposed(ctx, func(standing RoutingTable) (RoutingTable, error) {
 		changed, err := change(standing)
 		if err != nil {
 			return RoutingTable{}, err
@@ -207,6 +212,18 @@ func (h *Host) reshape(ctx context.Context, change func(RoutingTable) (RoutingTa
 		}
 		return changed, nil
 	})
+}
+
+func (h *Host) rerender(ctx context.Context) error {
+	return h.recomposed(ctx, func(standing RoutingTable) (RoutingTable, error) { return standing, nil })
+}
+
+func (h *Host) recomposed(ctx context.Context, compose func(RoutingTable) (RoutingTable, error)) error {
+	elevation, err := h.reachDocker(ctx)
+	if err != nil {
+		return err
+	}
+	shaped, err := h.composeProxy(ctx, compose)
 	if err != nil || !shaped.changed {
 		return err
 	}

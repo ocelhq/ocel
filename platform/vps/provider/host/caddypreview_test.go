@@ -10,7 +10,7 @@ import (
 	"time"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
-	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const previewBase = "preview.example.com"
@@ -393,41 +393,63 @@ func onDemandOn(t *testing.T, state RoutingTable) string {
 	return string(written)
 }
 
-func TestDescribingABoxAssertsItsProxyServesOnlyWhatItsRoutingTableRenders(t *testing.T) {
+func olderRendering(t *testing.T, state RoutingTable) string {
+	t.Helper()
+
+	var read map[string]any
+	if err := json.Unmarshal(mustRender(t, state), &read); err != nil {
+		t.Fatal(err)
+	}
+	written, err := json.MarshalIndent(read, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	older := strings.ReplaceAll(string(written), `"stream_close_delay": "30s"`, `"flush_interval": -1`)
+	if older == string(mustRender(t, state)) {
+		t.Fatal("the older rendering is byte for byte this one, so nothing below is about an upgrade")
+	}
+	return older
+}
+
+func TestDescribingABoxRefusesOnDemandTlsAndNothingElseItsConfigHolds(t *testing.T) {
 	t.Parallel()
 
-	rendered := string(mustRender(t, previewing()))
 	for what, config := range map[string]string{
-		"a proxy ocel rendered":                   rendered,
-		"a proxy somebody added on-demand tls to": onDemandOn(t, previewing()),
-		"a proxy rendered from another table":     string(mustRender(t, routed())),
+		"a proxy ocel rendered":                           string(mustRender(t, previewing())),
+		"a proxy an older ocel rendered":                  olderRendering(t, previewing()),
+		"a proxy rendered from another table":             string(mustRender(t, routed())),
+		"a proxy whose config is not json":                "{",
+		"a proxy somebody added on-demand tls to":         onDemandOn(t, previewing()),
+		"a proxy with on-demand tls ocel's shape rejects": strings.Replace(onDemandOn(t, previewing()), `"status_code":404`, `"status_code":"404"`, 1),
 	} {
 		stood := claimingBox(t, previewing())
-		table := stood.answer
-		stood.answer = func(command string) (session.Result, bool) {
-			if readsConfig(command) {
-				return session.Result{Stdout: config}, true
-			}
-			return table(command)
-		}
+		stood.answer = servesPair(stood.bench, &stood.held, &config)
 		_, err := Bootstrap(stood.host(), testVendor).described(context.Background(), standingHost())
-		if refused := err != nil; refused != (config != rendered) {
-			t.Errorf("describing %s = %v: caddy only warns about an on-demand policy carrying no permission module and serves anyway, so `ocel doctor` and the bootstrap assert the proxy runs exactly what ocel renders rather than trusting a refusal that never comes", what, err)
+		if refused := err != nil; refused != strings.Contains(config, "on_demand") {
+			t.Errorf("describing %s = %v: caddy only warns about an on-demand policy carrying no permission module and serves anyway, so `ocel doctor` and the bootstrap refuse one; every other difference is a rendering the next write puts back from %s, and refusing it locks the box out of the write that would", what, err, live.RoutingTable)
+		}
+		if err != nil && strings.Contains(err.Error(), "remove "+live.RoutingTable) {
+			t.Errorf("describing %s tells the operator to remove %s, the only record of what every project on the box routes: %v", what, live.RoutingTable, err)
 		}
 	}
 }
 
-func TestDescribingABoxBeforeItHoldsARoutingTableAsksNothingOfTheProxy(t *testing.T) {
+func TestDescribingABoxBeforeItHoldsARoutingTableStillRefusesOnDemandTls(t *testing.T) {
 	t.Parallel()
 
 	read := standingHost()
 	delete(read.Observed, routingTableItem().ID())
-	stood := machine(nil)
-	if _, err := Bootstrap(stood.host(), testVendor).described(context.Background(), read); err != nil {
-		t.Fatalf("describing a box bootstrapped before its routing table = %v, want it described so the plan can seed the table", err)
-	}
-	if at := stood.at(ProxyConfig); at >= 0 {
-		t.Errorf("describing a box with no routing table read %s: %v", ProxyConfig, stood.commands())
+	for what, config := range map[string]string{
+		"a proxy an older ocel wrote":             olderRendering(t, routed()),
+		"a proxy somebody added on-demand tls to": onDemandOn(t, routed()),
+	} {
+		stood := machine(nil)
+		absent := ""
+		stood.answer = servesPair(stood, &absent, &config)
+		_, err := Bootstrap(stood.host(), testVendor).described(context.Background(), read)
+		if refused := err != nil; refused != strings.Contains(config, "on_demand") {
+			t.Errorf("describing a box bootstrapped before its routing table, holding %s = %v, want it described so the plan can seed the table, unless its proxy declares on-demand tls", what, err)
+		}
 	}
 }
 
