@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -23,7 +24,7 @@ func activeCheck(t *testing.T, rendered []byte, identity string) (caddyForward, 
 				continue
 			}
 			for _, handled := range route.Handle {
-				if handled.Handler == forwardHandler {
+				if handled.Handler == caddyadmin.ForwardHandler {
 					return handled, true
 				}
 			}
