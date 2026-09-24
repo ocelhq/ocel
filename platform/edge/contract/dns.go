@@ -142,7 +142,7 @@ func Pointable(target DNSTarget, bound []string, hostname string) bool {
 func RecordsFor(target DNSTarget, hostnames []string) ([]Record, error) {
 	records := make([]Record, 0, len(hostnames))
 	for _, host := range hostnames {
-		if host == "" {
+		if host == "" || loopback(host) {
 			continue
 		}
 		if target.ServesUnbound {
@@ -156,6 +156,10 @@ func RecordsFor(target DNSTarget, hostnames []string) ([]Record, error) {
 		records = append(records, addressRecord(host, front))
 	}
 	return records, nil
+}
+
+func loopback(hostname string) bool {
+	return ZoneOwns(strings.TrimSuffix(hostname, "."), "localhost")
 }
 
 func addressRecord(host, front string) Record {
