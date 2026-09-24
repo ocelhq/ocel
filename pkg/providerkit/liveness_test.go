@@ -7,8 +7,10 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -30,17 +32,97 @@ func answeringAs(t *testing.T, header string, handler http.HandlerFunc) string {
 	return served.Listener.Addr().String()
 }
 
-func locatedAt(addresses ...string) func(context.Context, string) ([]string, error) {
-	return func(context.Context, string) ([]string, error) { return addresses, nil }
+type dnsBook struct {
+	mu      sync.Mutex
+	asked   []string
+	down    bool
+	hosts   map[string][]string
+	aliases map[string]string
+	zones   map[string][]string
+}
+
+func (b *dnsBook) note(what, name string) string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	name = strings.TrimSuffix(name, ".")
+	b.asked = append(b.asked, what+" "+name)
+	return name
+}
+
+func (b *dnsBook) heard() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return slices.Clone(b.asked)
+}
+
+func missing(name string) error {
+	return &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
+}
+
+func (b *dnsBook) LookupHost(_ context.Context, host string) ([]string, error) {
+	host = b.note("A", host)
+	if b.down {
+		return nil, &net.DNSError{Err: "i/o timeout", Name: host, IsTimeout: true}
+	}
+	if held, ok := b.hosts[host]; ok {
+		return held, nil
+	}
+	return nil, missing(host)
+}
+
+func (b *dnsBook) LookupCNAME(_ context.Context, host string) (string, error) {
+	host = b.note("CNAME", host)
+	if b.down {
+		return "", &net.DNSError{Err: "i/o timeout", Name: host, IsTimeout: true}
+	}
+	if target, ok := b.aliases[host]; ok {
+		return target + ".", nil
+	}
+	if _, ok := b.hosts[host]; ok {
+		return host + ".", nil
+	}
+	return "", missing(host)
+}
+
+func (b *dnsBook) LookupNS(_ context.Context, name string) ([]*net.NS, error) {
+	name = b.note("NS", name)
+	held, ok := b.zones[name]
+	if !ok {
+		return nil, missing(name)
+	}
+	named := make([]*net.NS, 0, len(held))
+	for _, ns := range held {
+		named = append(named, &net.NS{Host: ns + "."})
+	}
+	return named, nil
+}
+
+func dialing(routes map[string]string) func(context.Context, string, string) (net.Conn, error) {
+	return func(ctx context.Context, network, address string) (net.Conn, error) {
+		at, ok := routes[address]
+		if !ok {
+			return nil, &net.OpError{Op: "dial", Net: network, Err: errors.New("connection refused")}
+		}
+		return (&net.Dialer{}).DialContext(ctx, network, at)
+	}
 }
 
 func trusting() *tls.Config { return &tls.Config{InsecureSkipVerify: true} }
+
+func resolvedAt(t *testing.T, header string, handler http.HandlerFunc) *Liveness {
+	t.Helper()
+	return &Liveness{
+		System: &dnsBook{hosts: map[string][]string{"shop.example.com": {"203.0.113.4"}}},
+		Dial:   dialing(map[string]string{"203.0.113.4:443": answeringAs(t, header, handler)}),
+		TLS:    trusting(),
+	}
+}
 
 func TestTheLivenessProbeReadsWhichEdgeAnswersOffItsMarkerAndNotItsStatus(t *testing.T) {
 	t.Parallel()
 
 	for _, header := range []string{"cloudfront", "cloudflare", ""} {
-		probe := &Liveness{Locate: locatedAt(answeringAs(t, header, nil)), TLS: trusting()}
+		probe := resolvedAt(t, header, nil)
 		kind, err := probe.Serving(context.Background(), "cloudfront", "shop.example.com")
 		if err != nil {
 			t.Fatalf("Serving() = %v", err)
@@ -55,7 +137,7 @@ func TestTheLivenessProbeAsksForTheHostnameItProbesAndFollowsNoRedirect(t *testi
 	t.Parallel()
 
 	var asked []string
-	at := answeringAs(t, "", func(w http.ResponseWriter, r *http.Request) {
+	probe := resolvedAt(t, "", func(w http.ResponseWriter, r *http.Request) {
 		asked = append(asked, r.Host+" "+r.TLS.ServerName)
 		if r.URL.Path == "/" {
 			http.Redirect(w, r, "/elsewhere", http.StatusFound)
@@ -63,7 +145,6 @@ func TestTheLivenessProbeAsksForTheHostnameItProbesAndFollowsNoRedirect(t *testi
 		}
 		w.Header().Set(edge.HeaderEdge, "cloudflare")
 	})
-	probe := &Liveness{Locate: locatedAt(at), TLS: trusting()}
 
 	kind, err := probe.Serving(context.Background(), "cloudflare", "shop.example.com")
 	if err != nil {
@@ -77,28 +158,44 @@ func TestTheLivenessProbeAsksForTheHostnameItProbesAndFollowsNoRedirect(t *testi
 	}
 }
 
+func TestAHostnameTheSystemResolverAnswersIsProbedWhereItResolvesAndNoNameserverIsAsked(t *testing.T) {
+	t.Parallel()
+
+	probe := resolvedAt(t, "cloudfront", nil)
+	var authorities []string
+	probe.Authority = func(nameserver string) Names {
+		authorities = append(authorities, nameserver)
+		return &dnsBook{}
+	}
+
+	kind, err := probe.Serving(context.Background(), "cloudfront", "shop.example.com")
+	if err != nil || kind != "cloudfront" {
+		t.Fatalf("Serving() = %q, %v, want the edge at the address the system resolver gave", kind, err)
+	}
+	if len(authorities) != 0 {
+		t.Errorf("the probe asked nameservers %v directly although the system resolver answered: a private zone, a split horizon or a hosts-file entry is what the operator's own machine reaches, and the public nameservers know nothing of it", authorities)
+	}
+}
+
 func TestAWildcardIsProbedOnALabelUnderIt(t *testing.T) {
 	t.Parallel()
 
-	var located string
-	probe := &Liveness{
-		Locate: func(_ context.Context, hostname string) ([]string, error) {
-			located = hostname
-			return nil, errors.New("no such host")
-		},
-	}
+	book := &dnsBook{}
+	probe := &Liveness{System: book, Authority: func(string) Names { return &dnsBook{} }}
 	if _, err := probe.Serving(context.Background(), "cloudflare", "*.preview.example.com"); err != nil {
 		t.Fatal(err)
 	}
-	if located != edge.ProbeHostname("*.preview.example.com") {
-		t.Errorf("the probe located %q, want %q", located, edge.ProbeHostname("*.preview.example.com"))
+	want := "A " + edge.ProbeHostname("*.preview.example.com")
+	if heard := book.heard(); len(heard) == 0 || heard[0] != want {
+		t.Errorf("the probe asked %v first, want %q", heard, want)
 	}
 }
 
 func TestACertificateNothingTrustsIsUnservedAndSaysWhy(t *testing.T) {
 	t.Parallel()
 
-	probe := &Liveness{Locate: locatedAt(answeringAs(t, "cloudfront", nil))}
+	probe := resolvedAt(t, "cloudfront", nil)
+	probe.TLS = nil
 	kind, err := probe.Serving(context.Background(), "cloudfront", "shop.example.com")
 	if err != nil {
 		t.Fatalf("Serving() = %v, want it reported unserved so the settle keeps waiting", err)
@@ -111,18 +208,102 @@ func TestACertificateNothingTrustsIsUnservedAndSaysWhy(t *testing.T) {
 	}
 }
 
+func hinted(t *testing.T, zones map[string][]string, nameservers map[string]*dnsBook) *Liveness {
+	t.Helper()
+	return &Liveness{
+		System: &dnsBook{
+			zones: zones,
+			hosts: map[string][]string{"d111.cloudfront.net": {"198.51.100.7"}},
+		},
+		Authority: func(nameserver string) Names {
+			if book, ok := nameservers[nameserver]; ok {
+				return book
+			}
+			return &dnsBook{down: true}
+		},
+		Dial: dialing(map[string]string{
+			"203.0.113.4:443":  answeringAs(t, "cloudfront", nil),
+			"198.51.100.7:443": answeringAs(t, "cloudfront", nil),
+		}),
+		TLS: trusting(),
+	}
+}
+
+func TestAHostnameTheSystemResolverCannotSeeYetIsLocatedOffAnyOneOfItsZonesNameservers(t *testing.T) {
+	t.Parallel()
+
+	probe := hinted(t,
+		map[string][]string{"example.com": {"ns1.example.net", "ns2.example.net"}},
+		map[string]*dnsBook{
+			"ns1.example.net": {down: true},
+			"ns2.example.net": {hosts: map[string][]string{"shop.example.com": {"203.0.113.4"}}},
+		})
+
+	kind, err := probe.Serving(context.Background(), "cloudfront", "shop.example.com")
+	if err != nil || kind != "cloudfront" {
+		t.Fatalf("Serving() = %q, %v (%s), want the edge located off the one nameserver that answered: the address is a hint, and one nameserver out of reach is no reason to call the hostname unserved", kind, err, probe.Unreached("shop.example.com"))
+	}
+}
+
+func TestAHostnameThatIsItsOwnZoneApexIsAskedOfItsOwnNameservers(t *testing.T) {
+	t.Parallel()
+
+	probe := hinted(t,
+		map[string][]string{"shop.example.co.uk": {"ns1.example.net"}, "co.uk": {"ns.nic.uk"}},
+		map[string]*dnsBook{
+			"ns1.example.net": {hosts: map[string][]string{"shop.example.co.uk": {"203.0.113.4"}}},
+		})
+
+	kind, err := probe.Serving(context.Background(), "cloudfront", "shop.example.co.uk")
+	if err != nil || kind != "cloudfront" {
+		t.Fatalf("Serving() = %q, %v (%s), want the apex located off the zone it heads", kind, err, probe.Unreached("shop.example.co.uk"))
+	}
+}
+
+func TestAHostnameTwoLabelsBelowItsZoneFindsTheZoneAboveIt(t *testing.T) {
+	t.Parallel()
+
+	probe := hinted(t,
+		map[string][]string{"example.com": {"ns1.example.net"}},
+		map[string]*dnsBook{
+			"ns1.example.net": {hosts: map[string][]string{"a.b.example.com": {"203.0.113.4"}}},
+		})
+
+	if kind, err := probe.Serving(context.Background(), "cloudfront", "a.b.example.com"); err != nil || kind != "cloudfront" {
+		t.Fatalf("Serving() = %q, %v (%s)", kind, err, probe.Unreached("a.b.example.com"))
+	}
+}
+
+func TestAHostnameAliasedToTheFrontIsLocatedWhereTheFrontIs(t *testing.T) {
+	t.Parallel()
+
+	probe := hinted(t,
+		map[string][]string{"example.com": {"ns1.example.net"}},
+		map[string]*dnsBook{
+			"ns1.example.net": {aliases: map[string]string{"shop.example.com": "d111.cloudfront.net"}},
+		})
+
+	if kind, err := probe.Serving(context.Background(), "cloudfront", "shop.example.com"); err != nil || kind != "cloudfront" {
+		t.Fatalf("Serving() = %q, %v (%s), want the edge where the alias the zone holds resolves", kind, err, probe.Unreached("shop.example.com"))
+	}
+}
+
 func TestAHostnameNoNameserverAnswersForYetIsUnservedAndSaysWhy(t *testing.T) {
 	t.Parallel()
 
-	probe := &Liveness{Locate: func(context.Context, string) ([]string, error) {
-		return nil, errors.New("shop.example.com is not on ns1.example.net yet")
-	}}
+	probe := hinted(t,
+		map[string][]string{"example.com": {"ns1.example.net", "ns2.example.net"}},
+		map[string]*dnsBook{"ns1.example.net": {}, "ns2.example.net": {}})
+
 	kind, err := probe.Serving(context.Background(), "cloudfront", "shop.example.com")
 	if err != nil || kind != "" {
 		t.Fatalf("Serving() = %q, %v, want it unserved", kind, err)
 	}
-	if cause := probe.Unreached("shop.example.com"); !strings.Contains(cause, "ns1.example.net") {
-		t.Errorf("Unreached() = %q, want what located nothing", cause)
+	cause := probe.Unreached("shop.example.com")
+	for _, named := range []string{"ns1.example.net", "ns2.example.net", "example.com"} {
+		if !strings.Contains(cause, named) {
+			t.Errorf("Unreached() = %q, want it to name %s", cause, named)
+		}
 	}
 }
 
@@ -131,119 +312,67 @@ func TestAProbeTheRunStoppedReportsTheStop(t *testing.T) {
 
 	ctx, stop := context.WithCancel(context.Background())
 	stop()
-	probe := &Liveness{Locate: func(ctx context.Context, _ string) ([]string, error) { return nil, ctx.Err() }}
+	probe := resolvedAt(t, "cloudfront", nil)
 	if _, err := probe.Serving(ctx, "cloudfront", "shop.example.com"); !errors.Is(err, context.Canceled) {
 		t.Errorf("Serving() under a cancelled context = %v, want the cancellation", err)
 	}
 }
 
-type recordedLookups struct {
-	asked []string
-	ns    map[string][]string
-	on    map[string]map[string]string
-}
-
-func (r *recordedLookups) authority() authority {
-	return authority{
-		nameservers: func(_ context.Context, zone string) ([]string, error) {
-			r.asked = append(r.asked, "system NS "+zone)
-			if held, ok := r.ns[zone]; ok {
-				return held, nil
-			}
-			return nil, &net.DNSError{Err: "no such host", Name: zone, IsNotFound: true}
-		},
-		answer: func(_ context.Context, nameserver, hostname string) (string, []string, error) {
-			r.asked = append(r.asked, nameserver+" "+hostname)
-			said, ok := r.on[nameserver][hostname]
-			if !ok {
-				return "", nil, &net.DNSError{Err: "no such host", Name: hostname, IsNotFound: true}
-			}
-			if strings.HasPrefix(said, "cname ") {
-				return strings.TrimPrefix(said, "cname "), nil, nil
-			}
-			return hostname, []string{said}, nil
-		},
-		public: func(_ context.Context, hostname string) ([]string, error) {
-			r.asked = append(r.asked, "system A "+hostname)
-			if hostname == "d111.cloudfront.net" {
-				return []string{"198.51.100.7"}, nil
-			}
-			return nil, &net.DNSError{Err: "no such host", Name: hostname, IsNotFound: true}
-		},
-	}
-}
-
-func TestAHostnameIsLocatedOnItsZonesOwnNameserversAndNeverThroughTheLocalResolver(t *testing.T) {
+func TestAFrontThatAnswersAtAKnownEndpointIsAskedThereForTheHostname(t *testing.T) {
 	t.Parallel()
 
-	lookups := &recordedLookups{
-		ns: map[string][]string{"example.com": {"ns1.example.net", "ns2.example.net"}},
-		on: map[string]map[string]string{
-			"ns1.example.net": {"shop.example.com": "203.0.113.4"},
-			"ns2.example.net": {"shop.example.com": "203.0.113.4"},
-		},
-	}
-	located, err := lookups.authority().locate(context.Background(), "shop.example.com")
+	var asked []string
+	served := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		asked = append(asked, r.Host)
+		w.Header().Set(edge.HeaderEdge, "api-gateway")
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(served.Close)
+	front, err := url.Parse(served.URL)
 	if err != nil {
-		t.Fatalf("locate() = %v", err)
+		t.Fatal(err)
 	}
-	if !slices.Equal(located, []string{"203.0.113.4:443"}) {
-		t.Errorf("locate() = %v, want the address the zone's nameservers hold", located)
+	book := &dnsBook{}
+	probe := &Liveness{System: book, Front: front}
+
+	kind, err := probe.Serving(context.Background(), "api-gateway", "web.journey.test")
+	if err != nil || kind != "api-gateway" {
+		t.Fatalf("Serving() = %q, %v (%s), want the edge the endpoint answered as", kind, err, probe.Unreached("web.journey.test"))
 	}
-	for _, asked := range lookups.asked {
-		if strings.HasPrefix(asked, "system") && strings.Contains(asked, "shop.example.com") {
-			t.Errorf("the local resolver was asked %q: a name asked for before its record lands is cached as absent for the zone's negative ttl, and every browser behind that resolver is refused long after the hostname serves", asked)
-		}
+	if !slices.Equal(asked, []string{"web.journey.test"}) {
+		t.Errorf("the endpoint was asked for %v, want the hostname: the front routes on the name", asked)
+	}
+	if heard := book.heard(); len(heard) != 0 {
+		t.Errorf("the probe asked DNS %v, want nothing: where the front answers is already known", heard)
 	}
 }
 
-func TestAHostnameMissingFromOneNameserverIsNotLocatedYet(t *testing.T) {
+func TestALoopbackNameIsProbedFromWhereItResolves(t *testing.T) {
 	t.Parallel()
 
-	lookups := &recordedLookups{
-		ns: map[string][]string{"example.com": {"ns1.example.net", "ns2.example.net"}},
-		on: map[string]map[string]string{
-			"ns1.example.net": {"shop.example.com": "203.0.113.4"},
+	var asked []string
+	probe := &Liveness{
+		System: &dnsBook{},
+		Loopback: func(_ context.Context, hostname string) (edge.Kind, error) {
+			asked = append(asked, hostname)
+			return "", Unanswered{Cause: "tls: no certificate for " + hostname + " yet"}
 		},
 	}
-	if located, err := lookups.authority().locate(context.Background(), "shop.example.com"); err == nil {
-		t.Errorf("locate() = %v, want it refused while ns2.example.net has not the record: a resolver asking that one caches the name as absent", located)
+	kind, err := probe.Serving(context.Background(), "box", "shop.localhost")
+	if err != nil || kind != "" {
+		t.Fatalf("Serving() = %q, %v, want it unserved", kind, err)
 	}
-}
-
-func TestAHostnameAliasedToTheFrontIsLocatedWhereTheFrontIs(t *testing.T) {
-	t.Parallel()
-
-	lookups := &recordedLookups{
-		ns: map[string][]string{"example.com": {"ns1.example.net"}},
-		on: map[string]map[string]string{
-			"ns1.example.net": {"shop.example.com": "cname d111.cloudfront.net."},
-		},
+	if !slices.Equal(asked, []string{"shop.localhost"}) {
+		t.Errorf("the loopback probe was asked %v", asked)
 	}
-	located, err := lookups.authority().locate(context.Background(), "shop.example.com")
-	if err != nil {
-		t.Fatalf("locate() = %v", err)
+	if cause := probe.Unreached("shop.localhost"); !strings.Contains(cause, "no certificate") {
+		t.Errorf("Unreached() = %q, want what the loopback probe said", cause)
 	}
-	if !slices.Equal(located, []string{"198.51.100.7:443"}) {
-		t.Errorf("locate() = %v, want where the alias the zone holds resolves", located)
+	if _, err := probe.Serving(context.Background(), "box", "shop.example.com"); err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestAHostnameTwoLabelsBelowItsZoneFindsTheZoneAboveIt(t *testing.T) {
-	t.Parallel()
-
-	lookups := &recordedLookups{
-		ns: map[string][]string{"example.com": {"ns1.example.net"}},
-		on: map[string]map[string]string{
-			"ns1.example.net": {"a.b.example.com": "203.0.113.9"},
-		},
-	}
-	located, err := lookups.authority().locate(context.Background(), "a.b.example.com")
-	if err != nil {
-		t.Fatalf("locate() = %v", err)
-	}
-	if !slices.Equal(located, []string{"203.0.113.9:443"}) {
-		t.Errorf("locate() = %v", located)
+	if len(asked) != 1 {
+		t.Errorf("a public name went to the loopback probe: %v", asked)
 	}
 }
 
