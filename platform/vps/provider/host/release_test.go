@@ -734,7 +734,7 @@ func TestAWriteThatDiesBetweenItsMovesLeavesTheTableItWroteRatherThanTheConfig(t
 	moving, _ := exec.LookPath("mv")
 	dir, bin := t.TempDir(), t.TempDir()
 	table, config := filepath.Join(dir, "routing.json"), filepath.Join(dir, "caddy.json")
-	before, stale := string(mustWrite(t, seededTable())), string(mustRender(t, seededTable()))
+	before, stale := string(mustWrite(t, seededTable)), string(mustRender(t, seededTable))
 	for path, body := range map[string]string{table: before, config: stale} {
 		if err := os.WriteFile(path, []byte(body), 0o640); err != nil {
 			t.Fatal(err)

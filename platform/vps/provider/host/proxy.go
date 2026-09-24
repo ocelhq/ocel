@@ -3,6 +3,7 @@ package host
 import (
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -126,34 +127,37 @@ func ProxyItems(arch string) []Item {
 	}
 }
 
-func seededTable() RoutingTable { return RoutingTable{Grace: DrainWindow} }
+var seededTable = RoutingTable{Grace: DrainWindow}
 
-func proxyConfigItem() Item {
-	rendered, err := RenderProxyConfig(seededTable())
-	if err != nil {
+var seededRows, seededRendering = seeded(seededTable)
+
+func seeded(table RoutingTable) ([]byte, []byte) {
+	rows, unwritten := WriteRoutingTable(table)
+	rendered, unrendered := RenderProxyConfig(table)
+	if err := errors.Join(unwritten, unrendered); err != nil {
 		panic(err)
 	}
+	return rows, rendered
+}
+
+func proxyConfigItem() Item {
 	return Item{
 		Kind:    KindProxyConfig,
 		Name:    ProxyConfig,
 		Mode:    0o640,
 		Owner:   stateOwner,
-		Content: rendered,
+		Content: seededRendering,
 		Note:    "rendered from the routing table",
 	}
 }
 
 func routingTableItem() Item {
-	written, err := WriteRoutingTable(seededTable())
-	if err != nil {
-		panic(err)
-	}
 	return Item{
 		Kind:    KindRoutingTable,
 		Name:    live.RoutingTable,
 		Mode:    0o640,
 		Owner:   stateOwner,
-		Content: written,
+		Content: seededRows,
 		Note:    "seeded here, rewritten by deploys",
 	}
 }
@@ -162,7 +166,7 @@ func rewrittenByDeploys(item Item) bool {
 	return item.Kind == KindProxyConfig || item.Kind == KindRoutingTable
 }
 
-func seedingPair(table, config, own Item) string {
+func seedingPair(table, config Item) string {
 	var script strings.Builder
 	script.WriteString("set -e\n")
 	for _, item := range []Item{table, config} {
@@ -175,12 +179,10 @@ func seedingPair(table, config, own Item) string {
 	}
 	script.WriteString("if [ ! -f " + quoted(table.Name) + " ]; then\n" + install(table) + install(config) +
 		"elif [ ! -f " + quoted(config.Name) + " ]; then\n" + install(config) + "fi\n")
-	fmt.Fprintf(&script, "chown %s:%s %s\nchmod %04o %s", own.Owner, own.Owner, quoted(own.Name), own.Mode, quoted(own.Name))
-	return script.String()
-}
-
-func seededCommand(item Item) string {
-	return seedingPair(routingTableItem(), proxyConfigItem(), item)
+	for _, item := range []Item{table, config} {
+		fmt.Fprintf(&script, "chown %s:%s %s\nchmod %04o %s\n", item.Owner, item.Owner, quoted(item.Name), item.Mode, quoted(item.Name))
+	}
+	return strings.TrimSuffix(script.String(), "\n")
 }
 
 func notAFile(name string) string {

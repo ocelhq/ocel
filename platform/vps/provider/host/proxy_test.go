@@ -496,10 +496,8 @@ func seedsIn(t *testing.T) (string, string, Item, Item) {
 
 func seeding(t *testing.T, bin string, table, config Item) {
 	t.Helper()
-	for _, own := range []Item{config, table} {
-		if said, err := writing(t, bin, seedingPair(table, config, own)); err != nil {
-			t.Fatalf("seeding %s = %v: %s", own.Name, err, said)
-		}
+	if said, err := writing(t, bin, seedingPair(table, config)); err != nil {
+		t.Fatalf("seeding %s and %s = %v: %s", table.Name, config.Name, err, said)
 	}
 }
 
@@ -531,7 +529,7 @@ func TestABootstrapSeedsTheRoutingTableAndItsRenderingTogether(t *testing.T) {
 	if got := held(t, table.Name); got != string(routingTableItem().Content) {
 		t.Errorf("a fresh box is seeded with the table\n%s\nwant the empty one\n%s", got, routingTableItem().Content)
 	}
-	if got := held(t, config.Name); got != string(mustRender(t, seededTable())) {
+	if got := held(t, config.Name); got != string(mustRender(t, seededTable)) {
 		t.Errorf("a fresh box is seeded with the config\n%s\nwant the rendering of the empty table", got)
 	}
 }
@@ -561,7 +559,7 @@ func TestABootstrapOverABoxHoldingOnlyItsConfigSeedsAnEmptyTableAndItsRendering(
 		t.Fatal(err)
 	}
 	seeding(t, bin, table, config)
-	if held(t, table.Name) != string(routingTableItem().Content) || held(t, config.Name) != string(mustRender(t, seededTable())) {
+	if held(t, table.Name) != string(routingTableItem().Content) || held(t, config.Name) != string(mustRender(t, seededTable)) {
 		t.Errorf("a box holding only %s was seeded as\n%s\n%s\nwant the empty table and its rendering: nothing is migrated out of a config, and one the table did not render serves what no deploy wrote",
 			config.Name, held(t, table.Name), held(t, config.Name))
 	}
@@ -1090,15 +1088,13 @@ func TestSomethingOtherThanTheProxysConfigStandingAtItsPathIsRefusedRatherThanCh
 		if err := os.MkdirAll(over.Name, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		for _, own := range []Item{config, table} {
-			said, err := writing(t, bin, seedingPair(table, config, own))
-			if err == nil {
-				t.Fatalf("the write of %s over a directory where %s belongs landed, and the probe reads that path with -f: "+
-					"the write would call it present forever, the survey would call it absent forever, and every apply would report success over a proxy that never serves:\n%s", own.Name, over.Name, said)
-			}
-			if !strings.Contains(said, over.Name) {
-				t.Errorf("the write said %q, want it to name %s as what stands there", said, over.Name)
-			}
+		said, err := writing(t, bin, seedingPair(table, config))
+		if err == nil {
+			t.Fatalf("the seed over a directory where %s belongs landed, and the probe reads that path with -f: "+
+				"the write would call it present forever, the survey would call it absent forever, and every apply would report success over a proxy that never serves:\n%s", over.Name, said)
+		}
+		if !strings.Contains(said, over.Name) {
+			t.Errorf("the write said %q, want it to name %s as what stands there", said, over.Name)
 		}
 		stood, err := os.Stat(over.Name)
 		if err != nil {
