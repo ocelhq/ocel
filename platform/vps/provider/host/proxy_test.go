@@ -471,7 +471,7 @@ func TestWhatTheDeployLoopWritesOverTheRoutingTableAndTheProxysConfigIsNeverCall
 			t.Errorf("the survey hashes what a deploy wrote:\n%s", seeded.probe())
 		}
 		seeding := seeded.command()
-		if !strings.Contains(seeding, "if [ ! -f "+quoted(live.RoutingTable)+" ] || [ ! -f "+quoted(ProxyConfig)+" ]") {
+		if !strings.Contains(seeding, "if [ ! -f "+quoted(live.RoutingTable)+" ]; then") || !strings.Contains(seeding, "elif [ ! -f "+quoted(ProxyConfig)+" ]; then") {
 			t.Errorf("the write of %s replaces what stands there rather than seeding what does not:\n%s", seeded.Name, seeding)
 		}
 		if !strings.Contains(seeding, "chown "+stateOwner+":"+stateOwner+" "+quoted(seeded.Name)) || !strings.Contains(seeding, "chmod 0640 "+quoted(seeded.Name)) {
@@ -553,19 +553,35 @@ func TestABootstrapOverABoxThatRoutesLeavesItsTableAndItsConfigAlone(t *testing.
 	}
 }
 
-func TestABootstrapOverABoxHoldingOnlyOneHalfOfThePairSeedsBoth(t *testing.T) {
+func TestABootstrapOverABoxHoldingOnlyItsConfigSeedsAnEmptyTableAndItsRendering(t *testing.T) {
 	t.Parallel()
 
-	for _, standing := range []string{"caddy.json", "routing.json"} {
-		dir, bin, table, config := seedsIn(t)
-		if err := os.WriteFile(filepath.Join(dir, standing), []byte(`{"left":"by an older ocel"}`), 0o640); err != nil {
-			t.Fatal(err)
-		}
-		seeding(t, bin, table, config)
-		if held(t, table.Name) != string(routingTableItem().Content) || held(t, config.Name) != string(mustRender(t, seededTable())) {
-			t.Errorf("a box holding only %s was seeded as\n%s\n%s\nwant the empty table and its rendering: a config the table did not render is one describing the box refuses, and a table with no config beside it serves nothing",
-				standing, held(t, table.Name), held(t, config.Name))
-		}
+	_, bin, table, config := seedsIn(t)
+	if err := os.WriteFile(config.Name, []byte(`{"left":"by an older ocel"}`), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	seeding(t, bin, table, config)
+	if held(t, table.Name) != string(routingTableItem().Content) || held(t, config.Name) != string(mustRender(t, seededTable())) {
+		t.Errorf("a box holding only %s was seeded as\n%s\n%s\nwant the empty table and its rendering: nothing is migrated out of a config, and one the table did not render serves what no deploy wrote",
+			config.Name, held(t, table.Name), held(t, config.Name))
+	}
+}
+
+func TestABootstrapOverABoxHoldingOnlyItsTableKeepsEveryRoute(t *testing.T) {
+	t.Parallel()
+
+	_, bin, table, config := seedsIn(t)
+	written := string(mustWrite(t, routed()))
+	if err := os.WriteFile(table.Name, []byte(written), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	seeding(t, bin, table, config)
+	if got := held(t, table.Name); got != written {
+		t.Errorf("a box holding its table and no config was seeded with the table\n%s\nwant the one standing\n%s\nthe table is the only record of what every project on the box routes, and a missing rendering is repaired from it rather than paid for with it",
+			got, written)
+	}
+	if _, err := os.Stat(config.Name); err != nil {
+		t.Errorf("a box holding only its table was left with no config beside it: %v, and the proxy is started against that path", err)
 	}
 }
 

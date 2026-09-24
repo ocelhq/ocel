@@ -169,12 +169,12 @@ func seedingPair(table, config, own Item) string {
 		at := quoted(item.Name)
 		script.WriteString("if [ -e " + at + " ] && [ ! -f " + at + " ]; then " + notAFile(item.Name) + "; fi\n")
 	}
-	script.WriteString("if [ ! -f " + quoted(table.Name) + " ] || [ ! -f " + quoted(config.Name) + " ]; then\n")
-	for _, item := range []Item{config, table} {
-		fmt.Fprintf(&script, "printf '%%s' %s | install -m %04o -o %s -g %s /dev/stdin %s\n",
+	install := func(item Item) string {
+		return fmt.Sprintf("printf '%%s' %s | install -m %04o -o %s -g %s /dev/stdin %s\n",
 			quoted(string(item.Content)), item.Mode, item.Owner, item.Owner, quoted(item.Name))
 	}
-	script.WriteString("fi\n")
+	script.WriteString("if [ ! -f " + quoted(table.Name) + " ]; then\n" + install(table) + install(config) +
+		"elif [ ! -f " + quoted(config.Name) + " ]; then\n" + install(config) + "fi\n")
 	fmt.Fprintf(&script, "chown %s:%s %s\nchmod %04o %s", own.Owner, own.Owner, quoted(own.Name), own.Mode, quoted(own.Name))
 	return script.String()
 }
