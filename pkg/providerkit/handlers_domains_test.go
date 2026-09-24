@@ -129,8 +129,20 @@ func TestAddHostnameOnAProjectThatPromotedNothingSaysNothingServesIt(t *testing.
 	if result.GetSuccess() || !strings.Contains(said, "promoted no release") || strings.Contains(said, "deploy again") {
 		t.Fatalf("AddHostname() = %q, want it to say plainly that nothing is promoted for app.acme.com to serve", said)
 	}
-	if bound := readStack(t, provider, providerkit.ClassProduction, "shop").Edge.Bound; !slices.Contains(bound, "app.acme.com") {
-		t.Errorf("the edge binds %v, want app.acme.com kept bound: the next promotion serves it", bound)
+	held := readStack(t, provider, providerkit.ClassProduction, "shop")
+	if len(held.Edge.Bound) != 0 || len(held.Hosts) != 0 {
+		t.Errorf("the refused add left the edge binding %v and the state settling %v, want nothing changed: `ocel deploy` settles the hostname when it promotes",
+			held.Edge.Bound, held.Hostnames())
+	}
+	if bound := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Bindings(); len(bound) != 0 {
+		t.Errorf("the refused add bound %v, want nothing bound", bound)
+	}
+	writer, err := provider.DNS().Open(fake.KindZone, "acme.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written := writer.(*fake.DNSWriter).Records(); len(written) != 0 {
+		t.Errorf("the refused add wrote %v, want no record written", written)
 	}
 }
 
