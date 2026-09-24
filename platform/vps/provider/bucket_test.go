@@ -420,9 +420,9 @@ func TestAStandingStoreIsRoutedOnTheBoxsProxyUnderALabelOfItsOwn(t *testing.T) {
 	if _, err := over(machine).Bucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
-	state, err := host.ReadProxyState([]byte(machine.proxyDoc))
+	state, err := host.ReadRoutingTable([]byte(machine.routingDoc))
 	if err != nil {
-		t.Fatalf("ReadProxyState() = %v", err)
+		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
 	at := slices.IndexFunc(state.Routes, func(route host.AppRoute) bool { return route.App == vars.StoreLabel })
 	if at < 0 {

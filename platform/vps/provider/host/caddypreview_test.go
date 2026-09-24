@@ -10,13 +10,14 @@ import (
 	"time"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const previewBase = "preview.example.com"
 
 const internalBase = "preview.ocel.home.arpa"
 
-func previewing() ProxyState {
+func previewing() RoutingTable {
 	state := routed()
 	state.PreviewBase = previewBase
 	return state
@@ -111,7 +112,7 @@ func TestThePreviewCatchAllRendersItsSuffixRatherThanAnEmptyHostMatcher(t *testi
 		"a label over 63 bytes":         strings.Repeat("a", 64) + ".example.com",
 		"a name the probe overflows":    strings.Repeat(strings.Repeat("a", 63)+".", 3) + strings.Repeat("b", 55) + ".com",
 	} {
-		if _, err := RenderProxyConfig(ProxyState{Grace: DrainWindow, PreviewBase: base}); err == nil {
+		if _, err := RenderProxyConfig(RoutingTable{Grace: DrainWindow, PreviewBase: base}); err == nil {
 			t.Errorf("a preview entry on base %q (%s) renders, and the probe route beside the catch-all is deliberately not skipped: an acme subject no CA can ever issue for is exactly the failing-order retry loop the exclusion exists to prevent, on a route the operator cannot see or remove short of releasing the base",
 				base, what)
 		}
@@ -129,9 +130,9 @@ func TestThePreviewCatchAllRendersItsSuffixRatherThanAnEmptyHostMatcher(t *testi
 func TestThePreviewEntryReadsBackAsTheBaseThatRenderedIt(t *testing.T) {
 	t.Parallel()
 
-	read, err := ReadProxyState(mustRender(t, previewing()))
+	read, err := ReadRoutingTable(mustWrite(t, previewing()))
 	if err != nil {
-		t.Fatalf("ReadProxyState() = %v", err)
+		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
 	if read.PreviewBase != previewBase {
 		t.Fatalf("the preview base reads back as %q, want %q: this file is the only thing that answers whether the shared preview entry stands", read.PreviewBase, previewBase)
@@ -141,31 +142,10 @@ func TestThePreviewEntryReadsBackAsTheBaseThatRenderedIt(t *testing.T) {
 	}
 }
 
-func TestAConfigDeclaringOnDemandTlsIsRefusedRatherThanServed(t *testing.T) {
-	t.Parallel()
-
-	rendered := mustRender(t, previewing())
-	var config map[string]any
-	if err := json.Unmarshal(rendered, &config); err != nil {
-		t.Fatal(err)
-	}
-	apps := config["apps"].(map[string]any)
-	apps["tls"] = map[string]any{"automation": map[string]any{
-		"on_demand": map[string]any{"ask": "http://127.0.0.1:9/ask"},
-	}}
-	written, err := json.Marshal(config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := ReadProxyState(written); err == nil {
-		t.Fatal("a proxy configuration declaring on-demand tls reads back as one ocel wrote: caddy only warns when on-demand carries no permission module and serves anyway, so a catch-all beside it is an unauthenticated acme trigger a stranger drives with a junk subdomain until this box is locked out of its own tls")
-	}
-}
-
 func TestTheRendererHasNoWayToDeclareOnDemandTlsAtAll(t *testing.T) {
 	t.Parallel()
 
-	for what, state := range map[string]ProxyState{
+	for what, state := range map[string]RoutingTable{
 		"a box serving previews": previewing(),
 		"a box serving one app":  routed(),
 		"a box serving nothing":  {Grace: DrainWindow},
@@ -290,7 +270,7 @@ func TestInstallingThePreviewEntryLoadsItOntoTheRunningProxyAndTakingItDownUnloa
 	if err := stood.host().InstallPreviewEntry(ctx, previewBase); err != nil {
 		t.Fatalf("InstallPreviewEntry() = %v", err)
 	}
-	held, err := ReadProxyState([]byte(stood.held))
+	held, err := ReadRoutingTable([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +286,7 @@ func TestInstallingThePreviewEntryLoadsItOntoTheRunningProxyAndTakingItDownUnloa
 	if err := stood.host().RemovePreviewEntry(ctx, previewBase); err != nil {
 		t.Fatalf("RemovePreviewEntry() = %v", err)
 	}
-	if held, err = ReadProxyState([]byte(stood.held)); err != nil {
+	if held, err = ReadRoutingTable([]byte(stood.held)); err != nil {
 		t.Fatal(err)
 	}
 	if held.PreviewBase != "" {
@@ -343,7 +323,7 @@ func TestReleasingThePreviewBaseIsRefusedWhileHostnamesUnderItStillStand(t *test
 	if !strings.Contains(err.Error(), claimed) {
 		t.Errorf("the refusal reads %q and names none of the hostnames standing in the way", err)
 	}
-	held, err := ReadProxyState([]byte(stood.held))
+	held, err := ReadRoutingTable([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -396,7 +376,7 @@ func TestAPreviewBaseNoPublicCaWillIssueForIsManagedInternallyAndReachesNoCaAtAl
 	}
 }
 
-func onDemandOn(t *testing.T, state ProxyState) string {
+func onDemandOn(t *testing.T, state RoutingTable) string {
 	t.Helper()
 
 	var read map[string]any
@@ -413,19 +393,41 @@ func onDemandOn(t *testing.T, state ProxyState) string {
 	return string(written)
 }
 
-func TestDescribingABoxAssertsItsProxyDeclaresNoOnDemandTls(t *testing.T) {
+func TestDescribingABoxAssertsItsProxyServesOnlyWhatItsRoutingTableRenders(t *testing.T) {
 	t.Parallel()
 
-	for what, held := range map[string]string{
-		"a proxy ocel wrote":               string(mustRender(t, previewing())),
-		"a proxy somebody added on-demand": onDemandOn(t, previewing()),
+	rendered := string(mustRender(t, previewing()))
+	for what, config := range map[string]string{
+		"a proxy ocel rendered":                   rendered,
+		"a proxy somebody added on-demand tls to": onDemandOn(t, previewing()),
+		"a proxy rendered from another table":     string(mustRender(t, routed())),
 	} {
-		stood := &claimBench{bench: machine(nil), held: held}
-		stood.answer = servesProxy(stood.bench, &stood.held)
-		_, err := Bootstrap(stood.host(), testVendor).described(context.Background(), standingHost())
-		if refused := err != nil; refused != strings.Contains(held, "on_demand") {
-			t.Errorf("describing %s = %v: caddy only warns about an on-demand policy carrying no permission module and serves anyway, so `ocel doctor` and the bootstrap assert its absence rather than trusting a refusal that never comes", what, err)
+		stood := claimingBox(t, previewing())
+		table := stood.answer
+		stood.answer = func(command string) (session.Result, bool) {
+			if readsConfig(command) {
+				return session.Result{Stdout: config}, true
+			}
+			return table(command)
 		}
+		_, err := Bootstrap(stood.host(), testVendor).described(context.Background(), standingHost())
+		if refused := err != nil; refused != (config != rendered) {
+			t.Errorf("describing %s = %v: caddy only warns about an on-demand policy carrying no permission module and serves anyway, so `ocel doctor` and the bootstrap assert the proxy runs exactly what ocel renders rather than trusting a refusal that never comes", what, err)
+		}
+	}
+}
+
+func TestDescribingABoxBeforeItHoldsARoutingTableAsksNothingOfTheProxy(t *testing.T) {
+	t.Parallel()
+
+	read := standingHost()
+	delete(read.Observed, routingTableItem().ID())
+	stood := machine(nil)
+	if _, err := Bootstrap(stood.host(), testVendor).described(context.Background(), read); err != nil {
+		t.Fatalf("describing a box bootstrapped before its routing table = %v, want it described so the plan can seed the table", err)
+	}
+	if at := stood.at(ProxyConfig); at >= 0 {
+		t.Errorf("describing a box with no routing table read %s: %v", ProxyConfig, stood.commands())
 	}
 }
 

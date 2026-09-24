@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const adminPort = "2019"
@@ -322,6 +323,9 @@ func TestLiveTheProxysConfigIsStatedAndItsLogCarriesNoQueryString(t *testing.T) 
 
 	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U:%a "+host.ProxyConfig)); owner != deployLogin+":640" {
 		t.Errorf("%s stands as %q, want the deploy principal's own file: the config is what a deploy renders", host.ProxyConfig, owner)
+	}
+	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U:%a "+vars.RoutingTable)); owner != deployLogin+":640" {
+		t.Errorf("%s stands as %q, want the deploy principal's own file: the table is what a deploy writes", vars.RoutingTable, owner)
 	}
 	grace := vm.drives(t, "config apps/http/grace_period")
 	if grace == "" || grace == "null" {

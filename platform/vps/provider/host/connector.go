@@ -181,7 +181,7 @@ func connectorRemoval() string {
 }
 
 func (c *Connector) Route(ctx context.Context, hostname string) error {
-	return c.host.reshape(ctx, func(state ProxyState) (ProxyState, error) {
+	return c.host.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
 		state.Connector = hostname
 		return state, nil
 	})

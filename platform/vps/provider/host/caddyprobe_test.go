@@ -22,7 +22,7 @@ type answered struct {
 	body   string
 }
 
-func probing(t *testing.T, state ProxyState) func(hostname string) answered {
+func probing(t *testing.T, state RoutingTable) func(hostname string) answered {
 	t.Helper()
 
 	rendered, err := RenderProxyConfig(state)
@@ -115,9 +115,9 @@ func logsOf(name string) string {
 func TestARealProxyAnswersAHostnameNothingOnTheBoxClaimsWithABare404(t *testing.T) {
 	for _, box := range []struct {
 		what  string
-		state ProxyState
+		state RoutingTable
 	}{
-		{"a box serving nothing", ProxyState{Grace: DrainWindow}},
+		{"a box serving nothing", RoutingTable{Grace: DrainWindow}},
 		{"a box serving one project", routed()},
 		{"a box serving two projects", twoProjects()},
 	} {
@@ -196,7 +196,7 @@ func standingApp(t *testing.T, body string) (network, upstream string) {
 func TestARealProxyServesTheAppsBodyUnderTheHostnameAndNamesTheEdgeThatServedIt(t *testing.T) {
 	network, upstream := standingApp(t, "the app answered")
 
-	state := ProxyState{
+	state := RoutingTable{
 		Grace:  DrainWindow,
 		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
 		Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
@@ -215,7 +215,7 @@ func TestARealProxyServesTheAppsBodyUnderTheHostnameAndNamesTheEdgeThatServedIt(
 func TestARealProxyStopsServingAHostnameTheProjectUnbound(t *testing.T) {
 	network, upstream := standingApp(t, "the app answered")
 
-	bound := ProxyState{
+	bound := RoutingTable{
 		Grace:  DrainWindow,
 		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
 		Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},

@@ -54,9 +54,9 @@ func TestAPinIsWrittenAtThePathTheProxyOpensAndReadBackAtThePathThisHostSpells(t
 		t.Errorf("the config carries a path off this host's own filesystem:\n%s", rendered)
 	}
 
-	read, err := ReadProxyState(rendered)
+	read, err := ReadRoutingTable(mustWrite(t, state))
 	if err != nil {
-		t.Fatalf("ReadProxyState() = %v", err)
+		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
 	if !slices.Equal(read.Pins, state.Pins) {
 		t.Errorf("the pins read back as %v, want %v: what ocel reads a pinned pair off is the path on this host, and what it hands the proxy is the path inside it", read.Pins, state.Pins)
@@ -183,9 +183,9 @@ func TestOneCertificateCoveringTwoHostnamesIsHandedToTheProxyOnce(t *testing.T) 
 		t.Errorf("the one entry is tagged %v, want every hostname the pair was pinned for: a tag dropped here is a hostname nothing on this box can say is pinned", files[0].Tags)
 	}
 
-	held, err := ReadProxyState(rendered)
+	held, err := ReadRoutingTable(mustWrite(t, state))
 	if err != nil {
-		t.Fatalf("ReadProxyState() = %v", err)
+		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
 	want := []Pin{{Hostname: "blog.example.com", Path: at}, {Hostname: "shop.example.com", Path: at}}
 	if !slices.Equal(held.Pins, want) {

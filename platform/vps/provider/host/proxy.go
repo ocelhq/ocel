@@ -12,9 +12,10 @@ import (
 )
 
 const (
-	KindNetwork     = "docker:network"
-	KindContainer   = "docker:container"
-	KindProxyConfig = "ocel:proxy-config"
+	KindNetwork      = "docker:network"
+	KindContainer    = "docker:container"
+	KindProxyConfig  = "ocel:proxy-config"
+	KindRoutingTable = "ocel:routing-table"
 )
 
 const ProxyImage = "public.ecr.aws/docker/library/caddy@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d"
@@ -118,32 +119,68 @@ func ProxyItems(arch string) []Item {
 		dir(proxyRoot, 0o750, stateOwner, ""),
 		dir(ProxyPins, 0o700, rootOwner, "your pinned certificates"),
 		proxyConfigItem(),
+		routingTableItem(),
 		dir(ProxyData, 0o700, rootOwner, "certificates and acme key"),
 		networkItem(),
 		containerItem(),
 	}
 }
 
+func seededTable() RoutingTable { return RoutingTable{Grace: DrainWindow} }
+
 func proxyConfigItem() Item {
+	rendered, err := RenderProxyConfig(seededTable())
+	if err != nil {
+		panic(err)
+	}
 	return Item{
 		Kind:    KindProxyConfig,
 		Name:    ProxyConfig,
 		Mode:    0o640,
 		Owner:   stateOwner,
-		Content: proxyBaseline,
+		Content: rendered,
+		Note:    "rendered from the routing table",
+	}
+}
+
+func routingTableItem() Item {
+	written, err := WriteRoutingTable(seededTable())
+	if err != nil {
+		panic(err)
+	}
+	return Item{
+		Kind:    KindRoutingTable,
+		Name:    live.RoutingTable,
+		Mode:    0o640,
+		Owner:   stateOwner,
+		Content: written,
 		Note:    "seeded here, rewritten by deploys",
 	}
 }
 
-func proxyConfigCommand(item Item) string {
-	at := quoted(item.Name)
-	seed := fmt.Sprintf("install -m %04o -o %s -g %s /dev/stdin %s", item.Mode, item.Owner, item.Owner, at)
-	return "set -e\n" +
-		"if [ -f " + at + " ]; then cat >/dev/null\n" +
-		"elif [ -e " + at + " ]; then cat >/dev/null; " + notAFile(item.Name) + "\n" +
-		"else " + seed + "; fi\n" +
-		fmt.Sprintf("chown %s:%s %s\n", item.Owner, item.Owner, at) +
-		fmt.Sprintf("chmod %04o %s", item.Mode, at)
+func rewrittenByDeploys(item Item) bool {
+	return item.Kind == KindProxyConfig || item.Kind == KindRoutingTable
+}
+
+func seedingPair(table, config, own Item) string {
+	var script strings.Builder
+	script.WriteString("set -e\n")
+	for _, item := range []Item{table, config} {
+		at := quoted(item.Name)
+		script.WriteString("if [ -e " + at + " ] && [ ! -f " + at + " ]; then " + notAFile(item.Name) + "; fi\n")
+	}
+	script.WriteString("if [ ! -f " + quoted(table.Name) + " ] || [ ! -f " + quoted(config.Name) + " ]; then\n")
+	for _, item := range []Item{config, table} {
+		fmt.Fprintf(&script, "printf '%%s' %s | install -m %04o -o %s -g %s /dev/stdin %s\n",
+			quoted(string(item.Content)), item.Mode, item.Owner, item.Owner, quoted(item.Name))
+	}
+	script.WriteString("fi\n")
+	fmt.Fprintf(&script, "chown %s:%s %s\nchmod %04o %s", own.Owner, own.Owner, quoted(own.Name), own.Mode, quoted(own.Name))
+	return script.String()
+}
+
+func seededCommand(item Item) string {
+	return seedingPair(routingTableItem(), proxyConfigItem(), item)
 }
 
 func notAFile(name string) string {
@@ -160,12 +197,12 @@ func bindsStanding(files []string) string {
 	return written
 }
 
-func proxyConfigProbe(item Item) string {
+func seededProbe(item Item) string {
 	at := quoted(item.Name)
 	return "if [ -h " + at + " ]; then " +
 		reports(quoted(kindLink), at, "0", "''", `"$(readlink `+at+`)"`) + "\n" +
 		"elif [ -f " + at + " ]; then " +
-		reports(quoted(KindProxyConfig), at, `"$(stat -c %a `+at+`)"`, `"$(stat -c %U `+at+`)"`, "''") + "\nfi"
+		reports(quoted(item.Kind), at, `"$(stat -c %a `+at+`)"`, `"$(stat -c %U `+at+`)"`, "''") + "\nfi"
 }
 
 func networkItem() Item {
@@ -338,7 +375,8 @@ func proxyRemovals() []removal {
 		taking(KindContainer, ProxyContainer, "ocel's proxy"),
 		taking(KindDir, ProxyData, "certificates and acme key"),
 		taking(KindNetwork, ProxyNetwork, "kept while anything is attached"),
-		taking(KindProxyConfig, ProxyConfig, "every app's routes"),
+		taking(KindProxyConfig, ProxyConfig, ""),
+		taking(KindRoutingTable, live.RoutingTable, "every app's routes"),
 		taking(KindDir, proxyRoot, ""),
 		sharing(ProxyPins, "only if empty"),
 	}

@@ -70,9 +70,9 @@ func TestTheStoresAdminApiIsRefusedAtTheEdgeAheadOfItsForward(t *testing.T) {
 func TestTheStoresAdminRefusalSurvivesBeingWrittenAndReadBack(t *testing.T) {
 	t.Parallel()
 
-	state, err := ReadProxyState(mustRender(t, storing()))
+	state, err := ReadRoutingTable(mustWrite(t, storing()))
 	if err != nil {
-		t.Fatalf("ReadProxyState() = %v", err)
+		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
 	again, err := RenderProxyConfig(state)
 	if err != nil {

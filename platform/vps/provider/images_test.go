@@ -24,24 +24,25 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 const loadedCoordinate = "ocel/shop/web:sha256-abc"
 
 type box struct {
-	mu       sync.Mutex
-	ran      []string
-	fed      []string
-	holds    bool
-	unsocket bool
-	serves   map[string]string
-	images   map[string]string
-	reads    map[string]string
-	leaf     string
-	kept     string
-	proxyDoc string
-	refuses  func(command string) (session.Result, bool)
+	mu         sync.Mutex
+	ran        []string
+	fed        []string
+	holds      bool
+	unsocket   bool
+	serves     map[string]string
+	images     map[string]string
+	reads      map[string]string
+	leaf       string
+	kept       string
+	routingDoc string
+	refuses    func(command string) (session.Result, bool)
 }
 
 func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (session.Result, error) {
@@ -110,25 +111,36 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 }
 
 func (b *box) proxying(command, carried string) (session.Result, bool) {
-	if !strings.Contains(command, quote(host.ProxyConfig)) {
+	if !strings.Contains(command, quote(vars.RoutingTable)) && command != "cat "+quote(host.ProxyConfig) {
 		return session.Result{}, false
 	}
-	if b.proxyDoc == "" {
-		rendered, err := host.RenderProxyConfig(host.ProxyState{Grace: host.DrainWindow})
+	if b.routingDoc == "" {
+		written, err := host.WriteRoutingTable(host.RoutingTable{Grace: host.DrainWindow})
 		if err != nil {
 			return session.Result{Code: 1, Stderr: err.Error()}, true
 		}
-		b.proxyDoc = string(rendered)
+		b.routingDoc = string(written)
 	}
-	sum := sha256.Sum256([]byte(b.proxyDoc))
-	digest := hex.EncodeToString(sum[:])
+	digested := func() string {
+		sum := sha256.Sum256([]byte(b.routingDoc))
+		return hex.EncodeToString(sum[:])
+	}
 	switch {
 	case strings.HasPrefix(command, "set -e\nsha256sum "):
-		return session.Result{Stdout: digest + "\n" + b.proxyDoc}, true
+		return session.Result{Stdout: digested() + "\n" + b.routingDoc}, true
 	case strings.Contains(command, `mv "$staged" `):
-		b.proxyDoc = carried
-		sum = sha256.Sum256([]byte(b.proxyDoc))
-		return session.Result{Stdout: hex.EncodeToString(sum[:]) + "\n"}, true
+		b.routingDoc, _, _ = strings.Cut(carried, "\n")
+		return session.Result{Stdout: digested() + "\n"}, true
+	case strings.HasPrefix(command, "cat "):
+		table, err := host.ReadRoutingTable([]byte(b.routingDoc))
+		if err != nil {
+			return session.Result{Code: 1, Stderr: err.Error()}, true
+		}
+		rendered, err := host.RenderProxyConfig(table)
+		if err != nil {
+			return session.Result{Code: 1, Stderr: err.Error()}, true
+		}
+		return session.Result{Stdout: string(rendered)}, true
 	}
 	return session.Result{}, false
 }

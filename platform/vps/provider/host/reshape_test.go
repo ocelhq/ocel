@@ -12,7 +12,7 @@ func TestAClaimComposedOntoAFileOneDeployMovedOnceIsRetriedOntoWhatThatDeployLef
 	t.Parallel()
 
 	stood := claimingBox(t, routed())
-	moved := mustRender(t, twoProjects())
+	moved := mustWrite(t, twoProjects())
 	proxied := servesProxy(stood.bench, &stood.held)
 	writes := 0
 	stood.answer = func(command string) (session.Result, bool) {
@@ -27,7 +27,7 @@ func TestAClaimComposedOntoAFileOneDeployMovedOnceIsRetriedOntoWhatThatDeployLef
 		}
 		stood.mu.Unlock()
 		if first {
-			return session.Result{Code: proxyMoved, Stderr: digested(string(moved))}, true
+			return session.Result{Code: routingMoved, Stderr: digested(string(moved))}, true
 		}
 		return proxied(command)
 	}
@@ -38,7 +38,7 @@ func TestAClaimComposedOntoAFileOneDeployMovedOnceIsRetriedOntoWhatThatDeployLef
 	if written := writes; written != 2 {
 		t.Errorf("the claim wrote %s %d times, want twice: once onto the digest the other deploy moved, and once onto what it left", ProxyConfig, written)
 	}
-	held, err := ReadProxyState([]byte(stood.held))
+	held, err := ReadRoutingTable([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}

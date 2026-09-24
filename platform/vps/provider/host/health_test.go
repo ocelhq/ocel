@@ -3,11 +3,9 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -52,9 +50,9 @@ func TestAnAppRouteProbesItsHealthPathActively(t *testing.T) {
 		t.Error("the check names its path under the deprecated `path` key rather than `uri`")
 	}
 
-	read, err := ReadProxyState(rendered)
+	read, err := ReadRoutingTable(mustWrite(t, state))
 	if err != nil {
-		t.Fatalf("ReadProxyState() = %v", err)
+		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
 	if len(read.Routes) != 1 || read.Routes[0] != state.Routes[0] {
 		t.Errorf("the route read back as %+v, want %+v: a deploy that cannot read a neighbour's health path rewrites the box without it", read.Routes, state.Routes)
@@ -69,24 +67,16 @@ func TestARouteWithNoHealthPathRendersNoCheckAndReadsBackAsNone(t *testing.T) {
 	if !found || app.HealthChecks != nil {
 		t.Errorf("a route naming no health path renders %+v", app.HealthChecks)
 	}
-	read, err := ReadProxyState(rendered)
+	read, err := ReadRoutingTable(mustWrite(t, releasing()))
 	if err != nil || read.Routes[0].Health != "" {
-		t.Errorf("ReadProxyState() = %+v, %v", read.Routes, err)
+		t.Errorf("ReadRoutingTable() = %+v, %v", read.Routes, err)
 	}
 }
 
-func TestAHealthCheckOtherThanTheOneAReleaseWritesIsRefusedAsNotOcels(t *testing.T) {
+func TestAHealthPathTheProxyCouldNotProbeIsRefusedRatherThanRendered(t *testing.T) {
 	t.Parallel()
 
-	state := releasing()
-	state.Routes[0].Health = "/healthz"
-	doctored := strings.Replace(string(mustRender(t, state)), `"expect_status":2`, `"expect_status":5`, 1)
-	_, err := ReadProxyState([]byte(doctored))
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Errorf("ReadProxyState() over a hand-edited check = %v, want the refusal every foreign route gets: a rewrite would take the edit with it", err)
-	}
-	if _, err := RenderProxyConfig(ProxyState{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-1:8080", Health: "healthz"}}}); err == nil {
+	if _, err := RenderProxyConfig(RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-1:8080", Health: "healthz"}}}); err == nil {
 		t.Error("a health path with no leading slash rendered, and the proxy would refuse the whole configuration at load")
 	}
 }
@@ -98,7 +88,7 @@ func TestAReleaseWritesTheHealthPathItGatedOnIntoTheRouteItFlipsTo(t *testing.T)
 	if err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
-	state, err := ReadProxyState([]byte(stood.held))
+	state, err := ReadRoutingTable([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}

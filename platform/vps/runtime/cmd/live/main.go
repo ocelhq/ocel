@@ -35,7 +35,7 @@ func run(argv []string, errs *os.File) int {
 	classRoot := flags.String("class-root", live.ClassRoot, "where each class keeps its seal key")
 	stateRoot := flags.String("state-root", live.StateRoot, "where each class keeps its records")
 	proc := flags.String("proc", agent.ProcRoot, "the procfs a caller's cgroup is read from")
-	proxyConfig := flags.String("proxy-config", live.ProxyConfig, "proxy config to read this box's hostnames from")
+	routingTable := flags.String("routing-table", live.RoutingTable, "routing table to read this box's hostnames from")
 	if err := flags.Parse(argv); err != nil {
 		return 2
 	}
@@ -55,7 +55,7 @@ func run(argv []string, errs *os.File) int {
 	server := &agent.Server{
 		Proc:    *proc,
 		Inspect: inspect,
-		Resolve: agent.Store{ClassRoot: *classRoot, StateRoot: *stateRoot, ProxyConfig: *proxyConfig},
+		Resolve: agent.Store{ClassRoot: *classRoot, StateRoot: *stateRoot, RoutingTable: *routingTable},
 		Space:   inspect,
 	}
 	if err := server.Serve(ctx, ln); err != nil {

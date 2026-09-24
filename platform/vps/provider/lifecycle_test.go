@@ -31,6 +31,7 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const lifecycleSlug = "ocel-vps-e2e"
@@ -1357,7 +1358,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	run.gaveBack(t, repository)
 	for _, taken := range []string{
 		filepath.Dir(host.ClassDir(class)), host.ClassDir(class), host.StateDir(class),
-		filepath.Dir(host.SealHelper), host.ProxyData, host.ProxyConfig, host.ProxyHelper,
+		filepath.Dir(host.SealHelper), host.ProxyData, host.ProxyConfig, vars.RoutingTable, host.ProxyHelper,
 	} {
 		if run.vm.stands(t, taken) {
 			t.Errorf("%s stands after a destroy, so the machine was not given back", taken)

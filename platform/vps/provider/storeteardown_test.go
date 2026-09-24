@@ -106,7 +106,7 @@ func (b *box) forget() {
 func (b *box) proxied() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.proxyDoc
+	return b.routingDoc
 }
 
 func holdingBuckets(t *testing.T, provider *vps.Provider, stack naming.StackName, named ...string) {

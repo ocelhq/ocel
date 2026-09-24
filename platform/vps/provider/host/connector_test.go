@@ -217,7 +217,7 @@ func TestWhatTheConnectorSaysAboutItselfIsReadBack(t *testing.T) {
 func TestTheProxyForwardsTheConnectorPathAheadOfEverySurface(t *testing.T) {
 	t.Parallel()
 
-	state := ProxyState{
+	state := RoutingTable{
 		Grace:     DeployWindow,
 		Connector: "box.example.com",
 		Claims:    []HostClaim{{Hostname: "box.example.com", Owner: surface, Pointer: pointed, App: "web"}},
@@ -251,59 +251,35 @@ func TestTheProxyForwardsTheConnectorPathAheadOfEverySurface(t *testing.T) {
 		t.Errorf("the connector route dials %v, want %s", dialled.Upstreams, ConnectorDial)
 	}
 
-	held, err := ReadProxyState(rendered)
+	held, err := ReadRoutingTable(mustWrite(t, state))
 	if err != nil {
-		t.Fatalf("ReadProxyState: %v", err)
+		t.Fatalf("ReadRoutingTable: %v", err)
 	}
 	if held.Connector != "box.example.com" {
 		t.Errorf("the route the render wrote reads back as %q, so the next deploy takes it with it", held.Connector)
 	}
 }
 
-func TestAConnectorRouteWithNoHostMatcherIsNotOneOcelWrote(t *testing.T) {
-	t.Parallel()
-
-	rendered := mustRender(t, ProxyState{Grace: DeployWindow, Connector: "box.example.com"})
-	var read caddyConfig
-	if err := json.Unmarshal(rendered, &read); err != nil {
-		t.Fatal(err)
-	}
-	server := read.Apps.HTTP.Servers[proxyServer]
-	for at, route := range server.Routes {
-		if route.Identity == connectorRoute {
-			server.Routes[at].Match = []caddyMatch{{Path: route.Match[0].Path}}
-		}
-	}
-	read.Apps.HTTP.Servers[proxyServer] = server
-	stripped, err := json.Marshal(read)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := ReadProxyState(stripped); err == nil {
-		t.Error("a connector route carrying no host matcher read back as one ocel wrote, and Caddy orders no certificate for a route that matches every hostname")
-	}
-}
-
 func TestABoxWithNoConnectorForwardsNothingToOne(t *testing.T) {
 	t.Parallel()
 
-	rendered := mustRender(t, ProxyState{Grace: DeployWindow})
+	rendered := mustRender(t, RoutingTable{Grace: DeployWindow})
 	if strings.Contains(string(rendered), ConnectorPath) {
 		t.Errorf("a box nothing was added to still routes %s:\n%s", ConnectorPath, rendered)
 	}
-	held, err := ReadProxyState(rendered)
+	held, err := ReadRoutingTable(mustWrite(t, RoutingTable{Grace: DeployWindow}))
 	if err != nil {
-		t.Fatalf("ReadProxyState: %v", err)
+		t.Fatalf("ReadRoutingTable: %v", err)
 	}
 	if held.Connector != "" {
-		t.Errorf("a config carrying no connector route read back as %q", held.Connector)
+		t.Errorf("a table carrying no connector read back as %q", held.Connector)
 	}
 }
 
 func TestASurfaceThatClaimsNothingStillMatchesNothing(t *testing.T) {
 	t.Parallel()
 
-	rendered := mustRender(t, ProxyState{
+	rendered := mustRender(t, RoutingTable{
 		Grace:  DeployWindow,
 		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "web:3000"}},
 	})

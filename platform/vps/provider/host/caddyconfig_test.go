@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 )
 
-func loading(t *testing.T, state ProxyState) map[string]any {
+func loading(t *testing.T, state RoutingTable) map[string]any {
 	t.Helper()
 	rendered, err := RenderProxyConfig(state)
 	if err != nil {
@@ -37,8 +37,8 @@ func servers(t *testing.T, read map[string]any) map[string]any {
 	return found
 }
 
-func releasing() ProxyState {
-	return ProxyState{
+func releasing() RoutingTable {
+	return RoutingTable{
 		Grace:  30 * time.Second,
 		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + providerkit.InjectedPortText}},
 	}
@@ -47,7 +47,7 @@ func releasing() ProxyState {
 func TestEveryConfigTheRendererEmitsCarriesTheAdminBlockItsGuardWouldRefuseItFor(t *testing.T) {
 	t.Parallel()
 
-	for what, state := range map[string]ProxyState{
+	for what, state := range map[string]RoutingTable{
 		"a flip":               releasing(),
 		"a box serving no app": {Grace: 30 * time.Second},
 	} {
@@ -78,11 +78,11 @@ func TestTheProxysCeilingAndTheDeploysAreOneNumber(t *testing.T) {
 func TestARedeployThatChangesNothingRendersTheSameBytes(t *testing.T) {
 	t.Parallel()
 
-	scrambled := ProxyState{Grace: 30 * time.Second, Routes: []AppRoute{
+	scrambled := RoutingTable{Grace: 30 * time.Second, Routes: []AppRoute{
 		{RouteKey: keyed("worker"), Upstream: "shop-worker-1:" + providerkit.InjectedPortText},
 		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + providerkit.InjectedPortText},
 	}}
-	ordered := ProxyState{Grace: 30 * time.Second, Routes: []AppRoute{
+	ordered := RoutingTable{Grace: 30 * time.Second, Routes: []AppRoute{
 		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + providerkit.InjectedPortText},
 		{RouteKey: keyed("worker"), Upstream: "shop-worker-1:" + providerkit.InjectedPortText},
 	}}
@@ -91,34 +91,21 @@ func TestARedeployThatChangesNothingRendersTheSameBytes(t *testing.T) {
 	}
 }
 
-func TestTheBoxsOwnFileReadsBackAsTheStateThatRenderedIt(t *testing.T) {
+func TestWhatBootstrapSeedsIsABoxServingNothingAndItsRendering(t *testing.T) {
 	t.Parallel()
 
-	state := releasing()
-	read, err := ReadProxyState(mustRender(t, state))
+	read, err := ReadRoutingTable(routingTableItem().Content)
 	if err != nil {
-		t.Fatalf("ReadProxyState() = %v", err)
+		t.Fatalf("ReadRoutingTable() over the table bootstrap seeds = %v", err)
 	}
-	if read.Grace != state.Grace {
-		t.Errorf("the grace period read back as %s, want %s", read.Grace, state.Grace)
+	if len(read.Routes) != 0 || len(read.Claims) != 0 || len(read.Pins) != 0 || read.PreviewBase != "" || read.Connector != "" {
+		t.Errorf("the seeded table reads back carrying %+v", read)
 	}
-	if len(read.Routes) != 1 || read.Routes[0] != state.Routes[0] {
-		t.Errorf("the routes read back as %v, want %v: a deploy that cannot read the box's other apps overwrites them", read.Routes, state.Routes)
+	if read.Grace != DrainWindow {
+		t.Errorf("the seeded table reads back with a grace period of %s, want the %s drain window: rendering over no grace declares caddy's eternal default", read.Grace, DrainWindow)
 	}
-}
-
-func TestTheBaselineBootstrapSeedsReadsBackAsABoxServingNothing(t *testing.T) {
-	t.Parallel()
-
-	read, err := ReadProxyState(proxyBaseline)
-	if err != nil {
-		t.Fatalf("ReadProxyState() over the config bootstrap seeds = %v", err)
-	}
-	if len(read.Routes) != 0 {
-		t.Errorf("the seeded baseline reads back carrying %v", read.Routes)
-	}
-	if read.Grace == 0 {
-		t.Error("the seeded baseline reads back with no grace period, and rendering over it would declare caddy's eternal default")
+	if seeded := proxyConfigItem().Content; !bytes.Equal(seeded, mustRender(t, read)) {
+		t.Errorf("bootstrap seeds %s as\n%s\nwhich is not the rendering of the table it seeds beside it, and describing the box refuses a config ocel did not render", ProxyConfig, seeded)
 	}
 }
 
@@ -163,7 +150,7 @@ func TestTheRedactingLogIsCarriedRatherThanRebuiltOnEveryFlip(t *testing.T) {
 
 func keyed(app string) RouteKey { return RouteKey{Owner: surface, Pointer: pointed, App: app} }
 
-func mustRender(t *testing.T, state ProxyState) []byte {
+func mustRender(t *testing.T, state RoutingTable) []byte {
 	t.Helper()
 	rendered, err := RenderProxyConfig(state)
 	if err != nil {

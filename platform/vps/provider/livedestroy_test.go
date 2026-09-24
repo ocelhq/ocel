@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
@@ -178,7 +179,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 	defer vm.ssh(t, "sudo docker rm -f "+workload+" >/dev/null 2>&1 || true")
 
 	singletons := []string{"/var/lib/ocel", "/usr/local/lib/ocel", "/usr/local/lib/ocel/seal", "/usr/local/lib/ocel/records",
-		host.ProxyHelper, host.ProxyConfig, "/etc/ocel"}
+		host.ProxyHelper, host.ProxyConfig, vars.RoutingTable, "/etc/ocel"}
 	sealGrant := func(class providerkit.Class) string { return "/etc/sudoers.d/ocel-seal-" + string(class) }
 
 	first, err := bootstrapper.PlanRemoval(ctx, production)

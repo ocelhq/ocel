@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -113,7 +114,7 @@ func TestTheProbeAndTheWriteAgreeOnWhatAServingProxyIs(t *testing.T) {
 
 	observed := dockered(t, holding())
 	for _, item := range ProxyItems(ArchAMD64) {
-		if item.Kind == KindFile || item.Kind == KindDir || item.Kind == KindProxyConfig {
+		if item.Kind == KindFile || item.Kind == KindDir || rewrittenByDeploys(item) {
 			continue
 		}
 		if observed[item.ID()] != item.Digest() {
@@ -444,37 +445,127 @@ func TestTheFileTheProxyIsStartedFromIsTheWholeOfWhatItServes(t *testing.T) {
 	}
 }
 
-func TestWhatTheDeployLoopWritesOverTheProxysConfigIsNeverCalledDrift(t *testing.T) {
+func TestWhatTheDeployLoopWritesOverTheRoutingTableAndTheProxysConfigIsNeverCalledDrift(t *testing.T) {
 	t.Parallel()
 
 	class := providerkit.ClassProduction
 	keys := []byte(aKey + "\n")
 	deployed := digests(Items(class, keys, ArchAMD64))
-	routed := proxyConfigItem()
-	routed.Content = []byte("every route this box serves")
-	if routed.Digest() != proxyConfigItem().Digest() {
-		t.Fatal("the proxy's config digests differently once a deploy has written routes into it, and every deploy would then read as drift")
+	for _, seeded := range []Item{routingTableItem(), proxyConfigItem()} {
+		routed := seeded
+		routed.Content = []byte("every route this box serves")
+		if routed.Digest() != seeded.Digest() {
+			t.Fatalf("%s digests differently once a deploy has written routes into it, and every deploy would then read as drift", seeded.Name)
+		}
+		read := Reading{Class: class, Keys: keys, Arch: ArchAMD64, Observed: deployed}
+		if !read.current(routed) {
+			t.Fatalf("a box whose deploys have written routes into %s reads as drifted, and the item is keyed on content the deploy loop is built to replace", seeded.Name)
+		}
+		if planned := planFor(planned(read), seeded.ID()); planned.Action != providerkit.ActionKeep {
+			t.Errorf("a re-run over a box carrying deployed routes plans %q for %s, and a bootstrap that reseeds it takes every app on the box down", planned.Action, seeded.Name)
+		}
+		if sum := seeded.sum(); sum != "" {
+			t.Errorf("%s is digested over %q, and every deploy invalidates it", seeded.Name, sum)
+		}
+		if strings.Contains(seeded.probe(), "sha256sum") {
+			t.Errorf("the survey hashes what a deploy wrote:\n%s", seeded.probe())
+		}
+		seeding := seeded.command()
+		if !strings.Contains(seeding, "if [ ! -f "+quoted(live.RoutingTable)+" ] || [ ! -f "+quoted(ProxyConfig)+" ]") {
+			t.Errorf("the write of %s replaces what stands there rather than seeding what does not:\n%s", seeded.Name, seeding)
+		}
+		if !strings.Contains(seeding, "chown "+stateOwner+":"+stateOwner+" "+quoted(seeded.Name)) || !strings.Contains(seeding, "chmod 0640 "+quoted(seeded.Name)) {
+			t.Errorf("the write of %s leaves its mode and owner as it found them:\n%s", seeded.Name, seeding)
+		}
 	}
+}
 
-	read := Reading{Class: class, Keys: keys, Arch: ArchAMD64, Observed: deployed}
-	if !read.current(routed) {
-		t.Fatal("a box whose deploys have written routes into the proxy's config reads as drifted, and the item is keyed on content the deploy loop is built to replace")
+func seedsIn(t *testing.T) (string, string, Item, Item) {
+	t.Helper()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "bin")
+	if err := os.Mkdir(bin, 0o755); err != nil {
+		t.Fatal(err)
 	}
-	if planned := planFor(planned(read), proxyConfigItem().ID()); planned.Action != providerkit.ActionKeep {
-		t.Errorf("a re-run over a box carrying deployed routes plans %q for %s, and a bootstrap that reseeds it takes every app on the box down", planned.Action, ProxyConfig)
+	executable(t, filepath.Join(bin, "install"), "#!/bin/sh\neval last=\\${$#}\ncat > \"$last\"\n")
+	executable(t, filepath.Join(bin, "chown"), "#!/bin/sh\nexit 0\n")
+	table, config := routingTableItem(), proxyConfigItem()
+	table.Name, config.Name = filepath.Join(dir, "routing.json"), filepath.Join(dir, "caddy.json")
+	return dir, bin, table, config
+}
+
+func seeding(t *testing.T, bin string, table, config Item) {
+	t.Helper()
+	for _, own := range []Item{config, table} {
+		if said, err := writing(t, bin, seedingPair(table, config, own)); err != nil {
+			t.Fatalf("seeding %s = %v: %s", own.Name, err, said)
+		}
 	}
-	if sum := proxyConfigItem().sum(); sum != "" {
-		t.Errorf("the proxy's config is digested over %q, and every deploy invalidates it", sum)
+}
+
+func held(t *testing.T, path string) string {
+	t.Helper()
+	read, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if strings.Contains(proxyConfigProbe(proxyConfigItem()), "sha256sum") {
-		t.Errorf("the survey hashes what the proxy serves:\n%s", proxyConfigProbe(proxyConfigItem()))
+	return string(read)
+}
+
+func TestTheDeployLoginIsToldItOwnsTheRoutingTable(t *testing.T) {
+	t.Parallel()
+
+	owned := slices.ContainsFunc(grants(providerkit.ClassProduction, ArchAMD64), func(grant Grant) bool {
+		return grant.Name == "owns "+live.RoutingTable
+	})
+	if !owned {
+		t.Errorf("the deploy grants never name %s, and it is a file every deploy of every project on the box rewrites", live.RoutingTable)
 	}
-	seeding := proxyConfigCommand(proxyConfigItem())
-	if !strings.Contains(seeding, "if [ -f "+quoted(ProxyConfig)+" ]") {
-		t.Errorf("the write of %s replaces what stands there rather than seeding what does not:\n%s", ProxyConfig, seeding)
+}
+
+func TestABootstrapSeedsTheRoutingTableAndItsRenderingTogether(t *testing.T) {
+	t.Parallel()
+
+	_, bin, table, config := seedsIn(t)
+	seeding(t, bin, table, config)
+	if got := held(t, table.Name); got != string(routingTableItem().Content) {
+		t.Errorf("a fresh box is seeded with the table\n%s\nwant the empty one\n%s", got, routingTableItem().Content)
 	}
-	if !strings.Contains(seeding, "chown "+stateOwner+":"+stateOwner) || !strings.Contains(seeding, "chmod 0640") {
-		t.Errorf("the write of %s leaves its mode and owner as it found them:\n%s", ProxyConfig, seeding)
+	if got := held(t, config.Name); got != string(mustRender(t, seededTable())) {
+		t.Errorf("a fresh box is seeded with the config\n%s\nwant the rendering of the empty table", got)
+	}
+}
+
+func TestABootstrapOverABoxThatRoutesLeavesItsTableAndItsConfigAlone(t *testing.T) {
+	t.Parallel()
+
+	_, bin, table, config := seedsIn(t)
+	written := string(mustWrite(t, routed()))
+	rendered := string(mustRender(t, routed()))
+	for path, body := range map[string]string{table.Name: written, config.Name: rendered} {
+		if err := os.WriteFile(path, []byte(body), 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seeding(t, bin, table, config)
+	if held(t, table.Name) != written || held(t, config.Name) != rendered {
+		t.Error("a bootstrap over a box a deploy has routed reseeded it, and every app on the box goes dark until its next deploy")
+	}
+}
+
+func TestABootstrapOverABoxHoldingOnlyOneHalfOfThePairSeedsBoth(t *testing.T) {
+	t.Parallel()
+
+	for _, standing := range []string{"caddy.json", "routing.json"} {
+		dir, bin, table, config := seedsIn(t)
+		if err := os.WriteFile(filepath.Join(dir, standing), []byte(`{"left":"by an older ocel"}`), 0o640); err != nil {
+			t.Fatal(err)
+		}
+		seeding(t, bin, table, config)
+		if held(t, table.Name) != string(routingTableItem().Content) || held(t, config.Name) != string(mustRender(t, seededTable())) {
+			t.Errorf("a box holding only %s was seeded as\n%s\n%s\nwant the empty table and its rendering: a config the table did not render is one describing the box refuses, and a table with no config beside it serves nothing",
+				standing, held(t, table.Name), held(t, config.Name))
+		}
 	}
 }
 
@@ -486,6 +577,7 @@ func TestOneProxyConfigOfTheDeploysOwnDoesNotRefuseTheHealOfEveryOtherItem(t *te
 	items := Items(class, keys, ArchAMD64)
 	observed := digests(items)
 	observed[proxyConfigItem().ID()] = digest(KindProxyConfig, ProxyConfig, 0o600, rootOwner, "")
+	observed[routingTableItem().ID()] = digest(KindRoutingTable, live.RoutingTable, 0o600, rootOwner, "")
 	observed[KindDir+" "+RecordsDir(class)] = digest(KindDir, RecordsDir(class), 0o700, stateOwner, "")
 	read := Reading{Class: class, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
 		Stamp: Stamp{State: StateComplete, Digests: digests(items)}}
@@ -497,8 +589,10 @@ func TestOneProxyConfigOfTheDeploysOwnDoesNotRefuseTheHealOfEveryOtherItem(t *te
 	if len(work) != 1 || work[0].Name != RecordsDir(class) {
 		t.Errorf("healable() = %v, want only the record tier", ids(work))
 	}
-	if !slices.Contains(left, proxyConfigItem().ID()) {
-		t.Errorf("heal left %v, and a box told nothing about the one item it declined to write is one nobody can read the exit code of", left)
+	for _, said := range []string{proxyConfigItem().ID(), routingTableItem().ID()} {
+		if !slices.Contains(left, said) {
+			t.Errorf("heal left %v without %s, and a box told nothing about the item it declined to write is one nobody can read the exit code of", left, said)
+		}
 	}
 	if err := refuseReplacements(read, work); err != nil {
 		t.Errorf("an unattended apply over the same box = %v, want the proxy's own config never counted as something a user must consent to overwrite", err)
@@ -512,7 +606,7 @@ func TestAMissingProxyIsLeftToABootstrapAndSaidSoRatherThanPassedOver(t *testing
 	keys := []byte(aKey + "\n")
 	items := Items(class, keys, ArchAMD64)
 	observed := digests(items)
-	for _, gone := range []Item{containerItem(), proxyConfigItem()} {
+	for _, gone := range []Item{containerItem(), proxyConfigItem(), routingTableItem()} {
 		delete(observed, gone.ID())
 	}
 	read := Reading{Class: class, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
@@ -525,7 +619,7 @@ func TestAMissingProxyIsLeftToABootstrapAndSaidSoRatherThanPassedOver(t *testing
 	if len(work) != 0 {
 		t.Errorf("heal writes %v, and the unattended path with nobody watching does not install a proxy", ids(work))
 	}
-	for _, said := range []string{containerItem().ID(), proxyConfigItem().ID()} {
+	for _, said := range []string{containerItem().ID(), proxyConfigItem().ID(), routingTableItem().ID()} {
 		if !slices.Contains(left, said) {
 			t.Errorf("heal left %v and never names %s, so a box with no proxy at all exits zero saying nothing", left, said)
 		}
@@ -975,27 +1069,31 @@ func TestTheProxyIsWrittenAgainstTheBoxTheEngineWriteLeftBehind(t *testing.T) {
 func TestSomethingOtherThanTheProxysConfigStandingAtItsPathIsRefusedRatherThanChowned(t *testing.T) {
 	t.Parallel()
 
-	at := filepath.Join(t.TempDir(), "caddy.json")
-	if err := os.Mkdir(at, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	item := proxyConfigItem()
-	item.Name = at
-
-	said, err := writing(t, t.TempDir(), proxyConfigCommand(item))
-	if err == nil {
-		t.Fatalf("the write over a directory where the config belongs landed, and the probe reads that path with -f: "+
-			"the write would call it present forever, the survey would call it absent forever, and every apply would report success over a proxy that never serves:\n%s", said)
-	}
-	if !strings.Contains(said, at) {
-		t.Errorf("the write said %q, want it to name %s as what stands there", said, at)
-	}
-	held, err := os.Stat(at)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if held.Mode().Perm() != 0o755 {
-		t.Errorf("the write left %s at %v, and it chmodded what it could not write rather than refusing over it", at, held.Mode().Perm())
+	_, bin, table, config := seedsIn(t)
+	for _, over := range []Item{config, table} {
+		if err := os.MkdirAll(over.Name, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for _, own := range []Item{config, table} {
+			said, err := writing(t, bin, seedingPair(table, config, own))
+			if err == nil {
+				t.Fatalf("the write of %s over a directory where %s belongs landed, and the probe reads that path with -f: "+
+					"the write would call it present forever, the survey would call it absent forever, and every apply would report success over a proxy that never serves:\n%s", own.Name, over.Name, said)
+			}
+			if !strings.Contains(said, over.Name) {
+				t.Errorf("the write said %q, want it to name %s as what stands there", said, over.Name)
+			}
+		}
+		stood, err := os.Stat(over.Name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if stood.Mode().Perm() != 0o755 {
+			t.Errorf("the write left %s at %v, and it chmodded what it could not write rather than refusing over it", over.Name, stood.Mode().Perm())
+		}
+		if err := os.Remove(over.Name); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
