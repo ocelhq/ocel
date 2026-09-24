@@ -15,8 +15,9 @@ type Resolver interface {
 }
 
 const (
-	settleAttempts = 12
-	settleWait     = 5 * time.Second
+	settleAttempts   = 12
+	attendedAttempts = 180
+	settleWait       = 5 * time.Second
 )
 
 type settler struct {
@@ -41,6 +42,11 @@ func attended(sender *eventSender) owedPolicy {
 	return owedPolicy{ask: func(headline string, records []edge.Record, notes ...string) {
 		sender.send(dnsOwedEvent(headline, records, notes...))
 	}}
+}
+
+func (s *settler) attend(sender *eventSender) {
+	s.owed = attended(sender)
+	s.attempts = attendedAttempts
 }
 
 func unattended(sender *eventSender) owedPolicy {
