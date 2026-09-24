@@ -725,7 +725,12 @@ jobs:
     concurrency:
       group: ${{ needs.binary.outputs.real == 'true' && 'real-vps' || format('journey-vps-{0}', github.event.pull_request.number) }}
       cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
+    permissions:
+      contents: read
+      id-token: write
+      packages: write
     env:
+      REGISTRY_PUSHES: ${{ needs.binary.outputs.real == 'true' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository) }}
       OCEL_TARGET: vps
       OCEL_JOURNEY_CONCERN: ${{ needs.binary.outputs.concern }}
       OCEL_JOURNEY_FIXTURES: ${{ needs.binary.outputs.fixtures }}
@@ -821,8 +826,23 @@ jobs:
             echo "OCEL_VPS_IDENTITY_FILE=$OCEL_EC2_KEY"
           } >> "$GITHUB_ENV"
 
+      - name: Mark when this lane begins pushing to the journey registry
+        id: registry
+        if: ${{ env.REGISTRY_PUSHES == 'true' }}
+        run: echo "since=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: Run the journey
+        env:
+          OCEL_JOURNEY_REGISTRY_USER: ${{ env.REGISTRY_PUSHES == 'true' && github.actor || '' }}
+          OCEL_JOURNEY_REGISTRY_TOKEN: ${{ env.REGISTRY_PUSHES == 'true' && secrets.GITHUB_TOKEN || '' }}
         run: pnpm --filter @ocel-tests/journeys journey
+
+      - name: No journey image left in the registry
+        if: ${{ always() && steps.registry.outputs.since != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SINCE: ${{ steps.registry.outputs.since }}
+        run: pnpm --filter @ocel-tests/journeys sweep:registry --since "$SINCE"
 
       - name: Record that what vps reads has passed
         if: ${{ needs.binary.outputs.real != 'true' }}
