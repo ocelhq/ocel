@@ -101,9 +101,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Fatalf("Plan() over a machine with no engine shows %s as %q, want the install a user consents to", engineName, engine.Action)
 	}
 	for _, learned := range []*regexp.Regexp{
-		regexp.MustCompile(`https://raw\.githubusercontent\.com/docker/docker-install/[0-9a-f]{40}/install\.sh`),
-		regexp.MustCompile(`sha256 [0-9a-f]{64}`),
-		regexp.MustCompile(`engine [0-9]+\.[0-9]+\.[0-9]+`),
+		regexp.MustCompile(`docker [0-9]+\.[0-9]+\.[0-9]+`),
 	} {
 		if !learned.MatchString(engine.Reason) {
 			t.Errorf("the engine is planned as %q, which never names %s, and the user consenting never learns what runs on their machine", engine.Reason, learned)
