@@ -1074,20 +1074,19 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	if !strings.Contains(deployed, lifecycleApp) {
 		t.Fatalf("the deploy transcript never even names %s, so it is no window a leaked value could have appeared in:\n%s", lifecycleApp, deployed)
 	}
-	if !strings.Contains(deployed, "`ocel domain add`") {
-		t.Errorf("the deploy that creates the edge surface never said what binds %s:\n%s", lifecycleHostname, deployed)
+	for _, want := range []string{lifecycleHostname + " does not answer as the box edge yet", "`ocel domain add`"} {
+		if !strings.Contains(deployed, want) {
+			t.Errorf("the deploy never said %q, and a hostname it bound but could not reach is left to `ocel domain add`, not to another deploy:\n%s", want, deployed)
+		}
+	}
+	if strings.Contains(deployed, "has no DNS writer configured") {
+		t.Errorf("the deploy owed a record for %s, and no DNS provider holds a localhost name:\n%s", lifecycleHostname, deployed)
 	}
 
 	written := run.vm.proxyLogBytes(t)
 	owed := run.refused(t, "domain", "add")
-	for _, want := range []string{
-		"A     " + lifecycleHostname + "  " + run.vm.addr,
-		"has no DNS writer configured",
-		lifecycleHostname + " does not answer as the box edge yet",
-	} {
-		if !strings.Contains(owed, want) {
-			t.Errorf("`ocel domain add` never said %q, and a box's whole dns story is the record it owes and the honesty of its probe:\n%s", want, owed)
-		}
+	if !strings.Contains(owed, lifecycleHostname+" does not answer as the box edge yet") {
+		t.Errorf("`ocel domain add` never said %s does not answer yet, and a box's dns story is the honesty of its probe:\n%s", lifecycleHostname, owed)
 	}
 	run.trusting(t)
 	bound := run.deploying(t, "domain", "add")

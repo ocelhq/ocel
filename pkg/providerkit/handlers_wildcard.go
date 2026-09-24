@@ -36,7 +36,7 @@ func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) 
 	if err != nil {
 		return nil, err
 	}
-	writer, err := h.dnsFor(provider, sel)
+	writer, err := dnsFor(provider, sel)
 	if err != nil {
 		return nil, err
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -19,16 +20,17 @@ const (
 )
 
 type settler struct {
-	kind     edge.Kind
-	unbound  bool
-	writer   edge.DNSWriter
-	zone     string
-	resolve  Resolver
-	attempts int
-	wait     time.Duration
-	sleep    func(context.Context, time.Duration) error
-	now      func() time.Time
-	ask      func(headline string, records []edge.Record, notes ...string)
+	kind       edge.Kind
+	unbound    bool
+	writer     edge.DNSWriter
+	zone       string
+	resolve    Resolver
+	attempts   int
+	wait       time.Duration
+	sleep      func(context.Context, time.Duration) error
+	now        func() time.Time
+	ask        func(headline string, records []edge.Record, notes ...string)
+	unattended bool
 }
 
 func newSettler(front edge.Edge, writer edge.DNSWriter, zone string, resolve Resolver) settler {
@@ -137,14 +139,37 @@ func (s settler) write(ctx context.Context, records []edge.Record, headline stri
 		if s.ask != nil {
 			s.ask(headline, records, append(slices.Clone(notes), instructionsOnly)...)
 		}
-		return settled, nil
+		return settled, s.waiting(headline, settled.Owed)
 	}
 	for _, rec := range records {
 		say("Writing " + rec.String())
 	}
 	written, err := s.writer.EnsureRecords(ctx, records, say)
 	settled.Written, settled.Owed = written, edge.Unwritten(records, written)
-	return settled, err
+	if err != nil || len(settled.Owed) == 0 {
+		return settled, err
+	}
+	if s.unattended && s.ask != nil {
+		s.ask(headline, settled.Owed, notes...)
+	}
+	return settled, s.waiting(headline, settled.Owed)
+}
+
+type owedRecords struct {
+	headline string
+	records  []edge.Record
+}
+
+func (o owedRecords) Error() string {
+	return fmt.Sprintf("%s — ocel did not write %s; once that is in place, `ocel domain add` waits for it and settles the rest",
+		o.headline, strings.Join(recordLines(o.records), ", "))
+}
+
+func (s settler) waiting(headline string, owed []edge.Record) error {
+	if !s.unattended || len(owed) == 0 {
+		return nil
+	}
+	return owedRecords{headline: headline, records: owed}
 }
 
 func (s settler) release(ctx context.Context, written []edge.Record, say func(string)) error {
@@ -184,7 +209,7 @@ func (s settler) unresolved(hostname string, serving edge.Kind, began time.Time)
 	waited := s.now().Sub(began).Round(time.Second)
 	if serving == "" {
 		return Refuse(CodeNotReady,
-			"%s does not answer as the %s edge yet%s — this run gave up after about %s, and re-running it picks up where this one stopped",
+			"%s does not answer as the %s edge yet%s — this run gave up after about %s, and `ocel domain add` picks up where it stopped",
 			hostname, s.kind, s.unreached(hostname), waited)
 	}
 	return Refuse(CodeNotReady,

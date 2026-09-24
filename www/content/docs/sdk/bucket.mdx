@@ -306,8 +306,7 @@ on the machine, and reaches browsers through `storage.<domain>` on the same prox
 apps, claimed when a domain is bound to the project. Until then a signed url, a browser upload and
 a public object have no address, and the runtime refuses them rather than handing out one nothing
 can reach. A bucket answers the browsers of the hostnames the project held when it was last
-deployed, so bind the domain and deploy again before uploading from a page served on a hostname
-bound since.
+deployed, and a deploy binds every hostname your config declares before it stands the store up.
 
 The store writes to the same disk as everything else on the box, so it stops signing writes while
 the volume has less than 1 GiB, or a tenth of its size, free.
