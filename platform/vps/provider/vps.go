@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"slices"
 	"strings"
 	"sync"
@@ -124,7 +123,7 @@ type Provider struct {
 	sealer  *host.Sealer
 
 	transform transformkit.Evaluator
-	probing   *http.Client
+	liveness  providerkit.Liveness
 	resolve   Lookup
 	reaches   Reach
 

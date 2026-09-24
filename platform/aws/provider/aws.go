@@ -62,6 +62,7 @@ type Provider struct {
 	account  memo[struct{}, string]
 
 	releases *deploy.Releaser
+	live     providerkit.Liveness
 }
 
 type classEdge struct {
@@ -156,6 +157,12 @@ func (p *Provider) Sealer() providerkit.Sealer {
 func (p *Provider) Credentials() providerkit.Credentials {
 	return control.CredentialsFor(p.aws, p.namespace)
 }
+
+func (p *Provider) Serving(ctx context.Context, kind edge.Kind, hostname string) (edge.Kind, error) {
+	return p.live.Serving(ctx, kind, hostname)
+}
+
+func (p *Provider) Unreached(hostname string) string { return p.live.Unreached(hostname) }
 
 func (p *Provider) Edges() providerkit.EdgeRegistry { return p.edges() }
 

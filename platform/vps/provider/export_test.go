@@ -29,7 +29,7 @@ func (p *Provider) Host() *host.Host { return p.host }
 
 func (p *Provider) Recording(records providerkit.RecordStore) { p.records = records }
 
-func (p *Provider) Probing(client *http.Client) { p.probing = client }
+func (p *Provider) Probing(client *http.Client) { p.liveness.Transport = client.Transport }
 
 func (p *Provider) Resolving(look Lookup) { p.resolve = look }
 
