@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"strings"
 	"testing"
@@ -10,7 +11,10 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-type sudoless struct{ asked []string }
+type sudoless struct {
+	asked   []string
+	stamped string
+}
 
 func (c *sudoless) Preflight(context.Context) (session.Facts, error) {
 	return session.Facts{Systemd: true}, providerkit.Refuse(providerkit.CodeDenied,
@@ -29,6 +33,11 @@ func (c *sudoless) Stream(_ context.Context, command string, _ io.Reader) (sessi
 		return session.Result{Stdout: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB deploy@ocel\n"}, nil
 	case command == "uname -m":
 		return session.Result{Stdout: "x86_64\n"}, nil
+	case c.stamped != "" && command == "cat "+quoted(StampPath(providerkit.ClassProduction)):
+		return session.Result{Stdout: c.stamped}, nil
+	case c.stamped != "" && strings.Contains(command, "for p in"):
+		return session.Result{Stdout: KindFile + "\t" + StampPath(providerkit.ClassProduction) + "\t644\troot\tabc\n" +
+			KindSealKey + "\t" + SealKeyPath(providerkit.ClassProduction) + "\t400\troot\t\t2026-09-23T23:27:00Z\n"}, nil
 	default:
 		return session.Result{}, nil
 	}
@@ -77,5 +86,60 @@ func TestReadingTheHostABootstrapWritesToStillNeedsRoot(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "sudo") {
 		t.Fatalf("Read() = %v, want the refusal naming the grant this login lacks: an apply plans against what root can see, and a plan drawn from a narrower view writes over what it could not read",
 			err)
+	}
+}
+
+func stampedBy(t *testing.T, conn *sudoless, change func(map[string]string)) {
+	t.Helper()
+	keys, err := hostFor(&sudoless{}).keys(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	written := digests(Items(providerkit.ClassProduction, keys, ArchAMD64))
+	change(written)
+	stamp, err := json.Marshal(Stamp{
+		Schema:  providerkit.BootstrapSchema,
+		State:   StateComplete,
+		Seal:    Seal{Fingerprint: "abc"},
+		Digests: written,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn.stamped = string(stamp)
+}
+
+func TestALoginThatCannotElevateSeesTheBootstrapThisBuildWroteAsCurrent(t *testing.T) {
+	conn := &sudoless{}
+	stampedBy(t, conn, func(map[string]string) {})
+
+	described, err := Bootstrap(hostFor(conn), testVendor).Describe(context.Background(), providerkit.ClassProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !described.Present || !described.Stacks[0].DigestCurrent {
+		t.Errorf("Describe() = present %v, current %v, want a class this build stamped complete reported current: ocel-deploy cannot hash the root-only seal key, and a deploy right after a bootstrap was told the bootstrap is behind",
+			described.Present, described.Stacks[0].DigestCurrent)
+	}
+	if over := conn.elevated(); len(over) != 0 {
+		t.Errorf("Describe() ran %q as root, want a description read as the login that asked for it", over)
+	}
+}
+
+func TestALoginThatCannotElevateStillSeesABootstrapAnotherBuildWrote(t *testing.T) {
+	conn := &sudoless{}
+	stampedBy(t, conn, func(written map[string]string) {
+		for id := range written {
+			written[id] = "older"
+			return
+		}
+	})
+
+	described, err := Bootstrap(hostFor(conn), testVendor).Describe(context.Background(), providerkit.ClassProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if described.Stacks[0].DigestCurrent {
+		t.Errorf("Describe() reports current a class whose stamp records content this build does not write, want it behind")
 	}
 }
