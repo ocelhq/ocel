@@ -390,7 +390,14 @@ func (r *deployRun) settleHostnames(ctx context.Context) error {
 		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(report Reporter) error {
 			settling := &hostnames{stackSession: r.stackSession}
 			for _, host := range r.configuredHosts() {
-				if r.state.Ready(host.Hostname, r.front.Kind()) {
+				serving := r.state.Host(host.Hostname).Serving()
+				if serving == r.front.Kind() {
+					continue
+				}
+				if serving != "" {
+					r.pending = append(r.pending, fmt.Sprintf(
+						"%s is still served by the %s edge, not the %s edge this deploy promoted to: `ocel domain add` moves it, in the order that keeps it answering",
+						host.Hostname, serving, r.front.Kind()))
 					continue
 				}
 				_, err := settling.settleHost(ctx, host, report)

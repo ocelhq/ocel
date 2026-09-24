@@ -900,6 +900,34 @@ func TestADeployBindsItsHostnamesOnlyOnceEveryStackItProvisionsStands(t *testing
 	}
 }
 
+func TestADeployLeavesAHostnameAnotherEdgeServesToDomainAdd(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+
+	req := deployRequest()
+	req.Edge = writtenBy("shop.example")
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() on the %s edge = %q", fake.KindRelay, result.GetError())
+	}
+
+	req.Edge.Kind = string(fake.KindDirect)
+	result, _ := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() on the %s edge = %q", fake.KindDirect, result.GetError())
+	}
+	note := result.GetUrlNote()
+	if !strings.Contains(note, "shop.example") || !strings.Contains(note, string(fake.KindRelay)) || !strings.Contains(note, "`ocel domain add`") {
+		t.Errorf("the note = %q, want it naming the hostname, the edge that still serves it, and that `ocel domain add` moves it", note)
+	}
+	edges := provider.Edges().(*fake.Edges)
+	if bound := edges.Edge(fake.KindDirect).Bindings(); len(bound) != 0 {
+		t.Errorf("the %s edge binds %v, want nothing: moving a hostname between edges is `ocel domain add`'s to order", fake.KindDirect, bound)
+	}
+	if bound := edges.Edge(fake.KindRelay).Bindings(); len(bound) != 1 || bound[0].Hostname != "shop.example" {
+		t.Errorf("the %s edge binds %v, want shop.example still bound there: nothing moved it off", fake.KindRelay, bound)
+	}
+}
+
 func TestALaterDeploySettlesAHostnameTheConfigNewlyDeclares(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
