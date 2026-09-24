@@ -74,14 +74,45 @@ func pointerOr(pointer string) string {
 	return pointer
 }
 
+const displacedDepth = 16
+
 type promotionRecord struct {
 	edge.Promotion
-	Seq       int64  `json:"seq"`
-	Displaced string `json:"displaced,omitempty"`
+	Seq     int64    `json:"seq"`
+	Claimed bool     `json:"claimed,omitempty"`
+	Was     *earlier `json:"was,omitempty"`
+}
+
+type earlier struct {
+	Seq int64 `json:"seq"`
+	Ts  int64 `json:"ts"`
 }
 
 type pointerRecord struct {
-	PromotionID string `json:"promotionId"`
+	PromotionID string   `json:"promotionId"`
+	Displaced   []string `json:"displaced,omitempty"`
+}
+
+func (p pointerRecord) movedTo(promotionID string) pointerRecord {
+	if p.PromotionID == "" {
+		return pointerRecord{PromotionID: promotionID}
+	}
+	displaced := append([]string{p.PromotionID}, p.Displaced...)
+	return pointerRecord{PromotionID: promotionID, Displaced: displaced[:min(len(displaced), displacedDepth)]}
+}
+
+func (p pointerRecord) without(promotionID string) (pointerRecord, bool) {
+	if p.PromotionID == promotionID {
+		if len(p.Displaced) == 0 {
+			return pointerRecord{}, true
+		}
+		return pointerRecord{PromotionID: p.Displaced[0], Displaced: p.Displaced[1:]}, true
+	}
+	at := slices.Index(p.Displaced, promotionID)
+	if at < 0 {
+		return p, false
+	}
+	return pointerRecord{PromotionID: p.PromotionID, Displaced: slices.Delete(slices.Clone(p.Displaced), at, at+1)}, true
 }
 
 type tagRecord struct {
@@ -151,7 +182,8 @@ func (l *Ledger) Record(ctx context.Context, app, identity string) (edge.Deploym
 
 func (l *Ledger) Promote(ctx context.Context, promotion edge.Promotion, pointer string, _ edge.Reporter) error {
 	name := pointerOr(pointer)
-	if err := l.claimTag(ctx, promotion); err != nil {
+	claimed, err := l.claimTag(ctx, promotion)
+	if err != nil {
 		return err
 	}
 	seq, err := l.nextSequence(ctx)
@@ -162,24 +194,32 @@ func (l *Ledger) Promote(ctx context.Context, promotion edge.Promotion, pointer 
 	if err != nil {
 		return fmt.Errorf("read what %s points at: %w", name, err)
 	}
-	displaced, err := holderOf(name, at)
+	holding, err := pointerOf(name, at)
 	if err != nil {
 		return err
-	}
-	encoded, err := json.Marshal(promotionRecord{Promotion: promotion, Seq: seq, Displaced: displaced})
-	if err != nil {
-		return fmt.Errorf("encode promotion %s: %w", promotion.PromotionID, err)
 	}
 	held, err := ports.Held(ctx, l.records, l.promotionName(name, promotion.PromotionID))
 	if err != nil {
 		return fmt.Errorf("read promotion %s: %w", promotion.PromotionID, err)
+	}
+	row := promotionRecord{Promotion: promotion, Seq: seq, Claimed: claimed}
+	if len(held.Bytes) > 0 {
+		var prior promotionRecord
+		if err := json.Unmarshal(held.Bytes, &prior); err != nil {
+			return fmt.Errorf("decode promotion %s: %w", promotion.PromotionID, err)
+		}
+		row.Was = &earlier{Seq: prior.Seq, Ts: prior.Ts}
+	}
+	encoded, err := json.Marshal(row)
+	if err != nil {
+		return fmt.Errorf("encode promotion %s: %w", promotion.PromotionID, err)
 	}
 	held.Bytes = encoded
 	if _, err := l.records.Write(ctx, held); err != nil {
 		return fmt.Errorf("record promotion %s: %w", promotion.PromotionID, err)
 	}
 
-	flipped, err := json.Marshal(pointerRecord{PromotionID: promotion.PromotionID})
+	flipped, err := json.Marshal(holding.movedTo(promotion.PromotionID))
 	if err != nil {
 		return fmt.Errorf("encode the pointer %s: %w", name, err)
 	}
@@ -190,9 +230,13 @@ func (l *Ledger) Promote(ctx context.Context, promotion edge.Promotion, pointer 
 			if readErr != nil || holder == "" {
 				holder = "another promotion"
 			}
-			return ports.Refuse(ports.CodeBusy,
+			busy := ports.Refuse(ports.CodeBusy,
 				"point %s at promotion %s: %s now holds %s, so another deploy moved it while this one was promoting, and this deploy stopped rather than overwrite it. The release it staged is still recorded: reach it with `ocel rollback --to %s`, or re-run this deploy once the other one has finished",
 				name, promotion.PromotionID, holder, name, promotion.PromotionID)
+			if err := l.retract(ctx, name, promotion.PromotionID); err != nil {
+				return errors.Join(busy, err)
+			}
+			return busy
 		}
 		return fmt.Errorf("point %s at promotion %s: %w", name, promotion.PromotionID, err)
 	}
@@ -201,30 +245,23 @@ func (l *Ledger) Promote(ctx context.Context, promotion edge.Promotion, pointer 
 
 func (l *Ledger) Unpromote(ctx context.Context, promotionID, pointer string) error {
 	name := pointerOr(pointer)
-	held, err := ports.Held(ctx, l.records, l.promotionName(name, promotionID))
-	if err != nil {
-		return fmt.Errorf("read promotion %s: %w", promotionID, err)
-	}
-	if len(held.Bytes) == 0 {
-		return fmt.Errorf("take back promotion %s: %s records no such promotion", promotionID, name)
-	}
-	var row promotionRecord
-	if err := json.Unmarshal(held.Bytes, &row); err != nil {
-		return fmt.Errorf("decode promotion %s: %w", promotionID, err)
-	}
 	for range casAttempts {
 		at, err := ports.Held(ctx, l.records, l.pointerName(name))
 		if err != nil {
 			return fmt.Errorf("read what %s points at: %w", name, err)
 		}
-		holder, err := holderOf(name, at)
-		if err != nil || holder != promotionID {
+		holding, err := pointerOf(name, at)
+		if err != nil {
 			return err
 		}
-		if row.Displaced == "" {
+		back, held := holding.without(promotionID)
+		if !held {
+			return l.retract(ctx, name, promotionID)
+		}
+		if back.PromotionID == "" {
 			err = l.records.Remove(ctx, at.Name, at.Revision)
 		} else {
-			at.Bytes, err = json.Marshal(pointerRecord{PromotionID: row.Displaced})
+			at.Bytes, err = json.Marshal(back)
 			if err == nil {
 				_, err = l.records.Write(ctx, at)
 			}
@@ -233,42 +270,110 @@ func (l *Ledger) Unpromote(ctx context.Context, promotionID, pointer string) err
 			continue
 		}
 		if err != nil {
-			return fmt.Errorf("point %s back at %q: %w", name, row.Displaced, err)
+			return fmt.Errorf("point %s back from promotion %s: %w", name, promotionID, err)
 		}
-		return nil
+		return l.retract(ctx, name, promotionID)
 	}
 	return fmt.Errorf("point %s back from promotion %s: it moved under %d attempts", name, promotionID, casAttempts)
 }
 
-func (l *Ledger) claimTag(ctx context.Context, promotion edge.Promotion) error {
-	if promotion.Tag == "" {
+func (l *Ledger) retract(ctx context.Context, pointer, promotionID string) error {
+	for range casAttempts {
+		held, err := ports.Held(ctx, l.records, l.promotionName(pointer, promotionID))
+		if err != nil {
+			return fmt.Errorf("read promotion %s: %w", promotionID, err)
+		}
+		if len(held.Bytes) == 0 {
+			return fmt.Errorf("take back promotion %s: %s records no such promotion", promotionID, pointer)
+		}
+		var row promotionRecord
+		if err := json.Unmarshal(held.Bytes, &row); err != nil {
+			return fmt.Errorf("decode promotion %s: %w", promotionID, err)
+		}
+		if !row.Claimed && row.Was == nil {
+			return nil
+		}
+		freed := ""
+		if row.Claimed {
+			freed, row.Tag, row.Claimed = row.Tag, "", false
+		}
+		if row.Was != nil {
+			row.Seq, row.Ts, row.Was = row.Was.Seq, row.Was.Ts, nil
+		}
+		if held.Bytes, err = json.Marshal(row); err != nil {
+			return fmt.Errorf("encode promotion %s: %w", promotionID, err)
+		}
+		if _, err := l.records.Write(ctx, held); err != nil {
+			if errors.Is(err, ports.ErrStale) {
+				continue
+			}
+			return fmt.Errorf("take back promotion %s: %w", promotionID, err)
+		}
+		return l.freeTag(ctx, freed, promotionID)
+	}
+	return fmt.Errorf("take back promotion %s: it moved under %d attempts", promotionID, casAttempts)
+}
+
+func (l *Ledger) freeTag(ctx context.Context, tag, promotionID string) error {
+	if tag == "" {
 		return nil
+	}
+	for range casAttempts {
+		held, err := ports.Held(ctx, l.records, l.tagName(tag))
+		if err != nil {
+			return fmt.Errorf("read the tag %q: %w", tag, err)
+		}
+		if len(held.Bytes) == 0 {
+			return nil
+		}
+		var claimed tagRecord
+		if err := json.Unmarshal(held.Bytes, &claimed); err != nil {
+			return fmt.Errorf("decode the tag %q: %w", tag, err)
+		}
+		if claimed.PromotionID != promotionID {
+			return nil
+		}
+		err = l.records.Remove(ctx, held.Name, held.Revision)
+		if errors.Is(err, ports.ErrStale) {
+			continue
+		}
+		if err != nil && !errors.Is(err, ports.ErrNoRecord) {
+			return fmt.Errorf("free the tag %q: %w", tag, err)
+		}
+		return nil
+	}
+	return fmt.Errorf("free the tag %q: it moved under %d attempts", tag, casAttempts)
+}
+
+func (l *Ledger) claimTag(ctx context.Context, promotion edge.Promotion) (bool, error) {
+	if promotion.Tag == "" {
+		return false, nil
 	}
 	held, err := ports.Held(ctx, l.records, l.tagName(promotion.Tag))
 	if err != nil {
-		return fmt.Errorf("read the tag %q: %w", promotion.Tag, err)
+		return false, fmt.Errorf("read the tag %q: %w", promotion.Tag, err)
 	}
 	if len(held.Bytes) > 0 {
 		var claimed tagRecord
 		if err := json.Unmarshal(held.Bytes, &claimed); err != nil {
-			return fmt.Errorf("decode the tag %q: %w", promotion.Tag, err)
+			return false, fmt.Errorf("decode the tag %q: %w", promotion.Tag, err)
 		}
 		if claimed.PromotionID == promotion.PromotionID {
-			return nil
+			return false, nil
 		}
-		return l.tagTaken(promotion, claimed.PromotionID)
+		return false, l.tagTaken(promotion, claimed.PromotionID)
 	}
 	encoded, err := json.Marshal(tagRecord{PromotionID: promotion.PromotionID})
 	if err != nil {
-		return fmt.Errorf("encode the tag %q: %w", promotion.Tag, err)
+		return false, fmt.Errorf("encode the tag %q: %w", promotion.Tag, err)
 	}
 	if _, err := l.records.Write(ctx, ports.Record{Name: l.tagName(promotion.Tag), Bytes: encoded}); err != nil {
 		if errors.Is(err, ports.ErrStale) {
-			return l.tagTaken(promotion, l.tagHolder(ctx, promotion.Tag))
+			return false, l.tagTaken(promotion, l.tagHolder(ctx, promotion.Tag))
 		}
-		return fmt.Errorf("claim the tag %q: %w", promotion.Tag, err)
+		return false, fmt.Errorf("claim the tag %q: %w", promotion.Tag, err)
 	}
-	return nil
+	return true, nil
 }
 
 func (l *Ledger) tagHolder(ctx context.Context, tag string) string {
@@ -501,18 +606,19 @@ func (l *Ledger) pointerAt(ctx context.Context, pointer string) (string, error) 
 	if err != nil {
 		return "", fmt.Errorf("read what %s points at: %w", pointer, err)
 	}
-	return holderOf(pointer, held)
+	at, err := pointerOf(pointer, held)
+	return at.PromotionID, err
 }
 
-func holderOf(pointer string, held ports.Record) (string, error) {
+func pointerOf(pointer string, held ports.Record) (pointerRecord, error) {
 	if len(held.Bytes) == 0 {
-		return "", nil
+		return pointerRecord{}, nil
 	}
 	var at pointerRecord
 	if err := json.Unmarshal(held.Bytes, &at); err != nil {
-		return "", fmt.Errorf("decode what %s points at: %w", pointer, err)
+		return pointerRecord{}, fmt.Errorf("decode what %s points at: %w", pointer, err)
 	}
-	return at.PromotionID, nil
+	return at, nil
 }
 
 func (l *Ledger) promotions(ctx context.Context, pointer string) ([]promotionRecord, error) {
