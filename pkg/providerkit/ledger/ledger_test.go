@@ -347,3 +347,94 @@ func TestStagedRecordsRoundTrip(t *testing.T) {
 		t.Fatal("PutStaged() with no identity succeeded, want it refused")
 	}
 }
+
+func activeIn(t *testing.T, l *Ledger, pointer string) string {
+	t.Helper()
+	held, err := l.pointerAt(context.Background(), pointerOr(pointer))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return held
+}
+
+func TestUnpromotingPutsThePointerBackOnThePromotionItDisplaced(t *testing.T) {
+	l, _ := fixture()
+	ctx := context.Background()
+	for _, id := range []string{"p1", "p2"} {
+		if err := l.Promote(ctx, edge.Promotion{PromotionID: id}, "", edge.DiscardReporter()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := l.Unpromote(ctx, "p2", ""); err != nil {
+		t.Fatalf("Unpromote(p2) = %v", err)
+	}
+	if held := activeIn(t, l, ""); held != "p1" {
+		t.Errorf("the pointer holds %q after p2 was taken back, want p1: an edge that could not serve p2 is still serving p1", held)
+	}
+	entries, err := l.History(ctx, "")
+	if err != nil || len(entries) != 2 {
+		t.Errorf("history = %v, %v, want p2 still recorded so `ocel rollback --to p2` can reach it", entries, err)
+	}
+}
+
+func TestUnpromotingTheFirstPromotionLeavesThePointerAtNothing(t *testing.T) {
+	l, _ := fixture()
+	ctx := context.Background()
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1"}, "staging", edge.DiscardReporter()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := l.Unpromote(ctx, "p1", "staging"); err != nil {
+		t.Fatalf("Unpromote(p1) = %v", err)
+	}
+	if held := activeIn(t, l, "staging"); held != "" {
+		t.Errorf("the pointer holds %q after its first promotion was taken back, want nothing: the edge serves nothing under it", held)
+	}
+}
+
+func TestUnpromotingLeavesAPointerAnotherPromotionHasSinceTaken(t *testing.T) {
+	l, _ := fixture()
+	ctx := context.Background()
+	for _, id := range []string{"p1", "p2", "p3"} {
+		if err := l.Promote(ctx, edge.Promotion{PromotionID: id}, "", edge.DiscardReporter()); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := l.Unpromote(ctx, "p2", ""); err != nil {
+		t.Fatalf("Unpromote(p2) = %v", err)
+	}
+	if held := activeIn(t, l, ""); held != "p3" {
+		t.Errorf("the pointer holds %q, want p3: taking p2 back must not undo the promotion that followed it", held)
+	}
+}
+
+func TestPromoteRefusesAPointerThatMovedAfterItWasRead(t *testing.T) {
+	l, records := fixture()
+	ctx := context.Background()
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1"}, "", edge.DiscardReporter()); err != nil {
+		t.Fatal(err)
+	}
+	pointer := l.pointerName(edge.DefaultPointer).String()
+	promotion := l.promotionName(edge.DefaultPointer, "p2").String()
+	records.racing = func(name string) {
+		if name != promotion {
+			return
+		}
+		records.racing = nil
+		racer := ports.Record{Name: l.pointerName(edge.DefaultPointer), Bytes: []byte(`{"promotionId":"p9"}`), Revision: records.held[pointer].Revision}
+		if _, err := records.Write(ctx, racer); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	err := l.Promote(ctx, edge.Promotion{PromotionID: "p2"}, "", edge.DiscardReporter())
+	var refusal ports.Refusal
+	if !errors.As(err, &refusal) || refusal.Code != ports.CodeBusy {
+		t.Fatalf("promote onto a pointer another deploy moved after it was read = %v, want a busy refusal: the promotion records what it displaced, and a pointer that moved displaced something else", err)
+	}
+	if held := activeIn(t, l, ""); held != "p9" {
+		t.Errorf("the pointer holds %q, want the winner's p9", held)
+	}
+}
