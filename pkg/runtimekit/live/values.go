@@ -59,15 +59,16 @@ func New(fetcher Fetcher, keys []string, bindings []Binding, now func() time.Tim
 	return &Values{fetcher: fetcher, keys: keys, bindings: bindings, now: now, failed: make(chan struct{})}
 }
 
-func (l *Values) read(ctx context.Context) (map[string]string, error) {
+func (l *Values) read(ctx context.Context) (map[string]string, time.Time, error) {
+	started := l.now()
 	values, err := l.fetcher.FetchLive(ctx)
 	if err != nil {
-		return nil, err
+		return nil, started, err
 	}
 	if err := Conform(l.bindings, values); err != nil {
-		return nil, err
+		return nil, started, err
 	}
-	return values, nil
+	return values, started, nil
 }
 
 func (l *Values) Env() []string {
@@ -114,7 +115,7 @@ func (l *Values) Prefetch(ctx context.Context) <-chan error {
 	go func() {
 		ctx, cancel := context.WithTimeout(ctx, FetchBudget)
 		defer cancel()
-		values, err := l.read(ctx)
+		values, started, err := l.read(ctx)
 		if err != nil {
 			l.mu.Lock()
 			l.failure = err
@@ -123,7 +124,7 @@ func (l *Values) Prefetch(ctx context.Context) <-chan error {
 			done <- err
 			return
 		}
-		l.apply(values)
+		l.apply(values, started)
 		done <- nil
 	}()
 	return done
@@ -196,7 +197,7 @@ func (l *Values) Refresh(ctx context.Context) {
 	go func() {
 		ctx, cancel := context.WithTimeout(ctx, FetchBudget)
 		defer cancel()
-		values, err := l.read(ctx)
+		values, started, err := l.read(ctx)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "ocel: live value refresh failed, serving the last resolved generation: %v\n", err)
 			l.mu.Lock()
@@ -207,7 +208,7 @@ func (l *Values) Refresh(ctx context.Context) {
 		l.mu.Lock()
 		l.refreshing = false
 		l.mu.Unlock()
-		l.apply(values)
+		l.apply(values, started)
 	}()
 }
 
@@ -227,12 +228,12 @@ func (l *Values) Reread(ctx context.Context) {
 
 	ctx, cancel := context.WithTimeout(ctx, FetchBudget)
 	defer cancel()
-	values, err := l.read(ctx)
+	values, started, err := l.read(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: live value reread failed, serving the last resolved generation: %v\n", err)
 		return
 	}
-	l.apply(values)
+	l.apply(values, started)
 }
 
 func (l *Values) Keep(ctx context.Context) {
@@ -251,7 +252,7 @@ func (l *Values) Keep(ctx context.Context) {
 	}
 }
 
-func (l *Values) apply(values map[string]string) {
+func (l *Values) apply(values map[string]string, started time.Time) {
 	if values == nil {
 		values = map[string]string{}
 	}
@@ -259,7 +260,7 @@ func (l *Values) apply(values map[string]string) {
 	defer l.mu.Unlock()
 	l.generation++
 	l.values = values
-	l.fetchedAt = l.now()
+	l.fetchedAt = started
 	l.undelivered = true
 	l.deliver()
 	if l.projection != nil {
