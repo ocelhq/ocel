@@ -638,6 +638,32 @@ func TestTheFirstReleaseAfterABindTakesTheHostnameLive(t *testing.T) {
 	}
 }
 
+func TestAHostnameBoundAfterAReleaseIsRoutedToThePromotedService(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	_, w, stack := reconciled(t)
+	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
+		App: "web", Identity: "b1", Physical: "ocel-shop-prod-web",
+		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
+	}); err != nil {
+		t.Fatalf("PutStaged = %v", err)
+	}
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}},
+		"", edge.DiscardReporter()); err != nil {
+		t.Fatalf("Promote = %v", err)
+	}
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
+		t.Fatalf("BindDomain = %v", err)
+	}
+
+	want := backendName("shop", providerkit.ClassProduction, "shop.example.com")
+	if got := w.hosts("ocel-alb-production-routes")["shop.example.com"]; got != want {
+		t.Errorf("the class url map routes shop.example.com onto %q, want the project's own backend %q: the release was promoted before the bind, "+
+			"and no later promotion comes to take the hostname live", got, want)
+	}
+}
+
 func TestAPromotionOfAnotherAppLeavesAHeldHostnameHeld(t *testing.T) {
 	t.Parallel()
 
