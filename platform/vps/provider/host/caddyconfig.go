@@ -273,6 +273,7 @@ type caddyForward struct {
 	Headers         map[string][]string `json:"headers,omitempty"`
 	Response        *caddyHeaderOps     `json:"response,omitempty"`
 	StripPathPrefix string              `json:"strip_path_prefix,omitempty"`
+	StreamDelay     string              `json:"stream_close_delay,omitempty"`
 }
 
 type caddyHeaderOps struct {
@@ -310,13 +311,18 @@ func namingTheEdge() caddyForward {
 	}
 }
 
-func forwarding(identity, upstream string) caddyRoute {
+func forwarding(identity, upstream string, grace time.Duration) caddyRoute {
 	return caddyRoute{
 		Identity: identity,
-		Handle: []caddyForward{namingTheEdge(), {
-			Handler:   caddyadmin.ForwardHandler,
-			Upstreams: []caddyDial{{Dial: upstream}},
-		}},
+		Handle:   []caddyForward{namingTheEdge(), forwardingTo(upstream, grace)},
+	}
+}
+
+func forwardingTo(upstream string, grace time.Duration) caddyForward {
+	return caddyForward{
+		Handler:     caddyadmin.ForwardHandler,
+		Upstreams:   []caddyDial{{Dial: upstream}},
+		StreamDelay: spelled(grace),
 	}
 }
 
@@ -370,14 +376,14 @@ func previewRoutes(base string) ([]caddyRoute, error) {
 	}, nil
 }
 
-func connectorForwarding(hostname string) caddyRoute {
+func connectorForwarding(hostname string, grace time.Duration) caddyRoute {
 	return caddyRoute{
 		Identity: connectorRoute,
 		Match:    []caddyMatch{{Host: hostnamesOf(hostname), Path: []string{ConnectorPath, ConnectorPath + "/*"}}},
 		Handle: []caddyForward{
 			namingTheEdge(),
 			{Handler: rewriteHandler, StripPathPrefix: ConnectorPath},
-			{Handler: caddyadmin.ForwardHandler, Upstreams: []caddyDial{{Dial: ConnectorDial}}},
+			forwardingTo(ConnectorDial, grace),
 		},
 	}
 }
@@ -389,8 +395,8 @@ func connectorHostOf(route caddyRoute) string {
 	return route.Match[0].hosts()[0]
 }
 
-func matching(app AppRoute, hostnames []string) caddyRoute {
-	route := forwarding(app.identity(), app.Upstream)
+func matching(app AppRoute, hostnames []string, grace time.Duration) caddyRoute {
+	route := forwarding(app.identity(), app.Upstream, grace)
 	route.Handle[1].HealthChecks = checking(app.Health)
 	route.Match = []caddyMatch{{Host: hostnamesOf(hostnames...)}}
 	return route
@@ -403,7 +409,7 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 	}
 	routes := make([]caddyRoute, 0, len(state.Claims)+len(state.Routes)+2)
 	if state.Connector != "" {
-		routes = append(routes, connectorForwarding(state.Connector))
+		routes = append(routes, connectorForwarding(state.Connector, state.Grace))
 	}
 	claimed := map[claimKey][]string{}
 	for _, claim := range slices.SortedFunc(slices.Values(state.Claims), func(a, b HostClaim) int {
@@ -459,7 +465,7 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 		if !route.app() && len(hostnames) > 0 {
 			routes = append(routes, refusingStoreAdmin(route, hostnames))
 		}
-		routes = append(routes, matching(route, hostnames))
+		routes = append(routes, matching(route, hostnames, state.Grace))
 	}
 	entry, err := previewRoutes(state.PreviewBase)
 	if err != nil {
@@ -666,7 +672,7 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 		}
 		if route.Identity == connectorRoute {
 			hosts := connectorHostOf(route)
-			if hosts == "" || !routeEqual(route, connectorForwarding(hosts)) {
+			if hosts == "" || !routeEqual(route, connectorForwarding(hosts, grace)) {
 				return ProxyState{}, unwritten("route", route.Identity)
 			}
 			state.Connector = hosts
