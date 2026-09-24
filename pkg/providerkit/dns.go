@@ -9,7 +9,7 @@ type DNSRegistry interface {
 
 	Default() DNSKind
 
-	Open(kind DNSKind, zone string) (edge.DNSWriter, error)
+	Open(kind DNSKind, zone string, front edge.Kind) (edge.DNSWriter, error)
 }
 
 type DNSKind string

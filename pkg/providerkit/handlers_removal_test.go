@@ -170,7 +170,7 @@ func settledProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fak
 			},
 		},
 	})
-	writer, err := provider.DNS().Open(fake.KindZone, "acme.com")
+	writer, err := provider.DNS().Open(fake.KindZone, "acme.com", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +257,7 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 			"old.acme.com": {Certificate: providerkit.Certificate{ID: "pinned-cert"}},
 		},
 	})
-	writer, err := provider.DNS().Open(fake.KindZone, "acme.com")
+	writer, err := provider.DNS().Open(fake.KindZone, "acme.com", "")
 	if err != nil {
 		t.Fatal(err)
 	}

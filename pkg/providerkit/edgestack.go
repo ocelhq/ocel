@@ -76,7 +76,7 @@ func dnsFor(provider Provider, sel *contractv1.EdgeSelection) (edge.DNSWriter, e
 	if kind == "" {
 		return nil, nil
 	}
-	return provider.DNS().Open(kind, sel.GetDns().GetZone())
+	return provider.DNS().Open(kind, sel.GetDns().GetZone(), edge.Kind(sel.GetKind()))
 }
 
 func (h *handlers) openStack(ctx context.Context, class Class, slug string, sel *contractv1.EdgeSelection) (*stackSession, error) {

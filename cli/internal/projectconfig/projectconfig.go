@@ -127,11 +127,6 @@ func normalize(doc *configdoc.Document, configPath string) (*Config, error) {
 		edgeDescriptor = &EdgeDescriptor{ID: doc.Edge.ID}
 	}
 
-	dns, err := normalizeDNS(doc.DNS, edgeDescriptor)
-	if err != nil {
-		return nil, fmt.Errorf("%s has an invalid \"dns\": %w", configPath, err)
-	}
-
 	allowDegraded, err := normalizeAllowDegraded(doc.AllowDegraded)
 	if err != nil {
 		return nil, fmt.Errorf("%s has an invalid \"allowDegraded\": %w", configPath, err)
@@ -168,7 +163,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Config, error) {
 		Discovery:     discovery,
 		Provider:      provider,
 		Edge:          edgeDescriptor,
-		DNS:           dns,
+		DNS:           normalizeDNS(doc.DNS),
 		AllowDegraded: allowDegraded,
 		Apps:          apps,
 		Bindings:      bindings,
@@ -337,16 +332,11 @@ func knownNeeds() []string {
 	return edge.NeedNames(edge.AllNeeds())
 }
 
-const route53UnderCloudflare = "route53 cannot write the records a Cloudflare edge answers on — pair a cloudflare edge with cloudflare dns, or drop the edge"
-
-func normalizeDNS(raw *configdoc.DnsDescriptor, edgeDescriptor *EdgeDescriptor) (*DNSDescriptor, error) {
+func normalizeDNS(raw *configdoc.DnsDescriptor) *DNSDescriptor {
 	if raw == nil {
-		return nil, nil
+		return nil
 	}
-	if raw.ID == "route53" && edgeDescriptor != nil && edgeDescriptor.ID == "cloudflare" {
-		return nil, errors.New(route53UnderCloudflare)
-	}
-	return &DNSDescriptor{ID: raw.ID, Zone: raw.Options.Zone}, nil
+	return &DNSDescriptor{ID: raw.ID, Zone: raw.Options.Zone}
 }
 
 func normalizeAllowDegraded(raw []string) ([]string, error) {

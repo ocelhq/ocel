@@ -970,7 +970,7 @@ func TestALaterDeploySettlesAHostnameTheConfigNewlyDeclares(t *testing.T) {
 func TestADeployWhoseDNSWriterFailsPromotesNothing(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
-	writer, err := provider.DNS().Open(fake.KindZone, "shop.example")
+	writer, err := provider.DNS().Open(fake.KindZone, "shop.example", "")
 	if err != nil {
 		t.Fatal(err)
 	}
