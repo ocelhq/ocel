@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/pkg/configdoc"
@@ -307,11 +308,18 @@ func normalizeBindings(raw configdoc.Bindings) ([]Binding, error) {
 		named := raw[key]
 		for _, declared := range slices.Sorted(maps.Keys(named)) {
 			if strings.TrimSpace(declared) == "" {
-				return nil, fmt.Errorf("`bindings.%s` is keyed by an empty name — the key is the name an app declares the resource under, and the value is the name the record is published under", key)
+				return nil, fmt.Errorf("`bindings.%s` is keyed by an empty name — the key is the name an app declares the resource under, and the value is the record it binds, written as \"@<name>\"", key)
 			}
-			external := strings.TrimSpace(named[declared])
-			if external == "" {
-				return nil, fmt.Errorf("`bindings.%s.%s` names no published record — a binding always spells out the name the record is published under, even when it matches", key, declared)
+			value := strings.TrimSpace(named[declared])
+			external, marked := strings.CutPrefix(value, "@")
+			if strings.TrimSpace(external) == "" {
+				return nil, fmt.Errorf("`bindings.%s.%s` names no published record — a binding always spells out the name the record is published under, even when it matches, as \"@<name>\"", key, declared)
+			}
+			if !marked {
+				return nil, fmt.Errorf("`bindings.%s.%s` is %q; a published record is written %q — the @ marks the name the record is published under, apart from the name the app declares", key, declared, value, "@"+value)
+			}
+			if trimmed := strings.TrimLeftFunc(external, unicode.IsSpace); trimmed != external {
+				return nil, fmt.Errorf("`bindings.%s.%s` is %q; the published name starts right after the @, written %q", key, declared, value, "@"+trimmed)
 			}
 			if strings.Contains(external, naming.KeySeparator) {
 				return nil, fmt.Errorf("published name %q may not contain %q: it separates the fields of the key the record is stored under", external, naming.KeySeparator)

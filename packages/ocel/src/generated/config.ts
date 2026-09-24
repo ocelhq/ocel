@@ -14,12 +14,12 @@ export interface OcelConfig {
   )[];
   /** The apps this project deploys. Left off, ocel detects one at the project root. */
   apps?: AppConfig[];
-  /** Resources this project declares that ocel binds to a record your own infrastructure published, instead of provisioning them itself. Keyed by resource type, then by the name the app declares; the value is the name the record is published under. A name nothing has published refuses the deploy. */
+  /** Resources this project declares that ocel binds to a record your own infrastructure published, instead of provisioning them itself. Keyed by resource type, then by the name the app declares; the value is "@" followed by the name the record is published under, such as "@warehouse" — the @ keeps it apart from the name the app declares. A name nothing has published refuses the deploy. */
   bindings?: {
-    /** Each key is a bucket resource this project declares; its value is the name the record is published under. */
-    bucket?: Record<string, string>;
-    /** Each key is a postgres resource this project declares; its value is the name the record is published under. */
-    postgres?: Record<string, string>;
+    /** Each key is a bucket resource this project declares; its value is "@" followed by the name the record is published under, such as "@warehouse". */
+    bucket?: Record<string, `@${string}`>;
+    /** Each key is a postgres resource this project declares; its value is "@" followed by the name the record is published under, such as "@warehouse". */
+    postgres?: Record<string, `@${string}`>;
   };
   /** Where the resources an app declares are found. */
   discovery?: DiscoveryConfig;

@@ -215,6 +215,21 @@ func TestDeployBindsByTheExternalName(t *testing.T) {
 	})
 }
 
+func TestDeployWarnsWhenItProvisionsBesideAPublishedNamesake(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	publishRecord(t, provider, providerkit.ClassProduction, "terraform", postgresRecord("orders", "terraform"))
+
+	_, events := deploy(t, client, externalBindingRequest("orders", "", bindingsv1.BindingType_BINDING_TYPE_POSTGRES))
+	want := `"bindings": { "postgres": { "orders": "@orders" } }`
+	for _, event := range events {
+		if strings.Contains(event.GetProgress().GetMessage(), want) {
+			return
+		}
+	}
+	t.Errorf("no progress message carries %s: the warning must show the binding written as config accepts it", want)
+}
+
 func TestDeployRefusesAVariableClassItCannotDeliver(t *testing.T) {
 	req := deployRequest()
 	req.Manifest.Apps[0].Variables = []*contractv1.ManifestVariable{

@@ -113,7 +113,7 @@ class Emitter {
     if (node.oneOf) return this.union(node, indent);
     switch (node.type) {
       case "string":
-        return "string";
+        return prefixed(node.pattern);
       case "boolean":
         return "boolean";
       case "integer":
@@ -211,6 +211,11 @@ class Emitter {
   render() {
     return [...this.interfaces.values()].join("\n");
   }
+}
+
+function prefixed(pattern) {
+  const prefix = /^\^([^\\^$.|?*+()[\]{}`]+)/.exec(pattern ?? "")?.[1];
+  return prefix ? `\`${prefix}\${string}\`` : "string";
 }
 
 function doc(node) {

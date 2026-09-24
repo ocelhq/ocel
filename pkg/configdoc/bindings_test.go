@@ -76,13 +76,16 @@ func TestBindingsSchemaMapsADeclaredNameToAnExternalName(t *testing.T) {
 		if !ok || values["type"] != "string" {
 			t.Errorf("bindings.%s values = %v, want a string external name", key, entry["additionalProperties"])
 		}
+		if values["pattern"] != `^@\S` {
+			t.Errorf("bindings.%s value pattern = %v, want ^@\\S: the editor must flag a published name written without its sigil, or with a space after it", key, values["pattern"])
+		}
 	}
 }
 
 func TestCheckRefusesAnUnbindableTypeKey(t *testing.T) {
 	err := Check("", Document{}, map[string]any{
 		"slug":     "shop",
-		"bindings": map[string]any{"redis": map[string]any{"cache": "shared-redis"}},
+		"bindings": map[string]any{"redis": map[string]any{"cache": "@shared-redis"}},
 	})
 	if err == nil {
 		t.Fatal("Check = nil, want redis refused: nothing declares a redis resource")
@@ -97,7 +100,7 @@ func TestCheckRefusesAnUnbindableTypeKey(t *testing.T) {
 func TestCheckAdmitsABindingUnderEachBindableType(t *testing.T) {
 	bindings := map[string]any{}
 	for _, typ := range naming.BindableResourceTypes() {
-		bindings[naming.ResourceTypeName(typ)] = map[string]any{"orders": "sst-orders"}
+		bindings[naming.ResourceTypeName(typ)] = map[string]any{"orders": "@sst-orders"}
 	}
 	if err := Check("", Document{}, map[string]any{"slug": "shop", "bindings": bindings}); err != nil {
 		t.Fatalf("Check = %v, want every bindable type admitted", err)

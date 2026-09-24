@@ -134,20 +134,22 @@
     },
     "bindings": {
       "additionalProperties": false,
-      "description": "Resources this project declares that ocel binds to a record your own infrastructure published, instead of provisioning them itself. Keyed by resource type, then by the name the app declares; the value is the name the record is published under. A name nothing has published refuses the deploy.",
+      "description": "Resources this project declares that ocel binds to a record your own infrastructure published, instead of provisioning them itself. Keyed by resource type, then by the name the app declares; the value is \"@\" followed by the name the record is published under, such as \"@warehouse\" — the @ keeps it apart from the name the app declares. A name nothing has published refuses the deploy.",
       "properties": {
         "bucket": {
           "additionalProperties": {
+            "pattern": "^@\\S",
             "type": "string"
           },
-          "description": "Each key is a bucket resource this project declares; its value is the name the record is published under.",
+          "description": "Each key is a bucket resource this project declares; its value is \"@\" followed by the name the record is published under, such as \"@warehouse\".",
           "type": "object"
         },
         "postgres": {
           "additionalProperties": {
+            "pattern": "^@\\S",
             "type": "string"
           },
-          "description": "Each key is a postgres resource this project declares; its value is the name the record is published under.",
+          "description": "Each key is a postgres resource this project declares; its value is \"@\" followed by the name the record is published under, such as \"@warehouse\".",
           "type": "object"
         }
       },
