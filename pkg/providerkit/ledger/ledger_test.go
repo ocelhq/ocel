@@ -20,7 +20,10 @@ type store struct {
 
 func newStore() *store { return &store{held: map[string]ports.Record{}} }
 
-func (s *store) Read(_ context.Context, name ports.RecordName) (ports.Record, error) {
+func (s *store) Read(ctx context.Context, name ports.RecordName) (ports.Record, error) {
+	if err := ctx.Err(); err != nil {
+		return ports.Record{}, err
+	}
 	held, ok := s.held[name.String()]
 	if !ok {
 		return ports.Record{}, ports.ErrNoRecord
@@ -28,7 +31,10 @@ func (s *store) Read(_ context.Context, name ports.RecordName) (ports.Record, er
 	return held, nil
 }
 
-func (s *store) Write(_ context.Context, record ports.Record) (ports.Revision, error) {
+func (s *store) Write(ctx context.Context, record ports.Record) (ports.Revision, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	if s.racing != nil {
 		s.racing(record.Name.String())
 	}
@@ -52,7 +58,10 @@ func (s *store) WritePair(ctx context.Context, first, second ports.Record) error
 	return err
 }
 
-func (s *store) Remove(_ context.Context, name ports.RecordName, expected ports.Revision) error {
+func (s *store) Remove(ctx context.Context, name ports.RecordName, expected ports.Revision) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	held, ok := s.held[name.String()]
 	if !ok {
 		return ports.ErrNoRecord
@@ -415,6 +424,23 @@ func TestUnpromotingLeavesAPointerAnotherPromotionHasSinceTaken(t *testing.T) {
 	}
 	if held := activeIn(t, l, ""); held != "p1" {
 		t.Errorf("the pointer holds %q once p3 was taken back too, want p1: p2 was taken back first, so the edge never served it and p1 is what it still serves", held)
+	}
+}
+
+func TestUnpromotingUnderAnInterruptedDeployStillPutsThePointerBack(t *testing.T) {
+	l, _ := fixture()
+	promoting(t, l, edge.Promotion{PromotionID: "p1"}, edge.Promotion{PromotionID: "p2", Tag: "v2"})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if err := l.Unpromote(ctx, "p2", ""); err != nil {
+		t.Fatalf("Unpromote(p2) under a cancelled context = %v: an interrupted deploy is exactly the one whose edge never served its promotion", err)
+	}
+	if held := activeIn(t, l, ""); held != "p1" {
+		t.Errorf("the pointer holds %q, want p1", held)
+	}
+	if err := l.Promote(context.Background(), edge.Promotion{PromotionID: "p3", Tag: "v2"}, "", edge.DiscardReporter()); err != nil {
+		t.Errorf("a retried deploy tagged v2 = %v, want the tag the interrupted one claimed freed", err)
 	}
 }
 

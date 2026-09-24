@@ -14,14 +14,18 @@ import (
 )
 
 type pinRecorder struct {
-	mu     sync.Mutex
-	pinned []string
-	refuse error
+	mu        sync.Mutex
+	pinned    []string
+	refuse    error
+	interrupt context.CancelFunc
 }
 
 func (p *pinRecorder) Pin(_ context.Context, service, revision string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.interrupt != nil {
+		p.interrupt()
+	}
 	if p.refuse != nil {
 		return p.refuse
 	}
@@ -173,5 +177,53 @@ func TestAPromotionThatLostThePointerRacePinsNothing(t *testing.T) {
 	}
 	if got := pins.calls(); len(got) != 0 {
 		t.Errorf("a promotion that lost the pointer pinned %v: Cloud Run then serves the loser while the ledger names the winner", got)
+	}
+}
+
+type honouring struct{ providerkit.RecordStore }
+
+func (h honouring) Read(ctx context.Context, name providerkit.RecordName) (providerkit.Record, error) {
+	if err := ctx.Err(); err != nil {
+		return providerkit.Record{}, err
+	}
+	return h.RecordStore.Read(ctx, name)
+}
+
+func (h honouring) Write(ctx context.Context, record providerkit.Record) (providerkit.Revision, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	return h.RecordStore.Write(ctx, record)
+}
+
+func TestAPromotionInterruptedAtItsPinStillPutsThePointerBack(t *testing.T) {
+	t.Parallel()
+
+	pins := &pinRecorder{}
+	front := direct.New(honouring{fake.NewRecords()}, pins)
+	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Class: providerkit.ClassProduction}, edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile(shop) = %v", err)
+	}
+	staged(t, stack, "b1", "web-00001-abc")
+	staged(t, stack, "b2", "web-00002-def")
+	if err := promoted(t, stack, "p1", "b1"); err != nil {
+		t.Fatalf("Promote(p1) = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	pins.interrupt, pins.refuse = cancel, context.Canceled
+
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Builds: map[string]string{"web": "b2"}}, "", edge.DiscardReporter()); err == nil {
+		t.Fatal("Promote(p2) interrupted at its pin = nil")
+	}
+	history, err := stack.Ledger().History(context.Background(), "")
+	if err != nil {
+		t.Fatalf("History() = %v", err)
+	}
+	for _, entry := range history {
+		if entry.Active && entry.PromotionID != "p1" {
+			t.Errorf("the ledger holds %s active after a pin that was interrupted, want p1: the interrupt is the context the take-back ran under", entry.PromotionID)
+		}
 	}
 }
