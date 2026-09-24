@@ -35,6 +35,9 @@ func TestAClaimComposedOntoAFileOneDeployMovedOnceIsRetriedOntoWhatThatDeployLef
 	if err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts() beside one deploy that rewrote %s = %v: the compare-and-set exists to refuse a lost update, and a release retries it rather than handing the collision to the user, so a domain bind does the same", ProxyConfig, err)
 	}
+	if written := writes; written != 2 {
+		t.Errorf("the claim wrote %s %d times, want twice: once onto the digest the other deploy moved, and once onto what it left", ProxyConfig, written)
+	}
 	held, err := ReadProxyState([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
