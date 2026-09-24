@@ -10,12 +10,19 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
 
-func Locate(ctx context.Context, projectDir, name string) (string, error) {
+type pinning int
+
+const (
+	pinToLock pinning = iota
+	pinInMemory
+)
+
+func locateProvider(ctx context.Context, projectDir, name string, pinning pinning) (string, error) {
 	store, err := providers.New(version.Version)
 	if err != nil {
 		return "", err
 	}
-	return locate(ctx, store, providers.KindProvider, projectDir, name, store.Platform)
+	return locate(ctx, store, providers.KindProvider, projectDir, name, store.Platform, pinning)
 }
 
 func Connector(ctx context.Context, projectDir, name string, platform providers.Platform) ([]byte, error) {
@@ -23,7 +30,7 @@ func Connector(ctx context.Context, projectDir, name string, platform providers.
 	if err != nil {
 		return nil, err
 	}
-	path, err := locate(ctx, store, providers.KindConnector, projectDir, name, platform)
+	path, err := locate(ctx, store, providers.KindConnector, projectDir, name, platform, pinToLock)
 	if err != nil {
 		return nil, err
 	}
@@ -34,12 +41,12 @@ func Connector(ctx context.Context, projectDir, name string, platform providers.
 	return read, nil
 }
 
-func locate(ctx context.Context, store *providers.Store, kind providers.Kind, projectDir, name string, platform providers.Platform) (string, error) {
+func locate(ctx context.Context, store *providers.Store, kind providers.Kind, projectDir, name string, platform providers.Platform, pinning pinning) (string, error) {
 	if !store.Fetches() {
 		return store.Binary(ctx, kind, name, platform, "")
 	}
 
-	lock, err := pins(ctx, store, projectDir)
+	lock, err := pins(ctx, store, projectDir, pinning)
 	if err != nil {
 		return "", err
 	}
@@ -60,12 +67,15 @@ func Pin(ctx context.Context, projectDir string) error {
 	return err
 }
 
-func pins(ctx context.Context, store *providers.Store, projectDir string) (lockfile.Lock, error) {
+func pins(ctx context.Context, store *providers.Store, projectDir string, pinning pinning) (lockfile.Lock, error) {
 	lock, held, err := lockfile.Read(projectDir)
 	if err != nil {
 		return lockfile.Lock{}, err
 	}
 	if !held {
+		if pinning == pinInMemory {
+			return lockFromRelease(ctx, store)
+		}
 		return pin(ctx, store, projectDir)
 	}
 	if lock.CLI != store.Version {
@@ -75,13 +85,20 @@ func pins(ctx context.Context, store *providers.Store, projectDir string) (lockf
 }
 
 func pin(ctx context.Context, store *providers.Store, projectDir string) (lockfile.Lock, error) {
-	sums, err := store.Checksums(ctx)
+	lock, err := lockFromRelease(ctx, store)
 	if err != nil {
-		return lockfile.Lock{}, fmt.Errorf("read the checksums of release %s: %w", store.Version, err)
+		return lockfile.Lock{}, err
 	}
-	lock := lockfile.FromChecksums(store.Version, sums)
 	if err := lockfile.Write(projectDir, lock); err != nil {
 		return lockfile.Lock{}, err
 	}
 	return lock, nil
+}
+
+func lockFromRelease(ctx context.Context, store *providers.Store) (lockfile.Lock, error) {
+	sums, err := store.Checksums(ctx)
+	if err != nil {
+		return lockfile.Lock{}, fmt.Errorf("read the checksums of release %s: %w", store.Version, err)
+	}
+	return lockfile.FromChecksums(store.Version, sums), nil
 }

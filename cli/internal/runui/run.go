@@ -53,8 +53,12 @@ func Run(ctx context.Context, spec Spec, body Body) error {
 	ui.gate = g
 	defer ui.Close()
 
+	drive := provider.Drive
+	if spec.Dry {
+		drive = provider.DriveDry
+	}
 	provW := ui.ProcessWriter()
-	err = provider.Drive(ctx, spec.Config, provW, provW, TrustFor(spec.Trust, ui), func(runner *provider.Runner) error {
+	err = drive(ctx, spec.Config, provW, provW, TrustFor(spec.Trust, ui), func(runner *provider.Runner) error {
 		return body(ctx, runner, ui)
 	})
 	if err != nil {

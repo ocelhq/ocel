@@ -91,7 +91,7 @@ func TestTheLockIsWrittenBesideTheConfigOnTheFirstRunOfAVersion(t *testing.T) {
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
-	if _, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform); err == nil {
+	if _, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, pinToLock); err == nil {
 		t.Fatal("locate() error = nil, want the fetch of an archive this release does not serve to fail")
 	}
 
@@ -112,6 +112,26 @@ func TestTheLockIsWrittenBesideTheConfigOnTheFirstRunOfAVersion(t *testing.T) {
 	}
 }
 
+func TestADryRunHoldingNoLockPinsInMemoryAndWritesNothing(t *testing.T) {
+	t.Parallel()
+
+	server := releaseServing(t, "aws")
+	store := storeOn(t, server, "linux", "amd64")
+	projectDir := t.TempDir()
+
+	_, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, pinInMemory)
+	if err == nil {
+		t.Fatal("locate() error = nil, want the fetch of an archive this release does not serve to fail")
+	}
+	archive := providers.AssetName(providers.KindProvider, "aws", locatedVersion, "linux", "amd64")
+	if !strings.Contains(err.Error(), archive) {
+		t.Fatalf("error %q does not name %s, want the dry run pinned and on to fetching it", err.Error(), archive)
+	}
+	if _, err := os.Stat(lockfile.Path(projectDir)); err == nil {
+		t.Fatalf("%s was written by a dry run", lockfile.Name)
+	}
+}
+
 func TestALockWrittenOnOnePlatformMatchesTheOneWrittenOnAnother(t *testing.T) {
 	t.Parallel()
 
@@ -121,7 +141,7 @@ func TestALockWrittenOnOnePlatformMatchesTheOneWrittenOnAnother(t *testing.T) {
 	for _, host := range []providers.Platform{{GOOS: "darwin", GOARCH: "arm64"}, {GOOS: "linux", GOARCH: "amd64"}} {
 		projectDir := t.TempDir()
 		store := storeOn(t, server, host.GOOS, host.GOARCH)
-		_, _ = locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform)
+		_, _ = locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, pinToLock)
 
 		raw, err := os.ReadFile(lockfile.Path(projectDir))
 		if err != nil {
@@ -151,7 +171,7 @@ func TestALockPinningAnotherVersionIsRefusedRatherThanRewritten(t *testing.T) {
 		t.Fatalf("read the lock: %v", err)
 	}
 
-	_, err = locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform)
+	_, err = locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, pinToLock)
 	if err == nil {
 		t.Fatal("locate() error = nil, want a lock pinning another version refused")
 	}
@@ -208,7 +228,7 @@ func TestAPinnedLockIsNotRewrittenOrRefetched(t *testing.T) {
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
-	_, _ = locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform)
+	_, _ = locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, pinToLock)
 	first, err := os.ReadFile(lockfile.Path(projectDir))
 	if err != nil {
 		t.Fatalf("read the lock: %v", err)
@@ -216,7 +236,7 @@ func TestAPinnedLockIsNotRewrittenOrRefetched(t *testing.T) {
 
 	server.Close()
 
-	if _, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform); err == nil {
+	if _, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, pinToLock); err == nil {
 		t.Fatal("locate() error = nil, want the fetch to fail against a closed release")
 	}
 	second, err := os.ReadFile(lockfile.Path(projectDir))
@@ -235,7 +255,7 @@ func TestAProviderTheLockDoesNotPinIsRefusedByName(t *testing.T) {
 	store := storeOn(t, server, "linux", "amd64")
 	projectDir := t.TempDir()
 
-	_, err := locate(context.Background(), store, providers.KindProvider, projectDir, "nowhere", store.Platform)
+	_, err := locate(context.Background(), store, providers.KindProvider, projectDir, "nowhere", store.Platform, pinToLock)
 	if err == nil {
 		t.Fatal("locate() error = nil, want the unpinned provider refused")
 	}
@@ -262,7 +282,7 @@ func TestAProvidersDirResolvesWithNothingOnPATH(t *testing.T) {
 	}
 
 	projectDir := t.TempDir()
-	got, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform)
+	got, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, pinToLock)
 	if err != nil {
 		t.Fatalf("locate: %v", err)
 	}
@@ -277,18 +297,20 @@ func TestAProvidersDirResolvesWithNothingOnPATH(t *testing.T) {
 func TestAReleaseThatSignsNoChecksumsPinsNothing(t *testing.T) {
 	t.Parallel()
 
-	store := storeOn(t, unsignedRelease(t), "linux", "amd64")
-	projectDir := t.TempDir()
+	for _, pinning := range []pinning{pinToLock, pinInMemory} {
+		store := storeOn(t, unsignedRelease(t), "linux", "amd64")
+		projectDir := t.TempDir()
 
-	_, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform)
-	if err == nil {
-		t.Fatal("locate() error = nil, want a release that signs no checksums refused")
-	}
-	if !strings.Contains(err.Error(), providers.SignatureAsset) {
-		t.Errorf("error %q does not name the signature it looked for", err.Error())
-	}
-	if _, err := os.Stat(lockfile.Path(projectDir)); err == nil {
-		t.Fatalf("%s was written from checksums nothing signed", lockfile.Name)
+		_, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, pinning)
+		if err == nil {
+			t.Fatal("locate() error = nil, want a release that signs no checksums refused")
+		}
+		if !strings.Contains(err.Error(), providers.SignatureAsset) {
+			t.Errorf("error %q does not name the signature it looked for", err.Error())
+		}
+		if _, err := os.Stat(lockfile.Path(projectDir)); err == nil {
+			t.Fatalf("%s was written from checksums nothing signed", lockfile.Name)
+		}
 	}
 }
 
@@ -301,7 +323,7 @@ func TestChecksumsTheSignatureDoesNotCoverPinNothing(t *testing.T) {
 	}
 	projectDir := t.TempDir()
 
-	if _, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform); err == nil {
+	if _, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, pinToLock); err == nil {
 		t.Fatal("locate() error = nil, want checksums the signature does not cover refused")
 	}
 	if _, err := os.Stat(lockfile.Path(projectDir)); err == nil {
