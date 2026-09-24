@@ -14,6 +14,8 @@ on:
       - "tests/fixtures/sdk/python/**"
       - "tests/fixtures/sdk/rust/**"
       - "tests/fixtures/sdk/rust-workspace/**"
+      - "go.work"
+      - "go.work.sum"
       - "crates/**"
       - "python/**"
       - "pnpm-lock.yaml"
@@ -54,25 +56,28 @@ jobs:
         group:
           - name: cli
             dirs: cli sdk pkg/naming pkg/proto pkg/channel pkg/configdoc pkg/constants pkg/target tests/fixtures/sdk/go tests/fixtures/deploy/go/server scripts/redactvet
-            packages: ./cli/... ./sdk/... ./pkg/naming/... ./pkg/proto/... ./pkg/channel/... ./pkg/configdoc/... ./pkg/constants/... ./pkg/target/... ./tests/fixtures/sdk/go/... ./tests/fixtures/deploy/go/server/... ./scripts/redactvet/...
           - name: aws
             dirs: platform/aws/provider platform/aws/runtime platform/aws/connector
-            packages: ./platform/aws/provider/... ./platform/aws/runtime/... ./platform/aws/connector/...
           - name: gcp
             dirs: platform/gcp/provider platform/gcp/runtime platform/gcp/connector
-            packages: ./platform/gcp/provider/... ./platform/gcp/runtime/... ./platform/gcp/connector/...
           - name: providerkit
             dirs: platform/vps/provider platform/vps/runtime platform/vps/connector pkg/providerkit pkg/providerkit/pulumi pkg/costkit pkg/transformkit pkg/runtimekit pkg/connectorkit platform/edge/cloudflare/deploy platform/edge/contract
-            packages: ./platform/vps/provider/... ./platform/vps/runtime/... ./platform/vps/connector/... ./pkg/providerkit/... ./pkg/providerkit/pulumi/... ./pkg/costkit/... ./pkg/transformkit/... ./pkg/runtimekit/... ./pkg/connectorkit/... ./platform/edge/cloudflare/deploy/... ./platform/edge/contract/...
     env:
       DIRS: ${{ matrix.group.dirs }}
-      PACKAGES: ${{ matrix.group.packages }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Setup Go
         uses: ./.github/actions/go
+
+      - name: The matrix names every go.work module, and nothing else
+        if: matrix.group.name == 'cli'
+        run: |
+          set -euo pipefail
+          diff -u \
+            <(sed -n 's/^ *dirs: //p' .github/workflows/go.yml | tr ' ' '\n' | sort) \
+            <(go list -m -f '{{.Dir}}' | sed "s|^$PWD/||" | sort)
 
       - uses: ./.github/actions/node-workspace
         with:
@@ -167,10 +172,22 @@ jobs:
           done
 
       - name: go build
-        run: go build $PACKAGES
+        run: |
+          set -euo pipefail
+          packages=()
+          for dir in $DIRS; do
+            packages+=("./$dir/...")
+          done
+          go build "${packages[@]}"
 
       - name: go test -race
-        run: go test -race -count=1 $PACKAGES
+        run: |
+          set -euo pipefail
+          packages=()
+          for dir in $DIRS; do
+            packages+=("./$dir/...")
+          done
+          go test -race -count=1 "${packages[@]}"
 
       - name: Run the dev stack's live suite on the runner's docker
         if: matrix.group.name == 'cli'
