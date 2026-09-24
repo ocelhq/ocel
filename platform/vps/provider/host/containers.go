@@ -55,12 +55,12 @@ func networkCreating(class providerkit.Class, project string) string {
 		"fi"
 }
 
-func networkStanding(spec Container) string {
-	network := quoted(AppNetwork(spec.Class, spec.Project))
-	return networkCreating(spec.Class, spec.Project) + "\n" +
+func networkStanding(class providerkit.Class, project string) string {
+	network := quoted(AppNetwork(class, project))
+	return networkCreating(class, project) + "\n" +
 		"if ! docker network connect " + network + " " + quoted(ProxyContainer) + " >/dev/null 2>&1 && " +
 		"! docker network inspect --format " + quoted(membersFormat) + " " + network + " | grep -qx " + quoted(ProxyContainer) + "; then\n" +
-		"printf '%s\\n' " + quoted(ProxyContainer+" could not join "+AppNetwork(spec.Class, spec.Project)) + " >&2\n" +
+		"printf '%s\\n' " + quoted(ProxyContainer+" could not join "+AppNetwork(class, project)) + " >&2\n" +
 		"exit 1\n" +
 		"fi"
 }
@@ -76,7 +76,7 @@ func networkForgetting(class providerkit.Class, project string) string {
 }
 
 func (h *Host) join(ctx context.Context, spec Container, elevation string) error {
-	return h.joining(ctx, spec.App, spec.Class, spec.Project, networkStanding(spec), elevation)
+	return h.joining(ctx, spec.App, spec.Class, spec.Project, networkStanding(spec.Class, spec.Project), elevation)
 }
 
 func (h *Host) joining(ctx context.Context, who string, class providerkit.Class, project, command, elevation string) error {
