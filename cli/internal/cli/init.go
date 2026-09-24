@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -258,20 +259,27 @@ func configTemplate(name, slug, provider string) string {
 	if projectconfig.IsYAML(name) {
 		return yamlTemplate(slug, provider)
 	}
+	selected := fmt.Sprintf("{ %q: {} }", provider)
+	if configdoc.ProviderNamedAlone(provider) {
+		selected = strconv.Quote(provider)
+	}
 	return fmt.Sprintf(`{
   "$schema": %q,
   "slug": %q,
-  "provider": { %q: {} }
+  "provider": %s
 }
-`, schemaURL(), slug, provider)
+`, schemaURL(), slug, selected)
 }
 
 func yamlTemplate(slug, provider string) string {
+	selected := fmt.Sprintf("\n  %s: {}", provider)
+	if configdoc.ProviderNamedAlone(provider) {
+		selected = " " + provider
+	}
 	return fmt.Sprintf(`# yaml-language-server: $schema=%s
 slug: %q
-provider:
-  %s: {}
-`, schemaURL(), slug, provider)
+provider:%s
+`, schemaURL(), slug, selected)
 }
 
 func typescriptTemplate(slug, provider string) string {

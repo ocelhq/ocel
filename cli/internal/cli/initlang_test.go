@@ -263,16 +263,19 @@ func TestInitWritesOnlyTheConfigWhenNoManifestNamesALanguage(t *testing.T) {
 	}
 }
 
-func TestInitKeysTheProviderByItsIdentifierInEveryForm(t *testing.T) {
+func TestInitNamesTheProviderAloneWhereItNeedsNoOptionsAndKeysItElsewhere(t *testing.T) {
 	for _, tc := range []struct {
 		opts    initOptions
 		written string
 		want    string
 	}{
+		{initOptions{provider: "aws"}, projectconfig.DefaultFileName, "  \"provider\": \"aws\"\n"},
+		{initOptions{provider: "aws", yaml: true}, projectconfig.YAMLFileName, "provider: aws\n"},
+		{initOptions{provider: "vps"}, projectconfig.DefaultFileName, "  \"provider\": { \"vps\": {} }\n"},
 		{initOptions{provider: "vps", yaml: true}, projectconfig.YAMLFileName, "provider:\n  vps: {}\n"},
 		{initOptions{provider: "aws", ts: true}, projectconfig.TSFileName, "  provider: awsProvider({}),\n"},
 	} {
-		t.Run(tc.written, func(t *testing.T) {
+		t.Run(tc.opts.provider+" in "+tc.written, func(t *testing.T) {
 			dir := manifestDir(t, "")
 			deps := newDeps()
 			stubPackageManager(&deps, nil)
