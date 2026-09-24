@@ -172,7 +172,11 @@ export class AwsSweeper implements Sweeper {
       this.sweepNamespaces(runId, cells, byPart, complaints, busy),
     );
 
-    await sweepStacks(fixtures, complaints, (stack) => stack.sweepStale(runId));
+    const inUse = async (names: string[]) => {
+      const live = await busy(names);
+      return new Set(names.filter((name) => underway(name, live)));
+    };
+    await sweepStacks(fixtures, complaints, (stack) => stack.sweepStale(runId, inUse));
 
     await report(real, complaints);
   }

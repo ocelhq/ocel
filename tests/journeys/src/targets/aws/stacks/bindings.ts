@@ -5,7 +5,7 @@ import { journeyConfigIn } from "../../../config";
 import { ocel, spawnOcel, workTree } from "../../../ocel";
 import { progress } from "../../../progress";
 import type { CellUnderTest } from "../../../run/cellRun";
-import type { ExternalStack, StackChecks } from "../../../stacks";
+import type { ExternalStack, InUse, StackChecks } from "../../../stacks";
 import { awsBindingStore, awsStore, type Cli, cliAt, said } from "../store";
 import type { AwsWorld } from "../world";
 
@@ -395,7 +395,7 @@ export abstract class AwsStack implements ExternalStack {
 
   abstract destroy(cell: CellUnderTest): Promise<void>;
 
-  abstract sweepStale(runId: string): Promise<void>;
+  abstract sweepStale(runId: string, inUse: InUse): Promise<void>;
 
   abstract sweepRun(runId: string): Promise<void>;
 

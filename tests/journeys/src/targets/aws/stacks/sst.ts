@@ -4,6 +4,7 @@ import { HARNESS_PREFIX } from "../../../identity";
 import { workTree } from "../../../ocel";
 import { fixtureDir, treeDir } from "../../../paths";
 import type { CellUnderTest } from "../../../run/cellRun";
+import type { InUse } from "../../../stacks";
 import { copyTree } from "../../../tree";
 import { spawnBin } from "../run";
 import { type Cli, cliAt } from "../store";
@@ -55,11 +56,9 @@ export class SstStack extends AwsStack {
     await spawnBin(bin, ["remove", "--stage", stage], dir, await sstEnv(this.world, process.env));
   }
 
-  async sweepStale(runId: string): Promise<void> {
-    await this.remove(runId, [
-      `${HARNESS_PREFIX}${runId}`,
-      ...(await recordedStages(cliAt(await this.world.endpoint()))),
-    ]);
+  async sweepStale(runId: string, inUse: InUse): Promise<void> {
+    const recorded = await recordedStages(cliAt(await this.world.endpoint()));
+    await this.remove(runId, staleStages(runId, recorded, await inUse(recorded)));
   }
 
   async sweepRun(runId: string): Promise<void> {
@@ -73,7 +72,7 @@ export class SstStack extends AwsStack {
     );
     try {
       const bin = path.join(dir, "node_modules", ".bin", "sst");
-      for (const stage of new Set(stages)) {
+      for (const stage of stages) {
         try {
           await spawnBin(
             bin,
@@ -91,6 +90,12 @@ export class SstStack extends AwsStack {
       await rm(dir, { recursive: true, force: true });
     }
   }
+}
+
+export function staleStages(runId: string, recorded: string[], inUse: Set<string>): string[] {
+  return [
+    ...new Set([`${HARNESS_PREFIX}${runId}`, ...recorded.filter((stage) => !inUse.has(stage))]),
+  ];
 }
 
 function isStageNotFound(error: unknown): boolean {

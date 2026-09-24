@@ -10,11 +10,13 @@ export type StackCheck = {
 
 export type StackChecks = Record<StackPoint, StackCheck[]>;
 
+export type InUse = (names: string[]) => Promise<Set<string>>;
+
 export interface ExternalStack {
   readonly checks: StackChecks;
   deploy(cell: CellUnderTest): Promise<void>;
   destroy(cell: CellUnderTest): Promise<void>;
   refuse(cell: CellUnderTest): Promise<void>;
-  sweepStale(runId: string): Promise<void>;
+  sweepStale(runId: string, inUse: InUse): Promise<void>;
   sweepRun(runId: string): Promise<void>;
 }
