@@ -210,6 +210,32 @@ func (s shaped) pruned() error {
 	return nil
 }
 
+func routedTo(live string) (map[string]bool, error) {
+	dir := filepath.Join(live, upstreamsDir)
+	entries, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	routed := map[string]bool{}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".") {
+			continue
+		}
+		held, err := os.ReadFile(filepath.Join(dir, entry.Name()))
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		routed[string(held)] = true
+	}
+	return routed, nil
+}
+
 func holding(live string) (func(), error) {
 	if err := os.MkdirAll(live, 0o700); err != nil {
 		return nil, err

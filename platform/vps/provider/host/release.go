@@ -108,7 +108,7 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 		return cut.routed(standing), nil
 	}); err != nil {
 		if overtaken != nil {
-			return h.overtaken(ctx, rel, overtaken)
+			return h.overtaken(ctx, rel, overtaken, elevation)
 		}
 		return h.stranded(ctx, rel, cut, err, elevation)
 	}
@@ -373,6 +373,10 @@ func gateCommand(window time.Duration, gates []string) []string {
 	return helperCommand(append([]string{"gate", "--deploy-timeout", seconds(window)}, gates...)...)
 }
 
+func idleCommand(targets []string) []string {
+	return helperCommand(append([]string{"idle"}, targets...)...)
+}
+
 func flipCommand(window time.Duration, retiring []string) []string {
 	argv := []string{"flip"}
 	if len(retiring) > 0 {
@@ -422,14 +426,14 @@ func (h *Host) ungated(ctx context.Context, rel Release, outcome, verdict, said,
 	}
 	return Unserved{providerkit.Refuse(providerkit.CodeNotReady,
 		"release %s onto %s: the gate %s; the previous release is still live\n%s%s%s",
-		rel.apps(), h.named(), outcome, verdict, evidence.String(), h.discard(ctx, rel))}
+		rel.apps(), h.named(), outcome, verdict, evidence.String(), h.discard(ctx, rel, elevation))}
 }
 
-func (h *Host) overtaken(ctx context.Context, rel Release, why error) error {
+func (h *Host) overtaken(ctx context.Context, rel Release, why error, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	return Unserved{fmt.Errorf("release %s onto %s: %w; nothing was written, so the box serves what it served before%s",
-		rel.apps(), h.named(), why, h.discard(ctx, rel))}
+		rel.apps(), h.named(), why, h.discard(ctx, rel, elevation))}
 }
 
 func (h *Host) stranded(ctx context.Context, rel Release, cut cutover, why error, elevation string) error {
@@ -448,7 +452,7 @@ func (h *Host) stranded(ctx context.Context, rel Release, cut cutover, why error
 	}
 	return Unserved{providerkit.Refuse(code,
 		"release %s onto %s: could not write %s; the proxy was not flipped: %v\n%s%s",
-		rel.apps(), h.named(), ProxyConfig, why, rolled, h.discard(ctx, rel))}
+		rel.apps(), h.named(), ProxyConfig, why, rolled, h.discard(ctx, rel, elevation))}
 }
 
 func (h *Host) unflipped(ctx context.Context, rel Release, cut cutover, outcome, verdict, elevation string) error {
@@ -464,7 +468,7 @@ func (h *Host) unflipped(ctx context.Context, rel Release, cut cutover, outcome,
 	}
 	return Unserved{providerkit.Refuse(providerkit.CodeNotReady,
 		"release %s onto %s: the flip helper %s; the previous release is still live\n%s%s",
-		rel.apps(), h.named(), outcome, verdict, h.discard(ctx, rel))}
+		rel.apps(), h.named(), outcome, verdict, h.discard(ctx, rel, elevation))}
 }
 
 func (h *Host) putBack(ctx context.Context, cut cutover, elevation string) (bool, error) {
@@ -480,7 +484,7 @@ func (h *Host) putBack(ctx context.Context, cut cutover, elevation string) (bool
 	return true, err
 }
 
-func (h *Host) discard(ctx context.Context, rel Release) string {
+func (h *Host) discard(ctx context.Context, rel Release, elevation string) string {
 	state, _, err := h.proxyState(ctx)
 	if err != nil {
 		return fmt.Sprintf("\n%s left standing: %s could not be read to tell whether the proxy routes to them: %v",
@@ -490,9 +494,24 @@ func (h *Host) discard(ctx context.Context, rel Release) string {
 	for _, route := range state.Routes {
 		live = append(live, route.Upstream)
 	}
+	var unrouted []string
+	for _, app := range rel.Apps {
+		if !slices.Contains(live, app.Target) {
+			unrouted = append(unrouted, app.Target)
+		}
+	}
+	if len(unrouted) == 0 {
+		return ""
+	}
+	said, err := h.ran(ctx, "ask the proxy whether a route or a drain still holds "+listed(unrouted, containerOf),
+		words(idleCommand(unrouted)), nil, elevation)
+	if err != nil {
+		return fmt.Sprintf("\n%s left standing: %v", listed(unrouted, containerOf), err)
+	}
+	idle := strings.Fields(said)
 	var left strings.Builder
 	for _, app := range rel.Apps {
-		if slices.Contains(live, app.Target) {
+		if !slices.Contains(idle, app.Target) {
 			continue
 		}
 		if err := h.RemoveContainer(ctx, app.name()); err != nil {

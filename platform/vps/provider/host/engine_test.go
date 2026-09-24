@@ -427,3 +427,73 @@ func TestARealProxyServesTheNewReleaseWhenTheRetiredOneStopsUnderAHealthProbe(t 
 			claimed, answered)
 	}
 }
+
+func askedFor(hostname string, timeout time.Duration) (string, error) {
+	request, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+proxyPort+"/", nil)
+	if err != nil {
+		return "", err
+	}
+	request.Host = hostname
+	said, err := (&http.Client{Timeout: timeout}).Do(request)
+	if err != nil {
+		return "", err
+	}
+	defer said.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(said.Body, 1<<12))
+	if err == nil && said.StatusCode != http.StatusOK {
+		err = errors.New(said.Status)
+	}
+	return string(body), err
+}
+
+func TestARealProxyCallsAnUpstreamIdleOnlyOnceTheFlipRetiringItHasDrainedIt(t *testing.T) {
+	stood := proxyStanding(t)
+
+	retired, next := "shop-web-1111:"+providerkit.InjectedPortText, "shop-web-2222:"+providerkit.InjectedPortText
+	stood.standsSlowApp(t, retired, 4*time.Second)
+	stood.standsApp(t, next, "two")
+	serving := func(upstream string) ProxyState {
+		return ProxyState{
+			Grace:  DrainWindow,
+			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
+			Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
+		}
+	}
+	held := stood.moves(t, proxyBaseline, serving(retired))
+	if idle := strings.TrimSpace(stood.drives(t, "idle", retired)); idle != "" {
+		t.Errorf("idle named %q while the route still dials it", idle)
+	}
+
+	inFlight := make(chan error, 1)
+	go func() {
+		_, err := askedFor(claimed, 30*time.Second)
+		inFlight <- err
+	}()
+	time.Sleep(500 * time.Millisecond)
+	stood.writes(t, held, serving(next))
+	flipped := make(chan string, 1)
+	go func() {
+		said, err := exec.Command(dockerEngine, "exec", stood.name, ProxyHelperMount,
+			"flip", "--drain-timeout", "30", "--retire", retired, ProxyConfigMount).CombinedOutput()
+		flipped <- fmt.Sprintf("%v %s", err, said)
+	}()
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+		if body, err := askedFor(claimed, 2*time.Second); err == nil && body == "two" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s never answered from %s after the flip: %s", claimed, next, <-flipped)
+		}
+	}
+
+	if idle := strings.TrimSpace(stood.drives(t, "idle", retired, next)); idle != "" {
+		t.Errorf("idle named %q while the flip that retired %s was still draining a request from it: a failed release that removes what idle names cuts that request", idle, retired)
+	}
+	if err := <-inFlight; err != nil {
+		t.Errorf("the request in flight when the route moved was answered %v", err)
+	}
+	t.Logf("the flip said %s", <-flipped)
+	if idle := strings.TrimSpace(stood.drives(t, "idle", retired, next)); idle != retired {
+		t.Errorf("idle named %q once the flip retiring %s had drained it and returned, want %s alone", idle, retired, retired)
+	}
+}

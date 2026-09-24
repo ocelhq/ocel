@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -1260,5 +1261,49 @@ func TestNoVerbThatAnswersWhatACertificateIsCanReachTheDataDirectory(t *testing.
 	}
 	if !slices.Contains(dataTakers(t), "forget") {
 		t.Fatalf("forget is handed no %s, so the exemption this bench names is not the one the code takes and the absences above are read over a window that holds nothing", proxyData)
+	}
+}
+
+func running(t *testing.T, proc string, pid int, argv ...string) {
+	t.Helper()
+	dir := filepath.Join(proc, strconv.Itoa(pid))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if argv == nil {
+		return
+	}
+	if err := os.WriteFile(filepath.Join(dir, "cmdline"), []byte(strings.Join(argv, "\x00")+"\x00"), 0o444); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAnUpstreamIsIdleOnlyOnceNoRouteDialsItAndNoRunningFlipIsDrainingIt(t *testing.T) {
+	proc, live := procWith(t, nil), t.TempDir()
+	running(t, proc, 1, "caddy", "run", "--config", "/run/ocel-proxy/caddy.json")
+	running(t, proc, 412, "/ocel/ocel-proxyctl", "flip", "--drain-timeout", "30", "--retire", "tcp/old-web:08080", "/etc/caddy/ocel/caddy.json")
+	running(t, proc, 413, "/bin/sh", "flip", "--drain-timeout", "30", "--retire", "gone-web:8080", "/etc/caddy/ocel/caddy.json")
+	running(t, proc, 414)
+	if err := os.MkdirAll(filepath.Join(live, upstreamsDir), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(live, upstreamsDir, url.PathEscape(routed)), []byte("new-web:8080"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errs strings.Builder
+	code := run(t.TempDir(), proc, live, []string{"idle", "old-web:8080", "new-web:8080", "gone-web:8080"}, &out, &errs)
+	if code != 0 {
+		t.Fatalf("idle = %d, %q", code, errs.String())
+	}
+	if got := strings.Fields(out.String()); !slices.Equal(got, []string{"gone-web:8080"}) {
+		t.Errorf("idle named %v, want only gone-web:8080: a release that removes old-web cuts the requests the flip retiring it is still draining, and one that removes new-web cuts the route that dials it", got)
+	}
+}
+
+func TestIdleRefusesAnUpstreamItCannotKeyRatherThanCallingItIdle(t *testing.T) {
+	code, out, errs := ran(t, "idle", "old-web")
+	if code == 0 || strings.TrimSpace(out) != "" {
+		t.Errorf("idle old-web = %d, %q, %q: an address with no port matches no route file and no retired upstream, so it would read as idle whatever holds it", code, out, errs)
 	}
 }
