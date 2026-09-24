@@ -105,7 +105,7 @@ func TestWhatBootstrapSeedsIsABoxServingNothingAndItsRendering(t *testing.T) {
 		t.Errorf("the seeded table reads back with a grace period of %s, want the %s drain window: rendering over no grace declares caddy's eternal default", read.Grace, DrainWindow)
 	}
 	if seeded := proxyConfigItem().Content; !bytes.Equal(seeded, mustRender(t, read)) {
-		t.Errorf("bootstrap seeds %s as\n%s\nwhich is not the rendering of the table it seeds beside it, and describing the box refuses a config ocel did not render", ProxyConfig, seeded)
+		t.Errorf("bootstrap seeds %s as\n%s\nwhich is not the rendering of the table it seeds beside it, so a fresh box serves what no table records until its first write puts it back", ProxyConfig, seeded)
 	}
 }
 

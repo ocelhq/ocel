@@ -282,9 +282,12 @@ func TestTheControlPlaneBindsAUnixSocketAndNothingPublishesAPortForIt(t *testing
 func TestTheGracePeriodIsStatedRatherThanLeftEternal(t *testing.T) {
 	t.Parallel()
 
-	grace, written := nested(t, baseline(t), "apps", "http", "grace_period").(string)
-	if !written || grace == "" {
-		t.Fatal("the proxy leaves grace_period at its default, which caddy documents as eternal: one hung request would hold a retired server open forever")
+	var seeded map[string]any
+	if err := json.Unmarshal(proxyConfigItem().Content, &seeded); err != nil {
+		t.Fatalf("the config a box is seeded with is not json: %v", err)
+	}
+	if grace := nested(t, seeded, "apps", "http", "grace_period"); grace != "30s" {
+		t.Fatalf("a fresh box's proxy declares grace_period %v, want the 30s drain window: caddy documents its default as eternal, and one hung request would hold a retired server open forever", grace)
 	}
 }
 
