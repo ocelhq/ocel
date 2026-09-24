@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/constant"
 	"go/types"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -15,7 +16,7 @@ import (
 
 var Analyzer = &analysis.Analyzer{
 	Name:      "redactvet",
-	Doc:       "reports formatting a protobuf message that carries a debug_redact field, which protobuf-go renders in clear",
+	Doc:       "reports formatting or JSON-encoding a protobuf message that carries a debug_redact field, which protobuf-go renders in clear",
 	Run:       run,
 	FactTypes: []analysis.Fact{new(carriers)},
 }
@@ -41,12 +42,31 @@ func (r *carriers) String() string {
 	return "carriers(" + strings.Join(names, ", ") + ")"
 }
 
-var sinks = map[string]bool{
-	"fmt":      true,
-	"log":      true,
-	"log/slog": true,
-	"testing":  true,
-	"google.golang.org/protobuf/encoding/prototext": true,
+type sink int
+
+const (
+	formats sink = 1 << iota
+	encodes
+)
+
+var sinks = map[string]sink{
+	"fmt":     formats,
+	"log":     formats,
+	"testing": formats,
+	"google.golang.org/protobuf/encoding/prototext": formats,
+	"log/slog": formats | encodes,
+}
+
+var jsonEncoders = map[string]bool{"Marshal": true, "MarshalIndent": true, "Encode": true}
+
+func sinkOf(callee *types.Func) sink {
+	if callee.Pkg().Path() == "encoding/json" {
+		if jsonEncoders[callee.Name()] {
+			return encodes
+		}
+		return 0
+	}
+	return sinks[callee.Pkg().Path()]
 }
 
 func run(pass *analysis.Pass) (any, error) {
@@ -68,13 +88,20 @@ func run(pass *analysis.Pass) (any, error) {
 }
 
 func checkSink(pass *analysis.Pass, call *ast.CallExpr) {
-	callee := typeutil.Callee(pass.TypesInfo, call)
-	if callee == nil || callee.Pkg() == nil || !sinks[callee.Pkg().Path()] {
+	callee, ok := typeutil.Callee(pass.TypesInfo, call).(*types.Func)
+	if !ok || callee.Pkg() == nil {
 		return
 	}
+	kind := sinkOf(callee)
 	for _, arg := range call.Args {
-		if t := pass.TypesInfo.TypeOf(arg); t != nil && fmtRenders(pass, t) {
+		t := pass.TypesInfo.TypeOf(arg)
+		switch {
+		case t == nil:
+		case kind&formats != 0 && fmtRenders(pass, t):
 			report(pass, arg, t)
+		case kind&encodes != 0 && jsonEncodes(pass, t, false, map[addressed]bool{}):
+			pass.Reportf(arg.Pos(), "%s encodes its debug_redact fields in clear through encoding/json: encode the fields you need, and a message bound for the wire with protojson",
+				types.TypeString(t, byName(pass.Pkg)))
 		}
 	}
 }
@@ -181,6 +208,64 @@ func fmtReaches(pass *analysis.Pass, t types.Type, top bool, r reach, seen map[v
 		return fmtReaches(pass, u.Key(), false, r.elements(), seen) || fmtReaches(pass, u.Elem(), false, r.elements(), seen)
 	}
 	return false
+}
+
+type addressed struct {
+	t           types.Type
+	addressable bool
+}
+
+func jsonEncodes(pass *analysis.Pass, t types.Type, addressable bool, seen map[addressed]bool) bool {
+	if seen[addressed{t, addressable}] {
+		return false
+	}
+	seen[addressed{t, addressable}] = true
+	if isGenericMessage(t) || isCarrier(pass, t) {
+		return true
+	}
+	if marshalsItself(t) || addressable && marshalsItself(types.NewPointer(t)) {
+		return false
+	}
+	switch u := t.Underlying().(type) {
+	case *types.Pointer:
+		return jsonEncodes(pass, u.Elem(), true, seen)
+	case *types.Slice:
+		return jsonEncodes(pass, u.Elem(), true, seen)
+	case *types.Array:
+		return jsonEncodes(pass, u.Elem(), addressable, seen)
+	case *types.Map:
+		return jsonEncodes(pass, u.Elem(), false, seen)
+	case *types.Struct:
+		for i := range u.NumFields() {
+			if field := u.Field(i); !jsonSkips(field, u.Tag(i)) && jsonEncodes(pass, field.Type(), addressable, seen) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func jsonSkips(field *types.Var, tag string) bool {
+	if reflect.StructTag(tag).Get("json") == "-" {
+		return true
+	}
+	if field.Exported() {
+		return false
+	}
+	if !field.Embedded() {
+		return true
+	}
+	t := field.Type()
+	if pointer, ok := t.Underlying().(*types.Pointer); ok {
+		t = pointer.Elem()
+	}
+	_, isStruct := t.Underlying().(*types.Struct)
+	return !isStruct
+}
+
+func marshalsItself(t types.Type) bool {
+	methods := types.NewMethodSet(t)
+	return methods.Lookup(nil, "MarshalJSON") != nil || methods.Lookup(nil, "MarshalText") != nil
 }
 
 func isCarrier(pass *analysis.Pass, t types.Type) bool {
