@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"syscall"
+	"time"
 )
 
 const (
@@ -22,10 +23,13 @@ const (
 	forwardModule = "reverse_proxy"
 )
 
+const probeTimeout = 5 * time.Second
+
 type shaped struct {
 	dir       string
 	config    []byte
 	upstreams map[string]string
+	probes    map[string]time.Duration
 }
 
 func shaping(live string, document []byte) (shaped, error) {
@@ -35,6 +39,7 @@ func shaping(live string, document []byte) (shaped, error) {
 	}
 	dir := filepath.Join(live, upstreamsDir)
 	upstreams := map[string]string{}
+	probes := map[string]time.Duration{}
 	apps, _ := config["apps"].(map[string]any)
 	web, _ := apps["http"].(map[string]any)
 	servers, _ := web["servers"].(map[string]any)
@@ -67,7 +72,12 @@ func shaping(live string, document []byte) (shaped, error) {
 				case strings.ContainsAny(dial, "{}"):
 					return shaped{}, fmt.Errorf("forwards route %q to %q, a placeholder rather than an address", identity, dial)
 				}
+				probe, err := probing(forwards)
+				if err != nil {
+					return shaped{}, fmt.Errorf("probes route %q %w", identity, err)
+				}
 				upstreams[named] = dial
+				probes[named] = probe
 				upstream["dial"] = "{file." + filepath.Join(dir, named) + "}"
 			}
 		}
@@ -76,17 +86,48 @@ func shaping(live string, document []byte) (shaped, error) {
 	if err != nil {
 		return shaped{}, err
 	}
-	return shaped{dir: dir, config: written, upstreams: upstreams}, nil
+	return shaped{dir: dir, config: written, upstreams: upstreams, probes: probes}, nil
+}
+
+func probing(forwards map[string]any) (time.Duration, error) {
+	checks, _ := forwards["health_checks"].(map[string]any)
+	active, _ := checks["active"].(map[string]any)
+	if active == nil {
+		return 0, nil
+	}
+	switch timeout := active["timeout"].(type) {
+	case nil:
+		return probeTimeout, nil
+	case float64:
+		return time.Duration(timeout), nil
+	case string:
+		read, err := time.ParseDuration(timeout)
+		if err != nil {
+			return 0, fmt.Errorf("with a timeout %q it cannot read: %w", timeout, err)
+		}
+		return read, nil
+	default:
+		return 0, fmt.Errorf("with a timeout %v that is neither a duration nor nanoseconds", timeout)
+	}
 }
 
 func (s shaped) introduced() error {
 	return s.pointed(func(_ string, _ []byte, standing bool) bool { return !standing })
 }
 
-func (s shaped) moved() error {
-	return s.pointed(func(named string, held []byte, standing bool) bool {
-		return !standing || string(held) != s.upstreams[named]
+func (s shaped) moved() (time.Duration, error) {
+	var probed time.Duration
+	err := s.pointed(func(named string, held []byte, standing bool) bool {
+		if !standing {
+			return true
+		}
+		if string(held) == s.upstreams[named] {
+			return false
+		}
+		probed = max(probed, s.probes[named])
+		return true
 	})
+	return probed, err
 }
 
 func (s shaped) pointed(moving func(named string, held []byte, standing bool) bool) error {

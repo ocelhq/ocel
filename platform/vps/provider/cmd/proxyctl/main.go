@@ -439,38 +439,47 @@ func draining(socket string, retiring []string, window time.Duration, out, errs 
 }
 
 func flip(socket, live, path string, out, errs io.Writer) int {
+	probed, code := flipped(socket, live, path, out, errs)
+	if code == 0 {
+		time.Sleep(probed)
+	}
+	return code
+}
+
+func flipped(socket, live, path string, out, errs io.Writer) (time.Duration, int) {
 	release, err := holding(live)
 	if err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
-		return exitRefused
+		return 0, exitRefused
 	}
 	defer release()
 	document, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: read %s: %v\n", path, err)
-		return exitRefused
+		return 0, exitRefused
 	}
 	if err := caddyadmin.Keeps(document, socket); err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: %s %v\n", path, err)
-		return exitRefused
+		return 0, exitRefused
 	}
 	shape, err := shaping(live, document)
 	if err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: %s %v\n", path, err)
-		return exitRefused
+		return 0, exitRefused
 	}
 	if err := shape.introduced(); err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
-		return exitRefused
+		return 0, exitRefused
 	}
 	if code := speak(socket, http.MethodPost, loadPath, shape.config, out, errs); code != 0 {
-		return code
+		return 0, code
 	}
-	if err := errors.Join(shape.moved(), shape.pruned()); err != nil {
+	probed, err := shape.moved()
+	if err := errors.Join(err, shape.pruned()); err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
-		return exitRefused
+		return 0, exitRefused
 	}
-	return 0
+	return probed, 0
 }
 
 func serve(live, path string, errs io.Writer) int {
@@ -485,7 +494,8 @@ func serve(live, path string, errs io.Writer) int {
 		return exitRefused
 	}
 	started := filepath.Join(live, liveConfig)
-	if err := errors.Join(shape.moved(), shape.pruned(), os.WriteFile(started, shape.config, 0o600)); err != nil {
+	_, moved := shape.moved()
+	if err := errors.Join(moved, shape.pruned(), os.WriteFile(started, shape.config, 0o600)); err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
 		return exitRefused
 	}
