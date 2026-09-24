@@ -135,7 +135,7 @@ func TestInstallingAConnectorEndsWithTheAddressAndTheKey(t *testing.T) {
 	})
 	result := finalResult(t, stream, err)
 	if !result.GetSuccess() {
-		t.Fatalf("result = %v, want a success", result)
+		t.Fatalf("result error = %q, want a success", result.GetError())
 	}
 	if result.GetConnector().GetUrl() != "https://box.example.com/"+constants.ProjectStateDirName+"/connector" {
 		t.Errorf("url = %q", result.GetConnector().GetUrl())
@@ -180,7 +180,7 @@ func TestRemovingAConnectorReachesTheProvider(t *testing.T) {
 
 	stream, err := client.RemoveConnector(context.Background(), &contractv1.RemoveConnectorRequest{})
 	if result := finalResult(t, stream, err); !result.GetSuccess() {
-		t.Fatalf("result = %v, want a success", result)
+		t.Fatalf("result error = %q, want a success", result.GetError())
 	}
 	if !held.removed {
 		t.Error("the provider was never asked to take the connector off")

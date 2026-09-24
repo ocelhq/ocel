@@ -190,7 +190,11 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		}
 		apps := manifest.GetApps()
 		if len(apps) != 1 || apps[0].GetDeploymentId() != recorded {
-			t.Errorf("manifest apps = %v, want api carrying %q", apps, recorded)
+			ids := make([]string, 0, len(apps))
+			for _, app := range apps {
+				ids = append(ids, app.GetDeploymentId())
+			}
+			t.Errorf("manifest apps carry deployments %q, want api alone carrying %q", ids, recorded)
 		}
 	})
 

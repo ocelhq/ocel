@@ -566,7 +566,7 @@ func TestBuild(t *testing.T) {
 			t.Fatalf("Build: %v", err)
 		}
 		if len(manifest.GetApps()) != 1 || manifest.GetApps()[0].GetName() != "web" {
-			t.Fatalf("apps = %v, want one app named web", manifest.GetApps())
+			t.Fatalf("apps = %v, want one app named web", appNames(manifest.GetApps()))
 		}
 		if got := manifest.GetApps()[0].GetCompute(); got != "container" {
 			t.Errorf("app compute = %q, want the %q the config asked for rather than the project default", got, "container")
@@ -602,7 +602,7 @@ func TestBuild(t *testing.T) {
 			t.Fatalf("Build: %v", err)
 		}
 		if len(manifest.GetApps()) != 0 {
-			t.Fatalf("apps = %v, want none", manifest.GetApps())
+			t.Fatalf("apps = %v, want none", appNames(manifest.GetApps()))
 		}
 	})
 
@@ -646,7 +646,7 @@ func TestBuild(t *testing.T) {
 
 		store := byName["storefront"]
 		if len(store) != 1 || store[0].GetValue() != "ph-store" {
-			t.Fatalf("storefront variables = %v, want only its own POSTHOG_ID", store)
+			t.Fatalf("storefront variables = %v, want only its own POSTHOG_ID", variableKeys(store))
 		}
 	})
 
@@ -700,6 +700,22 @@ func TestBuild(t *testing.T) {
 			t.Errorf("ROOT_KEY folder = %q, want the empty root spelling — the store's %q sentinel is never written above the store", got, "/")
 		}
 	})
+}
+
+func appNames(apps []*contractv1.ManifestApp) []string {
+	names := make([]string, 0, len(apps))
+	for _, app := range apps {
+		names = append(names, app.GetName())
+	}
+	return names
+}
+
+func variableKeys(variables []*contractv1.ManifestVariable) []string {
+	keys := make([]string, 0, len(variables))
+	for _, variable := range variables {
+		keys = append(keys, variable.GetKey())
+	}
+	return keys
 }
 
 func TestLogicalNames(t *testing.T) {
@@ -761,13 +777,13 @@ func TestManifestVariables(t *testing.T) {
 			{Key: "UNVERSIONED", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "u"},
 		})
 		if len(got) != 2 {
-			t.Fatalf("manifestVariables = %v, want both", got)
+			t.Fatalf("manifestVariables = %v, want both", variableKeys(got))
 		}
 		if got[0].GetKey() != "UNVERSIONED" || got[0].GetVersion() != 0 {
-			t.Errorf("UNVERSIONED = %v, want version 0", got[0])
+			t.Errorf("%s at version %d, want UNVERSIONED at version 0", got[0].GetKey(), got[0].GetVersion())
 		}
 		if got[1].GetKey() != "VERSIONED" || got[1].GetVersion() != 4 {
-			t.Errorf("VERSIONED = %v, want the version it resolved at", got[1])
+			t.Errorf("%s at version %d, want VERSIONED at the version it resolved at", got[1].GetKey(), got[1].GetVersion())
 		}
 		if got[1].GetDescription() != "Used to call Stripe" {
 			t.Errorf("VERSIONED description = %q, want it preserved", got[1].GetDescription())

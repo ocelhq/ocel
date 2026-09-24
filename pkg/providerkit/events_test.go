@@ -175,10 +175,10 @@ func TestEventSenderFailPassesARefusalBackToTheCaller(t *testing.T) {
 		t.Fatalf("got %d events, want a result envelope for the refusal and one for the failure", len(events))
 	}
 	if result := events[0].GetResult(); !result.GetRefused() || !strings.Contains(result.GetError(), "no") {
-		t.Fatalf("result = %+v, want the refusal's envelope marked refused so it is not read as the verdict", result)
+		t.Fatalf("result success=%t refused=%t error=%q, want the refusal's envelope marked refused so it is not read as the verdict", result.GetSuccess(), result.GetRefused(), result.GetError())
 	}
 	if result := events[1].GetResult(); result.GetSuccess() || result.GetRefused() || result.GetError() != "the engine gave up" {
-		t.Fatalf("result = %+v, want the failure carried as an unsuccessful result", result)
+		t.Fatalf("result success=%t refused=%t error=%q, want the failure carried as an unsuccessful result", result.GetSuccess(), result.GetRefused(), result.GetError())
 	}
 }
 

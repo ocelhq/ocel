@@ -155,7 +155,7 @@ func TestDeployHandsPreflightThePlanBeforeItUploadsAnything(t *testing.T) {
 	}
 	pre := preflighted[0]
 	if pre.Plan.Slug != "shop" || len(pre.Plan.Apps) != 1 {
-		t.Errorf("preflight saw plan %+v, want the project and the app the manifest declares", pre.Plan)
+		t.Errorf("preflight saw a plan for %q with %d apps, want the project and the app the manifest declares", pre.Plan.Slug, len(pre.Plan.Apps))
 	}
 	if len(pre.Resources) != 1 || pre.Resources[0].Name != "orders" {
 		t.Errorf("preflight saw resources %+v, want the one the manifest declares", pre.Resources)

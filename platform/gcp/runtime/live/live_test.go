@@ -144,7 +144,7 @@ func TestABindingRecordReachesTheAppUnderTheKeyTheSdkReadsItBy(t *testing.T) {
 		t.Fatalf("the app was handed %q under the binding's key, which is no record: %v", got["OCEL_RESOURCE_POSTGRES_main"], err)
 	}
 	if record.GetPostgres().GetHost() != "h" {
-		t.Errorf("the app was handed %v, want the record published under db--main", record)
+		t.Errorf("the app was handed a record for host %q, want the record published under db--main", record.GetPostgres().GetHost())
 	}
 }
 

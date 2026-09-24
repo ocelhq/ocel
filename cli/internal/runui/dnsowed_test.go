@@ -152,7 +152,7 @@ func TestDNSOwedProjection(t *testing.T) {
 		}
 		records := got[0].GetOperation().GetDnsOwed().GetRecords()
 		if len(records) != 1 {
-			t.Fatalf("envelope = %v, want one owed record", got[0])
+			t.Fatalf("envelope owes %d records, want one", len(records))
 		}
 		if records[0].GetName() != validation.GetName() || records[0].GetValue() != validation.GetValue() {
 			t.Errorf("record = %+v, want the fields carried through", records[0])
