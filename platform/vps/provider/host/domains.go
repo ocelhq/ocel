@@ -164,7 +164,7 @@ func claimedUnder(claims []HostClaim, base string) []string {
 }
 
 func (h *Host) routingTable(ctx context.Context) (RoutingTable, error) {
-	held, err := h.routingDocument(ctx)
+	held, err := h.tableHeld(ctx)
 	if err != nil {
 		return RoutingTable{}, err
 	}
@@ -172,7 +172,7 @@ func (h *Host) routingTable(ctx context.Context) (RoutingTable, error) {
 }
 
 func (h *Host) proxyInspected(ctx context.Context, class providerkit.Class) error {
-	held, err := h.routingPair(ctx)
+	held, err := h.pairHeld(ctx)
 	if err != nil {
 		return err
 	}
@@ -223,7 +223,7 @@ func (h *Host) recomposed(ctx context.Context, compose func(RoutingTable) (Routi
 	if err != nil {
 		return err
 	}
-	shaped, err := h.composeProxy(ctx, compose)
+	shaped, err := h.composeRouting(ctx, compose)
 	if err != nil || !shaped.changed {
 		return err
 	}
@@ -234,7 +234,7 @@ func (h *Host) recomposed(ctx context.Context, compose func(RoutingTable) (Routi
 	return nil
 }
 
-func (h *Host) reverted(ctx context.Context, previous RoutingTable, expected string, why error) error {
+func (h *Host) reverted(ctx context.Context, previous RoutingTable, expected tableDigest, why error) error {
 	if _, err := h.writeRouting(ctx, expected, previous); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"the running proxy rejected %s: %v\nrestoring %s and %s also failed: %v",

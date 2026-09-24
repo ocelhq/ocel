@@ -22,12 +22,12 @@ type RoutingTable struct {
 }
 
 type tableRows struct {
-	Grace     string      `json:"grace"`
-	Claims    []HostClaim `json:"claims,omitempty"`
-	Routes    []AppRoute  `json:"routes,omitempty"`
-	Pins      []Pin       `json:"pins,omitempty"`
-	Preview   string      `json:"preview,omitempty"`
-	Connector string      `json:"connector,omitempty"`
+	Grace       string      `json:"grace"`
+	Claims      []HostClaim `json:"claims,omitempty"`
+	Routes      []AppRoute  `json:"routes,omitempty"`
+	Pins        []Pin       `json:"pins,omitempty"`
+	PreviewBase string      `json:"preview,omitempty"`
+	Connector   string      `json:"connector,omitempty"`
 }
 
 func WriteRoutingTable(table RoutingTable) ([]byte, error) {
@@ -40,8 +40,8 @@ func WriteRoutingTable(table RoutingTable) ([]byte, error) {
 		Pins: slices.SortedFunc(slices.Values(table.Pins), func(a, b Pin) int {
 			return cmp.Or(strings.Compare(a.Hostname, b.Hostname), strings.Compare(a.Path, b.Path))
 		}),
-		Preview:   table.PreviewBase,
-		Connector: table.Connector,
+		PreviewBase: table.PreviewBase,
+		Connector:   table.Connector,
 	})
 }
 
@@ -61,7 +61,7 @@ func ReadRoutingTable(document []byte) (RoutingTable, error) {
 		Claims:      rows.Claims,
 		Routes:      rows.Routes,
 		Pins:        rows.Pins,
-		PreviewBase: rows.Preview,
+		PreviewBase: rows.PreviewBase,
 		Connector:   rows.Connector,
 	}
 	if _, err := RenderProxyConfig(table); err != nil {

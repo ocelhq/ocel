@@ -391,8 +391,8 @@ func TestAWriteThatKeepsMovingIsRefusedBusyAndFlipsNothing(t *testing.T) {
 	if !unserved(err) {
 		t.Errorf("a write that never landed refused with %v, which does not say the previous release still serves", err)
 	}
-	if written := stood.count(writesProxy); written != proxyRewrites {
-		t.Errorf("the release wrote %d times, want %d: the retry is bounded", written, proxyRewrites)
+	if written := stood.count(writesProxy); written != routingRewrites {
+		t.Errorf("the release wrote %d times, want %d: the retry is bounded", written, routingRewrites)
 	}
 	if stood.cutover() >= 0 {
 		t.Errorf("a release that never wrote its configuration still flipped: %v", stood.commands())
@@ -744,7 +744,7 @@ func TestAWriteThatDiesBetweenItsMovesLeavesTheTableItWroteRatherThanTheConfig(t
 
 	after := string(mustWrite(t, routed()))
 	here := strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
-	write := exec.Command("/bin/sh", "-c", here(stagedWrite(contentSum([]byte(before)))))
+	write := exec.Command("/bin/sh", "-c", here(stagedWrite(tableDigest(contentSum([]byte(before))))))
 	write.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
 	write.Stdin = strings.NewReader(after + "\n" + string(mustRender(t, routed())))
 	if err := write.Run(); err == nil {
@@ -865,7 +865,7 @@ func TestTwoWritersThatReadTheSameDigestLeaveOneOfTheirDocumentsBehind(t *testin
 			t.Fatal(err)
 		}
 	}
-	read := contentSum([]byte("the table both writers read"))
+	read := tableDigest(contentSum([]byte("the table both writers read")))
 
 	racing := make(chan error, 2)
 	for _, writer := range []string{"one", "the other"} {
