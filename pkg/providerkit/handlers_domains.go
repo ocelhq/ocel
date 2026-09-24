@@ -44,7 +44,7 @@ func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequ
 		if err != nil {
 			return err
 		}
-		session.settle.owed = attended(sender)
+		session.settle.attend(sender)
 		return session.add(ctx, report)
 	})
 }

@@ -23,7 +23,7 @@ type wildcards struct {
 	held     Wildcard
 	writer   edge.DNSWriter
 	zone     string
-	owed     owedPolicy
+	attended *eventSender
 }
 
 func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) (*wildcards, error) {
@@ -51,7 +51,9 @@ func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) 
 
 func (w *wildcards) settler(front edge.Edge) settler {
 	s := newSettler(front, w.writer, w.zone, resolving(w.provider, front, servedResolver{kind: front.Kind()}))
-	s.owed = w.owed
+	if w.attended != nil {
+		s.attend(w.attended)
+	}
 	return s
 }
 
@@ -100,7 +102,7 @@ func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePr
 		if err != nil {
 			return err
 		}
-		w.owed = attended(sender)
+		w.attended = sender
 		front, err := h.edgeFor(w.provider, req.GetEdge())
 		if err != nil {
 			return err
