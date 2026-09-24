@@ -3,6 +3,7 @@ package box
 import (
 	"context"
 	"errors"
+	"fmt"
 	"maps"
 	"slices"
 
@@ -203,7 +204,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, report edge.R
 		return edge.PruneResult{}, err
 	}
 	if err := s.holdOrigins(ctx); err != nil {
-		return edge.PruneResult{}, err
+		report.Say(s.released("preview "+pointer, err).Error())
 	}
 	if err := s.e.machine.UnroutePointer(ctx, s.surface(), named(pointer)); err != nil {
 		return edge.PruneResult{}, err
@@ -314,12 +315,16 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	if err := s.e.machine.DisclaimHost(ctx, live.StoreHostname(hostname), s.surface()); err != nil {
 		return err
 	}
-	if err := s.holdOrigins(ctx); err != nil {
-		return err
-	}
 	s.state.Release(hostname)
 	s.state.PublishFront(hostname, "")
+	if err := s.holdOrigins(ctx); err != nil {
+		return edge.Warned(s.released(hostname, err))
+	}
 	return nil
+}
+
+func (s *stack) released(what string, err error) error {
+	return fmt.Errorf("%s is released, but this project's buckets still answer it as an origin until the next deploy holds them to what the project claims: %w", what, err)
 }
 
 func (s *stack) Destroy(ctx context.Context) error {

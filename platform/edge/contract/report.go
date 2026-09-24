@@ -1,6 +1,9 @@
 package edge
 
-import "time"
+import (
+	"errors"
+	"time"
+)
 
 type Reporter interface {
 	Say(message string)
@@ -24,3 +27,25 @@ func (discarded) Say(string) {}
 func (discarded) Detail(string) {}
 
 func (discarded) Span(string, time.Time, time.Time, error, ...Attr) {}
+
+type Warning struct{ Cause error }
+
+func (w Warning) Error() string { return w.Cause.Error() }
+
+func (w Warning) Unwrap() error { return w.Cause }
+
+func Warned(err error) error {
+	if err == nil {
+		return nil
+	}
+	return Warning{Cause: err}
+}
+
+func Heeded(err error, report Reporter) error {
+	var warned Warning
+	if errors.As(err, &warned) {
+		report.Say(warned.Error())
+		return nil
+	}
+	return err
+}

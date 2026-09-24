@@ -135,6 +135,7 @@ type Edge struct {
 	serves   *[]edge.Need
 	byLabel  bool
 	refusal  error
+	unbound  error
 
 	unreadable error
 }
@@ -152,10 +153,11 @@ func (e *Edge) bound(binding edge.DomainBinding) {
 	e.serving[binding.Hostname] = binding.Certificate
 }
 
-func (e *Edge) unbound(hostname string) {
+func (e *Edge) release(hostname string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	delete(e.serving, hostname)
+	return edge.Warned(e.unbound)
 }
 
 func (e *Edge) answers(hostname string) bool {
@@ -181,6 +183,12 @@ func (e *Edge) UseLedger(ledgers func(edge.StackState) Ledger) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.ledgers = ledgers
+}
+
+func (e *Edge) WarnOnUnbind(err error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.unbound = err
 }
 
 func (e *Edge) Refuse(err error) {
@@ -421,12 +429,12 @@ func (s *Stack) BindDomain(_ context.Context, binding edge.DomainBinding) error 
 }
 
 func (s *Stack) UnbindDomain(_ context.Context, hostname string) error {
-	s.front.unbound(hostname)
+	warned := s.front.release(hostname)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.state.Release(hostname)
 	s.state.PublishFront(hostname, "")
-	return nil
+	return warned
 }
 
 func (s *Stack) Destroy(ctx context.Context) error {

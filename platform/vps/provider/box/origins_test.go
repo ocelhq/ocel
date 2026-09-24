@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -71,5 +72,48 @@ func TestAPreviewsHostnamesAreOriginsItsProjectsBucketsAnswer(t *testing.T) {
 	gone := slices.Index(stood.calls, "disclaim "+"ocel--"+slug+"--preview/pr-7")
 	if gone < 0 || !slices.Contains(stood.calls[gone+1:], "hold origins "+slug+"/preview") {
 		t.Errorf("the preview released its hostnames and never held its project's buckets to what is left: %v", stood.calls)
+	}
+}
+
+func TestAnUnbindWhoseBucketOriginsCannotBeHeldStillReleasesTheHostnameAndWarns(t *testing.T) {
+	t.Parallel()
+
+	stood, _, stack := standing(t)
+	ctx := context.Background()
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+	stood.refuseOn("HoldOrigins", errors.New("the store answered 503"))
+
+	err := stack.UnbindDomain(ctx, "shop.example.com")
+	var warned edge.Warning
+	if !errors.As(err, &warned) {
+		t.Fatalf("UnbindDomain = %v, want a warning: the name is already released on the box, and failing here leaves `domain rm` unable to finish over a CORS rule the next deploy rewrites anyway", err)
+	}
+	if !strings.Contains(err.Error(), "503") || !strings.Contains(err.Error(), "next deploy") {
+		t.Errorf("the warning says %q, want what failed and what repairs it", err)
+	}
+	if slices.Contains(stack.State().Bound, "shop.example.com") {
+		t.Error("the stack still records shop.example.com as bound although the box released it")
+	}
+}
+
+func TestAPreviewWhoseBucketOriginsCannotBeHeldIsStillRemovedAndWarns(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	stack := previewStack(t, stood)
+	previewed(t, stack, "pr-7", "web")
+	stood.refuseOn("HoldOrigins", errors.New("the store answered 503"))
+
+	said := &reported{}
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", said); err != nil {
+		t.Fatalf("RemovePointer = %v, want the preview removed: its hostnames are already released, and a CORS rule the next deploy rewrites is no reason to leave its routes standing", err)
+	}
+	if !slices.Contains(stood.calls, "unroute ocel--"+slug+"--preview/pr-7") {
+		t.Errorf("the preview's routes were never removed: %v", stood.calls)
+	}
+	if !slices.ContainsFunc(said.lines, func(line string) bool { return strings.Contains(line, "503") }) {
+		t.Errorf("the removal said %v, want the origins it could not hold named", said.lines)
 	}
 }

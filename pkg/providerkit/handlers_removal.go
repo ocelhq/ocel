@@ -262,7 +262,7 @@ func (r *projectRemoval) unbind(ctx context.Context, report Reporter) error {
 	var errs []error
 	for _, hostname := range r.stack.State().Bound {
 		report.Say("Unbinding " + hostname + " from the edge")
-		if err := r.stack.UnbindDomain(ctx, hostname); err != nil {
+		if err := edge.Heeded(r.stack.UnbindDomain(ctx, hostname), report); err != nil {
 			errs = append(errs, fmt.Errorf("unbind %q before the origin it fronts is destroyed: %w", hostname, err))
 		}
 	}

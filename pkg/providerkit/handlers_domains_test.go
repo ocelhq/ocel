@@ -313,6 +313,54 @@ func TestRemoveHostnameUnbindsAndReleasesItsRecords(t *testing.T) {
 	}
 }
 
+func TestRemoveHostnameFinishesOverAnUnbindThatOnlyWarnsAndSaysWhat(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	deployed(t, provider, providerkit.ClassProduction, "shop")
+
+	add, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: configuredHosts("app.acme.com"),
+		Edge:       zoned("acme.com"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := drain(add); err != nil {
+		t.Fatal(err)
+	}
+	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).WarnOnUnbind(errors.New("its buckets still answer app.acme.com until the next deploy"))
+
+	remove, err := client.RemoveHostname(context.Background(), &contractv1.HostnameRequest{
+		Slug: "shop",
+		Host: "app.acme.com",
+		Edge: zoned("acme.com"),
+	})
+	if err != nil {
+		t.Fatalf("RemoveHostname() error = %v", err)
+	}
+	var said []string
+	var result *progressv1.ResultEvent
+	for remove.Receive() {
+		said = append(said, remove.Msg().GetProgress().GetMessage())
+		if done := remove.Msg().GetResult(); done != nil {
+			result = done
+		}
+	}
+	if err := remove.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if !result.GetSuccess() {
+		t.Fatalf("RemoveHostname() = %q, want the hostname given back: the edge released it and only warned about what the next deploy repairs", result.GetError())
+	}
+	if !slices.ContainsFunc(said, func(line string) bool { return strings.Contains(line, "next deploy") }) {
+		t.Errorf("RemoveHostname() said %v, want the edge's warning passed on", said)
+	}
+	if state := readStack(t, provider, providerkit.ClassProduction, "shop"); len(state.Hosts) != 0 {
+		t.Errorf("the settlement still holds %v", state.Hostnames())
+	}
+}
+
 func TestRemoveHostnameRefusesAHostTheProjectDoesNotServe(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")

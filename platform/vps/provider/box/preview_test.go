@@ -378,7 +378,7 @@ func callsATeardownMakes(t *testing.T) []string {
 	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
-	reached := stood.reached()
+	reached := slices.DeleteFunc(stood.reached(), func(call string) bool { return call == "HoldOrigins" })
 	if len(reached) == 0 {
 		t.Fatal("a teardown reached no call on the box that this fake can refuse, so every case below would be vacuous")
 	}
