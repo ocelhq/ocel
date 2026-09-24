@@ -288,8 +288,9 @@ func (d routingPair) digest() tableDigest { return tableDigest(contentSum(d.tabl
 type tableDigest string
 
 const (
-	routingMoved = 9
-	routingLock  = live.StateRoot
+	routingMoved    = 9
+	routingUnseeded = 10
+	routingLock     = live.StateRoot
 )
 
 func routingLocked(mode string) string {
@@ -424,6 +425,10 @@ func (h *Host) writePair(ctx context.Context, expected tableDigest, pair routing
 		return "", providerkit.Refuse(providerkit.CodeBusy,
 			"%s on %s changed during this deploy (%s, expected %s); nothing was written\nRun the deploy again",
 			live.RoutingTable, h.named(), strings.TrimSpace(result.Stderr), expected)
+	case routingUnseeded:
+		return "", providerkit.Refuse(providerkit.CodeNotReady,
+			"%s or %s is missing on %s; nothing was written\nRun `ocel bootstrap` for this box's class",
+			live.RoutingTable, ProxyConfig, h.named())
 	default:
 		return "", unelevated(refused, h.refuse("write "+live.RoutingTable+" and "+ProxyConfig, result))
 	}
@@ -441,8 +446,6 @@ func stagedWrite(expected tableDigest) string {
 	table, config := quoted(live.RoutingTable), quoted(ProxyConfig)
 	return strings.Join([]string{
 		"set -e",
-		"test -f " + table,
-		"test -f " + config,
 		`staged=$(mktemp ` + quoted(live.RoutingTable+".XXXXXX") + `)`,
 		`rendered=$(mktemp ` + quoted(ProxyConfig+".XXXXXX") + `)`,
 		`trap 'rm -f "$staged" "$rendered"' EXIT`,
@@ -451,6 +454,7 @@ func stagedWrite(expected tableDigest) string {
 		`printf '%s' "$written" | base64 -d > "$staged"`,
 		`printf '%s' "$rendering" | base64 -d > "$rendered"`,
 		strings.TrimSuffix(routingLocked("-x"), "\n"),
+		`if [ ! -f ` + table + ` ] || [ ! -f ` + config + ` ]; then exit ` + strconv.Itoa(routingUnseeded) + `; fi`,
 		`held=$(sha256sum ` + table + ` | cut -d' ' -f1)`,
 		`if [ "$held" != ` + quoted(string(expected)) + ` ]; then printf '%s' "$held" >&2; exit ` + strconv.Itoa(routingMoved) + `; fi`,
 		`chmod --reference=` + table + ` "$staged"`,

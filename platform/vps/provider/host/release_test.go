@@ -807,6 +807,50 @@ func TestAReleaseWhoseWriteDiesBetweenItsMovesPutsTheTableAndItsConfigBackTogeth
 	}
 }
 
+func TestAWriteOntoABoxMissingEitherFileSaysToBootstrapIt(t *testing.T) {
+	t.Parallel()
+
+	for _, needed := range []string{"sh", "flock", "sha256sum", "mktemp", "base64"} {
+		if _, err := exec.LookPath(needed); err != nil {
+			t.Skipf("no %s on this machine, and the write under test is the shell one a box runs", needed)
+		}
+	}
+	for _, missing := range []string{"routing.json", "caddy.json"} {
+		dir := t.TempDir()
+		table, config := filepath.Join(dir, "routing.json"), filepath.Join(dir, "caddy.json")
+		written := mustWrite(t, seededTable)
+		for path, body := range map[string][]byte{table: written, config: mustRender(t, seededTable)} {
+			if filepath.Base(path) == missing {
+				continue
+			}
+			if err := os.WriteFile(path, body, 0o640); err != nil {
+				t.Fatal(err)
+			}
+		}
+		here := strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
+		write := exec.Command("/bin/sh", "-c", here(stagedWrite(tableDigest(contentSum(written)))))
+		write.Stdin = strings.NewReader(pairFed(routingPair{table: mustWrite(t, routed()), config: mustRender(t, routed())}))
+		err := write.Run()
+		var exited *exec.ExitError
+		if !errors.As(err, &exited) || exited.ExitCode() != routingUnseeded {
+			t.Errorf("a write onto a box missing %s = %v, want exit %d so the deploy can say the box needs its bootstrap", missing, err, routingUnseeded)
+		}
+	}
+
+	stood := claimingBox(t, routed())
+	proxied := stood.answer
+	stood.answer = func(command string) (session.Result, bool) {
+		if writesProxy(command) {
+			return session.Result{Code: routingUnseeded}, true
+		}
+		return proxied(command)
+	}
+	err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
+	if err == nil || !strings.Contains(err.Error(), "ocel bootstrap") {
+		t.Errorf("a write onto a box missing its table or its config = %v, want it to say to run `ocel bootstrap`", err)
+	}
+}
+
 func TestTheTableAndItsConfigAreReadTogetherUnderTheLockAWriterHoldsAcrossBothMoves(t *testing.T) {
 	t.Parallel()
 
