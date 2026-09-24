@@ -1,0 +1,23 @@
+package covert
+
+import (
+	"context"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
+)
+
+var _ proxy.Proxy = (*Overt)(nil)
+
+func (o *Overt) Guarantees() proxy.Guarantees { return o.guarantees }
+
+func (o *Overt) Admit(context.Context, proxy.Admission) error { return nil }
+
+func (o *Overt) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
+
+func (o *Overt) Certificate(context.Context, string) (proxy.Certificate, error) {
+	return proxy.Certificate{}, nil
+}
+
+func (o *Overt) Forget(_ context.Context, hostnames []string) ([]string, error) {
+	return hostnames, nil
+}
