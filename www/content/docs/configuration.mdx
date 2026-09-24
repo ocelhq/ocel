@@ -23,6 +23,28 @@ creates is keyed on it, so changing it forks a new project.
 The file is JSON with comments and trailing commas allowed, so a variant you are not using
 can sit beside the one you are.
 
+## YAML
+
+The same document can be written as YAML, in `ocel.yaml` or `ocel.yml`. Every field,
+default and error is the one this page describes. `ocel init --yaml` writes it.
+
+```yaml title="ocel.yaml"
+# yaml-language-server: $schema=https://ocel.dev/schema/0.0.0/ocel.schema.json
+slug: my-app
+provider:
+  name: aws
+apps:
+  - name: web
+    path: .
+```
+
+The first line is what your editor completes and validates against. Anchors and merge keys
+expand before ocel reads the document, so apps that share settings can share them once.
+
+One project reads one config: a directory holding two of `ocel.json`, `ocel.yaml`,
+`ocel.yml` and a [TypeScript config](/docs/typescript-config) is refused, and so is one
+holding two forms of the same target, such as `ocel.vps.json` and `ocel.vps.yaml`.
+
 ## Variables
 
 Any string may interpolate an environment variable with `${NAME}`. The value comes from

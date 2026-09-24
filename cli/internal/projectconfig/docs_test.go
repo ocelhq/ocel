@@ -50,7 +50,7 @@ func mdxPages(t *testing.T, root string) map[string]string {
 	return pages
 }
 
-func jsonBlocks(t *testing.T, root string) []block {
+func configBlocks(t *testing.T, root string) []block {
 	t.Helper()
 	var blocks []block
 	for page, source := range mdxPages(t, root) {
@@ -70,7 +70,7 @@ func jsonBlocks(t *testing.T, root string) []block {
 				continue
 			}
 			info := strings.TrimPrefix(line, "```")
-			if !strings.HasPrefix(info, "json") {
+			if !strings.HasPrefix(info, "json") && !strings.HasPrefix(info, "yaml") {
 				continue
 			}
 			named := fenceTitle.FindStringSubmatch(info)
@@ -92,14 +92,14 @@ func TestEveryDocumentedConfigValidatesAgainstTheSchema(t *testing.T) {
 	schema := committedSchema(t, root)
 	want := schemaID(t, root)
 	shown := 0
-	for _, example := range jsonBlocks(t, root) {
+	for _, example := range configBlocks(t, root) {
 		if !configTitled(example.title) {
 			continue
 		}
 		shown++
 		name := example.page + " › " + example.title
 		document := documentOf(t, name, []byte(example.body))
-		named, _ := document.(map[string]any)["$schema"].(string)
+		named := schemaNamed(name, []byte(example.body), document)
 		if named != want {
 			t.Errorf("%s names %q, want the committed schema %q", name, named, want)
 		}

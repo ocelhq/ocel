@@ -247,7 +247,7 @@ func configFailure(err error) (string, string) {
 	message := firstLine(err.Error())
 	var missing projectconfig.NoConfigError
 	if errors.As(err, &missing) {
-		return "no " + strings.Join(missing.Names, " or ") + " found in this directory or any parent",
+		return "no " + missing.Listed() + " found in this directory or any parent",
 			"run `ocel init` to set up this project"
 	}
 	if head, hint, ok := splitHint(message); ok {

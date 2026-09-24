@@ -104,6 +104,34 @@ func TestInitWritesTypeScriptOnRequest(t *testing.T) {
 	}
 }
 
+func TestInitWritesYAMLOnRequest(t *testing.T) {
+	dir := manifestDir(t, "go.mod")
+	deps := newDeps()
+	stubPackageManager(&deps, nil)
+
+	if err := runInit(context.Background(), deps, dir, "007", initOptions{provider: "acme", yaml: true}, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runInit: %v", err)
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, projectconfig.DefaultFileName)); err == nil {
+		t.Fatal("--yaml wrote a JSON config as well")
+	}
+	cfg, err := projectconfig.Resolve(context.Background(), dir, "")
+	if err != nil {
+		t.Fatalf("the config init wrote does not load: %v", err)
+	}
+	if cfg.Path != filepath.Join(dir, projectconfig.YAMLFileName) || cfg.Slug != "007" || cfg.Provider == nil || cfg.Provider.Name != "acme" {
+		t.Fatalf("config = %+v", cfg)
+	}
+	written, err := os.ReadFile(cfg.Path)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if !strings.Contains(string(written), "$schema=https://ocel.dev/schema/"+version.Version+"/ocel.schema.json") {
+		t.Fatalf("config names no schema for this CLI's version:\n%s", written)
+	}
+}
+
 func TestInitRefusesADirectoryOfSeveralLanguages(t *testing.T) {
 	dir := manifestDir(t, "go.mod")
 	if err := os.WriteFile(filepath.Join(dir, "Cargo.toml"), []byte("\n"), 0o644); err != nil {

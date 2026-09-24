@@ -14,6 +14,7 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/tailscale/hujson"
+	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -79,21 +80,49 @@ func committedSchema(t *testing.T, root string) *jsonschema.Schema {
 	return schema
 }
 
+var yamlSchemaLine = regexp.MustCompile(`(?m)^# yaml-language-server: \$schema=(\S+)$`)
+
+func isYAML(name string) bool {
+	return strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml")
+}
+
 func documentOf(t *testing.T, name string, source []byte) any {
 	t.Helper()
-	value, err := parseConfig(source)
+	value, err := parseConfig(name, source)
 	if err != nil {
 		t.Fatalf("%s: %v", name, err)
 	}
 	return value
 }
 
-func parseConfig(source []byte) (any, error) {
+func parseConfig(name string, source []byte) (any, error) {
+	if isYAML(name) {
+		var tree any
+		if err := yaml.Unmarshal(source, &tree); err != nil {
+			return nil, fmt.Errorf("is not valid YAML: %w", err)
+		}
+		standard, err := json.Marshal(tree)
+		if err != nil {
+			return nil, fmt.Errorf("does not convert to JSON: %w", err)
+		}
+		return jsonschema.UnmarshalJSON(bytes.NewReader(standard))
+	}
 	standard, err := hujson.Standardize(source)
 	if err != nil {
 		return nil, fmt.Errorf("is not valid JSON: %w", err)
 	}
 	return jsonschema.UnmarshalJSON(bytes.NewReader(standard))
+}
+
+func schemaNamed(name string, source []byte, document any) string {
+	if isYAML(name) {
+		if named := yamlSchemaLine.FindSubmatch(source); named != nil {
+			return string(named[1])
+		}
+		return ""
+	}
+	named, _ := document.(map[string]any)["$schema"].(string)
+	return named
 }
 
 func committedConfigs(t *testing.T, root string) []string {
@@ -174,7 +203,7 @@ func TestEverySampleConfigTheCompareTableShowsValidatesAgainstTheSchema(t *testi
 		shown++
 		name := compareTable + " › " + sample[1]
 		document := documentOf(t, name, []byte(sample[2]))
-		named, _ := document.(map[string]any)["$schema"].(string)
+		named := schemaNamed(name, []byte(sample[2]), document)
 		if named != want {
 			t.Errorf("%s names %q, want the committed schema %q", name, named, want)
 		}
@@ -215,18 +244,8 @@ func TestEveryCommittedConfigNamesTheCommittedSchema(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", path, err)
 		}
-		var read struct {
-			Schema string `json:"$schema"`
-		}
-		standard, err := hujson.Standardize(source)
-		if err != nil {
-			t.Fatalf("%s is not valid JSON: %v", path, err)
-		}
-		if err := json.Unmarshal(standard, &read); err != nil {
-			t.Fatalf("unmarshal %s: %v", path, err)
-		}
-		if read.Schema != want {
-			t.Errorf("%s names %q, want the committed schema %q", path, read.Schema, want)
+		if named := schemaNamed(path, source, documentOf(t, path, source)); named != want {
+			t.Errorf("%s names %q, want the committed schema %q", path, named, want)
 		}
 	}
 }
@@ -264,7 +283,7 @@ func TestACommentedVariantUncommentsIntoAConfigThatOnlyDiffers(t *testing.T) {
 		}
 		lines := strings.Split(string(source), "\n")
 		for _, at := range commentBlocksIn(lines) {
-			picked, err := parseConfig(uncommented(lines, at))
+			picked, err := parseConfig(path, uncommented(lines, at))
 			if err != nil {
 				t.Errorf("%s picked at line %d %v", path, at.last+1, err)
 				continue
