@@ -20,6 +20,7 @@ on:
       - "turbo.json"
       - "scripts/floci.sh"
       - "scripts/assert-ran.sh"
+      - "scripts/redactvet/**"
       - ".golangci.yml"
       - ".github/workflows/go.yml"
       - ".github/actions/go/**"
@@ -52,8 +53,8 @@ jobs:
       matrix:
         group:
           - name: cli
-            dirs: cli sdk pkg/naming pkg/proto pkg/channel pkg/configdoc pkg/constants pkg/target tests/fixtures/sdk/go tests/fixtures/deploy/go/server
-            packages: ./cli/... ./sdk/... ./pkg/naming/... ./pkg/proto/... ./pkg/channel/... ./pkg/configdoc/... ./pkg/constants/... ./pkg/target/... ./tests/fixtures/sdk/go/... ./tests/fixtures/deploy/go/server/...
+            dirs: cli sdk pkg/naming pkg/proto pkg/channel pkg/configdoc pkg/constants pkg/target tests/fixtures/sdk/go tests/fixtures/deploy/go/server scripts/redactvet
+            packages: ./cli/... ./sdk/... ./pkg/naming/... ./pkg/proto/... ./pkg/channel/... ./pkg/configdoc/... ./pkg/constants/... ./pkg/target/... ./tests/fixtures/sdk/go/... ./tests/fixtures/deploy/go/server/... ./scripts/redactvet/...
           - name: aws
             dirs: platform/aws/provider platform/aws/runtime platform/aws/connector
             packages: ./platform/aws/provider/... ./platform/aws/runtime/... ./platform/aws/connector/...
@@ -155,6 +156,14 @@ jobs:
           set -euo pipefail
           for dir in $DIRS; do
             (cd "$dir" && golangci-lint run ./...)
+          done
+
+      - name: redactvet
+        run: |
+          set -euo pipefail
+          go build -o "$RUNNER_TEMP/redactvet" ./scripts/redactvet
+          for dir in $DIRS; do
+            (cd "$dir" && go vet -vettool="$RUNNER_TEMP/redactvet" ./...)
           done
 
       - name: go build
