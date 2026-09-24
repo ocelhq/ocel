@@ -1,5 +1,5 @@
-import { describe, expect, it } from "bun:test";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { afterAll, describe, expect, it } from "bun:test";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -393,8 +393,15 @@ describe("renderJsonConfig", () => {
 });
 
 describe("writeJourneyConfig", () => {
+  const dirs: string[] = [];
+
+  afterAll(async () => {
+    await Promise.all(dirs.map((dir) => rm(dir, { recursive: true, force: true })));
+  });
+
   it("writes the overlay in the form the fixture's own base is written in", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "journey-config-"));
+    dirs.push(dir);
     await writeFile(path.join(dir, "ocel.json"), COMMENTED_JSON_BASE, "utf8");
     const file = await writeJourneyConfig(dir, { base: DEFAULT_BASE, slug: "j-1-go" });
 
@@ -405,6 +412,7 @@ describe("writeJourneyConfig", () => {
 
   it("writes a program where the fixture's own base is one", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "journey-config-"));
+    dirs.push(dir);
     await writeFile(path.join(dir, "ocel.config.ts"), "export default {};\n", "utf8");
     const file = await writeJourneyConfig(dir, { base: DEFAULT_BASE, slug: "j-1-node" });
 
