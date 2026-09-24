@@ -166,7 +166,7 @@ func (d *hostnames) retire(ctx context.Context, host string, serving edge.Kind, 
 		return err
 	}
 	report.Say(fmt.Sprintf("Unbinding %s from the %s edge it moved off", host, serving))
-	if err := stack.UnbindDomain(ctx, host); err != nil {
+	if err := edge.Heeded(stack.UnbindDomain(ctx, host), report); err != nil {
 		return err
 	}
 	report.Say(fmt.Sprintf("%s answers on both edges until resolvers drop the record they hold: %s",
@@ -199,7 +199,7 @@ func (d *hostnames) remove(ctx context.Context, report Reporter) error {
 	}
 	for _, host := range targets {
 		report.Say(fmt.Sprintf("Unbinding %s from the %s edge", host, d.settle.kind))
-		if err := d.stack.UnbindDomain(ctx, host); err != nil {
+		if err := edge.Heeded(d.stack.UnbindDomain(ctx, host), report); err != nil {
 			return err
 		}
 		settled := d.state.Host(host)

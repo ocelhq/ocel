@@ -3,15 +3,18 @@ package vps_test
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
 func lastFedTo(t *testing.T, machine *box, needle string) (string, string) {
@@ -33,6 +36,12 @@ func lastFedTo(t *testing.T, machine *box, needle string) (string, string) {
 }
 
 func stoodWithABucket(t *testing.T, declared ...string) (*box, *vps.Provider, edge.EdgeStack) {
+	t.Helper()
+	machine, p, stack, _ := stoodWithABucketDeclared(t, declared...)
+	return machine, p, stack
+}
+
+func stoodWithABucketDeclared(t *testing.T, declared ...string) (*box, *vps.Provider, edge.EdgeStack, resources.Instruction) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -64,7 +73,7 @@ func stoodWithABucket(t *testing.T, declared ...string) (*box, *vps.Provider, ed
 	if err != nil {
 		t.Fatalf("Reconcile() = %v", err)
 	}
-	return machine, p, stack
+	return machine, p, stack, bucket
 }
 
 func TestAHostnameBoundAfterTheStoreStoodUpIsAnOriginItsBucketAnswers(t *testing.T) {
@@ -119,5 +128,42 @@ func TestABucketLeftWithNoOriginAnswersNoBrowserAtAll(t *testing.T) {
 	command, _ := lastFedTo(t, machine, "?cors")
 	if !strings.Contains(command, "'DELETE'") {
 		t.Errorf("the last call to the bucket's cors was\n%s\nwant it deleted: the one origin it answered was released, and a rule left standing keeps answering it", command)
+	}
+}
+
+func TestTheNextDeployHoldsTheBucketToWhatTheProjectStillClaimsAfterAnUnbindCouldNot(t *testing.T) {
+	t.Parallel()
+
+	machine, p, stack, bucket := stoodWithABucketDeclared(t, "https://app.example.com")
+	ctx := context.Background()
+	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
+		t.Fatalf("BindDomain() = %v", err)
+	}
+	machine.mu.Lock()
+	machine.refuses = func(command string) (session.Result, bool) {
+		if strings.Contains(command, "?cors") {
+			return session.Result{Code: 7, Stderr: "curl: (7) the store answered nothing"}, true
+		}
+		return session.Result{}, false
+	}
+	machine.mu.Unlock()
+
+	var warned edge.Warning
+	if err := stack.UnbindDomain(ctx, "shop.example.com"); !errors.As(err, &warned) {
+		t.Fatalf("UnbindDomain() = %v, want the hostname released with a warning", err)
+	}
+
+	machine.mu.Lock()
+	machine.refuses = nil
+	machine.mu.Unlock()
+	if _, err := p.Bucket(ctx, bucket, nil); err != nil {
+		t.Fatalf("Bucket() on the next deploy = %v", err)
+	}
+	_, held := lastFedTo(t, machine, "?cors")
+	if strings.Contains(held, "https://shop.example.com") {
+		t.Errorf("the next deploy left the bucket answering the released shop.example.com:\n%s", held)
+	}
+	if !strings.Contains(held, "<AllowedOrigin>https://app.example.com</AllowedOrigin>") {
+		t.Errorf("the next deploy dropped the declared origin:\n%s", held)
 	}
 }
