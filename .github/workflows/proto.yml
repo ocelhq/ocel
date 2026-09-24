@@ -5,11 +5,8 @@ on:
     branches: [main]
     paths:
       - "proto/**"
-      - "buf.yaml"
-      - "buf.lock"
-      - "buf.gen.yaml"
-      - "buf.gen.go.yaml"
       - "pkg/proto/**"
+      - "console/connectors/src/gen/**"
       - "packages/ocel/src/gen/**"
       - "python/ocel/src/ocel/gen/**"
       - "crates/ocel-sdk/src/proto/**"
@@ -21,11 +18,8 @@ on:
     types: [opened, synchronize, reopened]
     paths:
       - "proto/**"
-      - "buf.yaml"
-      - "buf.lock"
-      - "buf.gen.yaml"
-      - "buf.gen.go.yaml"
       - "pkg/proto/**"
+      - "console/connectors/src/gen/**"
       - "packages/ocel/src/gen/**"
       - "python/ocel/src/ocel/gen/**"
       - "crates/ocel-sdk/src/proto/**"
