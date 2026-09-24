@@ -113,7 +113,7 @@ func (dns) Supported() []providerkit.DNSKind {
 
 func (dns) Default() providerkit.DNSKind { return "" }
 
-func (dns) Open(kind providerkit.DNSKind, zone string) (edge.DNSWriter, error) {
+func (dns) Open(kind providerkit.DNSKind, zone string, _ edge.Kind) (edge.DNSWriter, error) {
 	if kind != dnsCloudflare {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"dns %q is not supported; use %s", kind, dnsCloudflare)

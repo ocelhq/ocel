@@ -47,7 +47,11 @@ func (r Registry) Supported() []providerkit.DNSKind {
 
 func (r Registry) Default() providerkit.DNSKind { return "" }
 
-func (r Registry) Open(kind providerkit.DNSKind, zone string) (edge.DNSWriter, error) {
+func (r Registry) Open(kind providerkit.DNSKind, zone string, front edge.Kind) (edge.DNSWriter, error) {
+	if kind == KindRoute53 && front == cloudflare.Kind {
+		return nil, kit.Refuse(kit.CodeInvalid,
+			"route53 cannot write the records a Cloudflare edge answers on — pair a cloudflare edge with cloudflare dns, or drop the edge")
+	}
 	construct, ok := constructors[string(kind)]
 	if !ok {
 		return nil, kit.Refuse(kit.CodeInvalid,
@@ -69,5 +73,5 @@ func WriterFor(kind, zone string, deps Deps) (edge.DNSWriter, error) {
 	if kind == "" {
 		return nil, nil
 	}
-	return Registry{Deps: deps}.Open(providerkit.DNSKind(kind), zone)
+	return Registry{Deps: deps}.Open(providerkit.DNSKind(kind), zone, "")
 }

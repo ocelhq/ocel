@@ -137,7 +137,7 @@ func TestAddHostnameOnAProjectThatPromotedNothingSaysNothingServesIt(t *testing.
 	if bound := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Bindings(); len(bound) != 0 {
 		t.Errorf("the refused add bound %v, want nothing bound", bound)
 	}
-	writer, err := provider.DNS().Open(fake.KindZone, "acme.com")
+	writer, err := provider.DNS().Open(fake.KindZone, "acme.com", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -482,7 +482,7 @@ func TestAddHostnameDiscardsTheCertificateItSupersedes(t *testing.T) {
 		},
 	})
 	promoted(t, provider, providerkit.ClassProduction, "shop")
-	writer, err := provider.DNS().Open(fake.KindZone, "acme.com")
+	writer, err := provider.DNS().Open(fake.KindZone, "acme.com", "")
 	if err != nil {
 		t.Fatal(err)
 	}

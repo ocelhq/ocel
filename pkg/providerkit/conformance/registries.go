@@ -96,7 +96,7 @@ func RunDNSRegistry(t *testing.T, dns providerkit.DNSRegistry) {
 
 	t.Run("Open answers every supported writer", func(t *testing.T) {
 		for _, kind := range supported {
-			writer, err := dns.Open(kind, "conformance.invalid")
+			writer, err := dns.Open(kind, "conformance.invalid", "")
 			if err != nil {
 				t.Errorf("Open(%q) = %v, want the writer Supported() offers", kind, err)
 				continue
@@ -112,7 +112,7 @@ func RunDNSRegistry(t *testing.T, dns providerkit.DNSRegistry) {
 		if slices.Contains(supported, unserved) {
 			t.Skip("this provider writes dns by that name, so it is the wrong probe")
 		}
-		writer, err := dns.Open(unserved, "conformance.invalid")
+		writer, err := dns.Open(unserved, "conformance.invalid", "")
 		if err == nil {
 			t.Fatalf("Open(%q) = %v, want a refusal", unserved, writer)
 		}

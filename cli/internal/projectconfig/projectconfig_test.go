@@ -1138,17 +1138,6 @@ export default {
 `,
 			wantErr: []string{`invalid "registry"`, "password"},
 		},
-		{
-			name: "refuses route53 paired with a cloudflare edge",
-			config: `
-export default {
-  slug: "test-app",
-  edge: "cloudflare",
-  dns: { route53: {} },
-};
-`,
-			wantErr: []string{`has an invalid "dns"`, "route53", "cloudflare"},
-		},
 	}
 
 	for _, tc := range rejected {

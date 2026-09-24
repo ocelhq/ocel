@@ -447,6 +447,7 @@ func (s *Stack) Destroy(ctx context.Context) error {
 type DNS struct {
 	mu      sync.Mutex
 	writers map[string]*DNSWriter
+	fronts  []edge.Kind
 }
 
 const KindZone providerkit.DNSKind = "zone"
@@ -457,19 +458,26 @@ func (d *DNS) Supported() []providerkit.DNSKind { return []providerkit.DNSKind{K
 
 func (d *DNS) Default() providerkit.DNSKind { return "" }
 
-func (d *DNS) Open(kind providerkit.DNSKind, zone string) (edge.DNSWriter, error) {
+func (d *DNS) Open(kind providerkit.DNSKind, zone string, front edge.Kind) (edge.DNSWriter, error) {
 	if kind != KindZone {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"the reference provider writes no dns %q; it writes %s", kind, KindZone)
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	d.fronts = append(d.fronts, front)
 	writer, open := d.writers[zone]
 	if !open {
 		writer = &DNSWriter{zone: zone}
 		d.writers[zone] = writer
 	}
 	return writer, nil
+}
+
+func (d *DNS) Fronts() []edge.Kind {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return slices.Clone(d.fronts)
 }
 
 func (d *DNS) Writer(zone string) *DNSWriter {

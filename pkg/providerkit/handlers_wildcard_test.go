@@ -127,6 +127,19 @@ func TestUsePreviewWildcardRaisesTheEntryAndRecordsItsHolder(t *testing.T) {
 	}
 }
 
+func TestUsePreviewWildcardOpensItsDNSForTheEdgeTheSelectionNames(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+
+	selected := zoned("acme.com")
+	selected.Kind = string(fake.KindRelay)
+	usePreviewWildcard(t, client, "preview.acme.com", selected)
+
+	if fronts := provider.DNS().(*fake.DNS).Fronts(); !slices.Equal(fronts, []edge.Kind{fake.KindRelay}) {
+		t.Errorf("the DNS was opened under %v, want the %s edge the selection names", fronts, fake.KindRelay)
+	}
+}
+
 func TestUsePreviewWildcardRefusesASecondDomain(t *testing.T) {
 	t.Parallel()
 	client, _ := contractServed(t, "1.0.0")

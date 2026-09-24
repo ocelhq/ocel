@@ -30,13 +30,13 @@ func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
 	if got := registry.Default(); got != "" {
 		t.Errorf("Default() = %q, want no default: instructions-only DNS is the absence of a writer", got)
 	}
-	writer, err := registry.Open("cloudflare", "app.com")
+	writer, err := registry.Open("cloudflare", "app.com", "")
 	if err != nil || writer == nil {
 		t.Fatalf("Open(cloudflare) = %v, %v, want a writer", writer, err)
 	}
 
 	var refusal providerkit.Refusal
-	opened, err := registry.Open("route53", "app.com")
+	opened, err := registry.Open("route53", "app.com", "")
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 		t.Fatalf("Open(route53) = %v, %v, want an invalid refusal", opened, err)
 	}
