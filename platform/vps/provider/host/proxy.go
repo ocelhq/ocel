@@ -166,7 +166,7 @@ func rewrittenByDeploys(item Item) bool {
 	return item.Kind == KindProxyConfig || item.Kind == KindRoutingTable
 }
 
-func seedingPair(table, config Item) string {
+func seedingRouting(table, config Item) string {
 	var script strings.Builder
 	script.WriteString("set -e\n")
 	for _, item := range []Item{table, config} {
