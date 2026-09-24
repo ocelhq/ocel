@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { type CheckContext, json, REDACTED, redact } from "./context";
+import { type CheckContext, json, REDACTED, redact, SECRET_TOKEN, secretsOf } from "./context";
 import { healthChecks } from "./health";
 
 function answering(app: string): CheckContext["fetch"] {
@@ -59,16 +59,29 @@ describe("json", () => {
 });
 
 describe("redact", () => {
-  it("masks the registry token wherever a log or evidence carries it", () => {
+  it("masks each secret it is handed, wherever a log or evidence carries it", () => {
     expect(
-      redact("login ghs_s3cret ok, again ghs_s3cret", {
-        OCEL_JOURNEY_REGISTRY_TOKEN: "ghs_s3cret",
-      }),
-    ).toBe(`login ${REDACTED} ok, again ${REDACTED}`);
+      redact("login ghs_s3cret ok, again ghs_s3cret as hunter2", ["ghs_s3cret", "hunter2"]),
+    ).toBe(`login ${REDACTED} ok, again ${REDACTED} as ${REDACTED}`);
   });
 
-  it("leaves the text alone when the run carries no registry token", () => {
-    expect(redact("login ok", {})).toBe("login ok");
-    expect(redact("login ok", { OCEL_JOURNEY_REGISTRY_TOKEN: "" })).toBe("login ok");
+  it("masks a password written into a url or a json document it was never handed", () => {
+    expect(redact('https://u:hunter2@host {"password": "hunter2"}', [])).toBe(
+      `https://u:${REDACTED}@host {"password": "${REDACTED}"}`,
+    );
+  });
+});
+
+describe("secretsOf", () => {
+  it("holds the registry token among the journey's secrets when the run carries one", () => {
+    expect(secretsOf({ OCEL_JOURNEY_REGISTRY_TOKEN: "ghs_s3cret" })).toEqual([
+      SECRET_TOKEN,
+      "ghs_s3cret",
+    ]);
+  });
+
+  it("holds only the journey's own secret when the run carries no registry token", () => {
+    expect(secretsOf({})).toEqual([SECRET_TOKEN]);
+    expect(secretsOf({ OCEL_JOURNEY_REGISTRY_TOKEN: " " })).toEqual([SECRET_TOKEN]);
   });
 });

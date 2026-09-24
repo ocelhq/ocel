@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import type { Phase } from "../matrix/types";
+import { REGISTRY_TOKEN_ENV } from "../registry/settings";
 
 export type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
 
@@ -7,7 +8,6 @@ export const INITIAL_GREETING = "journey-hello";
 export const REDEPLOY_GREETING = "redeployed";
 export const SECRET_TOKEN = "journey-secret-never-in-a-body";
 export const REDACTED = "<redacted>";
-export const REGISTRY_TOKEN_ENV = "OCEL_JOURNEY_REGISTRY_TOKEN";
 
 export const OCEL_SVG_BYTES = 365;
 export const LARGE_RESPONSE_BYTES = 5 * 1024 * 1024;
@@ -32,11 +32,13 @@ export type Check = {
 const PASSWORD_IN_URL = /(:\/\/[^\s/@:]+:)[^\s/@]+@/g;
 const PASSWORD_IN_JSON = /("password"\s*:\s*)"(?:[^"\\]|\\.)*"/g;
 
-export function redact(text: string, env: NodeJS.ProcessEnv = process.env): string {
-  const token = env[REGISTRY_TOKEN_ENV];
-  return (token ? text.split(token).join(REDACTED) : text)
-    .split(SECRET_TOKEN)
-    .join(REDACTED)
+export function secretsOf(env: NodeJS.ProcessEnv): string[] {
+  return [SECRET_TOKEN, env[REGISTRY_TOKEN_ENV]?.trim() ?? ""].filter((secret) => secret !== "");
+}
+
+export function redact(text: string, secrets: string[] = secretsOf(process.env)): string {
+  return secrets
+    .reduce((masked, secret) => masked.split(secret).join(REDACTED), text)
     .replace(PASSWORD_IN_URL, `$1${REDACTED}@`)
     .replace(PASSWORD_IN_JSON, `$1"${REDACTED}"`);
 }
