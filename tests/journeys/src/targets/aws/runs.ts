@@ -10,7 +10,7 @@ export type Unreadable = { id: string; reason: string };
 
 export type Lively = { keep: Set<string>; unreadable: Unreadable[] };
 
-const RUN_ID = new RegExp(`^${HARNESS_PREFIX}(\\d+)-`);
+const RUN_ID = new RegExp(`^${HARNESS_PREFIX}(\\d+)(?:-|$)`);
 
 const LIVE = new Set(["queued", "in_progress", "waiting", "requested", "pending"]);
 

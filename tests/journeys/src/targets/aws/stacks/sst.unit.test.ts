@@ -1,6 +1,6 @@
 import { describe, it } from "bun:test";
 import assert from "node:assert/strict";
-import { harnessStagesIn, sstEnv } from "./sst";
+import { harnessStagesIn, sstEnv, staleStages } from "./sst";
 
 describe("harnessStagesIn", () => {
   it("names every harness stage the SST home records, whoever ran it", () => {
@@ -17,6 +17,16 @@ describe("harnessStagesIn", () => {
 
   it("finds nothing in an empty home", () => {
     assert.deepEqual(harnessStagesIn([]), []);
+  });
+});
+
+describe("staleStages", () => {
+  it("removes the sweep's own stage and every recorded one no live run is using", () => {
+    assert.deepEqual(staleStages("1900", ["j-1874", "j-1875", "j-local-ag"], new Set(["j-1875"])), [
+      "j-1900",
+      "j-1874",
+      "j-local-ag",
+    ]);
   });
 });
 

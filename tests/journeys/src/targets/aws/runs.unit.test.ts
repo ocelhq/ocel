@@ -43,7 +43,11 @@ describe("runIdOf", () => {
   it("reads no run id out of a name the harness never made", () => {
     assert.equal(runIdOf("deploy-node"), undefined);
     assert.equal(runIdOf("j--deploy-node"), undefined);
-    assert.equal(runIdOf("j-1874"), undefined);
+    assert.equal(runIdOf("j-1874x"), undefined);
+  });
+
+  it("reads the run id out of an SST stage, which is the head alone", () => {
+    assert.equal(runIdOf("j-1874"), "1874");
   });
 });
 
