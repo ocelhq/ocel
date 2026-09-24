@@ -411,6 +411,23 @@ func olderRendering(t *testing.T, state RoutingTable) string {
 	return older
 }
 
+func loadingFrom(t *testing.T, state RoutingTable) string {
+	t.Helper()
+
+	var read map[string]any
+	if err := json.Unmarshal(mustRender(t, state), &read); err != nil {
+		t.Fatal(err)
+	}
+	read["admin"].(map[string]any)["config"] = map[string]any{"load": map[string]any{
+		"module": "http", "url": "http://203.0.113.99/caddy.json",
+	}}
+	written, err := json.Marshal(read)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(written)
+}
+
 func TestDescribingABoxRefusesOnDemandTlsAndNothingElseItsConfigHolds(t *testing.T) {
 	t.Parallel()
 
@@ -421,12 +438,13 @@ func TestDescribingABoxRefusesOnDemandTlsAndNothingElseItsConfigHolds(t *testing
 		"a proxy whose config is not json":                "{",
 		"a proxy somebody added on-demand tls to":         onDemandOn(t, previewing()),
 		"a proxy with on-demand tls ocel's shape rejects": strings.Replace(onDemandOn(t, previewing()), `"status_code":404`, `"status_code":"404"`, 1),
+		"a proxy somebody pointed at a config loader":     loadingFrom(t, previewing()),
 	} {
 		stood := claimingBox(t, previewing())
 		stood.answer = servesPair(stood.bench, &stood.held, &config)
 		_, err := Bootstrap(stood.host(), testVendor).described(context.Background(), standingHost())
-		if refused := err != nil; refused != strings.Contains(config, "on_demand") {
-			t.Errorf("describing %s = %v: caddy only warns about an on-demand policy carrying no permission module and serves anyway, so `ocel doctor` and the bootstrap refuse one; every other difference is a rendering the next write puts back from %s, and refusing it locks the box out of the write that would", what, err, live.RoutingTable)
+		if refused := err != nil; refused != (strings.Contains(config, "on_demand") || strings.Contains(config, `"load"`)) {
+			t.Errorf("describing %s = %v: caddy only warns about an on-demand policy carrying no permission module and serves anyway, and a config loader serves whatever it fetches, so `ocel doctor` and the bootstrap refuse either; every other difference is a rendering the next write puts back from %s, and refusing it locks the box out of the write that would", what, err, live.RoutingTable)
 		}
 		if err != nil && strings.Contains(err.Error(), "remove "+live.RoutingTable) {
 			t.Errorf("describing %s tells the operator to remove %s, the only record of what every project on the box routes: %v", what, live.RoutingTable, err)

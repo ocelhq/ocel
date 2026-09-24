@@ -181,24 +181,39 @@ func (h *Host) proxyInspected(ctx context.Context, class providerkit.Class) erro
 			return err
 		}
 	}
-	if !onDemand(held.config) {
+	declared := foreignSource(held.config)
+	if declared == "" {
 		return nil
 	}
 	return providerkit.Refuse(providerkit.CodeInvalid,
-		"%s on %s declares a tls automation policy ocel never renders, so the proxy may order certificates for any name it is asked for\n"+
+		"%s on %s declares %s, which ocel never renders\n"+
 			"Remove %s and run `%s` to render it again from %s",
-		ProxyConfig, h.named(), ProxyConfig, providerkit.BootstrapCommand(class), live.RoutingTable)
+		ProxyConfig, h.named(), declared, ProxyConfig, providerkit.BootstrapCommand(class), live.RoutingTable)
 }
 
-func onDemand(config []byte) bool {
+func foreignSource(config []byte) string {
 	var read struct {
+		Admin struct {
+			Config struct {
+				Load json.RawMessage `json:"load"`
+			} `json:"config"`
+		} `json:"admin"`
 		Apps struct {
 			TLS struct {
 				Automation json.RawMessage `json:"automation"`
 			} `json:"tls"`
 		} `json:"apps"`
 	}
-	return json.Unmarshal(config, &read) == nil && len(read.Apps.TLS.Automation) > 0
+	switch {
+	case json.Unmarshal(config, &read) != nil:
+		return ""
+	case len(read.Apps.TLS.Automation) > 0:
+		return "a tls automation policy, so the proxy may order certificates for any name it is asked for"
+	case len(read.Admin.Config.Load) > 0:
+		return "a config loader, so the proxy serves whatever that loader fetches rather than the routing table"
+	default:
+		return ""
+	}
 }
 
 func (h *Host) reshape(ctx context.Context, change func(RoutingTable) (RoutingTable, error)) error {
