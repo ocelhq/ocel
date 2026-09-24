@@ -482,6 +482,31 @@ func TestABoundHostnameIsClaimedOnTheProxyAndPointedAtTheBoxItself(t *testing.T)
 	}
 }
 
+func TestAHostnameBoundAfterAPromotionAnswersFromTheReleasedContainer(t *testing.T) {
+	t.Parallel()
+
+	const hostname = "shop.example.com"
+	stood, _, stack := standing(t)
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	if err := stack.BindDomain(context.Background(), edge.DomainBinding{Hostname: hostname, App: "web"}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+
+	at := slices.IndexFunc(stood.claims, func(claim host.HostClaim) bool { return claim.Hostname == hostname })
+	if at < 0 {
+		t.Fatalf("the box claims %v, want %s among them", stood.claims, hostname)
+	}
+	claim := stood.claims[at]
+	want := "shop-web-1111:" + providerkit.InjectedPortText
+	if got := stood.upstream[host.RouteKey{Owner: claim.Owner, Pointer: claim.Pointer, App: claim.App}]; got != want {
+		t.Errorf("%s is claimed onto a route that answers from %q, want %q: the release was promoted before the bind, and no later promotion comes to route it",
+			hostname, got, want)
+	}
+}
+
 func TestAHostnameOneProjectUnbindsIsOneAnotherCanBind(t *testing.T) {
 	t.Parallel()
 

@@ -219,6 +219,34 @@ func TestBindDomain(t *testing.T) {
 	})
 }
 
+func TestAHostnameBoundAfterAPromotionRoutesToTheWorkerServingIt(t *testing.T) {
+	m := zoneMock()
+	store := fakeStoreServer(t, "s3cr3t")
+	t.Setenv(envAccountID, "acct")
+	state := testState(store.URL, "s3cr3t")
+	state.Adapter = edge.Own(private{EntryWorkers: []string{domainEntryScript}})
+	s := stackOn(m.provider(t), state)
+
+	promotion := edge.Promotion{PromotionID: "promo-1", Ts: 1000, Builds: map[string]string{"web": "b1"}}
+	if err := s.Promote(t.Context(), promotion, edge.DefaultPointer, edge.DiscardReporter()); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	if err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "shop.app.com"}); err != nil {
+		t.Fatalf("BindDomain: %v", err)
+	}
+
+	if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "shop.app.com/*" || m.createdRoutes[0]["script"] != domainEntryScript {
+		t.Fatalf("created routes = %v, want shop.app.com/* on %s, the entry worker that reads the promoted release", m.createdRoutes, domainEntryScript)
+	}
+	history, err := s.History(t.Context(), edge.DefaultPointer)
+	if err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	if len(history) != 1 || history[0].PromotionID != promotion.PromotionID || !history[0].Active {
+		t.Errorf("the default pointer's history = %+v, want %s still active: the worker serves a bound hostname from it, with no promotion keyed by hostname to publish again", history, promotion.PromotionID)
+	}
+}
+
 func TestUnbindDomain(t *testing.T) {
 	t.Run("takes the route and leaves the zone's records alone", func(t *testing.T) {
 		m := zoneMock()
