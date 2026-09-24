@@ -98,7 +98,7 @@ func computeOf(t *testing.T, manifest *contractv1.Manifest, app string) string {
 			return candidate.GetCompute()
 		}
 	}
-	t.Fatalf("manifest carries no app %q: %+v", app, manifest.GetApps())
+	t.Fatalf("manifest carries no app %q among its %d apps", app, len(manifest.GetApps()))
 	return ""
 }
 

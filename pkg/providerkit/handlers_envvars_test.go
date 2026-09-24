@@ -73,7 +73,7 @@ func TestSetGetAndRevealAnswerAcrossTheWire(t *testing.T) {
 		Coordinate: cell("DATABASE_URL"),
 	})
 	if err != nil || !got.GetFound() || got.GetValue() != "" {
-		t.Fatalf("GetValue() = %+v, %v, want it found and unrevealed", got, err)
+		t.Fatalf("GetValue() found=%t revealed=%t, %v, want it found and unrevealed", got.GetFound(), got.GetValue() != "", err)
 	}
 
 	got, err = vars.GetValue(ctx, &envvarsv1.GetValueRequest{
@@ -90,7 +90,7 @@ func TestSetGetAndRevealAnswerAcrossTheWire(t *testing.T) {
 		Coordinate: cell("NOTHING_HERE"),
 	})
 	if err != nil || missing.GetFound() {
-		t.Fatalf("GetValue() of a key nobody set = %+v, %v, want it answered as not found", missing, err)
+		t.Fatalf("GetValue() of a key nobody set found=%t, %v, want it answered as not found", missing.GetFound(), err)
 	}
 
 	listed, err := vars.ListValues(ctx, &envvarsv1.ListValuesRequest{
@@ -107,7 +107,7 @@ func TestSetGetAndRevealAnswerAcrossTheWire(t *testing.T) {
 		Cells: []*envvarsv1.Coordinate{cell("DATABASE_URL"), cell("NOTHING_HERE")},
 	})
 	if err != nil || len(revealed.GetValues()) != 1 || revealed.GetValues()[0].GetValue() != "postgres://one" {
-		t.Fatalf("RevealValues() = %+v, %v", revealed.GetValues(), err)
+		t.Fatalf("RevealValues() revealed %d values, %v, want DATABASE_URL's alone and as it was set", len(revealed.GetValues()), err)
 	}
 }
 

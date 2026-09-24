@@ -73,7 +73,7 @@ func bootstrapOK(t *testing.T, client contractv1connect.ProviderServiceClient, r
 		t.Fatalf("Bootstrap() stream = %v", err)
 	}
 	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Bootstrap() result = %v, want it to succeed", result)
+		t.Fatalf("Bootstrap() result error = %q, want it to succeed", result.GetError())
 	}
 }
 
@@ -714,7 +714,7 @@ func TestRemoveBootstrapTakesTheBootstrapAndItsRecord(t *testing.T) {
 		t.Fatalf("RemoveBootstrap() stream = %v", err)
 	}
 	if result == nil || !result.GetSuccess() {
-		t.Fatalf("RemoveBootstrap() result = %v, want it to succeed", result)
+		t.Fatalf("RemoveBootstrap() result error = %q, want it to succeed", result.GetError())
 	}
 
 	planned, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
@@ -748,7 +748,7 @@ func TestRemoveBootstrapTearsDownTheEdgeItWasAsked(t *testing.T) {
 		t.Fatalf("RemoveBootstrap() stream = %v", err)
 	}
 	if result == nil || !result.GetSuccess() {
-		t.Fatalf("RemoveBootstrap() result = %v, want it to succeed", result)
+		t.Fatalf("RemoveBootstrap() result error = %q, want it to succeed", result.GetError())
 	}
 	if fronting := provider.Bootstrapper().Fronting(); fronting != fake.KindDirect {
 		t.Errorf("RemoveBootstrap() removed the %q edge, want the %q the request named", fronting, fake.KindDirect)

@@ -80,7 +80,7 @@ func TestResolve(t *testing.T) {
 		}
 		props := binding(t, main.Env["OCEL_RESOURCE_POSTGRES_main"]).GetPostgres()
 		if props.GetHost() != "127.0.0.1" || props.GetPort() != 54001 || props.GetDatabase() != "main" || props.GetUsername() != "postgres" || props.GetPassword() == "" {
-			t.Errorf("binding = %+v, want the container's address and the database named for the resource", props)
+			t.Errorf("binding = %s:%d/%s as %q with a password set %t, want the container's address and the database named for the resource", props.GetHost(), props.GetPort(), props.GetDatabase(), props.GetUsername(), props.GetPassword() != "")
 		}
 	})
 

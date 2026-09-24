@@ -285,11 +285,11 @@ func TestDeploy(t *testing.T) {
 			t.Fatalf("got %d events, want 2 (progress, result)", len(events))
 		}
 		if events[0].GetProgress() == nil {
-			t.Errorf("events[0] = %v, want a ProgressEvent", events[0])
+			t.Errorf("events[0] holds %T, want a ProgressEvent", events[0].GetEvent())
 		}
 		result := events[1].GetResult()
 		if result == nil || !result.GetSuccess() {
-			t.Errorf("events[1] = %v, want a successful ResultEvent", events[1])
+			t.Errorf("events[1] holds %T failing with %q, want a successful ResultEvent", events[1].GetEvent(), events[1].GetResult().GetError())
 		}
 
 		r.Close()
@@ -519,7 +519,7 @@ func TestBootstrap(t *testing.T) {
 			t.Fatalf("got %d events, want 2 (progress, result)", len(events))
 		}
 		if result := events[1].GetResult(); result == nil || !result.GetSuccess() {
-			t.Errorf("events[1] = %v, want a successful ResultEvent", events[1])
+			t.Errorf("events[1] holds %T failing with %q, want a successful ResultEvent", events[1].GetEvent(), events[1].GetResult().GetError())
 		}
 
 		r.Close()

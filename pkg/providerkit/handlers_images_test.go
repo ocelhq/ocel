@@ -1,12 +1,15 @@
 package providerkit_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
+
+	"google.golang.org/protobuf/proto"
 
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -21,6 +24,15 @@ const pushedCoordinate = "ghcr.io/acme/web:sha256-0123456789abcdef0123456789abcd
 
 func registryDeployRequest() *contractv1.DeployRequest {
 	return namingARegistry(containerDeployRequest("/"))
+}
+
+func wireCarries(t *testing.T, event proto.Message, text string) bool {
+	t.Helper()
+	wire, err := proto.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return bytes.Contains(wire, []byte(text))
 }
 
 func imageRows(plan *planv1.ChangePlan) []*planv1.Change {
@@ -221,8 +233,8 @@ func TestThePasswordTheDeployCarriesReachesTheRegistryAndNothingElse(t *testing.
 		t.Fatalf("the registry was opened as %v, want the one target the deploy resolved", opened)
 	}
 	for _, event := range events {
-		if strings.Contains(event.String(), "hunter2") {
-			t.Fatalf("the deploy stream carries the registry password: %s", event.String())
+		if wireCarries(t, event, "hunter2") {
+			t.Fatal("the deploy stream carries the registry password")
 		}
 	}
 }
@@ -424,7 +436,7 @@ func TestTheDeploySaysWhereTheImageWentRatherThanWhatItIsCalledThere(t *testing.
 
 	want := "Sending web's image to deploy@box.invalid"
 	for _, event := range events {
-		if strings.Contains(event.String(), want) {
+		if wireCarries(t, event, want) {
 			return
 		}
 	}

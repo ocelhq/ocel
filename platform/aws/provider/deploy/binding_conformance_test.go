@@ -98,7 +98,7 @@ func assertMatchesFixture(t *testing.T, got *bindingsv1.Binding, typ bindingsv1.
 	t.Helper()
 	want := bindingFixture(t, typ)
 	if !proto.Equal(got, want) {
-		t.Errorf("producer emitted %v, want the checked-in record %v — the consumer suite parses that fixture, so a divergence here is cross-language drift", got, want)
+		t.Errorf("producer emitted a %s binding %q unequal to the checked-in record %s — the consumer suite parses that fixture, so a divergence here is cross-language drift", typ, got.GetName(), fixtureFile(typ))
 	}
 
 	payload, err := providerkit.EncodeBinding(got)

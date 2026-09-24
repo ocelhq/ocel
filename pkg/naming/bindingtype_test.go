@@ -98,7 +98,7 @@ func TestBindingTypeOf(t *testing.T) {
 		{nil, bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED},
 	} {
 		if got := BindingTypeOf(tc.binding); got != tc.want {
-			t.Errorf("BindingTypeOf(%v) = %v, want %v", tc.binding, got, tc.want)
+			t.Errorf("BindingTypeOf(a binding holding %T) = %v, want %v", tc.binding.GetProperties(), got, tc.want)
 		}
 	}
 }

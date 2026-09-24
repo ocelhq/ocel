@@ -140,7 +140,7 @@ func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 		t.Error("Deploy() promoted nothing: the result names no promotion, so nothing can be rolled back to")
 	}
 	if len(result.GetBindings()) != 1 || result.GetBindings()[0].GetName() != "orders" {
-		t.Fatalf("Deploy() returned bindings %v, want the one the manifest declares", result.GetBindings())
+		t.Fatalf("Deploy() returned %d bindings, want only orders, the one the manifest declares", len(result.GetBindings()))
 	}
 	if len(result.GetFunctions()) != 1 || result.GetFunctions()[0].GetUrl() == "" {
 		t.Fatalf("Deploy() returned functions %v, want the one it stood up, carrying its url", result.GetFunctions())

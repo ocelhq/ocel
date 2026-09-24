@@ -694,7 +694,7 @@ func TestBindingColdStart(t *testing.T) {
 		}
 		handed := decodeBinding(t, msgs[0].Values[binding.Key])
 		if handed.GetPostgres().GetPassword() != "s3cr3t" || handed.GetPostgres().GetHost() != "db.host" {
-			t.Errorf("record = %v, want the published credential", handed)
+			t.Errorf("record = host %q, want the published credential", handed.GetPostgres().GetHost())
 		}
 		if msgs[0].Values["DB_PASSWORD"] != "hunter2" {
 			t.Errorf("values = %v, want the user's own secrets delivered alongside", msgs[0].Values)
