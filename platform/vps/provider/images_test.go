@@ -111,7 +111,7 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 }
 
 func (b *box) proxying(command, carried string) (session.Result, bool) {
-	if !strings.Contains(command, quote(vars.RoutingTable)) && command != "cat "+quote(host.ProxyConfig) {
+	if !strings.Contains(command, quote(vars.RoutingTable)) {
 		return session.Result{}, false
 	}
 	if b.routingDoc == "" {
@@ -121,17 +121,8 @@ func (b *box) proxying(command, carried string) (session.Result, bool) {
 		}
 		b.routingDoc = string(written)
 	}
-	digested := func() string {
-		sum := sha256.Sum256([]byte(b.routingDoc))
-		return hex.EncodeToString(sum[:])
-	}
 	switch {
-	case strings.HasPrefix(command, "set -e\nsha256sum "):
-		return session.Result{Stdout: digested() + "\n" + b.routingDoc}, true
-	case strings.Contains(command, `mv "$staged" `):
-		b.routingDoc, _, _ = strings.Cut(carried, "\n")
-		return session.Result{Stdout: digested() + "\n"}, true
-	case strings.HasPrefix(command, "cat "):
+	case strings.Contains(command, "flock -s 9"):
 		table, err := host.ReadRoutingTable([]byte(b.routingDoc))
 		if err != nil {
 			return session.Result{Code: 1, Stderr: err.Error()}, true
@@ -140,7 +131,12 @@ func (b *box) proxying(command, carried string) (session.Result, bool) {
 		if err != nil {
 			return session.Result{Code: 1, Stderr: err.Error()}, true
 		}
-		return session.Result{Stdout: string(rendered)}, true
+		held := func(read []byte) string { return "+" + base64.StdEncoding.EncodeToString(read) + "\n" }
+		return session.Result{Stdout: held([]byte(b.routingDoc)) + held(rendered)}, true
+	case strings.Contains(command, `mv "$staged" `):
+		b.routingDoc, _, _ = strings.Cut(carried, "\n")
+		sum := sha256.Sum256([]byte(b.routingDoc))
+		return session.Result{Stdout: hex.EncodeToString(sum[:]) + "\n"}, true
 	}
 	return session.Result{}, false
 }

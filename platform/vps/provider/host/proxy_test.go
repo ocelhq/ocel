@@ -1234,3 +1234,59 @@ func TestThePinRootIsNoWiderThanTheRootThatReadsIt(t *testing.T) {
 			ProxyPins, pins.Mode)
 	}
 }
+
+func TestAnUpgradedOcelRendersTheConfigAnOlderOneRenderedAgainRatherThanRefusingTheBox(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	table, config := string(mustWrite(t, routed())), olderRendering(t, routed())
+	stood := settledHolding(t, class, &table, &config)
+	boot := Bootstrap(stood.host(), testVendor)
+	request := providerkit.BootstrapRequest{Class: class, Writer: "the-suite"}
+
+	if _, err := boot.Describe(context.Background(), class); err != nil {
+		t.Fatalf("Describe() over a box an older ocel rendered = %v: an upgrade that changes the rendering is not a hand edit, and refusing it locks every existing box out of `ocel doctor`", err)
+	}
+	if _, err := boot.Plan(context.Background(), request); err != nil {
+		t.Fatalf("Plan() over a box an older ocel rendered = %v, and the bootstrap is what would render it again", err)
+	}
+	if err := boot.Apply(context.Background(), request, nil); err != nil {
+		t.Fatalf("Apply() over a box an older ocel rendered = %v", err)
+	}
+	stood.mu.Lock()
+	held, rendered := table, config
+	stood.mu.Unlock()
+	if held != string(mustWrite(t, routed())) {
+		t.Errorf("the bootstrap rewrote the routing table as\n%s\nand it is the only record of what the box routes", held)
+	}
+	if rendered != string(mustRender(t, routed())) {
+		t.Errorf("the bootstrap left %s as\n%s\nwant it rendered again from %s", ProxyConfig, rendered, live.RoutingTable)
+	}
+	written := slices.IndexFunc(stood.commands(), writesProxy)
+	if written < 0 || slices.IndexFunc(stood.commands()[written:], func(command string) bool { return strings.Contains(command, quoted("flip")) }) < 0 {
+		t.Errorf("the bootstrap rendered %s again and never reloaded the proxy onto it: %v", ProxyConfig, stood.commands())
+	}
+}
+
+func TestADeployOverAConfigAnOlderOcelRenderedRendersItAgainEvenWhenTheTableHoldsStill(t *testing.T) {
+	t.Parallel()
+
+	stood := claimingBox(t, routed())
+	config := olderRendering(t, routed())
+	stood.answer = servesPair(stood.bench, &stood.held, &config)
+	if err := stood.host().UnrouteApp(context.Background(), keyed("api")); err != nil {
+		t.Fatalf("UnrouteApp() of an app the box never routed = %v", err)
+	}
+	stood.mu.Lock()
+	held, rendered := stood.held, config
+	stood.mu.Unlock()
+	if held != string(mustWrite(t, routed())) {
+		t.Errorf("unrouting an app the box never routed rewrote the table as\n%s", held)
+	}
+	if rendered != string(mustRender(t, routed())) {
+		t.Errorf("a write left %s as the older rendering\n%s\nwant it rendered from %s: a rendering is derived, so any write that finds it stale puts it back", ProxyConfig, rendered, live.RoutingTable)
+	}
+	if stood.at(quoted("flip")) < 0 {
+		t.Errorf("the config was rendered again and the proxy never reloaded it: %v", stood.commands())
+	}
+}

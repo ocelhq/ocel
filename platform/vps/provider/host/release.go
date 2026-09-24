@@ -3,6 +3,7 @@ package host
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"slices"
@@ -278,25 +279,67 @@ func tellDrain(report providerkit.Reporter, said string) {
 }
 
 type routingDocument struct {
-	text   string
-	digest string
+	table  []byte
+	config []byte
 }
 
-const routingMoved = 9
+func (d routingDocument) digest() string { return contentSum(d.table) }
 
-func (h *Host) routingDocument(ctx context.Context) (routingDocument, error) {
-	said, err := h.reach(ctx, "read "+live.RoutingTable,
-		"set -e\nsha256sum "+quoted(live.RoutingTable)+" | cut -d' ' -f1\ncat "+quoted(live.RoutingTable), nil)
+const (
+	routingMoved = 9
+	routingLock  = live.StateRoot
+)
+
+func pairReading() string {
+	held := func(path string) string {
+		at := quoted(path)
+		return "if [ -f " + at + " ]; then printf '+'; base64 < " + at + " | tr -d '\\n'; fi; printf '\\n'"
+	}
+	return strings.Join([]string{
+		"set -e",
+		"exec 9<" + quoted(routingLock),
+		"flock -s 9",
+		held(live.RoutingTable),
+		held(ProxyConfig),
+	}, "\n")
+}
+
+func (h *Host) routingPair(ctx context.Context) (routingDocument, error) {
+	said, err := h.reach(ctx, "read "+live.RoutingTable+" and "+ProxyConfig, pairReading(), nil)
 	if err != nil {
 		return routingDocument{}, err
 	}
-	digest, text, split := strings.Cut(said, "\n")
-	if !split || strings.TrimSpace(digest) == "" {
+	lines := strings.SplitN(said, "\n", 3)
+	if len(lines) < 3 {
 		return routingDocument{}, providerkit.Refuse(providerkit.CodeNotReady,
-			"%s on %s returned no digest",
-			live.RoutingTable, h.named())
+			"%s and %s on %s read back as %q, not one line for each", live.RoutingTable, ProxyConfig, h.named(), said)
 	}
-	return routingDocument{text: text, digest: strings.TrimSpace(digest)}, nil
+	var read [2][]byte
+	for at, line := range lines[:2] {
+		encoded, held := strings.CutPrefix(line, "+")
+		if !held {
+			continue
+		}
+		decoded, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			return routingDocument{}, providerkit.Refuse(providerkit.CodeNotReady,
+				"%s and %s on %s read back undecodable: %v", live.RoutingTable, ProxyConfig, h.named(), err)
+		}
+		read[at] = decoded
+	}
+	return routingDocument{table: read[0], config: read[1]}, nil
+}
+
+func (h *Host) routingDocument(ctx context.Context) (routingDocument, error) {
+	held, err := h.routingPair(ctx)
+	if err != nil {
+		return routingDocument{}, err
+	}
+	if held.table == nil {
+		return routingDocument{}, providerkit.Refuse(providerkit.CodeNotReady,
+			"%s is missing on %s\nRun `ocel bootstrap` for this box's class", live.RoutingTable, h.named())
+	}
+	return held, nil
 }
 
 const proxyRewrites = 5
@@ -314,11 +357,11 @@ func (h *Host) composeProxy(ctx context.Context, compose func(RoutingTable) (Rou
 		if err != nil {
 			return composed{}, err
 		}
-		standing, err := ReadRoutingTable([]byte(held.text))
+		standing, err := ReadRoutingTable(held.table)
 		if err != nil {
 			return composed{}, err
 		}
-		shaped := composed{held: standing, written: held.digest}
+		shaped := composed{held: standing, written: held.digest()}
 		next, err := compose(standing)
 		if err != nil {
 			return shaped, err
@@ -331,10 +374,14 @@ func (h *Host) composeProxy(ctx context.Context, compose func(RoutingTable) (Rou
 		if err != nil {
 			return shaped, err
 		}
-		if bytes.Equal(before, after) {
+		rendered, err := RenderProxyConfig(standing)
+		if err != nil {
+			return shaped, err
+		}
+		if bytes.Equal(before, after) && bytes.Equal(held.config, rendered) {
 			return shaped, nil
 		}
-		shaped.written, err = h.writeRouting(ctx, held.digest, next)
+		shaped.written, err = h.writeRouting(ctx, held.digest(), next)
 		shaped.changed = true
 		rewrites++
 		if err == nil || !moved(err) || rewrites >= proxyRewrites {
@@ -389,7 +436,7 @@ func stagedWrite(expected string) string {
 		`IFS= read -r written`,
 		`printf '%s' "$written" > "$staged"`,
 		`cat > "$rendered"`,
-		"exec 9<" + table,
+		"exec 9<" + quoted(routingLock),
 		"flock -x 9",
 		`held=$(sha256sum ` + table + ` | cut -d' ' -f1)`,
 		`if [ "$held" != ` + quoted(expected) + ` ]; then printf '%s' "$held" >&2; exit ` + strconv.Itoa(routingMoved) + `; fi`,
@@ -398,8 +445,8 @@ func stagedWrite(expected string) string {
 		`chmod --reference=` + config + ` "$rendered"`,
 		`chown --reference=` + config + ` "$rendered"`,
 		`sha256sum "$staged" | cut -d' ' -f1`,
-		`mv "$rendered" ` + config,
 		`mv "$staged" ` + table,
+		`mv "$rendered" ` + config,
 		"trap - EXIT",
 	}, "\n")
 }

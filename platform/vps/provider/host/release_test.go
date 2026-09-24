@@ -715,11 +715,138 @@ func TestTheCompareAndSetOverTheProxyConfigIsOneCriticalSection(t *testing.T) {
 	if rendered := strings.Index(written, `mv "$rendered" `); rendered < locked {
 		t.Errorf("the staged write is\n%s\nand moves %s into place outside the lock, so two writers can leave one's table beside the other's rendering", written, ProxyConfig)
 	}
-	if !strings.Contains(written[:locked], "exec 9<"+quoted(live.RoutingTable)) {
-		t.Errorf("the staged write is\n%s\nand locks something other than %s, so a writer of that file contends with nothing", written, live.RoutingTable)
+	if !strings.Contains(written[:locked], "exec 9<"+quoted(routingLock)) {
+		t.Errorf("the staged write is\n%s\nand locks something other than %s: a lock on a file the write moves over is a lock on an inode the next writer never opens", written, routingLock)
 	}
 	if strings.Index(written, `cat > "$rendered"`) > locked {
 		t.Errorf("the staged write is\n%s\nand reads the whole document off the wire with the lock held, which stalls every other writer on this box for the length of an ssh transfer", written)
+	}
+}
+
+func TestAWriteThatDiesBetweenItsMovesLeavesTheTableItWroteRatherThanTheConfig(t *testing.T) {
+	t.Parallel()
+
+	for _, needed := range []string{"sh", "flock", "sha256sum", "mktemp", "mv"} {
+		if _, err := exec.LookPath(needed); err != nil {
+			t.Skipf("no %s on this machine, and the write under test is the shell one a box runs", needed)
+		}
+	}
+	moving, _ := exec.LookPath("mv")
+	dir, bin := t.TempDir(), t.TempDir()
+	table, config := filepath.Join(dir, "routing.json"), filepath.Join(dir, "caddy.json")
+	before, stale := string(mustWrite(t, seededTable())), string(mustRender(t, seededTable()))
+	for path, body := range map[string]string{table: before, config: stale} {
+		if err := os.WriteFile(path, []byte(body), 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}
+	executable(t, filepath.Join(bin, "mv"), "#!/bin/sh\nif [ \"$2\" = "+quoted(config)+" ]; then exit 1; fi\nexec "+quoted(moving)+" \"$@\"\n")
+
+	after := string(mustWrite(t, routed()))
+	here := strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
+	write := exec.Command("/bin/sh", "-c", here(stagedWrite(contentSum([]byte(before)))))
+	write.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
+	write.Stdin = strings.NewReader(after + "\n" + string(mustRender(t, routed())))
+	if err := write.Run(); err == nil {
+		t.Fatal("a write whose second move failed reported success, so nothing below is about a write that died between its moves")
+	}
+	if got := held(t, table); got != after {
+		t.Errorf("a write that died between its moves left the table\n%s\nwant the one it wrote: the table is what every later write and rollback reads, so it moves first and a config left behind is a stale rendering of it, not a record of routes that no longer exist", got)
+	}
+	if got := held(t, config); got != stale {
+		t.Errorf("a write that died moving the config left it as\n%s\nwant it untouched", got)
+	}
+}
+
+func TestAReleaseWhoseWriteDiesBetweenItsMovesPutsTheTableAndItsConfigBackTogether(t *testing.T) {
+	t.Parallel()
+
+	prior := configFor(t, retired)
+	stood := &flipped{bench: machine(nil), held: prior}
+	config := renderedFrom(prior)
+	proxied := servesPair(stood.bench, &stood.held, &config)
+	died := false
+	stood.answer = func(command string) (session.Result, bool) {
+		switch {
+		case writesProxy(command):
+			stood.mu.Lock()
+			dying := !died
+			if dying {
+				died = true
+				stood.held = tableOf(stood.fed[len(stood.fed)-1])
+			}
+			stood.mu.Unlock()
+			if dying {
+				return session.Result{Code: 1, Stderr: "mv: cannot move the rendering into place"}, true
+			}
+			return proxied(command)
+		case gates(command), flips(command):
+			return session.Result{}, true
+		case idles(command):
+			return everyIdle(command), true
+		default:
+			return proxied(command)
+		}
+	}
+
+	err := stood.host().Release(context.Background(), aRelease(), nil)
+	if err == nil {
+		t.Fatal("Release() over a write that died between its moves = nil, want the release refused")
+	}
+	stood.mu.Lock()
+	table, rendered := stood.held, config
+	stood.mu.Unlock()
+	if table != prior {
+		t.Errorf("a release whose write died between its moves left the table\n%s\nwant the previous release's\n%s", table, prior)
+	}
+	if rendered != renderedFrom(table) {
+		t.Errorf("a release whose write died between its moves left a config that is not the rendering of the table beside it:\n%s", rendered)
+	}
+	if stood.after(slices.IndexFunc(stood.commands(), writesProxy), flips) < 0 {
+		t.Errorf("the pair was put back and the proxy never reloaded it: %v", stood.commands())
+	}
+}
+
+func TestTheTableAndItsConfigAreReadTogetherUnderTheLockAWriterHoldsAcrossBothMoves(t *testing.T) {
+	t.Parallel()
+
+	for _, needed := range []string{"sh", "flock", "base64"} {
+		if _, err := exec.LookPath(needed); err != nil {
+			t.Skipf("no %s on this machine, and the read under test is the shell one a box runs", needed)
+		}
+	}
+	dir := t.TempDir()
+	table, config := filepath.Join(dir, "routing.json"), filepath.Join(dir, "caddy.json")
+	for path, body := range map[string]string{table: "the table before", config: "the config before"} {
+		if err := os.WriteFile(path, []byte(body), 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}
+	here := strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
+	if !strings.Contains(stagedWrite("a-digest"), "exec 9<"+quoted(routingLock)+"\nflock -x 9") {
+		t.Fatalf("the staged write is\n%s\nand does not hold %s exclusively, so a read under it serializes against nothing", stagedWrite("a-digest"), routingLock)
+	}
+
+	acquired := filepath.Join(t.TempDir(), "acquired")
+	writer := exec.Command("flock", "-x", dir, "-c",
+		"touch "+quoted(acquired)+"; sleep 0.3; printf 'the table after' > "+quoted(table)+"; sleep 0.3; printf 'the config after' > "+quoted(config))
+	if err := writer.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { writer.Wait() })
+	for range 100 {
+		if _, err := os.Stat(acquired); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	said, err := exec.Command("/bin/sh", "-c", here(pairReading())).Output()
+	if err != nil {
+		t.Fatalf("the read of the pair = %v", err)
+	}
+	if want := pairSaid("the table after", "the config after"); string(said) != want {
+		t.Errorf("a read begun while a writer held the lock said\n%q\nwant both files as that writer left them\n%q\na read taken outside the writer's lock sees one file before a move and the other after it", said, want)
 	}
 }
 
@@ -743,7 +870,7 @@ func TestTwoWritersThatReadTheSameDigestLeaveOneOfTheirDocumentsBehind(t *testin
 	racing := make(chan error, 2)
 	for _, writer := range []string{"one", "the other"} {
 		go func() {
-			run := exec.Command("/bin/sh", "-c", strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config).Replace(stagedWrite(read)))
+			run := exec.Command("/bin/sh", "-c", strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace(stagedWrite(read)))
 			run.Stdin = strings.NewReader("table by " + writer + "\nconfig by " + writer)
 			racing <- run.Run()
 		}()

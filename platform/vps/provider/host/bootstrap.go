@@ -38,8 +38,8 @@ func (b Bootstrapper) described(ctx context.Context, read Reading) (providerkit.
 	if err != nil {
 		return providerkit.Bootstrap{}, err
 	}
-	if read.standing(KindRoutingTable, live.RoutingTable) && read.standing(KindProxyConfig, ProxyConfig) {
-		if err := b.host.proxyRendered(ctx, read.Class); err != nil {
+	if read.standing(KindRoutingTable, live.RoutingTable) || read.standing(KindProxyConfig, ProxyConfig) {
+		if err := b.host.proxyInspected(ctx, read.Class); err != nil {
 			return providerkit.Bootstrap{}, err
 		}
 	}
@@ -195,6 +195,9 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 		return err
 	}
 	if err := b.write(ctx, served, ProxyItems(standing.Arch), report); err != nil {
+		return err
+	}
+	if err := b.host.rerender(ctx); err != nil {
 		return err
 	}
 	if err := b.write(ctx, served, BackupItems(), report); err != nil {
