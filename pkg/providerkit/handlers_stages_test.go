@@ -117,7 +117,7 @@ func TestDeployDeclaresEveryUnitAndItsPhasesUpFront(t *testing.T) {
 		first = false
 	}
 
-	want := []string{"Environment", "Shared infrastructure", "web", "Edge", "Promotion"}
+	want := []string{"Environment", "Shared infrastructure", "web", "Edge", "Hostnames", "Promotion"}
 	if strings.Join(roster, ",") != strings.Join(want, ",") {
 		t.Errorf("roster = %v, want %v", roster, want)
 	}

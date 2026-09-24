@@ -9,6 +9,7 @@ import (
 const (
 	UnitEnvironment = "environment"
 	UnitEdge        = "edge"
+	UnitHostnames   = "hostnames"
 	UnitPromotion   = "promotion"
 	UnitConnector   = "connector"
 
