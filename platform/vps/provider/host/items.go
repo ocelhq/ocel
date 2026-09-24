@@ -105,7 +105,7 @@ func dir(name string, mode fs.FileMode, owner string, note string) Item {
 func (i Item) ID() string { return i.Kind + " " + i.Name }
 
 func (i Item) stdin() io.Reader {
-	if i.Kind == KindFile || i.Kind == KindProxyConfig {
+	if i.Kind == KindFile {
 		return bytes.NewReader(i.Content)
 	}
 	return nil
@@ -116,7 +116,7 @@ func (i Item) Digest() string {
 }
 
 func (i Item) sum() string {
-	if i.Kind == KindProxyConfig {
+	if rewrittenByDeploys(i) {
 		return ""
 	}
 	return contentSum(i.Content)
@@ -136,8 +136,8 @@ func (i Item) command() string {
 		return networkCommand()
 	case KindContainer:
 		return containerCommand()
-	case KindProxyConfig:
-		return proxyConfigCommand(i)
+	case KindProxyConfig, KindRoutingTable:
+		return seededCommand(i)
 	case KindDir:
 		return fmt.Sprintf("install -d -m %04o -o %s -g %s %s", i.Mode, i.Owner, i.Owner, quoted(i.Name))
 	default:
@@ -159,8 +159,8 @@ func (i Item) probe() string {
 		return networkProbe()
 	case KindContainer:
 		return containerProbe()
-	case KindProxyConfig:
-		return proxyConfigProbe(i)
+	case KindProxyConfig, KindRoutingTable:
+		return seededProbe(i)
 	default:
 		return ""
 	}

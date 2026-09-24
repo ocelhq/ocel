@@ -3,14 +3,13 @@ package host
 import (
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-func storing() ProxyState {
-	return ProxyState{
+func storing() RoutingTable {
+	return RoutingTable{
 		Grace: DrainWindow,
 		Routes: []AppRoute{
 			{RouteKey: keyed("web"), Upstream: "shop-web-1:" + providerkit.InjectedPortText},
@@ -97,24 +96,4 @@ func TestAStoreStandingBeforeAnyDomainIsBoundIsAConfigCaddyLoads(t *testing.T) {
 	if held := ask("nothing.example.com"); held.status != 404 {
 		t.Errorf("a box routing a store nothing claims a name for answered %d", held.status)
 	}
-}
-
-func TestTheStoresRouteSurvivesBeingWrittenAndReadBack(t *testing.T) {
-	t.Parallel()
-
-	state, err := ReadProxyState(mustRender(t, storing()))
-	if err != nil {
-		t.Fatalf("ReadProxyState() = %v", err)
-	}
-	if len(state.Routes) != 2 || len(state.Claims) != 2 {
-		t.Fatalf("a box serving an app and a store reads back as %d routes and %d claims", len(state.Routes), len(state.Claims))
-	}
-	claims, err := live.ClaimedIn(mustRender(t, storing()))
-	if err != nil {
-		t.Fatalf("ClaimedIn() = %v", err)
-	}
-	if base := live.StoreBase(claims, surface, pointed); base != "https://storage.shop.example.com" {
-		t.Errorf("the box's own config reads back a store base of %q", base)
-	}
-	_ = time.Second
 }

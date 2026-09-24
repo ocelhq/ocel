@@ -75,11 +75,7 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 	if !strings.Contains(string(rendered), proxyPinsMount+"/wildcard"+pinCertificate) {
 		t.Fatalf("the config names a pinned pair by a path other than the one the proxy is handed it at:\n%s", rendered)
 	}
-	write := exec.Command("/bin/sh", "-c", stood.here(stagedWrite(contentSum(proxyBaseline))))
-	write.Stdin = strings.NewReader(string(issuedByNobody(t, rendered)))
-	if out, err := write.CombinedOutput(); err != nil {
-		t.Fatalf("the staged write a deploy makes = %v\n%s", err, out)
-	}
+	stood.stages(t, routingTableItem().Content, state, issuedByNobody(t, rendered))
 	flip := exec.Command(dockerEngine, "exec", stood.name, ProxyHelperMount, "flip", ProxyConfigMount)
 	if out, err := flip.CombinedOutput(); err != nil {
 		t.Fatalf("the proxy stood up as the box stands it would not take a config carrying an operator's pin, so every reshape on a box with one pinned — claim, release and retire alike — fails: %v\n%s\n%s",
@@ -192,7 +188,7 @@ func managed(logs, managing, hostname string) bool {
 }
 
 func TestAHostnameClaimedBeforeAnythingServesItIsOrderedForAllTheSame(t *testing.T) {
-	state := ProxyState{Grace: DrainWindow, Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}}
+	state := RoutingTable{Grace: DrainWindow, Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}}
 	probingConfig(t, issuedByNobody(t, mustRender(t, state)))
 
 	const managing = "enabling automatic TLS certificate management"

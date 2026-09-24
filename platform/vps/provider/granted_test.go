@@ -17,7 +17,7 @@ func TestABucketAnswersTheHostnamesItsOwnProjectClaims(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	rendered, err := host.RenderProxyConfig(host.ProxyState{
+	written, err := host.WriteRoutingTable(host.RoutingTable{
 		Grace: host.DrainWindow,
 		Claims: []host.HostClaim{{
 			Hostname: "shop.example.com", Owner: vars.Surface("shop", "production"),
@@ -27,7 +27,7 @@ func TestABucketAnswersTheHostnamesItsOwnProjectClaims(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	machine.proxyDoc = string(rendered)
+	machine.routingDoc = string(written)
 
 	if _, err := over(machine).Bucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
 		t.Fatalf("Bucket() = %v", err)

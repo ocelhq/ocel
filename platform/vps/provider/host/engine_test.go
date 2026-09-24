@@ -17,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }
@@ -63,8 +64,11 @@ func proxyStanding(t *testing.T) standingProxy {
 		t.Skipf("no flip helper is built for a machine reporting %q", runtime.GOARCH)
 	}
 	config, helper := filepath.Join(dir, proxyConfigName), filepath.Join(dir, proxyHelperName)
-	if err := os.WriteFile(config, proxyBaseline, 0o640); err != nil {
-		t.Fatal(err)
+	table := filepath.Join(dir, "routing.json")
+	for path, seeded := range map[string][]byte{config: proxyConfigItem().Content, table: routingTableItem().Content} {
+		if err := os.WriteFile(path, seeded, 0o640); err != nil {
+			t.Fatal(err)
+		}
 	}
 	runnable(t, helper, proxyHelper(arch), 0o750)
 	pins := filepath.Join(dir, "pins")
@@ -74,7 +78,7 @@ func proxyStanding(t *testing.T) standingProxy {
 		}
 	}
 	stood := standingProxy{name: name, network: network, dir: dir, pins: pins, helper: helper, here: func(written string) string {
-		return strings.NewReplacer(ProxyPins, pins, proxyRoot, dir, ProxyHelper, helper,
+		return strings.NewReplacer(ProxyPins, pins, proxyRoot, dir, live.RoutingTable, table, ProxyHelper, helper,
 			quoted(ProxyContainer), quoted(name), quoted(ProxyNetwork), quoted(network), `"`+ProxyNetwork+`"`, `"`+network+`"`).Replace(written)
 	}}
 
@@ -189,15 +193,7 @@ func TestAConfigMovedIntoPlaceIsWhatTheRunningProxyLoads(t *testing.T) {
 	flipped := routed()
 	stood.standsApp(t, flipped.Routes[0].Upstream, "the app answered")
 	flipped.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	rendered, err := RenderProxyConfig(flipped)
-	if err != nil {
-		t.Fatalf("RenderProxyConfig() = %v", err)
-	}
-	write := exec.Command("/bin/sh", "-c", stood.here(stagedWrite(contentSum(proxyBaseline))))
-	write.Stdin = strings.NewReader(string(rendered))
-	if out, err := write.CombinedOutput(); err != nil {
-		t.Fatalf("the staged write a deploy makes = %v\n%s", err, out)
-	}
+	stood.writes(t, routingTableItem().Content, flipped)
 
 	if read := stood.drives(t, "flip", ProxyConfigMount); strings.TrimSpace(read) != "" {
 		t.Logf("the flip said %q", strings.TrimSpace(read))
@@ -243,27 +239,29 @@ func TestAConfigMovedIntoPlaceIsWhatTheRunningProxyLoads(t *testing.T) {
 	}
 }
 
-func (p standingProxy) writes(t *testing.T, held []byte, state ProxyState) []byte {
+func (p standingProxy) stages(t *testing.T, held []byte, state RoutingTable, config []byte) []byte {
 	t.Helper()
 
-	rendered, err := RenderProxyConfig(state)
-	if err != nil {
-		t.Fatalf("RenderProxyConfig() = %v", err)
-	}
+	written := mustWrite(t, state)
 	write := exec.Command("/bin/sh", "-c", p.here(stagedWrite(contentSum(held))))
-	write.Stdin = strings.NewReader(string(rendered))
+	write.Stdin = strings.NewReader(string(written) + "\n" + string(config))
 	if out, err := write.CombinedOutput(); err != nil {
 		t.Fatalf("the staged write a deploy makes = %v\n%s", err, out)
 	}
-	return rendered
+	return written
 }
 
-func (p standingProxy) moves(t *testing.T, held []byte, state ProxyState) []byte {
+func (p standingProxy) writes(t *testing.T, held []byte, state RoutingTable) []byte {
+	t.Helper()
+	return p.stages(t, held, state, mustRender(t, state))
+}
+
+func (p standingProxy) moves(t *testing.T, held []byte, state RoutingTable) []byte {
 	t.Helper()
 
-	rendered := p.writes(t, held, state)
+	written := p.writes(t, held, state)
 	p.drives(t, "flip", ProxyConfigMount)
-	return rendered
+	return written
 }
 
 func (p standingProxy) standsSlowApp(t *testing.T, upstream string, slow time.Duration) {
@@ -288,14 +286,14 @@ func TestARealProxyDropsNoRequestWhileAFlipMovesAStandingRouteBetweenUpstreams(t
 	one, two := "shop-web-1111:"+providerkit.InjectedPortText, "shop-web-2222:"+providerkit.InjectedPortText
 	stood.standsApp(t, one, "one")
 	stood.standsApp(t, two, "two")
-	serving := func(upstream string) ProxyState {
-		return ProxyState{
+	serving := func(upstream string) RoutingTable {
+		return RoutingTable{
 			Grace:  DrainWindow,
 			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
 			Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
 		}
 	}
-	held := stood.moves(t, proxyBaseline, serving(one))
+	held := stood.moves(t, routingTableItem().Content, serving(one))
 
 	var (
 		mu      sync.Mutex
@@ -362,14 +360,14 @@ func TestARealProxyServesTheNewReleaseWhenTheRetiredOneStopsUnderAHealthProbe(t 
 	retired, next := "shop-web-1111:"+providerkit.InjectedPortText, "shop-web-2222:"+providerkit.InjectedPortText
 	stood.standsSlowApp(t, retired, 2*time.Second)
 	stood.standsApp(t, next, "two")
-	serving := func(upstream string) ProxyState {
-		return ProxyState{
+	serving := func(upstream string) RoutingTable {
+		return RoutingTable{
 			Grace:  DrainWindow,
 			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream, Health: "/up"}},
 			Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
 		}
 	}
-	held := stood.moves(t, proxyBaseline, serving(retired))
+	held := stood.moves(t, routingTableItem().Content, serving(retired))
 	stood.writes(t, held, serving(next))
 	stood.drives(t, "gate", "--deploy-timeout", "10", next+"/up")
 	stood.drives(t, "flip", "--drain-timeout", "30", "--retire", retired, ProxyConfigMount)
@@ -424,14 +422,14 @@ func TestARealProxyCallsAnUpstreamIdleOnlyOnceTheFlipRetiringItHasDrainedIt(t *t
 	retired, next := "shop-web-1111:"+providerkit.InjectedPortText, "shop-web-2222:"+providerkit.InjectedPortText
 	stood.standsSlowApp(t, retired, 4*time.Second)
 	stood.standsApp(t, next, "two")
-	serving := func(upstream string) ProxyState {
-		return ProxyState{
+	serving := func(upstream string) RoutingTable {
+		return RoutingTable{
 			Grace:  DrainWindow,
 			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
 			Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
 		}
 	}
-	held := stood.moves(t, proxyBaseline, serving(retired))
+	held := stood.moves(t, routingTableItem().Content, serving(retired))
 	if idle := strings.TrimSpace(stood.drives(t, "idle", retired)); idle != "" {
 		t.Errorf("idle named %q while the route still dials it", idle)
 	}

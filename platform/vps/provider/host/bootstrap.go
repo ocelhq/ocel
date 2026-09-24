@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
@@ -37,8 +38,8 @@ func (b Bootstrapper) described(ctx context.Context, read Reading) (providerkit.
 	if err != nil {
 		return providerkit.Bootstrap{}, err
 	}
-	if read.standing(KindProxyConfig, ProxyConfig) {
-		if err := b.assertsNoOnDemandTLS(ctx); err != nil {
+	if read.standing(KindRoutingTable, live.RoutingTable) && read.standing(KindProxyConfig, ProxyConfig) {
+		if err := b.host.proxyRendered(ctx, read.Class); err != nil {
 			return providerkit.Bootstrap{}, err
 		}
 	}
@@ -55,11 +56,6 @@ func (b Bootstrapper) described(ctx context.Context, read Reading) (providerkit.
 			Writer:        read.Stamp.Writer,
 		}},
 	}, nil
-}
-
-func (b Bootstrapper) assertsNoOnDemandTLS(ctx context.Context) error {
-	_, _, err := b.host.proxyState(ctx)
-	return err
 }
 
 func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
@@ -261,7 +257,7 @@ func healable(read Reading) ([]Item, []string, error) {
 			work = append(work, item)
 			continue
 		}
-		if daemonHeld(item) || beneath(proxyRoot, item.Name) || !read.standing(item.Kind, item.Name) {
+		if daemonHeld(item) || beneath(proxyRoot, item.Name) || rewrittenByDeploys(item) || !read.standing(item.Kind, item.Name) {
 			left = append(left, item.ID())
 			continue
 		}
@@ -300,7 +296,7 @@ func beneath(root, name string) bool {
 
 func replacing(item Item) bool {
 	switch item.Kind {
-	case KindDir, KindUnit, KindNetwork, KindContainer, KindProxyConfig:
+	case KindDir, KindUnit, KindNetwork, KindContainer, KindProxyConfig, KindRoutingTable:
 		return false
 	default:
 		return true

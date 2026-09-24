@@ -21,8 +21,8 @@ func previewClaim(pointer, app, hostname string) HostClaim {
 	return HostClaim{Hostname: hostname, Owner: previewSurface, Pointer: pointer, App: app}
 }
 
-func twoBranchesOfOneApp() ProxyState {
-	return ProxyState{
+func twoBranchesOfOneApp() RoutingTable {
+	return RoutingTable{
 		Grace:       DrainWindow,
 		PreviewBase: previewBase,
 		Routes: []AppRoute{
@@ -43,9 +43,9 @@ func TestTwoLivePreviewsOfOneAppAnswerOnTheirOwnHostnameEach(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderProxyConfig() = %v: two branches of one app are the ordinary preview case, and a claim keyed on the surface and the app alone hands both hostnames to both routes", err)
 	}
-	read, err := ReadProxyState(rendered)
+	read, err := ReadRoutingTable(mustWrite(t, twoBranchesOfOneApp()))
 	if err != nil {
-		t.Fatalf("ReadProxyState() = %v", err)
+		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
 	want := slices.SortedFunc(slices.Values(twoBranchesOfOneApp().Claims), func(a, b HostClaim) int {
 		return strings.Compare(a.Hostname, b.Hostname)
@@ -98,9 +98,9 @@ func TestAProductionBindClaimsUnderTheDefaultPointerAndKeepsItsRoute(t *testing.
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: edge.DefaultPointer}}
-	read, err := ReadProxyState(mustRender(t, state))
+	read, err := ReadRoutingTable(mustWrite(t, state))
 	if err != nil {
-		t.Fatalf("ReadProxyState() = %v", err)
+		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
 	if !slices.Equal(read.Claims, state.Claims) {
 		t.Fatalf("the claims read back as %v, want %v", read.Claims, state.Claims)
@@ -113,8 +113,8 @@ func TestAProductionBindClaimsUnderTheDefaultPointerAndKeepsItsRoute(t *testing.
 	}
 }
 
-func twoAppsOfOneBranch(web, api string) ProxyState {
-	return ProxyState{
+func twoAppsOfOneBranch(web, api string) RoutingTable {
+	return RoutingTable{
 		Grace:       DrainWindow,
 		PreviewBase: previewBase,
 		Routes: []AppRoute{

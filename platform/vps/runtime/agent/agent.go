@@ -300,9 +300,9 @@ func ManifestIn(env []string) string {
 }
 
 type Store struct {
-	ClassRoot   string
-	StateRoot   string
-	ProxyConfig string
+	ClassRoot    string
+	StateRoot    string
+	RoutingTable string
 }
 
 func (s Store) Resolve(ctx context.Context, manifest live.Manifest) (map[string]string, error) {
@@ -351,15 +351,15 @@ func (s Store) storeBase(manifest live.Manifest) string {
 	if manifest.Store.Pointer == "" {
 		return ""
 	}
-	at := s.ProxyConfig
+	at := s.RoutingTable
 	if at == "" {
-		at = live.ProxyConfig
+		at = live.RoutingTable
 	}
-	document, err := os.ReadFile(at)
+	table, err := os.ReadFile(at)
 	if err != nil {
 		return ""
 	}
-	claims, err := live.ClaimedIn(document)
+	claims, err := live.ClaimedIn(table)
 	if err != nil {
 		return ""
 	}

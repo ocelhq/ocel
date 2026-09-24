@@ -26,34 +26,19 @@ type claimBench struct {
 	held string
 }
 
-func claimingBox(t *testing.T, state ProxyState) *claimBench {
+func claimingBox(t *testing.T, state RoutingTable) *claimBench {
 	t.Helper()
 
-	rendered, err := RenderProxyConfig(state)
-	if err != nil {
-		t.Fatal(err)
-	}
-	stood := &claimBench{bench: machine(nil), held: string(rendered)}
+	mustRender(t, state)
+	stood := &claimBench{bench: machine(nil), held: string(mustWrite(t, state))}
 	stood.answer = servesProxy(stood.bench, &stood.held)
 	return stood
 }
 
-func routed() ProxyState {
-	return ProxyState{
+func routed() RoutingTable {
+	return RoutingTable{
 		Grace:  DrainWindow,
 		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + providerkit.InjectedPortText}},
-	}
-}
-
-func TestTheDrainWindowAndTheBaselineGracePeriodAreOneNumber(t *testing.T) {
-	t.Parallel()
-
-	baseline, err := ReadProxyState(proxyBaseline)
-	if err != nil {
-		t.Fatalf("ReadProxyState(the baseline) = %v", err)
-	}
-	if baseline.Grace != DrainWindow {
-		t.Errorf("the baseline holds the retired container for %v and a release drains it for %v; the ceiling the user is told and the one the proxy keeps are one number", baseline.Grace, DrainWindow)
 	}
 }
 
@@ -62,13 +47,9 @@ func TestAClaimedHostnameReadsBackAsTheSurfaceThatClaimedIt(t *testing.T) {
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	rendered, err := RenderProxyConfig(state)
+	read, err := ReadRoutingTable(mustWrite(t, state))
 	if err != nil {
-		t.Fatalf("RenderProxyConfig() = %v", err)
-	}
-	read, err := ReadProxyState(rendered)
-	if err != nil {
-		t.Fatalf("ReadProxyState() = %v", err)
+		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
 	if !slices.Equal(read.Claims, state.Claims) {
 		t.Errorf("the claims read back as %v, want the %v that were written: this file is the only thing that answers which surface claims a hostname", read.Claims, state.Claims)
@@ -138,93 +119,6 @@ func hosts(t *testing.T, match map[string]any) []string {
 	return named
 }
 
-func TestARouteNamingASurfaceAndNoHostIsNotOneOcelWrote(t *testing.T) {
-	t.Parallel()
-
-	document := strings.Replace(string(mustRender(t, routed())),
-		`"@id":"`+keyed("web").identity()+`"`,
-		`"@id":"`+live.ClaimPrefix+surface+claimSeparator+claimed+`"`, 1)
-	if _, err := ReadProxyState([]byte(document)); err == nil {
-		t.Error("a claim carrying an app's forwarding handler reads back as a claim, and a deploy that rewrites this file whole would drop what it forwards to")
-	}
-}
-
-func planted(t *testing.T, was, now string) []byte {
-	t.Helper()
-
-	document := strings.Replace(string(mustRender(t, routed())), was, now, 1)
-	if !strings.Contains(document, now) {
-		t.Fatalf("this test never planted the shape it is about:\n%s", document)
-	}
-	return []byte(document)
-}
-
-func refusedRead(t *testing.T, document []byte, said string) {
-	t.Helper()
-
-	_, err := ReadProxyState(document)
-	if err == nil {
-		t.Fatalf("this document reads back as routes ocel wrote, and the next deploy renders the file whole from them: %s", said)
-	}
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Fatalf("the read failed with %v, want %s", err, providerkit.CodeInvalid)
-	}
-	if !strings.Contains(err.Error(), keyed("web").identity()) {
-		t.Errorf("the read is refused with\n%s\nand never names the route it will not rewrite over", err)
-	}
-}
-
-func TestAForwardingRouteCarryingAHandlerOcelDidNotWriteIsRefused(t *testing.T) {
-	t.Parallel()
-
-	refusedRead(t, planted(t,
-		`"handle":[{"handler":"headers"`,
-		`"handle":[{"handler":"rewrite"},{"handler":"headers"`),
-		"an operator's own handler runs ahead of the one this route was written with, and a read that takes the upstream and ignores the rest drops it on the next flip")
-}
-
-func TestAForwardingRouteWhoseLeadingHandlerNoLongerNamesTheEdgeIsRefused(t *testing.T) {
-	t.Parallel()
-
-	refusedRead(t, planted(t,
-		`{"handler":"headers","response":{"set":{"`+EdgeHeader+`":["`+EdgeName+`"]}}}`,
-		`{"handler":"headers","response":{"set":{"`+EdgeHeader+`":["someone-elses-edge"]}}}`),
-		"the header that tells a response came through this box says something else, and a read that never looks at it re-emits ocel's own value over the answer")
-}
-
-func TestAForwardingRouteFanningOutToASecondUpstreamIsRefused(t *testing.T) {
-	t.Parallel()
-
-	refusedRead(t, planted(t,
-		`"upstreams":[{"dial":"shop-web-2222:`+providerkit.InjectedPortText+`"}]`,
-		`"upstreams":[{"dial":"shop-web-2222:`+providerkit.InjectedPortText+`"},{"dial":"someone-elses:`+providerkit.InjectedPortText+`"}]`),
-		"a route ocel writes forwards to the one container this deploy stood up, and a read that takes the first of two upstreams drops the second with no row naming it")
-}
-
-func TestAServerNoDeployWroteIsRefusedTheWayARouteNoDeployWroteIs(t *testing.T) {
-	t.Parallel()
-
-	document := strings.Replace(string(mustRender(t, routed())),
-		`"servers":{"`+proxyServer+`"`,
-		`"servers":{"someone_elses":{"listen":[":8443"],"routes":[]},"`+proxyServer+`"`, 1)
-	if !strings.Contains(document, "someone_elses") {
-		t.Fatalf("this test never planted the server it is about:\n%s", document)
-	}
-
-	_, err := ReadProxyState([]byte(document))
-	if err == nil {
-		t.Fatal("a server ocel never wrote reads back as nothing at all, and the next deploy renders this file whole from the ocel server alone: whatever else the box was serving is gone with no row naming it")
-	}
-	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
-		t.Errorf("the read failed with %v, want %s: an unwritten route is refused here and an unwritten server is the same file being taken over", err, providerkit.CodeInvalid)
-	}
-	if !strings.Contains(err.Error(), "someone_elses") {
-		t.Errorf("the read is refused with\n%s\nand never names the server it will not rewrite over", err)
-	}
-}
-
 func TestASurfaceNamedWithTheSeparatorIsRefusedRatherThanRenderedAmbiguously(t *testing.T) {
 	t.Parallel()
 
@@ -253,7 +147,7 @@ func TestClaimingAHostnameLoadsItOntoTheRunningProxy(t *testing.T) {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
 
-	held, err := ReadProxyState([]byte(stood.held))
+	held, err := ReadRoutingTable([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -313,7 +207,7 @@ func TestDisclaimingAHostnameTakesTheClaimAndLeavesTheRest(t *testing.T) {
 		t.Fatalf("DisclaimHost() = %v", err)
 	}
 
-	held, err := ReadProxyState([]byte(stood.held))
+	held, err := ReadRoutingTable([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +227,7 @@ func TestDisclaimingASurfaceTakesEveryHostnameItHoldsAndNoOneElses(t *testing.T)
 		t.Fatalf("DisclaimSurface() = %v", err)
 	}
 
-	held, err := ReadProxyState([]byte(stood.held))
+	held, err := ReadRoutingTable([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -376,7 +270,7 @@ func TestUnbindingAHostnameAnotherSurfaceNowHoldsLeavesItWhereItIs(t *testing.T)
 	if err := stood.host().DisclaimHost(context.Background(), claimed, surface); err != nil {
 		t.Fatalf("DisclaimHost() = %v", err)
 	}
-	held, err := ReadProxyState([]byte(stood.held))
+	held, err := ReadRoutingTable([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -400,7 +294,7 @@ func TestAHostnameItsOwnerReleasesIsFreeForTheNextSurfaceToTake(t *testing.T) {
 		t.Fatalf("ClaimHosts() by the surface it was released for = %v: a hostname one project unbinds is a hostname another can bind, and a box that keeps refusing it has taken the name out of circulation for good", err)
 	}
 
-	held, err := ReadProxyState([]byte(stood.held))
+	held, err := ReadRoutingTable([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -426,14 +320,14 @@ func TestALoginThatCannotElevateStillWritesAProxyConfigItOwns(t *testing.T) {
 		t.Fatalf("ClaimHosts = %v; a deploy login that owns %s writes it without sudo, and that is how a box provisioned for a non-root login works rather than a state to refuse", err, ProxyConfig)
 	}
 
-	held, err := ReadProxyState([]byte(stood.held))
+	held, err := ReadRoutingTable([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !slices.Contains(held.Claims, HostClaim{Hostname: claimed, Owner: surface, Pointer: pointed}) {
 		t.Errorf("the claims on the box are %v, want %s among them", held.Claims, claimed)
 	}
-	if at := stood.at(`cat > "$staged"`); at < 0 || strings.HasPrefix(stood.commands()[at], "sudo") {
+	if at := stood.at(`IFS= read -r written`); at < 0 || strings.HasPrefix(stood.commands()[at], "sudo") {
 		t.Errorf("the write went out as %v, want one unelevated command", stood.commands())
 	}
 }
@@ -514,7 +408,7 @@ func TestAClaimSurvivesTheReleaseThatRewritesTheWholeFile(t *testing.T) {
 		t.Fatalf("Release() = %v", err)
 	}
 
-	held, err := ReadProxyState([]byte(stood.held))
+	held, err := ReadRoutingTable([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -525,8 +419,8 @@ func TestAClaimSurvivesTheReleaseThatRewritesTheWholeFile(t *testing.T) {
 
 const otherSurface = "ocel--blog--production"
 
-func twoProjects() ProxyState {
-	return ProxyState{
+func twoProjects() RoutingTable {
+	return RoutingTable{
 		Grace: DrainWindow,
 		Routes: []AppRoute{
 			{RouteKey: keyed("web"), Upstream: "shop-web-2222:" + providerkit.InjectedPortText},
@@ -538,9 +432,9 @@ func twoProjects() ProxyState {
 func TestTwoProjectsRunningTheSameAppNameOnOneBoxKeepTheirOwnRoutes(t *testing.T) {
 	t.Parallel()
 
-	read, err := ReadProxyState(mustRender(t, twoProjects()))
+	read, err := ReadRoutingTable(mustWrite(t, twoProjects()))
 	if err != nil {
-		t.Fatalf("ReadProxyState() = %v", err)
+		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
 	if want := slices.SortedFunc(slices.Values(twoProjects().Routes), byKey); !slices.Equal(read.Routes, want) {
 		t.Fatalf("the routes read back as %v, want %v: two projects on one box name their apps whatever they like, and a route keyed on the app name alone is one project's route answering for both", read.Routes, want)
@@ -567,7 +461,7 @@ func TestADeployOfOneProjectLeavesAnotherProjectsRouteWhereItFoundIt(t *testing.
 		t.Fatalf("Release() = %v", err)
 	}
 
-	held, err := ReadProxyState([]byte(stood.held))
+	held, err := ReadRoutingTable([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -614,8 +508,8 @@ func TestAppRoutesAreReachedByTheHostnamesTheirOwnSurfaceClaims(t *testing.T) {
 	}
 }
 
-func twoApps() ProxyState {
-	return ProxyState{
+func twoApps() RoutingTable {
+	return RoutingTable{
 		Grace: DrainWindow,
 		Routes: []AppRoute{
 			{RouteKey: keyed("api"), Upstream: "shop-api-1111:" + providerkit.InjectedPortText},
@@ -696,9 +590,9 @@ func TestAClaimNamingTheAppItWasDeclaredUnderReadsBackCarryingThatApp(t *testing
 		{Hostname: "www.example.com", Owner: surface, Pointer: pointed, App: "web"},
 	}
 
-	read, err := ReadProxyState(mustRender(t, state))
+	read, err := ReadRoutingTable(mustWrite(t, state))
 	if err != nil {
-		t.Fatalf("ReadProxyState() = %v", err)
+		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
 	want := slices.SortedFunc(slices.Values(state.Claims), func(a, b HostClaim) int {
 		return strings.Compare(a.Hostname, b.Hostname)
@@ -747,9 +641,9 @@ func TestAnUnattributedHostnameOnAMultiAppSurfaceIsRefusedAndNamesTheFormThatFix
 func TestTwoAppsOnASurfaceThatClaimsNothingAreBothStillWritten(t *testing.T) {
 	t.Parallel()
 
-	read, err := ReadProxyState(mustRender(t, twoApps()))
+	read, err := ReadRoutingTable(mustWrite(t, twoApps()))
 	if err != nil {
-		t.Fatalf("ReadProxyState() = %v", err)
+		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
 	if len(read.Routes) != 2 {
 		t.Errorf("a project running two apps and claiming no hostname renders %v; neither route answers a hostname yet, and refusing the pair here would stop every multi-app deploy on a box that has no domain bound at all", read.Routes)
@@ -761,9 +655,9 @@ func TestEveryBoxRefusesTheHostnamesNothingOnItClaimsAndNamesItselfDoingIt(t *te
 
 	for _, box := range []struct {
 		what  string
-		state ProxyState
+		state RoutingTable
 	}{
-		{"a box serving nothing", ProxyState{Grace: DrainWindow}},
+		{"a box serving nothing", RoutingTable{Grace: DrainWindow}},
 		{"a box serving one project", routed()},
 		{"a box serving two projects", twoProjects()},
 	} {
@@ -814,7 +708,7 @@ func TestARouteOnlyOneSurfaceOwnsIsTakenByThatSurfaceAlone(t *testing.T) {
 	if err := stood.host().UnroutePointer(context.Background(), surface, pointed); err != nil {
 		t.Fatalf("UnroutePointer() = %v", err)
 	}
-	held, err := ReadProxyState([]byte(stood.held))
+	held, err := ReadRoutingTable([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -835,7 +729,7 @@ func TestATornDownSurfaceLeavesNoRouteForwardingToARemovedContainer(t *testing.T
 	if err := stood.host().UnrouteSurface(context.Background(), surface); err != nil {
 		t.Fatalf("UnrouteSurface() = %v", err)
 	}
-	held, err := ReadProxyState([]byte(stood.held))
+	held, err := ReadRoutingTable([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -848,7 +742,7 @@ func TestAConfigComposedOntoAFileAnotherDeployHasSinceRewrittenIsRefusedRatherTh
 	t.Parallel()
 
 	stood := claimingBox(t, routed())
-	moved := mustRender(t, twoProjects())
+	moved := mustWrite(t, twoProjects())
 	proxied := servesProxy(stood.bench, &stood.held)
 	stood.answer = func(command string) (session.Result, bool) {
 		if !writesProxy(command) {
@@ -857,7 +751,7 @@ func TestAConfigComposedOntoAFileAnotherDeployHasSinceRewrittenIsRefusedRatherTh
 		stood.mu.Lock()
 		stood.held = string(moved)
 		stood.mu.Unlock()
-		return session.Result{Code: proxyMoved, Stderr: digested(string(moved))}, true
+		return session.Result{Code: routingMoved, Stderr: digested(string(moved))}, true
 	}
 
 	err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})

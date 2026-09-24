@@ -112,11 +112,11 @@ func (s goSealer) Open(_ context.Context, at providerkit.Coordinate, sealed []by
 }
 
 type box struct {
-	classRoot   string
-	stateRoot   string
-	proxyConfig string
-	records     *memRecords
-	sealer      goSealer
+	classRoot    string
+	stateRoot    string
+	routingTable string
+	records      *memRecords
+	sealer       goSealer
 }
 
 func aBox(t *testing.T, root string) *box {
@@ -177,16 +177,16 @@ func (b *box) dump(t *testing.T) {
 }
 
 func (b *box) resolver() Store {
-	return Store{ClassRoot: b.classRoot, StateRoot: b.stateRoot, ProxyConfig: b.proxyConfig}
+	return Store{ClassRoot: b.classRoot, StateRoot: b.stateRoot, RoutingTable: b.routingTable}
 }
 
 func (b *box) claims(t *testing.T, document string) {
 	t.Helper()
-	b.proxyConfig = filepath.Join(b.stateRoot, "caddy.json")
+	b.routingTable = filepath.Join(b.stateRoot, "routing.json")
 	if err := os.MkdirAll(b.stateRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(b.proxyConfig, []byte(document), 0o644); err != nil {
+	if err := os.WriteFile(b.routingTable, []byte(document), 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -202,9 +202,9 @@ func aStoreManifest(sealed string) live.Manifest {
 	}
 }
 
-const claimingStorage = `{"apps":{"http":{"servers":{"ocel":{"routes":[
-	{"@id":"ocel--shop--production/shop.example.com/@production/web"},
-	{"@id":"ocel-host-ocel--shop--production/storage.shop.example.com/@production/storage"}]}}}}}`
+const claimingStorage = `{"grace":"30s","claims":[
+	{"hostname":"shop.example.com","owner":"ocel--shop--production","pointer":"@production","app":"web"},
+	{"hostname":"storage.shop.example.com","owner":"ocel--shop--production","pointer":"@production","app":"storage"}]}`
 
 func TestTheStoresPublicAddressIsWhateverTheBoxClaimsForItNow(t *testing.T) {
 	t.Parallel()
@@ -226,7 +226,7 @@ func TestAStoreNoDomainPointsAtHasNoPublicAddress(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
 	b.dump(t)
-	b.claims(t, `{"apps":{"http":{"servers":{"ocel":{"routes":[{"@id":"ocel-box"}]}}}}}`)
+	b.claims(t, `{"grace":"30s"}`)
 
 	resolved, err := b.resolver().Resolve(context.Background(), aStoreManifest(""))
 	if err != nil {

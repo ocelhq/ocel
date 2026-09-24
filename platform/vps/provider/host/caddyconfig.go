@@ -55,9 +55,9 @@ const (
 )
 
 type RouteKey struct {
-	Owner   string
-	Pointer string
-	App     string
+	Owner   string `json:"owner"`
+	Pointer string `json:"pointer"`
+	App     string `json:"app"`
 }
 
 func (k RouteKey) identity() string {
@@ -66,8 +66,8 @@ func (k RouteKey) identity() string {
 
 type AppRoute struct {
 	RouteKey
-	Upstream string
-	Health   string
+	Upstream string `json:"upstream"`
+	Health   string `json:"health,omitempty"`
 }
 
 const (
@@ -77,10 +77,10 @@ const (
 )
 
 type HostClaim struct {
-	Hostname string
-	Owner    string
-	Pointer  string
-	App      string
+	Hostname string `json:"hostname"`
+	Owner    string `json:"owner"`
+	Pointer  string `json:"pointer"`
+	App      string `json:"app,omitempty"`
 }
 
 type claimKey struct {
@@ -109,8 +109,8 @@ func (c HostClaim) identity() string {
 func (r AppRoute) app() bool { return r.App != live.StoreLabel }
 
 type Pin struct {
-	Hostname string
-	Path     string
+	Hostname string `json:"hostname"`
+	Path     string `json:"path"`
 }
 
 const (
@@ -136,15 +136,6 @@ func Covering(pins []Pin, hostname string) string {
 		}
 	}
 	return ""
-}
-
-type ProxyState struct {
-	Grace       time.Duration
-	Claims      []HostClaim
-	Routes      []AppRoute
-	Pins        []Pin
-	PreviewBase string
-	Connector   string
 }
 
 const (
@@ -253,13 +244,6 @@ type caddyMatch struct {
 	Path []string  `json:"path,omitempty"`
 }
 
-func (m caddyMatch) hosts() []string {
-	if m.Host == nil {
-		return nil
-	}
-	return *m.Host
-}
-
 func hostnamesOf(hostnames ...string) *[]string {
 	named := append([]string{}, hostnames...)
 	return &named
@@ -347,15 +331,6 @@ const storeAdminSuffix = claimSeparator + "admin"
 
 var storeAdminPaths = []string{"/rustfs", "/rustfs/*", "/health", "/health/*"}
 
-func refusesStoreAdmin(route caddyRoute) bool {
-	if len(route.Match) != 1 || !slices.Equal(route.Match[0].Path, storeAdminPaths) {
-		return false
-	}
-	return len(route.Handle) == 1 &&
-		route.Handle[0].Handler == refuseHandler &&
-		route.Handle[0].Status == http.StatusNotFound
-}
-
 func refusingStoreAdmin(route AppRoute, hostnames []string) caddyRoute {
 	refused := refusing(route.identity() + storeAdminSuffix)
 	refused.Match = []caddyMatch{{Host: hostnamesOf(hostnames...), Path: storeAdminPaths}}
@@ -388,13 +363,6 @@ func connectorForwarding(hostname string, grace time.Duration) caddyRoute {
 	}
 }
 
-func connectorHostOf(route caddyRoute) string {
-	if len(route.Match) != 1 || len(route.Match[0].hosts()) != 1 {
-		return ""
-	}
-	return route.Match[0].hosts()[0]
-}
-
 func matching(app AppRoute, hostnames []string, grace time.Duration) caddyRoute {
 	route := forwarding(app.identity(), app.Upstream, grace)
 	route.Handle[1].HealthChecks = checking(app.Health)
@@ -402,7 +370,7 @@ func matching(app AppRoute, hostnames []string, grace time.Duration) caddyRoute 
 	return route
 }
 
-func RenderProxyConfig(state ProxyState) ([]byte, error) {
+func RenderProxyConfig(state RoutingTable) ([]byte, error) {
 	seeded, err := seededConfig()
 	if err != nil {
 		return nil, err
@@ -534,14 +502,6 @@ func loadFiles(pins []Pin) (*caddyTLS, error) {
 
 func pinMount(path string) string { return proxyPinsMount + strings.TrimPrefix(path, ProxyPins) }
 
-func pinnedAt(mounted string) (string, bool) {
-	under, ok := strings.CutPrefix(mounted, proxyPinsMount+"/")
-	if !ok || !pinLeaf(under) {
-		return "", false
-	}
-	return ProxyPins + "/" + under, true
-}
-
 func pinLeaf(under string) bool {
 	return under != "" && !strings.Contains(under, "/") && under != "." && under != ".."
 }
@@ -558,211 +518,6 @@ func validPin(pin Pin) error {
 			pin.Hostname, pin.Path, ProxyPins)
 	}
 	return nil
-}
-
-func previewRouteOf(route caddyRoute) (base, named string) {
-	for _, label := range []string{edge.PreviewEntryOwner, edge.LivenessProbeLabel} {
-		if rest, mine := strings.CutPrefix(route.Identity, label+claimSeparator); mine {
-			return rest, label
-		}
-	}
-	return "", ""
-}
-
-func previewRouteRead(route caddyRoute, base, named string) error {
-	if err := PreviewBaseUsable(base); err != nil {
-		return err
-	}
-	wildcard := edge.PreviewWildcard(base)
-	hostname := wildcard
-	if named == edge.LivenessProbeLabel {
-		hostname = edge.ProbeHostname(wildcard)
-	}
-	if want := refusingHost(route.Identity, hostname); !routeEqual(route, want) {
-		return unwritten("route", route.Identity)
-	}
-	return nil
-}
-
-func routeEqual(held, want caddyRoute) bool {
-	written, err := json.Marshal([]caddyRoute{held, want})
-	if err != nil {
-		return false
-	}
-	var pair []json.RawMessage
-	if err := json.Unmarshal(written, &pair); err != nil || len(pair) != 2 {
-		return false
-	}
-	return string(pair[0]) == string(pair[1])
-}
-
-func previewBaseRead(read caddyConfig, entry map[string]string) (string, error) {
-	base := entry[edge.PreviewEntryOwner]
-	if probe := entry[edge.LivenessProbeLabel]; probe != base {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
-			"%s has a preview catch-all for %q but a liveness probe route for %q",
-			ProxyConfig, base, probe)
-	}
-	held := read.Apps.HTTP.Servers[proxyServer].Automatic
-	var skipped []string
-	if held != nil {
-		skipped = held.SkipCertificates
-	}
-	want := skipping(base)
-	var wanted []string
-	if want != nil {
-		wanted = want.SkipCertificates
-	}
-	if !slices.Equal(skipped, wanted) {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
-			"%s skips %v from automatic https; the preview entry needs exactly %v",
-			ProxyConfig, skipped, wanted)
-	}
-	return base, nil
-}
-
-func pinnedBy(read caddyConfig) ([]Pin, error) {
-	if read.Apps.TLS == nil {
-		return nil, nil
-	}
-	var pins []Pin
-	for _, file := range read.Apps.TLS.Certificates.LoadFiles {
-		mounted, cut := strings.CutSuffix(file.Certificate, pinCertificate)
-		at, beneath := pinnedAt(mounted)
-		if len(file.Tags) == 0 || !cut || !beneath || file.Key != PinKey(mounted) {
-			return nil, unwritten("pinned certificate", file.Certificate)
-		}
-		for _, hostname := range file.Tags {
-			pins = append(pins, Pin{Hostname: hostname, Path: at})
-		}
-	}
-	return pins, nil
-}
-
-func ReadProxyState(document []byte) (ProxyState, error) {
-	read, err := parsed(document)
-	if err != nil {
-		return ProxyState{}, err
-	}
-	grace, err := time.ParseDuration(read.Apps.HTTP.GracePeriod)
-	if err != nil {
-		return ProxyState{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"%s declares an unreadable grace period %q",
-			ProxyConfig, read.Apps.HTTP.GracePeriod)
-	}
-	for _, named := range slices.Sorted(maps.Keys(read.Apps.HTTP.Servers)) {
-		if named != proxyServer {
-			return ProxyState{}, unwritten("server", named)
-		}
-	}
-	pins, err := pinnedBy(read)
-	if err != nil {
-		return ProxyState{}, err
-	}
-	if read.Apps.TLS != nil && len(read.Apps.TLS.Automation) > 0 {
-		return ProxyState{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"%s declares a tls automation policy ocel did not write",
-			ProxyConfig)
-	}
-	state := ProxyState{Grace: grace, Pins: pins}
-	entry := map[string]string{}
-	for _, route := range read.Apps.HTTP.Servers[proxyServer].Routes {
-		if route.Identity == boxIdentity {
-			continue
-		}
-		if route.Identity == connectorRoute {
-			hosts := connectorHostOf(route)
-			if hosts == "" || !routeEqual(route, connectorForwarding(hosts, grace)) {
-				return ProxyState{}, unwritten("route", route.Identity)
-			}
-			state.Connector = hosts
-			continue
-		}
-		if base, named := previewRouteOf(route); named != "" {
-			if err := previewRouteRead(route, base, named); err != nil {
-				return ProxyState{}, err
-			}
-			entry[named] = base
-			continue
-		}
-		if strings.HasPrefix(route.Identity, live.ClaimPrefix) {
-			claim, named := live.ClaimedAt(route.Identity)
-			if !named || !claimsOnly(route, claim.Hostname) {
-				return ProxyState{}, unwritten("route", route.Identity)
-			}
-			state.Claims = append(state.Claims, HostClaim{
-				Hostname: claim.Hostname, Owner: claim.Owner, Pointer: claim.Pointer, App: claim.App,
-			})
-			continue
-		}
-		if held, refuses := strings.CutSuffix(route.Identity, storeAdminSuffix); refuses && strings.HasPrefix(held, routeIdentity) {
-			if !refusesStoreAdmin(route) {
-				return ProxyState{}, unwritten("route", route.Identity)
-			}
-			continue
-		}
-		named, keyed := strings.CutPrefix(route.Identity, routeIdentity)
-		fields := strings.Split(named, claimSeparator)
-		if !keyed || len(fields) != 3 {
-			return ProxyState{}, unwritten("route", route.Identity)
-		}
-		upstream, health, err := forwardedBy(route)
-		if err != nil {
-			return ProxyState{}, err
-		}
-		state.Routes = append(state.Routes, AppRoute{
-			RouteKey: RouteKey{Owner: fields[0], Pointer: fields[1], App: fields[2]},
-			Upstream: upstream,
-			Health:   health,
-		})
-	}
-	base, err := previewBaseRead(read, entry)
-	if err != nil {
-		return ProxyState{}, err
-	}
-	state.PreviewBase = base
-	return state, nil
-}
-
-func forwardedBy(route caddyRoute) (string, string, error) {
-	if len(route.Handle) != 2 {
-		return "", "", misshapen(route.Identity, fmt.Sprintf("%d handlers", len(route.Handle)))
-	}
-	naming, forwards := route.Handle[0], route.Handle[1]
-	edged := naming.Response != nil && maps.EqualFunc(naming.Response.Set, map[string][]string{EdgeHeader: {EdgeName}}, slices.Equal)
-	switch {
-	case naming.Handler != edgeHandler || !edged || len(naming.Upstreams) > 0 || naming.Status != 0 || len(naming.Headers) > 0:
-		return "", "", misshapen(route.Identity, fmt.Sprintf("a leading %q handler not setting only %s: %s", naming.Handler, EdgeHeader, EdgeName))
-	case forwards.Handler != caddyadmin.ForwardHandler || forwards.Status != 0 || len(forwards.Headers) > 0 || forwards.Response != nil:
-		return "", "", misshapen(route.Identity, fmt.Sprintf("a terminal %q handler", forwards.Handler))
-	case len(forwards.Upstreams) != 1:
-		return "", "", misshapen(route.Identity, fmt.Sprintf("%d upstreams", len(forwards.Upstreams)))
-	case forwards.Upstreams[0].Dial == "":
-		return "", "", misshapen(route.Identity, "an upstream naming nothing to dial")
-	}
-	health := ""
-	if forwards.HealthChecks != nil {
-		health = forwards.HealthChecks.Active.URI
-		if health == "" || !routeEqual(caddyRoute{Handle: []caddyForward{{HealthChecks: forwards.HealthChecks}}}, caddyRoute{Handle: []caddyForward{{HealthChecks: checking(health)}}}) {
-			return "", "", misshapen(route.Identity, "an unexpected active health check")
-		}
-	}
-	return forwards.Upstreams[0].Dial, health, nil
-}
-
-func misshapen(named, found string) error {
-	return providerkit.Refuse(providerkit.CodeInvalid,
-		"%s has route %q with %s, which ocel did not write",
-		ProxyConfig, named, found)
-}
-
-func forwardedTo(route caddyRoute) string {
-	for _, handled := range route.Handle {
-		if len(handled.Upstreams) > 0 {
-			return handled.Upstreams[0].Dial
-		}
-	}
-	return ""
 }
 
 func byKey(a, b AppRoute) int {
@@ -793,16 +548,6 @@ func validRoute(route AppRoute) error {
 			"the route %s has health path %q, which does not start with /", route.identity(), route.Health)
 	}
 	return nil
-}
-
-func unwritten(what, named string) error {
-	return providerkit.Refuse(providerkit.CodeInvalid,
-		"%s carries a %s ocel did not write: %q",
-		ProxyConfig, what, named)
-}
-
-func claimsOnly(route caddyRoute, hostname string) bool {
-	return len(route.Handle) == 0 && len(route.Match) == 1 && slices.Equal(route.Match[0].hosts(), []string{hostname})
 }
 
 func validClaim(claim HostClaim) error {

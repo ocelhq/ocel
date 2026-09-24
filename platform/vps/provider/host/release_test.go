@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -67,18 +68,15 @@ func bothApps() Release {
 	return rel
 }
 
-func documentOf(t *testing.T, state ProxyState) string {
+func documentOf(t *testing.T, state RoutingTable) string {
 	t.Helper()
-	rendered, err := RenderProxyConfig(state)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(rendered)
+	mustRender(t, state)
+	return string(mustWrite(t, state))
 }
 
 func configFor(t *testing.T, upstream string) string {
 	t.Helper()
-	return documentOf(t, ProxyState{
+	return documentOf(t, RoutingTable{
 		Grace:  30 * time.Second,
 		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream, Health: "/healthz"}},
 	})
@@ -86,7 +84,7 @@ func configFor(t *testing.T, upstream string) string {
 
 func twoAppsServing(t *testing.T) string {
 	t.Helper()
-	return documentOf(t, ProxyState{
+	return documentOf(t, RoutingTable{
 		Grace: 30 * time.Second,
 		Routes: []AppRoute{
 			{RouteKey: keyed("web"), Upstream: retired, Health: "/healthz"},
@@ -138,19 +136,19 @@ func (f *flipped) count(match func(string) bool) int {
 
 func (f *flipped) cutover() int { return f.after(-1, flips) }
 
-func (f *flipped) state(t *testing.T) ProxyState {
+func (f *flipped) state(t *testing.T) RoutingTable {
 	t.Helper()
 	f.mu.Lock()
 	held := f.held
 	f.mu.Unlock()
-	state, err := ReadProxyState([]byte(held))
+	state, err := ReadRoutingTable([]byte(held))
 	if err != nil {
-		t.Fatalf("%s was left as %q, which a restarted proxy cannot read: %v", ProxyConfig, held, err)
+		t.Fatalf("%s was left as %q, which the next deploy cannot read: %v", live.RoutingTable, held, err)
 	}
 	return state
 }
 
-func upstreamsOf(state ProxyState) map[string]string {
+func upstreamsOf(state RoutingTable) map[string]string {
 	upstreams := map[string]string{}
 	for _, route := range state.Routes {
 		upstreams[route.App] = route.Upstream
@@ -237,7 +235,7 @@ func TestAPromotionOfEveryAppIsOneGateOneWriteAndOneFlip(t *testing.T) {
 	if written != 1 {
 		t.Errorf("the promotion wrote %s %d times before its flip, want once: %v", ProxyConfig, written, stood.commands())
 	}
-	flip, err := ReadProxyState([]byte(posted))
+	flip, err := ReadRoutingTable([]byte(posted))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +330,7 @@ func TestAFlipThatFailsPutsEveryAppBackOntoItsPreviousUpstreamAndPostsIt(t *test
 func TestADigestThatMovesAfterTheGateIsRecomposedAndWrittenWithoutGatingAgain(t *testing.T) {
 	t.Parallel()
 
-	neighbour := documentOf(t, ProxyState{
+	neighbour := documentOf(t, RoutingTable{
 		Grace: 30 * time.Second,
 		Routes: []AppRoute{
 			{RouteKey: keyed("web"), Upstream: retired, Health: "/healthz"},
@@ -353,7 +351,7 @@ func TestADigestThatMovesAfterTheGateIsRecomposedAndWrittenWithoutGatingAgain(t 
 			}
 			stood.mu.Unlock()
 			if collided {
-				return session.Result{Code: proxyMoved, Stderr: digested(neighbour)}, true
+				return session.Result{Code: routingMoved, Stderr: digested(neighbour)}, true
 			}
 		}
 		return proxied(command)
@@ -381,7 +379,7 @@ func TestAWriteThatKeepsMovingIsRefusedBusyAndFlipsNothing(t *testing.T) {
 	proxied := stood.answer
 	stood.answer = func(command string) (session.Result, bool) {
 		if writesProxy(command) {
-			return session.Result{Code: proxyMoved, Stderr: "a digest another writer left"}, true
+			return session.Result{Code: routingMoved, Stderr: "a digest another writer left"}, true
 		}
 		return proxied(command)
 	}
@@ -559,7 +557,7 @@ func TestAFlipThatNeverReturnedAnExitCodeEndsWhereANonZeroOneDoes(t *testing.T) 
 func TestAFirstDeployThatFailsLeavesNothingServingAndIsNotAPathOfItsOwn(t *testing.T) {
 	t.Parallel()
 
-	stood := benchedOn(t, documentOf(t, ProxyState{Grace: 30 * time.Second}),
+	stood := benchedOn(t, documentOf(t, RoutingTable{Grace: 30 * time.Second}),
 		session.Result{Code: 3, Stderr: "answered /healthz with status 500"}, session.Result{})
 	if err := stood.host().Release(context.Background(), aRelease(), nil); err == nil {
 		t.Fatal("a first deploy whose app never came up released successfully")
@@ -602,7 +600,7 @@ func TestAReleaseCarryingNoHealthPathIsRefusedBeforeTheHelperEverRuns(t *testing
 func TestAReleaseWithNothingToRetireNeverAsksForADrain(t *testing.T) {
 	t.Parallel()
 
-	stood := benchedOn(t, documentOf(t, ProxyState{Grace: 30 * time.Second}), session.Result{}, session.Result{})
+	stood := benchedOn(t, documentOf(t, RoutingTable{Grace: 30 * time.Second}), session.Result{}, session.Result{})
 	if err := stood.host().Release(context.Background(), aRelease(), nil); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
@@ -631,15 +629,15 @@ func TestTheFlipConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUpstre
 	if err := stood.host().Release(context.Background(), aRelease(), nil); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
-	want, err := RenderProxyConfig(ProxyState{
+	want, err := RenderProxyConfig(RoutingTable{
 		Grace:  30 * time.Second,
 		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: flipTo, Health: "/healthz"}},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if posted != string(want) {
-		t.Errorf("the config the helper was handed is\n%s\nwant the running one with only the route moved:\n%s\nanything else it declares changes what caddy runs, and caddy restarts every server to take it", posted, want)
+	if handed := renderedFrom(posted); handed != string(want) {
+		t.Errorf("the config the helper was handed is\n%s\nwant the running one with only the route moved:\n%s\nanything else it declares changes what caddy runs, and caddy restarts every server to take it", handed, want)
 	}
 	gated := stood.commands()[stood.at(quoted("gate"))]
 	for _, wanted := range []string{
@@ -714,10 +712,13 @@ func TestTheCompareAndSetOverTheProxyConfigIsOneCriticalSection(t *testing.T) {
 	if compared < locked || moved < locked {
 		t.Errorf("the staged write is\n%s\nand compares or moves outside the lock it takes, which serializes nothing", written)
 	}
-	if !strings.Contains(written[:locked], "exec 9<"+quoted(ProxyConfig)) {
-		t.Errorf("the staged write is\n%s\nand locks something other than %s, so a writer of that file contends with nothing", written, ProxyConfig)
+	if rendered := strings.Index(written, `mv "$rendered" `); rendered < locked {
+		t.Errorf("the staged write is\n%s\nand moves %s into place outside the lock, so two writers can leave one's table beside the other's rendering", written, ProxyConfig)
 	}
-	if strings.Index(written, `cat > "$staged"`) > locked {
+	if !strings.Contains(written[:locked], "exec 9<"+quoted(live.RoutingTable)) {
+		t.Errorf("the staged write is\n%s\nand locks something other than %s, so a writer of that file contends with nothing", written, live.RoutingTable)
+	}
+	if strings.Index(written, `cat > "$rendered"`) > locked {
 		t.Errorf("the staged write is\n%s\nand reads the whole document off the wire with the lock held, which stalls every other writer on this box for the length of an ssh transfer", written)
 	}
 }
@@ -730,17 +731,20 @@ func TestTwoWritersThatReadTheSameDigestLeaveOneOfTheirDocumentsBehind(t *testin
 			t.Skipf("no %s on this machine, and the write under test is the shell one a box runs", needed)
 		}
 	}
-	config := filepath.Join(t.TempDir(), "caddy.json")
-	if err := os.WriteFile(config, []byte("the config both writers read\n"), 0o640); err != nil {
-		t.Fatal(err)
+	dir := t.TempDir()
+	table, config := filepath.Join(dir, "routing.json"), filepath.Join(dir, "caddy.json")
+	for path, body := range map[string]string{table: "the table both writers read", config: "the config both writers read"} {
+		if err := os.WriteFile(path, []byte(body), 0o640); err != nil {
+			t.Fatal(err)
+		}
 	}
-	read := contentSum([]byte("the config both writers read\n"))
+	read := contentSum([]byte("the table both writers read"))
 
 	racing := make(chan error, 2)
-	for _, document := range []string{"written by one\n", "written by the other\n"} {
+	for _, writer := range []string{"one", "the other"} {
 		go func() {
-			run := exec.Command("/bin/sh", "-c", strings.ReplaceAll(stagedWrite(read), ProxyConfig, config))
-			run.Stdin = strings.NewReader(document)
+			run := exec.Command("/bin/sh", "-c", strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config).Replace(stagedWrite(read)))
+			run.Stdin = strings.NewReader("table by " + writer + "\nconfig by " + writer)
 			racing <- run.Run()
 		}()
 	}
@@ -753,12 +757,10 @@ func TestTwoWritersThatReadTheSameDigestLeaveOneOfTheirDocumentsBehind(t *testin
 	if won != 1 {
 		t.Fatalf("%d of two writers that read the same digest were told they had written it, want one: the other composed its routes onto a file it no longer holds", won)
 	}
-	held, err := os.ReadFile(config)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(held) != "written by one\n" && string(held) != "written by the other\n" {
-		t.Errorf("the file holds %q, want one writer's whole document", held)
+	heldTable, heldConfig := held(t, table), held(t, config)
+	writer, whole := strings.CutPrefix(heldTable, "table by ")
+	if !whole || heldConfig != "config by "+writer {
+		t.Errorf("the box holds the table %q beside the config %q, want one writer's table and that same writer's rendering of it", heldTable, heldConfig)
 	}
 }
 
@@ -766,7 +768,7 @@ func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing
 	t.Parallel()
 
 	neighbours := map[int]string{
-		1: documentOf(t, ProxyState{
+		1: documentOf(t, RoutingTable{
 			Grace:  30 * time.Second,
 			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}, {RouteKey: keyed("api"), Upstream: "prod-api-1:8080"}},
 		}),
@@ -784,7 +786,7 @@ func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing
 			}
 			stood.mu.Unlock()
 			if collided {
-				return session.Result{Code: proxyMoved, Stderr: digested(neighbour)}, true
+				return session.Result{Code: routingMoved, Stderr: digested(neighbour)}, true
 			}
 		}
 		return proxied(command)
@@ -1088,7 +1090,7 @@ func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T
 	}
 
 	quiet := &watched{}
-	first := benchedOn(t, documentOf(t, ProxyState{Grace: 30 * time.Second}), session.Result{}, session.Result{})
+	first := benchedOn(t, documentOf(t, RoutingTable{Grace: 30 * time.Second}), session.Result{}, session.Result{})
 	if err := first.host().Release(context.Background(), aRelease(), quiet); err != nil {
 		t.Fatal(err)
 	}
@@ -1180,7 +1182,7 @@ func TestWhatFollowsTheFlipLeavesARouteAnotherReleaseFlippedSinceOnItsUpstream(t
 		if flips(command) {
 			once.Do(func() {
 				stood.mu.Lock()
-				stood.held = documentOf(t, ProxyState{
+				stood.held = documentOf(t, RoutingTable{
 					Grace:  30 * time.Second,
 					Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: overtaking, Health: "/healthz"}},
 				})

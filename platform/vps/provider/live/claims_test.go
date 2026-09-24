@@ -1,45 +1,21 @@
 package live_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-func TestAClaimSurvivesBeingNamedAndReadBack(t *testing.T) {
-	t.Parallel()
-
-	for _, held := range []live.Claimed{
-		{Owner: "ocel.shop.production", Hostname: "shop.example.com", Pointer: "@production"},
-		{Owner: "ocel.shop.production", Hostname: "storage.shop.example.com", Pointer: "@production", App: "storage"},
-	} {
-		read, mine := live.ClaimedAt(live.ClaimIdentity(held))
-		if !mine || read != held {
-			t.Errorf("ClaimedAt(ClaimIdentity(%+v)) = %+v, %v", held, read, mine)
-		}
-	}
-}
-
-func TestARouteThatIsNotAClaimIsNoClaim(t *testing.T) {
-	t.Parallel()
-
-	for _, identity := range []string{"ocel-app-ocel.shop.production/@production/web", "ocel-box", "ocel-host-only/two"} {
-		if read, mine := live.ClaimedAt(identity); mine {
-			t.Errorf("ClaimedAt(%q) = %+v, want nothing", identity, read)
-		}
-	}
-}
-
-const claimedConfig = `{"apps":{"http":{"servers":{"ocel":{"routes":[
-	{"@id":"ocel-host-ocel.shop.production/shop.example.com/@production/web"},
-	{"@id":"ocel-host-ocel.shop.production/storage.shop.example.com/@production/storage"},
-	{"@id":"ocel-host-ocel.other.production/storage.other.example.com/@production/storage"},
-	{"@id":"ocel-box"}]}}}}}`
+const claimedTable = `{"grace":"30s","claims":[
+	{"owner":"ocel.shop.production","hostname":"shop.example.com","pointer":"@production","app":"web"},
+	{"owner":"ocel.shop.production","hostname":"storage.shop.example.com","pointer":"@production","app":"storage"},
+	{"owner":"ocel.other.production","hostname":"storage.other.example.com","pointer":"@production","app":"storage"}]}`
 
 func TestTheStoresBaseIsTheHostTheSurfaceClaimsForIt(t *testing.T) {
 	t.Parallel()
 
-	claims, err := live.ClaimedIn([]byte(claimedConfig))
+	claims, err := live.ClaimedIn([]byte(claimedTable))
 	if err != nil {
 		t.Fatalf("ClaimedIn() = %v", err)
 	}
@@ -48,5 +24,13 @@ func TestTheStoresBaseIsTheHostTheSurfaceClaimsForIt(t *testing.T) {
 	}
 	if base := live.StoreBase(claims, "ocel.nothing.production", "@production"); base != "" {
 		t.Errorf("StoreBase() = %q for a surface that claims nothing, want nothing", base)
+	}
+}
+
+func TestTheRoutingTableIsNeverWhereTheProxyCanReadIt(t *testing.T) {
+	t.Parallel()
+
+	if strings.HasPrefix(live.RoutingTable, live.ProxyDir+"/") {
+		t.Errorf("the routing table lives at %s, inside %s, which the proxy container mounts", live.RoutingTable, live.ProxyDir)
 	}
 }

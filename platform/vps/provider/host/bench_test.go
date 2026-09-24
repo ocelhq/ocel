@@ -14,6 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -251,7 +252,7 @@ func settledOn(t *testing.T, class providerkit.Class) *bench {
 		t.Fatal(err)
 	}
 	stood := machine(map[providerkit.Class][]Item{class: append(standing, stamp)})
-	seeded := string(proxyBaseline)
+	seeded := string(routingTableItem().Content)
 	proxied := servesProxy(stood, &seeded)
 	stood.answer = func(command string) (session.Result, bool) {
 		if command == "cat ~/.ssh/authorized_keys 2>/dev/null" {
@@ -337,17 +338,38 @@ func digested(document string) string {
 }
 
 func readsProxy(command string) bool {
-	return strings.Contains(command, "sha256sum "+quoted(ProxyConfig)+" | cut")
+	return strings.Contains(command, "sha256sum "+quoted(live.RoutingTable)+" | cut")
 }
 
 func writesProxy(command string) bool {
-	return strings.Contains(command, `cat > "$staged"`)
+	return strings.Contains(command, `IFS= read -r written`)
+}
+
+func readsConfig(command string) bool {
+	return command == "cat "+quoted(ProxyConfig)
 }
 
 func expectedDigest(command string) string {
 	_, checked, _ := strings.Cut(command, `if [ "$held" != `)
 	expected, _, _ := strings.Cut(checked, " ]")
 	return strings.Trim(expected, "'")
+}
+
+func tableOf(fed string) string {
+	table, _, _ := strings.Cut(fed, "\n")
+	return table
+}
+
+func renderedFrom(document string) string {
+	table, err := ReadRoutingTable([]byte(document))
+	if err != nil {
+		return err.Error()
+	}
+	rendered, err := RenderProxyConfig(table)
+	if err != nil {
+		return err.Error()
+	}
+	return string(rendered)
 }
 
 func servesProxy(b *bench, held *string) func(string) (session.Result, bool) {
@@ -357,14 +379,32 @@ func servesProxy(b *bench, held *string) func(string) (session.Result, bool) {
 		switch {
 		case writesProxy(command):
 			if expected := expectedDigest(command); expected != digested(*held) {
-				return session.Result{Code: proxyMoved, Stderr: digested(*held)}, true
+				return session.Result{Code: routingMoved, Stderr: digested(*held)}, true
 			}
-			*held = b.fed[len(b.fed)-1]
+			*held = tableOf(b.fed[len(b.fed)-1])
 			return session.Result{Stdout: digested(*held)}, true
 		case readsProxy(command):
 			return session.Result{Stdout: digested(*held) + "\n" + *held}, true
+		case readsConfig(command):
+			return session.Result{Stdout: renderedFrom(*held)}, true
 		default:
 			return session.Result{}, false
 		}
 	}
+}
+
+func (m caddyMatch) hosts() []string {
+	if m.Host == nil {
+		return nil
+	}
+	return *m.Host
+}
+
+func forwardedTo(route caddyRoute) string {
+	for _, handled := range route.Handle {
+		if len(handled.Upstreams) > 0 {
+			return handled.Upstreams[0].Dial
+		}
+	}
+	return ""
 }
