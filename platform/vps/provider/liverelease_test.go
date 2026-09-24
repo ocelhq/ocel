@@ -361,7 +361,7 @@ func TestLiveAReleaseThatCannotPassItsGateLeavesThePreviousOneServing(t *testing
 	}
 }
 
-func TestLiveHijackedConnectionsDoNotSurviveADeploy(t *testing.T) {
+func TestLiveAHijackedConnectionDrainsWithItsRetireeRatherThanBeingCutAtCutover(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
 	one := standsUp(t, p, "one")
@@ -370,8 +370,10 @@ func TestLiveHijackedConnectionsDoNotSurviveADeploy(t *testing.T) {
 	}
 	two := standsUp(t, p, "two")
 
+	const window = 8 * time.Second
 	var group sync.WaitGroup
 	var streamed, upgraded string
+	var hungUp time.Time
 	var samples []string
 	var sampling sync.Mutex
 	done := make(chan struct{})
@@ -385,6 +387,7 @@ func TestLiveHijackedConnectionsDoNotSurviveADeploy(t *testing.T) {
 		defer group.Done()
 		upgraded = vm.peers(t, "curl -sS -m 40 -o /dev/null -w '%{http_code} %{time_total}' -H 'Connection: Upgrade' -H 'Upgrade: websocket' http://"+
 			host.ProxyContainer+"/ws")
+		hungUp = time.Now()
 	}()
 	go func() {
 		defer group.Done()
@@ -404,7 +407,7 @@ func TestLiveHijackedConnectionsDoNotSurviveADeploy(t *testing.T) {
 
 	warned := &said{}
 	began := time.Now()
-	if err := releasing(p, two, 8*time.Second, warned); err != nil {
+	if err := releasing(p, two, window, warned); err != nil {
 		close(done)
 		group.Wait()
 		t.Fatalf("Release() with hijacked connections open = %v", err)
@@ -420,11 +423,14 @@ func TestLiveHijackedConnectionsDoNotSurviveADeploy(t *testing.T) {
 	if !strings.HasPrefix(strings.TrimSpace(upgraded), "101") {
 		t.Fatalf("the upgraded client saw %q, want the 101 this measurement is about", strings.TrimSpace(upgraded))
 	}
-	if held := seconds(t, upgraded); held > 6 {
-		t.Errorf("the hijacked connection lived %.1fs across a flip made 3s in, so caddy no longer cuts it at cutover and the deploy's own statement about websockets is wrong", held)
+	if held := seconds(t, upgraded); held < window.Seconds() {
+		t.Errorf("the hijacked connection lived %.1fs, shorter than the %s drain window, so the reload at cutover cut it rather than leaving it the window a stream to the retiree is promised", held, window)
 	}
-	if took < 7*time.Second {
-		t.Errorf("the release returned in %s inside an 8s window with an sse stream still open, so the stream no longer holds the retired upstream and the statement that an sse app drains at its ceiling is wrong", took)
+	if after := hungUp.Sub(began) - took; after > 3*time.Second {
+		t.Errorf("the hijacked connection hung up %s after the release returned, so it outlived the retiree the release stopped and survived the deploy", after)
+	}
+	if took < window-time.Second {
+		t.Errorf("the release returned in %s inside a %s window with an sse stream still open, so the stream no longer holds the retired upstream and the statement that an sse app drains at its ceiling is wrong", took, window)
 	}
 	if warned.at("still held") < 0 {
 		t.Errorf("a release with an sse stream open warned %v, want the expiry the measurement says it causes", warned.lines)
