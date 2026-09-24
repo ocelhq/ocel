@@ -37,6 +37,7 @@ type machine struct {
 	forgotten   []string
 	refusals    map[string]error
 	visited     []string
+	releasing   func(host.Release) error
 }
 
 func aMachine() *machine {
@@ -116,6 +117,11 @@ func (m *machine) Release(_ context.Context, rel host.Release, _ providerkit.Rep
 		onto = append(onto, app.App+" onto "+app.Target)
 	}
 	m.calls = append(m.calls, "release "+strings.Join(onto, ", "))
+	if m.releasing != nil {
+		if err := m.releasing(rel); err != nil {
+			return err
+		}
+	}
 	if err := m.refuse("Release"); err != nil {
 		return err
 	}
@@ -424,6 +430,60 @@ func TestAPromotionThatFailedAfterTheFlipKeepsThePointerOnTheReleaseTheBoxServes
 	}
 	if active := activePromotion(t, stack); active != "p2" {
 		t.Errorf("after a failure past the flip the pointer stands at %q, want p2: the box is serving p2", active)
+	}
+}
+
+type honouring struct{ providerkit.RecordStore }
+
+func (h honouring) Read(ctx context.Context, name providerkit.RecordName) (providerkit.Record, error) {
+	if err := ctx.Err(); err != nil {
+		return providerkit.Record{}, err
+	}
+	return h.RecordStore.Read(ctx, name)
+}
+
+func (h honouring) Write(ctx context.Context, record providerkit.Record) (providerkit.Revision, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	return h.RecordStore.Write(ctx, record)
+}
+
+func (h honouring) Remove(ctx context.Context, name providerkit.RecordName, expected providerkit.Revision) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return h.RecordStore.Remove(ctx, name, expected)
+}
+
+func TestAPromotionInterruptedBeforeItsFlipStillPutsThePointerBack(t *testing.T) {
+	t.Parallel()
+
+	stood := aMachine()
+	front := edgeOver(stood, honouring{fake.NewRecords()})
+	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
+		Version: "test", Class: edge.ClassProduction, Slug: slug,
+	}, edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile: %v", err)
+	}
+	staged(t, stack, "web", "b1", "shop-web-1111")
+	staged(t, stack, "web", "b2", "shop-web-2222")
+	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
+		t.Fatalf("Promote(p1): %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	stood.releasing = func(host.Release) error {
+		cancel()
+		return host.Unserved{Err: providerkit.Refuse(providerkit.CodeNotReady, "the gate was interrupted; the previous release is still live")}
+	}
+
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}, "", edge.DiscardReporter()); err == nil {
+		t.Fatal("a promotion interrupted before its flip succeeded")
+	}
+	if active := activePromotion(t, stack); active != "p1" {
+		t.Errorf("after a promotion interrupted before its flip the pointer stands at %q, want p1: the interrupt that stopped the release is the context the unwind ran under", active)
 	}
 }
 

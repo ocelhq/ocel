@@ -9,13 +9,21 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const casAttempts = 8
+const (
+	casAttempts  = 8
+	unwindWindow = 60 * time.Second
+)
+
+func sparing(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), unwindWindow)
+}
 
 type Ledger struct {
 	records ports.RecordStore
@@ -244,6 +252,8 @@ func (l *Ledger) Promote(ctx context.Context, promotion edge.Promotion, pointer 
 }
 
 func (l *Ledger) Unpromote(ctx context.Context, promotionID, pointer string) error {
+	ctx, stop := sparing(ctx)
+	defer stop()
 	name := pointerOr(pointer)
 	for range casAttempts {
 		at, err := ports.Held(ctx, l.records, l.pointerName(name))
@@ -278,6 +288,8 @@ func (l *Ledger) Unpromote(ctx context.Context, promotionID, pointer string) err
 }
 
 func (l *Ledger) retract(ctx context.Context, pointer, promotionID string) error {
+	ctx, stop := sparing(ctx)
+	defer stop()
 	for range casAttempts {
 		held, err := ports.Held(ctx, l.records, l.promotionName(pointer, promotionID))
 		if err != nil {
