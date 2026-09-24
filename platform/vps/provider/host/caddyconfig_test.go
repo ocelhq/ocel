@@ -171,3 +171,28 @@ func mustRender(t *testing.T, state ProxyState) []byte {
 	}
 	return rendered
 }
+
+func TestAReloadLeavesEveryProxiedStreamTheDrainWindowRatherThanCuttingIt(t *testing.T) {
+	t.Parallel()
+
+	state := storing()
+	state.Grace = 12 * time.Second
+	state.Connector = "box.example.com"
+	forwards := 0
+	for _, route := range servers(t, loading(t, state))[proxyServer].(map[string]any)["routes"].([]any) {
+		for _, handler := range route.(map[string]any)["handle"].([]any) {
+			handled := handler.(map[string]any)
+			if handled["handler"] != caddyadmin.ForwardHandler {
+				continue
+			}
+			forwards++
+			if delay := handled["stream_close_delay"]; delay != "12s" {
+				t.Errorf("route %v forwards with stream_close_delay %v, want the 12s drain window: caddy closes every websocket a reverse_proxy holds the moment a config load unloads it, so binding one domain cuts every stream on the box",
+					route.(map[string]any)["@id"], delay)
+			}
+		}
+	}
+	if forwards < 3 {
+		t.Fatalf("found %d forwarding handlers, want the connector, the store and an app", forwards)
+	}
+}
