@@ -386,7 +386,7 @@ func (r *deployRun) settleHostnames(ctx context.Context, report Reporter) error 
 			continue
 		}
 		_, err := settling.settleHost(ctx, host, report)
-		if waits, held := awaitingSomeone(err); held {
+		if waits, held := LeftPending(err); held {
 			r.pending = append(r.pending, fmt.Sprintf("%s is not served yet: %s", host.Hostname, waits))
 			continue
 		}
@@ -395,18 +395,6 @@ func (r *deployRun) settleHostnames(ctx context.Context, report Reporter) error 
 		}
 	}
 	return nil
-}
-
-func awaitingSomeone(err error) (string, bool) {
-	var owed owedRecords
-	if errors.As(err, &owed) {
-		return owed.Error(), true
-	}
-	var refusal Refusal
-	if errors.As(err, &refusal) && refusal.Code == CodeNotReady {
-		return refusal.Message, true
-	}
-	return "", false
 }
 
 func (r *deployRun) configuredHosts() []ConfiguredHost {

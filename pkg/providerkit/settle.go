@@ -169,7 +169,7 @@ func (s settler) waiting(headline string, owed []edge.Record) error {
 	if !s.unattended || len(owed) == 0 {
 		return nil
 	}
-	return owedRecords{headline: headline, records: owed}
+	return Pending(owedRecords{headline: headline, records: owed})
 }
 
 func (s settler) release(ctx context.Context, written []edge.Record, say func(string)) error {
@@ -208,13 +208,13 @@ func (s settler) await(ctx context.Context, hostname string, say func(string)) (
 func (s settler) unresolved(hostname string, serving edge.Kind, began time.Time) error {
 	waited := s.now().Sub(began).Round(time.Second)
 	if serving == "" {
-		return Refuse(CodeNotReady,
+		return Pending(Refuse(CodeNotReady,
 			"%s does not answer as the %s edge yet%s — this run gave up after about %s, and `ocel domain add` picks up where it stopped",
-			hostname, s.kind, s.unreached(hostname), waited)
+			hostname, s.kind, s.unreached(hostname), waited))
 	}
-	return Refuse(CodeNotReady,
+	return Pending(Refuse(CodeNotReady,
 		"%s answers as the %s edge, not the %s one this project deploys to — this run gave up after about %s",
-		hostname, serving, s.kind, waited)
+		hostname, serving, s.kind, waited))
 }
 
 func (s settler) unreached(hostname string) string {

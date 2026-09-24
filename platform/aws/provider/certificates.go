@@ -99,7 +99,7 @@ func waiting(err error) error {
 	if !certs.Pending(err) {
 		return err
 	}
-	return providerkit.Refuse(providerkit.CodeNotReady, "%s", err)
+	return providerkit.Pending(providerkit.Refuse(providerkit.CodeNotReady, "%s", err))
 }
 
 func (p *Provider) InspectCertificate(ctx context.Context, kind edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {

@@ -179,6 +179,9 @@ func (p *Provider) issued(
 		func(held *certmanager.Certificate) bool {
 			return held != nil && held.Managed != nil && held.Managed.State != certificateProvisioning
 		})
+	if code, _ := providerkit.RefusedCode(err); code == providerkit.CodeNotReady {
+		return providerkit.Pending(err)
+	}
 	if err != nil {
 		return err
 	}

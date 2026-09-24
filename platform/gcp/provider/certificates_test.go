@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -129,6 +130,27 @@ func TestACertificateManagerRefusedToIssueIsReportedRatherThanWaitedOutForever(t
 	}
 	if !strings.Contains(refusal.Message, server.failure) {
 		t.Errorf("the refusal reads %q, want Google's own reason in it: the owner is the only one who can fix the record", refusal.Message)
+	}
+}
+
+func TestACertificateStillProvisioningWhenThePatienceRunsOutIsLeftPending(t *testing.T) {
+	held := issuance
+	issuance = patience{attempts: 2, ceiling: time.Millisecond}
+	t.Cleanup(func() { issuance = held })
+
+	server := newCertServer()
+	server.provisioning = 5
+
+	_, err := server.open(t).Certificate(context.Background(), providerkit.CertificateRequest{
+		Kind:     alb.Kind,
+		Hostname: "shop.example.com",
+		Report:   edge.DiscardReporter(),
+		Prove: func(_ context.Context, cert providerkit.Certificate, _ []edge.Record) (providerkit.Certificate, error) {
+			return cert, nil
+		},
+	})
+	if _, pending := providerkit.LeftPending(err); !pending {
+		t.Errorf("Certificate() while Google still provisions = %v, want it marked pending: issuance finishes on Google's time, and a deploy leaves the hostname to `ocel domain add` rather than failing", err)
 	}
 }
 

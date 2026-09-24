@@ -79,3 +79,24 @@ func RefusedCode(err error) (Code, bool) {
 	}
 	return "", false
 }
+
+type pending struct{ cause error }
+
+func (p pending) Error() string { return p.cause.Error() }
+
+func (p pending) Unwrap() error { return p.cause }
+
+func Pending(err error) error {
+	if err == nil {
+		return nil
+	}
+	return pending{cause: err}
+}
+
+func LeftPending(err error) (string, bool) {
+	var held pending
+	if errors.As(err, &held) {
+		return held.Error(), true
+	}
+	return "", false
+}
