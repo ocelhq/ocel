@@ -499,7 +499,7 @@ func seedsIn(t *testing.T) (string, string, Item, Item) {
 
 func seeding(t *testing.T, bin string, table, config Item) {
 	t.Helper()
-	if said, err := writing(t, bin, seedingPair(table, config)); err != nil {
+	if said, err := writing(t, bin, seedingRouting(table, config)); err != nil {
 		t.Fatalf("seeding %s and %s = %v: %s", table.Name, config.Name, err, said)
 	}
 }
@@ -1091,7 +1091,7 @@ func TestSomethingOtherThanTheProxysConfigStandingAtItsPathIsRefusedRatherThanCh
 		if err := os.MkdirAll(over.Name, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		said, err := writing(t, bin, seedingPair(table, config))
+		said, err := writing(t, bin, seedingRouting(table, config))
 		if err == nil {
 			t.Fatalf("the seed over a directory where %s belongs landed, and the probe reads that path with -f: "+
 				"the write would call it present forever, the survey would call it absent forever, and every apply would report success over a proxy that never serves:\n%s", over.Name, said)
