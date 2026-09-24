@@ -7,9 +7,7 @@
     "index",
     "---Resources---",
     "bucket",
-    "queue",
     "database",
-    "secret",
     "---Internals---",
     "dev-server",
     "wire-format"
