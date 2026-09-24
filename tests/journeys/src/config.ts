@@ -165,7 +165,7 @@ export function renderConfig(overlay: Overlay): string {
 type App = Record<string, unknown> & { name?: string };
 
 type Document = Record<string, unknown> & {
-  provider?: string | Record<string, Record<string, unknown> | null> | null;
+  provider?: string | Record<string, Record<string, unknown>> | null;
   apps?: App[];
 };
 
