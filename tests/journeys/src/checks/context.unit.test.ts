@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { type CheckContext, json } from "./context";
+import { type CheckContext, json, REDACTED, redact } from "./context";
 import { healthChecks } from "./health";
 
 function answering(app: string): CheckContext["fetch"] {
@@ -55,5 +55,20 @@ describe("json", () => {
     expect(failure).toContain("status 502");
     expect(failure).toContain("content-type: text/html");
     expect(failure).toContain("bad gateway");
+  });
+});
+
+describe("redact", () => {
+  it("masks the registry token wherever a log or evidence carries it", () => {
+    expect(
+      redact("login ghs_s3cret ok, again ghs_s3cret", {
+        OCEL_JOURNEY_REGISTRY_TOKEN: "ghs_s3cret",
+      }),
+    ).toBe(`login ${REDACTED} ok, again ${REDACTED}`);
+  });
+
+  it("leaves the text alone when the run carries no registry token", () => {
+    expect(redact("login ok", {})).toBe("login ok");
+    expect(redact("login ok", { OCEL_JOURNEY_REGISTRY_TOKEN: "" })).toBe("login ok");
   });
 });

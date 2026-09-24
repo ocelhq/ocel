@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import stripJsonComments from "strip-json-comments";
 import { appHostname } from "./identity";
-import type { Cell, Compute, Edge, TargetName } from "./matrix/types";
+import type { Cell, Compute, Edge, RegistryConfig, TargetName } from "./matrix/types";
 import type { CellUnderTest } from "./run/cellRun";
 import { gcpSlug } from "./targets/gcp/names";
 
@@ -15,6 +15,8 @@ export const VPS_BASE = "./ocel.vps.json";
 export const GCP_BASE = "./ocel.gcp.json";
 
 const VPS_DEFAULT_ZONE = "localhost";
+
+export const REGISTRY_USER_ENV = "OCEL_JOURNEY_REGISTRY_USER";
 
 export function journeyZone(env: NodeJS.ProcessEnv): string {
   return env.OCEL_JOURNEY_ZONE?.trim() || VPS_DEFAULT_ZONE;
@@ -28,6 +30,7 @@ export type Overlay = {
   dns?: "cloudflare";
   hostnames?: Record<string, string>;
   varsKey?: string;
+  registry?: RegistryConfig;
 };
 
 const EDGE_IMPORTS: Record<Edge, { name: string; from: string }> = {
@@ -45,6 +48,20 @@ function hostnamesOf(cell: CellUnderTest, zone: string): Record<string, string> 
     }
   }
   return named;
+}
+
+function registryOf(cell: CellUnderTest, env: NodeJS.ProcessEnv): { registry?: RegistryConfig } {
+  const named = cell.variant.config.registry;
+  if (!named) {
+    return {};
+  }
+  const username = env[REGISTRY_USER_ENV]?.trim();
+  if (!username) {
+    throw new Error(
+      `${cell.name} pushes to ${named.server} as the user ${REGISTRY_USER_ENV} names, and it is unset`,
+    );
+  }
+  return { registry: { ...named, username } };
 }
 
 function dnsOf(env: NodeJS.ProcessEnv): { dns?: "cloudflare" } {
@@ -80,7 +97,12 @@ export function overlayFor(
     case "gcp":
       return { base: GCP_BASE, slug: gcpSlug(cell, env), ...cell.variant.config };
     case "vps":
-      return { base: VPS_BASE, slug: cell.slug, hostnames: hostnamesOf(cell, journeyZone(env)) };
+      return {
+        base: VPS_BASE,
+        slug: cell.slug,
+        hostnames: hostnamesOf(cell, journeyZone(env)),
+        ...registryOf(cell, env),
+      };
     case "dev":
       return { base: DEFAULT_BASE, slug: cell.slug };
   }
@@ -125,6 +147,9 @@ export function renderConfig(overlay: Overlay): string {
   }
   if (overlay.dns) {
     fields.push(`  dns: cloudflareDns(),`);
+  }
+  if (overlay.registry) {
+    fields.push(`  registry: ${JSON.stringify(overlay.registry)},`);
   }
   const perApp = appOverlay(overlay);
   if (perApp !== "") {
@@ -175,6 +200,9 @@ export function renderJsonConfig(base: string, overlay: Overlay): string {
   }
   if (overlay.dns) {
     written.dns = { kind: overlay.dns };
+  }
+  if (overlay.registry) {
+    written.registry = overlay.registry;
   }
   if (read.apps) {
     written.apps = read.apps.map((app) => appDocument(app, overlay));

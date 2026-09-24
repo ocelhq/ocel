@@ -16,7 +16,7 @@ import { PulumiStack } from "../targets/aws/stacks/pulumi";
 import { SstStack } from "../targets/aws/stacks/sst";
 import { awsWorld } from "../targets/aws/world";
 import { type Fixture, fixture } from "./types";
-import { apiGateway, cloudflare, container, defaults } from "./variants";
+import { apiGateway, cloudflare, container, defaults, registry } from "./variants";
 
 const RUNTIME_NEUTRAL_CHECKS = [...healthChecks, ...staticChecks, ...httpProbeChecks];
 const NODE_CHECKS = [...RUNTIME_NEUTRAL_CHECKS, ...nativeModuleChecks];
@@ -39,7 +39,7 @@ export const deploy = {
     on: {
       dev: [defaults],
       aws: [container, apiGateway],
-      vps: [defaults],
+      vps: [defaults, registry],
       gcp: [defaults, container],
     },
     sample: { group: "node-http" },
