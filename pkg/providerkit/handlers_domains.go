@@ -69,6 +69,15 @@ func (d *hostnames) add(ctx context.Context, report Reporter) error {
 		}
 		settledAny = settledAny || changed
 	}
+	promoted, err := d.promoted(ctx)
+	if err != nil {
+		return err
+	}
+	if !promoted {
+		return Refuse(CodeNotReady,
+			"%s is bound to the %s edge, but this project has promoted no release yet, so nothing answers there: `ocel deploy` promotes one, and it serves %s from then on",
+			strings.Join(hostnamesOf(d.addTargets()), ", "), d.settle.kind, strings.Join(hostnamesOf(d.addTargets()), ", "))
+	}
 	if !settledAny && d.host == "" {
 		report.Say(fmt.Sprintf("Every hostname this project declares is already served: %s", strings.Join(d.declared(), ", ")))
 	}
