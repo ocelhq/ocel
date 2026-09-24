@@ -71,25 +71,25 @@ type Item struct {
 
 func ClassItems(class providerkit.Class) []Item {
 	return []Item{
-		dir(classRoot, 0o755, rootOwner, "ocel's config root"),
-		dir(ClassDir(class), 0o755, rootOwner, "config for this class"),
+		dir(classRoot, 0o755, rootOwner, ""),
+		dir(ClassDir(class), 0o755, rootOwner, ""),
 	}
 }
 
 func StorageItems(class providerkit.Class, keys []byte) []Item {
 	return []Item{
-		dir(helperRoot, 0o755, rootOwner, "ocel's helper scripts"),
-		{Kind: KindFile, Name: recordsHelper, Mode: 0o755, Owner: rootOwner, Content: recordsScript, Note: "reads and writes deploy records"},
-		{Kind: KindFile, Name: releasesHelper, Mode: 0o755, Owner: rootOwner, Content: releasesScript, Note: "keeps the release window and sweeps the images no release names"},
-		{Kind: KindFile, Name: SealHelper, Mode: 0o755, Owner: rootOwner, Content: sealScript, Note: "seals and opens secret values"},
+		dir(helperRoot, 0o755, rootOwner, ""),
+		{Kind: KindFile, Name: recordsHelper, Mode: 0o755, Owner: rootOwner, Content: recordsScript, Note: "deploy records"},
+		{Kind: KindFile, Name: releasesHelper, Mode: 0o755, Owner: rootOwner, Content: releasesScript, Note: "release window"},
+		{Kind: KindFile, Name: SealHelper, Mode: 0o755, Owner: rootOwner, Content: sealScript, Note: "seals secret values"},
 		principal(),
-		{Kind: KindFile, Name: sudoersSeal(class), Mode: 0o440, Owner: rootOwner, Content: sealSudoers(class), Note: "lets " + deployUser + " seal and open " + string(class) + " values through the helper as root, and run nothing else through it"},
-		dir(stateRoot, 0o750, stateOwner, "deploy state root"),
-		dir(releasesRoot, 0o750, stateOwner, "the release window every class on this host keeps"),
-		dir(sshDir, 0o700, stateOwner, "the deploy account's ssh login"),
-		{Kind: KindFile, Name: authorizedKeys, Mode: 0o600, Owner: stateOwner, Content: keys, Note: "the keys allowed to deploy"},
-		dir(StateDir(class), 0o750, stateOwner, "state for this class"),
-		dir(RecordsDir(class), 0o750, stateOwner, "records of what is deployed"),
+		{Kind: KindFile, Name: sudoersSeal(class), Mode: 0o440, Owner: rootOwner, Content: sealSudoers(class), Note: "sudo for the seal helper"},
+		dir(stateRoot, 0o750, stateOwner, ""),
+		dir(releasesRoot, 0o750, stateOwner, ""),
+		dir(sshDir, 0o700, stateOwner, ""),
+		{Kind: KindFile, Name: authorizedKeys, Mode: 0o600, Owner: stateOwner, Content: keys, Note: "keys allowed to deploy"},
+		dir(StateDir(class), 0o750, stateOwner, ""),
+		dir(RecordsDir(class), 0o750, stateOwner, ""),
 		sealKey(class),
 	}
 }

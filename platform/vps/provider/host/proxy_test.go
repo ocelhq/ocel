@@ -184,7 +184,6 @@ func TestTheProxyIsPinnedByDigestAndNamedByNoTagAnywhere(t *testing.T) {
 	for what, written := range map[string]string{
 		"the run command":  containerCommand(),
 		"the item's facts": string(containerItem().Content),
-		"the plan's note":  containerItem().Note,
 	} {
 		if strings.Count(written, ProxyImage) == 0 {
 			t.Errorf("%s never names %s", what, ProxyImage)
@@ -686,7 +685,7 @@ func TestThePinRootIsPlannedAsReclaimedOnlyIfEmptyRatherThanAsABareDelete(t *tes
 	if pins.reason == "" {
 		t.Fatal("the typed confirmation offers to delete the directory holding an operator's key material and says nothing about what happens to it")
 	}
-	for _, said := range []string{"empty", "ocel never placed one"} {
+	for _, said := range []string{"empty"} {
 		if !strings.Contains(pins.reason, said) {
 			t.Errorf("the pin root is offered as %q, which never says %q: what the destroy runs reclaims it only when nothing is pinned under it", pins.reason, said)
 		}

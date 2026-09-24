@@ -31,6 +31,24 @@ ocel deploy
 
 Bootstrap creates the `ocel-deploy` login every later deploy acts as.
 
+## Bootstrap
+
+`ocel bootstrap <class>` prepares the machine once per class (`production`, `preview`).
+Running it again changes only what has drifted, and `ocel destroy` removes it all.
+
+| What | Why |
+| --- | --- |
+| `ocel-deploy` login, `/var/lib/ocel/.ssh/authorized_keys` | Every deploy logs in as this account. The keys are copied from the login you bootstrap with, or taken from `deployKey`. |
+| `/etc/ocel/<class>/seal.key`, `/usr/local/lib/ocel/seal`, a sudoers line | Secret values are sealed to a key that never leaves the machine. `ocel-deploy` may run the seal helper as root and nothing else. Lose the key and the values can't be opened again. |
+| `/var/lib/ocel/<class>/records`, `/usr/local/lib/ocel/records` | What is deployed, per class. |
+| `/var/lib/ocel/releases`, `/usr/local/lib/ocel/releases` | The release window: which images a rollback can still reach. Older images are swept. |
+| Docker | Installed with Docker's install script, pinned by sha256. It stays after `ocel destroy`, and so do its containers. |
+| `ocel-proxy` container, the `ocel` network | Caddy on ports 80 and 443. Every app is reached through it. Deploys rewrite its config at `/var/lib/ocel/proxy/caddy.json`. |
+| `/var/lib/ocel/proxy/data` | Certificates, their keys and the ACME account key. |
+| `/etc/ocel/certs` | Certificates you pin yourself. `ocel destroy` removes the directory only if it is empty. |
+| `ocel-live.socket`, `ocel-live.service` | Serve each app container its secret values over a unix socket. |
+| `ocel-backups.timer` | Dumps every resource once a day, and at boot if a day was missed. |
+
 ## Postgres
 
 `postgres("main")` runs as one container on the box, on your project's own network. It

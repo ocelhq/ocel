@@ -8,7 +8,10 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-const reasonStanding = "already current"
+const (
+	reasonStanding = "already current"
+	bootstrapDocs  = "https://ocel.dev/docs/providers/vps#bootstrap"
+)
 
 type Bootstrapper struct {
 	host   *Host
@@ -70,6 +73,9 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 	}
 	groups := providerkit.DeriveGroups(described, b.Catalogue(), req)
 	groups[0].Changes = planned(read)
+	if groups[0].Reason == "" {
+		groups[0].Reason = bootstrapDocs
+	}
 	return providerkit.Plan{Groups: providerkit.Vendored(b.vendor, groups)}, nil
 }
 
@@ -90,7 +96,7 @@ func planned(read Reading) []providerkit.Change {
 		case read.standing(item.Kind, item.Name):
 			change.Action = providerkit.ActionUpdate
 			if change.Reason == "" {
-				change.Reason = "not as this ocel writes it"
+				change.Reason = "drifted"
 			}
 		}
 		changes = append(changes, change)
@@ -175,7 +181,7 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	}
 	if minted.Seal.Fingerprint == "" {
 		return providerkit.Refuse(providerkit.CodeDenied,
-			"%s stands with no seal key, and a class that seals nothing is a class no deploy can hold a value for",
+			"%s has no seal key",
 			req.Class)
 	}
 	held := Reading{Class: req.Class, Present: true, Seal: minted.Seal, Stamp: standing.Stamp}
@@ -212,7 +218,7 @@ func (b Bootstrapper) heal(ctx context.Context, req providerkit.BootstrapRequest
 		return err
 	}
 	for _, id := range left {
-		say(report, id+": left as this host holds it, and heal reasserts only what "+deployUser+" owns under "+stateRoot)
+		say(report, id+": left as is")
 	}
 	return b.writing(ctx, read, work, report, b.host.Reassert)
 }
@@ -234,12 +240,12 @@ func healable(read Reading) ([]Item, []string, error) {
 	command := providerkit.BootstrapCommand(read.Class)
 	if !read.Present {
 		return nil, nil, providerkit.Refuse(providerkit.CodeDenied,
-			"nothing has bootstrapped the %s class on this host, and heal reasserts what a bootstrap wrote rather than writing one.\nRun `%s`",
+			"the %s class is not bootstrapped on this host\nRun `%s`",
 			read.Class, command)
 	}
 	if read.unfinished() {
 		return nil, nil, providerkit.Refuse(providerkit.CodeDenied,
-			"%s records an apply that never finished, and heal finishes nothing it did not start.\nRun `%s` to plan the work that is left and finish it",
+			"%s records an unfinished apply\nRun `%s` to finish it",
 			StampPath(read.Class), command)
 	}
 	if err := read.adopting(); err != nil {
@@ -263,8 +269,8 @@ func healable(read Reading) ([]Item, []string, error) {
 	}
 	if len(denied) > 0 {
 		return nil, nil, providerkit.Refuse(providerkit.CodeDenied,
-			"heal writes what %s owns under %s and nothing else, and this one would write %s.\nRun `%s` as the login that bootstrapped this host",
-			deployUser, stateRoot, strings.Join(denied, ", "), command)
+			"heal cannot write %s\nRun `%s` as the login that bootstrapped this host",
+			strings.Join(denied, ", "), command)
 	}
 	return work, left, nil
 }
@@ -312,8 +318,7 @@ func refuseReplacements(standing Reading, items []Item) error {
 		return nil
 	}
 	return providerkit.Refuse(providerkit.CodeNotReady,
-		"%s already stands as something other than what ocel writes, so this apply would write over it rather than install it, and what is there now does not survive that.\n"+
-			"Re-run with --yes to write it anyway",
+		"%s would be overwritten\nRe-run with --yes to overwrite",
 		strings.Join(over, ", "))
 }
 
@@ -330,10 +335,7 @@ func (r Reading) adopting() error {
 		standing = "no key at all"
 	}
 	return providerkit.Refuse(providerkit.CodeInvalid,
-		"%s records the seal key %s and %s now holds %s.\n"+
-			"Every value this class holds was sealed to the key the stamp records, and nothing opens them under another: "+
-			"this apply will not adopt the key that replaced it.\n"+
-			"Put the recorded key back, or `ocel destroy` the class and seal its values again",
+		"%s records seal key %s, but %s holds %s\nRestore the recorded key, or `ocel destroy` the class",
 		StampPath(r.Class), recorded, SealKeyPath(r.Class), standing)
 }
 
@@ -409,7 +411,7 @@ func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 			return err
 		}
 		if !taken {
-			say(report, "kept "+removal.kind+" "+removal.path+", which something else on this host is still attached to")
+			say(report, "kept "+removal.kind+" "+removal.path+", still in use")
 			continue
 		}
 		say(report, "removed "+removal.kind+" "+removal.path)
@@ -419,7 +421,7 @@ func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 }
 
 func leavingKnownHosts(forget string) string {
-	return "your known_hosts is as ocel found it; to drop this host's key from it yourself, run: " + forget
+	return "to drop this host from known_hosts: " + forget
 }
 
 const dirHeld = "dir=held"
@@ -517,15 +519,15 @@ func appsRemoving(class providerkit.Class, apps appsStanding) []removal {
 	var taken []removal
 	if apps.containers {
 		taken = append(taken, taking(KindApps, classSelector(class),
-			"every app container this class stood up, each holding the values its deploy handed it; nothing routes to them once the class is gone"))
+			""))
 	}
 	if apps.volumes {
 		taken = append(taken, taking(KindResourceVolumes, classSelector(class),
-			"the volume each of this class's resources kept its data on; the data goes with it, and nothing on this box holds another copy"))
+			"resource data, not recoverable"))
 	}
 	if apps.networks {
 		taken = append(taken, taking(KindAppNetworks, classSelector(class),
-			"the network each of this class's projects ran on, which the proxy is detached from first"))
+			""))
 	}
 	return taken
 }
@@ -535,22 +537,22 @@ func removing(read, sibling Reading, apps appsStanding) []removal {
 	last := !sibling.standing(KindDir, ClassDir(beside)) && !sibling.standing(KindDir, StateDir(beside))
 
 	beneath := append(appsRemoving(read.Class, apps),
-		taking(KindDir, StateDir(read.Class), "every record ocel holds for this class on this host, and nothing writes them again"),
-		taking(KindSealKey, SealKeyPath(read.Class), "the key every value this class holds was sealed to, and no other machine ever held it: what it sealed, nothing opens again"),
-		taking(KindFile, sudoersSeal(read.Class), "the one sudoers line that lets the deploy login seal and open this class's values"),
+		taking(KindDir, StateDir(read.Class), "deploy records"),
+		taking(KindSealKey, SealKeyPath(read.Class), "sealed values become unreadable"),
+		taking(KindFile, sudoersSeal(read.Class), ""),
 	)
 	stamp := []removal{taking(KindDir, ClassDir(read.Class),
-		"the stamp that says what this host carries, taken last so an interrupted destroy leaves a host that still says what it is")}
+		"")}
 	var above []removal
 	if last {
 		beneath = append(beneath, proxyRemovals()...)
 		beneath = append(beneath, liveRemovals()...)
 		beneath = append(beneath, backupRemovals()...)
 		beneath = append(beneath,
-			taking(KindDir, sshDir, "the deploy login's own key store, which nothing but ocel ever wrote"),
-			taking(KindDir, releasesRoot, "the window naming which images this host still owes a rollback to; the images themselves stay, because what this host runs stays when ocel goes"),
+			taking(KindDir, sshDir, ""),
+			taking(KindDir, releasesRoot, "images stay"),
 			sharing(stateRoot, ""),
-			taking(KindUser, deployUser, "the login every deploy onto this host runs as"),
+			taking(KindUser, deployUser, ""),
 			taking(KindFile, recordsHelper, ""),
 			taking(KindFile, releasesHelper, ""),
 			taking(KindFile, SealHelper, ""),

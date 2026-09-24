@@ -47,7 +47,7 @@ func (l login) described() []byte {
 
 func principal() Item {
 	held := deployLogin()
-	return Item{Kind: KindUser, Name: held.name, Owner: held.name, Content: held.described(), Note: "the account deploys log in as"}
+	return Item{Kind: KindUser, Name: held.name, Owner: held.name, Content: held.described(), Note: "deploy login"}
 }
 
 func (l login) joined(flag string) string {
@@ -122,13 +122,13 @@ func resolved(path string) (string, error) {
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "", providerkit.Refuse(providerkit.CodeInvalid,
-				"option %q names %s and this run has no home directory to resolve it against: %s", "deployKey", path, err)
+				"option %q names %s, and there is no home directory to resolve it: %s", "deployKey", path, err)
 		}
 		return filepath.Join(home, strings.TrimPrefix(path, "~")), nil
 	}
 	if !filepath.IsAbs(path) {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
-			"option %q names %s, and a provider is never told which directory a relative path is relative to, so ocel will not guess one.\nSpell it from / or from ~/ and try again",
+			"option %q names %s, a relative path\nSpell it from / or ~/",
 			"deployKey", path)
 	}
 	return path, nil
@@ -178,7 +178,7 @@ func (h *Host) resolve(ctx context.Context) ([]byte, error) {
 	keys := authorized([]byte(result.Stdout))
 	if len(keys) == 0 {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"%s has no ~/.ssh/authorized_keys for %s to inherit, so the deploy login would answer to nobody.\nName a public key file with the %q option and try again",
+			"%s has no ~/.ssh/authorized_keys for %s to inherit\nName a public key file with the %q option",
 			h.named(), deployUser, "deployKey")
 	}
 	return keys, nil

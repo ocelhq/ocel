@@ -30,7 +30,7 @@ type Seal struct {
 }
 
 func sealKey(class providerkit.Class) Item {
-	return Item{Kind: KindSealKey, Name: SealKeyPath(class), Mode: sealKeyMode, Owner: rootOwner, Class: class, Note: "the key values are sealed with"}
+	return Item{Kind: KindSealKey, Name: SealKeyPath(class), Mode: sealKeyMode, Owner: rootOwner, Class: class, Note: "seals secret values"}
 }
 
 func sealSudoers(class providerkit.Class) []byte {
@@ -45,7 +45,7 @@ func (i Item) mint() string {
 	name := quoted(i.Name)
 	return "if [ -e " + name + " ]; then chown " + rootOwner + ":" + rootOwner + " " + name +
 		fmt.Sprintf(" && chmod %04o ", i.Mode) + name + "; else " +
-		`command -v python3 >/dev/null 2>&1 || { echo 'this host carries no python3, and the seal helper reaches its libcrypto for the AES-256-GCM every value is sealed with' >&2; exit 1; }
+		`command -v python3 >/dev/null 2>&1 || { echo 'the seal helper needs python3' >&2; exit 1; }
 ` + quoted(SealHelper) + " " + quoted(string(i.Class)) + " init; fi"
 }
 
@@ -86,7 +86,7 @@ func (s *Sealer) through(ctx context.Context, verb string, at providerkit.Coordi
 	written, err := base64.StdEncoding.DecodeString(strings.TrimSpace(rendered))
 	if err != nil {
 		return nil, providerkit.Refuse(providerkit.CodeDenied,
-			"the seal helper answered a %s with %d bytes, which is no value ocel sealed", verb, len(rendered))
+			"the seal helper answered a %s with %d unreadable bytes", verb, len(rendered))
 	}
 	return written, nil
 }
@@ -94,7 +94,7 @@ func (s *Sealer) through(ctx context.Context, verb string, at providerkit.Coordi
 func sealArgv(verb string, at providerkit.Coordinate) ([]string, error) {
 	if at.Class == "" {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"%s names no class, and this host mints one seal key per class", at.Name)
+			"%s names no class", at.Name)
 	}
 	argv := []string{SealHelper, string(at.Class), verb}
 	for _, named := range [][2]string{
@@ -106,7 +106,7 @@ func sealArgv(verb string, at providerkit.Coordinate) ([]string, error) {
 	} {
 		if named[1] == "" && named[0] != "binding" {
 			return nil, providerkit.Refuse(providerkit.CodeInvalid,
-				"a value's coordinate names no %s, and the coordinate is what a sealed value is bound to", named[0])
+				"a value's coordinate names no %s", named[0])
 		}
 		argv = append(argv, "--"+named[0], named[1])
 	}
