@@ -44,7 +44,65 @@ type held struct {
 }
 
 func wrapped(h held) error {
-	return fmt.Errorf("deploy %v", h) // want `held renders`
+	return fmt.Errorf("deploy %v", h)
+}
+
+type heldByValue struct {
+	registry contractv1.ImageRegistry
+}
+
+func reflected(h heldByValue) string {
+	return fmt.Sprint(h) // want `heldByValue renders`
+}
+
+type heldInSlice struct {
+	registries []contractv1.ImageRegistry
+}
+
+func reflectedElements(h *heldInSlice) string {
+	return fmt.Sprintf("%+v", h) // want `\*heldInSlice renders`
+}
+
+type exposed struct {
+	Req *contractv1.DeployRequest
+}
+
+func exported(e exposed) string {
+	return fmt.Sprint(e) // want `exposed renders`
+}
+
+type sealed struct {
+	inner exposed
+}
+
+func sealedAway(s sealed) string {
+	return fmt.Sprint(s)
+}
+
+type reopened struct {
+	exposed
+}
+
+func embeddedUnexported(r reopened) string {
+	return fmt.Sprint(r) // want `reopened renders`
+}
+
+type indirect struct {
+	Inner *exposed
+}
+
+func addressOnly(i indirect) string {
+	return fmt.Sprint(i)
+}
+
+type pointerDescribed struct {
+	Req *contractv1.DeployRequest
+}
+
+func (d *pointerDescribed) String() string { return d.Req.GetTag() }
+
+func describedByValue(d pointerDescribed, p *pointerDescribed) string {
+	return fmt.Sprint(d, p) // want `pointerDescribed renders`
 }
 
 type embedding struct {
