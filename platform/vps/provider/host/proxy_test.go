@@ -408,17 +408,29 @@ func starting(t *testing.T, command string) string {
 	return ""
 }
 
+func TestTheContainerIsWrittenAgainWhenTheCommandItStartsWithMoves(t *testing.T) {
+	t.Parallel()
+
+	started := strings.Join(proxyCommand(), " ")
+	if !strings.Contains(containerCommand(), quoted(proxyCommandLabel+"="+started)) {
+		t.Errorf("the proxy is run carrying no record of the command it is started with:\n%s", containerCommand())
+	}
+	if !strings.Contains(string(containerItem().Content), "command="+started) {
+		t.Errorf("the proxy is surveyed without the command it is started with, so a box already running caddy directly keeps booting on a shape the first flip after every restart reloads:\n%s", containerItem().Content)
+	}
+}
+
 func TestTheFileTheProxyIsStartedFromIsTheWholeOfWhatItServes(t *testing.T) {
 	t.Parallel()
 
 	command := containerCommand()
-	run, config, split := strings.Cut(strings.TrimSuffix(starting(t, command), " >/dev/null"), quoted("caddy")+" "+quoted("run")+" ")
+	run, config, split := strings.Cut(strings.TrimSuffix(starting(t, command), " >/dev/null"), quoted(ProxyHelperMount)+" "+quoted("serve")+" ")
 	if !split {
-		t.Fatalf("nothing in the run command starts caddy:\n%s", command)
+		t.Fatalf("nothing in the run command starts the proxy from its config:\n%s", command)
 	}
-	if config != quoted("--config")+" "+quoted(ProxyConfigMount) {
-		t.Errorf("caddy is started with %q, want nothing beyond --config: --resume is documented to use the last autosaved configuration, overriding --config, so the file every deploy replaces would be read and thrown away",
-			config)
+	if config != quoted(ProxyConfigMount) {
+		t.Errorf("the proxy is started from %q, want %s alone: --resume is documented to use the last autosaved configuration, overriding --config, so the file every deploy replaces would be read and thrown away",
+			config, ProxyConfigMount)
 	}
 	if strings.Contains(run, "--resume") {
 		t.Errorf("the proxy is run with --resume:\n%s", command)

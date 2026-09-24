@@ -105,7 +105,7 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 			}
 		}
 		cut = cutting(rel, standing)
-		return cut.flip(standing), nil
+		return cut.routed(standing), nil
 	}); err != nil {
 		if overtaken != nil {
 			return h.overtaken(ctx, rel, overtaken)
@@ -147,16 +147,6 @@ func (h *Host) settle(ctx context.Context, rel Release, cut cutover, report prov
 		if !slices.Contains(settled, retiree) {
 			failed = append(failed, fmt.Sprintf("%s was drained and unrouted but not stopped, so it is still running: %v", containerOf(retiree), refused[retiree]))
 		}
-	}
-	if _, err := h.composeProxy(ctx, func(standing ProxyState) (ProxyState, error) {
-		return cut.settle(standing, h.stopped(ctx, cut.others(standing), elevation)), nil
-	}); err != nil {
-		failed = append(failed, fmt.Sprintf("the steady-state write failed, so %s still declares %s on %s until the next release on this box clears it: %v",
-			ProxyConfig, listed(cut.retiring, containerOf), proxyDrainServer, err))
-	} else if _, err := h.ran(ctx, "reload the proxy's steady-state configuration",
-		words(helperCommand("flip", ProxyConfigMount)), nil, elevation); err != nil {
-		failed = append(failed, fmt.Sprintf("the steady-state reload failed, so the running proxy still declares %s on %s until the next release on this box reloads it: %v",
-			listed(cut.retiring, containerOf), proxyDrainServer, err))
 	}
 	if len(failed) == 0 {
 		return nil
@@ -229,27 +219,6 @@ func (c cutover) routed(standing ProxyState) ProxyState {
 	return standing
 }
 
-func (c cutover) flip(standing ProxyState) ProxyState {
-	standing = c.routed(standing)
-	for _, retiree := range c.retiring {
-		if !slices.Contains(standing.Retiring, retiree) {
-			standing.Retiring = append(standing.Retiring, retiree)
-		}
-	}
-	return standing
-}
-
-func (c cutover) released(retiring []string) []string {
-	return slices.DeleteFunc(slices.Clone(retiring), func(held string) bool { return slices.Contains(c.retiring, held) })
-}
-
-func (c cutover) others(standing ProxyState) []string { return c.released(standing.Retiring) }
-
-func (c cutover) settle(standing ProxyState, stopped []string) ProxyState {
-	standing.Retiring = slices.DeleteFunc(c.released(standing.Retiring), func(held string) bool { return slices.Contains(stopped, held) })
-	return standing
-}
-
 func (c cutover) back(standing ProxyState) (ProxyState, error) {
 	for _, app := range c.rel.Apps {
 		ours := func(route AppRoute) bool { return route.RouteKey == app.RouteKey }
@@ -262,7 +231,6 @@ func (c cutover) back(standing ProxyState) (ProxyState, error) {
 			standing.Routes = append(standing.Routes, c.prior[was])
 		}
 	}
-	standing.Retiring = c.released(standing.Retiring)
 	return standing, nil
 }
 
@@ -518,7 +486,7 @@ func (h *Host) discard(ctx context.Context, rel Release) string {
 		return fmt.Sprintf("\n%s left standing: %s could not be read to tell whether the proxy routes to them: %v",
 			rel.names(), ProxyConfig, err)
 	}
-	live := slices.Clone(state.Retiring)
+	var live []string
 	for _, route := range state.Routes {
 		live = append(live, route.Upstream)
 	}

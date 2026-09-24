@@ -20,12 +20,13 @@ const (
 const ProxyImage = "public.ecr.aws/docker/library/caddy@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d"
 
 const (
-	ProxyNetwork   = "ocel"
-	ProxyContainer = "ocel-proxy"
-	proxyRestart   = "unless-stopped"
-	proxyPort      = "80"
-	proxyTLSPort   = "443"
-	proxyLabel     = "ocel.config"
+	ProxyNetwork      = "ocel"
+	ProxyContainer    = "ocel-proxy"
+	proxyRestart      = "unless-stopped"
+	proxyPort         = "80"
+	proxyTLSPort      = "443"
+	proxyLabel        = "ocel.config"
+	proxyCommandLabel = "ocel.command"
 )
 
 const (
@@ -81,6 +82,7 @@ var proxyBaseline []byte
 var proxyHelpers embed.FS
 
 const ProxyFactTemplate = `image={{.Config.Image}}
+command={{index .Config.Labels "` + proxyCommandLabel + `"}}
 restart={{.HostConfig.RestartPolicy.Name}}
 network={{if index .NetworkSettings.Networks "` + ProxyNetwork + `"}}` + networkJoined + `{{else}}` + networkLeft + `{{end}}
 {{range .HostConfig.Binds}}bind={{.}}
@@ -191,6 +193,7 @@ func proxyFacts() []byte { return proxyFactsOver(proxyBinds()) }
 func proxyFactsOver(binds []string) []byte {
 	stated := []string{
 		"image=" + ProxyImage,
+		"command=" + strings.Join(proxyCommand(), " "),
 		"restart=" + proxyRestart,
 		"network=" + networkJoined,
 		"ports=" + marshalled(proxyPorts()),
@@ -247,6 +250,7 @@ func proxyRun() []string {
 		"--restart", proxyRestart,
 		"--network", ProxyNetwork,
 		"--label", proxyLabel + "=" + contentSum(proxyBaseline),
+		"--label", proxyCommandLabel + "=" + strings.Join(proxyCommand(), " "),
 		"--env", "XDG_CONFIG_HOME=" + proxyDataMount + "/config",
 	}
 	argv = append(argv, logging()...)
@@ -257,8 +261,10 @@ func proxyRun() []string {
 	for _, bind := range proxyBinds() {
 		argv = append(argv, "--volume", bind)
 	}
-	return append(argv, ProxyImage, "caddy", "run", "--config", ProxyConfigMount)
+	return append(append(argv, ProxyImage), proxyCommand()...)
 }
+
+func proxyCommand() []string { return []string{ProxyHelperMount, "serve", ProxyConfigMount} }
 
 func containerWriting(attempts int, files []string) string {
 	argv := proxyRun()

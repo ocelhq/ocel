@@ -15,9 +15,11 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -45,6 +47,10 @@ const (
 
 const adminTimeout = 30 * time.Second
 
+const caddyBinary = "caddy"
+
+var starting = syscall.Exec
+
 const (
 	gateInterval  = 250 * time.Millisecond
 	gateAttempt   = 2 * time.Second
@@ -63,9 +69,9 @@ const (
 	servingTimeout = 10 * time.Second
 )
 
-func main() { os.Exit(run(proxyData, procRoot, os.Args[1:], os.Stdout, os.Stderr)) }
+func main() { os.Exit(run(proxyData, procRoot, liveRoot, os.Args[1:], os.Stdout, os.Stderr)) }
 
-func run(data, proc string, argv []string, out, errs io.Writer) int {
+func run(data, proc, live string, argv []string, out, errs io.Writer) int {
 	socket := os.Getenv(socketEnv)
 	if socket == "" {
 		socket = defaultSocket
@@ -76,9 +82,14 @@ func run(data, proc string, argv []string, out, errs io.Writer) int {
 	rest := argv[1:]
 	switch argv[0] {
 	case "flip":
-		return flipping(socket, rest, out, errs)
+		return flipping(socket, live, rest, out, errs)
 	case "gate":
 		return gate(rest, out, errs)
+	case "serve":
+		if len(rest) != 1 {
+			return usage(errs)
+		}
+		return serve(live, rest[0], errs)
 	case "upstreams":
 		if len(rest) != 0 {
 			return usage(errs)
@@ -115,7 +126,7 @@ func run(data, proc string, argv []string, out, errs io.Writer) int {
 }
 
 func usage(errs io.Writer) int {
-	fmt.Fprintln(errs, "usage: ocel-proxyctl upstreams | config <path> | leaf <hostname> |")
+	fmt.Fprintln(errs, "usage: ocel-proxyctl serve <config> | upstreams | config <path> | leaf <hostname> |")
 	fmt.Fprintln(errs, "       probe <hostname> |")
 	fmt.Fprintln(errs, "       listeners |")
 	fmt.Fprintln(errs, "       forget <hostname>... |")
@@ -330,7 +341,7 @@ func gate(argv []string, out, errs io.Writer) int {
 	return 0
 }
 
-func flipping(socket string, argv []string, out, errs io.Writer) int {
+func flipping(socket, live string, argv []string, out, errs io.Writer) int {
 	flags := flag.NewFlagSet("flip", flag.ContinueOnError)
 	flags.SetOutput(errs)
 	var retiring addresses
@@ -342,7 +353,7 @@ func flipping(socket string, argv []string, out, errs io.Writer) int {
 	if flags.NArg() != 1 || (len(retiring) > 0 && *drainTimeout <= 0) {
 		return usage(errs)
 	}
-	if code := flip(socket, flags.Arg(0), out, errs); code != 0 || len(retiring) == 0 {
+	if code := flip(socket, live, flags.Arg(0), out, errs); code != 0 || len(retiring) == 0 {
 		return code
 	}
 	return draining(socket, retiring, time.Duration(*drainTimeout)*time.Second, out, errs)
@@ -403,14 +414,7 @@ func draining(socket string, retiring []string, window time.Duration, out, errs 
 		}
 		held := map[string]int{}
 		for _, up := range pool {
-			held[up.Address] = up.NumRequests
-		}
-		for _, address := range pending {
-			if _, pooled := held[address]; !pooled {
-				fmt.Fprintf(errs, "ocel-proxyctl: %s has no upstream %s\n",
-					upstreamsPath, address)
-				return exitUnattributable
-			}
+			held[up.Address] += up.NumRequests
 		}
 		pending = slices.DeleteFunc(pending, func(address string) bool {
 			if held[address] > 0 {
@@ -434,7 +438,7 @@ func draining(socket string, retiring []string, window time.Duration, out, errs 
 	return 0
 }
 
-func flip(socket, path string, out, errs io.Writer) int {
+func flip(socket, live, path string, out, errs io.Writer) int {
 	document, err := os.ReadFile(path)
 	if err != nil {
 		fmt.Fprintf(errs, "ocel-proxyctl: read %s: %v\n", path, err)
@@ -444,7 +448,51 @@ func flip(socket, path string, out, errs io.Writer) int {
 		fmt.Fprintf(errs, "ocel-proxyctl: %s %v\n", path, err)
 		return exitRefused
 	}
-	return speak(socket, http.MethodPost, loadPath, document, out, errs)
+	shape, err := shaping(live, document)
+	if err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: %s %v\n", path, err)
+		return exitRefused
+	}
+	if err := shape.introduced(); err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
+		return exitRefused
+	}
+	if code := speak(socket, http.MethodPost, loadPath, shape.config, out, errs); code != 0 {
+		return code
+	}
+	if err := errors.Join(shape.moved(), shape.pruned()); err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
+		return exitRefused
+	}
+	return 0
+}
+
+func serve(live, path string, errs io.Writer) int {
+	document, err := os.ReadFile(path)
+	if err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: read %s: %v\n", path, err)
+		return exitRefused
+	}
+	shape, err := shaping(live, document)
+	if err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: %s %v\n", path, err)
+		return exitRefused
+	}
+	started := filepath.Join(live, liveConfig)
+	if err := errors.Join(shape.moved(), shape.pruned(), os.WriteFile(started, shape.config, 0o600)); err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
+		return exitRefused
+	}
+	caddy, err := exec.LookPath(caddyBinary)
+	if err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
+		return exitRefused
+	}
+	if err := starting(caddy, []string{caddyBinary, "run", "--config", started}, os.Environ()); err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: exec %s: %v\n", caddy, err)
+		return exitRefused
+	}
+	return 0
 }
 
 func ask(socket, path string, out, errs io.Writer) int {
