@@ -33,7 +33,13 @@ type Spec struct {
 
 type Body func(context.Context, *provider.Runner, *Session) error
 
+type drive func(context.Context, *projectconfig.Config, io.Writer, io.Writer, provider.Trust, func(*provider.Runner) error) error
+
 func Run(ctx context.Context, spec Spec, body Body) error {
+	return run(ctx, spec, body, provider.Drive, provider.DriveDry)
+}
+
+func run(ctx context.Context, spec Spec, body Body, driveReal, driveDry drive) error {
 	if _, err := spec.Config.RequireProvider(); err != nil {
 		return err
 	}
@@ -53,12 +59,12 @@ func Run(ctx context.Context, spec Spec, body Body) error {
 	ui.gate = g
 	defer ui.Close()
 
-	drive := provider.Drive
+	driveProvider := driveReal
 	if spec.Dry {
-		drive = provider.DriveDry
+		driveProvider = driveDry
 	}
 	provW := ui.ProcessWriter()
-	err = drive(ctx, spec.Config, provW, provW, TrustFor(spec.Trust, ui), func(runner *provider.Runner) error {
+	err = driveProvider(ctx, spec.Config, provW, provW, TrustFor(spec.Trust, ui), func(runner *provider.Runner) error {
 		return body(ctx, runner, ui)
 	})
 	if err != nil {

@@ -17,12 +17,12 @@ const (
 	pinInMemory
 )
 
-func locateProvider(ctx context.Context, projectDir, name string, pinning pinning) (string, error) {
+func locateProvider(ctx context.Context, projectDir, name string, mode pinning) (string, error) {
 	store, err := providers.New(version.Version)
 	if err != nil {
 		return "", err
 	}
-	return locate(ctx, store, providers.KindProvider, projectDir, name, store.Platform, pinning)
+	return locate(ctx, store, providers.KindProvider, projectDir, name, store.Platform, mode)
 }
 
 func Connector(ctx context.Context, projectDir, name string, platform providers.Platform) ([]byte, error) {
@@ -41,12 +41,12 @@ func Connector(ctx context.Context, projectDir, name string, platform providers.
 	return read, nil
 }
 
-func locate(ctx context.Context, store *providers.Store, kind providers.Kind, projectDir, name string, platform providers.Platform, pinning pinning) (string, error) {
+func locate(ctx context.Context, store *providers.Store, kind providers.Kind, projectDir, name string, platform providers.Platform, mode pinning) (string, error) {
 	if !store.Fetches() {
 		return store.Binary(ctx, kind, name, platform, "")
 	}
 
-	lock, err := pins(ctx, store, projectDir, pinning)
+	lock, err := pins(ctx, store, projectDir, mode)
 	if err != nil {
 		return "", err
 	}
@@ -67,15 +67,15 @@ func Pin(ctx context.Context, projectDir string) error {
 	return err
 }
 
-func pins(ctx context.Context, store *providers.Store, projectDir string, pinning pinning) (lockfile.Lock, error) {
+func pins(ctx context.Context, store *providers.Store, projectDir string, mode pinning) (lockfile.Lock, error) {
 	lock, held, err := lockfile.Read(projectDir)
 	if err != nil {
 		return lockfile.Lock{}, err
 	}
+	if mode == pinInMemory && (!held || lock.CLI != store.Version) {
+		return lockFromRelease(ctx, store)
+	}
 	if !held {
-		if pinning == pinInMemory {
-			return lockFromRelease(ctx, store)
-		}
 		return pin(ctx, store, projectDir)
 	}
 	if lock.CLI != store.Version {

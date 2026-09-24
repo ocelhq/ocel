@@ -73,7 +73,8 @@ every CI run then fetches the same bytes, and a CLI of another version is refuse
 you run `ocel lock` again.
 
 A project holding no `ocel.lock` gets one the first time a command fetches its providers.
-A `--dry` run writes none: it pins the providers for that run alone.
+A `--dry` run writes none: with no `ocel.lock`, or one another version wrote, it pins the
+providers for that run alone.
 
 ## discovery.paths
 

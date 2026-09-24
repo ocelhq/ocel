@@ -23,13 +23,7 @@ func DriveDry(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.
 	return drive(ctx, cfg, stdout, stderr, trust, pinInMemory, fn)
 }
 
-func drive(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, trust Trust, pinning pinning, fn func(*Runner) error) error {
-	return driveTrusting(ctx, trust, func() error {
-		return driveOnce(ctx, cfg, stdout, stderr, pinning, fn)
-	})
-}
-
-func driveOnce(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, pinning pinning, fn func(*Runner) error) error {
+func drive(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer, trust Trust, mode pinning, fn func(*Runner) error) error {
 	if err := node.Ensure(cfg.Dir); err != nil {
 		return err
 	}
@@ -39,11 +33,17 @@ func driveOnce(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io
 		return err
 	}
 
-	binPath, err := locateProvider(ctx, cfg.Dir, desc.Name, pinning)
+	binPath, err := locateProvider(ctx, cfg.Dir, desc.Name, mode)
 	if err != nil {
 		return err
 	}
 
+	return driveTrusting(ctx, trust, func() error {
+		return driveOnce(ctx, cfg, desc, binPath, stdout, stderr, fn)
+	})
+}
+
+func driveOnce(ctx context.Context, cfg *projectconfig.Config, desc *projectconfig.ProviderDescriptor, binPath string, stdout, stderr io.Writer, fn func(*Runner) error) error {
 	env, err := workerBundleEnv(cfg.Dir)
 	if err != nil {
 		return err
