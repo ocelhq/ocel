@@ -68,7 +68,7 @@ func (h *handlers) removalEdge(provider Provider, state EdgeStackState, sel *con
 	return provider.Edges().Open(state.Kind)
 }
 
-func (h *handlers) dnsFor(provider Provider, sel *contractv1.EdgeSelection) (edge.DNSWriter, error) {
+func dnsFor(provider Provider, sel *contractv1.EdgeSelection) (edge.DNSWriter, error) {
 	kind := DNSKind(sel.GetDns().GetKind())
 	if kind == "" {
 		kind = provider.DNS().Default()
@@ -103,14 +103,18 @@ func (h *handlers) openStack(ctx context.Context, class Class, slug string, sel 
 	if err != nil {
 		return nil, err
 	}
-	writer, err := h.dnsFor(provider, sel)
+	writer, err := dnsFor(provider, sel)
 	if err != nil {
 		return nil, err
 	}
 	session := &stackSession{provider: provider, front: front, stack: stack, store: store, state: state}
-	session.settle = newSettler(front, writer, sel.GetDns().GetZone(),
-		resolving(provider, front, boundBy(front, func() edge.StackState { return session.stack.State() })))
+	session.settling(writer, sel.GetDns().GetZone())
 	return session, nil
+}
+
+func (s *stackSession) settling(writer edge.DNSWriter, zone string) {
+	s.settle = newSettler(s.front, writer, zone,
+		resolving(s.provider, s.front, boundBy(s.front, func() edge.StackState { return s.stack.State() })))
 }
 
 func (s *stackSession) checkpoint(ctx context.Context) error {

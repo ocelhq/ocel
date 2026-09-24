@@ -96,6 +96,25 @@ func TestTheSuccessResultIndentsAnAppsSecondURLUnderTheFirst(t *testing.T) {
 	}
 }
 
+func TestTheSuccessResultCarriesTheNoteBesideTheURLsItPrinted(t *testing.T) {
+	t.Parallel()
+
+	note := "www.shop.example is not served yet: its record is owed\napi.shop.example is not served yet: it does not answer"
+	p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
+	got := p.project(&streamv1.RunEvent{Event: &streamv1.RunEvent_Result{Result: &streamv1.RunResultEvent{
+		Success:  true,
+		Headline: "Deployed",
+		Apps:     []*progressv1.AppResult{{App: "web", Urls: []string{"https://shop.example"}}},
+		UrlNote:  note,
+	}}})
+
+	if !slices.Contains(got, blockIndent+"https://shop.example") ||
+		!slices.Contains(got, blockIndent+"www.shop.example is not served yet: its record is owed") ||
+		!slices.Contains(got, blockIndent+"api.shop.example is not served yet: it does not answer") {
+		t.Errorf("projection =\n%q\nwant both the url that serves and the note on the hostname that does not yet", got)
+	}
+}
+
 func TestTheSuccessResultSaysSoWhenAnAppAnswersNowhere(t *testing.T) {
 	t.Parallel()
 

@@ -57,7 +57,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	if err != nil {
 		return nil, err
 	}
-	writer, err := h.dnsFor(provider, req.GetEdge())
+	writer, err := dnsFor(provider, req.GetEdge())
 	if err != nil {
 		return nil, err
 	}

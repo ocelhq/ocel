@@ -535,11 +535,14 @@ func (p *projector) result(m protoreflect.Message) []string {
 	if ev.GetSuccess() {
 		out := p.strand(warnMark, "unfinished")
 		out = append(out, "", p.style(color.FgGreen, color.Bold).Sprintf("%s %s in %s", okMark, headlineOr(ev, "Done"), formatDuration(d)))
-		switch urls := p.appURLBlock(ev.GetApps()); {
-		case len(urls) > 0:
+		if urls := p.appURLBlock(ev.GetApps()); len(urls) > 0 {
 			out = append(out, append([]string{""}, urls...)...)
-		case ev.GetUrlNote() != "":
-			out = append(out, "", blockIndent+ev.GetUrlNote())
+		}
+		if note := ev.GetUrlNote(); note != "" {
+			out = append(out, "")
+			for _, line := range strings.Split(note, "\n") {
+				out = append(out, blockIndent+line)
+			}
 		}
 		if note := FlipNote(ev.GetFlipBound()); note != "" {
 			out = append(out, "", blockIndent+p.faint(note))

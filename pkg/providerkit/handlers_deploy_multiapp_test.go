@@ -198,12 +198,9 @@ func TestDeployServesAProjectHostnameOnTheFirstAppAlone(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
-	if result, _ := deploy(t, client, twoAppRequest()); !result.GetSuccess() {
-		t.Fatalf("the deploy that creates the edge surface = %q", result.GetError())
-	}
-	hostnameAdded(t, client, "shop.example")
-
-	result, _ := deploy(t, client, twoAppRequest())
+	req := twoAppRequest()
+	req.Edge = writtenBy("shop.example")
+	result, _ := deploy(t, client, req)
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}

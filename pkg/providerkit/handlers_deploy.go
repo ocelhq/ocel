@@ -73,7 +73,7 @@ func newDeployStages(plan DeployPlan) deployStages {
 }
 
 type deployRun struct {
-	provider   Provider
+	*stackSession
 	gate       Gate
 	features   []string
 	transforms []string
@@ -83,12 +83,10 @@ type deployRun struct {
 	plan       DeployPlan
 	stages     deployStages
 
-	front     edge.Edge
-	stack     edge.EdgeStack
-	store     stackStore
-	state     EdgeStackState
 	wildcard  Wildcard
 	previewOn string
+	selection *contractv1.EdgeSelection
+	pending   []string
 
 	values    values.Store
 	scope     values.Scope
@@ -100,7 +98,6 @@ type deployRun struct {
 	dry           bool
 	draft         draft
 	allowDegraded []string
-	withheld      string
 
 	outcomes []*progressv1.AppResult
 
@@ -153,7 +150,11 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		return nil, RefusalError(err)
 	}
 	run := &deployRun{
-		provider:       provider,
+		stackSession: &stackSession{
+			provider: provider,
+			front:    front,
+			store:    stackStore{records: provider.Records(), name: EdgeStackRecord(plan.Class, plan.Slug)},
+		},
 		gate:           gate,
 		features:       features,
 		transforms:     h.session.transforms(),
@@ -161,8 +162,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		tracked:        newStageScope(sender),
 		manifest:       req.GetManifest(),
 		plan:           plan,
-		front:          front,
-		store:          stackStore{records: provider.Records(), name: EdgeStackRecord(plan.Class, plan.Slug)},
+		selection:      req.GetEdge(),
 		values:         values.Store{Records: provider.Records(), Sealer: provider.Sealer()},
 		scope:          values.Scope{Project: plan.Slug, Class: plan.Class},
 		artifacts:      map[string]ArtifactRef{},
@@ -202,7 +202,7 @@ func (r *deployRun) reportApps(result *progressv1.ResultEvent) {
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
 	if err := r.tracked.unit(r.stages.Environment, func(env *unitRun) error {
 		return env.phase(progressv1.Phase_PHASE_PROVISIONING, func(report Reporter) error {
-			return r.settle(ctx, report)
+			return r.admission(ctx, report)
 		})
 	}); err != nil {
 		return nil, err
@@ -216,7 +216,7 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	return r.promote(ctx)
 }
 
-func (r *deployRun) settle(ctx context.Context, report Reporter) error {
+func (r *deployRun) admission(ctx context.Context, report Reporter) error {
 	if err := r.admit(ctx, report); err != nil {
 		return err
 	}
@@ -271,20 +271,16 @@ func (r *deployRun) admitDomains(ctx context.Context) error {
 			return nil
 		}
 		return Refuse(CodeNotReady,
-			"no domains.production declared on the project or any app — declare one, then run `ocel domain add`")
+			"no domains.production declared on the project or any app, so this deploy has nowhere to serve: declare one, and the deploy that reads it settles it")
 	}
-	if r.state.Edge.Empty() {
-		r.withheld = fmt.Sprintf(
-			"this deploy is the one that creates the edge surface, so nothing is bound to %s yet: "+
-				"run `ocel domain add` to settle the certificate, the surface and the DNS, then deploy again — until then there is no address of yours to print",
-			strings.Join(hosts, ", "))
-		return nil
+	writer, err := dnsFor(r.provider, r.selection)
+	if err != nil {
+		return err
 	}
-	for _, host := range hosts {
-		if !r.state.Ready(host, r.front.Kind()) {
-			return Refuse(CodeNotReady,
-				"%s is not bound to the %s edge, so nothing there would answer for it: run `ocel domain add`", host, r.front.Kind())
-		}
+	r.settling(writer, r.selection.GetDns().GetZone())
+	r.settle.unattended = true
+	r.settle.ask = func(headline string, records []edge.Record, notes ...string) {
+		r.sender.send(dnsOwedEvent(headline, records, notes...))
 	}
 	return nil
 }
@@ -331,7 +327,10 @@ func (r *deployRun) raiseEdge(ctx context.Context) error {
 				return nil
 			}
 			report.Say(fmt.Sprintf("Reconciling the %s edge", r.front.Kind()))
-			return r.reconcileEdge(ctx)
+			if err := r.reconcileEdge(ctx); err != nil {
+				return err
+			}
+			return r.settleHostnames(ctx, report)
 		})
 	})
 }
@@ -375,6 +374,49 @@ func (r *deployRun) reconcileEdge(ctx context.Context) error {
 	}
 	r.stack = stack
 	return r.checkpoint(ctx)
+}
+
+func (r *deployRun) settleHostnames(ctx context.Context, report Reporter) error {
+	if r.world() != hostingProduction {
+		return nil
+	}
+	settling := &hostnames{stackSession: r.stackSession}
+	for _, host := range r.configuredHosts() {
+		if r.state.Ready(host.Hostname, r.front.Kind()) {
+			continue
+		}
+		_, err := settling.settleHost(ctx, host, report)
+		if waits, held := awaitingSomeone(err); held {
+			r.pending = append(r.pending, fmt.Sprintf("%s is not served yet: %s", host.Hostname, waits))
+			continue
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func awaitingSomeone(err error) (string, bool) {
+	var owed owedRecords
+	if errors.As(err, &owed) {
+		return owed.Error(), true
+	}
+	var refusal Refusal
+	if errors.As(err, &refusal) && refusal.Code == CodeNotReady {
+		return refusal.Message, true
+	}
+	return "", false
+}
+
+func (r *deployRun) configuredHosts() []ConfiguredHost {
+	owners := r.domainApps()
+	hosts := r.hostnames()
+	configured := make([]ConfiguredHost, 0, len(hosts))
+	for _, host := range hosts {
+		configured = append(configured, ConfiguredHost{Hostname: host, App: owners[strings.ToLower(host)]})
+	}
+	return configured
 }
 
 func (r *deployRun) previewBase() (string, error) {
@@ -1188,14 +1230,14 @@ func (r *deployRun) result(promotion edge.Promotion, flip edge.FlipBound) (*prog
 	}
 	for slot, hosts := range r.servedHostnames() {
 		for _, host := range hosts {
+			if r.plan.Class != ClassPreview && !r.state.Ready(host, r.front.Kind()) {
+				continue
+			}
 			r.outcomes[slot].Urls = append(r.outcomes[slot].Urls, "https://"+host)
 		}
 	}
-	if r.withheld != "" {
-		for _, outcome := range r.outcomes {
-			outcome.Urls = nil
-		}
-		result.UrlNote = r.withheld
+	if len(r.pending) > 0 {
+		result.UrlNote = strings.Join(r.pending, "\n")
 	}
 	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{Result: result}}, nil
 }

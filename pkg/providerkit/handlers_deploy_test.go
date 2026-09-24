@@ -3,6 +3,7 @@ package providerkit_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -347,7 +348,6 @@ func TestDeployPublishesEveryInfraBindingForItsAppsToRead(t *testing.T) {
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	hostnameAdded(t, client, "shop.example")
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("a second Deploy() = %q", result.GetError())
 	}
@@ -528,7 +528,6 @@ func TestDeployProvisionsInfraBeforeEveryAppSoATransformReadsThisDeploysBinding(
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	hostnameAdded(t, client, "shop.example")
 	releaser.publishes("db-two.invalid")
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("a second Deploy() = %q", result.GetError())
@@ -703,8 +702,6 @@ func TestDeployPrunesTheBindingItStoppedProvisioning(t *testing.T) {
 	if result, _ := deploy(t, deploys, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-
-	hostnameAdded(t, deploys, "shop.example")
 	dropped := deployRequest()
 	dropped.Manifest.Resources = nil
 	dropped.Manifest.Usages = nil
@@ -836,29 +833,132 @@ func hostnameAdded(t *testing.T, client contractv1connect.ProviderServiceClient,
 	}
 }
 
-func TestDeployWithholdsTheURLUntilTheHostnameIsSettled(t *testing.T) {
+func writtenBy(zone string) *contractv1.EdgeSelection {
+	return &contractv1.EdgeSelection{Dns: &contractv1.Dns{Kind: string(fake.KindZone), Zone: zone}}
+}
+
+func TestTheFirstDeploySettlesAHostnameItsDNSWriterPoints(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
-	result, _ := deploy(t, client, deployRequest())
+	req := deployRequest()
+	req.Edge = writtenBy("shop.example")
+	result, _ := deploy(t, client, req)
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	if len(servedURLs(result)) != 0 || !strings.Contains(result.GetUrlNote(), "shop.example") {
-		t.Fatalf("the first deploy returned urls %v and the note %q, want no url and a note naming the hostname nothing is bound to yet",
+	if !slices.Equal(servedURLs(result), []string{"https://shop.example"}) || result.GetUrlNote() != "" {
+		t.Errorf("the first deploy returned urls %v and the note %q, want the hostname it settled printed: nothing was owed, so nothing waits on anyone",
 			servedURLs(result), result.GetUrlNote())
+	}
+}
+
+func TestTheFirstDeploySettlesALocalhostNameWithNoDNSWriter(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	req := deployRequest()
+	req.Manifest.Domains[0].Hostnames = []string{"web-j-1-deploy-python.localhost"}
+	result, events := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	if owed := owedRecordsIn(events); len(owed) != 0 {
+		t.Errorf("the deploy owed %v, want nothing: a localhost name resolves without any record", owed)
+	}
+	if want := []string{"https://web-j-1-deploy-python.localhost"}; !slices.Equal(servedURLs(result), want) || result.GetUrlNote() != "" {
+		t.Errorf("the deploy printed %v with the note %q, want %v", servedURLs(result), result.GetUrlNote(), want)
+	}
+}
+
+func TestALaterDeploySettlesAHostnameTheConfigNewlyDeclares(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	req := deployRequest()
+	req.Edge = writtenBy("shop.example")
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+
+	req.Manifest.Domains[0].Hostnames = append(req.Manifest.Domains[0].Hostnames, "www.shop.example")
+	result, _ := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("a deploy declaring one more hostname = %q, want it settled: the config is the declaration and the deploy reconciles it", result.GetError())
+	}
+	if want := []string{"https://shop.example", "https://www.shop.example"}; !slices.Equal(servedURLs(result), want) {
+		t.Errorf("the deploy printed %v, want %v", servedURLs(result), want)
+	}
+}
+
+func TestADeployWhoseDNSWriterFailsPromotesNothing(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	writer, err := provider.DNS().Open(fake.KindZone, "shop.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	writer.(*fake.DNSWriter).Refuse(errors.New("the zone's api answered 500"))
+
+	req := deployRequest()
+	req.Edge = writtenBy("shop.example")
+	result, events := deploy(t, client, req)
+	if result.GetSuccess() {
+		t.Fatalf("Deploy() succeeded, want it failed: the dns writer broke, which no one waiting fixes")
+	}
+	if _, promoted := spanStatuses(events)[promotionUnitSpan]; promoted {
+		t.Error("the run promoted, want nothing promoted once settling a declared hostname failed")
+	}
+}
+
+func TestADeployWhoseCertificateWaitsOnYouLeavesItToDomainAdd(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	provider.IssueCertificates(edge.Record{Name: "_acme.shop.example", Type: edge.RecordTypeCNAME, Value: "validate.example"})
+
+	result, events := deploy(t, client, deployRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed without waiting on a record only you can write", result.GetError())
+	}
+	if owed := owedRecordsIn(events); !slices.Contains(owed, "_acme.shop.example CNAME") {
+		t.Errorf("the deploy owed %v, want the record that proves the certificate", owed)
+	}
+	if len(servedURLs(result)) != 0 || !strings.Contains(result.GetUrlNote(), "Prove you own shop.example") {
+		t.Errorf("the deploy printed %v with the note %q, want no url and a note naming the proof it waits on",
+			servedURLs(result), result.GetUrlNote())
+	}
+}
+
+func owedRecordsIn(events []*progressv1.OperationEvent) []string {
+	var owed []string
+	for _, event := range events {
+		for _, record := range event.GetDnsOwed().GetRecords() {
+			owed = append(owed, record.GetName()+" "+record.GetType())
+		}
+	}
+	return owed
+}
+
+func TestDeployOwingRecordsSucceedsAndLeavesTheHostnameToDomainAdd(t *testing.T) {
+	builtProject(t)
+	client, _ := deployServed(t)
+
+	result, events := deploy(t, client, deployRequest())
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed: a record only you can write holds back the hostname, not the release", result.GetError())
+	}
+	if len(servedURLs(result)) != 0 {
+		t.Errorf("the deploy printed %v, want no url: shop.example answers nowhere until its record is written", servedURLs(result))
+	}
+	if owed := owedRecordsIn(events); !slices.Contains(owed, "shop.example CNAME") {
+		t.Errorf("the deploy owed %v, want the record that points shop.example at the edge, told the way domain add tells it", owed)
+	}
+	note := result.GetUrlNote()
+	if !strings.Contains(note, "shop.example") || !strings.Contains(note, "ocel domain add") || strings.Contains(note, "deploy again") {
+		t.Errorf("the note = %q, want it naming the hostname, what is owed and that `ocel domain add` resumes it — never another deploy", note)
 	}
 
 	hostnameAdded(t, client, "shop.example")
-
-	result, _ = deploy(t, client, deployRequest())
-	if !result.GetSuccess() {
-		t.Fatalf("a second Deploy() = %q", result.GetError())
-	}
-	if !slices.Equal(servedURLs(result), []string{"https://shop.example"}) || result.GetUrlNote() != "" {
-		t.Errorf("the deploy after the hostname settled returned urls %v and the note %q, want the hostname it serves printed",
-			servedURLs(result), result.GetUrlNote())
-	}
 }
 
 func TestDeployAnnouncesThePreviewHostnameOfTheProjectsOwnWildcard(t *testing.T) {
@@ -1069,22 +1169,14 @@ func TestDeployServesAHostnameDeclaredOnAnAppRatherThanTheProject(t *testing.T) 
 		Hostnames: []string{"shop.example"},
 	}}
 
+	req.Edge = writtenBy("shop.example")
+
 	result, _ := deploy(t, client, req)
 	if !result.GetSuccess() {
 		t.Fatalf("Deploy() of a project whose only hostname sits on an app = %q, want it admitted", result.GetError())
 	}
-	if !strings.Contains(result.GetUrlNote(), "shop.example") {
-		t.Errorf("the first deploy returned the note %q, want it naming the app's hostname nothing is bound to yet", result.GetUrlNote())
-	}
-
-	hostnameAdded(t, client, "shop.example")
-
-	result, _ = deploy(t, client, req)
-	if !result.GetSuccess() {
-		t.Fatalf("a second Deploy() = %q", result.GetError())
-	}
 	if !slices.Equal(servedURLs(result), []string{"https://shop.example"}) {
-		t.Errorf("the deploy after the hostname settled returned urls %v, want the app-declared hostname printed", servedURLs(result))
+		t.Errorf("the deploy returned urls %v, want the app-declared hostname it settled printed", servedURLs(result))
 	}
 }
 
@@ -1102,15 +1194,11 @@ func TestDeployAnnouncesEachAppsOwnHostnameUnderThatApp(t *testing.T) {
 		Tier:      environmentv1.Tier_TIER_PRODUCTION,
 		Hostnames: []string{"admin.shop.example"},
 	}}
-
-	if result, _ := deploy(t, client, req); !result.GetSuccess() {
-		t.Fatalf("the first Deploy() = %q", result.GetError())
-	}
-	hostnameAdded(t, client, "shop.example", "admin.shop.example")
+	req.Edge = writtenBy("shop.example")
 
 	result, _ := deploy(t, client, req)
 	if !result.GetSuccess() {
-		t.Fatalf("a second Deploy() = %q", result.GetError())
+		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 	if got := servedAppURLs(result, "web"); !slices.Equal(got, []string{"https://shop.example"}) {
 		t.Errorf("web carries %v, want the hostname web itself declares", got)
