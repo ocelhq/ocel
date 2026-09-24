@@ -143,3 +143,35 @@ func TestAPromotionThatCannotPinLeavesTheLedgerPointingWhereItDid(t *testing.T) 
 		}
 	}
 }
+
+type staleAt struct {
+	providerkit.RecordStore
+	at string
+}
+
+func (s staleAt) Write(ctx context.Context, record providerkit.Record) (providerkit.Revision, error) {
+	if slices.Contains(record.Name, s.at) {
+		return "", providerkit.ErrStale
+	}
+	return s.RecordStore.Write(ctx, record)
+}
+
+func TestAPromotionThatLostThePointerRacePinsNothing(t *testing.T) {
+	t.Parallel()
+
+	pins := &pinRecorder{}
+	front := direct.New(staleAt{RecordStore: fake.NewRecords(), at: "pointers"}, pins)
+	stack, err := front.Reconcile(context.Background(), edge.StackSpec{Slug: "shop", Class: providerkit.ClassProduction}, edge.StackState{})
+	if err != nil {
+		t.Fatalf("Reconcile(shop) = %v", err)
+	}
+	staged(t, stack, "b1", "web-00001-abc")
+
+	var refusal providerkit.Refusal
+	if err := promoted(t, stack, "p1", "b1"); !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
+		t.Fatalf("Promote(p1) while the pointer moved = %v, want a %s refusal", err, providerkit.CodeBusy)
+	}
+	if got := pins.calls(); len(got) != 0 {
+		t.Errorf("a promotion that lost the pointer pinned %v: Cloud Run then serves the loser while the ledger names the winner", got)
+	}
+}
