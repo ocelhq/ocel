@@ -308,3 +308,13 @@ dns:
 		t.Fatalf("dns = %+v, want cloudflare in example.com", cfg.DNS)
 	}
 }
+
+func TestResolveRefusesAYAMLProviderKeyedWithNoValue(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, YAMLFileName), "slug: acme\nprovider:\n  aws:\n")
+
+	_, err := Resolve(context.Background(), dir, "")
+	if err == nil || !strings.Contains(err.Error(), `"provider.aws" must be an object of options`) {
+		t.Fatalf("error %v, want aws with no value refused as options that are not an object", err)
+	}
+}

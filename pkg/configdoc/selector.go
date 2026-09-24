@@ -122,11 +122,7 @@ func unmarshalSelector(data []byte) (string, json.RawMessage, error) {
 	if len(ids) != 1 {
 		return "", nil, errors.New("a selector is keyed by exactly one identifier")
 	}
-	options := keyed[ids[0]]
-	if string(options) == "null" {
-		options = noOptions
-	}
-	return ids[0], options, nil
+	return ids[0], keyed[ids[0]], nil
 }
 
 func checkSelector(path string, value any, noun string, of selection, options reflect.Type) error {
@@ -146,9 +142,6 @@ func checkSelector(path string, value any, noun string, of selection, options re
 		id := keys[0]
 		if !slices.Contains(of.IDs, id) {
 			return unknownSelection(path, noun, id, of)
-		}
-		if held[id] == nil {
-			return checkNamedAlone(path, noun, id, of)
 		}
 		if _, ok := held[id].(map[string]any); !ok {
 			return typeError(JoinPath(path, id), "an object of options")
