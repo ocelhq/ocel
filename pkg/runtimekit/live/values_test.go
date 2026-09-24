@@ -619,6 +619,62 @@ func TestLiveStalenessBound(t *testing.T) {
 	})
 }
 
+type slowClock struct {
+	mu  sync.Mutex
+	now time.Time
+}
+
+func (c *slowClock) read() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *slowClock) advance(by time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = c.now.Add(by)
+}
+
+type slowFetcher struct {
+	clock *slowClock
+	inner *scriptedFetcher
+}
+
+func (f *slowFetcher) FetchLive(ctx context.Context) (map[string]string, error) {
+	f.clock.advance(time.Second)
+	return f.inner.FetchLive(ctx)
+}
+
+func TestKeepHoldsTheBoundWhenAFetchTakesTime(t *testing.T) {
+	t.Run("every tick of the bound reads the store again", func(t *testing.T) {
+		clock := &slowClock{now: time.Unix(1_700_000_000, 0)}
+		inner := resolves(map[string]string{"DB_PASSWORD": "hunter2"})
+		l := New(&slowFetcher{clock: clock, inner: inner}, []string{"DB_PASSWORD"}, nil, clock.read)
+
+		if err := l.Join(l.Prefetch(context.Background())); err != nil {
+			t.Fatalf("join: %v", err)
+		}
+		tick := clock.read().Add(-time.Second)
+
+		for want := 2; want <= 4; want++ {
+			tick = tick.Add(StalenessBound)
+			clock.mu.Lock()
+			clock.now = tick
+			clock.mu.Unlock()
+			l.Refresh(context.Background())
+			eventually(t, "a tick one bound after the last read to read the store again", func() bool {
+				return inner.count() == want
+			})
+			eventually(t, "the refresh to settle", func() bool {
+				l.mu.Lock()
+				defer l.mu.Unlock()
+				return !l.refreshing
+			})
+		}
+	})
+}
+
 func TestKeep(t *testing.T) {
 	t.Run("stops when the process it keeps values for is done", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
