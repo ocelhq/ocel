@@ -911,6 +911,43 @@ func TestADeployWhoseDNSWriterFailsPromotesNothing(t *testing.T) {
 	}
 }
 
+func TestADeployRefusedForAReasonNoWaitingFixesFailsWithThatReason(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	refusal := "no load balancer stands in this project for shop.example: run `ocel bootstrap`"
+	provider.RefuseCertificates(providerkit.Refuse(providerkit.CodeNotReady, "%s", refusal))
+
+	req := deployRequest()
+	req.Edge = writtenBy("shop.example")
+	result, events := deploy(t, client, req)
+	if result.GetSuccess() {
+		t.Fatalf("Deploy() succeeded with the note %q, want it failed: a missing load balancer waits on `ocel bootstrap`, not on `ocel domain add`", result.GetUrlNote())
+	}
+	if !strings.Contains(result.GetError(), refusal) {
+		t.Errorf("Deploy() = %q, want the refusal's own remedy", result.GetError())
+	}
+	if _, promoted := spanStatuses(events)[promotionUnitSpan]; promoted {
+		t.Error("the run promoted, want nothing promoted over a hostname that could not be settled")
+	}
+}
+
+func TestADeployWhoseCertificateIsStillIssuingLeavesItToDomainAdd(t *testing.T) {
+	builtProject(t)
+	client, provider := deployServed(t)
+	provider.IssueCertificates(edge.Record{Name: "_acme.shop.example", Type: edge.RecordTypeCNAME, Value: "validate.example"})
+	provider.StallAfterProving(providerkit.Pending(providerkit.Refuse(providerkit.CodeNotReady, "the certificate is still validating")))
+
+	req := deployRequest()
+	req.Edge = writtenBy("shop.example")
+	result, _ := deploy(t, client, req)
+	if !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed: an issuance still in flight holds back the hostname, not the release", result.GetError())
+	}
+	if !strings.Contains(result.GetUrlNote(), "the certificate is still validating") {
+		t.Errorf("the note = %q, want it naming the issuance it waits on", result.GetUrlNote())
+	}
+}
+
 func TestADeployWhoseCertificateWaitsOnYouLeavesItToDomainAdd(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
