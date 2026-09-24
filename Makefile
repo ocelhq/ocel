@@ -20,6 +20,8 @@ clean:
 
 lint:
 	pnpm exec biome check
-	for dir in $$(go work edit -json | node -p 'JSON.parse(require("fs").readFileSync(0)).Use.map(u => u.DiskPath).join(" ")'); do (cd "$$dir" && golangci-lint run ./...) || exit 1; done
-	go build -o "$${TMPDIR:-/tmp}/ocel-redactvet" ./scripts/redactvet
-	for dir in $$(go work edit -json | node -p 'JSON.parse(require("fs").readFileSync(0)).Use.map(u => u.DiskPath).join(" ")'); do (cd "$$dir" && go vet -vettool="$${TMPDIR:-/tmp}/ocel-redactvet" ./...) || exit 1; done
+	vettool="$$(mktemp -d)"; trap 'rm -rf "$$vettool"' EXIT; \
+	go build -o "$$vettool/redactvet" ./scripts/redactvet || exit 1; \
+	for dir in $$(go list -m -f '{{.Dir}}'); do \
+		(cd "$$dir" && golangci-lint run ./... && go vet -vettool="$$vettool/redactvet" ./...) || exit 1; \
+	done
