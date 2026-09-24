@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -18,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 )
@@ -52,6 +54,7 @@ const (
 	loadPath      = "/load"
 	upstreamsPath = "/reverse_proxy/upstreams"
 	configPath    = "/config/"
+	authorityPath = "/pki/ca/local"
 )
 
 const (
@@ -91,6 +94,11 @@ func run(data, proc string, argv []string, out, errs io.Writer) int {
 			return usage(errs)
 		}
 		return serving(servingAt, rest[0], out, errs)
+	case "probe":
+		if len(rest) != 1 {
+			return usage(errs)
+		}
+		return probe(socket, servingAt, rest[0], out, errs)
 	case "listeners":
 		if len(rest) != 0 {
 			return usage(errs)
@@ -110,6 +118,7 @@ func run(data, proc string, argv []string, out, errs io.Writer) int {
 
 func usage(errs io.Writer) int {
 	fmt.Fprintln(errs, "usage: ocel-proxyctl flip <config> | upstreams | config <path> | leaf <hostname> |")
+	fmt.Fprintln(errs, "       probe <hostname> |")
 	fmt.Fprintln(errs, "       listeners |")
 	fmt.Fprintln(errs, "       forget <hostname>... |")
 	fmt.Fprintln(errs, "       deploy --target <host:port> --health-check-path <path> --deploy-timeout <seconds>")
@@ -233,6 +242,44 @@ func serving(at, hostname string, out, errs io.Writer) int {
 		fmt.Fprintf(errs, "ocel-proxyctl: %v\n", err)
 		return exitRefused
 	}
+	return 0
+}
+
+func probe(socket, at, hostname string, out, errs io.Writer) int {
+	var said bytes.Buffer
+	if code := ask(socket, authorityPath, &said, errs); code != 0 {
+		return code
+	}
+	var authority struct {
+		Root string `json:"root_certificate"`
+	}
+	if err := json.Unmarshal(said.Bytes(), &authority); err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: the proxy described its local authority as something other than json: %v\n", err)
+		return exitRefused
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM([]byte(authority.Root)) {
+		fmt.Fprintln(errs, "ocel-proxyctl: the proxy's local authority carries no root certificate")
+		return exitRefused
+	}
+	client := &http.Client{
+		Timeout: servingTimeout,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{ServerName: hostname, RootCAs: roots},
+			DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, network, at)
+			},
+		},
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}
+	answer, err := client.Get("https://" + hostname + "/")
+	if err != nil {
+		fmt.Fprintf(errs, "ocel-proxyctl: %s answered nothing from inside the proxy: %v\n", hostname, err)
+		return exitUnhealthy
+	}
+	defer answer.Body.Close()
+	_, _ = io.Copy(io.Discard, io.LimitReader(answer.Body, 1<<12))
+	fmt.Fprintln(out, strings.TrimSpace(answer.Header.Get(edge.HeaderEdge)))
 	return 0
 }
 

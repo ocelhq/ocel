@@ -15,6 +15,9 @@ import (
 const probeTimeout = 15 * time.Second
 
 func (p *Provider) Serving(ctx context.Context, _ edge.Kind, hostname string) (edge.Kind, error) {
+	if edge.Loopback(hostname) {
+		return p.servedOnTheBox(ctx, hostname)
+	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		"https://"+edge.ProbeHostname(hostname)+"/", nil)
 	if err != nil {
@@ -32,6 +35,15 @@ func (p *Provider) Serving(ctx context.Context, _ edge.Kind, hostname string) (e
 	_, _ = io.Copy(io.Discard, io.LimitReader(said.Body, 1<<12))
 	p.stopped(hostname, "")
 	return edge.Kind(strings.TrimSpace(said.Header.Get(edge.HeaderEdge))), nil
+}
+
+func (p *Provider) servedOnTheBox(ctx context.Context, hostname string) (edge.Kind, error) {
+	said, err := p.host.ServedEdge(ctx, edge.ProbeHostname(hostname))
+	if err != nil {
+		return "", err
+	}
+	p.stopped(hostname, said.Unreached)
+	return edge.Kind(said.Edge), nil
 }
 
 func (p *Provider) Unreached(hostname string) string {
