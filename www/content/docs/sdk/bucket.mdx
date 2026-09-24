@@ -305,9 +305,8 @@ its data on a docker volume. Every bucket you declare is a bucket inside it. It 
 on the machine, and reaches browsers through `storage.<domain>` on the same proxy that serves your
 apps, claimed when a domain is bound to the project. Until then a signed url, a browser upload and
 a public object have no address, and the runtime refuses them rather than handing out one nothing
-can reach. A deploy stands the store up before it binds the hostnames your config declares, and a
-bucket answers the browsers of the hostnames bound when it was stood up, so a page on a hostname
-bound for the first time uploads to it from the next deploy on.
+can reach. A bucket answers the browsers of the hostnames the project holds at that moment: binding
+a hostname, by a deploy or by `ocel domain add`, adds it at once, and releasing one takes it away.
 
 The store writes to the same disk as everything else on the box, so it stops signing writes while
 the volume has less than 1 GiB, or a tenth of its size, free.

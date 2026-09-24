@@ -189,6 +189,11 @@ func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 	return nil
 }
 
+func (m *machine) HoldOrigins(_ context.Context, project string, class providerkit.Class) error {
+	m.calls = append(m.calls, "hold origins "+project+"/"+string(class))
+	return m.refuse("HoldOrigins")
+}
+
 func (m *machine) PreviewEntry(context.Context) (string, error) {
 	return m.previewBase, m.refuse("PreviewEntry")
 }

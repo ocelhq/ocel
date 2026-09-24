@@ -37,6 +37,7 @@ const (
 	storeBucketNameMax = 63
 
 	propertySweepUploads = "sweepUploads"
+	propertyOrigins      = "allowedOrigins"
 )
 
 const storeHealthPath = "/health/ready"
@@ -324,6 +325,7 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 			providerkit.PropertyBucket: bucket,
 			providerkit.PropertyPublic: strconv.FormatBool(public),
 			propertySweepUploads:       strconv.FormatBool(p.stores.sweeping()),
+			propertyOrigins:            strings.Join(declaredOrigins(in.Resource.Bucket), " "),
 		},
 	}, nil
 }
@@ -494,11 +496,15 @@ func declaredOrigins(spec *providerkit.BucketSpec) []string {
 }
 
 func (p *Provider) bucketOrigins(ctx context.Context, ref providerkit.StackRef, spec *providerkit.BucketSpec) ([]string, error) {
-	origins := slices.Clone(declaredOrigins(spec))
 	claims, err := p.host.Claims(ctx)
 	if err != nil {
 		return nil, err
 	}
+	return answered(ref, declaredOrigins(spec), claims), nil
+}
+
+func answered(ref providerkit.StackRef, declared []string, claims []host.HostClaim) []string {
+	origins := slices.Clone(declared)
 	owner := live.Surface(ref.Project, string(ref.Class))
 	for _, claim := range claims {
 		if claim.Owner != owner || claim.App == live.StoreLabel {
@@ -508,7 +514,55 @@ func (p *Provider) bucketOrigins(ctx context.Context, ref providerkit.StackRef, 
 			origins = append(origins, origin)
 		}
 	}
-	return origins, nil
+	return origins
+}
+
+func (p *Provider) holdOrigins(ctx context.Context, project string, class providerkit.Class) error {
+	if p.options.Bucket.configured() {
+		return nil
+	}
+	entries, err := providerkit.ReadStacks(ctx, p.records, class, project)
+	if err != nil {
+		return err
+	}
+	var claims []host.HostClaim
+	claimed := false
+	for _, entry := range entries {
+		ref := providerkit.StackRef{Project: project, Class: class, Name: entry.Name}
+		var root storeCredential
+		opened := false
+		for _, binding := range entry.Bindings {
+			if binding.Type != providerkit.BindingBucket || p.stores.forgotten(entry.Name, binding.Name) {
+				continue
+			}
+			if !claimed {
+				if claims, err = p.host.Claims(ctx); err != nil {
+					return err
+				}
+				claimed = true
+			}
+			if !opened {
+				if root, err = p.storeRoot(ctx, ref, storeName(ref)); err != nil {
+					return err
+				}
+				opened = true
+			}
+			if root.secret == "" {
+				break
+			}
+			if err := p.host.HoldOrigins(ctx, storeBucketSpec(ref, storeName(ref), root.secret, host.BucketSpec{
+				Bucket:         binding.Properties[providerkit.PropertyBucket],
+				AllowedOrigins: answered(ref, recordedOrigins(binding), claims),
+			})); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func recordedOrigins(binding providerkit.Binding) []string {
+	return strings.Fields(binding.Properties[propertyOrigins])
 }
 
 func declaredPublic(spec *providerkit.BucketSpec) bool {
