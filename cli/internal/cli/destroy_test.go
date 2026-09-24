@@ -175,7 +175,7 @@ func TestRunDestroy(t *testing.T) {
 		for _, want := range []string{
 			"fronted by the cloudfront edge",
 			"– cloudfront/edge",
-			"    – disable, then delete E1test-app  AWS::CloudFront::Distribution (this one is slow)",
+			"    – disable, then delete E1test-app  AWS::CloudFront::Distribution (slow)",
 			"– aws/test-app--infra  [infra]",
 			"– aws/test-app--web--b1  [web]",
 			"4 to delete, 1 unchanged.",

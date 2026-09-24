@@ -48,19 +48,17 @@ func ConnectorItems(binary, config []byte) []Item {
 	unit := connectorUnit()
 	return []Item{
 		{Kind: KindFile, Name: ConnectorBinary, Mode: 0o755, Owner: rootOwner, Content: binary,
-			Note: "the connector the console reaches this host through"},
+			Note: "console connector"},
 		dir(classRoot, 0o755, rootOwner, "ocel's config root"),
-		dir(connectorRoot, 0o700, stateOwner, "what the connector trusts and the key it is known by"),
+		dir(connectorRoot, 0o700, stateOwner, ""),
 		{Kind: KindFile, Name: ConnectorConfig, Mode: 0o600, Owner: stateOwner, Content: config,
-			Note: "names the console this connector trusts and what it may do"},
-		{Kind: KindFile, Name: connectorTmpfiles, Mode: 0o644, Owner: rootOwner, Content: connectorRuntimeConf(),
-			Note: "keeps " + ConnectorRun + " across a reboot, which the proxy has bind-mounted"},
-		dir(ConnectorRun, 0o755, stateOwner, "where the connector's socket stands"),
-		{Kind: KindFile, Name: connectorUnitFile, Mode: 0o644, Owner: rootOwner, Content: unit,
-			Note: "runs the connector as " + deployUser + " on a unix socket"},
+			Note: "the console it trusts"},
+		{Kind: KindFile, Name: connectorTmpfiles, Mode: 0o644, Owner: rootOwner, Content: connectorRuntimeConf()},
+		dir(ConnectorRun, 0o755, stateOwner, ""),
+		{Kind: KindFile, Name: connectorUnitFile, Mode: 0o644, Owner: rootOwner, Content: unit},
 		{Kind: KindUnit, Name: ConnectorUnit, Owner: rootOwner, Content: unitWatchFacts(unit, binary, config),
 			Watch: []string{connectorUnitFile, ConnectorBinary, ConnectorConfig},
-			Slow:  true, Note: "started now and at every boot, and restarted whenever the unit, the binary or the config changes"},
+			Slow:  true},
 	}
 }
 
@@ -106,7 +104,7 @@ func readConnectorStanding(rendered string) (ConnectorStanding, error) {
 	}
 	if standing.Installed && standing.PublicKey == "" {
 		return ConnectorStanding{}, providerkit.Refuse(providerkit.CodeNotReady,
-			"%s stands on this host and answered no public key, so the console has nothing to verify its heartbeat against: remove it and add it again",
+			"%s answered no public key\nRemove the connector and add it again",
 			ConnectorBinary)
 	}
 	return standing, nil
@@ -116,7 +114,7 @@ func keyPathed(config []byte) ([]byte, error) {
 	var named map[string]any
 	if err := json.Unmarshal(config, &named); err != nil {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"the connector config this install carries is not an object: %s", err)
+			"the connector config is not an object: %s", err)
 	}
 	named["keyPath"] = ConnectorKey
 	written, err := json.Marshal(named)
@@ -153,7 +151,7 @@ func (c *Connector) Install(ctx context.Context, hostname string, binary, config
 	if err := c.Route(ctx, hostname); err != nil {
 		return ConnectorStanding{}, err
 	}
-	say(report, "the proxy forwards "+hostname+ConnectorPath+" to "+ConnectorSocket+", and holds a certificate for "+hostname)
+	say(report, "routed "+hostname+ConnectorPath)
 	return c.Describe(ctx)
 }
 
@@ -161,7 +159,7 @@ func (c *Connector) Remove(ctx context.Context, report providerkit.Reporter) err
 	if err := c.Route(ctx, ""); err != nil {
 		return err
 	}
-	say(report, "the proxy forwards "+ConnectorPath+" nowhere")
+	say(report, "unrouted "+ConnectorPath)
 	if _, err := c.host.run(ctx, "take the connector off this host", connectorRemoval(), nil); err != nil {
 		return err
 	}

@@ -96,7 +96,7 @@ func Architecture(reported string) (string, error) {
 		return ArchARM64, nil
 	default:
 		return "", providerkit.Refuse(providerkit.CodeDenied,
-			"this host reports its architecture as %q, and ocel builds the proxy's flip helper for %s and %s alone",
+			"this host's architecture %q is not %s or %s",
 			reported, ArchAMD64, ArchARM64)
 	}
 }
@@ -112,11 +112,11 @@ func proxyHelper(arch string) []byte {
 func ProxyItems(arch string) []Item {
 	return []Item{
 		{Kind: KindFile, Name: ProxyHelper, Mode: 0o750, Owner: rootOwner, Content: proxyHelper(arch),
-			Note: "gates a target, flips the proxy and reads what is still in flight"},
-		dir(proxyRoot, 0o750, stateOwner, "what the proxy serves"),
-		dir(ProxyPins, 0o700, rootOwner, "the one directory a certificate pair pinned by an operator is loaded from, which a destroy leaves where it found it"),
+			Note: "proxy control"},
+		dir(proxyRoot, 0o750, stateOwner, ""),
+		dir(ProxyPins, 0o700, rootOwner, "your pinned certificates"),
 		proxyConfigItem(),
-		dir(ProxyData, 0o700, rootOwner, "the proxy's certificates, their private keys and the acme account key that issues for every one of them"),
+		dir(ProxyData, 0o700, rootOwner, "certificates and acme key"),
 		networkItem(),
 		containerItem(),
 	}
@@ -129,7 +129,7 @@ func proxyConfigItem() Item {
 		Mode:    0o640,
 		Owner:   stateOwner,
 		Content: proxyBaseline,
-		Note:    "the proxy's whole configuration, seeded once here and rewritten by every deploy",
+		Note:    "seeded here, rewritten by deploys",
 	}
 }
 
@@ -145,8 +145,7 @@ func proxyConfigCommand(item Item) string {
 }
 
 func notAFile(name string) string {
-	return "printf '%s\\n' " + quoted(name+" stands as something other than a regular file, and the proxy reads"+
-		" the whole of what it serves from it. Take whatever is there and re-run") + " >&2; exit 1"
+	return "printf '%s\\n' " + quoted(name+" is not a regular file") + " >&2; exit 1"
 }
 
 func proxyFiles() []string { return []string{ProxyConfig, ProxyHelper} }
@@ -173,7 +172,6 @@ func networkItem() Item {
 		Name:    ProxyNetwork,
 		Owner:   rootOwner,
 		Content: []byte(networkFact + "\n"),
-		Note:    "the one network every deploy target resolves across",
 	}
 }
 
@@ -184,8 +182,7 @@ func containerItem() Item {
 		Owner:   rootOwner,
 		Content: proxyFacts(),
 		Slow:    true,
-		Note: "the proxy every request to ports " + proxyPort + " and " + proxyTLSPort +
-			" on this host reaches, pulled as " + ProxyImage,
+		Note:    "serves :" + proxyPort + " and :" + proxyTLSPort,
 	}
 }
 
@@ -332,13 +329,11 @@ func containerProbe() string {
 
 func proxyRemovals() []removal {
 	return []removal{
-		taking(KindContainer, ProxyContainer, "the proxy ocel runs, and nothing else this engine carries"),
-		taking(KindDir, ProxyData, "the proxy's certificates, their private keys and the acme account key that issues for every hostname on it, which no other machine holds"),
-		taking(KindNetwork, ProxyNetwork,
-			"the network ocel's deploys resolve across, which stays as long as anything this host runs is still attached to it"),
-		taking(KindProxyConfig, ProxyConfig,
-			"the routes every app deployed onto this host is reached through, which no deploy renders again"),
-		taking(KindDir, proxyRoot, "what the proxy serves"),
-		sharing(ProxyPins, "the one directory a certificate pair pinned by an operator is loaded from, reclaimed only if it is empty: any pair you placed there stays, because ocel never placed one"),
+		taking(KindContainer, ProxyContainer, "ocel's proxy"),
+		taking(KindDir, ProxyData, "certificates and acme key"),
+		taking(KindNetwork, ProxyNetwork, "kept while anything is attached"),
+		taking(KindProxyConfig, ProxyConfig, "every app's routes"),
+		taking(KindDir, proxyRoot, ""),
+		sharing(ProxyPins, "only if empty"),
 	}
 }

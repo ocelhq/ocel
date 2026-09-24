@@ -95,7 +95,7 @@ func TestRunBootstrapDestroy(t *testing.T) {
 			"– aws/ocel-production-isr  [isr]",
 			"    – RevalidationTable  AWS::DynamoDB::Table",
 			"– aws/ocel-production  [core]",
-			"    – StateBucket  AWS::S3::Bucket   — the Pulumi state of every stack this bootstrap deployed (this one is slow)",
+			"    – StateBucket  AWS::S3::Bucket   — the Pulumi state of every stack this bootstrap deployed (slow)",
 			"– aws/parameters",
 			"    – /ocel/origin/secret  AWS::SSM::Parameter",
 			"– cloudflare/edge  [cloudflare-edge]",
@@ -233,7 +233,7 @@ func TestBootstrapShowsItsPlan(t *testing.T) {
 			"    ~ OcelRouterFunction  AWS::Lambda::Function",
 			"    ± OcelOriginSecret    AWS::SecretsManager::Secret   — rotation forces replacement",
 			"+ aws/ocel-production-image-optimization  [image-optimization]",
-			"– aws/ocel-production-isr  [isr]  — web, api were deployed against it (this one is slow)",
+			"– aws/ocel-production-isr  [isr]  — web, api were deployed against it (slow)",
 			"    – OcelRevalidationTable  AWS::DynamoDB::Table",
 			"1 to create, 1 to update, 1 to replace, 1 to delete, 1 unchanged.",
 		} {

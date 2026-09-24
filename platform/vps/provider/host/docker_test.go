@@ -239,7 +239,7 @@ func TestAHostWithNoEngineHasTheInstallPlannedLastAndNamed(t *testing.T) {
 	if engine.Action != providerkit.ActionCreate {
 		t.Fatalf("a host with no engine plans %q for it, want the install shown as a change to consent to", engine.Action)
 	}
-	if !strings.Contains(engine.Reason, dockerSource) {
+	if !strings.Contains(engine.Reason, dockerVersion) {
 		t.Errorf("the engine is planned with the reason %q, and a user consenting to it is never told what runs on their host", engine.Reason)
 	}
 	if !engine.Slow {

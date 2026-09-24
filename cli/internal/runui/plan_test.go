@@ -263,7 +263,7 @@ func TestAChildlessGroupIsOneRowAndOneItemOfTheTally(t *testing.T) {
 Proposed changes to the preview bootstrap:
 
 + ocel-preview-core  [core]
-– disable, then delete distribution E1PREVIEW (this one is slow)
+– disable, then delete distribution E1PREVIEW (slow)
 
 1 to create, 1 to delete.
 `

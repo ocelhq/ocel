@@ -67,20 +67,18 @@ func BackupItems() []Item {
 	service, timer := backupsServiceUnit(), backupsTimerUnit()
 	return []Item{
 		{Kind: KindFile, Name: BackupsHelper, Mode: 0o755, Owner: rootOwner, Content: backupsScript,
-			Note: "dumps a resource's data beside it, keeps the newest few, and reads one back"},
-		{Kind: KindFile, Name: backupsServiceFile, Mode: 0o644, Owner: rootOwner, Content: service,
-			Note: "one pass over every resource on this host that asks for a dump"},
-		{Kind: KindFile, Name: backupsTimerFile, Mode: 0o644, Owner: rootOwner, Content: timer,
-			Note: "runs that pass once a day, and once at boot if a day was missed"},
+			Note: "dump and restore"},
+		{Kind: KindFile, Name: backupsServiceFile, Mode: 0o644, Owner: rootOwner, Content: service},
+		{Kind: KindFile, Name: backupsTimerFile, Mode: 0o644, Owner: rootOwner, Content: timer},
 		{Kind: KindUnit, Name: BackupsTimer, Owner: rootOwner, Content: unitWatchFacts(timer, service, backupsScript),
 			Watch: []string{backupsTimerFile, backupsServiceFile, BackupsHelper},
-			Slow:  true, Note: "armed now and at every boot"},
+			Slow:  true, Note: "daily backups"},
 	}
 }
 
 func backupRemovals() []removal {
 	return []removal{
-		taking(KindUnit, BackupsTimer, "the timer that dumped every resource on this host once a day; the dumps themselves go with the class that kept them"),
+		taking(KindUnit, BackupsTimer, ""),
 		taking(KindFile, backupsTimerFile, ""),
 		taking(KindFile, backupsServiceFile, ""),
 		taking(KindFile, BackupsHelper, ""),

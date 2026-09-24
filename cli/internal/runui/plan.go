@@ -19,7 +19,7 @@ const (
 	baselineTag     = "core"
 	planGutter      = "  "
 	planTypeGutter  = "   "
-	slowNote        = " (this one is slow)"
+	slowNote        = " (slow)"
 )
 
 func (p *projector) plan(m protoreflect.Message) []string {

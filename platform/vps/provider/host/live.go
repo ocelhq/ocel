@@ -81,8 +81,8 @@ func ContainerArch(app, declared, runs string) (string, error) {
 	}
 	if asked, _ := providerkit.GoArch(declared); asked != runs {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
-			"app %s declares arch %q, and this host runs %s: drop the arch and the image is built for the host, or deploy %s to a host that runs %s",
-			app, declared, runs, app, declared)
+			"app %s declares arch %q, and this host runs %s\nDrop the arch, or deploy to a %s host",
+			app, declared, runs, declared)
 	}
 	return runs, nil
 }
@@ -103,24 +103,22 @@ func LiveItems(arch string) []Item {
 	socket, service, agent := liveSocketUnit(), liveServiceUnit(), liveAgent(arch)
 	return []Item{
 		{Kind: KindFile, Name: LiveBinary, Mode: 0o755, Owner: rootOwner, Content: agent,
-			Note: "answers each app container with the values its own deploy declared, opened under the class key as root"},
-		{Kind: KindFile, Name: liveSocketFile, Mode: 0o644, Owner: rootOwner, Content: socket,
-			Note: "binds " + LiveSocket + " before the engine starts, so a container that restarts on a boot finds it"},
-		{Kind: KindFile, Name: liveUnitFile, Mode: 0o644, Owner: rootOwner, Content: service,
-			Note: "runs the agent as root on the socket systemd hands it, with the filesystem read-only to it"},
+			Note: "serves apps their secret values"},
+		{Kind: KindFile, Name: liveSocketFile, Mode: 0o644, Owner: rootOwner, Content: socket},
+		{Kind: KindFile, Name: liveUnitFile, Mode: 0o644, Owner: rootOwner, Content: service},
 		{Kind: KindUnit, Name: LiveSocketUnit, Owner: rootOwner, Content: unitWatchFacts(socket),
 			Watch: []string{liveSocketFile},
-			Slow:  true, Note: "listening now and at every boot, ahead of the engine"},
+			Slow:  true},
 		{Kind: KindUnit, Name: LiveService, Owner: rootOwner, Content: unitWatchFacts(service, agent),
 			Watch: []string{liveUnitFile, LiveBinary},
-			Slow:  true, Note: "started now and at every boot, and restarted whenever the unit or the agent changes"},
+			Slow:  true},
 	}
 }
 
 func liveRemovals() []removal {
 	return []removal{
-		taking(KindUnit, LiveService, "the agent that opened each app container's live values; a container still running keeps the last values it read and reads no more"),
-		taking(KindUnit, LiveSocketUnit, "the socket every app container asked for its values"),
+		taking(KindUnit, LiveService, ""),
+		taking(KindUnit, LiveSocketUnit, ""),
 		taking(KindFile, liveUnitFile, ""),
 		taking(KindFile, liveSocketFile, ""),
 		taking(KindFile, LiveBinary, ""),
