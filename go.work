@@ -25,6 +25,7 @@ use (
 	./platform/vps/connector
 	./platform/vps/provider
 	./platform/vps/runtime
+	./scripts/redactvet
 	./sdk
 	./tests/fixtures/deploy/go/server
 	./tests/fixtures/sdk/go
