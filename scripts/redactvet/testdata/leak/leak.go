@@ -1,11 +1,14 @@
 package leak
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"log/slog"
 	"testing"
 
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -156,4 +159,83 @@ type sealedGeneric struct {
 
 func genericSealed(s sealedGeneric) string {
 	return fmt.Sprint(s)
+}
+
+func marshalled(req *contractv1.DeployRequest) ([]byte, error) {
+	return json.Marshal(req) // want `contractv1.DeployRequest encodes its debug_redact fields`
+}
+
+func indented(registry contractv1.ImageRegistry) ([]byte, error) {
+	return json.MarshalIndent(registry, "", "  ") // want `contractv1.ImageRegistry encodes`
+}
+
+func streamed(w io.Writer, values map[string]*envvarsv1.RevealedValue) error {
+	return json.NewEncoder(w).Encode(values) // want `map\[string\]\*envvarsv1.RevealedValue encodes`
+}
+
+func followed(i indirect, h held, m proto.Message) ([]byte, error) {
+	if _, err := json.Marshal(h); err != nil {
+		return nil, err
+	}
+	if _, err := json.Marshal(m); err != nil { // want `proto.Message encodes`
+		return nil, err
+	}
+	return json.Marshal(i) // want `indirect encodes`
+}
+
+type promotedJSON struct {
+	sealedEmbedded
+}
+
+type sealedEmbedded struct {
+	Req *contractv1.DeployRequest
+}
+
+type skipped struct {
+	Req *contractv1.DeployRequest `json:"-"`
+	req *contractv1.DeployRequest
+}
+
+type marshaler struct {
+	Req *contractv1.DeployRequest
+}
+
+func (marshaler) MarshalJSON() ([]byte, error) { return []byte("{}"), nil }
+
+func tagged(p promotedJSON, s skipped, d marshaler) ([]byte, error) {
+	if _, err := json.Marshal(s); err != nil {
+		return nil, err
+	}
+	if _, err := json.Marshal(d); err != nil {
+		return nil, err
+	}
+	return json.Marshal(p) // want `promotedJSON encodes`
+}
+
+func decoded(data []byte, registry *contractv1.ImageRegistry) error {
+	return json.Unmarshal(data, registry)
+}
+
+func wire(req *contractv1.DeployRequest) ([]byte, error) {
+	return protojson.Marshal(req)
+}
+
+func slogged(logger *slog.Logger, i indirect) {
+	logger.Info("deploy", "inner", i) // want `indirect encodes`
+}
+
+type pointerMarshaler struct {
+	Req *contractv1.DeployRequest
+}
+
+func (*pointerMarshaler) MarshalJSON() ([]byte, error) { return []byte("{}"), nil }
+
+func addressable(p pointerMarshaler, all []pointerMarshaler) ([]byte, error) {
+	if _, err := json.Marshal(&p); err != nil {
+		return nil, err
+	}
+	if _, err := json.Marshal(all); err != nil {
+		return nil, err
+	}
+	return json.Marshal(p) // want `pointerMarshaler encodes`
 }
