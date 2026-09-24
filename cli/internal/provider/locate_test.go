@@ -71,6 +71,14 @@ func unsignedRelease(t *testing.T) *httptest.Server {
 	return server
 }
 
+var pinningModes = []struct {
+	name string
+	mode pinning
+}{
+	{"to the lock", pinToLock},
+	{"in memory", pinInMemory},
+}
+
 func storeOn(t *testing.T, server *httptest.Server, goos, goarch string) *providers.Store {
 	t.Helper()
 	return &providers.Store{
@@ -129,6 +137,40 @@ func TestADryRunHoldingNoLockPinsInMemoryAndWritesNothing(t *testing.T) {
 	}
 	if _, err := os.Stat(lockfile.Path(projectDir)); err == nil {
 		t.Fatalf("%s was written by a dry run", lockfile.Name)
+	}
+}
+
+func TestADryRunAgainstALockPinningAnotherVersionPinsInMemoryAndLeavesTheLockAlone(t *testing.T) {
+	t.Parallel()
+
+	server := releaseServing(t, "aws")
+	store := storeOn(t, server, "linux", "amd64")
+	projectDir := t.TempDir()
+
+	pinned := lockfile.Lock{CLI: "0.3.0", Providers: map[string]map[string]string{"aws": {"linux-amd64": "abc"}}}
+	if err := lockfile.Write(projectDir, pinned); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	before, err := os.ReadFile(lockfile.Path(projectDir))
+	if err != nil {
+		t.Fatalf("read the lock: %v", err)
+	}
+
+	_, err = locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, pinInMemory)
+	if err == nil {
+		t.Fatal("locate() error = nil, want the fetch of an archive this release does not serve to fail")
+	}
+	archive := providers.AssetName(providers.KindProvider, "aws", locatedVersion, "linux", "amd64")
+	if !strings.Contains(err.Error(), archive) {
+		t.Fatalf("error %q does not name %s, want the dry run pinned from the release and on to fetching it", err.Error(), archive)
+	}
+
+	after, err := os.ReadFile(lockfile.Path(projectDir))
+	if err != nil {
+		t.Fatalf("read the lock back: %v", err)
+	}
+	if string(after) != string(before) {
+		t.Fatalf("a dry run rewrote the lock:\n%s\nwant\n%s", after, before)
 	}
 }
 
@@ -297,36 +339,46 @@ func TestAProvidersDirResolvesWithNothingOnPATH(t *testing.T) {
 func TestAReleaseThatSignsNoChecksumsPinsNothing(t *testing.T) {
 	t.Parallel()
 
-	for _, pinning := range []pinning{pinToLock, pinInMemory} {
-		store := storeOn(t, unsignedRelease(t), "linux", "amd64")
-		projectDir := t.TempDir()
+	for _, tt := range pinningModes {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-		_, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, pinning)
-		if err == nil {
-			t.Fatal("locate() error = nil, want a release that signs no checksums refused")
-		}
-		if !strings.Contains(err.Error(), providers.SignatureAsset) {
-			t.Errorf("error %q does not name the signature it looked for", err.Error())
-		}
-		if _, err := os.Stat(lockfile.Path(projectDir)); err == nil {
-			t.Fatalf("%s was written from checksums nothing signed", lockfile.Name)
-		}
+			store := storeOn(t, unsignedRelease(t), "linux", "amd64")
+			projectDir := t.TempDir()
+
+			_, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, tt.mode)
+			if err == nil {
+				t.Fatal("locate() error = nil, want a release that signs no checksums refused")
+			}
+			if !strings.Contains(err.Error(), providers.SignatureAsset) {
+				t.Errorf("error %q does not name the signature it looked for", err.Error())
+			}
+			if _, err := os.Stat(lockfile.Path(projectDir)); err == nil {
+				t.Fatalf("%s was written from checksums nothing signed", lockfile.Name)
+			}
+		})
 	}
 }
 
 func TestChecksumsTheSignatureDoesNotCoverPinNothing(t *testing.T) {
 	t.Parallel()
 
-	store := storeOn(t, releaseServing(t, "aws"), "linux", "amd64")
-	store.Verify = func(checksums, signature []byte, identity string) error {
-		return countersigns(append(checksums, '\n'), signature, identity)
-	}
-	projectDir := t.TempDir()
+	for _, tt := range pinningModes {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	if _, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, pinToLock); err == nil {
-		t.Fatal("locate() error = nil, want checksums the signature does not cover refused")
-	}
-	if _, err := os.Stat(lockfile.Path(projectDir)); err == nil {
-		t.Fatalf("%s was written from checksums the signature does not cover", lockfile.Name)
+			store := storeOn(t, releaseServing(t, "aws"), "linux", "amd64")
+			store.Verify = func(checksums, signature []byte, identity string) error {
+				return countersigns(append(checksums, '\n'), signature, identity)
+			}
+			projectDir := t.TempDir()
+
+			if _, err := locate(context.Background(), store, providers.KindProvider, projectDir, "aws", store.Platform, tt.mode); err == nil {
+				t.Fatal("locate() error = nil, want checksums the signature does not cover refused")
+			}
+			if _, err := os.Stat(lockfile.Path(projectDir)); err == nil {
+				t.Fatalf("%s was written from checksums the signature does not cover", lockfile.Name)
+			}
+		})
 	}
 }

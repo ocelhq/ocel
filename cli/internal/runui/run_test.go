@@ -127,6 +127,39 @@ func TestADryRunNeedsNoConsentAtAll(t *testing.T) {
 	}
 }
 
+func TestADryRunDrivesTheProviderThroughTheDriveThatWritesNothing(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		dry  bool
+		want string
+	}{
+		{"real", false, "Drive"},
+		{"dry", true, "DriveDry"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var out bytes.Buffer
+			spec := specFor(t, &out)
+			spec.Dry = tt.dry
+
+			var drove string
+			driving := func(name string) func(context.Context, *projectconfig.Config, io.Writer, io.Writer, provider.Trust, func(*provider.Runner) error) error {
+				return func(_ context.Context, _ *projectconfig.Config, _, _ io.Writer, _ provider.Trust, fn func(*provider.Runner) error) error {
+					drove = name
+					return fn(nil)
+				}
+			}
+
+			var body fakeBody
+			if err := runui.RunDriving(context.Background(), spec, body.run, driving("Drive"), driving("DriveDry")); err != nil {
+				t.Fatalf("Run() = %v", err)
+			}
+			if drove != tt.want {
+				t.Errorf("Run() drove the provider through %q, want %q", drove, tt.want)
+			}
+		})
+	}
+}
+
 func TestTheSessionTheBodyIsHandedCarriesTheResolvedPresentation(t *testing.T) {
 	var out bytes.Buffer
 	spec := specFor(t, &out)
