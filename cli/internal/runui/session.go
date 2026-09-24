@@ -314,12 +314,12 @@ func (s *Session) ingestSpan(span *progressv1.SpanEvent) {
 	)
 }
 
-func (s *Session) Deployed(headline string, urlNote string, flip Flip, bindings []*bindingsv1.Binding, functions []*progressv1.FunctionOutput) {
+func (s *Session) Deployed(headline string, urlNotes []string, flip Flip, bindings []*bindingsv1.Binding, functions []*progressv1.FunctionOutput) {
 	s.logOutputs(bindings, functions)
 	s.result(&streamv1.RunResultEvent{
 		Success:   true,
 		Headline:  headline,
-		UrlNote:   urlNote,
+		UrlNotes:  urlNotes,
 		FlipBound: flip.Bound,
 	})
 }

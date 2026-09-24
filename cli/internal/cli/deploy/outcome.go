@@ -10,7 +10,7 @@ type deployOutcome struct {
 	bindings    []*bindingsv1.Binding
 	functions   []*progressv1.FunctionOutput
 	apps        []*progressv1.AppResult
-	urlNote     string
+	urlNotes    []string
 	promotionID string
 	flip        runui.Flip
 }
@@ -25,7 +25,7 @@ func (o *deployOutcome) collect(ui *runui.Session) func(*progressv1.OperationEve
 		o.bindings = res.GetBindings()
 		o.functions = res.GetFunctions()
 		o.apps = res.GetApps()
-		o.urlNote = res.GetUrlNote()
+		o.urlNotes = res.GetUrlNotes()
 		o.promotionID = res.GetPromotionId()
 		o.flip = runui.FlipFor(res.GetFlipBound())
 	}

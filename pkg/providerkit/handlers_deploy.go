@@ -1244,9 +1244,7 @@ func (r *deployRun) result(promotion edge.Promotion, flip edge.FlipBound) (*prog
 			r.outcomes[slot].Urls = append(r.outcomes[slot].Urls, "https://"+host)
 		}
 	}
-	if len(r.pending) > 0 {
-		result.UrlNote = strings.Join(r.pending, "\n")
-	}
+	result.UrlNotes = r.pending
 	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{Result: result}}, nil
 }
 
