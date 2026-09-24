@@ -30,11 +30,15 @@ export function distTag(version) {
   return DIST_TAGS[parse(version).channel];
 }
 
-function published(name, version) {
-  const result = spawnSync("npm", ["view", `${name}@${version}`, "version"], {
+export function published(name, version, run = spawnSync) {
+  const result = run("npm", ["view", `${name}@${version}`, "version", "--json"], {
+    cwd: tmpdir(),
     encoding: "utf8",
   });
-  return result.status === 0 && result.stdout.trim() === version;
+  const answer = result.stdout ? JSON.parse(result.stdout) : undefined;
+  if (result.status === 0) return answer === version;
+  if (answer?.error?.code === "E404") return false;
+  throw new Error(`npm view ${name}@${version} failed: ${result.stderr || result.error}`);
 }
 
 function main() {

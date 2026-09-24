@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { distTag, LICENSING, ORDER } from "./npm.mjs";
+import { distTag, LICENSING, ORDER, published } from "./npm.mjs";
 
 const packages = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "packages");
 
@@ -74,5 +74,37 @@ describe("ORDER", () => {
       assert.equal(manifest.repository?.url, "git+https://github.com/ocelhq/ocel.git", dir);
       assert.equal(manifest.repository?.directory, `packages/${dir}`, dir);
     }
+  });
+});
+
+describe("published", () => {
+  const answering = (result) => (_command, _args, options) => {
+    assert.ok(!existsSync(join(options.cwd, "package.json")), "npm view runs beside a manifest");
+    return { stdout: "", stderr: "", ...result };
+  };
+
+  it("asks npm from a directory no manifest's devEngines governs", () => {
+    published("@ocel/cli", "0.1.0", answering({ status: 0, stdout: '"0.1.0"' }));
+  });
+
+  it("reads a version npm returns as published", () => {
+    assert.equal(
+      published("@ocel/cli", "0.1.0", answering({ status: 0, stdout: '"0.1.0"' })),
+      true,
+    );
+  });
+
+  it("reads an E404 as not published", () => {
+    const stdout = JSON.stringify({ error: { code: "E404", summary: "No match found" } });
+    assert.equal(published("@ocel/cli", "0.1.0", answering({ status: 1, stdout })), false);
+  });
+
+  it("refuses to read any other failure as not published", () => {
+    const stdout = JSON.stringify({ error: { code: "EBADDEVENGINES" } });
+    assert.throws(
+      () =>
+        published("@ocel/cli", "0.1.0", answering({ status: 1, stdout, stderr: "EBADDEVENGINES" })),
+      /EBADDEVENGINES/,
+    );
   });
 });
