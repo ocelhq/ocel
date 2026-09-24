@@ -117,16 +117,31 @@ func TestTheDrainReadAsksTheOneEndpointThatCountsWhatIsStillInFlight(t *testing.
 func TestTheDrainReadIsAVerbTheHelperCarriesRatherThanOneTheCallerSpells(t *testing.T) {
 	_, _ = served(t)
 
-	for _, verb := range []string{"drain", "deploy"} {
-		code, _, errs := ran(t, verb, "127.0.0.1:1", "/up", "1")
-		if code == 0 {
-			t.Errorf("the helper answered %q, a verb no host code spells", verb)
-		}
-		if strings.Contains(errs, verb+" <") {
-			t.Errorf("the helper's usage still offers %q: %q", verb, errs)
-		}
-		if !strings.Contains(errs, "upstreams") {
-			t.Errorf("the helper's usage is %q and never names the drain read: a verb nothing names is one a contributor deletes", errs)
+	code, _, errs := ran(t, "drain", "127.0.0.1:1", "/up", "1")
+	if code == 0 {
+		t.Errorf("the helper answered %q, a verb no host code spells", "drain")
+	}
+	if strings.Contains(errs, "drain <") {
+		t.Errorf("the helper's usage still offers %q: %q", "drain", errs)
+	}
+	if !strings.Contains(errs, "upstreams") {
+		t.Errorf("the helper's usage is %q and never names the drain read: a verb nothing names is one a contributor deletes", errs)
+	}
+}
+
+func TestAPromotionIsGatedAndFlippedByTwoVerbsAndNoLongerByOneDeploy(t *testing.T) {
+	_, _ = served(t)
+
+	code, _, errs := ran(t, "deploy", "127.0.0.1:1", "/up", "1")
+	if code == 0 {
+		t.Errorf("the helper answered %q, the one-call verb a release no longer spells: it gated and flipped one app, and a promotion gates every app before one flip", "deploy")
+	}
+	if strings.Contains(errs, "deploy <") {
+		t.Errorf("the helper's usage still offers %q: %q", "deploy", errs)
+	}
+	for _, verb := range []string{"gate", "flip"} {
+		if !strings.Contains(errs, verb) {
+			t.Errorf("the helper's usage is %q and never names %q, one of the two verbs a release runs", errs, verb)
 		}
 	}
 }
