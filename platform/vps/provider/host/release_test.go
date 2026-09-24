@@ -825,10 +825,17 @@ func TestASteadyStateWriteBesideANeighboursDrainKeepsThatDrainDeclared(t *testin
 func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing(t *testing.T) {
 	t.Parallel()
 
-	neighbour := documentOf(t, ProxyState{
-		Grace:  30 * time.Second,
-		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}, {RouteKey: keyed("api"), Upstream: "prod-api-1:8080"}},
-	})
+	neighbours := map[int]string{
+		1: documentOf(t, ProxyState{
+			Grace:  30 * time.Second,
+			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}, {RouteKey: keyed("api"), Upstream: "prod-api-1:8080"}},
+		}),
+		3: documentOf(t, ProxyState{
+			Grace:    30 * time.Second,
+			Routes:   []AppRoute{{RouteKey: keyed("web"), Upstream: flipTo, Health: "/healthz"}, {RouteKey: keyed("api"), Upstream: "prod-api-1:8080"}},
+			Retiring: []string{retired},
+		}),
+	}
 	stood := benched(t, session.Result{}, session.Result{})
 	proxied := stood.answer
 	writes := 0
@@ -836,7 +843,7 @@ func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing
 		if writesProxy(command) {
 			stood.mu.Lock()
 			writes++
-			collided := writes == 1 || writes == 3
+			neighbour, collided := neighbours[writes]
 			if collided {
 				stood.held = neighbour
 			}
@@ -1229,5 +1236,137 @@ func TestAReleaseInterruptedAtItsFirstWriteStillPutsTheFileBackAndRemovesWhatItS
 	}
 	if !strings.Contains(err.Error(), ProxyConfig+" restored") {
 		t.Errorf("the refusal reads %q, and the stranded write was never put back under the cancelled context", err)
+	}
+}
+
+func TestASteadyStateWriteLeavesARouteAnotherReleaseFlippedSinceOnItsUpstream(t *testing.T) {
+	t.Parallel()
+
+	overtaking := "shop-web-overtaker:" + providerkit.InjectedPortText
+	stood := benched(t, session.Result{}, session.Result{})
+	proxied := stood.answer
+	var once sync.Once
+	stood.answer = func(command string) (session.Result, bool) {
+		if flips(command) {
+			once.Do(func() {
+				stood.mu.Lock()
+				stood.held = documentOf(t, ProxyState{
+					Grace:    30 * time.Second,
+					Routes:   []AppRoute{{RouteKey: keyed("web"), Upstream: overtaking, Health: "/healthz"}},
+					Retiring: []string{flipTo, retired},
+				})
+				stood.mu.Unlock()
+			})
+		}
+		return proxied(command)
+	}
+
+	if err := stood.host().Release(context.Background(), aRelease(), nil); err != nil {
+		t.Fatalf("Release() = %v", err)
+	}
+	state := stood.state(t)
+	if got := upstreamsOf(state)["web"]; got != overtaking {
+		t.Errorf("the steady state routes web to %s, want %s: a release that flipped the route since has drained and stopped %s, and routing back onto it serves 502s", got, overtaking, flipTo)
+	}
+	if !slices.Equal(state.Retiring, []string{flipTo}) {
+		t.Errorf("the steady state declares %v retiring, want the overtaking release's %s alone: each release clears only what it retired", state.Retiring, flipTo)
+	}
+}
+
+func TestEveryFailureAfterTheFlipSaysTheFlipTookAndStillFinishesWhatItCan(t *testing.T) {
+	t.Parallel()
+
+	for what, failing := range map[string]func(command string, flipped bool) bool{
+		"a retiree that would not stop": func(command string, _ bool) bool {
+			return command == "docker stop "+quoted(apiRetiring)+" >/dev/null"
+		},
+		"a steady-state write": func(command string, flipped bool) bool {
+			return writesProxy(command) && flipped
+		},
+		"a steady-state reload": func(command string, flipped bool) bool {
+			return flips(command) && flipped
+		},
+	} {
+		t.Run(what, func(t *testing.T) {
+			t.Parallel()
+
+			stood := benchedOn(t, twoAppsServing(t), session.Result{}, session.Result{})
+			proxied := stood.answer
+			stood.answer = func(command string) (session.Result, bool) {
+				stood.mu.Lock()
+				flipped := slices.ContainsFunc(stood.ran[:len(stood.ran)-1], flips)
+				stood.mu.Unlock()
+				if failing(command, flipped) {
+					return session.Result{Code: 1, Stderr: "no space left on device"}, true
+				}
+				return proxied(command)
+			}
+
+			err := stood.host().Release(context.Background(), bothApps(), nil)
+			if err == nil {
+				t.Fatalf("a release whose %s failed reported success", what)
+			}
+			if unserved(err) {
+				t.Errorf("a release whose %s failed after the flip refused with %v as though the previous release still served, and the ledger would then point away from the release that is live", what, err)
+			}
+			var refusal providerkit.Refusal
+			if !errors.As(err, &refusal) {
+				t.Errorf("a release whose %s failed after the flip failed with %T, want the refusal every other failure renders", what, err)
+			}
+			for detail, wanted := range map[string]string{
+				"that the flip took":       "flipped",
+				"what failed":              "no space left on device",
+				"the release that is live": physical,
+			} {
+				if !strings.Contains(err.Error(), wanted) {
+					t.Errorf("a release whose %s failed is refused with\n%s\nand that names no %s (%s)", what, err, detail, wanted)
+				}
+			}
+			if stood.at("docker stop "+quoted(retiring)) < 0 {
+				t.Errorf("a release whose %s failed never stopped %s, which it had drained: %v", what, retiring, stood.commands())
+			}
+			if stood.after(stood.cutover(), writesProxy) < 0 {
+				t.Errorf("a release whose %s failed never wrote its steady state: %v", what, stood.commands())
+			}
+		})
+	}
+}
+
+func TestAStoppedRetireeAReleaseLeftDeclaredIsClearedByTheNextReleaseOnTheBox(t *testing.T) {
+	t.Parallel()
+
+	for what, answer := range map[string]struct {
+		said string
+		kept bool
+	}{
+		"a container that is gone":          {"shop-api-leaked0000 gone\n", false},
+		"a container that stopped":          {"shop-api-leaked0000 false\n", false},
+		"a container still draining":        {"shop-api-leaked0000 true\n", true},
+		"a box that never said which it is": {"", true},
+	} {
+		t.Run(what, func(t *testing.T) {
+			t.Parallel()
+
+			leaked := "shop-api-leaked0000:" + providerkit.InjectedPortText
+			stood := benchedOn(t, documentOf(t, ProxyState{
+				Grace:    30 * time.Second,
+				Routes:   []AppRoute{{RouteKey: keyed("web"), Upstream: retired, Health: "/healthz"}},
+				Retiring: []string{leaked},
+			}), session.Result{}, session.Result{})
+			proxied := stood.answer
+			stood.answer = func(command string) (session.Result, bool) {
+				if strings.Contains(command, ".State.Running") {
+					return session.Result{Stdout: answer.said}, true
+				}
+				return proxied(command)
+			}
+
+			if err := stood.host().Release(context.Background(), aRelease(), nil); err != nil {
+				t.Fatalf("Release() = %v", err)
+			}
+			if kept := slices.Contains(stood.state(t).Retiring, leaked); kept != answer.kept {
+				t.Errorf("the steady state kept %s retiring = %v with %s, want %v: nothing drains through a stopped container, and only a later release ever writes the file again", leaked, kept, what, answer.kept)
+			}
+		})
 	}
 }

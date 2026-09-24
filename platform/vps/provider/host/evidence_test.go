@@ -8,12 +8,13 @@ import (
 
 func inspecting() map[string]string {
 	return map[string]string{
-		"what a release reads to see if the app is already serving": servingCommand(physical),
-		"what a release that fell over captures as evidence":        stateCommand(physical),
-		"what a release that fell over captures as logs":            logCommand(physical),
-		"what a proxy that did not come up reports":                 containerRising(3),
-		"what a bootstrap probes the proxy with":                    containerProbe(),
-		"what a preflight reads the proxy's state with":             stateCommand(ProxyContainer),
+		"what a release reads to see if the app is already serving":              servingCommand(physical),
+		"what a release that fell over captures as evidence":                     stateCommand(physical),
+		"what a release that fell over captures as logs":                         logCommand(physical),
+		"what a proxy that did not come up reports":                              containerRising(3),
+		"what a bootstrap probes the proxy with":                                 containerProbe(),
+		"what a preflight reads the proxy's state with":                          stateCommand(ProxyContainer),
+		"what a release reads to tell a stopped retiree from one still draining": runningCommand([]string{retiring}),
 	}
 }
 
@@ -68,7 +69,7 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 
 func inspectRosters() map[string][]string {
 	return map[string][]string{
-		"docker inspect":         {"containerProbe", "containerRising", "servingCommand", "stateCommand"},
+		"docker inspect":         {"containerProbe", "containerRising", "runningCommand", "servingCommand", "stateCommand"},
 		"docker network inspect": {"command", "networkCommand", "networkCreating", "networkForgetting", "networkProbe", "networkStanding"},
 		"docker image inspect":   {"imageHeld"},
 	}

@@ -43,18 +43,14 @@ func (a AppRelease) gate() string { return a.Target + a.path() }
 
 func (a AppRelease) name() string { return containerOf(a.Target) }
 
-func (r Release) apps() string {
-	named := make([]string, 0, len(r.Apps))
-	for _, app := range r.Apps {
-		named = append(named, app.App)
-	}
-	return strings.Join(named, ", ")
-}
+func (r Release) apps() string { return listed(r.Apps, func(app AppRelease) string { return app.App }) }
 
-func (r Release) names() string {
-	named := make([]string, 0, len(r.Apps))
-	for _, app := range r.Apps {
-		named = append(named, app.name())
+func (r Release) names() string { return listed(r.Apps, AppRelease.name) }
+
+func listed[T any](items []T, name func(T) string) string {
+	named := make([]string, 0, len(items))
+	for _, item := range items {
+		named = append(named, name(item))
 	}
 	return strings.Join(named, ", ")
 }
@@ -62,14 +58,6 @@ func (r Release) names() string {
 func containerOf(address string) string {
 	name, _, _ := strings.Cut(address, ":")
 	return name
-}
-
-func containersOf(addresses []string) string {
-	named := make([]string, 0, len(addresses))
-	for _, address := range addresses {
-		named = append(named, containerOf(address))
-	}
-	return strings.Join(named, ", ")
 }
 
 type Unserved struct{ Err error }
@@ -129,20 +117,65 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 		return h.unflipped(ctx, rel, cut, fmt.Sprintf("exited %d", flipped.Code), strings.TrimSpace(flipped.Stderr), elevation)
 	}
 	tellDrain(report, flipped.Stdout)
+	return h.settle(ctx, rel, cut, report, elevation)
+}
+
+func (h *Host) settle(ctx context.Context, rel Release, cut cutover, report providerkit.Reporter, elevation string) error {
+	ctx, stop := sparing(ctx)
+	defer stop()
+	var failed []string
 	for _, retiree := range cut.retiring {
 		say(report, "Stopping "+containerOf(retiree))
 		if err := h.StopContainer(ctx, containerOf(retiree)); err != nil {
-			return err
+			failed = append(failed, fmt.Sprintf("%s was drained and unrouted but not stopped, so it is still running: %v", containerOf(retiree), err))
 		}
 	}
-	if _, err := h.composeProxy(ctx, cut.settle); err != nil {
-		return h.serving(rel, cut.retiring, err)
-	}
-	if _, err := h.ran(ctx, "reload the proxy's steady-state configuration",
+	if _, err := h.composeProxy(ctx, func(standing ProxyState) (ProxyState, error) {
+		return cut.settle(standing, h.stopped(ctx, cut.others(standing), elevation)), nil
+	}); err != nil {
+		failed = append(failed, fmt.Sprintf("the steady-state write failed, so %s still declares %s on %s until the next release on this box clears it: %v",
+			ProxyConfig, listed(cut.retiring, containerOf), proxyDrainServer, err))
+	} else if _, err := h.ran(ctx, "reload the proxy's steady-state configuration",
 		words(helperCommand("flip", ProxyConfigMount)), nil, elevation); err != nil {
-		return h.serving(rel, cut.retiring, err)
+		failed = append(failed, fmt.Sprintf("the steady-state reload failed, so the running proxy still declares %s on %s until the next release on this box reloads it: %v",
+			listed(cut.retiring, containerOf), proxyDrainServer, err))
 	}
-	return nil
+	if len(failed) == 0 {
+		return nil
+	}
+	return providerkit.Refuse(providerkit.CodeNotReady,
+		"release %s onto %s: flipped onto %s, which now serve, but what follows the flip did not all finish:\n%s",
+		rel.apps(), h.named(), rel.names(), strings.Join(failed, "\n"))
+}
+
+func runningCommand(names []string) string {
+	return "for name in " + words(names) + `; do ` +
+		`if said=$(docker inspect --type container --format '{{.State.Running}}' "$name" 2>&1); then printf '%s %s\n' "$name" "$said"; ` +
+		`elif printf '%s' "$said" | grep -qi 'no such'; then printf '%s gone\n' "$name"; fi; done`
+}
+
+func (h *Host) stopped(ctx context.Context, upstreams []string, elevation string) []string {
+	if len(upstreams) == 0 {
+		return nil
+	}
+	names := make([]string, 0, len(upstreams))
+	for _, upstream := range upstreams {
+		names = append(names, containerOf(upstream))
+	}
+	said := h.said(ctx, runningCommand(names), elevation)
+	var gone []string
+	for line := range strings.Lines(said) {
+		fields := strings.Fields(line)
+		if len(fields) != 2 || (fields[1] != "false" && fields[1] != "gone") {
+			continue
+		}
+		for _, upstream := range upstreams {
+			if containerOf(upstream) == fields[0] {
+				gone = append(gone, upstream)
+			}
+		}
+	}
+	return gone
 }
 
 type cutover struct {
@@ -192,10 +225,11 @@ func (c cutover) released(retiring []string) []string {
 	return slices.DeleteFunc(slices.Clone(retiring), func(held string) bool { return slices.Contains(c.retiring, held) })
 }
 
-func (c cutover) settle(standing ProxyState) (ProxyState, error) {
-	standing = c.routed(standing)
-	standing.Retiring = c.released(standing.Retiring)
-	return standing, nil
+func (c cutover) others(standing ProxyState) []string { return c.released(standing.Retiring) }
+
+func (c cutover) settle(standing ProxyState, stopped []string) ProxyState {
+	standing.Retiring = slices.DeleteFunc(c.released(standing.Retiring), func(held string) bool { return slices.Contains(stopped, held) })
+	return standing
 }
 
 func (c cutover) back(standing ProxyState) (ProxyState, error) {
@@ -212,17 +246,6 @@ func (c cutover) back(standing ProxyState) (ProxyState, error) {
 	}
 	standing.Retiring = c.released(standing.Retiring)
 	return standing, nil
-}
-
-func (h *Host) serving(rel Release, retired []string, why error) error {
-	left := ProxyConfig + " is one write behind the running proxy"
-	if len(retired) > 0 {
-		left = fmt.Sprintf("%s still routes %s to the stopped %s",
-			ProxyConfig, proxyDrainServer, containersOf(retired))
-	}
-	return providerkit.Refuse(providerkit.CodeNotReady,
-		"release %s onto %s: flipped onto %s, but the follow-up config write failed: %v\n%s; deploy again",
-		rel.apps(), h.named(), rel.names(), why, left)
 }
 
 func tellDrain(report providerkit.Reporter, said string) {
