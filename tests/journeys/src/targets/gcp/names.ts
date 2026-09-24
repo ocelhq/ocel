@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { sanitize } from "../../naming";
 import type { CellUnderTest } from "../../run/cellRun";
 
 export const NAMESPACE_ENV = "OCEL_NAMESPACE";
@@ -13,14 +14,6 @@ const SEPARATORS = 5;
 
 export function namespaceOf(env: NodeJS.ProcessEnv): string {
   return env[NAMESPACE_ENV]?.trim() || DEFAULT_NAMESPACE;
-}
-
-export function sanitize(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^-|-$/g, "");
 }
 
 export function roomForSlug(namespace: string, apps: string[]): number {

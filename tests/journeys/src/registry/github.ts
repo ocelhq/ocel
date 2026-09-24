@@ -1,8 +1,4 @@
-import type { Fixture } from "./matrix/types";
-
-const GHCR = "ghcr.io";
-
-export type Package = { org: string; name: string };
+import type { Package } from "./packages";
 
 export type PackageVersion = {
   id: number;
@@ -11,31 +7,6 @@ export type PackageVersion = {
 };
 
 export type Reclaim = { package: true } | { versions: number[] };
-
-function packageOf(server: string, app: string): Package {
-  const [host, org, ...namespace] = server.split("/");
-  if (host !== GHCR || !org) {
-    throw new Error(`${server} is no ghcr.io namespace, and only ghcr packages are reclaimed here`);
-  }
-  return { org, name: [...namespace, app].join("/") };
-}
-
-export function registryPackages(fixtures: Fixture[]): Package[] {
-  const named = new Map<string, Package>();
-  for (const one of fixtures) {
-    for (const variant of Object.values(one.on).flat()) {
-      const server = variant?.config.registry?.server;
-      if (!server) {
-        continue;
-      }
-      for (const app of one.apps) {
-        const pkg = packageOf(server, app);
-        named.set(`${pkg.org}/${pkg.name}`, pkg);
-      }
-    }
-  }
-  return [...named.values()];
-}
 
 function tagged(version: PackageVersion): boolean {
   return (version.metadata?.container?.tags ?? []).length > 0;
