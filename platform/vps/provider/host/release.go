@@ -25,6 +25,7 @@ type Release struct {
 	Apps          []AppRelease
 	DeployTimeout time.Duration
 	DrainTimeout  time.Duration
+	Holding       func(ctx context.Context) error
 }
 
 type AppRelease struct {
@@ -96,10 +97,19 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 	}
 
 	var cut cutover
+	var overtaken error
 	if _, err := h.composeProxy(ctx, func(standing ProxyState) (ProxyState, error) {
+		if rel.Holding != nil {
+			if overtaken = rel.Holding(ctx); overtaken != nil {
+				return standing, overtaken
+			}
+		}
 		cut = cutting(rel, standing)
 		return cut.flip(standing), nil
 	}); err != nil {
+		if overtaken != nil {
+			return h.overtaken(ctx, rel, overtaken)
+		}
 		return h.stranded(ctx, rel, cut, err, elevation)
 	}
 
@@ -437,6 +447,13 @@ func (h *Host) ungated(ctx context.Context, rel Release, outcome, verdict, said,
 	return Unserved{providerkit.Refuse(providerkit.CodeNotReady,
 		"release %s onto %s: the gate %s; the previous release is still live\n%s%s%s",
 		rel.apps(), h.named(), outcome, verdict, evidence.String(), h.discard(ctx, rel))}
+}
+
+func (h *Host) overtaken(ctx context.Context, rel Release, why error) error {
+	ctx, stop := sparing(ctx)
+	defer stop()
+	return Unserved{fmt.Errorf("release %s onto %s: %w; nothing was written, so the box serves what it served before%s",
+		rel.apps(), h.named(), why, h.discard(ctx, rel))}
 }
 
 func (h *Host) stranded(ctx context.Context, rel Release, cut cutover, why error, elevation string) error {

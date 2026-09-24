@@ -613,6 +613,10 @@ func (l *Ledger) drop(ctx context.Context, pointer string, rows []promotionRecor
 	return nil
 }
 
+func (l *Ledger) Holder(ctx context.Context, pointer string) (string, error) {
+	return l.pointerAt(ctx, pointerOr(pointer))
+}
+
 func (l *Ledger) pointerAt(ctx context.Context, pointer string) (string, error) {
 	held, err := ports.Held(ctx, l.records, l.pointerName(pointer))
 	if err != nil {
