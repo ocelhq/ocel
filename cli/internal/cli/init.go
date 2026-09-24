@@ -29,6 +29,7 @@ type initOptions struct {
 	provider   string
 	language   string
 	ts         bool
+	yaml       bool
 	configPath string
 }
 
@@ -66,6 +67,8 @@ func init() {
 	initCmd.Flags().StringVar(&initOpts.provider, "provider", "", "Provider this project deploys through")
 	initCmd.Flags().StringVar(&initOpts.language, "lang", "", "Language of this project ("+strings.Join(languageNames(), ", ")+"), when the manifests do not say")
 	initCmd.Flags().BoolVar(&initOpts.ts, "ts", false, "Write ocel.config.ts instead of ocel.json — it compiles to the same document and needs node")
+	initCmd.Flags().BoolVar(&initOpts.yaml, "yaml", false, "Write ocel.yaml instead of ocel.json — the same document, written as YAML")
+	initCmd.MarkFlagsMutuallyExclusive("ts", "yaml")
 }
 
 type language struct {
@@ -193,8 +196,11 @@ func languageOfProject(projectDir string, opts initOptions) (language, bool, err
 }
 
 func configFileName(opts initOptions) string {
-	if opts.ts {
+	switch {
+	case opts.ts:
 		return projectconfig.TSFileName
+	case opts.yaml:
+		return projectconfig.YAMLFileName
 	}
 	return projectconfig.DefaultFileName
 }
@@ -224,11 +230,23 @@ func configTemplate(name, slug, provider string) string {
 	if strings.HasSuffix(name, ".ts") {
 		return typescriptTemplate(slug, provider)
 	}
+	if strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml") {
+		return yamlTemplate(slug, provider)
+	}
 	return fmt.Sprintf(`{
   "$schema": %q,
   "slug": %q,
   "provider": { "name": %q, "options": {} }
 }
+`, schemaURL(), slug, provider)
+}
+
+func yamlTemplate(slug, provider string) string {
+	return fmt.Sprintf(`# yaml-language-server: $schema=%s
+slug: %q
+provider:
+  name: %q
+  options: {}
 `, schemaURL(), slug, provider)
 }
 

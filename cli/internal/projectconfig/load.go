@@ -16,12 +16,15 @@ import (
 
 const (
 	DefaultFileName = configStem + jsonSuffix
+	YAMLFileName    = configStem + yamlSuffix
 	TSFileName      = configStem + tsSuffix
 )
 
 const (
 	configStem = "ocel"
 	jsonSuffix = ".json"
+	yamlSuffix = ".yaml"
+	ymlSuffix  = ".yml"
 	tsSuffix   = ".config.ts"
 )
 
@@ -49,7 +52,14 @@ type NoConfigError struct {
 }
 
 func (e NoConfigError) Error() string {
-	return fmt.Sprintf("no %s found in %s or any parent directory — %s", strings.Join(e.Names, " or "), e.StartDir, initHint)
+	return fmt.Sprintf("no %s found in %s or any parent directory — %s", e.Listed(), e.StartDir, initHint)
+}
+
+func (e NoConfigError) Listed() string {
+	if len(e.Names) < 2 {
+		return strings.Join(e.Names, "")
+	}
+	return strings.Join(e.Names[:len(e.Names)-1], ", ") + " or " + e.Names[len(e.Names)-1]
 }
 
 type form struct {
@@ -60,8 +70,18 @@ type form struct {
 func forms() []form {
 	return []form{
 		{suffix: jsonSuffix, read: readJSON},
+		{suffix: yamlSuffix, read: readYAML},
+		{suffix: ymlSuffix, read: readYAML},
 		{suffix: tsSuffix, read: readTS},
 	}
+}
+
+func fileNames(target string) []string {
+	names := make([]string, 0, len(forms()))
+	for _, f := range forms() {
+		names = append(names, fileName(target, f))
+	}
+	return names
 }
 
 func formOf(base string) (string, form, bool) {
@@ -89,17 +109,19 @@ func fileName(target string, f form) string {
 	return configStem + "." + target + f.suffix
 }
 
-func counterpart(base string) string {
+func counterparts(dir, base string) []string {
 	target, mine, ok := formOf(base)
 	if !ok {
-		return ""
+		return nil
 	}
+	var found []string
 	for _, other := range forms() {
-		if other.suffix != mine.suffix {
-			return fileName(target, other)
+		name := fileName(target, other)
+		if other.suffix != mine.suffix && isFile(filepath.Join(dir, name)) {
+			found = append(found, name)
 		}
 	}
-	return ""
+	return found
 }
 
 func Resolve(ctx context.Context, startDir, explicitPath string) (*Config, error) {
@@ -129,7 +151,7 @@ func resolve(ctx context.Context, startDir, explicitPath string, optional bool) 
 		if optional {
 			return &Config{Dir: root, Path: filepath.Join(root, DefaultFileName)}, nil
 		}
-		return nil, NoConfigError{Names: []string{DefaultFileName, TSFileName}, StartDir: startDir}
+		return nil, NoConfigError{Names: fileNames(""), StartDir: startDir}
 	}
 	return load(ctx, configPath)
 }
@@ -166,11 +188,11 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 	base := filepath.Base(configPath)
 	_, f, ok := formOf(base)
 	if !ok {
-		return nil, fmt.Errorf("%s is not a config this reads — a config is named %s, %s, or %s and %s with a target between the stem and the suffix", base, DefaultFileName, TSFileName, "ocel.<target>.json", "ocel.<target>.config.ts")
+		return nil, fmt.Errorf("%s is not a config this reads — a config is named %s, or %s with a target between the stem and the suffix", base, strings.Join(fileNames(""), ", "), strings.Join(fileNames("<target>"), ", "))
 	}
 	dir := filepath.Dir(configPath)
-	if other := counterpart(base); other != "" && isFile(filepath.Join(dir, other)) {
-		return nil, fmt.Errorf("%s holds both %s and %s, and one project reads one config: delete whichever is not the one you author", dir, base, other)
+	if others := counterparts(dir, base); len(others) > 0 {
+		return nil, fmt.Errorf("%s holds %s, and one project reads one config: delete all but the one you author", dir, strings.Join(append([]string{base}, others...), " and "))
 	}
 
 	data, err := f.read(ctx, configPath)

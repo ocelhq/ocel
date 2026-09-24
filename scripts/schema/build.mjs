@@ -160,7 +160,7 @@ function types(merged) {
     `/** ${provider.description} */`,
     `export type ProviderDescriptor =\n  | ${descriptor};`,
     "",
-    `/** The project configuration \`ocel deploy\` reads, whether written as ${"`ocel.json`"} or as ${"`ocel.config.ts`"}. */`,
+    `/** The project configuration \`ocel deploy\` reads, whether written as ${"`ocel.json`"}, as ${"`ocel.yaml`"} or as ${"`ocel.config.ts`"}. */`,
     `export interface OcelConfig ${config}`,
     "",
   ].join("\n");

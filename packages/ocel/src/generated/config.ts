@@ -15,7 +15,7 @@ export type ProviderDescriptor =
       options?: VpsProviderOptions;
     };
 
-/** The project configuration `ocel deploy` reads, whether written as `ocel.json` or as `ocel.config.ts`. */
+/** The project configuration `ocel deploy` reads, whether written as `ocel.json`, as `ocel.yaml` or as `ocel.config.ts`. */
 export interface OcelConfig {
   /** The JSON Schema this config is written against. ocel init writes the schema shipped with the CLI that created it. */
   $schema?: string;
