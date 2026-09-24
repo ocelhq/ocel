@@ -300,7 +300,7 @@ func (s *stack) claim(ctx context.Context, claims []host.HostClaim) error {
 }
 
 func (s *stack) holdOrigins(ctx context.Context) error {
-	return s.e.machine.HoldOrigins(ctx, s.state.Slug, s.state.Class)
+	return s.e.origins(ctx, s.state.Slug, s.state.Class)
 }
 
 func (s *stack) stores(ctx context.Context, pointer string) (bool, error) {

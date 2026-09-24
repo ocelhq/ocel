@@ -189,6 +189,10 @@ func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 	return nil
 }
 
+func edgeOver(m *machine, records providerkit.RecordStore) *box.Edge {
+	return box.New(m, m.HoldOrigins, records, sshScope)
+}
+
 func (m *machine) HoldOrigins(_ context.Context, project string, class providerkit.Class) error {
 	m.calls = append(m.calls, "hold origins "+project+"/"+string(class))
 	return m.refuse("HoldOrigins")
@@ -226,11 +230,11 @@ func TestTheBoxEdge(t *testing.T) {
 	edgeconformance.Run(t, edgeconformance.Suite{
 		Hostname: "shop.example.com",
 		New: func(*testing.T) (edge.Edge, edge.StackSpec) {
-			return box.New(aMachine(), fake.NewRecords(), sshScope),
+			return edgeOver(aMachine(), fake.NewRecords()),
 				edge.StackSpec{Version: "test", Class: edge.ClassProduction, Slug: slug}
 		},
 		Previews: func(*testing.T) (edge.Edge, edge.StackSpec, edge.PreviewWildcardSpec) {
-			return box.New(aMachine(), fake.NewRecords(), sshScope),
+			return edgeOver(aMachine(), fake.NewRecords()),
 				edge.StackSpec{Version: "test", Class: edge.ClassPreview, Slug: slug},
 				previewSpec()
 		},
@@ -241,7 +245,7 @@ func standing(t *testing.T) (*machine, *box.Edge, edge.EdgeStack) {
 	t.Helper()
 
 	stood := aMachine()
-	front := box.New(stood, fake.NewRecords(), sshScope)
+	front := edgeOver(stood, fake.NewRecords())
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Class: edge.ClassProduction, Slug: slug,
 	}, edge.StackState{})
@@ -271,7 +275,7 @@ func imageFor(app, identity string) string { return "ghcr.io/acme/" + app + ":" 
 func TestTheEdgeAnswersTheFactsABoxCanStandBehind(t *testing.T) {
 	t.Parallel()
 
-	front := box.New(aMachine(), fake.NewRecords(), sshScope)
+	front := edgeOver(aMachine(), fake.NewRecords())
 	facts := front.Facts()
 	if facts.RunsCode || facts.SignsOriginForwards || facts.InvalidatesByCacheTag {
 		t.Errorf("Facts() = %+v; a box runs the container and nothing in front of it, its origin is one hop on a private network that verifies no signature, and there is no edge cache to tag", facts)
@@ -290,7 +294,7 @@ func TestTheEdgeAnswersTheFactsABoxCanStandBehind(t *testing.T) {
 func TestTheFlipCarriesNoPropagationNoteToPrint(t *testing.T) {
 	t.Parallel()
 
-	bound := box.New(aMachine(), fake.NewRecords(), sshScope).FlipBound()
+	bound := edgeOver(aMachine(), fake.NewRecords()).FlipBound()
 	if bound.Typical > 0 {
 		t.Errorf("FlipBound() = %+v, and a bound above zero is rendered to the user as a propagation note; when the flip call returns on a box the gate has passed, the config is loaded and the retired upstream has drained, so there is no window to advertise", bound)
 	}
@@ -303,7 +307,7 @@ func TestBootstrappingTheEdgeTouchesTheBoxNotAtAll(t *testing.T) {
 	t.Parallel()
 
 	stood := aMachine()
-	front := box.New(stood, fake.NewRecords(), sshScope)
+	front := edgeOver(stood, fake.NewRecords())
 	out, err := front.Bootstrap(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
@@ -393,7 +397,7 @@ func TestADeployThatLostTheRaceForThePointerNeverReachesTheProxy(t *testing.T) {
 	t.Parallel()
 
 	stood := aMachine()
-	front := box.New(stood, staleAt{RecordStore: fake.NewRecords(), at: "pointers"}, sshScope)
+	front := edgeOver(stood, staleAt{RecordStore: fake.NewRecords(), at: "pointers"})
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Class: edge.ClassProduction, Slug: slug,
 	}, edge.StackState{})
@@ -556,7 +560,7 @@ func TestATeardownTakesTheClaimsTheBoxHoldsRatherThanTheOnesItsStateRemembers(t 
 	const hostname = "moving.example.com"
 	ctx := context.Background()
 	stood := aMachine()
-	front := box.New(stood, fake.NewRecords(), sshScope)
+	front := edgeOver(stood, fake.NewRecords())
 	first := standingOn(t, stood, "shop")
 	if err := first.BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
@@ -594,7 +598,7 @@ func TestAHostnameAnotherProjectStillHoldsIsRefusedNamingWhoHoldsIt(t *testing.T
 	if !strings.Contains(err.Error(), box.Surface("shop", edge.ClassProduction)) {
 		t.Errorf("the refusal reads %q and never names the surface holding %q, so nobody knows where to unbind it", err, hostname)
 	}
-	owner, err := box.New(stood, fake.NewRecords(), sshScope).DomainOwner(ctx, hostname)
+	owner, err := edgeOver(stood, fake.NewRecords()).DomainOwner(ctx, hostname)
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
@@ -606,7 +610,7 @@ func TestAHostnameAnotherProjectStillHoldsIsRefusedNamingWhoHoldsIt(t *testing.T
 func TestTheRemovalPlanNamesTheEdgesRowsAndNotTheContainersReleasesOwn(t *testing.T) {
 	t.Parallel()
 
-	front := box.New(aMachine(), fake.NewRecords(), sshScope)
+	front := edgeOver(aMachine(), fake.NewRecords())
 	groups := front.ProjectRemovals(edge.ProjectScope{
 		Slug: slug, Class: edge.ClassProduction, Hostnames: []string{"shop.example.com"}, Front: address,
 	})
@@ -645,7 +649,7 @@ func TestTheKeptCertificateIsNamedByTheHandleThatHoldsItAndSaysWhoRenewsIt(t *te
 	at := host.ProxyPins + "/wildcard"
 	stood := aMachine()
 	stood.pins = []host.Pin{{Hostname: "*.preview.example.com", Path: at}}
-	front := box.New(stood, fake.NewRecords(), sshScope)
+	front := edgeOver(stood, fake.NewRecords())
 
 	kept := map[string]edge.PlanChange{}
 	for _, change := range front.ProjectRemovals(edge.ProjectScope{
@@ -675,7 +679,7 @@ func TestReleasingAPreviewWildcardNamesTheRouteItTakesAndTheCatchAllItLeaves(t *
 	t.Parallel()
 
 	const wildcard = "*.preview.example.com"
-	front := box.New(aMachine(), fake.NewRecords(), sshScope)
+	front := edgeOver(aMachine(), fake.NewRecords())
 	removed, kept := front.PreviewWildcardRemovals(wildcard)
 
 	if removed.Action != edge.PlanDelete {
@@ -697,7 +701,7 @@ func TestReleasingAPreviewWildcardNamesTheRouteItTakesAndTheCatchAllItLeaves(t *
 func TestTheSharedCatchAllIsAKeptRowThatSaysWhyItStays(t *testing.T) {
 	t.Parallel()
 
-	shared := box.New(aMachine(), fake.NewRecords(), sshScope).SharedPreviewRemoval()
+	shared := edgeOver(aMachine(), fake.NewRecords()).SharedPreviewRemoval()
 	if shared.Action != edge.PlanKeep {
 		t.Errorf("the shared catch-all is actioned %q, want %q: it is a bootstrap item and it answers for every project this box serves", shared.Action, edge.PlanKeep)
 	}
@@ -715,7 +719,7 @@ func TestTheSharedCatchAllIsAKeptRowThatSaysWhyItStays(t *testing.T) {
 func standingOn(t *testing.T, stood *machine, named string) edge.EdgeStack {
 	t.Helper()
 
-	front := box.New(stood, fake.NewRecords(), sshScope)
+	front := edgeOver(stood, fake.NewRecords())
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Class: edge.ClassProduction, Slug: named,
 	}, edge.StackState{})
@@ -1012,7 +1016,7 @@ func TestRemovingAProductionPointerNamedByABranchForgetsNoPreviewCertificate(t *
 	t.Parallel()
 
 	stood := aMachine()
-	front := box.New(stood, fake.NewRecords(), sshScope)
+	front := edgeOver(stood, fake.NewRecords())
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Class: edge.ClassProduction, Slug: slug,
 	}, edge.StackState{GlobalPreview: previewBase})

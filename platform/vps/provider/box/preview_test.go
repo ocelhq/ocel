@@ -114,7 +114,7 @@ func TestABoxAlreadyServingOnePreviewBaseRefusesASecondRatherThanSwappingIt(t *t
 func previewStack(t *testing.T, stood *machine) edge.EdgeStack {
 	t.Helper()
 
-	front := box.New(stood, fake.NewRecords(), sshScope)
+	front := edgeOver(stood, fake.NewRecords())
 	if _, err := front.ReconcilePreviewWildcard(context.Background(), previewSpec()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
@@ -334,7 +334,7 @@ func TestAPreviewWhoseGlobalBaseWentMissingStillForgetsTheCertificatesItsClaimsN
 
 	ctx := context.Background()
 	stood := aMachine()
-	front := box.New(stood, fake.NewRecords(), sshScope)
+	front := edgeOver(stood, fake.NewRecords())
 	if _, err := front.ReconcilePreviewWildcard(ctx, previewSpec()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
@@ -431,7 +431,7 @@ func TestRemovingAPreviewLeavesTheCatchAllStandingAndRendersItAsKeptWithAReason(
 	stood := aMachine()
 	stack := previewStack(t, stood)
 	previewed(t, stack, "pr-7", "web")
-	front := box.New(stood, fake.NewRecords(), sshScope)
+	front := edgeOver(stood, fake.NewRecords())
 
 	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
@@ -483,7 +483,7 @@ func TestAProjectsOwnPreviewDomainClaimsTheHostnamesTheKitPrintsForIt(t *testing
 
 	ctx := context.Background()
 	stood := aMachine()
-	front := box.New(stood, fake.NewRecords(), sshScope)
+	front := edgeOver(stood, fake.NewRecords())
 	if _, err := front.ReconcilePreviewWildcard(ctx, previewSpec()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
@@ -517,7 +517,7 @@ func TestAStackOpenedFromItsOwnStateServesTheSamePreviewSiteItWasReconciledFor(t
 
 	ctx := context.Background()
 	stood := aMachine()
-	front := box.New(stood, fake.NewRecords(), sshScope)
+	front := edgeOver(stood, fake.NewRecords())
 	if _, err := front.ReconcilePreviewWildcard(ctx, previewSpec()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
