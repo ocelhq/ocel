@@ -40,6 +40,11 @@ func IsProgram(path string) bool {
 	return ok && f.suffix == tsSuffix
 }
 
+func IsYAML(path string) bool {
+	_, f, ok := formOf(filepath.Base(path))
+	return ok && (f.suffix == yamlSuffix || f.suffix == ymlSuffix)
+}
+
 func ProgramNamedIn(source string) string {
 	return programNamed.FindString(source)
 }
@@ -109,7 +114,8 @@ func fileName(target string, f form) string {
 	return configStem + "." + target + f.suffix
 }
 
-func counterparts(dir, base string) []string {
+func Counterparts(configPath string) []string {
+	dir, base := filepath.Dir(configPath), filepath.Base(configPath)
 	target, mine, ok := formOf(base)
 	if !ok {
 		return nil
@@ -191,7 +197,7 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 		return nil, fmt.Errorf("%s is not a config this reads — a config is named %s, or %s with a target between the stem and the suffix", base, strings.Join(fileNames(""), ", "), strings.Join(fileNames("<target>"), ", "))
 	}
 	dir := filepath.Dir(configPath)
-	if others := counterparts(dir, base); len(others) > 0 {
+	if others := Counterparts(configPath); len(others) > 0 {
 		return nil, fmt.Errorf("%s holds %s, and one project reads one config: delete all but the one you author", dir, strings.Join(append([]string{base}, others...), " and "))
 	}
 

@@ -48,7 +48,7 @@ func interpolate(path string, value any, lookup Lookup) (any, error) {
 	case []any:
 		out := make([]any, len(shaped))
 		for i, item := range shaped {
-			expanded, err := interpolate(fmt.Sprintf("%s[%d]", path, i), item, lookup)
+			expanded, err := interpolate(IndexPath(path, i), item, lookup)
 			if err != nil {
 				return nil, err
 			}
@@ -58,7 +58,7 @@ func interpolate(path string, value any, lookup Lookup) (any, error) {
 	case map[string]any:
 		out := make(map[string]any, len(shaped))
 		for key, item := range shaped {
-			expanded, err := interpolate(joinPath(path, key), item, lookup)
+			expanded, err := interpolate(JoinPath(path, key), item, lookup)
 			if err != nil {
 				return nil, err
 			}

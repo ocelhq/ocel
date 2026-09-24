@@ -7,11 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"os"
-	"strconv"
+	"slices"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/ocelhq/ocel/pkg/configdoc"
 )
 
 func readYAML(_ context.Context, configPath string) ([]byte, error) {
@@ -19,72 +22,115 @@ func readYAML(_ context.Context, configPath string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", configPath, err)
 	}
-
-	decoder := yaml.NewDecoder(bytes.NewReader(read))
-	var tree any
-	if err := decoder.Decode(&tree); err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("%s is not valid YAML: %w", configPath, err)
-	}
-	switch err := decoder.Decode(new(any)); {
-	case err == nil:
-		return nil, fmt.Errorf("%s holds more than one YAML document, and a config is one document", configPath)
-	case !errors.Is(err, io.EOF):
-		return nil, fmt.Errorf("%s is not valid YAML: %w", configPath, err)
-	}
-
-	standard, err := jsonTree("", tree)
+	standard, err := yamlToJSON(read)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", configPath, err)
+		return nil, fmt.Errorf("%s %w", configPath, err)
 	}
-	return json.Marshal(standard)
+	return standard, nil
 }
 
-func jsonTree(path string, value any) (any, error) {
+func yamlToJSON(source []byte) ([]byte, error) {
+	document, err := onlyDocument(source)
+	if err != nil {
+		return nil, err
+	}
+	if document == nil {
+		return []byte("null"), nil
+	}
+
+	keepSourceText(document, map[*yaml.Node]bool{})
+	var tree any
+	if err := document.Decode(&tree); err != nil {
+		return nil, fmt.Errorf("is not valid YAML: %w", err)
+	}
+	if err := checkJSONable("", tree); err != nil {
+		return nil, err
+	}
+	return json.Marshal(tree)
+}
+
+func onlyDocument(source []byte) (*yaml.Node, error) {
+	decoder := yaml.NewDecoder(bytes.NewReader(source))
+	var found *yaml.Node
+	for {
+		var document yaml.Node
+		err := decoder.Decode(&document)
+		if errors.Is(err, io.EOF) {
+			return found, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("is not valid YAML: %w", err)
+		}
+		if isEmpty(&document) {
+			continue
+		}
+		if found != nil {
+			return nil, errors.New("holds more than one YAML document, and a config is one document")
+		}
+		found = &document
+	}
+}
+
+func isEmpty(document *yaml.Node) bool {
+	if len(document.Content) == 0 {
+		return true
+	}
+	root := document.Content[0]
+	return root.Kind == yaml.ScalarNode && root.ShortTag() == "!!null"
+}
+
+func keepSourceText(node *yaml.Node, seen map[*yaml.Node]bool) {
+	if seen[node] {
+		return
+	}
+	seen[node] = true
+	switch node.Kind {
+	case yaml.ScalarNode:
+		switch node.ShortTag() {
+		case "!!timestamp", "!!binary":
+			node.Tag = "!!str"
+		}
+	case yaml.MappingNode:
+		for i := 0; i+1 < len(node.Content); i += 2 {
+			key := node.Content[i]
+			if key.Kind == yaml.ScalarNode && key.ShortTag() != "!!merge" {
+				key.Tag = "!!str"
+			}
+		}
+	case yaml.AliasNode:
+		keepSourceText(node.Alias, seen)
+		return
+	}
+	for _, child := range node.Content {
+		keepSourceText(child, seen)
+	}
+}
+
+func checkJSONable(path string, value any) error {
 	switch held := value.(type) {
 	case map[string]any:
-		out := make(map[string]any, len(held))
-		for key, item := range held {
-			at := key
-			if path != "" {
-				at = path + "." + key
+		for _, key := range slices.Sorted(maps.Keys(held)) {
+			if err := checkJSONable(configdoc.JoinPath(path, key), held[key]); err != nil {
+				return err
 			}
-			converted, err := jsonTree(at, item)
-			if err != nil {
-				return nil, err
-			}
-			out[key] = converted
 		}
-		return out, nil
 	case map[any]any:
+		keys := make([]string, 0, len(held))
 		for key := range held {
-			if _, named := key.(string); !named {
-				return nil, fmt.Errorf("%s has the key %v, and a config key must be a string — quote it", describe(path), key)
-			}
+			keys = append(keys, fmt.Sprint(key))
 		}
-		return nil, fmt.Errorf("%s must be an object of string keys", describe(path))
+		slices.Sort(keys)
+		return fmt.Errorf("has the key %s under %s, and a config key must be a string — quote it", keys[0], configdoc.PathName(path))
 	case []any:
-		out := make([]any, len(held))
 		for i, item := range held {
-			converted, err := jsonTree(fmt.Sprintf("%s[%d]", path, i), item)
-			if err != nil {
-				return nil, err
+			if err := checkJSONable(configdoc.IndexPath(path, i), item); err != nil {
+				return err
 			}
-			out[i] = converted
 		}
-		return out, nil
 	case float64:
 		if math.IsInf(held, 0) || math.IsNaN(held) {
-			return nil, fmt.Errorf("%s is %v, which a config cannot hold", describe(path), held)
+			return fmt.Errorf("sets %s to %v, which a config cannot hold", configdoc.PathName(path), held)
 		}
-		return held, nil
-	default:
-		return value, nil
 	}
-}
-
-func describe(path string) string {
-	if path == "" {
-		return "the config"
-	}
-	return strconv.Quote(path)
+	return nil
 }

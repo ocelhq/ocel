@@ -14,7 +14,6 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/tailscale/hujson"
-	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/cli/internal/fixturetest"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -82,28 +81,20 @@ func committedSchema(t *testing.T, root string) *jsonschema.Schema {
 
 var yamlSchemaLine = regexp.MustCompile(`(?m)^# yaml-language-server: \$schema=(\S+)$`)
 
-func isYAML(name string) bool {
-	return strings.HasSuffix(name, ".yaml") || strings.HasSuffix(name, ".yml")
-}
-
-func documentOf(t *testing.T, name string, source []byte) any {
+func documentOf(t *testing.T, label, file string, source []byte) any {
 	t.Helper()
-	value, err := parseConfig(name, source)
+	value, err := parseConfig(file, source)
 	if err != nil {
-		t.Fatalf("%s: %v", name, err)
+		t.Fatalf("%s: %v", label, err)
 	}
 	return value
 }
 
-func parseConfig(name string, source []byte) (any, error) {
-	if isYAML(name) {
-		var tree any
-		if err := yaml.Unmarshal(source, &tree); err != nil {
-			return nil, fmt.Errorf("is not valid YAML: %w", err)
-		}
-		standard, err := json.Marshal(tree)
+func parseConfig(file string, source []byte) (any, error) {
+	if projectconfig.IsYAML(file) {
+		standard, err := projectconfig.YAMLToJSON(source)
 		if err != nil {
-			return nil, fmt.Errorf("does not convert to JSON: %w", err)
+			return nil, err
 		}
 		return jsonschema.UnmarshalJSON(bytes.NewReader(standard))
 	}
@@ -114,8 +105,8 @@ func parseConfig(name string, source []byte) (any, error) {
 	return jsonschema.UnmarshalJSON(bytes.NewReader(standard))
 }
 
-func schemaNamed(name string, source []byte, document any) string {
-	if isYAML(name) {
+func schemaNamed(file string, source []byte, document any) string {
+	if projectconfig.IsYAML(file) {
 		if named := yamlSchemaLine.FindSubmatch(source); named != nil {
 			return string(named[1])
 		}
@@ -136,11 +127,23 @@ func committedConfigs(t *testing.T, root string) []string {
 
 type commentBlock struct{ first, last int }
 
-func commentBlocksIn(lines []string) []commentBlock {
+func commentPrefix(file string) string {
+	if projectconfig.IsYAML(file) {
+		return "#"
+	}
+	return "//"
+}
+
+func isComment(line, prefix string) bool {
+	trimmed := strings.TrimSpace(line)
+	return strings.HasPrefix(trimmed, prefix) && !yamlSchemaLine.MatchString(trimmed)
+}
+
+func commentBlocksIn(lines []string, prefix string) []commentBlock {
 	var blocks []commentBlock
 	open := -1
 	for i, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "//") {
+		if isComment(line, prefix) {
 			if open < 0 {
 				open = i
 			}
@@ -157,11 +160,11 @@ func commentBlocksIn(lines []string) []commentBlock {
 	return blocks
 }
 
-func uncommented(lines []string, at commentBlock) []byte {
+func uncommented(lines []string, at commentBlock, prefix string) []byte {
 	variant := lines[at.last]
 	indent := variant[:len(variant)-len(strings.TrimLeft(variant, " \t"))]
 	out := slices.Clone(lines[:at.first])
-	out = append(out, indent+strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(variant), "//")))
+	out = append(out, indent+strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(variant), prefix)))
 	return []byte(strings.Join(append(out, lines[at.last+1:]...), "\n"))
 }
 
@@ -202,8 +205,8 @@ func TestEverySampleConfigTheCompareTableShowsValidatesAgainstTheSchema(t *testi
 		}
 		shown++
 		name := compareTable + " › " + sample[1]
-		document := documentOf(t, name, []byte(sample[2]))
-		named := schemaNamed(name, []byte(sample[2]), document)
+		document := documentOf(t, name, sample[1], []byte(sample[2]))
+		named := schemaNamed(sample[1], []byte(sample[2]), document)
 		if named != want {
 			t.Errorf("%s names %q, want the committed schema %q", name, named, want)
 		}
@@ -227,7 +230,7 @@ func TestEveryCommittedConfigValidatesAgainstTheSchema(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", path, err)
 		}
-		if err := schema.Validate(documentOf(t, path, source)); err != nil {
+		if err := schema.Validate(documentOf(t, path, path, source)); err != nil {
 			t.Errorf("%s does not validate against the committed schema: %v", path, err)
 		}
 	}
@@ -244,7 +247,7 @@ func TestEveryCommittedConfigNamesTheCommittedSchema(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", path, err)
 		}
-		if named := schemaNamed(path, source, documentOf(t, path, source)); named != want {
+		if named := schemaNamed(path, source, documentOf(t, path, path, source)); named != want {
 			t.Errorf("%s names %q, want the committed schema %q", path, named, want)
 		}
 	}
@@ -257,7 +260,7 @@ func TestACommittedConfigCommentsOneVariantAndOneLineSayingWhenToPickIt(t *testi
 		if err != nil {
 			t.Fatalf("read %s: %v", path, err)
 		}
-		blocks := commentBlocksIn(strings.Split(string(source), "\n"))
+		blocks := commentBlocksIn(strings.Split(string(source), "\n"), commentPrefix(path))
 		if len(blocks) > 1 {
 			t.Errorf("%s comments %d separate things, and a config comments at most one variant", path, len(blocks))
 			continue
@@ -282,8 +285,9 @@ func TestACommentedVariantUncommentsIntoAConfigThatOnlyDiffers(t *testing.T) {
 			t.Fatalf("read %s: %v", path, err)
 		}
 		lines := strings.Split(string(source), "\n")
-		for _, at := range commentBlocksIn(lines) {
-			picked, err := parseConfig(path, uncommented(lines, at))
+		prefix := commentPrefix(path)
+		for _, at := range commentBlocksIn(lines, prefix) {
+			picked, err := parseConfig(path, uncommented(lines, at, prefix))
 			if err != nil {
 				t.Errorf("%s picked at line %d %v", path, at.last+1, err)
 				continue
@@ -291,7 +295,7 @@ func TestACommentedVariantUncommentsIntoAConfigThatOnlyDiffers(t *testing.T) {
 			if err := schema.Validate(picked); err != nil {
 				t.Errorf("%s picked at line %d does not validate against the committed schema: %v", path, at.last+1, err)
 			}
-			live := documentOf(t, path, source)
+			live := documentOf(t, path, path, source)
 			if want, got := keyPaths("", live), keyPaths("", picked); !slices.Equal(want, got) {
 				t.Errorf("%s picked at line %d holds keys %v, and a commented variant conflicts with a live key rather than adding %v", path, at.last+1, got, want)
 			}

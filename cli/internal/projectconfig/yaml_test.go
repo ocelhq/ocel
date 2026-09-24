@@ -2,6 +2,7 @@ package projectconfig
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -142,12 +143,11 @@ func TestResolveRefusesYAMLItCannotReadAsOneDocument(t *testing.T) {
 	for name, tc := range map[string]struct{ source, want string }{
 		"malformed":        {"slug: [acme\n", "not valid YAML"},
 		"two documents":    {"slug: acme\n---\nslug: other\n", "more than one YAML document"},
-		"non-string key":   {"slug: acme\nbindings:\n  1: orders\n", `"bindings" has the key 1`},
-		"infinite number":  {"slug: acme\nprovider:\n  name: aws\n  options: { weight: .inf }\n", `"provider.options.weight"`},
+		"aliased int key":  {"slug: acme\nprovider:\n  name: &n 1\n  options:\n    *n : x\n", `has the key 1 under "provider.options"`},
+		"infinite number":  {"slug: acme\nprovider:\n  name: aws\n  options: { weight: .inf }\n", `sets "provider.options.weight" to +Inf`},
 		"duplicate key":    {"slug: acme\nslug: other\n", "already defined"},
 		"not an object":    {"- slug: acme\n", "must be an object"},
 		"empty":            {"", "must be an object"},
-		"non-string top":   {"true: acme\n", "the config has the key true"},
 		"malformed second": {"slug: acme\n---\nslug: [\n", "not valid YAML"},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -174,6 +174,115 @@ func TestResolveNamesTheYAMLFormsWhenNoConfigIsFound(t *testing.T) {
 	for _, name := range []string{DefaultFileName, YAMLFileName, "ocel.yml", TSFileName} {
 		if !strings.Contains(err.Error(), name) {
 			t.Fatalf("error %q does not name %s", err, name)
+		}
+	}
+}
+
+func TestResolveKeepsTheSourceTextOfWhatJSONHasNoTypeFor(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, YAMLFileName), `slug: 2024-01-01
+provider:
+  name: vps
+  options:
+    since: 2024-01-01
+    at: 2001-12-14t21:59:43.10-05:00
+    blob: !!binary aGVsbG8=
+    quoted: "1.10"
+    version: 1.10
+    port: 22
+    enabled: true
+    yes: yes
+    1: one
+    2024-06-01: dated
+`)
+
+	cfg, err := Resolve(context.Background(), dir, "")
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if cfg.Slug != "2024-01-01" {
+		t.Fatalf("slug = %q, want the date as written", cfg.Slug)
+	}
+	var options map[string]any
+	if err := json.Unmarshal(cfg.Provider.Options, &options); err != nil {
+		t.Fatalf("options: %v", err)
+	}
+	want := map[string]any{
+		"since":      "2024-01-01",
+		"at":         "2001-12-14t21:59:43.10-05:00",
+		"blob":       "aGVsbG8=",
+		"quoted":     "1.10",
+		"version":    1.1,
+		"port":       float64(22),
+		"enabled":    true,
+		"yes":        "yes",
+		"1":          "one",
+		"2024-06-01": "dated",
+	}
+	for key, value := range want {
+		if options[key] != value {
+			t.Errorf("options[%q] = %#v, want %#v", key, options[key], value)
+		}
+	}
+}
+
+func TestResolveReadsAYAMLNumberAsTheSameJSONNumberWouldBeRead(t *testing.T) {
+	yamlDir, jsonDir := t.TempDir(), t.TempDir()
+	write(t, filepath.Join(yamlDir, YAMLFileName), "slug: acme\nprovider:\n  name: vps\n  options: { version: 1.10, port: 22 }\n")
+	write(t, filepath.Join(jsonDir, DefaultFileName), `{"slug":"acme","provider":{"name":"vps","options":{"version":1.10,"port":22}}}`)
+
+	fromYAML, err := Resolve(context.Background(), yamlDir, "")
+	if err != nil {
+		t.Fatalf("resolve yaml: %v", err)
+	}
+	fromJSON, err := Resolve(context.Background(), jsonDir, "")
+	if err != nil {
+		t.Fatalf("resolve json: %v", err)
+	}
+	if string(fromYAML.Provider.Options) != string(fromJSON.Provider.Options) {
+		t.Fatalf("yaml options %s, json options %s", fromYAML.Provider.Options, fromJSON.Provider.Options)
+	}
+}
+
+func TestResolveReadsAYAMLFileWithEmptyDocumentsAroundItsOne(t *testing.T) {
+	for name, source := range map[string]string{
+		"trailing separator": "slug: acme\nprovider:\n  name: vps\n---\n",
+		"leading separator":  "---\nslug: acme\n",
+		"null document":      "slug: acme\n---\n~\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, filepath.Join(dir, YAMLFileName), source)
+
+			cfg, err := Resolve(context.Background(), dir, "")
+			if err != nil {
+				t.Fatalf("resolve: %v", err)
+			}
+			if cfg.Slug != "acme" {
+				t.Fatalf("slug = %q", cfg.Slug)
+			}
+		})
+	}
+}
+
+func TestResolveReportsTheSameYAMLErrorOnEveryRun(t *testing.T) {
+	dir := t.TempDir()
+	write(t, filepath.Join(dir, YAMLFileName), `slug: acme
+provider:
+  name: vps
+  options:
+    z: .inf
+    a: .nan
+    m: -.inf
+`)
+
+	_, first := Resolve(context.Background(), dir, "")
+	if first == nil || !strings.Contains(first.Error(), `sets "provider.options.a" to NaN`) {
+		t.Fatalf("error %v does not name the first bad key in order", first)
+	}
+	for range 50 {
+		if _, err := Resolve(context.Background(), dir, ""); err == nil || err.Error() != first.Error() {
+			t.Fatalf("error %v differs from the first run's %v", err, first)
 		}
 	}
 }
