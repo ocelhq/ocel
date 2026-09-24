@@ -178,15 +178,15 @@ func (h *Host) reshape(ctx context.Context, change func(ProxyState) (ProxyState,
 	if err != nil {
 		return err
 	}
-	shaped, err := h.composeProxy(ctx, 0, func(standing ProxyState, _ bool) (ProxyState, bool, error) {
+	shaped, err := h.composeProxy(ctx, func(standing ProxyState) (ProxyState, error) {
 		changed, err := change(standing)
 		if err != nil {
-			return ProxyState{}, false, err
+			return ProxyState{}, err
 		}
 		if changed.Pins, err = h.VerifiedPins(ctx); err != nil {
-			return ProxyState{}, false, err
+			return ProxyState{}, err
 		}
-		return changed, true, nil
+		return changed, nil
 	})
 	if err != nil || !shaped.changed {
 		return err

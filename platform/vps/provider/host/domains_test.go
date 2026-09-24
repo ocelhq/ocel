@@ -229,7 +229,7 @@ func TestTheDrainServerADeployWritesReadsBackAsOcelsOwn(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Retiring = "shop-web-1111:" + providerkit.InjectedPortText
+	state.Retiring = []string{"shop-web-1111:" + providerkit.InjectedPortText}
 	if _, err := ReadProxyState(mustRender(t, state)); err != nil {
 		t.Fatalf("ReadProxyState(a config mid-flip) = %v: the drain server is one this deploy just wrote, and refusing it strands every release between the flip and the steady state", err)
 	}

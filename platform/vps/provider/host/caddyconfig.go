@@ -148,7 +148,7 @@ type ProxyState struct {
 	Routes      []AppRoute
 	Pins        []Pin
 	PreviewBase string
-	Retiring    string
+	Retiring    []string
 	Connector   string
 }
 
@@ -315,12 +315,16 @@ func namingTheEdge() caddyForward {
 	}
 }
 
-func forwarding(identity, upstream string) caddyRoute {
+func forwarding(identity string, upstreams ...string) caddyRoute {
+	dials := make([]caddyDial, 0, len(upstreams))
+	for _, upstream := range upstreams {
+		dials = append(dials, caddyDial{Dial: upstream})
+	}
 	return caddyRoute{
 		Identity: identity,
 		Handle: []caddyForward{namingTheEdge(), {
 			Handler:   forwardHandler,
-			Upstreams: []caddyDial{{Dial: upstream}},
+			Upstreams: dials,
 		}},
 	}
 }
@@ -492,10 +496,11 @@ func RenderProxyConfig(state ProxyState) ([]byte, error) {
 			PKI: seeded.Apps.PKI,
 		},
 	}
-	if state.Retiring != "" {
+	if len(state.Retiring) > 0 {
+		retiring := slices.Sorted(slices.Values(state.Retiring))
 		rendered.Apps.HTTP.Servers[proxyDrainServer] = caddyServer{
 			Listen: []string{drainListen},
-			Routes: []caddyRoute{forwarding(drainIdentity, state.Retiring)},
+			Routes: []caddyRoute{forwarding(drainIdentity, slices.Compact(retiring)...)},
 		}
 	}
 	return json.Marshal(rendered)
@@ -724,13 +729,16 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 		if !keyed || len(fields) != 3 {
 			return ProxyState{}, unwritten("route", route.Identity)
 		}
-		upstream, health, err := forwardedBy(route)
+		upstreams, health, err := forwardedBy(route)
 		if err != nil {
 			return ProxyState{}, err
 		}
+		if len(upstreams) != 1 {
+			return ProxyState{}, misshapen(route.Identity, fmt.Sprintf("%d upstreams", len(upstreams)))
+		}
 		state.Routes = append(state.Routes, AppRoute{
 			RouteKey: RouteKey{Owner: fields[0], Pointer: fields[1], App: fields[2]},
-			Upstream: upstream,
+			Upstream: upstreams[0],
 			Health:   health,
 		})
 	}
@@ -742,30 +750,35 @@ func ReadProxyState(document []byte) (ProxyState, error) {
 	return state, nil
 }
 
-func forwardedBy(route caddyRoute) (string, string, error) {
+func forwardedBy(route caddyRoute) ([]string, string, error) {
 	if len(route.Handle) != 2 {
-		return "", "", misshapen(route.Identity, fmt.Sprintf("%d handlers", len(route.Handle)))
+		return nil, "", misshapen(route.Identity, fmt.Sprintf("%d handlers", len(route.Handle)))
 	}
 	naming, forwards := route.Handle[0], route.Handle[1]
 	edged := naming.Response != nil && maps.EqualFunc(naming.Response.Set, map[string][]string{EdgeHeader: {EdgeName}}, slices.Equal)
 	switch {
 	case naming.Handler != edgeHandler || !edged || len(naming.Upstreams) > 0 || naming.Status != 0 || len(naming.Headers) > 0:
-		return "", "", misshapen(route.Identity, fmt.Sprintf("a leading %q handler not setting only %s: %s", naming.Handler, EdgeHeader, EdgeName))
+		return nil, "", misshapen(route.Identity, fmt.Sprintf("a leading %q handler not setting only %s: %s", naming.Handler, EdgeHeader, EdgeName))
 	case forwards.Handler != forwardHandler || forwards.Status != 0 || len(forwards.Headers) > 0 || forwards.Response != nil:
-		return "", "", misshapen(route.Identity, fmt.Sprintf("a terminal %q handler", forwards.Handler))
-	case len(forwards.Upstreams) != 1:
-		return "", "", misshapen(route.Identity, fmt.Sprintf("%d upstreams", len(forwards.Upstreams)))
-	case forwards.Upstreams[0].Dial == "":
-		return "", "", misshapen(route.Identity, "an upstream naming nothing to dial")
+		return nil, "", misshapen(route.Identity, fmt.Sprintf("a terminal %q handler", forwards.Handler))
+	case len(forwards.Upstreams) == 0:
+		return nil, "", misshapen(route.Identity, "no upstreams")
+	}
+	dials := make([]string, 0, len(forwards.Upstreams))
+	for _, upstream := range forwards.Upstreams {
+		if upstream.Dial == "" {
+			return nil, "", misshapen(route.Identity, "an upstream naming nothing to dial")
+		}
+		dials = append(dials, upstream.Dial)
 	}
 	health := ""
 	if forwards.HealthChecks != nil {
 		health = forwards.HealthChecks.Active.URI
 		if health == "" || !routeEqual(caddyRoute{Handle: []caddyForward{{HealthChecks: forwards.HealthChecks}}}, caddyRoute{Handle: []caddyForward{{HealthChecks: checking(health)}}}) {
-			return "", "", misshapen(route.Identity, "an unexpected active health check")
+			return nil, "", misshapen(route.Identity, "an unexpected active health check")
 		}
 	}
-	return forwards.Upstreams[0].Dial, health, nil
+	return dials, health, nil
 }
 
 func misshapen(named, found string) error {

@@ -456,56 +456,48 @@ func TestTwoWritersThatReadTheSameDigestLeaveOneOfTheirDocumentsBehind(t *testin
 	}
 }
 
-func TestAReleaseLeavesANeighboursDrainAloneAndWaitsForItBeforeStartingItsOwn(t *testing.T) {
+func TestAReleaseDrainsBesideANeighboursDrainRatherThanWaitingForIt(t *testing.T) {
 	t.Parallel()
 
 	neighbourDraining, err := RenderProxyConfig(ProxyState{
 		Grace:    30 * time.Second,
 		Routes:   []AppRoute{{RouteKey: keyed("web"), Upstream: retired}, {RouteKey: keyed("api"), Upstream: "prod-api-1:8080"}},
-		Retiring: "prod-api-0",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	neighbourDone, err := RenderProxyConfig(ProxyState{
-		Grace:  30 * time.Second,
-		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}, {RouteKey: keyed("api"), Upstream: "prod-api-1:8080"}},
+		Retiring: []string{"prod-api-0:8080"},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	stood := &flipped{bench: machine(nil), held: string(neighbourDraining)}
 	proxied := servesProxy(stood.bench, &stood.held)
-	reads := 0
+	var posted string
 	stood.answer = func(command string) (session.Result, bool) {
-		switch {
-		case readsProxy(command):
-			stood.mu.Lock()
-			reads++
-			if reads == 2 {
-				stood.held = string(neighbourDone)
-			}
-			stood.mu.Unlock()
-			return proxied(command)
-		case strings.Contains(command, quoted("deploy")):
+		if strings.Contains(command, quoted("deploy")) {
+			posted = stood.held
 			return session.Result{}, true
-		default:
-			return proxied(command)
 		}
+		return proxied(command)
 	}
 
+	start := time.Now()
 	if err := stood.host().Release(context.Background(), aRelease(), nil); err != nil {
-		t.Fatalf("Release() while a neighbour drained = %v: the box drains one retired upstream at a time, so the flip waits for the neighbour's rather than taking its slot", err)
+		t.Fatalf("Release() while a neighbour drained = %v", err)
 	}
-	if reads < 3 {
-		t.Errorf("the release read %s %d times, and a flip that found a neighbour draining had to read again after the wait", ProxyConfig, reads)
+	if waited := time.Since(start); waited > 5*time.Second {
+		t.Errorf("the release took %s beside a neighbour's drain: the drain server declares every retiring upstream, so neither release has a slot to wait for", waited)
+	}
+	flip, err := ReadProxyState([]byte(posted))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"prod-api-0:8080", retired}; !slices.Equal(flip.Retiring, want) {
+		t.Errorf("the flip declares %v retiring, want %v: dropping the neighbour's upstream mid-drain leaves its helper counting one the pool no longer names", flip.Retiring, want)
 	}
 	state, err := ReadProxyState([]byte(stood.held))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.Retiring != "" {
-		t.Errorf("the steady-state configuration still declares %s retiring", state.Retiring)
+	if !slices.Equal(state.Retiring, []string{"prod-api-0:8080"}) {
+		t.Errorf("the steady state declares %v retiring, want the neighbour's alone: each release clears only what it retired", state.Retiring)
 	}
 	upstreams := map[string]string{}
 	for _, route := range state.Routes {
@@ -522,7 +514,7 @@ func TestASteadyStateWriteBesideANeighboursDrainKeepsThatDrainDeclared(t *testin
 	neighbourDraining, err := RenderProxyConfig(ProxyState{
 		Grace:    30 * time.Second,
 		Routes:   []AppRoute{{RouteKey: keyed("web"), Upstream: flipTo}, {RouteKey: keyed("api"), Upstream: "prod-api-1:8080"}},
-		Retiring: "prod-api-0",
+		Retiring: []string{"prod-api-0"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -560,7 +552,7 @@ func TestASteadyStateWriteBesideANeighboursDrainKeepsThatDrainDeclared(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state.Retiring != "prod-api-0" {
+	if !slices.Equal(state.Retiring, []string{"prod-api-0"}) {
 		t.Errorf("the steady-state write left %q retiring, want the neighbour's prod-api-0 still declared: the drain server is the neighbour's to clear, and dropping it mid-drain leaves its helper counting an upstream the pool no longer names", state.Retiring)
 	}
 }
@@ -613,7 +605,7 @@ func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing
 	if upstreams["web"] != flipTo || upstreams["api"] != "prod-api-1:8080" {
 		t.Errorf("the box serves %v after the release, want web onto %s beside the neighbour's api: the retry must compose onto what it re-read, not onto what it first read", upstreams, flipTo)
 	}
-	if state.Retiring != "" {
+	if len(state.Retiring) > 0 {
 		t.Errorf("the steady-state configuration still declares %s retiring", state.Retiring)
 	}
 }
@@ -945,7 +937,7 @@ func TestAReleaseInterruptedAtTheFlipStillPutsTheProxyBackAndRemovesWhatItStoodU
 	if readErr != nil {
 		t.Fatal(readErr)
 	}
-	if len(state.Routes) != 1 || state.Routes[0].Upstream != retired || state.Retiring != "" {
+	if len(state.Routes) != 1 || state.Routes[0].Upstream != retired || len(state.Retiring) > 0 {
 		t.Errorf("%s was left as %+v after the interrupted release, want the previous release put back: the context that carried the interrupt is the one the unwind ran under, so the unwind never ran", ProxyConfig, state)
 	}
 	if stood.at("docker rm --force "+quoted(physical)) < 0 {
