@@ -73,7 +73,7 @@ func checkSink(pass *analysis.Pass, call *ast.CallExpr) {
 		return
 	}
 	for _, arg := range call.Args {
-		if t := pass.TypesInfo.TypeOf(arg); t != nil && reachesCarrier(pass, t, map[types.Type]bool{}) {
+		if t := pass.TypesInfo.TypeOf(arg); t != nil && fmtRenders(pass, t) {
 			report(pass, arg, t)
 		}
 	}
@@ -107,34 +107,75 @@ func byName(self *types.Package) types.Qualifier {
 	}
 }
 
-func reachesCarrier(pass *analysis.Pass, t types.Type, seen map[types.Type]bool) bool {
-	if seen[t] {
+type reach int
+
+const (
+	methodsCalled reach = iota
+	embeddedUnexported
+	unexported
+)
+
+func (r reach) through(field *types.Var) reach {
+	switch {
+	case r == unexported || !field.Exported() && !field.Embedded():
+		return unexported
+	case !field.Exported():
+		return embeddedUnexported
+	}
+	return methodsCalled
+}
+
+func (r reach) elements() reach {
+	if r == methodsCalled {
+		return methodsCalled
+	}
+	return unexported
+}
+
+type visit struct {
+	t     types.Type
+	top   bool
+	reach reach
+}
+
+func fmtRenders(pass *analysis.Pass, t types.Type) bool {
+	return fmtReaches(pass, t, true, methodsCalled, map[visit]bool{})
+}
+
+func fmtReaches(pass *analysis.Pass, t types.Type, top bool, r reach, seen map[visit]bool) bool {
+	if seen[visit{t, top, r}] {
 		return false
 	}
-	seen[t] = true
-	if isCarrier(pass, t) {
+	seen[visit{t, top, r}] = true
+	if r == methodsCalled {
+		if method := renderer(t); method != nil {
+			return isCarrier(pass, method.Signature().Recv().Type())
+		}
+	}
+	if named, ok := types.Unalias(t).(*types.Named); ok && namesCarrier(pass, named.Obj()) {
 		return true
 	}
-	if renderer := renderer(t); renderer != nil {
-		return isCarrier(pass, renderer.Signature().Recv().Type())
-	}
-	switch t := types.Unalias(t).(type) {
+	switch u := t.Underlying().(type) {
 	case *types.Pointer:
-		return reachesCarrier(pass, t.Elem(), seen)
-	case *types.Named:
-		return reachesCarrier(pass, t.Underlying(), seen)
-	case *types.Slice:
-		return reachesCarrier(pass, t.Elem(), seen)
-	case *types.Array:
-		return reachesCarrier(pass, t.Elem(), seen)
-	case *types.Map:
-		return reachesCarrier(pass, t.Key(), seen) || reachesCarrier(pass, t.Elem(), seen)
+		if !top {
+			return false
+		}
+		switch u.Elem().Underlying().(type) {
+		case *types.Struct, *types.Array, *types.Slice, *types.Map:
+			return fmtReaches(pass, u.Elem(), false, r, seen)
+		}
 	case *types.Struct:
-		for field := range t.Fields() {
-			if reachesCarrier(pass, field.Type(), seen) {
+		for field := range u.Fields() {
+			if fmtReaches(pass, field.Type(), false, r.through(field), seen) {
 				return true
 			}
 		}
+	case *types.Slice:
+		return fmtReaches(pass, u.Elem(), false, r.elements(), seen)
+	case *types.Array:
+		return fmtReaches(pass, u.Elem(), false, r.elements(), seen)
+	case *types.Map:
+		return fmtReaches(pass, u.Key(), false, r.elements(), seen) || fmtReaches(pass, u.Elem(), false, r.elements(), seen)
 	}
 	return false
 }
@@ -148,9 +189,10 @@ func isCarrier(pass *analysis.Pass, t types.Type) bool {
 }
 
 func renderer(t types.Type) *types.Func {
+	methods := types.NewMethodSet(t)
 	for _, name := range []string{"Format", "Error", "String"} {
-		if method, _, _ := types.LookupFieldOrMethod(t, false, nil, name); method != nil {
-			if fn, ok := method.(*types.Func); ok {
+		if selection := methods.Lookup(nil, name); selection != nil {
+			if fn, ok := selection.Obj().(*types.Func); ok {
 				return fn
 			}
 		}
