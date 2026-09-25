@@ -23,7 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtimekit/front"
 	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/pkg/runtimekit/proxy"
-	bucket "github.com/ocelhq/ocel/platform/s3"
+	s3store "github.com/ocelhq/ocel/platform/s3"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/runtime/live"
 )
@@ -168,13 +168,13 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (pr
 	if values == nil || !slices.ContainsFunc(manifest.Bindings, func(l rt.Binding) bool { return naming.Proxied(l.Type) }) {
 		return proxy.Served{}, nil
 	}
-	callbacks := bucket.HTTPPoster{App: app}
-	bound, own, err := bucket.Backends(values, callbacks)
+	callbacks := s3store.HTTPPoster{App: app}
+	bound, own, err := s3store.Backends(values, callbacks)
 	if err != nil {
 		return proxy.Served{}, err
 	}
 	if !own {
-		return proxy.Serve(bucket.Route(nil, bound...))
+		return proxy.Serve(s3store.Route(nil, bound...))
 	}
 	if manifest.Store == nil {
 		return proxy.Served{}, errors.New("this deployment binds a bucket this box keeps, and its manifest names no store to reach it in")
@@ -183,14 +183,14 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (pr
 	if secret == "" {
 		return proxy.Served{}, fmt.Errorf("this deployment binds a bucket but has no credential for the store at %s", manifest.Store.Endpoint)
 	}
-	internal := bucket.Store{
+	internal := s3store.Store{
 		Endpoint:        manifest.Store.Endpoint,
 		Region:          manifest.Store.Region,
 		AccessKeyID:     manifest.Store.AccessKeyID,
 		SecretAccessKey: secret,
 		PathStyle:       manifest.Store.PathStyle,
 	}
-	cfg := bucket.Config{
+	cfg := s3store.Config{
 		Objects:      internal.Client(),
 		Internal:     internal.Presigner(),
 		External:     publishing(internal, values),
@@ -203,17 +203,17 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (pr
 	if manifest.Store.Volume != "" {
 		cfg.Volume = live.FreeSpace(socket)
 	}
-	return proxy.Serve(bucket.Route(bucket.New(cfg), bound...))
+	return proxy.Serve(s3store.Route(s3store.New(cfg), bound...))
 }
 
 const unclaimedWindow = 10 * time.Second
 
-func publishing(store bucket.Store, values *rt.Values) func(context.Context) (bucket.PresignAPI, string) {
+func publishing(store s3store.Store, values *rt.Values) func(context.Context) (s3store.PresignAPI, string) {
 	var mu sync.Mutex
 	var base string
-	var signer bucket.PresignAPI
+	var signer s3store.PresignAPI
 	var looked time.Time
-	return func(ctx context.Context) (bucket.PresignAPI, string) {
+	return func(ctx context.Context) (s3store.PresignAPI, string) {
 		claimed := values.Value(vars.StorePublicKey)
 		if claimed == "" {
 			mu.Lock()
