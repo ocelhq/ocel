@@ -63,7 +63,7 @@ func TestTheRouterSendsEachBucketToTheBackendThatHoldsIt(t *testing.T) {
 	own := &ownBackend{}
 	uploads := boundBackend(t, "b0", "acme/uploads")
 	avatars := boundBackend(t, "b1", "acme-avatars")
-	router := Route(own, uploads, avatars)
+	router := route(own, uploads, avatars)
 
 	if _, err := router.Head(context.Background(), &bucketv1.HeadRequest{Bucket: "ocel-owned", Key: "a.png"}); err != nil {
 		t.Fatalf("Head(ocel-owned): %v", err)
@@ -97,7 +97,7 @@ func TestTheRouterSendsEachBucketToTheBackendThatHoldsIt(t *testing.T) {
 }
 
 func TestARouterWithNoOwnBackendRefusesABucketNoBindingNames(t *testing.T) {
-	router := Route(nil, boundBackend(t, "b0", "acme/uploads"))
+	router := route(nil, boundBackend(t, "b0", "acme/uploads"))
 
 	_, err := router.Head(context.Background(), &bucketv1.HeadRequest{Bucket: "elsewhere", Key: "a.png"})
 	if connect.CodeOf(err) != connect.CodePermissionDenied {

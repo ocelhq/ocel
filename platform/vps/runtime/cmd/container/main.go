@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,7 +16,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/runtimekit/child"
 	"github.com/ocelhq/ocel/pkg/runtimekit/front"
@@ -165,19 +163,11 @@ func pinned(manifest string) (vars.Manifest, error) {
 }
 
 func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (proxy.Served, error) {
-	if values == nil || !slices.ContainsFunc(manifest.Bindings, func(l rt.Binding) bool { return naming.Proxied(l.Type) }) {
+	if values == nil {
 		return proxy.Served{}, nil
 	}
-	callbacks := s3store.HTTPPoster{App: app}
-	bound, own, err := s3store.Backends(values, callbacks)
-	if err != nil {
-		return proxy.Served{}, err
-	}
-	if !own {
-		return proxy.Serve(s3store.Route(nil, bound...))
-	}
 	if manifest.Store == nil {
-		return proxy.Served{}, errors.New("this deployment binds a bucket this box keeps, and its manifest names no store to reach it in")
+		return s3store.ServeBound(values, app)
 	}
 	secret := values.Value(vars.StoreSecretKey)
 	if secret == "" {
@@ -194,7 +184,7 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (pr
 		Objects:      internal.Client(),
 		Internal:     internal.Presigner(),
 		External:     publishing(internal, values),
-		Callbacks:    callbacks,
+		Callbacks:    s3store.HTTPPoster{App: app},
 		PostPolicies: true,
 		SweepUploads: manifest.Store.SweepUploads,
 		Sessions:     manifest.Store.Sessions,
@@ -203,7 +193,7 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (pr
 	if manifest.Store.Volume != "" {
 		cfg.Volume = live.FreeSpace(socket)
 	}
-	return proxy.Serve(s3store.Route(s3store.New(cfg), bound...))
+	return proxy.Serve(s3store.RouteRecords(s3store.New(cfg), values, cfg.Callbacks))
 }
 
 const unclaimedWindow = 10 * time.Second

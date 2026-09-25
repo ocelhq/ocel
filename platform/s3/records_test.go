@@ -41,15 +41,12 @@ func TestBackendsAreBuiltForTheBucketsARecordPointsAtAStore(t *testing.T) {
 		},
 	}
 
-	backends, own, err := Backends(held, &recordingPoster{})
+	built, err := backends(held, &recordingPoster{})
 	if err != nil {
-		t.Fatalf("Backends: %v", err)
+		t.Fatalf("backends: %v", err)
 	}
-	if len(backends) != 1 || !backends[0].holds("OCEL_RESOURCE_BUCKET_uploads") {
-		t.Fatalf("backends = %d, want one serving the uploads binding", len(backends))
-	}
-	if !own {
-		t.Error("own = false, want the bucket the runtime's own backend reaches reported")
+	if len(built) != 1 || !built[0].holds("OCEL_RESOURCE_BUCKET_uploads") {
+		t.Fatalf("backends = %d, want one serving the uploads binding", len(built))
 	}
 }
 
@@ -94,9 +91,9 @@ func TestAnUnreadableBucketRecordIsRefusedWithoutItsValue(t *testing.T) {
 		bindings: []live.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
 		values:   map[string]string{"OCEL_RESOURCE_BUCKET_uploads": `{"bucket": secret-key-here`},
 	}
-	_, _, err := Backends(held, &recordingPoster{})
+	_, err := backends(held, &recordingPoster{})
 	if err == nil {
-		t.Fatal("Backends = nil error, want an unreadable record refused")
+		t.Fatal("backends = nil error, want an unreadable record refused")
 	}
 	if got := err.Error(); len(got) == 0 || strings.Contains(got, "secret-key-here") {
 		t.Errorf("error = %q, want the record named and its value kept out", got)
