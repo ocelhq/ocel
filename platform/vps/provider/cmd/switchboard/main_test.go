@@ -184,6 +184,41 @@ func TestServeRefusesToTakeTheControlSocketFromASwitchboardStillAnsweringOnIt(t 
 	}
 }
 
+func TestOfServesStartedTogetherOnOneControlSocketExactlyOneTakesIt(t *testing.T) {
+	controlAt(t)
+	table := tableFile(t, nil)
+	ctx, stop := context.WithCancel(t.Context())
+	const racing = 16
+	exited := make(chan int, racing)
+	var errs [racing]strings.Builder
+	for at := range racing {
+		proc, argv := t.TempDir(), []string{"serve", "--listen", freeAddress(t), "--table", table}
+		go func() { exited <- run(ctx, proc, argv, io.Discard, &errs[at]) }()
+	}
+	refused := 0
+	t.Cleanup(func() {
+		stop()
+		for range racing - refused {
+			<-exited
+		}
+	})
+
+	for refused < racing-1 {
+		select {
+		case code := <-exited:
+			refused++
+			if code != exitRefused {
+				t.Errorf("a serve that lost the control socket exited %d, want %d", code, exitRefused)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%d of %d serves started together are still serving on one control socket, want exactly one", racing-refused, racing)
+		}
+	}
+	if code, _, errs := ran(t, "upstreams"); code != 0 {
+		t.Errorf("the serve that kept the control socket answered upstreams = %d, %q, want it reachable", code, errs)
+	}
+}
+
 func TestServeReplacesASocketNothingAnswersOn(t *testing.T) {
 	control := controlAt(t)
 	stale, err := net.Listen("unix", control)
