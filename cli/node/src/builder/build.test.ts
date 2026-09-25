@@ -313,13 +313,13 @@ describe("serve descriptor", () => {
     );
   }
 
-  it("names the runtime and an artifact hash at the app artifact root", async () => {
+  it("names the framework and an artifact hash at the app artifact root", async () => {
     const outDir = freshOut();
     dirs.push(outDir);
     await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
 
     expect(readServe(outDir, "api")).toEqual({
-      runtime: "node",
+      framework: "node",
       edgeRouting: false,
       entry: NODE_ENTRY_ROUTE_ID,
       needs: {},

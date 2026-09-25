@@ -12,6 +12,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -172,5 +173,35 @@ func TestTheStagedRecordNamesTheISRPrefixTheFunctionWritesUnder(t *testing.T) {
 	}
 	if strings.HasSuffix(staged[0].IsrPrefix, "/") {
 		t.Errorf("isrPrefix = %q, want no trailing slash", staged[0].IsrPrefix)
+	}
+}
+
+func TestTheStagedRecordCarriesNoCodeForAnEdgeThatRunsNone(t *testing.T) {
+	builtProject(t)
+	builtEdgeBundle(t, "web", []byte(`{"version":1}`))
+	client, provider := deployServed(t)
+	direct := provider.Edges().(*fake.Edges).Edge(fake.KindDirect)
+	held := &stagingLedger{}
+	direct.UseLedger(func(state edge.StackState) fake.Ledger {
+		held.Ledger = ledger.New(provider.Records(), state.Class, state.Slug)
+		return held
+	})
+	if direct.Hooks().Compatibility != nil {
+		t.Fatal("the reference direct edge names a compatibility, so it cannot stand for an edge that runs no code")
+	}
+
+	req := deployRequest()
+	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
+	result, _ := deploy(t, client, req)
+	if result == nil || !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
+	}
+
+	staged := held.records()
+	if len(staged) != 1 {
+		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
+	}
+	if staged[0].EdgeWorkers != nil {
+		t.Errorf("edgeWorkers = %+v, want none: the edge runs no code, so nothing loads the bundle the build left", staged[0].EdgeWorkers)
 	}
 }

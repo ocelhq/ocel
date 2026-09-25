@@ -26,7 +26,7 @@ const (
 type settler struct {
 	kind    edge.Kind
 	unbound bool
-	writer  edge.DNSWriter
+	writer  edge.DNSRecords
 	zone    string
 	resolve resolver
 	budget  time.Duration
@@ -59,7 +59,7 @@ func unattended(sender *eventSender) owedPolicy {
 	return policy
 }
 
-func newSettler(front edge.Edge, writer edge.DNSWriter, zone string, resolve resolver) settler {
+func newSettler(front edge.Edge, writer edge.DNSRecords, zone string, resolve resolver) settler {
 	return settler{
 		kind:    front.Kind(),
 		unbound: front.Facts().ServesUnbound,
@@ -137,7 +137,7 @@ func (s settler) write(ctx context.Context, records []edge.Record, headline stri
 	for _, rec := range records {
 		say("Writing " + rec.String())
 	}
-	written, err := s.writer.EnsureRecords(ctx, records, say)
+	written, err := s.writer.Ensure(ctx, records, say)
 	settled.Written, settled.Owed = written, edge.Unwritten(records, written)
 	if err != nil || len(settled.Owed) == 0 {
 		return settled, err
@@ -172,7 +172,7 @@ func (s settler) release(ctx context.Context, written []edge.Record, say func(st
 	for _, rec := range written {
 		say("Removing " + rec.String())
 	}
-	return s.writer.DeleteRecords(ctx, written)
+	return s.writer.Delete(ctx, written)
 }
 
 func (s settler) await(ctx context.Context, hostname string, say func(string)) (Probe, error) {

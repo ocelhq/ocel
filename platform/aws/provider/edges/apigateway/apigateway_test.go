@@ -101,12 +101,11 @@ func assertSet(t *testing.T, what string, got, want []string) {
 	}
 }
 
-func TestNoneIsNotProgrammable(t *testing.T) {
+func TestTheAPIGatewayEdgeRunsNoCode(t *testing.T) {
 	t.Parallel()
 
-	var e edge.Edge = newWorld().edge()
-	if _, programmable := e.(edge.Programmable); programmable {
-		t.Error("the api-gateway edge is Programmable, but it declares only streaming; nothing of the app's code runs at this edge")
+	if newWorld().edge().Hooks().Compatibility != nil {
+		t.Error("the api-gateway edge names a compatibility, but it declares only streaming; nothing of the app's code runs at this edge")
 	}
 }
 

@@ -43,6 +43,14 @@ func (e *Edge) Facts() edge.Facts {
 	}
 }
 
+func (e *Edge) Hooks() edge.Hooks {
+	return edge.Hooks{
+		BootstrapStands:       e.bootstrapStands,
+		BoundHostnames:        e.boundHostnames,
+		CredentialPermissions: e.credentialPermissions,
+	}
+}
+
 var supported = []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming}
 
 func (e *Edge) Supported() []edge.Need { return slices.Clone(supported) }
@@ -97,7 +105,7 @@ func (e *Edge) raiseServing(ctx context.Context, class edge.Class, held previewE
 	return front, nil
 }
 
-func (e *Edge) Standing(ctx context.Context, class edge.Class) (bool, error) {
+func (e *Edge) bootstrapStands(ctx context.Context, class edge.Class) (bool, error) {
 	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Class: class})
 	if err != nil {
 		return false, err
@@ -105,7 +113,7 @@ func (e *Edge) Standing(ctx context.Context, class edge.Class) (bool, error) {
 	return frontOf(outputs).standing(), nil
 }
 
-func (e *Edge) Bound(ctx context.Context, class edge.Class) ([]string, error) {
+func (e *Edge) boundHostnames(ctx context.Context, class edge.Class) ([]string, error) {
 	if e.deps.Entries == nil {
 		return nil, nil
 	}
@@ -121,7 +129,7 @@ func (e *Edge) Bound(ctx context.Context, class edge.Class) ([]string, error) {
 }
 
 func (e *Edge) Teardown(ctx context.Context, class edge.Class) error {
-	bound, err := e.Bound(ctx, class)
+	bound, err := e.boundHostnames(ctx, class)
 	if err != nil {
 		return err
 	}

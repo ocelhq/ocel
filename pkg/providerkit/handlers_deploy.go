@@ -1131,8 +1131,8 @@ func (r *deployRun) edgeCode(entry AppEntry, result StackResult) (*edge.Code, er
 	if result.EdgeBundleKey == "" {
 		return nil, nil
 	}
-	host, runs := r.front.(edge.CodeHost)
-	if !runs {
+	compatibility := r.front.Hooks().Compatibility
+	if compatibility == nil {
 		return nil, nil
 	}
 	bundle, err := os.ReadFile(filepath.Join(AppArtifactRoot(ArtifactRoot(), entry.App), filepath.FromSlash(edge.AppBundleFile)))
@@ -1144,7 +1144,7 @@ func (r *deployRun) edgeCode(entry AppEntry, result StackResult) (*edge.Code, er
 	if err != nil {
 		return nil, fmt.Errorf("read the edge bundle %s runs: %w", entry.App, err)
 	}
-	compatDate, compatFlags := host.Compatibility()
+	compatDate, compatFlags := compatibility()
 	return &edge.Code{
 		BundleKey:   result.EdgeBundleKey,
 		ID:          loaderID(bundle, compatDate, compatFlags),

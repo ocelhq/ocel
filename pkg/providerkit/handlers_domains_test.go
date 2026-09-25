@@ -104,7 +104,7 @@ func TestAddHostnameBindsWritesAndRecordsTheProbe(t *testing.T) {
 	if len(settled.Written) == 0 {
 		t.Error("the settlement records no written DNS record, though a writer was selected")
 	}
-	if written := provider.DNS().(*fake.DNS).Writer("acme.com").Records(); len(written) != 1 {
+	if written := provider.DNS().(*fake.DNS).Zone("acme.com").Records(); len(written) != 1 {
 		t.Errorf("the zone holds %v, want the one record pointing app.acme.com at the edge", written)
 	}
 }
@@ -167,7 +167,7 @@ func TestAddHostnameOnAProjectThatPromotedNothingSaysNothingServesIt(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if written := writer.(*fake.DNSWriter).Records(); len(written) != 0 {
+	if written := writer.(*fake.DNSRecords).Records(); len(written) != 0 {
 		t.Errorf("the refused add wrote %v, want no record written", written)
 	}
 }
@@ -334,7 +334,7 @@ func TestRemoveHostnameUnbindsAndReleasesItsRecords(t *testing.T) {
 	if len(state.Hosts) != 0 {
 		t.Errorf("the settlement still holds %v", state.Hostnames())
 	}
-	if written := provider.DNS().(*fake.DNS).Writer("acme.com").Records(); len(written) != 0 {
+	if written := provider.DNS().(*fake.DNS).Zone("acme.com").Records(); len(written) != 0 {
 		t.Errorf("the zone still holds %v, want the records ocel wrote taken back", written)
 	}
 }
@@ -492,7 +492,7 @@ func TestAddHostnameSettlesTheValidationRecordsItsProviderProves(t *testing.T) {
 	if !slices.Contains(settled.Certificate.Written, validationRecord) {
 		t.Errorf("the certificate records %v as written, want the validation record among them", settled.Certificate.Written)
 	}
-	if written := provider.DNS().(*fake.DNS).Writer("acme.com").Records(); len(written) != 2 {
+	if written := provider.DNS().(*fake.DNS).Zone("acme.com").Records(); len(written) != 2 {
 		t.Errorf("the zone holds %v, want the validation record beside the one pointing at the edge", written)
 	}
 }
@@ -512,7 +512,7 @@ func TestAddHostnameDiscardsTheCertificateItSupersedes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := writer.EnsureRecords(context.Background(), []edge.Record{stale}, nil); err != nil {
+	if _, err := writer.Ensure(context.Background(), []edge.Record{stale}, nil); err != nil {
 		t.Fatal(err)
 	}
 	provider.IssueCertificates(validationRecord)
@@ -532,7 +532,7 @@ func TestAddHostnameDiscardsTheCertificateItSupersedes(t *testing.T) {
 	if discarded := provider.Discarded(); !slices.Contains(discarded, "superseded") {
 		t.Errorf("the provider discarded %v, want the superseded certificate among them", discarded)
 	}
-	if held := writer.(*fake.DNSWriter).Records(); slices.Contains(held, stale) {
+	if held := writer.(*fake.DNSRecords).Records(); slices.Contains(held, stale) {
 		t.Errorf("the zone still holds %v, want the superseded validation record released", held)
 	}
 }
@@ -583,7 +583,7 @@ func TestAddHostnameDiscardsTheSupersededCertificateOnlyOnceTheRebindFreesIt(t *
 	if len(settled.Superseded) != 0 {
 		t.Errorf("the record still carries %+v, want the discarded certificate forgotten", settled.Superseded)
 	}
-	if held := provider.DNS().(*fake.DNS).Writer("acme.com").Records(); slices.Contains(held, validationRecord) {
+	if held := provider.DNS().(*fake.DNS).Zone("acme.com").Records(); slices.Contains(held, validationRecord) {
 		t.Errorf("the zone still holds %v, want the superseded validation record released", held)
 	}
 }

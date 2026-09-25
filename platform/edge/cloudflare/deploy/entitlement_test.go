@@ -81,7 +81,7 @@ func TestCodeEntitlementReportsWhatThePlanEntitles(t *testing.T) {
 			t.Setenv(envAPIToken, "tok")
 
 			p := entitlementProvider(t, tc.subscriptions, tc.status)
-			got, err := p.CodeEntitlement(t.Context())
+			got, err := p.Hooks().CodeEntitlement(t.Context())
 			if err != nil {
 				t.Fatalf("CodeEntitlement: %v", err)
 			}

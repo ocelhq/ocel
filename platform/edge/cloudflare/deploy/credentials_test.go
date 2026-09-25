@@ -34,7 +34,7 @@ func TestCredentialPermissionsListsWhatEachTierMints(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			doc, err := (&provider{}).CredentialPermissions(tc.tier)
+			doc, err := New("ocel").Hooks().CredentialPermissions(tc.tier)
 			if err != nil {
 				t.Fatalf("CredentialPermissions(%v) error = %v", tc.tier, err)
 			}
@@ -54,7 +54,7 @@ func TestCredentialPermissionsListsWhatEachTierMints(t *testing.T) {
 		})
 	}
 
-	if _, err := (&provider{}).CredentialPermissions("admin"); err == nil || !strings.Contains(err.Error(), `"admin"`) {
+	if _, err := New("ocel").Hooks().CredentialPermissions("admin"); err == nil || !strings.Contains(err.Error(), `"admin"`) {
 		t.Errorf("CredentialPermissions(admin) err = %v, want it to name the tier it was asked for", err)
 	}
 }

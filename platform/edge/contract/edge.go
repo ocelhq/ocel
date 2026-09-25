@@ -64,6 +64,8 @@ type Edge interface {
 
 	Facts() Facts
 
+	Hooks() Hooks
+
 	Supported() []Need
 
 	FlipBound() FlipBound
@@ -133,30 +135,8 @@ type Ledger interface {
 	Prune(ctx context.Context, keepN int, pointer string) (PruneResult, error)
 }
 
-type CodeHost interface {
-	Compatibility() (compatDate string, compatFlags []string)
-}
-
-type Programmable interface {
-	CodeHost
-
-	AssembleApp(src WorkerSource, r Resolver) (Worker, error)
-
-	DeployApp(ctx context.Context, app AppDeployment) (AppResult, error)
-
-	FindApp(ctx context.Context, name string) (bool, error)
-}
-
-type CredentialVerifier interface {
-	VerifyCredentials(ctx context.Context) (CredentialIdentity, error)
-}
-
 type CredentialIdentity struct {
 	Account string
-}
-
-type EntitlementChecker interface {
-	CodeEntitlement(ctx context.Context) (CodeEntitlement, error)
 }
 
 type CodeEntitlement struct {
@@ -182,10 +162,6 @@ const (
 type CredentialDocument struct {
 	Heading  string
 	Document string
-}
-
-type CredentialDocumenter interface {
-	CredentialPermissions(tier CredentialTier) (CredentialDocument, error)
 }
 
 type AppDeployment struct {

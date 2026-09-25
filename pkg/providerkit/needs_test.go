@@ -151,3 +151,74 @@ func TestNeedCheckPassesAnAppThatShipsNoDescriptor(t *testing.T) {
 		t.Errorf("Run() recorded %v for an app that declares nothing", records)
 	}
 }
+
+type entitlingEdge struct {
+	edge.Edge
+	asked *int
+	plan  edge.CodeEntitlement
+}
+
+func (e entitlingEdge) Hooks() edge.Hooks {
+	return edge.Hooks{CodeEntitlement: func(context.Context) (edge.CodeEntitlement, error) {
+		*e.asked++
+		return e.plan, nil
+	}}
+}
+
+func TestNeedCheckServesACodeNeedWithoutAskingAnEdgeThatChecksNoEntitlement(t *testing.T) {
+	t.Parallel()
+
+	root := servedDescriptor(t, "web", edge.ServeDescriptor{
+		Needs: map[edge.Need]edge.NeedDetail{edge.NeedEdgeMiddleware: {Count: 1}},
+	})
+	front, err := fake.NewEdges(fake.NewRecords()).Open(fake.KindRelay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if front.Hooks().CodeEntitlement != nil {
+		t.Fatal("the reference edge checks an entitlement, so it cannot stand for one that checks none")
+	}
+
+	records, err := providerkit.NeedCheck{Edge: front, Root: root}.Run(context.Background(), oneApp())
+	if err != nil {
+		t.Fatalf("Run() over an edge that checks no entitlement = %v, want the code need served", err)
+	}
+	if !slices.Contains(records["web"].InEffect, edge.NeedEdgeMiddleware) {
+		t.Errorf("web's needs in effect are %v, want %s among them", records["web"].InEffect, edge.NeedEdgeMiddleware)
+	}
+}
+
+func TestNeedCheckRefusesACodeNeedThePlanWithholdsAndAsksOnce(t *testing.T) {
+	t.Parallel()
+
+	root := servedDescriptor(t, "web", edge.ServeDescriptor{
+		Needs: map[edge.Need]edge.NeedDetail{edge.NeedEdgeMiddleware: {Count: 1}, edge.NeedEdgeRuntime: {Count: 1}},
+	})
+	front, err := fake.NewEdges(fake.NewRecords()).Open(fake.KindRelay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	asked := 0
+	withheld := entitlingEdge{Edge: front, asked: &asked, plan: edge.CodeEntitlement{Plan: "Workers Free", Granted: edge.EntitlementWithheld}}
+
+	records, err := providerkit.NeedCheck{
+		Edge:          withheld,
+		Root:          root,
+		AllowDegraded: []string{string(edge.NeedEdgeMiddleware), string(edge.NeedEdgeRuntime)},
+	}.Run(context.Background(), oneApp())
+	if err != nil {
+		t.Fatalf("Run() with both code needs waived = %v", err)
+	}
+	if len(records["web"].InEffect) != 0 {
+		t.Errorf("web's needs in effect are %v, want none on a plan that withholds edge code", records["web"].InEffect)
+	}
+	if asked != 1 {
+		t.Errorf("the edge was asked for its entitlement %d times, want once for the whole check", asked)
+	}
+
+	var refused *providerkit.EdgeEntitlementError
+	_, err = providerkit.NeedCheck{Edge: withheld, Root: root}.Run(context.Background(), oneApp())
+	if !errors.As(err, &refused) || refused.Plan != "Workers Free" {
+		t.Errorf("Run() with nothing waived = %v, want the plan named in an entitlement refusal", err)
+	}
+}

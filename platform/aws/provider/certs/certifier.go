@@ -2,8 +2,6 @@ package certs
 
 import (
 	"strings"
-
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Certifier struct {
@@ -11,8 +9,8 @@ type Certifier struct {
 	Pins   map[string]string
 }
 
-func CertifierFor(front edge.Edge, deps Deps, pins map[string]string) Certifier {
-	return Certifier{Issuer: IssuerFor(front, deps), Pins: NormalizePins(pins)}
+func CertifierFor(region string, deps Deps, pins map[string]string) Certifier {
+	return Certifier{Issuer: IssuerFor(region, deps), Pins: NormalizePins(pins)}
 }
 
 func (c Certifier) Issues() bool { return c.Issuer.API != nil }

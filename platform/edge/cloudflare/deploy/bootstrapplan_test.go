@@ -1,6 +1,7 @@
 package cloudflare
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -85,13 +86,13 @@ func stripBinding(t *testing.T, m *cfMock, script, kind string) {
 	m.scriptSettings[script]["bindings"] = kept
 }
 
-func planner(t *testing.T, m *cfMock) edge.BootstrapPlanner {
+func planner(t *testing.T, m *cfMock) func(context.Context, edge.Class) ([]edge.PlanChange, error) {
 	t.Helper()
-	planner, ok := any(m.provider(t)).(edge.BootstrapPlanner)
-	if !ok {
-		t.Fatal("cloudflare provider does not implement edge.BootstrapPlanner")
+	plan := m.provider(t).Hooks().PlanBootstrap
+	if plan == nil {
+		t.Fatal("the cloudflare edge plans no bootstrap of its own")
 	}
-	return planner
+	return plan
 }
 
 func TestPlanBootstrap(t *testing.T) {
@@ -99,7 +100,7 @@ func TestPlanBootstrap(t *testing.T) {
 		seedBootstrapBundles(t, "export default {}", "export default {writer:1}")
 		m := bootstrapMock(t, false)
 
-		changes, err := planner(t, m).PlanBootstrap(t.Context(), edge.ClassProduction)
+		changes, err := planner(t, m)(t.Context(), edge.ClassProduction)
 		if err != nil {
 			t.Fatalf("PlanBootstrap: %v", err)
 		}
@@ -116,7 +117,7 @@ func TestPlanBootstrap(t *testing.T) {
 			t.Fatalf("Bootstrap: %v", err)
 		}
 
-		changes, err := p.PlanBootstrap(t.Context(), edge.ClassProduction)
+		changes, err := p.planBootstrap(t.Context(), edge.ClassProduction)
 		if err != nil {
 			t.Fatalf("PlanBootstrap: %v", err)
 		}
@@ -136,7 +137,7 @@ func TestPlanBootstrap(t *testing.T) {
 			t.Fatalf("rewrite bundle: %v", err)
 		}
 
-		changes, err := p.PlanBootstrap(t.Context(), edge.ClassProduction)
+		changes, err := p.planBootstrap(t.Context(), edge.ClassProduction)
 		if err != nil {
 			t.Fatalf("PlanBootstrap: %v", err)
 		}
@@ -155,7 +156,7 @@ func TestPlanBootstrap(t *testing.T) {
 		uploads := len(m.putScripts)
 		m.scriptSettings[sharedStoreScriptName]["compatibility_date"] = "2020-01-01"
 
-		changes, err := p.PlanBootstrap(t.Context(), edge.ClassProduction)
+		changes, err := p.planBootstrap(t.Context(), edge.ClassProduction)
 		if err != nil {
 			t.Fatalf("PlanBootstrap: %v", err)
 		}
@@ -184,7 +185,7 @@ func TestPlanBootstrap(t *testing.T) {
 		uploads := len(m.putScripts)
 		stripBinding(t, m, isrWriterScriptName, "r2_bucket")
 
-		changes, err := p.PlanBootstrap(t.Context(), edge.ClassProduction)
+		changes, err := p.planBootstrap(t.Context(), edge.ClassProduction)
 		if err != nil {
 			t.Fatalf("PlanBootstrap: %v", err)
 		}
@@ -206,7 +207,7 @@ func TestPlanBootstrap(t *testing.T) {
 	t.Run("an unset account id is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "")
 		t.Setenv(envAPIToken, "tok")
-		if _, err := New("ocel").(edge.BootstrapPlanner).PlanBootstrap(t.Context(), edge.ClassProduction); err == nil {
+		if _, err := New("ocel").Hooks().PlanBootstrap(t.Context(), edge.ClassProduction); err == nil {
 			t.Fatal("PlanBootstrap without an account id err = nil, want an error")
 		}
 	})
@@ -214,7 +215,7 @@ func TestPlanBootstrap(t *testing.T) {
 	t.Run("an unset api token is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "acct")
 		t.Setenv(envAPIToken, "")
-		if _, err := New("ocel").(edge.BootstrapPlanner).PlanBootstrap(t.Context(), edge.ClassProduction); err == nil {
+		if _, err := New("ocel").Hooks().PlanBootstrap(t.Context(), edge.ClassProduction); err == nil {
 			t.Fatal("PlanBootstrap without an api token err = nil, want an error")
 		}
 	})
@@ -325,7 +326,7 @@ func TestBootstrapWithTheCredentialGone(t *testing.T) {
 		uploads := len(m.putScripts)
 		m.scriptSecrets[sharedStoreScriptName] = nil
 
-		changes, err := p.PlanBootstrap(t.Context(), edge.ClassProduction)
+		changes, err := p.planBootstrap(t.Context(), edge.ClassProduction)
 		if err != nil {
 			t.Fatalf("PlanBootstrap: %v", err)
 		}
@@ -356,7 +357,7 @@ func TestBootstrapWithTheCredentialGone(t *testing.T) {
 			}
 		}
 
-		settled, err := p.PlanBootstrap(t.Context(), edge.ClassProduction)
+		settled, err := p.planBootstrap(t.Context(), edge.ClassProduction)
 		if err != nil {
 			t.Fatalf("PlanBootstrap after the secret was set: %v", err)
 		}

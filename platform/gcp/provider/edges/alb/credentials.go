@@ -43,9 +43,7 @@ var Permissions = []string{
 	"certificatemanager.operations.get",
 }
 
-var _ edge.CredentialDocumenter = (*Edge)(nil)
-
-func (e *Edge) CredentialPermissions(tier edge.CredentialTier) (edge.CredentialDocument, error) {
+func (e *Edge) credentialPermissions(tier edge.CredentialTier) (edge.CredentialDocument, error) {
 	var does string
 	switch tier {
 	case edge.TierBootstrap:

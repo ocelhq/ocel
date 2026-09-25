@@ -89,8 +89,8 @@ func TestRoute53EnsureRecords(t *testing.T) {
 		t.Parallel()
 
 		api := newFakeRoute53()
-		if _, err := NewRoute53(api, "").EnsureRecords(t.Context(), []edge.Record{cname}, nil); err != nil {
-			t.Fatalf("EnsureRecords: %v", err)
+		if _, err := NewRoute53(api, "").Ensure(t.Context(), []edge.Record{cname}, nil); err != nil {
+			t.Fatalf("Ensure: %v", err)
 		}
 		if len(api.changes) != 1 {
 			t.Fatalf("changes = %v, want one", api.changes)
@@ -112,8 +112,8 @@ func TestRoute53EnsureRecords(t *testing.T) {
 		t.Parallel()
 
 		api := newFakeRoute53()
-		if _, err := NewRoute53(api, "app.com").EnsureRecords(t.Context(), []edge.Record{cname}, nil); err != nil {
-			t.Fatalf("EnsureRecords: %v", err)
+		if _, err := NewRoute53(api, "app.com").Ensure(t.Context(), []edge.Record{cname}, nil); err != nil {
+			t.Fatalf("Ensure: %v", err)
 		}
 		if got := aws.ToString(api.changes[0].HostedZoneId); got != "Z-APP" {
 			t.Errorf("hosted zone = %q, want the named zone %q", got, "Z-APP")
@@ -124,9 +124,9 @@ func TestRoute53EnsureRecords(t *testing.T) {
 		t.Parallel()
 
 		api := newFakeRoute53()
-		_, err := NewRoute53(api, "").EnsureRecords(t.Context(), []edge.Record{{Name: "shop.elsewhere.com", Type: edge.RecordTypeCNAME, Value: "front"}}, nil)
+		_, err := NewRoute53(api, "").Ensure(t.Context(), []edge.Record{{Name: "shop.elsewhere.com", Type: edge.RecordTypeCNAME, Value: "front"}}, nil)
 		if err == nil {
-			t.Fatal("EnsureRecords err = nil, want a refusal")
+			t.Fatal("Ensure err = nil, want a refusal")
 		}
 		if !strings.Contains(err.Error(), "shop.elsewhere.com") {
 			t.Errorf("err = %q, want it to name the hostname", err)
@@ -141,8 +141,8 @@ func TestRoute53EnsureRecords(t *testing.T) {
 
 		api := newFakeRoute53()
 		proxied := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
-		if _, err := NewRoute53(api, "").EnsureRecords(t.Context(), []edge.Record{proxied}, nil); err == nil {
-			t.Fatal("EnsureRecords err = nil, want a refusal: Route 53 cannot proxy")
+		if _, err := NewRoute53(api, "").Ensure(t.Context(), []edge.Record{proxied}, nil); err == nil {
+			t.Fatal("Ensure err = nil, want a refusal: Route 53 cannot proxy")
 		}
 	})
 
@@ -152,8 +152,8 @@ func TestRoute53EnsureRecords(t *testing.T) {
 		api := newFakeRoute53()
 		w := NewRoute53(api, "")
 		for range 3 {
-			if _, err := w.EnsureRecords(t.Context(), []edge.Record{cname}, nil); err != nil {
-				t.Fatalf("EnsureRecords: %v", err)
+			if _, err := w.Ensure(t.Context(), []edge.Record{cname}, nil); err != nil {
+				t.Fatalf("Ensure: %v", err)
 			}
 		}
 		if api.lists != 2 {
@@ -166,8 +166,8 @@ func TestRoute53EnsureRecords(t *testing.T) {
 
 		api := newFakeRoute53()
 		api.markerless = true
-		if _, err := NewRoute53(api, "").EnsureRecords(t.Context(), []edge.Record{cname}, nil); err != nil {
-			t.Fatalf("EnsureRecords: %v", err)
+		if _, err := NewRoute53(api, "").Ensure(t.Context(), []edge.Record{cname}, nil); err != nil {
+			t.Fatalf("Ensure: %v", err)
 		}
 		if api.lists != 1 {
 			t.Errorf("hosted zone lists = %d, want 1: a page with no marker cannot be followed", api.lists)
@@ -220,8 +220,8 @@ func TestRoute53DeleteRecords(t *testing.T) {
 
 			api := newFakeRoute53()
 			api.live[tc.zone] = tc.live
-			if err := NewRoute53(api, "").DeleteRecords(t.Context(), []edge.Record{tc.written}); err != nil {
-				t.Fatalf("DeleteRecords: %v", err)
+			if err := NewRoute53(api, "").Delete(t.Context(), []edge.Record{tc.written}); err != nil {
+				t.Fatalf("Delete: %v", err)
 			}
 			if got := len(api.changes) == 1; got != tc.want {
 				t.Errorf("deleted = %v, want %v (changes = %v)", got, tc.want, api.changes)
@@ -242,18 +242,18 @@ func TestWriterFor(t *testing.T) {
 	t.Run("no kind resolves to no writer", func(t *testing.T) {
 		t.Parallel()
 
-		writer, err := WriterFor("", "", Deps{})
+		writer, err := RecordsFor("", "", Deps{})
 		if err != nil || writer != nil {
-			t.Errorf("WriterFor(\"\") = %v, %v, want nil, nil", writer, err)
+			t.Errorf("RecordsFor(\"\") = %v, %v, want nil, nil", writer, err)
 		}
 	})
 
 	t.Run("an unknown kind names the ones this provider writes with", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := WriterFor("bind9", "", Deps{})
+		_, err := RecordsFor("bind9", "", Deps{})
 		if err == nil {
-			t.Fatal("WriterFor(\"bind9\") err = nil, want a refusal")
+			t.Fatal("RecordsFor(\"bind9\") err = nil, want a refusal")
 		}
 		for _, kind := range SupportedKinds() {
 			if !strings.Contains(err.Error(), kind) {
@@ -265,12 +265,12 @@ func TestWriterFor(t *testing.T) {
 	t.Run("route53 resolves to a writer", func(t *testing.T) {
 		t.Parallel()
 
-		writer, err := WriterFor(KindRoute53, "app.com", Deps{})
+		writer, err := RecordsFor(KindRoute53, "app.com", Deps{})
 		if err != nil {
-			t.Fatalf("WriterFor(route53) error = %v", err)
+			t.Fatalf("RecordsFor(route53) error = %v", err)
 		}
 		if writer == nil {
-			t.Error("WriterFor(route53) = nil, want a writer")
+			t.Error("RecordsFor(route53) = nil, want a writer")
 		}
 	})
 }

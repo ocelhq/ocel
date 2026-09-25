@@ -35,13 +35,7 @@ const (
 	reasonBucketEmptied = "every cached object in it, emptied one page at a time first"
 )
 
-var (
-	_ edge.BootstrapPlanner = (*provider)(nil)
-	_ edge.BootstrapRemover = (*provider)(nil)
-	_ edge.BootstrapAdopter = (*provider)(nil)
-)
-
-func (p *provider) PlanBootstrap(ctx context.Context, class edge.Class) ([]edge.PlanChange, error) {
+func (p *provider) planBootstrap(ctx context.Context, class edge.Class) ([]edge.PlanChange, error) {
 	accountID, err := bootstrapCredentials()
 	if err != nil {
 		return nil, err
@@ -53,7 +47,7 @@ func (p *provider) PlanBootstrap(ctx context.Context, class edge.Class) ([]edge.
 	return state.changes(), nil
 }
 
-func (p *provider) PlanRemoveBootstrap(ctx context.Context, class edge.Class) ([]edge.PlanChange, error) {
+func (p *provider) planRemoveBootstrap(ctx context.Context, class edge.Class) ([]edge.PlanChange, error) {
 	accountID, err := bootstrapCredentials()
 	if err != nil {
 		return nil, err
@@ -63,6 +57,25 @@ func (p *provider) PlanRemoveBootstrap(ctx context.Context, class edge.Class) ([
 		return nil, err
 	}
 	return state.removals(), nil
+}
+
+func (p *provider) adoption(_ context.Context, class edge.Class) (edge.Adoption, error) {
+	name, err := cacheStoreNameFor(p.namespace, class)
+	if err != nil {
+		return edge.Adoption{}, err
+	}
+	workers, err := bootstrapWorkers(p.namespace, class)
+	if err != nil {
+		return edge.Adoption{}, err
+	}
+	adoption := edge.Adoption{
+		Values: adoptedValues(name),
+		Offers: []edge.OfferKind{edge.OfferCacheStore},
+	}
+	for _, worker := range workers {
+		adoption.Offers = append(adoption.Offers, worker.offer)
+	}
+	return adoption, nil
 }
 
 func (s bootstrapState) removals() []edge.PlanChange {

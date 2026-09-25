@@ -14,10 +14,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 )
 
-func writeAppNeeds(t *testing.T, root, app, runtime, needs string) {
+func writeAppNeeds(t *testing.T, root, app, framework, needs string) {
 	t.Helper()
 	clitest.WriteFile(t, filepath.Join(root, constants.ProjectStateDirName, "output", "apps", app, edge.ServeDescriptorFile),
-		`{"runtime":"`+runtime+`","buildId":"b1","needs":`+needs+`}`)
+		`{"framework":"`+framework+`","buildId":"b1","needs":`+needs+`}`)
 }
 
 func lintEdgeWarnings(t *testing.T, cfg *projectconfig.Config) []string {

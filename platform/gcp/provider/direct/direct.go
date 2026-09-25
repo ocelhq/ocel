@@ -27,6 +27,8 @@ func (e *Edge) Kind() edge.Kind { return Kind }
 
 func (e *Edge) Facts() edge.Facts { return edge.Facts{AddressesItself: true} }
 
+func (e *Edge) Hooks() edge.Hooks { return edge.Hooks{} }
+
 var supported = []edge.Need{edge.NeedStreaming}
 
 func (e *Edge) Supported() []edge.Need { return slices.Clone(supported) }

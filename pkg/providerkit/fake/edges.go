@@ -29,14 +29,13 @@ type Ledger interface {
 }
 
 type Edges struct {
-	mu        sync.Mutex
-	order     []edge.Kind
-	edges     map[edge.Kind]*Edge
-	verifiers map[edge.Kind]verifying
+	mu    sync.Mutex
+	order []edge.Kind
+	edges map[edge.Kind]*Edge
 }
 
 func NewEdges(records providerkit.RecordStore) *Edges {
-	registry := &Edges{edges: map[edge.Kind]*Edge{}, verifiers: map[edge.Kind]verifying{}}
+	registry := &Edges{edges: map[edge.Kind]*Edge{}}
 	for _, kind := range []edge.Kind{KindRelay, KindDirect} {
 		registry.order = append(registry.order, kind)
 		registry.edges[kind] = newEdge(kind, records)
@@ -60,27 +59,14 @@ func (e *Edges) Open(kind edge.Kind) (edge.Edge, error) {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"the reference provider serves no edge %q; it serves %s", kind, kindList(e.order))
 	}
-	if verifier, verifies := e.verifiers[kind]; verifies {
-		verifier.Edge = front
-		return verifier, nil
-	}
 	return front, nil
 }
 
 func (e *Edges) Verifies(kind edge.Kind, identity edge.CredentialIdentity, err error) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.verifiers[kind] = verifying{identity: identity, err: err}
-}
-
-type verifying struct {
-	*Edge
-	identity edge.CredentialIdentity
-	err      error
-}
-
-func (v verifying) VerifyCredentials(context.Context) (edge.CredentialIdentity, error) {
-	return v.identity, v.err
+	front := e.Edge(kind)
+	front.mu.Lock()
+	defer front.mu.Unlock()
+	front.verify = func(context.Context) (edge.CredentialIdentity, error) { return identity, err }
 }
 
 func (e *Edges) serving(certificate string) bool {
@@ -137,6 +123,7 @@ type Edge struct {
 	refusal  error
 	unbound  error
 	bindSays string
+	verify   func(context.Context) (edge.CredentialIdentity, error)
 
 	unreadable error
 }
@@ -249,7 +236,17 @@ const (
 	CompatFlag = "nodejs_compat"
 )
 
-func (e *Edge) Compatibility() (string, []string) {
+func (e *Edge) Hooks() edge.Hooks {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	hooks := edge.Hooks{VerifyCredentials: e.verify}
+	if e.kind == KindRelay {
+		hooks.Compatibility = compatibility
+	}
+	return hooks
+}
+
+func compatibility() (string, []string) {
 	return CompatDate, []string{CompatFlag}
 }
 
@@ -456,17 +453,17 @@ func (s *Stack) Destroy(ctx context.Context) error {
 
 type DNS struct {
 	mu      sync.Mutex
-	writers map[string]*DNSWriter
+	writers map[string]*DNSRecords
 	fronts  []edge.Kind
 }
 
 const KindZone providerkit.DNSKind = "zone"
 
-func NewDNS() *DNS { return &DNS{writers: map[string]*DNSWriter{}} }
+func NewDNS() *DNS { return &DNS{writers: map[string]*DNSRecords{}} }
 
 func (d *DNS) Supported() []providerkit.DNSKind { return []providerkit.DNSKind{KindZone} }
 
-func (d *DNS) Open(kind providerkit.DNSKind, zone string, front edge.Kind) (edge.DNSWriter, error) {
+func (d *DNS) Open(kind providerkit.DNSKind, zone string, front edge.Kind) (edge.DNSRecords, error) {
 	if kind != KindZone {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"the reference provider writes no dns %q; it writes %s", kind, KindZone)
@@ -476,7 +473,7 @@ func (d *DNS) Open(kind providerkit.DNSKind, zone string, front edge.Kind) (edge
 	d.fronts = append(d.fronts, front)
 	writer, open := d.writers[zone]
 	if !open {
-		writer = &DNSWriter{zone: zone}
+		writer = &DNSRecords{zone: zone}
 		d.writers[zone] = writer
 	}
 	return writer, nil
@@ -488,42 +485,34 @@ func (d *DNS) Fronts() []edge.Kind {
 	return slices.Clone(d.fronts)
 }
 
-func (d *DNS) Writer(zone string) *DNSWriter {
+func (d *DNS) Zone(zone string) *DNSRecords {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	return d.writers[zone]
 }
 
-type DNSWriter struct {
+type DNSRecords struct {
 	mu      sync.Mutex
 	zone    string
 	records []edge.Record
 	refusal error
 }
 
-func (w *DNSWriter) Refuse(err error) {
+func (w *DNSRecords) Refuse(err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.refusal = err
 }
 
-func (w *DNSWriter) Records() []edge.Record {
+func (w *DNSRecords) Records() []edge.Record {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return slices.Clone(w.records)
 }
 
-func (w *DNSWriter) RecordTTL() time.Duration { return 60 * time.Second }
+func (w *DNSRecords) TTL() time.Duration { return 60 * time.Second }
 
-func (w *DNSWriter) ZoneOf(_ context.Context, hostname string) (edge.Zone, error) {
-	if w.zone == "" || !edge.ZoneOwns(hostname, w.zone) {
-		return edge.Zone{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"no zone reachable with these credentials owns %q", hostname)
-	}
-	return edge.Zone{ID: w.zone, Name: w.zone}, nil
-}
-
-func (w *DNSWriter) EnsureRecords(_ context.Context, records []edge.Record, say func(string)) ([]edge.Record, error) {
+func (w *DNSRecords) Ensure(_ context.Context, records []edge.Record, say func(string)) ([]edge.Record, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.refusal != nil {
@@ -540,7 +529,7 @@ func (w *DNSWriter) EnsureRecords(_ context.Context, records []edge.Record, say 
 	return slices.Clone(records), nil
 }
 
-func (w *DNSWriter) DeleteRecords(_ context.Context, records []edge.Record) error {
+func (w *DNSRecords) Delete(_ context.Context, records []edge.Record) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.refusal != nil {
@@ -557,8 +546,6 @@ var (
 	_ providerkit.DNS   = (*DNS)(nil)
 	_ edge.Edge         = (*Edge)(nil)
 	_ edge.EdgeStack    = (*Stack)(nil)
-	_ edge.DNSWriter    = (*DNSWriter)(nil)
-	_ edge.TTLBound     = (*DNSWriter)(nil)
-	_ edge.ZoneFinder   = (*DNSWriter)(nil)
+	_ edge.DNSRecords   = (*DNSRecords)(nil)
 	_ Ledger            = (*ledger.Ledger)(nil)
 )

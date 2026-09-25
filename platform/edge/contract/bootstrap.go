@@ -1,26 +1,11 @@
 package edge
 
-import (
-	"context"
-	"strings"
-)
+import "strings"
 
 type BootstrapOutput struct {
 	Trust  TrustBoundary
 	Values map[string]string
 	Offers []Offer
-}
-
-type BootstrapPlanner interface {
-	PlanBootstrap(ctx context.Context, class Class) ([]PlanChange, error)
-}
-
-type BootstrapRemover interface {
-	PlanRemoveBootstrap(ctx context.Context, class Class) ([]PlanChange, error)
-}
-
-type BootstrapAdopter interface {
-	Adoption(ctx context.Context, class Class) (Adoption, error)
 }
 
 type Adoption struct {

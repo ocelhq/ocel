@@ -133,5 +133,5 @@ func readDeployResult(t *testing.T, root string) deployresult.Result {
 func writeServeDescriptor(t *testing.T, root, app, buildID string) {
 	t.Helper()
 	clitest.WriteFile(t, filepath.Join(root, constants.ProjectStateDirName, "output", "apps", app, edge.ServeDescriptorFile),
-		`{"runtime":"node","buildId":"`+buildID+`"}`)
+		`{"framework":"node","buildId":"`+buildID+`"}`)
 }

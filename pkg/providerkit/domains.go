@@ -237,9 +237,14 @@ func recordLines(records []edge.Record) []string {
 	return out
 }
 
-func flipWindow(writer edge.DNSWriter) string {
-	if ttl := edge.WriteTTL(writer); ttl > 0 {
+func flipWindow(records edge.DNSRecords) string {
+	if records == nil {
+		return unknownTTL
+	}
+	if ttl := records.TTL(); ttl > 0 {
 		return ttl.String()
 	}
-	return "whatever TTL your DNS provider serves that record with"
+	return unknownTTL
 }
+
+const unknownTTL = "whatever TTL your DNS provider serves that record with"

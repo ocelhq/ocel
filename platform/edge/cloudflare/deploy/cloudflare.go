@@ -20,10 +20,8 @@ import (
 	"time"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
-	"github.com/cloudflare/cloudflare-go/v4/accounts"
 	"github.com/cloudflare/cloudflare-go/v4/option"
 	"github.com/cloudflare/cloudflare-go/v4/r2"
-	"github.com/cloudflare/cloudflare-go/v4/shared"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -39,6 +37,8 @@ const (
 const compatDate = "2026-07-13"
 
 var compatFlags = []string{"nodejs_compat"}
+
+func compatibility() (string, []string) { return compatDate, compatFlags }
 
 const envObservability = "OCEL_EDGE_OBSERVABILITY"
 
@@ -67,11 +67,6 @@ type provider struct {
 	entryWorkers map[string][]string
 }
 
-var (
-	_ edge.Edge         = (*provider)(nil)
-	_ edge.Programmable = (*provider)(nil)
-)
-
 func New(namespace string) edge.Edge {
 	return &provider{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries)), namespace: namespace}
 }
@@ -99,6 +94,18 @@ func (p *provider) Facts() edge.Facts {
 		SignsOriginForwards: true,
 		CachesRecords:       true,
 		CredentialScope:     os.Getenv(envAccountID),
+	}
+}
+
+func (p *provider) Hooks() edge.Hooks {
+	return edge.Hooks{
+		PlanBootstrap:         p.planBootstrap,
+		PlanRemoveBootstrap:   p.planRemoveBootstrap,
+		Adoption:              p.adoption,
+		VerifyCredentials:     p.verifyCredentials,
+		CodeEntitlement:       p.codeEntitlement,
+		CredentialPermissions: credentialPermissions,
+		Compatibility:         compatibility,
 	}
 }
 
@@ -167,27 +174,6 @@ func (p *provider) SharedPreviewRemoval() edge.PlanGroup {
 		Action: edge.PlanKeep,
 		Reason: "bootstrap-scoped: " + edge.PreviewEntryOwner + " fronts every project's previews",
 	}
-}
-
-func (p *provider) Compatibility() (string, []string) { return compatDate, compatFlags }
-
-func (p *provider) Adoption(_ context.Context, class edge.Class) (edge.Adoption, error) {
-	name, err := cacheStoreNameFor(p.namespace, class)
-	if err != nil {
-		return edge.Adoption{}, err
-	}
-	workers, err := bootstrapWorkers(p.namespace, class)
-	if err != nil {
-		return edge.Adoption{}, err
-	}
-	adoption := edge.Adoption{
-		Values: adoptedValues(name),
-		Offers: []edge.OfferKind{edge.OfferCacheStore},
-	}
-	for _, worker := range workers {
-		adoption.Offers = append(adoption.Offers, worker.offer)
-	}
-	return adoption, nil
 }
 
 func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {
@@ -399,7 +385,7 @@ func readWorkerBundle(path string) (edge.Worker, error) {
 	}}, nil
 }
 
-func (p *provider) FindApp(ctx context.Context, name string) (bool, error) {
+func (p *provider) findApp(ctx context.Context, name string) (bool, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return false, fmt.Errorf("%s is not set; it is required to query the Cloudflare edge", envAccountID)
@@ -414,65 +400,7 @@ func (p *provider) FindApp(ctx context.Context, name string) (bool, error) {
 	return err == nil, err
 }
 
-func (p *provider) VerifyCredentials(ctx context.Context) (edge.CredentialIdentity, error) {
-	accountID := os.Getenv(envAccountID)
-	if accountID == "" {
-		return edge.CredentialIdentity{}, fmt.Errorf("%s is not set", envAccountID)
-	}
-	if os.Getenv(envAPIToken) == "" {
-		return edge.CredentialIdentity{}, fmt.Errorf("%s is not set", envAPIToken)
-	}
-	if _, err := p.client.Accounts.Get(ctx, accounts.AccountGetParams{AccountID: cf.F(accountID)}); err != nil {
-		return edge.CredentialIdentity{}, fmt.Errorf("%s was rejected by Cloudflare for account %s: %w", envAPIToken, accountID, err)
-	}
-	return edge.CredentialIdentity{Account: accountID}, nil
-}
-
-func (p *provider) CodeEntitlement(ctx context.Context) (edge.CodeEntitlement, error) {
-	accountID := os.Getenv(envAccountID)
-	if accountID == "" {
-		return edge.CodeEntitlement{}, fmt.Errorf("%s is not set", envAccountID)
-	}
-	plan, granted := p.workersPlan(ctx, accountID)
-	return edge.CodeEntitlement{Plan: plan, Granted: granted}, nil
-}
-
-const workersPaidPlan = "Workers Paid"
-
-const workersFreePlan = "Workers Free"
-
-func (p *provider) workersPlan(ctx context.Context, accountID string) (string, edge.Entitlement) {
-	page, err := p.client.Accounts.Subscriptions.Get(ctx, accounts.SubscriptionGetParams{AccountID: cf.F(accountID)})
-	if err != nil {
-		fmt.Fprintf(os.Stderr,
-			"ocel cloudflare edge: could not read the subscriptions of account %s: %v\n"+
-				"%s must carry the \"Billing Read\" permission (Account scope) to tell whether the plan runs code at the edge. "+
-				"Without it this deploy proceeds, and an account on the Workers Free plan is rejected by Cloudflare when the "+
-				"worker is uploaded, after the deploy has begun changing your infrastructure\n",
-			accountID, err, envAPIToken)
-		return "", edge.EntitlementUnknown
-	}
-	for _, sub := range page.Result {
-		if runsWorkerCode(sub.RatePlan) {
-			name := sub.RatePlan.PublicName
-			if name == "" {
-				name = workersPaidPlan
-			}
-			return name, edge.EntitlementGranted
-		}
-	}
-	return workersFreePlan, edge.EntitlementWithheld
-}
-
-func runsWorkerCode(plan shared.RatePlan) bool {
-	if plan.IsContract || plan.ID == shared.RatePlanIDEnterprise || plan.ID == shared.RatePlanIDPartnersEnterprise {
-		return true
-	}
-	id := strings.ToLower(string(plan.ID))
-	return strings.Contains(id, "workers") && !strings.Contains(id, "free")
-}
-
-func (p *provider) DeployApp(ctx context.Context, app edge.AppDeployment) (edge.AppResult, error) {
+func (p *provider) deployApp(ctx context.Context, app edge.AppDeployment) (edge.AppResult, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return edge.AppResult{}, fmt.Errorf("%s is not set; it is required to deploy to the Cloudflare edge", envAccountID)

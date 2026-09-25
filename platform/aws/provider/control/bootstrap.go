@@ -151,11 +151,11 @@ func (b Bootstrap) adoptions(ctx context.Context, req providerkit.BootstrapReque
 		if err != nil {
 			return nil, err
 		}
-		adopter, ok := front.(edge.BootstrapAdopter)
-		if !ok {
+		adopt := front.Hooks().Adoption
+		if adopt == nil {
 			continue
 		}
-		adoption, err := adopter.Adoption(ctx, req.Class)
+		adoption, err := adopt(ctx, req.Class)
 		if err != nil {
 			return nil, fmt.Errorf("read what the %s edge hands this account to hold: %w", kind, err)
 		}
@@ -204,11 +204,11 @@ func (b Bootstrap) standingEdgeGroup(ctx context.Context, class providerkit.Clas
 }
 
 func plannedBootstrap(ctx context.Context, front edge.Edge, class providerkit.Class) ([]edge.PlanChange, error) {
-	planner, ok := front.(edge.BootstrapPlanner)
-	if !ok {
+	plan := front.Hooks().PlanBootstrap
+	if plan == nil {
 		return nil, nil
 	}
-	planned, err := planner.PlanBootstrap(ctx, class)
+	planned, err := plan(ctx, class)
 	if err != nil {
 		return nil, fmt.Errorf("plan the %s edge bootstrap: %w", front.Kind(), err)
 	}

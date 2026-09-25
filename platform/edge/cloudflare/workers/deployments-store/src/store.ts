@@ -5,7 +5,7 @@ export interface SqlStore {
 
 export interface DeploymentRecord {
   app: string;
-  runtime: string;
+  framework: string;
   identity: string;
   deploymentId: string;
   routingManifest: unknown;

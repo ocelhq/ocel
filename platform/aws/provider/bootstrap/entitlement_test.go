@@ -12,9 +12,11 @@ type freePlanEdge struct {
 	checks int
 }
 
-func (f *freePlanEdge) CodeEntitlement(context.Context) (edge.CodeEntitlement, error) {
-	f.checks++
-	return edge.CodeEntitlement{Plan: "Workers Free", Granted: edge.EntitlementWithheld}, nil
+func (f *freePlanEdge) Hooks() edge.Hooks {
+	return edge.Hooks{CodeEntitlement: func(context.Context) (edge.CodeEntitlement, error) {
+		f.checks++
+		return edge.CodeEntitlement{Plan: "Workers Free", Granted: edge.EntitlementWithheld}, nil
+	}}
 }
 
 func TestRunNeverAsksWhatThePlanEntitles(t *testing.T) {

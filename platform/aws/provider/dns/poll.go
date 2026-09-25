@@ -96,7 +96,7 @@ func (p Poller) window() time.Duration {
 	return time.Duration(max(p.Attempts, 1)-1) * p.Every
 }
 
-func Release(ctx context.Context, writer edge.DNSWriter, records []edge.Record, say func(string)) error {
+func Release(ctx context.Context, writer edge.DNSRecords, records []edge.Record, say func(string)) error {
 	if len(records) == 0 {
 		return nil
 	}
@@ -109,7 +109,7 @@ func Release(ctx context.Context, writer edge.DNSWriter, records []edge.Record, 
 	for _, rec := range records {
 		say(fmt.Sprintf("Removing %s", rec))
 	}
-	return writer.DeleteRecords(ctx, records)
+	return writer.Delete(ctx, records)
 }
 
 func probeHostname(name string) string {

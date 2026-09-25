@@ -84,7 +84,7 @@ type Config struct {
 
 	Edge edge.Edge
 
-	DNS      edge.DNSWriter
+	DNS      edge.DNSRecords
 	DNSAwait RecordWaiter
 
 	Tier                   environmentv1.Tier

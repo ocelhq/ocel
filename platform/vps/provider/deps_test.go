@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	repo      = "github.com/ocelhq/ocel/"
-	dnsWriter = repo + "platform/edge/cloudflare/deploy"
+	repo       = "github.com/ocelhq/ocel/"
+	dnsRecords = repo + "platform/edge/cloudflare/deploy"
 )
 
 var reachable = map[string]bool{
@@ -25,7 +25,7 @@ var reachable = map[string]bool{
 	"github.com/ocelhq/ocel/pkg/target":             true,
 	"github.com/ocelhq/ocel/pkg/transformkit":       true,
 	"github.com/ocelhq/ocel/platform/edge/contract": true,
-	dnsWriter: true,
+	dnsRecords: true,
 }
 
 var goSSHStack = []string{
@@ -46,7 +46,7 @@ var provisioningEngines = []string{
 func TestTheProviderReachesNoCloudAndNoGoSSHStackOfItsOwn(t *testing.T) {
 	t.Parallel()
 
-	writers := depsOf(t, dnsWriter)
+	writers := depsOf(t, dnsRecords)
 	own := slices.DeleteFunc(depsOf(t, "./..."), func(pkg string) bool {
 		return !strings.HasPrefix(pkg, repo) && slices.Contains(writers, pkg)
 	})
@@ -62,7 +62,7 @@ func TestTheProviderReachesNoCloudAndNoGoSSHStackOfItsOwn(t *testing.T) {
 		}
 		for _, engine := range provisioningEngines {
 			if strings.HasPrefix(pkg, engine) {
-				t.Errorf("the vps provider reaches %s of its own: a box is provisioned over a shell session, and the only vendor SDK it binds is the one the %s it opens brings with it", pkg, dnsWriter)
+				t.Errorf("the vps provider reaches %s of its own: a box is provisioned over a shell session, and the only vendor SDK it binds is the one the %s it opens brings with it", pkg, dnsRecords)
 			}
 		}
 	}
@@ -83,7 +83,7 @@ func TestTheProviderNamesNoVendorSDKInItsOwnImports(t *testing.T) {
 		}
 		for _, engine := range append(slices.Clone(provisioningEngines), goSSHStack...) {
 			if strings.HasPrefix(imported, engine) {
-				t.Errorf("%s imports %s itself; a vendor SDK reaches this provider only behind the %s it opens", mine, imported, dnsWriter)
+				t.Errorf("%s imports %s itself; a vendor SDK reaches this provider only behind the %s it opens", mine, imported, dnsRecords)
 			}
 		}
 	}

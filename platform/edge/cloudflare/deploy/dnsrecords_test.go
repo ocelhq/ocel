@@ -58,12 +58,12 @@ func (f *fakeZones) List(_ context.Context, params zones.ZoneListParams, _ ...op
 	return &pagination.V4PagePaginationArray[zones.Zone]{Result: f.owned}, nil
 }
 
-func newTestWriter(records *fakeRecords, owned []zones.Zone, named string) (*dnsWriter, *fakeZones) {
+func newTestWriter(records *fakeRecords, owned []zones.Zone, named string) (*dnsRecords, *fakeZones) {
 	if records.existing == nil {
 		records.existing = map[string][]dns.RecordResponse{}
 	}
 	zoneList := &fakeZones{owned: owned}
-	return &dnsWriter{records: records, zones: zoneList, accountID: testAccountID, named: named}, zoneList
+	return &dnsRecords{records: records, zones: zoneList, accountID: testAccountID, named: named}, zoneList
 }
 
 var testZones = []zones.Zone{
@@ -84,7 +84,7 @@ func createdBody(t *testing.T, params dns.RecordNewParams) map[string]any {
 	return body
 }
 
-func TestDNSWriterEnsureRecords(t *testing.T) {
+func TestDNSRecordsEnsureRecords(t *testing.T) {
 	t.Parallel()
 
 	t.Run("writes a proxied placeholder into the longest matching zone", func(t *testing.T) {
@@ -93,8 +93,8 @@ func TestDNSWriterEnsureRecords(t *testing.T) {
 		records := &fakeRecords{}
 		w, zoneList := newTestWriter(records, testZones, "")
 		want := edge.Record{Name: "*.preview.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
-		if _, err := w.EnsureRecords(t.Context(), []edge.Record{want}, nil); err != nil {
-			t.Fatalf("EnsureRecords: %v", err)
+		if _, err := w.Ensure(t.Context(), []edge.Record{want}, nil); err != nil {
+			t.Fatalf("Ensure: %v", err)
 		}
 		if len(records.created) != 1 {
 			t.Fatalf("created = %v, want one record", records.created)
@@ -117,9 +117,9 @@ func TestDNSWriterEnsureRecords(t *testing.T) {
 		records := &fakeRecords{}
 		w, _ := newTestWriter(records, testZones, "")
 		want := edge.Record{Name: "shop.app.com", Type: "MX", Value: "mail.example.net"}
-		_, err := w.EnsureRecords(t.Context(), []edge.Record{want}, nil)
+		_, err := w.Ensure(t.Context(), []edge.Record{want}, nil)
 		if err == nil {
-			t.Fatal("EnsureRecords error = nil, want a refusal: the state is deserialised, so any string can name the type")
+			t.Fatal("Ensure error = nil, want a refusal: the state is deserialised, so any string can name the type")
 		}
 		if !strings.Contains(err.Error(), "MX") {
 			t.Errorf("err = %q, want it to name the type it refused", err)
@@ -137,9 +137,9 @@ func TestDNSWriterEnsureRecords(t *testing.T) {
 		}}
 		w, _ := newTestWriter(records, testZones, "")
 		want := edge.Record{Name: "shop.app.com", Type: "MX", Value: "mail.example.net"}
-		_, err := w.EnsureRecords(t.Context(), []edge.Record{want}, nil)
+		_, err := w.Ensure(t.Context(), []edge.Record{want}, nil)
 		if err == nil {
-			t.Fatal("EnsureRecords error = nil, want a refusal on the repoint too")
+			t.Fatal("Ensure error = nil, want a refusal on the repoint too")
 		}
 		if len(records.updated) != 0 {
 			t.Errorf("updated = %v, want nothing repointed", records.updated)
@@ -152,8 +152,8 @@ func TestDNSWriterEnsureRecords(t *testing.T) {
 		records := &fakeRecords{}
 		w, _ := newTestWriter(records, testZones, "")
 		want := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeCNAME, Value: "front.example.net"}
-		if _, err := w.EnsureRecords(t.Context(), []edge.Record{want}, nil); err != nil {
-			t.Fatalf("EnsureRecords: %v", err)
+		if _, err := w.Ensure(t.Context(), []edge.Record{want}, nil); err != nil {
+			t.Fatalf("Ensure: %v", err)
 		}
 		body := createdBody(t, records.created[0])
 		if body["type"] != "CNAME" || body["content"] != "front.example.net" || body["proxied"] != false {
@@ -167,8 +167,8 @@ func TestDNSWriterEnsureRecords(t *testing.T) {
 		records := &fakeRecords{}
 		w, _ := newTestWriter(records, testZones, "")
 		want := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeA, Value: "203.0.113.10"}
-		if _, err := w.EnsureRecords(t.Context(), []edge.Record{want}, nil); err != nil {
-			t.Fatalf("EnsureRecords: %v", err)
+		if _, err := w.Ensure(t.Context(), []edge.Record{want}, nil); err != nil {
+			t.Fatalf("Ensure: %v", err)
 		}
 		body := createdBody(t, records.created[0])
 		if body["type"] != "A" || body["content"] != "203.0.113.10" || body["proxied"] != false {
@@ -182,8 +182,8 @@ func TestDNSWriterEnsureRecords(t *testing.T) {
 		records := &fakeRecords{}
 		w, _ := newTestWriter(records, testZones, "")
 		want := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeAAAA, Value: "2001:db8::1"}
-		if _, err := w.EnsureRecords(t.Context(), []edge.Record{want}, nil); err != nil {
-			t.Fatalf("EnsureRecords: %v", err)
+		if _, err := w.Ensure(t.Context(), []edge.Record{want}, nil); err != nil {
+			t.Fatalf("Ensure: %v", err)
 		}
 		body := createdBody(t, records.created[0])
 		if body["type"] != "AAAA" || body["content"] != "2001:db8::1" {
@@ -197,8 +197,8 @@ func TestDNSWriterEnsureRecords(t *testing.T) {
 		records := &fakeRecords{}
 		w, _ := newTestWriter(records, testZones, "app.com")
 		want := edge.Record{Name: "*.preview.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
-		if _, err := w.EnsureRecords(t.Context(), []edge.Record{want}, nil); err != nil {
-			t.Fatalf("EnsureRecords: %v", err)
+		if _, err := w.Ensure(t.Context(), []edge.Record{want}, nil); err != nil {
+			t.Fatalf("Ensure: %v", err)
 		}
 		if got := records.created[0].ZoneID.Value; got != "zone-app" {
 			t.Errorf("zone = %q, want the named zone %q", got, "zone-app")
@@ -210,9 +210,9 @@ func TestDNSWriterEnsureRecords(t *testing.T) {
 
 		records := &fakeRecords{}
 		w, _ := newTestWriter(records, testZones, "")
-		_, err := w.EnsureRecords(t.Context(), []edge.Record{{Name: "shop.elsewhere.com", Type: edge.RecordTypeCNAME, Value: "front"}}, nil)
+		_, err := w.Ensure(t.Context(), []edge.Record{{Name: "shop.elsewhere.com", Type: edge.RecordTypeCNAME, Value: "front"}}, nil)
 		if err == nil {
-			t.Fatal("EnsureRecords err = nil, want a refusal for a hostname outside the account's zones")
+			t.Fatal("Ensure err = nil, want a refusal for a hostname outside the account's zones")
 		}
 		if !strings.Contains(err.Error(), "shop.elsewhere.com") {
 			t.Errorf("err = %q, want it to name the hostname", err)
@@ -229,8 +229,8 @@ func TestDNSWriterEnsureRecords(t *testing.T) {
 			"zone-app|shop.app.com": {{ID: "live", Type: dns.RecordResponseTypeCNAME, Content: "front.example.net"}},
 		}}
 		w, _ := newTestWriter(records, testZones, "")
-		if _, err := w.EnsureRecords(t.Context(), []edge.Record{{Name: "shop.app.com", Type: edge.RecordTypeCNAME, Value: "front.example.net"}}, nil); err != nil {
-			t.Fatalf("EnsureRecords: %v", err)
+		if _, err := w.Ensure(t.Context(), []edge.Record{{Name: "shop.app.com", Type: edge.RecordTypeCNAME, Value: "front.example.net"}}, nil); err != nil {
+			t.Fatalf("Ensure: %v", err)
 		}
 		if len(records.created) != 0 || len(records.updated) != 0 {
 			t.Errorf("created = %v, updated = %v, want the live record untouched", records.created, records.updated)
@@ -245,12 +245,12 @@ func TestDNSWriterEnsureRecords(t *testing.T) {
 			"zone-app|theirs.app.com": {{ID: "theirs", Type: dns.RecordResponseTypeCNAME, Content: "their.example.net"}},
 		}}
 		w, _ := newTestWriter(records, testZones, "")
-		written, err := w.EnsureRecords(t.Context(), []edge.Record{
+		written, err := w.Ensure(t.Context(), []edge.Record{
 			{Name: "ours.app.com", Type: edge.RecordTypeCNAME, Value: "front.example.net"},
 			{Name: "theirs.app.com", Type: edge.RecordTypeCNAME, Value: "front.example.net"},
 		}, nil)
 		if err != nil {
-			t.Fatalf("EnsureRecords: %v", err)
+			t.Fatalf("Ensure: %v", err)
 		}
 		if len(records.updated) != 1 || records.updated[0] != "ours" {
 			t.Errorf("updated = %v, want only the record ocel wrote", records.updated)
@@ -272,9 +272,9 @@ func TestDNSWriterEnsureRecords(t *testing.T) {
 		w, _ := newTestWriter(records, testZones, "")
 		var said []string
 		want := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
-		written, err := w.EnsureRecords(t.Context(), []edge.Record{want}, func(m string) { said = append(said, m) })
+		written, err := w.Ensure(t.Context(), []edge.Record{want}, func(m string) { said = append(said, m) })
 		if err != nil {
-			t.Fatalf("EnsureRecords: %v", err)
+			t.Fatalf("Ensure: %v", err)
 		}
 		if len(records.created) != 0 || len(records.updated) != 0 {
 			t.Errorf("created = %v, updated = %v, want a record ocel does not own untouched", records.created, records.updated)
@@ -298,9 +298,9 @@ func TestDNSWriterEnsureRecords(t *testing.T) {
 		}}
 		w, _ := newTestWriter(records, testZones, "")
 		want := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeCNAME, Value: "front.example.net"}
-		written, err := w.EnsureRecords(t.Context(), []edge.Record{want}, nil)
+		written, err := w.Ensure(t.Context(), []edge.Record{want}, nil)
 		if err != nil {
-			t.Fatalf("EnsureRecords: %v", err)
+			t.Fatalf("Ensure: %v", err)
 		}
 		if len(records.updated) != 1 || records.updated[0] != "ours" {
 			t.Errorf("updated = %v, want ocel's own record repointed", records.updated)
@@ -319,8 +319,8 @@ func TestDNSWriterEnsureRecords(t *testing.T) {
 		w, _ := newTestWriter(records, testZones, "")
 		var said []string
 		want := edge.Record{Name: "shop.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
-		if _, err := w.EnsureRecords(t.Context(), []edge.Record{want}, func(m string) { said = append(said, m) }); err != nil {
-			t.Fatalf("EnsureRecords: %v", err)
+		if _, err := w.Ensure(t.Context(), []edge.Record{want}, func(m string) { said = append(said, m) }); err != nil {
+			t.Fatalf("Ensure: %v", err)
 		}
 		if len(said) != 0 {
 			t.Errorf("said = %v, want silence: the hostname already serves", said)
@@ -328,7 +328,7 @@ func TestDNSWriterEnsureRecords(t *testing.T) {
 	})
 }
 
-func TestDNSWriterDeleteRecords(t *testing.T) {
+func TestDNSRecordsDeleteRecords(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -359,8 +359,8 @@ func TestDNSWriterDeleteRecords(t *testing.T) {
 			}}
 			w, _ := newTestWriter(records, testZones, "")
 			written := edge.Record{Name: "*.preview.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
-			if err := w.DeleteRecords(t.Context(), []edge.Record{written}); err != nil {
-				t.Fatalf("DeleteRecords: %v", err)
+			if err := w.Delete(t.Context(), []edge.Record{written}); err != nil {
+				t.Fatalf("Delete: %v", err)
 			}
 			if len(records.deleted) != len(tc.want) {
 				t.Fatalf("deleted = %v, want %v", records.deleted, tc.want)

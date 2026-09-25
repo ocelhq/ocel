@@ -9,13 +9,13 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type stubResolver struct {
+type stubAddresses struct {
 	urls     map[string]string
 	creds    edge.Credentials
 	hasCreds bool
 }
 
-func (s stubResolver) FunctionURL(routeID string) (string, error) {
+func (s stubAddresses) FunctionURL(routeID string) (string, error) {
 	url, ok := s.urls[routeID]
 	if !ok {
 		return "", errNoURL{routeID}
@@ -23,7 +23,7 @@ func (s stubResolver) FunctionURL(routeID string) (string, error) {
 	return url, nil
 }
 
-func (s stubResolver) EdgeCredentials() (edge.Credentials, bool) {
+func (s stubAddresses) EdgeCredentials() (edge.Credentials, bool) {
 	return s.creds, s.hasCreds
 }
 
@@ -50,13 +50,13 @@ func writeAppArtifacts(t *testing.T) edge.WorkerSource {
 	return edge.WorkerSource{ArtifactRoot: root, BundlePath: bundle, Entry: "/"}
 }
 
-func assembleFor(t *testing.T) func(edge.WorkerSource, edge.Resolver) (edge.Worker, error) {
+func assembleFor(t *testing.T) func(edge.WorkerSource, edge.Addresses) (edge.Worker, error) {
 	t.Helper()
-	return New("ocel").(edge.Programmable).AssembleApp
+	return (&provider{namespace: "ocel"}).assembleApp
 }
 
-func signing(urls map[string]string) stubResolver {
-	return stubResolver{
+func signing(urls map[string]string) stubAddresses {
+	return stubAddresses{
 		urls:     urls,
 		creds:    edge.Credentials{AccessKeyID: "AKIAEDGE", SecretKey: "secret-edge"},
 		hasCreds: true,
@@ -72,7 +72,7 @@ func TestAssembleApp(t *testing.T) {
 		src := writeAppArtifacts(t)
 		src.Entry = "/api/documents"
 		src.Routes = []string{"/api/documents"}
-		r := stubResolver{
+		r := stubAddresses{
 			urls:     map[string]string{"/api/documents": "https://fn.lambda-url.aws/"},
 			creds:    edge.Credentials{AccessKeyID: "AKIAEDGE", SecretKey: "secret-edge"},
 			hasCreds: true,
@@ -120,12 +120,12 @@ func TestAssembleApp(t *testing.T) {
 
 		src := writeAppArtifacts(t)
 		src.Routes = []string{"/"}
-		for name, r := range map[string]stubResolver{
+		for name, r := range map[string]stubAddresses{
 			"none":       {urls: map[string]string{"/": "https://fn.lambda-url.aws/"}},
 			"empty half": {urls: map[string]string{"/": "https://fn.lambda-url.aws/"}, creds: edge.Credentials{AccessKeyID: "AKIAEDGE"}, hasCreds: true},
 		} {
 			if _, err := assembleFor(t)(src, r); err == nil {
-				t.Errorf("%s: AssembleApp err = nil, want a refusal: the worker would forward to the origin unsigned", name)
+				t.Errorf("%s: assembleApp err = nil, want a refusal: the worker would forward to the origin unsigned", name)
 			}
 		}
 	})

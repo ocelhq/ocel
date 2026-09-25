@@ -5,7 +5,7 @@ import { type RouteDeps, resolveRouteDeps } from "../src/index";
 function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   return {
     app: "web",
-    runtime: "next",
+    framework: "next",
     identity: "deploy-1",
     deploymentId: "deploy-1",
     buildId: "build-1",
@@ -147,7 +147,7 @@ describe("resolveRouteDeps", () => {
   });
 
   it("returns 501 for a Deployment that ships no routing manifest", async () => {
-    const record = makeRecord({ runtime: "node", routingManifest: undefined });
+    const record = makeRecord({ framework: "node", routingManifest: undefined });
     const deps = await resolveRouteDeps(
       { binding: bindingReturning("deploy-1", record), app: "web" },
       { assetStore },

@@ -68,7 +68,7 @@ func (h *handlers) removalEdge(provider Provider, state EdgeStackState, sel *con
 	return provider.Edges().Open(state.Kind)
 }
 
-func dnsFor(provider Provider, front edge.Edge, sel *contractv1.EdgeSelection) (edge.DNSWriter, error) {
+func dnsFor(provider Provider, front edge.Edge, sel *contractv1.EdgeSelection) (edge.DNSRecords, error) {
 	kind := DNSKind(sel.GetDns().GetKind())
 	if kind == "" {
 		return nil, nil
@@ -109,7 +109,7 @@ func (h *handlers) openStack(ctx context.Context, class Class, slug string, sel 
 	return session, nil
 }
 
-func (s *stackSession) installSettler(writer edge.DNSWriter, zone string) {
+func (s *stackSession) installSettler(writer edge.DNSRecords, zone string) {
 	s.settle = newSettler(s.front, writer, zone, probingFor(s.provider, s.front))
 }
 

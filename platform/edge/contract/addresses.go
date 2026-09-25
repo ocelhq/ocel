@@ -1,6 +1,6 @@
 package edge
 
-type Resolver interface {
+type Addresses interface {
 	FunctionURL(routeID string) (string, error)
 	EdgeCredentials() (Credentials, bool)
 }

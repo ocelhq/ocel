@@ -66,8 +66,21 @@ func EdgeFor(kind edge.Kind, deps Deps) (edge.Edge, error) {
 	return Registry{Deps: deps}.Open(kind)
 }
 
+var certificateRegions = map[edge.Kind]func(apiRegion string) string{
+	cloudfront.Kind: cloudfront.CertificateRegion,
+	apigateway.Kind: apigateway.CertificateRegion,
+}
+
+func CertificateRegion(kind edge.Kind, apiRegion string) string {
+	region, certified := certificateRegions[kind]
+	if !certified {
+		return ""
+	}
+	return region(apiRegion)
+}
+
 func (r Registry) Certifier(front edge.Edge, deps certs.Deps) certs.Certifier {
-	return certs.CertifierFor(front, deps, r.Deps.Certificates)
+	return certs.CertifierFor(CertificateRegion(front.Kind(), deps.AWS.Region), deps, r.Deps.Certificates)
 }
 
 func IgnoredPinNote(front edge.Edge, certifier certs.Certifier, hostname string) string {

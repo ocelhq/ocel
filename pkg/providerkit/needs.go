@@ -132,8 +132,9 @@ func (c NeedCheck) Run(ctx context.Context, manifest *contractv1.Manifest) (Need
 		return nil, nil
 	}
 	records := NeedRecords{}
-	checker, entitles := c.Edge.(edge.EntitlementChecker)
-	entitlement := onceChecked(ctx, checker)
+	check := c.Edge.Hooks().CodeEntitlement
+	entitles := check != nil
+	entitlement := onceChecked(ctx, check)
 
 	for _, app := range manifest.GetApps() {
 		name := app.GetName()
@@ -218,14 +219,14 @@ func declaredNeeds(desc edge.ServeDescriptor) []edge.Need {
 	return ordered
 }
 
-func onceChecked(ctx context.Context, checker edge.EntitlementChecker) func() (edge.CodeEntitlement, error) {
+func onceChecked(ctx context.Context, check func(context.Context) (edge.CodeEntitlement, error)) func() (edge.CodeEntitlement, error) {
 	var entitlement edge.CodeEntitlement
 	var err error
 	asked := false
 	return func() (edge.CodeEntitlement, error) {
 		if !asked {
 			asked = true
-			entitlement, err = checker.CodeEntitlement(ctx)
+			entitlement, err = check(ctx)
 		}
 		return entitlement, err
 	}

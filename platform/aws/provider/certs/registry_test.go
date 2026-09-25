@@ -6,50 +6,17 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
-
-type uncertifiedEdge struct{ edge.Edge }
-
-type certifyingEdge struct {
-	edge.Edge
-	region string
-}
-
-func (c certifyingEdge) CertificateRegion(apiRegion string) string {
-	if c.region == "" {
-		return apiRegion
-	}
-	return c.region
-}
-
-func TestRegionFor(t *testing.T) {
-	t.Parallel()
-
-	for name, tc := range map[string]struct {
-		front edge.Edge
-		want  string
-	}{
-		"an edge that certifies nothing is handed no region": {uncertifiedEdge{}, ""},
-		"an edge that pins a region takes it":                {certifyingEdge{region: CloudFrontRegion}, CloudFrontRegion},
-		"an edge that certifies where the API lives":         {certifyingEdge{}, "eu-west-2"},
-	} {
-		if got := RegionFor(tc.front, "eu-west-2"); got != tc.want {
-			t.Errorf("%s: RegionFor = %q, want %q", name, got, tc.want)
-		}
-	}
-}
 
 func TestIssuerFor(t *testing.T) {
 	t.Parallel()
 
-	uncertified := IssuerFor(uncertifiedEdge{}, Deps{AWS: aws.Config{Region: "eu-west-2"}})
+	uncertified := IssuerFor("", Deps{AWS: aws.Config{Region: "eu-west-2"}})
 	if uncertified.API != nil {
 		t.Error("an edge that certifies nothing was handed an ACM client; it terminates TLS itself")
 	}
 
-	pinned := IssuerFor(certifyingEdge{region: CloudFrontRegion}, Deps{AWS: aws.Config{Region: "eu-west-2"}})
+	pinned := IssuerFor(CloudFrontRegion, Deps{AWS: aws.Config{Region: "eu-west-2"}})
 	if pinned.API == nil || pinned.Region != CloudFrontRegion {
 		t.Errorf("issuer = %+v, want an ACM client in %s", pinned, CloudFrontRegion)
 	}

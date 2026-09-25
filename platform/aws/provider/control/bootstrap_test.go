@@ -298,13 +298,46 @@ type planningEdge struct {
 	classes  []edge.Class
 }
 
-func (e *planningEdge) PlanBootstrap(_ context.Context, class edge.Class) ([]edge.PlanChange, error) {
-	e.classes = append(e.classes, class)
-	return e.planned, e.err
+func (e *planningEdge) Hooks() edge.Hooks {
+	return edge.Hooks{
+		PlanBootstrap: func(_ context.Context, class edge.Class) ([]edge.PlanChange, error) {
+			e.classes = append(e.classes, class)
+			return e.planned, e.err
+		},
+		PlanRemoveBootstrap: func(context.Context, edge.Class) ([]edge.PlanChange, error) {
+			return e.removals, e.err
+		},
+	}
 }
 
-func (e *planningEdge) PlanRemoveBootstrap(context.Context, edge.Class) ([]edge.PlanChange, error) {
-	return e.removals, e.err
+type adoptingEdge struct {
+	teardownEdge
+
+	refusal error
+	asked   []edge.Class
+}
+
+func (e *adoptingEdge) Hooks() edge.Hooks {
+	return edge.Hooks{Adoption: func(_ context.Context, class edge.Class) (edge.Adoption, error) {
+		e.asked = append(e.asked, class)
+		return edge.Adoption{}, e.refusal
+	}}
+}
+
+func TestPlanAsksTheEdgeWhatItHandsThisAccountToHold(t *testing.T) {
+	t.Parallel()
+
+	front := &adoptingEdge{refusal: errors.New("CLOUDFLARE_API_TOKEN was rejected")}
+	_, err := planningBootstrapper(front).Plan(context.Background(), providerkit.BootstrapRequest{
+		Class:    providerkit.ClassProduction,
+		Features: []string{bootstrap.FeatureCloudflareEdge},
+	})
+	if err == nil || !strings.Contains(err.Error(), "CLOUDFLARE_API_TOKEN was rejected") {
+		t.Fatalf("Plan error = %v, want the edge's refusal to say what it hands this account", err)
+	}
+	if !slices.Equal(front.asked, []edge.Class{edge.ClassProduction}) {
+		t.Errorf("the edge was asked what it hands over for %v, want the one class planned", front.asked)
+	}
 }
 
 func TestRemoveTearsTheEdgeDownForTheClassThenTheAWSBootstrap(t *testing.T) {
@@ -372,6 +405,8 @@ func (e *teardownEdge) Kind() edge.Kind {
 	}
 	return e.kind
 }
+
+func (e *teardownEdge) Hooks() edge.Hooks { return edge.Hooks{} }
 
 func (e *teardownEdge) Teardown(_ context.Context, class edge.Class) error {
 	e.torndown = append(e.torndown, class)

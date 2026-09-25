@@ -31,7 +31,7 @@ type zoneAPI interface {
 	List(ctx context.Context, params zones.ZoneListParams, opts ...option.RequestOption) (*pagination.V4PagePaginationArray[zones.Zone], error)
 }
 
-type dnsWriter struct {
+type dnsRecords struct {
 	records recordAPI
 	zones   zoneAPI
 
@@ -42,15 +42,13 @@ type dnsWriter struct {
 	seen []edge.Zone
 }
 
-var _ edge.DNSWriter = (*dnsWriter)(nil)
-
-func NewDNS(zone string) (edge.DNSWriter, error) {
+func NewDNS(zone string) (edge.DNSRecords, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return nil, fmt.Errorf("%s is not set; it is required to write DNS records in Cloudflare", envAccountID)
 	}
 	client := cf.NewClient(option.WithMaxRetries(clientMaxRetries))
-	return &dnsWriter{
+	return &dnsRecords{
 		records:   client.DNS.Records,
 		zones:     client.Zones,
 		accountID: accountID,
@@ -58,15 +56,11 @@ func NewDNS(zone string) (edge.DNSWriter, error) {
 	}, nil
 }
 
-func (w *dnsWriter) RecordTTL() time.Duration {
+func (w *dnsRecords) TTL() time.Duration {
 	return automaticTTL
 }
 
-func (w *dnsWriter) ZoneOf(ctx context.Context, hostname string) (edge.Zone, error) {
-	return w.zoneFor(ctx, hostname)
-}
-
-func (w *dnsWriter) EnsureRecords(ctx context.Context, records []edge.Record, say func(string)) ([]edge.Record, error) {
+func (w *dnsRecords) Ensure(ctx context.Context, records []edge.Record, say func(string)) ([]edge.Record, error) {
 	written := make([]edge.Record, 0, len(records))
 	for _, want := range records {
 		zone, err := w.zoneFor(ctx, want.Name)
@@ -88,7 +82,7 @@ func (w *dnsWriter) EnsureRecords(ctx context.Context, records []edge.Record, sa
 	return written, nil
 }
 
-func (w *dnsWriter) ensure(ctx context.Context, zone edge.Zone, want edge.Record, live []dns.RecordResponse, say func(string)) (bool, error) {
+func (w *dnsRecords) ensure(ctx context.Context, zone edge.Zone, want edge.Record, live []dns.RecordResponse, say func(string)) (bool, error) {
 	var mine, foreign *dns.RecordResponse
 	for i := range live {
 		if !isAddressRecord(live[i].Type) {
@@ -144,7 +138,7 @@ func foreignRecordWarning(want edge.Record, rec dns.RecordResponse) string {
 	return fmt.Sprintf("%s already has a %s record ocel did not write pointing at %s, so this deployment will not serve it — repoint it at %s, or delete it and deploy again", want.Name, rec.Type, rec.Content, want.Value)
 }
 
-func (w *dnsWriter) replace(ctx context.Context, zoneID, recordID string, want edge.Record) error {
+func (w *dnsRecords) replace(ctx context.Context, zoneID, recordID string, want edge.Record) error {
 	body, err := recordBody(want)
 	if err != nil {
 		return err
@@ -196,7 +190,7 @@ func recordBody(want edge.Record) (recordParam, error) {
 	return nil, fmt.Errorf("write DNS record %s: %q is no record type this writer knows", want, want.Type)
 }
 
-func (w *dnsWriter) DeleteRecords(ctx context.Context, records []edge.Record) error {
+func (w *dnsRecords) Delete(ctx context.Context, records []edge.Record) error {
 	for _, written := range records {
 		zone, err := w.zoneFor(ctx, written.Name)
 		if err != nil {
@@ -218,7 +212,7 @@ func (w *dnsWriter) DeleteRecords(ctx context.Context, records []edge.Record) er
 	return nil
 }
 
-func (w *dnsWriter) recordsAt(ctx context.Context, zoneID, hostname string) ([]dns.RecordResponse, error) {
+func (w *dnsRecords) recordsAt(ctx context.Context, zoneID, hostname string) ([]dns.RecordResponse, error) {
 	var found []dns.RecordResponse
 	for page := 1; ; page++ {
 		res, err := w.records.List(ctx, dns.RecordListParams{
@@ -236,7 +230,7 @@ func (w *dnsWriter) recordsAt(ctx context.Context, zoneID, hostname string) ([]d
 	}
 }
 
-func (w *dnsWriter) zoneFor(ctx context.Context, hostname string) (edge.Zone, error) {
+func (w *dnsRecords) zoneFor(ctx context.Context, hostname string) (edge.Zone, error) {
 	owned, err := w.ownedZones(ctx)
 	if err != nil {
 		return edge.Zone{}, err
@@ -244,7 +238,7 @@ func (w *dnsWriter) zoneFor(ctx context.Context, hostname string) (edge.Zone, er
 	return edge.SelectZone(owned, routeBaseDomain(hostname), w.named)
 }
 
-func (w *dnsWriter) ownedZones(ctx context.Context) ([]edge.Zone, error) {
+func (w *dnsRecords) ownedZones(ctx context.Context) ([]edge.Zone, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.seen != nil {

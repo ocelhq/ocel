@@ -21,10 +21,6 @@ type recordingEdge struct {
 	compatDate  string
 	compatFlags []string
 
-	deployed []edge.AppDeployment
-	existing map[string]bool
-	asked    []string
-
 	opens        []edge.StackState
 	reconciles   []edge.StackSpec
 	reconcileErr error
@@ -60,10 +56,7 @@ type pointedPromotion struct {
 	promotion edge.Promotion
 }
 
-var (
-	_ edge.Edge         = (*recordingEdge)(nil)
-	_ edge.Programmable = (*recordingEdge)(nil)
-)
+var _ edge.Edge = (*recordingEdge)(nil)
 
 func (f *recordingEdge) recordCall(call string) {
 	f.calls = append(f.calls, call)
@@ -119,24 +112,9 @@ func (f *recordingEdge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOu
 
 func (f *recordingEdge) Teardown(context.Context, edge.Class) error { return nil }
 
-func (f *recordingEdge) AssembleApp(src edge.WorkerSource, r edge.Resolver) (edge.Worker, error) {
-	return cloudflare.New("ocel").(edge.Programmable).AssembleApp(src, r)
+func (f *recordingEdge) Hooks() edge.Hooks {
+	return edge.Hooks{Compatibility: func() (string, []string) { return f.compatDate, f.compatFlags }}
 }
-
-func (f *recordingEdge) DeployApp(_ context.Context, app edge.AppDeployment) (edge.AppResult, error) {
-	f.deployed = append(f.deployed, app)
-	return edge.AppResult{URL: "https://" + app.Name + ".acme.workers.dev"}, nil
-}
-
-func (f *recordingEdge) FindApp(_ context.Context, name string) (bool, error) {
-	f.asked = append(f.asked, name)
-	if f.existing[name] {
-		return true, nil
-	}
-	return slices.ContainsFunc(f.deployed, func(app edge.AppDeployment) bool { return app.Name == name }), nil
-}
-
-func (f *recordingEdge) Compatibility() (string, []string) { return f.compatDate, f.compatFlags }
 
 func (f *recordingEdge) DomainOwner(_ context.Context, hostname string) (string, error) {
 	return f.bound[hostname], nil
@@ -353,7 +331,7 @@ func fakeEdgeOf(kind edge.Kind) edge.Edge {
 	if slices.ContainsFunc(edge.CodeNeeds(), func(need edge.Need) bool { return edge.Supports(f, need) }) {
 		return f
 	}
-	return unprogrammableEdge{f}
+	return codelessEdge{f}
 }
 
 func TestOriginFakeEdgeConformance(t *testing.T) {
@@ -480,9 +458,11 @@ func TestRecordingEdge(t *testing.T) {
 	})
 }
 
-type unprogrammableEdge struct{ edge.Edge }
+type codelessEdge struct{ edge.Edge }
 
-func (u unprogrammableEdge) Facts() edge.Facts {
+func (u codelessEdge) Hooks() edge.Hooks { return edge.Hooks{} }
+
+func (u codelessEdge) Facts() edge.Facts {
 	facts := u.Edge.Facts()
 	facts.RunsCode = false
 	return facts

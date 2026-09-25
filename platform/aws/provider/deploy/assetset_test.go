@@ -132,7 +132,7 @@ func TestAnAssetSetIsOneRowWhateverTheFileCount(t *testing.T) {
 
 	files := map[string]string{
 		"apps/web/routing-manifest.json": routedManifest,
-		"apps/web/serve.json":            `{"runtime":"next","buildId":"WEB1","edgeRouting":true,"entry":"/"}`,
+		"apps/web/serve.json":            `{"framework":"next","buildId":"WEB1","edgeRouting":true,"entry":"/"}`,
 	}
 	for _, name := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
 		files["apps/web/static/"+name+".txt"] = name

@@ -151,7 +151,7 @@ func TestRemoveProjectRefusesACallNamingNoProject(t *testing.T) {
 	}
 }
 
-func settledProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider, *fake.DNSWriter) {
+func settledProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider, *fake.DNSRecords) {
 	t.Helper()
 	client, provider := contractServed(t, "1.0.0")
 	seedStack(t, provider, providerkit.ClassProduction, "shop", providerkit.EdgeStackState{
@@ -174,12 +174,12 @@ func settledProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fak
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := writer.EnsureRecords(context.Background(), []edge.Record{
+	if _, err := writer.Ensure(context.Background(), []edge.Record{
 		{Name: "app.acme.com", Type: edge.RecordTypeCNAME, Value: "shop.relay.fake.invalid"},
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
-	return client, provider, writer.(*fake.DNSWriter)
+	return client, provider, writer.(*fake.DNSRecords)
 }
 
 func settledRequest() *contractv1.ProjectRequest {
@@ -261,7 +261,7 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := writer.EnsureRecords(context.Background(), []edge.Record{validation, stale}, nil); err != nil {
+	if _, err := writer.Ensure(context.Background(), []edge.Record{validation, stale}, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -302,7 +302,7 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 	if discarded := provider.Discarded(); slices.Contains(discarded, "pinned-cert") {
 		t.Errorf("the provider discarded %v, want a pinned certificate left standing", discarded)
 	}
-	if held := writer.(*fake.DNSWriter).Records(); len(held) != 0 {
+	if held := writer.(*fake.DNSRecords).Records(); len(held) != 0 {
 		t.Errorf("the zone still holds %v, want the validation record released with the certificate", held)
 	}
 }

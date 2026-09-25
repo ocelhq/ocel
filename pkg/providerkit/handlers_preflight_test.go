@@ -409,3 +409,29 @@ func TestPreflightLeavesTheEdgeScopeEmptyWhenNoEdgeVerifiesCredentials(t *testin
 		t.Errorf("Preflight() reported %v, want an edge that verifies nothing to be no problem", resp.GetCredentialProblems())
 	}
 }
+
+func TestPreflightNamesNoEdgeScopeForAnEdgeThatChecksNoCredentials(t *testing.T) {
+	t.Parallel()
+
+	client, provider := contractServed(t, "1.2.3")
+	front, err := provider.Edges().Open(fake.KindRelay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if front.Hooks().VerifyCredentials != nil {
+		t.Fatal("the reference edge checks its credentials, so it cannot stand for one that checks none")
+	}
+
+	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
+		RequiredTier: environmentv1.Tier_TIER_PRODUCTION,
+	})
+	if err != nil {
+		t.Fatalf("Preflight() error = %v", err)
+	}
+	if resp.GetIdentity().GetEdgeScope() != "" {
+		t.Errorf("Preflight() edge scope = %q, want none from an edge that checks no credentials", resp.GetIdentity().GetEdgeScope())
+	}
+	if len(resp.GetCredentialProblems()) != 0 {
+		t.Errorf("Preflight() reported %v, want nothing from an edge that checks no credentials", resp.GetCredentialProblems())
+	}
+}

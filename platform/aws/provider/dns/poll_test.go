@@ -90,14 +90,16 @@ type deletingWriter struct {
 	deleted []edge.Record
 }
 
-func (d *deletingWriter) EnsureRecords(context.Context, []edge.Record, func(string)) ([]edge.Record, error) {
+func (d *deletingWriter) Ensure(context.Context, []edge.Record, func(string)) ([]edge.Record, error) {
 	return nil, nil
 }
 
-func (d *deletingWriter) DeleteRecords(_ context.Context, records []edge.Record) error {
+func (d *deletingWriter) Delete(_ context.Context, records []edge.Record) error {
 	d.deleted = append(d.deleted, records...)
 	return nil
 }
+
+func (d *deletingWriter) TTL() time.Duration { return 0 }
 
 func TestRelease(t *testing.T) {
 	t.Parallel()
