@@ -26,7 +26,7 @@ func TestAWSProvider(t *testing.T) {
 	})
 }
 
-func TestTheRootCarriesTheVendorAndEveryOptionalSet(t *testing.T) {
+func TestTheProviderCarriesTheVendorAndSetsEveryHookItImplements(t *testing.T) {
 	t.Parallel()
 
 	p := provider.NewProvider(provider.Options{Region: "us-east-1"}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)
@@ -40,24 +40,24 @@ func TestTheRootCarriesTheVendorAndEveryOptionalSet(t *testing.T) {
 		}
 	}
 
-	var root providerkit.Provider = p
-	for name, held := range map[string]bool{
-		"Warmer":         held[providerkit.Warmer](root),
-		"CodeEmbedder":   held[providerkit.CodeEmbedder](root),
-		"StackInspector": held[providerkit.StackInspector](root),
-		"ArtifactPacker": held[providerkit.ArtifactPacker](root),
-		"GrantVerifier":  held[providerkit.GrantVerifier](root),
-		"ImageRegistry":  held[providerkit.ImageRegistry](root),
+	hooks := p.Hooks()
+	for name, set := range map[string]bool{
+		"PreflightDeploy":     hooks.PreflightDeploy != nil,
+		"VerifyGrants":        hooks.VerifyGrants != nil,
+		"InspectStack":        hooks.InspectStack != nil,
+		"PackApp":             hooks.PackApp != nil,
+		"EmbedCode":           hooks.EmbedCode != nil,
+		"WarmFunctions":       hooks.WarmFunctions != nil,
+		"ProgramEdge":         hooks.ProgramEdge != nil,
+		"EnsureImageRegistry": hooks.EnsureImageRegistry != nil,
+		"RegistryImages":      hooks.RegistryImages != nil,
+		"ShapeCost":           hooks.ShapeCost != nil,
+		"EstimateCost":        hooks.EstimateCost != nil,
 	} {
-		if !held {
-			t.Errorf("the root does not carry %s, and a wrapped port would never bring it back", name)
+		if !set {
+			t.Errorf("the aws provider's hooks leave %s nil, so the deploy skips a step this provider implements", name)
 		}
 	}
-}
-
-func held[T any](root providerkit.Provider) bool {
-	_, ok := root.(T)
-	return ok
 }
 
 func buildProvider(t *testing.T) string {

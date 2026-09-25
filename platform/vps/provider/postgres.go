@@ -71,7 +71,7 @@ func mintPostgresSecret() (string, error) {
 	return hex.EncodeToString(raw), nil
 }
 
-func (p *Provider) Postgres(ctx context.Context, in resources.Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
+func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
 	spec, err := postgresContainer(in)
 	if err != nil {
 		return providerkit.Binding{}, err
@@ -140,23 +140,3 @@ func (p *Provider) heldSecret(ctx context.Context, in resources.Instruction, nam
 	}
 	return string(opened), nil
 }
-
-func (p *Provider) RemoveResource(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, report providerkit.Reporter) error {
-	switch binding.Type {
-	case providerkit.BindingPostgres:
-		name := host.ResourceName(ref.Name.String(), binding.Name, postgresKind)
-		if report != nil {
-			report.Say("Taking postgres " + binding.Name + " and its data down")
-		}
-		return p.host.RemoveResource(ctx, host.ResourceRef{Class: ref.Class, Project: ref.Project, Resource: binding.Name, Name: name})
-	case providerkit.BindingBucket:
-		return p.removeBucket(ctx, ref, binding, report)
-	default:
-		return nil
-	}
-}
-
-var (
-	_ resources.Postgres = (*Provider)(nil)
-	_ resources.Remover  = (*Provider)(nil)
-)

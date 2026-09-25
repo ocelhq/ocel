@@ -13,7 +13,6 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 
 const (
@@ -53,7 +52,7 @@ func pullBase(ctx context.Context, ref string) (v1.Image, error) {
 		remote.WithPlatform(runOn))
 }
 
-func (p *Provider) FunctionBase(ctx context.Context, runtime providerkit.Runtime) (v1.Image, error) {
+func (p *Provider) FunctionBaseImage(ctx context.Context, runtime providerkit.Runtime) (v1.Image, error) {
 	if err := runsX8664(runtime.Arch, "the "+runtime.Name+" function"); err != nil {
 		return nil, err
 	}
@@ -103,13 +102,6 @@ func onPath(env []string, bins []string) []string {
 	return append(kept, pathVariable+"="+held)
 }
 
-func (p *Provider) FunctionRuntimePayload(_ context.Context, runtime providerkit.Runtime) ([]byte, error) {
-	if !providerkit.BootsThroughRuntime(runtime) {
-		return nil, nil
-	}
-	return payloads.NodeRuntime(), nil
-}
-
 func runsX8664(arch, what string) error {
 	if providerkit.Architecture(arch) == providerkit.ArchX8664 {
 		return nil
@@ -118,5 +110,3 @@ func runsX8664(arch, what string) error {
 		"%s is built for %s, and Cloud Run runs %s alone: build it for %s, or run it somewhere that offers %s",
 		what, providerkit.Architecture(arch), providerkit.ArchX8664, providerkit.ArchX8664, providerkit.Architecture(arch))
 }
-
-var _ providerkit.FunctionImager = (*Provider)(nil)

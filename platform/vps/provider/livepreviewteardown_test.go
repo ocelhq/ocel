@@ -10,7 +10,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -129,7 +128,7 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 			HealthCheckPath: healthPath,
 		},
 	}
-	stood, err := resources.Releaser(p.Records(), p.Artifacts(), p).Provision(ctx, plan, nil)
+	stood, err := p.Releases().Provision(ctx, plan, nil)
 	if err != nil {
 		t.Fatalf("Provision(%s) = %v", pointer, err)
 	}

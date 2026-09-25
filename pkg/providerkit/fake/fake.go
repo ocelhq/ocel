@@ -31,6 +31,7 @@ type Provider struct {
 	preflightRefusal error
 	preflighted      []providerkit.DeployPreflight
 	wrappedFor       []string
+	hooks            providerkit.Hooks
 
 	journal   *Journal
 	options   Options
@@ -51,7 +52,8 @@ func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider
 	if err != nil {
 		return nil, err
 	}
-	return Full{NewProvider(decoded)}, nil
+	provider := NewProvider(decoded)
+	return provider.Hook(provider.everyHook), nil
 }
 
 func NewProvider(options Options) *Provider {
@@ -60,7 +62,7 @@ func NewProvider(options Options) *Provider {
 	records.journal = journal
 	artifacts := NewArtifacts()
 	artifacts.journal = journal
-	return &Provider{
+	p := &Provider{
 		journal:   journal,
 		options:   options,
 		records:   records,
@@ -73,6 +75,44 @@ func NewProvider(options Options) *Provider {
 		edges:     NewEdges(records),
 		dns:       NewDNS(),
 	}
+	p.hooks = providerkit.Hooks{
+		ProgramEdge:    p.ProgramEdge,
+		RegistryImages: p.RegistryImages,
+		ShapeCost:      p.ShapeCost,
+		EstimateCost:   p.EstimateCost,
+	}
+	return p
+}
+
+func (p *Provider) Hooks() providerkit.Hooks {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.hooks
+}
+
+func (p *Provider) Hook(set func(*providerkit.Hooks)) *Provider {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	set(&p.hooks)
+	return p
+}
+
+func (p *Provider) everyHook(hooks *providerkit.Hooks) {
+	hooks.WarmFunctions = func(context.Context, []string, providerkit.Reporter) error { return nil }
+	hooks.EmbedCode = func(context.Context, string, providerkit.ArtifactRef, providerkit.Reporter) error { return nil }
+	hooks.InspectStack = p.InspectStack
+	hooks.VerifyGrants = func(context.Context, providerkit.Binding) error { return nil }
+	hooks.PreflightDeploy = p.PreflightDeploy
+	hooks.EnsureImageRegistry = p.EnsureImageRegistry
+}
+
+func (p *Provider) ResourceHooks() resources.Hooks {
+	return resources.Hooks{
+		ProvisionFunctions:  p.ProvisionFunctions,
+		RemoveFunctions:     p.RemoveFunctions,
+		ProvisionContainers: p.ProvisionContainers,
+		RemoveContainers:    p.RemoveContainers,
+	}
 }
 
 func (p *Provider) Ships(store providerkit.ArtifactStore) *Provider {
@@ -81,7 +121,7 @@ func (p *Provider) Ships(store providerkit.ArtifactStore) *Provider {
 	return p
 }
 
-func (p *Provider) Images(_ context.Context, target providerkit.RegistryTarget) (providerkit.ImageStore, error) {
+func (p *Provider) RegistryImages(_ context.Context, target providerkit.RegistryTarget) (providerkit.ImageStore, error) {
 	p.images.open(target)
 	return p.images, nil
 }
@@ -110,8 +150,8 @@ func (p *Provider) Bootstrapper() *Bootstrapper { return p.bootstrap }
 
 func (p *Provider) Journal() []string { return p.journal.Entries() }
 
-func (p *Provider) Releasing(impl any) *Provider {
-	p.releasing = resources.Releaser(p.records, p.artifacts, impl)
+func (p *Provider) Releasing(hooks resources.Hooks) *Provider {
+	p.releasing = resources.Releaser(p.records, p.artifacts, hooks)
 	return p
 }
 
@@ -275,10 +315,8 @@ func (p *Provider) preflight(pre providerkit.DeployPreflight) error {
 	return p.preflightRefusal
 }
 
-type DeployPreflighter struct{ *Provider }
-
-func (d DeployPreflighter) PreflightDeploy(_ context.Context, pre providerkit.DeployPreflight) error {
-	return d.preflight(pre)
+func (p *Provider) PreflightDeploy(_ context.Context, pre providerkit.DeployPreflight) error {
+	return p.preflight(pre)
 }
 
 type ContainerWrapper struct {
@@ -312,84 +350,35 @@ func (p *Provider) WrappedFor() []string {
 	return slices.Clone(p.wrappedFor)
 }
 
-type Warmer struct{ *Provider }
-
-func (Warmer) Warm(context.Context, []string, providerkit.Reporter) error { return nil }
-
-type CodeEmbedder struct{ *Provider }
-
-func (CodeEmbedder) EmbedCode(context.Context, string, providerkit.ArtifactRef, providerkit.Reporter) error {
-	return nil
+func (p *Provider) InspectStack(_ context.Context, ref providerkit.StackRef) (providerkit.StackState, error) {
+	return p.releases.State(ref), nil
 }
 
-type StackInspector struct{ *Provider }
-
-func (s StackInspector) Inspect(_ context.Context, ref providerkit.StackRef) (providerkit.StackState, error) {
-	return s.releases.State(ref), nil
-}
-
-type GrantVerifier struct{ *Provider }
-
-func (GrantVerifier) VerifyGrants(context.Context, providerkit.Binding) error { return nil }
-
-type Full struct{ *Provider }
-
-func (Full) Warm(context.Context, []string, providerkit.Reporter) error { return nil }
-
-func (Full) EmbedCode(context.Context, string, providerkit.ArtifactRef, providerkit.Reporter) error {
-	return nil
-}
-
-func (f Full) Inspect(_ context.Context, ref providerkit.StackRef) (providerkit.StackState, error) {
-	return f.releases.State(ref), nil
-}
-
-func (Full) VerifyGrants(context.Context, providerkit.Binding) error { return nil }
-
-func (f Full) PreflightDeploy(_ context.Context, pre providerkit.DeployPreflight) error {
-	return f.preflight(pre)
-}
-
-func (Full) ProvisionFunctions(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.Function, error) {
-	return StoodUpFunctions(plan), nil
-}
-
-func (f Full) RemoveFunctions(_ context.Context, _ providerkit.StackRef, functions []providerkit.Function, _ providerkit.Reporter) error {
-	for _, function := range functions {
-		f.releases.tookDown(function.Name)
-	}
-	return nil
-}
-
-func (Full) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.AppContainer, error) {
-	return StoodUpContainers(plan), nil
-}
-
-func (Full) ImageRegistry(context.Context, providerkit.Class, []string) (providerkit.RegistryTarget, error) {
+func (p *Provider) EnsureImageRegistry(context.Context, providerkit.Class, []string) (providerkit.RegistryTarget, error) {
 	return providerkit.RegistryTarget{Server: RegistryServer, Namespace: RegistryNamespace, Username: "fake", Password: "fake-token"}, nil
 }
 
-func (f Full) RemoveContainers(_ context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, _ providerkit.Reporter) error {
-	for _, container := range containers {
-		f.releases.tookDown(container.Name)
+func (*Provider) ProvisionFunctions(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.Function, error) {
+	return StoodUpFunctions(plan), nil
+}
+
+func (p *Provider) RemoveFunctions(_ context.Context, _ providerkit.StackRef, functions []providerkit.Function, _ providerkit.Reporter) error {
+	for _, function := range functions {
+		p.releases.tookDown(function.Name)
 	}
 	return nil
 }
 
-var (
-	_ providerkit.Provider          = (*Provider)(nil)
-	_ providerkit.Warmer            = Warmer{}
-	_ providerkit.CodeEmbedder      = CodeEmbedder{}
-	_ providerkit.StackInspector    = StackInspector{}
-	_ providerkit.GrantVerifier     = GrantVerifier{}
-	_ providerkit.DeployPreflighter = DeployPreflighter{}
-	_ providerkit.Certifier         = (*Provider)(nil)
-	_ providerkit.EdgeProgrammer    = (*Provider)(nil)
-	_ providerkit.ImageRegistry     = Full{}
-	_ providerkit.ContainerRuntimer = ContainerWrapper{}
-	_ resources.Functions           = Full{}
-	_ resources.AppContainers       = Full{}
-)
+func (*Provider) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.AppContainer, error) {
+	return StoodUpContainers(plan), nil
+}
+
+func (p *Provider) RemoveContainers(_ context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, _ providerkit.Reporter) error {
+	for _, container := range containers {
+		p.releases.tookDown(container.Name)
+	}
+	return nil
+}
 
 const (
 	RegistryServer    = "registry.fake.invalid"

@@ -27,10 +27,6 @@ type StandingRequest struct {
 	Hostnames []string
 }
 
-type StandingChecker interface {
-	CheckStanding(ctx context.Context, req StandingRequest) ([]StandingCheck, error)
-}
-
 func StandingProto(checks []StandingCheck) []*contractv1.StandingCheck {
 	if len(checks) == 0 {
 		return nil
@@ -59,11 +55,11 @@ func verdictProto(verdict StandingVerdict) contractv1.StandingCheck_Verdict {
 }
 
 func (h *handlers) standingChecks(ctx context.Context, provider Provider, class Class, hostnames []string) []*contractv1.StandingCheck {
-	checker, held := provider.(StandingChecker)
-	if !held {
+	checkHost := provider.Hooks().CheckHost
+	if checkHost == nil {
 		return nil
 	}
-	checks, err := checker.CheckStanding(ctx, StandingRequest{Class: class, Hostnames: hostnames})
+	checks, err := checkHost(ctx, StandingRequest{Class: class, Hostnames: hostnames})
 	if err != nil {
 		return StandingProto([]StandingCheck{{
 			Verdict: StandingFail,

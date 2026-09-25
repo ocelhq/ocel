@@ -17,7 +17,7 @@ import (
 func manifestAfterBucket(t *testing.T, machine *box) vars.Manifest {
 	t.Helper()
 	provider := over(machine)
-	binding, err := provider.Bucket(context.Background(), aBucket(t, "uploads", false), nil)
+	binding, err := provider.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil)
 	if err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
@@ -61,7 +61,7 @@ func TestAStoreThatRefusedToExpireItsUploadsIsSweptByADeployThatOnlyBuildsTheApp
 	t.Parallel()
 
 	machine := &box{kept: sealedRootKey(), refuses: lifecycleAnswering("lifecycle=501\n")}
-	binding, err := over(machine).Bucket(context.Background(), aBucket(t, "uploads", false), nil)
+	binding, err := over(machine).ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil)
 	if err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
@@ -110,7 +110,7 @@ func holdingBuckets(t *testing.T, provider *vps.Provider, stack naming.StackName
 
 func standingBucket(t *testing.T, machine *box, provider *vps.Provider, name string) providerkit.Binding {
 	t.Helper()
-	binding, err := provider.Bucket(context.Background(), aBucket(t, name, false), nil)
+	binding, err := provider.ProvisionBucket(context.Background(), aBucket(t, name, false), nil)
 	if err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}

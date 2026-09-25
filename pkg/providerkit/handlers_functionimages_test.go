@@ -27,14 +27,21 @@ type imaging struct {
 	base v1.Image
 }
 
-func (i imaging) FunctionBase(context.Context, providerkit.Runtime) (v1.Image, error) {
+func (i imaging) Hooks() providerkit.Hooks {
+	hooks := i.Provider.Hooks()
+	hooks.FunctionBaseImage = i.FunctionBaseImage
+	hooks.FunctionRuntime = i.FunctionRuntime
+	return hooks
+}
+
+func (i imaging) FunctionBaseImage(context.Context, providerkit.Runtime) (v1.Image, error) {
 	if i.base != nil {
 		return i.base, nil
 	}
 	return empty.Image, nil
 }
 
-func (imaging) FunctionRuntimePayload(context.Context, providerkit.Runtime) ([]byte, error) {
+func (imaging) FunctionRuntime(context.Context, providerkit.Runtime) ([]byte, error) {
 	return []byte("export const runtime = 1"), nil
 }
 
@@ -210,7 +217,13 @@ func TestANodeFunctionsImageCarriesTheRuntimeTheProviderHandsIt(t *testing.T) {
 
 type imagingWithoutRuntime struct{ imaging }
 
-func (imagingWithoutRuntime) FunctionRuntimePayload(context.Context, providerkit.Runtime) ([]byte, error) {
+func (w imagingWithoutRuntime) Hooks() providerkit.Hooks {
+	hooks := w.imaging.Hooks()
+	hooks.FunctionRuntime = w.FunctionRuntime
+	return hooks
+}
+
+func (imagingWithoutRuntime) FunctionRuntime(context.Context, providerkit.Runtime) ([]byte, error) {
 	return nil, nil
 }
 

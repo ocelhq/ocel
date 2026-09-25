@@ -52,7 +52,7 @@ func stoodWithABucketDeclared(t *testing.T, declared ...string) (*box, *vps.Prov
 
 	bucket := aBucket(t, "uploads", false)
 	bucket.Resource.Bucket.AllowedOrigins = declared
-	binding, err := p.Bucket(ctx, bucket, nil)
+	binding, err := p.ProvisionBucket(ctx, bucket, nil)
 	if err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
@@ -156,7 +156,7 @@ func TestTheNextDeployHoldsTheBucketToWhatTheProjectStillClaimsAfterAnUnbindCoul
 	machine.mu.Lock()
 	machine.refuses = nil
 	machine.mu.Unlock()
-	if _, err := p.Bucket(ctx, bucket, nil); err != nil {
+	if _, err := p.ProvisionBucket(ctx, bucket, nil); err != nil {
 		t.Fatalf("Bucket() on the next deploy = %v", err)
 	}
 	_, held := lastFedTo(t, machine, "?cors")

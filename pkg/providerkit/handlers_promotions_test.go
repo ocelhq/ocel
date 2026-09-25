@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -631,6 +632,15 @@ func (s *sweeper) ForgetReleases(_ context.Context, _ providerkit.StackRef, app 
 	return nil
 }
 
+func (s *sweeper) hooks() resources.Hooks {
+	return resources.Hooks{
+		ProvisionContainers: s.ProvisionContainers,
+		RemoveContainers:    s.RemoveContainers,
+		ReconcileImages:     s.ReconcileImages,
+		ForgetReleases:      s.ForgetReleases,
+	}
+}
+
 func (s *sweeper) swept() []string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -675,7 +685,7 @@ func TestRemovingAPreviewSweepsTheImagesOfAStackItsLedgerNoLongerNames(t *testin
 	t.Parallel()
 
 	swept := &sweeper{}
-	provider := fake.NewProvider(fake.Options{Region: "nowhere"}).Releasing(swept)
+	provider := fake.NewProvider(fake.Options{Region: "nowhere"}).Releasing(swept.hooks())
 	client := servedProvider(t, "1.0.0", provider)
 	deployed(t, provider, providerkit.ClassPreview, "shop")
 	stack := seedContainerStack(t, provider, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")

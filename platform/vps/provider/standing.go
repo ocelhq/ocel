@@ -52,7 +52,7 @@ func (p *Provider) reach() Reach {
 	return systemReach
 }
 
-func (p *Provider) CheckStanding(ctx context.Context, req providerkit.StandingRequest) ([]providerkit.StandingCheck, error) {
+func (p *Provider) CheckHost(ctx context.Context, req providerkit.StandingRequest) ([]providerkit.StandingCheck, error) {
 	address, err := p.host.Address(ctx)
 	if err != nil {
 		return []providerkit.StandingCheck{{
@@ -176,5 +176,3 @@ func reachVerdict(ctx context.Context, dial Reach, address string) providerkit.S
 		caddy.HTTPPort)
 	return check
 }
-
-var _ providerkit.StandingChecker = (*Provider)(nil)

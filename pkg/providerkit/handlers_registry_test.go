@@ -27,7 +27,13 @@ type hosting struct {
 	refusal error
 }
 
-func (h *hosting) ImageRegistry(_ context.Context, class providerkit.Class, repositories []string) (providerkit.RegistryTarget, error) {
+func (h *hosting) Hooks() providerkit.Hooks {
+	hooks := h.Provider.Hooks()
+	hooks.EnsureImageRegistry = h.EnsureImageRegistry
+	return hooks
+}
+
+func (h *hosting) EnsureImageRegistry(_ context.Context, class providerkit.Class, repositories []string) (providerkit.RegistryTarget, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.asked = append(h.asked, repositories)

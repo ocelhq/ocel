@@ -14,7 +14,7 @@ import (
 
 const tfDataTransfer = "aws_data_transfer"
 
-func (p *Provider) Shape(ctx context.Context, req providerkit.ShapeRequest) (*costv1.ResourceSet, error) {
+func (p *Provider) ShapeCost(ctx context.Context, req providerkit.ShapeRequest) (*costv1.ResourceSet, error) {
 	tree := &costkit.Tree{}
 	project := tree.Scope("", costkit.ScopeProject, req.Plan.Slug)
 	shared := tree.Scope(project, costkit.ScopeShared, string(req.Plan.Class))
@@ -62,7 +62,7 @@ func (p *Provider) Shape(ctx context.Context, req providerkit.ShapeRequest) (*co
 	return tree.Set(providerkit.CostSource)
 }
 
-func (p *Provider) Price(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
+func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
 	edges, err := providerkit.EdgePricers(p.edges())
 	if err != nil {
 		return nil, err

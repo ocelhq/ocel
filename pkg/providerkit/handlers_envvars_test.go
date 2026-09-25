@@ -397,6 +397,12 @@ func TestABindingOcelCouldNotHaveProducedIsRefused(t *testing.T) {
 
 type refusingGrants struct{ *fake.Provider }
 
+func (r refusingGrants) Hooks() providerkit.Hooks {
+	hooks := r.Provider.Hooks()
+	hooks.VerifyGrants = r.VerifyGrants
+	return hooks
+}
+
 func (refusingGrants) VerifyGrants(context.Context, providerkit.Binding) error {
 	return fmt.Errorf("s3:* names a whole service: %w", providerkit.ErrUnscopedGrant)
 }

@@ -48,18 +48,6 @@ type Access struct {
 	Env map[string]string
 }
 
-type Program interface {
-	Run(ctx *pulumi.Context, plan providerkit.StackPlan) error
-}
-
-type Configurer interface {
-	Configure(ctx context.Context, plan providerkit.StackPlan) (auto.ConfigMap, error)
-}
-
-type Decoder interface {
-	Decode(ctx context.Context, plan providerkit.StackPlan, outputs auto.OutputMap) (providerkit.StackResult, error)
-}
-
 type Engine interface {
 	Preview(ctx context.Context, setup Setup, op Op, report providerkit.Reporter) ([]providerkit.Change, error)
 
@@ -73,7 +61,11 @@ type Engine interface {
 type Config struct {
 	Access Access
 
-	Program Program
+	Program func(ctx *pulumi.Context, plan providerkit.StackPlan) error
+
+	Configure func(ctx context.Context, plan providerkit.StackPlan) (auto.ConfigMap, error)
+
+	Decode func(ctx context.Context, plan providerkit.StackPlan, outputs auto.OutputMap) (providerkit.StackResult, error)
 
 	Parallel int
 
@@ -151,7 +143,7 @@ func (a *Adapter) workspace(plan providerkit.StackPlan, op Op) (Setup, error) {
 	if err != nil {
 		return Setup{}, err
 	}
-	program := func(ctx *pulumi.Context) error { return a.config.Program.Run(ctx, plan) }
+	program := func(ctx *pulumi.Context) error { return a.config.Program(ctx, plan) }
 
 	return Setup{
 		Ref:      plan.Ref,
@@ -205,11 +197,10 @@ func (a *Adapter) Stack(ctx context.Context, plan providerkit.StackPlan) (auto.C
 	if _, err := a.Workspace(plan); err != nil {
 		return nil, err
 	}
-	configurer, configures := a.config.Program.(Configurer)
-	if !configures {
+	if a.config.Configure == nil {
 		return auto.ConfigMap{}, nil
 	}
-	return configurer.Configure(ctx, plan)
+	return a.config.Configure(ctx, plan)
 }
 
 func (a *Adapter) setup(ctx context.Context, plan providerkit.StackPlan, op Op, report providerkit.Reporter) (Setup, error) {
@@ -325,11 +316,10 @@ func (a *Adapter) Run(ctx context.Context, plan providerkit.StackPlan, report pr
 	if err != nil {
 		return providerkit.StackResult{}, busy(err, setup)
 	}
-	decoder, decodes := a.config.Program.(Decoder)
-	if !decodes {
+	if a.config.Decode == nil {
 		return providerkit.StackResult{}, nil
 	}
-	return decoder.Decode(ctx, plan, outputs)
+	return a.config.Decode(ctx, plan, outputs)
 }
 
 func (a *Adapter) Destroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {

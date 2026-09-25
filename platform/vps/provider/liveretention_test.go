@@ -9,7 +9,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -153,7 +152,7 @@ func TestLiveAFailedReleaseSweepsItsOwnImage(t *testing.T) {
 
 	plan := sweepPlan(t, "leak")
 	plan.App.HealthCheckPath = ""
-	releaser := resources.Releaser(p.Records(), p.Artifacts(), p)
+	releaser := p.Releases()
 	_, err := releaser.Provision(context.Background(), plan, nil)
 	if err == nil {
 		t.Fatal("Provision() of an app carrying no health path succeeded, and this test needs the failure path")

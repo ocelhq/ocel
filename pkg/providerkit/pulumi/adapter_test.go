@@ -58,7 +58,7 @@ func TestPreviewGathersWhatTheEngineWouldDoIntoOneGroup(t *testing.T) {
 		row(providerkit.ActionReplace, "Instance", "reporting"),
 	}}
 
-	produced, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}, Engine: engine}).
+	produced, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}.Run, Engine: engine}).
 		Preview(context.Background(), plan(), nil)
 	if err != nil {
 		t.Fatalf("Preview() = %v", err)
@@ -95,7 +95,7 @@ func TestPreviewDestroyShowsWhatTheTeardownWouldTakeDown(t *testing.T) {
 
 	engine := &recordingEngine{rows: []providerkit.Change{row(providerkit.ActionDelete, "Bucket", "uploads")}}
 
-	produced, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}, Engine: engine}).
+	produced, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}.Run, Engine: engine}).
 		PreviewDestroy(context.Background(), plan().Ref, nil)
 	if err != nil {
 		t.Fatalf("PreviewDestroy() = %v", err)
@@ -111,7 +111,7 @@ func TestPreviewDestroyShowsWhatTheTeardownWouldTakeDown(t *testing.T) {
 func TestWorkspaceCarriesTheBackendTheProviderNamed(t *testing.T) {
 	t.Parallel()
 
-	setup, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}}).Workspace(plan())
+	setup, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}.Run}).Workspace(plan())
 	if err != nil {
 		t.Fatalf("Workspace() = %v", err)
 	}
@@ -132,7 +132,7 @@ func TestWorkspaceCarriesTheBackendTheProviderNamed(t *testing.T) {
 func TestWorkspaceCarriesThePassphraseAndTheVendorsOwnEnvironment(t *testing.T) {
 	t.Parallel()
 
-	setup, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}}).Workspace(plan())
+	setup, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}.Run}).Workspace(plan())
 	if err != nil {
 		t.Fatalf("Workspace() = %v", err)
 	}
@@ -149,7 +149,7 @@ func TestWorkspaceTakesTheProjectNameTheProviderPins(t *testing.T) {
 
 	pinned := access()
 	pinned.Project = "ocel-shop-pinned"
-	setup, err := pulumi.New(pulumi.Config{Access: pinned, Program: program{}}).Workspace(plan())
+	setup, err := pulumi.New(pulumi.Config{Access: pinned, Program: program{}.Run}).Workspace(plan())
 	if err != nil {
 		t.Fatalf("Workspace() = %v", err)
 	}
@@ -166,7 +166,7 @@ func TestWorkspaceRefusesAnAccessThatWouldWriteStateUnsealed(t *testing.T) {
 		"no passphrase": {BackendURL: "s3://ocel-state/shop"},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := pulumi.New(pulumi.Config{Access: broken, Program: program{}}).Workspace(plan())
+			_, err := pulumi.New(pulumi.Config{Access: broken, Program: program{}.Run}).Workspace(plan())
 			var refusal providerkit.Refusal
 			if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeNotReady {
 				t.Fatalf("Workspace() with %s = %v, want a not-ready refusal", name, err)
@@ -188,8 +188,9 @@ func TestStackTakesTheConfigTheProgramAsksFor(t *testing.T) {
 
 	wanted := auto.ConfigMap{"aws:region": auto.ConfigValue{Value: "nowhere"}}
 	config, err := pulumi.New(pulumi.Config{
-		Access:  access(),
-		Program: configuring{program{config: wanted}},
+		Access:    access(),
+		Program:   program{}.Run,
+		Configure: configuring{program{config: wanted}}.Configure,
 	}).Stack(context.Background(), plan())
 	if err != nil {
 		t.Fatalf("Stack() = %v", err)
@@ -202,7 +203,7 @@ func TestStackTakesTheConfigTheProgramAsksFor(t *testing.T) {
 func TestStackOfAProgramThatConfiguresNothingIsEmpty(t *testing.T) {
 	t.Parallel()
 
-	config, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}}).Stack(context.Background(), plan())
+	config, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}.Run}).Stack(context.Background(), plan())
 	if err != nil {
 		t.Fatalf("Stack() = %v", err)
 	}
@@ -217,7 +218,8 @@ func TestRunHandsTheEngineTheWorkspaceAndDecodesWhatItAnswers(t *testing.T) {
 	engine := &recordingEngine{outputs: auto.OutputMap{"bucket": auto.OutputValue{Value: "shop-uploads"}}}
 	result, err := pulumi.New(pulumi.Config{
 		Access:  access(),
-		Program: decoding{},
+		Program: program{}.Run,
+		Decode:  decoding{}.Decode,
 		Engine:  engine,
 	}).Run(context.Background(), plan(), nil)
 	if err != nil {
@@ -240,7 +242,7 @@ func TestRunTakesTheParallelismTheProviderPins(t *testing.T) {
 	engine := &recordingEngine{}
 	if _, err := pulumi.New(pulumi.Config{
 		Access:   access(),
-		Program:  program{},
+		Program:  program{}.Run,
 		Engine:   engine,
 		Parallel: 8,
 	}).Run(context.Background(), plan(), nil); err != nil {
@@ -257,7 +259,7 @@ func TestRunRefreshesOnlyTheStacksTheProviderSaysToRefresh(t *testing.T) {
 	engine := &recordingEngine{}
 	adapter := pulumi.New(pulumi.Config{
 		Access:  access(),
-		Program: program{},
+		Program: program{}.Run,
 		Engine:  engine,
 		Refresh: func(ref providerkit.StackRef, _ pulumi.Op) bool { return ref.Name.Env == "prod" },
 	})
@@ -284,9 +286,10 @@ func TestRunCarriesTheProgramsConfigToTheEngine(t *testing.T) {
 	engine := &recordingEngine{}
 	wanted := auto.ConfigMap{"aws:defaultTags": auto.ConfigValue{Value: `{"tags":{"ocel:project":"shop"}}`}}
 	if _, err := pulumi.New(pulumi.Config{
-		Access:  access(),
-		Program: configuring{program{config: wanted}},
-		Engine:  engine,
+		Access:    access(),
+		Program:   program{}.Run,
+		Configure: configuring{program{config: wanted}}.Configure,
+		Engine:    engine,
 	}).Run(context.Background(), plan(), nil); err != nil {
 		t.Fatalf("Run() = %v", err)
 	}
@@ -299,7 +302,7 @@ func TestALockedStackReadsAsBusySoTheCLISaysToWaitRatherThanToRetry(t *testing.T
 	t.Parallel()
 
 	engine := &recordingEngine{err: errors.New("update failed: the stack is currently locked by 1 lock(s)")}
-	_, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}, Engine: engine}).
+	_, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}.Run, Engine: engine}).
 		Run(context.Background(), plan(), nil)
 	var refusal providerkit.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
@@ -314,7 +317,7 @@ func TestDestroyHandsTheEngineTheSameWorkspaceRunDoes(t *testing.T) {
 	t.Parallel()
 
 	engine := &recordingEngine{}
-	if err := pulumi.New(pulumi.Config{Access: access(), Program: program{}, Engine: engine}).
+	if err := pulumi.New(pulumi.Config{Access: access(), Program: program{}.Run, Engine: engine}).
 		Destroy(context.Background(), plan().Ref, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
@@ -330,7 +333,7 @@ func TestDestroyOfALockedStackReadsAsBusyToo(t *testing.T) {
 	t.Parallel()
 
 	engine := &recordingEngine{err: errors.New("destroy failed: the stack is currently locked by 1 lock(s)")}
-	err := pulumi.New(pulumi.Config{Access: access(), Program: program{}, Engine: engine}).
+	err := pulumi.New(pulumi.Config{Access: access(), Program: program{}.Run, Engine: engine}).
 		Destroy(context.Background(), plan().Ref, nil)
 	var refusal providerkit.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {

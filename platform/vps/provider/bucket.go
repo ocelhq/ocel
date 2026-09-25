@@ -242,7 +242,7 @@ func (p *Provider) storeCredential(ctx context.Context, ref providerkit.StackRef
 	return storeCredential{sealed: sealed, secret: string(opened)}, nil
 }
 
-func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
+func (p *Provider) ProvisionBucket(ctx context.Context, in resources.Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
 
 	spec := storeContainer(in)
 	spec, err := p.reshaped(ctx, in, transformTypeBucket, spec)
@@ -661,5 +661,3 @@ func (p *Provider) storeRoot(ctx context.Context, ref providerkit.StackRef, stor
 	}
 	return storeCredential{sealed: sealed, secret: string(opened)}, nil
 }
-
-var _ resources.Bucket = (*Provider)(nil)

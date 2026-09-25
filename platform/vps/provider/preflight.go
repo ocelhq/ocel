@@ -58,5 +58,3 @@ func refusing(found []error) error {
 			"this box is not ready for a deploy:\n\n%s", strings.Join(said, "\n\n"))
 	}
 }
-
-var _ providerkit.DeployPreflighter = (*Provider)(nil)

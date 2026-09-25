@@ -25,11 +25,30 @@ func Run(t *testing.T, suite Suite) {
 	t.Helper()
 
 	t.Run("ports", func(t *testing.T) { runPorts(t, suite) })
-	t.Run("optional sets", func(t *testing.T) { runOptionalSets(t, suite) })
 	t.Run("wire", func(t *testing.T) { runWire(t, suite) })
 	t.Run("certifier", func(t *testing.T) { runCertifier(t, suite) })
-	t.Run("cost", func(t *testing.T) { runCost(t, suite) })
+	t.Run("hooks", func(t *testing.T) { runHooks(t, suite) })
 	t.Run("vendor", func(t *testing.T) { runVendor(t, suite) })
+}
+
+func runHooks(t *testing.T, suite Suite) {
+	t.Helper()
+
+	if suite.New == nil {
+		t.Skip("the suite carries no constructor, so there are no hooks to read")
+	}
+	provider, err := suite.New(context.Background(), providerkit.Settings{Options: suite.Options})
+	if err != nil {
+		t.Fatalf("New() error = %v, want a provider", err)
+	}
+	hooks := provider.Hooks()
+
+	t.Run("ShapeCost", func(t *testing.T) {
+		if hooks.ShapeCost == nil {
+			t.Skip("this provider sets no ShapeCost hook, so no deploy of it is priced")
+		}
+		runCost(t, suite)
+	})
 }
 
 func runVendor(t *testing.T, suite Suite) {

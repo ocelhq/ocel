@@ -31,7 +31,7 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 		vm.ssh(t, "sudo docker volume ls -q --filter label="+host.LabelResource+" | xargs -r sudo docker volume rm >/dev/null 2>&1 || true")
 	})
 
-	binding, err := p.Postgres(ctx, in, nil)
+	binding, err := p.ProvisionPostgres(ctx, in, nil)
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
@@ -48,7 +48,7 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 	}
 
 	started := vm.ssh(t, "sudo docker inspect -f '{{.Id}} {{.State.StartedAt}}' "+quote(name))
-	again, err := p.Postgres(ctx, in, nil)
+	again, err := p.ProvisionPostgres(ctx, in, nil)
 	if err != nil {
 		t.Fatalf("a second Postgres() = %v", err)
 	}
@@ -70,7 +70,7 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 		t.Errorf("the daily dump is %q on a bootstrapped box, and a database nothing dumps is one disk away from gone", armed)
 	}
 
-	upgraded, err := p.Postgres(ctx, aPostgres(t, "17"), nil)
+	upgraded, err := p.ProvisionPostgres(ctx, aPostgres(t, "17"), nil)
 	if err != nil {
 		t.Fatalf("moving %s from 16 to 17 = %v", name, err)
 	}

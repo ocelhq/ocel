@@ -68,7 +68,7 @@ func TestTheStandingOfABoxYourProxyFrontsAsksNothingOfPort80(t *testing.T) {
 		reached = append(reached, address)
 		return nil
 	})
-	checks, err := p.CheckStanding(context.Background(), providerkit.StandingRequest{Class: providerkit.ClassProduction})
+	checks, err := p.CheckHost(context.Background(), providerkit.StandingRequest{Class: providerkit.ClassProduction})
 	if err != nil {
 		t.Fatalf("CheckStanding() = %v", err)
 	}

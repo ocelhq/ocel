@@ -14,7 +14,13 @@ import (
 
 type occupied struct{ *fake.Provider }
 
-func (occupied) Inspect(context.Context, providerkit.StackRef) (providerkit.StackState, error) {
+func (o occupied) Hooks() providerkit.Hooks {
+	hooks := o.Provider.Hooks()
+	hooks.InspectStack = o.InspectStack
+	return hooks
+}
+
+func (occupied) InspectStack(context.Context, providerkit.StackRef) (providerkit.StackState, error) {
 	return providerkit.StackState{Present: true}, nil
 }
 
@@ -58,6 +64,12 @@ type embedding struct {
 	embedded []string
 }
 
+func (e *embedding) Hooks() providerkit.Hooks {
+	hooks := e.Provider.Hooks()
+	hooks.EmbedCode = e.EmbedCode
+	return hooks
+}
+
 func (e *embedding) EmbedCode(_ context.Context, function string, ref providerkit.ArtifactRef, _ providerkit.Reporter) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -72,7 +84,13 @@ type warming struct {
 	warmed []string
 }
 
-func (w *warming) Warm(_ context.Context, targets []string, _ providerkit.Reporter) error {
+func (w *warming) Hooks() providerkit.Hooks {
+	hooks := w.Provider.Hooks()
+	hooks.WarmFunctions = w.WarmFunctions
+	return hooks
+}
+
+func (w *warming) WarmFunctions(_ context.Context, targets []string, _ providerkit.Reporter) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.warmed = append(w.warmed, targets...)
@@ -115,8 +133,14 @@ type preflighting struct {
 	uploaded []string
 }
 
+func (p *preflighting) Hooks() providerkit.Hooks {
+	hooks := p.Provider.Hooks()
+	hooks.PreflightDeploy = p.PreflightDeploy
+	return hooks
+}
+
 func (p *preflighting) PreflightDeploy(ctx context.Context, pre providerkit.DeployPreflight) error {
-	return fake.DeployPreflighter{Provider: p.Provider}.PreflightDeploy(ctx, pre)
+	return p.Provider.PreflightDeploy(ctx, pre)
 }
 
 func (p *preflighting) Artifacts() providerkit.ArtifactStore {

@@ -128,3 +128,7 @@ var (
 	_ providerkit.EdgeRegistry = edges{}
 	_ providerkit.DNSRegistry  = dns{}
 )
+
+func (p *Provider) box() *box.Edge {
+	return box.New(p.host, p.holdOrigins, p.records, p.options.SSH.session().Destination())
+}

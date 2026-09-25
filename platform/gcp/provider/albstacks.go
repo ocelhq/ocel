@@ -111,7 +111,7 @@ func (s albStacks) config(
 		},
 	}
 	if program != nil {
-		config.Program = albProgram{run: program, project: clients.project}
+		config.Program = albProgram{run: program, project: clients.project}.Run
 	}
 	if target.Slug == "" {
 		config.Refresh = refreshesTheFront

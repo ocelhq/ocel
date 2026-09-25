@@ -81,7 +81,7 @@ func TestVPSProvider(t *testing.T) {
 	})
 }
 
-func TestTheRootCarriesTheVendorAndNoOptionalSetYet(t *testing.T) {
+func TestTheProviderCarriesTheVendorAndSetsTheHooksABoxImplements(t *testing.T) {
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
@@ -90,32 +90,33 @@ func TestTheRootCarriesTheVendorAndNoOptionalSetYet(t *testing.T) {
 		t.Errorf("Facts().Vendor = %q, want %q", p.Facts().Vendor, vps.Vendor)
 	}
 	if got := p.Facts().Bindings; !slices.Equal(got, []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket}) {
-		t.Errorf("Serves() = %v, want the binding types a box provisions for itself", got)
+		t.Errorf("Facts().Bindings = %v, want the binding types a box provisions for itself", got)
 	}
 
-	var root providerkit.Provider = p
-	for name, held := range map[string]bool{
-		"Warmer":         held[providerkit.Warmer](root),
-		"CodeEmbedder":   held[providerkit.CodeEmbedder](root),
-		"StackInspector": held[providerkit.StackInspector](root),
-		"GrantVerifier":  held[providerkit.GrantVerifier](root),
-		"ArtifactPacker": held[providerkit.ArtifactPacker](root),
+	hooks := p.Hooks()
+	for name, set := range map[string]bool{
+		"WarmFunctions": hooks.WarmFunctions != nil,
+		"EmbedCode":     hooks.EmbedCode != nil,
+		"InspectStack":  hooks.InspectStack != nil,
+		"VerifyGrants":  hooks.VerifyGrants != nil,
+		"PackApp":       hooks.PackApp != nil,
 	} {
-		if held {
-			t.Errorf("the root carries %s, which the optional-set tier must be told to expect on it", name)
+		if set {
+			t.Errorf("the box's hooks set %s, a step no box takes", name)
 		}
 	}
+	var root providerkit.Provider = p
 	if !held[providerkit.Certifier](root) {
 		t.Error("the root carries no Certifier, and a provider without one blanks the certificate and renewal lines in `ocel domain status` entirely, which reads as no tls rather than tls you do not manage")
 	}
 	if !held[providerkit.Prober](root) {
 		t.Error("the root carries no Prober, and the settle then answers from what it just bound rather than from what the hostname serves")
 	}
-	if !held[providerkit.DeployPreflighter](root) {
-		t.Error("the root carries no DeployPreflighter, and a box then learns its engine, its disk, its proxy or its ports are not ready halfway through an image transfer")
+	if hooks.PreflightDeploy == nil {
+		t.Error("the box's hooks leave PreflightDeploy nil, and a box then learns its engine, its disk, its proxy or its ports are not ready halfway through an image transfer")
 	}
-	if !held[providerkit.StandingChecker](root) {
-		t.Error("the root carries no StandingChecker, and `doctor` calls Preflight and DescribeBootstrap and nothing else: with no standing port there is nowhere for a verdict about the life of the box to arrive")
+	if hooks.CheckHost == nil {
+		t.Error("the box's hooks leave CheckHost nil, and `doctor` calls Preflight and DescribeBootstrap and nothing else: with no standing port there is nowhere for a verdict about the life of the box to arrive")
 	}
 }
 

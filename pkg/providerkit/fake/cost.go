@@ -22,7 +22,7 @@ var declaredTypes = map[providerkit.BindingType]string{
 	providerkit.BindingBucket:   TypeBucket,
 }
 
-func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*costv1.ResourceSet, error) {
+func (p *Provider) ShapeCost(_ context.Context, req providerkit.ShapeRequest) (*costv1.ResourceSet, error) {
 	project := "project:" + req.Plan.Slug
 	environment := "environment:" + req.Plan.Env
 	set := &costv1.ResourceSet{
@@ -97,7 +97,7 @@ var table = costkit.Table{
 	},
 }
 
-func (p *Provider) Price(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
+func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
 	card, err := costkit.Load([]byte(rates))
 	if err != nil {
 		return nil, err

@@ -28,8 +28,7 @@ func imaged(provider Provider, compute Compute) bool {
 	case ComputeContainer:
 		return true
 	case ComputeServerless:
-		_, images := provider.(FunctionImager)
-		return images
+		return provider.Hooks().FunctionBaseImage != nil
 	}
 	return false
 }

@@ -227,14 +227,11 @@ func (p *Provider) pushedConnector(ctx context.Context, binary []byte, report pr
 		return "", fmt.Errorf("read the digest of the connector image: %w", err)
 	}
 
-	at, err := p.ImageRegistry(ctx, providerkit.ClassProduction, nil)
+	at, err := p.EnsureImageRegistry(ctx, providerkit.ClassProduction, nil)
 	if err != nil {
 		return "", err
 	}
-	store, err := p.Images(ctx, at)
-	if err != nil {
-		return "", err
-	}
+	store := providerkit.RegistryImages(at)
 	names, err := p.Names(ctx)
 	if err != nil {
 		return "", err

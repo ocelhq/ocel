@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 )
 
 func (p *Provider) ReconcileImages(ctx context.Context, ref providerkit.StackRef, app, coordinate string, report providerkit.Reporter) error {
@@ -14,5 +13,3 @@ func (p *Provider) ReconcileImages(ctx context.Context, ref providerkit.StackRef
 func (p *Provider) ForgetReleases(ctx context.Context, ref providerkit.StackRef, app string, _ providerkit.Reporter) error {
 	return p.host.Forget(ctx, ref.Class, ref.Project, app)
 }
-
-var _ resources.ImageRetention = (*Provider)(nil)

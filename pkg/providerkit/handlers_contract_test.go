@@ -18,7 +18,7 @@ func TestConfigureHandsTheProviderTheTransformModulesTheProjectLists(t *testing.
 		Version: "test",
 		New: func(_ context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
 			seen = settings
-			return fake.Full{Provider: fake.NewProvider(fake.Options{})}, nil
+			return fake.NewProvider(fake.Options{}), nil
 		},
 	}
 	server := httptest.NewServer(providerkit.ConformanceMux(spec))
@@ -43,7 +43,7 @@ func TestConfigureHandsTheProviderTheProjectItServes(t *testing.T) {
 		Version: "test",
 		New: func(_ context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
 			seen = settings
-			return fake.Full{Provider: fake.NewProvider(fake.Options{})}, nil
+			return fake.NewProvider(fake.Options{}), nil
 		},
 	}
 	server := httptest.NewServer(providerkit.ConformanceMux(spec))

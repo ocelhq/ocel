@@ -1,7 +1,6 @@
 package providerkit
 
 import (
-	"context"
 	"fmt"
 	"strings"
 )
@@ -27,8 +26,4 @@ func (t RegistryTarget) Coordinate(repository, tag string) string {
 		parts = append(parts, strings.Trim(t.Namespace, "/"))
 	}
 	return strings.Join(append(parts, repository), "/") + ":" + tag
-}
-
-type ImageRegistry interface {
-	ImageRegistry(ctx context.Context, class Class, repositories []string) (RegistryTarget, error)
 }

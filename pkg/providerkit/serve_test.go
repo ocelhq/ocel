@@ -149,4 +149,6 @@ func TestSessionConfigureIsSafeUnderConcurrency(t *testing.T) {
 
 type stubProvider struct{ Provider }
 
-func (stubProvider) Vendor() Vendor { return "stub" }
+func (stubProvider) Facts() Facts { return Facts{Vendor: "stub"} }
+
+func (stubProvider) Hooks() Hooks { return Hooks{} }
