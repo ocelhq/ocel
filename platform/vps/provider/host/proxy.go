@@ -53,6 +53,9 @@ const (
 	migrateFact   = "migrate="
 	migrateHeld   = "held"
 	migrateUnset  = "unset"
+	mountsFact    = "mounts="
+	mountsHeld    = "held"
+	mountsMoved   = "moved"
 )
 
 var proxyCapabilities = []string{"NET_BIND_SERVICE", "DAC_OVERRIDE", "DAC_READ_SEARCH"}
@@ -268,6 +271,7 @@ func (s boxContainer) factsOver(binds []string) []byte {
 		"ports=" + marshalled(published(s.ports)),
 		"config=" + s.config,
 		"state=running",
+		mountsFact + mountsHeld,
 	}
 	if s.migrates {
 		stated = append(stated, migrateFact+migrateHeld)
@@ -412,8 +416,22 @@ func (s boxContainer) probe() string {
 	return "if command -v " + quoted(dockerEngine) + " >/dev/null 2>&1 && " +
 		"facts=$(docker inspect --type container --format " + quoted(template) + " " + quoted(s.name) + " 2>/dev/null); then\n" +
 		normalized +
+		s.mountsProbe() +
 		reports(quoted(KindContainer), quoted(s.name), "0", quoted(rootOwner),
 			`"$(printf '%s\n' "$facts" | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"`) + "\nfi"
+}
+
+func (s boxContainer) mountsProbe() string {
+	probe := "mounts=" + mountsHeld + "\n" +
+		"if pid=$(docker inspect --type container --format '{{.State.Pid}}' " + quoted(s.name) + " 2>/dev/null); then\n"
+	for _, bind := range s.binds {
+		source, dest, _ := strings.Cut(bind, ":")
+		dest, _, _ = strings.Cut(dest, ":")
+		probe += "if inside=$(stat -c %d:%i \"/proc/$pid/root\"" + quoted(dest) + " 2>/dev/null) && " +
+			"[ \"$inside\" != \"$(stat -c %d:%i " + quoted(source) + " 2>/dev/null)\" ]; then mounts=" + mountsMoved + "; fi\n"
+	}
+	return probe + "fi\n" +
+		"facts=\"$facts\n" + mountsFact + "$mounts\"\n"
 }
 
 func standingOf(item Item) boxContainer {

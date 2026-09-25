@@ -28,8 +28,8 @@ type engineHolding struct {
 
 func holding() engineHolding {
 	return engineHolding{network: true, volume: true, facts: map[string]string{
-		caddy.Container:      string(frontItem().Content),
-		SwitchboardContainer: string(boardItem().Content),
+		caddy.Container:      engineSays(frontProxy(), migrateHeld),
+		SwitchboardContainer: engineSays(standingOf(boardItem()), migrateHeld),
 	}}
 }
 

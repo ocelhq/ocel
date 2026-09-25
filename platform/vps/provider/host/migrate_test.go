@@ -2,7 +2,6 @@ package host
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -60,46 +59,6 @@ func TestTheFrontProxyHandsItsListenersOnWhereverTheKernelCan(t *testing.T) {
 	}
 }
 
-func probedWith(t *testing.T, k kernel, container boxContainer, facts string) string {
-	t.Helper()
-	dir := t.TempDir()
-	said := filepath.Join(dir, "facts")
-	if err := os.WriteFile(said, []byte(facts), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	executable(t, filepath.Join(dir, dockerEngine), "#!/bin/sh\n[ \"$1\" = inspect ] && cat "+quoted(said)+"\n")
-	for _, tool := range []string{"sha256sum", "cut", "cat", "sort"} {
-		found, err := exec.LookPath(tool)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := os.Symlink(found, filepath.Join(dir, tool)); err != nil {
-			t.Fatal(err)
-		}
-	}
-	cmd := exec.Command("/bin/sh", "-c", k.script(container.probe()))
-	cmd.Env = []string{"PATH=" + dir}
-	rendered, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("probe %s: %v", container.name, err)
-	}
-	observed, _, err := readSurvey(string(rendered))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return observed[container.item("").ID()]
-}
-
-func engineSays(container boxContainer, migrate string) string {
-	var said []string
-	for line := range strings.Lines(string(container.facts())) {
-		if !strings.HasPrefix(line, "migrate=") {
-			said = append(said, strings.TrimSuffix(line, "\n"))
-		}
-	}
-	return strings.Join(append(said, "migrate="+migrate), "\n")
-}
-
 func TestAFrontProxyIsCurrentWhenItMigratesItsListenersOrItsKernelCannot(t *testing.T) {
 	t.Parallel()
 
@@ -114,7 +73,7 @@ func TestAFrontProxyIsCurrentWhenItMigratesItsListenersOrItsKernelCannot(t *test
 		"not migrating on a kernel that can":    {can: true, migrate: "unset", current: false},
 		"not migrating on a kernel that cannot": {can: false, migrate: "unset", current: true},
 	} {
-		observed := probedWith(t, kernelMigrating(t, held.can), front, engineSays(front, held.migrate))
+		observed := probedAs(t, kernelMigrating(t, held.can), front, engineReport{facts: engineSays(front, held.migrate)})
 		if (observed == stated) != held.current {
 			t.Errorf("a front proxy %s reads as current=%v, want %v", what, observed == stated, held.current)
 		}
