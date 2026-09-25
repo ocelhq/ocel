@@ -1,13 +1,11 @@
 import { randomUUID } from "node:crypto";
 
-const KEY = "OCEL_NEXT_BOOT";
+const KEY = Symbol.for("ocel.next.boot");
+
+type Booted = { [KEY]?: string };
 
 export function bootId(): string {
-  const seen = process.env[KEY];
-  if (seen) {
-    return seen;
-  }
-  const fresh = randomUUID();
-  process.env[KEY] = fresh;
-  return fresh;
+  const booted = globalThis as Booted;
+  booted[KEY] ??= randomUUID();
+  return booted[KEY];
 }
