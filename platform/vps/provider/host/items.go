@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/helpers"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -26,11 +27,11 @@ const (
 	classRoot    = live.ClassRoot
 	stateRoot    = live.StateRoot
 	releasesRoot = stateRoot + "/releases"
-	helperRoot   = "/usr/local/lib/ocel"
+	helperRoot   = helpers.Dir
 
-	recordsHelper  = helperRoot + "/records"
+	recordsHelper  = helpers.RecordsPath
 	releasesHelper = helperRoot + "/releases"
-	SealHelper     = helperRoot + "/seal"
+	SealHelper     = helpers.SealPath
 
 	stampFile   = "stamp.json"
 	sealKeyFile = "seal.key"

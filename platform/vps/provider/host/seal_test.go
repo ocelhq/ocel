@@ -2,10 +2,12 @@ package host
 
 import (
 	"bytes"
+	"context"
 	"crypto/aes"
 	"crypto/cipher"
 	"encoding/base64"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/helpers"
 )
 
 const sealClass = "production"
@@ -102,6 +105,25 @@ var bound = providerkit.Coordinate{
 }
 
 var aCoordinate = sealFlags(bound)
+
+type argvTaken struct{ argv []string }
+
+func (a *argvTaken) Seal(_ context.Context, _ string, argv []string, _ io.Reader) (string, error) {
+	a.argv = argv
+	return "", nil
+}
+
+func sealArgv(verb string, at providerkit.Coordinate) ([]string, error) {
+	taken := &argvTaken{}
+	sealer := helpers.SealerOver(taken)
+	var err error
+	if verb == "open" {
+		_, err = sealer.Open(context.Background(), at, nil)
+	} else {
+		_, err = sealer.Seal(context.Background(), at, nil)
+	}
+	return taken.argv, err
+}
 
 func sealFlags(at providerkit.Coordinate) []string {
 	argv, err := sealArgv("seal", at)

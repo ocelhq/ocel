@@ -7,7 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/connectorkit"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/vps/connector/hostports"
+	"github.com/ocelhq/ocel/platform/vps/provider/helpers"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
@@ -55,8 +55,8 @@ func run(listen, config string, printing, reporting bool) error {
 		Addr:       listen,
 		ConfigPath: config,
 		Vars: providerkit.Vars{
-			Records: host.RecordsOver(hostports.Records{}),
-			Sealer:  host.SealerOver(hostports.Sealer{}),
+			Records: helpers.RecordsOver(helpers.Local{}),
+			Sealer:  helpers.SealerOver(helpers.Local{Elevate: []string{"sudo", "-n"}}),
 		},
 	})
 }

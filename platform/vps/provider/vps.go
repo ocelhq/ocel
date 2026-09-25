@@ -120,7 +120,7 @@ type Provider struct {
 	options Options
 	host    *host.Host
 	records providerkit.RecordStore
-	sealer  *host.Sealer
+	sealer  providerkit.Sealer
 
 	transform transformkit.Evaluator
 	resolve   Lookup

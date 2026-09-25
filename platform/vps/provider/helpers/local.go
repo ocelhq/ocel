@@ -1,4 +1,4 @@
-package hostports
+package helpers
 
 import (
 	"bytes"
@@ -11,39 +11,40 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-type Records struct{}
+type Local struct {
+	Elevate []string
+}
 
-func (Records) Holds(_ context.Context, class providerkit.Class) (bool, error) {
-	if _, err := os.Stat(host.RecordsHelper); err != nil {
+func (Local) Holds(_ context.Context, class providerkit.Class) (bool, error) {
+	if _, err := os.Stat(RecordsPath); err != nil {
 		return false, nil
 	}
-	held, err := os.Stat(host.RecordsDir(class))
+	held, err := os.Stat(live.RecordsDir(live.StateRoot, class))
 	return err == nil && held.IsDir(), nil
 }
 
-func (Records) Records(ctx context.Context, class providerkit.Class, stdin io.Reader, argv ...string) (string, error) {
-	stdout, stderr, code, err := ran(ctx, stdin, host.RecordsHelper, append([]string{string(class)}, argv...)...)
+func (Local) Records(ctx context.Context, class providerkit.Class, stdin io.Reader, argv ...string) (string, error) {
+	stdout, stderr, code, err := ran(ctx, stdin, RecordsPath, append([]string{string(class)}, argv...)...)
 	switch {
 	case err != nil:
 		return "", providerkit.Refuse(providerkit.CodeDenied, "run the records helper on this host: %s", err)
 	case code == 0:
 		return stdout, nil
-	case code == host.ExitNoRecord:
+	case code == ExitNoRecord:
 		return "", providerkit.ErrNoRecord
-	case code == host.ExitStale:
+	case code == ExitStale:
 		return "", providerkit.ErrStale
 	default:
 		return "", providerkit.Refuse(providerkit.CodeDenied, "records %s on this host: %s", argv[0], terse(stderr, code))
 	}
 }
 
-type Sealer struct{}
-
-func (Sealer) Seal(ctx context.Context, what string, argv []string, stdin io.Reader) (string, error) {
-	stdout, stderr, code, err := ran(ctx, stdin, "sudo", append([]string{"-n"}, argv...)...)
+func (l Local) Seal(ctx context.Context, what string, argv []string, stdin io.Reader) (string, error) {
+	elevated := append(append([]string{}, l.Elevate...), argv...)
+	stdout, stderr, code, err := ran(ctx, stdin, elevated[0], elevated[1:]...)
 	switch {
 	case err != nil:
 		return "", providerkit.Refuse(providerkit.CodeDenied, "run the seal helper on this host: %s", err)
@@ -80,6 +81,6 @@ func terse(stderr string, code int) string {
 }
 
 var (
-	_ host.RecordTransport = Records{}
-	_ host.SealTransport   = Sealer{}
+	_ RecordTransport = Local{}
+	_ SealTransport   = Local{}
 )
