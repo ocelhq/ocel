@@ -16,10 +16,14 @@ type engine struct {
 	deaf      bool
 	active    string
 	enabled   string
+	server    string
+	dockerd   string
+	snap      bool
+	rootless  bool
 }
 
 func serving() engine {
-	return engine{installed: true, unit: true, active: "active", enabled: "enabled"}
+	return engine{installed: true, unit: true, active: "active", enabled: "enabled", server: "28.3.1", dockerd: "28.3.1"}
 }
 
 func daemon(t *testing.T, held engine) string {
@@ -30,7 +34,21 @@ func daemon(t *testing.T, held engine) string {
 		executable(t, filepath.Join(dir, name), "#!/bin/sh\n"+body)
 	}
 	if held.installed {
-		write(dockerEngine, "exit 0")
+		answer := "echo 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock' >&2; exit 1"
+		if held.server != "" {
+			answer = "printf '%s\\n' " + quoted(held.server)
+		}
+		write(dockerEngine, `case "$1" in
+version) `+answer+` ;;
+esac
+exit 0`)
+		write("dockerd", "printf 'Docker version %s, build 38b7060\\n' "+quoted(held.dockerd))
+	}
+	if held.snap {
+		write("snap", `[ "$1" = list ] && [ "$2" = docker ]`)
+	}
+	if held.rootless {
+		write("pgrep", `[ "$1" = -x ] && [ "$2" = rootlesskit ]`)
 	}
 	known := "exit 1"
 	if held.unit {
@@ -47,7 +65,7 @@ esac`
 		manager = "exit 126"
 	}
 	write("systemctl", manager)
-	for _, tool := range []string{"sha256sum", "cut"} {
+	for _, tool := range []string{"sha256sum", "cut", "timeout"} {
 		found, err := exec.LookPath(tool)
 		if err != nil {
 			t.Fatal(err)
@@ -70,6 +88,12 @@ func probed(t *testing.T, held engine) map[string]string {
 
 func engineProbed(t *testing.T, held engine) (map[string]string, error) {
 	t.Helper()
+	observed, _, err := readSurvey(engineRendered(t, held))
+	return observed, err
+}
+
+func engineRendered(t *testing.T, held engine) string {
+	t.Helper()
 	dir := daemon(t, held)
 	cmd := exec.Command("/bin/sh", "-c", engineProbe()+"\n"+unitProbe(unitItem()))
 	cmd.Env = []string{"PATH=" + dir}
@@ -79,8 +103,54 @@ func engineProbed(t *testing.T, held engine) (map[string]string, error) {
 	if err != nil {
 		t.Fatalf("probe the engine: %v\n%s", err, stderr.String())
 	}
-	observed, _, err := readSurvey(string(rendered))
-	return observed, err
+	return string(rendered)
+}
+
+func engineHeld(t *testing.T, held engine) Engine {
+	t.Helper()
+	return readEngine(engineRendered(t, held))
+}
+
+func TestTheReadCarriesTheEngineVersionBesideItsItemAndNeverInIt(t *testing.T) {
+	t.Parallel()
+
+	older, newer := serving(), serving()
+	newer.server, newer.dockerd = "29.8.0", "29.8.0"
+	if got := engineHeld(t, older); got != (Engine{Kind: engineStandard, Version: "28.3.1"}) {
+		t.Errorf("a host serving docker 28.3.1 from docker.service reads as %+v", got)
+	}
+	if probed(t, older)[engineItem().ID()] != probed(t, newer)[engineItem().ID()] {
+		t.Error("the engine digests differently at 28.3.1 and at 29.8.0, and every docker upgrade the user makes would read as drift for bootstrap to write over")
+	}
+
+	down := serving()
+	down.server, down.dockerd = "", "28.0.4"
+	if got := engineHeld(t, down).Version; got != "28.0.4" {
+		t.Errorf("a host whose daemon is down reads docker %q, want the version dockerd itself reports", got)
+	}
+}
+
+func TestTheReadNamesWhatKindOfDockerTheHostCarries(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		held engine
+		want string
+	}{
+		"docker's own packages":            {serving(), engineStandard},
+		"a masked docker.service":          {engine{installed: true, unit: true, active: "inactive", enabled: "masked", dockerd: "28.3.1"}, engineMasked},
+		"the snap package":                 {engine{installed: true, snap: true, dockerd: "27.2.0"}, engineSnap},
+		"a rootless daemon":                {engine{installed: true, rootless: true, dockerd: "28.3.1"}, engineRootless},
+		"a binary nothing on systemd runs": {engine{installed: true, dockerd: "28.3.1"}, engineUnserved},
+		"no docker at all":                 {engine{}, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if got := engineHeld(t, tc.held).Kind; got != tc.want {
+				t.Errorf("the read names %q, want %q", got, tc.want)
+			}
+		})
+	}
 }
 
 func TestASystemctlThatWillNotRunIsNotAnEngineNothingServesAndNoUnit(t *testing.T) {
