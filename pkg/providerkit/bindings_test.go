@@ -170,9 +170,9 @@ func TestAVendorSaysWhichBindingTypesItsAppsReachThroughTheRuntime(t *testing.T)
 
 func TestReadableAs(t *testing.T) {
 	t.Run("refuses a custom record bound as a binding", func(t *testing.T) {
-		err := providerkit.ReadableAs(providerkit.Binding{Name: "flags", Type: providerkit.BindingCustom}, "flags", providerkit.BindingPostgres, providerkit.Proxied)
-		if err == nil || !strings.Contains(err.Error(), "transform") {
-			t.Errorf("ReadableAs = %v, want a custom record sent to transforms", err)
+		err := providerkit.ReadableAs(providerkit.Binding{Name: "flags", Type: providerkit.BindingCustom}, "settings", providerkit.BindingPostgres, providerkit.Proxied)
+		if err == nil || !strings.Contains(err.Error(), "`bindings.custom.flags.<property>`") {
+			t.Errorf("ReadableAs = %v, want a custom record sent to transforms by the key a transform reads it under", err)
 		}
 	})
 
