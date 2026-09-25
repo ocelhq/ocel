@@ -742,7 +742,7 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 	keys := []byte(aKey + "\n")
 	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64))}
 	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64))}
-	proxied := []string{caddy.Container, SwitchboardContainer, ProxyData, ProxyNetwork, proxyRoot, SwitchboardBinary, SwitchboardDir, ProxyConfig, live.RoutingTable, live.RoutingDir}
+	proxied := []string{caddy.Container, SwitchboardContainer, ProxyData, ProxyNetwork, proxyRoot, SwitchboardBinary, SwitchboardDir, SwitchboardControl, ProxyConfig, live.RoutingTable, live.RoutingDir}
 
 	for _, taken := range removing(standing, beside, appsStanding{}) {
 		if slices.Contains(proxied, taken.path) && taken.action == providerkit.ActionDelete {
@@ -763,10 +763,15 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 	if reason := removalOf(last, ProxyData).reason; reason == "" {
 		t.Error("the proxy's data directory is taken with no reason, and every private key and the acme account key it holds go with it")
 	}
-	container := slices.IndexFunc(last, func(r removal) bool { return r.path == caddy.Container })
-	for _, after := range []string{ProxyData, ProxyNetwork, proxyRoot} {
-		if at := slices.IndexFunc(last, func(r removal) bool { return r.path == after }); at < container {
-			t.Errorf("%s is taken at %d and the container using it at %d, and nothing takes what a running container holds", after, at, container)
+	for container, held := range map[string][]string{
+		caddy.Container:      {ProxyData, ProxyNetwork, proxyRoot},
+		SwitchboardContainer: {SwitchboardControl, SwitchboardDir, live.RoutingDir, ProxyNetwork},
+	} {
+		running := slices.IndexFunc(last, func(r removal) bool { return r.path == container })
+		for _, after := range held {
+			if at := slices.IndexFunc(last, func(r removal) bool { return r.path == after }); at < running {
+				t.Errorf("%s is taken at %d and %s using it at %d, and nothing takes what a running container holds", after, at, container, running)
+			}
 		}
 	}
 	if kept := removalOf(last, dockerEngine); kept.action != providerkit.ActionKeep {
