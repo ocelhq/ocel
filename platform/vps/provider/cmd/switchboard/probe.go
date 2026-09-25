@@ -66,6 +66,9 @@ func leaf(argv []string, out, errs io.Writer) int {
 	case err != nil && declined(err):
 		fmt.Fprintf(errs, "%s: %s served no certificate for %s: %v\n", switchboard.Name, at, hostname, err)
 		return exitNotServingYet
+	case err != nil && held(err):
+		fmt.Fprintf(errs, "%s: %s held the handshake for %s past %s, still ordering its certificate: %v\n", switchboard.Name, at, hostname, servingTimeout, err)
+		return exitNotServingYet
 	case err != nil:
 		fmt.Fprintf(errs, "%s: tls handshake for %s failed: %v\n", switchboard.Name, hostname, err)
 		return exitUnservable
@@ -167,6 +170,11 @@ func serves(chain []*x509.Certificate, hostname string, now time.Time) error {
 func declined(err error) bool {
 	var refused *net.OpError
 	return errors.As(err, &refused) && refused.Op == "remote error"
+}
+
+func held(err error) bool {
+	var stalled net.Error
+	return errors.As(err, &stalled) && stalled.Timeout()
 }
 
 func oneLine(err error) string { return strings.Join(strings.Fields(err.Error()), " ") }
