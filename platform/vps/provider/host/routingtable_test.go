@@ -11,12 +11,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func everything() RoutingTable {
 	table := storing()
 	table.Routes = []AppRoute{
-		{RouteKey: keyed(live.StoreLabel), Upstream: "shop-prod-store-s3:9000"},
+		{RouteKey: keyed(switchboard.StoreLabel), Upstream: "shop-prod-store-s3:9000"},
 		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + providerkit.InjectedPortText},
 	}
 	table.Grace = 12 * time.Second

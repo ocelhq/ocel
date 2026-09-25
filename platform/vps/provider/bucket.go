@@ -21,6 +21,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -51,7 +52,7 @@ func storeRoute(ref providerkit.StackRef, store string) host.AppRoute {
 		RouteKey: host.RouteKey{
 			Owner:   live.Surface(ref.Project, string(ref.Class)),
 			Pointer: pointer,
-			App:     live.StoreLabel,
+			App:     switchboard.StoreLabel,
 		},
 		Upstream: store + ":" + storePort,
 	}
@@ -506,7 +507,7 @@ func corsOrigins(ref providerkit.StackRef, declared []string, claims []host.Host
 	origins := slices.Clone(declared)
 	owner := live.Surface(ref.Project, string(ref.Class))
 	for _, claim := range claims {
-		if claim.Owner != owner || claim.App == live.StoreLabel {
+		if claim.Owner != owner || claim.App == switchboard.StoreLabel {
 			continue
 		}
 		if origin := "https://" + claim.Hostname; !slices.Contains(origins, origin) {

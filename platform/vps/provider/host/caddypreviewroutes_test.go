@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const previewSurface = "ocel--shop--preview"
@@ -74,8 +75,8 @@ func TestAClaimNamingNoPointerIsRefusedRatherThanAnsweredForEveryBranch(t *testi
 	if _, err := RenderProxyConfig(state); err == nil {
 		t.Error("a claim naming no pointer rendered, and a box runs many branches of one app at once: the pointer is half of what says which route answers a hostname")
 	}
-	if err := validClaim(previewClaim("pr"+claimSeparator+"7", "", "shop--pr-7."+previewBase)); err == nil {
-		t.Errorf("a pointer carrying %q is claimable, and it is what separates the fields of the identity this is written under", claimSeparator)
+	if err := validClaim(previewClaim("pr"+switchboard.ClaimSeparator+"7", "", "shop--pr-7."+previewBase)); err == nil {
+		t.Errorf("a pointer carrying %q is claimable, and it is what separates the fields of the identity this is written under", switchboard.ClaimSeparator)
 	}
 }
 

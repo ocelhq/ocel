@@ -4,23 +4,16 @@ import (
 	"cmp"
 	"fmt"
 	"maps"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
-)
-
-const (
-	routeIdentity  = "ocel-app-"
-	claimSeparator = live.ClaimSeparator
 )
 
 const (
@@ -35,7 +28,7 @@ type RouteKey struct {
 }
 
 func (k RouteKey) identity() string {
-	return routeIdentity + strings.Join([]string{k.Owner, k.Pointer, k.App}, claimSeparator)
+	return switchboard.RouteIdentity + strings.Join([]string{k.Owner, k.Pointer, k.App}, switchboard.ClaimSeparator)
 }
 
 type AppRoute struct {
@@ -64,7 +57,7 @@ func (r AppRoute) surface() surfaceKey {
 	return surfaceKey{Owner: r.Owner, Pointer: r.Pointer}
 }
 
-func (r AppRoute) app() bool { return r.App != live.StoreLabel }
+func (r AppRoute) app() bool { return r.App != switchboard.StoreLabel }
 
 type Pin struct {
 	Hostname string `json:"hostname"`
@@ -87,28 +80,13 @@ func Covering(pins []Pin, hostname string) string {
 	return ""
 }
 
-const (
-	dnsLabelMax = 63
-	dnsNameMax  = 253
-)
-
-var dnsLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
-
 func PreviewBaseUsable(base string) error {
 	if base == "" {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"the preview entry on this box has no base domain")
 	}
-	named := strings.ToLower(base)
-	labels := strings.Split(named, ".")
-	usable := len(labels) > 1 && len(named)+len(edge.LivenessProbeLabel)+1 <= dnsNameMax
-	for _, label := range labels {
-		usable = usable && len(label) <= dnsLabelMax && dnsLabel.MatchString(label)
-	}
-	if !usable {
-		return providerkit.Refuse(providerkit.CodeInvalid,
-			"%q is not a usable preview base: want dotted dns labels of ≤%d bytes, with %s ≤%d bytes",
-			base, dnsLabelMax, edge.ProbeHostname(edge.PreviewWildcard(base)), dnsNameMax)
+	if err := switchboard.PreviewBaseUsable(base); err != nil {
+		return providerkit.Refuse(providerkit.CodeInvalid, "%v", err)
 	}
 	return nil
 }
@@ -245,7 +223,7 @@ func byKey(a, b AppRoute) int {
 }
 
 func bySurface(a, b surfaceKey) int {
-	return strings.Compare(a.Owner+claimSeparator+a.Pointer, b.Owner+claimSeparator+b.Pointer)
+	return strings.Compare(a.Owner+switchboard.ClaimSeparator+a.Pointer, b.Owner+switchboard.ClaimSeparator+b.Pointer)
 }
 
 func validRoute(route AppRoute) error {
@@ -253,7 +231,7 @@ func validRoute(route AppRoute) error {
 		{"surface", route.Owner}, {"pointer", route.Pointer}, {"app", route.App},
 	} {
 		what, named := field.what, field.named
-		if named == "" || strings.Contains(named, claimSeparator) {
+		if named == "" || strings.Contains(named, switchboard.ClaimSeparator) {
 			return providerkit.Refuse(providerkit.CodeInvalid,
 				"a route on this box has an invalid %s %q",
 				what, named)
@@ -276,11 +254,11 @@ func validClaim(claim HostClaim) error {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"a hostname claim on this box names wildcard %q",
 			claim.Hostname)
-	case strings.Contains(claim.Owner, claimSeparator) || strings.Contains(claim.Hostname, claimSeparator) ||
-		strings.Contains(claim.Pointer, claimSeparator) || strings.Contains(claim.App, claimSeparator):
+	case strings.Contains(claim.Owner, switchboard.ClaimSeparator) || strings.Contains(claim.Hostname, switchboard.ClaimSeparator) ||
+		strings.Contains(claim.Pointer, switchboard.ClaimSeparator) || strings.Contains(claim.App, switchboard.ClaimSeparator):
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"the claim of %q by %q under pointer %q and app %q contains %q",
-			claim.Hostname, claim.Owner, claim.Pointer, claim.App, claimSeparator)
+			claim.Hostname, claim.Owner, claim.Pointer, claim.App, switchboard.ClaimSeparator)
 	}
 	return nil
 }

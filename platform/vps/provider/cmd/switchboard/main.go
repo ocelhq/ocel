@@ -22,11 +22,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
-const (
-	controlEnv     = "OCEL_SWITCHBOARD_CONTROL"
-	defaultControl = "/run/ocel-switchboard/control.sock"
-	helperName     = "ocel-switchboard"
-)
+const controlEnv = "OCEL_SWITCHBOARD_CONTROL"
 
 const (
 	exitRefused        = 2
@@ -58,7 +54,7 @@ func main() {
 func run(ctx context.Context, argv []string, out, errs io.Writer) int {
 	control := os.Getenv(controlEnv)
 	if control == "" {
-		control = defaultControl
+		control = switchboard.ControlSocket
 	}
 	if len(argv) == 0 {
 		return usage(errs)
@@ -97,7 +93,7 @@ func run(ctx context.Context, argv []string, out, errs io.Writer) int {
 }
 
 func usage(errs io.Writer) int {
-	fmt.Fprintln(errs, "usage: "+helperName+" serve --listen <host:port> --table <path> [--trust <addr|cidr|name>]... |")
+	fmt.Fprintln(errs, "usage: "+switchboard.Name+" serve --listen <host:port> --table <path> [--trust <addr|cidr|name>]... |")
 	fmt.Fprintln(errs, "       load <table> |")
 	fmt.Fprintln(errs, "       gate --deploy-timeout <seconds> <host:port/path>... |")
 	fmt.Fprintln(errs, "       flip [--drain-timeout <seconds> --retire <host:port>...] <table> |")
@@ -109,7 +105,7 @@ func usage(errs io.Writer) int {
 }
 
 func refuse(errs io.Writer, err error) int {
-	fmt.Fprintf(errs, "%s: %v\n", helperName, err)
+	fmt.Fprintf(errs, "%s: %v\n", switchboard.Name, err)
 	return exitRefused
 }
 

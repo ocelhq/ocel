@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const KeepWindow = 3
@@ -232,7 +233,7 @@ func switchboardAnswering() readiness {
 			return providerkit.Refuse(providerkit.CodeNotReady,
 				"%s on %s answered nothing over its control socket in %s: %s\n"+
 					"Run `ocel bootstrap %s`",
-				SwitchboardContainer, host, SwitchboardControl, said, providerkit.ClassProduction)
+				SwitchboardContainer, host, switchboard.ControlDir, said, providerkit.ClassProduction)
 		},
 	}
 }

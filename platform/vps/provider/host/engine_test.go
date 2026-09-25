@@ -74,7 +74,7 @@ func proxyStanding(t *testing.T) standingProxy {
 	stood := standingProxy{name: name, board: board, network: network, dir: dir}
 	proxied, routing, switching := filepath.Join(dir, "proxy"), filepath.Join(dir, "routing"), filepath.Join(dir, "switchboard")
 	stood.pins, stood.table = filepath.Join(dir, "pins"), filepath.Join(routing, filepath.Base(live.RoutingTable))
-	stood.binary = filepath.Join(switching, switchboardName)
+	stood.binary = filepath.Join(switching, switchboard.Name)
 	for _, made := range []string{proxied, filepath.Join(proxied, "data"), routing, switching, stood.pins, filepath.Join(dir, "control"), filepath.Join(dir, "connector")} {
 		if err := os.MkdirAll(made, 0o755); err != nil {
 			t.Fatal(err)
@@ -94,7 +94,7 @@ func proxyStanding(t *testing.T) standingProxy {
 	}
 	stood.here = strings.NewReplacer(
 		SwitchboardAddress, board+":"+switchboardPort,
-		SwitchboardControl, filepath.Join(dir, "control"),
+		switchboard.ControlDir, filepath.Join(dir, "control"),
 		SwitchboardDir, switching,
 		ConnectorRun, filepath.Join(dir, "connector"),
 		caddy.PinsDir, stood.pins,
