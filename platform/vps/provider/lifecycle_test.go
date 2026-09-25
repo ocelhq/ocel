@@ -1248,6 +1248,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	}
 	previewHost := lifecyclePreview + "." + lifecyclePreviewBase
 	run.serving(t, previewHost, "two")
+	run.vm.handshakes(t, previewHost)
 	if listed := run.deploying(t, "preview", "ls"); !strings.Contains(listed, lifecyclePreview) {
 		t.Errorf("`ocel preview ls` never listed %s:\n%s", lifecyclePreview, listed)
 	}
@@ -1270,12 +1271,12 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 
 	after := run.vm.proxyLogBytes(t)
 	if after <= written {
-		t.Fatalf("the proxy had logged %d bytes before this journey bound anything and %d after every hostname it binds, so its log is no window an acme order could have appeared in", written, after)
+		t.Fatalf("the proxy had logged %d bytes before this journey bound anything and %d after a handshake for every hostname it binds, so its log is no window an acme order could have appeared in", written, after)
 	}
 	since := run.vm.proxyLogSince(t, written)
 	for _, bound := range []string{lifecycleHostname, previewHost} {
 		if !strings.Contains(since, "\"identifier\":\""+bound+"\"") {
-			t.Fatalf("the proxy logged no certificate work for %s across every bind this journey made, so those logs are no window an acme order could have appeared in:\n%s", bound, since)
+			t.Fatalf("the proxy logged no certificate work for %s across every handshake this journey made, so those logs are no window an acme order could have appeared in:\n%s", bound, since)
 		}
 		if !localAuthority(since, bound) {
 			t.Errorf("the proxy issued %s from something other than the box's own local authority:\n%s", bound, since)
