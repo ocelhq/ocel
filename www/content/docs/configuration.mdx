@@ -166,6 +166,82 @@ The processor architecture an app's functions or container image are built for.
 Either `x86_64` or `arm64`. Left off, it is what your provider runs the app on. A provider
 that cannot run the one you name refuses the deploy before anything is built.
 
+## bindings
+
+A resource the code declares is provisioned in your account, unless `bindings` names what it
+binds to instead. Keyed by resource type, then by the name the code declares.
+
+A record your own infrastructure published, with `ocel bindings set` or the SST and Pulumi
+packages, is written `"@"` and the name it was published under:
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
+  "bindings": { "postgres": { "analytics": "@warehouse" } }
+}
+```
+
+Or write the record itself. A postgres takes its connection string whole, which keeps the
+`sslmode`, `options` and pooler parameters a hosted database needs:
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
+  "bindings": { "postgres": { "orders": { "url": { "$env": "ORDERS_DATABASE_URL" } } } }
+}
+```
+
+or its parts, keyed by the tier it serves:
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
+  "bindings": {
+    "postgres": {
+      "orders": {
+        "production": {
+          "host": "db.abcdefghijkl.supabase.co",
+          "database": "postgres",
+          "username": "postgres",
+          "password": { "$env": "SUPABASE_DB_PASSWORD" },
+          "tls": { "mode": "verify-full", "ca": { "$env": "SUPABASE_CA" } }
+        }
+      }
+    }
+  }
+}
+```
+
+A binding keyed by `production` or `preview` serves that tier alone, and the other provisions
+its own resource as usual. `ocel dev` always runs its own. A bucket binds to one in a store you
+already run: see [Bucket](/docs/sdk/bucket#a-bucket-in-a-store-you-already-run).
+
+`{ "$env": "NAME" }` is a [variable](/docs/environments), set with `ocel env set` for each class
+and environment, and it is the only way a password, a connection string, a CA or a key reaches a
+binding. `${NAME}` in the same file is read from your shell when the config loads, and belongs to
+the values that are not secret. Each `$env` a binding reads is owed like one your code declares:
+the deploy stops and names the `ocel env set` that fills it. The variables editor shows it
+grouped under the binding. The app never receives it, and a name both your code declares and a
+binding reads is refused.
+
+Nothing written inline is provisioned, so the deploy checks it instead. It connects to a postgres
+and compares its major version with the one the code declares, and it checks a bucket's access,
+CORS and policy against what the code asks of it. A binding that fails the check stops the deploy
+before anything is built.
+
+A preview environment per pull request can bind a database branch of its own. Create it in CI,
+then set the variable for that environment before the preview deploys:
+
+```yaml title=".github/workflows/preview.yml"
+- run: |
+    URL=$(neonctl branches create --name pr-${{ github.event.number }} --output json | jq -r '.connection_uris[0].connection_uri')
+    ocel env set ORDERS_DATABASE_URL="$URL" --preview --environment pr-${{ github.event.number }}
+- run: ocel preview up
+```
+
 ## Another config per target
 
 A file named `ocel.<target>.json` is the same project deployed somewhere else — a box of

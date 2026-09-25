@@ -315,54 +315,9 @@ Drop the last bucket a project declares in an environment and the store goes wit
 container, its volume and every byte those buckets held, its route on the proxy, and the
 credentials the box kept for it. Take a backup first if you want the objects.
 
-Point the project at an S3-compatible store instead, and every declared bucket becomes a key
-prefix inside the one you name:
-
-```json title="ocel.json"
-{
-  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
-  "slug": "my-app",
-  "provider": {
-    "vps": {
-      "ssh": { "host": "${DEPLOY_HOST}", "user": "deploy" },
-      "bucket": {
-        "endpoint": "https://s3.eu-west-1.amazonaws.com",
-        "region": "eu-west-1",
-        "bucket": "my-app-objects",
-        "accessKeyId": "${STORE_ACCESS_KEY_ID}",
-        "secretAccessKey": "${STORE_SECRET_ACCESS_KEY}"
-      }
-    }
-  },
-  "apps": [{ "name": "web", "path": ".", "compute": "container" }]
-}
-```
-
-All five fields go together, or none of them. Add `"pathStyle": true` for a store that serves no
-wildcard DNS. Every string in `ocel.json` takes `${VAR}` from your environment, so
-`secretAccessKey` need never be written down in the file.
-
 <Callout>
-  That credential reaches the whole bucket you name, and the runtime in front of every app on the
-  box holds it — the apps themselves never see it, and the runtime answers each one only for the
-  prefixes its own deploy granted it, but the boundary is the runtime rather than the store. Issue
-  a key scoped to that one bucket, and give each project a bucket of its own.
-</Callout>
-
-The deploy probes that store before it provisions anything: conditional writes, bucket CORS,
-presigned urls and multipart uploads. A store missing any of them is refused by name, with nothing
-provisioned, and the probe deletes everything it wrote. `public` is refused on an external store,
-since anonymous access there is that store's to grant.
-
-Past the probe, the deploy leaves that bucket's own configuration alone. It writes no lifecycle
-rule, and instead abandons an unfinished multipart upload once the upload is a day old, so a
-browser that walked away stops costing you storage. It writes no CORS rule either, so
-`allowedOrigins` has nothing to set there: put the origins your pages are served from on the
-bucket yourself, or browser uploads and signed writes from a page are refused by the store.
-
-<Callout>
-  The box's own store is as durable as the box's disk. Point `bucket` at a store you trust for
-  anything you cannot afford to lose with the machine.
+  The box's own store is as durable as the box's disk. [Bind a bucket](#a-bucket-in-a-store-you-already-run)
+  to a store you trust for anything you cannot afford to lose with the machine.
 </Callout>
 
 A [transform](/docs/transforms#on-a-vps) changes what the store container runs: its image, its
@@ -370,6 +325,56 @@ memory, where its volume lives. One container holds every bucket a project decla
 environment, so it runs as one shape. Two buckets patched into different shapes are refused by
 name: gate the rule on the environment rather than on which bucket it reaches, or patch both the
 same way.
+
+## A bucket in a store you already run
+
+Bind a declared bucket to one in an S3-compatible store of your own (R2, a Hetzner or AWS
+bucket, anything that speaks S3) and ocel reaches that bucket instead of provisioning one. The
+binding lives in `bindings`, on any provider:
+
+```json title="ocel.json"
+{
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": "aws",
+  "bindings": {
+    "bucket": {
+      "uploads": {
+        "endpoint": "https://${CF_ACCOUNT_ID}.r2.cloudflarestorage.com",
+        "region": "auto",
+        "bucket": { "$env": "UPLOADS_BUCKET" },
+        "prefix": "uploads/",
+        "accessKeyId": { "$env": "R2_ACCESS_KEY_ID" },
+        "secretAccessKey": { "$env": "R2_SECRET_ACCESS_KEY" },
+        "publicBaseUrl": "https://cdn.acme.com"
+      }
+    }
+  },
+  "apps": [{ "name": "web", "path": "." }]
+}
+```
+
+The key pair is written as variables you set with `ocel env set`, per class and environment, so
+the config never holds it and the app never reads it. Add `"pathStyle": true` for a store that
+serves no wildcard DNS. `prefix` keeps every key the app writes under it, so one bucket can hold
+several resources, and `$env` on `bucket` or `prefix` gives each preview environment its own.
+Keyed by `production` or `preview`, the binding serves only that tier, and the other provisions
+its own bucket as usual.
+
+Ocel holds no admin credential for a store it does not run, so it checks the bucket at every
+deploy instead of configuring it. The bucket must answer. When the code sets `allowedOrigins`, the
+bucket's CORS rules must allow each of them. When it sets `public`, the bucket's policy must let
+anyone read the objects under the prefix, and the binding must name `publicBaseUrl`. A mismatch
+refuses the deploy and names the difference. A rule the key pair may not read, or a store that
+serves no bucket policy, becomes a warning naming what could not be checked.
+
+Uploads, signed urls and multipart work as they do on any bucket. Upload sessions are kept in the
+bucket itself, under the prefix, and completed by checking what the store holds.
+
+<Callout>
+  Issue a key scoped to that one bucket. The runtime in front of your app holds it, and the app
+  never sees it.
+</Callout>
 
 ## On AWS
 
