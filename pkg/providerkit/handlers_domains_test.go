@@ -109,6 +109,32 @@ func TestAddHostnameBindsWritesAndRecordsTheProbe(t *testing.T) {
 	}
 }
 
+func TestAddHostnameSaysWhatTheEdgeAsksOfYouAsItBinds(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	deployed(t, provider, providerkit.ClassProduction, "shop")
+	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).SayOnBind("Route app.acme.com → http://127.0.0.1:8480 (keep Host, set X-Forwarded-Proto)")
+
+	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
+		Slug:       "shop",
+		Configured: configuredHosts("app.acme.com"),
+		Edge:       zoned("acme.com"),
+	})
+	if err != nil {
+		t.Fatalf("AddHostname() error = %v", err)
+	}
+	var said []string
+	for stream.Receive() {
+		said = append(said, stream.Msg().GetProgress().GetMessage())
+	}
+	if err := stream.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(said, func(line string) bool { return strings.HasPrefix(line, "Route app.acme.com") }) {
+		t.Errorf("AddHostname() said %v, want the route the edge asks of you", said)
+	}
+}
+
 func TestAddHostnameOnAProjectThatPromotedNothingSaysNothingServesIt(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
