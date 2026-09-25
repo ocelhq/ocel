@@ -265,14 +265,17 @@ func TestTheSwitchboardRunsOnTheBoxNetworkBehindTheFrontProxyAndPublishesNothing
 	}
 }
 
-func TestTheFrontProxyMountsNothingTheSwitchboardNowOwns(t *testing.T) {
+func TestTheFrontProxyMountsNoRoutingStateTheSwitchboardNowOwns(t *testing.T) {
 	t.Parallel()
 
 	joined := strings.Join(frontProxy().run(), " ")
-	for _, owned := range []string{ConnectorRun, live.RoutingDir, SwitchboardDir} {
+	for _, owned := range []string{ConnectorRun, live.RoutingDir, switchboard.ControlDir} {
 		if strings.Contains(joined, "--volume "+owned+":") {
 			t.Errorf("the front proxy runs as %q, which still reaches %s", joined, owned)
 		}
+	}
+	if reader := "--volume " + SwitchboardDir + ":" + switchboardMount + ":ro"; !strings.Contains(joined, reader) {
+		t.Errorf("the front proxy runs as %q, which carries no %s: its image holds nothing that reads its admin socket, so nothing proves the socket answers", joined, reader)
 	}
 	if !slices.Equal(frontProxy().run()[len(frontProxy().run())-len(caddy.Command()):], caddy.Command()) {
 		t.Errorf("the front proxy runs %q, want caddy started straight off its config", frontProxy().run())

@@ -186,11 +186,11 @@ func TestLiveADiskThatClearsTheFloorIsStillRefusedByWhatThisBoxHolds(t *testing.
 	}
 }
 
-func TestLiveTheFourProxyStatesAreFourInducedConditionsAndFourMessages(t *testing.T) {
+func TestLiveTheFiveProxyStatesAreFiveInducedConditionsAndFiveMessages(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
 	if err := preflightedOn(t, p); err != nil {
-		t.Fatalf("PreflightDeploy() over a standing proxy = %v, and the answered state is the control the other three are read against", err)
+		t.Fatalf("PreflightDeploy() over a standing proxy = %v, and the answered state is the control the others are read against", err)
 	}
 
 	held := map[string]string{}
@@ -220,12 +220,18 @@ func TestLiveTheFourProxyStatesAreFourInducedConditionsAndFourMessages(t *testin
 			restore: func() {
 				vm.ssh(t, "sudo docker exec "+caddy.Container+" mv "+quote(caddy.AdminSocket+".moved")+" "+quote(caddy.AdminSocket))
 			},
-			wants: []string{"`test -S " + caddy.AdminSocket + "`"},
+			wants: []string{caddy.Container, caddy.AdminSocket, "no such file"},
+		},
+		{
+			what:    "the front proxy's admin socket is there and nothing is listening on it",
+			induce:  func() { vm.deafens(t, vm.insideFrontProxy(t, caddy.AdminSocket)) },
+			restore: func() { vm.hears(t, vm.insideFrontProxy(t, caddy.AdminSocket)) },
+			wants:   []string{caddy.Container, caddy.AdminSocket, "connection refused"},
 		},
 		{
 			what:    "the switchboard's control socket is there and nothing is listening on it",
-			induce:  func() { vm.deafens(t) },
-			restore: func() { vm.hears(t) },
+			induce:  func() { vm.deafens(t, switchboard.ControlSocket) },
+			restore: func() { vm.hears(t, switchboard.ControlSocket) },
 			wants:   []string{host.SwitchboardContainer, "answered nothing over", "connection refused"},
 		},
 	} {
@@ -250,42 +256,49 @@ func TestLiveTheFourProxyStatesAreFourInducedConditionsAndFourMessages(t *testin
 			held[induced.what] = said
 		}()
 	}
-	if len(held) != 4 {
-		t.Fatalf("%d proxy states were induced, want the four this check tells apart", len(held))
+	if len(held) != 5 {
+		t.Fatalf("%d proxy states were induced, want the five this check tells apart", len(held))
 	}
 	if err := preflightedOn(t, vm.deploying(t)); err != nil {
-		t.Fatalf("PreflightDeploy() after every induced state was undone = %v, so the four messages above were read off a box left broken", err)
+		t.Fatalf("PreflightDeploy() after every induced state was undone = %v, so the five messages above were read off a box left broken", err)
 	}
 }
-
-const deafSocket = switchboard.ControlSocket + ".listening"
 
 const deafPid = "/run/ocel-live-deafened.pid"
 
 const deafScript = "import socket,time; s=socket.socket(socket.AF_UNIX); s.bind(%q); time.sleep(300)"
 
-func (vm machine) deafens(t *testing.T) {
+func (vm machine) insideFrontProxy(t *testing.T, path string) string {
+	t.Helper()
+	pid := strings.TrimSpace(vm.ssh(t, "sudo docker inspect -f '{{.State.Pid}}' "+caddy.Container))
+	if pid == "" || pid == "0" {
+		t.Fatalf("%s named no pid, so its filesystem cannot be reached from this host", caddy.Container)
+	}
+	return "/proc/" + pid + "/root" + path
+}
+
+func (vm machine) deafens(t *testing.T, socket string) {
 	t.Helper()
 	if strings.TrimSpace(vm.ssh(t, "command -v python3 >/dev/null && echo held || echo gone")) != "held" {
-		t.Skip("this box carries no python3, and a socket that is bound and not listening is what a control endpoint that refuses looks like")
+		t.Skip("this box carries no python3, and a socket that is bound and not listening is what an endpoint that refuses looks like")
 	}
-	vm.ssh(t, "sudo mv "+quote(switchboard.ControlSocket)+" "+quote(deafSocket))
+	vm.ssh(t, "sudo mv "+quote(socket)+" "+quote(socket+".listening"))
 	vm.ssh(t, "sudo sh -c "+quote(
-		"python3 -c "+quote(fmt.Sprintf(deafScript, switchboard.ControlSocket))+" >/dev/null 2>&1 </dev/null & echo $!")+
+		"python3 -c "+quote(fmt.Sprintf(deafScript, socket))+" >/dev/null 2>&1 </dev/null & echo $!")+
 		" | sudo tee "+quote(deafPid)+" >/dev/null")
 	for range 40 {
-		if strings.TrimSpace(vm.ssh(t, "sudo test -S "+quote(switchboard.ControlSocket)+" && echo bound || echo gone")) == "bound" {
+		if strings.TrimSpace(vm.ssh(t, "sudo test -S "+quote(socket)+" && echo bound || echo gone")) == "bound" {
 			return
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
-	vm.hears(t)
-	t.Fatalf("a socket bound and not listening never appeared at %s, and this induction proves nothing without one: a run that reports green having induced nothing is the shape this tier exists to rule out", switchboard.ControlSocket)
+	vm.hears(t, socket)
+	t.Fatalf("a socket bound and not listening never appeared at %s, and this induction proves nothing without one: a run that reports green having induced nothing is the shape this tier exists to rule out", socket)
 }
 
-func (vm machine) hears(t *testing.T) {
+func (vm machine) hears(t *testing.T, socket string) {
 	t.Helper()
-	vm.ssh(t, "sudo sh -c "+quote("kill $(cat "+deafPid+") || true; rm -f "+deafPid+" "+switchboard.ControlSocket+"; mv "+deafSocket+" "+switchboard.ControlSocket))
+	vm.ssh(t, "sudo sh -c "+quote("kill $(cat "+deafPid+") || true; rm -f "+deafPid+" "+socket+"; mv "+socket+".listening "+socket))
 }
 
 func TestLiveAForeignContainerHoldingPortEightyIsRefusedByName(t *testing.T) {

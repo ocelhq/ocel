@@ -240,15 +240,16 @@ func frontProxy() boxContainer {
 			caddy.PinsDir + ":" + caddy.PinsMount + ":ro",
 			ProxyData + ":" + caddy.DataMount,
 			switchboard.FrontDir + ":" + switchboard.FrontDir + ":ro",
+			SwitchboardDir + ":" + switchboardMount + ":ro",
 		},
 		ports:    proxyServing(),
 		env:      []string{proxyDataConfigEnv},
 		caps:     proxyCapabilities,
 		fileCaps: true,
 		files:    []string{ProxyConfig},
-		ready:    caddy.Ready(),
+		ready:    caddy.Ready(SwitchboardMounted),
 		inodes:   []string{"stat", "-c", "%n %d:%i"},
-		unready:  "did not pass `" + strings.Join(caddy.Ready(), " ") + "`",
+		unready:  "did not answer with its http app loaded over its admin socket " + caddy.AdminSocket,
 		migrates: true,
 	}
 }
