@@ -72,6 +72,8 @@ message ProviderConfig {
   google.protobuf.Struct options = 1;
 
   repeated string transforms = 2;
+
+  string slug = 3;
 }
 
 message ConfigureRequest {

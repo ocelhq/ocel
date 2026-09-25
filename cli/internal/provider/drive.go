@@ -74,7 +74,7 @@ func driveOnce(ctx context.Context, cfg *projectconfig.Config, desc *projectconf
 }
 
 func providerConfig(cfg *projectconfig.Config, desc *projectconfig.ProviderDescriptor) (*contractv1.ProviderConfig, error) {
-	config := &contractv1.ProviderConfig{Transforms: cfg.Transforms}
+	config := &contractv1.ProviderConfig{Transforms: cfg.Transforms, Slug: cfg.Slug}
 	if desc == nil || len(desc.Options) == 0 {
 		return config, nil
 	}

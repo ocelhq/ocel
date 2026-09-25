@@ -36,3 +36,27 @@ func TestConfigureHandsTheProviderTheTransformModulesTheProjectLists(t *testing.
 		t.Errorf("Transforms = %v, want %v", seen.Transforms, modules)
 	}
 }
+
+func TestConfigureHandsTheProviderTheProjectItServes(t *testing.T) {
+	var seen providerkit.Settings
+	spec := providerkit.Spec{
+		Version: "test",
+		New: func(_ context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
+			seen = settings
+			return fake.Full{Provider: fake.NewProvider(fake.Options{})}, nil
+		},
+	}
+	server := httptest.NewServer(providerkit.ConformanceMux(spec))
+	t.Cleanup(server.Close)
+
+	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
+	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{
+		Config: &contractv1.ProviderConfig{Slug: "shop"},
+	}); err != nil {
+		t.Fatalf("Configure() error = %v", err)
+	}
+
+	if seen.Slug != "shop" {
+		t.Errorf("Slug = %q, want shop", seen.Slug)
+	}
+}

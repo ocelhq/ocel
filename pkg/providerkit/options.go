@@ -16,6 +16,7 @@ type Options map[string]any
 type Settings struct {
 	Options    Options
 	Transforms []string
+	Slug       string
 }
 
 func RefuseTransforms(vendor Vendor, transforms []string) error {
