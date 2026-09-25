@@ -301,7 +301,7 @@ func TestServeRefusesToTakeTheControlSocketFromASwitchboardStillAnsweringOnIt(t 
 }
 
 func TestOfServesStartedTogetherOnOneControlSocketExactlyOneTakesIt(t *testing.T) {
-	controlAt(t)
+	control := controlAt(t)
 	table := tableFile(t, nil)
 	ctx, stop := context.WithCancel(t.Context())
 	const racing = 16
@@ -330,9 +330,24 @@ func TestOfServesStartedTogetherOnOneControlSocketExactlyOneTakesIt(t *testing.T
 			t.Fatalf("%d of %d serves started together are still serving on one control socket, want exactly one", racing-refused, racing)
 		}
 	}
+	if !controlAnswers(control, 5*time.Second) {
+		t.Fatalf("the serve that kept the control socket never answered on %s once the other %d were refused", control, racing-1)
+	}
 	if code, _, errs := ran(t, "upstreams"); code != 0 {
 		t.Errorf("the serve that kept the control socket answered upstreams = %d, %q, want it reachable", code, errs)
 	}
+}
+
+func controlAnswers(control string, within time.Duration) bool {
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		if conn, err := net.Dial("unix", control); err == nil {
+			_ = conn.Close()
+			return true
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return false
 }
 
 func TestServeReplacesASocketNothingAnswersOn(t *testing.T) {
