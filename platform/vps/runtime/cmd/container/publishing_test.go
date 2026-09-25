@@ -7,7 +7,7 @@ import (
 	"time"
 
 	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
-	"github.com/ocelhq/ocel/platform/vps/runtime/bucket"
+	bucket "github.com/ocelhq/ocel/platform/s3"
 )
 
 type stalling struct {
