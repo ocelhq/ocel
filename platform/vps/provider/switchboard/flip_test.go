@@ -3,6 +3,7 @@ package switchboard_test
 import (
 	"bufio"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -304,5 +305,48 @@ func TestADrainCeilingCutsEveryRequestAndStreamStillOpenOnARetireeNoLongerRouted
 	case <-rest:
 	case <-time.After(5 * time.Second):
 		t.Error("the stream held across the ceiling is still open, want it cut once the drain expired")
+	}
+}
+
+func TestARetireeKeepsNoConnectionFromTheSwitchboardOnceItHasDrained(t *testing.T) {
+	t.Parallel()
+
+	var open atomic.Int64
+	closed := make(chan struct{}, 64)
+	retiree := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, "blue")
+	}))
+	retiree.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		switch state {
+		case http.StateNew:
+			open.Add(1)
+		case http.StateClosed, http.StateHijacked:
+			open.Add(-1)
+			closed <- struct{}{}
+		}
+	}
+	retiree.Start()
+	t.Cleanup(retiree.Close)
+	blue, green := strings.TrimPrefix(retiree.URL, "http://"), backend(t, "green")
+	board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue}))
+	for range 3 {
+		if said := ask(t, http.DefaultClient, at, "shop.example.com", "/"); said.body != "blue" {
+			t.Fatalf("shop.example.com answered %q before the flip, want blue", said.body)
+		}
+	}
+	if open.Load() == 0 {
+		t.Fatal("the switchboard holds no connection to blue after asking it, want one kept alive for the next request")
+	}
+
+	var told drains
+	if err := board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue}, 10*time.Second, told.tell); err != nil {
+		t.Fatal(err)
+	}
+	for open.Load() > 0 {
+		select {
+		case <-closed:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("the switchboard still holds %d connections to %s after it drained, want none left to keep the retired container open", open.Load(), blue)
+		}
 	}
 }

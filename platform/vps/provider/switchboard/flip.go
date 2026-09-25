@@ -63,6 +63,7 @@ func (b *Board) Flip(ctx context.Context, path string, retiring []string, window
 		case address := <-drained:
 			if pending[address] {
 				delete(pending, address)
+				b.cutUnrouted(address)
 				tell(Drain{Address: address})
 			}
 		case <-ctx.Done():
