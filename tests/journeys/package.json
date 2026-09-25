@@ -10,6 +10,7 @@
     "journey": "bun src/run/journey.ts",
     "journey:aws": "OCEL_TARGET=aws bun src/run/journey.ts",
     "journey:vps": "OCEL_TARGET=vps bun src/run/journey.ts",
+    "journey:vps-front": "OCEL_TARGET=vps bun src/run/journey.ts",
     "journey:dev": "OCEL_TARGET=dev bun src/run/journey.ts",
     "journey:gcp": "OCEL_TARGET=gcp bun src/run/journey.ts",
     "journey:next": "OCEL_TARGET=aws bun src/run/journey.ts",

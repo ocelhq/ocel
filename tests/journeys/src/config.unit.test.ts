@@ -151,6 +151,21 @@ describe("overlayFor", () => {
     });
   });
 
+  it("puts a vps cell behind the proxy the run's front names", () => {
+    expect(overlayFor(cell(deploy.node), "vps", { OCEL_VPS_FRONT: "nginx" })).toEqual({
+      base: VPS_BASE,
+      slug: "j-1-deploy-node",
+      hostnames: { web: "web-j-1-deploy-node.localhost" },
+      proxy: "manual",
+    });
+  });
+
+  it("refuses a front the run names and no directory holds", () => {
+    expect(() => overlayFor(cell(deploy.node), "vps", { OCEL_VPS_FRONT: "haproxy" })).toThrow(
+      /haproxy.*nginx/s,
+    );
+  });
+
   it("refuses a vps registry cell when the run names no user to push as", () => {
     expect(() => overlayFor(cell(deploy.node, registry), "vps", {})).toThrow(
       /OCEL_JOURNEY_REGISTRY_USER/,
@@ -236,6 +251,12 @@ export default defineConfig({
       renderConfig({ base: TS_BASE, slug: "j-1-node", varsKey: "arn:aws:kms:key/k" }),
     ).toContain(
       `  provider: { aws: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.aws : {}), varsKey: "arn:aws:kms:key/k" } },`,
+    );
+  });
+
+  it("keeps the fixture's own vps options under the proxy its box runs behind", () => {
+    expect(renderConfig({ base: TS_BASE, slug: "j-1-node", proxy: "manual" })).toContain(
+      `  provider: { vps: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.vps : {}), proxy: "manual" } },`,
     );
   });
 
@@ -379,6 +400,18 @@ describe("renderJsonConfig", () => {
         }),
       ).provider,
     ).toEqual({ aws: { region: "eu-west-1", varsKey: "arn:aws:kms:key/k" } });
+  });
+
+  it("keeps the box the fixture's vps provider reaches under the proxy it runs behind", () => {
+    expect(
+      JSON.parse(
+        renderJsonConfig(`{"slug":"go","provider":{"vps":{"ssh":{"host":"box"}}}}`, {
+          base: "./ocel.vps.json",
+          slug: "j-1-go",
+          proxy: { manual: { port: 9000 } },
+        }),
+      ).provider,
+    ).toEqual({ vps: { ssh: { host: "box" }, proxy: { manual: { port: 9000 } } } });
   });
 
   it("seals vars under aws when the fixture's provider is null", () => {

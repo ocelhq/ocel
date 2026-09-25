@@ -6,6 +6,7 @@ import { appHostname } from "./identity";
 import type { Cell, Compute, Edge, RegistryConfig, TargetName } from "./matrix/types";
 import { REGISTRY_USER_ENV } from "./registry/settings";
 import type { CellUnderTest } from "./run/cellRun";
+import { frontNamed } from "./targets/front";
 import { gcpSlug } from "./targets/gcp/names";
 
 export const JOURNEY_TS = "ocel.journey.config.ts";
@@ -30,6 +31,7 @@ export type Overlay = {
   hostnames?: Record<string, string>;
   varsKey?: string;
   registry?: RegistryConfig;
+  proxy?: unknown;
 };
 
 const EDGE_IMPORTS: Record<Edge, { name: string; from: string }> = {
@@ -95,13 +97,16 @@ export function overlayFor(
     }
     case "gcp":
       return { base: GCP_BASE, slug: gcpSlug(cell, env), ...cell.variant.config };
-    case "vps":
+    case "vps": {
+      const front = frontNamed(env);
       return {
         base: VPS_BASE,
         slug: cell.slug,
         hostnames: hostnamesOf(cell, journeyZone(env)),
         ...registryOf(cell, env),
+        ...(front ? { proxy: front.proxy } : {}),
       };
+    }
     case "dev":
       return { base: DEFAULT_BASE, slug: cell.slug };
   }
@@ -139,6 +144,11 @@ export function renderConfig(overlay: Overlay): string {
   if (overlay.varsKey) {
     fields.push(
       `  provider: { aws: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.aws : {}), varsKey: ${JSON.stringify(overlay.varsKey)} } },`,
+    );
+  }
+  if (overlay.proxy !== undefined) {
+    fields.push(
+      `  provider: { vps: { ...(base.provider !== null && typeof base.provider === "object" ? base.provider.vps : {}), proxy: ${JSON.stringify(overlay.proxy)} } },`,
     );
   }
   if (overlay.edge) {
@@ -192,6 +202,11 @@ export function renderJsonConfig(base: string, overlay: Overlay): string {
     const options =
       read.provider !== null && typeof read.provider === "object" ? read.provider.aws : undefined;
     written.provider = { aws: { ...options, varsKey: overlay.varsKey } };
+  }
+  if (overlay.proxy !== undefined) {
+    const options =
+      read.provider !== null && typeof read.provider === "object" ? read.provider.vps : undefined;
+    written.provider = { vps: { ...options, proxy: overlay.proxy } };
   }
   if (overlay.edge) {
     written.edge = overlay.edge;
