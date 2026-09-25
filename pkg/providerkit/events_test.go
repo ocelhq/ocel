@@ -182,6 +182,29 @@ func TestEventStreamFailPassesARefusalBackToTheCaller(t *testing.T) {
 	}
 }
 
+func TestAnUnimplementedFailureIsARefusalOnlyOnAStreamThatSaysSo(t *testing.T) {
+	t.Parallel()
+
+	unimplemented := connect.NewError(connect.CodeUnimplemented, errors.New("no connector here"))
+
+	plain := newEventStream(context.Background(), (&recordingStream{}).send)
+	if err := plain.fail(unimplemented); err != nil {
+		t.Errorf("fail(unimplemented) = %v on a plain stream, want nil: a step that reports it is not built is a failed run, not a malformed request", err)
+	}
+	if err := plain.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+
+	answering := newEventStream(context.Background(), (&recordingStream{}).send)
+	answering.refusing(connect.CodeUnimplemented)
+	if err := answering.fail(unimplemented); !errors.Is(err, unimplemented) {
+		t.Errorf("fail(unimplemented) = %v on a stream that answers unimplemented, want it returned so the RPC carries the code", err)
+	}
+	if err := answering.close(); err != nil {
+		t.Fatalf("close() error = %v", err)
+	}
+}
+
 var testStage = PhaseStage(naming.UnitEnvironment, progressv1.Phase_PHASE_PROVISIONING)
 
 func TestStageProgressTagsEverythingWithItsStage(t *testing.T) {
