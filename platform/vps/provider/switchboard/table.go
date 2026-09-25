@@ -106,6 +106,7 @@ func Read(document []byte) (*Table, error) {
 	if err != nil {
 		return nil, fmt.Errorf("the routing table's grace %q is not a duration: %w", read.Grace, err)
 	}
+	lowered(&read)
 	if read.PreviewBase != "" {
 		if err := PreviewBaseUsable(read.PreviewBase); err != nil {
 			return nil, err
@@ -141,18 +142,18 @@ func Read(document []byte) (*Table, error) {
 	table := &Table{
 		grace:     grace,
 		answering: map[string]answer{},
-		connector: strings.ToLower(read.Connector),
+		connector: read.Connector,
 		routed:    map[string]bool{},
 		admitted:  map[string]bool{},
 	}
 	for _, hostClaim := range read.Claims {
-		table.admitted[strings.ToLower(hostClaim.Hostname)] = true
+		table.admitted[hostClaim.Hostname] = true
 	}
 	if table.connector != "" {
 		table.admitted[table.connector] = true
 	}
 	if read.PreviewBase != "" {
-		table.admitted[strings.ToLower(edge.ProbeHostname(edge.PreviewWildcard(read.PreviewBase)))] = true
+		table.admitted[edge.ProbeHostname(edge.PreviewWildcard(read.PreviewBase))] = true
 	}
 	answeredBy := map[string]route{}
 	for _, appRoute := range standing {
@@ -162,17 +163,27 @@ func Read(document []byte) (*Table, error) {
 		}
 		slices.Sort(hostnames)
 		for _, hostname := range hostnames {
-			named := strings.ToLower(hostname)
-			if first, answered := answeredBy[named]; answered {
+			if first, answered := answeredBy[hostname]; answered {
 				return nil, fmt.Errorf("%s would be forwarded by both %s and %s",
 					hostname, first.identity(), appRoute.identity())
 			}
-			answeredBy[named] = appRoute
-			table.answering[named] = answer{upstream: appRoute.Upstream, store: !appRoute.app()}
+			answeredBy[hostname] = appRoute
+			table.answering[hostname] = answer{upstream: appRoute.Upstream, store: !appRoute.app()}
 		}
 		table.routed[appRoute.Upstream] = true
 	}
 	return table, nil
+}
+
+func lowered(read *writtenTable) {
+	for at := range read.Claims {
+		read.Claims[at].Hostname = strings.ToLower(read.Claims[at].Hostname)
+	}
+	for at := range read.Pins {
+		read.Pins[at].Hostname = strings.ToLower(read.Pins[at].Hostname)
+	}
+	read.PreviewBase = strings.ToLower(read.PreviewBase)
+	read.Connector = strings.ToLower(read.Connector)
 }
 
 func (c claim) valid() error {
