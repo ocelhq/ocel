@@ -15,7 +15,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 const (
@@ -117,6 +116,9 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 		}
 		return h.stranded(ctx, rel, cut, err, elevation)
 	}
+	if err := h.takenUp(ctx, shaped, false, elevation); err != nil {
+		return h.unfronted(ctx, rel, err, elevation)
+	}
 
 	if report != nil {
 		for _, retiree := range cut.retiring {
@@ -132,35 +134,13 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 		return h.unflipped(ctx, rel, cut, fmt.Sprintf("exited %d", flipped.Code), strings.TrimSpace(flipped.Stderr), elevation)
 	}
 	tellDrain(report, flipped.Stdout)
-	var reloaded error
-	if shaped.reloading {
-		reloaded = h.reloadedAfterFlip(ctx, shaped)
-	}
-	return h.settle(ctx, rel, cut, reloaded, report, elevation)
+	return h.settle(ctx, rel, cut, report, elevation)
 }
 
-func (h *Host) reloadedAfterFlip(ctx context.Context, shaped composed) error {
-	refused := h.front.Reload(ctx)
-	if refused == nil {
-		return nil
-	}
-	table, err := WriteRoutingTable(shaped.is)
-	if err == nil {
-		_, err = h.writePair(ctx, shaped.written, routingPair{table: table, config: shaped.prior.config})
-	}
-	if err != nil {
-		return fmt.Errorf("%w\n%s was not put back to what it serves either, so no later deploy reloads it: %w", refused, ProxyConfig, err)
-	}
-	return refused
-}
-
-func (h *Host) settle(ctx context.Context, rel Release, cut cutover, reloaded error, report providerkit.Reporter, elevation string) error {
+func (h *Host) settle(ctx context.Context, rel Release, cut cutover, report providerkit.Reporter, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	var failed, unstopped []string
-	if reloaded != nil {
-		failed = append(failed, fmt.Sprintf("%s was not reloaded onto %s, so it still terminates what it did before: %v", caddy.Container, ProxyConfig, reloaded))
-	}
 	idle, err := h.unheld(ctx, cut.retiring, elevation)
 	if err != nil {
 		for _, retiree := range cut.retiring {
@@ -380,7 +360,6 @@ type composed struct {
 	written   tableDigest
 	changed   bool
 	reloading bool
-	is        RoutingTable
 }
 
 func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (RoutingTable, error)) (composed, error) {
@@ -418,7 +397,6 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 		if err != nil {
 			return shaped, err
 		}
-		shaped.is = next
 		shaped.reloading = !bytes.Equal(held.config, admitted)
 		shaped.written, err = h.writePair(ctx, held.digest(), routingPair{table: after, config: admitted})
 		shaped.changed = true
@@ -579,6 +557,13 @@ func (h *Host) stranded(ctx context.Context, rel Release, cut cutover, why error
 	return Unserved{providerkit.Refuse(code,
 		"release %s onto %s: could not write %s; the proxy was not flipped: %v\n%s%s",
 		rel.apps(), h.named(), written, why, rolled, h.discard(ctx, rel, elevation))}
+}
+
+func (h *Host) unfronted(ctx context.Context, rel Release, why error, elevation string) error {
+	ctx, stop := sparing(ctx)
+	defer stop()
+	return Unserved{fmt.Errorf("release %s onto %s: %w; the previous release is still live%s",
+		rel.apps(), h.named(), why, h.discard(ctx, rel, elevation))}
 }
 
 func (h *Host) unflipped(ctx context.Context, rel Release, cut cutover, outcome, verdict, elevation string) error {
