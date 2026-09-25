@@ -3,6 +3,8 @@ package appregistry
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -258,5 +260,41 @@ func TestThePasswordIsReadWhereTheTargetIsBuiltAndNowhereEarlier(t *testing.T) {
 	}
 	if target.Password != "the-one-the-push-uses" {
 		t.Errorf("Resolve() carried %q, want the value the variable holds when the target is built: a password held from the plan-time check is one the deploy cannot let the user correct", target.Password)
+	}
+}
+
+func TestTheRegistryPasswordIsReadFromTheProjectsDotenvWhenTheShellLacksIt(t *testing.T) {
+	cfg := project(&projectconfig.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+	cfg.Dir = t.TempDir()
+	if err := os.WriteFile(filepath.Join(cfg.Dir, ".env"), []byte("GHCR_TOKEN=from-dotenv\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := RequireSecret(cfg); err != nil {
+		t.Fatalf("RequireSecret() = %v, want a placeholder the project's .env fills to pass, as every other ${} in the config does", err)
+	}
+	target, _, err := Resolve(context.Background(), cfg, hosting(), environmentv1.Tier_TIER_PRODUCTION)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if target.Password != "from-dotenv" {
+		t.Errorf("Resolve() carried a password of %d bytes, want the value the project's .env holds", len(target.Password))
+	}
+}
+
+func TestTheShellsRegistryPasswordWinsOverTheProjectsDotenv(t *testing.T) {
+	cfg := project(&projectconfig.Registry{Server: "ghcr.io", Password: "GHCR_TOKEN"})
+	cfg.Dir = t.TempDir()
+	if err := os.WriteFile(filepath.Join(cfg.Dir, ".env"), []byte("GHCR_TOKEN=from-dotenv\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GHCR_TOKEN", "from-shell")
+
+	target, _, err := Resolve(context.Background(), cfg, hosting(), environmentv1.Tier_TIER_PRODUCTION)
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if target.Password != "from-shell" {
+		t.Error("Resolve() carried the .env's password, want the shell's: the shell wins, as it does for every ${} in the config")
 	}
 }

@@ -3,7 +3,6 @@ package appregistry
 import (
 	"context"
 	"fmt"
-	"os"
 
 	connect "connectrpc.com/connect"
 
@@ -35,13 +34,13 @@ func RequireSecret(cfg *projectconfig.Config) error {
 	if cfg.Registry == nil || len(cfg.Apps) == 0 {
 		return nil
 	}
-	_, err := secret(cfg.Registry)
+	_, err := secret(cfg)
 	return err
 }
 
 func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host, tier environmentv1.Tier) (providerkit.RegistryTarget, bool, error) {
 	if cfg.Registry != nil {
-		password, err := secret(cfg.Registry)
+		password, err := secret(cfg)
 		if err != nil {
 			return providerkit.RegistryTarget{}, false, err
 		}
@@ -74,11 +73,16 @@ func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host, tier env
 	}, true, nil
 }
 
-func secret(registry *projectconfig.Registry) (string, error) {
-	password := os.Getenv(registry.Password)
+func secret(cfg *projectconfig.Config) (string, error) {
+	lookup, err := projectconfig.EnvLookup(cfg.Dir)
+	if err != nil {
+		return "", err
+	}
+	registry := cfg.Registry
+	password, _ := lookup(registry.Password)
 	if password == "" {
 		return "", fmt.Errorf("the registry %s is pushed to authenticates with the environment variable %s, which is unset here: "+
-			"export it before deploying, or drop `registry` from the config to push nowhere",
+			"export it or set it in the project's .env before deploying, or drop `registry` from the config to push nowhere",
 			registry.Server, registry.Password)
 	}
 	return password, nil
