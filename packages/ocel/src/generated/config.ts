@@ -116,13 +116,13 @@ export interface PostgresHostBinding {
   password: VariableRef;
   /** The server's port. Left off, 5432. */
   port?: number;
-  /** How the connection is encrypted. Left off, it is not. */
+  /** How the connection is encrypted. Left off, each client library connects as it does by default. */
   tls?: PostgresTLS;
   /** The role the app connects as. */
   username: string | VariableRef;
 }
 
-/** How the connection is encrypted. Left off, it is not. */
+/** How the connection is encrypted. Left off, each client library connects as it does by default. */
 export interface PostgresTLS {
   /** The certificate authority the server's certificate chains to, as PEM, when it is not one the system trusts. */
   ca?: VariableRef;

@@ -57,7 +57,7 @@ type postgresHost struct {
 	Database Text         `json:"database" doc:"The database the app connects to."`
 	Username Text         `json:"username" doc:"The role the app connects as."`
 	Password Ref          `json:"password" doc:"The role's password."`
-	TLS      *PostgresTLS `json:"tls,omitempty" doc:"How the connection is encrypted. Left off, it is not."`
+	TLS      *PostgresTLS `json:"tls,omitempty" doc:"How the connection is encrypted. Left off, each client library connects as it does by default."`
 }
 
 const (
