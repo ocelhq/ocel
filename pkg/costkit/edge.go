@@ -34,21 +34,21 @@ type EdgeShape struct {
 	Apps        map[string][]Shaped
 }
 
-type EdgeShaper interface {
-	ShapeCost(site EdgeSite) (EdgeShape, error)
+type EdgeCost interface {
+	Shape(site EdgeSite) (EdgeShape, error)
 }
 
-type EdgePricer interface {
-	CostCard() (*Card, error)
-	CostTable() Table
+type EdgeRates interface {
+	Card() (*Card, error)
+	Table() Table
 }
 
 func ShapeEdge(front edge.Edge, site EdgeSite) (EdgeShape, error) {
-	shaper, shapes := front.(EdgeShaper)
+	cost, shapes := front.(EdgeCost)
 	if !shapes {
 		return EdgeShape{}, nil
 	}
-	return shaper.ShapeCost(site)
+	return cost.Shape(site)
 }
 
 type EdgeScopes struct {
@@ -64,16 +64,16 @@ func (t *Tree) AddEdge(scopes EdgeScopes, shape EdgeShape) {
 	}
 }
 
-func Priced(card *Card, table Table, edges ...EdgePricer) (*Card, Table, error) {
+func Priced(card *Card, table Table, edges ...EdgeRates) (*Card, Table, error) {
 	cards := []*Card{}
 	tables := []Table{table}
-	for _, pricer := range edges {
-		held, err := pricer.CostCard()
+	for _, rates := range edges {
+		held, err := rates.Card()
 		if err != nil {
 			return nil, nil, err
 		}
 		cards = append(cards, held)
-		tables = append(tables, pricer.CostTable())
+		tables = append(tables, rates.Table())
 	}
 	return Merge(card, cards...), Tables(tables...), nil
 }

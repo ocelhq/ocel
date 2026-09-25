@@ -10,7 +10,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -159,13 +159,13 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 	if _, err := liveStore(p).Set(context.Background(), liveScope(), values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, rotated, nil); err != nil {
 		t.Fatalf("rotating the secret after the deploy = %v", err)
 	}
-	deadline := time.Now().Add(3 * rt.StalenessBound)
+	deadline := time.Now().Add(3 * live.StalenessBound)
 	for {
 		if got := vm.reads(t, physical, "DATABASE_URL"); got == rotated {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("the app still reads the old DATABASE_URL %s after the secret was rotated on the box, and a live value lands without a deploy", 3*rt.StalenessBound)
+			t.Fatalf("the app still reads the old DATABASE_URL %s after the secret was rotated on the box, and a live value lands without a deploy", 3*live.StalenessBound)
 		}
 		time.Sleep(5 * time.Second)
 	}

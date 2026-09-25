@@ -19,9 +19,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
-	runtime "github.com/ocelhq/ocel/platform/vps/runtime/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	source "github.com/ocelhq/ocel/platform/vps/runtime/live"
 )
 
 const containerID = "021294b7a2a44cb5a12500a19d9fa7842f10fae35f15cfe25105844c754253d8"
@@ -67,10 +67,10 @@ func (i *inspecting) Manifest(_ context.Context, container string) (string, erro
 
 type resolving struct {
 	mu    sync.Mutex
-	given []live.Manifest
+	given []vars.Manifest
 }
 
-func (r *resolving) Resolve(_ context.Context, manifest live.Manifest) (map[string]string, error) {
+func (r *resolving) Resolve(_ context.Context, manifest vars.Manifest) (map[string]string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.given = append(r.given, manifest)
@@ -100,7 +100,7 @@ func serving(t *testing.T, server *Server) string {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { os.RemoveAll(dir) })
-	socket := filepath.Join(dir, live.SocketFile)
+	socket := filepath.Join(dir, vars.SocketFile)
 	ln, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +122,7 @@ func ask(t *testing.T, socket string) (int, string) {
 	client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", socket)
 	}}}
-	resp, err := client.Get("http://ocel-live" + live.ValuesPath)
+	resp, err := client.Get("http://ocel-live" + vars.ValuesPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func ask(t *testing.T, socket string) (int, string) {
 
 func manifestFor(t *testing.T, slug, environment string) string {
 	t.Helper()
-	rendered, err := live.Render(live.Manifest{Slug: slug, Class: "production", Environment: environment, Keys: []rt.Key{{Key: "DATABASE_URL"}}})
+	rendered, err := vars.Render(vars.Manifest{Slug: slug, Class: "production", Environment: environment, Keys: []live.Key{{Key: "DATABASE_URL"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,7 +157,7 @@ func TestTheAgentAnswersACallerWithTheValuesItsOwnContainerWasHandedAndNothingIt
 	if status != http.StatusOK {
 		t.Fatalf("the agent answered %d: %s", status, body)
 	}
-	var answer live.Answer
+	var answer vars.Answer
 	if err := json.Unmarshal([]byte(body), &answer); err != nil {
 		t.Fatalf("the agent answered %q, which is no value set: %v", body, err)
 	}
@@ -171,7 +171,7 @@ func TestTheAgentAnswersACallerWithTheValuesItsOwnContainerWasHandedAndNothingIt
 		t.Errorf("the agent resolved %+v, want the manifest the engine holds for the caller's container: nothing the caller sends names a scope", resolve.given)
 	}
 
-	over := runtime.Over(live.Manifest{Slug: "shop", Class: "production", Keys: []rt.Key{{Key: "DATABASE_URL"}}}, socket)
+	over := source.Over(vars.Manifest{Slug: "shop", Class: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}}, socket)
 	if err := over.Join(over.Prefetch(context.Background())); err != nil {
 		t.Fatalf("the runtime's own fetcher could not read through the socket: %v", err)
 	}
@@ -197,9 +197,9 @@ func (m *measuring) Space(_ context.Context, volume string) (uint64, uint64, err
 
 func storeManifest(t *testing.T, volume string) string {
 	t.Helper()
-	rendered, err := live.Render(live.Manifest{
-		Slug: "shop", Class: "production", Keys: []rt.Key{{Key: "DATABASE_URL"}},
-		Store: &live.Store{Env: "shop-prod", Volume: volume},
+	rendered, err := vars.Render(vars.Manifest{
+		Slug: "shop", Class: "production", Keys: []live.Key{{Key: "DATABASE_URL"}},
+		Store: &vars.Store{Env: "shop-prod", Volume: volume},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -212,7 +212,7 @@ func askSpace(t *testing.T, socket string) (int, string) {
 	client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return (&net.Dialer{}).DialContext(ctx, "unix", socket)
 	}}}
-	resp, err := client.Get("http://ocel-live" + live.SpacePath)
+	resp, err := client.Get("http://ocel-live" + vars.SpacePath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +238,7 @@ func TestTheAgentMeasuresTheVolumeTheCallersOwnManifestNamesAndNoOther(t *testin
 	if status != http.StatusOK {
 		t.Fatalf("the agent answered %d asking after the store volume: %s", status, body)
 	}
-	var answer live.Space
+	var answer vars.Space
 	if err := json.Unmarshal([]byte(body), &answer); err != nil {
 		t.Fatalf("the agent answered %q, which is no measurement: %v", body, err)
 	}
@@ -391,11 +391,11 @@ func TestAContainerReadsItsSecretOffTheBoxThroughTheRuntimeAndTheAgent(t *testin
 	if err := os.MkdirAll(socketDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	ln, err := net.Listen("unix", filepath.Join(socketDir, live.SocketFile))
+	ln, err := net.Listen("unix", filepath.Join(socketDir, vars.SocketFile))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(filepath.Join(socketDir, live.SocketFile), 0o666); err != nil {
+	if err := os.Chmod(filepath.Join(socketDir, vars.SocketFile), 0o666); err != nil {
 		t.Fatal(err)
 	}
 	ctx, stop := context.WithCancel(context.Background())
@@ -410,9 +410,9 @@ func TestAContainerReadsItsSecretOffTheBoxThroughTheRuntimeAndTheAgent(t *testin
 
 	manifest := manifestFor(t, "shop", "")
 	run := exec.Command("docker", "run", "--rm", "--pull", "never", "--network", "none",
-		"--mount", "type=bind,src="+socketDir+",dst="+live.SocketDir+",readonly",
+		"--mount", "type=bind,src="+socketDir+",dst="+vars.SocketDir+",readonly",
 		"--volume", runtimeBinary+":"+providerkit.ContainerRuntimePath+":ro",
-		"--env", live.EnvVar+"="+manifest,
+		"--env", vars.EnvVar+"="+manifest,
 		"--env", providerkit.InjectedPortName+"="+providerkit.InjectedPortText,
 		testImage, providerkit.ContainerRuntimePath,
 		"sh", "-c", `cat "$OCEL_LIVE_DIR/DATABASE_URL"; echo; echo "keys=$OCEL_LIVE_KEYS"`)

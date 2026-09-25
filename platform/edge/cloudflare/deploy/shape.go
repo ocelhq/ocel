@@ -9,11 +9,11 @@ import (
 const entryWorker = "entry"
 
 var (
-	_ costkit.EdgeShaper = (*provider)(nil)
-	_ costkit.EdgePricer = (*provider)(nil)
+	_ costkit.EdgeCost  = (*provider)(nil)
+	_ costkit.EdgeRates = (*provider)(nil)
 )
 
-func (p *provider) ShapeCost(site costkit.EdgeSite) (costkit.EdgeShape, error) {
+func (p *provider) Shape(site costkit.EdgeSite) (costkit.EdgeShape, error) {
 	store, err := storeScriptNameFor(p.namespace, site.Class)
 	if err != nil {
 		return costkit.EdgeShape{}, err
@@ -44,9 +44,9 @@ func (p *provider) ShapeCost(site costkit.EdgeSite) (costkit.EdgeShape, error) {
 	return shape, nil
 }
 
-func (p *provider) CostCard() (*costkit.Card, error) { return cost.Card() }
+func (p *provider) Card() (*costkit.Card, error) { return cost.Card() }
 
-func (p *provider) CostTable() costkit.Table { return cost.Table }
+func (p *provider) Table() costkit.Table { return cost.Table }
 
 func durableObjectScript(worker durableObjectWorker) map[string]any {
 	classes := make([]any, 0, len(worker.classes))

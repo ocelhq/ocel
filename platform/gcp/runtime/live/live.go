@@ -6,20 +6,20 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
-type Values = rt.Values
+type Values = live.Values
 
-type storeFetcher struct {
+type storeSource struct {
 	reader   values.Reader
 	cells    []values.Cell
-	bindings []rt.Binding
+	bindings []live.Binding
 }
 
-func (f *storeFetcher) FetchLive(ctx context.Context) (map[string]string, error) {
+func (f *storeSource) Fetch(ctx context.Context) (map[string]string, error) {
 	resolved, err := f.reader.Values(ctx, f.cells)
 	if err != nil {
 		return nil, err
@@ -31,7 +31,7 @@ func (f *storeFetcher) FetchLive(ctx context.Context) (map[string]string, error)
 	return merged(resolved, f.bindings, records), nil
 }
 
-func bindingNames(bindings []rt.Binding) []string {
+func bindingNames(bindings []live.Binding) []string {
 	names := make([]string, 0, len(bindings))
 	for _, l := range bindings {
 		names = append(names, l.Name)
@@ -39,7 +39,7 @@ func bindingNames(bindings []rt.Binding) []string {
 	return names
 }
 
-func merged(resolved map[string]string, bindings []rt.Binding, records []values.Published) map[string]string {
+func merged(resolved map[string]string, bindings []live.Binding, records []values.Published) map[string]string {
 	out := make(map[string]string, len(resolved)+len(records))
 	maps.Copy(out, resolved)
 	for i, record := range records {
@@ -66,7 +66,7 @@ func FromManifest(raw []byte) (*Values, error) {
 }
 
 func Over(manifest vars.Manifest, records providerkit.RecordStore, sealer providerkit.Cipher) *Values {
-	return rt.New(&storeFetcher{
+	return live.New(&storeSource{
 		reader: values.Reader{
 			Records:     records,
 			Cipher:      sealer,
@@ -75,7 +75,7 @@ func Over(manifest vars.Manifest, records providerkit.RecordStore, sealer provid
 		},
 		cells:    manifestCells(manifest),
 		bindings: manifest.Bindings,
-	}, rt.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil)
+	}, live.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil)
 }
 
 func manifestCells(m vars.Manifest) []values.Cell {

@@ -18,9 +18,9 @@ import (
 	"github.com/aws/aws-lambda-go/lambdacontext"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	vars "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
-	"github.com/ocelhq/ocel/platform/aws/runtime/live"
+	source "github.com/ocelhq/ocel/platform/aws/runtime/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -35,7 +35,7 @@ func main() {
 		prime = primeBytecode(bytecode.Start(ctx, nodeVersionFromBinary))
 	}
 
-	values, err := live.Resolve(ctx, taskRoot())
+	values, err := source.Resolve(ctx, taskRoot())
 	if err != nil {
 		fatalInit(fmt.Sprintf("failed to read this deployment's live variables: %v", err))
 	}
@@ -79,7 +79,7 @@ type liveValues interface {
 	Refresh(ctx context.Context)
 	Env() []string
 	Value(key string) string
-	Bindings() []vars.Binding
+	Bindings() []live.Binding
 	Generation() uint32
 }
 

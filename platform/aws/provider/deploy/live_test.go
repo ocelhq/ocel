@@ -12,9 +12,9 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
-	rtlive "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
+	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
 
 const (
@@ -80,16 +80,16 @@ func TestRenderAppBundle(t *testing.T) {
 			t.Fatalf("renderAppBundle: %v", err)
 		}
 
-		manifest, err := live.Parse(bundle.Live)
+		manifest, err := vars.Parse(bundle.Live)
 		if err != nil {
 			t.Fatalf("parse the live manifest: %v", err)
 		}
 		if manifest.Slug != "shop" || manifest.Table != valuesTable || manifest.KeyARN != productionVarsKeyARN || manifest.Class != varsClass {
 			t.Errorf("manifest = %+v, want the bootstrap's own store", manifest)
 		}
-		want := []rtlive.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}}
+		want := []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}}
 		got := slices.Clone(manifest.Keys)
-		slices.SortFunc(got, func(a, b rtlive.Key) int { return strings.Compare(a.Key, b.Key) })
+		slices.SortFunc(got, func(a, b live.Key) int { return strings.Compare(a.Key, b.Key) })
 		if !slices.Equal(got, want) {
 			t.Errorf("manifest keys = %+v, want %+v", got, want)
 		}
@@ -130,7 +130,7 @@ func TestRenderAppBundle(t *testing.T) {
 				if err != nil {
 					t.Fatalf("renderAppBundle: %v", err)
 				}
-				manifest, err := live.Parse(bundle.Live)
+				manifest, err := vars.Parse(bundle.Live)
 				if err != nil {
 					t.Fatalf("parse the live manifest: %v", err)
 				}
@@ -167,7 +167,7 @@ func TestRenderAppBundle(t *testing.T) {
 		if len(bundle.Live) != 0 {
 			t.Errorf("Live = %q, want nothing", bundle.Live)
 		}
-		if _, ok := bundle.overlay()[live.FilePath]; ok {
+		if _, ok := bundle.overlay()[vars.FilePath]; ok {
 			t.Error("an app with no live values still carries a live manifest file")
 		}
 	})
@@ -221,8 +221,8 @@ func TestAppBundle(t *testing.T) {
 		if got := overlay[baked.FilePath]; !bytes.Equal(got, []byte("sealed")) {
 			t.Errorf("overlay[%q] = %q, want the sealed bytes", baked.FilePath, got)
 		}
-		if got := overlay[live.FilePath]; !bytes.Equal(got, []byte(`{"slug":"shop"}`)) {
-			t.Errorf("overlay[%q] = %q, want the live manifest", live.FilePath, got)
+		if got := overlay[vars.FilePath]; !bytes.Equal(got, []byte(`{"slug":"shop"}`)) {
+			t.Errorf("overlay[%q] = %q, want the live manifest", vars.FilePath, got)
 		}
 	})
 
@@ -247,7 +247,7 @@ func TestAppBundle(t *testing.T) {
 		if bundle.Envelope != "" || len(bundle.Ciphertext) != 0 {
 			t.Errorf("bundle = %+v, want no sealed half", bundle)
 		}
-		if _, ok := bundle.overlay()[live.FilePath]; !ok {
+		if _, ok := bundle.overlay()[vars.FilePath]; !ok {
 			t.Error("the live manifest is not in the package")
 		}
 		if len(bundle.env()) != 0 {

@@ -10,9 +10,9 @@ const (
 	endpointType = "REGIONAL"
 )
 
-var _ costkit.EdgeShaper = (*provider)(nil)
+var _ costkit.EdgeCost = (*provider)(nil)
 
-func (p *provider) ShapeCost(site costkit.EdgeSite) (costkit.EdgeShape, error) {
+func (p *provider) Shape(site costkit.EdgeSite) (costkit.EdgeShape, error) {
 	return costkit.EdgeShape{
 		Vendor: costVendor,
 		Region: site.Region,

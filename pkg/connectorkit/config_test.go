@@ -16,9 +16,9 @@ const carried = `{"console":"https://console.example.com","connectorId":"con_1",
 func TestAFormWithNoFilesystemReadsItsConfigOffTheEnvironment(t *testing.T) {
 	t.Setenv(providerkit.ConnectorConfigEnvVar, carried)
 
-	held, err := Configured("")
+	held, err := ReadConfig("")
 	if err != nil {
-		t.Fatalf("Configured: %v", err)
+		t.Fatalf("ReadConfig: %v", err)
 	}
 	if held.Console != "https://console.example.com" || held.ConnectorID != "con_1" || held.OrganizationID != "org_1" {
 		t.Errorf("config = %+v, want what the environment carried", held)
@@ -31,20 +31,33 @@ func TestAFormWithNoFilesystemReadsItsConfigOffTheEnvironment(t *testing.T) {
 func TestTheEnvironmentIsReadAheadOfAPathThatNamesNothing(t *testing.T) {
 	t.Setenv(providerkit.ConnectorConfigEnvVar, carried)
 
-	if _, err := Configured(filepath.Join(t.TempDir(), "absent.json")); err != nil {
-		t.Errorf("Configured with the environment set = %v, want the carried config read", err)
+	if _, err := ReadConfig(filepath.Join(t.TempDir(), "absent.json")); err != nil {
+		t.Errorf("ReadConfig with the environment set = %v, want the carried config read", err)
 	}
 }
 
 func TestWithNeitherAPathNorTheEnvironmentNothingNamesTheConsole(t *testing.T) {
 	t.Setenv(providerkit.ConnectorConfigEnvVar, "")
 
-	_, err := Configured("")
+	_, err := ReadConfig("")
 	if err == nil {
-		t.Fatal("Configured = nil, want a refusal naming what would have carried the config")
+		t.Fatal("ReadConfig = nil, want a refusal naming what would have carried the config")
 	}
 	if !strings.Contains(err.Error(), providerkit.ConnectorConfigEnvVar) {
 		t.Errorf("err = %v, want it to name %s", err, providerkit.ConnectorConfigEnvVar)
+	}
+}
+
+func TestAPathThatNamesNoFileIsRefused(t *testing.T) {
+	t.Setenv(providerkit.ConnectorConfigEnvVar, "")
+
+	absent := filepath.Join(t.TempDir(), "absent.json")
+	_, err := ReadConfig(absent)
+	if err == nil {
+		t.Fatal("ReadConfig = nil, want a refusal: the path names no file and nothing else carries the config")
+	}
+	if !strings.Contains(err.Error(), "absent.json") {
+		t.Errorf("err = %v, want it to name the path it could not read", err)
 	}
 }
 
@@ -55,9 +68,9 @@ func TestAConfigOnDiskIsStillRead(t *testing.T) {
 	if err := os.WriteFile(path, []byte(carried), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	held, err := Configured(path)
+	held, err := ReadConfig(path)
 	if err != nil {
-		t.Fatalf("Configured: %v", err)
+		t.Fatalf("ReadConfig: %v", err)
 	}
 	if held.ConnectorID != "con_1" {
 		t.Errorf("config = %+v, want what the file held", held)

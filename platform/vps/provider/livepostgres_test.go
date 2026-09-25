@@ -21,7 +21,7 @@ func (vm machine) queries(t *testing.T, binding providerkit.Binding, statement s
 }
 
 func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBehind(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
 	p := vm.deploying(t)
 	ctx := context.Background()

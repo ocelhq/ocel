@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
@@ -15,7 +15,7 @@ type stalling struct {
 	held    chan struct{}
 }
 
-func (s *stalling) FetchLive(ctx context.Context) (map[string]string, error) {
+func (s *stalling) Fetch(ctx context.Context) (map[string]string, error) {
 	s.fetches.Add(1)
 	if s.held == nil {
 		return map[string]string{"SOMETHING": "live"}, nil
@@ -31,14 +31,14 @@ func (s *stalling) FetchLive(ctx context.Context) (map[string]string, error) {
 func TestAStoreWithNoClaimedAddressAnswersOnTheCallersOwnDeadline(t *testing.T) {
 	t.Parallel()
 
-	fetcher := &stalling{}
+	source := &stalling{}
 	clock := time.Unix(1_000_000, 0)
-	values := rt.New(fetcher, []string{"SOMETHING"}, nil, func() time.Time { return clock })
+	values := live.New(source, []string{"SOMETHING"}, nil, func() time.Time { return clock })
 	if err := <-values.Prefetch(context.Background()); err != nil {
 		t.Fatalf("Prefetch() = %v", err)
 	}
-	fetcher.held = make(chan struct{})
-	defer close(fetcher.held)
+	source.held = make(chan struct{})
+	defer close(source.held)
 	clock = clock.Add(time.Minute)
 
 	external := publishing(s3store.Store{}, values)
@@ -68,9 +68,9 @@ func TestAStoreWithNoClaimedAddressAnswersOnTheCallersOwnDeadline(t *testing.T) 
 func TestAStoreWithNoClaimedAddressIsNotRereadOnEveryCall(t *testing.T) {
 	t.Parallel()
 
-	fetcher := &stalling{}
+	source := &stalling{}
 	clock := time.Unix(2_000_000, 0)
-	values := rt.New(fetcher, []string{"SOMETHING"}, nil, func() time.Time { return clock })
+	values := live.New(source, []string{"SOMETHING"}, nil, func() time.Time { return clock })
 	if err := <-values.Prefetch(context.Background()); err != nil {
 		t.Fatalf("Prefetch() = %v", err)
 	}
@@ -82,7 +82,7 @@ func TestAStoreWithNoClaimedAddressIsNotRereadOnEveryCall(t *testing.T) {
 			t.Fatalf("base = %q, want nothing", base)
 		}
 	}
-	if held := fetcher.fetches.Load(); held > 2 {
+	if held := source.fetches.Load(); held > 2 {
 		t.Errorf("a box claiming nothing was reread %d times over five signing calls, so every call pays for the same empty answer", held-1)
 	}
 }

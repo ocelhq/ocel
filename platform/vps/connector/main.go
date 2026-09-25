@@ -41,7 +41,7 @@ func run(listen, config string, printing, reporting bool) error {
 		return nil
 	}
 
-	trust, err := connectorkit.LoadConfig(config)
+	trust, err := connectorkit.ReadConfig(config)
 	if err != nil {
 		return err
 	}

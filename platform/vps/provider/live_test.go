@@ -119,7 +119,7 @@ func (vm machine) forgetsTheDeployLogin(t *testing.T) {
 	}
 }
 
-func live(t *testing.T) machine {
+func liveMachine(t *testing.T) machine {
 	t.Helper()
 	if suite.addr == "" {
 		t.Skip(unreachable)
@@ -157,7 +157,7 @@ func closing(t *testing.T, p *vps.Provider) {
 func TestLiveTheMachineAnswersEveryPortTheConformanceSuiteAsks(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
-	p := live(t).provider(t)
+	p := liveMachine(t).provider(t)
 	defer closing(t, p)
 
 	bootstrapper, err := p.Bootstrap("")
@@ -180,7 +180,7 @@ func TestLiveTheMachineAnswersEveryPortTheConformanceSuiteAsks(t *testing.T) {
 }
 
 func TestLiveWhoamiAnswersFromTheMachineItself(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	p := vm.provider(t)
 	defer closing(t, p)
 

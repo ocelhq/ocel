@@ -178,7 +178,7 @@ func TestLiveOcelServesBehindAnNginxInAContainerOnItsNetwork(t *testing.T) {
 
 func servesBehind(t *testing.T, front string) machine {
 	t.Helper()
-	vm := live(t)
+	vm := liveMachine(t)
 	vm.purges(t)
 	t.Cleanup(func() { vm.purges(t) })
 	vm.fronted(t, front, "*.localhost", "*."+frontedPreview)

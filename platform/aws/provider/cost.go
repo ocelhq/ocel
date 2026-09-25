@@ -63,7 +63,7 @@ func (p *Provider) ShapeCost(ctx context.Context, req providerkit.ShapeRequest) 
 }
 
 func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
-	edges, err := providerkit.EdgePricers(p.edges())
+	edges, err := providerkit.EdgeRates(p.edges())
 	if err != nil {
 		return nil, err
 	}

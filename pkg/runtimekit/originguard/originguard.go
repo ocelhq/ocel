@@ -1,4 +1,4 @@
-package front
+package originguard
 
 import (
 	"crypto/sha256"

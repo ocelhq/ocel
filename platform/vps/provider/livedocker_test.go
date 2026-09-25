@@ -71,7 +71,7 @@ func unmade(t *testing.T, vm machine) ([]string, string) {
 }
 
 func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	vm.purges(t)
 	purged(t, vm)
 

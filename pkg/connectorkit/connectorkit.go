@@ -131,7 +131,7 @@ func listen(addr string) (net.Listener, error) {
 }
 
 func PublicKey(configPath string) (string, error) {
-	cfg, err := LoadConfig(configPath)
+	cfg, err := ReadConfig(configPath)
 	if err != nil {
 		return "", err
 	}

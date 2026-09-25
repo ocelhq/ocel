@@ -1,4 +1,4 @@
-package proxy_test
+package bindingproxy_test
 
 import (
 	"context"
@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
-	"github.com/ocelhq/ocel/pkg/runtimekit/proxy"
+	"github.com/ocelhq/ocel/pkg/runtimekit/bindingproxy"
 )
 
 type silentBuckets struct {
@@ -48,7 +48,7 @@ func TestServe(t *testing.T) {
 	t.Parallel()
 
 	svc := &silentBuckets{}
-	served, err := proxy.Serve(svc)
+	served, err := bindingproxy.Serve(svc)
 	if err != nil {
 		t.Fatalf("Serve: %v", err)
 	}
@@ -91,12 +91,12 @@ func TestServe(t *testing.T) {
 func TestServeMintsAFreshTokenEachTime(t *testing.T) {
 	t.Parallel()
 
-	first, err := proxy.Serve(&silentBuckets{})
+	first, err := bindingproxy.Serve(&silentBuckets{})
 	if err != nil {
 		t.Fatalf("Serve: %v", err)
 	}
 	t.Cleanup(func() { first.Close() })
-	second, err := proxy.Serve(&silentBuckets{})
+	second, err := bindingproxy.Serve(&silentBuckets{})
 	if err != nil {
 		t.Fatalf("Serve: %v", err)
 	}

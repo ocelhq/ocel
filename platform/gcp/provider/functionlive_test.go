@@ -7,7 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/runtimekit/front"
+	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
@@ -61,8 +61,8 @@ func TestAFunctionDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *tes
 	if env["REGION"] != "eu" || env["OCEL_ROUTE"] != "index" {
 		t.Errorf("the revision carries REGION=%q and OCEL_ROUTE=%q, want the plain value the deploy delivered and what the function's own spec names", env["REGION"], env["OCEL_ROUTE"])
 	}
-	if held, carried := env[front.HealthPathVar]; carried {
-		t.Errorf("the revision carries %s=%q, and a function has no probe path for the runtime to let through", front.HealthPathVar, held)
+	if held, carried := env[originguard.HealthPathVar]; carried {
+		t.Errorf("the revision carries %s=%q, and a function has no probe path for the runtime to let through", originguard.HealthPathVar, held)
 	}
 	manifest, err := live.Parse([]byte(env[live.EnvVar]))
 	if err != nil {

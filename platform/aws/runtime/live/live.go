@@ -14,25 +14,25 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type Values = rt.Values
+type Values = live.Values
 
-type storeFetcher struct {
+type storeSource struct {
 	reader   values.Reader
 	cells    []values.Cell
-	bindings []rt.Binding
+	bindings []live.Binding
 
 	mu       sync.Mutex
 	reported map[string]int64
 }
 
-func (f *storeFetcher) FetchLive(ctx context.Context) (map[string]string, error) {
+func (f *storeSource) Fetch(ctx context.Context) (map[string]string, error) {
 	resolved, err := f.reader.Values(ctx, f.cells)
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func (f *storeFetcher) FetchLive(ctx context.Context) (map[string]string, error)
 	return merged(resolved, f.bindings, records), nil
 }
 
-func (f *storeFetcher) unreportedGrantLag(records []values.Published) []string {
+func (f *storeSource) unreportedGrantLag(records []values.Published) []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.reported == nil {
@@ -71,7 +71,7 @@ type lagged struct {
 	Message string
 }
 
-func grantLag(bindings []rt.Binding, records []values.Published) []lagged {
+func grantLag(bindings []live.Binding, records []values.Published) []lagged {
 	var out []lagged
 	for i, record := range records {
 		granted := bindings[i].Granted
@@ -94,7 +94,7 @@ func republished(n int64) string {
 	return fmt.Sprintf("%d more times", n)
 }
 
-func bindingNames(bindings []rt.Binding) []string {
+func bindingNames(bindings []live.Binding) []string {
 	names := make([]string, 0, len(bindings))
 	for _, l := range bindings {
 		names = append(names, l.Name)
@@ -102,7 +102,7 @@ func bindingNames(bindings []rt.Binding) []string {
 	return names
 }
 
-func merged(resolved map[string]string, bindings []rt.Binding, records []values.Published) map[string]string {
+func merged(resolved map[string]string, bindings []live.Binding, records []values.Published) map[string]string {
 	out := make(map[string]string, len(resolved)+len(records))
 	maps.Copy(out, resolved)
 	for i, record := range records {
@@ -135,7 +135,7 @@ func FromManifest(ctx context.Context, raw []byte) (*Values, error) {
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
-	return rt.New(&storeFetcher{
+	return live.New(&storeSource{
 		reader: values.Reader{
 			Records:     awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: awsports.Table(manifest.Table)},
 			Cipher:      awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: awsports.Key(manifest.KeyARN)},
@@ -144,7 +144,7 @@ func FromManifest(ctx context.Context, raw []byte) (*Values, error) {
 		},
 		cells:    manifestCells(manifest),
 		bindings: manifest.Bindings,
-	}, rt.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil), nil
+	}, live.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil), nil
 }
 
 func manifestCells(m vars.Manifest) []values.Cell {

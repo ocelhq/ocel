@@ -109,7 +109,7 @@ func (vm machine) beside(t *testing.T, container, command string) string {
 func quote(arg string) string { return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'" }
 
 func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	vm.purges(t)
 	p := vm.provider(t)
 	defer closing(t, p)
@@ -276,7 +276,7 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 }
 
 func TestLiveTheFileOnTheBoxIsTheConfigTheProxyServes(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	vm.purges(t)
 	p := vm.provider(t)
 	defer closing(t, p)
@@ -325,7 +325,7 @@ func TestLiveTheFileOnTheBoxIsTheConfigTheProxyServes(t *testing.T) {
 }
 
 func TestLiveTheProxysConfigIsStatedAndItsLogCarriesNoQueryString(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	vm.purges(t)
 	p := vm.provider(t)
 	defer closing(t, p)
@@ -371,7 +371,7 @@ func TestLiveTheProxysConfigIsStatedAndItsLogCarriesNoQueryString(t *testing.T) 
 }
 
 func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	vm.purges(t)
 	p := vm.provider(t)
 	defer closing(t, p)

@@ -17,13 +17,13 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/runtimekit/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtimekit/child"
-	"github.com/ocelhq/ocel/pkg/runtimekit/front"
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
-	"github.com/ocelhq/ocel/pkg/runtimekit/proxy"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/runtime/live"
+	source "github.com/ocelhq/ocel/platform/vps/runtime/live"
 )
 
 const (
@@ -55,12 +55,12 @@ func run(ctx context.Context, command []string, environ []string) int {
 		case vars.EnvVar:
 			manifest = value
 			continue
-		case front.HealthPathVar:
+		case originguard.HealthPathVar:
 			healthPath = value
 		}
 		env = append(env, entry)
 	}
-	guard, env := front.GuardFromEnv(env)
+	guard, env := originguard.GuardFromEnv(env)
 
 	values, err := resolve(ctx, manifest, vars.SocketPath, vars.ProjectionDir)
 	if err != nil {
@@ -106,7 +106,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 		return fatal(fmt.Sprintf("listen on port %s: %v", exposed, err))
 	}
 	upstream := &url.URL{Scheme: "http", Host: app}
-	server := &http.Server{Handler: front.Handler(front.Options{
+	server := &http.Server{Handler: originguard.Handler(originguard.Options{
 		Upstream:   upstream,
 		Guard:      guard,
 		HealthPath: healthPath,
@@ -162,16 +162,16 @@ func pinned(manifest string) (vars.Manifest, error) {
 	return vars.Parse([]byte(manifest))
 }
 
-func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (proxy.Served, error) {
+func proxying(manifest vars.Manifest, values *live.Values, socket, app string) (bindingproxy.Served, error) {
 	if values == nil {
-		return proxy.Served{}, nil
+		return bindingproxy.Served{}, nil
 	}
 	if manifest.Store == nil {
 		return s3store.ServeBound(values, app)
 	}
 	secret := values.Value(vars.StoreSecretKey)
 	if secret == "" {
-		return proxy.Served{}, fmt.Errorf("this deployment binds a bucket but has no credential for the store at %s", manifest.Store.Endpoint)
+		return bindingproxy.Served{}, fmt.Errorf("this deployment binds a bucket but has no credential for the store at %s", manifest.Store.Endpoint)
 	}
 	internal := s3store.Store{
 		Endpoint:        manifest.Store.Endpoint,
@@ -191,14 +191,14 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (pr
 		Granted:      manifest.Store.Granted,
 	}
 	if manifest.Store.Volume != "" {
-		cfg.Volume = live.FreeSpace(socket)
+		cfg.Volume = source.FreeSpace(socket)
 	}
-	return proxy.Serve(s3store.RouteRecords(s3store.New(cfg), values, cfg.Callbacks))
+	return bindingproxy.Serve(s3store.RouteRecords(s3store.New(cfg), values, cfg.Callbacks))
 }
 
 const unclaimedWindow = 10 * time.Second
 
-func publishing(store s3store.Store, values *rt.Values) func(context.Context) (s3store.PresignAPI, string) {
+func publishing(store s3store.Store, values *live.Values) func(context.Context) (s3store.PresignAPI, string) {
 	var mu sync.Mutex
 	var base string
 	var signer s3store.PresignAPI
@@ -232,11 +232,11 @@ func publishing(store s3store.Store, values *rt.Values) func(context.Context) (s
 	}
 }
 
-func resolve(ctx context.Context, manifest, socket, dir string) (*rt.Values, error) {
+func resolve(ctx context.Context, manifest, socket, dir string) (*live.Values, error) {
 	if manifest == "" {
 		return nil, nil
 	}
-	values, err := live.FromManifest([]byte(manifest), socket)
+	values, err := source.FromManifest([]byte(manifest), socket)
 	if err != nil {
 		return nil, fmt.Errorf("read this deployment's live variables: %w", err)
 	}

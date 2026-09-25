@@ -10,7 +10,7 @@ import (
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	rtfront "github.com/ocelhq/ocel/pkg/runtimekit/front"
+	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -82,7 +82,7 @@ func TestASecretAndABindingReachTheContainerAsAManifestRatherThanAsValues(t *tes
 	if strings.Contains(file, "DATABASE_URL=") || strings.Contains(file, "SESSION_SECRET=") || strings.Contains(file, "OCEL_RESOURCE_POSTGRES_main=") {
 		t.Errorf("the env file reads %q and carries a secret or a binding record, which the runtime reads live off the box instead", file)
 	}
-	if !strings.Contains(file, rtfront.HealthPathVar+"=/healthz\n") {
+	if !strings.Contains(file, originguard.HealthPathVar+"=/healthz\n") {
 		t.Errorf("the env file reads %q and never names the health path the runtime lets the proxy's probe through on", file)
 	}
 	line := ""
@@ -156,7 +156,7 @@ func TestAnAppDeclaringNothingIsHandedTheHealthPathAloneAndNoSocket(t *testing.T
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	if file := envFileWritten(t, machine, providerkit.ClassProduction, standing[0].Physical); file != rtfront.HealthPathVar+"=/healthz\n" {
+	if file := envFileWritten(t, machine, providerkit.ClassProduction, standing[0].Physical); file != originguard.HealthPathVar+"=/healthz\n" {
 		t.Errorf("an app declaring no value is handed %q, want the health path alone", file)
 	}
 	joined := strings.Join(machine.commands(), "\n")
@@ -168,7 +168,7 @@ func TestAnAppDeclaringNothingIsHandedTheHealthPathAloneAndNoSocket(t *testing.T
 func TestAValueDeliveredUnderANameTheRuntimeReadsItsOwnFromIsRefused(t *testing.T) {
 	t.Parallel()
 
-	for _, owned := range []string{rtfront.HealthPathVar, vars.EnvVar} {
+	for _, owned := range []string{originguard.HealthPathVar, vars.EnvVar} {
 		app := anApp()
 		app.Values = providerkit.AppValues{Delivered: map[string]string{owned: "x"}}
 		_, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, app), nil)

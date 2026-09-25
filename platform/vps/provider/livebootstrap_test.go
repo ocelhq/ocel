@@ -60,7 +60,7 @@ func (vm machine) dialling(login, fed, command string, extra ...string) (string,
 }
 
 func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	vm.purges(t)
 	p := vm.provider(t)
 	defer closing(t, p)
@@ -191,7 +191,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 }
 
 func TestLiveAnUnfinishedApplyIsReportedAsDrifted(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	p := vm.provider(t)
 	defer closing(t, p)
 
@@ -232,7 +232,7 @@ func TestLiveAnUnfinishedApplyIsReportedAsDrifted(t *testing.T) {
 }
 
 func TestLiveApplyRefusesWorkTheShownPlanNeverCarried(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	p := vm.provider(t)
 	defer closing(t, p)
 
@@ -268,7 +268,7 @@ func TestLiveApplyRefusesWorkTheShownPlanNeverCarried(t *testing.T) {
 }
 
 func TestLiveForgettingARecordNothingWroteIsAlreadyForgotten(t *testing.T) {
-	p := live(t).provider(t)
+	p := liveMachine(t).provider(t)
 	defer closing(t, p)
 
 	name := providerkit.RecordName{providerkit.RootConformance, string(providerkit.ClassProduction), t.Name()}

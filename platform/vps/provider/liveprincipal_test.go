@@ -46,7 +46,7 @@ func standsAsDecided(t *testing.T, vm machine) {
 }
 
 func TestLiveTheDeployKeyOptionOverridesTheMirroredKeys(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	vm.purges(t)
 	vm.forgetsTheDeployLogin(t)
 
@@ -91,7 +91,7 @@ func TestLiveTheDeployKeyOptionOverridesTheMirroredKeys(t *testing.T) {
 }
 
 func TestLiveBothPermissionsDocumentsDescribeTheMachineTheyBootstrap(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	p := vm.provider(t)
 	defer closing(t, p)
 
@@ -139,7 +139,7 @@ func TestLiveBothPermissionsDocumentsDescribeTheMachineTheyBootstrap(t *testing.
 }
 
 func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	named := filepath.Join(t.TempDir(), "deploy.pub")
 	keygen := exec.Command("ssh-keygen", "-q", "-t", "ed25519", "-f", strings.TrimSuffix(named, ".pub"), "-N", "", "-C", "destroy-needs-no-key")
 	if out, err := keygen.CombinedOutput(); err != nil {

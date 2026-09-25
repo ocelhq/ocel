@@ -17,18 +17,18 @@ type ShapeRequest struct {
 	Transforms []string
 }
 
-func EdgePricers(registry Edges) ([]costkit.EdgePricer, error) {
-	var pricers []costkit.EdgePricer
+func EdgeRates(registry Edges) ([]costkit.EdgeRates, error) {
+	var rated []costkit.EdgeRates
 	for _, kind := range registry.Supported() {
 		front, err := registry.Open(kind)
 		if err != nil {
 			return nil, err
 		}
-		if pricer, prices := front.(costkit.EdgePricer); prices {
-			pricers = append(pricers, pricer)
+		if rates, priced := front.(costkit.EdgeRates); priced {
+			rated = append(rated, rates)
 		}
 	}
-	return pricers, nil
+	return rated, nil
 }
 
 func ProductionHostnames(app AppEntry) []string {

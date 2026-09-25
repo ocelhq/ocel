@@ -137,7 +137,7 @@ func (p *Provider) standing(held bootstrap.Deployed, class providerkit.Class) er
 	return nil
 }
 
-func (p *Provider) transformPass(root string) transformkit.Evaluator {
+func (p *Provider) transformPass(root string) transformkit.Pass {
 	if len(p.transforms) == 0 {
 		return nil
 	}

@@ -6,7 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 )
 
 const FilePath = constants.ProjectStateDirName + "/variables.live.json"
@@ -14,13 +14,13 @@ const FilePath = constants.ProjectStateDirName + "/variables.live.json"
 const EnvVar = "OCEL_LIVE_MANIFEST"
 
 type Manifest struct {
-	Slug        string       `json:"slug"`
-	Table       string       `json:"table"`
-	KeyARN      string       `json:"keyArn"`
-	Class       string       `json:"class"`
-	Environment string       `json:"environment,omitempty"`
-	Keys        []rt.Key     `json:"keys"`
-	Bindings    []rt.Binding `json:"bindings,omitempty"`
+	Slug        string         `json:"slug"`
+	Table       string         `json:"table"`
+	KeyARN      string         `json:"keyArn"`
+	Class       string         `json:"class"`
+	Environment string         `json:"environment,omitempty"`
+	Keys        []live.Key     `json:"keys"`
+	Bindings    []live.Binding `json:"bindings,omitempty"`
 }
 
 func (m Manifest) Live() bool { return len(m.Keys) > 0 || len(m.Bindings) > 0 }

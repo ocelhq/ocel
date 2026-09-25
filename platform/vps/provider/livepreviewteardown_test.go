@@ -31,7 +31,7 @@ func teardownAt(pointer string) string { return teardownRepo + ":" + pointer }
 func onABoxServingPreviews(t *testing.T) (machine, *vps.Provider, edge.EdgeStack) {
 	t.Helper()
 
-	vm := live(t)
+	vm := liveMachine(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
 	bootstrapped(t, vm, providerkit.ClassPreview)
 	fixtures(t, vm)

@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -41,7 +41,7 @@ func answering(t *testing.T, values map[string]string) string {
 
 func TestTheRuntimeProjectsLiveValuesIntoADirectoryTheImageNeverHadToCarry(t *testing.T) {
 	socket := answering(t, map[string]string{"DATABASE_URL": "postgres://app:hunter2@db/orders"})
-	manifest, err := vars.Render(vars.Manifest{Slug: "shop", Class: "production", Keys: []rt.Key{{Key: "DATABASE_URL"}}})
+	manifest, err := vars.Render(vars.Manifest{Slug: "shop", Class: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func bucketManifest(t *testing.T, store *vars.Store) (vars.Manifest, string) {
 	t.Helper()
 	manifest := vars.Manifest{
 		Slug: "shop", Class: "production",
-		Bindings: []rt.Binding{{
+		Bindings: []live.Binding{{
 			Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads",
 			Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET,
 		}},
@@ -172,7 +172,7 @@ func TestTheRuntimeFrontsABucketBoundToAStoreWithNoStoreOfItsOwn(t *testing.T) {
 }
 
 func TestTheRuntimeFrontsNothingWhereNoBindingIsProxied(t *testing.T) {
-	manifest := vars.Manifest{Slug: "shop", Class: "production", Keys: []rt.Key{{Key: "DATABASE_URL"}}}
+	manifest := vars.Manifest{Slug: "shop", Class: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}}
 	served, err := proxying(manifest, nil, filepath.Join(t.TempDir(), "absent.sock"), "127.0.0.1:1")
 	if err != nil || served.Env != nil {
 		t.Errorf("proxying() = %+v, %v, want no proxy for a deployment binding nothing it must be fronted for", served, err)

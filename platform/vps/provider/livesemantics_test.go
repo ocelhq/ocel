@@ -86,7 +86,7 @@ func stillMoving(t *testing.T, planner planning, class providerkit.Class, held a
 }
 
 func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	vm.purges(t)
 	vm.forgetsTheDeployLogin(t)
 
@@ -179,7 +179,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 }
 
 func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	p := vm.provider(t)
 	defer closing(t, p)
 	ctx := context.Background()
@@ -241,7 +241,7 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 }
 
 func TestLiveHealReassertsTheStateTierAndRefusesEverythingBesideWhole(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	class := providerkit.ClassProduction
 	p := bootstrapped(t, vm, class)
 	ctx := context.Background()
@@ -280,7 +280,7 @@ func TestLiveHealReassertsTheStateTierAndRefusesEverythingBesideWhole(t *testing
 }
 
 func TestLiveASymlinkWhereTheDeployLoginOwnsAPathIsRefusedRatherThanChowned(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	class := providerkit.ClassProduction
 	p := bootstrapped(t, vm, class)
 	ctx := context.Background()
@@ -304,7 +304,7 @@ func TestLiveASymlinkWhereTheDeployLoginOwnsAPathIsRefusedRatherThanChowned(t *t
 }
 
 func TestLiveHealAsTheDeployLoginReassertsItsOwnTierAndNothingBeside(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	class := providerkit.ClassProduction
 	bootstrapped(t, vm, class)
 

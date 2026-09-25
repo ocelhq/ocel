@@ -7,14 +7,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/transformkit"
 )
 
-type fakeEvaluator struct {
+type fakePass struct {
 	seen transformkit.Request
 	out  []transformkit.Patches
 	tags map[string]string
 	err  error
 }
 
-func (f *fakeEvaluator) Evaluate(_ context.Context, req transformkit.Request) ([]transformkit.Result, error) {
+func (f *fakePass) Evaluate(_ context.Context, req transformkit.Request) ([]transformkit.Result, error) {
 	f.seen = req
 	if f.err != nil {
 		return nil, f.err

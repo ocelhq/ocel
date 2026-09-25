@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 )
 
 func complete() Manifest {
 	return Manifest{
 		Project: "acme-prod", Region: "europe-west1", Namespace: "ocel", Slug: "shop", Class: "production",
-		Keys: []rt.Key{{Key: "DATABASE_URL"}},
+		Keys: []live.Key{{Key: "DATABASE_URL"}},
 	}
 }
 

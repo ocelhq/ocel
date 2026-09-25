@@ -194,7 +194,7 @@ func TestLiveAClaimedHostnameIsLoadedOntoTheProxyAndChangesNothingItServes(t *te
 var liveSlug atomic.Int64
 
 func TestLiveTheBoxEdgeAnswersTheEdgeContractsLedgerAndDomainObligationsAgainstARealMachine(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
 	p := vm.deploying(t)
 	defer closing(t, p)

@@ -72,7 +72,7 @@ func (vm machine) holds(t *testing.T, image string) string {
 }
 
 func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	vm.purges(t)
 	p := vm.provider(t)
 	defer closing(t, p)
@@ -159,7 +159,7 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 }
 
 func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	vm.purges(t)
 	vm.forgetsTheDeployLogin(t)
 	p := vm.provider(t)

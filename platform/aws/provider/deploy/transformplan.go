@@ -25,8 +25,8 @@ func NodePass(root string, modules []string) transformkit.NodePass {
 	}
 }
 
-func transformStackPlan(ctx context.Context, evaluator transformkit.Evaluator, plan providerkit.StackPlan) (*transformPatches, error) {
-	if evaluator == nil {
+func transformStackPlan(ctx context.Context, pass transformkit.Pass, plan providerkit.StackPlan) (*transformPatches, error) {
+	if pass == nil {
 		return nil, nil
 	}
 	project, stack := naming.Sanitize(plan.Ref.Project), plan.Ref.Name
@@ -75,7 +75,7 @@ func transformStackPlan(ctx context.Context, evaluator transformkit.Evaluator, p
 		}
 	}
 
-	results, err := evaluator.Evaluate(ctx, req)
+	results, err := pass.Evaluate(ctx, req)
 	if err != nil {
 		return nil, err
 	}

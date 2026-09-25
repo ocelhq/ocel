@@ -10,9 +10,9 @@ const (
 	previewBaseShaped = "preview"
 )
 
-var _ costkit.EdgeShaper = (*Edge)(nil)
+var _ costkit.EdgeCost = (*Edge)(nil)
 
-func (e *Edge) ShapeCost(site costkit.EdgeSite) (costkit.EdgeShape, error) {
+func (e *Edge) Shape(site costkit.EdgeSite) (costkit.EdgeShape, error) {
 	previewBase := ""
 	if site.Class == edge.ClassPreview {
 		previewBase = previewBaseShaped

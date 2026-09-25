@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/runtimekit/front"
+	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -137,8 +137,8 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 	if work.readsLive() {
 		t.Error("an app with nothing live is granted a read on the variable table")
 	}
-	if got := work.definitionEnv()[front.HealthPathVar]; got != "/healthz" {
-		t.Errorf("%s = %q, want the manifest's probe path, which the runtime answers without the origin secret", front.HealthPathVar, got)
+	if got := work.definitionEnv()[originguard.HealthPathVar]; got != "/healthz" {
+		t.Errorf("%s = %q, want the manifest's probe path, which the runtime answers without the origin secret", originguard.HealthPathVar, got)
 	}
 
 	_, err = containerEnv("web", providerkit.AppValues{Plain: map[string]string{containerPortEnv: "3000"}}, fixtureSecret, "", nil)
@@ -475,8 +475,8 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingCarriesIsRefused(t *t
 	t.Parallel()
 
 	cfg, plan := plannedContainerStack(t)
-	evaluator := &fakeEvaluator{tags: map[string]string{"team": "shop"}}
-	cfg.Transform = evaluator
+	pass := &fakePass{tags: map[string]string{"team": "shop"}}
+	cfg.Transform = pass
 	release := releasing(t, cfg)
 	work, err := release.containerWork(plan, fixtureSubstrate())
 	if err != nil {
@@ -485,8 +485,8 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingCarriesIsRefused(t *t
 	if work.transformed, err = transformStackPlan(context.Background(), cfg.Transform, plan); err != nil {
 		t.Fatalf("transformStackPlan() = %v", err)
 	}
-	if len(evaluator.seen.Resources) != 1 || evaluator.seen.Resources[0].Type != transformTypeContainer || evaluator.seen.Resources[0].App != "web" {
-		t.Fatalf("the transform was shown %+v, want the container as the one resource of app web", evaluator.seen.Resources)
+	if len(pass.seen.Resources) != 1 || pass.seen.Resources[0].Type != transformTypeContainer || pass.seen.Resources[0].App != "web" {
+		t.Fatalf("the transform was shown %+v, want the container as the one resource of app web", pass.seen.Resources)
 	}
 	if err := release.placeRule(context.Background(), work); err != nil {
 		t.Fatalf("placeRule() = %v", err)
@@ -501,7 +501,7 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingCarriesIsRefused(t *t
 		}
 	}
 
-	evaluator.out = []transformkit.Patches{{"role": {"description": "patched"}}}
+	pass.out = []transformkit.Patches{{"role": {"description": "patched"}}}
 	if work.transformed, err = transformStackPlan(context.Background(), cfg.Transform, plan); err != nil {
 		t.Fatalf("transformStackPlan() = %v", err)
 	}

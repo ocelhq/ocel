@@ -15,7 +15,7 @@ import (
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
 
@@ -31,9 +31,9 @@ func (s *sink) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-type fixedFetcher map[string]string
+type fixedSource map[string]string
 
-func (f fixedFetcher) FetchLive(context.Context) (map[string]string, error) { return f, nil }
+func (f fixedSource) Fetch(context.Context) (map[string]string, error) { return f, nil }
 
 func unsetAWS(t *testing.T) {
 	t.Helper()
@@ -55,8 +55,8 @@ func plant(t *testing.T, raw []byte) string {
 	return root
 }
 
-func postgresBinding() rt.Binding {
-	return rt.Binding{
+func postgresBinding() live.Binding {
+	return live.Binding{
 		Name: "db--main",
 		Key:  "OCEL_RESOURCE_POSTGRES_main",
 		Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES,
@@ -99,7 +99,7 @@ func TestResolveLiveValues(t *testing.T) {
 			KeyARN:      "arn:aws:kms:us-east-1:1234:key/abcd",
 			Class:       "preview",
 			Environment: "pr-42",
-			Bindings: []rt.Binding{
+			Bindings: []live.Binding{
 				{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main"},
 				{Name: "bucket--uploads", Key: "OCEL_RESOURCE_BUCKET_uploads"},
 			},
@@ -125,7 +125,7 @@ func TestResolveLiveValues(t *testing.T) {
 			}
 		}
 
-		keys := rt.Keys(manifest.Keys, manifest.Bindings)
+		keys := live.Keys(manifest.Keys, manifest.Bindings)
 		if len(keys) != 2 {
 			t.Fatalf("declared keys = %v, want the binding keys named to the child", keys)
 		}
@@ -137,7 +137,7 @@ func TestResolveLiveValues(t *testing.T) {
 			Table:  "ocel-vars",
 			KeyARN: "arn:aws:kms:us-east-1:1234:key/abcd",
 			Class:  "production",
-			Keys:   []rt.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
+			Keys:   []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		}
 
 		cells := manifestCells(manifest)
@@ -156,7 +156,7 @@ func TestResolveLiveValues(t *testing.T) {
 		manifest := vars.Manifest{
 			Slug:        "shop",
 			Environment: "pr-42",
-			Keys:        []rt.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
+			Keys:        []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		}
 
 		want := []values.Cell{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}}
@@ -168,7 +168,7 @@ func TestResolveLiveValues(t *testing.T) {
 	t.Run("production asks for one cell per key", func(t *testing.T) {
 		cells := manifestCells(vars.Manifest{
 			Slug: "shop",
-			Keys: []rt.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
+			Keys: []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		})
 
 		if len(cells) != 2 {
@@ -225,7 +225,7 @@ func TestResolveLiveValues(t *testing.T) {
 			Table:  "ocel-vars",
 			KeyARN: "arn:aws:kms:us-east-1:1234:key/abcd",
 			Class:  "production",
-			Keys:   []rt.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
+			Keys:   []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -257,8 +257,8 @@ func TestResolveLiveValues(t *testing.T) {
 			KeyARN:      "arn:aws:kms:us-east-1:1234:key/abcd",
 			Class:       "preview",
 			Environment: "pr-42",
-			Keys:        []rt.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
-			Bindings:    []rt.Binding{binding},
+			Keys:        []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
+			Bindings:    []live.Binding{binding},
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -288,7 +288,7 @@ func TestResolveLiveValues(t *testing.T) {
 }
 
 func TestMerged(t *testing.T) {
-	bindings := []rt.Binding{{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main"}}
+	bindings := []live.Binding{{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main"}}
 	published := &bindingsv1.Binding{
 		Name:       "db--main",
 		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "ocel", Port: 5432}},
@@ -324,7 +324,7 @@ func publishedRecord(t *testing.T, binding *bindingsv1.Binding, version int64) v
 
 func TestEnv(t *testing.T) {
 	t.Run("declares the live keys the child must ask for", func(t *testing.T) {
-		l := rt.New(fixedFetcher{}, []string{"DB_PASSWORD"}, nil, nil)
+		l := live.New(fixedSource{}, []string{"DB_PASSWORD"}, nil, nil)
 
 		if got := l.Env(); !slices.Equal(got, []string{"OCEL_LIVE_KEYS=DB_PASSWORD"}) {
 			t.Errorf("Env = %q, want the declaration alone", got)
@@ -339,7 +339,7 @@ func TestEnv(t *testing.T) {
 		const sessionSecret = "session-plaintext-must-not-be-exported"
 		secrets := []string{dbPassword, sessionSecret}
 
-		l := rt.New(fixedFetcher{
+		l := live.New(fixedSource{
 			"DB_PASSWORD":    dbPassword,
 			"SESSION_SECRET": sessionSecret,
 		}, []string{"DB_PASSWORD", "SESSION_SECRET"}, nil, nil)
@@ -375,7 +375,7 @@ func TestEnv(t *testing.T) {
 }
 
 func TestGrantLag(t *testing.T) {
-	bound := func(granted int64) rt.Binding {
+	bound := func(granted int64) live.Binding {
 		binding := postgresBinding()
 		binding.Granted = granted
 		return binding
@@ -385,7 +385,7 @@ func TestGrantLag(t *testing.T) {
 	}
 
 	t.Run("names the publishes an app's grants are behind", func(t *testing.T) {
-		got := grantLag([]rt.Binding{bound(3)}, published(5))
+		got := grantLag([]live.Binding{bound(3)}, published(5))
 		if len(got) != 1 {
 			t.Fatalf("grantLag = %v, want the lag reported once", got)
 		}
@@ -397,27 +397,27 @@ func TestGrantLag(t *testing.T) {
 	})
 
 	t.Run("says nothing while the grants match the record", func(t *testing.T) {
-		if got := grantLag([]rt.Binding{bound(5)}, published(5)); len(got) != 0 {
+		if got := grantLag([]live.Binding{bound(5)}, published(5)); len(got) != 0 {
 			t.Errorf("grantLag = %v, want silence when the running grants came from the live version", got)
 		}
 	})
 
 	t.Run("says nothing for a binding this deploy provisioned and granted in one pass", func(t *testing.T) {
-		if got := grantLag([]rt.Binding{postgresBinding()}, published(9)); len(got) != 0 {
+		if got := grantLag([]live.Binding{postgresBinding()}, published(9)); len(got) != 0 {
 			t.Errorf("grantLag = %v, want no lag where publish and grant are the same act", got)
 		}
 	})
 
 	t.Run("repeats itself only when the record moves again", func(t *testing.T) {
-		fetcher := &storeFetcher{bindings: []rt.Binding{bound(3)}}
+		source := &storeSource{bindings: []live.Binding{bound(3)}}
 
-		if got := fetcher.unreportedGrantLag(published(5)); len(got) != 1 {
+		if got := source.unreportedGrantLag(published(5)); len(got) != 1 {
 			t.Fatalf("first refresh reported %v, want the lag once", got)
 		}
-		if got := fetcher.unreportedGrantLag(published(5)); len(got) != 0 {
+		if got := source.unreportedGrantLag(published(5)); len(got) != 0 {
 			t.Errorf("second refresh reported %v, want a standing lag reported once, not on every refresh", got)
 		}
-		if got := fetcher.unreportedGrantLag(published(6)); len(got) != 1 {
+		if got := source.unreportedGrantLag(published(6)); len(got) != 1 {
 			t.Errorf("a further publish reported %v, want the widened lag named again", got)
 		}
 	})

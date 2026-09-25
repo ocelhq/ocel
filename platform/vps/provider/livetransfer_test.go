@@ -190,7 +190,7 @@ func wrappedAsADeployDoes(ctx context.Context, daemon providerkit.DockerHost, cl
 }
 
 func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
 	daemon, client := imported(t)
 	keepsImagesInContainerd(t, daemon, client)
@@ -231,7 +231,7 @@ func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *tes
 }
 
 func TestLiveARedeployOfAnUnchangedAppCarriesTheImageNoSecondTime(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
 	daemon, client := imported(t)
 	keepsImagesInContainerd(t, daemon, client)
