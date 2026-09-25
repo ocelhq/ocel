@@ -414,7 +414,7 @@ func (s boxContainer) probe() string {
 	template, normalized := ContainerFactTemplate, ""
 	if s.migrates {
 		template += "\n" + migrateFact + `{{if eq (index .HostConfig.Sysctls "` + migrateSysctl + `") "1"}}` + migrateHeld + `{{else}}` + migrateUnset + `{{end}}`
-		normalized = "if [ ! -e " + quoted(migrateKnob) + " ]; then facts=\"${facts%" + migrateFact + migrateUnset + "}" + migrateFact + migrateHeld + "\"; fi\n"
+		normalized = "if [ ! -e " + quoted(migrateKnob) + " ]; then facts=\"${facts%" + migrateFact + "*}" + migrateFact + migrateHeld + "\"; fi\n"
 	}
 	return "if command -v " + quoted(dockerEngine) + " >/dev/null 2>&1 && " +
 		"facts=$(docker inspect --type container --format " + quoted(template) + " " + quoted(s.name) + " 2>/dev/null); then\n" +

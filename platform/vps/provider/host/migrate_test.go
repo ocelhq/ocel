@@ -72,6 +72,7 @@ func TestAFrontProxyIsCurrentWhenItMigratesItsListenersOrItsKernelCannot(t *test
 		"migrating on a kernel that can":        {can: true, migrate: "held", current: true},
 		"not migrating on a kernel that can":    {can: true, migrate: "unset", current: false},
 		"not migrating on a kernel that cannot": {can: false, migrate: "unset", current: true},
+		"migrating on a kernel that cannot":     {can: false, migrate: "held", current: true},
 	} {
 		observed := probedAs(t, kernelMigrating(t, held.can), front, engineReport{facts: engineSays(front, held.migrate)})
 		if (observed == stated) != held.current {
