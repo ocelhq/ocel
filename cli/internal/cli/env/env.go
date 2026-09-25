@@ -31,6 +31,7 @@ import (
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envsource"
 )
 
 type envOptions struct {
@@ -185,8 +186,9 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 		if err != nil {
 			return err
 		}
+		writable := append(slices.Clone(definitions), envwire.CredentialDefinitions(cfg, opts.preview)...)
 		for _, pair := range pairs {
-			if err := envgate.CheckWritable(definitions, pair.key, opts.folder); err != nil {
+			if err := envgate.CheckWritable(writable, pair.key, opts.folder); err != nil {
 				return err
 			}
 		}
@@ -438,7 +440,8 @@ func runEnvRef(ctx context.Context, deps cmddeps.Deps, cwd, key string, opts env
 		if err != nil {
 			return err
 		}
-		if err := envgate.CheckWritable(definitions, key, opts.folder); err != nil {
+		writable := append(slices.Clone(definitions), envwire.CredentialDefinitions(cfg, opts.preview)...)
+		if err := envgate.CheckWritable(writable, key, opts.folder); err != nil {
 			return err
 		}
 		target := ref.target(cfg.Slug, key)
@@ -586,7 +589,10 @@ func valueRow(v *envvarsv1.ValueMetadata, lead string, descriptions map[string]s
 		environment += " (orphaned)"
 	}
 	size := fmt.Sprint(v.GetSize())
-	source := "—"
+	source := v.GetEnvSource()
+	if source == "" {
+		source = string(envsource.Builtin)
+	}
 	if target := v.GetTarget(); target != nil {
 		size, source = "—", describeCoordinate(target)
 	}

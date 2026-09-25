@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/localsource"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/envsource"
@@ -56,6 +57,26 @@ func SyncEnvSource(ctx context.Context, runner *provider.Runner, cfg *projectcon
 		EnvSource: wire,
 		Folders:   folders,
 	})
+}
+
+const CredentialGroup = "env source"
+
+func CredentialDefinitions(cfg *projectconfig.Config, preview bool) []*resourcesv1.VariableDefinition {
+	descriptor := DeployedSource(cfg, preview)
+	if descriptor.Infisical == nil {
+		return nil
+	}
+	var out []*resourcesv1.VariableDefinition
+	for _, name := range descriptor.Infisical.Auth.Vars() {
+		out = append(out, &resourcesv1.VariableDefinition{
+			Key:         name,
+			Class:       resourcesv1.VariableClass_VARIABLE_CLASS_SECRET,
+			Required:    true,
+			Group:       CredentialGroup,
+			Description: "Signs " + descriptor.ID() + " in; read by ocel alone, never by an app",
+		})
+	}
+	return out
 }
 
 func SourceOf(resp *envvarsv1.SyncEnvSourceResponse) envgate.Source {
