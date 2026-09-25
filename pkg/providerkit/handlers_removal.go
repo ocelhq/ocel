@@ -12,6 +12,7 @@ import (
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/envsource"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -323,6 +324,9 @@ func (r *projectRemoval) discardCertificates(ctx context.Context, held []Certifi
 func (r *projectRemoval) purgeValues(ctx context.Context, report Reporter) error {
 	report.Say("Removing the project's stored variable values")
 	store := values.Store{Records: r.provider.Records(), Sealer: r.provider.Sealer()}
+	if err := envsource.Retire(ctx, store, r.class, r.slug); err != nil {
+		return fmt.Errorf("forget %s's env source: %w", r.slug, err)
+	}
 	if _, err := store.Purge(ctx, values.Scope{Project: r.slug, Class: r.class}); err != nil {
 		return fmt.Errorf("remove %s's stored variable values: %w", r.slug, err)
 	}

@@ -12,6 +12,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envsource"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -116,6 +117,10 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 
 	plans := provider.Releases().(*fake.Releaser).Plans()
 	ref := plans[1].App.Functions[0].Artifact
+	registered := envsource.Registration{Project: "shop", Descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"op"}}}, Folders: []string{""}}
+	if err := envsource.Register(ctx, provider.Records(), providerkit.ClassProduction, registered); err != nil {
+		t.Fatal(err)
+	}
 
 	stream, err := client.RemoveProject(ctx, projectRequest())
 	if err != nil {
@@ -137,6 +142,9 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 	}
 	if len(names) != 0 {
 		t.Errorf("the removal left bindings %v published, want the project's values purged", names)
+	}
+	if _, found, err := envsource.Registered(ctx, provider.Records(), providerkit.ClassProduction, "shop"); err != nil || found {
+		t.Errorf("Registered() after the removal = %v, %v, want the project's env source forgotten", found, err)
 	}
 }
 
