@@ -39,6 +39,7 @@ server {
     listen 80 default_server;
     listen 443 ssl default_server;
     server_name _;
+    client_max_body_size 0;
     ssl_certificate /etc/nginx/ocel-front/cert.pem;
     ssl_certificate_key /etc/nginx/ocel-front/key.pem;
     resolver 127.0.0.11 valid=10s ipv6=off;
