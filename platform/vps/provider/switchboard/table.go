@@ -155,6 +155,15 @@ func Read(document []byte) (*Table, error) {
 	if read.PreviewBase != "" {
 		table.admitted[edge.ProbeHostname(edge.PreviewWildcard(read.PreviewBase))] = true
 	}
+	pinned := map[string]bool{}
+	for _, held := range read.Pins {
+		pinned[held.Hostname] = true
+	}
+	for hostname := range table.admitted {
+		if pinned[hostname] || pinned[wildcardOver(hostname)] {
+			delete(table.admitted, hostname)
+		}
+	}
 	answeredBy := map[string]route{}
 	for _, appRoute := range standing {
 		hostnames := claimed[appRoute.key()]
@@ -279,6 +288,13 @@ func (t *Table) Forward(host, requested string) (Forward, bool) {
 }
 
 func (t *Table) Admits(hostname string) bool { return t.admitted[strings.ToLower(hostname)] }
+
+func wildcardOver(hostname string) string {
+	if _, parent, split := strings.Cut(hostname, "."); split {
+		return "*." + parent
+	}
+	return ""
+}
 
 func under(requested, prefix string) bool {
 	lowered := strings.ToLower(requested)
