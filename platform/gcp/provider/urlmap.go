@@ -11,7 +11,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
 func matcherFor(hostname string) string { return "host-" + naming.Sanitize(hostname) }
@@ -186,5 +185,3 @@ func (p *Provider) settle(
 }
 
 const operationDone = "DONE"
-
-var _ alb.Routes = (*Provider)(nil)

@@ -76,3 +76,8 @@ func (i *Images) open(target providerkit.RegistryTarget) {
 	defer i.mu.Unlock()
 	i.opened = append(i.opened, target)
 }
+
+func (p *Provider) OpenRegistryImages(_ context.Context, target providerkit.RegistryTarget) (providerkit.ImageStore, error) {
+	p.images.open(target)
+	return p.images, nil
+}

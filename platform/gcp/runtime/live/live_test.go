@@ -49,7 +49,7 @@ func (s stores) publish(t *testing.T, scope values.Scope, environment, name stri
 	}
 }
 
-func resolved(t *testing.T, held *Values) map[string]string {
+func resolved(t *testing.T, held *live.Values) map[string]string {
 	t.Helper()
 	if err := held.Join(held.Prefetch(context.Background())); err != nil {
 		t.Fatalf("Prefetch() = %v", err)

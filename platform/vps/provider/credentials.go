@@ -6,9 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
-	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -87,40 +85,4 @@ func (c credentials) login() string {
 		return user
 	}
 	return anyLogin
-}
-
-type edges struct{ provider *Provider }
-
-func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
-	if kind != box.Kind {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"edge %q is not supported; use %q", kind, box.Kind)
-	}
-	return e.provider.box(), nil
-}
-
-type dns struct{}
-
-const dnsCloudflare = providerkit.DNSKind(cloudflare.Kind)
-
-func (dns) Open(kind providerkit.DNSKind, zone string, _ edge.Kind) (edge.DNSRecords, error) {
-	if kind != dnsCloudflare {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid,
-			"dns %q is not supported; use %s", kind, dnsCloudflare)
-	}
-	writer, err := cloudflare.NewDNS(zone)
-	if err != nil {
-		return nil, providerkit.Refuse(providerkit.CodeInvalid, "%s", err)
-	}
-	return writer, nil
-}
-
-var (
-	_ providerkit.Credentials = credentials{}
-	_ providerkit.Edges       = edges{}
-	_ providerkit.DNS         = dns{}
-)
-
-func (p *Provider) box() *box.Edge {
-	return box.New(p.host, p.holdOrigins, p.records, p.options.SSH.session().Destination())
 }

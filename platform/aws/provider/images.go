@@ -9,10 +9,6 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
 
-func (p *Provider) EnsureImageRegistry(ctx context.Context, _ providerkit.Class, _ []string) (providerkit.RegistryTarget, error) {
-	return registry.Resolve(ctx, ecr.NewFromConfig(p.aws))
-}
-
 func (p *Provider) OpenRegistryImages(_ context.Context, target providerkit.RegistryTarget) (providerkit.ImageStore, error) {
 	if !registry.Owns(target) {
 		return providerkit.RegistryImages(target), nil

@@ -21,8 +21,6 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type Values = live.Values
-
 type storeSource struct {
 	reader   values.Reader
 	cells    []values.Cell
@@ -111,7 +109,7 @@ func merged(resolved map[string]string, bindings []live.Binding, records []value
 	return out
 }
 
-func Resolve(ctx context.Context, taskRoot string) (*Values, error) {
+func Resolve(ctx context.Context, taskRoot string) (*live.Values, error) {
 	raw, err := os.ReadFile(filepath.Join(taskRoot, vars.FilePath))
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, nil
@@ -122,7 +120,7 @@ func Resolve(ctx context.Context, taskRoot string) (*Values, error) {
 	return FromManifest(ctx, raw)
 }
 
-func FromManifest(ctx context.Context, raw []byte) (*Values, error) {
+func FromManifest(ctx context.Context, raw []byte) (*live.Values, error) {
 	manifest, err := vars.Parse(raw)
 	if err != nil {
 		return nil, err

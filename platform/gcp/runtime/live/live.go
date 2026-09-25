@@ -11,8 +11,6 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
-type Values = live.Values
-
 type storeSource struct {
 	reader   values.Reader
 	cells    []values.Cell
@@ -48,7 +46,7 @@ func merged(resolved map[string]string, bindings []live.Binding, records []value
 	return out
 }
 
-func FromManifest(raw []byte) (*Values, error) {
+func FromManifest(raw []byte) (*live.Values, error) {
 	manifest, err := vars.Parse(raw)
 	if err != nil {
 		return nil, err
@@ -65,7 +63,7 @@ func FromManifest(raw []byte) (*Values, error) {
 	return Over(manifest, ports.Records{Clients: clients}, ports.Cipher{Clients: clients}), nil
 }
 
-func Over(manifest vars.Manifest, records providerkit.RecordStore, sealer providerkit.Cipher) *Values {
+func Over(manifest vars.Manifest, records providerkit.RecordStore, sealer providerkit.Cipher) *live.Values {
 	return live.New(&storeSource{
 		reader: values.Reader{
 			Records:     records,

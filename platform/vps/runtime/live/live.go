@@ -13,8 +13,6 @@ import (
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-type Values = live.Values
-
 const answerCeiling = 1 << 20
 
 type socketSource struct {
@@ -76,7 +74,7 @@ func FreeSpace(socket string) func() (uint64, uint64, error) {
 	return over(socket).FreeSpace
 }
 
-func FromManifest(raw []byte, socket string) (*Values, error) {
+func FromManifest(raw []byte, socket string) (*live.Values, error) {
 	manifest, err := vars.Parse(raw)
 	if err != nil {
 		return nil, err
@@ -87,7 +85,7 @@ func FromManifest(raw []byte, socket string) (*Values, error) {
 	return Over(manifest, socket), nil
 }
 
-func Over(manifest vars.Manifest, socket string) *Values {
+func Over(manifest vars.Manifest, socket string) *live.Values {
 	return live.New(over(socket), live.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil)
 }
 
