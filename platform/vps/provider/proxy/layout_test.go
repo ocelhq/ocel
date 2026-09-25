@@ -86,10 +86,10 @@ func TestTheLayoutRuleNamesWhatToMove(t *testing.T) {
 			"testdata/late/proxy.go opens with func (*Late).Guarantees; move the assertion that Late implements proxy.Proxy above it",
 		},
 		"incomplete": {
-			"testdata/incomplete/proxy.go declares no Forget on Incomplete; declare it there",
+			"testdata/incomplete/proxy.go declares no Certificate on Incomplete; declare it there",
 		},
 		"scattered": {
-			"testdata/scattered/forget.go declares func (*Scattered).Forget, a method of proxy.Proxy; move it to testdata/scattered/proxy.go",
+			"testdata/scattered/certificate.go declares func (*Scattered).Certificate, a method of proxy.Proxy; move it to testdata/scattered/proxy.go",
 		},
 		"crowded": {
 			"testdata/crowded/proxy.go declares const upstream, which is no method of proxy.Proxy on Crowded; move it to another file",

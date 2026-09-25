@@ -229,7 +229,7 @@ func (vm machine) handshakes(t *testing.T, hostname string) {
 	vm.ssh(t, quote(host.SwitchboardBinary)+" leaf "+quote(hostname)+" >/dev/null 2>&1 || true")
 }
 
-func TestLiveAPreviewTornDownLeavesNoRouteAndNoImageBehindAndItsCertificateToThePermissionCheck(t *testing.T) {
+func TestLiveAPreviewTornDownLeavesNoRouteAndNoImageBehindAndKeepsItsCertificate(t *testing.T) {
 	vm, p, stack := onABoxServingPreviews(t)
 
 	previewUp(t, vm, p, stack, "pr-7", 1)
@@ -252,7 +252,7 @@ func TestLiveAPreviewTornDownLeavesNoRouteAndNoImageBehindAndItsCertificateToThe
 		t.Errorf("the proxy still routes %s after its preview came down: %v", hostname, routed)
 	}
 	if held := vm.certificates(t); !strings.Contains(held, hostname) {
-		t.Errorf("the proxy's store no longer holds a subject for %s:\n%s\nCaddy keeps the pair in memory after its storage is gone and renews one it cannot find in storage without asking the switchboard, so the teardown leaves it for the refused renewal to evict and caddy's storage cleaner to take once it has expired", hostname, held)
+		t.Errorf("the proxy's store no longer holds a subject for %s:\n%s\nCaddy keeps the pair in memory after its storage is gone, and orders a new one for a cached name it cannot find in storage without asking the switchboard, so a teardown that takes the pair opens that order at the renewal point", hostname, held)
 	}
 	if status := vm.asksFor(t, hostname); status != 404 {
 		t.Errorf("%s was answered %d after its preview came down, want the switchboard's 404", hostname, status)

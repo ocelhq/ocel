@@ -13,7 +13,6 @@ type Proxy interface {
 	Reload(ctx context.Context) error
 	Inspect(ctx context.Context) (Standing, error)
 	Certificate(ctx context.Context, hostname string) (Certificate, error)
-	Forget(ctx context.Context, hostnames []string) ([]string, error)
 }
 
 const (
@@ -25,7 +24,6 @@ const (
 type Guarantees struct {
 	OwnsPorts              bool
 	IssuesCertificates     bool
-	ForgetsCertificates    bool
 	HonoursPins            bool
 	ReportsRateLimits      bool
 	ServesPreviewWildcards bool

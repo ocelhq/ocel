@@ -22,6 +22,3 @@ func (m *Misnamed) Certificate(context.Context, string) (proxy.Certificate, erro
 	return proxy.Certificate{}, nil
 }
 
-func (m *Misnamed) Forget(_ context.Context, hostnames []string) ([]string, error) {
-	return hostnames, nil
-}

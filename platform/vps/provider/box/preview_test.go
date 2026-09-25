@@ -304,70 +304,6 @@ func TestAProductionPromotionClaimsNoPreviewHostnameAtAll(t *testing.T) {
 	}
 }
 
-func TestRemovingAPreviewPointerTakesTheCertificatesBehindItsHostnamesWithIt(t *testing.T) {
-	t.Parallel()
-
-	stood := aMachine()
-	stack := previewStack(t, stood)
-	previewed(t, stack, "pr-7", "api", "web")
-	previewed(t, stack, "pr-9", "api", "web")
-
-	site := edge.SharedPreview(slug, previewBase)
-	want := site.Hosts("pr-7", []string{"api", "web"})
-	slices.Sort(want)
-
-	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
-		t.Fatalf("RemovePointer: %v", err)
-	}
-	if !slices.Equal(stood.forgotten, want) {
-		t.Fatalf("the teardown forgot %v, want %v: the proxy holds one certificate and one private key per hostname it ever terminated, so a teardown that takes the routes and leaves the pairs leaves bytes behind and grows with previews-ever", stood.forgotten, want)
-	}
-	for _, hostname := range site.Hosts("pr-9", []string{"api", "web"}) {
-		if slices.Contains(stood.forgotten, hostname) {
-			t.Errorf("%s was forgotten with another branch's preview, and it is still being served", hostname)
-		}
-	}
-}
-
-func TestAPreviewWhoseGlobalBaseWentMissingStillForgetsTheCertificatesItsClaimsName(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	stood := aMachine()
-	front := edgeOver(stood, fake.NewRecords())
-	if _, err := front.ReconcilePreviewWildcard(ctx, previewSpec()); err != nil {
-		t.Fatalf("ReconcilePreviewWildcard: %v", err)
-	}
-	spec := edge.StackSpec{Version: "test", Class: edge.ClassPreview, Slug: slug}
-	raised, err := front.Reconcile(ctx, spec, edge.StackState{GlobalPreview: previewBase})
-	if err != nil {
-		t.Fatalf("Reconcile: %v", err)
-	}
-	previewed(t, raised, "pr-7", "web")
-
-	want := make([]string, 0, 1)
-	for _, claim := range claimedOn(t, stood) {
-		want = append(want, claim.Hostname)
-	}
-	slices.Sort(want)
-	if len(want) == 0 {
-		t.Fatal("the promotion claimed no hostname, so this teardown has no certificate to leave behind and the assertion below is vacuous")
-	}
-
-	zeroed, err := front.Reconcile(ctx, spec, edge.StackState{})
-	if err != nil {
-		t.Fatalf("Reconcile with no global preview base: %v", err)
-	}
-	if _, err := zeroed.RemovePointer(ctx, "pr-7", edge.DiscardReporter()); err != nil {
-		t.Fatalf("RemovePointer: %v", err)
-	}
-
-	if !slices.Equal(stood.forgotten, want) {
-		t.Errorf("the teardown forgot %v, want %v: the class alone decides whether a pointer holds preview hostnames, and the state's preview base is zeroed for every pointer of the class the moment one deploy stops being served on the shared base. Reading it here leaves the certificate and key of every hostname this pointer still claims sitting in the proxy's data",
-			stood.forgotten, want)
-	}
-}
-
 func callsATeardownMakes(t *testing.T) []string {
 	t.Helper()
 
@@ -420,9 +356,6 @@ func TestRemovingAPointerNothingWasEverPromotedUnderTakesNothingAndRefusesNothin
 	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
 		t.Fatalf("RemovePointer of a preview that is already gone = %v, and teardown is run again on every retry", err)
 	}
-	if len(stood.forgotten) != 0 {
-		t.Errorf("a preview that claimed nothing forgot %v", stood.forgotten)
-	}
 }
 
 func TestRemovingAPreviewLeavesTheCatchAllStandingAndRendersItAsKeptWithAReason(t *testing.T) {
@@ -448,33 +381,6 @@ func TestRemovingAPreviewLeavesTheCatchAllStandingAndRendersItAsKeptWithAReason(
 	kept := front.SharedPreviewRemoval()
 	if kept.Action != edge.PlanKeep || kept.Reason == "" {
 		t.Errorf("the catch-all renders as %+v, want a kept row carrying why it is kept", kept)
-	}
-}
-
-func TestATeardownThatFailedOnTheCertificatesForgetsThemOnTheNextRun(t *testing.T) {
-	t.Parallel()
-
-	stood := aMachine()
-	stack := previewStack(t, stood)
-	previewed(t, stack, "pr-7", "api", "web")
-
-	stood.refuseOn("ForgetCertificates", errors.New("the proxy answered nothing over its admin socket"))
-	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err == nil {
-		t.Fatal("a teardown whose certificate removal failed reported success, and the pairs it left are bytes nothing else will ever take")
-	}
-	stood.allowOn("ForgetCertificates")
-	stood.forgotten = nil
-
-	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
-		t.Fatalf("the second run = %v", err)
-	}
-
-	site := edge.SharedPreview(slug, previewBase)
-	want := site.Hosts("pr-7", []string{"api", "web"})
-	slices.Sort(want)
-	if !slices.Equal(stood.forgotten, want) {
-		t.Errorf("the second run forgot %v, want %v: the first run disclaimed the hostnames before it fell over, so a teardown that reads them off the claims alone can never reach them again",
-			stood.forgotten, want)
 	}
 }
 
@@ -534,20 +440,19 @@ func TestAStackOpenedFromItsOwnStateServesTheSamePreviewSiteItWasReconciledFor(t
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	stood.refuseOn("ForgetCertificates", errors.New("the proxy answered nothing over its admin socket"))
-	if _, err := opened.RemovePointer(ctx, "pr-7", edge.DiscardReporter()); err == nil {
-		t.Fatal("a teardown whose certificate removal failed reported success, so the run below is not the one that has only the site left to read")
-	}
-	stood.allowOn("ForgetCertificates")
-	stood.forgotten = nil
-	if _, err := opened.RemovePointer(ctx, "pr-7", edge.DiscardReporter()); err != nil {
-		t.Fatalf("the second RemovePointer = %v", err)
-	}
+	previewed(t, opened, "pr-9", "web")
 
-	want := edge.ProjectPreview(previewBase).Hosts("pr-7", []string{"web"})
+	var claimed []string
+	for _, claim := range claimedOn(t, stood) {
+		if claim.Pointer == "pr-9" {
+			claimed = append(claimed, claim.Hostname)
+		}
+	}
+	want := edge.ProjectPreview(previewBase).Hosts("pr-9", []string{"web"})
+	slices.Sort(claimed)
 	slices.Sort(want)
-	if !slices.Equal(stood.forgotten, want) {
-		t.Errorf("a stack opened from its own state tore down %v, want %v: the first run disclaimed the hostnames before it fell over, so the second reads them off the preview site alone, and a stack whose site does not survive Open forgets a different project's names and leaves its own behind",
-			stood.forgotten, want)
+	if !slices.Equal(claimed, want) {
+		t.Errorf("a stack opened from its own state claimed %v for pr-9, want %v: a stack whose preview site does not survive Open serves a branch under a different project's names",
+			claimed, want)
 	}
 }

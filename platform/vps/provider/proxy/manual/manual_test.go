@@ -76,7 +76,7 @@ func TestManualRendersNothingForItsProxyWhateverTheBoxAdmits(t *testing.T) {
 	}
 }
 
-func TestManualTouchesNothingToReloadOrForget(t *testing.T) {
+func TestManualTouchesNothingToReload(t *testing.T) {
 	t.Parallel()
 
 	held := &box{}
@@ -84,12 +84,8 @@ func TestManualTouchesNothingToReloadOrForget(t *testing.T) {
 	if err := front.Reload(context.Background()); err != nil {
 		t.Errorf("Reload() = %v, want nothing to do", err)
 	}
-	forgot, err := front.Forget(context.Background(), []string{"shop.example.com"})
-	if err != nil || len(forgot) != 0 {
-		t.Errorf("Forget() = %q, %v; want nothing forgotten", forgot, err)
-	}
 	if len(held.asked) != 0 {
-		t.Errorf("Reload and Forget asked the box %q, want nothing asked", held.asked)
+		t.Errorf("Reload asked the box %q, want nothing asked", held.asked)
 	}
 }
 

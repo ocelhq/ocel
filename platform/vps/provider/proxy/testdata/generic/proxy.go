@@ -22,4 +22,3 @@ func (*Generic[T]) Certificate(context.Context, string) (proxy.Certificate, erro
 	return proxy.Certificate{}, nil
 }
 
-func (*Generic[T]) Forget(context.Context, []string) ([]string, error) { return nil, nil }

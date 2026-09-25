@@ -17,7 +17,3 @@ func (i *Incomplete) Unrendered([]byte, proxy.Permission) string { return "" }
 func (i *Incomplete) Reload(context.Context) error { return nil }
 
 func (i *Incomplete) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
-
-func (i *Incomplete) Certificate(context.Context, string) (proxy.Certificate, error) {
-	return proxy.Certificate{}, nil
-}

@@ -24,4 +24,3 @@ func (Second) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
 
-func (Second) Forget(context.Context, []string) ([]string, error) { return nil, nil }

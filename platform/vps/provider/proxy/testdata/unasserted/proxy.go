@@ -20,6 +20,3 @@ func (u *Unasserted) Certificate(context.Context, string) (proxy.Certificate, er
 	return proxy.Certificate{}, nil
 }
 
-func (u *Unasserted) Forget(_ context.Context, hostnames []string) ([]string, error) {
-	return hostnames, nil
-}

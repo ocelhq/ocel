@@ -22,4 +22,3 @@ func (Valued) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
 
-func (Valued) Forget(context.Context, []string) ([]string, error) { return nil, nil }

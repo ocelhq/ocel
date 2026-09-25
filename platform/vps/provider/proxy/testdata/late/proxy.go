@@ -22,6 +22,3 @@ func (l *Late) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
 
-func (l *Late) Forget(_ context.Context, hostnames []string) ([]string, error) {
-	return hostnames, nil
-}

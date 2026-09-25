@@ -17,7 +17,3 @@ func (s *Scattered) Unrendered([]byte, proxy.Permission) string { return "" }
 func (s *Scattered) Reload(context.Context) error { return nil }
 
 func (s *Scattered) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
-
-func (s *Scattered) Certificate(context.Context, string) (proxy.Certificate, error) {
-	return proxy.Certificate{}, nil
-}
