@@ -10,6 +10,7 @@ import type {
   AppResolution,
   Cell,
   Class,
+  EnvSource,
   MatrixCell,
   MatrixRow,
   Override,
@@ -68,6 +69,7 @@ interface Held {
   set: boolean;
   version: number;
   reference?: Stored["reference"];
+  envSource?: string;
 }
 
 function keyOf(at: Cell & { environment: string }): string {
@@ -81,6 +83,9 @@ function storedOf(stored: readonly Stored[]): Map<string, Held> {
       set: true,
       version: value.version,
       ...(value.reference && { reference: value.reference }),
+      ...(value.environment === "" &&
+        value.envSource &&
+        value.envSource !== "builtin" && { envSource: value.envSource }),
     });
   }
   return out;
@@ -133,21 +138,64 @@ function cellOf(
     version: found?.version ?? 0,
     ...(overrides.length > 0 && { overrides }),
     ...(found?.reference && { reference: found.reference }),
+    ...(found?.envSource && { envSource: found.envSource }),
   };
+}
+
+const credentialGroup = "env source";
+
+function withCredentials(
+  declared: Map<string, Declared>,
+  envSource: EnvSource | undefined,
+): Map<string, Declared> {
+  const out = new Map(declared);
+  for (const key of envSource?.credentials ?? []) {
+    if (out.has(key)) {
+      continue;
+    }
+    out.set(key, {
+      key,
+      class: "secret",
+      required: true,
+      group: credentialGroup,
+      description: "read by ocel alone, never by an app",
+      folders: new Set([""]),
+      scopes: new Set(),
+    });
+  }
+  return out;
+}
+
+function driftOf(declared: Map<string, Declared>, stored: readonly Stored[]): Cell[] {
+  return stored
+    .filter(
+      (value) =>
+        value.environment === "" &&
+        value.envSource !== undefined &&
+        value.envSource !== "builtin" &&
+        !declared.has(value.key),
+    )
+    .map((value) => ({ key: value.key, folder: value.folder }))
+    .sort((a, b) => a.key.localeCompare(b.key) || a.folder.localeCompare(b.folder));
 }
 
 export function matrixOf(
   topology: DeploymentTopology,
   stored: readonly Stored[],
   environments: readonly string[],
+  envSource?: EnvSource,
 ): State["matrix"] {
-  const declared = declaredOf(topology);
+  const declared = withCredentials(declaredOf(topology), envSource);
   const columns = foldersOf(topology, declared);
   const held = storedOf(stored);
+  const drift = driftOf(declared, stored);
+  const drifting = new Set(drift.map((cell) => cell.key));
 
   const keys = new Set<string>(declared.keys());
   for (const value of stored) {
-    keys.add(value.key);
+    if (!drifting.has(value.key)) {
+      keys.add(value.key);
+    }
   }
 
   const rows: MatrixRow[] = [...keys].sort().map((key) => {
@@ -167,8 +215,21 @@ export function matrixOf(
     required: group.required,
     ...(group.description && { description: group.description }),
   }));
+  if (rows.some((row) => row.group === credentialGroup)) {
+    groups.push({
+      key: credentialGroup,
+      required: true,
+      description: `how ocel signs in to ${envSource?.id}`,
+    });
+  }
 
-  return { columns, rows, groups, apps: appsOf(topology) };
+  return {
+    columns,
+    rows,
+    groups,
+    apps: appsOf(topology),
+    ...(drift.length > 0 && { drift }),
+  };
 }
 
 export function stateOf(
@@ -179,6 +240,7 @@ export function stateOf(
   environments: readonly string[],
   can: Ability,
   values: "live" | "unknown" = "live",
+  envSource?: EnvSource,
 ): State {
   return {
     slug,
@@ -187,7 +249,8 @@ export function stateOf(
     values,
     can,
     environments: [...environments],
-    matrix: matrixOf(topology, stored, held === "preview" ? environments : []),
+    matrix: matrixOf(topology, stored, held === "preview" ? environments : [], envSource),
+    ...(envSource && { envSource }),
   };
 }
 

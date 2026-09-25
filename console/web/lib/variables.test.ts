@@ -133,3 +133,49 @@ describe("stateOf", () => {
     ).toMatchObject({ can: { write: false, reveal: false }, values: "unknown" });
   });
 });
+
+describe("an env source", () => {
+  const held = topology([app("web", undefined, [{ key: "API", class: "plain", required: true }])]);
+  const infisical = {
+    id: "infisical:p-1/prod",
+    writable: false,
+    links: { "": "https://infisical.example/root" },
+    credentials: ["INFISICAL_CLIENT_ID"],
+  };
+
+  it("names the source a stored value was read from", () => {
+    const matrix = matrixOf(held, [{ ...stored("API"), envSource: infisical.id }], [], infisical);
+    expect(cellAt(matrix, "API", "")?.envSource).toBe(infisical.id);
+  });
+
+  it("lists what the source holds and nothing declares as drift, not as a row", () => {
+    const matrix = matrixOf(
+      held,
+      [{ ...stored("RETIRED"), envSource: infisical.id }, stored("GONE")],
+      [],
+      infisical,
+    );
+    expect(matrix.drift).toEqual([{ key: "RETIRED", folder: "" }]);
+    expect(matrix.rows.map((row) => row.key)).toEqual(["API", "GONE", "INFISICAL_CLIENT_ID"]);
+  });
+
+  it("offers the credentials it signs in with as secrets in the env source group", () => {
+    const matrix = matrixOf(held, [], [], infisical);
+    expect(matrix.rows.find((row) => row.key === "INFISICAL_CLIENT_ID")).toMatchObject({
+      class: "secret",
+      group: "env source",
+      cells: [{ folder: "", state: "required", set: false }],
+    });
+    expect(matrix.groups).toContainEqual({
+      key: "env source",
+      required: true,
+      description: "how ocel signs in to infisical:p-1/prod",
+    });
+  });
+
+  it("rides on the state the table renders", () => {
+    expect(
+      stateOf("acme", "production", held, [], [], { write: true, reveal: true }, "live", infisical),
+    ).toMatchObject({ envSource: infisical });
+  });
+});

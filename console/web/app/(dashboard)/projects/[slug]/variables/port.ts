@@ -4,6 +4,7 @@ import { VarsError } from "@ui/vars";
 import {
   type Answer,
   copyValues,
+  createValue,
   listVersions,
   otherValues,
   readState,
@@ -26,6 +27,7 @@ export function consolePort(projectId: string, environment: string): VarsPort {
     set: async (at, value, version) => {
       held(await setValue(projectId, environment, at, value, version));
     },
+    create: async (at, value) => held(await createValue(projectId, environment, at, value)),
     remove: async (at, version) => {
       held(await removeValue(projectId, environment, at, version));
     },
