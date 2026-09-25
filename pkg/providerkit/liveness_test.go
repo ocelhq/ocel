@@ -346,6 +346,31 @@ func TestAFrontThatAnswersAtAKnownEndpointIsAskedThereForTheHostname(t *testing.
 	}
 }
 
+func TestAFrontThatAnswersOnlyOnItsOwnMachineIsProbedThereForEveryName(t *testing.T) {
+	t.Parallel()
+
+	book := &dnsBook{}
+	var asked []string
+	probe := &Liveness{
+		System:       book,
+		LoopbackOnly: true,
+		Loopback: func(_ context.Context, hostname string) (edge.Kind, error) {
+			asked = append(asked, hostname)
+			return "box", nil
+		},
+	}
+	kind, err := probe.Serving(context.Background(), "box", "shop.example.com")
+	if err != nil || kind != "box" {
+		t.Fatalf("Serving() = %q, %v, want box", kind, err)
+	}
+	if !slices.Equal(asked, []string{"shop.example.com"}) {
+		t.Errorf("the loopback probe was asked %v, want the public name asked there too", asked)
+	}
+	if heard := book.heard(); len(heard) != 0 {
+		t.Errorf("the probe asked DNS %v, want nothing: the machine is asked for the name directly", heard)
+	}
+}
+
 func TestALoopbackNameIsProbedFromWhereItResolves(t *testing.T) {
 	t.Parallel()
 
