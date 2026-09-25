@@ -132,15 +132,15 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 		return h.unflipped(ctx, rel, cut, fmt.Sprintf("exited %d", flipped.Code), strings.TrimSpace(flipped.Stderr), elevation)
 	}
 	tellDrain(report, flipped.Stdout)
-	var admitted error
-	if shaped.admitting {
-		admitted = h.admittedAfterFlip(ctx, shaped)
+	var reloaded error
+	if shaped.reloading {
+		reloaded = h.reloadedAfterFlip(ctx, shaped)
 	}
-	return h.settle(ctx, rel, cut, admitted, report, elevation)
+	return h.settle(ctx, rel, cut, reloaded, report, elevation)
 }
 
-func (h *Host) admittedAfterFlip(ctx context.Context, shaped composed) error {
-	refused := h.front.Admit(ctx, admission(shaped.is))
+func (h *Host) reloadedAfterFlip(ctx context.Context, shaped composed) error {
+	refused := h.front.Reload(ctx)
 	if refused == nil {
 		return nil
 	}
@@ -154,12 +154,12 @@ func (h *Host) admittedAfterFlip(ctx context.Context, shaped composed) error {
 	return refused
 }
 
-func (h *Host) settle(ctx context.Context, rel Release, cut cutover, admitted error, report providerkit.Reporter, elevation string) error {
+func (h *Host) settle(ctx context.Context, rel Release, cut cutover, reloaded error, report providerkit.Reporter, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	var failed, unstopped []string
-	if admitted != nil {
-		failed = append(failed, fmt.Sprintf("%s was not reloaded onto %s, so it still terminates what it did before: %v", caddy.Container, ProxyConfig, admitted))
+	if reloaded != nil {
+		failed = append(failed, fmt.Sprintf("%s was not reloaded onto %s, so it still terminates what it did before: %v", caddy.Container, ProxyConfig, reloaded))
 	}
 	idle, err := h.unheld(ctx, cut.retiring, elevation)
 	if err != nil {
@@ -379,7 +379,7 @@ type composed struct {
 	prior     routingPair
 	written   tableDigest
 	changed   bool
-	admitting bool
+	reloading bool
 	was, is   RoutingTable
 }
 
@@ -407,19 +407,19 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 		if err != nil {
 			return shaped, err
 		}
-		rendered, err := RenderProxyConfig(standing)
+		rendered, err := RenderProxyConfig(h.front, standing)
 		if err != nil {
 			return shaped, err
 		}
 		if bytes.Equal(before, after) && bytes.Equal(held.config, rendered) {
 			return shaped, nil
 		}
-		admitted, err := RenderProxyConfig(next)
+		admitted, err := RenderProxyConfig(h.front, next)
 		if err != nil {
 			return shaped, err
 		}
 		shaped.was, shaped.is = standing, next
-		shaped.admitting = !bytes.Equal(held.config, admitted)
+		shaped.reloading = !bytes.Equal(held.config, admitted)
 		shaped.written, err = h.writeRouting(ctx, held.digest(), next)
 		shaped.changed = true
 		rewrites++
@@ -434,7 +434,7 @@ func (h *Host) writeRouting(ctx context.Context, expected tableDigest, table Rou
 	if err != nil {
 		return "", err
 	}
-	rendered, err := RenderProxyConfig(table)
+	rendered, err := RenderProxyConfig(h.front, table)
 	if err != nil {
 		return "", err
 	}

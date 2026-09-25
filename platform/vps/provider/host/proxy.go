@@ -125,7 +125,7 @@ var seededRows, seededRendering = seeded(seededTable)
 
 func seeded(table RoutingTable) ([]byte, []byte) {
 	rows, unwritten := WriteRoutingTable(table)
-	rendered, unrendered := RenderProxyConfig(table)
+	rendered, unrendered := RenderProxyConfig(caddy.Builtin{}, table)
 	if err := errors.Join(unwritten, unrendered); err != nil {
 		panic(err)
 	}
@@ -211,20 +211,20 @@ func networkItem() Item {
 }
 
 type boxContainer struct {
-	name      string
-	image     string
-	command   []string
-	config    string
-	binds     []string
-	ports     []string
-	env       []string
-	caps      []string
-	fileCaps  bool
-	files     []string
-	answering string
-	answer    string
-	joins     bool
-	migrates  bool
+	name     string
+	image    string
+	command  []string
+	config   string
+	binds    []string
+	ports    []string
+	env      []string
+	caps     []string
+	fileCaps bool
+	files    []string
+	ready    []string
+	unready  string
+	joins    bool
+	migrates bool
 }
 
 func frontProxy() boxContainer {
@@ -237,14 +237,14 @@ func frontProxy() boxContainer {
 			caddy.PinsDir + ":" + caddy.PinsMount + ":ro",
 			ProxyData + ":" + caddy.DataMount,
 		},
-		ports:     proxyServing(),
-		env:       []string{proxyDataConfigEnv},
-		caps:      proxyCapabilities,
-		fileCaps:  true,
-		files:     []string{ProxyConfig},
-		answering: "test -S " + quoted(caddy.AdminSocket),
-		answer:    "did not answer over its admin socket",
-		migrates:  true,
+		ports:    proxyServing(),
+		env:      []string{proxyDataConfigEnv},
+		caps:     proxyCapabilities,
+		fileCaps: true,
+		files:    []string{ProxyConfig},
+		ready:    caddy.Ready(),
+		unready:  "did not pass `" + strings.Join(caddy.Ready(), " ") + "`",
+		migrates: true,
 	}
 }
 
@@ -377,10 +377,14 @@ func imageHeld(coordinate string, attempts int) string {
 		"done\n"
 }
 
+func (s boxContainer) readiness() []string {
+	return append([]string{"docker", "exec", s.name}, s.ready...)
+}
+
 func (s boxContainer) rising(attempts int) string {
 	name := quoted(s.name)
 	inspect := "docker inspect --type container --format "
-	answering := "docker exec " + name + " " + s.answering + " >/dev/null 2>&1"
+	answering := words(s.readiness()) + " >/dev/null 2>&1"
 	return "at=0\n" +
 		"while :; do\n" +
 		"if [ \"$(" + inspect + quoted("{{.State.Status}}") + " " + name + " 2>/dev/null)\" = running ] && " + answering + "; then exit 0; fi\n" +
@@ -388,7 +392,7 @@ func (s boxContainer) rising(attempts int) string {
 		"[ \"$at\" -lt " + fmt.Sprint(attempts) + " ] || break\n" +
 		"sleep 1\n" +
 		"done\n" +
-		"printf '%s\\n' " + quoted(fmt.Sprintf("%s was created and %s within %ds", s.name, s.answer, attempts)) + " >&2\n" +
+		"printf '%s\\n' " + quoted(fmt.Sprintf("%s was created and %s within %ds", s.name, s.unready, attempts)) + " >&2\n" +
 		inspect + quoted("status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}") +
 		" " + name + " >&2 2>&1 || true\n" +
 		"docker logs --tail 2 " + name + " >&2 2>&1 || true\n" +

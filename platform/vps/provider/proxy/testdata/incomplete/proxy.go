@@ -10,9 +10,11 @@ var _ proxy.Proxy = (*Incomplete)(nil)
 
 func (i *Incomplete) Guarantees() proxy.Guarantees { return i.guarantees }
 
-func (i *Incomplete) Admit(ctx context.Context, admission proxy.Admission) error {
-	return i.admit(ctx, admission)
-}
+func (i *Incomplete) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+
+func (i *Incomplete) Unrendered([]byte) string { return "" }
+
+func (i *Incomplete) Reload(context.Context) error { return nil }
 
 func (i *Incomplete) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
 

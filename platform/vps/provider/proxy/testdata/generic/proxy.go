@@ -10,7 +10,11 @@ var _ proxy.Proxy = (*Generic[int])(nil)
 
 func (*Generic[T]) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
-func (*Generic[T]) Admit(context.Context, proxy.Admission) error { return nil }
+func (*Generic[T]) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+
+func (*Generic[T]) Unrendered([]byte) string { return "" }
+
+func (*Generic[T]) Reload(context.Context) error { return nil }
 
 func (*Generic[T]) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
 

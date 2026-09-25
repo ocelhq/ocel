@@ -18,13 +18,12 @@ func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateR
 		if strings.HasPrefix(req.Hostname, "*.") {
 			return providerkit.Certificate{}, nil
 		}
-		if err := p.host.CertificateTrouble(ctx, req.Hostname); err != nil {
-			if refused(err) {
-				return providerkit.Certificate{}, err
-			}
-			if req.Report != nil {
-				req.Report.Say("could not read CA rate limits for " + req.Hostname + ": " + err.Error())
-			}
+		held, err := p.host.FrontProxy().Certificate(ctx, req.Hostname)
+		if held.Trouble != nil && refused(held.Trouble) {
+			return providerkit.Certificate{}, held.Trouble
+		}
+		if err != nil && req.Report != nil {
+			req.Report.Say("could not read what the proxy holds for " + req.Hostname + ": " + err.Error())
 		}
 		return providerkit.Certificate{ID: certs.ProxyHandle(req.Hostname)}, nil
 	}

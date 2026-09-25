@@ -11,7 +11,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
-	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const KeepWindow = 3
@@ -219,44 +218,12 @@ func sized(count int64) string {
 	return fmt.Sprintf("%.1f %s", value, scale)
 }
 
-type readiness struct {
-	name    string
-	command []string
-	refused func(host, said string) error
-}
-
-func switchboardAnswering() readiness {
-	return readiness{
-		name:    SwitchboardContainer,
-		command: switchboardCommand("upstreams"),
-		refused: func(host, said string) error {
-			return providerkit.Refuse(providerkit.CodeNotReady,
-				"%s on %s answered nothing over its control socket in %s: %s\n"+
-					"Run `ocel bootstrap %s`",
-				SwitchboardContainer, host, switchboard.ControlDir, said, providerkit.ClassProduction)
-		},
-	}
-}
-
-func frontAnswering() readiness {
-	return readiness{
-		name:    caddy.Container,
-		command: []string{"docker", "exec", caddy.Container, "test", "-S", caddy.AdminSocket},
-		refused: func(host, said string) error {
-			return providerkit.Refuse(providerkit.CodeNotReady,
-				"%s on %s has no admin socket at %s: %s\n"+
-					"Run `ocel bootstrap %s`",
-				caddy.Container, host, caddy.AdminSocket, said, providerkit.ClassProduction)
-		},
-	}
-}
-
 func (h *Host) ProxyStanding(ctx context.Context) error {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return err
 	}
-	for _, asked := range []readiness{switchboardAnswering(), frontAnswering()} {
+	for _, asked := range []boxContainer{switchboardStanding(nil), frontProxy()} {
 		if err := h.answers(ctx, asked, elevation); err != nil {
 			return err
 		}
@@ -264,8 +231,8 @@ func (h *Host) ProxyStanding(ctx context.Context) error {
 	return nil
 }
 
-func (h *Host) answers(ctx context.Context, asked readiness, elevation string) error {
-	result, err := h.stream(ctx, words(asked.command), nil, elevation)
+func (h *Host) answers(ctx context.Context, asked boxContainer, elevation string) error {
+	result, err := h.stream(ctx, words(asked.readiness()), nil, elevation)
 	if err != nil {
 		return err
 	}
@@ -275,7 +242,10 @@ func (h *Host) answers(ctx context.Context, asked readiness, elevation string) e
 	if err := h.containerTrouble(ctx, asked.name, elevation); err != nil {
 		return err
 	}
-	return asked.refused(h.named(), spoken(result))
+	return providerkit.Refuse(providerkit.CodeNotReady,
+		"%s on %s %s: %s\n"+
+			"Run `ocel bootstrap %s`",
+		asked.name, h.named(), asked.unready, spoken(result), providerkit.ClassProduction)
 }
 
 const (

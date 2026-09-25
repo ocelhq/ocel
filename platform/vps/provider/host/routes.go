@@ -113,11 +113,11 @@ func Unrouting(routes []AppRoute, dropped func(AppRoute) bool) []AppRoute {
 	return slices.DeleteFunc(slices.Clone(routes), dropped)
 }
 
-func RenderProxyConfig(state RoutingTable) ([]byte, error) {
+func RenderProxyConfig(front proxy.Proxy, state RoutingTable) ([]byte, error) {
 	if err := validTable(state); err != nil {
 		return nil, err
 	}
-	rendered, err := caddy.Render(admission(state))
+	rendered, err := front.Render(admission(state))
 	if err != nil {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid, "%v", err)
 	}

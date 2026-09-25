@@ -97,14 +97,6 @@ func (h *Host) PinnedCertificate(ctx context.Context, path string) ([]byte, erro
 
 func (h *Host) FrontProxy() proxy.Proxy { return h.front }
 
-func (h *Host) CertificateTrouble(ctx context.Context, hostname string) error {
-	trouble, err := h.front.Trouble(ctx, hostname)
-	if err != nil {
-		return err
-	}
-	return trouble
-}
-
 func (h *Host) ForgetCertificates(ctx context.Context, hostnames []string, report providerkit.Reporter) error {
 	removed, err := h.front.Forget(ctx, hostnames)
 	if err != nil || report == nil {
@@ -167,8 +159,4 @@ func (b frontBox) Said(ctx context.Context, command string) (string, error) {
 		return "", err
 	}
 	return b.h.said(ctx, command, elevation), nil
-}
-
-func (b frontBox) Loopback(ctx context.Context, hostname string) ([]byte, error) {
-	return b.h.ServedCertificate(ctx, hostname)
 }

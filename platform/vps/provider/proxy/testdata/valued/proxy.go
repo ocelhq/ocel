@@ -10,7 +10,11 @@ var _ proxy.Proxy = Valued{}
 
 func (Valued) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
-func (Valued) Admit(context.Context, proxy.Admission) error { return nil }
+func (Valued) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+
+func (Valued) Unrendered([]byte) string { return "" }
+
+func (Valued) Reload(context.Context) error { return nil }
 
 func (Valued) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
 

@@ -25,6 +25,7 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -127,7 +128,7 @@ func (b *box) proxying(command, carried string) (session.Result, bool) {
 		if err != nil {
 			return session.Result{Code: 1, Stderr: err.Error()}, true
 		}
-		rendered, err := host.RenderProxyConfig(table)
+		rendered, err := host.RenderProxyConfig(caddy.Builtin{}, table)
 		if err != nil {
 			return session.Result{Code: 1, Stderr: err.Error()}, true
 		}

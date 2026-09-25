@@ -219,7 +219,7 @@ func TestLiveTheFourProxyStatesAreFourInducedConditionsAndFourMessages(t *testin
 			restore: func() {
 				vm.ssh(t, "sudo docker exec "+caddy.Container+" mv "+quote(caddy.AdminSocket+".moved")+" "+quote(caddy.AdminSocket))
 			},
-			wants: []string{"no admin socket at " + caddy.AdminSocket},
+			wants: []string{"`test -S " + caddy.AdminSocket + "`"},
 		},
 		{
 			what:    "the admin socket is there and nothing is listening on it",

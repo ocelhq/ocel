@@ -10,9 +10,11 @@ var _ proxy.Proxy = (*Conforming)(nil)
 
 func (c *Conforming) Guarantees() proxy.Guarantees { return c.guarantees }
 
-func (c *Conforming) Admit(ctx context.Context, admission proxy.Admission) error {
-	return c.admit(ctx, admission)
-}
+func (c *Conforming) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+
+func (c *Conforming) Unrendered([]byte) string { return "" }
+
+func (c *Conforming) Reload(context.Context) error { return nil }
 
 func (c *Conforming) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
 

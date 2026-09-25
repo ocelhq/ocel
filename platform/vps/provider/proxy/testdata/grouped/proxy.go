@@ -14,7 +14,11 @@ var (
 
 func (*Grouped) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
-func (*Grouped) Admit(context.Context, proxy.Admission) error { return nil }
+func (*Grouped) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+
+func (*Grouped) Unrendered([]byte) string { return "" }
+
+func (*Grouped) Reload(context.Context) error { return nil }
 
 func (*Grouped) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
 

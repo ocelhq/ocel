@@ -10,7 +10,11 @@ var _ Proxy = Dotted{}
 
 func (Dotted) Guarantees() Guarantees { return Guarantees{} }
 
-func (Dotted) Admit(context.Context, Admission) error { return nil }
+func (Dotted) Render(Admission) ([]byte, error) { return nil, nil }
+
+func (Dotted) Unrendered([]byte) string { return "" }
+
+func (Dotted) Reload(context.Context) error { return nil }
 
 func (Dotted) Inspect(context.Context) (Standing, error) { return nil, nil }
 

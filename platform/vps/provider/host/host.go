@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -26,7 +27,7 @@ type Host struct {
 	dial   Dial
 	deploy Keys
 	pins   []Pin
-	front  *caddy.Builtin
+	front  proxy.Proxy
 
 	elevating sync.Mutex
 	settled   bool
@@ -59,7 +60,7 @@ type Host struct {
 
 func New(dial Dial, deploy Keys, pins []Pin) *Host {
 	h := &Host{dial: dial, deploy: deploy, pins: pins, tiers: map[providerkit.Class]bool{}}
-	h.front = caddy.New(frontBox{h})
+	h.front = caddy.Builtin{Box: frontBox{h}}
 	return h
 }
 

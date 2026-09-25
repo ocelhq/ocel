@@ -265,7 +265,7 @@ func TestEachContainerTheBoxServesThroughIsRefusedByNameAndByWhatIsWrongWithIt(t
 		"the switchboard answers nothing over its control socket": {host.SwitchboardContainer, "control socket"},
 		"the front proxy is not there at all":                     {caddy.Container, "bootstrap"},
 		"the front proxy exited":                                  {caddy.Container, "exited"},
-		"the front proxy has no admin socket":                     {caddy.Container, "no admin socket at " + caddy.AdminSocket},
+		"the front proxy has no admin socket":                     {caddy.Container, "`test -S " + caddy.AdminSocket + "`"},
 	} {
 		for _, named := range wanted {
 			if !strings.Contains(said[what], named) {

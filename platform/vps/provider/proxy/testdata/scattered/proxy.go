@@ -10,9 +10,11 @@ var _ proxy.Proxy = (*Scattered)(nil)
 
 func (s *Scattered) Guarantees() proxy.Guarantees { return s.guarantees }
 
-func (s *Scattered) Admit(ctx context.Context, admission proxy.Admission) error {
-	return s.admit(ctx, admission)
-}
+func (s *Scattered) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+
+func (s *Scattered) Unrendered([]byte) string { return "" }
+
+func (s *Scattered) Reload(context.Context) error { return nil }
 
 func (s *Scattered) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
 

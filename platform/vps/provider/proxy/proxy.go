@@ -4,12 +4,13 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 )
 
 type Proxy interface {
 	Guarantees() Guarantees
-	Admit(ctx context.Context, admission Admission) error
+	Render(admission Admission) ([]byte, error)
+	Unrendered(config []byte) string
+	Reload(ctx context.Context) error
 	Inspect(ctx context.Context) (Standing, error)
 	Certificate(ctx context.Context, hostname string) (Certificate, error)
 	Forget(ctx context.Context, hostnames []string) ([]string, error)
@@ -39,7 +40,6 @@ type Entry struct {
 type Standing []providerkit.StandingCheck
 
 type Certificate struct {
-	Served  *certs.Leaf
 	Renewal string
 	Trouble error
 }

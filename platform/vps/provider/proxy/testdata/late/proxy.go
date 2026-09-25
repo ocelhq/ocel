@@ -10,9 +10,11 @@ func (l *Late) Guarantees() proxy.Guarantees { return l.guarantees }
 
 var _ proxy.Proxy = (*Late)(nil)
 
-func (l *Late) Admit(ctx context.Context, admission proxy.Admission) error {
-	return l.admit(ctx, admission)
-}
+func (l *Late) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+
+func (l *Late) Unrendered([]byte) string { return "" }
+
+func (l *Late) Reload(context.Context) error { return nil }
 
 func (l *Late) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
 

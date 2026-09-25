@@ -70,9 +70,9 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: "pr-7.preview.example.com", Owner: surface, Pointer: pointed}}
 	state.Pins = []Pin{{Hostname: "*.preview.example.com", Path: at}}
-	rendered, err := RenderProxyConfig(state)
+	rendered, err := RenderProxyConfig(caddy.Builtin{}, state)
 	if err != nil {
-		t.Fatalf("RenderProxyConfig() = %v", err)
+		t.Fatalf("RenderProxyConfig(caddy.Builtin{}, ) = %v", err)
 	}
 
 	if !strings.Contains(string(rendered), caddy.PinCertificate(caddy.PinsMount+"/wildcard")) {
@@ -121,9 +121,9 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 func TestARealProxyAsksACAForEveryHostnameSomethingOnTheBoxClaims(t *testing.T) {
 	state := twoProjects()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	rendered, err := RenderProxyConfig(state)
+	rendered, err := RenderProxyConfig(caddy.Builtin{}, state)
 	if err != nil {
-		t.Fatalf("RenderProxyConfig() = %v", err)
+		t.Fatalf("RenderProxyConfig(caddy.Builtin{}, ) = %v", err)
 	}
 	ask := probingConfig(t, state, issuedByNobody(t, rendered))
 

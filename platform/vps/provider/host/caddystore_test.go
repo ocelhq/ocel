@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -39,12 +40,12 @@ func TestAStoreRouteIsNotAnAppTheProjectsOwnHostnameCouldBeAmbiguousBetween(t *t
 
 	state := storing()
 	state.Routes = append(state.Routes, AppRoute{RouteKey: keyed("api"), Upstream: "shop-api-1:" + providerkit.InjectedPortText})
-	if _, err := RenderProxyConfig(state); err == nil {
+	if _, err := RenderProxyConfig(caddy.Builtin{}, state); err == nil {
 		t.Fatal("two apps under one wide claim rendered, and whichever sorted first would answer for both")
 	}
 
 	state.Routes = state.Routes[:len(state.Routes)-1]
-	if _, err := RenderProxyConfig(state); err != nil {
+	if _, err := RenderProxyConfig(caddy.Builtin{}, state); err != nil {
 		t.Fatalf("one app and a store under a wide claim = %v, want the app to answer it", err)
 	}
 }
