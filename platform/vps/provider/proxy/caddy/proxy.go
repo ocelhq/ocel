@@ -83,7 +83,7 @@ func (b Builtin) Forget(ctx context.Context, hostnames []string) ([]string, erro
 		return nil, nil
 	}
 	for _, hostname := range hostnames {
-		if !subject(hostname) {
+		if !certifiable(hostname) {
 			return nil, providerkit.Refuse(providerkit.CodeInvalid, "%q is not a hostname the proxy holds a certificate for", hostname)
 		}
 	}

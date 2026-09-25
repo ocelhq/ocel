@@ -22,7 +22,8 @@ type box struct {
 	unreached error
 }
 
-func (b *box) Ran(_ context.Context, _, command string) (string, error) {
+func (b *box) Ran(_ context.Context, _ string, argv []string) (string, error) {
+	command := strings.Join(argv, " ")
 	b.ran = append(b.ran, command)
 	if b.answer == nil {
 		return "", nil
@@ -30,8 +31,8 @@ func (b *box) Ran(_ context.Context, _, command string) (string, error) {
 	return b.answer(command)
 }
 
-func (b *box) Said(_ context.Context, command string) (string, error) {
-	b.ran = append(b.ran, command)
+func (b *box) Said(_ context.Context, argv []string) (string, error) {
+	b.ran = append(b.ran, strings.Join(argv, " "))
 	return b.logs, b.unreached
 }
 
@@ -45,7 +46,7 @@ func TestAReloadTakesUpTheConfigOnDiskOverTheAdminSocket(t *testing.T) {
 	if len(held.ran) != 1 {
 		t.Fatalf("Reload() ran %q, want the one reload", held.ran)
 	}
-	for _, wanted := range []string{"'docker' 'exec' '" + caddy.Container + "' 'caddy' 'reload'", "'--config' '" + caddy.ConfigMount + "'", "'--address' 'unix/" + caddy.AdminSocket + "'"} {
+	for _, wanted := range []string{"docker exec " + caddy.Container + " caddy reload", "--config " + caddy.ConfigMount, "--address unix/" + caddy.AdminSocket} {
 		if !strings.Contains(held.ran[0], wanted) {
 			t.Errorf("Reload() ran %q, which carries no %s", held.ran[0], wanted)
 		}
@@ -97,7 +98,7 @@ func TestTheStandingReadsWhetherTheAdminApiListensOnAPortInsideTheProxy(t *testi
 		if len(standing) != 1 || standing[0].Verdict != check.verdict {
 			t.Errorf("Inspect() over %s = %+v, want one %v verdict", what, standing, check.verdict)
 		}
-		if len(held.ran) != 1 || !strings.Contains(held.ran[0], "'docker' 'exec' '"+caddy.Container+"'") || !strings.Contains(held.ran[0], "/proc/net/tcp") {
+		if len(held.ran) != 1 || !strings.HasPrefix(held.ran[0], "docker exec "+caddy.Container+" ") || !strings.Contains(held.ran[0], "/proc/net/tcp") {
 			t.Errorf("Inspect() over %s ran %q, want the proxy's own socket tables read from inside it", what, held.ran)
 		}
 	}
@@ -169,8 +170,8 @@ type shell struct {
 	path string
 }
 
-func (s *shell) Ran(_ context.Context, _, command string) (string, error) {
-	run := exec.Command("/bin/sh", "-c", command)
+func (s *shell) Ran(_ context.Context, _ string, argv []string) (string, error) {
+	run := exec.Command(filepath.Join(s.path, argv[0]), argv[1:]...)
 	run.Env = []string{"PATH=" + s.path}
 	said, err := run.Output()
 	return string(said), err

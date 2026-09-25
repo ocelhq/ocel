@@ -198,13 +198,13 @@ func TestAnUnpinnedHostnameGetsTheProxysOwnHandleAndAsksNothingOfTheBox(t *testi
 		t.Errorf("Certificate() owes records %v/%v, and an http-01 hostname owes no validation record", cert.Written, cert.Owed)
 	}
 	for _, command := range machine.commands() {
-		if strings.Contains(command, "docker logs") || strings.Contains(command, "docker version") {
+		if strings.Contains(command, "'docker' 'logs'") || strings.Contains(command, "docker version") {
 			continue
 		}
 		t.Errorf("minting a handle reached the box with %q: a handle names a slot rather than a certificate that exists, and the one thing the box is asked is what its own proxy was told by the CA", command)
 	}
 	if !slices.ContainsFunc(machine.commands(), func(command string) bool {
-		return strings.Contains(command, "docker logs") && strings.Contains(command, caddy.Container)
+		return strings.Contains(command, "'docker' 'logs'") && strings.Contains(command, caddy.Container)
 	}) {
 		t.Errorf("minting a handle asked the proxy nothing (%v), so a box the CA has already refused for this registered domain names a slot it knows will stay empty and the user is told when the browser tells them", machine.commands())
 	}

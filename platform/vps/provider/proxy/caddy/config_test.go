@@ -217,6 +217,8 @@ func TestWhatTheProxyCouldNotHoldIsRefusedRatherThanRendered(t *testing.T) {
 		"no edge to name":                {Entries: []proxy.Entry{{Hostname: "shop.example.com"}}, Upstream: switchboard},
 		"a wildcard hostname":            admitting(proxy.Entry{Hostname: "*.example.com"}),
 		"an empty hostname":              admitting(proxy.Entry{}),
+		"a hostname that is a path":      admitting(proxy.Entry{Hostname: "shop.example.com/.."}),
+		"a hostname naming a store slot": admitting(proxy.Entry{Hostname: "wildcard_.example.com"}),
 		"a pin outside the pin root":     admitting(proxy.Entry{Hostname: "shop.example.com", Pin: "/etc/shadow"}),
 		"a pin beneath the pin root":     admitting(proxy.Entry{Hostname: "shop.example.com", Pin: caddy.PinsDir + "/nested/shop"}),
 		"the pin root itself":            admitting(proxy.Entry{Hostname: "shop.example.com", Pin: caddy.PinsDir}),
