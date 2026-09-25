@@ -170,6 +170,54 @@
       "monthlyUsage": "0.45"
     },
     {
+      "resource": "project:shop/shared:production/google_service_account:ocel-sync-prod",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/google_service_account:ocel-sched-prod",
+      "status": "STATUS_FREE"
+    },
+    {
+      "resource": "project:shop/shared:production/google_cloud_run_v2_job:ocel-production-envsync",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "CPU, billed a minute or more per execution",
+          "unit": "vCPU-seconds",
+          "monthlyQuantity": "2628000",
+          "unitPrice": "0.000018",
+          "monthlyCost": "47.30",
+          "rateRef": "gcp/run/cpu-always"
+        },
+        {
+          "name": "Memory, billed a minute or more per execution",
+          "unit": "GiB-seconds",
+          "monthlyQuantity": "1314000",
+          "unitPrice": "0.000002",
+          "monthlyCost": "2.63",
+          "rateRef": "gcp/run/memory-always"
+        }
+      ],
+      "monthlyFixed": "49.93",
+      "monthlyUsage": "0.00"
+    },
+    {
+      "resource": "project:shop/shared:production/google_cloud_scheduler_job:ocel-production-envsync",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Job",
+          "unit": "job-months",
+          "monthlyQuantity": "1",
+          "unitPrice": "0",
+          "monthlyCost": "0.00",
+          "rateRef": "gcp/scheduler/job"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.00"
+    },
+    {
       "resource": "project:shop/shared:production/google_secret_manager_secret:ocel-production-pulumi-passphrase",
       "status": "STATUS_PRICED",
       "components": [
@@ -337,12 +385,12 @@
   "scopes": [
     {
       "scope": "project:shop",
-      "monthlyFixed": "68.24",
+      "monthlyFixed": "118.17",
       "monthlyUsage": "7.93"
     },
     {
       "scope": "project:shop/shared:production",
-      "monthlyFixed": "18.31",
+      "monthlyFixed": "68.24",
       "monthlyUsage": "1.68"
     },
     {
@@ -362,13 +410,15 @@
     }
   ],
   "coverage": {
-    "supported": 10,
-    "free": 9,
+    "supported": 12,
+    "free": 11,
     "supportedTypes": [
       "google_artifact_registry_repository",
       "google_certificate_manager_certificate_map",
       "google_certificate_manager_certificate_map_entry",
+      "google_cloud_run_v2_job",
       "google_cloud_run_v2_service",
+      "google_cloud_scheduler_job",
       "google_compute_backend_service",
       "google_compute_global_address",
       "google_compute_global_forwarding_rule",
@@ -389,6 +439,6 @@
     "the free tier Cloud Run and Cloud Storage apply as a billing discount is not applied; a free first tier the catalog publishes is spent once per account across every resource sharing it",
     "the forwarding rule is priced as the project's first five, which share one hourly charge"
   ],
-  "monthlyFixed": "68.24",
+  "monthlyFixed": "118.17",
   "monthlyUsage": "7.93"
 }

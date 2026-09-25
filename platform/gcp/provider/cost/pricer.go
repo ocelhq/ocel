@@ -54,6 +54,8 @@ var (
 
 var table = costkit.Table{
 	"google_cloud_run_v2_service":                      cloudRunService,
+	"google_cloud_run_v2_job":                          cloudRunJob,
+	"google_cloud_scheduler_job":                       schedulerJob,
 	"google_firestore_database":                        firestoreDatabase,
 	"google_storage_bucket":                            storageBucket,
 	"google_kms_key_ring":                              free,
@@ -120,6 +122,18 @@ func cloudRunService(r *costkit.Subject) {
 	if r.String("ingress") == ingressEverywhere {
 		r.Add(costkit.Component{Name: "Data transfer out to internet", Unit: "GiB", Rate: "gcp/network/premium-egress", Quantity: r.Usage(usageDataOut, egressBand), UsageBased: true})
 	}
+}
+
+func cloudRunJob(r *costkit.Subject) {
+	seconds := r.Number("executions_per_hour").Mul(costkit.MonthlyHours).Mul(r.Number("billed_seconds_per_execution"))
+	cpu := r.Number("template.template.containers.0.resources.limits.cpu")
+	memoryGiB := quantityMiB(r.String("template.template.containers.0.resources.limits.memory")).Div(decimal.NewFromInt(mebibytesPerGiB))
+	r.Add(costkit.Component{Name: "CPU, billed a minute or more per execution", Unit: "vCPU-seconds", Rate: "gcp/run/cpu-always", Quantity: seconds.Mul(cpu)})
+	r.Add(costkit.Component{Name: "Memory, billed a minute or more per execution", Unit: "GiB-seconds", Rate: "gcp/run/memory-always", Quantity: seconds.Mul(memoryGiB)})
+}
+
+func schedulerJob(r *costkit.Subject) {
+	r.Add(costkit.Component{Name: "Job", Unit: "job-months", Rate: "gcp/scheduler/job", Quantity: decimal.NewFromInt(1)})
 }
 
 func quantityMiB(limit string) decimal.Decimal {

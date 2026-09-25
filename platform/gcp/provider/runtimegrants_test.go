@@ -95,10 +95,14 @@ func (s *iamServer) rest(t *testing.T) http.HandlerFunc {
 
 func (s *iamServer) open(t *testing.T) *clients {
 	t.Helper()
+	return s.serve(t, s.rest(t))
+}
+
+func (s *iamServer) serve(t *testing.T, rest http.HandlerFunc) *clients {
+	t.Helper()
 	grpcServer := grpc.NewServer()
 	kmspb.RegisterKeyManagementServiceServer(grpcServer, s)
 	iampb.RegisterIAMPolicyServer(grpcServer, s)
-	rest := s.rest(t)
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.ProtoMajor == 2 && strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 			grpcServer.ServeHTTP(w, r)

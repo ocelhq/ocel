@@ -70,7 +70,7 @@ func (g bootstrapGate) stood(ctx context.Context) (bootstrapper, error) {
 	if err != nil {
 		return bootstrapper{}, err
 	}
-	return bootstrapper{clients: held, fronts: g.p.Edges()}, nil
+	return bootstrapper{clients: held, fronts: g.p.Edges(), images: g.p}, nil
 }
 
 func (g bootstrapGate) Describe(ctx context.Context, class providerkit.Class) (providerkit.Bootstrap, error) {
@@ -116,6 +116,7 @@ func (g bootstrapGate) Remove(ctx context.Context, class providerkit.Class, repo
 type bootstrapper struct {
 	clients *clients
 	fronts  providerkit.EdgeRegistry
+	images  imageStore
 }
 
 func (b bootstrapper) Describe(ctx context.Context, class providerkit.Class) (providerkit.Bootstrap, error) {
@@ -321,6 +322,10 @@ func (b bootstrapper) make(ctx context.Context, read survey, held item) error {
 		return b.makeRepository(ctx, held.Name)
 	case KindServiceAccount:
 		return b.makeAccount(ctx, read, held.Name)
+	case KindJob:
+		return b.makeJob(ctx, read.Class, held.Name)
+	case KindSchedule:
+		return b.makeSchedule(ctx, read.Class, held.Name)
 	default:
 		return providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing stands up a %s", held.Kind)
 	}
@@ -526,11 +531,12 @@ func (b bootstrapper) makeAccount(ctx context.Context, read survey, name string)
 	if err != nil {
 		return err
 	}
+	role := b.roleOf(read.Class, name)
 	_, err = attempted(ctx, service.Projects.ServiceAccounts.Create("projects/"+b.clients.project, &iam.CreateServiceAccountRequest{
 		AccountId: name,
 		ServiceAccount: &iam.ServiceAccount{
-			DisplayName: "ocel " + string(read.Class) + " apps",
-			Description: "the identity every app ocel deploys in the " + string(read.Class) + " class runs as",
+			DisplayName: role.display,
+			Description: role.description,
 		},
 	}).Context(ctx).Do)
 	if err != nil && !taken(err) {
@@ -539,7 +545,10 @@ func (b bootstrapper) makeAccount(ctx context.Context, read survey, name string)
 	if err := b.grantRunAs(ctx, name); err != nil {
 		return err
 	}
-	return b.grantReads(ctx, read.Class)
+	if role.grant == nil {
+		return nil
+	}
+	return role.grant(b, ctx, read.Class, true)
 }
 
 func (b bootstrapper) grantRunAs(ctx context.Context, name string) error {
@@ -577,8 +586,10 @@ func (b bootstrapper) grantRunAs(ctx context.Context, name string) error {
 }
 
 func (b bootstrapper) takeAccount(ctx context.Context, class providerkit.Class, name string) error {
-	if err := b.forgetReads(ctx, class); err != nil {
-		return err
+	if role := b.roleOf(class, name); role.grant != nil {
+		if err := role.grant(b, ctx, class, false); err != nil {
+			return err
+		}
 	}
 	service, err := b.clients.Accounts()
 	if err != nil {
@@ -797,35 +808,31 @@ func (b bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 	return providerkit.Plan{Groups: providerkit.Vendored(Vendor, []providerkit.ChangeGroup{stack, params})}, nil
 }
 
+var removalOrder = []Kind{
+	KindSecret, KindSchedule, KindJob, KindKey, KindKeyRing, KindDatabase, KindServiceAccount, KindRepository, KindBucket,
+}
+
 func removals(read survey) []removal {
 	items := bootstrapItems(read.Names, read.Class, read.Emulated)
-	byKind := map[Kind]item{}
-	buckets := map[string]item{}
+	slices.SortStableFunc(items, func(a, b item) int {
+		return slices.Index(removalOrder, a.Kind) - slices.Index(removalOrder, b.Kind)
+	})
+	stamped := read.Names.Bucket(read.Class)
+	slices.SortStableFunc(items, func(a, b item) int {
+		return boolRank(a.Name == stamped && a.Kind == KindBucket) - boolRank(b.Name == stamped && b.Kind == KindBucket)
+	})
+	out := make([]removal, 0, len(items))
 	for _, item := range items {
-		byKind[item.Kind] = item
-		if item.Kind == KindBucket {
-			buckets[item.Name] = item
-		}
-	}
-	ordered := []item{
-		byKind[KindSecret],
-		byKind[KindKey],
-		byKind[KindKeyRing],
-		byKind[KindDatabase],
-		byKind[KindServiceAccount],
-		byKind[KindRepository],
-		buckets[read.Names.StateBucket(read.Class)],
-		buckets[read.Names.Bucket(read.Class)],
-	}
-
-	out := make([]removal, 0, len(ordered))
-	for _, item := range ordered {
-		if item.Kind == "" {
-			continue
-		}
 		out = append(out, removing(read, item))
 	}
 	return out
+}
+
+func boolRank(last bool) int {
+	if last {
+		return 1
+	}
+	return 0
 }
 
 func removing(read survey, held item) removal {
@@ -908,6 +915,10 @@ func (b bootstrapper) take(ctx context.Context, read survey, held item) error {
 		return b.takeRepository(ctx, held.Name)
 	case KindServiceAccount:
 		return b.takeAccount(ctx, read.Class, held.Name)
+	case KindJob:
+		return b.takeJob(ctx, held.Name)
+	case KindSchedule:
+		return b.takeSchedule(ctx, held.Name)
 	default:
 		return providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing takes down a %s", held.Kind)
 	}

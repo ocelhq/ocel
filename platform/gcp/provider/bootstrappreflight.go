@@ -50,8 +50,20 @@ var bootstrapPermissions = []string{
 	"iam.serviceAccounts.delete",
 	"iam.serviceAccounts.getIamPolicy",
 	"iam.serviceAccounts.setIamPolicy",
+	"iam.serviceAccounts.actAs",
 	"resourcemanager.projects.getIamPolicy",
 	"resourcemanager.projects.setIamPolicy",
+	"artifactregistry.repositories.uploadArtifacts",
+	"run.jobs.create",
+	"run.jobs.get",
+	"run.jobs.update",
+	"run.jobs.delete",
+	"run.jobs.getIamPolicy",
+	"run.jobs.setIamPolicy",
+	"cloudscheduler.jobs.create",
+	"cloudscheduler.jobs.get",
+	"cloudscheduler.jobs.update",
+	"cloudscheduler.jobs.delete",
 }
 
 var bootstrapRoles = []string{
@@ -62,6 +74,7 @@ var bootstrapRoles = []string{
 	"roles/artifactregistry.admin",
 	"roles/iam.serviceAccountAdmin",
 	"roles/resourcemanager.projectIamAdmin",
+	"roles/cloudscheduler.admin",
 }
 
 var deployRoles = []string{
@@ -106,9 +119,9 @@ func permissionsFor(features []string) []string {
 
 func rolesCovering(features []string) []string {
 	if !slices.Contains(features, albFeature) {
-		return slices.Clone(bootstrapRoles)
+		return rolesFor(providerkit.TierBootstrap)
 	}
-	return slices.Concat(bootstrapRoles, alb.Roles())
+	return slices.Concat(rolesFor(providerkit.TierBootstrap), alb.Roles())
 }
 
 func (b bootstrapper) servicesOn(ctx context.Context, features []string) error {

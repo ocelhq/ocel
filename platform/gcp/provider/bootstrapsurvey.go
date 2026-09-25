@@ -183,6 +183,10 @@ func (b bootstrapper) stands(ctx context.Context, class providerkit.Class, held 
 		return b.repositoryStands(ctx, held.Name)
 	case KindServiceAccount:
 		return b.accountStands(ctx, class, held.Name)
+	case KindJob:
+		return b.jobStands(ctx, class, held.Name)
+	case KindSchedule:
+		return b.scheduleStands(ctx, class, held.Name)
 	}
 	return standing{}, providerkit.Refuse(providerkit.CodeInvalid, "gcp: nothing surveys a %s", held.Kind)
 }
@@ -378,12 +382,16 @@ func (b bootstrapper) accountStands(ctx context.Context, class providerkit.Class
 	if !granted(policy, memberOf(member)) {
 		return standing{held: true, mends: reasonUngranted}, nil
 	}
-	reads, err := b.readsHeld(ctx, class)
+	role := b.roleOf(class, name)
+	if role.held == nil {
+		return standing{held: true}, nil
+	}
+	grants, err := role.held(b, ctx, class)
 	if err != nil {
 		return standing{}, err
 	}
-	if !reads {
-		return standing{held: true, mends: reasonUnread}, nil
+	if !grants {
+		return standing{held: true, mends: role.unheld}, nil
 	}
 	return standing{held: true}, nil
 }

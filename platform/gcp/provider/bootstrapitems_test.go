@@ -1,6 +1,7 @@
 package gcp
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -52,9 +53,10 @@ func TestTheRuntimeAccountStandsWhereverTheBootstrapDoes(t *testing.T) {
 	names := Names{namespace: "ocel", project: "acme-prod"}
 
 	for _, emulated := range []bool{false, true} {
-		if got := kindsOf(bootstrapItems(names, class, emulated))[KindServiceAccount]; got != names.RuntimeAccount(class) {
-			t.Errorf("a bootstrap with emulated=%t names %q as its runtime account, want %q: an app has to run as something wherever it runs",
-				emulated, got, names.RuntimeAccount(class))
+		stood := idsOf(bootstrapItems(names, class, emulated))
+		if runtime := (item{Kind: KindServiceAccount, Name: names.RuntimeAccount(class)}).ID(); !slices.Contains(stood, runtime) {
+			t.Errorf("a bootstrap with emulated=%t stands %v, want %s among them: an app has to run as something wherever it runs",
+				emulated, stood, runtime)
 		}
 	}
 }

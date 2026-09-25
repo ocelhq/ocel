@@ -552,6 +552,24 @@
       }
     },
     {
+      "id": "gcp/scheduler/job",
+      "region": "",
+      "unit": "job-months",
+      "allowance": "account",
+      "tiers": [
+        {
+          "start": "0",
+          "price": "0"
+        },
+        {
+          "start": "3",
+          "price": "0.10"
+        }
+      ],
+      "source": "https://cloud.google.com/scheduler/pricing",
+      "verified": "2026-09-25"
+    },
+    {
       "id": "gcp/kms/key-version",
       "region": "",
       "unit": "version-months",

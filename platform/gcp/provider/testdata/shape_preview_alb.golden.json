@@ -111,6 +111,63 @@
       }
     },
     {
+      "id": "project:shop/shared:preview/google_service_account:ocel-sync-prev",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_service_account",
+      "name": "ocel-sync-prev",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/google_service_account:ocel-sched-prev",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_service_account",
+      "name": "ocel-sched-prev",
+      "region": "europe-west1",
+      "properties": {}
+    },
+    {
+      "id": "project:shop/shared:preview/google_cloud_run_v2_job:ocel-preview-envsync",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_cloud_run_v2_job",
+      "name": "ocel-preview-envsync",
+      "region": "europe-west1",
+      "properties": {
+        "billed_seconds_per_execution": 60,
+        "executions_per_hour": 60,
+        "location": "europe-west1",
+        "template": {
+          "template": {
+            "containers": [
+              {
+                "resources": {
+                  "limits": {
+                    "cpu": "1",
+                    "memory": "512Mi"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": "project:shop/shared:preview/google_cloud_scheduler_job:ocel-preview-envsync",
+      "scope": "project:shop/shared:preview",
+      "vendor": "gcp",
+      "type": "google_cloud_scheduler_job",
+      "name": "ocel-preview-envsync",
+      "region": "europe-west1",
+      "properties": {
+        "region": "europe-west1",
+        "schedule": "* * * * *"
+      }
+    },
+    {
       "id": "project:shop/shared:preview/google_secret_manager_secret:ocel-preview-pulumi-passphrase",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",

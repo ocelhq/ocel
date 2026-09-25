@@ -18,6 +18,8 @@ const (
 	tfServiceAccount      = "google_service_account"
 	tfArtifactRepository  = "google_artifact_registry_repository"
 	tfSecretManagerSecret = "google_secret_manager_secret"
+	tfCloudRunJob         = "google_cloud_run_v2_job"
+	tfSchedulerJob        = "google_cloud_scheduler_job"
 
 	revisionMinInstancesContainer  = 1
 	revisionMinInstancesServerless = 0
@@ -31,6 +33,8 @@ var itemTypes = map[Kind]string{
 	KindServiceAccount: tfServiceAccount,
 	KindRepository:     tfArtifactRepository,
 	KindSecret:         tfSecretManagerSecret,
+	KindJob:            tfCloudRunJob,
+	KindSchedule:       tfSchedulerJob,
 }
 
 func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*costv1.ResourceSet, error) {
@@ -102,6 +106,19 @@ func itemProperties(item item, region string) map[string]any {
 		return map[string]any{"location": region, "format": "DOCKER"}
 	case KindSecret:
 		return map[string]any{"replication": map[string]any{"auto": map[string]any{}}}
+	case KindJob:
+		return map[string]any{
+			"location":                     region,
+			"executions_per_hour":          envSyncExecutionsPerHour,
+			"billed_seconds_per_execution": envSyncBilledSeconds,
+			"template": map[string]any{"template": map[string]any{
+				"containers": []any{map[string]any{
+					"resources": map[string]any{"limits": map[string]any{"cpu": envSyncCPU, "memory": envSyncMemory}},
+				}},
+			}},
+		}
+	case KindSchedule:
+		return map[string]any{"region": region, "schedule": envSyncSchedule}
 	}
 	return map[string]any{}
 }

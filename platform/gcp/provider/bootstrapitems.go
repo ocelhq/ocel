@@ -18,6 +18,8 @@ const (
 	KindSecret         Kind = "secretmanager:secret"
 	KindRepository     Kind = "artifactregistry:repository"
 	KindServiceAccount Kind = "iam:serviceaccount"
+	KindJob            Kind = "run:job"
+	KindSchedule       Kind = "cloudscheduler:job"
 )
 
 const StampObject = "ocel/bootstrap.json"
@@ -30,6 +32,7 @@ var BootstrapAPIs = []string{
 	"artifactregistry.googleapis.com",
 	"iam.googleapis.com",
 	"run.googleapis.com",
+	"cloudscheduler.googleapis.com",
 }
 
 type item struct {
@@ -43,7 +46,9 @@ type item struct {
 
 func (i item) ID() string { return string(i.Kind) + "/" + i.Name }
 
-func provisioned(kind Kind, emulated bool) bool { return !emulated || kind != KindRepository }
+func provisioned(kind Kind, emulated bool) bool {
+	return !emulated || (kind != KindRepository && kind != KindJob)
+}
 
 func stackItems(names Names, class providerkit.Class, emulated bool) []item {
 	items := []item{
@@ -74,6 +79,22 @@ func stackItems(names Names, class providerkit.Class, emulated bool) []item {
 		{
 			Kind: KindRepository, Name: names.Repository(class),
 			Note: "the images this class runs, and an untagged image lives at least a week",
+		},
+		{
+			Kind: KindServiceAccount, Name: names.EnvSyncAccount(class),
+			Note: "the identity the env syncer runs as: it reads and writes this project's records and seals under the class key, and nothing else",
+		},
+		{
+			Kind: KindServiceAccount, Name: names.EnvSyncInvoker(class),
+			Note: "the identity Cloud Scheduler starts the env syncer as, and it may start nothing else",
+		},
+		{
+			Kind: KindJob, Name: names.EnvSyncJob(class),
+			Note: "the env syncer: one poll of every standing env source this class registers, then it exits",
+		},
+		{
+			Kind: KindSchedule, Name: names.EnvSyncJob(class),
+			Note: "starts the env syncer once a minute, with no retry because the next minute is the retry",
 		},
 	}
 	return slices.DeleteFunc(items, func(held item) bool { return !provisioned(held.Kind, emulated) })

@@ -109,6 +109,39 @@ func serviceHash(parts ...string) string {
 	return hex.EncodeToString(sum[:])[:serviceHashLen]
 }
 
+const (
+	envSyncAccountStem = "-sync-"
+	envSyncInvokerStem = "-sched-"
+	envSyncJobSuffix   = "-envsync"
+)
+
+func classAbbreviated(class providerkit.Class) string {
+	if class == providerkit.ClassPreview {
+		return "prev"
+	}
+	return "prod"
+}
+
+func (n Names) EnvSyncAccount(class providerkit.Class) string {
+	return string(n.namespace) + envSyncAccountStem + classAbbreviated(class)
+}
+
+func (n Names) EnvSyncAccountEmail(class providerkit.Class) string {
+	return n.EnvSyncAccount(class) + "@" + n.project + accountDomain
+}
+
+func (n Names) EnvSyncInvoker(class providerkit.Class) string {
+	return string(n.namespace) + envSyncInvokerStem + classAbbreviated(class)
+}
+
+func (n Names) EnvSyncInvokerEmail(class providerkit.Class) string {
+	return n.EnvSyncInvoker(class) + "@" + n.project + accountDomain
+}
+
+func (n Names) EnvSyncJob(class providerkit.Class) string {
+	return string(n.namespace) + "-" + string(class) + envSyncJobSuffix
+}
+
 const connectorSuffix = "-connector"
 
 func (n Names) Connector() string { return string(n.namespace) + connectorSuffix }
