@@ -119,8 +119,25 @@ func probe(argv []string, out, errs io.Writer) int {
 	}
 	defer answer.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(answer.Body, edgeAnswerCap))
+	if heard := answer.Header.Get(switchboard.HeardHeader); heard != "" {
+		if err := hearing(heard, hostname); err != nil {
+			fmt.Fprintf(errs, "%s reaches %s, and %v\n", hostname, switchboard.Name, err)
+			return exitNotServingYet
+		}
+	}
 	fmt.Fprintln(out, strings.TrimSpace(answer.Header.Get(edge.HeaderEdge)))
 	return 0
+}
+
+func hearing(heard, hostname string) error {
+	proto, host, _ := strings.Cut(heard, " ")
+	if proto != "https" {
+		return fmt.Errorf("its apps would hear it over %s: set X-Forwarded-Proto to https where your proxy forwards it", proto)
+	}
+	if !strings.EqualFold(host, hostname) {
+		return fmt.Errorf("its apps would hear it as %s: keep the Host header where your proxy forwards it", host)
+	}
+	return nil
 }
 
 func serves(chain []*x509.Certificate, hostname string, now time.Time) error {

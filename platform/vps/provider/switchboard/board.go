@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"net/netip"
 	"os"
 	"slices"
 	"strings"
@@ -33,11 +34,16 @@ const (
 
 var forwardedKept = []string{"X-Forwarded-Host", "X-Forwarded-Proto"}
 
+const HeardHeader = "X-Ocel-Heard"
+
+const OwnNetwork = "network"
+
 type Board struct {
 	table     atomic.Pointer[Table]
 	loading   sync.Mutex
 	retiring  sync.Mutex
 	draining  map[string]int
+	relayed   []netip.Prefix
 	ledger    ledger
 	connector string
 	tcp       *http.Transport
@@ -45,8 +51,8 @@ type Board struct {
 	server    *http.Server
 }
 
-func New(table *Table) *Board {
-	board := &Board{connector: ConnectorSocket, draining: map[string]int{}}
+func New(table *Table, relayed ...netip.Prefix) *Board {
+	board := &Board{connector: ConnectorSocket, draining: map[string]int{}, relayed: slices.Clone(relayed)}
 	board.table.Store(table)
 	dialer := &net.Dialer{Timeout: dialTimeout, KeepAlive: dialKeepAlive}
 	board.tcp = upstreamTransport(func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -136,9 +142,15 @@ func (b *Board) Load(path string) error {
 }
 
 func (b *Board) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	named := func(header http.Header) {
+		header.Set(edgeHeader, EdgeName)
+		if r.URL.Path == edge.LivenessProbePath {
+			header.Set(HeardHeader, b.heard(r))
+		}
+	}
 	forward, ctx, hangUp, ok := b.forwarding(r)
 	if !ok {
-		w.Header().Set(edgeHeader, EdgeName)
+		named(w.Header())
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
@@ -164,11 +176,11 @@ func (b *Board) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Transport:     transport,
 		FlushInterval: -1,
 		ModifyResponse: func(answer *http.Response) error {
-			answer.Header.Set(edgeHeader, EdgeName)
+			named(answer.Header)
 			return nil
 		},
 		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
-			w.Header().Set(edgeHeader, EdgeName)
+			named(w.Header())
 			w.WriteHeader(http.StatusBadGateway)
 		},
 	}
@@ -198,15 +210,46 @@ func (b *Board) cutUnrouted(address string) {
 	}
 }
 
+type hearing int
+
+const (
+	hearsNothing hearing = iota
+	hearsScheme
+	hearsClient
+)
+
+func (b *Board) hears(r *http.Request) hearing {
+	if r.Context().Value(frontKey{}) != nil {
+		return hearsClient
+	}
+	peer, err := netip.ParseAddrPort(r.RemoteAddr)
+	if err == nil && slices.ContainsFunc(b.relayed, func(prefix netip.Prefix) bool { return prefix.Contains(peer.Addr().Unmap()) }) {
+		return hearsScheme
+	}
+	return hearsNothing
+}
+
+func (b *Board) heard(r *http.Request) string {
+	proto := "http"
+	if said := r.Header.Get("X-Forwarded-Proto"); said != "" && b.hears(r) != hearsNothing {
+		proto = said
+	}
+	return proto + " " + r.Host
+}
+
 func (b *Board) forwarded(out *httputil.ProxyRequest) {
-	if out.In.Context().Value(frontKey{}) == nil {
+	switch b.hears(out.In) {
+	case hearsNothing:
 		out.SetXForwarded()
 		return
-	}
-	out.Out.Header.Set("X-Forwarded-Host", out.In.Host)
-	out.Out.Header.Set("X-Forwarded-Proto", "http")
-	if prior := out.In.Header.Values("X-Forwarded-For"); len(prior) > 0 {
-		out.Out.Header["X-Forwarded-For"] = slices.Clone(prior)
+	case hearsScheme:
+		out.SetXForwarded()
+	case hearsClient:
+		out.Out.Header.Set("X-Forwarded-Host", out.In.Host)
+		out.Out.Header.Set("X-Forwarded-Proto", "http")
+		if prior := out.In.Header.Values("X-Forwarded-For"); len(prior) > 0 {
+			out.Out.Header["X-Forwarded-For"] = slices.Clone(prior)
+		}
 	}
 	for _, kept := range forwardedKept {
 		if said := out.In.Header.Get(kept); said != "" {

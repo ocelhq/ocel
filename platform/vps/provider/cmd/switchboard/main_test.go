@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"slices"
@@ -281,13 +282,68 @@ func TestServeReplacesASocketNothingAnswersOn(t *testing.T) {
 	}
 }
 
-func TestServeRefusesATableOrAFrontSocketItCannotTake(t *testing.T) {
+func TestServeHearsARelayingPeerOnTheSchemeAndNeverOnTheClient(t *testing.T) {
+	seen := make(chan http.Header, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		seen <- r.Header.Clone()
+	}))
+	t.Cleanup(upstream.Close)
+	stood := served(t, tableFile(t, map[string]string{"shop.example.com": strings.TrimPrefix(upstream.URL, "http://")}), "--relay", "127.0.0.1")
+
+	request, err := http.NewRequest(http.MethodGet, "http://"+stood.data+"/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = "shop.example.com"
+	request.Header.Set("X-Forwarded-Proto", "https")
+	request.Header.Set("X-Forwarded-For", "6.6.6.6")
+	said, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = said.Body.Close()
+	heard := <-seen
+	if proto, client := heard.Get("X-Forwarded-Proto"), heard.Get("X-Forwarded-For"); proto != "https" || client != "127.0.0.1" {
+		t.Errorf("the app heard proto %q for client %q, want https for 127.0.0.1: a relaying peer is heard on the scheme and never on the client", proto, client)
+	}
+}
+
+func TestTheOwnNetworkIsThePrefixOfTheInterfaceTheDefaultRouteLeavesBy(t *testing.T) {
+	routes := "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n" +
+		"eth1\t00001BAC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0\n" +
+		"eth0\t00000000\t010012AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n" +
+		"eth0\t000012AC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0\n"
+	addresses := func(name string) ([]net.Addr, error) {
+		if name != "eth0" {
+			return nil, fmt.Errorf("asked for %s", name)
+		}
+		return []net.Addr{&net.IPNet{IP: net.ParseIP("172.18.0.3"), Mask: net.CIDRMask(16, 32)}}, nil
+	}
+	got, err := ownNetwork(strings.NewReader(routes), addresses)
+	if err != nil {
+		t.Fatalf("ownNetwork() = %v", err)
+	}
+	if want := []netip.Prefix{netip.MustParsePrefix("172.18.0.0/16")}; !slices.Equal(got, want) {
+		t.Errorf("ownNetwork() = %v, want %v: the network the switchboard was started on, where its gateway and every proxy joined to it sit", got, want)
+	}
+}
+
+func TestTheOwnNetworkIsRefusedWhereNoDefaultRouteLeaves(t *testing.T) {
+	routes := "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n" +
+		"eth0\t000012AC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0\n"
+	if _, err := ownNetwork(strings.NewReader(routes), func(string) ([]net.Addr, error) { return nil, nil }); err == nil {
+		t.Error("ownNetwork() over a table with no default route = nil, want a refusal: relaying from nowhere would hear nobody's scheme")
+	}
+}
+
+func TestServeRefusesATableAFrontSocketOrARelayItCannotTake(t *testing.T) {
 	controlAt(t)
 	for what, argv := range map[string][]string{
 		"a table that is not there":     {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", filepath.Join(t.TempDir(), "routing.json")},
 		"a table it cannot render":      {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", documentAt(t, []byte(`{"grace":"soon"}`))},
 		"a front socket it cannot open": {"serve", "--listen", freeAddress(t), "--front", filepath.Join(t.TempDir(), "absent", "front.sock"), "--table", tableFile(t, nil)},
 		"no front socket":               {"serve", "--listen", freeAddress(t), "--table", tableFile(t, nil)},
+		"a relay that is no prefix":     {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", tableFile(t, nil), "--relay", "ocel-proxy"},
 		"no listen address":             {"serve", "--front", frontAt(t), "--table", tableFile(t, nil)},
 		"no table":                      {"serve", "--listen", freeAddress(t), "--front", frontAt(t)},
 	} {

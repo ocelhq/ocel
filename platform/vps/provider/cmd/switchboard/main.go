@@ -95,7 +95,7 @@ func run(ctx context.Context, argv []string, out, errs io.Writer) int {
 }
 
 func usage(errs io.Writer) int {
-	fmt.Fprintln(errs, "usage: "+switchboard.Name+" serve --listen <host:port> --front <socket> --table <path> |")
+	fmt.Fprintln(errs, "usage: "+switchboard.Name+" serve --listen <host:port> --front <socket> --table <path> [--relay <addr|cidr|"+switchboard.OwnNetwork+">]... |")
 	fmt.Fprintln(errs, "       load <table> |")
 	fmt.Fprintln(errs, "       gate --deploy-timeout <seconds> <host:port/path>... |")
 	fmt.Fprintln(errs, "       flip [--drain-timeout <seconds> --retire <host:port>...] <table> |")
@@ -128,8 +128,14 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	listen := flags.String("listen", "", "")
 	fronting := flags.String("front", "", "")
 	path := flags.String("table", "", "")
+	var relaying repeated
+	flags.Var(&relaying, "relay", "")
 	if err := flags.Parse(argv); err != nil || *listen == "" || *fronting == "" || *path == "" || flags.NArg() != 0 {
 		return usage(errs)
+	}
+	relayed, err := relayOf(relaying)
+	if err != nil {
+		return refuse(errs, err)
 	}
 	document, err := os.ReadFile(*path)
 	if err != nil {
@@ -139,7 +145,7 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	if err != nil {
 		return refuse(errs, fmt.Errorf("%s: %w", *path, err))
 	}
-	board := switchboard.New(table)
+	board := switchboard.New(table, relayed...)
 	controlling, lock, err := controlListener(control)
 	if err != nil {
 		return refuse(errs, err)
