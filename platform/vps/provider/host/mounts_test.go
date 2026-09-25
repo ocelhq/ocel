@@ -13,9 +13,10 @@ import (
 )
 
 type engineReport struct {
-	facts  string
-	inside map[string]string
-	stats  map[string]string
+	facts   string
+	inside  map[string]string
+	stats   map[string]string
+	started int
 }
 
 func probedAs(t *testing.T, k kernel, container boxContainer, engine engineReport) string {
@@ -26,6 +27,9 @@ func probedAs(t *testing.T, k kernel, container boxContainer, engine engineRepor
 		t.Fatal(err)
 	}
 	inside := "exit 1"
+	if engine.started != 0 {
+		inside = fmt.Sprintf("exit %d", engine.started)
+	}
 	if engine.inside != nil {
 		inside = "shift 2\nfor path; do\ncase \"$path\" in\n"
 		for path, held := range engine.inside {
@@ -110,6 +114,8 @@ func TestAContainerHoldingAMountTheHostNoLongerHasIsDrift(t *testing.T) {
 			"every mount still the host's own":                      {engineReport{facts: facts, inside: current, stats: held}, true},
 			"a mount whose source was replaced, read with no /proc": {engineReport{facts: facts, inside: inside, stats: moved}, false},
 			"a container the engine will not exec into":             {engineReport{facts: facts, stats: moved}, true},
+			"a container that cannot find the program it is asked":  {engineReport{facts: facts, stats: moved, started: 127}, false},
+			"a container that cannot start the program it is asked": {engineReport{facts: facts, stats: moved, started: 126}, false},
 			"a source the host will not stat":                       {engineReport{facts: facts, inside: inside}, true},
 		} {
 			observed := probedAs(t, kernelMigrating(t, true), container, probed.engine)

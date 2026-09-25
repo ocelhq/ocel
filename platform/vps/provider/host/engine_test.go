@@ -188,14 +188,21 @@ func TestAProbeWithNoRootReadsABindWhoseSourceTheHostReplacedAsMoved(t *testing.
 		name     string
 		as       boxContainer
 		replaced string
+		emptied  bool
 		binds    []string
 	}{
-		{stood.name, frontProxy(), stood.pins, []string{
+		{stood.name, frontProxy(), stood.pins, false, []string{
 			filepath.Join(stood.dir, "proxy") + ":" + caddy.ConfigDir + ":ro",
 			stood.pins + ":" + caddy.PinsMount + ":ro",
 			filepath.Join(stood.dir, "proxy", "data") + ":" + caddy.DataMount,
 		}},
-		{stood.board, switchboardStanding(switchboardBinary(arch)), filepath.Join(stood.dir, "connector"), []string{
+		{stood.board, switchboardStanding(switchboardBinary(arch)), filepath.Join(stood.dir, "connector"), false, []string{
+			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
+			filepath.Join(stood.dir, "routing") + ":" + filepath.Join(stood.dir, "routing") + ":ro",
+			filepath.Join(stood.dir, "connector") + ":" + filepath.Join(stood.dir, "connector") + ":ro",
+			filepath.Join(stood.dir, "control") + ":" + filepath.Join(stood.dir, "control"),
+		}},
+		{stood.board, switchboardStanding(switchboardBinary(arch)), filepath.Dir(stood.binary), true, []string{
 			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
 			filepath.Join(stood.dir, "routing") + ":" + filepath.Join(stood.dir, "routing") + ":ro",
 			filepath.Join(stood.dir, "connector") + ":" + filepath.Join(stood.dir, "connector") + ":ro",
@@ -207,6 +214,12 @@ func TestAProbeWithNoRootReadsABindWhoseSourceTheHostReplacedAsMoved(t *testing.
 		}
 		if err := os.Mkdir(standing.replaced, 0o755); err != nil {
 			t.Fatal(err)
+		}
+		if standing.emptied {
+			if err := os.RemoveAll(standing.replaced + ".gone"); err != nil {
+				t.Fatal(err)
+			}
+			runnable(t, stood.binary, switchboardBinary(arch), 0o755)
 		}
 		rendered, err := exec.Command("/bin/sh", "-c", stood.here(standing.as.probe())).Output()
 		if err != nil {
