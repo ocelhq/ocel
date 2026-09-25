@@ -39,7 +39,7 @@ type Board struct {
 	loading   sync.Mutex
 	retiring  sync.Mutex
 	draining  map[string]int
-	trusted   []netip.Prefix
+	trust     *trust
 	ledger    ledger
 	connector string
 	tcp       *http.Transport
@@ -47,8 +47,8 @@ type Board struct {
 	server    *http.Server
 }
 
-func New(table *Table, trusted []netip.Prefix) *Board {
-	board := &Board{trusted: slices.Clone(trusted), connector: ConnectorSocket, draining: map[string]int{}}
+func New(table *Table, trust Trust) *Board {
+	board := &Board{trust: trusting(trust), connector: ConnectorSocket, draining: map[string]int{}}
 	board.table.Store(table)
 	dialer := &net.Dialer{Timeout: dialTimeout, KeepAlive: dialKeepAlive}
 	board.tcp = upstreamTransport(func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -180,9 +180,7 @@ func (b *Board) cutUnrouted(address string) {
 
 func (b *Board) forwarded(out *httputil.ProxyRequest) {
 	peer, err := netip.ParseAddrPort(out.In.RemoteAddr)
-	trusted := err == nil && slices.ContainsFunc(b.trusted, func(prefix netip.Prefix) bool {
-		return prefix.Contains(peer.Addr().Unmap())
-	})
+	trusted := err == nil && b.trust.trusts(out.In.Context(), peer.Addr().Unmap())
 	if trusted {
 		if prior := out.In.Header.Values("X-Forwarded-For"); len(prior) > 0 {
 			out.Out.Header["X-Forwarded-For"] = slices.Clone(prior)

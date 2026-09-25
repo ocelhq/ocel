@@ -159,6 +159,30 @@ func TestServeAnswersEachHostnameItsTableClaimsAndNamesTheBox(t *testing.T) {
 	}
 }
 
+func TestServeTrustsAFrontProxyNamedByTheNameItResolvesUnder(t *testing.T) {
+	seen := make(chan string, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		seen <- r.Header.Get("X-Forwarded-Proto")
+	}))
+	t.Cleanup(upstream.Close)
+	stood := served(t, tableFile(t, map[string]string{"shop.example.com": strings.TrimPrefix(upstream.URL, "http://")}), "--trust", "localhost")
+
+	request, err := http.NewRequest(http.MethodGet, "http://"+stood.data+"/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = "shop.example.com"
+	request.Header.Set("X-Forwarded-Proto", "https")
+	said, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = said.Body.Close()
+	if proto := <-seen; proto != "https" {
+		t.Errorf("a peer at the address localhost resolves to said it forwarded https and the app heard %q: the front proxy is trusted by the name it answers to on the box's network, since its address changes whenever it is recreated", proto)
+	}
+}
+
 func TestTheControlSocketIsTheServingUsersAlone(t *testing.T) {
 	stood := served(t, tableFile(t, nil))
 
@@ -238,11 +262,12 @@ func TestServeReplacesASocketNothingAnswersOn(t *testing.T) {
 func TestServeRefusesATableOrATrustItCannotRead(t *testing.T) {
 	controlAt(t)
 	for what, argv := range map[string][]string{
-		"a table that is not there":  {"serve", "--listen", freeAddress(t), "--table", filepath.Join(t.TempDir(), "routing.json")},
-		"a table it cannot render":   {"serve", "--listen", freeAddress(t), "--table", documentAt(t, []byte(`{"grace":"soon"}`))},
-		"a trust that is no address": {"serve", "--listen", freeAddress(t), "--table", tableFile(t, nil), "--trust", "front-proxy"},
-		"no listen address":          {"serve", "--table", tableFile(t, nil)},
-		"no table":                   {"serve", "--listen", freeAddress(t)},
+		"a table that is not there": {"serve", "--listen", freeAddress(t), "--table", filepath.Join(t.TempDir(), "routing.json")},
+		"a table it cannot render":  {"serve", "--listen", freeAddress(t), "--table", documentAt(t, []byte(`{"grace":"soon"}`))},
+		"a trust that is no prefix": {"serve", "--listen", freeAddress(t), "--table", tableFile(t, nil), "--trust", "10.0.0.0/33"},
+		"a trust that is no name":   {"serve", "--listen", freeAddress(t), "--table", tableFile(t, nil), "--trust", "front proxy"},
+		"no listen address":         {"serve", "--table", tableFile(t, nil)},
+		"no table":                  {"serve", "--listen", freeAddress(t)},
 	} {
 		if code, _, errs := ran(t, argv...); code != exitRefused {
 			t.Errorf("serve with %s = %d, %q, want %d", what, code, errs, exitRefused)

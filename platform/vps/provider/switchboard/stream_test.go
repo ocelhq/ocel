@@ -280,7 +280,7 @@ func TestTheConnectorPathReachesTheConnectorOverItsSocketWithThePrefixStripped(t
 	if err != nil {
 		t.Fatal(err)
 	}
-	board := switchboard.New(table, nil)
+	board := switchboard.New(table, switchboard.Trust{})
 	board.DialConnectorAt(path)
 	served, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

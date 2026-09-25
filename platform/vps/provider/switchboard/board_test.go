@@ -1,6 +1,7 @@
 package switchboard_test
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"net/netip"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -50,11 +52,16 @@ func routing(t *testing.T, upstreams map[string]string) []byte {
 
 func standing(t *testing.T, document []byte, trusted ...netip.Prefix) (*switchboard.Board, string) {
 	t.Helper()
+	return trusting(t, document, switchboard.Trust{Prefixes: trusted})
+}
+
+func trusting(t *testing.T, document []byte, trust switchboard.Trust) (*switchboard.Board, string) {
+	t.Helper()
 	table, err := switchboard.Read(document)
 	if err != nil {
 		t.Fatal(err)
 	}
-	board := switchboard.New(table, trusted)
+	board := switchboard.New(table, trust)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -192,5 +199,53 @@ func TestForwardedHeadersAClientSpoofsAreOverwrittenAndOnlyATrustedFrontProxysAr
 		if got := said.header.Get("Seen-" + header); got != want {
 			t.Errorf("the trusted front proxy's %s reached the upstream as %q, want %q: it terminated tls and knows the client", header, got, want)
 		}
+	}
+}
+
+func TestAFrontProxyTrustedByNameIsTrustedAtWhateverAddressItsNameResolvesToNow(t *testing.T) {
+	t.Parallel()
+
+	web := backend(t, "web")
+	var mu sync.Mutex
+	resolved := netip.MustParseAddr("10.9.0.7")
+	asked := 0
+	board, at := trusting(t, routing(t, map[string]string{"shop.example.com": web}), switchboard.Trust{
+		Names: []string{"ocel-proxy"},
+		Resolve: func(_ context.Context, name string) ([]netip.Addr, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			asked++
+			if name != "ocel-proxy" {
+				return nil, fmt.Errorf("asked to resolve %q", name)
+			}
+			return []netip.Addr{resolved}, nil
+		},
+	})
+	board.RefreshTrustEvery(50 * time.Millisecond)
+	spoofed := []string{"X-Forwarded-Proto", "https"}
+
+	if said := ask(t, http.DefaultClient, at, "shop.example.com", "/", spoofed...); said.header.Get("Seen-X-Forwarded-Proto") != "http" {
+		t.Errorf("a peer the trusted name does not resolve to had its X-Forwarded-Proto kept as %q, want http", said.header.Get("Seen-X-Forwarded-Proto"))
+	}
+	mu.Lock()
+	resolved = netip.MustParseAddr("127.0.0.1")
+	mu.Unlock()
+	deadline := time.Now().Add(5 * time.Second)
+	for said := ask(t, http.DefaultClient, at, "shop.example.com", "/", spoofed...); said.header.Get("Seen-X-Forwarded-Proto") != "https"; said = ask(t, http.DefaultClient, at, "shop.example.com", "/", spoofed...) {
+		if time.Now().After(deadline) {
+			t.Fatal("the front proxy's name came to resolve to the peer and its X-Forwarded-Proto was still overwritten five seconds later: a recreated front proxy takes a new address, and every app behind it would be told its https clients came over http")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	mu.Lock()
+	before := asked
+	mu.Unlock()
+	for range 20 {
+		ask(t, http.DefaultClient, at, "shop.example.com", "/", spoofed...)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if asked != before {
+		t.Errorf("twenty requests from the trusted peer asked the resolver %d more times, want none: a peer already trusted is answered from what the name last resolved to", asked-before)
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -100,7 +101,7 @@ func run(ctx context.Context, proc string, argv []string, out, errs io.Writer) i
 }
 
 func usage(errs io.Writer) int {
-	fmt.Fprintln(errs, "usage: "+helperName+" serve --listen <host:port> --table <path> [--trust <addr|cidr>]... |")
+	fmt.Fprintln(errs, "usage: "+helperName+" serve --listen <host:port> --table <path> [--trust <addr|cidr|name>]... |")
 	fmt.Fprintln(errs, "       load <table> |")
 	fmt.Fprintln(errs, "       gate --deploy-timeout <seconds> <host:port/path>... |")
 	fmt.Fprintln(errs, "       flip [--drain-timeout <seconds> --retire <host:port>...] <table> |")
@@ -134,7 +135,7 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	if err := flags.Parse(argv); err != nil || *listen == "" || *path == "" || flags.NArg() != 0 {
 		return usage(errs)
 	}
-	trusted, err := prefixes(trusting)
+	trusted, err := trustOf(trusting)
 	if err != nil {
 		return refuse(errs, err)
 	}
@@ -184,18 +185,23 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	return code
 }
 
-func prefixes(trusting []string) ([]netip.Prefix, error) {
-	trusted := make([]netip.Prefix, 0, len(trusting))
+var hostName = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$`)
+
+func trustOf(trusting []string) (switchboard.Trust, error) {
+	var trusted switchboard.Trust
 	for _, spelled := range trusting {
 		if addr, err := netip.ParseAddr(spelled); err == nil {
-			trusted = append(trusted, netip.PrefixFrom(addr.Unmap(), addr.Unmap().BitLen()))
+			trusted.Prefixes = append(trusted.Prefixes, netip.PrefixFrom(addr.Unmap(), addr.Unmap().BitLen()))
 			continue
 		}
-		prefix, err := netip.ParsePrefix(spelled)
-		if err != nil {
-			return nil, fmt.Errorf("--trust %q is neither an address nor a prefix", spelled)
+		if prefix, err := netip.ParsePrefix(spelled); err == nil {
+			trusted.Prefixes = append(trusted.Prefixes, prefix.Masked())
+			continue
 		}
-		trusted = append(trusted, prefix.Masked())
+		if strings.Contains(spelled, "/") || !hostName.MatchString(spelled) {
+			return switchboard.Trust{}, fmt.Errorf("--trust %q is neither an address, a prefix nor a name", spelled)
+		}
+		trusted.Names = append(trusted.Names, spelled)
 	}
 	return trusted, nil
 }
