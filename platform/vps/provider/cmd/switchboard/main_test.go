@@ -580,12 +580,12 @@ func TestListenersNamesEverySocketBoundInsideThisNamespaceAndRefusesOneItNeverRe
 }
 
 func TestAVerbTheSwitchboardDoesNotCarryIsRefusedWithTheOnesItDoes(t *testing.T) {
-	for _, argv := range [][]string{{}, {"probe", "shop.example.com"}, {"forget", "shop.example.com"}, {"leaf", "shop.example.com"}, {"config", "/"}} {
+	for _, argv := range [][]string{{}, {"forget", "shop.example.com"}, {"config", "/"}} {
 		code, _, errs := ran(t, argv...)
 		if code != exitRefused {
 			t.Errorf("%v = %d, want the usage refusal", argv, code)
 		}
-		for _, verb := range []string{"serve", "load", "gate", "flip", "idle", "upstreams", "listeners"} {
+		for _, verb := range []string{"serve", "load", "gate", "flip", "idle", "upstreams", "leaf", "probe", "listeners"} {
 			if !strings.Contains(errs, verb) {
 				t.Errorf("the usage %q never names %s", errs, verb)
 			}
