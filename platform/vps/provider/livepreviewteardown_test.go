@@ -86,13 +86,13 @@ func previewBuild(t *testing.T, pointer string) providerkit.Build {
 	return build
 }
 
-func previewRef(t *testing.T, pointer string) providerkit.StackRef {
+func previewStack(t *testing.T, slug, app, pointer string) providerkit.StackRef {
 	t.Helper()
 
 	return providerkit.StackRef{
-		Project: teardownSlug,
+		Project: slug,
 		Class:   providerkit.ClassPreview,
-		Name:    naming.AppStack(pointer, teardownApp, previewBuild(t, pointer).Release()),
+		Name:    naming.AppStack(pointer, app, previewBuild(t, pointer).Release()),
 	}
 }
 
@@ -110,16 +110,22 @@ func previewUp(t *testing.T, vm machine, p *vps.Provider, stack edge.EdgeStack, 
 	t.Helper()
 
 	vm.ships(t, pointer)
+	promotesPreview(t, p, stack, teardownSlug, teardownApp, teardownAt(pointer), pointer, at)
+}
+
+func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, app, image, pointer string, at int64) {
+	t.Helper()
+
 	ctx := context.Background()
 	build := previewBuild(t, pointer)
 	plan := providerkit.StackPlan{
-		Ref:  previewRef(t, pointer),
+		Ref:  previewStack(t, slug, app, pointer),
 		Kind: providerkit.StackApp,
 		App: &providerkit.AppPlan{
-			App:             teardownApp,
+			App:             app,
 			Compute:         providerkit.ComputeContainer,
 			Deployment:      build.DeploymentID(),
-			Image:           teardownAt(pointer),
+			Image:           image,
 			HealthCheckPath: healthPath,
 		},
 	}
@@ -130,9 +136,9 @@ func previewUp(t *testing.T, vm machine, p *vps.Provider, stack edge.EdgeStack, 
 	if len(stood.Containers) != 1 {
 		t.Fatalf("Provision(%s) stood up %v", pointer, stood.Containers)
 	}
-	if err := providerkit.WriteStack(ctx, p.Records(), providerkit.ClassPreview, teardownSlug, plan.Ref.Name, providerkit.Stack{
+	if err := providerkit.WriteStack(ctx, p.Records(), providerkit.ClassPreview, slug, plan.Ref.Name, providerkit.Stack{
 		Kind:       providerkit.StackApp,
-		App:        teardownApp,
+		App:        app,
 		Release:    build.Release().String(),
 		Identity:   build.String(),
 		Containers: stood.Containers,
@@ -141,17 +147,17 @@ func previewUp(t *testing.T, vm machine, p *vps.Provider, stack edge.EdgeStack, 
 		t.Fatalf("WriteStack(%s): %v", pointer, err)
 	}
 	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
-		App:        teardownApp,
+		App:        app,
 		Identity:   build.String(),
 		Entry:      "/",
-		Image:      teardownAt(pointer),
+		Image:      image,
 		Physical:   stood.Containers[0].Physical,
 		HealthPath: healthPath,
 	}); err != nil {
 		t.Fatalf("PutStaged(%s): %v", pointer, err)
 	}
 	if err := stack.Promote(ctx, edge.Promotion{
-		PromotionID: "p-" + pointer, Ts: at, Builds: map[string]string{teardownApp: build.String()},
+		PromotionID: "p-" + pointer, Ts: at, Builds: map[string]string{app: build.String()},
 	}, pointer, edge.DiscardReporter()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
