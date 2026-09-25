@@ -77,7 +77,7 @@ func writingAs(t *testing.T, store signedStore, bucket, key string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return readProbe(said)["wrote"].code
+	return readAnswers(said)["wrote"].code
 }
 
 func TestAnAppsAccountReachesTheBucketsItWasGrantedAndNoOthers(t *testing.T) {
@@ -202,7 +202,7 @@ func askingAs(t *testing.T, store signedStore, bucket, name, method, key, query 
 	if err != nil {
 		t.Fatal(err)
 	}
-	return readProbe(said)[name].code
+	return readAnswers(said)[name].code
 }
 
 func TestAnAppsAccountDrivesTheDataPlaneAndNothingThatReshapesTheBucket(t *testing.T) {

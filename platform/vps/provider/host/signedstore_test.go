@@ -147,7 +147,7 @@ func aSignedStore(t *testing.T, store enginetest.Store, bucket string) signedSto
 	}
 }
 
-func hereRuns(t *testing.T) probeRunner {
+func hereRuns(t *testing.T) storeRunner {
 	t.Helper()
 	return func(what, script string) (string, error) {
 		run := exec.Command("sh", "-c", script)

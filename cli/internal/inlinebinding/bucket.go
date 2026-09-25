@@ -7,6 +7,6 @@ import (
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
-func CheckBucket(ctx context.Context, props *bindingsv1.BucketProperties, public bool, origins []string) ([]string, error) {
+func ProbeBucket(ctx context.Context, props *bindingsv1.BucketProperties, public bool, origins []string) ([]string, error) {
 	return s3store.Check(ctx, props, s3store.Want{Public: public, Origins: origins})
 }

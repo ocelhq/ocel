@@ -10,20 +10,20 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-var ordersBinding = envgate.Implied{
+var ordersBinding = envgate.BindingVariables{
 	Group: "postgres.orders",
 	Site:  "bindings.postgres.orders",
 	Keys:  []string{"ORDERS_HOST", "ORDERS_PASSWORD"},
 }
 
-func TestImpliedDeclarations(t *testing.T) {
+func TestBindingVariables(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a variable a binding reads and nobody set refuses the deploy with the command that sets it", func(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.set("ORDERS_HOST", "", "db.example.com")
-		g := prefetched(t, values, envgate.Scope{Preview: true, Environment: "pr-12", Implied: []envgate.Implied{ordersBinding}})
+		g := prefetched(t, values, envgate.Scope{Preview: true, Environment: "pr-12", Bindings: []envgate.BindingVariables{ordersBinding}})
 
 		err := g.Check()
 		var refusal *envgate.Refusal
@@ -46,17 +46,17 @@ func TestImpliedDeclarations(t *testing.T) {
 		values := newFakeValues()
 		values.set("ORDERS_HOST", "", "db.example.com")
 		values.override("ORDERS_PASSWORD", "", "pr-12", "hunter2")
-		g := prefetched(t, values, envgate.Scope{Preview: true, Environment: "pr-12", Implied: []envgate.Implied{ordersBinding}})
+		g := prefetched(t, values, envgate.Scope{Preview: true, Environment: "pr-12", Bindings: []envgate.BindingVariables{ordersBinding}})
 
 		if err := g.Check(); err != nil {
 			t.Fatalf("Check = %v, want the override to satisfy the binding", err)
 		}
-		resolved, err := g.ResolveImplied(context.Background())
+		resolved, err := g.ResolveBindingVariables(context.Background())
 		if err != nil {
-			t.Fatalf("ResolveImplied: %v", err)
+			t.Fatalf("ResolveBindingVariables: %v", err)
 		}
 		if resolved["ORDERS_PASSWORD"] != "hunter2" || resolved["ORDERS_HOST"] != "db.example.com" {
-			t.Errorf("ResolveImplied = %v, want each variable's value for pr-12", resolved)
+			t.Errorf("ResolveBindingVariables = %v, want each variable's value for pr-12", resolved)
 		}
 	})
 
@@ -65,7 +65,7 @@ func TestImpliedDeclarations(t *testing.T) {
 		values := newFakeValues()
 		values.set("ORDERS_HOST", "/web", "db.example.com")
 		values.set("ORDERS_PASSWORD", "", "hunter2")
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}, Implied: []envgate.Implied{ordersBinding}})
+		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}, Bindings: []envgate.BindingVariables{ordersBinding}})
 
 		err := g.Check()
 		if err == nil || !strings.Contains(err.Error(), "ORDERS_HOST") {
@@ -81,7 +81,7 @@ func TestImpliedDeclarations(t *testing.T) {
 		values := newFakeValues()
 		values.set("ORDERS_HOST", "", "db.example.com")
 		values.set("ORDERS_PASSWORD", "", "hunter2")
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}, Implied: []envgate.Implied{ordersBinding}})
+		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}, Bindings: []envgate.BindingVariables{ordersBinding}})
 		declare(t, g, def("LOG_LEVEL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 		values.set("LOG_LEVEL", "", "debug")
 
@@ -104,7 +104,7 @@ func TestImpliedDeclarations(t *testing.T) {
 		values := newFakeValues()
 		values.set("ORDERS_HOST", "", "db.example.com")
 		values.set("ORDERS_PASSWORD", "", "hunter2")
-		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}, Implied: []envgate.Implied{ordersBinding}})
+		g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}, Bindings: []envgate.BindingVariables{ordersBinding}})
 		declare(t, g, &resourcesv1.VariableDefinition{
 			Key: "ORDERS_PASSWORD", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: true, Source: "resources/env.ts",
 		})
@@ -126,7 +126,7 @@ func TestImpliedDeclarations(t *testing.T) {
 
 	t.Run("a key the app declares and a binding reads in another tier is refused, though this tier owes it nothing", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}}, Preview: true, OtherTiers: []envgate.Implied{ordersBinding}})
+		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}}, Preview: true, OtherTiers: []envgate.BindingVariables{ordersBinding}})
 		if err := g.Check(); err != nil {
 			t.Fatalf("Check = %v, want nothing owed for a binding this tier does not take", err)
 		}
@@ -147,7 +147,7 @@ func TestImpliedDeclarations(t *testing.T) {
 
 	t.Run("the variables editor shows a binding's variables as its group", func(t *testing.T) {
 		t.Parallel()
-		g := prefetched(t, newFakeValues(), envgate.Scope{Implied: []envgate.Implied{ordersBinding}})
+		g := prefetched(t, newFakeValues(), envgate.Scope{Bindings: []envgate.BindingVariables{ordersBinding}})
 		matrix := g.Matrix(nil)
 
 		grouped := map[string]string{}

@@ -542,8 +542,8 @@ func TestPutValue(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
 		gate := envgate.New(store, envgate.Scope{
-			Apps:    []envgate.App{{Name: "web", Folder: "/web"}},
-			Implied: []envgate.Implied{{Group: "postgres.orders", Site: "bindings.postgres.orders", Keys: []string{"ORDERS_URL"}}},
+			Apps:     []envgate.App{{Name: "web", Folder: "/web"}},
+			Bindings: []envgate.BindingVariables{{Group: "postgres.orders", Site: "bindings.postgres.orders", Keys: []string{"ORDERS_URL"}}},
 		})
 		if err := gate.Prefetch(context.Background()); err != nil {
 			t.Fatalf("Prefetch: %v", err)

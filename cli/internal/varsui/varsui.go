@@ -248,7 +248,7 @@ func (s *Session) writable(at envgate.Address) error {
 	if err := addressable(at.Cell.Folder); err != nil {
 		return err
 	}
-	if err := envgate.CheckImpliedWritable(s.opts.Gate.Scope().Implied, at.Cell.Key, at.Cell.Folder); err != nil {
+	if err := envgate.CheckBindingVariableWritable(s.opts.Gate.Scope().Bindings, at.Cell.Key, at.Cell.Folder); err != nil {
 		return err
 	}
 	if err := envgate.CheckWritable(s.opts.Gate.Declared(), at.Cell.Key, at.Cell.Folder); err != nil {

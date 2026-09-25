@@ -29,7 +29,7 @@ const FakeBucketRefusalEnvVar = "OCEL_TEST_FAKE_BUCKET_REFUSAL"
 
 const FakeBucketWarningEnvVar = "OCEL_TEST_FAKE_BUCKET_WARNING"
 
-func fakeCheckBucket(_ context.Context, props *bindingsv1.BucketProperties, _ bool, _ []string) ([]string, error) {
+func fakeProbeBucket(_ context.Context, props *bindingsv1.BucketProperties, _ bool, _ []string) ([]string, error) {
 	if refusal := os.Getenv(FakeBucketRefusalEnvVar); refusal != "" {
 		return nil, fmt.Errorf("bucket %s: %s", props.GetBucket(), refusal)
 	}

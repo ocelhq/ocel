@@ -64,8 +64,8 @@ type Scope struct {
 	Preview     bool
 	Environment string
 	Browser     bool
-	Implied     []Implied
-	OtherTiers  []Implied
+	Bindings    []BindingVariables
+	OtherTiers  []BindingVariables
 }
 
 func (s Scope) Tier() environmentv1.Tier {
@@ -292,14 +292,14 @@ func (g *Gate) Check() error {
 	if err := collision(definitions, g.scope); err != nil {
 		return err
 	}
-	implied := g.scope.impliedDefinitions()
+	bound := g.scope.bindingDefinitions()
 	problems = append(problems, unresolved(definitions, groups, apps, held, problems)...)
-	problems = append(problems, unsetImplied(implied, held)...)
+	problems = append(problems, unsetBindingVariables(bound, held)...)
 	if len(problems) == 0 {
 		return nil
 	}
-	definitions = append(definitions, implied...)
-	groups = append(groups, g.scope.impliedGroups()...)
+	definitions = append(definitions, bound...)
+	groups = append(groups, g.scope.bindingGroups()...)
 	slices.SortStableFunc(problems, func(a, b *resourcesv1.VariableProblem) int {
 		if c := cmp.Compare(declaredAt(definitions, a.GetKey()), declaredAt(definitions, b.GetKey())); c != 0 {
 			return c

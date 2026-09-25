@@ -16,15 +16,15 @@ import (
 
 const storePage = 1000
 
-type probeAnswer struct {
+type storeAnswer struct {
 	code string
 	body []byte
 }
 
-type probeRunner func(what, script string) (string, error)
+type storeRunner func(what, script string) (string, error)
 
-func readProbe(said string) map[string]probeAnswer {
-	answers := map[string]probeAnswer{}
+func readAnswers(said string) map[string]storeAnswer {
+	answers := map[string]storeAnswer{}
 	for line := range strings.Lines(said) {
 		name, value, cut := strings.Cut(strings.TrimSpace(line), "=")
 		if !cut {
@@ -110,7 +110,7 @@ func storeScript(store string, runs []*http.Request, calls []storeCall) string {
 	return written.String()
 }
 
-func droveStore(spec BucketSpec, calls []storeCall, now time.Time, run probeRunner) (map[string]probeAnswer, error) {
+func droveStore(spec BucketSpec, calls []storeCall, now time.Time, run storeRunner) (map[string]storeAnswer, error) {
 	runs := make([]*http.Request, 0, len(calls))
 	what := make([]string, 0, len(calls))
 	for _, call := range calls {
@@ -125,7 +125,7 @@ func droveStore(spec BucketSpec, calls []storeCall, now time.Time, run probeRunn
 	if err != nil {
 		return nil, err
 	}
-	answers := readProbe(said)
+	answers := readAnswers(said)
 	for _, call := range calls {
 		answer, spoke := answers[call.name]
 		if !spoke {
@@ -155,7 +155,7 @@ func listingCalls() []storeCall {
 	}
 }
 
-func uploadsIn(answer probeAnswer) ([]storedUpload, error) {
+func uploadsIn(answer storeAnswer) ([]storedUpload, error) {
 	if answer.code != "200" || len(answer.body) == 0 {
 		return nil, nil
 	}
@@ -167,7 +167,7 @@ func uploadsIn(answer probeAnswer) ([]storedUpload, error) {
 	return listed.Uploads, nil
 }
 
-func objectsIn(answer probeAnswer) ([]string, error) {
+func objectsIn(answer storeAnswer) ([]string, error) {
 	if answer.code != "200" || len(answer.body) == 0 {
 		return nil, nil
 	}
@@ -223,7 +223,7 @@ func heldSignature(keys []string, uploads []storedUpload) string {
 	return held
 }
 
-func removedBucket(spec BucketSpec, clock func() time.Time, run probeRunner) error {
+func removedBucket(spec BucketSpec, clock func() time.Time, run storeRunner) error {
 	for held := ""; ; {
 		listed, err := droveStore(spec, listingCalls(), clock(), run)
 		if err != nil {
