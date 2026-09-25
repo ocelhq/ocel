@@ -777,83 +777,20 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup the incus host
-        if: ${{ needs.binary.outputs.real != 'true' }}
-        uses: ./.github/actions/incus-vm
-        with:
-          go: "false"
-          turbo-token: ${{ secrets.TURBO_TOKEN }}
-          turbo-team: ${{ vars.TURBO_TEAM }}
-
-      - uses: ./.github/actions/node-workspace
-        if: ${{ needs.binary.outputs.real == 'true' }}
-        with:
-          turbo-token: ${{ secrets.TURBO_TOKEN }}
-          turbo-team: ${{ vars.TURBO_TEAM }}
-
-      - name: The node bundles the fixtures import
-        run: pnpm turbo run build --filter=ocel --filter=@ocel/transforms
-
-      - name: The Docker the image build on this runner needs
-        if: ${{ needs.binary.outputs.real == 'true' }}
-        uses: ./.github/actions/containerd-docker
-
-      - name: Take the binaries this lane drives
-        uses: ./.github/actions/journey-binaries
-
       - name: Bring up the box this lane deploys to
-        if: ${{ needs.binary.outputs.real != 'true' }}
-        run: |
-          set -euo pipefail
-          sg incus-admin -c "scripts/incus.sh create $VM"
-          eval "$(sg incus-admin -c "scripts/incus.sh info $VM")"
-          {
-            echo "OCEL_VPS_HOST=$OCEL_INCUS_ADDR"
-            echo "OCEL_VPS_USER=$OCEL_INCUS_USER"
-            echo "OCEL_VPS_IDENTITY_FILE=$OCEL_INCUS_KEY"
-          } >> "$GITHUB_ENV"
-
-      - name: Assume the session that may spend the real account
-        if: ${{ needs.binary.outputs.real == 'true' }}
-        uses: ./.github/actions/real-aws-session
+        uses: ./.github/actions/vps-box
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-          bun-version: ${{ env.BUN_VERSION }}
+          real: ${{ needs.binary.outputs.real }}
+          vm: ${{ env.VM }}
+          box: ${{ env.BOX }}
+          session: ocel-journey-vps-${{ github.run_id }}
+          sweep: "true"
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
-          role-session-name: ocel-journey-vps-${{ github.run_id }}
-          role-duration-seconds: "7200"
-          guard-script: tests/next-compat/guard-accounts.sh
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Name the account this run may touch
-        if: ${{ needs.binary.outputs.real == 'true' }}
-        env:
-          EXPECTED: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
-          REGION: ${{ vars.E2E_AWS_REGION }}
-        run: |
-          set -euo pipefail
-          {
-            echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED"
-            echo "AWS_REGION=$REGION"
-          } >> "$GITHUB_ENV"
-
-      - name: Reclaim boxes a run that died left behind
-        if: ${{ needs.binary.outputs.real == 'true' }}
-        run: scripts/ec2.sh sweep
-
-      - name: Bring up the box this lane deploys to
-        if: ${{ needs.binary.outputs.real == 'true' }}
-        run: |
-          set -euo pipefail
-          eval "$(scripts/ec2.sh create "$BOX")"
-          {
-            echo "OCEL_VPS_HOST=$OCEL_EC2_ADDR"
-            echo "OCEL_VPS_USER=$OCEL_EC2_USER"
-            echo "OCEL_VPS_IDENTITY_FILE=$OCEL_EC2_KEY"
-          } >> "$GITHUB_ENV"
 
       - name: Reclaim journey images a run that died left in the registry
         id: registry
@@ -888,32 +825,14 @@ jobs:
           docker system df || true
           docker buildx du 2>/dev/null | tail -n 3 || true
 
-      - name: No VM left behind
-        if: ${{ always() && needs.binary.outputs.real != 'true' }}
-        run: sg incus-admin -c "scripts/incus.sh destroy $VM" || echo "could not destroy $VM"
-
-      - name: No box left behind
-        if: ${{ always() && needs.binary.outputs.real == 'true' }}
-        run: scripts/ec2.sh destroy "$BOX" || echo "could not destroy $BOX"
-
-      - name: Pack the evidence
+      - name: Nothing left behind, and the evidence kept
         if: always()
-        run: |
-          set -euo pipefail
-          mkdir -p tests/journeys/output
-          tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
-            --exclude='*/node_modules' \
-            --exclude='*/node_modules/*' \
-            --exclude='*/trees/*/packages' \
-            -C tests/journeys output
-
-      - name: Upload the evidence
-        if: always()
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/vps-box-gone
         with:
-          name: journey-evidence-vps
-          path: ${{ runner.temp }}/journey-evidence.tgz
-          if-no-files-found: warn
+          real: ${{ needs.binary.outputs.real }}
+          vm: ${{ env.VM }}
+          box: ${{ env.BOX }}
+          evidence: journey-evidence-vps
 
   vps-front:
     name: vps behind ${{ matrix.front }}
@@ -950,109 +869,31 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Setup the incus host
-        if: ${{ needs.binary.outputs.real != 'true' }}
-        uses: ./.github/actions/incus-vm
-        with:
-          go: "false"
-          turbo-token: ${{ secrets.TURBO_TOKEN }}
-          turbo-team: ${{ vars.TURBO_TEAM }}
-
-      - uses: ./.github/actions/node-workspace
-        if: ${{ needs.binary.outputs.real == 'true' }}
-        with:
-          turbo-token: ${{ secrets.TURBO_TOKEN }}
-          turbo-team: ${{ vars.TURBO_TEAM }}
-
-      - name: The node bundles the fixtures import
-        run: pnpm turbo run build --filter=ocel --filter=@ocel/transforms
-
-      - name: The Docker the image build on this runner needs
-        if: ${{ needs.binary.outputs.real == 'true' }}
-        uses: ./.github/actions/containerd-docker
-
-      - name: Take the binaries this lane drives
-        uses: ./.github/actions/journey-binaries
-
       - name: Bring up the box this lane deploys to
-        if: ${{ needs.binary.outputs.real != 'true' }}
-        run: |
-          set -euo pipefail
-          sg incus-admin -c "scripts/incus.sh create $VM"
-          eval "$(sg incus-admin -c "scripts/incus.sh info $VM")"
-          {
-            echo "OCEL_VPS_HOST=$OCEL_INCUS_ADDR"
-            echo "OCEL_VPS_USER=$OCEL_INCUS_USER"
-            echo "OCEL_VPS_IDENTITY_FILE=$OCEL_INCUS_KEY"
-          } >> "$GITHUB_ENV"
-
-      - name: Assume the session that may spend the real account
-        if: ${{ needs.binary.outputs.real == 'true' }}
-        uses: ./.github/actions/real-aws-session
+        uses: ./.github/actions/vps-box
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          pnpm-version: ${{ env.PNPM_VERSION }}
-          bun-version: ${{ env.BUN_VERSION }}
+          real: ${{ needs.binary.outputs.real }}
+          vm: ${{ env.VM }}
+          box: ${{ env.BOX }}
+          session: ocel-journey-vps-${{ matrix.front }}-${{ github.run_id }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
-          role-session-name: ocel-journey-vps-${{ matrix.front }}-${{ github.run_id }}
-          role-duration-seconds: "7200"
-          guard-script: tests/next-compat/guard-accounts.sh
           expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
-
-      - name: Name the account this run may touch
-        if: ${{ needs.binary.outputs.real == 'true' }}
-        env:
-          EXPECTED: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
-          REGION: ${{ vars.E2E_AWS_REGION }}
-        run: |
-          set -euo pipefail
-          {
-            echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED"
-            echo "AWS_REGION=$REGION"
-          } >> "$GITHUB_ENV"
-
-      - name: Bring up the box this lane deploys to
-        if: ${{ needs.binary.outputs.real == 'true' }}
-        run: |
-          set -euo pipefail
-          eval "$(scripts/ec2.sh create "$BOX")"
-          {
-            echo "OCEL_VPS_HOST=$OCEL_EC2_ADDR"
-            echo "OCEL_VPS_USER=$OCEL_EC2_USER"
-            echo "OCEL_VPS_IDENTITY_FILE=$OCEL_EC2_KEY"
-          } >> "$GITHUB_ENV"
 
       - name: Run the journey behind ${{ matrix.front }}
         run: pnpm --filter @ocel-tests/journeys journey
 
-      - name: No VM left behind
-        if: ${{ always() && needs.binary.outputs.real != 'true' }}
-        run: sg incus-admin -c "scripts/incus.sh destroy $VM" || echo "could not destroy $VM"
-
-      - name: No box left behind
-        if: ${{ always() && needs.binary.outputs.real == 'true' }}
-        run: scripts/ec2.sh destroy "$BOX" || echo "could not destroy $BOX"
-
-      - name: Pack the evidence
+      - name: Nothing left behind, and the evidence kept
         if: always()
-        run: |
-          set -euo pipefail
-          mkdir -p tests/journeys/output
-          tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
-            --exclude='*/node_modules' \
-            --exclude='*/node_modules/*' \
-            --exclude='*/trees/*/packages' \
-            -C tests/journeys output
-
-      - name: Upload the evidence
-        if: always()
-        uses: actions/upload-artifact@v4
+        uses: ./.github/actions/vps-box-gone
         with:
-          name: journey-evidence-vps-${{ matrix.front }}
-          path: ${{ runner.temp }}/journey-evidence.tgz
-          if-no-files-found: warn
+          real: ${{ needs.binary.outputs.real }}
+          vm: ${{ env.VM }}
+          box: ${{ env.BOX }}
+          evidence: journey-evidence-vps-${{ matrix.front }}
 
   vps-front-passed:
     name: vps behind every front

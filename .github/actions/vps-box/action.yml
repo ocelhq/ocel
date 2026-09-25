@@ -1,0 +1,125 @@
+name: vps-box
+description: >-
+  The box a vps journey lane deploys to and the binaries it drives there: an
+  incus VM for a pull request, an EC2 instance under the real account's
+  session for a real run. OCEL_VPS_HOST, OCEL_VPS_USER and
+  OCEL_VPS_IDENTITY_FILE name it afterwards.
+
+inputs:
+  real:
+    description: true brings the box up in the real account.
+    required: true
+  vm:
+    description: The incus VM a pull request's lane deploys to.
+    required: true
+  box:
+    description: The EC2 instance a real run deploys to.
+    required: true
+  session:
+    description: The name of the real account's session.
+    required: true
+  sweep:
+    description: true reclaims boxes a real run that died left behind before this one comes up.
+    default: "false"
+  turbo-token:
+    default: ""
+  turbo-team:
+    default: ""
+  aws-region:
+    default: ""
+  role-to-assume:
+    default: ""
+  expected-aws-account-id:
+    default: ""
+  expected-cloudflare-account-id:
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Setup the incus host
+      if: inputs.real != 'true'
+      uses: ./.github/actions/incus-vm
+      with:
+        go: "false"
+        turbo-token: ${{ inputs.turbo-token }}
+        turbo-team: ${{ inputs.turbo-team }}
+
+    - uses: ./.github/actions/node-workspace
+      if: inputs.real == 'true'
+      with:
+        turbo-token: ${{ inputs.turbo-token }}
+        turbo-team: ${{ inputs.turbo-team }}
+
+    - name: The node bundles the fixtures import
+      shell: bash
+      run: pnpm turbo run build --filter=ocel --filter=@ocel/transforms
+
+    - name: The Docker the image build on this runner needs
+      if: inputs.real == 'true'
+      uses: ./.github/actions/containerd-docker
+
+    - name: Take the binaries this lane drives
+      uses: ./.github/actions/journey-binaries
+
+    - name: Bring up the box this lane deploys to
+      if: inputs.real != 'true'
+      shell: bash
+      env:
+        VM: ${{ inputs.vm }}
+      run: |
+        set -euo pipefail
+        sg incus-admin -c "scripts/incus.sh create $VM"
+        eval "$(sg incus-admin -c "scripts/incus.sh info $VM")"
+        {
+          echo "OCEL_VPS_HOST=$OCEL_INCUS_ADDR"
+          echo "OCEL_VPS_USER=$OCEL_INCUS_USER"
+          echo "OCEL_VPS_IDENTITY_FILE=$OCEL_INCUS_KEY"
+        } >> "$GITHUB_ENV"
+
+    - name: Assume the session that may spend the real account
+      if: inputs.real == 'true'
+      uses: ./.github/actions/real-aws-session
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        pnpm-version: ${{ env.PNPM_VERSION }}
+        bun-version: ${{ env.BUN_VERSION }}
+        aws-region: ${{ inputs.aws-region }}
+        role-to-assume: ${{ inputs.role-to-assume }}
+        role-session-name: ${{ inputs.session }}
+        role-duration-seconds: "7200"
+        guard-script: tests/next-compat/guard-accounts.sh
+        expected-aws-account-id: ${{ inputs.expected-aws-account-id }}
+        expected-cloudflare-account-id: ${{ inputs.expected-cloudflare-account-id }}
+
+    - name: Name the account this run may touch
+      if: inputs.real == 'true'
+      shell: bash
+      env:
+        EXPECTED: ${{ inputs.expected-aws-account-id }}
+        REGION: ${{ inputs.aws-region }}
+      run: |
+        set -euo pipefail
+        {
+          echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED"
+          echo "AWS_REGION=$REGION"
+        } >> "$GITHUB_ENV"
+
+    - name: Reclaim boxes a run that died left behind
+      if: inputs.real == 'true' && inputs.sweep == 'true'
+      shell: bash
+      run: scripts/ec2.sh sweep
+
+    - name: Bring up the box this lane deploys to
+      if: inputs.real == 'true'
+      shell: bash
+      env:
+        BOX: ${{ inputs.box }}
+      run: |
+        set -euo pipefail
+        eval "$(scripts/ec2.sh create "$BOX")"
+        {
+          echo "OCEL_VPS_HOST=$OCEL_EC2_ADDR"
+          echo "OCEL_VPS_USER=$OCEL_EC2_USER"
+          echo "OCEL_VPS_IDENTITY_FILE=$OCEL_EC2_KEY"
+        } >> "$GITHUB_ENV"

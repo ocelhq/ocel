@@ -1,0 +1,53 @@
+name: vps-box-gone
+description: >-
+  Takes down the box vps-box brought up, whatever the lane did, and uploads
+  the journey's evidence under the name given.
+
+inputs:
+  real:
+    description: true takes down the EC2 instance, otherwise the incus VM.
+    required: true
+  vm:
+    required: true
+  box:
+    required: true
+  evidence:
+    description: The artifact the journey's evidence is uploaded as.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: No VM left behind
+      if: always() && inputs.real != 'true'
+      shell: bash
+      env:
+        VM: ${{ inputs.vm }}
+      run: sg incus-admin -c "scripts/incus.sh destroy $VM" || echo "could not destroy $VM"
+
+    - name: No box left behind
+      if: always() && inputs.real == 'true'
+      shell: bash
+      env:
+        BOX: ${{ inputs.box }}
+      run: scripts/ec2.sh destroy "$BOX" || echo "could not destroy $BOX"
+
+    - name: Pack the evidence
+      if: always()
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p tests/journeys/output
+        tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
+          --exclude='*/node_modules' \
+          --exclude='*/node_modules/*' \
+          --exclude='*/trees/*/packages' \
+          -C tests/journeys output
+
+    - name: Upload the evidence
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.evidence }}
+        path: ${{ runner.temp }}/journey-evidence.tgz
+        if-no-files-found: warn
