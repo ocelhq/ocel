@@ -194,7 +194,7 @@ func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Repo
 		if report != nil {
 			report.Say("Standing " + s.service + " up on Cloud Run")
 		}
-		err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
+		err = runSettled(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 			return services.Projects.Locations.Services.
 				Create(clients.location(), desired).ServiceId(s.service).Context(ctx).Do(call...)
 		})
@@ -211,7 +211,7 @@ func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Repo
 			}
 			desired.Etag = held.Etag
 			desired.Traffic = held.Traffic
-			return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
+			return runSettled(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 				return services.Projects.Locations.Services.Patch(path, desired).Context(ctx).Do(call...)
 			})
 		})
@@ -289,7 +289,7 @@ func (p *Provider) route(
 			Template: held.Template,
 			Traffic:  trafficTo(revision),
 		}
-		return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
+		return runSettled(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 			return services.Projects.Locations.Services.Patch(path, routed).Context(ctx).Do(call...)
 		})
 	})
@@ -346,7 +346,7 @@ func revisionName(path string) string {
 	return path
 }
 
-func (p *Provider) await(ctx context.Context, services *run.Service, call func(...googleapi.CallOption) (*run.GoogleLongrunningOperation, error)) error {
+func runSettled(ctx context.Context, services *run.Service, call func(...googleapi.CallOption) (*run.GoogleLongrunningOperation, error)) error {
 	started, err := attempted(ctx, call)
 	if err != nil {
 		return fmt.Errorf("ask Cloud Run to release: %w", err)
@@ -381,7 +381,7 @@ func (p *Provider) tearDown(ctx context.Context, service string, report provider
 	if report != nil {
 		report.Say("Taking " + service + " down")
 	}
-	err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
+	err = runSettled(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 		return services.Projects.Locations.Services.Delete(clients.servicePath(service)).Context(ctx).Do(call...)
 	})
 	if absent(err) {

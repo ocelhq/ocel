@@ -21,7 +21,7 @@ import (
 func TestTheConnectorImageRunsTheBinaryItCarries(t *testing.T) {
 	t.Parallel()
 
-	built, err := connectorImage(empty.Image, []byte("connector"))
+	built, err := binaryImage(empty.Image, []byte("connector"), connectorImagePath)
 	if err != nil {
 		t.Fatalf("connectorImage: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestTheConnectorImageRunsTheBinaryItCarries(t *testing.T) {
 		t.Errorf("the image holds %d layers on an empty base, want the one that carries the connector", len(layers))
 	}
 
-	again, err := connectorImage(empty.Image, []byte("connector"))
+	again, err := binaryImage(empty.Image, []byte("connector"), connectorImagePath)
 	if err != nil {
 		t.Fatal(err)
 	}
