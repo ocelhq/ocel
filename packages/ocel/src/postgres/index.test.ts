@@ -1,3 +1,4 @@
+import { Client } from "pg";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../utils/rpc", () => ({
@@ -54,9 +55,42 @@ describe("postgres()", () => {
 
     const pool = postgres("orders");
 
-    expect(pool.options).toMatchObject({ connectionString: url });
+    expect(new Client(pool.options).connectionParameters).toMatchObject({
+      host: "ep-cool.neon.tech",
+      user: "app",
+      database: "orders",
+      options: "endpoint=ep-cool",
+    });
     expect(pool.options).not.toHaveProperty("host");
     expect(pool.connectionString).toBe(url);
+  });
+
+  it("reads a url's sslmode as libpq does, so require encrypts without checking the certificate", () => {
+    const url = "postgres://app:s3cret@db.supabase.co/postgres?sslmode=require";
+    vi.stubEnv(
+      "OCEL_RESOURCE_POSTGRES_orders",
+      JSON.stringify({ name: "orders", postgres: { url } }),
+    );
+
+    const pool = postgres("orders");
+
+    expect(new Client(pool.options).ssl).toMatchObject({ rejectUnauthorized: false });
+    expect(pool.connectionString).toBe(url);
+  });
+
+  it("verifies the server under a url's sslmode=verify-full", () => {
+    vi.stubEnv(
+      "OCEL_RESOURCE_POSTGRES_orders",
+      JSON.stringify({
+        name: "orders",
+        postgres: { url: "postgres://app:s3cret@db/postgres?sslmode=verify-full" },
+      }),
+    );
+
+    const ssl = new Client(postgres("orders").options).ssl;
+
+    expect(ssl).not.toMatchObject({ rejectUnauthorized: false });
+    expect(ssl).toBeTruthy();
   });
 
   it("encrypts the connection without checking the certificate when the record requires tls", () => {
