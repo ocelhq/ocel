@@ -162,7 +162,7 @@ func render(admission proxy.Admission) ([]byte, error) {
 func served(admission proxy.Admission) ([]string, error) {
 	var hostnames []string
 	for _, entry := range admission.Entries {
-		if strings.TrimSpace(entry.Hostname) == "" || strings.ContainsAny(entry.Hostname, "*/ ") {
+		if !certifiable(entry.Hostname) {
 			return nil, fmt.Errorf("an admission entry names %q, which is no hostname the front proxy can hold a certificate for", entry.Hostname)
 		}
 		hostnames = append(hostnames, strings.ToLower(entry.Hostname))

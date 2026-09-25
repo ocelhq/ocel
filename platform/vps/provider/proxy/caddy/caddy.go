@@ -2,7 +2,6 @@ package caddy
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -40,24 +39,12 @@ func Command() []string { return []string{"caddy", "run", "--config", ConfigMoun
 func Ready() []string { return []string{"test", "-S", AdminSocket} }
 
 type Box interface {
-	Ran(ctx context.Context, what, command string) (string, error)
-	Said(ctx context.Context, command string) (string, error)
+	Ran(ctx context.Context, what string, argv []string) (string, error)
+	Said(ctx context.Context, argv []string) (string, error)
 }
 
 type Builtin struct{ Box Box }
 
-func quoted(arg string) string {
-	return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'"
-}
-
-func words(argv []string) string {
-	quotedArgs := make([]string, 0, len(argv))
-	for _, arg := range argv {
-		quotedArgs = append(quotedArgs, quoted(arg))
-	}
-	return strings.Join(quotedArgs, " ")
-}
-
-func inside(argv ...string) string {
-	return words(append([]string{"docker", "exec", Container}, argv...))
+func inside(argv ...string) []string {
+	return append([]string{"docker", "exec", Container}, argv...)
 }

@@ -10,30 +10,33 @@ const (
 
 var certificateStore = DataMount + "/caddy/certificates"
 
-func reloading() string {
+const forgettingScript = `store=$1
+shift
+for issuer in "$store"/*/; do
+[ -d "$issuer" ] || continue
+for name in "$@"; do
+held="${issuer}${name}"
+if [ -e "$held" ]; then rm -rf -- "$held" && printf '%s\n' "$held"; fi
+done
+done`
+
+func reloading() []string {
 	return inside("caddy", "reload", "--config", ConfigMount, "--address", "unix/"+AdminSocket)
 }
 
-func listening() string {
+func listening() []string {
 	return inside("sh", "-c", "cat /proc/net/tcp && { cat /proc/net/tcp6 2>/dev/null || :; }")
 }
 
-func logging() string {
-	return "docker logs --timestamps --tail " + logTail + " " + quoted(Container) + " 2>&1 || true"
+func logging() []string {
+	return []string{"docker", "logs", "--timestamps", "--tail", logTail, Container}
 }
 
-func forgetting(hostnames []string) string {
-	script := "for issuer in " + quoted(certificateStore) + "/*/; do\n" +
-		"[ -d \"$issuer\" ] || continue\n" +
-		"for name in " + words(hostnames) + "; do\n" +
-		"held=\"${issuer}${name}\"\n" +
-		"if [ -e \"$held\" ]; then rm -rf -- \"$held\" && printf '%s\\n' \"$held\"; fi\n" +
-		"done\n" +
-		"done"
-	return inside("sh", "-c", script)
+func forgetting(hostnames []string) []string {
+	return inside(append([]string{"sh", "-c", forgettingScript, "sh", certificateStore}, hostnames...)...)
 }
 
-func subject(hostname string) bool {
+func certifiable(hostname string) bool {
 	if hostname == "" || len(hostname) > hostnameMax {
 		return false
 	}

@@ -27,7 +27,7 @@ func refusedBy(said string) string {
 func boxWhoseProxyWasRefused(said string) *box {
 	machine := &box{}
 	machine.refuses = func(command string) (session.Result, bool) {
-		if strings.Contains(command, "docker logs") && strings.Contains(command, caddy.Container) {
+		if strings.Contains(command, "'docker' 'logs'") && strings.Contains(command, caddy.Container) {
 			return session.Result{Stdout: said}, true
 		}
 		return session.Result{}, false

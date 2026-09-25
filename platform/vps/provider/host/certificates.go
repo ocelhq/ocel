@@ -145,18 +145,18 @@ func (h *Host) ServedEdge(ctx context.Context, hostname string) (Answer, error) 
 
 type frontBox struct{ h *Host }
 
-func (b frontBox) Ran(ctx context.Context, what, command string) (string, error) {
+func (b frontBox) Ran(ctx context.Context, what string, argv []string) (string, error) {
 	elevation, err := b.h.reachDocker(ctx)
 	if err != nil {
 		return "", err
 	}
-	return b.h.ran(ctx, what, command, nil, elevation)
+	return b.h.ran(ctx, what, words(argv), nil, elevation)
 }
 
-func (b frontBox) Said(ctx context.Context, command string) (string, error) {
+func (b frontBox) Said(ctx context.Context, argv []string) (string, error) {
 	elevation, err := b.h.reachDocker(ctx)
 	if err != nil {
 		return "", err
 	}
-	return b.h.said(ctx, command, elevation), nil
+	return b.h.said(ctx, words(argv), elevation), nil
 }
