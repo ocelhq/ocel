@@ -67,6 +67,7 @@ type Item struct {
 	Watch   []string
 	Slow    bool
 	Note    string
+	box     *boxContainer
 }
 
 func ClassItems(class providerkit.Class) []Item {
@@ -135,7 +136,7 @@ func (i Item) command() string {
 	case KindNetwork:
 		return networkCommand()
 	case KindContainer:
-		return standingOf(i).writing(containerRising)
+		return i.box.writing(containerRising)
 	case KindProxyConfig, KindRoutingTable:
 		return seedingRouting(routingTableItem(), proxyConfigItem())
 	case KindDir:
@@ -158,7 +159,7 @@ func (i Item) probe() string {
 	case KindNetwork:
 		return networkProbe()
 	case KindContainer:
-		return standingOf(i).probe()
+		return i.box.probe()
 	case KindProxyConfig, KindRoutingTable:
 		return seededProbe(i)
 	default:

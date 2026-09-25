@@ -30,7 +30,7 @@ type engineHolding struct {
 func holding() engineHolding {
 	return engineHolding{network: true, volume: true, facts: map[string]string{
 		caddy.Container:      engineSays(frontProxy(), migrateHeld),
-		SwitchboardContainer: engineSays(standingOf(boardItem()), migrateHeld),
+		SwitchboardContainer: engineSays(*boardItem().box, migrateHeld),
 	}}
 }
 
@@ -76,7 +76,7 @@ func dockered(t *testing.T, held engineHolding) map[string]string {
 			t.Fatal(err)
 		}
 	}
-	cmd := exec.Command("/bin/sh", "-c", strings.Join([]string{networkProbe(), frontProxy().probe(), standingOf(boardItem()).probe()}, "\n"))
+	cmd := exec.Command("/bin/sh", "-c", strings.Join([]string{networkProbe(), frontProxy().probe(), boardItem().box.probe()}, "\n"))
 	cmd.Env = []string{"PATH=" + dir}
 	var stderr strings.Builder
 	cmd.Stderr = &stderr

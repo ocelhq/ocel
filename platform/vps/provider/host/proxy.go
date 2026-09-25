@@ -258,6 +258,7 @@ func (s boxContainer) item(note string) Item {
 		Content: s.facts(),
 		Slow:    true,
 		Note:    note,
+		box:     &s,
 	}
 }
 
@@ -435,13 +436,6 @@ func (s boxContainer) mountsProbe() string {
 	return "mounts=" + mountsHeld + "\n" +
 		"if inside=$(" + words(asked) + " 2>/dev/null); then\n" + compared + "fi\n" +
 		"facts=\"$facts\n" + mountsFact + "$mounts\"\n"
-}
-
-func standingOf(item Item) boxContainer {
-	if item.Name == SwitchboardContainer {
-		return switchboardOver(factOf(item.Content, "config"))
-	}
-	return frontProxy()
 }
 
 func proxyRemovals() []removal {
