@@ -51,7 +51,13 @@ func New(table *Table, trusted []netip.Prefix) *Board {
 	board := &Board{trusted: slices.Clone(trusted), connector: ConnectorSocket, draining: map[string]int{}}
 	board.table.Store(table)
 	dialer := &net.Dialer{Timeout: dialTimeout, KeepAlive: dialKeepAlive}
-	board.tcp = upstreams(dialer.DialContext)
+	board.tcp = upstreams(func(ctx context.Context, network, address string) (net.Conn, error) {
+		conn, err := dialer.DialContext(ctx, network, address)
+		if err != nil {
+			return nil, err
+		}
+		return board.ledger.wired(ctx, conn)
+	})
 	board.socket = upstreams(func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return dialer.DialContext(ctx, "unix", board.connector)
 	})
