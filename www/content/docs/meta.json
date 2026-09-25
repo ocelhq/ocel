@@ -9,6 +9,7 @@
     "configuration",
     "typescript-config",
     "environments",
+    "env-sources",
     "transforms",
     "frameworks",
     "---Providers---",

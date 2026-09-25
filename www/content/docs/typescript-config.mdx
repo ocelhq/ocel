@@ -62,6 +62,31 @@ export default defineConfig({
 
 `ocel.json` reaches the same variables with `${DEPLOY_HOST}`, unchecked and as a string.
 
+## Env sources
+
+`ocel/env-source` holds a helper for each [env source](/docs/env-sources) that takes options,
+so a tier's source is typed the same way a provider is:
+
+```ts title="ocel.config.ts"
+import { defineConfig } from "ocel/config";
+import { exec, infisical } from "ocel/env-source";
+import awsProvider from "ocel/providers/aws";
+
+export default defineConfig({
+  slug: "my-app",
+  provider: awsProvider(),
+  envSource: {
+    production: infisical({
+      project: "4f1c2e0a-...",
+      environment: "prod",
+      auth: { aws: { identityId: "b7d0..." } },
+    }),
+    dev: exec({ command: ["./scripts/dev-env.sh", "{folder}"], format: "dotenv" }),
+  },
+  apps: [{ name: "web", path: "." }],
+});
+```
+
 ## Transforms are the same either way
 
 A [transform](/docs/transforms) is a module path, not a value the config imports, so it
