@@ -50,9 +50,9 @@ func TestTheRoutingTableIsAloneInADirectoryOfItsOwnThatIsWrittenBeforeIt(t *test
 	}
 	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64)
 	made := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindDir && item.Name == held })
-	table := slices.IndexFunc(items, func(item Item) bool { return item.Name == live.RoutingTable })
+	table := slices.IndexFunc(items, func(item Item) bool { return strings.Contains(item.command(), live.RoutingTable) })
 	if made < 0 || table < 0 || made > table {
-		t.Fatalf("%s is made at %d and the table in it written at %d: the table is written by renaming a file staged beside it, so its directory stands first", held, made, table)
+		t.Fatalf("%s is made at %d and the table in it first written at %d by %s: the table is written by renaming a file staged beside it, so its directory stands first", held, made, table, items[max(table, 0)].ID())
 	}
 	for _, item := range items {
 		if item.Name != held && item.Name != live.RoutingTable && beneath(held, item.Name) {
