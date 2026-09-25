@@ -12,14 +12,14 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type Releaser interface {
-	Plan(ctx context.Context, plan StackPlan, report Reporter) (Plan, error)
+type Stacks interface {
+	Plan(ctx context.Context, plan StackPlan, progress Progress) (Plan, error)
 
-	Provision(ctx context.Context, plan StackPlan, report Reporter) (StackResult, error)
+	Provision(ctx context.Context, plan StackPlan, progress Progress) (StackResult, error)
 
-	PlanDestroy(ctx context.Context, ref StackRef, report Reporter) (Plan, error)
+	PlanDestroy(ctx context.Context, ref StackRef, progress Progress) (Plan, error)
 
-	Destroy(ctx context.Context, ref StackRef, report Reporter) error
+	Destroy(ctx context.Context, ref StackRef, progress Progress) error
 }
 
 type StackRef struct {
@@ -49,19 +49,19 @@ type StackPlan struct {
 
 	Images ImagePlan
 
-	Bindings BindingReader
+	Bindings Bindings
 
 	App *AppPlan
 
 	Options any
 }
 
-type BindingReader interface {
+type Bindings interface {
 	Names(ctx context.Context) ([]string, error)
 
 	Published(ctx context.Context) ([]Binding, error)
 
-	Resolve(ctx context.Context, binding string) (Binding, error)
+	Named(ctx context.Context, binding string) (Binding, error)
 }
 
 type AppPlan struct {
@@ -177,7 +177,7 @@ type SecretRef struct {
 	Folder string
 }
 
-type Runtime struct {
+type Framework struct {
 	Name string `json:"name"`
 	Arch string `json:"arch,omitempty"`
 }
@@ -186,7 +186,7 @@ type FunctionSpec struct {
 	Name     string
 	Route    string
 	Handler  string
-	Runtime  Runtime
+	Runtime  Framework
 	Artifact ArtifactRef
 	Image    string
 	Env      map[string]string

@@ -26,25 +26,25 @@ func siblingAppRoot(t *testing.T, apps ...string) string {
 	return writeTree(t, files)
 }
 
-type recordingReporter struct {
+type recordingProgress struct {
 	mu    sync.Mutex
 	said  []string
 	spans []string
 }
 
-func (r *recordingReporter) Say(message string) {
+func (r *recordingProgress) Say(message string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.said = append(r.said, message)
 }
 
-func (r *recordingReporter) Detail(message string) {
+func (r *recordingProgress) Detail(message string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.said = append(r.said, message)
 }
 
-func (r *recordingReporter) Span(name string, _, _ time.Time, err error, _ ...providerkit.Attr) {
+func (r *recordingProgress) Span(name string, _, _ time.Time, err error, _ ...providerkit.Attr) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if err != nil {
@@ -53,7 +53,7 @@ func (r *recordingReporter) Span(name string, _, _ time.Time, err error, _ ...pr
 	r.spans = append(r.spans, name)
 }
 
-func (r *recordingReporter) reported() []string {
+func (r *recordingProgress) reported() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return append(slices.Clone(r.said), r.spans...)
@@ -118,9 +118,9 @@ func TestOneReleaserStandsUpSiblingAppStacksAtOnce(t *testing.T) {
 	var wg sync.WaitGroup
 	failures := make([]error, len(apps))
 	results := make([]providerkit.StackResult, len(apps))
-	reports := make([]*recordingReporter, len(apps))
+	reports := make([]*recordingProgress, len(apps))
 	for slot, app := range apps {
-		reports[slot] = &recordingReporter{}
+		reports[slot] = &recordingProgress{}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

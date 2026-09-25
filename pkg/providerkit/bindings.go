@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 )
 
-func (r *deployRun) admitBindings(ctx context.Context, report Reporter) error {
+func (r *deployRun) admitBindings(ctx context.Context, progress Progress) error {
 	resources, err := manifestResources(r.manifest)
 	if err != nil {
 		return err
@@ -25,7 +25,7 @@ func (r *deployRun) admitBindings(ctx context.Context, report Reporter) error {
 		published[binding.Name] = binding
 		names = append(names, binding.Name)
 	}
-	r.warnShadowed(report, resources, published)
+	r.warnShadowed(progress, resources, published)
 
 	var missing []string
 	for _, resource := range resources {
@@ -125,7 +125,7 @@ func (r *deployRun) publishingClasses(ctx context.Context, missing []string) map
 	return found
 }
 
-func (r *deployRun) warnShadowed(report Reporter, resources []Resource, published map[string]Binding) {
+func (r *deployRun) warnShadowed(progress Progress, resources []Resource, published map[string]Binding) {
 	for _, resource := range resources {
 		if resource.Binding != "" {
 			continue
@@ -134,7 +134,7 @@ func (r *deployRun) warnShadowed(report Reporter, resources []Resource, publishe
 		if !held || ReadableAs(namesake, resource.Declared, resource.Type, proxied) != nil {
 			continue
 		}
-		report.Say(fmt.Sprintf(
+		progress.Say(fmt.Sprintf(
 			"a binding named %q is already published to %s, and this deploy provisions %s beside it. "+
 				"Ocel binds neither to the other on its own: put %q in `bindings` — \"bindings\": { %q: { %q: %q } } — to consume the published record instead",
 			resource.Declared, describeCoordinate(string(r.plan.Class), r.plan.bindingEnvironment()), resource.Name,

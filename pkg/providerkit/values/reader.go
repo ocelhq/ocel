@@ -8,13 +8,13 @@ import (
 
 type Reader struct {
 	Records     ports.RecordStore
-	Sealer      ports.Sealer
+	Cipher      ports.Cipher
 	Scope       Scope
 	Environment string
 }
 
 func (r Reader) Values(ctx context.Context, cells []Cell) (map[string]string, error) {
-	store := Store{Records: r.Records, Sealer: r.Sealer}
+	store := Store{Records: r.Records, Cipher: r.Cipher}
 	wanted := make([]Coordinate, 0, len(cells)*2)
 	for _, at := range cells {
 		for _, environment := range shadowing(r.Environment) {
@@ -45,6 +45,6 @@ func (r Reader) Values(ctx context.Context, cells []Cell) (map[string]string, er
 }
 
 func (r Reader) Bindings(ctx context.Context, names []string) ([]Published, error) {
-	store := Store{Records: r.Records, Sealer: r.Sealer}
+	store := Store{Records: r.Records, Cipher: r.Cipher}
 	return store.ResolveBindings(ctx, r.Scope, r.Environment, names)
 }

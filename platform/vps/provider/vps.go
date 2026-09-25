@@ -20,7 +20,7 @@ type Provider struct {
 	project string
 	host    *host.Host
 	records providerkit.RecordStore
-	sealer  *host.Sealer
+	sealer  *host.Cipher
 
 	transform transformkit.Evaluator
 	resolve   Lookup
@@ -31,10 +31,8 @@ type Provider struct {
 	dial sync.Mutex
 	live *session.Session
 
-	providerkit.Liveness
+	providerkit.NetLiveness
 }
-
-var _ providerkit.Diagnoser = (*Provider)(nil)
 
 func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
 	decoded, err := providerkit.Decode[Options](Vendor, settings.Options)
@@ -70,7 +68,7 @@ func newProvider(options Options, dial host.Dial) *Provider {
 func (p *Provider) standing(dial host.Dial) *Provider {
 	p.host = host.New(dial, host.Keys{Path: p.options.DeployKey}, pins(p.options.Certificates), p.options.Proxy.front())
 	p.records = host.NewRecords(p.host)
-	p.sealer = host.NewSealer(p.host)
+	p.sealer = host.NewCipher(p.host)
 	p.Loopback = p.servedOnTheBox
 	p.LoopbackOnly = !p.host.FrontProxy().Guarantees().OwnsPorts
 	return p
@@ -106,27 +104,30 @@ func (p *Provider) resourceHooks() resources.Hooks {
 	}
 }
 
-func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrapper, error) {
-	return elevating{Bootstrapper: host.Bootstrap(p.host, Vendor, p.project), elevated: p.elevated}, nil
+func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrap, error) {
+	return elevating{Bootstrap: host.NewBootstrap(p.host, Vendor, p.project), elevated: p.elevated}, nil
 }
 
-func (p *Provider) Releases() providerkit.Releaser {
-	return resources.Releaser(p.records, p.Artifacts(), p.resourceHooks())
+func (p *Provider) Stacks() providerkit.Stacks {
+	return resources.Stacks(p.records, p.Artifacts(), p.resourceHooks())
 }
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore { return providerkit.NoArtifacts{} }
 
 func (p *Provider) Records() providerkit.RecordStore { return p.records }
 
-func (p *Provider) Sealer() providerkit.Sealer { return p.sealer }
+func (p *Provider) Cipher() providerkit.Cipher { return p.sealer }
 
 func (p *Provider) Credentials() providerkit.Credentials { return credentials{p} }
 
-func (p *Provider) Edges() providerkit.EdgeRegistry { return edges{p} }
+func (p *Provider) Edges() providerkit.Edges { return edges{p} }
 
-func (p *Provider) DNS() providerkit.DNSRegistry { return dns{} }
+func (p *Provider) DNS() providerkit.DNS { return dns{} }
 
-var (
-	_ providerkit.Prober            = (*Provider)(nil)
-	_ providerkit.ContainerRuntimer = (*Provider)(nil)
-)
+func (p *Provider) Certificates() providerkit.Certificates { return certificates{p} }
+
+func (p *Provider) Connector() providerkit.Connector { return connector{p} }
+
+func (p *Provider) Runtime() providerkit.Runtime { return containerRuntime{p} }
+
+func (p *Provider) Liveness() providerkit.Liveness { return &p.NetLiveness }

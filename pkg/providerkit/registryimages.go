@@ -295,7 +295,7 @@ func registryScheme(server string) string {
 	return "https"
 }
 
-func (r registryImages) Push(ctx context.Context, push ImagePush, report Reporter) error {
+func (r registryImages) Push(ctx context.Context, push ImagePush, progress Progress) error {
 	if push.Built != nil {
 		return r.write(ctx, push)
 	}
@@ -325,7 +325,7 @@ func (r registryImages) Push(ctx context.Context, push ImagePush, report Reporte
 				return err
 			}
 		}
-		again, wait, err = r.upload(ctx, client, host, named, tag, report)
+		again, wait, err = r.upload(ctx, client, host, named, tag, progress)
 		if !again {
 			return err
 		}
@@ -352,7 +352,7 @@ func (r registryImages) write(ctx context.Context, push ImagePush) error {
 	return nil
 }
 
-func (r registryImages) upload(ctx context.Context, client *http.Client, host DockerHost, named, tag string, report Reporter) (again bool, after time.Duration, err error) {
+func (r registryImages) upload(ctx context.Context, client *http.Client, host DockerHost, named, tag string, progress Progress) (again bool, after time.Duration, err error) {
 	endpoint := "http://docker/images/" + named + "/push?" + url.Values{"tag": {tag}}.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
 	if err != nil {
@@ -374,7 +374,7 @@ func (r registryImages) upload(ctx context.Context, client *http.Client, host Do
 		return resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500, retryAfter(resp),
 			fmt.Errorf("the daemon at %s answered %q pushing %s:%s: %s", host.Address, resp.Status, named, tag, said(resp.Body))
 	}
-	if err := drainPush(resp.Body, report); err != nil {
+	if err := drainPush(resp.Body, progress); err != nil {
 		var refusal registryRefusal
 		return errors.As(err, &refusal) && refusal.again, 0, err
 	}
@@ -416,7 +416,7 @@ type registryRefusal struct {
 
 func (e registryRefusal) Error() string { return "the registry refused the push: " + e.said }
 
-func drainPush(body io.Reader, report Reporter) error {
+func drainPush(body io.Reader, progress Progress) error {
 	decoder := json.NewDecoder(body)
 	for {
 		var line struct {
@@ -432,8 +432,8 @@ func drainPush(body io.Reader, report Reporter) error {
 		if line.Error != "" {
 			return registryRefusal{said: line.Error, again: Throttled(line.Error)}
 		}
-		if report != nil && line.Status != "" {
-			report.Detail(line.Status)
+		if progress != nil && line.Status != "" {
+			progress.Detail(line.Status)
 		}
 	}
 }

@@ -69,7 +69,7 @@ func TestLiveCredentials(t *testing.T) {
 func TestLiveReleaser(t *testing.T) {
 	p := live(t)
 
-	conformance.RunReleaser(t, p.Releases(), p.Artifacts(), p.Records(), p.Facts().Bindings)
+	conformance.RunStacks(t, p.Stacks(), p.Artifacts(), p.Records(), p.Facts().Bindings)
 }
 
 func TestLiveRecordStore(t *testing.T) {
@@ -110,7 +110,7 @@ func TestLiveSealer(t *testing.T) {
 	provider := live(t)
 	bootstrapped(t, provider, providerkit.ClassProduction)
 
-	conformance.RunSealer(t, provider.Sealer())
+	conformance.RunCipher(t, provider.Cipher())
 }
 
 func TestLiveSealingWhereNoKeyRingStandsSaysWhatToRun(t *testing.T) {
@@ -118,7 +118,7 @@ func TestLiveSealingWhereNoKeyRingStandsSaysWhatToRun(t *testing.T) {
 
 	elsewhere := newProvider(t, gcp.Options{Project: liveProject(), Region: "australia-southeast2"})
 	var refusal providerkit.Refusal
-	_, err := elsewhere.Sealer().Seal(context.Background(), providerkit.Coordinate{
+	_, err := elsewhere.Cipher().Seal(context.Background(), providerkit.Coordinate{
 		Project: "shop",
 		Class:   providerkit.ClassProduction,
 		Env:     "*",

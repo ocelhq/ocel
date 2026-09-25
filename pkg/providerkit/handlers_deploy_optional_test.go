@@ -70,7 +70,7 @@ func (e *embedding) Hooks() providerkit.Hooks {
 	return hooks
 }
 
-func (e *embedding) EmbedCode(_ context.Context, function string, ref providerkit.ArtifactRef, _ providerkit.Reporter) error {
+func (e *embedding) EmbedCode(_ context.Context, function string, ref providerkit.ArtifactRef, _ providerkit.Progress) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.embedded = append(e.embedded, function+" "+ref.Key)
@@ -90,7 +90,7 @@ func (w *warming) Hooks() providerkit.Hooks {
 	return hooks
 }
 
-func (w *warming) WarmFunctions(_ context.Context, targets []string, _ providerkit.Reporter) error {
+func (w *warming) WarmFunctions(_ context.Context, targets []string, _ providerkit.Progress) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.warmed = append(w.warmed, targets...)
@@ -184,7 +184,7 @@ func TestDeployHandsPreflightThePlanBeforeItUploadsAnything(t *testing.T) {
 	if len(pre.Resources) != 1 || pre.Resources[0].Name != "orders" {
 		t.Errorf("preflight saw resources %+v, want the one the manifest declares", pre.Resources)
 	}
-	if pre.Report == nil {
+	if pre.Progress == nil {
 		t.Error("preflight was handed no reporter, and a vendor check has nothing to say through")
 	}
 }

@@ -114,7 +114,7 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 	client, provider := deployedProject(t)
 	ctx := context.Background()
 
-	plans := provider.Releases().(*fake.Releaser).Plans()
+	plans := provider.FakeStacks().Plans()
 	ref := plans[1].App.Functions[0].Artifact
 
 	stream, err := client.RemoveProject(ctx, projectRequest())
@@ -130,7 +130,7 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 		t.Errorf("the artifact at %s survived the removal, want the project's whole prefix gone", ref.Key)
 	}
 
-	store := values.Store{Records: provider.Records(), Sealer: provider.Sealer()}
+	store := values.Store{Records: provider.Records(), Cipher: provider.Cipher()}
 	names, err := store.PublishedNames(ctx, values.Scope{Project: "shop", Class: providerkit.ClassProduction}, providerkit.ProductionEnv)
 	if err != nil {
 		t.Fatal(err)

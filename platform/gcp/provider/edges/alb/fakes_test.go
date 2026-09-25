@@ -56,7 +56,7 @@ func front() map[string]string {
 	}
 }
 
-func (w *world) Up(_ context.Context, target Target, program Program, _ edge.Reporter) (map[string]string, error) {
+func (w *world) Up(_ context.Context, target Target, program Program, _ edge.Progress) (map[string]string, error) {
 	stack := target.Name()
 	if program == nil {
 		return nil, errors.New("a stack was raised with no program to raise")
@@ -86,7 +86,7 @@ func (w *world) Up(_ context.Context, target Target, program Program, _ edge.Rep
 	return map[string]string{}, nil
 }
 
-func (w *world) Destroy(_ context.Context, target Target, _ edge.Reporter) error {
+func (w *world) Destroy(_ context.Context, target Target, _ edge.Progress) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.destroys = append(w.destroys, target.Name())

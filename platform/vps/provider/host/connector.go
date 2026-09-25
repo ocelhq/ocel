@@ -124,7 +124,7 @@ func keyPathed(config []byte) ([]byte, error) {
 	return append(written, '\n'), nil
 }
 
-func (c *Connector) Install(ctx context.Context, hostname string, binary, config []byte, report providerkit.Reporter) (ConnectorStanding, error) {
+func (c *Connector) Install(ctx context.Context, hostname string, binary, config []byte, progress providerkit.Progress) (ConnectorStanding, error) {
 	written, err := keyPathed(config)
 	if err != nil {
 		return ConnectorStanding{}, err
@@ -140,33 +140,33 @@ func (c *Connector) Install(ctx context.Context, hostname string, binary, config
 	}
 	for _, item := range items {
 		if observed[item.ID()] == item.Digest() {
-			say(report, item.ID()+": "+reasonStanding)
+			say(progress, item.ID()+": "+reasonStanding)
 			continue
 		}
 		if err := c.host.Install(ctx, item); err != nil {
 			return ConnectorStanding{}, err
 		}
-		say(report, "wrote "+item.ID())
+		say(progress, "wrote "+item.ID())
 	}
 	if err := c.Route(ctx, hostname); err != nil {
 		return ConnectorStanding{}, err
 	}
-	say(report, "routed "+hostname+switchboard.ConnectorPath)
+	say(progress, "routed "+hostname+switchboard.ConnectorPath)
 	if route := c.host.RouteBy(hostname); route != "" {
-		say(report, route)
+		say(progress, route)
 	}
 	return c.Describe(ctx)
 }
 
-func (c *Connector) Remove(ctx context.Context, report providerkit.Reporter) error {
+func (c *Connector) Remove(ctx context.Context, progress providerkit.Progress) error {
 	if err := c.Route(ctx, ""); err != nil {
 		return err
 	}
-	say(report, "unrouted "+switchboard.ConnectorPath)
+	say(progress, "unrouted "+switchboard.ConnectorPath)
 	if _, err := c.host.run(ctx, "take the connector off this host", connectorRemoval(), nil); err != nil {
 		return err
 	}
-	say(report, "removed "+ConnectorUnit+", "+ConnectorBinary+" and "+connectorRoot)
+	say(progress, "removed "+ConnectorUnit+", "+ConnectorBinary+" and "+connectorRoot)
 	return nil
 }
 

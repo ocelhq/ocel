@@ -170,7 +170,7 @@ type release struct {
 	revision string
 }
 
-func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Reporter) (release, error) {
+func (p *Provider) stand(ctx context.Context, s serving, progress providerkit.Progress) (release, error) {
 	clients, err := p.stood(ctx)
 	if err != nil {
 		return release{}, err
@@ -191,8 +191,8 @@ func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Repo
 	})
 	switch {
 	case absent(err):
-		if report != nil {
-			report.Say("Standing " + s.service + " up on Cloud Run")
+		if progress != nil {
+			progress.Say("Standing " + s.service + " up on Cloud Run")
 		}
 		err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 			return services.Projects.Locations.Services.
@@ -201,8 +201,8 @@ func (p *Provider) stand(ctx context.Context, s serving, report providerkit.Repo
 	case err != nil:
 		return release{}, fmt.Errorf("read the Cloud Run service %s: %w", s.service, err)
 	default:
-		if report != nil {
-			report.Say("Releasing " + s.service + " onto Cloud Run")
+		if progress != nil {
+			progress.Say("Releasing " + s.service + " onto Cloud Run")
 		}
 		err = p.settled(ctx, "release "+s.service+" onto Cloud Run", func() error {
 			held, err := p.read(ctx, services, path, s.service)
@@ -369,7 +369,7 @@ func (p *Provider) await(ctx context.Context, services *run.Service, call func(.
 	return nil
 }
 
-func (p *Provider) tearDown(ctx context.Context, service string, report providerkit.Reporter) error {
+func (p *Provider) tearDown(ctx context.Context, service string, progress providerkit.Progress) error {
 	clients, err := p.stood(ctx)
 	if err != nil {
 		return err
@@ -378,8 +378,8 @@ func (p *Provider) tearDown(ctx context.Context, service string, report provider
 	if err != nil {
 		return err
 	}
-	if report != nil {
-		report.Say("Taking " + service + " down")
+	if progress != nil {
+		progress.Say("Taking " + service + " down")
 	}
 	err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 		return services.Projects.Locations.Services.Delete(clients.servicePath(service)).Context(ctx).Do(call...)

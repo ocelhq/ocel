@@ -25,7 +25,7 @@ func serviceFor(names Names, plan providerkit.StackPlan, app *providerkit.AppPla
 const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: the %q edge shields nothing, " +
 	"and Cloud Run's invoker check would shut browsers out too. Front previews with an edge that shields the origin, or keep their urls to yourselves"
 
-func warnPreviewOpen(plan providerkit.StackPlan, service string, report providerkit.Reporter) {
+func warnPreviewOpen(plan providerkit.StackPlan, service string, progress providerkit.Progress) {
 	if plan.Ref.Class != providerkit.ClassPreview || factsOf(plan.Edge).ShieldsOrigin {
 		return
 	}
@@ -33,10 +33,10 @@ func warnPreviewOpen(plan providerkit.StackPlan, service string, report provider
 	if plan.Edge != nil {
 		kind = plan.Edge.Kind()
 	}
-	say(report, service+" "+fmt.Sprintf(previewOpenWarning, kind))
+	say(progress, service+" "+fmt.Sprintf(previewOpenWarning, kind))
 }
 
-func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) ([]providerkit.Function, error) {
+func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) ([]providerkit.Function, error) {
 	app := plan.App
 	if app == nil {
 		return nil, nil
@@ -80,11 +80,11 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 			ingress: ingressFor(factsOf(plan.Edge)),
 			memory:  spec.Memory,
 			timeout: spec.Timeout,
-		}, report)
+		}, progress)
 		if err != nil {
 			return nil, err
 		}
-		warnPreviewOpen(plan, service, report)
+		warnPreviewOpen(plan, service, progress)
 		standing = append(standing, providerkit.Function{
 			Name: spec.Name, Physical: service, URL: ran.url, Revision: ran.revision,
 		})
@@ -92,19 +92,19 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 	return standing, nil
 }
 
-func (p *Provider) RemoveFunctions(ctx context.Context, _ providerkit.StackRef, functions []providerkit.Function, report providerkit.Reporter) error {
+func (p *Provider) RemoveFunctions(ctx context.Context, _ providerkit.StackRef, functions []providerkit.Function, progress providerkit.Progress) error {
 	for _, function := range functions {
 		if function.Physical == "" {
 			continue
 		}
-		if err := p.tearDown(ctx, function.Physical, report); err != nil {
+		if err := p.tearDown(ctx, function.Physical, progress); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) ([]providerkit.AppContainer, error) {
+func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) ([]providerkit.AppContainer, error) {
 	app := plan.App
 	if app == nil {
 		return nil, nil
@@ -142,22 +142,22 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 		health:  app.HealthCheckPath,
 		public:  true,
 		ingress: ingressFor(factsOf(plan.Edge)),
-	}, report)
+	}, progress)
 	if err != nil {
 		return nil, err
 	}
-	warnPreviewOpen(plan, service, report)
+	warnPreviewOpen(plan, service, progress)
 	return []providerkit.AppContainer{{
 		Name: app.App, Physical: service, URL: ran.url, Image: app.Image, Revision: ran.revision,
 	}}, nil
 }
 
-func (p *Provider) RemoveContainers(ctx context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, report providerkit.Reporter) error {
+func (p *Provider) RemoveContainers(ctx context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, progress providerkit.Progress) error {
 	for _, container := range containers {
 		if container.Physical == "" {
 			continue
 		}
-		if err := p.tearDown(ctx, container.Physical, report); err != nil {
+		if err := p.tearDown(ctx, container.Physical, progress); err != nil {
 			return err
 		}
 	}

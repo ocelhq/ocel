@@ -793,7 +793,7 @@ func promote(t *testing.T, p *provider, state edge.StackState, app, build string
 	if err := s.PutStaged(t.Context(), edge.DeploymentRecord{App: app, Identity: build}); err != nil {
 		t.Fatalf("PutStaged(%s): %v", app, err)
 	}
-	if err := s.Promote(t.Context(), edge.Promotion{PromotionID: app + "-1", Ts: 1, Builds: map[string]string{app: build}}, "", edge.DiscardReporter()); err != nil {
+	if err := s.Promote(t.Context(), edge.Promotion{PromotionID: app + "-1", Ts: 1, Builds: map[string]string{app: build}}, "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", app, err)
 	}
 }

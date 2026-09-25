@@ -2,21 +2,21 @@ package providerkit
 
 import "context"
 
-type Bootstrapper interface {
+type Bootstrap interface {
 	Catalogue() []Feature
 
-	Describe(ctx context.Context, class Class) (Bootstrap, error)
+	Describe(ctx context.Context, class Class) (BootstrapReading, error)
 
 	Plan(ctx context.Context, req BootstrapRequest) (Plan, error)
 
-	Apply(ctx context.Context, req BootstrapRequest, report Reporter) error
+	Apply(ctx context.Context, req BootstrapRequest, progress Progress) error
 
-	PlanRemoval(ctx context.Context, class Class) (Plan, error)
+	PlanRemove(ctx context.Context, class Class) (Plan, error)
 
-	Remove(ctx context.Context, class Class, report Reporter) error
+	Remove(ctx context.Context, class Class, progress Progress) error
 }
 
-type Bootstrap struct {
+type BootstrapReading struct {
 	Class   Class
 	Present bool
 	Stacks  []BootstrapStack
@@ -35,7 +35,7 @@ type BootstrapStack struct {
 
 	DigestCurrent bool
 
-	Writer string
+	WrittenBy string
 }
 
 type Feature struct {
@@ -61,7 +61,7 @@ type BootstrapRequest struct {
 
 	Heal bool
 
-	Writer Writer
+	WrittenBy WrittenBy
 
 	Held any
 }

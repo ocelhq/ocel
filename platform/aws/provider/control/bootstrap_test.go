@@ -27,7 +27,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func standingBootstrapper(t *testing.T, class string) Bootstrapper {
+func standingBootstrapper(t *testing.T, class string) Bootstrap {
 	t.Helper()
 
 	stackName, err := defaultNamespace.StackNameFor(class)
@@ -56,7 +56,7 @@ func standingBootstrapper(t *testing.T, class string) Bootstrapper {
 		VarsTable:      "ocel-vars",
 	}
 	front := &teardownEdge{}
-	return Bootstrapper{
+	return Bootstrap{
 		CFN:     &teardownCFN{present: map[string]bootstrap.Deployed{stackName: deployed}},
 		SSM:     &teardownSSM{params: stored},
 		IAM:     &teardownIAM{keys: map[string][]string{userName: {"AKIAOLD"}}},
@@ -277,8 +277,8 @@ func TestPlanCarriesTheEdgesRefusalOut(t *testing.T) {
 	}
 }
 
-func planningBootstrapper(front edge.Edge) Bootstrapper {
-	return Bootstrapper{
+func planningBootstrapper(front edge.Edge) Bootstrap {
+	return Bootstrap{
 		CFN:   &teardownCFN{present: map[string]bootstrap.Deployed{}},
 		SSM:   &teardownSSM{params: map[string]string{}},
 		IAM:   &teardownIAM{keys: map[string][]string{}},
@@ -521,9 +521,9 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 	}}
 	b := planningBootstrapper(front)
 	cfn := b.CFN.(*teardownCFN)
-	gate := providerkit.Gate{Bootstrapper: b, Records: fake.NewRecords(), Edge: cloudflareKind}
+	gate := providerkit.Gate{Bootstrap: b, Records: fake.NewRecords(), Edge: cloudflareKind}
 
-	standing, err := gate.Standing(context.Background(), providerkit.ClassProduction)
+	standing, err := gate.State(context.Background(), providerkit.ClassProduction)
 	if err != nil {
 		t.Fatalf("Standing: %v", err)
 	}

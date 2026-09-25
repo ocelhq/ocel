@@ -30,7 +30,7 @@ type IAMAPI interface {
 	bootstrap.IAMBoundaryAPI
 }
 
-type Bootstrapper struct {
+type Bootstrap struct {
 	CFN     cfn.API
 	SSM     SSMAPI
 	IAM     IAMAPI
@@ -38,15 +38,15 @@ type Bootstrapper struct {
 	Store   bootstrap.ObjectStore
 	Buckets cfn.BucketEmptierAPI
 	Edge    edge.Edge
-	Edges   providerkit.EdgeRegistry
+	Edges   providerkit.Edges
 	Region  string
 	VarsKey string
 
 	Namespace bootstrap.Namespace
 }
 
-func BootstrapperFor(cfg aws.Config, front edge.Edge, registry providerkit.EdgeRegistry, varsKey string, ns bootstrap.Namespace) Bootstrapper {
-	return Bootstrapper{
+func BootstrapFor(cfg aws.Config, front edge.Edge, registry providerkit.Edges, varsKey string, ns bootstrap.Namespace) Bootstrap {
+	return Bootstrap{
 		CFN:     cloudformation.NewFromConfig(cfg),
 		SSM:     ssm.NewFromConfig(cfg),
 		IAM:     iam.NewFromConfig(cfg),
@@ -62,34 +62,34 @@ func BootstrapperFor(cfg aws.Config, front edge.Edge, registry providerkit.EdgeR
 	}
 }
 
-func (b Bootstrapper) paramAPIs() bootstrap.ParamAPIs {
+func (b Bootstrap) paramAPIs() bootstrap.ParamAPIs {
 	return bootstrap.ParamAPIs{SSM: b.SSM, IAM: b.IAM, KMS: b.KMS, Region: b.Region}
 }
 
-func (b Bootstrapper) request(req providerkit.BootstrapRequest) bootstrap.Request {
+func (b Bootstrap) request(req providerkit.BootstrapRequest) bootstrap.Request {
 	return bootstrap.Request{
 		VarsKey:            b.VarsKey,
 		Features:           req.Features,
 		Remove:             req.Remove,
-		Writer:             req.Writer,
+		Writer:             req.WrittenBy,
 		AcceptReplacements: !req.Unattended,
 	}
 }
 
-func (b Bootstrapper) Catalogue() []providerkit.Feature { return bootstrap.Catalogue() }
+func (b Bootstrap) Catalogue() []providerkit.Feature { return bootstrap.Catalogue() }
 
-func (b Bootstrapper) Describe(ctx context.Context, class providerkit.Class) (providerkit.Bootstrap, error) {
+func (b Bootstrap) Describe(ctx context.Context, class providerkit.Class) (providerkit.BootstrapReading, error) {
 	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(class))
 	if err != nil {
-		return providerkit.Bootstrap{}, err
+		return providerkit.BootstrapReading{}, err
 	}
 	held := described(class, read.Deployed)
 	held.Held = read
 	return held, nil
 }
 
-func described(class providerkit.Class, deployed bootstrap.Deployed) providerkit.Bootstrap {
-	described := providerkit.Bootstrap{Class: class, Present: deployed.Present}
+func described(class providerkit.Class, deployed bootstrap.Deployed) providerkit.BootstrapReading {
+	described := providerkit.BootstrapReading{Class: class, Present: deployed.Present}
 	for _, stack := range deployed.Stacks {
 		described.Stacks = append(described.Stacks, providerkit.BootstrapStack{
 			Name:          stack.Name,
@@ -97,13 +97,13 @@ func described(class providerkit.Class, deployed bootstrap.Deployed) providerkit
 			Present:       stack.Present,
 			Schema:        uint32(stack.Schema),
 			DigestCurrent: stack.Current(),
-			Writer:        stack.WrittenBy,
+			WrittenBy:     stack.WrittenBy,
 		})
 	}
 	return described
 }
 
-func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
+func (b Bootstrap) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
 	read, err := b.reading(ctx, req)
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -130,21 +130,21 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 	return plan, nil
 }
 
-func (b Bootstrapper) reading(ctx context.Context, req providerkit.BootstrapRequest) (bootstrap.Reading, error) {
+func (b Bootstrap) reading(ctx context.Context, req providerkit.BootstrapRequest) (bootstrap.Reading, error) {
 	if held, carried := req.Held.(bootstrap.Reading); carried && held.Class() == string(req.Class) {
 		return held, nil
 	}
 	return bootstrap.Read(ctx, b.CFN, b.Namespace, string(req.Class))
 }
 
-func (b Bootstrapper) open(kind edge.Kind) (edge.Edge, error) {
+func (b Bootstrap) open(kind edge.Kind) (edge.Edge, error) {
 	if b.Edge != nil && b.Edge.Kind() == kind {
 		return b.Edge, nil
 	}
 	return b.Edges.Open(kind)
 }
 
-func (b Bootstrapper) adoptions(ctx context.Context, req providerkit.BootstrapRequest) ([]bootstrap.EdgeAdoption, error) {
+func (b Bootstrap) adoptions(ctx context.Context, req providerkit.BootstrapRequest) ([]bootstrap.EdgeAdoption, error) {
 	var out []bootstrap.EdgeAdoption
 	for _, kind := range bootstrap.EdgeKindsFor(req.Features) {
 		front, err := b.open(kind)
@@ -164,7 +164,7 @@ func (b Bootstrapper) adoptions(ctx context.Context, req providerkit.BootstrapRe
 	return out, nil
 }
 
-func (b Bootstrapper) edgeGroups(ctx context.Context, req providerkit.BootstrapRequest) ([]providerkit.ChangeGroup, error) {
+func (b Bootstrap) edgeGroups(ctx context.Context, req providerkit.BootstrapRequest) ([]providerkit.ChangeGroup, error) {
 	var groups []providerkit.ChangeGroup
 	for _, kind := range bootstrap.EdgeKindsFor(req.Features) {
 		group, err := b.standingEdgeGroup(ctx, req.Class, kind)
@@ -187,7 +187,7 @@ func (b Bootstrapper) edgeGroups(ctx context.Context, req providerkit.BootstrapR
 	return groups, nil
 }
 
-func (b Bootstrapper) standingEdgeGroup(ctx context.Context, class providerkit.Class, kind edge.Kind) (*providerkit.ChangeGroup, error) {
+func (b Bootstrap) standingEdgeGroup(ctx context.Context, class providerkit.Class, kind edge.Kind) (*providerkit.ChangeGroup, error) {
 	front, err := b.open(kind)
 	if err != nil {
 		return nil, err
@@ -215,7 +215,7 @@ func plannedBootstrap(ctx context.Context, front edge.Edge, class providerkit.Cl
 	return planned, nil
 }
 
-func (b Bootstrapper) severedEdge(ctx context.Context, class providerkit.Class, kind edge.Kind) (*providerkit.ChangeGroup, error) {
+func (b Bootstrap) severedEdge(ctx context.Context, class providerkit.Class, kind edge.Kind) (*providerkit.ChangeGroup, error) {
 	front, err := b.open(kind)
 	if err != nil {
 		return nil, err
@@ -262,30 +262,30 @@ func standingEdgeChanges(kind edge.Kind, feature string, planned []edge.PlanChan
 	return &group
 }
 
-func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
+func (b Bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
 	if req.Heal {
-		return b.heal(ctx, req, report)
+		return b.heal(ctx, req, progress)
 	}
-	err := bootstrap.Run(ctx, b.apis(), b.Namespace, string(req.Class), b.request(req), say(report), detail(report))
+	err := bootstrap.Run(ctx, b.apis(), b.Namespace, string(req.Class), b.request(req), say(progress), detail(progress))
 	if bootstrap.RefusedWrite(err) {
 		return providerkit.Refuse(providerkit.CodeDenied, "%s", err.Error())
 	}
 	return err
 }
 
-func (b Bootstrapper) heal(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
+func (b Bootstrap) heal(ctx context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
 	_, err := bootstrap.Heal(ctx, b.apis(), b.Namespace, string(req.Class), bootstrap.HealRequest{
 		Features: req.Features,
-		Writer:   req.Writer,
-	}, detail(report))
+		Writer:   req.WrittenBy,
+	}, detail(progress))
 	if errors.Is(err, bootstrap.ErrHealNotPermitted) {
 		return providerkit.Refuse(providerkit.CodeDenied, "%s", err.Error())
 	}
 	return err
 }
 
-func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {
-	progress, logf := say(report), detail(report)
+func (b Bootstrap) Remove(ctx context.Context, class providerkit.Class, progress providerkit.Progress) error {
+	sayf, logf := say(progress), detail(progress)
 	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(class))
 	if err != nil {
 		return err
@@ -295,7 +295,7 @@ func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 		return err
 	}
 	for _, front := range fronts {
-		progress(fmt.Sprintf("Tearing down the %s edge", front.Kind()))
+		sayf(fmt.Sprintf("Tearing down the %s edge", front.Kind()))
 		if err := front.Teardown(ctx, class); err != nil {
 			return fmt.Errorf("tear down %s edge: %w", front.Kind(), err)
 		}
@@ -305,25 +305,25 @@ func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 		SSM:     b.SSM,
 		IAM:     b.IAM,
 		Buckets: b.Buckets,
-	}, b.Namespace, string(class), progress, logf)
+	}, b.Namespace, string(class), sayf, logf)
 }
 
-func (b Bootstrapper) apis() bootstrap.APIs {
+func (b Bootstrap) apis() bootstrap.APIs {
 	return bootstrap.APIs{CFN: b.CFN, SSM: b.SSM, IAM: b.IAM, Store: b.Store, Edge: b.Edge, Edges: b.Edges}
 }
 
-func say(report providerkit.Reporter) func(string) {
-	if report == nil {
+func say(progress providerkit.Progress) func(string) {
+	if progress == nil {
 		return func(string) {}
 	}
-	return report.Say
+	return progress.Say
 }
 
-func detail(report providerkit.Reporter) func(string) {
-	if report == nil {
+func detail(progress providerkit.Progress) func(string) {
+	if progress == nil {
 		return func(string) {}
 	}
-	return report.Detail
+	return progress.Detail
 }
 
-var _ providerkit.Bootstrapper = Bootstrapper{}
+var _ providerkit.Bootstrap = Bootstrap{}

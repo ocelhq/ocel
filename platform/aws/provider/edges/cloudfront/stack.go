@@ -199,7 +199,7 @@ func (s *stack) findDistributionFor(ctx context.Context, c Clients, name string)
 	return findDistribution(ctx, c, name)
 }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, report edge.Reporter) error {
+func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
 	c, err := s.clients(ctx)
 	if err != nil {
 		return err
@@ -207,7 +207,7 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	if err := s.publish(ctx, c, promotion, pointer); err != nil {
 		return err
 	}
-	if err := s.ledger(c).Promote(ctx, promotion, pointer, report); err != nil {
+	if err := s.ledger(c).Promote(ctx, promotion, pointer, progress); err != nil {
 		return errors.Join(err, s.republish(ctx, c, pointer))
 	}
 	return nil
@@ -413,7 +413,7 @@ func (s *stack) originSecret(ctx context.Context, c Clients) (bootstrap.OriginSe
 	return secret, nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Reporter) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progress) (edge.PruneResult, error) {
 	c, err := s.clients(ctx)
 	if err != nil {
 		return edge.PruneResult{}, err

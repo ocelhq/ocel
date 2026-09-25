@@ -32,7 +32,7 @@ func summary(id, kind string) cfntypes.StackResourceSummary {
 	return cfntypes.StackResourceSummary{LogicalResourceId: aws.String(id), ResourceType: aws.String(kind)}
 }
 
-func removingBootstrapper(t *testing.T, class string) Bootstrapper {
+func removingBootstrapper(t *testing.T, class string) Bootstrap {
 	t.Helper()
 
 	b := standingBootstrapper(t, class)
@@ -96,7 +96,7 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 
 	b := removingBootstrapper(t, bootstrap.ClassProduction)
 
-	plan, err := b.PlanRemoval(context.Background(), providerkit.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemoval: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestPlanRemovalKeepsThePassphraseABootstrappedSiblingHolds(t *testing.T) {
 	b := removingBootstrapper(t, bootstrap.ClassPreview)
 	b.CFN.(*teardownCFN).present[coreStackName] = bootstrap.Deployed{Present: true}
 
-	plan, err := b.PlanRemoval(context.Background(), providerkit.ClassPreview)
+	plan, err := b.PlanRemove(context.Background(), providerkit.ClassPreview)
 	if err != nil {
 		t.Fatalf("PlanRemoval: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestPlanRemovalOfAnAbsentBootstrapStillPlansWhatItLeftBehind(t *testing.T) 
 	b := removingBootstrapper(t, bootstrap.ClassProduction)
 	delete(b.CFN.(*teardownCFN).present, coreStackName)
 
-	plan, err := b.PlanRemoval(context.Background(), providerkit.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemoval: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestPlanRemovalLeavesOutAnEdgeThatSaysNothingAboutItsOwnRemoval(t *testing.
 	b := removingBootstrapper(t, bootstrap.ClassProduction)
 	b.Edge = &teardownEdge{}
 
-	plan, err := b.PlanRemoval(context.Background(), providerkit.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemoval: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestPlanRemovalLeavesOutAnEdgeThatSaysNothingAboutItsOwnRemoval(t *testing.
 	}
 }
 
-func frontedBootstrapper(t *testing.T, class string) (Bootstrapper, *planningEdge, *planningEdge) {
+func frontedBootstrapper(t *testing.T, class string) (Bootstrap, *planningEdge, *planningEdge) {
 	t.Helper()
 
 	b := removingBootstrapper(t, class)
@@ -245,7 +245,7 @@ func TestPlanRemovalNamesEveryStandingEdgeByItsOwnKind(t *testing.T) {
 
 	b, _, _ := frontedBootstrapper(t, bootstrap.ClassProduction)
 
-	plan, err := b.PlanRemoval(context.Background(), providerkit.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemoval: %v", err)
 	}
@@ -284,7 +284,7 @@ func TestPlanRemovalLeavesOutAnEdgeThisAccountHoldsNothingFor(t *testing.T) {
 	}
 	b.Edges = registryOf(selected, standing, unused)
 
-	plan, err := b.PlanRemoval(context.Background(), providerkit.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemoval: %v", err)
 	}
@@ -299,7 +299,7 @@ func TestPlanRemovalStillSeesAnEdgeWhoseParametersAreAlreadyGone(t *testing.T) {
 	b, _, _ := frontedBootstrapper(t, bootstrap.ClassProduction)
 	severed(t, b, bootstrap.ClassProduction)
 
-	plan, err := b.PlanRemoval(context.Background(), providerkit.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemoval: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestRemoveTearsDownAnEdgeWhoseParametersAreAlreadyGone(t *testing.T) {
 	}
 }
 
-func severed(t *testing.T, b Bootstrapper, class string) {
+func severed(t *testing.T, b Bootstrap, class string) {
 	t.Helper()
 
 	b.CFN.(*teardownCFN).present[defaultNamespace.FeatureStackName(bootstrap.FeatureCloudflareEdge, class)] =
@@ -374,7 +374,7 @@ func TestPlanRemovalSaysWhatDroppingTheVarsKeyStrands(t *testing.T) {
 
 	b := removingBootstrapper(t, bootstrap.ClassProduction)
 
-	plan, err := b.PlanRemoval(context.Background(), providerkit.ClassProduction)
+	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemoval: %v", err)
 	}

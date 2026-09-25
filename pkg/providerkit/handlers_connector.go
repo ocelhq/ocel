@@ -2,7 +2,6 @@ package providerkit
 
 import (
 	"context"
-	"errors"
 
 	connect "connectrpc.com/connect"
 
@@ -11,25 +10,20 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func (h *handlers) connectorHost() (ConnectorHost, error) {
+func (h *handlers) connector() (Connector, error) {
 	provider, err := h.session.use()
 	if err != nil {
 		return nil, err
 	}
-	installs, does := provider.(ConnectorHost)
-	if !does {
-		return nil, connect.NewError(connect.CodeUnimplemented,
-			errors.New("this provider puts no connector on its targets; the console reaches a target of this kind through the provider itself"))
-	}
-	return installs, nil
+	return provider.Connector(), nil
 }
 
 func (h *handlers) DescribeConnectorTarget(ctx context.Context, _ *contractv1.DescribeConnectorTargetRequest) (*contractv1.DescribeConnectorTargetResponse, error) {
-	installs, err := h.connectorHost()
+	connector, err := h.connector()
 	if err != nil {
 		return nil, err
 	}
-	described, err := installs.DescribeConnectorTarget(ctx)
+	described, err := connector.Target(ctx)
 	if err != nil {
 		return nil, RefusalError(err)
 	}
@@ -49,19 +43,19 @@ func (h *handlers) DescribeConnectorTarget(ctx context.Context, _ *contractv1.De
 }
 
 func (h *handlers) InstallConnector(ctx context.Context, req *contractv1.InstallConnectorRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	installs, err := h.connectorHost()
+	connector, err := h.connector()
 	if err != nil {
 		return err
 	}
 	return streamResult(ctx, stream, func(sender *eventSender) (*progressv1.OperationEvent, error) {
 		var at ConnectorAddress
-		err := inUnit(sender, naming.UnitConnector, connectorUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(_ *eventSender, report Reporter) error {
-			at, err = installs.InstallConnector(ctx, ConnectorInstall{
+		err := inUnit(sender, naming.UnitConnector, connectorUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(_ *eventSender, progress Progress) error {
+			at, err = connector.Install(ctx, ConnectorInstall{
 				Binary:  req.GetBinary(),
 				Version: req.GetVersion(),
 				Config:  req.GetConfigJson(),
 				Compute: Compute(req.GetCompute()),
-			}, report)
+			}, progress)
 			return err
 		})
 		if err != nil {
@@ -72,12 +66,12 @@ func (h *handlers) InstallConnector(ctx context.Context, req *contractv1.Install
 }
 
 func (h *handlers) RemoveConnector(ctx context.Context, _ *contractv1.RemoveConnectorRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	installs, err := h.connectorHost()
+	connector, err := h.connector()
 	if err != nil {
 		return err
 	}
-	return streamed(ctx, stream, naming.UnitConnector, connectorUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, report Reporter) error {
-		return installs.RemoveConnector(ctx, report)
+	return streamed(ctx, stream, naming.UnitConnector, connectorUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, progress Progress) error {
+		return connector.Remove(ctx, progress)
 	})
 }
 

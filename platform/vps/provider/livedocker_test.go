@@ -89,7 +89,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: absent.Held}
+	req := providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Held: absent.Held}
 	plan, err := bootstrapper.Plan(ctx, req)
 	if err != nil {
 		t.Fatalf("Plan() over a machine with no engine = %v", err)
@@ -148,7 +148,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Errorf("Describe() calls a machine that has just been bootstrapped, engine and all, drifted, %s\n%s",
 			stillMoving(t, bootstrapper, class, standing.Held), vm.proxySaid(t))
 	}
-	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: standing.Held})
+	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Held: standing.Held})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +173,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	stopped := providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: idle.Held}
+	stopped := providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Held: idle.Held}
 	restarting, err := bootstrapper.Plan(ctx, stopped)
 	if err != nil {
 		t.Fatalf("Plan() over an installed engine whose daemon is idle = %v", err)
@@ -225,7 +225,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	reinstalling, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: shimmed.Held})
+	reinstalling, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Held: shimmed.Held})
 	if err != nil {
 		t.Fatalf("Plan() over a docker binary with no unit behind it = %v", err)
 	}
@@ -237,7 +237,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Errorf("a binary with no %s plans %q for the unit, want the install that brings one", unitName, unit.Action)
 	}
 	refusal := refused(t, bootstrapper.Apply(ctx,
-		providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: shimmed.Held, Unattended: true}, nil),
+		providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Held: shimmed.Held, Unattended: true}, nil),
 		providerkit.CodeNotReady)
 	if !strings.Contains(refusal.Message, engineName) {
 		t.Errorf("an unattended apply over a docker binary with no unit says %q, want it refused by name: nobody is there to consent to %s being run as root over an install that already stands",

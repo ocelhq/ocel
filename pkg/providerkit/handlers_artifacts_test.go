@@ -36,7 +36,7 @@ func (p *packingProvider) Hooks() providerkit.Hooks {
 	return hooks
 }
 
-func (p *packingProvider) PackApp(_ context.Context, packing providerkit.AppPacking, _ providerkit.Reporter) (providerkit.AppPack, error) {
+func (p *packingProvider) PackApp(_ context.Context, packing providerkit.AppPacking, _ providerkit.Progress) (providerkit.AppPack, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.packed = append(p.packed, packing)
@@ -93,7 +93,7 @@ func TestDeployPacksTheVendorsOverlayIntoEveryFunctionPackage(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	plan := provider.Releases().(*fake.Releaser).Plans()[1]
+	plan := provider.FakeStacks().Plans()[1]
 	files := packagedFiles(t, provider, plan.App.Functions[0].Artifact)
 	if _, held := files[builtEntrypoint]; !held {
 		t.Errorf("the package holds %v, want the built artifact's own files", files)
@@ -137,7 +137,7 @@ func TestDeployPacksTheRoutingManifestIntoTheEntryFunctionAlone(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	plan := provider.Releases().(*fake.Releaser).Plans()[1]
+	plan := provider.FakeStacks().Plans()[1]
 	packages := map[string]map[string]string{}
 	for _, fn := range plan.App.Functions {
 		packages[fn.Name] = packagedFiles(t, provider, fn.Artifact)

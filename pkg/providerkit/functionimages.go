@@ -64,7 +64,7 @@ func (r *deployRun) imageFunction(
 	if err != nil {
 		return ImagePush{}, err
 	}
-	runtime := Runtime{Name: fn.GetRuntime().GetName(), Arch: fn.GetRuntime().GetArch()}
+	runtime := Framework{Name: fn.GetRuntime().GetName(), Arch: fn.GetRuntime().GetArch()}
 	base, err := hooks.FunctionBaseImage(ctx, runtime)
 	if err != nil {
 		return ImagePush{}, fmt.Errorf("read the base image %s's %s function is built on: %w", name, runtime.Name, err)
@@ -97,18 +97,14 @@ func (r *deployRun) imageFunction(
 	}, nil
 }
 
-func (r *deployRun) wrapFunction(ctx context.Context, name string, runtime Runtime, image v1.Image) (v1.Image, error) {
-	wrapper, wraps := r.provider.(ContainerRuntimer)
-	if !wraps {
-		return image, nil
-	}
+func (r *deployRun) wrapFunction(ctx context.Context, name string, runtime Framework, image v1.Image) (v1.Image, error) {
 	arch, known := GoArch(runtime.Arch)
 	if !known {
 		return nil, Refuse(CodeInvalid,
 			"%s is built for %s, and this provider carries a container runtime for %s and %s alone",
 			name, runtime.Arch, ArchX8664, ArchARM64)
 	}
-	body, err := wrapper.ContainerRuntime(ctx, arch)
+	body, err := r.provider.Runtime().Binary(ctx, arch)
 	if err != nil {
 		return nil, fmt.Errorf("read the runtime %s's function boots through: %w", name, err)
 	}
@@ -126,7 +122,7 @@ func (r *deployRun) wrapFunction(ctx context.Context, name string, runtime Runti
 func runtimeOverlay(
 	ctx context.Context,
 	hooks Hooks,
-	runtime Runtime,
+	runtime Framework,
 	name string,
 	overlay map[string][]byte,
 ) (map[string][]byte, error) {

@@ -40,9 +40,9 @@ func (Records) Records(ctx context.Context, class providerkit.Class, stdin io.Re
 	}
 }
 
-type Sealer struct{}
+type Cipher struct{}
 
-func (Sealer) Seal(ctx context.Context, what string, argv []string, stdin io.Reader) (string, error) {
+func (Cipher) Seal(ctx context.Context, what string, argv []string, stdin io.Reader) (string, error) {
 	stdout, stderr, code, err := ran(ctx, stdin, "sudo", append([]string{"-n"}, argv...)...)
 	switch {
 	case err != nil:
@@ -81,5 +81,5 @@ func terse(stderr string, code int) string {
 
 var (
 	_ host.RecordTransport = Records{}
-	_ host.SealTransport   = Sealer{}
+	_ host.SealTransport   = Cipher{}
 )

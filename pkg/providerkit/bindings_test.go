@@ -45,7 +45,7 @@ func publishRecord(t *testing.T, provider *fake.Provider, class providerkit.Clas
 	if err != nil {
 		t.Fatalf("BindingPair: %v", err)
 	}
-	store := values.Store{Records: provider.Records(), Sealer: provider.Sealer()}
+	store := values.Store{Records: provider.Records(), Cipher: provider.Cipher()}
 	scope := values.Scope{Project: "shop", Class: class}
 	if _, err := store.SetBindings(context.Background(), scope, "", owner, []values.Publishing{{Name: binding.GetName(), Pair: pair}}); err != nil {
 		t.Fatalf("SetBindings: %v", err)

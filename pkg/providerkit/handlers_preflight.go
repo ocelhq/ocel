@@ -32,22 +32,20 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		return resp, nil
 	}
 	resp.Identity = IdentityProto(provider.Facts().Vendor, identity)
-	if wrapper, wraps := provider.(ContainerRuntimer); wraps {
-		resp.ContainerArchs, err = containerArchs(ctx, wrapper, req.GetContainers())
-		if err != nil {
-			return nil, RefusalError(err)
-		}
+	resp.ContainerArchs, err = containerArchs(ctx, provider.Runtime(), req.GetContainers())
+	if err != nil {
+		return nil, RefusalError(err)
 	}
 	if err := h.edgeIdentity(ctx, provider, gate.Edge, req.GetEdge(), resp); err != nil {
 		return nil, err
 	}
 
-	required, err := RequiredFeatures(gate.Bootstrapper.Catalogue(), req.GetRuntimes(), string(gate.Edge))
+	required, err := RequiredFeatures(gate.Bootstrap.Catalogue(), req.GetRuntimes(), string(gate.Edge))
 	if err != nil {
 		return nil, RefusalError(err)
 	}
 
-	standing, err := gate.Standing(ctx, class)
+	standing, err := gate.State(ctx, class)
 	if err != nil {
 		return nil, RefusalError(err)
 	}
@@ -78,7 +76,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		return resp, nil
 	}
 
-	sibling, err := gate.Standing(ctx, siblingOf(class))
+	sibling, err := gate.State(ctx, siblingOf(class))
 	if err != nil {
 		return nil, RefusalError(err)
 	}
@@ -88,13 +86,13 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	return resp, nil
 }
 
-func containerArchs(ctx context.Context, wrapper ContainerRuntimer, containers []*contractv1.ContainerApp) (map[string]string, error) {
+func containerArchs(ctx context.Context, runtime Runtime, containers []*contractv1.ContainerApp) (map[string]string, error) {
 	if len(containers) == 0 {
 		return nil, nil
 	}
 	archs := make(map[string]string, len(containers))
 	for _, container := range containers {
-		runs, err := wrapper.ContainerArch(ctx, container.GetApp(), container.GetArch())
+		runs, err := runtime.Arch(ctx, container.GetApp(), container.GetArch())
 		if err != nil {
 			return nil, err
 		}

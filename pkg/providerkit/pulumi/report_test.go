@@ -19,26 +19,26 @@ type recordedSpan struct {
 	attrs []providerkit.Attr
 }
 
-type fakeReporter struct {
+type fakeProgress struct {
 	said    []string
 	details []string
 	spans   []recordedSpan
 }
 
-func (r *fakeReporter) Say(message string) { r.said = append(r.said, message) }
+func (r *fakeProgress) Say(message string) { r.said = append(r.said, message) }
 
-func (r *fakeReporter) Detail(message string) { r.details = append(r.details, message) }
+func (r *fakeProgress) Detail(message string) { r.details = append(r.details, message) }
 
-func (r *fakeReporter) Span(name string, _, _ time.Time, err error, attrs ...providerkit.Attr) {
+func (r *fakeProgress) Span(name string, _, _ time.Time, err error, attrs ...providerkit.Attr) {
 	r.spans = append(r.spans, recordedSpan{name: name, err: err, attrs: attrs})
 }
 
 func TestTheBatchSpanCarriesNoResourceIdentityAndTheStandoutDoes(t *testing.T) {
 	t.Parallel()
 
-	report := &fakeReporter{}
+	progress := &fakeProgress{}
 	start := time.Unix(6000, 0)
-	reportTrace(report, engineTrace{
+	reportTrace(progress, engineTrace{
 		ResourceCount: 2,
 		Start:         start,
 		End:           start.Add(5 * time.Second),
@@ -53,11 +53,11 @@ func TestTheBatchSpanCarriesNoResourceIdentityAndTheStandoutDoes(t *testing.T) {
 		}},
 	}, nil)
 
-	if len(report.spans) != 2 {
-		t.Fatalf("got %d spans, want 2 (batch + standout)", len(report.spans))
+	if len(progress.spans) != 2 {
+		t.Fatalf("got %d spans, want 2 (batch + standout)", len(progress.spans))
 	}
 
-	batch := report.spans[0]
+	batch := progress.spans[0]
 	if batch.name != engineBatchSpanName {
 		t.Fatalf("spans[0].name = %q, want the batch span name", batch.name)
 	}
@@ -68,7 +68,7 @@ func TestTheBatchSpanCarriesNoResourceIdentityAndTheStandoutDoes(t *testing.T) {
 	}
 
 	var sawType, sawName bool
-	for _, a := range report.spans[1].attrs {
+	for _, a := range progress.spans[1].attrs {
 		switch a.Key {
 		case providerkit.AttrKeyResourceType:
 			sawType = true
@@ -96,9 +96,9 @@ func TestTheBatchSpanCarriesNoResourceIdentityAndTheStandoutDoes(t *testing.T) {
 func TestAStandoutWhoseURNDidNotParseCarriesNoResourceIdentity(t *testing.T) {
 	t.Parallel()
 
-	report := &fakeReporter{}
+	progress := &fakeProgress{}
 	start := time.Unix(7000, 0)
-	reportTrace(report, engineTrace{
+	reportTrace(progress, engineTrace{
 		ResourceCount: 1,
 		Start:         start,
 		End:           start.Add(time.Second),
@@ -108,10 +108,10 @@ func TestAStandoutWhoseURNDidNotParseCarriesNoResourceIdentity(t *testing.T) {
 		},
 	}, nil)
 
-	if len(report.spans) != 2 {
-		t.Fatalf("got %d spans, want 2", len(report.spans))
+	if len(progress.spans) != 2 {
+		t.Fatalf("got %d spans, want 2", len(progress.spans))
 	}
-	for _, a := range report.spans[1].attrs {
+	for _, a := range progress.spans[1].attrs {
 		if a.Key == providerkit.AttrKeyResourceType || a.Key == providerkit.AttrKeyResourceName {
 			t.Errorf("standout span carries resource identity attr %+v despite an unparseable URN", a)
 		}
@@ -121,14 +121,14 @@ func TestAStandoutWhoseURNDidNotParseCarriesNoResourceIdentity(t *testing.T) {
 func TestARunThatFailedBeforeTouchingAResourceStillLeavesASpan(t *testing.T) {
 	t.Parallel()
 
-	report := &fakeReporter{}
+	progress := &fakeProgress{}
 	start := time.Unix(8000, 0)
-	reportTrace(report, engineTrace{Start: start, End: start.Add(time.Second)}, errors.New("plugin failed to start"))
+	reportTrace(progress, engineTrace{Start: start, End: start.Add(time.Second)}, errors.New("plugin failed to start"))
 
-	if len(report.spans) != 1 {
-		t.Fatalf("got %d spans, want 1", len(report.spans))
+	if len(progress.spans) != 1 {
+		t.Fatalf("got %d spans, want 1", len(progress.spans))
 	}
-	if report.spans[0].err == nil {
+	if progress.spans[0].err == nil {
 		t.Error("batch span not recorded as failed")
 	}
 }
@@ -136,11 +136,11 @@ func TestARunThatFailedBeforeTouchingAResourceStillLeavesASpan(t *testing.T) {
 func TestAQuietSuccessfulRunSaysNothing(t *testing.T) {
 	t.Parallel()
 
-	report := &fakeReporter{}
-	reportTrace(report, engineTrace{}, nil)
+	progress := &fakeProgress{}
+	reportTrace(progress, engineTrace{}, nil)
 
-	if len(report.spans) != 0 {
-		t.Fatalf("got %d spans, want 0: nothing happened and nothing failed", len(report.spans))
+	if len(progress.spans) != 0 {
+		t.Fatalf("got %d spans, want 0: nothing happened and nothing failed", len(progress.spans))
 	}
 }
 
@@ -173,16 +173,16 @@ func TestAnEventStreamThatIsNeverClosedLeavesTheRunToFinish(t *testing.T) {
 func TestTheEngineLogIsForwardedALineAtATime(t *testing.T) {
 	t.Parallel()
 
-	report := &fakeReporter{}
-	lines := detailWriter(report)
+	progress := &fakeProgress{}
+	lines := detailWriter(progress)
 	if _, err := lines.Write([]byte("creating bucket\r\nupdating role\npart")); err != nil {
 		t.Fatal(err)
 	}
-	if want := []string{"creating bucket", "updating role"}; !reflect.DeepEqual(report.details, want) {
-		t.Fatalf("forwarded %q, want %q", report.details, want)
+	if want := []string{"creating bucket", "updating role"}; !reflect.DeepEqual(progress.details, want) {
+		t.Fatalf("forwarded %q, want %q", progress.details, want)
 	}
 	lines.Flush()
-	if len(report.details) != 3 || report.details[2] != "part" {
-		t.Errorf("forwarded %q, want the trailing partial line flushed", report.details)
+	if len(progress.details) != 3 || progress.details[2] != "part" {
+		t.Errorf("forwarded %q, want the trailing partial line flushed", progress.details)
 	}
 }

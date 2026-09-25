@@ -13,9 +13,9 @@ type Hooks struct {
 	PreflightDeploy     func(ctx context.Context, pre DeployPreflight) error
 	VerifyGrants        func(ctx context.Context, binding Binding) error
 	InspectStack        func(ctx context.Context, ref StackRef) (StackState, error)
-	PackApp             func(ctx context.Context, packing AppPacking, report Reporter) (AppPack, error)
-	EmbedCode           func(ctx context.Context, function string, artifact ArtifactRef, report Reporter) error
-	WarmFunctions       func(ctx context.Context, targets []string, report Reporter) error
+	PackApp             func(ctx context.Context, packing AppPacking, progress Progress) (AppPack, error)
+	EmbedCode           func(ctx context.Context, function string, artifact ArtifactRef, progress Progress) error
+	WarmFunctions       func(ctx context.Context, targets []string, progress Progress) error
 	ProgramEdge         func(ctx context.Context, req EdgeProgramRequest) (EdgeProgram, error)
 	EnsureImageRegistry func(ctx context.Context, class Class, repositories []string) (RegistryTarget, error)
 	RegistryImages      func(ctx context.Context, target RegistryTarget) (ImageStore, error)
@@ -23,8 +23,8 @@ type Hooks struct {
 	CheckHost           func(ctx context.Context, req StandingRequest) ([]StandingCheck, error)
 	ShapeCost           func(ctx context.Context, req ShapeRequest) (*costv1.ResourceSet, error)
 	EstimateCost        func(ctx context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error)
-	FunctionBaseImage   func(ctx context.Context, runtime Runtime) (v1.Image, error)
-	FunctionRuntime     func(ctx context.Context, runtime Runtime) ([]byte, error)
+	FunctionBaseImage   func(ctx context.Context, runtime Framework) (v1.Image, error)
+	FunctionRuntime     func(ctx context.Context, runtime Framework) ([]byte, error)
 }
 
 func (h Hooks) refuseHalfPairs() error {

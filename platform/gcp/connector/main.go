@@ -70,7 +70,7 @@ func run(listen, config string, reporting bool) error {
 		ConfigPath: config,
 		Vars: providerkit.Vars{
 			Records: ports.Records{Clients: bindings},
-			Sealer:  ports.Sealer{Clients: bindings},
+			Cipher:  ports.Cipher{Clients: bindings},
 		},
 	})
 }

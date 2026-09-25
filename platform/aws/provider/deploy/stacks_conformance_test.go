@@ -46,7 +46,7 @@ func (p pushingAssetSets) NewResource(args sdk.MockResourceArgs) (string, resour
 		if !waiting {
 			return "", nil, fmt.Errorf("the program declared %s but the run held nothing to push for it", id)
 		}
-		if err := held.set.push(context.Background(), held.report); err != nil {
+		if err := held.set.push(context.Background(), held.progress); err != nil {
 			return "", nil, err
 		}
 	}
@@ -57,11 +57,11 @@ func (p pushingAssetSets) Call(args sdk.MockCallArgs) (resource.PropertyMap, err
 	return p.inner.Call(args)
 }
 
-func standingUp(cfg Config, engine *mockedEngine) *Releaser {
+func standingUp(cfg Config, engine *mockedEngine) *Stacks {
 	if engine == nil {
-		return newReleaser(fixed(cfg), &Realized{}, nil)
+		return newStacks(fixed(cfg), &Realized{}, nil)
 	}
-	held := newReleaser(fixed(cfg), &Realized{}, engine)
+	held := newStacks(fixed(cfg), &Realized{}, engine)
 	engine.pending = held.pending
 	return held
 }
@@ -74,7 +74,7 @@ func (e *mockedEngine) stacks() []string {
 
 var _ kitpulumi.Engine = (*mockedEngine)(nil)
 
-func (e *mockedEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerkit.Reporter) (auto.OutputMap, error) {
+func (e *mockedEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerkit.Progress) (auto.OutputMap, error) {
 	var monitor sdk.MockResourceMonitor = standInCloud{}
 	if e.mocks != nil {
 		monitor = e.mocks
@@ -94,7 +94,7 @@ func (e *mockedEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerki
 	return e.outputs, nil
 }
 
-func (e *mockedEngine) Preview(_ context.Context, setup kitpulumi.Setup, op kitpulumi.Op, _ providerkit.Reporter) ([]providerkit.Change, error) {
+func (e *mockedEngine) Preview(_ context.Context, setup kitpulumi.Setup, op kitpulumi.Op, _ providerkit.Progress) ([]providerkit.Change, error) {
 	if op == kitpulumi.OpDestroy {
 		rows := make([]providerkit.Change, 0, len(e.previewed))
 		for _, row := range e.previewed {
@@ -135,7 +135,7 @@ func (p *previewing) Call(args sdk.MockCallArgs) (resource.PropertyMap, error) {
 	return p.inner.Call(args)
 }
 
-func (e *mockedEngine) Destroy(_ context.Context, setup kitpulumi.Setup, _ providerkit.Reporter) error {
+func (e *mockedEngine) Destroy(_ context.Context, setup kitpulumi.Setup, _ providerkit.Progress) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.torndown = append(e.torndown, setup.Stack)
@@ -185,11 +185,11 @@ func provisionedOutputs() auto.OutputMap {
 	}
 }
 
-func conformingReleaser(engine *mockedEngine) *Releaser {
+func conformingReleaser(engine *mockedEngine) *Stacks {
 	return releaserPlacingInto(engine, &fakeUploader{})
 }
 
-func releaserPlacingInto(engine *mockedEngine, uploader *fakeUploader) *Releaser {
+func releaserPlacingInto(engine *mockedEngine, uploader *fakeUploader) *Stacks {
 	cfg := Config{
 		Slug:           "conformance",
 		Region:         "eu-west-1",
@@ -283,7 +283,7 @@ func (s *shippedArtifacts) Open(_ context.Context, ref providerkit.ArtifactRef) 
 	return io.NopCloser(bytes.NewReader(slices.Clone(blob))), nil
 }
 
-func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ providerkit.Class, prefix string, _ providerkit.Reporter) error {
+func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ providerkit.Class, prefix string, _ providerkit.Progress) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for at := range s.objects {
@@ -297,7 +297,7 @@ func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ providerkit.Class, 
 func TestReleaserRunsTheKitsPortTier(t *testing.T) {
 	store := newShippedArtifacts()
 	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: store}
-	conformance.RunReleaser(t, conformingReleaser(engine), store, nil, Serves())
+	conformance.RunStacks(t, conformingReleaser(engine), store, nil, Serves())
 }
 
 func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *testing.T) {

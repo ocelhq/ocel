@@ -12,21 +12,21 @@ type Instruction struct {
 	Ref  providerkit.StackRef
 	Tags map[string]string
 
-	Bindings providerkit.BindingReader
+	Bindings providerkit.Bindings
 
 	Resource providerkit.Resource
 }
 
 type Hooks struct {
-	ProvisionPostgres   func(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error)
-	ProvisionBucket     func(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error)
-	RemoveResource      func(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, report providerkit.Reporter) error
-	ProvisionFunctions  func(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) ([]providerkit.Function, error)
-	RemoveFunctions     func(ctx context.Context, ref providerkit.StackRef, functions []providerkit.Function, report providerkit.Reporter) error
-	ProvisionContainers func(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) ([]providerkit.AppContainer, error)
-	RemoveContainers    func(ctx context.Context, ref providerkit.StackRef, containers []providerkit.AppContainer, report providerkit.Reporter) error
-	ReconcileImages     func(ctx context.Context, ref providerkit.StackRef, app, coordinate string, report providerkit.Reporter) error
-	ForgetReleases      func(ctx context.Context, ref providerkit.StackRef, app string, report providerkit.Reporter) error
+	ProvisionPostgres   func(ctx context.Context, in Instruction, progress providerkit.Progress) (providerkit.Binding, error)
+	ProvisionBucket     func(ctx context.Context, in Instruction, progress providerkit.Progress) (providerkit.Binding, error)
+	RemoveResource      func(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, progress providerkit.Progress) error
+	ProvisionFunctions  func(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) ([]providerkit.Function, error)
+	RemoveFunctions     func(ctx context.Context, ref providerkit.StackRef, functions []providerkit.Function, progress providerkit.Progress) error
+	ProvisionContainers func(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) ([]providerkit.AppContainer, error)
+	RemoveContainers    func(ctx context.Context, ref providerkit.StackRef, containers []providerkit.AppContainer, progress providerkit.Progress) error
+	ReconcileImages     func(ctx context.Context, ref providerkit.StackRef, app, coordinate string, progress providerkit.Progress) error
+	ForgetReleases      func(ctx context.Context, ref providerkit.StackRef, app string, progress providerkit.Progress) error
 }
 
 func Serves(hooks Hooks) []providerkit.BindingType {
@@ -39,11 +39,11 @@ func Serves(hooks Hooks) []providerkit.BindingType {
 	return served
 }
 
-func Releaser(records providerkit.RecordStore, artifacts providerkit.ArtifactStore, hooks Hooks) providerkit.Releaser {
+func Stacks(records providerkit.RecordStore, artifacts providerkit.ArtifactStore, hooks Hooks) providerkit.Stacks {
 	return &fanout{records: records, artifacts: artifacts, hooks: hooks}
 }
 
-type provisioning func(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error)
+type provisioning func(ctx context.Context, in Instruction, progress providerkit.Progress) (providerkit.Binding, error)
 
 type primitive struct {
 	kind providerkit.BindingType
@@ -61,7 +61,7 @@ type fanout struct {
 	hooks     Hooks
 }
 
-func (f *fanout) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.Plan, error) {
+func (f *fanout) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Progress) (providerkit.Plan, error) {
 	if err := f.serves(plan); err != nil {
 		return providerkit.Plan{}, err
 	}
@@ -72,7 +72,7 @@ func (f *fanout) Plan(ctx context.Context, plan providerkit.StackPlan, _ provide
 	return providerkit.SynthesizedPlan(ctx, f.artifacts, plan, standing(recorded))
 }
 
-func (f *fanout) PlanDestroy(ctx context.Context, ref providerkit.StackRef, _ providerkit.Reporter) (providerkit.Plan, error) {
+func (f *fanout) PlanDestroy(ctx context.Context, ref providerkit.StackRef, _ providerkit.Progress) (providerkit.Plan, error) {
 	recorded, err := f.recorded(ctx, ref)
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -84,9 +84,9 @@ func standing(recorded providerkit.Stack) providerkit.StackResult {
 	return providerkit.StackResult{Bindings: recorded.Bindings, Functions: recorded.Functions, Containers: recorded.Containers}
 }
 
-func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
+func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
 	if plan.App != nil {
-		defer func() { _ = f.reconcile(ctx, plan.Ref, plan.App.App, plan.App.Image, report) }()
+		defer func() { _ = f.reconcile(ctx, plan.Ref, plan.App.App, plan.App.Image, progress) }()
 	}
 	if err := f.serves(plan); err != nil {
 		return providerkit.StackResult{}, err
@@ -99,19 +99,19 @@ func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, repo
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
-	if err := f.removeOrphans(ctx, plan, recorded, report); err != nil {
+	if err := f.removeOrphans(ctx, plan, recorded, progress); err != nil {
 		return providerkit.StackResult{}, err
 	}
-	if err := plan.Images.Ship(ctx, report); err != nil {
+	if err := plan.Images.Ship(ctx, progress); err != nil {
 		return providerkit.StackResult{}, err
 	}
-	if err := providerkit.ShipUploads(ctx, f.artifacts, plan.Uploads, report); err != nil {
+	if err := providerkit.ShipUploads(ctx, f.artifacts, plan.Uploads, progress); err != nil {
 		return providerkit.StackResult{}, err
 	}
 
 	var result providerkit.StackResult
 	for _, resource := range plan.Resources {
-		binding, err := f.provision(ctx, plan, resource, report)
+		binding, err := f.provision(ctx, plan, resource, progress)
 		if err != nil {
 			return providerkit.StackResult{}, err
 		}
@@ -123,7 +123,7 @@ func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, repo
 	if standUp == nil {
 		return result, nil
 	}
-	stood, err := standUp(ctx, report)
+	stood, err := standUp(ctx, progress)
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
@@ -131,7 +131,7 @@ func (f *fanout) Provision(ctx context.Context, plan providerkit.StackPlan, repo
 	return result, nil
 }
 
-type standingUp func(context.Context, providerkit.Reporter) (providerkit.StackResult, error)
+type standingUp func(context.Context, providerkit.Progress) (providerkit.StackResult, error)
 
 func (f *fanout) standingUp(plan providerkit.StackPlan) (standingUp, error) {
 	if plan.App == nil {
@@ -142,16 +142,16 @@ func (f *fanout) standingUp(plan providerkit.StackPlan) (standingUp, error) {
 		if f.hooks.ProvisionFunctions == nil {
 			return nil, lacking(plan.App, "ProvisionFunctions")
 		}
-		return func(ctx context.Context, report providerkit.Reporter) (providerkit.StackResult, error) {
-			standing, err := f.hooks.ProvisionFunctions(ctx, plan, report)
+		return func(ctx context.Context, progress providerkit.Progress) (providerkit.StackResult, error) {
+			standing, err := f.hooks.ProvisionFunctions(ctx, plan, progress)
 			return providerkit.StackResult{Functions: standing}, err
 		}, nil
 	case providerkit.ComputeContainer:
 		if f.hooks.ProvisionContainers == nil {
 			return nil, lacking(plan.App, "ProvisionContainers")
 		}
-		return func(ctx context.Context, report providerkit.Reporter) (providerkit.StackResult, error) {
-			standing, err := f.hooks.ProvisionContainers(ctx, plan, report)
+		return func(ctx context.Context, progress providerkit.Progress) (providerkit.StackResult, error) {
+			standing, err := f.hooks.ProvisionContainers(ctx, plan, progress)
 			return providerkit.StackResult{Containers: standing}, err
 		}, nil
 	default:
@@ -167,13 +167,13 @@ func lacking(app *providerkit.AppPlan, hook string) error {
 		app.App, app.Compute, hook)
 }
 
-func (f *fanout) provision(ctx context.Context, plan providerkit.StackPlan, resource providerkit.Resource, report providerkit.Reporter) (providerkit.Binding, error) {
+func (f *fanout) provision(ctx context.Context, plan providerkit.StackPlan, resource providerkit.Resource, progress providerkit.Progress) (providerkit.Binding, error) {
 	provision, err := f.serving(resource)
 	if err != nil {
 		return providerkit.Binding{}, err
 	}
 	in := Instruction{Ref: plan.Ref, Tags: plan.Tags, Bindings: plan.Bindings, Resource: resource}
-	return provision(ctx, in, report)
+	return provision(ctx, in, progress)
 }
 
 func (f *fanout) serves(plan providerkit.StackPlan) error {
@@ -200,54 +200,54 @@ func (f *fanout) serving(resource providerkit.Resource) (provisioning, error) {
 		resource.Name, resource.Type, served(Serves(f.hooks)))
 }
 
-func (f *fanout) Destroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
+func (f *fanout) Destroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
 	recorded, err := f.recorded(ctx, ref)
 	if err != nil {
 		return err
 	}
 	for _, binding := range recorded.Bindings {
-		if err := f.remove(ctx, ref, binding, report); err != nil {
+		if err := f.remove(ctx, ref, binding, progress); err != nil {
 			return err
 		}
 	}
-	if err := f.removeFunctions(ctx, ref, recorded.Functions, torn, report); err != nil {
+	if err := f.removeFunctions(ctx, ref, recorded.Functions, torn, progress); err != nil {
 		return err
 	}
-	if err := f.removeContainers(ctx, ref, recorded.Containers, torn, report); err != nil {
+	if err := f.removeContainers(ctx, ref, recorded.Containers, torn, progress); err != nil {
 		return err
 	}
 	var stopped error
 	for _, held := range recorded.Containers {
-		if err := f.forget(ctx, ref, held.Name, report); err != nil && stopped == nil {
+		if err := f.forget(ctx, ref, held.Name, progress); err != nil && stopped == nil {
 			stopped = err
 		}
 	}
 	for _, held := range recorded.Containers {
-		if err := f.reconcile(ctx, ref, held.Name, held.Image, report); err != nil && stopped == nil {
+		if err := f.reconcile(ctx, ref, held.Name, held.Image, progress); err != nil && stopped == nil {
 			stopped = err
 		}
 	}
 	return stopped
 }
 
-func (f *fanout) forget(ctx context.Context, ref providerkit.StackRef, app string, report providerkit.Reporter) error {
+func (f *fanout) forget(ctx context.Context, ref providerkit.StackRef, app string, progress providerkit.Progress) error {
 	if f.hooks.ForgetReleases == nil {
 		return nil
 	}
-	err := f.hooks.ForgetReleases(ctx, ref, app, report)
-	if err != nil && report != nil {
-		report.Detail(fmt.Sprintf("Left %s's release window standing: %v", app, err))
+	err := f.hooks.ForgetReleases(ctx, ref, app, progress)
+	if err != nil && progress != nil {
+		progress.Detail(fmt.Sprintf("Left %s's release window standing: %v", app, err))
 	}
 	return err
 }
 
-func (f *fanout) reconcile(ctx context.Context, ref providerkit.StackRef, app, coordinate string, report providerkit.Reporter) error {
+func (f *fanout) reconcile(ctx context.Context, ref providerkit.StackRef, app, coordinate string, progress providerkit.Progress) error {
 	if f.hooks.ReconcileImages == nil || coordinate == "" {
 		return nil
 	}
-	err := f.hooks.ReconcileImages(ctx, ref, app, coordinate, report)
-	if err != nil && report != nil {
-		report.Detail(fmt.Sprintf("Left %s's unreferenced images where they stand: %v", app, err))
+	err := f.hooks.ReconcileImages(ctx, ref, app, coordinate, progress)
+	if err != nil && progress != nil {
+		progress.Detail(fmt.Sprintf("Left %s's unreferenced images where they stand: %v", app, err))
 	}
 	return err
 }
@@ -257,24 +257,24 @@ const (
 	torn       = "this destroy would take down"
 )
 
-func (f *fanout) removeFunctions(ctx context.Context, ref providerkit.StackRef, going []providerkit.Function, because string, report providerkit.Reporter) error {
+func (f *fanout) removeFunctions(ctx context.Context, ref providerkit.StackRef, going []providerkit.Function, because string, progress providerkit.Progress) error {
 	if len(going) == 0 {
 		return nil
 	}
 	if f.hooks.RemoveFunctions == nil {
 		return unownable(ref, len(going), "function", because, "RemoveFunctions")
 	}
-	return f.hooks.RemoveFunctions(ctx, ref, going, report)
+	return f.hooks.RemoveFunctions(ctx, ref, going, progress)
 }
 
-func (f *fanout) removeContainers(ctx context.Context, ref providerkit.StackRef, going []providerkit.AppContainer, because string, report providerkit.Reporter) error {
+func (f *fanout) removeContainers(ctx context.Context, ref providerkit.StackRef, going []providerkit.AppContainer, because string, progress providerkit.Progress) error {
 	if len(going) == 0 {
 		return nil
 	}
 	if f.hooks.RemoveContainers == nil {
 		return unownable(ref, len(going), "container", because, "RemoveContainers")
 	}
-	return f.hooks.RemoveContainers(ctx, ref, going, report)
+	return f.hooks.RemoveContainers(ctx, ref, going, progress)
 }
 
 func unownable(ref providerkit.StackRef, going int, noun, because, hook string) error {
@@ -283,66 +283,66 @@ func unownable(ref providerkit.StackRef, going int, noun, because, hook string) 
 		ref.Name, going, noun, because, hook)
 }
 
-func (f *fanout) removeOrphans(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, report providerkit.Reporter) error {
+func (f *fanout) removeOrphans(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, progress providerkit.Progress) error {
 	for _, binding := range recorded.Bindings {
 		if slices.ContainsFunc(plan.Resources, func(resource providerkit.Resource) bool {
 			return resource.Name == binding.Name && resource.Type == binding.Type
 		}) {
 			continue
 		}
-		if report != nil {
-			report.Detail(fmt.Sprintf("Removing %s: this plan no longer declares it", binding.Name))
+		if progress != nil {
+			progress.Detail(fmt.Sprintf("Removing %s: this plan no longer declares it", binding.Name))
 		}
-		if err := f.remove(ctx, plan.Ref, binding, report); err != nil {
+		if err := f.remove(ctx, plan.Ref, binding, progress); err != nil {
 			return err
 		}
 	}
-	if err := f.removeOrphanFunctions(ctx, plan, recorded, report); err != nil {
+	if err := f.removeOrphanFunctions(ctx, plan, recorded, progress); err != nil {
 		return err
 	}
-	return f.removeOrphanContainers(ctx, plan, recorded, report)
+	return f.removeOrphanContainers(ctx, plan, recorded, progress)
 }
 
-func (f *fanout) removeOrphanFunctions(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, report providerkit.Reporter) error {
+func (f *fanout) removeOrphanFunctions(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, progress providerkit.Progress) error {
 	declared := providerkit.DeclaredFunctions(plan)
 	var orphans []providerkit.Function
 	for _, held := range recorded.Functions {
 		if slices.Contains(declared, held.Name) {
 			continue
 		}
-		reportUndeclared(report, held.Name)
+		reportUndeclared(progress, held.Name)
 		orphans = append(orphans, held)
 	}
-	return f.removeFunctions(ctx, plan.Ref, orphans, undeclared, report)
+	return f.removeFunctions(ctx, plan.Ref, orphans, undeclared, progress)
 }
 
-func (f *fanout) removeOrphanContainers(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, report providerkit.Reporter) error {
+func (f *fanout) removeOrphanContainers(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, progress providerkit.Progress) error {
 	declared := providerkit.DeclaredContainers(plan)
 	var orphans []providerkit.AppContainer
 	for _, held := range recorded.Containers {
 		if slices.Contains(declared, held.Name) {
 			continue
 		}
-		reportUndeclared(report, held.Name)
+		reportUndeclared(progress, held.Name)
 		orphans = append(orphans, held)
 	}
-	return f.removeContainers(ctx, plan.Ref, orphans, undeclared, report)
+	return f.removeContainers(ctx, plan.Ref, orphans, undeclared, progress)
 }
 
-func reportUndeclared(report providerkit.Reporter, name string) {
-	if report == nil {
+func reportUndeclared(progress providerkit.Progress, name string) {
+	if progress == nil {
 		return
 	}
-	report.Detail(fmt.Sprintf("Removing %s: this plan no longer declares it", name))
+	progress.Detail(fmt.Sprintf("Removing %s: this plan no longer declares it", name))
 }
 
-func (f *fanout) remove(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, report providerkit.Reporter) error {
+func (f *fanout) remove(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, progress providerkit.Progress) error {
 	if f.hooks.RemoveResource == nil {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"binding %s is no longer declared and this provider removes no resource, so it would be left standing and unowned",
 			binding.Name)
 	}
-	return f.hooks.RemoveResource(ctx, ref, binding, report)
+	return f.hooks.RemoveResource(ctx, ref, binding, progress)
 }
 
 func (f *fanout) recorded(ctx context.Context, ref providerkit.StackRef) (providerkit.Stack, error) {

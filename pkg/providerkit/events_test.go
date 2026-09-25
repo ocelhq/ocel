@@ -190,11 +190,11 @@ func TestReporterTagsEverythingWithItsStage(t *testing.T) {
 	stream := &recordingStream{}
 	sender := newEventSender(context.Background(), stream.send)
 	stage := PhaseStage(naming.UnitEnvironment, progressv1.Phase_PHASE_PROVISIONING)
-	report := newReporter(sender, stage)
+	progress := newProgress(sender, stage)
 
-	report.Say("provisioning the infra stack")
-	report.Detail("engine said something")
-	report.Span("infra", time.Unix(1000, 0), time.Unix(1005, 0), nil)
+	progress.Say("provisioning the infra stack")
+	progress.Detail("engine said something")
+	progress.Span("infra", time.Unix(1000, 0), time.Unix(1005, 0), nil)
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
@@ -224,9 +224,9 @@ func TestReporterStripsControlCharacters(t *testing.T) {
 
 	stream := &recordingStream{}
 	sender := newEventSender(context.Background(), stream.send)
-	report := newReporter(sender, testStage)
+	progress := newProgress(sender, testStage)
 
-	report.Say("clearing the screen\x1b[2J now")
+	progress.Say("clearing the screen\x1b[2J now")
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)

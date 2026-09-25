@@ -137,7 +137,7 @@ func previewed(t *testing.T, stack edge.EdgeStack, pointer string, apps ...strin
 	}
 	if err := stack.Promote(context.Background(), edge.Promotion{
 		PromotionID: "p-" + pointer, Ts: 1, Builds: builds,
-	}, pointer, edge.DiscardReporter()); err != nil {
+	}, pointer, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
 }
@@ -211,7 +211,7 @@ func TestRemovingAPreviewPointerTakesItsHostnamesOffTheBoxWithIt(t *testing.T) {
 	previewed(t, stack, "pr-7", "api", "web")
 	previewed(t, stack, "pr-9", "api", "web")
 
-	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	for _, claim := range claimedOn(t, stood) {
@@ -237,7 +237,7 @@ func TestAPreviewHostnameDnsWillNotCarryIsRefusedRatherThanClaimed(t *testing.T)
 
 	err := stack.Promote(context.Background(), edge.Promotion{
 		PromotionID: "p-over", Ts: 1, Builds: map[string]string{"web": "b1"},
-	}, over, edge.DiscardReporter())
+	}, over, edge.DiscardProgress())
 	if err == nil {
 		t.Fatalf("a preview whose hostname carries a %d-character label was claimed on this box: DNS caps a label at %d, so the name resolves nowhere and its acme order can never succeed. The check lives in the CLI's preflight alone, and a caller that skips preflight reaches this",
 			len(slug)+len(edge.PreviewAppSeparator)+len(over), edge.PreviewLabelMaxLen)
@@ -296,7 +296,7 @@ func TestAProductionPromotionClaimsNoPreviewHostnameAtAll(t *testing.T) {
 	staged(t, pointed, "web", "b2", "shop-web-2222")
 	if err := pointed.Promote(context.Background(), edge.Promotion{
 		PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"},
-	}, "pr-7", edge.DiscardReporter()); err != nil {
+	}, "pr-7", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote under a pointer: %v", err)
 	}
 	if held := claimedOn(t, stood); len(held) != 0 {
@@ -311,7 +311,7 @@ func callsATeardownMakes(t *testing.T) []string {
 	stack := previewStack(t, stood)
 	previewed(t, stack, "pr-7", "api", "web")
 	stood.visited = nil
-	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	reached := slices.DeleteFunc(stood.reached(), func(call string) bool { return call == "HoldOrigins" })
@@ -333,7 +333,7 @@ func TestATeardownThatFellOverLeavesThePointersHistoryStandingForTheNextRun(t *t
 			previewed(t, stack, "pr-7", "api", "web")
 			stood.refuseOn(call, errors.New("the box answered nothing over its ssh session"))
 
-			if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err == nil {
+			if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardProgress()); err == nil {
 				t.Fatalf("a teardown whose %s refused reported success, and a step a teardown never makes is a step this table names for nothing", call)
 			}
 			history, err := stack.Ledger().History(context.Background(), "pr-7")
@@ -353,7 +353,7 @@ func TestRemovingAPointerNothingWasEverPromotedUnderTakesNothingAndRefusesNothin
 	stood := aMachine()
 	stack := previewStack(t, stood)
 
-	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer of a preview that is already gone = %v, and teardown is run again on every retry", err)
 	}
 }
@@ -366,7 +366,7 @@ func TestRemovingAPreviewLeavesTheCatchAllStandingAndRendersItAsKeptWithAReason(
 	previewed(t, stack, "pr-7", "web")
 	front := edgeOver(stood, fake.NewRecords())
 
-	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 

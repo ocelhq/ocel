@@ -19,7 +19,7 @@ import (
 
 const (
 	liveRegion = "us-east-1"
-	liveWriter = providerkit.Writer("live-suite")
+	liveWriter = providerkit.WrittenBy("live-suite")
 )
 
 type account struct {
@@ -45,7 +45,7 @@ func live(t *testing.T) account {
 	return account{endpoint: endpoint, aws: cfg}
 }
 
-func (a account) bootstrapper(t *testing.T) providerkit.Bootstrapper {
+func (a account) bootstrapper(t *testing.T) providerkit.Bootstrap {
 	t.Helper()
 	p, err := provider.New(context.Background(), providerkit.Settings{Options: providerkit.Options{"region": liveRegion}})
 	if err != nil {
@@ -58,7 +58,7 @@ func (a account) bootstrapper(t *testing.T) providerkit.Bootstrapper {
 	return bootstrapper
 }
 
-func (a account) emptied(t *testing.T, classes ...providerkit.Class) providerkit.Bootstrapper {
+func (a account) emptied(t *testing.T, classes ...providerkit.Class) providerkit.Bootstrap {
 	t.Helper()
 	bootstrapper := a.bootstrapper(t)
 	ctx := context.Background()

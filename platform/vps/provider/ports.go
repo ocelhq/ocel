@@ -124,9 +124,9 @@ func (dns) Open(kind providerkit.DNSKind, zone string, _ edge.Kind) (edge.DNSWri
 }
 
 var (
-	_ providerkit.Credentials  = credentials{}
-	_ providerkit.EdgeRegistry = edges{}
-	_ providerkit.DNSRegistry  = dns{}
+	_ providerkit.Credentials = credentials{}
+	_ providerkit.Edges       = edges{}
+	_ providerkit.DNS         = dns{}
 )
 
 func (p *Provider) box() *box.Edge {

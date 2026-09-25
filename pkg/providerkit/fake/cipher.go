@@ -9,19 +9,19 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-type Sealer struct {
+type Cipher struct {
 	key []byte
 }
 
-func NewSealer() *Sealer {
+func NewCipher() *Cipher {
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
 		panic("fake: mint sealing key: " + err.Error())
 	}
-	return &Sealer{key: key}
+	return &Cipher{key: key}
 }
 
-func (s *Sealer) Seal(_ context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
+func (s *Cipher) Seal(_ context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
 	gcm, err := s.gcm()
 	if err != nil {
 		return nil, err
@@ -33,7 +33,7 @@ func (s *Sealer) Seal(_ context.Context, at providerkit.Coordinate, plaintext []
 	return gcm.Seal(nonce, nonce, plaintext, at.AAD()), nil
 }
 
-func (s *Sealer) Open(_ context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+func (s *Cipher) Open(_ context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
 	gcm, err := s.gcm()
 	if err != nil {
 		return nil, err
@@ -49,7 +49,7 @@ func (s *Sealer) Open(_ context.Context, at providerkit.Coordinate, sealed []byt
 	return plaintext, nil
 }
 
-func (s *Sealer) gcm() (cipher.AEAD, error) {
+func (s *Cipher) gcm() (cipher.AEAD, error) {
 	block, err := aes.NewCipher(s.key)
 	if err != nil {
 		return nil, err

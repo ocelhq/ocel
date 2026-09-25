@@ -143,7 +143,7 @@ func TestBootstrapClosesEveryDeclaredStage(t *testing.T) {
 	t.Run("when the work fails", func(t *testing.T) {
 		t.Parallel()
 		client, provider := contractServed(t, "1.0.0")
-		provider.Bootstrapper().RefuseApply(errors.New("the bootstrap fell over"))
+		provider.FakeBootstrap().RefuseApply(errors.New("the bootstrap fell over"))
 
 		stream, err := client.Bootstrap(context.Background(), &contractv1.BootstrapRequest{
 			Tier: environmentv1.Tier_TIER_PRODUCTION,

@@ -57,7 +57,7 @@ func run(listen, config string, printing, reporting bool) error {
 		ConfigPath: config,
 		Vars: providerkit.Vars{
 			Records: host.RecordsOver(hostports.Records{}),
-			Sealer:  host.SealerOver(hostports.Sealer{}),
+			Cipher:  host.CipherOver(hostports.Cipher{}),
 		},
 	})
 }

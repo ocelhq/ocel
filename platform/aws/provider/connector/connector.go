@@ -156,7 +156,7 @@ func varsKeys(ctx context.Context, api cfn.Describer, ns bootstrap.Namespace) ([
 }
 
 func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Release,
-	writer providerkit.Writer, progress func(string)) (Standing, error) {
+	writer providerkit.WrittenBy, progress func(string)) (Standing, error) {
 	keys, err := varsKeys(ctx, apis.CFN, ns)
 	if err != nil {
 		return Standing{}, err
@@ -230,7 +230,7 @@ func Remove(ctx context.Context, apis APIs, ns bootstrap.Namespace, progress fun
 }
 
 func codeBucket(ctx context.Context, apis APIs, ns bootstrap.Namespace,
-	writer providerkit.Writer, progress func(string)) (string, error) {
+	writer providerkit.WrittenBy, progress func(string)) (string, error) {
 	stack, err := cfn.DescribeStack(ctx, apis.CFN, StackName(ns))
 	if err != nil {
 		return "", err
@@ -273,7 +273,7 @@ func codeBucket(ctx context.Context, apis APIs, ns bootstrap.Namespace,
 	return opened[outputBucket], nil
 }
 
-func tagsFor(ns bootstrap.Namespace, template string, writer providerkit.Writer) []cfntypes.Tag {
+func tagsFor(ns bootstrap.Namespace, template string, writer providerkit.WrittenBy) []cfntypes.Tag {
 	return []cfntypes.Tag{
 		{Key: aws.String(cfn.TagNamespace), Value: aws.String(string(ns))},
 		{Key: aws.String(cfn.TagDigest), Value: aws.String(cfn.TemplateDigest(template))},

@@ -18,17 +18,17 @@ type recordingEngine struct {
 	err       error
 }
 
-func (e *recordingEngine) Preview(_ context.Context, _ pulumi.Setup, op pulumi.Op, _ providerkit.Reporter) ([]providerkit.Change, error) {
+func (e *recordingEngine) Preview(_ context.Context, _ pulumi.Setup, op pulumi.Op, _ providerkit.Progress) ([]providerkit.Change, error) {
 	e.previewed = op
 	return e.rows, e.err
 }
 
-func (e *recordingEngine) Up(_ context.Context, setup pulumi.Setup, _ providerkit.Reporter) (auto.OutputMap, error) {
+func (e *recordingEngine) Up(_ context.Context, setup pulumi.Setup, _ providerkit.Progress) (auto.OutputMap, error) {
 	e.up = setup
 	return e.outputs, e.err
 }
 
-func (e *recordingEngine) Destroy(_ context.Context, setup pulumi.Setup, _ providerkit.Reporter) error {
+func (e *recordingEngine) Destroy(_ context.Context, setup pulumi.Setup, _ providerkit.Progress) error {
 	e.down = setup
 	return e.err
 }

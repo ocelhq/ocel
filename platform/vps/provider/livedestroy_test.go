@@ -83,14 +83,14 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err != nil {
+	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	vm.runs(t, workload)
 	defer vm.ssh(t, "sudo docker rm -f "+workload+" >/dev/null 2>&1 || true")
 	decoy := vm.holds(t, decoyImage)
 
-	removal, err := bootstrapper.PlanRemoval(ctx, class)
+	removal, err := bootstrapper.PlanRemove(ctx, class)
 	if err != nil {
 		t.Fatalf("PlanRemoval() = %v", err)
 	}
@@ -112,14 +112,14 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 		t.Fatal(err)
 	}
 
-	report := &said{}
-	if err := bootstrapper.Remove(ctx, class, report); err != nil {
+	progress := &said{}
+	if err := bootstrapper.Remove(ctx, class, progress); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 
-	stamped := report.removed(host.KindDir, host.ClassDir(class))
+	stamped := progress.removed(host.KindDir, host.ClassDir(class))
 	if stamped < 0 {
-		t.Fatalf("Remove() never says it took %s, and the stamp goes with it:\n%s", host.ClassDir(class), strings.Join(report.lines, "\n"))
+		t.Fatalf("Remove() never says it took %s, and the stamp goes with it:\n%s", host.ClassDir(class), strings.Join(progress.lines, "\n"))
 	}
 	for kind, earlier := range map[string]string{
 		host.KindDir:     host.StateDir(class),
@@ -127,13 +127,13 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 		host.KindFile:    host.SealHelper,
 		host.KindUser:    deployLogin,
 	} {
-		if at := report.removed(kind, earlier); at < 0 || at > stamped {
+		if at := progress.removed(kind, earlier); at < 0 || at > stamped {
 			t.Errorf("Remove() took %s %s at line %d and the class directory at %d, and the stamp is what an interrupted destroy leaves behind",
 				kind, earlier, at, stamped)
 		}
 	}
-	if note := report.at("ssh-keygen -R"); note < 0 {
-		t.Errorf("Remove() never spells the line that drops this host from known_hosts:\n%s", strings.Join(report.lines, "\n"))
+	if note := progress.at("ssh-keygen -R"); note < 0 {
+		t.Errorf("Remove() never spells the line that drops this host from known_hosts:\n%s", strings.Join(progress.lines, "\n"))
 	}
 
 	after, err := os.ReadFile(vm.known)
@@ -172,7 +172,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 		t.Fatal(err)
 	}
 	for _, class := range []providerkit.Class{production, preview} {
-		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err != nil {
+		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 			t.Fatalf("Apply(%s) = %v", class, err)
 		}
 	}
@@ -183,7 +183,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 		host.SwitchboardBinary, host.ProxyConfig, vars.RoutingTable, "/etc/ocel"}
 	sealGrant := func(class providerkit.Class) string { return "/etc/sudoers.d/ocel-seal-" + string(class) }
 
-	first, err := bootstrapper.PlanRemoval(ctx, production)
+	first, err := bootstrapper.PlanRemove(ctx, production)
 	if err != nil {
 		t.Fatalf("PlanRemoval(%s) = %v", production, err)
 	}
@@ -233,7 +233,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 		t.Errorf("%s went with the %s class, and the %s sibling is still served through it", caddy.Container, production, preview)
 	}
 
-	last, err := bootstrapper.PlanRemoval(ctx, preview)
+	last, err := bootstrapper.PlanRemove(ctx, preview)
 	if err != nil {
 		t.Fatalf("PlanRemoval(%s) = %v", preview, err)
 	}

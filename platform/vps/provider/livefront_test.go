@@ -191,7 +191,7 @@ func servesBehind(t *testing.T, front string) machine {
 		t.Fatal(err)
 	}
 	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
-		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err != nil {
+		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 			t.Fatalf("Apply(%s) behind %s = %v", class, front, err)
 		}
 	}
@@ -228,7 +228,7 @@ func servesBehind(t *testing.T, front string) machine {
 	if served := vm.throughTheFront(t, frontedHostname, "/"); served != "one" {
 		t.Fatalf("%s answered %q for %s, want the release it routes to the switchboard", front, served, frontedHostname)
 	}
-	if kind, err := d.Serving(ctx, boxedge.Kind, frontedHostname); err != nil || kind != boxedge.Kind {
+	if kind, err := d.ServingEdge(ctx, boxedge.Kind, frontedHostname); err != nil || kind != boxedge.Kind {
 		t.Errorf("Serving(%s) = %q, %v, want the box proven through %s", frontedHostname, kind, err, front)
 	}
 

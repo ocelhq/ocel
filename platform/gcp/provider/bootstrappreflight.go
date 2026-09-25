@@ -87,7 +87,7 @@ func rolesFor(tier providerkit.CredentialTier) []string {
 	return granted
 }
 
-func (b bootstrapper) preflight(ctx context.Context, read survey, features []string) error {
+func (b bootstrap) preflight(ctx context.Context, read survey, features []string) error {
 	if err := b.servicesOn(ctx, features); err != nil {
 		return err
 	}
@@ -111,7 +111,7 @@ func rolesCovering(features []string) []string {
 	return slices.Concat(bootstrapRoles, alb.Roles())
 }
 
-func (b bootstrapper) servicesOn(ctx context.Context, features []string) error {
+func (b bootstrap) servicesOn(ctx context.Context, features []string) error {
 	service, err := b.clients.Services()
 	if err != nil {
 		return err
@@ -136,7 +136,7 @@ func (b bootstrapper) servicesOn(ctx context.Context, features []string) error {
 		b.clients.project, strings.Join(off, ", "), strings.Join(off, " "), b.clients.project)
 }
 
-func (b bootstrapper) permitted(ctx context.Context, features []string) error {
+func (b bootstrap) permitted(ctx context.Context, features []string) error {
 	service, err := b.clients.Projects()
 	if err != nil {
 		return err
@@ -162,7 +162,7 @@ func (b bootstrapper) permitted(ctx context.Context, features []string) error {
 		b.clients.project, strings.Join(missing, ", "), strings.Join(rolesCovering(features), ", "))
 }
 
-func (b bootstrapper) regionServed(ctx context.Context, read survey) error {
+func (b bootstrap) regionServed(ctx context.Context, read survey) error {
 	if read.Emulated {
 		return nil
 	}

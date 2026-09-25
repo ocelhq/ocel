@@ -25,7 +25,7 @@ func planned(t *testing.T, stacks cfn.API, class string, req Request) []provider
 		t.Fatalf("Read: %v", err)
 	}
 	deployed := read.Deployed
-	described := providerkit.Bootstrap{Class: providerkit.Class(class), Present: deployed.Present}
+	described := providerkit.BootstrapReading{Class: providerkit.Class(class), Present: deployed.Present}
 	for _, stack := range deployed.Stacks {
 		described.Stacks = append(described.Stacks, providerkit.BootstrapStack{
 			Name:          stack.Name,

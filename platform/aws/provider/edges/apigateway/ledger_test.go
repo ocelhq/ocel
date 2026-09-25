@@ -25,7 +25,7 @@ func TestPromoteLeavesTheStageOnTheLedgersPromotionWhenItsPointerMovedUnderneath
 			t.Fatalf("PutStaged: %v", err)
 		}
 	}
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": first.Identity}}, "", edge.DiscardReporter()); err != nil {
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": first.Identity}}, "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
 	w.dynamo.beforePut = func(key string, items map[string]map[string]ddbtypes.AttributeValue) {
@@ -34,7 +34,7 @@ func TestPromoteLeavesTheStageOnTheLedgersPromotionWhenItsPointerMovedUnderneath
 		}
 	}
 
-	err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Identity}}, "", edge.DiscardReporter())
+	err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Identity}}, "", edge.DiscardProgress())
 	var refusal providerkit.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
 		t.Fatalf("Promote(p2) = %v, want the busy refusal a moved pointer earns", err)

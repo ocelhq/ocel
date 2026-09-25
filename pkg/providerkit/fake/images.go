@@ -60,7 +60,7 @@ func (i *Images) Has(_ context.Context, push providerkit.ImagePush) (bool, error
 	return i.held[push.Target], nil
 }
 
-func (i *Images) Push(_ context.Context, push providerkit.ImagePush, _ providerkit.Reporter) error {
+func (i *Images) Push(_ context.Context, push providerkit.ImagePush, _ providerkit.Progress) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if i.failed != nil {

@@ -24,7 +24,7 @@ type CertificateRequest struct {
 	Hostname string
 	Held     Certificate
 	Prove    Prover
-	Report   Reporter
+	Progress Progress
 }
 
 type CertificateHealth struct {
@@ -38,49 +38,32 @@ type CertificateHealth struct {
 	ExpiringSoon bool
 }
 
-type Certifier interface {
-	Certificate(ctx context.Context, req CertificateRequest) (Certificate, error)
+type Certificates interface {
+	Issue(ctx context.Context, req CertificateRequest) (Certificate, error)
 
-	InspectCertificate(ctx context.Context, kind edge.Kind, hostname string, cert Certificate) (CertificateHealth, error)
+	Inspect(ctx context.Context, kind edge.Kind, hostname string, cert Certificate) (CertificateHealth, error)
 
-	DiscardCertificate(ctx context.Context, cert Certificate, report Reporter) error
+	Discard(ctx context.Context, cert Certificate, progress Progress) error
 }
 
-func certificateFor(ctx context.Context, provider Provider, req CertificateRequest) (Certificate, error) {
-	certifier, ok := provider.(Certifier)
-	if !ok {
-		return Certificate{}, nil
-	}
-	return certifier.Certificate(ctx, req)
-}
-
-func inspectCertificate(ctx context.Context, provider Provider, kind edge.Kind, hostname string, cert Certificate) (CertificateHealth, error) {
-	certifier, ok := provider.(Certifier)
-	if !ok {
-		return CertificateHealth{}, nil
-	}
-	return certifier.InspectCertificate(ctx, kind, hostname, cert)
-}
-
-func discardCertificate(ctx context.Context, provider Provider, cert Certificate, report Reporter) error {
-	certifier, ok := provider.(Certifier)
-	if !ok || !cert.Requested || cert.ID == "" {
+func discardCertificate(ctx context.Context, provider Provider, cert Certificate, progress Progress) error {
+	if !cert.Requested || cert.ID == "" {
 		return nil
 	}
-	return certifier.DiscardCertificate(ctx, cert, report)
+	return provider.Certificates().Discard(ctx, cert, progress)
 }
 
-func retireCertificate(ctx context.Context, provider Provider, settle settler, cert, holding Certificate, report Reporter) error {
+func retireCertificate(ctx context.Context, provider Provider, settle settler, cert, holding Certificate, progress Progress) error {
 	if !cert.Held() || cert.ID == holding.ID {
 		return nil
 	}
 	if cert.Requested {
-		report.Say("Discarding certificate " + cert.ID)
+		progress.Say("Discarding certificate " + cert.ID)
 	}
-	if err := discardCertificate(ctx, provider, cert, report); err != nil {
+	if err := discardCertificate(ctx, provider, cert, progress); err != nil {
 		return err
 	}
-	return settle.release(ctx, edge.Unwritten(cert.Written, holding.Written), report.Say)
+	return settle.release(ctx, edge.Unwritten(cert.Written, holding.Written), progress.Say)
 }
 
 type certification struct {
@@ -92,14 +75,14 @@ type certification struct {
 	notes    []string
 }
 
-func (c certification) certify(ctx context.Context, hostname string, report Reporter) error {
-	cert, err := certificateFor(ctx, c.provider, CertificateRequest{
+func (c certification) certify(ctx context.Context, hostname string, progress Progress) error {
+	cert, err := c.provider.Certificates().Issue(ctx, CertificateRequest{
 		Kind:     c.settle.kind,
 		Hostname: hostname,
 		Held:     c.settled.Certificate,
-		Report:   report,
+		Progress: progress,
 		Prove: func(ctx context.Context, cert Certificate, records []edge.Record) (Certificate, error) {
-			written, werr := c.settle.write(ctx, records, proveHeadline(hostname), report.Say,
+			written, werr := c.settle.write(ctx, records, proveHeadline(hostname), progress.Say,
 				append([]string{proveNote}, c.notes...)...)
 			cert.Written, cert.Owed = written.Written, written.Owed
 			return cert, errors.Join(werr, c.hold(ctx, cert))
@@ -118,7 +101,7 @@ func (c certification) hold(ctx context.Context, cert Certificate) error {
 	return c.persist(ctx)
 }
 
-func (c certification) discardSuperseded(ctx context.Context, report Reporter) error {
+func (c certification) discardSuperseded(ctx context.Context, progress Progress) error {
 	if len(c.settled.Superseded) == 0 {
 		return nil
 	}
@@ -129,7 +112,7 @@ func (c certification) discardSuperseded(ctx context.Context, report Reporter) e
 		if c.uses != nil && c.uses(cert.ID) {
 			continue
 		}
-		if err := retireCertificate(ctx, c.provider, c.settle, cert, holding, report); err != nil {
+		if err := retireCertificate(ctx, c.provider, c.settle, cert, holding, progress); err != nil {
 			errs = append(errs, err)
 			kept = append(kept, cert)
 		}

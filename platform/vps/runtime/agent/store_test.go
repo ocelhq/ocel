@@ -137,7 +137,7 @@ func aBox(t *testing.T, root string) *box {
 	return b
 }
 
-func (b *box) store() values.Store { return values.Store{Records: b.records, Sealer: b.sealer} }
+func (b *box) store() values.Store { return values.Store{Records: b.records, Cipher: b.sealer} }
 
 func (b *box) set(t *testing.T, scope values.Scope, at values.Coordinate, plaintext string) {
 	t.Helper()

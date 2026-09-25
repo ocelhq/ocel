@@ -105,9 +105,9 @@ type EdgeStack interface {
 
 	Ledger() Ledger
 
-	Promote(ctx context.Context, promotion Promotion, pointer string, report Reporter) error
+	Promote(ctx context.Context, promotion Promotion, pointer string, progress Progress) error
 
-	RemovePointer(ctx context.Context, pointer string, report Reporter) (PruneResult, error)
+	RemovePointer(ctx context.Context, pointer string, progress Progress) (PruneResult, error)
 
 	BindDomain(ctx context.Context, binding DomainBinding) error
 

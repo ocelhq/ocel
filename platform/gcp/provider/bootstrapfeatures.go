@@ -14,7 +14,7 @@ const albFeature = "alb-edge"
 
 var albAPIs = []string{"compute.googleapis.com", "certificatemanager.googleapis.com"}
 
-func (bootstrapper) Catalogue() []providerkit.Feature {
+func (bootstrap) Catalogue() []providerkit.Feature {
 	return []providerkit.Feature{{
 		Name: albFeature,
 		Summary: "a global external Application Load Balancer as the front: one address, one certificate map, one URL map — " +
@@ -34,7 +34,7 @@ func standingFeatures(catalogue []providerkit.Feature, held []string, req provid
 	return standing
 }
 
-func (b bootstrapper) fronted(features []string) []providerkit.Feature {
+func (b bootstrap) fronted(features []string) []providerkit.Feature {
 	var wanted []providerkit.Feature
 	for _, feature := range b.Catalogue() {
 		if slices.Contains(features, feature.Name) && len(edgesNeededBy(feature)) > 0 {
@@ -54,7 +54,7 @@ func edgesNeededBy(feature providerkit.Feature) []edge.Kind {
 	return kinds
 }
 
-func (b bootstrapper) eachFront(features []string, visit func(providerkit.Feature, edge.Edge) error) error {
+func (b bootstrap) eachFront(features []string, visit func(providerkit.Feature, edge.Edge) error) error {
 	wanted := b.fronted(features)
 	if len(wanted) == 0 {
 		return nil
@@ -77,9 +77,9 @@ func (b bootstrapper) eachFront(features []string, visit func(providerkit.Featur
 	return nil
 }
 
-func (b bootstrapper) raiseFronts(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
+func (b bootstrap) raiseFronts(ctx context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
 	return b.eachFront(req.Features, func(feature providerkit.Feature, front edge.Edge) error {
-		say(report, "standing the front of the "+string(front.Kind())+" edge up for "+string(req.Class)+": "+feature.Summary)
+		say(progress, "standing the front of the "+string(front.Kind())+" edge up for "+string(req.Class)+": "+feature.Summary)
 		_, err := front.Bootstrap(ctx, req.Class)
 		return err
 	})
@@ -95,23 +95,23 @@ func droppedFeatures(held []string, req providerkit.BootstrapRequest) []string {
 	return dropping
 }
 
-func (b bootstrapper) dropFronts(
+func (b bootstrap) dropFronts(
 	ctx context.Context,
 	read survey,
 	req providerkit.BootstrapRequest,
-	report providerkit.Reporter,
+	progress providerkit.Progress,
 ) error {
 	dropping := droppedFeatures(read.Stamp.Features, req)
 	if err := b.frontsFree(ctx, req.Class, dropping); err != nil {
 		return err
 	}
 	return b.eachFront(dropping, func(feature providerkit.Feature, front edge.Edge) error {
-		say(report, "taking the front of the "+string(front.Kind())+" edge down for "+string(req.Class)+": "+feature.Name+" was removed")
+		say(progress, "taking the front of the "+string(front.Kind())+" edge down for "+string(req.Class)+": "+feature.Name+" was removed")
 		return front.Teardown(ctx, req.Class)
 	})
 }
 
-func (b bootstrapper) tearFronts(ctx context.Context, class providerkit.Class, features []string) error {
+func (b bootstrap) tearFronts(ctx context.Context, class providerkit.Class, features []string) error {
 	return b.eachFront(features, func(_ providerkit.Feature, front edge.Edge) error {
 		return front.Teardown(ctx, class)
 	})
@@ -123,7 +123,7 @@ type standingFront interface {
 	Bound(ctx context.Context, class edge.Class) ([]string, error)
 }
 
-func (b bootstrapper) frontStands(ctx context.Context, class providerkit.Class, feature string) (bool, error) {
+func (b bootstrap) frontStands(ctx context.Context, class providerkit.Class, feature string) (bool, error) {
 	standing := true
 	err := b.eachFront([]string{feature}, func(_ providerkit.Feature, front edge.Edge) error {
 		held, reports := front.(standingFront)
@@ -140,7 +140,7 @@ func (b bootstrapper) frontStands(ctx context.Context, class providerkit.Class, 
 	return standing, err
 }
 
-func (b bootstrapper) frontsFree(ctx context.Context, class providerkit.Class, features []string) error {
+func (b bootstrap) frontsFree(ctx context.Context, class providerkit.Class, features []string) error {
 	return b.eachFront(features, func(_ providerkit.Feature, front edge.Edge) error {
 		holder, holds := front.(standingFront)
 		if !holds {

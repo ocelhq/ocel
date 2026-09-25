@@ -119,11 +119,11 @@ func (s *stack) ledger() *kitledger.Ledger {
 
 func (s *stack) Ledger() edge.Ledger { return s.ledger() }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, report edge.Reporter) error {
-	return pin.Promote(ctx, s.ledger(), s.e.pins, promotion, pointer, report)
+func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
+	return pin.Promote(ctx, s.ledger(), s.e.pins, promotion, pointer, progress)
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Reporter) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progress) (edge.PruneResult, error) {
 	return s.ledger().RemovePointer(ctx, pointer)
 }
 

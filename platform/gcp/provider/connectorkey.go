@@ -72,7 +72,7 @@ func connectorPublicKeyOf(held *run.GoogleCloudRunV2Service) string {
 	return ""
 }
 
-func (p *Provider) connectorKey(ctx context.Context, report providerkit.Reporter) (string, error) {
+func (p *Provider) connectorKey(ctx context.Context, progress providerkit.Progress) (string, error) {
 	clients, err := p.stood(ctx)
 	if err != nil {
 		return "", err
@@ -101,7 +101,7 @@ func (p *Provider) connectorKey(ctx context.Context, report providerkit.Reporter
 		if err != nil {
 			return "", fmt.Errorf("read the connector key %s holds: %w", name, err)
 		}
-		say(report, "The connector keeps the key "+name+" already holds")
+		say(progress, "The connector keeps the key "+name+" already holds")
 		return public, nil
 	case err != nil && !absent(err):
 		return "", fmt.Errorf("read whether %s holds a connector key: %w", name, err)
@@ -117,7 +117,7 @@ func (p *Provider) connectorKey(ctx context.Context, report providerkit.Reporter
 	}).Context(ctx).Do); err != nil {
 		return "", fmt.Errorf("write the connector's key into %s: %w", name, err)
 	}
-	say(report, "Minted the connector's key into "+name)
+	say(progress, "Minted the connector's key into "+name)
 	return publicKeyOf(payload)
 }
 
@@ -166,7 +166,7 @@ func boundSecretMember(bindings []*secretmanager.Binding, role, member string, g
 	return append(bindings, &secretmanager.Binding{Role: role, Members: []string{member}}), true
 }
 
-func (p *Provider) takeConnectorKey(ctx context.Context, report providerkit.Reporter) error {
+func (p *Provider) takeConnectorKey(ctx context.Context, progress providerkit.Progress) error {
 	clients, err := p.stood(ctx)
 	if err != nil {
 		return err
@@ -179,6 +179,6 @@ func (p *Provider) takeConnectorKey(ctx context.Context, report providerkit.Repo
 	if _, err := attempted(ctx, service.Projects.Secrets.Delete(secretPath(clients.project, name)).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the %s secret: %w", name, err)
 	}
-	say(report, "Took away the connector's key")
+	say(progress, "Took away the connector's key")
 	return nil
 }

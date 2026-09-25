@@ -30,14 +30,14 @@ func (s *stack) ledger() *kitledger.Ledger {
 
 func (s *stack) Ledger() edge.Ledger { return s.ledger() }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, report edge.Reporter) error {
-	if err := pin.Promote(ctx, s.ledger(), s.e.deps.Pins, promotion, pointer, report); err != nil {
+func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
+	if err := pin.Promote(ctx, s.ledger(), s.e.deps.Pins, promotion, pointer, progress); err != nil {
 		return err
 	}
-	return s.released(ctx, promotion, report)
+	return s.released(ctx, promotion, progress)
 }
 
-func (s *stack) released(ctx context.Context, promotion edge.Promotion, report edge.Reporter) error {
+func (s *stack) released(ctx context.Context, promotion edge.Promotion, progress edge.Progress) error {
 	hosts := maps.Clone(s.held.Hosts)
 	serving := map[string]string{}
 	var took []string
@@ -71,8 +71,8 @@ func (s *stack) released(ctx context.Context, promotion edge.Promotion, report e
 		return err
 	}
 	for _, hostname := range took {
-		if report != nil {
-			report.Detail("Routing " + hostname + " to " + hosts[hostname].Service)
+		if progress != nil {
+			progress.Detail("Routing " + hostname + " to " + hosts[hostname].Service)
 		}
 		if err := s.reach(ctx, hosts[hostname], hostname); err != nil {
 			return errors.Join(err, s.raise(ctx, s.held.Hosts))
@@ -83,7 +83,7 @@ func (s *stack) released(ctx context.Context, promotion edge.Promotion, report e
 	return nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Reporter) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progress) (edge.PruneResult, error) {
 	return s.ledger().RemovePointer(ctx, pointer)
 }
 
@@ -192,7 +192,7 @@ func (s *stack) target() Target { return Target{Class: s.state.Class, Slug: s.st
 func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 	target := s.target()
 	if len(hosts) == 0 {
-		return s.e.deps.Stacks.Destroy(ctx, target, edge.DiscardReporter())
+		return s.e.deps.Stacks.Destroy(ctx, target, edge.DiscardProgress())
 	}
 	_, err := s.e.deps.Stacks.Up(ctx, target, bindingProgram(bindingSpec{
 		Region:         s.e.deps.Region,
@@ -200,7 +200,7 @@ func (s *stack) raise(ctx context.Context, hosts map[string]Host) error {
 		Class:          s.state.Class,
 		CertificateMap: s.held.Front.CertificateMap,
 		Hosts:          hosts,
-	}), edge.DiscardReporter())
+	}), edge.DiscardProgress())
 	return err
 }
 
@@ -295,7 +295,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 		}
 	}
 	if len(s.held.Hosts) > 0 {
-		if err := s.e.deps.Stacks.Destroy(ctx, s.target(), edge.DiscardReporter()); err != nil {
+		if err := s.e.deps.Stacks.Destroy(ctx, s.target(), edge.DiscardProgress()); err != nil {
 			return err
 		}
 	}

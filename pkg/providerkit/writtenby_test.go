@@ -13,7 +13,7 @@ func TestWriterFor(t *testing.T) {
 		t.Parallel()
 
 		for _, raw := range []string{"1.2.3", "v1.2.3", "0.0.1", "1.2.3-rc.1", "1.2.3+meta"} {
-			if w := WriterFor(raw); !w.Release() {
+			if w := WrittenByVersion(raw); !w.Release() {
 				t.Errorf("WriterFor(%q).Release() = false, want true", raw)
 			}
 		}
@@ -23,7 +23,7 @@ func TestWriterFor(t *testing.T) {
 		t.Parallel()
 
 		for _, raw := range []string{"", "dev", "(devel)", "dev+cafe", "1.2", "1.2.3.4", "nightly"} {
-			if w := Writer(raw); w.Release() {
+			if w := WrittenBy(raw); w.Release() {
 				t.Errorf("Writer(%q).Release() = true, want false", raw)
 			}
 		}
@@ -52,7 +52,7 @@ func TestWriterFor(t *testing.T) {
 	t.Run("an unset writer reads as unknown", func(t *testing.T) {
 		t.Parallel()
 
-		if got := Writer("").String(); got != "unknown" {
+		if got := WrittenBy("").String(); got != "unknown" {
 			t.Fatalf("Writer(\"\").String() = %q, want unknown", got)
 		}
 	})
@@ -60,7 +60,7 @@ func TestWriterFor(t *testing.T) {
 	t.Run("the live writer is never empty", func(t *testing.T) {
 		t.Parallel()
 
-		if got := WriterFor("dev"); !strings.HasPrefix(string(got), "dev") {
+		if got := WrittenByVersion("dev"); !strings.HasPrefix(string(got), "dev") {
 			t.Fatalf("WriterFor(dev) = %q, want it to start with dev", got)
 		}
 	})
@@ -70,7 +70,7 @@ func TestWriterDevelopment(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		writer Writer
+		writer WrittenBy
 		want   bool
 	}{
 		{"dev", true},
@@ -93,7 +93,7 @@ func TestWriterNewer(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		mine, theirs Writer
+		mine, theirs WrittenBy
 		want         bool
 	}{
 		{"1.3.0", "1.2.9", true},

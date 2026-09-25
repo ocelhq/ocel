@@ -85,7 +85,7 @@ func TestTheBoxAnswersWhichEdgeServesAHostnameOffTheHeaderItReadsOverTls(t *test
 		"a different edge":  "cloudfront",
 		"nothing ocel runs": "",
 	} {
-		kind, err := probingAt(t, header).Serving(context.Background(), boxedge.Kind, "shop.example.com")
+		kind, err := probingAt(t, header).ServingEdge(context.Background(), boxedge.Kind, "shop.example.com")
 		if err != nil {
 			t.Fatalf("Serving() over %s = %v", what, err)
 		}
@@ -116,7 +116,7 @@ func TestTheEdgeIsReadOffTheHostnameProbedAndNotOffWhereeverItPointsOn(t *testin
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	probedAt(p, at.Host, trusted)
 
-	kind, err := p.Serving(context.Background(), boxedge.Kind, "shop.example.com")
+	kind, err := p.ServingEdge(context.Background(), boxedge.Kind, "shop.example.com")
 	if err != nil {
 		t.Fatalf("Serving() over a hostname fronted by a redirect = %v", err)
 	}
@@ -141,7 +141,7 @@ func TestAHostnameServingACertificateNothingTrustsKeepsConvergingAndSaysWhy(t *t
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	probedAt(p, at.Host, untrusted)
 
-	kind, err := p.Serving(context.Background(), boxedge.Kind, "shop.example.com")
+	kind, err := p.ServingEdge(context.Background(), boxedge.Kind, "shop.example.com")
 	if err != nil {
 		t.Fatalf("Serving() over a certificate nothing trusts = %v, want it reported unserved: a settle writes the record and probes at once, so for the whole of the old record's ttl the probe reaches the previous host, and a deploy that dies on attempt 1 there never moves the domain at all",
 			err)
@@ -178,13 +178,13 @@ func TestAHostnameThatAnswersClearsTheCauseTheLastAttemptLeft(t *testing.T) {
 		return (&net.Dialer{}).DialContext(ctx, network, at.Host)
 	}
 
-	if _, err := p.Serving(context.Background(), boxedge.Kind, "shop.example.com"); err != nil {
+	if _, err := p.ServingEdge(context.Background(), boxedge.Kind, "shop.example.com"); err != nil {
 		t.Fatal(err)
 	}
 	if p.Unreached("shop.example.com") == "" {
 		t.Fatal("a hostname the probe never reached carries no cause, and this test states nothing about clearing one")
 	}
-	if _, err := p.Serving(context.Background(), boxedge.Kind, "shop.example.com"); err != nil {
+	if _, err := p.ServingEdge(context.Background(), boxedge.Kind, "shop.example.com"); err != nil {
 		t.Fatal(err)
 	}
 	if cause := p.Unreached("shop.example.com"); cause != "" {
@@ -201,7 +201,7 @@ func TestAProbeTheRunGaveUpOnSaysSoRatherThanReportingTheHostnameUnserved(t *tes
 	ctx, stop := context.WithCancel(context.Background())
 	stop()
 
-	if _, err := p.Serving(ctx, boxedge.Kind, "shop.example.com"); !errors.Is(err, context.Canceled) {
+	if _, err := p.ServingEdge(ctx, boxedge.Kind, "shop.example.com"); !errors.Is(err, context.Canceled) {
 		t.Errorf("Serving() under a cancelled context = %v, want the cancellation: a deploy the user stopped reads as a hostname that does not answer yet", err)
 	}
 }
@@ -212,7 +212,7 @@ func TestAHostnameNothingAnswersIsNotAnErrorTheSettleGivesUpOn(t *testing.T) {
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	p.System = resolvesNothing{}
 
-	kind, err := p.Serving(context.Background(), boxedge.Kind, "nothing.invalid")
+	kind, err := p.ServingEdge(context.Background(), boxedge.Kind, "nothing.invalid")
 	if err != nil {
 		t.Fatalf("Serving() over a hostname that resolves to nothing = %v, want it reported as unserved: the settle retries on an empty answer and gives up on an error", err)
 	}
@@ -255,7 +255,7 @@ func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheBoxAsItsEdge(t *testi
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	probedAt(p, at.Host, trusted)
 
-	kind, err := p.Serving(context.Background(), boxedge.Kind, hostname)
+	kind, err := p.ServingEdge(context.Background(), boxedge.Kind, hostname)
 	if err != nil {
 		t.Fatalf("Serving() = %v", err)
 	}
@@ -289,7 +289,7 @@ func TestALocalhostNameIsProbedOnTheBoxItResolvesOn(t *testing.T) {
 
 	p, machine := probedOnTheBox(t, session.Result{Stdout: string(boxedge.Kind) + "\n"})
 
-	kind, err := p.Serving(context.Background(), boxedge.Kind, "web.localhost")
+	kind, err := p.ServingEdge(context.Background(), boxedge.Kind, "web.localhost")
 	if err != nil {
 		t.Fatalf("Serving() = %v", err)
 	}
@@ -307,7 +307,7 @@ func TestALocalhostNameTheBoxCannotReachKeepsConvergingAndSaysWhy(t *testing.T) 
 	p, _ := probedOnTheBox(t, session.Result{Code: 3,
 		Stderr: "web.localhost at 127.0.0.1:443: the certificate served is for fallback.localhost, not this name"})
 
-	kind, err := p.Serving(context.Background(), boxedge.Kind, "web.localhost")
+	kind, err := p.ServingEdge(context.Background(), boxedge.Kind, "web.localhost")
 	if err != nil {
 		t.Fatalf("Serving() = %v, want it reported unserved: the proxy obtains the name's certificate in the background after the bind", err)
 	}
@@ -324,7 +324,7 @@ func TestALocalhostProbeTheBoxRefusesIsAnError(t *testing.T) {
 
 	p, _ := probedOnTheBox(t, session.Result{Code: 2, Stderr: "usage: ocel-switchboard serve"})
 
-	if _, err := p.Serving(context.Background(), boxedge.Kind, "web.localhost"); err == nil {
+	if _, err := p.ServingEdge(context.Background(), boxedge.Kind, "web.localhost"); err == nil {
 		t.Error("Serving() = nil over a proxy that could not be asked at all, and the settle burns a minute on a box whose proxy is down")
 	}
 }

@@ -159,7 +159,7 @@ func (s *stack) findAPIFor(ctx context.Context, c Clients, pointer, name string)
 	return findAPI(ctx, c, name)
 }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, report edge.Reporter) error {
+func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
 	c, err := s.p.clientsFor(ctx)
 	if err != nil {
 		return err
@@ -178,7 +178,7 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	if err := s.routePreview(ctx, c, pointer, id); err != nil {
 		return err
 	}
-	if err := s.ledger(c).Promote(ctx, promotion, pointer, report); err != nil {
+	if err := s.ledger(c).Promote(ctx, promotion, pointer, progress); err != nil {
 		return errors.Join(err, s.restage(ctx, c, pointer, id))
 	}
 	return nil
@@ -280,7 +280,7 @@ func (s *stack) stagePatch(ctx context.Context, c Clients, promotion edge.Promot
 	}), nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Reporter) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progress) (edge.PruneResult, error) {
 	c, err := s.p.clientsFor(ctx)
 	if err != nil {
 		return edge.PruneResult{}, err

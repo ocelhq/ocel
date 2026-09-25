@@ -7,7 +7,9 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 
-func (p *Provider) ContainerArch(_ context.Context, app, declared string) (string, error) {
+type containerRuntime struct{ *Provider }
+
+func (p containerRuntime) Arch(_ context.Context, app, declared string) (string, error) {
 	if runs, _ := providerkit.GoArch(declared); runs != payloads.ContainerArch {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
 			"app %s declares arch %q, and Cloud Run runs %s alone: drop the arch, or deploy %s to a provider that runs %s",
@@ -16,6 +18,6 @@ func (p *Provider) ContainerArch(_ context.Context, app, declared string) (strin
 	return payloads.ContainerArch, nil
 }
 
-func (p *Provider) ContainerRuntime(_ context.Context, arch string) ([]byte, error) {
+func (p containerRuntime) Binary(_ context.Context, arch string) ([]byte, error) {
 	return payloads.ContainerRuntime(arch)
 }

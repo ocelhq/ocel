@@ -45,8 +45,8 @@ func certifying(machine *box) *vps.Provider {
 func certificateRefusal(t *testing.T, p *vps.Provider, hostname string) error {
 	t.Helper()
 
-	_, err := p.Certificate(context.Background(), providerkit.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: hostname, Report: edge.DiscardReporter(),
+	_, err := p.Certificates().Issue(context.Background(), providerkit.CertificateRequest{
+		Kind: boxedge.Kind, Hostname: hostname, Progress: edge.DiscardProgress(),
 	})
 	return err
 }
@@ -103,8 +103,8 @@ func TestAProxyWithNothingToSayCertifiesAsItAlwaysDid(t *testing.T) {
 	t.Parallel()
 
 	machine := boxWhoseProxyWasRefused(`{"level":"info","msg":"certificate obtained successfully"}`)
-	cert, err := certifying(machine).Certificate(context.Background(), providerkit.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: "pr-9.preview.acme.com", Report: edge.DiscardReporter(),
+	cert, err := certifying(machine).Certificates().Issue(context.Background(), providerkit.CertificateRequest{
+		Kind: boxedge.Kind, Hostname: "pr-9.preview.acme.com", Progress: edge.DiscardProgress(),
 	})
 	if err != nil {
 		t.Fatalf("Certificate() = %v", err)
@@ -124,9 +124,9 @@ func TestABoxWhoseEngineCannotBeReachedSaysSoInTheEnginesOwnWordsAndStillMintsTh
 		}
 		return session.Result{}, false
 	}
-	spoken := &saying{Reporter: edge.DiscardReporter()}
-	cert, err := certifying(machine).Certificate(context.Background(), providerkit.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: "pr-9.preview.acme.com", Report: spoken,
+	spoken := &saying{Progress: edge.DiscardProgress()}
+	cert, err := certifying(machine).Certificates().Issue(context.Background(), providerkit.CertificateRequest{
+		Kind: boxedge.Kind, Hostname: "pr-9.preview.acme.com", Progress: spoken,
 	})
 	if err != nil {
 		t.Fatalf("Certificate() = %v: the handle names what the proxy renews and asks the box for nothing, and the conformance suite mints it against a box that answers nothing at all", err)
@@ -141,7 +141,7 @@ func TestABoxWhoseEngineCannotBeReachedSaysSoInTheEnginesOwnWordsAndStillMintsTh
 }
 
 type saying struct {
-	edge.Reporter
+	edge.Progress
 	said []string
 }
 

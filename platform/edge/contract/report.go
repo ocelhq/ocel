@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-type Reporter interface {
+type Progress interface {
 	Say(message string)
 
 	Detail(message string)
@@ -20,7 +20,7 @@ type Attr struct {
 
 type discarded struct{}
 
-func DiscardReporter() Reporter { return discarded{} }
+func DiscardProgress() Progress { return discarded{} }
 
 func (discarded) Say(string) {}
 
@@ -41,10 +41,10 @@ func Warned(err error) error {
 	return Warning{Cause: err}
 }
 
-func Heeded(err error, report Reporter) error {
+func Heeded(err error, progress Progress) error {
 	var warned Warning
 	if errors.As(err, &warned) {
-		report.Say(warned.Error())
+		progress.Say(warned.Error())
 		return nil
 	}
 	return err

@@ -4,6 +4,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/ports"
 )
 
-type Sealer = ports.Sealer
+type Cipher = ports.Cipher
 
 type Coordinate = ports.Coordinate

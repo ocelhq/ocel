@@ -106,7 +106,7 @@ func (m *nodeChild) warmBytecodeCache(ctx context.Context) warmSummary {
 		return warmSummary{State: warmStateFailed, Source: source, Key: m.cache.Key(), Error: err.Error()}
 	}
 
-	report, waiter, answered := m.warmCompileCache(ctx, deadline)
+	progress, waiter, answered := m.warmCompileCache(ctx, deadline)
 	defer m.endWarmExchange()
 
 	summary := warmSummary{Key: m.cache.Key(), Source: source}
@@ -119,9 +119,9 @@ func (m *nodeChild) warmBytecodeCache(ctx context.Context) warmSummary {
 	outcome := m.cache.Upload(ctx, uploadBy(ctx), m.flushed)
 
 	if !answered {
-		report, answered = collectWarmReport(waiter)
+		progress, answered = collectWarmReport(waiter)
 	}
-	summary.count(report, answered)
+	summary.count(progress, answered)
 
 	if outcome.Bytes > 0 {
 		summary.Bytes = outcome.Bytes
@@ -140,19 +140,19 @@ func (m *nodeChild) warmBytecodeCache(ctx context.Context) warmSummary {
 	return summary
 }
 
-func (s *warmSummary) count(report compileCacheWarmedPayload, answered bool) {
+func (s *warmSummary) count(progress compileCacheWarmedPayload, answered bool) {
 	switch {
 	case !answered:
 		s.Uncounted = "node did not report back on the compile-cache warm"
-	case !report.OK:
-		s.Uncounted = "this artifact has no compile-cache warm capability: " + report.State
+	case !progress.OK:
+		s.Uncounted = "this artifact has no compile-cache warm capability: " + progress.State
 	default:
-		s.Entries = report.Entries
-		s.Loaded = report.Loaded
-		s.Failures = report.Failures
-		s.StoppedBy = report.StoppedBy
-		s.Skipped = report.Skipped
-		s.SkippedCount = report.SkippedCount
-		s.Bytes = report.Bytes
+		s.Entries = progress.Entries
+		s.Loaded = progress.Loaded
+		s.Failures = progress.Failures
+		s.StoppedBy = progress.StoppedBy
+		s.Skipped = progress.Skipped
+		s.SkippedCount = progress.SkippedCount
+		s.Bytes = progress.Bytes
 	}
 }

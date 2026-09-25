@@ -34,12 +34,12 @@ type ConnectorAddress struct {
 	Compute   Compute
 }
 
-type ConnectorHost interface {
-	DescribeConnectorTarget(ctx context.Context) (ConnectorTarget, error)
+type Connector interface {
+	Target(ctx context.Context) (ConnectorTarget, error)
 
-	InstallConnector(ctx context.Context, install ConnectorInstall, report Reporter) (ConnectorAddress, error)
+	Install(ctx context.Context, install ConnectorInstall, progress Progress) (ConnectorAddress, error)
 
-	RemoveConnector(ctx context.Context, report Reporter) error
+	Remove(ctx context.Context, progress Progress) error
 }
 
 func ConnectorCompute(requested Compute, supported ...Compute) (Compute, error) {

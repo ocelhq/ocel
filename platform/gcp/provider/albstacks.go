@@ -33,24 +33,24 @@ func (s albStacks) Up(
 	ctx context.Context,
 	target alb.Target,
 	program alb.Program,
-	report edge.Reporter,
+	progress edge.Progress,
 ) (map[string]string, error) {
 	adapter, plan, err := s.opened(ctx, target, program)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := adapter.Run(ctx, plan, report); err != nil {
+	if _, err := adapter.Run(ctx, plan, progress); err != nil {
 		return nil, err
 	}
 	return outputsOf(ctx, adapter, plan.Ref)
 }
 
-func (s albStacks) Destroy(ctx context.Context, target alb.Target, report edge.Reporter) error {
+func (s albStacks) Destroy(ctx context.Context, target alb.Target, progress edge.Progress) error {
 	adapter, plan, err := s.opened(ctx, target, nil)
 	if err != nil {
 		return err
 	}
-	return adapter.Destroy(ctx, plan.Ref, report)
+	return adapter.Destroy(ctx, plan.Ref, progress)
 }
 
 func (s albStacks) Outputs(ctx context.Context, target alb.Target) (map[string]string, error) {
@@ -62,7 +62,7 @@ func (s albStacks) Outputs(ctx context.Context, target alb.Target) (map[string]s
 }
 
 func outputsOf(ctx context.Context, adapter *kitpulumi.Adapter, ref providerkit.StackRef) (map[string]string, error) {
-	outputs, err := adapter.Outputs(ctx, ref, edge.DiscardReporter())
+	outputs, err := adapter.Outputs(ctx, ref, edge.DiscardProgress())
 	if err != nil {
 		return nil, err
 	}

@@ -82,7 +82,7 @@ func (w *wildcards) save(ctx context.Context) error {
 }
 
 func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(sender *eventSender, report Reporter) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(sender *eventSender, progress Progress) error {
 		base, err := previewBaseDomain(req.GetBaseDomain())
 		if err != nil {
 			return err
@@ -96,11 +96,11 @@ func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePr
 		if err != nil {
 			return err
 		}
-		return w.use(ctx, front, base, report)
+		return w.use(ctx, front, base, progress)
 	})
 }
 
-func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, report Reporter) error {
+func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progress Progress) error {
 	if err := w.claimable(front, base); err != nil {
 		return err
 	}
@@ -120,11 +120,11 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, repor
 
 	certifying := w.certification(settle, fmt.Sprintf(
 		"If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard))
-	if err := certifying.certify(ctx, wildcard, report); err != nil {
+	if err := certifying.certify(ctx, wildcard, progress); err != nil {
 		return err
 	}
 
-	report.Say("Reconciling the shared preview entry on " + wildcard)
+	progress.Say("Reconciling the shared preview entry on " + wildcard)
 	program, err := edgeProgramFor(ctx, w.provider, front, EdgeProgramRequest{
 		Class:             ClassPreview,
 		PreviewBaseDomain: base,
@@ -137,7 +137,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, repor
 		Certificate: w.held.Settled.Certificate.ID,
 		GrammarMin:  edge.PreviewGrammarMin,
 		GrammarMax:  edge.PreviewGrammarMax,
-		Warn:        report.Detail,
+		Warn:        progress.Detail,
 		Program:     program.Spec,
 		Values:      program.Values,
 	})
@@ -147,7 +147,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, repor
 	if err := w.save(ctx); err != nil {
 		return err
 	}
-	if err := certifying.discardSuperseded(ctx, report); err != nil {
+	if err := certifying.discardSuperseded(ctx, progress); err != nil {
 		return err
 	}
 
@@ -157,7 +157,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, repor
 		return err
 	}
 	written, werr := settle.write(ctx, records,
-		fmt.Sprintf("Point %s at the %s edge", wildcard, front.Kind()), report.Say,
+		fmt.Sprintf("Point %s at the %s edge", wildcard, front.Kind()), progress.Say,
 		fmt.Sprintf("If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard))
 	w.held.Settled.Written, w.held.Settled.Owed = written.Written, written.Owed
 	if err := w.save(ctx); err != nil {
@@ -167,7 +167,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, repor
 		return werr
 	}
 
-	probe, aerr := settle.await(ctx, wildcard, report.Say)
+	probe, aerr := settle.await(ctx, wildcard, progress.Say)
 	w.held.Settled.Probe = probe
 	if err := w.save(ctx); err != nil {
 		return errors.Join(aerr, err)
@@ -175,7 +175,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, repor
 	if aerr != nil {
 		return aerr
 	}
-	report.Say(fmt.Sprintf("Previews are served on %s by the %s edge", wildcard, front.Kind()))
+	progress.Say(fmt.Sprintf("Previews are served on %s by the %s edge", wildcard, front.Kind()))
 	return nil
 }
 
@@ -216,7 +216,7 @@ func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.Previ
 	if err != nil {
 		return nil, RefusalError(err)
 	}
-	health, err := inspectCertificate(ctx, w.provider, w.held.Edge, w.held.Hostname(), w.held.Settled.Certificate)
+	health, err := w.provider.Certificates().Inspect(ctx, w.held.Edge, w.held.Hostname(), w.held.Settled.Certificate)
 	if err != nil {
 		return nil, RefusalError(err)
 	}
@@ -239,7 +239,7 @@ func heldPreviewWildcard(ctx context.Context, provider Provider) (*contractv1.Pr
 	}
 	w := &wildcards{provider: provider, records: provider.Records(), held: held}
 	wildcard := w.proto(ctx)
-	health, err := inspectCertificate(ctx, provider, held.Edge, held.Hostname(), held.Settled.Certificate)
+	health, err := provider.Certificates().Inspect(ctx, held.Edge, held.Hostname(), held.Settled.Certificate)
 	if err != nil {
 		return nil, err
 	}
@@ -419,18 +419,18 @@ func edgeGroupProto(group edge.PlanGroup) (*planv1.ChangeGroup, error) {
 }
 
 func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, report Reporter) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, progress Progress) error {
 		w, err := h.wildcard(ctx, req.GetEdge())
 		if err != nil {
 			return err
 		}
-		return w.release(ctx, report)
+		return w.release(ctx, progress)
 	})
 }
 
-func (w *wildcards) release(ctx context.Context, report Reporter) error {
+func (w *wildcards) release(ctx context.Context, progress Progress) error {
 	if w.held.BaseDomain == "" {
-		report.Say("This preview bootstrap has no global preview domain")
+		progress.Say("This preview bootstrap has no global preview domain")
 		return nil
 	}
 	front, err := w.holding()
@@ -444,19 +444,19 @@ func (w *wildcards) release(ctx context.Context, report Reporter) error {
 	if err != nil {
 		return err
 	}
-	report.Say("Removing the shared preview entry on " + w.held.Hostname())
+	progress.Say("Removing the shared preview entry on " + w.held.Hostname())
 	if err := front.DestroyPreviewWildcard(ctx, w.held.BaseDomain); err != nil {
 		return err
 	}
-	if err := settle.release(ctx, w.held.Settled.WrittenRecords(), report.Say); err != nil {
+	if err := settle.release(ctx, w.held.Settled.WrittenRecords(), progress.Say); err != nil {
 		return err
 	}
 	for _, cert := range w.held.Settled.certificates() {
 		if !cert.Requested {
 			continue
 		}
-		report.Say("Discarding certificate " + cert.ID)
-		if err := discardCertificate(ctx, w.provider, cert, report); err != nil {
+		progress.Say("Discarding certificate " + cert.ID)
+		if err := discardCertificate(ctx, w.provider, cert, progress); err != nil {
 			return err
 		}
 	}

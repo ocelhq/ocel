@@ -62,14 +62,14 @@ func FromManifest(raw []byte) (*Values, error) {
 		Region:    manifest.Region,
 		Endpoint:  manifest.Endpoint,
 	}
-	return Over(manifest, ports.Records{Clients: clients}, ports.Sealer{Clients: clients}), nil
+	return Over(manifest, ports.Records{Clients: clients}, ports.Cipher{Clients: clients}), nil
 }
 
-func Over(manifest vars.Manifest, records providerkit.RecordStore, sealer providerkit.Sealer) *Values {
+func Over(manifest vars.Manifest, records providerkit.RecordStore, sealer providerkit.Cipher) *Values {
 	return rt.New(&storeFetcher{
 		reader: values.Reader{
 			Records:     records,
-			Sealer:      sealer,
+			Cipher:      sealer,
 			Scope:       values.Scope{Project: manifest.Slug, Class: providerkit.Class(manifest.Class)},
 			Environment: manifest.Environment,
 		},

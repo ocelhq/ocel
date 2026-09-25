@@ -47,7 +47,7 @@ func TestAThrottledStoreIsWaitedOutRatherThanGivenUpOn(t *testing.T) {
 		staged(t, stack, fakeEntryURL, fakeAssetPrefix)
 		w.store.throttles = 2
 
-		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardReporter()); err != nil {
+		if err := stack.Promote(context.Background(), promotion(), "", edge.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
 		}
 

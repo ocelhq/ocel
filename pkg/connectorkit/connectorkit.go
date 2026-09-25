@@ -45,7 +45,7 @@ func Serve(spec Spec) error {
 	if spec.Vars.Records == nil {
 		return errors.New("connectorkit: Spec.Vars.Records is required")
 	}
-	if spec.Vars.Sealer == nil {
+	if spec.Vars.Cipher == nil {
 		return errors.New("connectorkit: Spec.Vars.Sealer is required")
 	}
 
@@ -154,7 +154,7 @@ func Mux(spec Spec) (*http.ServeMux, error) {
 
 	mux := http.NewServeMux()
 
-	source := providerkit.StandingVars(spec.Vars)
+	source := providerkit.FixedVars(spec.Vars)
 	path, handler := envvarsv1connect.NewEnvVarsServiceHandler(
 		&providerkit.VarsHandler{Source: source},
 		connect.WithInterceptors(validate.NewInterceptor(), guard.interceptor()),

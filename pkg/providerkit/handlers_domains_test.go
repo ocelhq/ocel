@@ -31,7 +31,7 @@ func deployed(t *testing.T, provider *fake.Provider, class providerkit.Class, sl
 func promoted(t *testing.T, provider *fake.Provider, class providerkit.Class, slug string) {
 	t.Helper()
 	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1"}}
-	if err := ledger.New(provider.Records(), class, slug).Promote(context.Background(), promotion, "", edge.DiscardReporter()); err != nil {
+	if err := ledger.New(provider.Records(), class, slug).Promote(context.Background(), promotion, "", edge.DiscardProgress()); err != nil {
 		t.Fatal(err)
 	}
 }

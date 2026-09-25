@@ -2,10 +2,12 @@ package fake
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strconv"
 	"sync"
 
+	"connectrpc.com/connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -31,6 +33,8 @@ type Provider struct {
 	preflightRefusal error
 	preflighted      []providerkit.DeployPreflight
 	wrappedFor       []string
+	runtimeArch      string
+	runtimeBinary    []byte
 	hooks            providerkit.Hooks
 
 	journal   *Journal
@@ -38,10 +42,10 @@ type Provider struct {
 	records   *Records
 	artifacts providerkit.ArtifactStore
 	images    *Images
-	sealer    *Sealer
-	bootstrap *Bootstrapper
-	releases  *Releaser
-	releasing providerkit.Releaser
+	sealer    *Cipher
+	bootstrap *Bootstrap
+	releases  *Stacks
+	releasing providerkit.Stacks
 	creds     *Credentials
 	edges     *Edges
 	dns       *DNS
@@ -68,12 +72,15 @@ func NewProvider(options Options) *Provider {
 		records:   records,
 		artifacts: artifacts,
 		images:    NewImages(),
-		sealer:    NewSealer(),
-		bootstrap: NewBootstrapper(),
-		releases:  NewReleaser(artifacts).journalling(journal),
+		sealer:    NewCipher(),
+		bootstrap: NewBootstrap(),
+		releases:  NewStacks(artifacts).journalling(journal),
 		creds:     NewCredentials(options.Region),
 		edges:     NewEdges(records),
 		dns:       NewDNS(),
+
+		runtimeArch:   "amd64",
+		runtimeBinary: []byte(RuntimeBinary),
 	}
 	p.hooks = providerkit.Hooks{
 		ProgramEdge:    p.ProgramEdge,
@@ -98,8 +105,8 @@ func (p *Provider) Hook(set func(*providerkit.Hooks)) *Provider {
 }
 
 func (p *Provider) everyHook(hooks *providerkit.Hooks) {
-	hooks.WarmFunctions = func(context.Context, []string, providerkit.Reporter) error { return nil }
-	hooks.EmbedCode = func(context.Context, string, providerkit.ArtifactRef, providerkit.Reporter) error { return nil }
+	hooks.WarmFunctions = func(context.Context, []string, providerkit.Progress) error { return nil }
+	hooks.EmbedCode = func(context.Context, string, providerkit.ArtifactRef, providerkit.Progress) error { return nil }
 	hooks.InspectStack = p.InspectStack
 	hooks.VerifyGrants = func(context.Context, providerkit.Binding) error { return nil }
 	hooks.PreflightDeploy = p.PreflightDeploy
@@ -138,7 +145,7 @@ func (p *Provider) Facts() providerkit.Facts {
 
 func (p *Provider) Region() string { return p.options.Region }
 
-func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {
+func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrap, error) {
 	if _, err := p.edges.Open(kind); err != nil {
 		return nil, err
 	}
@@ -146,39 +153,51 @@ func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {
 	return p.bootstrap, nil
 }
 
-func (p *Provider) Bootstrapper() *Bootstrapper { return p.bootstrap }
+func (p *Provider) FakeBootstrap() *Bootstrap { return p.bootstrap }
 
 func (p *Provider) Journal() []string { return p.journal.Entries() }
 
 func (p *Provider) Releasing(hooks resources.Hooks) *Provider {
-	p.releasing = resources.Releaser(p.records, p.artifacts, hooks)
+	p.releasing = resources.Stacks(p.records, p.artifacts, hooks)
 	return p
 }
 
-func (p *Provider) Releases() providerkit.Releaser {
+func (p *Provider) Stacks() providerkit.Stacks {
 	if p.releasing != nil {
 		return p.releasing
 	}
 	return p.releases
 }
 
-func (p *Provider) Releaser() *Releaser { return p.releases }
+func (p *Provider) FakeStacks() *Stacks { return p.releases }
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore { return p.artifacts }
 
 func (p *Provider) Records() providerkit.RecordStore { return p.records }
 
-func (p *Provider) Sealer() providerkit.Sealer { return p.sealer }
+func (p *Provider) Cipher() providerkit.Cipher { return p.sealer }
 
 func (p *Provider) Credentials() providerkit.Credentials { return p.creds }
 
-func (p *Provider) Edges() providerkit.EdgeRegistry { return p.edges }
+func (p *Provider) Edges() providerkit.Edges { return p.edges }
 
-func (p *Provider) DNS() providerkit.DNSRegistry { return p.dns }
+func (p *Provider) DNS() providerkit.DNS { return p.dns }
 
-func (p *Provider) Serving(_ context.Context, _ edge.Kind, hostname string) (edge.Kind, error) {
+func (p *Provider) Certificates() providerkit.Certificates { return certificates{p} }
+
+func (p *Provider) Connector() providerkit.Connector { return connector{} }
+
+func (p *Provider) Runtime() providerkit.Runtime { return containerRuntime{p} }
+
+func (p *Provider) Liveness() providerkit.Liveness { return liveness{p} }
+
+type liveness struct{ *Provider }
+
+func (p liveness) ServingEdge(_ context.Context, _ edge.Kind, hostname string) (edge.Kind, error) {
 	return p.edges.answering(hostname), nil
 }
+
+func (liveness) Unreached(string) string { return "" }
 
 func (p *Provider) Pin(hostname, certificate string) {
 	p.mu.Lock()
@@ -225,7 +244,9 @@ func (p *Provider) Discarded() []string {
 	return slices.Clone(p.discarded)
 }
 
-func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
+type certificates struct{ *Provider }
+
+func (p certificates) Issue(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
 	p.mu.Lock()
 	refusal, pinned, validation := p.certRefusal, p.pins[req.Hostname], slices.Clone(p.issue)
 	rotation, pending := p.rotation, p.pending
@@ -265,7 +286,7 @@ func (p *Provider) ReportCertificate(health providerkit.CertificateHealth) {
 	p.health = &health
 }
 
-func (p *Provider) InspectCertificate(_ context.Context, _ edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {
+func (p certificates) Inspect(_ context.Context, _ edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.health != nil {
@@ -283,7 +304,7 @@ func (p *Provider) InspectCertificate(_ context.Context, _ edge.Kind, hostname s
 	return health, nil
 }
 
-func (p *Provider) DiscardCertificate(_ context.Context, cert providerkit.Certificate, _ providerkit.Reporter) error {
+func (p certificates) Discard(_ context.Context, cert providerkit.Certificate, _ providerkit.Progress) error {
 	p.mu.Lock()
 	refusal := p.discardHeld
 	p.mu.Unlock()
@@ -319,30 +340,48 @@ func (p *Provider) PreflightDeploy(_ context.Context, pre providerkit.DeployPref
 	return p.preflight(pre)
 }
 
-type ContainerWrapper struct {
-	*Provider
-	arch    string
-	runtime []byte
+const RuntimeBinary = "the fake container runtime"
+
+func (p *Provider) WrappingContainers(arch string, binary []byte) *Provider {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.runtimeArch, p.runtimeBinary = arch, binary
+	return p
 }
 
-func (p *Provider) WrappingContainers(arch string, runtime []byte) ContainerWrapper {
-	return ContainerWrapper{Provider: p, arch: arch, runtime: runtime}
-}
+type containerRuntime struct{ *Provider }
 
-func (w ContainerWrapper) ContainerArch(_ context.Context, _, declared string) (string, error) {
+func (r containerRuntime) Arch(_ context.Context, _, declared string) (string, error) {
 	if declared == "" {
-		return w.arch, nil
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		return r.runtimeArch, nil
 	}
 	runs, _ := providerkit.GoArch(declared)
 	return runs, nil
 }
 
-func (w ContainerWrapper) ContainerRuntime(_ context.Context, arch string) ([]byte, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	w.wrappedFor = append(w.wrappedFor, arch)
-	return w.runtime, nil
+func (r containerRuntime) Binary(_ context.Context, arch string) ([]byte, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.wrappedFor = append(r.wrappedFor, arch)
+	return r.runtimeBinary, nil
 }
+
+type connector struct{}
+
+var errNoConnector = connect.NewError(connect.CodeUnimplemented,
+	errors.New("this provider puts no connector on its targets; the console reaches a target of this kind through the provider itself"))
+
+func (connector) Target(context.Context) (providerkit.ConnectorTarget, error) {
+	return providerkit.ConnectorTarget{}, errNoConnector
+}
+
+func (connector) Install(context.Context, providerkit.ConnectorInstall, providerkit.Progress) (providerkit.ConnectorAddress, error) {
+	return providerkit.ConnectorAddress{}, errNoConnector
+}
+
+func (connector) Remove(context.Context, providerkit.Progress) error { return errNoConnector }
 
 func (p *Provider) WrappedFor() []string {
 	p.mu.Lock()
@@ -358,22 +397,22 @@ func (p *Provider) EnsureImageRegistry(context.Context, providerkit.Class, []str
 	return providerkit.RegistryTarget{Server: RegistryServer, Namespace: RegistryNamespace, Username: "fake", Password: "fake-token"}, nil
 }
 
-func (*Provider) ProvisionFunctions(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.Function, error) {
+func (*Provider) ProvisionFunctions(_ context.Context, plan providerkit.StackPlan, _ providerkit.Progress) ([]providerkit.Function, error) {
 	return StoodUpFunctions(plan), nil
 }
 
-func (p *Provider) RemoveFunctions(_ context.Context, _ providerkit.StackRef, functions []providerkit.Function, _ providerkit.Reporter) error {
+func (p *Provider) RemoveFunctions(_ context.Context, _ providerkit.StackRef, functions []providerkit.Function, _ providerkit.Progress) error {
 	for _, function := range functions {
 		p.releases.tookDown(function.Name)
 	}
 	return nil
 }
 
-func (*Provider) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.AppContainer, error) {
+func (*Provider) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Progress) ([]providerkit.AppContainer, error) {
 	return StoodUpContainers(plan), nil
 }
 
-func (p *Provider) RemoveContainers(_ context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, _ providerkit.Reporter) error {
+func (p *Provider) RemoveContainers(_ context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, _ providerkit.Progress) error {
 	for _, container := range containers {
 		p.releases.tookDown(container.Name)
 	}

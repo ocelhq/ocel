@@ -12,8 +12,10 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
-	certifier, err := p.certifier(req.Kind, req.Hostname, req.Report)
+type certificates struct{ *Provider }
+
+func (p certificates) Issue(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
+	certifier, err := p.certifier(req.Kind, req.Hostname, req.Progress)
 	if err != nil || !certifier.Issues() {
 		return providerkit.Certificate{}, err
 	}
@@ -30,7 +32,7 @@ func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateR
 
 func issue(ctx context.Context, issuer certs.Issuer, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
 	cover := []string{req.Hostname}
-	say := req.Report.Say
+	say := req.Progress.Say
 
 	cert, err := recalled(ctx, issuer, req.Held, cover, say)
 	if err != nil {
@@ -102,7 +104,7 @@ func waiting(err error) error {
 	return providerkit.Pending(providerkit.Refuse(providerkit.CodeNotReady, "%s", err))
 }
 
-func (p *Provider) InspectCertificate(ctx context.Context, kind edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {
+func (p certificates) Inspect(ctx context.Context, kind edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {
 	registry := p.edges()
 	front, err := registry.Open(kind)
 	if err != nil {
@@ -136,15 +138,15 @@ func (p *Provider) InspectCertificate(ctx context.Context, kind edge.Kind, hostn
 	return health, nil
 }
 
-func (p *Provider) DiscardCertificate(ctx context.Context, cert providerkit.Certificate, report providerkit.Reporter) error {
+func (p certificates) Discard(ctx context.Context, cert providerkit.Certificate, progress providerkit.Progress) error {
 	if !cert.Requested || cert.ID == "" {
 		return nil
 	}
 	held := certs.Certificate{ARN: cert.ID, Region: certs.RegionOfARN(cert.ID)}
-	return certs.DiscardIssuerFor(held, certs.Deps{AWS: p.aws}).Discard(ctx, held, report.Say)
+	return certs.DiscardIssuerFor(held, certs.Deps{AWS: p.aws}).Discard(ctx, held, progress.Say)
 }
 
-func (p *Provider) certifier(kind edge.Kind, hostname string, report providerkit.Reporter) (certs.Certifier, error) {
+func (p *Provider) certifier(kind edge.Kind, hostname string, progress providerkit.Progress) (certs.Certifier, error) {
 	registry := p.edges()
 	front, err := registry.Open(kind)
 	if err != nil {
@@ -152,7 +154,7 @@ func (p *Provider) certifier(kind edge.Kind, hostname string, report providerkit
 	}
 	certifier := registry.Certifier(front, certs.Deps{AWS: p.aws})
 	if note := edges.IgnoredPinNote(front, certifier, hostname); note != "" {
-		report.Detail(note)
+		progress.Detail(note)
 	}
 	return certifier, nil
 }

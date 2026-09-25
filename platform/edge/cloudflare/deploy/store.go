@@ -60,7 +60,7 @@ type promoteBody struct {
 	Pointer string `json:"pointer,omitempty"`
 }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, _ edge.Reporter) error {
+func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, _ edge.Progress) error {
 	_, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/promote", promoteBody{Promotion: promotion, Pointer: pointer}, nil)
 	return err
 }
@@ -77,7 +77,7 @@ func (s *stack) History(ctx context.Context, pointer string) ([]edge.HistoryEntr
 	return history, nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Reporter) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progress) (edge.PruneResult, error) {
 	var result edge.PruneResult
 	if _, err := s.p.storeRequest(ctx, s.state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": pointer}, &result); err != nil {
 		return edge.PruneResult{}, err

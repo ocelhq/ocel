@@ -167,14 +167,14 @@ func staticAssetSet(cfg Config, app, runtime string, coord naming.Coordinate) (*
 		app:    app,
 		files:  manifest.files,
 		digest: manifest.digest(),
-		push: func(ctx context.Context, report providerkit.Reporter) error {
-			return pushStaticAssets(ctx, app, uploads, report)
+		push: func(ctx context.Context, progress providerkit.Progress) error {
+			return pushStaticAssets(ctx, app, uploads, progress)
 		},
 	}, nil
 }
 
-func pushStaticAssets(ctx context.Context, app string, uploads []assetUpload, report providerkit.Reporter) error {
-	say(report, "Uploading "+app+"'s static assets")
+func pushStaticAssets(ctx context.Context, app string, uploads []assetUpload, progress providerkit.Progress) error {
+	say(progress, "Uploading "+app+"'s static assets")
 	phaseStart := time.Now()
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(uploadConcurrency)
@@ -199,6 +199,6 @@ func pushStaticAssets(ctx context.Context, app string, uploads []assetUpload, re
 		}
 	}
 	err := g.Wait()
-	emitUploadBatch(report, uploadKindStaticAsset, stats, err, phaseStart)
+	emitUploadBatch(progress, uploadKindStaticAsset, stats, err, phaseStart)
 	return err
 }

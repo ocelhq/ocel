@@ -27,10 +27,10 @@ func TestGCPProvider(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
 	conformance.Run(t, conformance.Suite{
-		Spec:      providerkit.Spec{Version: "test", New: gcp.New},
-		Options:   providerkit.Options{"project": "conformance", "region": "europe-west1"},
-		Binary:    buildProvider(t),
-		Certifier: &conformance.CertifierChecks{Kind: alb.Kind},
+		Spec:         providerkit.Spec{Version: "test", New: gcp.New},
+		Options:      providerkit.Options{"project": "conformance", "region": "europe-west1"},
+		Binary:       buildProvider(t),
+		Certificates: &conformance.CertificateChecks{Kind: alb.Kind},
 	})
 }
 
@@ -44,7 +44,7 @@ func TestTheEdgeRegistryOpensTheEdgesThisProviderFronts(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 	registry := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Edges()
 
-	conformance.RunEdgeRegistry(t, registry)
+	conformance.RunEdges(t, registry)
 
 	if got := registry.Supported(); !slices.Equal(got, []edge.Kind{direct.Kind, alb.Kind}) {
 		t.Errorf("Supported() = %v, want %q and %q", got, direct.Kind, alb.Kind)
@@ -81,7 +81,7 @@ func TestTheDirectEdgeBindsNoHostnameAndSaysSo(t *testing.T) {
 func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
-	conformance.RunDNSRegistry(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).DNS())
+	conformance.RunDNS(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).DNS())
 }
 
 func buildProvider(t *testing.T) string {

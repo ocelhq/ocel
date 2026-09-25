@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
-func NameStacks(ns Namespace, described providerkit.Bootstrap) providerkit.Bootstrap {
+func NameStacks(ns Namespace, described providerkit.BootstrapReading) providerkit.BootstrapReading {
 	coreStack, err := ns.StackNameFor(string(described.Class))
 	if err != nil {
 		return described
@@ -169,7 +169,7 @@ func renderGroup(target spec, feature string, in featureInputs) (featureStack, b
 	return f.planned(in), true
 }
 
-func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, group providerkit.ChangeGroup, stack featureStack, writer providerkit.Writer) providerkit.ChangeGroup {
+func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, group providerkit.ChangeGroup, stack featureStack, writer providerkit.WrittenBy) providerkit.ChangeGroup {
 	tags := stampTags(ns, Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(stack.body), WrittenBy: writer.String()})
 	id, changes, err := cfn.Plan(ctx, stacks, ns, group.Name, stack.body, stack.params,
 		[]cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}, tags)

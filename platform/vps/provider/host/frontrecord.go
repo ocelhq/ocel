@@ -127,7 +127,7 @@ func (h *Host) FrontAgrees(ctx context.Context) error {
 
 const unrecordedSetter = "a bootstrap that left no record"
 
-func (b Bootstrapper) recorded(ctx context.Context, read Reading) (Reading, error) {
+func (b Bootstrap) recorded(ctx context.Context, read Reading) (Reading, error) {
 	held, err := b.host.frontRecorded(ctx, b.host.reach)
 	if err != nil {
 		return Reading{}, err

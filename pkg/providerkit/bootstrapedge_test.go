@@ -16,7 +16,7 @@ import (
 func fronting(t *testing.T, kind edge.Kind) (providerkit.Gate, *fake.Provider) {
 	t.Helper()
 
-	gate, provider := gated(t, providerkit.Writer("1.0.0"))
+	gate, provider := gated(t, providerkit.WrittenBy("1.0.0"))
 	gate.Edge = kind
 	return gate, provider
 }

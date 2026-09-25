@@ -17,7 +17,7 @@ import (
 
 const FunctionImageRoot = "/ocel/app"
 
-func FunctionImage(base v1.Image, runtime Runtime, dir string, overlay map[string][]byte) (v1.Image, error) {
+func FunctionImage(base v1.Image, runtime Framework, dir string, overlay map[string][]byte) (v1.Image, error) {
 	rels, err := artifactFiles(dir)
 	if err != nil {
 		return nil, err
@@ -76,7 +76,7 @@ const NodeRuntimePath = NodeRuntimeRoot + "/entrypoint.mjs"
 
 const HandlerName = "OCEL_HANDLER"
 
-func BootsThroughRuntime(runtime Runtime) bool {
+func BootsThroughRuntime(runtime Framework) bool {
 	return runtime.Name == RuntimeNode || runtime.Name == RuntimeNext
 }
 
@@ -95,7 +95,7 @@ func boundPort(env []string) []string {
 	return append(kept, InjectedPortName+"="+InjectedPortText)
 }
 
-func functionCommand(runtime Runtime, staged FunctionConfig) ([]string, error) {
+func functionCommand(runtime Framework, staged FunctionConfig) ([]string, error) {
 	switch {
 	case len(staged.Command) > 0:
 		return staged.Command, nil

@@ -80,7 +80,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		t.Fatal("Describe() claims a bootstrap on a machine nothing has written to")
 	}
 
-	req := providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: fresh.Held}
+	req := providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Held: fresh.Held}
 	plan, err := bootstrapper.Plan(ctx, req)
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
@@ -141,7 +141,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		t.Fatalf("Describe() after Apply() = %+v, want a present bootstrap standing at the digest applied, %s\n%s",
 			standing.Stacks, stillMoving(t, bootstrapper, class, standing.Held), vm.proxySaid(t))
 	}
-	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: standing.Held})
+	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Held: standing.Held})
 	if err != nil {
 		t.Fatalf("a second Plan() = %v", err)
 	}
@@ -155,7 +155,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		}
 	}
 
-	removal, err := bootstrapper.PlanRemoval(ctx, class)
+	removal, err := bootstrapper.PlanRemove(ctx, class)
 	if err != nil {
 		t.Fatalf("PlanRemoval() = %v", err)
 	}
@@ -201,7 +201,7 @@ func TestLiveAnUnfinishedApplyIsReportedAsDrifted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err != nil {
+	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
@@ -222,7 +222,7 @@ func TestLiveAnUnfinishedApplyIsReportedAsDrifted(t *testing.T) {
 	if described.Stacks[0].DigestCurrent {
 		t.Error("Describe() calls an unfinished apply current, so a partially applied host reads as a healthy one")
 	}
-	plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: described.Held})
+	plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Held: described.Held})
 	if err != nil {
 		t.Fatalf("Plan() over an unfinished apply = %v", err)
 	}
@@ -242,7 +242,7 @@ func TestLiveApplyRefusesWorkTheShownPlanNeverCarried(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err != nil {
+	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
@@ -257,7 +257,7 @@ func TestLiveApplyRefusesWorkTheShownPlanNeverCarried(t *testing.T) {
 	}
 	vm.ssh(t, "sudo rm -rf /usr/local/lib/ocel")
 
-	err = bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite", Held: shown.Held}, nil)
+	err = bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Held: shown.Held}, nil)
 	if err == nil {
 		t.Fatal("Apply() did work the plan the user consented to never carried")
 	}

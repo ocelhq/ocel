@@ -126,11 +126,11 @@ func writeLease(ctx context.Context, records providerkit.RecordStore, record por
 	return err
 }
 
-func (r *Releaser) substrateFor(ctx context.Context, class providerkit.Class) (*release, error) {
+func (r *Stacks) substrateFor(ctx context.Context, class providerkit.Class) (*release, error) {
 	return r.at(ctx, substrateRef(class), "")
 }
 
-func (r *Releaser) readSubstrate(ctx context.Context, class providerkit.Class) (substrate, bool, error) {
+func (r *Stacks) readSubstrate(ctx context.Context, class providerkit.Class) (substrate, bool, error) {
 	held, err := r.substrateFor(ctx, class)
 	if err != nil {
 		return substrate{}, false, err
@@ -150,7 +150,7 @@ func (r *Releaser) readSubstrate(ctx context.Context, class providerkit.Class) (
 	return decoded, err == nil, err
 }
 
-func (r *Releaser) ensureSubstrate(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) (substrate, error) {
+func (r *Stacks) ensureSubstrate(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (substrate, error) {
 	r.substrates.Lock()
 	defer r.substrates.Unlock()
 	class := ref.Class
@@ -168,8 +168,8 @@ func (r *Releaser) ensureSubstrate(ctx context.Context, ref providerkit.StackRef
 		}
 		return held, r.claimSubstrate(ctx, ref)
 	}
-	if report != nil {
-		report.Say("Standing up the shared container substrate for the " + string(class) + " class: one load balancer and one cluster every container app in it runs behind")
+	if progress != nil {
+		progress.Say("Standing up the shared container substrate for the " + string(class) + " class: one load balancer and one cluster every container app in it runs behind")
 	}
 	work := &substrateWork{
 		class:    class,
@@ -183,12 +183,12 @@ func (r *Releaser) ensureSubstrate(ctx context.Context, ref providerkit.StackRef
 		Options: work,
 	}
 	if err := providerkit.WriteStack(ctx, owner.cfg.Records, class, SubstrateSlug, substrateRef(class).Name, providerkit.Stack{
-		Kind:   providerkit.StackInfra,
-		Writer: providerkit.WriterFor(""),
+		Kind:      providerkit.StackInfra,
+		WrittenBy: providerkit.WrittenByVersion(""),
 	}); err != nil {
 		return substrate{}, err
 	}
-	if _, err := owner.adapter.Run(ctx, plan, report); err != nil {
+	if _, err := owner.adapter.Run(ctx, plan, progress); err != nil {
 		return substrate{}, fmt.Errorf("stand up the container substrate for the %s class: %w", class, err)
 	}
 	decoded, err := decodeSubstrate(work.outputs)
@@ -205,7 +205,7 @@ func (s substrate) front() awsports.ContainerFront {
 	return awsports.ContainerFront{VPCOrigin: s.VPCOrigin, Host: s.OriginHost}
 }
 
-func (r *Releaser) claimSubstrate(ctx context.Context, ref providerkit.StackRef) error {
+func (r *Stacks) claimSubstrate(ctx context.Context, ref providerkit.StackRef) error {
 	owner, err := r.substrateFor(ctx, ref.Class)
 	if err != nil {
 		return err
@@ -246,7 +246,7 @@ func (r *Releaser) claimSubstrate(ctx context.Context, ref providerkit.StackRef)
 		"the container substrate for the %s class changed hands %d times while %s was claiming it; re-run this deploy", ref.Class, leaseAttempts, ref.Name)
 }
 
-func (r *Releaser) releaseSubstrate(ctx context.Context, records providerkit.RecordStore, ref providerkit.StackRef, report providerkit.Reporter) error {
+func (r *Stacks) releaseSubstrate(ctx context.Context, records providerkit.RecordStore, ref providerkit.StackRef, progress providerkit.Progress) error {
 	if records == nil {
 		return nil
 	}
@@ -288,11 +288,11 @@ func (r *Releaser) releaseSubstrate(ctx context.Context, records providerkit.Rec
 		}
 		return fmt.Errorf("mark the container substrate for the %s class as going down: %w", ref.Class, err)
 	}
-	if report != nil {
-		report.Say("Taking down the shared container substrate for the " + string(ref.Class) + " class: the last container app in it is gone")
+	if progress != nil {
+		progress.Say("Taking down the shared container substrate for the " + string(ref.Class) + " class: the last container app in it is gone")
 	}
 	substrate := substrateRef(ref.Class)
-	if err := owner.adapter.Destroy(ctx, substrate, report); err != nil {
+	if err := owner.adapter.Destroy(ctx, substrate, progress); err != nil {
 		return fmt.Errorf("take down the container substrate for the %s class: %w", ref.Class, err)
 	}
 	if err := providerkit.ForgetStack(ctx, records, ref.Class, SubstrateSlug, substrate.Name); err != nil {

@@ -16,8 +16,8 @@ type reached struct {
 
 func (r *reached) Catalogue() []providerkit.Feature { return nil }
 
-func (r *reached) Describe(context.Context, providerkit.Class) (providerkit.Bootstrap, error) {
-	return providerkit.Bootstrap{}, nil
+func (r *reached) Describe(context.Context, providerkit.Class) (providerkit.BootstrapReading, error) {
+	return providerkit.BootstrapReading{}, nil
 }
 
 func (r *reached) Plan(context.Context, providerkit.BootstrapRequest) (providerkit.Plan, error) {
@@ -25,17 +25,17 @@ func (r *reached) Plan(context.Context, providerkit.BootstrapRequest) (providerk
 	return providerkit.Plan{}, nil
 }
 
-func (r *reached) Apply(context.Context, providerkit.BootstrapRequest, providerkit.Reporter) error {
+func (r *reached) Apply(context.Context, providerkit.BootstrapRequest, providerkit.Progress) error {
 	r.applied++
 	return nil
 }
 
-func (r *reached) PlanRemoval(context.Context, providerkit.Class) (providerkit.Plan, error) {
+func (r *reached) PlanRemove(context.Context, providerkit.Class) (providerkit.Plan, error) {
 	r.planned++
 	return providerkit.Plan{}, nil
 }
 
-func (r *reached) Remove(context.Context, providerkit.Class, providerkit.Reporter) error {
+func (r *reached) Remove(context.Context, providerkit.Class, providerkit.Progress) error {
 	r.removed++
 	return nil
 }
@@ -75,7 +75,7 @@ func TestAskingWhatABootstrapWouldDoIsNotAskingToRunIt(t *testing.T) {
 		t.Fatalf("Plan() = %v, want the plan drawn: reporting what a bootstrap would write is a read, and the same read backs the preflight that answers a deploy's domain claims, bootstrap standing and known slugs",
 			err)
 	}
-	if _, err := gated.PlanRemoval(ctx, providerkit.ClassProduction); err != nil {
+	if _, err := gated.PlanRemove(ctx, providerkit.ClassProduction); err != nil {
 		t.Fatalf("PlanRemoval() = %v, want the removal plan drawn for a login that may not run it", err)
 	}
 	if inner.planned != 2 {

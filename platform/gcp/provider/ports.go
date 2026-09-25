@@ -107,17 +107,17 @@ func (r records) List(ctx context.Context, under providerkit.RecordName) ([]prov
 	return held.List(ctx, under)
 }
 
-type sealer struct{ p *Provider }
+type cipher struct{ p *Provider }
 
-func (s sealer) stood(ctx context.Context) (ports.Sealer, error) {
+func (s cipher) stood(ctx context.Context) (ports.Cipher, error) {
 	held, err := s.p.stood(ctx)
 	if err != nil {
-		return ports.Sealer{}, err
+		return ports.Cipher{}, err
 	}
-	return ports.Sealer{Clients: held.Runtime()}, nil
+	return ports.Cipher{Clients: held.Runtime()}, nil
 }
 
-func (s sealer) Seal(ctx context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
+func (s cipher) Seal(ctx context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
 	held, err := s.stood(ctx)
 	if err != nil {
 		return nil, err
@@ -125,7 +125,7 @@ func (s sealer) Seal(ctx context.Context, at providerkit.Coordinate, plaintext [
 	return held.Seal(ctx, at, plaintext)
 }
 
-func (s sealer) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+func (s cipher) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
 	held, err := s.stood(ctx)
 	if err != nil {
 		return nil, err
@@ -152,10 +152,10 @@ func (dns) Open(kind providerkit.DNSKind, zone string, _ edge.Kind) (edge.DNSWri
 }
 
 var (
-	_ providerkit.Bootstrapper  = bootstrapper{}
+	_ providerkit.Bootstrap     = bootstrap{}
 	_ providerkit.ArtifactStore = artifacts{}
 	_ providerkit.RecordStore   = ports.Records{}
-	_ providerkit.Sealer        = ports.Sealer{}
-	_ providerkit.EdgeRegistry  = edges{}
-	_ providerkit.DNSRegistry   = dns{}
+	_ providerkit.Cipher        = ports.Cipher{}
+	_ providerkit.Edges         = edges{}
+	_ providerkit.DNS           = dns{}
 )

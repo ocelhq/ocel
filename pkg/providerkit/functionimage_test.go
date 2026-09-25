@@ -21,8 +21,8 @@ import (
 )
 
 var (
-	nodeRuntime = providerkit.Runtime{Name: providerkit.RuntimeNode, Arch: "x86_64"}
-	goRuntime   = providerkit.Runtime{Name: providerkit.RuntimeGo, Arch: "x86_64"}
+	nodeRuntime = providerkit.Framework{Name: providerkit.RuntimeNode, Arch: "x86_64"}
+	goRuntime   = providerkit.Framework{Name: providerkit.RuntimeGo, Arch: "x86_64"}
 )
 
 func stagedFunc(t *testing.T, files map[string]string) string {

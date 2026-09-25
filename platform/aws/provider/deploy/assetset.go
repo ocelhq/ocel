@@ -33,7 +33,7 @@ type assetSet struct {
 	app    string
 	files  int
 	digest string
-	push   func(ctx context.Context, report providerkit.Reporter) error
+	push   func(ctx context.Context, progress providerkit.Progress) error
 }
 
 type setManifest struct {
@@ -53,8 +53,8 @@ func (m *setManifest) add(bucket, key string, size int64) {
 func (m *setManifest) digest() string { return hex.EncodeToString(m.h.Sum(nil)) }
 
 type pendingSet struct {
-	set    assetSet
-	report providerkit.Reporter
+	set      assetSet
+	progress providerkit.Progress
 }
 
 type pendingSets struct {
@@ -64,11 +64,11 @@ type pendingSets struct {
 
 func newPendingSets() *pendingSets { return &pendingSets{held: map[string]pendingSet{}} }
 
-func (p *pendingSets) hold(stack string, sets []assetSet, report providerkit.Reporter) {
+func (p *pendingSets) hold(stack string, sets []assetSet, progress providerkit.Progress) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, set := range sets {
-		p.held[pendingKey(stack, set.name)] = pendingSet{set: set, report: report}
+		p.held[pendingKey(stack, set.name)] = pendingSet{set: set, progress: progress}
 	}
 }
 
@@ -121,7 +121,7 @@ func (r *assetSetResource) Create(ctx context.Context, req infer.CreateRequest[a
 		return infer.CreateResponse[assetSetOutputs]{}, fmt.Errorf(
 			"%s carries no %s to push, and this run would leave the plan's row unwritten", req.Inputs.Stack, req.Inputs.Set)
 	}
-	if err := held.set.push(ctx, held.report); err != nil {
+	if err := held.set.push(ctx, held.progress); err != nil {
 		return infer.CreateResponse[assetSetOutputs]{}, err
 	}
 	return infer.CreateResponse[assetSetOutputs]{

@@ -154,7 +154,7 @@ func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 		t.Fatalf("the first event is %T, want the stage plan: the CLI draws the tree before any work reports into it", events[0].GetEvent())
 	}
 
-	plans := provider.Releases().(*fake.Releaser).Plans()
+	plans := provider.FakeStacks().Plans()
 	if len(plans) != 2 {
 		t.Fatalf("the releaser saw %d plans, want the infra stack and the app stack", len(plans))
 	}
@@ -175,7 +175,7 @@ func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 func TestDeployRefusesToPublishABlanketGrantWithoutAskingTheProvider(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
-	provider.Releases().(*fake.Releaser).Grants = []providerkit.Grant{{
+	provider.FakeStacks().Grants = []providerkit.Grant{{
 		Label:     "everything",
 		Actions:   []string{"*"},
 		Resources: []string{"*"},
@@ -246,7 +246,7 @@ func TestDeployGrantsAnAppOnlyWhatItsUsageEdgesName(t *testing.T) {
 	}
 
 	apps := map[string]providerkit.StackPlan{}
-	for _, plan := range provider.Releases().(*fake.Releaser).Plans() {
+	for _, plan := range provider.FakeStacks().Plans() {
 		if plan.App != nil {
 			apps[plan.App.App] = plan
 		}
@@ -281,7 +281,7 @@ func TestDeployGrantsNothingToAnAppCarryingNoUsageEdge(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	for _, plan := range provider.Releases().(*fake.Releaser).Plans() {
+	for _, plan := range provider.FakeStacks().Plans() {
 		if plan.App == nil || plan.App.App != "admin" {
 			continue
 		}
@@ -333,7 +333,7 @@ func TestDeployUploadsEveryFunctionArtifact(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	plans := provider.Releases().(*fake.Releaser).Plans()
+	plans := provider.FakeStacks().Plans()
 	ref := plans[1].App.Functions[0].Artifact
 	opened, err := provider.Artifacts().Open(context.Background(), ref)
 	if err != nil {
@@ -356,7 +356,7 @@ func TestDeployPublishesEveryInfraBindingForItsAppsToRead(t *testing.T) {
 		t.Fatalf("a second Deploy() = %q", result.GetError())
 	}
 
-	plans := provider.Releases().(*fake.Releaser).Plans()
+	plans := provider.FakeStacks().Plans()
 	last := plans[len(plans)-1]
 	if !slices.ContainsFunc(last.App.Grants, func(binding providerkit.Binding) bool {
 		return binding.Name == "orders" && binding.Properties[providerkit.PropertyHost] != ""
@@ -365,24 +365,24 @@ func TestDeployPublishesEveryInfraBindingForItsAppsToRead(t *testing.T) {
 	}
 }
 
-type refusingReleaser struct {
+type refusingStacks struct {
 	*fake.Provider
-	releaser providerkit.Releaser
+	releaser providerkit.Stacks
 }
 
-func (r refusingReleaser) Releases() providerkit.Releaser { return r.releaser }
+func (r refusingStacks) Stacks() providerkit.Stacks { return r.releaser }
 
 type halfBindingReleaser struct{}
 
-func (halfBindingReleaser) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.Plan, error) {
+func (halfBindingReleaser) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Progress) (providerkit.Plan, error) {
 	return providerkit.SynthesizedPlan(ctx, fake.NewArtifacts(), plan, providerkit.StackResult{})
 }
 
-func (halfBindingReleaser) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Reporter) (providerkit.Plan, error) {
+func (halfBindingReleaser) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Progress) (providerkit.Plan, error) {
 	return providerkit.SynthesizedRemoval(ref, providerkit.StackResult{}), nil
 }
 
-func (halfBindingReleaser) Provision(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.StackResult, error) {
+func (halfBindingReleaser) Provision(_ context.Context, plan providerkit.StackPlan, _ providerkit.Progress) (providerkit.StackResult, error) {
 	var result providerkit.StackResult
 	for _, resource := range plan.Resources {
 		result.Bindings = append(result.Bindings, providerkit.Binding{
@@ -394,14 +394,14 @@ func (halfBindingReleaser) Provision(_ context.Context, plan providerkit.StackPl
 	return result, nil
 }
 
-func (halfBindingReleaser) Destroy(context.Context, providerkit.StackRef, providerkit.Reporter) error {
+func (halfBindingReleaser) Destroy(context.Context, providerkit.StackRef, providerkit.Progress) error {
 	return nil
 }
 
 func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{})
-	client := servedBy(t, refusingReleaser{Provider: base, releaser: halfBindingReleaser{}})
+	client := servedBy(t, refusingStacks{Provider: base, releaser: halfBindingReleaser{}})
 
 	stream, err := client.Deploy(context.Background(), deployRequest())
 	if err != nil {
@@ -423,23 +423,23 @@ func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	}
 }
 
-type countingSealer struct {
-	providerkit.Sealer
+type countingCipher struct {
+	providerkit.Cipher
 
 	mu     sync.Mutex
 	opened int
 }
 
-func (c *countingSealer) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+func (c *countingCipher) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
 	if at.Binding != "" {
 		c.mu.Lock()
 		c.opened++
 		c.mu.Unlock()
 	}
-	return c.Sealer.Open(ctx, at, sealed)
+	return c.Cipher.Open(ctx, at, sealed)
 }
 
-func (c *countingSealer) count() int {
+func (c *countingCipher) count() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.opened
@@ -447,15 +447,15 @@ func (c *countingSealer) count() int {
 
 type sealCounting struct {
 	*fake.Provider
-	sealer *countingSealer
+	sealer *countingCipher
 }
 
-func (s sealCounting) Sealer() providerkit.Sealer { return s.sealer }
+func (s sealCounting) Cipher() providerkit.Cipher { return s.sealer }
 
 func TestDeployResolvesThePublishedBindingsOnce(t *testing.T) {
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{})
-	sealer := &countingSealer{Sealer: base.Sealer()}
+	sealer := &countingCipher{Cipher: base.Cipher()}
 	client := servedBy(t, sealCounting{Provider: base, sealer: sealer})
 
 	if result, _ := deploy(t, client, twoAppRequest()); !result.GetSuccess() {
@@ -469,7 +469,7 @@ func TestDeployResolvesThePublishedBindingsOnce(t *testing.T) {
 }
 
 type resolvingReleaser struct {
-	inner providerkit.Releaser
+	inner providerkit.Stacks
 
 	mu       sync.Mutex
 	host     string
@@ -488,16 +488,16 @@ func (r *resolvingReleaser) Resolved() []providerkit.Binding {
 	return slices.Clone(r.resolved)
 }
 
-func (r *resolvingReleaser) Plan(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.Plan, error) {
-	return r.inner.Plan(ctx, plan, report)
+func (r *resolvingReleaser) Plan(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
+	return r.inner.Plan(ctx, plan, progress)
 }
 
-func (r *resolvingReleaser) PlanDestroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) (providerkit.Plan, error) {
-	return r.inner.PlanDestroy(ctx, ref, report)
+func (r *resolvingReleaser) PlanDestroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (providerkit.Plan, error) {
+	return r.inner.PlanDestroy(ctx, ref, progress)
 }
 
-func (r *resolvingReleaser) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
-	result, err := r.inner.Provision(ctx, plan, report)
+func (r *resolvingReleaser) Provision(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
+	result, err := r.inner.Provision(ctx, plan, progress)
 	if err != nil {
 		return result, err
 	}
@@ -509,7 +509,7 @@ func (r *resolvingReleaser) Provision(ctx context.Context, plan providerkit.Stac
 		}
 		return result, nil
 	}
-	binding, err := plan.Bindings.Resolve(ctx, "orders")
+	binding, err := plan.Bindings.Named(ctx, "orders")
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
@@ -519,15 +519,15 @@ func (r *resolvingReleaser) Provision(ctx context.Context, plan providerkit.Stac
 	return result, nil
 }
 
-func (r *resolvingReleaser) Destroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
-	return r.inner.Destroy(ctx, ref, report)
+func (r *resolvingReleaser) Destroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
+	return r.inner.Destroy(ctx, ref, progress)
 }
 
 func TestDeployProvisionsInfraBeforeEveryAppSoATransformReadsThisDeploysBinding(t *testing.T) {
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{})
-	releaser := &resolvingReleaser{inner: base.Releases(), host: "db-one.invalid"}
-	client := servedBy(t, refusingReleaser{Provider: base, releaser: releaser})
+	releaser := &resolvingReleaser{inner: base.Stacks(), host: "db-one.invalid"}
+	client := servedBy(t, refusingStacks{Provider: base, releaser: releaser})
 
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
@@ -914,7 +914,7 @@ func TestADeployDeclaringAWildcardForProductionIsRefusedBeforeItProvisionsAnythi
 	if code, _ := providerkit.RefusedCode(err); code != providerkit.CodeInvalid || !strings.Contains(err.Error(), "domains.preview") {
 		t.Fatalf("Deploy() = %v, want it refused as invalid: a wildcard belongs to domains.preview", err)
 	}
-	if plans := provider.Releaser().Plans(); len(plans) != 0 {
+	if plans := provider.FakeStacks().Plans(); len(plans) != 0 {
 		t.Errorf("the refused deploy provisioned %d stacks, want none: the hostname is read before anything is built", len(plans))
 	}
 }
@@ -1124,7 +1124,7 @@ func TestAGlobalPreviewDeployOnAnEdgeThatRoutesByLabelHandsTheReleaserTheLabelIt
 	}
 
 	want := edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", "")
-	for _, plan := range provider.Releases().(*fake.Releaser).Plans() {
+	for _, plan := range provider.FakeStacks().Plans() {
 		if plan.App == nil {
 			continue
 		}
@@ -1148,7 +1148,7 @@ func TestAGlobalPreviewDeployOnAnEdgeThatDoesNotRouteByLabelHandsTheReleaserNoLa
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	for _, plan := range provider.Releases().(*fake.Releaser).Plans() {
+	for _, plan := range provider.FakeStacks().Plans() {
 		if plan.App == nil {
 			continue
 		}
@@ -1179,7 +1179,7 @@ func TestAGlobalPreviewDeployLabelsEachAppWithTheFirstLabelOfTheHostnameItAnnoun
 	}
 
 	labels := map[string]string{}
-	for _, plan := range provider.Releases().(*fake.Releaser).Plans() {
+	for _, plan := range provider.FakeStacks().Plans() {
 		if plan.App == nil {
 			continue
 		}
@@ -1208,7 +1208,7 @@ func TestAPreviewDeployOnTheProjectsOwnWildcardHandsTheReleaserNoLabel(t *testin
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	for _, plan := range provider.Releases().(*fake.Releaser).Plans() {
+	for _, plan := range provider.FakeStacks().Plans() {
 		if plan.App == nil {
 			continue
 		}

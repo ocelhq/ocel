@@ -242,7 +242,7 @@ func (p *Provider) storeCredential(ctx context.Context, ref providerkit.StackRef
 	return storeCredential{sealed: sealed, secret: string(opened)}, nil
 }
 
-func (p *Provider) ProvisionBucket(ctx context.Context, in resources.Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
+func (p *Provider) ProvisionBucket(ctx context.Context, in resources.Instruction, progress providerkit.Progress) (providerkit.Binding, error) {
 
 	spec := storeContainer(in)
 	spec, err := p.reshaped(ctx, in, transformTypeBucket, spec)
@@ -253,8 +253,8 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.Instruction
 	if err != nil {
 		return providerkit.Binding{}, err
 	}
-	if report != nil {
-		report.Say("Standing bucket " + in.Resource.Name + " up in " + spec.Name)
+	if progress != nil {
+		progress.Say("Standing bucket " + in.Resource.Name + " up in " + spec.Name)
 	}
 
 	var sessions host.BucketStanding
@@ -509,23 +509,23 @@ func declaredPublic(spec *providerkit.BucketSpec) bool {
 	return spec != nil && spec.Public
 }
 
-func (p *Provider) removeBucket(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, report providerkit.Reporter) error {
-	if err := p.dropBucket(ctx, ref, binding, report); err != nil {
+func (p *Provider) removeBucket(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, progress providerkit.Progress) error {
+	if err := p.dropBucket(ctx, ref, binding, progress); err != nil {
 		return err
 	}
 	p.stores.forgot(ref.Name, binding.Name)
-	return p.reconcileStore(ctx, ref, report)
+	return p.reconcileStore(ctx, ref, progress)
 }
 
-func (p *Provider) dropBucket(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, report providerkit.Reporter) error {
+func (p *Provider) dropBucket(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, progress providerkit.Progress) error {
 	store := storeName(ref)
 	held, err := p.storeRoot(ctx, ref, store)
 	if err != nil {
 		return err
 	}
 	if held.secret == "" {
-		if report != nil {
-			report.Say("Leaving bucket " + binding.Name + ": no credential kept for " + store)
+		if progress != nil {
+			progress.Say("Leaving bucket " + binding.Name + ": no credential kept for " + store)
 		}
 		return nil
 	}
@@ -533,8 +533,8 @@ func (p *Provider) dropBucket(ctx context.Context, ref providerkit.StackRef, bin
 	if bucket == "" {
 		bucket = storeBucketName(ref, binding.Name)
 	}
-	if report != nil {
-		report.Say("Taking bucket " + binding.Name + " and its objects down")
+	if progress != nil {
+		progress.Say("Taking bucket " + binding.Name + " and its objects down")
 	}
 	return p.host.RemoveBucket(ctx, host.BucketRef{
 		Class:       ref.Class,
@@ -548,12 +548,12 @@ func (p *Provider) dropBucket(ctx context.Context, ref providerkit.StackRef, bin
 	})
 }
 
-func (p *Provider) reconcileStore(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
+func (p *Provider) reconcileStore(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
 	last, err := p.lastBucket(ctx, ref)
 	if err != nil || !last {
 		return err
 	}
-	return p.removeStore(ctx, ref, report)
+	return p.removeStore(ctx, ref, progress)
 }
 
 func (p *Provider) lastBucket(ctx context.Context, ref providerkit.StackRef) (bool, error) {
@@ -575,10 +575,10 @@ func (p *Provider) lastBucket(ctx context.Context, ref providerkit.StackRef) (bo
 	return true, nil
 }
 
-func (p *Provider) removeStore(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
+func (p *Provider) removeStore(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
 	store := storeName(ref)
-	if report != nil {
-		report.Say("Taking the store " + store + " down")
+	if progress != nil {
+		progress.Say("Taking the store " + store + " down")
 	}
 	if err := p.host.UnrouteApp(ctx, storeRoute(ref, store).RouteKey); err != nil {
 		return err

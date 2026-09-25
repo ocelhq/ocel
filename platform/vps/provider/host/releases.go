@@ -37,7 +37,7 @@ func (h *Host) Forget(ctx context.Context, class providerkit.Class, project, app
 	return err
 }
 
-func (h *Host) Reconcile(ctx context.Context, project, app, coordinate string, report providerkit.Reporter) error {
+func (h *Host) Reconcile(ctx context.Context, project, app, coordinate string, progress providerkit.Progress) error {
 	repository, named := Repository(coordinate)
 	if !named {
 		return providerkit.Refuse(providerkit.CodeInvalid,
@@ -51,7 +51,7 @@ func (h *Host) Reconcile(ctx context.Context, project, app, coordinate string, r
 	if err != nil {
 		return err
 	}
-	if report == nil {
+	if progress == nil {
 		return nil
 	}
 	for line := range strings.Lines(said) {
@@ -59,7 +59,7 @@ func (h *Host) Reconcile(ctx context.Context, project, app, coordinate string, r
 		if removed == "" {
 			continue
 		}
-		report.Detail("Removed " + removed + ": unused image of " + app)
+		progress.Detail("Removed " + removed + ": unused image of " + app)
 	}
 	return nil
 }

@@ -171,7 +171,7 @@ func (s Store) SetBindings(ctx context.Context, scope Scope, environment, owner 
 }
 
 func (s Store) writePair(ctx context.Context, scope Scope, environment, owner, name string, pair Pair) (int64, error) {
-	sealed, err := s.Sealer.Seal(ctx, bindingCoordinate(scope, environment, name), pair.Value)
+	sealed, err := s.Cipher.Seal(ctx, bindingCoordinate(scope, environment, name), pair.Value)
 	if err != nil {
 		return 0, err
 	}
@@ -344,7 +344,7 @@ func (s Store) ResolveBindings(ctx context.Context, scope Scope, environment str
 			continue
 		}
 		if err := each(ctx, len(names), func(ctx context.Context, i int) error {
-			plaintext, err := s.Sealer.Open(ctx, bindingCoordinate(scope, out[i].Environment, names[i]), sealed[i])
+			plaintext, err := s.Cipher.Open(ctx, bindingCoordinate(scope, out[i].Environment, names[i]), sealed[i])
 			if err != nil {
 				return fmt.Errorf("open binding %s's value: %w", names[i], err)
 			}

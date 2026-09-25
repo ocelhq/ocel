@@ -11,8 +11,9 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type Resolver interface {
+type resolver interface {
 	Serving(ctx context.Context, hostname string) (edge.Kind, error)
+	Unreached(hostname string) string
 }
 
 const (
@@ -27,7 +28,7 @@ type settler struct {
 	unbound bool
 	writer  edge.DNSWriter
 	zone    string
-	resolve Resolver
+	resolve resolver
 	budget  time.Duration
 	window  time.Duration
 	wait    time.Duration
@@ -58,7 +59,7 @@ func unattended(sender *eventSender) owedPolicy {
 	return policy
 }
 
-func newSettler(front edge.Edge, writer edge.DNSWriter, zone string, resolve Resolver) settler {
+func newSettler(front edge.Edge, writer edge.DNSWriter, zone string, resolve resolver) settler {
 	return settler{
 		kind:    front.Kind(),
 		unbound: front.Facts().ServesUnbound,
@@ -73,33 +74,21 @@ func newSettler(front edge.Edge, writer edge.DNSWriter, zone string, resolve Res
 	}
 }
 
-type Prober interface {
-	Serving(ctx context.Context, kind edge.Kind, hostname string) (edge.Kind, error)
-}
-
-type Diagnoser interface {
-	Unreached(hostname string) string
-}
-
-func probingFor(provider Provider, front edge.Edge) Resolver {
-	return probing{prober: provider, kind: front.Kind()}
+func probingFor(provider Provider, front edge.Edge) resolver {
+	return probing{liveness: provider.Liveness(), kind: front.Kind()}
 }
 
 type probing struct {
-	prober Prober
-	kind   edge.Kind
+	liveness Liveness
+	kind     edge.Kind
 }
 
 func (p probing) Serving(ctx context.Context, hostname string) (edge.Kind, error) {
-	return p.prober.Serving(ctx, p.kind, hostname)
+	return p.liveness.ServingEdge(ctx, p.kind, hostname)
 }
 
 func (p probing) Unreached(hostname string) string {
-	diagnoser, held := p.prober.(Diagnoser)
-	if !held {
-		return ""
-	}
-	return diagnoser.Unreached(hostname)
+	return p.liveness.Unreached(hostname)
 }
 
 func sleep(ctx context.Context, d time.Duration) error {
@@ -248,11 +237,7 @@ func (s settler) unresolved(hostname string, serving edge.Kind, began time.Time,
 }
 
 func (s settler) unreached(hostname string) string {
-	diagnoser, held := s.resolve.(Diagnoser)
-	if !held {
-		return ""
-	}
-	cause := diagnoser.Unreached(hostname)
+	cause := s.resolve.Unreached(hostname)
 	if cause == "" {
 		return ""
 	}

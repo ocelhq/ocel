@@ -50,7 +50,7 @@ func TestTheAppPlanCarriesEveryFactTheStoodUpAppServesFrom(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := provider.Releases().(*fake.Releaser).Plans()
+	plans := provider.FakeStacks().Plans()
 	app := plans[len(plans)-1].App
 	if app == nil {
 		t.Fatal("the last plan the releaser saw stands up no app")
@@ -103,21 +103,21 @@ func TestTheStagedRecordCarriesTheManifestAnEdgeRunningCodeRoutesBy(t *testing.T
 	}
 }
 
-type recordingReleaser struct {
-	providerkit.Releaser
+type recordingStacks struct {
+	providerkit.Stacks
 
 	mu    sync.Mutex
 	drawn []providerkit.StackPlan
 }
 
-func (r *recordingReleaser) Plan(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.Plan, error) {
+func (r *recordingStacks) Plan(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
 	r.mu.Lock()
 	r.drawn = append(r.drawn, plan)
 	r.mu.Unlock()
-	return r.Releaser.Plan(ctx, plan, report)
+	return r.Stacks.Plan(ctx, plan, progress)
 }
 
-func (r *recordingReleaser) drawnApps() []providerkit.StackPlan {
+func (r *recordingStacks) drawnApps() []providerkit.StackPlan {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return appStacks(r.drawn)
@@ -136,14 +136,14 @@ func appStacks(plans []providerkit.StackPlan) []providerkit.StackPlan {
 type drawing struct {
 	*fake.Provider
 
-	releases *recordingReleaser
+	releases *recordingStacks
 }
 
-func (d drawing) Releases() providerkit.Releaser { return d.releases }
+func (d drawing) Stacks() providerkit.Stacks { return d.releases }
 
 func drawingProvider() drawing {
 	base := fake.NewProvider(fake.Options{})
-	return drawing{base, &recordingReleaser{Releaser: base.Releases()}}
+	return drawing{base, &recordingStacks{Stacks: base.Stacks()}}
 }
 
 func TestADryDeployDrawsTheStackTheApplyWouldProvision(t *testing.T) {
@@ -164,7 +164,7 @@ func TestADryDeployDrawsTheStackTheApplyWouldProvision(t *testing.T) {
 	if result, _ := deploy(t, client, deployRequest()); result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	applied := appStacks(provider.releases.Releaser.(*fake.Releaser).Plans())
+	applied := appStacks(provider.releases.Stacks.(*fake.Stacks).Plans())
 	if len(applied) != 1 {
 		t.Fatalf("the apply provisioned %d app stacks, want the one the manifest declares", len(applied))
 	}

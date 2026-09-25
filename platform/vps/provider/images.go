@@ -37,13 +37,13 @@ func (p pulled) Has(ctx context.Context, push providerkit.ImagePush) (bool, erro
 	return p.host.HoldsImage(ctx, push.Target)
 }
 
-func (p pulled) Push(ctx context.Context, push providerkit.ImagePush, report providerkit.Reporter) error {
+func (p pulled) Push(ctx context.Context, push providerkit.ImagePush, progress providerkit.Progress) error {
 	held, err := p.from.Has(ctx, push)
 	if err != nil {
 		return err
 	}
 	if !held {
-		if err := p.from.Push(ctx, push, report); err != nil {
+		if err := p.from.Push(ctx, push, progress); err != nil {
 			return err
 		}
 	}
@@ -59,8 +59,8 @@ func (p pulled) Push(ctx context.Context, push providerkit.ImagePush, report pro
 	if err != nil {
 		return err
 	}
-	if report != nil && said != "" {
-		report.Detail(said)
+	if progress != nil && said != "" {
+		progress.Detail(said)
 	}
 	return nil
 }

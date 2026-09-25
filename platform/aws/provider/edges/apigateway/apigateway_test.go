@@ -232,7 +232,7 @@ func TestPromoteRefusesAContainerReleaseByName(t *testing.T) {
 	}
 
 	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Identity}}
-	err := stack.Promote(context.Background(), promotion, "", edge.DiscardReporter())
+	err := stack.Promote(context.Background(), promotion, "", edge.DiscardProgress())
 	if err == nil || !strings.Contains(err.Error(), "container") || !strings.Contains(err.Error(), "cloudfront") {
 		t.Fatalf("Promote of a container release = %v, want it refused with the edge that can front one: this edge invokes a function, and a container has none", err)
 	}
@@ -249,7 +249,7 @@ func TestPromoteMovesTheStageOnce(t *testing.T) {
 	record := staged(t, stack, entryFunction, "assets/shop/web/r1234abcd")
 
 	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Identity}}
-	if err := stack.Promote(context.Background(), promotion, "", edge.DiscardReporter()); err != nil {
+	if err := stack.Promote(context.Background(), promotion, "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 
@@ -288,7 +288,7 @@ func TestPromoteServesTheFunctionTheDeployNamed(t *testing.T) {
 	}
 
 	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Identity}}
-	if err := stack.Promote(context.Background(), promotion, "", edge.DiscardReporter()); err != nil {
+	if err := stack.Promote(context.Background(), promotion, "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 
@@ -312,7 +312,7 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 		w := newWorld()
 		stack := reconciled(t, w)
 
-		err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1.f1"}}, "", edge.DiscardReporter())
+		err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1.f1"}}, "", edge.DiscardProgress())
 		if err == nil {
 			t.Fatal("Promote succeeded against a promotion nothing was staged for")
 		}
@@ -326,7 +326,7 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 		stack := reconciled(t, w)
 		record := staged(t, stack, "", "assets/one")
 
-		err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Identity}}, "", edge.DiscardReporter())
+		err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Identity}}, "", edge.DiscardProgress())
 		if err == nil {
 			t.Fatal("Promote succeeded on a record naming no entry function")
 		}
@@ -349,7 +349,7 @@ func TestPromoteRefusesWhatTheStageCannotServe(t *testing.T) {
 		}
 
 		promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"api": "d1.f1", "web": "d1.f1"}}
-		err := stack.Promote(ctx, promotion, "", edge.DiscardReporter())
+		err := stack.Promote(ctx, promotion, "", edge.DiscardProgress())
 		if err == nil {
 			t.Fatal("Promote succeeded on two apps, want the one-app limit surfaced rather than one app silently served")
 		}
@@ -389,7 +389,7 @@ func TestPromoteRecordsNothingWhenTheStageRefuses(t *testing.T) {
 	w.gateway.stageErr = errors.New("stage is being updated by another operation")
 
 	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Identity}}
-	if err := stack.Promote(context.Background(), promotion, "", edge.DiscardReporter()); err == nil {
+	if err := stack.Promote(context.Background(), promotion, "", edge.DiscardProgress()); err == nil {
 		t.Fatal("Promote succeeded, want the stage failure surfaced")
 	}
 
@@ -415,15 +415,15 @@ func TestRollbackMovesTheStageOnce(t *testing.T) {
 			t.Fatalf("PutStaged: %v", err)
 		}
 	}
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": first.Identity}}, "", edge.DiscardReporter()); err != nil {
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": first.Identity}}, "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Identity}}, "", edge.DiscardReporter()); err != nil {
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": second.Identity}}, "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(p2): %v", err)
 	}
 
 	before := w.gateway.count("UpdateStage")
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 3, Builds: map[string]string{"web": first.Identity}}, "", edge.DiscardReporter()); err != nil {
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 3, Builds: map[string]string{"web": first.Identity}}, "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("rollback to p1: %v", err)
 	}
 	if got := w.gateway.count("UpdateStage") - before; got != 1 {
@@ -450,12 +450,12 @@ func TestRollbackRecordsNothingWhenTheStageRefuses(t *testing.T) {
 	w := newWorld()
 	stack := reconciled(t, w)
 	record := staged(t, stack, entryFunction, "assets/one")
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Identity}}, "", edge.DiscardReporter()); err != nil {
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Identity}}, "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
 	w.gateway.stageErr = errors.New("stage is being updated by another operation")
 
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": record.Identity}}, "", edge.DiscardReporter()); err == nil {
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": record.Identity}}, "", edge.DiscardProgress()); err == nil {
 		t.Fatal("rollback succeeded, want the stage failure surfaced")
 	}
 	history, err := stack.Ledger().History(ctx, "")
@@ -521,7 +521,7 @@ func TestReconcileKeepsTheReleaseTheStageIsServing(t *testing.T) {
 		t.Fatalf("Reconcile: %v", err)
 	}
 	record := staged(t, stack, entryFunction, "assets/one")
-	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Identity}}, "", edge.DiscardReporter()); err != nil {
+	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": record.Identity}}, "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 
@@ -977,7 +977,7 @@ func TestBindDomainAfterAPromotionMapsTheHostOntoThePromotedStage(t *testing.T) 
 	stack := reconciled(t, w)
 	staged(t, stack, entryFunction, "")
 	promotion := edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "d1.f1"}}
-	if err := stack.Promote(ctx, promotion, "", edge.DiscardReporter()); err != nil {
+	if err := stack.Promote(ctx, promotion, "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 

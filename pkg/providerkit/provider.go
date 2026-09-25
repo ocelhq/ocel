@@ -11,16 +11,18 @@ type Provider interface {
 	Facts() Facts
 	Hooks() Hooks
 
-	Bootstrap(kind edge.Kind) (Bootstrapper, error)
-	Releases() Releaser
+	Bootstrap(kind edge.Kind) (Bootstrap, error)
+	Stacks() Stacks
 	Artifacts() ArtifactStore
 	Records() RecordStore
-	Sealer() Sealer
+	Cipher() Cipher
 	Credentials() Credentials
-	Edges() EdgeRegistry
-	DNS() DNSRegistry
-
-	Prober
+	Edges() Edges
+	DNS() DNS
+	Certificates() Certificates
+	Connector() Connector
+	Runtime() Runtime
+	Liveness() Liveness
 }
 
 type Facts struct {
@@ -65,8 +67,8 @@ type DeployPreflight struct {
 	Resources []Resource
 	Grants    []Binding
 	Apps      []AppUsage
-	Report    Reporter
-	Writer    Writer
+	Progress  Progress
+	WrittenBy WrittenBy
 	Dry       bool
 }
 

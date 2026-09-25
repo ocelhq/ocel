@@ -58,12 +58,12 @@ func TestAClassDestroyRemovesTheVolumesItPlannedToAfterTheContainersThatMountThe
 		}
 		return session.Result{}, false
 	}
-	report := &said{}
-	if err := Bootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, report); err != nil {
+	progress := &said{}
+	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, progress); err != nil {
 		t.Fatalf("Remove() = %v, and a class that kept a volume can never be destroyed", err)
 	}
-	if taken := "removed " + KindResourceVolumes + " " + classSelector(class); !slices.Contains(report.lines, taken) {
-		t.Errorf("Remove() never said %q:\n%s", taken, strings.Join(report.lines, "\n"))
+	if taken := "removed " + KindResourceVolumes + " " + classSelector(class); !slices.Contains(progress.lines, taken) {
+		t.Errorf("Remove() never said %q:\n%s", taken, strings.Join(progress.lines, "\n"))
 	}
 	containers := stood.at("xargs -r docker rm --force")
 	volumes := stood.at("xargs -r docker volume rm")

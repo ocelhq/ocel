@@ -17,12 +17,12 @@ import (
 
 const issuedARN = "arn:aws:acm:us-east-1:111122223333:certificate/issued"
 
-type silentReporter struct{}
+type silentProgress struct{}
 
-func (silentReporter) Say(string)    {}
-func (silentReporter) Detail(string) {}
+func (silentProgress) Say(string)    {}
+func (silentProgress) Detail(string) {}
 
-func (silentReporter) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
+func (silentProgress) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
 
 type stubACM struct {
 	statuses  []string
@@ -76,7 +76,7 @@ func requestFor(hostname string, held providerkit.Certificate, proved *[]edge.Re
 		Kind:     "cloudfront",
 		Hostname: hostname,
 		Held:     held,
-		Report:   silentReporter{},
+		Progress: silentProgress{},
 		Prove: func(_ context.Context, cert providerkit.Certificate, records []edge.Record) (providerkit.Certificate, error) {
 			*proved = records
 			cert.Written = records

@@ -17,7 +17,7 @@ func TestReferenceProvider(t *testing.T) {
 		Spec:    providerkit.Spec{Version: "test", New: fake.New},
 		Options: providerkit.Options{"region": "nowhere"},
 		Binary:  buildFakeProvider(t),
-		Certifier: &conformance.CertifierChecks{
+		Certificates: &conformance.CertificateChecks{
 			Kind: fake.KindRelay,
 		},
 	})

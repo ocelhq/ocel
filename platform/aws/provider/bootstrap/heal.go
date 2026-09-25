@@ -110,7 +110,7 @@ func AdmitReplacements(ns Namespace, accept bool, log func(string)) cfn.ChangeRe
 
 type HealRequest struct {
 	Features []string
-	Writer   providerkit.Writer
+	Writer   providerkit.WrittenBy
 }
 
 var ErrHealNotPermitted = errors.New("these credentials may not write this account's bootstrap stacks")
@@ -180,7 +180,7 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, log func
 	return healed, nil
 }
 
-func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale StackStamp, deployed Deployed, refs stackRefs, writer providerkit.Writer, log func(string)) (bool, error) {
+func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale StackStamp, deployed Deployed, refs stackRefs, writer providerkit.WrittenBy, log func(string)) (bool, error) {
 	f, ok := featureNamed(stale.Feature)
 	if !ok {
 		return false, fmt.Errorf("this provider has no feature named %q", stale.Feature)

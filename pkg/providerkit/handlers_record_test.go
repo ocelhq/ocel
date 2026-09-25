@@ -161,7 +161,7 @@ func TestTheStagedRecordNamesTheISRPrefixTheFunctionWritesUnder(t *testing.T) {
 	if len(staged) != 1 {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
-	plans := provider.Releases().(*fake.Releaser).Plans()
+	plans := provider.FakeStacks().Plans()
 	app := plans[len(plans)-1].App
 	if app == nil || app.ISR == nil {
 		t.Fatal("the last plan the releaser saw carries no ISR plan")

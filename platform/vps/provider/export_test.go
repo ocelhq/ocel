@@ -20,8 +20,8 @@ func Whoami(ctx context.Context, live surveyor) (providerkit.Identity, error) {
 	return whoami(ctx, live)
 }
 
-func Elevating(inner providerkit.Bootstrapper, gate func(context.Context) error) providerkit.Bootstrapper {
-	return elevating{Bootstrapper: inner, elevated: gate}
+func Elevating(inner providerkit.Bootstrap, gate func(context.Context) error) providerkit.Bootstrap {
+	return elevating{Bootstrap: inner, elevated: gate}
 }
 
 func (p *Provider) Host() *host.Host { return p.host }

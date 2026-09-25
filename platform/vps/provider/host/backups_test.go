@@ -298,15 +298,15 @@ func TestAnApplyOverAHostBootstrappedBeforeBackupsWritesThem(t *testing.T) {
 	}
 	stood := settledOn(t, class)
 	stood.stands[class] = slices.DeleteFunc(stood.stands[class], func(item Item) bool { return slices.Contains(missing, item.ID()) })
-	report := &said{}
-	if err := Bootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
-		providerkit.BootstrapRequest{Class: class, Writer: "the-suite"}, report); err != nil {
+	progress := &said{}
+	if err := NewBootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
+		providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, progress); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	for _, id := range missing {
-		if report.at("wrote "+id) < 0 {
+		if progress.at("wrote "+id) < 0 {
 			t.Errorf("bootstrap says a host carries %s and an apply never wrote it, so every status after it reads drifted and every re-plan moves it:\n%s",
-				id, strings.Join(report.lines, "\n"))
+				id, strings.Join(progress.lines, "\n"))
 		}
 	}
 }

@@ -89,7 +89,7 @@ func TestApplyRefusesWorkThatAppearedAfterThePlanWasDrawn(t *testing.T) {
 		t.Fatalf("the cache group is %q, want the plan to show nothing owed on it", action)
 	}
 
-	provider.Bootstrapper().Behind(fake.FeatureCache)
+	provider.FakeBootstrap().Behind(fake.FeatureCache)
 
 	err = gate.Apply(ctx, shown, providerkit.ClassProduction, req, nil)
 	var refusal providerkit.Refusal
@@ -115,7 +115,7 @@ func TestApplyRunsThePlanItWasShown(t *testing.T) {
 	if err := gate.Apply(ctx, shown, providerkit.ClassProduction, req, nil); err != nil {
 		t.Fatalf("Apply() of the plan it was shown = %v, want it applied", err)
 	}
-	if len(provider.Bootstrapper().Applied()) == 0 {
+	if len(provider.FakeBootstrap().Applied()) == 0 {
 		t.Error("Apply() stood nothing up for the plan it was shown")
 	}
 }
@@ -163,7 +163,7 @@ func TestPlanSeparatesTheStaleFromTheCurrent(t *testing.T) {
 
 	gate, provider := gated(t, "1.2.3")
 	bootstrapped(t, provider, providerkit.ClassProduction, fake.FeatureCache, fake.FeatureImages)
-	provider.Bootstrapper().Behind(fake.FeatureImages)
+	provider.FakeBootstrap().Behind(fake.FeatureImages)
 
 	plan, err := gate.Plan(context.Background(), providerkit.ClassProduction, providerkit.ApplyRequest{
 		Features: []string{fake.FeatureImages},
@@ -435,7 +435,7 @@ func TestFeatureNeedingEdgeFindsTheFeatureTheEdgeParticipatesThrough(t *testing.
 func TestDeriveGroupsNamesTheStacksTheVendorDescribed(t *testing.T) {
 	t.Parallel()
 
-	described := providerkit.Bootstrap{
+	described := providerkit.BootstrapReading{
 		Class:   providerkit.ClassPreview,
 		Present: true,
 		Stacks: []providerkit.BootstrapStack{
@@ -443,7 +443,7 @@ func TestDeriveGroupsNamesTheStacksTheVendorDescribed(t *testing.T) {
 			{Name: "cache-stack", Feature: fake.FeatureCache, Present: true, Schema: providerkit.BootstrapSchema},
 		},
 	}
-	groups := providerkit.DeriveGroups(described, fake.NewBootstrapper().Catalogue(), providerkit.BootstrapRequest{
+	groups := providerkit.DeriveGroups(described, fake.NewBootstrap().Catalogue(), providerkit.BootstrapRequest{
 		Class:    providerkit.ClassPreview,
 		Features: []string{fake.FeatureCache},
 		Remove:   []string{fake.FeatureImages},

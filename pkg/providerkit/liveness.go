@@ -21,7 +21,7 @@ const (
 	nameserverWindow = 5 * time.Second
 )
 
-type Names interface {
+type DNSLookup interface {
 	LookupHost(ctx context.Context, host string) ([]string, error)
 	LookupNS(ctx context.Context, name string) ([]*net.NS, error)
 	LookupCNAME(ctx context.Context, host string) (string, error)
@@ -31,9 +31,9 @@ type Unanswered struct{ Cause string }
 
 func (u Unanswered) Error() string { return u.Cause }
 
-type Liveness struct {
-	System    Names
-	Authority func(nameserver string) Names
+type NetLiveness struct {
+	System    DNSLookup
+	Authority func(nameserver string) DNSLookup
 	Dial      func(ctx context.Context, network, address string) (net.Conn, error)
 	TLS       *tls.Config
 	Front     *url.URL
@@ -45,12 +45,13 @@ type Liveness struct {
 	unreached map[string]string
 }
 
-var (
-	_ Prober    = (*Liveness)(nil)
-	_ Diagnoser = (*Liveness)(nil)
-)
+type Liveness interface {
+	ServingEdge(ctx context.Context, kind edge.Kind, hostname string) (edge.Kind, error)
 
-func (l *Liveness) Serving(ctx context.Context, _ edge.Kind, hostname string) (edge.Kind, error) {
+	Unreached(hostname string) string
+}
+
+func (l *NetLiveness) ServingEdge(ctx context.Context, _ edge.Kind, hostname string) (edge.Kind, error) {
 	answered, err := l.ask(ctx, edge.ProbeHostname(hostname))
 	var unanswered Unanswered
 	switch {
@@ -67,13 +68,13 @@ func (l *Liveness) Serving(ctx context.Context, _ edge.Kind, hostname string) (e
 	}
 }
 
-func (l *Liveness) Unreached(hostname string) string {
+func (l *NetLiveness) Unreached(hostname string) string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.unreached[hostname]
 }
 
-func (l *Liveness) record(hostname, cause string) {
+func (l *NetLiveness) record(hostname, cause string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if cause == "" {
@@ -86,7 +87,7 @@ func (l *Liveness) record(hostname, cause string) {
 	l.unreached[hostname] = cause
 }
 
-func (l *Liveness) ask(ctx context.Context, hostname string) (edge.Kind, error) {
+func (l *NetLiveness) ask(ctx context.Context, hostname string) (edge.Kind, error) {
 	if l.Loopback != nil && (l.LoopbackOnly || edge.Loopback(hostname)) {
 		return l.Loopback(ctx, hostname)
 	}
@@ -100,7 +101,7 @@ func (l *Liveness) ask(ctx context.Context, hostname string) (edge.Kind, error) 
 	return l.request(ctx, scheme, hostname, addresses)
 }
 
-func (l *Liveness) request(ctx context.Context, scheme, hostname string, addresses []string) (edge.Kind, error) {
+func (l *NetLiveness) request(ctx context.Context, scheme, hostname string, addresses []string) (edge.Kind, error) {
 	var config *tls.Config
 	if l.TLS != nil {
 		config = l.TLS.Clone()
@@ -144,21 +145,21 @@ func (l *Liveness) request(ctx context.Context, scheme, hostname string, address
 	return edge.Kind(strings.TrimSpace(said.Header.Get(edge.HeaderEdge))), nil
 }
 
-func (l *Liveness) dial(ctx context.Context, network, address string) (net.Conn, error) {
+func (l *NetLiveness) dial(ctx context.Context, network, address string) (net.Conn, error) {
 	if l.Dial != nil {
 		return l.Dial(ctx, network, address)
 	}
 	return (&net.Dialer{}).DialContext(ctx, network, address)
 }
 
-func (l *Liveness) system() Names {
+func (l *NetLiveness) system() DNSLookup {
 	if l.System != nil {
 		return l.System
 	}
 	return net.DefaultResolver
 }
 
-func (l *Liveness) authority(nameserver string) Names {
+func (l *NetLiveness) authority(nameserver string) DNSLookup {
 	if l.Authority != nil {
 		return l.Authority(nameserver)
 	}
@@ -167,7 +168,7 @@ func (l *Liveness) authority(nameserver string) Names {
 	}}
 }
 
-func (l *Liveness) locate(ctx context.Context, hostname string) (string, []string, error) {
+func (l *NetLiveness) locate(ctx context.Context, hostname string) (string, []string, error) {
 	if l.Front != nil {
 		return l.Front.Scheme, []string{frontAddress(l.Front)}, nil
 	}
@@ -206,7 +207,7 @@ func onPort(addresses []string, port string) []string {
 	return held
 }
 
-func (l *Liveness) hint(ctx context.Context, hostname string) ([]string, error) {
+func (l *NetLiveness) hint(ctx context.Context, hostname string) ([]string, error) {
 	zone, nameservers, err := l.zoneOf(ctx, hostname)
 	if err != nil {
 		return nil, err
@@ -227,7 +228,7 @@ func (l *Liveness) hint(ctx context.Context, hostname string) ([]string, error) 
 	return nil, fmt.Errorf("no nameserver for %s answers for it yet (%s)", zone, strings.Join(failures, "; "))
 }
 
-func (l *Liveness) answer(ctx context.Context, nameserver, hostname string) ([]string, error) {
+func (l *NetLiveness) answer(ctx context.Context, nameserver, hostname string) ([]string, error) {
 	asked := l.authority(nameserver)
 	canonical, err := asked.LookupCNAME(ctx, hostname+".")
 	if err != nil {
@@ -250,7 +251,7 @@ func (l *Liveness) answer(ctx context.Context, nameserver, hostname string) ([]s
 	return onPort(addresses, "443"), nil
 }
 
-func (l *Liveness) zoneOf(ctx context.Context, hostname string) (string, []string, error) {
+func (l *NetLiveness) zoneOf(ctx context.Context, hostname string) (string, []string, error) {
 	labels := strings.Split(strings.TrimSuffix(hostname, "."), ".")
 	for at := range max(len(labels)-1, 1) {
 		candidate := strings.Join(labels[at:], ".")

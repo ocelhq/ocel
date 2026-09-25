@@ -87,8 +87,8 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 	fronting(t, pinned, "pinned")
 
 	ctx := context.Background()
-	cert, err := pinned.Certificate(ctx, providerkit.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: caddy.Container, Report: edge.DiscardReporter(),
+	cert, err := pinned.Certificates().Issue(ctx, providerkit.CertificateRequest{
+		Kind: boxedge.Kind, Hostname: caddy.Container, Progress: edge.DiscardProgress(),
 	})
 	if err != nil {
 		t.Fatalf("Certificate(%s) = %v", caddy.Container, err)
@@ -101,7 +101,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 	}
 
 	spoken := vm.proxyLogBytes(t)
-	served, err := pinned.InspectCertificate(ctx, boxedge.Kind, caddy.Container,
+	served, err := pinned.Certificates().Inspect(ctx, boxedge.Kind, caddy.Container,
 		providerkit.Certificate{ID: certs.ProxyHandle(caddy.Container)})
 	if err != nil {
 		t.Fatalf("InspectCertificate() over a proxy handle = %v", err)
@@ -135,13 +135,13 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 	defer closing(t, pinned)
 
 	ctx := context.Background()
-	cert, err := pinned.Certificate(ctx, providerkit.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.invalid", Report: edge.DiscardReporter(),
+	cert, err := pinned.Certificates().Issue(ctx, providerkit.CertificateRequest{
+		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.invalid", Progress: edge.DiscardProgress(),
 	})
 	if err != nil {
 		t.Fatalf("Certificate() over a pinned wildcard = %v", err)
 	}
-	health, err := pinned.InspectCertificate(ctx, boxedge.Kind, "pr-7.preview.example.invalid", cert)
+	health, err := pinned.Certificates().Inspect(ctx, boxedge.Kind, "pr-7.preview.example.invalid", cert)
 	if err != nil {
 		t.Fatalf("InspectCertificate() = %v", err)
 	}
@@ -152,7 +152,7 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 		t.Errorf("InspectCertificate().Renewal = %q, want %q", health.Renewal, certs.PinRenewal)
 	}
 
-	if err := pinned.DiscardCertificate(ctx, cert, edge.DiscardReporter()); err != nil {
+	if err := pinned.Certificates().Discard(ctx, cert, edge.DiscardProgress()); err != nil {
 		t.Errorf("DiscardCertificate() = %v, want nil", err)
 	}
 	if !vm.stands(t, caddy.PinKey(at)) {

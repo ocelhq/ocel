@@ -28,7 +28,7 @@ func TestACertificateYourProxyServesIsRenewedByYourProxy(t *testing.T) {
 	machine := &box{leaf: string(served)}
 	p := byHand(machine)
 	cert := certificateFor(t, p, "shop.example.com")
-	health, err := p.InspectCertificate(context.Background(), boxedge.Kind, "shop.example.com", cert)
+	health, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, "shop.example.com", cert)
 	if err != nil {
 		t.Fatalf("InspectCertificate() = %v", err)
 	}
@@ -48,7 +48,7 @@ func TestAHostnameOnABoxYourProxyFrontsIsProbedFromTheBoxItself(t *testing.T) {
 	machine := routedByHand(map[string]answer{"'probe' 'shop.example.com'": {stdout: "box\n"}})
 	p := byHand(machine)
 	p.System = resolvesNothing{}
-	served, err := p.Serving(context.Background(), boxedge.Kind, "shop.example.com")
+	served, err := p.ServingEdge(context.Background(), boxedge.Kind, "shop.example.com")
 	if err != nil || served != boxedge.Kind {
 		t.Fatalf("Serving() = %q, %v, want the box's own probe to answer box", served, err)
 	}

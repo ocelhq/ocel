@@ -72,7 +72,7 @@ func TestLiveTheDeployKeyOptionOverridesTheMirroredKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err != nil {
+	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
@@ -101,7 +101,7 @@ func TestLiveBothPermissionsDocumentsDescribeTheMachineTheyBootstrap(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err != nil {
+	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
@@ -156,7 +156,7 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: "live-suite"}, nil); err != nil {
+	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	closing(t, stood)
@@ -188,7 +188,7 @@ func TestLiveDestroyNeedsNoDeployKeyAtAll(t *testing.T) {
 		if !standing.Present {
 			continue
 		}
-		if _, err := forgetting.PlanRemoval(ctx, taken); err != nil {
+		if _, err := forgetting.PlanRemove(ctx, taken); err != nil {
 			t.Fatalf("PlanRemoval(%s) with the deploy key gone = %v, want a destroy that needs no key to say what it will take", taken, err)
 		}
 		if err := forgetting.Remove(ctx, taken, nil); err != nil {

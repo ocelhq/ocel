@@ -16,22 +16,22 @@ func (p *Provider) elevated(ctx context.Context) error {
 }
 
 type elevating struct {
-	providerkit.Bootstrapper
+	providerkit.Bootstrap
 	elevated func(context.Context) error
 }
 
-func (e elevating) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
+func (e elevating) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
 	if !req.Heal {
 		if err := e.elevated(ctx); err != nil {
 			return err
 		}
 	}
-	return e.Bootstrapper.Apply(ctx, req, report)
+	return e.Bootstrap.Apply(ctx, req, progress)
 }
 
-func (e elevating) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {
+func (e elevating) Remove(ctx context.Context, class providerkit.Class, progress providerkit.Progress) error {
 	if err := e.elevated(ctx); err != nil {
 		return err
 	}
-	return e.Bootstrapper.Remove(ctx, class, report)
+	return e.Bootstrap.Remove(ctx, class, progress)
 }

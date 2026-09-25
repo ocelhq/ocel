@@ -20,7 +20,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const pushedCoordinate = "ghcr.io/acme/web:sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+var pushedCoordinate = "ghcr.io/acme/web:" + providerkit.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary))
 
 func registryDeployRequest() *contractv1.DeployRequest {
 	return namingARegistry(containerDeployRequest("/"))
@@ -48,6 +48,7 @@ func imageRows(plan *planv1.ChangePlan) []*planv1.Change {
 }
 
 func TestADryDeployShowsTheImagePushAsARowAndPushesNothing(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
 
@@ -74,28 +75,29 @@ func TestADryDeployShowsTheImagePushAsARowAndPushesNothing(t *testing.T) {
 	}
 }
 
-type muteReleaser struct{}
+type muteStacks struct{}
 
-func (muteReleaser) Plan(context.Context, providerkit.StackPlan, providerkit.Reporter) (providerkit.Plan, error) {
+func (muteStacks) Plan(context.Context, providerkit.StackPlan, providerkit.Progress) (providerkit.Plan, error) {
 	return providerkit.Plan{}, nil
 }
 
-func (muteReleaser) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Reporter) (providerkit.Plan, error) {
+func (muteStacks) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Progress) (providerkit.Plan, error) {
 	return providerkit.Plan{}, nil
 }
 
-func (muteReleaser) Provision(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.StackResult, error) {
+func (muteStacks) Provision(_ context.Context, plan providerkit.StackPlan, _ providerkit.Progress) (providerkit.StackResult, error) {
 	return providerkit.StackResult{Containers: fake.StoodUpContainers(plan)}, nil
 }
 
-func (muteReleaser) Destroy(context.Context, providerkit.StackRef, providerkit.Reporter) error {
+func (muteStacks) Destroy(context.Context, providerkit.StackRef, providerkit.Progress) error {
 	return nil
 }
 
 func TestTheImageRowIsTheReleasersOwnAndNothingElseInventsIt(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{Region: "nowhere"})
-	client := servedBy(t, refusingReleaser{Provider: base, releaser: muteReleaser{}})
+	client := servedBy(t, refusingStacks{Provider: base, releaser: muteStacks{}})
 	standsBootstrapped(t, client)
 
 	req := registryDeployRequest()
@@ -111,6 +113,7 @@ func TestTheImageRowIsTheReleasersOwnAndNothingElseInventsIt(t *testing.T) {
 }
 
 func TestADeployPushesTheImageTheBuildProducedUnderTheRegistryCoordinate(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
 
@@ -132,6 +135,7 @@ func TestADeployPushesTheImageTheBuildProducedUnderTheRegistryCoordinate(t *test
 }
 
 func TestADigestTheRegistryAlreadyHoldsIsNotPushedAgain(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
 	provider.Registry().Holds(pushedCoordinate)
@@ -146,6 +150,7 @@ func TestADigestTheRegistryAlreadyHoldsIsNotPushedAgain(t *testing.T) {
 }
 
 func TestADigestTheRegistryAlreadyHoldsStandsOnThePlan(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
 	provider.Registry().Holds(pushedCoordinate)
@@ -207,6 +212,7 @@ func TestAServerlessDeployNamesNoImageToPush(t *testing.T) {
 }
 
 func TestARegistryThatCannotBeReachedStopsTheDeploy(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
 	provider.Registry().Refusing(errors.New("the token is not accepted"))
@@ -221,6 +227,7 @@ func TestARegistryThatCannotBeReachedStopsTheDeploy(t *testing.T) {
 }
 
 func TestThePasswordTheDeployCarriesReachesTheRegistryAndNothingElse(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
 
@@ -240,6 +247,7 @@ func TestThePasswordTheDeployCarriesReachesTheRegistryAndNothingElse(t *testing.
 }
 
 func TestAnImageRowRidesInsideTheAppsOwnStackGroup(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -285,7 +293,7 @@ func (s refusingStore) Has(context.Context, providerkit.ImagePush) (bool, error)
 	return false, nil
 }
 
-func (s refusingStore) Push(context.Context, providerkit.ImagePush, providerkit.Reporter) error {
+func (s refusingStore) Push(context.Context, providerkit.ImagePush, providerkit.Progress) error {
 	return errors.New("the stream stopped short")
 }
 
@@ -307,7 +315,7 @@ func TestATransferThatFailsNamesWhereItWasSendingRatherThanTheCoordinate(t *test
 	}
 }
 
-const loadedCoordinate = "ocel/shop/web:sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+var loadedCoordinate = "ocel/shop/web:" + providerkit.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary))
 
 type loadingProvider struct {
 	*fake.Provider
@@ -331,6 +339,7 @@ func loadServed(t *testing.T) (contractv1connect.ProviderServiceClient, loadingP
 }
 
 func TestAProviderThatTakesImagesDirectlyIsHandedTheOneTheBuildProduced(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := loadServed(t)
 
@@ -356,6 +365,7 @@ func TestAProviderThatTakesImagesDirectlyIsHandedTheOneTheBuildProduced(t *testi
 }
 
 func TestADigestTheBoxAlreadyHoldsIsNotSentAgain(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := loadServed(t)
 	provider.direct.Holds(loadedCoordinate)
@@ -373,6 +383,7 @@ func TestADigestTheBoxAlreadyHoldsIsNotSentAgain(t *testing.T) {
 }
 
 func TestANamedRegistryTakesTheImageFromAProviderThatWouldOtherwiseLoadItDirectly(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := loadServed(t)
 
@@ -394,6 +405,7 @@ func TestANamedRegistryTakesTheImageFromAProviderThatWouldOtherwiseLoadItDirectl
 }
 
 func TestADirectTransferStandsOnThePlanLikeAPush(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := loadServed(t)
 	provider.direct.Holds(loadedCoordinate)
@@ -434,6 +446,7 @@ func (p addressingProvider) DirectImages(context.Context) (providerkit.ImageStor
 }
 
 func TestTheDeploySaysWhereTheImageWentRatherThanWhatItIsCalledThere(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	provider := addressingProvider{
 		Provider: fake.NewProvider(fake.Options{Region: "nowhere"}),
@@ -485,6 +498,7 @@ func staging(t *testing.T, provider *fake.Provider) *stagingLedger {
 }
 
 func TestAnAppPlanNamesTheCoordinateTheProviderWillHoldRatherThanTheOneTheBuildLeft(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
 
@@ -493,7 +507,7 @@ func TestAnAppPlanNamesTheCoordinateTheProviderWillHoldRatherThanTheOneTheBuildL
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := provider.Releases().(*fake.Releaser).Plans()
+	plans := provider.FakeStacks().Plans()
 	app := plans[len(plans)-1].App
 	if app == nil {
 		t.Fatal("the last plan the releaser saw stands up no app")
@@ -504,6 +518,7 @@ func TestAnAppPlanNamesTheCoordinateTheProviderWillHoldRatherThanTheOneTheBuildL
 }
 
 func TestAnAppPlanNamesTheTaggedCoordinateADirectTransferLanded(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := loadServed(t)
 
@@ -512,7 +527,7 @@ func TestAnAppPlanNamesTheTaggedCoordinateADirectTransferLanded(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := provider.Releases().(*fake.Releaser).Plans()
+	plans := provider.FakeStacks().Plans()
 	app := plans[len(plans)-1].App
 	if app == nil {
 		t.Fatal("the last plan the releaser saw stands up no app")
@@ -523,6 +538,7 @@ func TestAnAppPlanNamesTheTaggedCoordinateADirectTransferLanded(t *testing.T) {
 }
 
 func TestTheStagedRecordNamesTheImageThatReleaseRuns(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
 	held := staging(t, provider)
@@ -542,6 +558,7 @@ func TestTheStagedRecordNamesTheImageThatReleaseRuns(t *testing.T) {
 }
 
 func TestTheStagedRecordNamesTheHealthPathTheReleaseIsGatedOn(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
 	held := staging(t, provider)
@@ -561,6 +578,7 @@ func TestTheStagedRecordNamesTheHealthPathTheReleaseIsGatedOn(t *testing.T) {
 }
 
 func TestTheStagedRecordNamesTheContainerTheReleaseStoodUp(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
 	held := staging(t, provider)

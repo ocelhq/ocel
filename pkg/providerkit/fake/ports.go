@@ -16,7 +16,7 @@ const (
 	FeatureImages = "images"
 )
 
-type Bootstrapper struct {
+type Bootstrap struct {
 	mu       sync.Mutex
 	applied  map[providerkit.Class][]string
 	behind   map[string]bool
@@ -29,8 +29,8 @@ type Bootstrapper struct {
 	halfway  bool
 }
 
-func NewBootstrapper() *Bootstrapper {
-	return &Bootstrapper{
+func NewBootstrap() *Bootstrap {
+	return &Bootstrap{
 		applied: map[providerkit.Class][]string{},
 		behind:  map[string]bool{},
 		writer:  "1.0.0",
@@ -38,25 +38,25 @@ func NewBootstrapper() *Bootstrapper {
 	}
 }
 
-func (b *Bootstrapper) fronting(kind edge.Kind) {
+func (b *Bootstrap) fronting(kind edge.Kind) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.front = kind
 }
 
-func (b *Bootstrapper) Standing(kinds ...edge.Kind) {
+func (b *Bootstrap) Standing(kinds ...edge.Kind) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.standing = append(make([]edge.Kind, 0, len(kinds)), kinds...)
 }
 
-func (b *Bootstrapper) Fronting() edge.Kind {
+func (b *Bootstrap) Fronting() edge.Kind {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.front
 }
 
-func (b *Bootstrapper) Catalogue() []providerkit.Feature {
+func (b *Bootstrap) Catalogue() []providerkit.Feature {
 	return []providerkit.Feature{
 		{
 			Name:    FeatureCache,
@@ -72,7 +72,7 @@ func (b *Bootstrapper) Catalogue() []providerkit.Feature {
 	}
 }
 
-func (b *Bootstrapper) Behind(features ...string) {
+func (b *Bootstrap) Behind(features ...string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for _, feature := range features {
@@ -80,41 +80,41 @@ func (b *Bootstrapper) Behind(features ...string) {
 	}
 }
 
-func (b *Bootstrapper) WrittenBy(writer string) {
+func (b *Bootstrap) WrittenBy(writer string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.writer = writer
 }
 
-func (b *Bootstrapper) AtSchema(schema uint32) {
+func (b *Bootstrap) AtSchema(schema uint32) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.schema = schema
 }
 
-func (b *Bootstrapper) Halfway() {
+func (b *Bootstrap) Halfway() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.halfway = true
 }
 
-func (b *Bootstrapper) RefuseApply(err error) {
+func (b *Bootstrap) RefuseApply(err error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.refusal = err
 }
 
-func (b *Bootstrapper) Applied() []providerkit.BootstrapRequest {
+func (b *Bootstrap) Applied() []providerkit.BootstrapRequest {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return slices.Clone(b.requests)
 }
 
-func (b *Bootstrapper) Describe(_ context.Context, class providerkit.Class) (providerkit.Bootstrap, error) {
+func (b *Bootstrap) Describe(_ context.Context, class providerkit.Class) (providerkit.BootstrapReading, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	features, present := b.applied[class]
-	described := providerkit.Bootstrap{Class: class, Present: present, Unfinished: present && b.halfway}
+	described := providerkit.BootstrapReading{Class: class, Present: present, Unfinished: present && b.halfway}
 	if !present {
 		return described, nil
 	}
@@ -133,18 +133,18 @@ func stackNameOf(class providerkit.Class, feature string) string {
 	return name
 }
 
-func (b *Bootstrapper) stack(class providerkit.Class, feature string) providerkit.BootstrapStack {
+func (b *Bootstrap) stack(class providerkit.Class, feature string) providerkit.BootstrapStack {
 	return providerkit.BootstrapStack{
 		Name:          stackNameOf(class, feature),
 		Feature:       feature,
 		Present:       true,
 		Schema:        b.schema,
 		DigestCurrent: !b.behind[feature],
-		Writer:        b.writer,
+		WrittenBy:     b.writer,
 	}
 }
 
-func (b *Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
+func (b *Bootstrap) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
 	described, err := b.Describe(ctx, req.Class)
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -163,13 +163,13 @@ func (b *Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapReques
 	return providerkit.Plan{Groups: groups}, nil
 }
 
-func (b *Bootstrapper) named(described providerkit.Bootstrap) providerkit.Bootstrap {
+func (b *Bootstrap) named(described providerkit.BootstrapReading) providerkit.BootstrapReading {
 	return providerkit.NameStacks(described, b.Catalogue(), func(feature string) string {
 		return stackNameOf(described.Class, feature)
 	})
 }
 
-func (b *Bootstrapper) Apply(_ context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
+func (b *Bootstrap) Apply(_ context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.refusal != nil {
@@ -178,13 +178,13 @@ func (b *Bootstrapper) Apply(_ context.Context, req providerkit.BootstrapRequest
 	b.requests = append(b.requests, req)
 	b.applied[req.Class] = slices.Clone(req.Features)
 	b.behind = map[string]bool{}
-	if report != nil {
-		report.Say("bootstrapped " + string(req.Class))
+	if progress != nil {
+		progress.Say("bootstrapped " + string(req.Class))
 	}
 	return nil
 }
 
-func (b *Bootstrapper) PlanRemoval(_ context.Context, class providerkit.Class) (providerkit.Plan, error) {
+func (b *Bootstrap) PlanRemove(_ context.Context, class providerkit.Class) (providerkit.Plan, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	features, present := b.applied[class]
@@ -222,7 +222,7 @@ func (b *Bootstrapper) PlanRemoval(_ context.Context, class providerkit.Class) (
 	return plan, nil
 }
 
-func (b *Bootstrapper) standingEdges() []edge.Kind {
+func (b *Bootstrap) standingEdges() []edge.Kind {
 	if b.standing != nil {
 		return b.standing
 	}
@@ -232,17 +232,17 @@ func (b *Bootstrapper) standingEdges() []edge.Kind {
 	return []edge.Kind{b.front}
 }
 
-func (b *Bootstrapper) Remove(_ context.Context, class providerkit.Class, report providerkit.Reporter) error {
+func (b *Bootstrap) Remove(_ context.Context, class providerkit.Class, progress providerkit.Progress) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	delete(b.applied, class)
-	if report != nil {
-		report.Say("removed " + string(class))
+	if progress != nil {
+		progress.Say("removed " + string(class))
 	}
 	return nil
 }
 
-type Releaser struct {
+type Stacks struct {
 	Grants []providerkit.Grant
 
 	artifacts providerkit.ArtifactStore
@@ -256,36 +256,36 @@ type Releaser struct {
 	entered func(providerkit.StackPlan) error
 }
 
-func NewReleaser(artifacts providerkit.ArtifactStore) *Releaser {
-	return &Releaser{artifacts: artifacts, stacks: map[string]providerkit.StackResult{}}
+func NewStacks(artifacts providerkit.ArtifactStore) *Stacks {
+	return &Stacks{artifacts: artifacts, stacks: map[string]providerkit.StackResult{}}
 }
 
-func (r *Releaser) journalling(journal *Journal) *Releaser {
+func (r *Stacks) journalling(journal *Journal) *Stacks {
 	r.journal = journal
 	return r
 }
 
-func (r *Releaser) Entering(hook func(providerkit.StackPlan) error) {
+func (r *Stacks) Entering(hook func(providerkit.StackPlan) error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.entered = hook
 }
 
-func (r *Releaser) Plans() []providerkit.StackPlan {
+func (r *Stacks) Plans() []providerkit.StackPlan {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.plans)
 }
 
-func (r *Releaser) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.Plan, error) {
+func (r *Stacks) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Progress) (providerkit.Plan, error) {
 	return providerkit.SynthesizedPlan(ctx, r.artifacts, plan, r.State(plan.Ref).Result)
 }
 
-func (r *Releaser) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Reporter) (providerkit.Plan, error) {
+func (r *Stacks) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Progress) (providerkit.Plan, error) {
 	return providerkit.SynthesizedRemoval(ref, r.State(ref).Result), nil
 }
 
-func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
+func (r *Stacks) Provision(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
 	if err := ctx.Err(); err != nil {
 		return providerkit.StackResult{}, err
 	}
@@ -297,10 +297,10 @@ func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, re
 			return providerkit.StackResult{}, err
 		}
 	}
-	if err := plan.Images.Ship(ctx, report); err != nil {
+	if err := plan.Images.Ship(ctx, progress); err != nil {
 		return providerkit.StackResult{}, err
 	}
-	if err := providerkit.ShipUploads(ctx, r.artifacts, plan.Uploads, report); err != nil {
+	if err := providerkit.ShipUploads(ctx, r.artifacts, plan.Uploads, progress); err != nil {
 		return providerkit.StackResult{}, err
 	}
 	result := providerkit.StackResult{}
@@ -327,19 +327,19 @@ func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, re
 	defer r.mu.Unlock()
 	r.plans = append(r.plans, plan)
 	r.stacks[stackKey(plan.Ref)] = result
-	if report != nil {
-		report.Say("provisioned " + plan.Ref.Name.String())
+	if progress != nil {
+		progress.Say("provisioned " + plan.Ref.Name.String())
 	}
 	return result, nil
 }
 
-func (r *Releaser) RefuseNextDestroy(err error) {
+func (r *Stacks) RefuseNextDestroy(err error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.refusal = err
 }
 
-func (r *Releaser) Destroy(_ context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
+func (r *Stacks) Destroy(_ context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
 	r.journal.note("destroy " + ref.Name.String())
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -349,13 +349,13 @@ func (r *Releaser) Destroy(_ context.Context, ref providerkit.StackRef, report p
 		return refused
 	}
 	delete(r.stacks, stackKey(ref))
-	if report != nil {
-		report.Say("destroyed " + ref.Name.String())
+	if progress != nil {
+		progress.Say("destroyed " + ref.Name.String())
 	}
 	return nil
 }
 
-func (r *Releaser) State(ref providerkit.StackRef) providerkit.StackState {
+func (r *Stacks) State(ref providerkit.StackRef) providerkit.StackState {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	result, present := r.stacks[stackKey(ref)]
@@ -402,13 +402,13 @@ func StoodUpContainers(plan providerkit.StackPlan) []providerkit.AppContainer {
 	}}
 }
 
-func (r *Releaser) tookDown(names ...string) {
+func (r *Stacks) tookDown(names ...string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.taken = append(r.taken, names...)
 }
 
-func (r *Releaser) TakenDown() []string {
+func (r *Stacks) TakenDown() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.taken)

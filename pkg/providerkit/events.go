@@ -106,7 +106,7 @@ func streamed(
 	stream *connect.ServerStream[progressv1.OperationEvent],
 	unit, title string,
 	phase progressv1.Phase,
-	do func(*eventSender, Reporter) error,
+	do func(*eventSender, Progress) error,
 ) error {
 	return streamResult(ctx, stream, func(sender *eventSender) (*progressv1.OperationEvent, error) {
 		if err := inUnit(sender, unit, title, phase, do); err != nil {
@@ -120,11 +120,11 @@ func inUnit(
 	sender *eventSender,
 	unit, title string,
 	phase progressv1.Phase,
-	do func(*eventSender, Reporter) error,
+	do func(*eventSender, Progress) error,
 ) error {
 	return newStageScope(sender).unit(UnitStage(unit, title), func(u *unitRun) error {
-		return u.phase(phase, func(report Reporter) error {
-			return do(sender, report)
+		return u.phase(phase, func(progress Progress) error {
+			return do(sender, progress)
 		})
 	})
 }
@@ -139,7 +139,7 @@ type reporter struct {
 	stage  Stage
 }
 
-func newReporter(sender *eventSender, stage Stage) Reporter {
+func newProgress(sender *eventSender, stage Stage) Progress {
 	return &reporter{sender: sender, tracer: newEventTracer(sender), stage: stage}
 }
 
@@ -199,7 +199,11 @@ func logEvent(id StageID, message string) *progressv1.OperationEvent {
 }
 
 func refusedRequest(err error) bool {
-	return connect.CodeOf(err) == connect.CodeInvalidArgument
+	switch connect.CodeOf(err) {
+	case connect.CodeInvalidArgument, connect.CodeUnimplemented:
+		return true
+	}
+	return false
 }
 
 func failureResult(err error) *progressv1.OperationEvent {

@@ -36,7 +36,7 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPr
 }
 
 func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre providerkit.DeployPreflight) error {
-	if pre.Edge == "" || pre.Report == nil {
+	if pre.Edge == "" || pre.Progress == nil {
 		return nil
 	}
 	params, err := p.classParams(ctx, pre.Plan.Class, pre.Edge)
@@ -47,7 +47,7 @@ func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre providerkit.DeployPr
 		return nil
 	}
 	if notice := bootstrap.StaleEdgeKeyNotice(params.EdgeCredentials, time.Now(), string(pre.Plan.Class)); notice != "" {
-		pre.Report.Detail(notice)
+		pre.Progress.Detail(notice)
 	}
 	return nil
 }
@@ -61,7 +61,7 @@ func (p *Provider) refuseUnreadableOriginSecret(ctx context.Context, pre provide
 }
 
 func (p *Provider) nagStaleOriginSecret(ctx context.Context, pre providerkit.DeployPreflight) error {
-	if pre.Report == nil {
+	if pre.Progress == nil {
 		return nil
 	}
 	params, err := p.classParams(ctx, pre.Plan.Class, pre.Edge)
@@ -69,7 +69,7 @@ func (p *Provider) nagStaleOriginSecret(ctx context.Context, pre providerkit.Dep
 		return err
 	}
 	if notice := bootstrap.StaleOriginSecretNotice(params.OriginSecret, time.Now(), string(pre.Plan.Class)); notice != "" {
-		pre.Report.Detail(notice)
+		pre.Progress.Detail(notice)
 	}
 	return nil
 }
@@ -88,8 +88,8 @@ func (p *Provider) publishRuntimeLayers(ctx context.Context, pre providerkit.Dep
 		Store: s3.NewFromConfig(p.aws),
 	}, p.namespace, string(class), bootstrap.RuntimeLayerRequest{
 		ArtifactBucket: held.ArtifactBucket,
-		Writer:         pre.Writer,
-	}, saying(pre.Report))
+		Writer:         pre.WrittenBy,
+	}, saying(pre.Progress))
 	if err != nil {
 		return err
 	}
@@ -99,11 +99,11 @@ func (p *Provider) publishRuntimeLayers(ctx context.Context, pre providerkit.Dep
 	return nil
 }
 
-func saying(report providerkit.Reporter) func(string) {
-	if report == nil {
+func saying(progress providerkit.Progress) func(string) {
+	if progress == nil {
 		return nil
 	}
-	return report.Say
+	return progress.Say
 }
 
 func refuseContainersBehindFunctionEdge(pre providerkit.DeployPreflight) error {

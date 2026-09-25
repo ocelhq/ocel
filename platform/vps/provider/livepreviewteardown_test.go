@@ -128,7 +128,7 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 			HealthCheckPath: healthPath,
 		},
 	}
-	stood, err := p.Releases().Provision(ctx, plan, nil)
+	stood, err := p.Stacks().Provision(ctx, plan, nil)
 	if err != nil {
 		t.Fatalf("Provision(%s) = %v", pointer, err)
 	}
@@ -141,7 +141,7 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 		Release:    build.Release().String(),
 		Identity:   build.String(),
 		Containers: stood.Containers,
-		Writer:     providerkit.WriterFor(""),
+		WrittenBy:  providerkit.WrittenByVersion(""),
 	}); err != nil {
 		t.Fatalf("WriteStack(%s): %v", pointer, err)
 	}
@@ -157,7 +157,7 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 	}
 	if err := stack.Promote(ctx, edge.Promotion{
 		PromotionID: "p-" + pointer, Ts: at, Builds: map[string]string{app: build.String()},
-	}, pointer, edge.DiscardReporter()); err != nil {
+	}, pointer, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", pointer, err)
 	}
 }
@@ -175,7 +175,7 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 		t.Fatalf("ReclaimPreview(%s) = %v", pointer, err)
 	}
 	infra := providerkit.StackRef{Project: teardownSlug, Class: providerkit.ClassPreview, Name: naming.InfraStack(pointer)}
-	if err := p.Releases().Destroy(ctx, infra, spoken); err != nil {
+	if err := p.Stacks().Destroy(ctx, infra, spoken); err != nil {
 		t.Fatalf("Destroy(%s) = %v: an ephemeral preview stands up no infra stack, and teardown destroys one regardless", infra.Name, err)
 	}
 	return spoken

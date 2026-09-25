@@ -36,20 +36,20 @@ func RunPorts(t *testing.T, provider providerkit.Provider) {
 	t.Helper()
 
 	t.Run("RecordStore", func(t *testing.T) { RunRecordStore(t, provider.Records()) })
-	t.Run("Sealer", func(t *testing.T) { RunSealer(t, provider.Sealer()) })
+	t.Run("Cipher", func(t *testing.T) { RunCipher(t, provider.Cipher()) })
 	t.Run("ArtifactStore", func(t *testing.T) { RunArtifactStore(t, provider.Artifacts()) })
-	t.Run("Releaser", func(t *testing.T) {
-		RunReleaser(t, provider.Releases(), provider.Artifacts(), provider.Records(), provider.Facts().Bindings)
+	t.Run("Stacks", func(t *testing.T) {
+		RunStacks(t, provider.Stacks(), provider.Artifacts(), provider.Records(), provider.Facts().Bindings)
 	})
-	t.Run("Bootstrapper", func(t *testing.T) {
-		RunBootstrapper(t, bootstrapperOf(t, provider), provider.Edges().Default())
+	t.Run("Bootstrap", func(t *testing.T) {
+		RunBootstrap(t, bootstrapOf(t, provider), provider.Edges().Default())
 	})
 	t.Run("Credentials", func(t *testing.T) { RunCredentials(t, provider.Credentials()) })
-	t.Run("EdgeRegistry", func(t *testing.T) { RunEdgeRegistry(t, provider.Edges()) })
-	t.Run("DNSRegistry", func(t *testing.T) { RunDNSRegistry(t, provider.DNS()) })
+	t.Run("Edges", func(t *testing.T) { RunEdges(t, provider.Edges()) })
+	t.Run("DNS", func(t *testing.T) { RunDNS(t, provider.DNS()) })
 }
 
-func bootstrapperOf(t *testing.T, provider providerkit.Provider) providerkit.Bootstrapper {
+func bootstrapOf(t *testing.T, provider providerkit.Provider) providerkit.Bootstrap {
 	t.Helper()
 	bootstrapper, err := provider.Bootstrap(provider.Edges().Default())
 	if err != nil {
@@ -248,7 +248,7 @@ func RunRecordStore(t *testing.T, records providerkit.RecordStore) {
 	})
 }
 
-func RunSealer(t *testing.T, sealer providerkit.Sealer) {
+func RunCipher(t *testing.T, sealer providerkit.Cipher) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -293,7 +293,7 @@ func RunSealer(t *testing.T, sealer providerkit.Sealer) {
 	}
 }
 
-func RunBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper, kind edge.Kind) {
+func RunBootstrap(t *testing.T, bootstrapper providerkit.Bootstrap, kind edge.Kind) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -431,7 +431,7 @@ func RunBootstrapper(t *testing.T, bootstrapper providerkit.Bootstrapper, kind e
 			}
 		}
 
-		removal, err := bootstrapper.PlanRemoval(ctx, class)
+		removal, err := bootstrapper.PlanRemove(ctx, class)
 		if err != nil {
 			t.Fatalf("PlanRemoval() = %v", err)
 		}
@@ -763,7 +763,7 @@ func (c *countedImages) Destination() string { return "the counted store" }
 
 func (c *countedImages) Has(context.Context, providerkit.ImagePush) (bool, error) { return false, nil }
 
-func (c *countedImages) Push(_ context.Context, _ providerkit.ImagePush, _ providerkit.Reporter) error {
+func (c *countedImages) Push(_ context.Context, _ providerkit.ImagePush, _ providerkit.Progress) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.pushed++
@@ -792,7 +792,7 @@ func writtenArtifact(t *testing.T) string {
 	return path
 }
 
-func RunReleaser(t *testing.T, releaser providerkit.Releaser, artifacts providerkit.ArtifactStore, records providerkit.RecordStore, serves []providerkit.BindingType) {
+func RunStacks(t *testing.T, releaser providerkit.Stacks, artifacts providerkit.ArtifactStore, records providerkit.RecordStore, serves []providerkit.BindingType) {
 	t.Helper()
 
 	ctx := context.Background()

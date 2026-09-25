@@ -106,12 +106,12 @@ func TestTheConnectorOnABoxYourProxyFrontsSaysWhatToRouteToIt(t *testing.T) {
 	stood := &claimBench{bench: machine(nil), held: string(mustWrite(t, routed()))}
 	absent := ""
 	stood.answer = servesPair(stood.bench, &stood.held, &absent)
-	report := &said{}
-	if _, err := NewConnector(stood.fronted(routedByHand())).Install(context.Background(), "box.example.com", []byte("a connector"), connectorConfig(), report); err != nil {
+	progress := &said{}
+	if _, err := NewConnector(stood.fronted(routedByHand())).Install(context.Background(), "box.example.com", []byte("a connector"), connectorConfig(), progress); err != nil {
 		t.Fatalf("Install() = %v", err)
 	}
-	if want := manual.Route("box.example.com", manual.DefaultPort); report.at(want) < 0 {
-		t.Errorf("the install said %q, want %q: the console reaches the connector through your proxy", report.lines, want)
+	if want := manual.Route("box.example.com", manual.DefaultPort); progress.at(want) < 0 {
+		t.Errorf("the install said %q, want %q: the console reaches the connector through your proxy", progress.lines, want)
 	}
 }
 
@@ -138,8 +138,8 @@ func TestABootstrapRecordsWhichProxyFrontsTheBoxAndWhoSetIt(t *testing.T) {
 	class := providerkit.ClassProduction
 	stood := settledOn(t, class)
 	stood.stands[class] = unrecorded(stood, class)
-	if err := Bootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
-		providerkit.BootstrapRequest{Class: class, Writer: "the-suite"}, nil); err != nil {
+	if err := NewBootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
+		providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	at := stood.at("/dev/stdin " + quoted(FrontRecordPath))
@@ -160,8 +160,8 @@ func TestABootstrapLeavesARecordThatAgreesAsItStands(t *testing.T) {
 	class := providerkit.ClassPreview
 	stood := settledOn(t, class)
 	recordOn(t, stood, class, Front{}, "blog")
-	if err := Bootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
-		providerkit.BootstrapRequest{Class: class, Writer: "the-suite"}, nil); err != nil {
+	if err := NewBootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
+		providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	if at := stood.at("/dev/stdin " + quoted(FrontRecordPath)); at >= 0 {
@@ -175,7 +175,7 @@ func TestABootstrapWhoseProxyTheBoxDoesNotRouteThroughIsRefusedWithWhatToWrite(t
 	class := providerkit.ClassProduction
 	stood := settledOn(t, class)
 	recordOn(t, stood, class, routedByHand(), "blog")
-	_, err := Bootstrap(stood.host(), testVendor, "shop").Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
+	_, err := NewBootstrap(stood.host(), testVendor, "shop").Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
 	refused := refusal(t, err, providerkit.CodeInvalid)
 	for _, wanted := range []string{"a proxy you route yourself", "set by blog/production", "add `\"proxy\": \"manual\"`"} {
 		if !strings.Contains(refused.Message, wanted) {
@@ -247,7 +247,7 @@ func TestTheLastClassToGoTakesTheRecordWithIt(t *testing.T) {
 	class := providerkit.ClassProduction
 	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
 	recordOn(t, stood, class, Front{}, "shop")
-	plan, err := Bootstrap(stood.host(), testVendor, "shop").PlanRemoval(context.Background(), class)
+	plan, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), class)
 	if err != nil {
 		t.Fatalf("PlanRemoval() = %v", err)
 	}
@@ -275,9 +275,9 @@ func TestABootstrapUnderAProxyRoutedByHandOntoABoxOcelsOwnProxyFrontsUnrecordedI
 	class := providerkit.ClassProduction
 	stood := settledOn(t, class)
 	stood.stands[class] = unrecorded(stood, class)
-	boot := Bootstrap(stood.fronted(routedByHand()), testVendor, "shop")
+	boot := NewBootstrap(stood.fronted(routedByHand()), testVendor, "shop")
 	_, planned := boot.Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
-	applied := boot.Apply(context.Background(), providerkit.BootstrapRequest{Class: class, Writer: "the-suite"}, nil)
+	applied := boot.Apply(context.Background(), providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil)
 	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
 		refused := refusal(t, err, providerkit.CodeInvalid)
 		for _, wanted := range []string{"ocel's own proxy", "remove `\"proxy\"`"} {
@@ -301,7 +301,7 @@ func TestABootstrapOverADeletedRecordPlansItAsDriftAndWritesItBack(t *testing.T)
 	class := providerkit.ClassProduction
 	stood := settledOn(t, class)
 	stood.stands[class] = unrecorded(stood, class)
-	boot := Bootstrap(stood.host(), testVendor, "shop")
+	boot := NewBootstrap(stood.host(), testVendor, "shop")
 	described, err := boot.Describe(context.Background(), class)
 	if err != nil {
 		t.Fatalf("Describe() = %v", err)
@@ -328,7 +328,7 @@ func TestABootstrapOfAFreshBoxUnderAProxyRoutedByHandPlansItsRecord(t *testing.T
 	fresh.answer = func(command string) (session.Result, bool) {
 		return session.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
 	}
-	plan, err := Bootstrap(fresh.fronted(routedByHand()), testVendor, "shop").Plan(context.Background(),
+	plan, err := NewBootstrap(fresh.fronted(routedByHand()), testVendor, "shop").Plan(context.Background(),
 		providerkit.BootstrapRequest{Class: providerkit.ClassProduction})
 	if err != nil {
 		t.Fatalf("Plan() = %v, want a fresh box, where nothing of ocel's stands, free to take a proxy routed by hand", err)

@@ -32,7 +32,7 @@ type Provider struct {
 	pull   func(ctx context.Context, ref string) (v1.Image, error)
 	pulled sync.Map
 
-	providerkit.Liveness
+	providerkit.NetLiveness
 }
 
 func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
@@ -104,22 +104,22 @@ func (p *Provider) resourceHooks() resources.Hooks {
 	}
 }
 
-func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {
+func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrap, error) {
 	if _, err := p.Edges().Open(kind); err != nil {
 		return nil, err
 	}
 	return bootstrapGate{p: p}, nil
 }
 
-func (p *Provider) Releases() providerkit.Releaser {
-	return resources.Releaser(p.Records(), p.Artifacts(), p.resourceHooks())
+func (p *Provider) Stacks() providerkit.Stacks {
+	return resources.Stacks(p.Records(), p.Artifacts(), p.resourceHooks())
 }
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore { return artifacts{p: p} }
 
 func (p *Provider) Records() providerkit.RecordStore { return records{p: p} }
 
-func (p *Provider) Sealer() providerkit.Sealer { return sealer{p: p} }
+func (p *Provider) Cipher() providerkit.Cipher { return cipher{p: p} }
 
 func (p *Provider) Credentials() providerkit.Credentials {
 	return Credentials{
@@ -131,7 +131,7 @@ func (p *Provider) Credentials() providerkit.Credentials {
 	}
 }
 
-func (p *Provider) Edges() providerkit.EdgeRegistry {
+func (p *Provider) Edges() providerkit.Edges {
 	return edges{
 		namespace: p.namespace,
 		records:   p.Records(),
@@ -144,9 +144,12 @@ func (p *Provider) Edges() providerkit.EdgeRegistry {
 	}
 }
 
-func (p *Provider) DNS() providerkit.DNSRegistry { return dns{} }
+func (p *Provider) DNS() providerkit.DNS { return dns{} }
 
-var (
-	_ providerkit.Diagnoser         = (*Provider)(nil)
-	_ providerkit.ContainerRuntimer = (*Provider)(nil)
-)
+func (p *Provider) Certificates() providerkit.Certificates { return certificates{p} }
+
+func (p *Provider) Connector() providerkit.Connector { return connector{p} }
+
+func (p *Provider) Runtime() providerkit.Runtime { return containerRuntime{p} }
+
+func (p *Provider) Liveness() providerkit.Liveness { return &p.NetLiveness }

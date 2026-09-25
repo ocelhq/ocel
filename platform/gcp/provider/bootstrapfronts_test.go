@@ -56,10 +56,10 @@ func (f *countingFront) Teardown(_ context.Context, class edge.Class) error {
 	return nil
 }
 
-func fronting(t *testing.T) (bootstrapper, *frontRegistry) {
+func fronting(t *testing.T) (bootstrap, *frontRegistry) {
 	t.Helper()
 	registry := &frontRegistry{front: &countingFront{}}
-	return bootstrapper{fronts: registry}, registry
+	return bootstrap{fronts: registry}, registry
 }
 
 func surveyed(features ...string) survey {
@@ -72,7 +72,7 @@ func surveyed(features ...string) survey {
 	}
 }
 
-func featureStack(described providerkit.Bootstrap, name string) (providerkit.BootstrapStack, bool) {
+func featureStack(described providerkit.BootstrapReading, name string) (providerkit.BootstrapStack, bool) {
 	for _, stack := range described.Stacks {
 		if stack.Feature == name {
 			return stack, true

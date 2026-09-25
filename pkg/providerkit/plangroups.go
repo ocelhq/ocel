@@ -6,7 +6,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func NameStacks(described Bootstrap, catalogue []Feature, name func(feature string) string) Bootstrap {
+func NameStacks(described BootstrapReading, catalogue []Feature, name func(feature string) string) BootstrapReading {
 	held := make(map[string]bool, len(described.Stacks))
 	for _, stack := range described.Stacks {
 		held[stack.Feature] = true
@@ -22,7 +22,7 @@ func NameStacks(described Bootstrap, catalogue []Feature, name func(feature stri
 	return named
 }
 
-func DeriveGroups(described Bootstrap, catalogue []Feature, req BootstrapRequest) []ChangeGroup {
+func DeriveGroups(described BootstrapReading, catalogue []Feature, req BootstrapRequest) []ChangeGroup {
 	standing := make(map[string]BootstrapStack, len(described.Stacks))
 	for _, stack := range described.Stacks {
 		standing[stack.Feature] = stack
@@ -46,7 +46,7 @@ func DeriveGroups(described Bootstrap, catalogue []Feature, req BootstrapRequest
 	return groups
 }
 
-func baselineGroup(described Bootstrap, stack BootstrapStack, class Class) ChangeGroup {
+func baselineGroup(described BootstrapReading, stack BootstrapStack, class Class) ChangeGroup {
 	group := ChangeGroup{Kind: StackGroupKind, Name: stackName(stack, string(class)+" bootstrap")}
 	group.Action, group.Reason = standingAction(stack, described.Present)
 	return group

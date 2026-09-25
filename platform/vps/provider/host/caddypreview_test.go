@@ -306,7 +306,7 @@ func TestDescribingABoxRefusesOnDemandTlsTheSwitchboardDoesNotGuardAndNothingEls
 		stood := claimingBox(t, previewing())
 		config := box.config
 		stood.answer = servesPair(stood.bench, &stood.held, &config)
-		_, err := Bootstrap(stood.host(), testVendor, "shop").described(context.Background(), standingHost())
+		_, err := NewBootstrap(stood.host(), testVendor, "shop").described(context.Background(), standingHost())
 		if refused := err != nil; refused != box.refused {
 			t.Errorf("describing %s = %v: a config that may order a certificate without the switchboard's word spends the box's CA allowance on any name pointed at it, and a config loader serves whatever it fetches, so `ocel doctor` and the bootstrap refuse either; every other difference is a rendering the next write puts back from %s, and refusing it locks the box out of the write that would", what, err, live.RoutingTable)
 		}
@@ -332,7 +332,7 @@ func TestDescribingABoxBeforeItHoldsARoutingTableStillRefusesUnguardedOnDemandTl
 		absent := ""
 		config := box.config
 		stood.answer = servesPair(stood, &absent, &config)
-		_, err := Bootstrap(stood.host(), testVendor, "shop").described(context.Background(), read)
+		_, err := NewBootstrap(stood.host(), testVendor, "shop").described(context.Background(), read)
 		if refused := err != nil; refused != box.refused {
 			t.Errorf("describing a box bootstrapped before its routing table, holding %s = %v, want it described so the plan can seed the table, unless its proxy may order without the switchboard's word", what, err)
 		}

@@ -162,16 +162,16 @@ func TestAClassDestroyTakesTheContainersAndNetworksItLabelledAndTheProxyOffThemF
 		}
 		return session.Result{}, false
 	}
-	report := &said{}
-	if err := Bootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, report); err != nil {
+	progress := &said{}
+	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, progress); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	for _, taken := range []string{
 		"removed " + KindApps + " " + classSelector(class),
 		"removed " + KindAppNetworks + " " + classSelector(class),
 	} {
-		if !slices.Contains(report.lines, taken) {
-			t.Errorf("Remove() never said %q:\n%s", taken, strings.Join(report.lines, "\n"))
+		if !slices.Contains(progress.lines, taken) {
+			t.Errorf("Remove() never said %q:\n%s", taken, strings.Join(progress.lines, "\n"))
 		}
 	}
 	containers := stood.at("xargs -r docker rm --force")
@@ -196,7 +196,7 @@ func TestAClassRunningNothingPlansNoContainerOrNetworkRemoval(t *testing.T) {
 
 	class := providerkit.ClassProduction
 	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
-	plan, err := Bootstrap(stood.host(), testVendor, "shop").PlanRemoval(context.Background(), class)
+	plan, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), class)
 	if err != nil {
 		t.Fatalf("PlanRemoval() = %v", err)
 	}

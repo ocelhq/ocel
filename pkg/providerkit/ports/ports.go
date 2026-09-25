@@ -100,7 +100,7 @@ func Forget(ctx context.Context, records RecordStore, name RecordName) error {
 
 const forgetAttempts = 5
 
-type Sealer interface {
+type Cipher interface {
 	Seal(ctx context.Context, at Coordinate, plaintext []byte) ([]byte, error)
 
 	Open(ctx context.Context, at Coordinate, sealed []byte) ([]byte, error)
