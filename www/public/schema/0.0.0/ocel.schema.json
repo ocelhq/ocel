@@ -251,7 +251,7 @@
                       },
                       "tls": {
                         "additionalProperties": false,
-                        "description": "How the connection is encrypted. Left off, it is not.",
+                        "description": "How the connection is encrypted. Left off, each client library connects as it does by default.",
                         "properties": {
                           "ca": {
                             "additionalProperties": false,
@@ -424,7 +424,7 @@
                           },
                           "tls": {
                             "additionalProperties": false,
-                            "description": "How the connection is encrypted. Left off, it is not.",
+                            "description": "How the connection is encrypted. Left off, each client library connects as it does by default.",
                             "properties": {
                               "ca": {
                                 "additionalProperties": false,
@@ -593,7 +593,7 @@
                           },
                           "tls": {
                             "additionalProperties": false,
-                            "description": "How the connection is encrypted. Left off, it is not.",
+                            "description": "How the connection is encrypted. Left off, each client library connects as it does by default.",
                             "properties": {
                               "ca": {
                                 "additionalProperties": false,
