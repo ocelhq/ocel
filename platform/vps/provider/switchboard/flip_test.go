@@ -156,17 +156,19 @@ func TestADrainIsAcknowledgedOnlyOnceTheLastRequestOnTheRetireeHasReturned(t *te
 	<-blue.arrived
 
 	var told drains
+	var released atomic.Bool
+	early := make(chan string, 1)
 	flipped := make(chan error, 1)
 	go func() {
-		flipped <- board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue.address}, 30*time.Second, told.tell)
+		flipped <- board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue.address}, 30*time.Second, func(drain switchboard.Drain) {
+			if !released.Load() {
+				early <- drain.String()
+			}
+			told.tell(drain)
+		})
 	}()
-	time.Sleep(500 * time.Millisecond)
-	if lines := told.lines(); len(lines) != 0 {
-		t.Fatalf("the flip told %v while a request was still open on the retiree, want nothing yet", lines)
-	}
-	if said := ask(t, http.DefaultClient, at, "shop.example.com", "/"); said.body != "green" {
-		t.Errorf("a request during the drain was served by %q, want green: the switch is made before the drain starts", said.body)
-	}
+	switchedTo(t, at, "shop.example.com", "green")
+	released.Store(true)
 	close(blue.release)
 	if said := <-held; said.status != http.StatusOK || said.body != "blue" {
 		t.Errorf("the held request answered %d %q, want the retiree's own 200 once it returned", said.status, said.body)
@@ -181,6 +183,11 @@ func TestADrainIsAcknowledgedOnlyOnceTheLastRequestOnTheRetireeHasReturned(t *te
 	}
 	if lines := told.lines(); !slices.Equal(lines, []string{caddyadmin.Drained + " " + blue.address}) {
 		t.Errorf("the flip told %v, want %s drained", lines, blue.address)
+	}
+	select {
+	case line := <-early:
+		t.Errorf("the flip told %q while a request was still open on the retiree, want nothing until it returned", line)
+	default:
 	}
 }
 

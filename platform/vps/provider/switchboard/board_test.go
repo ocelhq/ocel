@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -105,6 +106,16 @@ func ask(t *testing.T, client *http.Client, at, host, path string, headers ...st
 		t.Errorf("GET %s%s: %v", host, path, err)
 	}
 	return answered{status: response.StatusCode, body: string(body), header: response.Header}
+}
+
+func switchedTo(t *testing.T, at, host, want string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for said := ask(t, http.DefaultClient, at, host, "/"); said.body != want; said = ask(t, http.DefaultClient, at, host, "/") {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s still answered %q after five seconds, want %q", host, said.body, want)
+		}
+	}
 }
 
 func TestAClaimedHostnameIsServedByItsUpstreamUnderItsOwnHostAndNamesTheBox(t *testing.T) {

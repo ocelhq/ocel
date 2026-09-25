@@ -455,7 +455,13 @@ func TestServeStopsOnItsContextAndLetsARequestInFlightFinishWithinTheGrace(t *te
 	}()
 	<-held
 	stood.stop()
-	time.Sleep(100 * time.Millisecond)
+	deadline := time.Now().Add(5 * time.Second)
+	for conn, err := net.Dial("tcp", stood.data); err == nil; conn, err = net.Dial("tcp", stood.data) {
+		_ = conn.Close()
+		if time.Now().After(deadline) {
+			t.Fatalf("serve still takes connections on %s five seconds after it was told to stop", stood.data)
+		}
+	}
 	close(release)
 	if body := <-answered; body != "slow" {
 		t.Errorf("the request in flight when serve was told to stop answered %q, want its upstream's answer", body)
