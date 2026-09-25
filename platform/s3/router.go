@@ -21,7 +21,7 @@ type router struct {
 
 var _ bucketv1connect.BucketServiceHandler = (*router)(nil)
 
-func Route(own bucketv1connect.BucketServiceHandler, bound ...*Service) bucketv1connect.BucketServiceHandler {
+func route(own bucketv1connect.BucketServiceHandler, bound ...*Service) bucketv1connect.BucketServiceHandler {
 	return &router{own: own, bound: func() ([]*Service, error) { return bound, nil }}
 }
 
@@ -36,11 +36,11 @@ func RouteRecords(own bucketv1connect.BucketServiceHandler, records Records, cal
 		if held == read && built != nil {
 			return built, nil
 		}
-		backends, _, err := Backends(records, callbacks)
+		fresh, err := backends(records, callbacks)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 		}
-		read, built = held, backends
+		read, built = held, fresh
 		return built, nil
 	}}
 }
