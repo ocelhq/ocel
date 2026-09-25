@@ -67,7 +67,7 @@ func (r *router) forBucket(name string) (bucketv1connect.BucketServiceHandler, e
 		}
 	}
 	if r.own == nil {
-		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("this app was granted no bucket called %q", name))
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this runtime has no bucket store of its own and serves only buckets bound to a store by endpoint, and %q is not one: bind it with an endpoint under `bindings.bucket`", name))
 	}
 	return r.own, nil
 }
