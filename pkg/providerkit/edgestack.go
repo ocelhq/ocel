@@ -71,9 +71,6 @@ func (h *handlers) removalEdge(provider Provider, state EdgeStackState, sel *con
 func dnsFor(provider Provider, front edge.Edge, sel *contractv1.EdgeSelection) (edge.DNSWriter, error) {
 	kind := DNSKind(sel.GetDns().GetKind())
 	if kind == "" {
-		kind = provider.DNS().Default()
-	}
-	if kind == "" {
 		return nil, nil
 	}
 	return provider.DNS().Open(kind, sel.GetDns().GetZone(), front.Kind())

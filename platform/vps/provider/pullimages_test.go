@@ -454,12 +454,8 @@ func TestThePullNamesTheMachineRatherThanTheRegistry(t *testing.T) {
 	server, _ := standingRegistry(t)
 	store := pulling(t, &box{}, aTarget(server))
 
-	named, says := store.(providerkit.ImageDestination)
-	if !says {
-		t.Fatal("the pulling store does not say where the image lands, so a deploy reports the registry as though it were the destination")
-	}
-	if got := named.ImageDestination(); got != "box.invalid" {
-		t.Errorf("ImageDestination() = %q, want the machine the image lands on", got)
+	if got := store.Destination(); got != "box.invalid" {
+		t.Errorf("Destination() = %q, want the machine the image lands on", got)
 	}
 }
 

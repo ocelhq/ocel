@@ -37,7 +37,7 @@ func runCost(t *testing.T, suite Suite) {
 	vendor := ""
 	if suite.New != nil {
 		if held, err := suite.New(context.Background(), providerkit.Settings{Options: suite.Options}); err == nil {
-			vendor = string(held.Vendor())
+			vendor = string(held.Facts().Vendor)
 		}
 	}
 	RunCost(t, provider, costv1connect.NewCostServiceClient(server.Client(), server.URL), vendor)

@@ -95,32 +95,6 @@ func TestAServerlessAppIsNotHeldToTheContainerReservation(t *testing.T) {
 	}
 }
 
-func TestEveryValueClassIsDeliveredUnderItsBareNameToAContainerTheProviderBakes(t *testing.T) {
-	req := namingARegistry(containerDeployRequest("/healthz"))
-	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "REGION", "eu-west-1")
-	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, "API_TOKEN", "sensitive-token")
-	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, "DATABASE_URL", "")
-
-	delivered := deliveredBy(t, req, func(p *fake.Provider) {
-		sealValue(t, p, "DATABASE_URL", "postgres://sealed")
-	})
-
-	for key, want := range map[string]string{
-		"REGION":       "eu-west-1",
-		"API_TOKEN":    "sensitive-token",
-		"DATABASE_URL": "postgres://sealed",
-	} {
-		if delivered[key] != want {
-			t.Errorf("a container is handed %s=%q, want %q under its bare name", key, delivered[key], want)
-		}
-	}
-	for _, mirrored := range []string{"OCEL_VAR_REGION", "OCEL_VAR_API_TOKEN", "OCEL_VAR_DATABASE_URL"} {
-		if _, held := delivered[mirrored]; held {
-			t.Errorf("a container is handed %s as well, and one value under two names doubles what an inspect prints", mirrored)
-		}
-	}
-}
-
 func deliveredByWrapping(t *testing.T, req *contractv1.DeployRequest, publish func(*fake.Provider)) map[string]string {
 	t.Helper()
 	builtProject(t)
@@ -268,30 +242,6 @@ func TestTheDeploymentURLIsDeliveredToAContainerRatherThanRefusedAsAnOcelName(t 
 	}
 }
 
-func TestABindingRecordIsDeliveredUnderTheNameTheSdkReadsItBy(t *testing.T) {
-	req := namingARegistry(containerDeployRequest("/healthz"))
-	req.Manifest.Resources = []*contractv1.ManifestResource{{
-		LogicalName: "orders",
-		Binding:     "orders",
-		Resource:    &resourcesv1.ResourceIdentifier{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders"},
-	}}
-	req.Manifest.Usages = []*contractv1.ManifestUsage{{App: "web", Resource: "orders"}}
-
-	delivered := deliveredBy(t, req, func(p *fake.Provider) {
-		publishRecord(t, p, providerkit.ClassProduction, "terraform", postgresRecord("orders", "terraform"))
-	})
-
-	record := delivered[providerkit.ResourceEnvName(providerkit.BindingPostgres, "orders")]
-	if record == "" {
-		t.Fatalf("a container is handed %v, and nothing under the name the sdk resolves a binding by", delivered)
-	}
-	for _, want := range []string{`"host":"db.example"`, `"password":"hunter2"`, `"port":5432`} {
-		if !strings.Contains(strings.ReplaceAll(record, " ", ""), want) {
-			t.Errorf("the delivered record reads %q and carries no %s, so a client built from it cannot connect", record, want)
-		}
-	}
-}
-
 func TestAServerlessAppIsHandedNothingResolvedAtDeployTime(t *testing.T) {
 	req := declaring(deployRequest(), resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, "DATABASE_URL", "")
 	delivered := deliveredBy(t, req, func(p *fake.Provider) {
@@ -401,19 +351,6 @@ func TestAServerlessAppIsHeldToNeitherReservation(t *testing.T) {
 	result, _ := deploy(t, client, req)
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("a serverless app declaring both = %q: nothing is delivered bare there, so neither name is taken", result.GetError())
-	}
-}
-
-func TestABindingThisDeployProvisionsIsDeliveredAsItsRecordRatherThanAsNothing(t *testing.T) {
-	delivered := deliveredBy(t, namingARegistry(containerDeployRequest("/healthz")), nil)
-
-	name := providerkit.ResourceEnvName(providerkit.BindingPostgres, "orders")
-	record := delivered[name]
-	if record == "" {
-		t.Fatalf("a container is handed %s=%q for a resource this very deploy provisioned, and an app reading it builds a client out of an empty string", name, record)
-	}
-	if !strings.Contains(record, `"orders"`) {
-		t.Errorf("the delivered record reads %q and does not name the resource it stands for", record)
 	}
 }
 

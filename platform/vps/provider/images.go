@@ -25,7 +25,7 @@ func (l loaded) String() string { return "images loaded onto " + l.at }
 
 func (l loaded) GoString() string { return l.String() }
 
-func (l loaded) ImageDestination() string { return l.at }
+func (l loaded) Destination() string { return l.at }
 
 func (l loaded) Has(ctx context.Context, push providerkit.ImagePush) (bool, error) {
 	return l.host.HoldsImage(ctx, push.Target)
@@ -80,7 +80,7 @@ func (p pulled) String() string { return "images pulled onto " + p.at + " from "
 
 func (p pulled) GoString() string { return p.String() }
 
-func (p pulled) ImageDestination() string { return p.at }
+func (p pulled) Destination() string { return p.at }
 
 func (p pulled) Has(ctx context.Context, push providerkit.ImagePush) (bool, error) {
 	return p.host.HoldsImage(ctx, push.Target)

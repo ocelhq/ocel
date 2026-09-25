@@ -88,14 +88,12 @@ func (p *Provider) Images(_ context.Context, target providerkit.RegistryTarget) 
 
 func (p *Provider) Registry() *Images { return p.images }
 
-func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
-
-func (p *Provider) Serves() []providerkit.BindingType {
-	return []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket}
-}
-
-func (p *Provider) Computes() []providerkit.Compute {
-	return []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer}
+func (p *Provider) Facts() providerkit.Facts {
+	return providerkit.Facts{
+		Vendor:   Vendor,
+		Bindings: []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket},
+		Computes: []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer},
+	}
 }
 
 func (p *Provider) Region() string { return p.options.Region }

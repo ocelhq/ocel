@@ -133,6 +133,8 @@ type keptSecret struct{ password string }
 
 func (keptSecret) Has(context.Context, providerkit.ImagePush) (bool, error) { return false, nil }
 
+func (keptSecret) Destination() string { return "the kept registry" }
+
 func (keptSecret) Push(context.Context, providerkit.ImagePush, providerkit.Reporter) error {
 	return nil
 }

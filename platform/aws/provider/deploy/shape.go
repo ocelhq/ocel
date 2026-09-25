@@ -106,7 +106,7 @@ func (s shaper) plain(scope, typ, name string, properties map[string]any) {
 func (s shaper) functions(scope, project string, app providerkit.AppEntry, specs []providerkit.FunctionSpec) error {
 	runtime := app.Manifest.GetRuntime().GetName()
 	if len(specs) == 0 {
-		specs = []providerkit.FunctionSpec{{Name: app.App, URL: true}}
+		specs = []providerkit.FunctionSpec{{Name: app.App}}
 	}
 	for _, spec := range specs {
 		if spec.Runtime.Name == "" {

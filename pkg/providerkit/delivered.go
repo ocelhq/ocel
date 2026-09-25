@@ -23,15 +23,6 @@ func ResourceEnvName(kind BindingType, resource string) string {
 	return naming.ResourceEnvName(WireBindingType(kind), resource)
 }
 
-func (r *deployRun) bakes(compute Compute) bool {
-	return Bakes(r.provider, compute)
-}
-
-func Bakes(provider Provider, compute Compute) bool {
-	_, wraps := provider.(ContainerRuntimer)
-	return imaged(provider, compute) && !wraps
-}
-
 func imaged(provider Provider, compute Compute) bool {
 	switch compute {
 	case ComputeContainer:
@@ -43,56 +34,15 @@ func imaged(provider Provider, compute Compute) bool {
 	return false
 }
 
-func (r *deployRun) deliver(ctx context.Context, entry AppEntry, held AppValues) (map[string]string, error) {
-	compute := entry.Compute()
-	if !imaged(r.provider, compute) {
-		return nil, nil
+func (r *deployRun) deliver(entry AppEntry, held AppValues) map[string]string {
+	if !imaged(r.provider, entry.Compute()) {
+		return nil
 	}
-	delivered := make(map[string]string, len(held.Plain)+len(held.Sensitive)+len(held.Secrets)+len(held.Bindings))
+	delivered := make(map[string]string, len(held.Plain)+len(held.Sensitive)+1)
 	maps.Copy(delivered, held.Plain)
 	maps.Copy(delivered, held.Sensitive)
-	if !r.bakes(compute) {
-		maps.Copy(delivered, held.Injected())
-		return delivered, nil
-	}
-
-	cells := make([]values.Cell, 0, len(held.Secrets))
-	for _, secret := range held.Secrets {
-		cells = append(cells, values.Cell{Folder: secret.Folder, Key: secret.Key})
-	}
-	reader := values.Reader{
-		Records:     r.provider.Records(),
-		Sealer:      r.provider.Sealer(),
-		Scope:       r.scope,
-		Environment: r.plan.bindingEnvironment(),
-	}
-	opened, err := reader.Values(ctx, cells)
-	if err != nil {
-		return nil, err
-	}
-	for _, secret := range held.Secrets {
-		plaintext, found := opened[secret.Key]
-		if !found {
-			return nil, r.refuseUnsetSecret(entry.App, secret.Key)
-		}
-		delivered[secret.Key] = plaintext
-	}
-	for _, binding := range held.Bindings {
-		name := ResourceEnvName(binding.Type, grantedResource(binding))
-		if len(binding.Wire) == 0 {
-			return nil, Refuse(CodeNotReady,
-				"app %s consumes %s, and this deploy resolved no record for it: a container reads a bound resource off %s alone, so handing it an empty one would fail at the app's first connection rather than here",
-				entry.App, binding.Name, name)
-		}
-		if _, taken := delivered[name]; taken {
-			return nil, Refuse(CodeInvalid,
-				"app %s consumes two resources that both reach it as %s, and one would silently take the other's place: rename one of them",
-				entry.App, name)
-		}
-		delivered[name] = string(binding.Wire)
-	}
 	maps.Copy(delivered, held.Injected())
-	return delivered, nil
+	return delivered
 }
 
 func (r *deployRun) refuseUnsetSecret(app, key string) error {

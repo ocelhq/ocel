@@ -192,8 +192,6 @@ type FunctionSpec struct {
 	Env      map[string]string
 	Memory   int
 	Timeout  time.Duration
-
-	URL bool
 }
 
 type StackResult struct {

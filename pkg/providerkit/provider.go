@@ -8,11 +8,7 @@ import (
 )
 
 type Provider interface {
-	Vendor() Vendor
-
-	Serves() []BindingType
-
-	Computes() []Compute
+	Facts() Facts
 
 	Bootstrap(kind edge.Kind) (Bootstrapper, error)
 	Releases() Releaser
@@ -24,6 +20,13 @@ type Provider interface {
 	DNS() DNSRegistry
 
 	Prober
+}
+
+type Facts struct {
+	Vendor            Vendor
+	Bindings          []BindingType
+	Computes          []Compute
+	RendersTransforms bool
 }
 
 type Warmer interface {
@@ -88,24 +91,12 @@ type DeployPreflighter interface {
 	PreflightDeploy(ctx context.Context, pre DeployPreflight) error
 }
 
-type TransformRenderer interface {
-	RendersTransforms()
-}
-
 type StackInspector interface {
 	Inspect(ctx context.Context, ref StackRef) (StackState, error)
 }
 
 type GrantVerifier interface {
 	VerifyGrants(ctx context.Context, binding Binding) error
-}
-
-type ServesFunctionURLs interface {
-	ServesFunctionURLs() bool
-}
-
-type ProxiedBinder interface {
-	Proxied(kind BindingType) bool
 }
 
 type Vendor string

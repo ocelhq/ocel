@@ -272,16 +272,15 @@ func (p *Provider) standing(dial host.Dial) *Provider {
 	return p
 }
 
-func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
-
-func (p *Provider) RendersTransforms() {}
-
 func (p *Provider) Target() Target { return p.options.SSH }
 
-func (p *Provider) Serves() []providerkit.BindingType { return resources.Serves(p) }
-
-func (p *Provider) Computes() []providerkit.Compute {
-	return []providerkit.Compute{providerkit.ComputeContainer}
+func (p *Provider) Facts() providerkit.Facts {
+	return providerkit.Facts{
+		Vendor:            Vendor,
+		Bindings:          resources.Serves(p),
+		Computes:          []providerkit.Compute{providerkit.ComputeContainer},
+		RendersTransforms: true,
+	}
 }
 
 func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrapper, error) {

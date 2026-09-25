@@ -98,7 +98,7 @@ func (h *handlers) PlanRemoveProject(ctx context.Context, req *contractv1.Projec
 
 func (r *projectRemoval) plan() (*planv1.ChangePlan, error) {
 	plan := &planv1.ChangePlan{EdgeKind: string(r.front.Kind()), Subject: r.slug}
-	vendor := string(r.provider.Vendor())
+	vendor := string(r.provider.Facts().Vendor)
 	for _, stack := range r.apps {
 		plan.Groups = append(plan.Groups, &planv1.ChangeGroup{
 			Kind:    StackGroupKind,

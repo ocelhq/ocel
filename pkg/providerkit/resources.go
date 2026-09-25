@@ -19,7 +19,6 @@ type Resource struct {
 	Postgres  *PostgresSpec
 	Bucket    *BucketSpec
 	Container *ContainerSpec
-	Custom    *CustomSpec
 }
 
 type PostgresSpec struct {
@@ -35,11 +34,6 @@ type ContainerSpec struct {
 	Image string
 	Port  int
 	Env   map[string]string
-}
-
-type CustomSpec struct {
-	Type   string
-	Config map[string]any
 }
 
 const (

@@ -63,11 +63,6 @@ var optionalSets = []struct {
 		onPort: func(port any) bool { _, ok := port.(providerkit.GrantVerifier); return ok },
 	},
 	{
-		name:   "ProxiedBinder",
-		onRoot: func(p providerkit.Provider) bool { _, ok := p.(providerkit.ProxiedBinder); return ok },
-		onPort: func(port any) bool { _, ok := port.(providerkit.ProxiedBinder); return ok },
-	},
-	{
 		name:   "DeployPreflighter",
 		onRoot: func(p providerkit.Provider) bool { _, ok := p.(providerkit.DeployPreflighter); return ok },
 		onPort: func(port any) bool { _, ok := port.(providerkit.DeployPreflighter); return ok },
@@ -96,11 +91,6 @@ var optionalSets = []struct {
 		name:   "ImageLoader",
 		onRoot: func(p providerkit.Provider) bool { _, ok := p.(providerkit.ImageLoader); return ok },
 		onPort: func(port any) bool { _, ok := port.(providerkit.ImageLoader); return ok },
-	},
-	{
-		name:   "ServesFunctionURLs",
-		onRoot: func(p providerkit.Provider) bool { _, ok := p.(providerkit.ServesFunctionURLs); return ok },
-		onPort: func(port any) bool { _, ok := port.(providerkit.ServesFunctionURLs); return ok },
 	},
 	{
 		name:   "FunctionImager",

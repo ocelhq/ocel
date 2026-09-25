@@ -7,8 +7,6 @@ import (
 type DNSRegistry interface {
 	Supported() []DNSKind
 
-	Default() DNSKind
-
 	Open(kind DNSKind, zone string, front edge.Kind) (edge.DNSWriter, error)
 }
 

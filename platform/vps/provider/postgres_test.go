@@ -40,7 +40,7 @@ func holdingAPostgres(machine *box) {
 func TestAProviderOverABoxServesPostgres(t *testing.T) {
 	t.Parallel()
 
-	if served := over(&box{}).Serves(); !slices.Contains(served, providerkit.BindingPostgres) {
+	if served := over(&box{}).Facts().Bindings; !slices.Contains(served, providerkit.BindingPostgres) {
 		t.Errorf("Serves() = %v, and a project declaring a postgres is refused at deploy on a box", served)
 	}
 }

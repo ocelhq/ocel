@@ -45,8 +45,6 @@ func (r Registry) Supported() []providerkit.DNSKind {
 	return kinds
 }
 
-func (r Registry) Default() providerkit.DNSKind { return "" }
-
 func (r Registry) Open(kind providerkit.DNSKind, zone string, front edge.Kind) (edge.DNSWriter, error) {
 	if kind == KindRoute53 && front == cloudflare.Kind {
 		return nil, kit.Refuse(kit.CodeInvalid,

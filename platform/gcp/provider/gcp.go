@@ -124,14 +124,14 @@ func (p *Provider) named() (Names, error) {
 
 func (p *Provider) emulated() bool { return p.endpoint != "" }
 
-func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
-
 func (p *Provider) Region() string { return p.options.Region }
 
-func (p *Provider) Serves() []providerkit.BindingType { return resources.Serves(p) }
-
-func (p *Provider) Computes() []providerkit.Compute {
-	return []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer}
+func (p *Provider) Facts() providerkit.Facts {
+	return providerkit.Facts{
+		Vendor:   Vendor,
+		Bindings: resources.Serves(p),
+		Computes: []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer},
+	}
 }
 
 func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {

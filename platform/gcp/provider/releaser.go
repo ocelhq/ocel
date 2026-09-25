@@ -77,7 +77,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 			env:     values,
 			account: account,
 			compute: providerkit.ComputeServerless,
-			public:  spec.URL,
+			public:  true,
 			ingress: ingressFor(factsOf(plan.Edge)),
 			memory:  spec.Memory,
 			timeout: spec.Timeout,
@@ -85,9 +85,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 		if err != nil {
 			return nil, err
 		}
-		if spec.URL {
-			warnPreviewOpen(plan, service, report)
-		}
+		warnPreviewOpen(plan, service, report)
 		standing = append(standing, providerkit.Function{
 			Name: spec.Name, Physical: service, URL: ran.url, Revision: ran.revision,
 		})

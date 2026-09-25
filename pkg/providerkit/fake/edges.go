@@ -466,8 +466,6 @@ func NewDNS() *DNS { return &DNS{writers: map[string]*DNSWriter{}} }
 
 func (d *DNS) Supported() []providerkit.DNSKind { return []providerkit.DNSKind{KindZone} }
 
-func (d *DNS) Default() providerkit.DNSKind { return "" }
-
 func (d *DNS) Open(kind providerkit.DNSKind, zone string, front edge.Kind) (edge.DNSWriter, error) {
 	if kind != KindZone {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,

@@ -22,17 +22,16 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	}
 
 	resp := &contractv1.PreflightResponse{
-		Identity:      &contractv1.Identity{},
-		Computes:      ComputeNames(provider.Computes()),
-		BakedComputes: bakedComputes(provider),
+		Identity: &contractv1.Identity{},
+		Computes: ComputeNames(provider.Facts().Computes),
 	}
 
 	identity, err := provider.Credentials().Whoami(ctx)
 	if err != nil {
-		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(provider.Vendor(), err))
+		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(provider.Facts().Vendor, err))
 		return resp, nil
 	}
-	resp.Identity = IdentityProto(provider.Vendor(), identity)
+	resp.Identity = IdentityProto(provider.Facts().Vendor, identity)
 	if wrapper, wraps := provider.(ContainerRuntimer); wraps {
 		resp.ContainerArchs, err = containerArchs(ctx, wrapper, req.GetContainers())
 		if err != nil {
@@ -102,16 +101,6 @@ func containerArchs(ctx context.Context, wrapper ContainerRuntimer, containers [
 		archs[container.GetApp()] = runs
 	}
 	return archs, nil
-}
-
-func bakedComputes(provider Provider) []string {
-	var baked []string
-	for _, compute := range provider.Computes() {
-		if Bakes(provider, compute) {
-			baked = append(baked, string(compute))
-		}
-	}
-	return baked
 }
 
 func (h *handlers) edgeIdentity(

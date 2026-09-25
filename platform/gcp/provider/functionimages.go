@@ -53,8 +53,6 @@ func pullBase(ctx context.Context, ref string) (v1.Image, error) {
 		remote.WithPlatform(runOn))
 }
 
-func (p *Provider) ServesFunctionURLs() bool { return true }
-
 func (p *Provider) FunctionBase(ctx context.Context, runtime providerkit.Runtime) (v1.Image, error) {
 	if err := runsX8664(runtime.Arch, "the "+runtime.Name+" function"); err != nil {
 		return nil, err
@@ -121,7 +119,4 @@ func runsX8664(arch, what string) error {
 		what, providerkit.Architecture(arch), providerkit.ArchX8664, providerkit.ArchX8664, providerkit.Architecture(arch))
 }
 
-var (
-	_ providerkit.FunctionImager     = (*Provider)(nil)
-	_ providerkit.ServesFunctionURLs = (*Provider)(nil)
-)
+var _ providerkit.FunctionImager = (*Provider)(nil)

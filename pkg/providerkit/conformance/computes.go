@@ -53,5 +53,5 @@ func computesDeclared(t *testing.T, suite Suite) []providerkit.Compute {
 	if err != nil {
 		t.Fatalf("New() error = %v, want a provider to read Computes() from", err)
 	}
-	return provider.Computes()
+	return provider.Facts().Computes
 }

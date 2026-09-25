@@ -167,18 +167,6 @@ func AttrResourceName(name string) Attr {
 	return Attr{Key: AttrKeyResourceName, Value: name}
 }
 
-type Tracer interface {
-	DeclareStages(stages ...Stage)
-	Span(id, parentID StageID, name string, start, end time.Time, err error, attrs ...Attr)
-}
-
-func DeclareStages(t Tracer, stages ...Stage) {
-	if t == nil {
-		return
-	}
-	t.DeclareStages(stages...)
-}
-
 const (
 	ErrorKindCanceled = "canceled"
 	ErrorKindTimeout  = "timeout"

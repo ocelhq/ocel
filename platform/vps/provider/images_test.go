@@ -351,12 +351,8 @@ func TestAnImageTheMachineHoldsIsAnsweredWithoutReadingTheLocalDaemon(t *testing
 
 func TestTheTransferNamesTheMachineRatherThanTheCoordinate(t *testing.T) {
 	store := standing(t, &box{})
-	named, says := store.(providerkit.ImageDestination)
-	if !says {
-		t.Fatal("the direct store does not say where it sends, so a deploy reports the coordinate as though it were a destination")
-	}
-	if got := named.ImageDestination(); got != "box.invalid" {
-		t.Errorf("ImageDestination() = %q, want the machine the image lands on", got)
+	if got := store.Destination(); got != "box.invalid" {
+		t.Errorf("Destination() = %q, want the machine the image lands on", got)
 	}
 }
 
