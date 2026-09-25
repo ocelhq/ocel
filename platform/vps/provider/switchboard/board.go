@@ -4,12 +4,15 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/netip"
+	"os"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -34,6 +37,7 @@ var forwardedKept = []string{"X-Forwarded-Host", "X-Forwarded-Proto"}
 
 type Board struct {
 	table     atomic.Pointer[Table]
+	loading   sync.Mutex
 	trusted   []netip.Prefix
 	ledger    ledger
 	connector string
@@ -88,6 +92,21 @@ func (b *Board) Close() error {
 }
 
 func (b *Board) Grace() time.Duration { return b.table.Load().grace }
+
+func (b *Board) Load(path string) error {
+	b.loading.Lock()
+	defer b.loading.Unlock()
+	document, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	table, err := Read(document)
+	if err != nil {
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	b.table.Store(table)
+	return nil
+}
 
 func (b *Board) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	forward, ok := b.forwarding(r)
