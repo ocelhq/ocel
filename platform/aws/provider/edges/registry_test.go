@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
@@ -20,7 +21,7 @@ import (
 func TestRegistryConformance(t *testing.T) {
 	t.Parallel()
 
-	conformance.RunEdges(t, Registry{})
+	conformance.RunEdges(t, providerkit.Facts{Edges: SupportedEdges(), DefaultEdge: DefaultKind}, Registry{})
 }
 
 func TestIgnoredPinNote(t *testing.T) {

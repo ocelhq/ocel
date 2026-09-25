@@ -983,7 +983,7 @@ func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
 			Name:      fn.GetLogicalName(),
 			Route:     fn.GetRouteId(),
 			Handler:   fn.GetHandler(),
-			Framework: Framework{Name: fn.GetFramework().GetName(), Arch: fn.GetFramework().GetArch()},
+			Framework: frameworkOf(fn),
 			Artifact:  artifact,
 			Image:     r.functionImage(fn.GetLogicalName()),
 		})
@@ -1131,8 +1131,8 @@ func (r *deployRun) edgeCode(entry AppEntry, result StackResult) (*edge.Code, er
 	if result.EdgeBundleKey == "" {
 		return nil, nil
 	}
-	compatibility := r.front.Hooks().Compatibility
-	if compatibility == nil {
+	compatibility := r.front.Facts().Compatibility
+	if compatibility.IsZero() {
 		return nil, nil
 	}
 	bundle, err := os.ReadFile(filepath.Join(AppArtifactRoot(ArtifactRoot(), entry.App), filepath.FromSlash(edge.AppBundleFile)))
@@ -1144,12 +1144,11 @@ func (r *deployRun) edgeCode(entry AppEntry, result StackResult) (*edge.Code, er
 	if err != nil {
 		return nil, fmt.Errorf("read the edge bundle %s runs: %w", entry.App, err)
 	}
-	compatDate, compatFlags := compatibility()
 	return &edge.Code{
 		BundleKey:   result.EdgeBundleKey,
-		ID:          loaderID(bundle, compatDate, compatFlags),
-		CompatDate:  compatDate,
-		CompatFlags: compatFlags,
+		ID:          loaderID(bundle, compatibility.Date, compatibility.Flags),
+		CompatDate:  compatibility.Date,
+		CompatFlags: compatibility.Flags,
 	}, nil
 }
 
@@ -1176,7 +1175,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 		r.sender.send(planEvent(r.drawn()))
 		return okResult(), nil
 	}
-	flip := r.front.FlipBound()
+	flip := r.front.Facts().FlipBound
 	promotion := edge.Promotion{
 		PromotionID: r.plan.PromotionID,
 		Ts:          time.Now().Unix(),

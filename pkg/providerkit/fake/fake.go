@@ -83,10 +83,9 @@ func NewProvider(options Options) *Provider {
 		runtimeBinary: []byte(RuntimeBinary),
 	}
 	p.hooks = providerkit.Hooks{
-		ProgramEdge:    p.ProgramEdge,
-		RegistryImages: p.RegistryImages,
-		ShapeCost:      p.ShapeCost,
-		EstimateCost:   p.EstimateCost,
+		ProgramEdge:        p.ProgramEdge,
+		OpenRegistryImages: p.OpenRegistryImages,
+		Cost:               &providerkit.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
 	}
 	return p
 }
@@ -115,10 +114,8 @@ func (p *Provider) everyHook(hooks *providerkit.Hooks) {
 
 func (p *Provider) ResourceHooks() resources.Hooks {
 	return resources.Hooks{
-		ProvisionFunctions:  p.ProvisionFunctions,
-		RemoveFunctions:     p.RemoveFunctions,
-		ProvisionContainers: p.ProvisionContainers,
-		RemoveContainers:    p.RemoveContainers,
+		Functions:  &resources.FunctionHooks{Provision: p.ProvisionFunctions, Remove: p.RemoveFunctions},
+		Containers: &resources.ContainerHooks{Provision: p.ProvisionContainers, Remove: p.RemoveContainers},
 	}
 }
 
@@ -128,7 +125,7 @@ func (p *Provider) Ships(store providerkit.ArtifactStore) *Provider {
 	return p
 }
 
-func (p *Provider) RegistryImages(_ context.Context, target providerkit.RegistryTarget) (providerkit.ImageStore, error) {
+func (p *Provider) OpenRegistryImages(_ context.Context, target providerkit.RegistryTarget) (providerkit.ImageStore, error) {
 	p.images.open(target)
 	return p.images, nil
 }
@@ -137,9 +134,13 @@ func (p *Provider) Registry() *Images { return p.images }
 
 func (p *Provider) Facts() providerkit.Facts {
 	return providerkit.Facts{
-		Vendor:   Vendor,
-		Bindings: []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket},
-		Computes: []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer},
+		Vendor:          Vendor,
+		Bindings:        []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket},
+		Computes:        []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer},
+		Edges:           p.edges.kinds(),
+		DefaultEdge:     KindRelay,
+		DNSKinds:        []providerkit.DNSKind{KindZone},
+		StoresArtifacts: true,
 	}
 }
 

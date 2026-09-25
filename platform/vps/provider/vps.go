@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -79,28 +80,29 @@ func (p *Provider) Facts() providerkit.Facts {
 		Vendor:            Vendor,
 		Bindings:          resources.Serves(p.resourceHooks()),
 		Computes:          []providerkit.Compute{providerkit.ComputeContainer},
+		Edges:             []edge.Kind{box.Kind},
+		DefaultEdge:       box.Kind,
+		DNSKinds:          []providerkit.DNSKind{dnsCloudflare},
 		RendersTransforms: true,
 	}
 }
 
 func (p *Provider) Hooks() providerkit.Hooks {
 	return providerkit.Hooks{
-		PreflightDeploy: p.PreflightDeploy,
-		RegistryImages:  p.RegistryImages,
-		DirectImages:    p.DirectImages,
-		CheckHost:       p.CheckHost,
+		PreflightDeploy:    p.PreflightDeploy,
+		OpenRegistryImages: p.OpenRegistryImages,
+		OpenDirectImages:   p.OpenDirectImages,
+		CheckHost:          p.CheckHost,
 	}
 }
 
 func (p *Provider) resourceHooks() resources.Hooks {
 	return resources.Hooks{
-		ProvisionPostgres:   p.ProvisionPostgres,
-		ProvisionBucket:     p.ProvisionBucket,
-		RemoveResource:      p.RemoveResource,
-		ProvisionContainers: p.ProvisionContainers,
-		RemoveContainers:    p.RemoveContainers,
-		ReconcileImages:     p.ReconcileImages,
-		ForgetReleases:      p.ForgetReleases,
+		ProvisionPostgres: p.ProvisionPostgres,
+		ProvisionBucket:   p.ProvisionBucket,
+		RemoveResource:    p.RemoveResource,
+		Containers:        &resources.ContainerHooks{Provision: p.ProvisionContainers, Remove: p.RemoveContainers},
+		Retention:         &resources.RetentionHooks{Reconcile: p.ReconcileImages, Forget: p.ForgetReleases},
 	}
 }
 

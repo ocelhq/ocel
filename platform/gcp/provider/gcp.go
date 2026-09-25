@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"sync"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 )
 
 const Vendor providerkit.Vendor = "gcp"
@@ -78,29 +80,29 @@ func NewProvider(options Options) (*Provider, error) {
 
 func (p *Provider) Facts() providerkit.Facts {
 	return providerkit.Facts{
-		Vendor:   Vendor,
-		Bindings: resources.Serves(p.resourceHooks()),
-		Computes: []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer},
+		Vendor:          Vendor,
+		Bindings:        resources.Serves(p.resourceHooks()),
+		Computes:        []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer},
+		Edges:           slices.Clone(supportedEdges),
+		DefaultEdge:     direct.Kind,
+		DNSKinds:        []providerkit.DNSKind{dnsCloudflare},
+		StoresArtifacts: true,
 	}
 }
 
 func (p *Provider) Hooks() providerkit.Hooks {
 	return providerkit.Hooks{
 		EnsureImageRegistry: p.EnsureImageRegistry,
-		DirectImages:        p.DirectImages,
-		ShapeCost:           p.ShapeCost,
-		EstimateCost:        p.EstimateCost,
-		FunctionBaseImage:   p.FunctionBaseImage,
-		FunctionRuntime:     p.FunctionRuntime,
+		OpenDirectImages:    p.OpenDirectImages,
+		Cost:                &providerkit.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
+		FunctionImages:      &providerkit.FunctionImageHooks{ResolveBase: p.ResolveFunctionBase, ReadRuntime: p.ReadFunctionRuntime},
 	}
 }
 
 func (p *Provider) resourceHooks() resources.Hooks {
 	return resources.Hooks{
-		ProvisionFunctions:  p.ProvisionFunctions,
-		RemoveFunctions:     p.RemoveFunctions,
-		ProvisionContainers: p.ProvisionContainers,
-		RemoveContainers:    p.RemoveContainers,
+		Functions:  &resources.FunctionHooks{Provision: p.ProvisionFunctions, Remove: p.RemoveFunctions},
+		Containers: &resources.ContainerHooks{Provision: p.ProvisionContainers, Remove: p.RemoveContainers},
 	}
 }
 

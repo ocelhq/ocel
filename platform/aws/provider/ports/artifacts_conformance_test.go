@@ -114,7 +114,7 @@ func everyStoreRef() []providerkit.ArtifactRef {
 }
 
 func TestArtifactsRunTheKitsPortTier(t *testing.T) {
-	conformance.RunArtifactStore(t, artifacts())
+	conformance.RunArtifactStore(t, providerkit.Facts{StoresArtifacts: true}, artifacts())
 }
 
 func TestAStoreThisAccountHasNoBucketForRefusesRatherThanWritingNowhere(t *testing.T) {

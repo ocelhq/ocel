@@ -301,20 +301,20 @@ func TestTheEdgeAnswersTheFactsABoxCanStandBehind(t *testing.T) {
 	if facts.CredentialScope != sshScope {
 		t.Errorf("Facts().CredentialScope = %q, want the ssh destination %q it is reached at", facts.CredentialScope, sshScope)
 	}
-	if !slices.Equal(front.Supported(), []edge.Need{edge.NeedStreaming}) {
-		t.Errorf("Supported() = %v, want streaming alone", front.Supported())
+	if !slices.Equal(facts.Supported, []edge.Need{edge.NeedStreaming}) {
+		t.Errorf("Facts().Supported = %v, want streaming alone", facts.Supported)
 	}
 }
 
 func TestTheFlipCarriesNoPropagationNoteToPrint(t *testing.T) {
 	t.Parallel()
 
-	bound := edgeOver(aMachine(), fake.NewRecords()).FlipBound()
+	bound := edgeOver(aMachine(), fake.NewRecords()).Facts().FlipBound
 	if bound.Typical > 0 {
-		t.Errorf("FlipBound() = %+v, and a bound above zero is rendered to the user as a propagation note; when the flip call returns on a box the gate has passed, the config is loaded and the retired upstream has drained, so there is no window to advertise", bound)
+		t.Errorf("Facts().FlipBound = %+v, and a bound above zero is rendered to the user as a propagation note; when the flip call returns on a box the gate has passed, the config is loaded and the retired upstream has drained, so there is no window to advertise", bound)
 	}
 	if bound.Published {
-		t.Errorf("FlipBound() = %+v, which publishes a bound it declares instant", bound)
+		t.Errorf("Facts().FlipBound = %+v, which publishes a bound it declares instant", bound)
 	}
 }
 

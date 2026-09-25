@@ -34,27 +34,27 @@ func TestCredentialPermissionsListsWhatEachTierMints(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			doc, err := New("ocel").Hooks().CredentialPermissions(tc.tier)
+			doc, err := New("ocel").Hooks().DescribeCredentialPermissions(tc.tier)
 			if err != nil {
-				t.Fatalf("CredentialPermissions(%v) error = %v", tc.tier, err)
+				t.Fatalf("DescribeCredentialPermissions(%v) error = %v", tc.tier, err)
 			}
 			if doc.Heading != "Cloudflare API token" {
-				t.Errorf("CredentialPermissions(%v) heading = %q, want the Cloudflare token named", tc.tier, doc.Heading)
+				t.Errorf("DescribeCredentialPermissions(%v) heading = %q, want the Cloudflare token named", tc.tier, doc.Heading)
 			}
 			for _, want := range tc.want {
 				if !strings.Contains(doc.Document, want) {
-					t.Errorf("CredentialPermissions(%v) = %q, want it to carry %q", tc.tier, doc.Document, want)
+					t.Errorf("DescribeCredentialPermissions(%v) = %q, want it to carry %q", tc.tier, doc.Document, want)
 				}
 			}
 			for _, gone := range tc.gone {
 				if strings.Contains(doc.Document, gone) {
-					t.Errorf("CredentialPermissions(%v) = %q, want %q left out", tc.tier, doc.Document, gone)
+					t.Errorf("DescribeCredentialPermissions(%v) = %q, want %q left out", tc.tier, doc.Document, gone)
 				}
 			}
 		})
 	}
 
-	if _, err := New("ocel").Hooks().CredentialPermissions("admin"); err == nil || !strings.Contains(err.Error(), `"admin"`) {
-		t.Errorf("CredentialPermissions(admin) err = %v, want it to name the tier it was asked for", err)
+	if _, err := New("ocel").Hooks().DescribeCredentialPermissions("admin"); err == nil || !strings.Contains(err.Error(), `"admin"`) {
+		t.Errorf("DescribeCredentialPermissions(admin) err = %v, want it to name the tier it was asked for", err)
 	}
 }

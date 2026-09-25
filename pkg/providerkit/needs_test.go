@@ -42,7 +42,11 @@ type narrowEdge struct {
 	serves []edge.Need
 }
 
-func (n narrowEdge) Supported() []edge.Need { return n.serves }
+func (n narrowEdge) Facts() edge.Facts {
+	facts := n.Edge.Facts()
+	facts.Supported = n.serves
+	return facts
+}
 
 func TestNeedCheckRecordsWhatTheEdgeServes(t *testing.T) {
 	t.Parallel()
@@ -159,7 +163,7 @@ type entitlingEdge struct {
 }
 
 func (e entitlingEdge) Hooks() edge.Hooks {
-	return edge.Hooks{CodeEntitlement: func(context.Context) (edge.CodeEntitlement, error) {
+	return edge.Hooks{CheckCodeEntitlement: func(context.Context) (edge.CodeEntitlement, error) {
 		*e.asked++
 		return e.plan, nil
 	}}
@@ -175,7 +179,7 @@ func TestNeedCheckServesACodeNeedWithoutAskingAnEdgeThatChecksNoEntitlement(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	if front.Hooks().CodeEntitlement != nil {
+	if front.Hooks().CheckCodeEntitlement != nil {
 		t.Fatal("the reference edge checks an entitlement, so it cannot stand for one that checks none")
 	}
 

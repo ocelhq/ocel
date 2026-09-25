@@ -13,31 +13,31 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 )
 
-func storeless(t *testing.T) providerkit.ArtifactStore {
+func storeless(t *testing.T) *vps.Provider {
 	t.Helper()
-	return vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}}).Artifacts()
+	return vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 }
 
-func TestTheArtifactPortIsTheKitsStoreForAProviderThatKeepsNothing(t *testing.T) {
+func TestTheProviderSaysItKeepsNoArtifactStore(t *testing.T) {
 	t.Parallel()
 
-	store := storeless(t)
-	if _, kept := store.(providerkit.NoArtifacts); !kept {
-		t.Fatalf("Artifacts() = %T, want providerkit.NoArtifacts: a container app puts nothing in the store", store)
+	if storeless(t).Facts().StoresArtifacts {
+		t.Fatal("Facts().StoresArtifacts = true, but a container app puts nothing in the store")
 	}
 }
 
 func TestTheArtifactPortRunsTheKitsPortTier(t *testing.T) {
 	t.Parallel()
 
-	conformance.RunArtifactStore(t, storeless(t))
+	p := storeless(t)
+	conformance.RunArtifactStore(t, p.Facts(), p.Artifacts())
 }
 
 func TestAnUploadDrawsACreateRowAndThenFailsTheApplyLoudly(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	store := storeless(t)
+	store := storeless(t).Artifacts()
 	path := filepath.Join(t.TempDir(), "artifact.zip")
 	if err := os.WriteFile(path, []byte("a build artifact"), 0o644); err != nil {
 		t.Fatal(err)

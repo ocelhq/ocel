@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -180,6 +181,10 @@ type SecretRef struct {
 type Framework struct {
 	Name string `json:"name"`
 	Arch string `json:"arch,omitempty"`
+}
+
+func frameworkOf(fn *contractv1.ManifestFunction) Framework {
+	return Framework{Name: fn.GetFramework().GetName(), Arch: fn.GetFramework().GetArch()}
 }
 
 type FunctionSpec struct {

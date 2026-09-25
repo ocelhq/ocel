@@ -201,7 +201,7 @@ func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 	})
 
 	ctx := context.Background()
-	store, err := vm.deploying(t).RegistryImages(ctx, target)
+	store, err := vm.deploying(t).OpenRegistryImages(ctx, target)
 	if err != nil {
 		t.Fatalf("Images() = %v", err)
 	}

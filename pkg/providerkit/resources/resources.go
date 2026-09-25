@@ -18,15 +18,27 @@ type Instruction struct {
 }
 
 type Hooks struct {
-	ProvisionPostgres   func(ctx context.Context, in Instruction, progress providerkit.Progress) (providerkit.Binding, error)
-	ProvisionBucket     func(ctx context.Context, in Instruction, progress providerkit.Progress) (providerkit.Binding, error)
-	RemoveResource      func(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, progress providerkit.Progress) error
-	ProvisionFunctions  func(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) ([]providerkit.Function, error)
-	RemoveFunctions     func(ctx context.Context, ref providerkit.StackRef, functions []providerkit.Function, progress providerkit.Progress) error
-	ProvisionContainers func(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) ([]providerkit.AppContainer, error)
-	RemoveContainers    func(ctx context.Context, ref providerkit.StackRef, containers []providerkit.AppContainer, progress providerkit.Progress) error
-	ReconcileImages     func(ctx context.Context, ref providerkit.StackRef, app, imageRef string, progress providerkit.Progress) error
-	ForgetReleases      func(ctx context.Context, ref providerkit.StackRef, app string, progress providerkit.Progress) error
+	ProvisionPostgres func(ctx context.Context, in Instruction, progress providerkit.Progress) (providerkit.Binding, error)
+	ProvisionBucket   func(ctx context.Context, in Instruction, progress providerkit.Progress) (providerkit.Binding, error)
+	RemoveResource    func(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, progress providerkit.Progress) error
+	Functions         *FunctionHooks
+	Containers        *ContainerHooks
+	Retention         *RetentionHooks
+}
+
+type FunctionHooks struct {
+	Provision func(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) ([]providerkit.Function, error)
+	Remove    func(ctx context.Context, ref providerkit.StackRef, functions []providerkit.Function, progress providerkit.Progress) error
+}
+
+type ContainerHooks struct {
+	Provision func(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) ([]providerkit.AppContainer, error)
+	Remove    func(ctx context.Context, ref providerkit.StackRef, containers []providerkit.AppContainer, progress providerkit.Progress) error
+}
+
+type RetentionHooks struct {
+	Reconcile func(ctx context.Context, ref providerkit.StackRef, app, imageRef string, progress providerkit.Progress) error
+	Forget    func(ctx context.Context, ref providerkit.StackRef, app string, progress providerkit.Progress) error
 }
 
 func Serves(hooks Hooks) []providerkit.BindingType {
@@ -139,19 +151,19 @@ func (f *fanout) standingUp(plan providerkit.StackPlan) (standingUp, error) {
 	}
 	switch plan.App.Compute {
 	case providerkit.ComputeServerless:
-		if f.hooks.ProvisionFunctions == nil {
-			return nil, lacking(plan.App, "ProvisionFunctions")
+		if f.hooks.Functions == nil {
+			return nil, lacking(plan.App, "Functions")
 		}
 		return func(ctx context.Context, progress providerkit.Progress) (providerkit.StackResult, error) {
-			standing, err := f.hooks.ProvisionFunctions(ctx, plan, progress)
+			standing, err := f.hooks.Functions.Provision(ctx, plan, progress)
 			return providerkit.StackResult{Functions: standing}, err
 		}, nil
 	case providerkit.ComputeContainer:
-		if f.hooks.ProvisionContainers == nil {
-			return nil, lacking(plan.App, "ProvisionContainers")
+		if f.hooks.Containers == nil {
+			return nil, lacking(plan.App, "Containers")
 		}
 		return func(ctx context.Context, progress providerkit.Progress) (providerkit.StackResult, error) {
-			standing, err := f.hooks.ProvisionContainers(ctx, plan, progress)
+			standing, err := f.hooks.Containers.Provision(ctx, plan, progress)
 			return providerkit.StackResult{Containers: standing}, err
 		}, nil
 	default:
@@ -163,7 +175,7 @@ func (f *fanout) standingUp(plan providerkit.StackPlan) (standingUp, error) {
 
 func lacking(app *providerkit.AppPlan, hook string) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
-		"app %s runs on %s compute and this provider sets no %s hook, so nothing here can stand it up",
+		"app %s runs on %s compute and this provider sets no %s hooks, so nothing here can stand it up",
 		app.App, app.Compute, hook)
 }
 
@@ -231,10 +243,10 @@ func (f *fanout) Destroy(ctx context.Context, ref providerkit.StackRef, progress
 }
 
 func (f *fanout) forget(ctx context.Context, ref providerkit.StackRef, app string, progress providerkit.Progress) error {
-	if f.hooks.ForgetReleases == nil {
+	if f.hooks.Retention == nil {
 		return nil
 	}
-	err := f.hooks.ForgetReleases(ctx, ref, app, progress)
+	err := f.hooks.Retention.Forget(ctx, ref, app, progress)
 	if err != nil && progress != nil {
 		progress.Detail(fmt.Sprintf("Left %s's release window standing: %v", app, err))
 	}
@@ -242,10 +254,10 @@ func (f *fanout) forget(ctx context.Context, ref providerkit.StackRef, app strin
 }
 
 func (f *fanout) reconcile(ctx context.Context, ref providerkit.StackRef, app, imageRef string, progress providerkit.Progress) error {
-	if f.hooks.ReconcileImages == nil || imageRef == "" {
+	if f.hooks.Retention == nil || imageRef == "" {
 		return nil
 	}
-	err := f.hooks.ReconcileImages(ctx, ref, app, imageRef, progress)
+	err := f.hooks.Retention.Reconcile(ctx, ref, app, imageRef, progress)
 	if err != nil && progress != nil {
 		progress.Detail(fmt.Sprintf("Left %s's unreferenced images where they stand: %v", app, err))
 	}
@@ -261,25 +273,25 @@ func (f *fanout) removeFunctions(ctx context.Context, ref providerkit.StackRef, 
 	if len(going) == 0 {
 		return nil
 	}
-	if f.hooks.RemoveFunctions == nil {
-		return unownable(ref, len(going), "function", because, "RemoveFunctions")
+	if f.hooks.Functions == nil {
+		return unownable(ref, len(going), "function", because, "Functions")
 	}
-	return f.hooks.RemoveFunctions(ctx, ref, going, progress)
+	return f.hooks.Functions.Remove(ctx, ref, going, progress)
 }
 
 func (f *fanout) removeContainers(ctx context.Context, ref providerkit.StackRef, going []providerkit.AppContainer, because string, progress providerkit.Progress) error {
 	if len(going) == 0 {
 		return nil
 	}
-	if f.hooks.RemoveContainers == nil {
-		return unownable(ref, len(going), "container", because, "RemoveContainers")
+	if f.hooks.Containers == nil {
+		return unownable(ref, len(going), "container", because, "Containers")
 	}
-	return f.hooks.RemoveContainers(ctx, ref, going, progress)
+	return f.hooks.Containers.Remove(ctx, ref, going, progress)
 }
 
 func unownable(ref providerkit.StackRef, going int, noun, because, hook string) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
-		"%s holds %d %s(s) %s, and this provider sets no %s hook, so they would be left standing and unowned",
+		"%s holds %d %s(s) %s, and this provider sets no %s hooks, so they would be left standing and unowned",
 		ref.Name, going, noun, because, hook)
 }
 

@@ -201,9 +201,9 @@ func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *tes
 	t.Cleanup(func() { vm.ssh(t, "sudo docker image rm -f "+coordinate+" >/dev/null 2>&1 || true") })
 
 	ctx := context.Background()
-	store, err := vm.deploying(t).DirectImages(ctx)
+	store, err := vm.deploying(t).OpenDirectImages(ctx)
 	if err != nil {
-		t.Fatalf("DirectImages() = %v", err)
+		t.Fatalf("OpenDirectImages() = %v", err)
 	}
 	push := transferPush(daemon, client, runtime)
 
@@ -242,9 +242,9 @@ func TestLiveARedeployOfAnUnchangedAppCarriesTheImageNoSecondTime(t *testing.T) 
 	t.Cleanup(func() { vm.ssh(t, "sudo docker image rm -f "+coordinate+" >/dev/null 2>&1 || true") })
 
 	ctx := context.Background()
-	store, err := vm.deploying(t).DirectImages(ctx)
+	store, err := vm.deploying(t).OpenDirectImages(ctx)
 	if err != nil {
-		t.Fatalf("DirectImages() = %v", err)
+		t.Fatalf("OpenDirectImages() = %v", err)
 	}
 	plan := providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{transferPush(daemon, client, runtime)}}
 	if err := plan.Ship(ctx, nil); err != nil {

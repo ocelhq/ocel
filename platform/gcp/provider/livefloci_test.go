@@ -69,7 +69,7 @@ func TestLiveCredentials(t *testing.T) {
 func TestLiveReleaser(t *testing.T) {
 	p := live(t)
 
-	conformance.RunStacks(t, p.Stacks(), p.Artifacts(), p.Records(), p.Facts().Bindings)
+	conformance.RunStacks(t, p.Facts(), p.Stacks(), p.Artifacts(), p.Records())
 }
 
 func TestLiveRecordStore(t *testing.T) {
@@ -144,7 +144,7 @@ func TestLiveArtifactStore(t *testing.T) {
 	provider := live(t)
 	bucketsStanding(t, provider)
 
-	conformance.RunArtifactStore(t, provider.Artifacts())
+	conformance.RunArtifactStore(t, provider.Facts(), provider.Artifacts())
 }
 
 func TestLiveArtifactsWhereNoBucketStandsSayWhatToRun(t *testing.T) {

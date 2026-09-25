@@ -50,9 +50,8 @@ func TestTheProviderCarriesTheVendorAndSetsEveryHookItImplements(t *testing.T) {
 		"WarmFunctions":       hooks.WarmFunctions != nil,
 		"ProgramEdge":         hooks.ProgramEdge != nil,
 		"EnsureImageRegistry": hooks.EnsureImageRegistry != nil,
-		"RegistryImages":      hooks.RegistryImages != nil,
-		"ShapeCost":           hooks.ShapeCost != nil,
-		"EstimateCost":        hooks.EstimateCost != nil,
+		"OpenRegistryImages":  hooks.OpenRegistryImages != nil,
+		"Cost":                hooks.Cost != nil,
 	} {
 		if !set {
 			t.Errorf("the aws provider's hooks leave %s nil, so the deploy skips a step this provider implements", name)

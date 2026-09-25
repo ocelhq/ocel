@@ -1321,6 +1321,33 @@ func TestDeployAnnouncesEachAppsOwnHostnameUnderThatApp(t *testing.T) {
 	}
 }
 
+type defaultingTo struct {
+	*fake.Provider
+	kind edge.Kind
+}
+
+func (d defaultingTo) Facts() providerkit.Facts {
+	facts := d.Provider.Facts()
+	facts.DefaultEdge = d.kind
+	return facts
+}
+
+func TestADeployNamingNoEdgeGoesToTheEdgeTheProvidersFactsDefaultTo(t *testing.T) {
+	builtProject(t)
+	provider := defaultingTo{Provider: fake.NewProvider(fake.Options{}), kind: fake.KindDirect}
+	client := servedBy(t, provider)
+
+	req := deployRequest()
+	req.Edge = writtenBy("shop.example")
+	if result, _ := deploy(t, client, req); !result.GetSuccess() {
+		t.Fatalf("Deploy() = %q", result.GetError())
+	}
+	fronts := provider.DNS().(*fake.DNS).Fronts()
+	if len(fronts) == 0 || slices.ContainsFunc(fronts, func(front edge.Kind) bool { return front != fake.KindDirect }) {
+		t.Errorf("the deploy opened its DNS under %v, want the %s edge Facts().DefaultEdge names", fronts, fake.KindDirect)
+	}
+}
+
 func noteOf(result *progressv1.ResultEvent) string {
 	return strings.Join(result.GetUrlNotes(), "\n")
 }

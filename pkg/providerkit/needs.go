@@ -132,7 +132,7 @@ func (c NeedCheck) Run(ctx context.Context, manifest *contractv1.Manifest) (Need
 		return nil, nil
 	}
 	records := NeedRecords{}
-	check := c.Edge.Hooks().CodeEntitlement
+	check := c.Edge.Hooks().CheckCodeEntitlement
 	entitles := check != nil
 	entitlement := onceChecked(ctx, check)
 

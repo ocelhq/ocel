@@ -131,7 +131,7 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		return nil, RefusalError(err)
 	}
 
-	flip := session.front.FlipBound()
+	flip := session.front.Facts().FlipBound
 	promoted := edge.Promotion{
 		PromotionID: target.PromotionID,
 		Ts:          time.Now().Unix(),

@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -69,7 +70,11 @@ func (p *Provider) Facts() providerkit.Facts {
 		Vendor:            Vendor,
 		Bindings:          deploy.Serves(),
 		Computes:          []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer},
+		Edges:             edges.SupportedEdges(),
+		DefaultEdge:       edges.DefaultKind,
+		DNSKinds:          dns.Kinds(),
 		RendersTransforms: true,
+		StoresArtifacts:   true,
 	}
 }
 
@@ -83,9 +88,8 @@ func (p *Provider) Hooks() providerkit.Hooks {
 		WarmFunctions:       p.WarmFunctions,
 		ProgramEdge:         p.ProgramEdge,
 		EnsureImageRegistry: p.EnsureImageRegistry,
-		RegistryImages:      p.RegistryImages,
-		ShapeCost:           p.ShapeCost,
-		EstimateCost:        p.EstimateCost,
+		OpenRegistryImages:  p.OpenRegistryImages,
+		Cost:                &providerkit.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
 	}
 }
 
@@ -94,7 +98,7 @@ func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrap, error) {
 	if err != nil {
 		return nil, err
 	}
-	return settling{Bootstrap: control.BootstrapFor(p.aws, front, p.edges(), p.options.VarsKey, p.namespace), settled: p.forget}, nil
+	return settling{Bootstrap: control.BootstrapFor(p.aws, front, p.edges(), edges.SupportedEdges(), p.options.VarsKey, p.namespace), settled: p.forget}, nil
 }
 
 func (p *Provider) Stacks() providerkit.Stacks { return p.releases }

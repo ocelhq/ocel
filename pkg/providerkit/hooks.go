@@ -2,7 +2,6 @@ package providerkit
 
 import (
 	"context"
-	"fmt"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
@@ -18,31 +17,19 @@ type Hooks struct {
 	WarmFunctions       func(ctx context.Context, targets []string, progress Progress) error
 	ProgramEdge         func(ctx context.Context, req EdgeProgramRequest) (EdgeProgram, error)
 	EnsureImageRegistry func(ctx context.Context, class Class, repositories []string) (RegistryTarget, error)
-	RegistryImages      func(ctx context.Context, target RegistryTarget) (ImageStore, error)
-	DirectImages        func(ctx context.Context) (ImageStore, error)
+	OpenRegistryImages  func(ctx context.Context, target RegistryTarget) (ImageStore, error)
+	OpenDirectImages    func(ctx context.Context) (ImageStore, error)
 	CheckHost           func(ctx context.Context, req HostCheckRequest) ([]HostCheck, error)
-	ShapeCost           func(ctx context.Context, req ShapeRequest) (*costv1.ResourceSet, error)
-	EstimateCost        func(ctx context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error)
-	FunctionBaseImage   func(ctx context.Context, framework Framework) (v1.Image, error)
-	FunctionRuntime     func(ctx context.Context, framework Framework) ([]byte, error)
+	Cost                *CostHooks
+	FunctionImages      *FunctionImageHooks
 }
 
-func (h Hooks) refuseHalfPairs() error {
-	for _, pair := range []struct {
-		first, second       string
-		hasFirst, hasSecond bool
-	}{
-		{"ShapeCost", "EstimateCost", h.ShapeCost != nil, h.EstimateCost != nil},
-		{"FunctionBaseImage", "FunctionRuntime", h.FunctionBaseImage != nil, h.FunctionRuntime != nil},
-	} {
-		if pair.hasFirst == pair.hasSecond {
-			continue
-		}
-		set, unset := pair.first, pair.second
-		if pair.hasSecond {
-			set, unset = pair.second, pair.first
-		}
-		return fmt.Errorf("the provider's hooks set %s and leave %s nil, and one is never called without the other", set, unset)
-	}
-	return nil
+type CostHooks struct {
+	Shape    func(ctx context.Context, req ShapeRequest) (*costv1.ResourceSet, error)
+	Estimate func(ctx context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error)
+}
+
+type FunctionImageHooks struct {
+	ResolveBase func(ctx context.Context, framework Framework) (v1.Image, error)
+	ReadRuntime func(ctx context.Context, framework Framework) ([]byte, error)
 }

@@ -181,11 +181,11 @@ func held(t *testing.T, repository string, image v1.Image) string {
 func functionImage(t *testing.T, p *gcp.Provider, repository string, framework providerkit.Framework, dir string) string {
 	t.Helper()
 	ctx := context.Background()
-	base, err := p.FunctionBaseImage(ctx, framework)
+	base, err := p.ResolveFunctionBase(ctx, framework)
 	if err != nil {
 		t.Fatalf("read the base a %s function is built on: %v", framework.Name, err)
 	}
-	payload, err := p.FunctionRuntime(ctx, framework)
+	payload, err := p.ReadFunctionRuntime(ctx, framework)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,7 +211,7 @@ func functionImage(t *testing.T, p *gcp.Provider, repository string, framework p
 
 func serverImage(t *testing.T, p *gcp.Provider, repository, mark string) string {
 	t.Helper()
-	base, err := p.FunctionBaseImage(context.Background(), nodeRuntime)
+	base, err := p.ResolveFunctionBase(context.Background(), nodeRuntime)
 	if err != nil {
 		t.Fatal(err)
 	}

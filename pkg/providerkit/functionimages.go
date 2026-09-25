@@ -64,8 +64,8 @@ func (r *deployRun) imageFunction(
 	if err != nil {
 		return ImagePush{}, err
 	}
-	framework := Framework{Name: fn.GetFramework().GetName(), Arch: fn.GetFramework().GetArch()}
-	base, err := hooks.FunctionBaseImage(ctx, framework)
+	framework := frameworkOf(fn)
+	base, err := hooks.FunctionImages.ResolveBase(ctx, framework)
 	if err != nil {
 		return ImagePush{}, fmt.Errorf("read the base image %s's %s function is built on: %w", name, framework.Name, err)
 	}
@@ -129,7 +129,7 @@ func runtimeOverlay(
 	if !BootsThroughRuntime(framework) {
 		return overlay, nil
 	}
-	body, err := hooks.FunctionRuntime(ctx, framework)
+	body, err := hooks.FunctionImages.ReadRuntime(ctx, framework)
 	if err != nil {
 		return nil, fmt.Errorf("read the runtime %s boots through: %w", name, err)
 	}

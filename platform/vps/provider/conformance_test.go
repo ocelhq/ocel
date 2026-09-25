@@ -22,10 +22,12 @@ import (
 func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
-	registry := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}}).DNS()
+	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	registry := p.DNS()
 
-	if got := registry.Supported(); !slices.Equal(got, []providerkit.DNSKind{"cloudflare"}) {
-		t.Errorf("Supported() = %v, want cloudflare alone", got)
+	conformance.RunDNS(t, p.Facts(), registry)
+	if got := p.Facts().DNSKinds; !slices.Equal(got, []providerkit.DNSKind{"cloudflare"}) {
+		t.Errorf("Facts().DNSKinds = %v, want cloudflare alone", got)
 	}
 	writer, err := registry.Open("cloudflare", "app.com", "")
 	if err != nil || writer == nil {
@@ -45,15 +47,16 @@ func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
 func TestTheEdgeRegistryOpensTheBoxEdge(t *testing.T) {
 	t.Parallel()
 
-	registry := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}}).Edges()
+	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
+	registry := p.Edges()
 
-	conformance.RunEdges(t, registry)
+	conformance.RunEdges(t, p.Facts(), registry)
 
-	if got := registry.Supported(); !slices.Equal(got, []edge.Kind{boxedge.Kind}) {
-		t.Errorf("Supported() = %v, want %q alone: a machine is fronted by the proxy ocel puts on it", got, boxedge.Kind)
+	if got := p.Facts().Edges; !slices.Equal(got, []edge.Kind{boxedge.Kind}) {
+		t.Errorf("Facts().Edges = %v, want %q alone: a machine is fronted by the proxy ocel puts on it", got, boxedge.Kind)
 	}
-	if got := registry.Default(); got != boxedge.Kind {
-		t.Errorf("Default() = %q, want %q: a deploy that names no edge reaches the box's own proxy", got, boxedge.Kind)
+	if got := p.Facts().DefaultEdge; got != boxedge.Kind {
+		t.Errorf("Facts().DefaultEdge = %q, want %q: a deploy that names no edge reaches the box's own proxy", got, boxedge.Kind)
 	}
 
 	var refusal providerkit.Refusal

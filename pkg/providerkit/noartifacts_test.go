@@ -68,12 +68,3 @@ func TestTheStorelessStoreSweepsAnyPrefixWithoutComplaint(t *testing.T) {
 		}
 	}
 }
-
-func TestTheStorelessStoreIsAnArtifactStore(t *testing.T) {
-	t.Parallel()
-
-	var store ArtifactStore = NoArtifacts{}
-	if _, storeless := store.(NoArtifacts); !storeless {
-		t.Error("the empty store does not assert back to its own exported type, so the conformance tier cannot detect the shape")
-	}
-}

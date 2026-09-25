@@ -186,7 +186,7 @@ func TestTheStagedRecordCarriesNoCodeForAnEdgeThatRunsNone(t *testing.T) {
 		held.Ledger = ledger.New(provider.Records(), state.Class, state.Slug)
 		return held
 	})
-	if direct.Hooks().Compatibility != nil {
+	if !direct.Facts().Compatibility.IsZero() {
 		t.Fatal("the reference direct edge names a compatibility, so it cannot stand for an edge that runs no code")
 	}
 

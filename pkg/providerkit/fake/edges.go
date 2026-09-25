@@ -43,13 +43,11 @@ func NewEdges(records providerkit.RecordStore) *Edges {
 	return registry
 }
 
-func (e *Edges) Supported() []edge.Kind {
+func (e *Edges) kinds() []edge.Kind {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	return slices.Clone(e.order)
 }
-
-func (e *Edges) Default() edge.Kind { return KindRelay }
 
 func (e *Edges) Open(kind edge.Kind) (edge.Edge, error) {
 	e.mu.Lock()
@@ -217,12 +215,21 @@ func (e *Edge) Kind() edge.Kind { return e.kind }
 func (e *Edge) Facts() edge.Facts {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return edge.Facts{
+	facts := edge.Facts{
+		Supported:             edge.AllNeeds(),
+		FlipBound:             edge.FlipBound{Typical: 30 * time.Second, Published: true},
 		RunsCode:              e.kind == KindRelay,
 		SignsOriginForwards:   true,
 		RoutesPreviewsByLabel: e.byLabel,
 		CredentialScope:       "fake-account",
 	}
+	if e.serves != nil {
+		facts.Supported = slices.Clone(*e.serves)
+	}
+	if e.kind == KindRelay {
+		facts.Compatibility = edge.Compatibility{Date: CompatDate, Flags: []string{CompatFlag}}
+	}
+	return facts
 }
 
 func (e *Edge) RoutesPreviewsByLabel(routes bool) {
@@ -239,34 +246,13 @@ const (
 func (e *Edge) Hooks() edge.Hooks {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	hooks := edge.Hooks{VerifyCredentials: e.verify}
-	if e.kind == KindRelay {
-		hooks.Compatibility = compatibility
-	}
-	return hooks
-}
-
-func compatibility() (string, []string) {
-	return CompatDate, []string{CompatFlag}
+	return edge.Hooks{VerifyCredentials: e.verify}
 }
 
 func (e *Edge) Serves(needs []edge.Need) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.serves = &needs
-}
-
-func (e *Edge) Supported() []edge.Need {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	if e.serves != nil {
-		return slices.Clone(*e.serves)
-	}
-	return edge.AllNeeds()
-}
-
-func (e *Edge) FlipBound() edge.FlipBound {
-	return edge.FlipBound{Typical: 30 * time.Second, Published: true}
 }
 
 func (e *Edge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOutput, error) {
@@ -460,8 +446,6 @@ type DNS struct {
 const KindZone providerkit.DNSKind = "zone"
 
 func NewDNS() *DNS { return &DNS{writers: map[string]*DNSRecords{}} }
-
-func (d *DNS) Supported() []providerkit.DNSKind { return []providerkit.DNSKind{KindZone} }
 
 func (d *DNS) Open(kind providerkit.DNSKind, zone string, front edge.Kind) (edge.DNSRecords, error) {
 	if kind != KindZone {

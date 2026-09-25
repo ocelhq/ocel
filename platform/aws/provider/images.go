@@ -13,7 +13,7 @@ func (p *Provider) EnsureImageRegistry(ctx context.Context, _ providerkit.Class,
 	return registry.Resolve(ctx, ecr.NewFromConfig(p.aws))
 }
 
-func (p *Provider) RegistryImages(_ context.Context, target providerkit.RegistryTarget) (providerkit.ImageStore, error) {
+func (p *Provider) OpenRegistryImages(_ context.Context, target providerkit.RegistryTarget) (providerkit.ImageStore, error) {
 	if !registry.Owns(target) {
 		return providerkit.RegistryImages(target), nil
 	}

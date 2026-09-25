@@ -8,5 +8,5 @@ import (
 )
 
 func TestTheArtifactTierRunsForAProviderThatKeepsNoStore(t *testing.T) {
-	conformance.RunArtifactStore(t, providerkit.NoArtifacts{})
+	conformance.RunArtifactStore(t, providerkit.Facts{}, providerkit.NoArtifacts{})
 }

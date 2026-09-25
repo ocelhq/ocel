@@ -29,19 +29,18 @@ type imaging struct {
 
 func (i imaging) Hooks() providerkit.Hooks {
 	hooks := i.Provider.Hooks()
-	hooks.FunctionBaseImage = i.FunctionBaseImage
-	hooks.FunctionRuntime = i.FunctionRuntime
+	hooks.FunctionImages = &providerkit.FunctionImageHooks{ResolveBase: i.ResolveBase, ReadRuntime: i.ReadRuntime}
 	return hooks
 }
 
-func (i imaging) FunctionBaseImage(context.Context, providerkit.Framework) (v1.Image, error) {
+func (i imaging) ResolveBase(context.Context, providerkit.Framework) (v1.Image, error) {
 	if i.base != nil {
 		return i.base, nil
 	}
 	return empty.Image, nil
 }
 
-func (imaging) FunctionRuntime(context.Context, providerkit.Framework) ([]byte, error) {
+func (imaging) ReadRuntime(context.Context, providerkit.Framework) ([]byte, error) {
 	return []byte("export const runtime = 1"), nil
 }
 
@@ -222,11 +221,11 @@ type imagingWithoutRuntime struct{ imaging }
 
 func (w imagingWithoutRuntime) Hooks() providerkit.Hooks {
 	hooks := w.imaging.Hooks()
-	hooks.FunctionRuntime = w.FunctionRuntime
+	hooks.FunctionImages = &providerkit.FunctionImageHooks{ResolveBase: w.ResolveBase, ReadRuntime: w.ReadRuntime}
 	return hooks
 }
 
-func (imagingWithoutRuntime) FunctionRuntime(context.Context, providerkit.Framework) ([]byte, error) {
+func (imagingWithoutRuntime) ReadRuntime(context.Context, providerkit.Framework) ([]byte, error) {
 	return nil, nil
 }
 

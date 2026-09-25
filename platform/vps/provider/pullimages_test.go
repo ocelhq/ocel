@@ -141,7 +141,7 @@ func provisioning(t *testing.T, machine *box) *vps.Provider {
 
 func pulling(t *testing.T, machine *box, target providerkit.RegistryTarget) providerkit.ImageStore {
 	t.Helper()
-	store, err := provisioning(t, machine).RegistryImages(context.Background(), target)
+	store, err := provisioning(t, machine).OpenRegistryImages(context.Background(), target)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -388,7 +388,7 @@ func TestAPasswordWithNoLoginNameIsRefusedBeforeTheImageIsPublished(t *testing.T
 	target.Username = ""
 
 	ctx := context.Background()
-	store, err := provisioning(t, machine).RegistryImages(ctx, target)
+	store, err := provisioning(t, machine).OpenRegistryImages(ctx, target)
 	if err == nil {
 		err = store.Push(ctx, aPull(target), nil)
 	}

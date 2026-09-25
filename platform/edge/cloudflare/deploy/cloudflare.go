@@ -15,6 +15,7 @@ import (
 	"net/textproto"
 	"os"
 	"path"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -37,8 +38,6 @@ const (
 const compatDate = "2026-07-13"
 
 var compatFlags = []string{"nodejs_compat"}
-
-func compatibility() (string, []string) { return compatDate, compatFlags }
 
 const envObservability = "OCEL_EDGE_OBSERVABILITY"
 
@@ -89,6 +88,9 @@ func (p *provider) cacheStore() cacheStore {
 
 func (p *provider) Facts() edge.Facts {
 	return edge.Facts{
+		Supported:           edge.AllNeeds(),
+		FlipBound:           edge.FlipBound{Typical: recordTTL},
+		Compatibility:       edge.Compatibility{Date: compatDate, Flags: slices.Clone(compatFlags)},
 		RunsCode:            true,
 		ServesUnbound:       true,
 		SignsOriginForwards: true,
@@ -99,25 +101,16 @@ func (p *provider) Facts() edge.Facts {
 
 func (p *provider) Hooks() edge.Hooks {
 	return edge.Hooks{
-		PlanBootstrap:         p.planBootstrap,
-		PlanRemoveBootstrap:   p.planRemoveBootstrap,
-		Adoption:              p.adoption,
-		VerifyCredentials:     p.verifyCredentials,
-		CodeEntitlement:       p.codeEntitlement,
-		CredentialPermissions: credentialPermissions,
-		Compatibility:         compatibility,
+		PlanBootstrap:                 p.planBootstrap,
+		PlanRemoveBootstrap:           p.planRemoveBootstrap,
+		PlanAdoption:                  p.adoption,
+		VerifyCredentials:             p.verifyCredentials,
+		CheckCodeEntitlement:          p.codeEntitlement,
+		DescribeCredentialPermissions: credentialPermissions,
 	}
 }
 
-func (p *provider) Supported() []edge.Need {
-	return edge.AllNeeds()
-}
-
 const recordTTL = 5 * time.Second
-
-func (p *provider) FlipBound() edge.FlipBound {
-	return edge.FlipBound{Typical: recordTTL}
-}
 
 func (p *provider) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	changes := []edge.PlanChange{{

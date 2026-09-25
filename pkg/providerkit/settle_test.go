@@ -19,7 +19,7 @@ type answering struct {
 
 func (*answering) Unreached(string) string { return "" }
 
-func (a *answering) Serving(context.Context, string) (edge.Kind, error) {
+func (a *answering) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, error) {
 	a.asked++
 	if a.asked > a.after {
 		return a.kind, nil
@@ -27,16 +27,16 @@ func (a *answering) Serving(context.Context, string) (edge.Kind, error) {
 	return "", nil
 }
 
-func waiting(resolve resolver, attempts int) (settler, *int) {
+func waiting(liveness Liveness, attempts int) (settler, *int) {
 	slept := 0
 	clock := time.Unix(1700000000, 0)
 	return settler{
-		kind:    "relay",
-		resolve: resolve,
-		budget:  time.Duration(attempts) * time.Second,
-		window:  time.Second,
-		wait:    time.Second,
-		now:     func() time.Time { return clock },
+		kind:     "relay",
+		liveness: liveness,
+		budget:   time.Duration(attempts) * time.Second,
+		window:   time.Second,
+		wait:     time.Second,
+		now:      func() time.Time { return clock },
 		sleep: func(_ context.Context, d time.Duration) error {
 			slept++
 			clock = clock.Add(d)
@@ -136,9 +136,9 @@ func TestTheSettleAsksTheProvidersProbeWhichEdgeAnswers(t *testing.T) {
 	t.Parallel()
 
 	provider := &boxProvider{answers: "box"}
-	resolve := probingFor(provider, frontOf{kind: "box"})
-	if kind, err := resolve.Serving(context.Background(), "shop.example.com"); err != nil || kind != "box" {
-		t.Fatalf("Serving() = %q, %v, want the edge the provider's own probe answered", kind, err)
+	settle := newSettler(frontOf{kind: "box"}, nil, "", provider.Liveness())
+	if kind, err := settle.attempt(context.Background(), "shop.example.com"); err != nil || kind != "box" {
+		t.Fatalf("attempt() = %q, %v, want the edge the provider's own probe answered", kind, err)
 	}
 	if len(provider.asked) != 1 || provider.asked[0] != "shop.example.com" || provider.kinds[0] != "box" {
 		t.Errorf("the provider was asked %v as %v, want the hostname being settled and the edge it is settled onto", provider.asked, provider.kinds)
@@ -149,7 +149,7 @@ func TestTheSettleRefusesAHostnameAnotherEdgeAnswersOn(t *testing.T) {
 	t.Parallel()
 
 	provider := &boxProvider{answers: "cloudfront"}
-	settle, _ := waiting(probingFor(provider, frontOf{kind: "box"}), 3)
+	settle, _ := waiting(provider.Liveness(), 3)
 	settle.kind = "box"
 
 	probe, err := settle.await(context.Background(), "shop.example.com", func(string) {})
@@ -176,21 +176,21 @@ type slowly struct {
 
 func (slowly) Unreached(string) string { return "" }
 
-func (s slowly) Serving(context.Context, string) (edge.Kind, error) {
+func (s slowly) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, error) {
 	*s.asked++
 	*s.clock = s.clock.Add(s.cost)
 	return "", nil
 }
 
-func onTheClock(resolve func(*time.Time) resolver, budget time.Duration) settler {
+func onTheClock(resolve func(*time.Time) Liveness, budget time.Duration) settler {
 	clock := time.Unix(1700000000, 0)
 	return settler{
-		kind:    "box",
-		resolve: resolve(&clock),
-		budget:  budget,
-		window:  attemptWindow,
-		wait:    5 * time.Second,
-		now:     func() time.Time { return clock },
+		kind:     "box",
+		liveness: resolve(&clock),
+		budget:   budget,
+		window:   attemptWindow,
+		wait:     5 * time.Second,
+		now:      func() time.Time { return clock },
 		sleep: func(_ context.Context, d time.Duration) error {
 			clock = clock.Add(d)
 			return nil
@@ -202,7 +202,7 @@ func TestADeployGivesUpOnceItsMinuteHasPassedHoweverLongEachAttemptTakes(t *test
 	t.Parallel()
 
 	var asked int
-	settle := onTheClock(func(clock *time.Time) resolver {
+	settle := onTheClock(func(clock *time.Time) Liveness {
 		return slowly{clock: clock, cost: 15 * time.Second, asked: &asked}
 	}, settleBudget)
 
@@ -224,7 +224,7 @@ func TestAnAttendedSettleWaitsOutAFrontThatTakesMinutesToAnswer(t *testing.T) {
 
 	const minutes = 10 * time.Minute
 	for what, budget := range map[string]time.Duration{"domain add": attendedBudget, "a deploy": settleBudget} {
-		settle := onTheClock(func(clock *time.Time) resolver {
+		settle := onTheClock(func(clock *time.Time) Liveness {
 			return answeringAfter{clock: clock, at: clock.Add(minutes), kind: "box"}
 		}, budget)
 		_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
@@ -245,7 +245,7 @@ type answeringAfter struct {
 
 func (answeringAfter) Unreached(string) string { return "" }
 
-func (a answeringAfter) Serving(context.Context, string) (edge.Kind, error) {
+func (a answeringAfter) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, error) {
 	if a.clock.Before(a.at) {
 		return "", nil
 	}
@@ -256,7 +256,7 @@ type hanging struct{ asked *atomic.Int32 }
 
 func (hanging) Unreached(string) string { return "" }
 
-func (h hanging) Serving(ctx context.Context, _ string) (edge.Kind, error) {
+func (h hanging) ServingEdge(ctx context.Context, _ edge.Kind, _ string) (edge.Kind, error) {
 	h.asked.Add(1)
 	<-ctx.Done()
 	return "", ctx.Err()
@@ -267,13 +267,13 @@ func TestAProbeThatNeverReturnsIsCutOffAtEachAttemptAndTheSettleAtItsDeadline(t 
 
 	var asked atomic.Int32
 	settle := settler{
-		kind:    "box",
-		resolve: hanging{asked: &asked},
-		budget:  300 * time.Millisecond,
-		window:  50 * time.Millisecond,
-		wait:    10 * time.Millisecond,
-		now:     time.Now,
-		sleep:   sleep,
+		kind:     "box",
+		liveness: hanging{asked: &asked},
+		budget:   300 * time.Millisecond,
+		window:   50 * time.Millisecond,
+		wait:     10 * time.Millisecond,
+		now:      time.Now,
+		sleep:    sleep,
 	}
 
 	began := time.Now()
@@ -297,7 +297,7 @@ type stopped struct {
 	cause string
 }
 
-func (stopped) Serving(context.Context, string) (edge.Kind, error) { return "", nil }
+func (stopped) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, error) { return "", nil }
 
 func (s stopped) Unreached(string) string { return s.cause }
 
@@ -333,12 +333,12 @@ func TestAResolverThatDiagnosesNothingStillRefusesInOneSentence(t *testing.T) {
 	}
 }
 
-func TestAProviderThatDiagnosesItsOwnProbeIsAskedThroughTheKitsResolver(t *testing.T) {
+func TestAProviderThatDiagnosesItsOwnProbeIsAskedThroughItsLiveness(t *testing.T) {
 	t.Parallel()
 
 	cause := "x509: certificate is valid for parked.example.net, not shop.example.com"
 	provider := diagnosingProvider{boxProvider: &boxProvider{}, cause: cause}
-	settle, _ := waiting(probingFor(provider, frontOf{kind: "box"}), 2)
+	settle, _ := waiting(provider.Liveness(), 2)
 	settle.kind = "box"
 
 	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})

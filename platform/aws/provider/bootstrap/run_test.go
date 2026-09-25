@@ -529,10 +529,6 @@ func newFakeEdges(fronts ...edge.Edge) *fakeEdges {
 	return registry
 }
 
-func (e *fakeEdges) Supported() []edge.Kind { return edgeKinds() }
-
-func (e *fakeEdges) Default() edge.Kind { return KindCloudFront }
-
 func (e *fakeEdges) Open(kind edge.Kind) (edge.Edge, error) {
 	if front, ok := e.opened[kind]; ok {
 		return front, nil
@@ -571,13 +567,9 @@ func (f *fakeEdge) Teardown(context.Context, edge.Class) error {
 	return nil
 }
 
-func (f *fakeEdge) Facts() edge.Facts { return edge.Facts{} }
+func (f *fakeEdge) Facts() edge.Facts { return edge.Facts{Supported: slices.Clone(f.needs)} }
 
 func (f *fakeEdge) Hooks() edge.Hooks { return edge.Hooks{} }
-
-func (f *fakeEdge) Supported() []edge.Need { return slices.Clone(f.needs) }
-
-func (f *fakeEdge) FlipBound() edge.FlipBound { return edge.FlipBound{} }
 
 func (f *fakeEdge) Reconcile(context.Context, edge.StackSpec, edge.StackState) (edge.EdgeStack, error) {
 	return nil, errors.New("bootstrap never reconciles a project stack")

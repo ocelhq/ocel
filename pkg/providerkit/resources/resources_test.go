@@ -364,7 +364,7 @@ type withFunctions struct {
 
 func (w *withFunctions) hooks() resources.Hooks {
 	hooks := w.buckets.hooks()
-	hooks.ProvisionFunctions, hooks.RemoveFunctions = w.ProvisionFunctions, w.RemoveFunctions
+	hooks.Functions = &resources.FunctionHooks{Provision: w.ProvisionFunctions, Remove: w.RemoveFunctions}
 	return hooks
 }
 
@@ -477,7 +477,7 @@ type withContainers struct {
 
 func (w *withContainers) hooks() resources.Hooks {
 	hooks := w.buckets.hooks()
-	hooks.ProvisionContainers, hooks.RemoveContainers = w.ProvisionContainers, w.RemoveContainers
+	hooks.Containers = &resources.ContainerHooks{Provision: w.ProvisionContainers, Remove: w.RemoveContainers}
 	return hooks
 }
 
@@ -588,8 +588,8 @@ func TestAProviderStandingUpNoContainersRefusesAContainerAppByName(t *testing.T)
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 		t.Fatalf("Provision() of a container app on a provider that stands up none = %v, want an invalid refusal", err)
 	}
-	if !strings.Contains(refusal.Message, "ProvisionContainers") {
-		t.Errorf("the refusal reads %q, want it to name %s, the primitive this provider lacks", refusal.Message, "ProvisionContainers")
+	if !strings.Contains(refusal.Message, "Containers hooks") {
+		t.Errorf("the refusal reads %q, want it to name %s, the primitive this provider lacks", refusal.Message, "Containers hooks")
 	}
 }
 
@@ -607,8 +607,8 @@ func TestAProviderStandingUpNoFunctionsRefusesAServerlessAppByName(t *testing.T)
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 		t.Fatalf("Provision() of a serverless app on a provider that stands up none = %v, want an invalid refusal", err)
 	}
-	if !strings.Contains(refusal.Message, "ProvisionFunctions") {
-		t.Errorf("the refusal reads %q, want it to name %s, the primitive this provider lacks", refusal.Message, "ProvisionFunctions")
+	if !strings.Contains(refusal.Message, "Functions hooks") {
+		t.Errorf("the refusal reads %q, want it to name %s, the primitive this provider lacks", refusal.Message, "Functions hooks")
 	}
 }
 
@@ -680,8 +680,8 @@ func TestAProviderStandingUpNoContainersRefusesToOrphanTheOnesItRecorded(t *test
 		},
 	}, nil)
 	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "RemoveContainers") {
-		t.Fatalf("Provision() over a recorded container nothing can take down = %v, want a refusal naming %s", err, "RemoveContainers")
+	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "Containers hooks") {
+		t.Fatalf("Provision() over a recorded container nothing can take down = %v, want a refusal naming %s", err, "Containers hooks")
 	}
 }
 
@@ -721,8 +721,8 @@ func TestDestroyRefusesByNameWhenNothingCanTakeTheRecordedContainerDown(t *testi
 
 	err := resources.Stacks(records, fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks()).Destroy(ctx, ref, nil)
 	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "RemoveContainers") {
-		t.Fatalf("Destroy() of a recorded container nothing stands up = %v, want a refusal naming %s", err, "RemoveContainers")
+	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "Containers hooks") {
+		t.Fatalf("Destroy() of a recorded container nothing stands up = %v, want a refusal naming %s", err, "Containers hooks")
 	}
 	if strings.Contains(refusal.Message, "nothing here declares") {
 		t.Errorf("the refusal reads %q, and a destroy declares nothing at all: the sentence an orphan sweep gives is false here", refusal.Message)
@@ -748,8 +748,8 @@ func TestAnAppMovingToAComputeThisProviderLacksIsRefusedBeforeItsFunctionsAreTak
 		App:  containerApp("web"),
 	}, nil)
 	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "ProvisionContainers") {
-		t.Fatalf("Provision() of a container app on a provider that stands up none = %v, want a refusal naming %s", err, "ProvisionContainers")
+	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "Containers hooks") {
+		t.Fatalf("Provision() of a container app on a provider that stands up none = %v, want a refusal naming %s", err, "Containers hooks")
 	}
 	if len(own.removed) != 0 {
 		t.Fatalf("the fan-out took down %v on a release it then refused, leaving the app down with nothing standing in its place", own.removed)
@@ -784,7 +784,7 @@ type misnaming struct{ *withContainers }
 
 func (m misnaming) hooks() resources.Hooks {
 	hooks := m.withContainers.hooks()
-	hooks.ProvisionContainers = m.ProvisionContainers
+	hooks.Containers = &resources.ContainerHooks{Provision: m.ProvisionContainers, Remove: m.RemoveContainers}
 	return hooks
 }
 
@@ -901,8 +901,8 @@ func (r *retaining) promote(app, coordinate string) {
 func (r *retaining) hooks() resources.Hooks {
 	hooks := r.buckets.hooks()
 	hooks.ProvisionBucket = r.ProvisionBucket
-	hooks.ProvisionContainers, hooks.RemoveContainers = r.ProvisionContainers, r.RemoveContainers
-	hooks.ReconcileImages, hooks.ForgetReleases = r.ReconcileImages, r.ForgetReleases
+	hooks.Containers = &resources.ContainerHooks{Provision: r.ProvisionContainers, Remove: r.RemoveContainers}
+	hooks.Retention = &resources.RetentionHooks{Reconcile: r.ReconcileImages, Forget: r.ForgetReleases}
 	return hooks
 }
 
