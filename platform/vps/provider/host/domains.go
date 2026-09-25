@@ -222,16 +222,22 @@ func (h *Host) recomposed(ctx context.Context, compose func(RoutingTable) (Routi
 	if err != nil || !shaped.changed {
 		return err
 	}
-	if err := h.takenUp(ctx, shaped.reloading, elevation); err != nil {
-		return h.reverted(ctx, shaped, err, elevation)
+	return h.takenUp(ctx, shaped, true, elevation)
+}
+
+func (h *Host) takenUp(ctx context.Context, shaped composed, loading bool, elevation string) error {
+	if err := h.serving(ctx, loading, shaped.reloading, elevation); err != nil {
+		return h.reverted(ctx, shaped, loading, err, elevation)
 	}
 	return nil
 }
 
-func (h *Host) takenUp(ctx context.Context, reloading bool, elevation string) error {
-	if _, err := h.ran(ctx, "load the switchboard onto "+live.RoutingTable,
-		words(switchboardCommand("load", live.RoutingTable)), nil, elevation); err != nil {
-		return err
+func (h *Host) serving(ctx context.Context, loading, reloading bool, elevation string) error {
+	if loading {
+		if _, err := h.ran(ctx, "load the switchboard onto "+live.RoutingTable,
+			words(switchboardCommand("load", live.RoutingTable)), nil, elevation); err != nil {
+			return err
+		}
 	}
 	if !reloading {
 		return nil
@@ -239,13 +245,13 @@ func (h *Host) takenUp(ctx context.Context, reloading bool, elevation string) er
 	return h.front.Reload(ctx)
 }
 
-func (h *Host) reverted(ctx context.Context, shaped composed, why error, elevation string) error {
+func (h *Host) reverted(ctx context.Context, shaped composed, loading bool, why error, elevation string) error {
 	if _, err := h.writePair(ctx, shaped.written, shaped.prior); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"serving %s failed: %v\nrestoring %s and %s also failed: %v",
 			live.RoutingTable, why, live.RoutingTable, ProxyConfig, err)
 	}
-	if err := h.takenUp(ctx, shaped.reloading, elevation); err != nil {
+	if err := h.serving(ctx, loading, shaped.reloading, elevation); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"serving %s failed: %v\n%s and %s were restored, but serving them again failed too, so the box may still serve what they no longer record: %v\nRun the deploy again",
 			live.RoutingTable, why, live.RoutingTable, ProxyConfig, err)
