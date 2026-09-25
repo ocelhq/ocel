@@ -30,6 +30,34 @@ func TestARefusalOnATierItsSourceOwnsSaysToSetTheValueThere(t *testing.T) {
 	}
 }
 
+func TestARefusalOverAnInvalidValueASourceOwnsSaysToFixItThere(t *testing.T) {
+	t.Parallel()
+	refusal := &envgate.Refusal{
+		Problems: []*resourcesv1.VariableProblem{invalid("API_URL", "/web", "must be a URL")},
+		Scope:    envgate.Scope{Source: infisicalSource},
+	}
+	out := refusal.Error()
+	for _, want := range []string{"must be a URL", "fix it in infisical:p-1/prod", "https://infisical.example/web"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("refusal = %q, want %q", out, want)
+		}
+	}
+	if strings.Contains(out, "https://infisical.example/root") {
+		t.Errorf("refusal = %q, want only the folder that holds the invalid value linked", out)
+	}
+}
+
+func TestARefusalOverMissingAndInvalidValuesASourceOwnsSaysToSetOrFixThem(t *testing.T) {
+	t.Parallel()
+	refusal := &envgate.Refusal{
+		Problems: []*resourcesv1.VariableProblem{missing("DATABASE_URL", ""), invalid("API_URL", "/web", "must be a URL")},
+		Scope:    envgate.Scope{Source: infisicalSource},
+	}
+	if out := refusal.Error(); !strings.Contains(out, "set or fix them in infisical:p-1/prod") {
+		t.Errorf("refusal = %q, want both kinds named in the remedy", out)
+	}
+}
+
 func TestARefusalInTheBrowserStillOffersTheUIOverASource(t *testing.T) {
 	t.Parallel()
 	refusal := &envgate.Refusal{

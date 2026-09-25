@@ -40,11 +40,33 @@ func (s Source) remedy(problems []*resourcesv1.VariableProblem) string {
 			where = append(where, folderName(folder)+" "+link)
 		}
 	}
-	out := "set them in " + s.ID
+	out := remedyVerb(problems) + " in " + s.ID
 	if len(where) > 0 {
 		out += " (" + strings.Join(where, ", ") + ")"
 	}
 	return out + ", then deploy again"
+}
+
+func remedyVerb(problems []*resourcesv1.VariableProblem) string {
+	var missing, invalid bool
+	for _, problem := range problems {
+		if problem.GetKind() == resourcesv1.VariableProblem_KIND_INVALID {
+			invalid = true
+		} else {
+			missing = true
+		}
+	}
+	verb := "set"
+	switch {
+	case missing && invalid:
+		verb = "set or fix"
+	case invalid:
+		verb = "fix"
+	}
+	if len(problems) == 1 {
+		return verb + " it"
+	}
+	return verb + " them"
 }
 
 func Drift(definitions []*resourcesv1.VariableDefinition, source Source) []string {

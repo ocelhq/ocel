@@ -63,7 +63,7 @@ func TestADeployReadsItsTierFromTheEnvSourceFirst(t *testing.T) {
 			t.Fatal("runDeploy err = nil, want the gate to refuse")
 		}
 		out := stdout.String()
-		for _, want := range []string{"STRIPE_API_KEY", "set them in infisical:p-1/prod", "https://infisical.example/p-1/prod"} {
+		for _, want := range []string{"STRIPE_API_KEY", "set it in infisical:p-1/prod", "https://infisical.example/p-1/prod"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("stdout = %q, want %q", out, want)
 			}
