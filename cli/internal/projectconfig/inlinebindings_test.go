@@ -177,6 +177,20 @@ func TestAnInlineBucketNamesItsStoreAndTheVariablesItReads(t *testing.T) {
 	}
 }
 
+func TestAnInlineBucketsBlankOptionalFieldIsUnset(t *testing.T) {
+	cfg := mustResolveJSON(t, `{"slug":"shop","bindings":{"bucket":{"uploads":{
+		"endpoint":"https://abc.r2.cloudflarestorage.com","region":"auto","bucket":"acme",
+		"prefix":"","publicBaseUrl":" ","accessKeyId":{"$env":"R2_KEY"},"secretAccessKey":{"$env":"R2_SECRET"}
+	}}}}`)
+	bound := cfg.BindingsFor(environmentv1.Tier_TIER_PRODUCTION)
+	if len(bound) != 1 || bound[0].Inline == nil || bound[0].Inline.Bucket == nil {
+		t.Fatalf("bound = %+v, want the inline bucket", bound)
+	}
+	if got := bound[0].Inline.Bucket; got.Prefix != (Value{}) || got.PublicBaseURL != (Value{}) {
+		t.Errorf("prefix = %+v, publicBaseUrl = %+v, want both unset, as if left out", got.Prefix, got.PublicBaseURL)
+	}
+}
+
 func TestAnInlineBucketIsRefusedWhereNoStoreCouldBeReached(t *testing.T) {
 	for name, binding := range map[string]string{
 		"no secret":       `{"endpoint":"https://s3.example.com","region":"auto","bucket":"acme","accessKeyId":{"$env":"K"}}`,

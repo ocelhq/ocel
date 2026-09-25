@@ -306,7 +306,7 @@ func normalizePostgres(path string, raw *configdoc.PostgresBinding) (*PostgresIn
 }
 
 func optionalText(path, field string, text *configdoc.Text) (Value, error) {
-	if text == nil {
+	if text == nil || (text.Ref == nil && strings.TrimSpace(text.Literal) == "") {
 		return Value{}, nil
 	}
 	return textOf(path, field, text)
