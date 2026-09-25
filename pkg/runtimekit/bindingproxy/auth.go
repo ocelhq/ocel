@@ -1,4 +1,4 @@
-package proxy
+package bindingproxy
 
 import (
 	"context"

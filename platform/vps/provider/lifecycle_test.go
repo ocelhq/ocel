@@ -67,7 +67,7 @@ const unreleasedVersion = "dev"
 
 func lifecycle(t *testing.T) journey {
 	t.Helper()
-	vm := live(t)
+	vm := liveMachine(t)
 	vm.purges(t)
 	t.Cleanup(func() { vm.purges(t) })
 

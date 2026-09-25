@@ -34,7 +34,7 @@ type release struct {
 
 func onABoxServingContainers(t *testing.T) (machine, *vps.Provider) {
 	t.Helper()
-	vm := live(t)
+	vm := liveMachine(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
 	fixtures(t, vm)
 	p := vm.deploying(t)

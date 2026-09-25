@@ -22,7 +22,7 @@ type Provider struct {
 	records providerkit.RecordStore
 	sealer  *host.Cipher
 
-	transform transformkit.Evaluator
+	transform transformkit.Pass
 	resolve   Lookup
 	reaches   Reach
 

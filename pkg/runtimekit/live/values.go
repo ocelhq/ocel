@@ -19,8 +19,8 @@ const FetchBudget = 3 * time.Second
 
 const RereadFloor = time.Second
 
-type Fetcher interface {
-	FetchLive(ctx context.Context) (map[string]string, error)
+type Source interface {
+	Fetch(ctx context.Context) (map[string]string, error)
 }
 
 type valuesMsg struct {
@@ -32,7 +32,7 @@ type valuesMsg struct {
 const valuesMsgType = "liveValues"
 
 type Values struct {
-	fetcher  Fetcher
+	source   Source
 	keys     []string
 	bindings []Binding
 	now      func() time.Time
@@ -53,16 +53,16 @@ type Values struct {
 	refreshing  bool
 }
 
-func New(fetcher Fetcher, keys []string, bindings []Binding, now func() time.Time) *Values {
+func New(source Source, keys []string, bindings []Binding, now func() time.Time) *Values {
 	if now == nil {
 		now = time.Now
 	}
-	return &Values{fetcher: fetcher, keys: keys, bindings: bindings, now: now, failed: make(chan struct{})}
+	return &Values{source: source, keys: keys, bindings: bindings, now: now, failed: make(chan struct{})}
 }
 
 func (l *Values) read(ctx context.Context) (map[string]string, time.Time, error) {
 	started := l.now()
-	values, err := l.fetcher.FetchLive(ctx)
+	values, err := l.source.Fetch(ctx)
 	if err != nil {
 		return nil, started, err
 	}

@@ -10,7 +10,7 @@ import (
 )
 
 func TestLiveTheDeployPrincipalReadsAndWritesTheRecordsARootBootstrapWrote(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	vm.purges(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
 
@@ -37,7 +37,7 @@ func TestLiveTheDeployPrincipalReadsAndWritesTheRecordsARootBootstrapWrote(t *te
 }
 
 func TestLiveTheRootRecordsHelperHandsOwnershipToNothingItDidNotCreate(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	vm.purges(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
 
@@ -75,7 +75,7 @@ func TestLiveTheRootRecordsHelperHandsOwnershipToNothingItDidNotCreate(t *testin
 }
 
 func TestLiveARecordAHelperCouldNotHandOverIsARecordItNeverFlipped(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	vm.purges(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
 

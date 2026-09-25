@@ -5,21 +5,21 @@ import (
 	"fmt"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 )
 
 const EnvVar = "OCEL_LIVE_MANIFEST"
 
 type Manifest struct {
-	Project     string       `json:"project"`
-	Region      string       `json:"region"`
-	Namespace   string       `json:"namespace"`
-	Slug        string       `json:"slug"`
-	Class       string       `json:"class"`
-	Environment string       `json:"environment,omitempty"`
-	Endpoint    string       `json:"endpoint,omitempty"`
-	Keys        []rt.Key     `json:"keys"`
-	Bindings    []rt.Binding `json:"bindings,omitempty"`
+	Project     string         `json:"project"`
+	Region      string         `json:"region"`
+	Namespace   string         `json:"namespace"`
+	Slug        string         `json:"slug"`
+	Class       string         `json:"class"`
+	Environment string         `json:"environment,omitempty"`
+	Endpoint    string         `json:"endpoint,omitempty"`
+	Keys        []live.Key     `json:"keys"`
+	Bindings    []live.Binding `json:"bindings,omitempty"`
 }
 
 func (m Manifest) Live() bool { return len(m.Keys) > 0 || len(m.Bindings) > 0 }

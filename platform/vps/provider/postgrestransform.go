@@ -67,7 +67,7 @@ type volumePatch struct {
 	DriverOpts map[string]string `json:"driverOpts"`
 }
 
-func nodePass(modules []string) transformkit.Evaluator {
+func nodePass(modules []string) transformkit.Pass {
 	root, err := os.Getwd()
 	if err != nil {
 		root = "."

@@ -11,9 +11,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/costkit"
 )
 
-func fetcher(client *http.Client, waited *[]time.Duration) costkit.Fetcher {
-	return costkit.Fetcher{
-		Client: client, Attempts: 4, Base: time.Second, Ceiling: 5 * time.Second,
+func retrying(client *http.Client, waited *[]time.Duration) costkit.Client {
+	return costkit.Client{
+		HTTP: client, Attempts: 4, Base: time.Second, Ceiling: 5 * time.Second,
 		Sleep: func(_ context.Context, wait time.Duration) error {
 			*waited = append(*waited, wait)
 			return nil
@@ -39,7 +39,7 @@ func TestFetchRetriesThrottlingAndServerErrorsWithBackoff(t *testing.T) {
 	var waited []time.Duration
 	req, _ := http.NewRequest(http.MethodGet, server.URL+"/prices?key=secret", nil)
 
-	body, err := fetcher(server.Client(), &waited).Fetch(context.Background(), req)
+	body, err := retrying(server.Client(), &waited).Fetch(context.Background(), req)
 	if err != nil || string(body) != "ok" {
 		t.Fatalf("Fetch() = %q, %v", body, err)
 	}
@@ -62,7 +62,7 @@ func TestFetchGivesUpAtTheAttemptCeilingWithoutEchoingTheQuery(t *testing.T) {
 	var waited []time.Duration
 	req, _ := http.NewRequest(http.MethodGet, server.URL+"/prices?key=secret", nil)
 
-	_, err := fetcher(server.Client(), &waited).Fetch(context.Background(), req)
+	_, err := retrying(server.Client(), &waited).Fetch(context.Background(), req)
 	if err == nil || !strings.Contains(err.Error(), "4 attempts") {
 		t.Fatalf("Fetch() error = %v, want one after 4 attempts", err)
 	}
@@ -86,7 +86,7 @@ func TestFetchDoesNotRetryAClientError(t *testing.T) {
 	var waited []time.Duration
 	req, _ := http.NewRequest(http.MethodGet, server.URL+"/prices?key=secret", nil)
 
-	_, err := fetcher(server.Client(), &waited).Fetch(context.Background(), req)
+	_, err := retrying(server.Client(), &waited).Fetch(context.Background(), req)
 	if err == nil || calls != 1 || len(waited) != 0 {
 		t.Fatalf("Fetch() error = %v after %d calls and %v, want one refusal and no retry", err, calls, waited)
 	}

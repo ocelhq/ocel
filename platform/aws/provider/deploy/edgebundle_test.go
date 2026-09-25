@@ -9,7 +9,7 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	rtlive "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 )
 
 func edgeAppTree(t *testing.T) string {
@@ -178,13 +178,13 @@ func edgeBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest) appBuil
 	bundles := map[string]appBundle{}
 	for _, app := range manifestApps(manifest) {
 		sensitive := map[string]string{}
-		var keys []rtlive.Key
+		var keys []live.Key
 		for _, v := range app.GetVariables() {
 			switch v.GetClass() {
 			case resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE:
 				sensitive[v.GetKey()] = v.GetValue()
 			case resourcesv1.VariableClass_VARIABLE_CLASS_SECRET:
-				keys = append(keys, rtlive.Key{Key: v.GetKey(), Folder: v.GetFolder()})
+				keys = append(keys, live.Key{Key: v.GetKey(), Folder: v.GetFolder()})
 			}
 		}
 		bundle, err := sealAppBundle(liveConfig(), manifest.GetSlug(), app.GetName(), sensitive, keys, nil)

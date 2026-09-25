@@ -97,7 +97,7 @@ var table = costkit.Table{
 	"aws_data_transfer":               dataTransfer,
 }
 
-func Price(req *costv1.PriceRequest, edges ...costkit.EdgePricer) (*costv1.Estimate, error) {
+func Price(req *costv1.PriceRequest, edges ...costkit.EdgeRates) (*costv1.Estimate, error) {
 	held, err := card()
 	if err != nil {
 		return nil, err

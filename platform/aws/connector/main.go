@@ -53,7 +53,7 @@ func main() {
 func run(addr, region, config, keyParameter string) error {
 	ctx := context.Background()
 
-	trust, err := connectorkit.Configured(config)
+	trust, err := connectorkit.ReadConfig(config)
 	if err != nil {
 		return err
 	}

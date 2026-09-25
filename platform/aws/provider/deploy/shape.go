@@ -44,9 +44,9 @@ type shapedPatches struct {
 	unknown map[resourceRef][]string
 }
 
-func Shape(ctx context.Context, evaluator transformkit.Evaluator, region string, req providerkit.ShapeRequest, tree *costkit.Tree, scopes ShapeScopes) error {
+func Shape(ctx context.Context, pass transformkit.Pass, region string, req providerkit.ShapeRequest, tree *costkit.Tree, scopes ShapeScopes) error {
 	project := naming.Sanitize(req.Plan.Slug)
-	patched, err := shapeTransforms(ctx, evaluator, project, req)
+	patched, err := shapeTransforms(ctx, pass, project, req)
 	if err != nil {
 		return err
 	}
@@ -193,9 +193,9 @@ func (s shaper) bucket(scope, project, env string, resource providerkit.Resource
 	s.add(scope, tfLogGroup, resource.Name+"-"+uploadCompleterLocalName, map[string]any{"retention_in_days": lambdaLogRetentionDays}, names["uploadCompleterLogGroup"])
 }
 
-func shapeTransforms(ctx context.Context, evaluator transformkit.Evaluator, project string, req providerkit.ShapeRequest) (shapedPatches, error) {
+func shapeTransforms(ctx context.Context, pass transformkit.Pass, project string, req providerkit.ShapeRequest) (shapedPatches, error) {
 	held := shapedPatches{patches: map[resourceRef]map[string]any{}, unknown: map[resourceRef][]string{}}
-	if evaluator == nil {
+	if pass == nil {
 		return held, nil
 	}
 	request := transformkit.Request{Provider: transformProvider, EnvClass: string(req.Plan.Class), Env: req.Plan.Env}
@@ -229,7 +229,7 @@ func shapeTransforms(ctx context.Context, evaluator transformkit.Evaluator, proj
 	if len(candidates) == 0 {
 		return held, nil
 	}
-	results, err := evaluator.Evaluate(ctx, request)
+	results, err := pass.Evaluate(ctx, request)
 	if err != nil {
 		return held, err
 	}

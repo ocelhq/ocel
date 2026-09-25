@@ -5,11 +5,11 @@ import (
 	"testing"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 )
 
-func postgresBinding() rt.Binding {
-	return rt.Binding{
+func postgresBinding() live.Binding {
+	return live.Binding{
 		Name: "db--main",
 		Key:  "OCEL_RESOURCE_POSTGRES_main",
 		Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES,
@@ -22,7 +22,7 @@ func TestRender(t *testing.T) {
 	t.Run("names the same missing component every time", func(t *testing.T) {
 		t.Parallel()
 
-		m := Manifest{Keys: []rt.Key{{Key: "DB_PASSWORD"}}}
+		m := Manifest{Keys: []live.Key{{Key: "DB_PASSWORD"}}}
 
 		_, first := Render(m)
 		if first == nil {
@@ -42,7 +42,7 @@ func TestRender(t *testing.T) {
 	t.Run("a manifest with no key ARN says how to make one", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := Render(Manifest{Slug: "shop", Table: "ocel-vars", Class: "production", Keys: []rt.Key{{Key: "DB_PASSWORD"}}})
+		_, err := Render(Manifest{Slug: "shop", Table: "ocel-vars", Class: "production", Keys: []live.Key{{Key: "DB_PASSWORD"}}})
 		if err == nil {
 			t.Fatal("Render = nil, want a manifest with live values and no key refused")
 		}
@@ -75,7 +75,7 @@ func TestRenderParse(t *testing.T) {
 			Table:  "ocel-vars",
 			KeyARN: "arn:aws:kms:us-east-1:1234:key/abcd",
 			Class:  "production",
-			Keys:   []rt.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
+			Keys:   []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		}
 
 		raw, err := Render(want)
@@ -105,7 +105,7 @@ func TestRenderParse(t *testing.T) {
 		want.Granted = 3
 		raw, err := Render(Manifest{
 			Slug: "shop", Table: "ocel-vars", KeyARN: "arn:key", Class: "production",
-			Bindings: []rt.Binding{want},
+			Bindings: []live.Binding{want},
 		})
 		if err != nil {
 			t.Fatalf("Render: %v", err)
@@ -118,7 +118,7 @@ func TestRenderParse(t *testing.T) {
 			t.Fatalf("Parse: %v", err)
 		}
 		if len(got.Bindings) != 1 || got.Bindings[0] != want {
-			t.Errorf("bindings = %+v, want %+v", got.Bindings, []rt.Binding{want})
+			t.Errorf("bindings = %+v, want %+v", got.Bindings, []live.Binding{want})
 		}
 	})
 
@@ -135,7 +135,7 @@ func TestRenderParse(t *testing.T) {
 
 		raw, err := Render(Manifest{
 			Slug: "shop", Table: "ocel-vars", KeyARN: "arn:key", Class: "production",
-			Keys: []rt.Key{{Key: "DB_PASSWORD"}},
+			Keys: []live.Key{{Key: "DB_PASSWORD"}},
 		})
 		if err != nil {
 			t.Fatalf("Render: %v", err)
@@ -159,7 +159,7 @@ func TestRenderParse(t *testing.T) {
 		raw, err := Render(Manifest{
 			Slug: "shop", Table: "ocel-vars", KeyARN: "arn:key", Class: "preview",
 			Environment: "pr-42",
-			Keys:        []rt.Key{{Key: "DB_PASSWORD"}},
+			Keys:        []live.Key{{Key: "DB_PASSWORD"}},
 		})
 		if err != nil {
 			t.Fatalf("Render: %v", err)

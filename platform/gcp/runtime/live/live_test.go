@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -78,7 +78,7 @@ func (s *sink) Write(p []byte) (int, error) {
 func manifestOf(keys ...string) vars.Manifest {
 	held := vars.Manifest{Project: "acme-prod", Region: "europe-west1", Namespace: "ocel", Slug: "shop", Class: "production"}
 	for _, key := range keys {
-		held.Keys = append(held.Keys, rt.Key{Key: key})
+		held.Keys = append(held.Keys, live.Key{Key: key})
 	}
 	return held
 }
@@ -91,7 +91,7 @@ func TestASecretIsOpenedFromTheProjectsOwnRecordsUnderTheClassKey(t *testing.T) 
 	held.set(t, scope, values.Coordinate{Cell: values.Cell{Key: "SESSION_SECRET", Folder: "/web"}}, "s3ss10n")
 
 	manifest := manifestOf("DATABASE_URL")
-	manifest.Keys = append(manifest.Keys, rt.Key{Key: "SESSION_SECRET", Folder: "/web"})
+	manifest.Keys = append(manifest.Keys, live.Key{Key: "SESSION_SECRET", Folder: "/web"})
 	got := resolved(t, Over(manifest, held.records, held.sealer))
 
 	if got["DATABASE_URL"] != "postgres://live" || got["SESSION_SECRET"] != "s3ss10n" {
@@ -136,7 +136,7 @@ func TestABindingRecordReachesTheAppUnderTheKeyTheSdkReadsItBy(t *testing.T) {
 	})
 
 	manifest := manifestOf()
-	manifest.Bindings = []rt.Binding{{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}
+	manifest.Bindings = []live.Binding{{Name: "db--main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}
 	got := resolved(t, Over(manifest, held.records, held.sealer))
 
 	record := &bindingsv1.Binding{}

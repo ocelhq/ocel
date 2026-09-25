@@ -9,20 +9,20 @@ import (
 	"net/http"
 	"strings"
 
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-type Values = rt.Values
+type Values = live.Values
 
 const answerCeiling = 1 << 20
 
-type socketFetcher struct {
+type socketSource struct {
 	socket string
 	client *http.Client
 }
 
-func (f *socketFetcher) FetchLive(ctx context.Context) (map[string]string, error) {
+func (f *socketSource) Fetch(ctx context.Context) (map[string]string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://ocel-live"+vars.ValuesPath, nil)
 	if err != nil {
 		return nil, err
@@ -46,8 +46,8 @@ func (f *socketFetcher) FetchLive(ctx context.Context) (map[string]string, error
 	return answer.Values, nil
 }
 
-func (f *socketFetcher) FreeSpace() (uint64, uint64, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), rt.FetchBudget)
+func (f *socketSource) FreeSpace() (uint64, uint64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), live.FetchBudget)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://ocel-live"+vars.SpacePath, nil)
 	if err != nil {
@@ -88,11 +88,11 @@ func FromManifest(raw []byte, socket string) (*Values, error) {
 }
 
 func Over(manifest vars.Manifest, socket string) *Values {
-	return rt.New(over(socket), rt.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil)
+	return live.New(over(socket), live.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil)
 }
 
-func over(socket string) *socketFetcher {
-	return &socketFetcher{socket: socket, client: &http.Client{Transport: &http.Transport{
+func over(socket string) *socketSource {
+	return &socketSource{socket: socket, client: &http.Client{Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
 		},

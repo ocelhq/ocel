@@ -16,10 +16,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/runtimekit/child"
-	"github.com/ocelhq/ocel/pkg/runtimekit/front"
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
-	"github.com/ocelhq/ocel/platform/gcp/runtime/live"
+	source "github.com/ocelhq/ocel/platform/gcp/runtime/live"
 	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
@@ -52,12 +52,12 @@ func run(ctx context.Context, command []string, environ []string) int {
 		case vars.EnvVar:
 			manifest = value
 			continue
-		case front.HealthPathVar:
+		case originguard.HealthPathVar:
 			healthPath = value
 		}
 		env = append(env, entry)
 	}
-	guard, env := front.GuardFromEnv(env)
+	guard, env := originguard.GuardFromEnv(env)
 
 	values, err := resolve(ctx, manifest)
 	if err != nil {
@@ -113,7 +113,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 				_ = proc.Stop(stopGrace)
 				return fatal(fmt.Sprintf("listen on port %s: %v", exposed, err))
 			}
-			server = &http.Server{Handler: front.Handler(front.Options{
+			server = &http.Server{Handler: originguard.Handler(originguard.Options{
 				Upstream:   upstream,
 				Guard:      guard,
 				HealthPath: healthPath,
@@ -146,11 +146,11 @@ func exitCode(exit child.Exit) int {
 	return exit.Code
 }
 
-func resolve(ctx context.Context, manifest string) (*rt.Values, error) {
+func resolve(ctx context.Context, manifest string) (*live.Values, error) {
 	if manifest == "" {
 		return nil, nil
 	}
-	values, err := live.FromManifest([]byte(manifest))
+	values, err := source.FromManifest([]byte(manifest))
 	if err != nil {
 		return nil, fmt.Errorf("read this deployment's live variables: %w", err)
 	}

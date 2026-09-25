@@ -57,7 +57,7 @@ func shapeRequest(t *testing.T) providerkit.ShapeRequest {
 	}
 }
 
-func shaped(t *testing.T, evaluator transformkit.Evaluator, req providerkit.ShapeRequest) *costv1.ResourceSet {
+func shaped(t *testing.T, pass transformkit.Pass, req providerkit.ShapeRequest) *costv1.ResourceSet {
 	t.Helper()
 	tree := &costkit.Tree{}
 	project := tree.Scope("", "project", "shop")
@@ -65,7 +65,7 @@ func shaped(t *testing.T, evaluator transformkit.Evaluator, req providerkit.Shap
 		Shared:      tree.Scope(project, "shared", "production"),
 		Environment: tree.Scope(project, "environment", "prod"),
 	}
-	if err := Shape(context.Background(), evaluator, "us-east-1", req, tree, scopes); err != nil {
+	if err := Shape(context.Background(), pass, "us-east-1", req, tree, scopes); err != nil {
 		t.Fatalf("Shape() = %v", err)
 	}
 	set, err := tree.Set("ocel")
@@ -238,8 +238,8 @@ func TestTransformsResizeTheShapeAndBindingOutputsStayUnknown(t *testing.T) {
 	t.Parallel()
 
 	root := transformtest.Root(t, map[string]string{"sizing.transform.ts": sizingModule})
-	evaluator := NodePass(root, []string{"./sizing.transform.ts"})
-	set := shaped(t, evaluator, shapeRequest(t))
+	pass := NodePass(root, []string{"./sizing.transform.ts"})
+	set := shaped(t, pass, shapeRequest(t))
 
 	lambda := shapedNamed(t, set, "aws_lambda_function", "fn--web--entry")
 	if lambda["memory_size"] != float64(2048) {

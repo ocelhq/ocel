@@ -11,7 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/runtimekit/front"
+	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -162,7 +162,7 @@ func (c Container) delivered() map[string]string {
 	env := make(map[string]string, len(c.Env)+2)
 	maps.Copy(env, c.Env)
 	if c.HealthPath != "" {
-		env[front.HealthPathVar] = c.HealthPath
+		env[originguard.HealthPathVar] = c.HealthPath
 	}
 	if len(c.Manifest) > 0 {
 		env[live.EnvVar] = string(c.Manifest)

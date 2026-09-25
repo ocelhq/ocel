@@ -19,8 +19,8 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 type memRecords struct {
@@ -108,7 +108,7 @@ func (s goSealer) Seal(_ context.Context, at providerkit.SealScope, plaintext []
 }
 
 func (s goSealer) Open(_ context.Context, at providerkit.SealScope, sealed []byte) ([]byte, error) {
-	return live.Open(s.key, at, sealed)
+	return vars.Open(s.key, at, sealed)
 }
 
 type box struct {
@@ -127,10 +127,10 @@ func aBox(t *testing.T, root string) *box {
 	}
 	b := &box{classRoot: filepath.Join(root, "etc"), stateRoot: filepath.Join(root, "state"), records: &memRecords{}, sealer: goSealer{key: key}}
 	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
-		if err := os.MkdirAll(filepath.Dir(live.KeyPath(b.classRoot, class)), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(vars.KeyPath(b.classRoot, class)), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(live.KeyPath(b.classRoot, class), key, 0o400); err != nil {
+		if err := os.WriteFile(vars.KeyPath(b.classRoot, class), key, 0o400); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -162,11 +162,11 @@ func (b *box) dump(t *testing.T) {
 	b.records.mu.Lock()
 	defer b.records.mu.Unlock()
 	for _, record := range b.records.held {
-		class, encoded, err := live.Located(record.Name)
+		class, encoded, err := vars.Located(record.Name)
 		if err != nil {
 			t.Fatal(err)
 		}
-		path := filepath.Join(live.RecordsDir(b.stateRoot, class), encoded+".rec")
+		path := filepath.Join(vars.RecordsDir(b.stateRoot, class), encoded+".rec")
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -191,11 +191,11 @@ func (b *box) claims(t *testing.T, document string) {
 	}
 }
 
-func aStoreManifest(sealed string) live.Manifest {
-	return live.Manifest{
+func aStoreManifest(sealed string) vars.Manifest {
+	return vars.Manifest{
 		Slug: "shop", Class: "production",
-		Keys: []rt.Key{{Key: "DATABASE_URL"}},
-		Store: &live.Store{
+		Keys: []live.Key{{Key: "DATABASE_URL"}},
+		Store: &vars.Store{
 			Env: "shop-prod", Endpoint: "http://shop-prod-store-s3:9000", Region: "us-east-1",
 			AccessKeyID: "ocel", Pointer: "@production", Sealed: sealed,
 		},
@@ -216,9 +216,9 @@ func TestTheStoresPublicAddressIsWhateverTheBoxClaimsForItNow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve() = %v", err)
 	}
-	if resolved[live.StorePublicKey] != "https://storage.shop.example.com" {
+	if resolved[vars.StorePublicKey] != "https://storage.shop.example.com" {
 		t.Errorf("Resolve() handed %q under %s, want the name this box claims for the store right now",
-			resolved[live.StorePublicKey], live.StorePublicKey)
+			resolved[vars.StorePublicKey], vars.StorePublicKey)
 	}
 }
 
@@ -232,7 +232,7 @@ func TestAStoreNoDomainPointsAtHasNoPublicAddress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve() = %v", err)
 	}
-	if held := resolved[live.StorePublicKey]; held != "" {
+	if held := resolved[vars.StorePublicKey]; held != "" {
 		t.Errorf("Resolve() handed %q as the store's public address on a box claiming nothing for it", held)
 	}
 }
@@ -248,9 +248,9 @@ func TestTheStoreResolvesEachKeyOffTheBoxUnderTheCallersOwnScopeAndEnvironment(t
 	b.set(t, values.Scope{Project: "other", Class: providerkit.ClassProduction}, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, "postgres://other")
 	b.dump(t)
 
-	resolved, err := b.resolver().Resolve(context.Background(), live.Manifest{
+	resolved, err := b.resolver().Resolve(context.Background(), vars.Manifest{
 		Slug: "shop", Class: "production",
-		Keys: []rt.Key{{Key: "DATABASE_URL"}, {Key: "SESSION", Folder: "/web"}, {Key: "MISSING"}},
+		Keys: []live.Key{{Key: "DATABASE_URL"}, {Key: "SESSION", Folder: "/web"}, {Key: "MISSING"}},
 	})
 	if err != nil {
 		t.Fatalf("Resolve() = %v", err)
@@ -261,8 +261,8 @@ func TestTheStoreResolvesEachKeyOffTheBoxUnderTheCallersOwnScopeAndEnvironment(t
 	if _, held := resolved["MISSING"]; held {
 		t.Errorf("Resolve() handed back MISSING, which nothing stored: the runtime is what says it is unset")
 	}
-	preview, err := b.resolver().Resolve(context.Background(), live.Manifest{
-		Slug: "shop", Class: "production", Environment: "pr-7", Keys: []rt.Key{{Key: "DATABASE_URL"}},
+	preview, err := b.resolver().Resolve(context.Background(), vars.Manifest{
+		Slug: "shop", Class: "production", Environment: "pr-7", Keys: []live.Key{{Key: "DATABASE_URL"}},
 	})
 	if err != nil || preview["DATABASE_URL"] != "postgres://pr-7" {
 		t.Errorf("Resolve() for pr-7 = %v, %v, want the environment's own value over the class-wide one", preview, err)
@@ -281,8 +281,8 @@ func TestTheStoreResolvesABindingRecordUnderTheKeyTheRuntimeReadsItBy(t *testing
 	})
 	b.dump(t)
 
-	bindings := []rt.Binding{{Name: "main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}
-	resolved, err := b.resolver().Resolve(context.Background(), live.Manifest{Slug: "shop", Class: "production", Bindings: bindings})
+	bindings := []live.Binding{{Name: "main", Key: "OCEL_RESOURCE_POSTGRES_main", Type: bindingsv1.BindingType_BINDING_TYPE_POSTGRES}}
+	resolved, err := b.resolver().Resolve(context.Background(), vars.Manifest{Slug: "shop", Class: "production", Bindings: bindings})
 	if err != nil {
 		t.Fatalf("Resolve() = %v", err)
 	}
@@ -290,7 +290,7 @@ func TestTheStoreResolvesABindingRecordUnderTheKeyTheRuntimeReadsItBy(t *testing
 	if !strings.Contains(record, "hunter2") || !strings.Contains(record, "db.internal") {
 		t.Errorf("Resolve() handed %q under the binding's key, want the full record the app connects with", record)
 	}
-	if err := rt.Conform(bindings, resolved); err != nil {
+	if err := live.Conform(bindings, resolved); err != nil {
 		t.Errorf("what the store resolved does not conform to what the runtime was built to read: %v", err)
 	}
 }
@@ -300,10 +300,10 @@ func TestTheStoreOpensNothingUnderAClassWhoseKeyIsGone(t *testing.T) {
 	b := aBox(t, t.TempDir())
 	b.set(t, shop, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, "postgres://class-wide")
 	b.dump(t)
-	if err := os.Remove(live.KeyPath(b.classRoot, providerkit.ClassProduction)); err != nil {
+	if err := os.Remove(vars.KeyPath(b.classRoot, providerkit.ClassProduction)); err != nil {
 		t.Fatal(err)
 	}
-	_, err := b.resolver().Resolve(context.Background(), live.Manifest{Slug: "shop", Class: "production", Keys: []rt.Key{{Key: "DATABASE_URL"}}})
+	_, err := b.resolver().Resolve(context.Background(), vars.Manifest{Slug: "shop", Class: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}})
 	if err == nil || !errors.Is(err, os.ErrNotExist) && !strings.Contains(err.Error(), "seal key") {
 		t.Errorf("Resolve() with no key = %v, want a refusal naming the key", err)
 	}
@@ -314,7 +314,7 @@ func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *te
 	b := aBox(t, t.TempDir())
 	at := providerkit.SealScope{
 		Project: "shop", Class: providerkit.ClassProduction, Env: "shop-prod",
-		Folder: live.StoreSecretFolder, Binding: live.StoreSecretBinding, Name: live.StoreSecretName,
+		Folder: vars.StoreSecretFolder, Binding: vars.StoreSecretBinding, Name: vars.StoreSecretName,
 	}
 	sealed, err := b.sealer.Seal(context.Background(), at, []byte("s3cr3t"))
 	if err != nil {
@@ -326,10 +326,10 @@ func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *te
 	})
 	b.dump(t)
 
-	resolved, err := b.resolver().Resolve(context.Background(), live.Manifest{
+	resolved, err := b.resolver().Resolve(context.Background(), vars.Manifest{
 		Slug: "shop", Class: "production",
-		Bindings: []rt.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
-		Store: &live.Store{
+		Bindings: []live.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
+		Store: &vars.Store{
 			Env: "shop-prod", Endpoint: "http://shop-prod-store-s3:9000", Region: "us-east-1",
 			AccessKeyID: "ocel", Sealed: base64.StdEncoding.EncodeToString(sealed),
 		},
@@ -337,9 +337,9 @@ func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *te
 	if err != nil {
 		t.Fatalf("Resolve() = %v", err)
 	}
-	if resolved[live.StoreSecretKey] != "s3cr3t" {
+	if resolved[vars.StoreSecretKey] != "s3cr3t" {
 		t.Errorf("Resolve() handed %q under %s, want the store credential the deploy sealed for this box's runtime",
-			resolved[live.StoreSecretKey], live.StoreSecretKey)
+			resolved[vars.StoreSecretKey], vars.StoreSecretKey)
 	}
 }
 
@@ -348,24 +348,24 @@ func TestTheStoreRefusesAStoreCredentialSealedForAnotherProject(t *testing.T) {
 	b := aBox(t, t.TempDir())
 	elsewhere := providerkit.SealScope{
 		Project: "other", Class: providerkit.ClassProduction, Env: "other-prod",
-		Folder: live.StoreSecretFolder, Binding: live.StoreSecretBinding, Name: live.StoreSecretName,
+		Folder: vars.StoreSecretFolder, Binding: vars.StoreSecretBinding, Name: vars.StoreSecretName,
 	}
 	sealed, err := b.sealer.Seal(context.Background(), elsewhere, []byte("s3cr3t"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	b.dump(t)
-	_, err = b.resolver().Resolve(context.Background(), live.Manifest{
+	_, err = b.resolver().Resolve(context.Background(), vars.Manifest{
 		Slug: "shop", Class: "production",
-		Keys:  []rt.Key{{Key: "DATABASE_URL"}},
-		Store: &live.Store{Env: "shop-prod", Sealed: base64.StdEncoding.EncodeToString(sealed)},
+		Keys:  []live.Key{{Key: "DATABASE_URL"}},
+		Store: &vars.Store{Env: "shop-prod", Sealed: base64.StdEncoding.EncodeToString(sealed)},
 	})
-	if err == nil || !strings.Contains(err.Error(), live.StoreSecretName) {
+	if err == nil || !strings.Contains(err.Error(), vars.StoreSecretName) {
 		t.Errorf("Resolve() = %v, want a refusal: a credential sealed for another project must not open here", err)
 	}
 }
 
-func aBucketBinding(t *testing.T, b *box, public bool) []rt.Binding {
+func aBucketBinding(t *testing.T, b *box, public bool) []live.Binding {
 	t.Helper()
 	b.bind(t, shop, "", "uploads", &bindingsv1.Binding{
 		Name:   "uploads",
@@ -376,12 +376,12 @@ func aBucketBinding(t *testing.T, b *box, public bool) []rt.Binding {
 	})
 	b.dump(t)
 	b.claims(t, claimingStorage)
-	return []rt.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}}
+	return []live.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}}
 }
 
-func resolvedBucket(t *testing.T, b *box, bindings []rt.Binding) *bindingsv1.BucketProperties {
+func resolvedBucket(t *testing.T, b *box, bindings []live.Binding) *bindingsv1.BucketProperties {
 	t.Helper()
-	resolved, err := b.resolver().Resolve(context.Background(), live.Manifest{
+	resolved, err := b.resolver().Resolve(context.Background(), vars.Manifest{
 		Slug: "shop", Class: "production", Bindings: bindings,
 		Store: aStoreManifest("").Store,
 	})

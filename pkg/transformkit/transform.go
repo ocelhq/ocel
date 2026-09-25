@@ -22,6 +22,6 @@ type Result struct {
 	Tags    map[string]string
 }
 
-type Evaluator interface {
+type Pass interface {
 	Evaluate(ctx context.Context, req Request) ([]Result, error)
 }

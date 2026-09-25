@@ -99,7 +99,7 @@ type Config struct {
 
 	StackState edge.StackState
 
-	Transform transformkit.Evaluator
+	Transform transformkit.Pass
 }
 
 type RecordWaiter interface {

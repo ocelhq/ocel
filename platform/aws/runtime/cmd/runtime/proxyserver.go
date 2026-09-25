@@ -13,8 +13,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/runtimekit/bindingproxy"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
-	"github.com/ocelhq/ocel/pkg/runtimekit/proxy"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bucket"
 	s3store "github.com/ocelhq/ocel/platform/s3"
@@ -82,7 +82,7 @@ func serveProxy(ctx context.Context, values s3store.Records, table, sessionPrefi
 		Granted:          grantedBuckets(values),
 	})
 
-	served, err := proxy.Serve(s3store.RouteRecords(svc, values, s3store.HTTPPoster{}))
+	served, err := bindingproxy.Serve(s3store.RouteRecords(svc, values, s3store.HTTPPoster{}))
 	if err != nil {
 		return nil, nil, err
 	}

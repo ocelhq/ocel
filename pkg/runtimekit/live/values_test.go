@@ -17,7 +17,7 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
-type scriptedFetcher struct {
+type scriptedSource struct {
 	release chan struct{}
 
 	mu      sync.Mutex
@@ -30,7 +30,7 @@ type fetchResult struct {
 	err    error
 }
 
-func (f *scriptedFetcher) FetchLive(ctx context.Context) (map[string]string, error) {
+func (f *scriptedSource) Fetch(ctx context.Context) (map[string]string, error) {
 	f.mu.Lock()
 	n := f.calls
 	f.calls++
@@ -52,22 +52,22 @@ func (f *scriptedFetcher) FetchLive(ctx context.Context) (map[string]string, err
 	return f.results[n].values, f.results[n].err
 }
 
-func (f *scriptedFetcher) count() int {
+func (f *scriptedSource) count() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.calls
 }
 
-func resolves(values ...map[string]string) *scriptedFetcher {
-	f := &scriptedFetcher{}
+func resolves(values ...map[string]string) *scriptedSource {
+	f := &scriptedSource{}
 	for _, v := range values {
 		f.results = append(f.results, fetchResult{values: v})
 	}
 	return f
 }
 
-func fails(err error) *scriptedFetcher {
-	return &scriptedFetcher{results: []fetchResult{{err: err}}}
+func fails(err error) *scriptedSource {
+	return &scriptedSource{results: []fetchResult{{err: err}}}
 }
 
 type sink struct {
@@ -128,15 +128,15 @@ func eventually(t *testing.T, why string, cond func() bool) {
 
 func TestLiveValues(t *testing.T) {
 	t.Run("start kicks the fetch off without waiting on it", func(t *testing.T) {
-		fetcher := &scriptedFetcher{release: make(chan struct{}), results: []fetchResult{{values: map[string]string{"DB_PASSWORD": "hunter2"}}}}
+		source := &scriptedSource{release: make(chan struct{}), results: []fetchResult{{values: map[string]string{"DB_PASSWORD": "hunter2"}}}}
 		out := &sink{}
-		l := New(fetcher, []string{"DB_PASSWORD"}, nil, nil)
+		l := New(source, []string{"DB_PASSWORD"}, nil, nil)
 		l.Attach(out)
 
 		done := l.Prefetch(context.Background())
 		consistently(t, "a generation was pushed while the fetch was still held", func() bool { return len(out.messages(t)) == 0 })
 
-		close(fetcher.release)
+		close(source.release)
 		if err := l.Join(done); err != nil {
 			t.Fatalf("join: %v", err)
 		}
@@ -211,9 +211,9 @@ func TestLiveValues(t *testing.T) {
 
 	t.Run("an invocation within the bound costs no fetch", func(t *testing.T) {
 		clock := time.Unix(1_700_000_000, 0)
-		fetcher := resolves(map[string]string{"DB_PASSWORD": "hunter2"})
+		source := resolves(map[string]string{"DB_PASSWORD": "hunter2"})
 		out := &sink{}
-		l := New(fetcher, []string{"DB_PASSWORD"}, nil, func() time.Time { return clock })
+		l := New(source, []string{"DB_PASSWORD"}, nil, func() time.Time { return clock })
 		l.Attach(out)
 
 		if err := l.Join(l.Prefetch(context.Background())); err != nil {
@@ -225,7 +225,7 @@ func TestLiveValues(t *testing.T) {
 			l.Refresh(context.Background())
 		}
 
-		consistently(t, "an invocation inside the bound read the store again", func() bool { return fetcher.count() == 1 })
+		consistently(t, "an invocation inside the bound read the store again", func() bool { return source.count() == 1 })
 		if msgs := out.messages(t); len(msgs) != 1 {
 			t.Errorf("pushed %d messages, want only the first generation", len(msgs))
 		}
@@ -233,19 +233,19 @@ func TestLiveValues(t *testing.T) {
 
 	t.Run("a rotation is picked up in the background and pushed as the next generation", func(t *testing.T) {
 		clock := time.Unix(1_700_000_000, 0)
-		fetcher := resolves(
+		source := resolves(
 			map[string]string{"DB_PASSWORD": "hunter2"},
 			map[string]string{"DB_PASSWORD": "rotated"},
 		)
 		out := &sink{}
-		l := New(fetcher, []string{"DB_PASSWORD"}, nil, func() time.Time { return clock })
+		l := New(source, []string{"DB_PASSWORD"}, nil, func() time.Time { return clock })
 		l.Attach(out)
 
 		if err := l.Join(l.Prefetch(context.Background())); err != nil {
 			t.Fatalf("join: %v", err)
 		}
 
-		fetcher.release = make(chan struct{})
+		source.release = make(chan struct{})
 		clock = clock.Add(StalenessBound)
 
 		start := time.Now()
@@ -257,7 +257,7 @@ func TestLiveValues(t *testing.T) {
 			t.Errorf("messages = %+v, want the stale generation still the newest while revalidating", msgs)
 		}
 
-		close(fetcher.release)
+		close(source.release)
 		eventually(t, "the refreshed generation to be pushed", func() bool { return len(out.messages(t)) == 2 })
 
 		msgs := out.messages(t)
@@ -271,23 +271,23 @@ func TestLiveValues(t *testing.T) {
 
 	t.Run("an invocation does not stack refreshes on one already in flight", func(t *testing.T) {
 		clock := time.Unix(1_700_000_000, 0)
-		fetcher := resolves(map[string]string{"DB_PASSWORD": "hunter2"})
-		l := New(fetcher, []string{"DB_PASSWORD"}, nil, func() time.Time { return clock })
+		source := resolves(map[string]string{"DB_PASSWORD": "hunter2"})
+		l := New(source, []string{"DB_PASSWORD"}, nil, func() time.Time { return clock })
 		l.Attach(&sink{})
 
 		if err := l.Join(l.Prefetch(context.Background())); err != nil {
 			t.Fatalf("join: %v", err)
 		}
 
-		fetcher.release = make(chan struct{})
+		source.release = make(chan struct{})
 		clock = clock.Add(10 * StalenessBound)
 		for range 5 {
 			l.Refresh(context.Background())
 		}
-		eventually(t, "the refresh to reach the store", func() bool { return fetcher.count() >= 2 })
+		eventually(t, "the refresh to reach the store", func() bool { return source.count() >= 2 })
 
-		consistently(t, "an invocation stacked a second refresh on the one already in flight", func() bool { return fetcher.count() == 2 })
-		close(fetcher.release)
+		consistently(t, "an invocation stacked a second refresh on the one already in flight", func() bool { return source.count() == 2 })
+		close(source.release)
 	})
 
 	t.Run("a prefetch that cannot reach the store fails init", func(t *testing.T) {
@@ -309,12 +309,12 @@ func TestLiveValues(t *testing.T) {
 
 	t.Run("a failed refresh pushes nothing and keeps the last generation", func(t *testing.T) {
 		clock := time.Unix(1_700_000_000, 0)
-		fetcher := &scriptedFetcher{results: []fetchResult{
+		source := &scriptedSource{results: []fetchResult{
 			{values: map[string]string{"DB_PASSWORD": "hunter2"}},
 			{err: errors.New("dial tcp: connection refused")},
 		}}
 		out := &sink{}
-		l := New(fetcher, []string{"DB_PASSWORD"}, nil, func() time.Time { return clock })
+		l := New(source, []string{"DB_PASSWORD"}, nil, func() time.Time { return clock })
 		l.Attach(out)
 
 		if err := l.Join(l.Prefetch(context.Background())); err != nil {
@@ -323,7 +323,7 @@ func TestLiveValues(t *testing.T) {
 
 		clock = clock.Add(StalenessBound)
 		l.Refresh(context.Background())
-		eventually(t, "the failing refresh to run", func() bool { return fetcher.count() == 2 })
+		eventually(t, "the failing refresh to run", func() bool { return source.count() == 2 })
 
 		msgs := out.messages(t)
 		if len(msgs) != 1 {
@@ -335,7 +335,7 @@ func TestLiveValues(t *testing.T) {
 
 		clock = clock.Add(StalenessBound)
 		l.Refresh(context.Background())
-		eventually(t, "the refresh to be retried", func() bool { return fetcher.count() == 3 })
+		eventually(t, "the refresh to be retried", func() bool { return source.count() == 3 })
 	})
 
 	t.Run("tells node which keys to expect a push for", func(t *testing.T) {
@@ -454,11 +454,11 @@ func TestProject(t *testing.T) {
 	t.Run("a rotation is visible through the same path and the generation it replaced is gone", func(t *testing.T) {
 		clock := time.Unix(1_700_000_000, 0)
 		root := filepath.Join(t.TempDir(), "live")
-		fetcher := resolves(
+		source := resolves(
 			map[string]string{"DB_PASSWORD": "hunter2"},
 			map[string]string{"DB_PASSWORD": "rotated"},
 		)
-		l := New(fetcher, []string{"DB_PASSWORD"}, nil, func() time.Time { return clock })
+		l := New(source, []string{"DB_PASSWORD"}, nil, func() time.Time { return clock })
 
 		if err := l.Project(root); err != nil {
 			t.Fatalf("Project: %v", err)
@@ -484,8 +484,8 @@ func TestProject(t *testing.T) {
 
 	t.Run("projects nothing until the first generation arrives", func(t *testing.T) {
 		root := filepath.Join(t.TempDir(), "live")
-		fetcher := &scriptedFetcher{release: make(chan struct{}), results: []fetchResult{{values: map[string]string{"DB_PASSWORD": "hunter2"}}}}
-		l := New(fetcher, []string{"DB_PASSWORD"}, nil, nil)
+		source := &scriptedSource{release: make(chan struct{}), results: []fetchResult{{values: map[string]string{"DB_PASSWORD": "hunter2"}}}}
+		l := New(source, []string{"DB_PASSWORD"}, nil, nil)
 
 		if err := l.Project(root); err != nil {
 			t.Fatalf("Project: %v", err)
@@ -495,7 +495,7 @@ func TestProject(t *testing.T) {
 		}
 
 		done := l.Prefetch(context.Background())
-		close(fetcher.release)
+		close(source.release)
 		if err := l.Join(done); err != nil {
 			t.Fatalf("join: %v", err)
 		}
@@ -575,11 +575,11 @@ func TestProject(t *testing.T) {
 func TestReread(t *testing.T) {
 	t.Run("reaches the store inside the staleness bound and hands back what it now holds", func(t *testing.T) {
 		clock := time.Unix(1_700_000_000, 0)
-		fetcher := resolves(
+		source := resolves(
 			map[string]string{"STORE_BASE": ""},
 			map[string]string{"STORE_BASE": "https://storage.shop.example.com"},
 		)
-		l := New(fetcher, []string{"STORE_BASE"}, nil, func() time.Time { return clock })
+		l := New(source, []string{"STORE_BASE"}, nil, func() time.Time { return clock })
 
 		if err := l.Join(l.Prefetch(context.Background())); err != nil {
 			t.Fatalf("join: %v", err)
@@ -594,8 +594,8 @@ func TestReread(t *testing.T) {
 
 	t.Run("costs no fetch inside its own floor, however often it is asked", func(t *testing.T) {
 		clock := time.Unix(1_700_000_000, 0)
-		fetcher := resolves(map[string]string{"STORE_BASE": ""})
-		l := New(fetcher, []string{"STORE_BASE"}, nil, func() time.Time { return clock })
+		source := resolves(map[string]string{"STORE_BASE": ""})
+		l := New(source, []string{"STORE_BASE"}, nil, func() time.Time { return clock })
 
 		if err := l.Join(l.Prefetch(context.Background())); err != nil {
 			t.Fatalf("join: %v", err)
@@ -605,8 +605,8 @@ func TestReread(t *testing.T) {
 			l.Reread(context.Background())
 		}
 
-		if fetcher.count() != 1 {
-			t.Errorf("the store was read %d times, and a reread inside its floor reads nothing", fetcher.count())
+		if source.count() != 1 {
+			t.Errorf("the store was read %d times, and a reread inside its floor reads nothing", source.count())
 		}
 	})
 }
@@ -636,21 +636,21 @@ func (c *slowClock) advance(by time.Duration) {
 	c.now = c.now.Add(by)
 }
 
-type slowFetcher struct {
+type slowSource struct {
 	clock *slowClock
-	inner *scriptedFetcher
+	inner *scriptedSource
 }
 
-func (f *slowFetcher) FetchLive(ctx context.Context) (map[string]string, error) {
+func (f *slowSource) Fetch(ctx context.Context) (map[string]string, error) {
 	f.clock.advance(time.Second)
-	return f.inner.FetchLive(ctx)
+	return f.inner.Fetch(ctx)
 }
 
 func TestKeepHoldsTheBoundWhenAFetchTakesTime(t *testing.T) {
 	t.Run("every tick of the bound reads the store again", func(t *testing.T) {
 		clock := &slowClock{now: time.Unix(1_700_000_000, 0)}
 		inner := resolves(map[string]string{"DB_PASSWORD": "hunter2"})
-		l := New(&slowFetcher{clock: clock, inner: inner}, []string{"DB_PASSWORD"}, nil, clock.read)
+		l := New(&slowSource{clock: clock, inner: inner}, []string{"DB_PASSWORD"}, nil, clock.read)
 
 		if err := l.Join(l.Prefetch(context.Background())); err != nil {
 			t.Fatalf("join: %v", err)
@@ -732,12 +732,12 @@ func decodeBinding(t *testing.T, raw string) *bindingsv1.Binding {
 func TestBindingColdStart(t *testing.T) {
 	t.Run("a binding's value arrives at cold start as the record the app reads", func(t *testing.T) {
 		binding := postgresBinding()
-		fetcher := resolves(map[string]string{
+		source := resolves(map[string]string{
 			binding.Key:   postgresRecordFor(t, "s3cr3t"),
 			"DB_PASSWORD": "hunter2",
 		})
 		out := &sink{}
-		l := New(fetcher, []string{binding.Key, "DB_PASSWORD"}, []Binding{binding}, nil)
+		l := New(source, []string{binding.Key, "DB_PASSWORD"}, []Binding{binding}, nil)
 		l.Attach(out)
 
 		if err := l.Join(l.Prefetch(context.Background())); err != nil {
@@ -759,14 +759,14 @@ func TestBindingColdStart(t *testing.T) {
 
 	t.Run("a credential rotated after the deploy is served at the next cold start", func(t *testing.T) {
 		binding := postgresBinding()
-		fetcher := resolves(
+		source := resolves(
 			map[string]string{binding.Key: postgresRecordFor(t, "old")},
 			map[string]string{binding.Key: postgresRecordFor(t, "rotated")},
 		)
 
 		served := func() string {
 			out := &sink{}
-			l := New(fetcher, []string{binding.Key}, []Binding{binding}, nil)
+			l := New(source, []string{binding.Key}, []Binding{binding}, nil)
 			l.Attach(out)
 			if err := l.Join(l.Prefetch(context.Background())); err != nil {
 				t.Fatalf("join: %v", err)
@@ -839,12 +839,12 @@ func TestBindingColdStart(t *testing.T) {
 		binding := postgresBinding()
 		clock := time.Unix(1_700_000_000, 0)
 		good := postgresRecordFor(t, "good")
-		fetcher := resolves(
+		source := resolves(
 			map[string]string{binding.Key: good},
 			map[string]string{binding.Key: bucketRecord(t, "shop-uploads")},
 		)
 		out := &sink{}
-		l := New(fetcher, []string{binding.Key}, []Binding{binding}, func() time.Time { return clock })
+		l := New(source, []string{binding.Key}, []Binding{binding}, func() time.Time { return clock })
 		l.Attach(out)
 
 		if err := l.Join(l.Prefetch(context.Background())); err != nil {
@@ -853,7 +853,7 @@ func TestBindingColdStart(t *testing.T) {
 
 		clock = clock.Add(StalenessBound)
 		l.Refresh(context.Background())
-		eventually(t, "the drifting refresh to run", func() bool { return fetcher.count() == 2 })
+		eventually(t, "the drifting refresh to run", func() bool { return source.count() == 2 })
 
 		consistently(t, "a warm process pushed a generation it could not conform", func() bool { return len(out.messages(t)) == 1 })
 		if msgs := out.messages(t); msgs[0].Values[binding.Key] != good {

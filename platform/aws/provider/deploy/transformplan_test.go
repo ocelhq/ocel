@@ -68,11 +68,11 @@ func planUnderTransform() providerkit.StackPlan {
 	}
 }
 
-type patchingEvaluator struct {
+type patchingPass struct {
 	patch func([]transformkit.Patches)
 }
 
-func (e patchingEvaluator) Evaluate(_ context.Context, req transformkit.Request) ([]transformkit.Result, error) {
+func (e patchingPass) Evaluate(_ context.Context, req transformkit.Request) ([]transformkit.Result, error) {
 	patches := make([]transformkit.Patches, len(req.Resources))
 	for i := range req.Resources {
 		patches[i] = transformkit.Patches{}
@@ -93,56 +93,56 @@ func placeholderFor(kind, name, property string) map[string]any {
 	}
 }
 
-func filledFromBinding(kind, name, property string) patchingEvaluator {
-	return patchingEvaluator{patch: func(patches []transformkit.Patches) {
+func filledFromBinding(kind, name, property string) patchingPass {
+	return patchingPass{patch: func(patches []transformkit.Patches) {
 		patches[len(patches)-1]["lambda"] = map[string]any{"runtime": placeholderFor(kind, name, property)}
 	}}
 }
 
-func offered(t *testing.T, plan providerkit.StackPlan) (*fakeEvaluator, []string) {
+func offered(t *testing.T, plan providerkit.StackPlan) (*fakePass, []string) {
 	t.Helper()
-	evaluator := &fakeEvaluator{}
-	if _, err := transformStackPlan(context.Background(), evaluator, plan); err != nil {
+	pass := &fakePass{}
+	if _, err := transformStackPlan(context.Background(), pass, plan); err != nil {
 		t.Fatalf("transformStackPlan() = %v", err)
 	}
 	var seen []string
-	for _, resource := range evaluator.seen.Resources {
+	for _, resource := range pass.seen.Resources {
 		seen = append(seen, resource.Type+":"+resource.Name)
 	}
-	return evaluator, seen
+	return pass, seen
 }
 
 func TestAnAppStackOffersOnlyTheFunctionsItStandsUp(t *testing.T) {
-	evaluator, seen := offered(t, planUnderTransform())
+	pass, seen := offered(t, planUnderTransform())
 
 	want := []string{"function:fn--api--users"}
 	if strings.Join(seen, ",") != strings.Join(want, ",") {
 		t.Fatalf("the app stack offered %v, want %v — a patch on a resource this stack never constructs reaches nothing", seen, want)
 	}
-	if evaluator.seen.Provider != transformProvider {
-		t.Errorf("the transform was told provider %q, want %q", evaluator.seen.Provider, transformProvider)
+	if pass.seen.Provider != transformProvider {
+		t.Errorf("the transform was told provider %q, want %q", pass.seen.Provider, transformProvider)
 	}
-	if evaluator.seen.Env != "production" || evaluator.seen.EnvClass != string(providerkit.ClassProduction) {
-		t.Errorf("the transform was told env %q class %q, want the plan's own coordinate", evaluator.seen.Env, evaluator.seen.EnvClass)
+	if pass.seen.Env != "production" || pass.seen.EnvClass != string(providerkit.ClassProduction) {
+		t.Errorf("the transform was told env %q class %q, want the plan's own coordinate", pass.seen.Env, pass.seen.EnvClass)
 	}
 }
 
 func TestAPlanWithNoTransformIsLeftExactlyAsItWasPlanned(t *testing.T) {
 	transformed, err := transformStackPlan(context.Background(), nil, planUnderTransform())
 	if err != nil {
-		t.Fatalf("transformStackPlan() with no evaluator = %v", err)
+		t.Fatalf("transformStackPlan() with no pass = %v", err)
 	}
 	if transformed != nil {
-		t.Errorf("transformStackPlan() = %+v with no evaluator, want the planned arguments left alone", transformed)
+		t.Errorf("transformStackPlan() = %+v with no pass, want the planned arguments left alone", transformed)
 	}
 }
 
 func TestAPatchLandsOnThePulumiResourceThatOcelConstructsForIt(t *testing.T) {
-	evaluator := patchingEvaluator{patch: func(patches []transformkit.Patches) {
+	pass := patchingPass{patch: func(patches []transformkit.Patches) {
 		patches[len(patches)-1]["lambda"] = map[string]any{"memorySize": 2048}
 	}}
 
-	transformed, err := transformStackPlan(context.Background(), evaluator, planUnderTransform())
+	transformed, err := transformStackPlan(context.Background(), pass, planUnderTransform())
 	if err != nil {
 		t.Fatalf("transformStackPlan() = %v", err)
 	}
@@ -174,11 +174,11 @@ func TestAPatchOnAResourceThisProviderNeverConstructsIsRefused(t *testing.T) {
 	plan := planUnderTransform()
 	plan.App = nil
 	plan.Kind = providerkit.StackInfra
-	evaluator := patchingEvaluator{patch: func(patches []transformkit.Patches) {
+	pass := patchingPass{patch: func(patches []transformkit.Patches) {
 		patches[1]["queue"] = map[string]any{"fifo": true}
 	}}
 
-	_, err := transformStackPlan(context.Background(), evaluator, plan)
+	_, err := transformStackPlan(context.Background(), pass, plan)
 	if err == nil || !strings.Contains(err.Error(), "queue") {
 		t.Fatalf("transformStackPlan() = %v, want the resource this provider never constructs refused by name", err)
 	}
@@ -188,11 +188,11 @@ func TestABucketWithNoDeclaredOriginsCanStillBeGivenCORSByATransform(t *testing.
 	plan := planUnderTransform()
 	plan.App = nil
 	plan.Kind = providerkit.StackInfra
-	evaluator := patchingEvaluator{patch: func(patches []transformkit.Patches) {
+	pass := patchingPass{patch: func(patches []transformkit.Patches) {
 		patches[1]["cors"] = map[string]any{"corsRules": []any{map[string]any{"allowedMethods": []any{"GET"}}}}
 	}}
 
-	transformed, err := transformStackPlan(context.Background(), evaluator, plan)
+	transformed, err := transformStackPlan(context.Background(), pass, plan)
 	if err != nil {
 		t.Fatalf("transformStackPlan() = %v, want a transform allowed to add CORS to a bucket that declares no origins", err)
 	}
@@ -327,7 +327,7 @@ func TestEveryOutputOffTheSameBindingResolvesItOnce(t *testing.T) {
 	plan := planUnderTransform()
 	plan.Bindings = bindings
 
-	evaluator := patchingEvaluator{patch: func(patches []transformkit.Patches) {
+	pass := patchingPass{patch: func(patches []transformkit.Patches) {
 		placeholder := placeholderFor(customBindingType, "legacy", "runtime")
 		patches[len(patches)-1]["lambda"] = map[string]any{
 			"runtime":     placeholder,
@@ -335,7 +335,7 @@ func TestEveryOutputOffTheSameBindingResolvesItOnce(t *testing.T) {
 		}
 	}}
 
-	if _, err := transformStackPlan(context.Background(), evaluator, plan); err != nil {
+	if _, err := transformStackPlan(context.Background(), pass, plan); err != nil {
 		t.Fatalf("transformStackPlan() = %v", err)
 	}
 	if len(bindings.asked) != 1 {

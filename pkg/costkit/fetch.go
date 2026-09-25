@@ -12,36 +12,36 @@ import (
 	"time"
 )
 
-type Fetcher struct {
-	Client   *http.Client
+type Client struct {
+	HTTP     *http.Client
 	Attempts int
 	Base     time.Duration
 	Ceiling  time.Duration
 	Sleep    func(context.Context, time.Duration) error
 }
 
-var DefaultFetcher = Fetcher{
-	Client:   http.DefaultClient,
+var DefaultClient = Client{
+	HTTP:     http.DefaultClient,
 	Attempts: 6,
 	Base:     500 * time.Millisecond,
 	Ceiling:  30 * time.Second,
 }
 
 func Fetch(ctx context.Context, req *http.Request) ([]byte, error) {
-	return DefaultFetcher.Fetch(ctx, req)
+	return DefaultClient.Fetch(ctx, req)
 }
 
 type retryable struct{ err error }
 
 func (r retryable) Error() string { return r.err.Error() }
 
-func (f Fetcher) Fetch(ctx context.Context, req *http.Request) ([]byte, error) {
+func (c Client) Fetch(ctx context.Context, req *http.Request) ([]byte, error) {
 	if req.Body != nil {
 		return nil, fmt.Errorf("%s %s: a request with a body is not retried", req.Method, req.URL.Path)
 	}
 	var last error
-	for attempt := range f.Attempts {
-		body, wait, err := f.once(req.WithContext(ctx))
+	for attempt := range c.Attempts {
+		body, wait, err := c.once(req.WithContext(ctx))
 		if err == nil {
 			return body, nil
 		}
@@ -50,21 +50,21 @@ func (f Fetcher) Fetch(ctx context.Context, req *http.Request) ([]byte, error) {
 			return nil, err
 		}
 		last = again.err
-		if attempt == f.Attempts-1 {
+		if attempt == c.Attempts-1 {
 			break
 		}
 		if wait <= 0 {
-			wait = f.backoff(attempt)
+			wait = c.backoff(attempt)
 		}
-		if err := f.sleep(ctx, min(wait, f.Ceiling)); err != nil {
+		if err := c.sleep(ctx, min(wait, c.Ceiling)); err != nil {
 			return nil, err
 		}
 	}
-	return nil, fmt.Errorf("%s %s after %d attempts: %w", req.Method, req.URL.Path, f.Attempts, last)
+	return nil, fmt.Errorf("%s %s after %d attempts: %w", req.Method, req.URL.Path, c.Attempts, last)
 }
 
-func (f Fetcher) once(req *http.Request) ([]byte, time.Duration, error) {
-	resp, err := f.Client.Do(req)
+func (c Client) once(req *http.Request) ([]byte, time.Duration, error) {
+	resp, err := c.HTTP.Do(req)
 	if err != nil {
 		var failed *url.Error
 		if errors.As(err, &failed) {
@@ -97,14 +97,14 @@ func retryAfter(header string) time.Duration {
 	return 0
 }
 
-func (f Fetcher) backoff(attempt int) time.Duration {
-	ceiling := min(f.Base<<attempt, f.Ceiling)
+func (c Client) backoff(attempt int) time.Duration {
+	ceiling := min(c.Base<<attempt, c.Ceiling)
 	return time.Duration(rand.Int64N(int64(ceiling)) + 1)
 }
 
-func (f Fetcher) sleep(ctx context.Context, wait time.Duration) error {
-	if f.Sleep != nil {
-		return f.Sleep(ctx, wait)
+func (c Client) sleep(ctx context.Context, wait time.Duration) error {
+	if c.Sleep != nil {
+		return c.Sleep(ctx, wait)
 	}
 	timer := time.NewTimer(wait)
 	defer timer.Stop()

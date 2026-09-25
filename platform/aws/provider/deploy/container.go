@@ -23,7 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/runtimekit/front"
+	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -296,7 +296,7 @@ func containerEnv(app string, values providerkit.AppValues, originSecret, previo
 func (w *containerWork) definitionEnv() map[string]string {
 	env := make(map[string]string, len(w.env)+1)
 	maps.Copy(env, w.env)
-	env[front.HealthPathVar] = w.healthPath
+	env[originguard.HealthPathVar] = w.healthPath
 	return env
 }
 

@@ -8,7 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/runtimekit/front"
+	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
@@ -59,8 +59,8 @@ func TestAContainerDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *te
 	if env["REGION"] != "eu" {
 		t.Errorf("the revision carries REGION=%q, want the plain value the deploy delivered", env["REGION"])
 	}
-	if env[front.HealthPathVar] != "/healthz" {
-		t.Errorf("the revision carries %s=%q, want the probe path so the runtime lets Cloud Run's probe through", front.HealthPathVar, env[front.HealthPathVar])
+	if env[originguard.HealthPathVar] != "/healthz" {
+		t.Errorf("the revision carries %s=%q, want the probe path so the runtime lets Cloud Run's probe through", originguard.HealthPathVar, env[originguard.HealthPathVar])
 	}
 	manifest, err := live.Parse([]byte(env[live.EnvVar]))
 	if err != nil {
@@ -102,8 +102,8 @@ func TestAContainerWithNothingLiveBootsWithNoManifest(t *testing.T) {
 	if held, carried := env[live.EnvVar]; carried {
 		t.Errorf("the revision carries %s=%q, and a container with no secret opens no store", live.EnvVar, held)
 	}
-	if env[front.HealthPathVar] != "/healthz" {
-		t.Errorf("the revision carries %s=%q, want the probe path whether or not anything is live", front.HealthPathVar, env[front.HealthPathVar])
+	if env[originguard.HealthPathVar] != "/healthz" {
+		t.Errorf("the revision carries %s=%q, want the probe path whether or not anything is live", originguard.HealthPathVar, env[originguard.HealthPathVar])
 	}
 }
 

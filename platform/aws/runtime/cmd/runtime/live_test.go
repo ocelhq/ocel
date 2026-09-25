@@ -17,7 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
-	vars "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 )
 
 type sink struct {
@@ -49,9 +49,9 @@ func (s *sink) messages(t *testing.T) []map[string]string {
 	return out
 }
 
-type resolvedFetcher map[string]string
+type resolvedSource map[string]string
 
-func (f resolvedFetcher) FetchLive(context.Context) (map[string]string, error) { return f, nil }
+func (f resolvedSource) Fetch(context.Context) (map[string]string, error) { return f, nil }
 
 func TestLiveValuesReachNode(t *testing.T) {
 	src, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "..", "frameworks", "node", "runtime", "src", "live-values.mts"))
@@ -64,7 +64,7 @@ func TestLiveValuesReachNode(t *testing.T) {
 	}
 
 	out := &sink{}
-	l := vars.New(resolvedFetcher{"DB_PASSWORD": "hunter2"}, []string{"DB_PASSWORD"}, nil, nil)
+	l := live.New(resolvedSource{"DB_PASSWORD": "hunter2"}, []string{"DB_PASSWORD"}, nil, nil)
 	l.Attach(out)
 	if err := l.Join(l.Prefetch(t.Context())); err != nil {
 		t.Fatalf("join: %v", err)
@@ -88,7 +88,7 @@ func TestLiveValuesReachNode(t *testing.T) {
 
 type stubValues struct {
 	env      []string
-	bindings []vars.Binding
+	bindings []live.Binding
 	failure  error
 	released chan struct{}
 	pushed   map[string]string
@@ -147,7 +147,7 @@ func (s *stubValues) Refresh(context.Context) {
 
 func (s *stubValues) Env() []string { return s.env }
 
-func (s *stubValues) Bindings() []vars.Binding { return s.bindings }
+func (s *stubValues) Bindings() []live.Binding { return s.bindings }
 
 func (s *stubValues) Generation() uint32 { return 1 }
 
@@ -195,7 +195,7 @@ func TestBringUpNode(t *testing.T) {
 
 	t.Run("drift is reported as itself and not as node never starting", func(t *testing.T) {
 		const budget = 5 * time.Second
-		l := &stubValues{failure: fmt.Errorf("binding db--main is published as BINDING_TYPE_BUCKET: %w", vars.ErrDrift)}
+		l := &stubValues{failure: fmt.Errorf("binding db--main is published as BINDING_TYPE_BUCKET: %w", live.ErrDrift)}
 
 		_, err := bringUpNode(neverReady, l, l.Prefetch(context.Background()), nil, budget)
 		if err == nil {
@@ -253,7 +253,7 @@ func TestChildEnv(t *testing.T) {
 
 	t.Run("names the directory the live values were projected into", func(t *testing.T) {
 		root := filepath.Join(t.TempDir(), "live")
-		l := vars.New(resolvedFetcher{"DB_PASSWORD": "hunter2"}, []string{"DB_PASSWORD"}, nil, nil)
+		l := live.New(resolvedSource{"DB_PASSWORD": "hunter2"}, []string{"DB_PASSWORD"}, nil, nil)
 		if err := l.Join(l.Prefetch(t.Context())); err != nil {
 			t.Fatalf("prefetch: %v", err)
 		}

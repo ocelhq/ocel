@@ -126,7 +126,7 @@ func serviceProperties(compute providerkit.Compute, ingress string) map[string]a
 }
 
 func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
-	edges, err := providerkit.EdgePricers(p.Edges())
+	edges, err := providerkit.EdgeRates(p.Edges())
 	if err != nil {
 		return nil, err
 	}

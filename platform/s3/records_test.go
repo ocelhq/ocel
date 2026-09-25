@@ -236,7 +236,7 @@ func storeRecord(t *testing.T, endpoint, prefix, keyID string) string {
 
 type fetched map[string]string
 
-func (f fetched) FetchLive(context.Context) (map[string]string, error) { return f, nil }
+func (f fetched) Fetch(context.Context) (map[string]string, error) { return f, nil }
 
 func TestTwoBindingsOnOneStoreBucketAreEachServedUnderTheirOwnPrefixAndKeyPair(t *testing.T) {
 	store := &listeningStore{}

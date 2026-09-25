@@ -32,7 +32,7 @@ func (p *Provider) Resolving(look Lookup) { p.resolve = look }
 
 func (p *Provider) Reaching(dial Reach) { p.reaches = dial }
 
-func (p *Provider) Transforming(pass transformkit.Evaluator) { p.transform = pass }
+func (p *Provider) Transforming(pass transformkit.Pass) { p.transform = pass }
 
 func DNSVerdict(ctx context.Context, look Lookup, hostname, address string) providerkit.HostCheck {
 	here, unread := look(ctx, address)

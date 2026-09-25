@@ -7,10 +7,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/runtimekit/front"
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) ([]providerkit.AppContainer, error) {
@@ -31,7 +31,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	if err != nil {
 		return nil, fmt.Errorf("pin the store %s writes through: %w", app.App, err)
 	}
-	manifest, err := live.Render(live.Manifest{
+	manifest, err := vars.Render(vars.Manifest{
 		Slug:        plan.Ref.Project,
 		Class:       string(plan.Ref.Class),
 		Environment: liveEnvironment(plan.Ref),
@@ -42,7 +42,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	if err != nil {
 		return nil, fmt.Errorf("pin %s's live values: %w", app.App, err)
 	}
-	for _, owned := range []string{front.HealthPathVar, live.EnvVar} {
+	for _, owned := range []string{originguard.HealthPathVar, vars.EnvVar} {
 		if _, taken := app.Values.Delivered[owned]; taken {
 			return nil, providerkit.Refuse(providerkit.CodeInvalid,
 				"app %s sets %s, which ocel's runtime reserves: rename it", app.App, owned)
@@ -93,23 +93,23 @@ func liveEnvironment(ref providerkit.StackRef) string {
 	return ref.Name.Env
 }
 
-func liveKeys(held providerkit.AppValues) []rt.Key {
-	keys := make([]rt.Key, 0, len(held.Secrets))
+func liveKeys(held providerkit.AppValues) []live.Key {
+	keys := make([]live.Key, 0, len(held.Secrets))
 	for _, secret := range held.Secrets {
-		keys = append(keys, rt.Key{Key: secret.Key, Folder: secret.Folder})
+		keys = append(keys, live.Key{Key: secret.Key, Folder: secret.Folder})
 	}
 	return keys
 }
 
-func liveBindings(held providerkit.AppValues) []rt.Binding {
-	bindings := make([]rt.Binding, 0, len(held.Bindings))
+func liveBindings(held providerkit.AppValues) []live.Binding {
+	bindings := make([]live.Binding, 0, len(held.Bindings))
 	for _, binding := range held.Bindings {
 		kind := providerkit.WireBindingType(binding.Type)
 		resource := binding.Resource
 		if resource == "" {
 			resource = binding.Name
 		}
-		bindings = append(bindings, rt.Binding{
+		bindings = append(bindings, live.Binding{
 			Name:    binding.Name,
 			Key:     naming.ResourceEnvName(kind, resource),
 			Type:    kind,

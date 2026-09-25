@@ -183,7 +183,7 @@ func liveDigest(t *testing.T, target providerkit.RegistryTarget, coordinate stri
 }
 
 func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	bootstrapped(t, vm, providerkit.ClassProduction)
 	_, _ = imported(t)
 

@@ -61,7 +61,7 @@ func sealedAt(class providerkit.Class, name string) providerkit.SealScope {
 }
 
 func TestLiveTheSealKeyIsRootsAloneAndTheDeployLoginNeverReadsIt(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	class := providerkit.ClassProduction
 	bootstrapped(t, vm, class)
 
@@ -78,7 +78,7 @@ func TestLiveTheSealKeyIsRootsAloneAndTheDeployLoginNeverReadsIt(t *testing.T) {
 }
 
 func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	class := providerkit.ClassProduction
 	bootstrapped(t, vm, class)
 
@@ -108,7 +108,7 @@ func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *tes
 }
 
 func TestLiveASealKeyThatWasReplacedIsDriftInStatus(t *testing.T) {
-	vm := live(t)
+	vm := liveMachine(t)
 	class := providerkit.ClassProduction
 	p := bootstrapped(t, vm, class)
 	dirties(t, vm)

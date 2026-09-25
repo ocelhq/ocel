@@ -25,8 +25,8 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const (
@@ -90,7 +90,7 @@ type Inspector interface {
 }
 
 type Resolver interface {
-	Resolve(ctx context.Context, manifest live.Manifest) (map[string]string, error)
+	Resolve(ctx context.Context, manifest vars.Manifest) (map[string]string, error)
 }
 
 type Measurer interface {
@@ -132,41 +132,41 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc(http.MethodGet+" "+live.ValuesPath, s.answer)
-	mux.HandleFunc(http.MethodGet+" "+live.SpacePath, s.measure)
+	mux.HandleFunc(http.MethodGet+" "+vars.ValuesPath, s.answer)
+	mux.HandleFunc(http.MethodGet+" "+vars.SpacePath, s.measure)
 	return mux
 }
 
-func (s *Server) manifestOf(w http.ResponseWriter, r *http.Request) (live.Manifest, bool) {
+func (s *Server) manifestOf(w http.ResponseWriter, r *http.Request) (vars.Manifest, bool) {
 	held, _ := r.Context().Value(peerKey{}).(peer)
 	if held.err != nil {
 		http.Error(w, "the caller could not be identified: "+held.err.Error(), http.StatusForbidden)
-		return live.Manifest{}, false
+		return vars.Manifest{}, false
 	}
 	container, err := s.containerOf(held.pid)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
-		return live.Manifest{}, false
+		return vars.Manifest{}, false
 	}
 	inspecting, cancel := context.WithTimeout(r.Context(), inspectWindow)
 	defer cancel()
 	raw, err := s.Inspect.Manifest(inspecting, container)
 	if err != nil {
 		http.Error(w, "read the caller's container: "+err.Error(), http.StatusBadGateway)
-		return live.Manifest{}, false
+		return vars.Manifest{}, false
 	}
 	if raw == "" {
 		http.Error(w, "the caller's container carries no live-value manifest", http.StatusNotFound)
-		return live.Manifest{}, false
+		return vars.Manifest{}, false
 	}
-	manifest, err := live.Parse([]byte(raw))
+	manifest, err := vars.Parse([]byte(raw))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadGateway)
-		return live.Manifest{}, false
+		return vars.Manifest{}, false
 	}
 	if !manifest.Live() {
 		http.Error(w, "the caller's manifest names nothing live", http.StatusNotFound)
-		return live.Manifest{}, false
+		return vars.Manifest{}, false
 	}
 	return manifest, true
 }
@@ -186,7 +186,7 @@ func (s *Server) measure(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(live.Space{Free: free, Total: total})
+	_ = json.NewEncoder(w).Encode(vars.Space{Free: free, Total: total})
 }
 
 func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
@@ -200,7 +200,7 @@ func (s *Server) answer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(live.Answer{Values: resolved})
+	_ = json.NewEncoder(w).Encode(vars.Answer{Values: resolved})
 }
 
 func (s *Server) containerOf(pid int) (string, error) {
@@ -292,7 +292,7 @@ func (d *Docker) Space(ctx context.Context, volume string) (uint64, uint64, erro
 
 func ManifestIn(env []string) string {
 	for _, entry := range env {
-		if value, named := strings.CutPrefix(entry, live.EnvVar+"="); named {
+		if value, named := strings.CutPrefix(entry, vars.EnvVar+"="); named {
 			return value
 		}
 	}
@@ -305,10 +305,10 @@ type Store struct {
 	RoutingTable string
 }
 
-func (s Store) Resolve(ctx context.Context, manifest live.Manifest) (map[string]string, error) {
+func (s Store) Resolve(ctx context.Context, manifest vars.Manifest) (map[string]string, error) {
 	reader := values.Reader{
-		Records:     live.Records{Root: s.StateRoot},
-		Cipher:      live.Cipher{Root: s.ClassRoot},
+		Records:     vars.Records{Root: s.StateRoot},
+		Cipher:      vars.Cipher{Root: s.ClassRoot},
 		Scope:       values.Scope{Project: manifest.Slug, Class: providerkit.Class(manifest.Class)},
 		Environment: manifest.Environment,
 	}
@@ -333,7 +333,7 @@ func (s Store) Resolve(ctx context.Context, manifest live.Manifest) (map[string]
 		return answer, nil
 	}
 	if base := s.storeBase(manifest); base != "" {
-		answer[live.StorePublicKey] = base
+		answer[vars.StorePublicKey] = base
 		published(answer, manifest.Bindings, base)
 	}
 	if manifest.Store.Sealed == "" {
@@ -343,42 +343,42 @@ func (s Store) Resolve(ctx context.Context, manifest live.Manifest) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	answer[live.StoreSecretKey] = secret
+	answer[vars.StoreSecretKey] = secret
 	return answer, nil
 }
 
-func (s Store) storeBase(manifest live.Manifest) string {
+func (s Store) storeBase(manifest vars.Manifest) string {
 	if manifest.Store.Pointer == "" {
 		return ""
 	}
 	at := s.RoutingTable
 	if at == "" {
-		at = live.RoutingTable
+		at = vars.RoutingTable
 	}
 	table, err := os.ReadFile(at)
 	if err != nil {
 		return ""
 	}
-	claims, err := live.ClaimedIn(table)
+	claims, err := vars.ClaimedIn(table)
 	if err != nil {
 		return ""
 	}
-	return live.StoreBase(claims, live.Surface(manifest.Slug, manifest.Class), manifest.Store.Pointer)
+	return vars.StoreBase(claims, vars.Surface(manifest.Slug, manifest.Class), manifest.Store.Pointer)
 }
 
-func (s Store) storeSecret(ctx context.Context, manifest live.Manifest) (string, error) {
+func (s Store) storeSecret(ctx context.Context, manifest vars.Manifest) (string, error) {
 	sealed, err := base64.StdEncoding.DecodeString(manifest.Store.Sealed)
 	if err != nil {
-		return "", fmt.Errorf("the manifest's %s is not valid base64", live.StoreSecretName)
+		return "", fmt.Errorf("the manifest's %s is not valid base64", vars.StoreSecretName)
 	}
-	opened, err := (live.Cipher{Root: s.ClassRoot}).Open(ctx, manifest.StoreCoordinate(), sealed)
+	opened, err := (vars.Cipher{Root: s.ClassRoot}).Open(ctx, manifest.StoreCoordinate(), sealed)
 	if err != nil {
 		return "", err
 	}
 	return string(opened), nil
 }
 
-func published(answer map[string]string, bindings []rt.Binding, base string) {
+func published(answer map[string]string, bindings []live.Binding, base string) {
 	for _, binding := range bindings {
 		if binding.Type != bindingsv1.BindingType_BINDING_TYPE_BUCKET {
 			continue
@@ -404,7 +404,7 @@ func published(answer map[string]string, bindings []rt.Binding, base string) {
 	}
 }
 
-func merged(resolved map[string]string, bindings []rt.Binding, records []values.Published) map[string]string {
+func merged(resolved map[string]string, bindings []live.Binding, records []values.Published) map[string]string {
 	out := make(map[string]string, len(resolved)+len(records))
 	maps.Copy(out, resolved)
 	for i, record := range records {

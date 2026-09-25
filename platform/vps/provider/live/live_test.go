@@ -13,11 +13,11 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 )
 
 func complete() Manifest {
-	return Manifest{Slug: "shop", Class: "production", Keys: []rt.Key{{Key: "DATABASE_URL"}}}
+	return Manifest{Slug: "shop", Class: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}}
 }
 
 func TestAManifestNamingNothingLiveRendersToNothing(t *testing.T) {
@@ -34,7 +34,7 @@ func TestARenderedManifestParsesBackToWhatWasPinned(t *testing.T) {
 	t.Parallel()
 	held := complete()
 	held.Class, held.Environment = "preview", "pr-7"
-	held.Keys = append(held.Keys, rt.Key{Key: "SESSION", Folder: "/web"})
+	held.Keys = append(held.Keys, live.Key{Key: "SESSION", Folder: "/web"})
 	rendered, err := Render(held)
 	if err != nil {
 		t.Fatalf("Render() = %v", err)
