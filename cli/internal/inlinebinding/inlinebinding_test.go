@@ -55,7 +55,7 @@ func TestBuild(t *testing.T) {
 		}
 		want := &bindingsv1.PostgresProperties{
 			Host: "db.example.com", Port: 5432, Database: "orders", Username: "app", Password: "hunter2",
-			TlsMode: "verify-full", TlsCa: "-----BEGIN CERTIFICATE-----",
+			TlsMode: bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL, TlsCa: "-----BEGIN CERTIFICATE-----",
 		}
 		if got := records[0].Binding.GetPostgres(); !proto.Equal(got, want) {
 			t.Errorf("properties = %v, want %v", got, want)

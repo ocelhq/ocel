@@ -67,7 +67,7 @@ func TestARecordsURLIsTheConnectionVerbatim(t *testing.T) {
 }
 
 func TestARecordRequiringTLSEncryptsWithoutVerifying(t *testing.T) {
-	postgresRecord(t, map[string]any{"host": "db", "port": 5432, "database": "d", "username": "u", "password": "p", "tlsMode": "require"})
+	postgresRecord(t, map[string]any{"host": "db", "port": 5432, "database": "d", "username": "u", "password": "p", "tlsMode": "POSTGRES_TLS_MODE_REQUIRE"})
 	db := ocel.Postgres("main")
 
 	got, err := db.ConnectionString()
@@ -92,7 +92,7 @@ func TestARecordRequiringTLSEncryptsWithoutVerifying(t *testing.T) {
 func TestARecordUnderVerifyFullTrustsItsOwnCA(t *testing.T) {
 	postgresRecord(t, map[string]any{
 		"host": "db.example.com", "port": 5432, "database": "d", "username": "u", "password": "p",
-		"tlsMode": "verify-full", "tlsCa": testCA(t),
+		"tlsMode": "POSTGRES_TLS_MODE_VERIFY_FULL", "tlsCa": testCA(t),
 	})
 	pool, err := ocel.Postgres("main").Pool(t.Context())
 	if err != nil {

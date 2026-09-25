@@ -51,8 +51,8 @@ func ConnConfig(props *bindingsv1.PostgresProperties) (*pgconn.Config, error) {
 		return pgconn.ParseConfig(props.GetUrl())
 	}
 	query := url.Values{}
-	if props.GetTlsMode() != "" {
-		query.Set("sslmode", props.GetTlsMode())
+	if mode := sslmode(props.GetTlsMode()); mode != "" {
+		query.Set("sslmode", mode)
 	}
 	dsn := url.URL{
 		Scheme:   "postgres",

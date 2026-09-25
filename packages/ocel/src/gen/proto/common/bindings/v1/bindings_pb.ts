@@ -11,7 +11,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file common/bindings/v1/bindings.proto.
  */
 export const file_common_bindings_v1_bindings: GenFile = /*@__PURE__*/
-  fileDesc("CiFjb21tb24vYmluZGluZ3MvdjEvYmluZGluZ3MucHJvdG8SEmNvbW1vbi5iaW5kaW5ncy52MSL/AQoHQmluZGluZxIMCgRuYW1lGAEgASgJEjoKCHBvc3RncmVzGAIgASgLMiYuY29tbW9uLmJpbmRpbmdzLnYxLlBvc3RncmVzUHJvcGVydGllc0gAEjYKBmJ1Y2tldBgDIAEoCzIkLmNvbW1vbi5iaW5kaW5ncy52MS5CdWNrZXRQcm9wZXJ0aWVzSAASKQoGY3VzdG9tGAYgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdEgAEikKBmdyYW50cxgEIAMoCzIZLmNvbW1vbi5iaW5kaW5ncy52MS5HcmFudBIOCgZzb3VyY2UYBSABKAlCDAoKcHJvcGVydGllcyKfAQoSUG9zdGdyZXNQcm9wZXJ0aWVzEgwKBGhvc3QYASABKAkSDAoEcG9ydBgCIAEoBRIQCghkYXRhYmFzZRgDIAEoCRIQCgh1c2VybmFtZRgEIAEoCRIVCghwYXNzd29yZBgFIAEoCUIDgAEBEhAKA3VybBgGIAEoCUIDgAEBEhAKCHRsc19tb2RlGAcgASgJEg4KBnRsc19jYRgIIAEoCSLIAQoQQnVja2V0UHJvcGVydGllcxIOCgZidWNrZXQYASABKAkSFwoPcHVibGljX2Jhc2VfdXJsGAIgASgJEg4KBnB1YmxpYxgDIAEoCBIQCghlbmRwb2ludBgEIAEoCRIOCgZyZWdpb24YBSABKAkSEgoKcGF0aF9zdHlsZRgGIAEoCBIOCgZwcmVmaXgYByABKAkSFQoNYWNjZXNzX2tleV9pZBgIIAEoCRIeChFzZWNyZXRfYWNjZXNzX2tleRgJIAEoCUIDgAEBInIKBUdyYW50Eg8KB2FjdGlvbnMYASADKAkSEQoJcmVzb3VyY2VzGAIgAygJEg0KBWxhYmVsGAMgASgJEjYKCmNvbmRpdGlvbnMYBCADKAsyIi5jb21tb24uYmluZGluZ3MudjEuR3JhbnRDb25kaXRpb24iPwoOR3JhbnRDb25kaXRpb24SEAoIb3BlcmF0b3IYASABKAkSCwoDa2V5GAIgASgJEg4KBnZhbHVlcxgDIAMoCSp4CgtCaW5kaW5nVHlwZRIcChhCSU5ESU5HX1RZUEVfVU5TUEVDSUZJRUQQABIZChVCSU5ESU5HX1RZUEVfUE9TVEdSRVMQARIXChNCSU5ESU5HX1RZUEVfQlVDS0VUEAISFwoTQklORElOR19UWVBFX0NVU1RPTRADQkBaPmdpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL2NvbW1vbi9iaW5kaW5ncy92MTtiaW5kaW5nc3YxYgZwcm90bzM", [file_google_protobuf_struct]);
+  fileDesc("CiFjb21tb24vYmluZGluZ3MvdjEvYmluZGluZ3MucHJvdG8SEmNvbW1vbi5iaW5kaW5ncy52MSL/AQoHQmluZGluZxIMCgRuYW1lGAEgASgJEjoKCHBvc3RncmVzGAIgASgLMiYuY29tbW9uLmJpbmRpbmdzLnYxLlBvc3RncmVzUHJvcGVydGllc0gAEjYKBmJ1Y2tldBgDIAEoCzIkLmNvbW1vbi5iaW5kaW5ncy52MS5CdWNrZXRQcm9wZXJ0aWVzSAASKQoGY3VzdG9tGAYgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdEgAEikKBmdyYW50cxgEIAMoCzIZLmNvbW1vbi5iaW5kaW5ncy52MS5HcmFudBIOCgZzb3VyY2UYBSABKAlCDAoKcHJvcGVydGllcyLEAQoSUG9zdGdyZXNQcm9wZXJ0aWVzEgwKBGhvc3QYASABKAkSDAoEcG9ydBgCIAEoBRIQCghkYXRhYmFzZRgDIAEoCRIQCgh1c2VybmFtZRgEIAEoCRIVCghwYXNzd29yZBgFIAEoCUIDgAEBEhAKA3VybBgGIAEoCUIDgAEBEjUKCHRsc19tb2RlGAcgASgOMiMuY29tbW9uLmJpbmRpbmdzLnYxLlBvc3RncmVzVGxzTW9kZRIOCgZ0bHNfY2EYCCABKAkiyAEKEEJ1Y2tldFByb3BlcnRpZXMSDgoGYnVja2V0GAEgASgJEhcKD3B1YmxpY19iYXNlX3VybBgCIAEoCRIOCgZwdWJsaWMYAyABKAgSEAoIZW5kcG9pbnQYBCABKAkSDgoGcmVnaW9uGAUgASgJEhIKCnBhdGhfc3R5bGUYBiABKAgSDgoGcHJlZml4GAcgASgJEhUKDWFjY2Vzc19rZXlfaWQYCCABKAkSHgoRc2VjcmV0X2FjY2Vzc19rZXkYCSABKAlCA4ABASJyCgVHcmFudBIPCgdhY3Rpb25zGAEgAygJEhEKCXJlc291cmNlcxgCIAMoCRINCgVsYWJlbBgDIAEoCRI2Cgpjb25kaXRpb25zGAQgAygLMiIuY29tbW9uLmJpbmRpbmdzLnYxLkdyYW50Q29uZGl0aW9uIj8KDkdyYW50Q29uZGl0aW9uEhAKCG9wZXJhdG9yGAEgASgJEgsKA2tleRgCIAEoCRIOCgZ2YWx1ZXMYAyADKAkqeAoLQmluZGluZ1R5cGUSHAoYQklORElOR19UWVBFX1VOU1BFQ0lGSUVEEAASGQoVQklORElOR19UWVBFX1BPU1RHUkVTEAESFwoTQklORElOR19UWVBFX0JVQ0tFVBACEhcKE0JJTkRJTkdfVFlQRV9DVVNUT00QAyp2Cg9Qb3N0Z3Jlc1Rsc01vZGUSIQodUE9TVEdSRVNfVExTX01PREVfVU5TUEVDSUZJRUQQABIdChlQT1NUR1JFU19UTFNfTU9ERV9SRVFVSVJFEAESIQodUE9TVEdSRVNfVExTX01PREVfVkVSSUZZX0ZVTEwQAkJAWj5naXRodWIuY29tL29jZWxocS9vY2VsL3BrZy9wcm90by9jb21tb24vYmluZGluZ3MvdjE7YmluZGluZ3N2MWIGcHJvdG8z", [file_google_protobuf_struct]);
 
 /**
  * @generated from message common.bindings.v1.Binding
@@ -98,9 +98,9 @@ export type PostgresProperties = Message<"common.bindings.v1.PostgresProperties"
   url: string;
 
   /**
-   * @generated from field: string tls_mode = 7;
+   * @generated from field: common.bindings.v1.PostgresTlsMode tls_mode = 7;
    */
-  tlsMode: string;
+  tlsMode: PostgresTlsMode;
 
   /**
    * @generated from field: string tls_ca = 8;
@@ -261,4 +261,30 @@ export enum BindingType {
  */
 export const BindingTypeSchema: GenEnum<BindingType> = /*@__PURE__*/
   enumDesc(file_common_bindings_v1_bindings, 0);
+
+/**
+ * @generated from enum common.bindings.v1.PostgresTlsMode
+ */
+export enum PostgresTlsMode {
+  /**
+   * @generated from enum value: POSTGRES_TLS_MODE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: POSTGRES_TLS_MODE_REQUIRE = 1;
+   */
+  REQUIRE = 1,
+
+  /**
+   * @generated from enum value: POSTGRES_TLS_MODE_VERIFY_FULL = 2;
+   */
+  VERIFY_FULL = 2,
+}
+
+/**
+ * Describes the enum common.bindings.v1.PostgresTlsMode.
+ */
+export const PostgresTlsModeSchema: GenEnum<PostgresTlsMode> = /*@__PURE__*/
+  enumDesc(file_common_bindings_v1_bindings, 1);
 

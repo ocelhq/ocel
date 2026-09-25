@@ -44,7 +44,7 @@ def test_a_records_tls_mode_is_the_connection_strings_sslmode(monkeypatch):
             "database": "d",
             "username": "u",
             "password": "p",
-            "tlsMode": "require",
+            "tlsMode": "POSTGRES_TLS_MODE_REQUIRE",
         },
     )
 
@@ -62,7 +62,7 @@ async def test_a_record_under_verify_full_trusts_its_own_ca(monkeypatch):
             "database": "d",
             "username": "u",
             "password": "p",
-            "tlsMode": "verify-full",
+            "tlsMode": "POSTGRES_TLS_MODE_VERIFY_FULL",
             "tlsCa": _CA,
         },
     )
@@ -100,7 +100,7 @@ async def test_a_record_naming_no_ca_leaves_tls_to_the_connection_string(monkeyp
             "database": "d",
             "username": "u",
             "password": "p",
-            "tlsMode": "require",
+            "tlsMode": "POSTGRES_TLS_MODE_REQUIRE",
         },
     )
     import asyncpg

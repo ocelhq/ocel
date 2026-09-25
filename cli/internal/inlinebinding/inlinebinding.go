@@ -14,6 +14,20 @@ import (
 
 const defaultPostgresPort = 5432
 
+var tlsModes = map[string]bindingsv1.PostgresTlsMode{
+	"require":     bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_REQUIRE,
+	"verify-full": bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL,
+}
+
+func sslmode(mode bindingsv1.PostgresTlsMode) string {
+	for spelled, held := range tlsModes {
+		if held == mode {
+			return spelled
+		}
+	}
+	return ""
+}
+
 type Record struct {
 	Declared string
 	Site     string
@@ -92,7 +106,7 @@ func postgresProperties(p *projectconfig.PostgresInline, read func(string) (stri
 		return nil, err
 	}
 	if p.TLS != nil {
-		props.TlsMode = p.TLS.Mode
+		props.TlsMode = tlsModes[p.TLS.Mode]
 		if p.TLS.CA != "" {
 			if props.TlsCa, err = read(p.TLS.CA); err != nil {
 				return nil, err
