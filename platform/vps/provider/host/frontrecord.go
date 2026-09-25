@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -74,12 +75,7 @@ func (f Front) spelled() string {
 	}
 }
 
-func (f Front) same(other Front) bool {
-	if f.adopted() != other.adopted() {
-		return false
-	}
-	return !f.adopted() || f.Manual.Port == other.Manual.Port
-}
+func (f Front) same(other Front) bool { return reflect.DeepEqual(f, other) }
 
 func (f Front) agrees(held Front, setter string) error {
 	if f.same(held) {

@@ -267,7 +267,7 @@ func (p *Provider) standing(dial host.Dial) *Provider {
 	p.records = host.NewRecords(p.host)
 	p.sealer = host.NewSealer(p.host)
 	p.Loopback = p.servedOnTheBox
-	p.LoopbackOnly = p.options.Proxy != nil
+	p.LoopbackOnly = !p.host.FrontProxy().Guarantees().OwnsPorts
 	return p
 }
 
