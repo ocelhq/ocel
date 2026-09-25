@@ -17,6 +17,9 @@ func TestBindingPropertyShapes(t *testing.T) {
 			{Name: "database", JSONType: JSONTypeString},
 			{Name: "username", JSONType: JSONTypeString},
 			{Name: "password", JSONType: JSONTypeString},
+			{Name: "url", JSONType: JSONTypeString},
+			{Name: "tlsMode", JSONType: JSONTypeString},
+			{Name: "tlsCa", JSONType: JSONTypeString},
 		}
 		empty := &bindingsv1.Binding{
 			Name:       "orders",

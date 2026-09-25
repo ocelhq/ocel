@@ -113,7 +113,7 @@ func TestDerive(t *testing.T) {
 				db = l
 			}
 		}
-		if want := []string{"database", "host", "password", "port", "username"}; !reflect.DeepEqual(db.VarKeys, want) {
+		if want := []string{"database", "host", "password", "port", "tlsCa", "tlsMode", "url", "username"}; !reflect.DeepEqual(db.VarKeys, want) {
 			t.Errorf("varKeys = %v, want %v", db.VarKeys, want)
 		}
 		if want := []Grant{{Verb: "connect", Actions: []string{"fake:connect"}}}; !reflect.DeepEqual(db.Grants, want) {
