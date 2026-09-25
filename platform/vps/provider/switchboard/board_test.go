@@ -9,10 +9,9 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/netip"
+	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -50,25 +49,40 @@ func routing(t *testing.T, upstreams map[string]string) []byte {
 	return written
 }
 
-func standing(t *testing.T, document []byte, trusted ...netip.Prefix) (*switchboard.Board, string) {
+func standing(t *testing.T, document []byte) (*switchboard.Board, string) {
 	t.Helper()
-	return trusting(t, document, switchboard.Trust{Prefixes: trusted})
+	board, at, _ := fronted(t, document)
+	return board, at
 }
 
-func trusting(t *testing.T, document []byte, trust switchboard.Trust) (*switchboard.Board, string) {
+func fronted(t *testing.T, document []byte) (*switchboard.Board, string, *http.Client) {
 	t.Helper()
 	table, err := switchboard.Read(document)
 	if err != nil {
 		t.Fatal(err)
 	}
-	board := switchboard.New(table, trust)
+	board := switchboard.New(table)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
+	socket := filepath.Join(t.TempDir(), "front.sock")
+	if len(socket) > 100 {
+		t.Skipf("a unix socket path this host accepts does not fit under %s", socket)
+	}
+	front, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
 	go func() { _ = board.Serve(listener) }()
+	go func() { _ = board.ServeFront(front) }()
 	t.Cleanup(func() { _ = board.Close() })
-	return board, listener.Addr().String()
+	dialer := &net.Dialer{}
+	return board, listener.Addr().String(), &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return dialer.DialContext(ctx, "unix", socket)
+		},
+	}}
 }
 
 func backend(t *testing.T, name string) string {
@@ -171,81 +185,32 @@ func TestEveryAnswerTheBoxRefusesOrCannotReachNamesTheBox(t *testing.T) {
 	}
 }
 
-func TestForwardedHeadersAClientSpoofsAreOverwrittenAndOnlyATrustedFrontProxysAreKept(t *testing.T) {
+func TestForwardedHeadersAClientSpoofsAreOverwrittenAndOnlyTheFrontProxysAreKept(t *testing.T) {
 	t.Parallel()
 
 	web := backend(t, "web")
 	spoofed := []string{"X-Forwarded-For", "6.6.6.6", "X-Forwarded-Proto", "https", "X-Forwarded-Host", "bank.example.com"}
+	_, at, front := fronted(t, routing(t, map[string]string{"shop.example.com": web}))
 
-	_, untrusting := standing(t, routing(t, map[string]string{"shop.example.com": web}), netip.MustParsePrefix("10.9.0.0/16"))
-	said := ask(t, http.DefaultClient, untrusting, "shop.example.com", "/", spoofed...)
+	said := ask(t, http.DefaultClient, at, "shop.example.com", "/", spoofed...)
 	for header, want := range map[string]string{
 		"X-Forwarded-For":   "127.0.0.1",
 		"X-Forwarded-Proto": "http",
 		"X-Forwarded-Host":  "shop.example.com",
 	} {
 		if got := said.header.Get("Seen-" + header); got != want {
-			t.Errorf("an untrusted peer's %s reached the upstream as %q, want %q: anything a client says about where it came from is a lie until a trusted proxy says it", header, got, want)
+			t.Errorf("a peer on the switchboard's own listener had its %s reach the upstream as %q, want %q: anything a client says about where it came from is a lie until the front proxy says it", header, got, want)
 		}
 	}
 
-	_, trusting := standing(t, routing(t, map[string]string{"shop.example.com": web}), netip.MustParsePrefix("127.0.0.1/32"))
-	said = ask(t, http.DefaultClient, trusting, "shop.example.com", "/", spoofed...)
+	said = ask(t, front, "front", "shop.example.com", "/", spoofed...)
 	for header, want := range map[string]string{
-		"X-Forwarded-For":   "6.6.6.6, 127.0.0.1",
+		"X-Forwarded-For":   "6.6.6.6",
 		"X-Forwarded-Proto": "https",
 		"X-Forwarded-Host":  "bank.example.com",
 	} {
 		if got := said.header.Get("Seen-" + header); got != want {
-			t.Errorf("the trusted front proxy's %s reached the upstream as %q, want %q: it terminated tls and knows the client", header, got, want)
+			t.Errorf("the front proxy's %s reached the upstream as %q, want %q: it terminated tls and knows the client, and it is trusted on its first request whatever address it was recreated at", header, got, want)
 		}
-	}
-}
-
-func TestAFrontProxyTrustedByNameIsTrustedAtWhateverAddressItsNameResolvesToNow(t *testing.T) {
-	t.Parallel()
-
-	web := backend(t, "web")
-	var mu sync.Mutex
-	resolved := netip.MustParseAddr("10.9.0.7")
-	asked := 0
-	board, at := trusting(t, routing(t, map[string]string{"shop.example.com": web}), switchboard.Trust{
-		Names: []string{"ocel-proxy"},
-	})
-	board.LookUpNamesWith(func(_ context.Context, name string) ([]netip.Addr, error) {
-		mu.Lock()
-		defer mu.Unlock()
-		asked++
-		if name != "ocel-proxy" {
-			return nil, fmt.Errorf("asked to resolve %q", name)
-		}
-		return []netip.Addr{resolved}, nil
-	})
-	board.RefreshTrustEvery(50 * time.Millisecond)
-	spoofed := []string{"X-Forwarded-Proto", "https"}
-
-	if said := ask(t, http.DefaultClient, at, "shop.example.com", "/", spoofed...); said.header.Get("Seen-X-Forwarded-Proto") != "http" {
-		t.Errorf("a peer the trusted name does not resolve to had its X-Forwarded-Proto kept as %q, want http", said.header.Get("Seen-X-Forwarded-Proto"))
-	}
-	mu.Lock()
-	resolved = netip.MustParseAddr("127.0.0.1")
-	mu.Unlock()
-	deadline := time.Now().Add(5 * time.Second)
-	for said := ask(t, http.DefaultClient, at, "shop.example.com", "/", spoofed...); said.header.Get("Seen-X-Forwarded-Proto") != "https"; said = ask(t, http.DefaultClient, at, "shop.example.com", "/", spoofed...) {
-		if time.Now().After(deadline) {
-			t.Fatal("the front proxy's name came to resolve to the peer and its X-Forwarded-Proto was still overwritten five seconds later: a recreated front proxy takes a new address, and every app behind it would be told its https clients came over http")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	mu.Lock()
-	before := asked
-	mu.Unlock()
-	for range 20 {
-		ask(t, http.DefaultClient, at, "shop.example.com", "/", spoofed...)
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if asked != before {
-		t.Errorf("twenty requests from the trusted peer asked the resolver %d more times, want none: a peer already trusted is answered from what the name last resolved to", asked-before)
 	}
 }

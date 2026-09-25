@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
-	"net/netip"
 	"os"
 	"slices"
 	"strings"
@@ -39,7 +38,6 @@ type Board struct {
 	loading   sync.Mutex
 	retiring  sync.Mutex
 	draining  map[string]int
-	trust     *trustedPeers
 	ledger    ledger
 	connector string
 	tcp       *http.Transport
@@ -47,8 +45,8 @@ type Board struct {
 	server    *http.Server
 }
 
-func New(table *Table, trust Trust) *Board {
-	board := &Board{trust: trusting(trust), connector: ConnectorSocket, draining: map[string]int{}}
+func New(table *Table) *Board {
+	board := &Board{connector: ConnectorSocket, draining: map[string]int{}}
 	board.table.Store(table)
 	dialer := &net.Dialer{Timeout: dialTimeout, KeepAlive: dialKeepAlive}
 	board.tcp = upstreamTransport(func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -65,8 +63,28 @@ func New(table *Table, trust Trust) *Board {
 		Handler:           board,
 		ReadHeaderTimeout: ReadHeaderTimeout,
 		IdleTimeout:       idleTimeout,
+		ConnContext: func(ctx context.Context, conn net.Conn) context.Context {
+			if _, front := conn.(frontConn); front {
+				return context.WithValue(ctx, frontKey{}, true)
+			}
+			return ctx
+		},
 	}
 	return board
+}
+
+type frontKey struct{}
+
+type frontConn struct{ net.Conn }
+
+type frontListener struct{ net.Listener }
+
+func (l frontListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err != nil {
+		return nil, err
+	}
+	return frontConn{conn}, nil
 }
 
 func upstreamTransport(dial func(ctx context.Context, network, address string) (net.Conn, error)) *http.Transport {
@@ -85,6 +103,8 @@ func (b *Board) Serve(listener net.Listener) error {
 	}
 	return err
 }
+
+func (b *Board) ServeFront(listener net.Listener) error { return b.Serve(frontListener{listener}) }
 
 func (b *Board) Shutdown(ctx context.Context) error {
 	err := b.server.Shutdown(ctx)
@@ -179,16 +199,14 @@ func (b *Board) cutUnrouted(address string) {
 }
 
 func (b *Board) forwarded(out *httputil.ProxyRequest) {
-	peer, err := netip.ParseAddrPort(out.In.RemoteAddr)
-	trusted := err == nil && b.trust.trusts(out.In.Context(), peer.Addr().Unmap())
-	if trusted {
-		if prior := out.In.Header.Values("X-Forwarded-For"); len(prior) > 0 {
-			out.Out.Header["X-Forwarded-For"] = slices.Clone(prior)
-		}
-	}
-	out.SetXForwarded()
-	if !trusted {
+	if out.In.Context().Value(frontKey{}) == nil {
+		out.SetXForwarded()
 		return
+	}
+	out.Out.Header.Set("X-Forwarded-Host", out.In.Host)
+	out.Out.Header.Set("X-Forwarded-Proto", "http")
+	if prior := out.In.Header.Values("X-Forwarded-For"); len(prior) > 0 {
+		out.Out.Header["X-Forwarded-For"] = slices.Clone(prior)
 	}
 	for _, kept := range forwardedKept {
 		if said := out.In.Header.Get(kept); said != "" {

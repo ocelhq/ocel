@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
-	"net/netip"
 	"net/url"
 	"os"
 	"os/signal"
@@ -94,7 +93,7 @@ func run(ctx context.Context, argv []string, out, errs io.Writer) int {
 }
 
 func usage(errs io.Writer) int {
-	fmt.Fprintln(errs, "usage: "+switchboard.Name+" serve --listen <host:port> --table <path> [--trust <addr|cidr|name>]... |")
+	fmt.Fprintln(errs, "usage: "+switchboard.Name+" serve --listen <host:port> --front <socket> --table <path> |")
 	fmt.Fprintln(errs, "       load <table> |")
 	fmt.Fprintln(errs, "       gate --deploy-timeout <seconds> <host:port/path>... |")
 	fmt.Fprintln(errs, "       flip [--drain-timeout <seconds> --retire <host:port>...] <table> |")
@@ -124,15 +123,10 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	flags.SetOutput(errs)
 	listen := flags.String("listen", "", "")
+	fronting := flags.String("front", "", "")
 	path := flags.String("table", "", "")
-	var trusting repeated
-	flags.Var(&trusting, "trust", "")
-	if err := flags.Parse(argv); err != nil || *listen == "" || *path == "" || flags.NArg() != 0 {
+	if err := flags.Parse(argv); err != nil || *listen == "" || *fronting == "" || *path == "" || flags.NArg() != 0 {
 		return usage(errs)
-	}
-	trusted, err := trustOf(trusting)
-	if err != nil {
-		return refuse(errs, err)
 	}
 	document, err := os.ReadFile(*path)
 	if err != nil {
@@ -142,21 +136,32 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	if err != nil {
 		return refuse(errs, fmt.Errorf("%s: %w", *path, err))
 	}
-	board := switchboard.New(table, trusted)
+	board := switchboard.New(table)
 	controlling, lock, err := controlListener(control)
 	if err != nil {
 		return refuse(errs, err)
 	}
 	defer lock.Close()
-	data, err := net.Listen("tcp", *listen)
+	front, err := socketListener(*fronting)
 	if err != nil {
 		_ = controlling.Close()
 		return refuse(errs, err)
 	}
+	data, err := net.Listen("tcp", *listen)
+	if err != nil {
+		_ = controlling.Close()
+		_ = front.Close()
+		return refuse(errs, err)
+	}
 	controller := &http.Server{Handler: board.Control(), ReadHeaderTimeout: switchboard.ReadHeaderTimeout}
-	failed := make(chan error, 2)
+	failed := make(chan error, 3)
 	go func() {
 		if err := board.Serve(data); err != nil {
+			failed <- err
+		}
+	}()
+	go func() {
+		if err := board.ServeFront(front); err != nil {
 			failed <- err
 		}
 	}()
@@ -180,25 +185,6 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	return code
 }
 
-func trustOf(trusting []string) (switchboard.Trust, error) {
-	var trusted switchboard.Trust
-	for _, spelled := range trusting {
-		if addr, err := netip.ParseAddr(spelled); err == nil {
-			trusted.Prefixes = append(trusted.Prefixes, netip.PrefixFrom(addr.Unmap(), addr.Unmap().BitLen()))
-			continue
-		}
-		if prefix, err := netip.ParsePrefix(spelled); err == nil {
-			trusted.Prefixes = append(trusted.Prefixes, prefix.Masked())
-			continue
-		}
-		if !switchboard.DNSName(spelled) {
-			return switchboard.Trust{}, fmt.Errorf("--trust %q is neither an address, a prefix nor a name", spelled)
-		}
-		trusted.Names = append(trusted.Names, spelled)
-	}
-	return trusted, nil
-}
-
 func controlListener(path string) (net.Listener, io.Closer, error) {
 	if err := os.MkdirAll(filepath.Dir(path), controlDirMode); err != nil {
 		return nil, nil, err
@@ -214,18 +200,22 @@ func controlListener(path string) (net.Listener, io.Closer, error) {
 		}
 		return nil, nil, err
 	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		_ = lock.Close()
-		return nil, nil, err
-	}
-	mask := syscall.Umask(socketMask)
-	listener, err := net.Listen("unix", path)
-	syscall.Umask(mask)
+	listener, err := socketListener(path)
 	if err != nil {
 		_ = lock.Close()
 		return nil, nil, err
 	}
 	return listener, lock, nil
+}
+
+func socketListener(path string) (net.Listener, error) {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return nil, err
+	}
+	mask := syscall.Umask(socketMask)
+	listener, err := net.Listen("unix", path)
+	syscall.Umask(mask)
+	return listener, err
 }
 
 type controlClient struct {

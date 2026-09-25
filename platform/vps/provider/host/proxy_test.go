@@ -743,7 +743,7 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 	keys := []byte(aKey + "\n")
 	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64))}
 	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64))}
-	proxied := []string{caddy.Container, SwitchboardContainer, ProxyData, ProxyNetwork, proxyRoot, SwitchboardBinary, SwitchboardDir, switchboard.ControlDir, ProxyConfig, live.RoutingTable, live.RoutingDir}
+	proxied := []string{caddy.Container, SwitchboardContainer, ProxyData, ProxyNetwork, proxyRoot, SwitchboardBinary, SwitchboardDir, switchboard.ControlDir, switchboard.FrontDir, ProxyConfig, live.RoutingTable, live.RoutingDir}
 
 	for _, taken := range removing(standing, beside, appsStanding{}) {
 		if slices.Contains(proxied, taken.path) && taken.action == providerkit.ActionDelete {
@@ -765,8 +765,8 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 		t.Error("the proxy's data directory is taken with no reason, and every private key and the acme account key it holds go with it")
 	}
 	for container, held := range map[string][]string{
-		caddy.Container:      {ProxyData, ProxyNetwork, proxyRoot},
-		SwitchboardContainer: {switchboard.ControlDir, SwitchboardDir, live.RoutingDir, ProxyNetwork},
+		caddy.Container:      {ProxyData, ProxyNetwork, proxyRoot, switchboard.FrontDir},
+		SwitchboardContainer: {switchboard.ControlDir, switchboard.FrontDir, SwitchboardDir, live.RoutingDir, ProxyNetwork},
 	} {
 		running := slices.IndexFunc(last, func(r removal) bool { return r.path == container })
 		for _, after := range held {
