@@ -36,8 +36,6 @@ var forwardedKept = []string{"X-Forwarded-Host", "X-Forwarded-Proto"}
 
 const HeardHeader = "X-Ocel-Heard"
 
-const OwnNetwork = "network"
-
 type Board struct {
 	table     atomic.Pointer[Table]
 	loading   sync.Mutex

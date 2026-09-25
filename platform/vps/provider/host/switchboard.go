@@ -24,7 +24,7 @@ func switchboardBinary(arch string) []byte { return embedded(switchboard.Name, a
 func switchboardStanding(binary []byte, front Front) boxContainer {
 	var relaying []string
 	if front.adopted() {
-		relaying = []string{"--relay", switchboard.OwnNetwork}
+		relaying = []string{"--relay-network", ProxyNetwork}
 	}
 	return boxContainer{
 		name:  SwitchboardContainer,
