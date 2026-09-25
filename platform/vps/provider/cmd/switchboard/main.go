@@ -87,6 +87,8 @@ func run(ctx context.Context, argv []string, out, errs io.Writer) int {
 		return probe(rest, out, errs)
 	case "inodes":
 		return inodes(rest, out, errs)
+	case "holds":
+		return holds(rest, errs)
 	default:
 		return usage(errs)
 	}
@@ -101,7 +103,8 @@ func usage(errs io.Writer) int {
 	fmt.Fprintln(errs, "       upstreams |")
 	fmt.Fprintln(errs, "       leaf [--at <host:port>] <hostname> |")
 	fmt.Fprintln(errs, "       probe [--at <host:port>] <hostname> |")
-	fmt.Fprintln(errs, "       inodes <path>...")
+	fmt.Fprintln(errs, "       inodes <path>... |")
+	fmt.Fprintln(errs, "       holds <socket> <path>")
 	return exitRefused
 }
 

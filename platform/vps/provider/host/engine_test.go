@@ -154,6 +154,7 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 			stood.pins + ":" + caddy.PinsMount + ":ro",
 			filepath.Join(stood.dir, "proxy", "data") + ":" + caddy.DataMount,
 			filepath.Join(stood.dir, "front") + ":" + filepath.Join(stood.dir, "front") + ":ro",
+			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
 		}},
 		{stood.board, switchboardStanding(switchboardBinary(arch)), []string{
 			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
@@ -198,6 +199,7 @@ func TestAProbeWithNoRootReadsABindWhoseSourceTheHostReplacedAsMoved(t *testing.
 			stood.pins + ":" + caddy.PinsMount + ":ro",
 			filepath.Join(stood.dir, "proxy", "data") + ":" + caddy.DataMount,
 			filepath.Join(stood.dir, "front") + ":" + filepath.Join(stood.dir, "front") + ":ro",
+			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
 		}},
 		{stood.board, switchboardStanding(switchboardBinary(arch)), filepath.Join(stood.dir, "connector"), false, []string{
 			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",

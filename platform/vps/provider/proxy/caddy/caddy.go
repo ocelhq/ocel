@@ -42,7 +42,9 @@ func Pinned(path string) (string, bool) {
 
 func Command() []string { return []string{"caddy", "run", "--config", ConfigMount} }
 
-func Ready() []string { return []string{"test", "-S", AdminSocket} }
+const loadedApp = "/config/apps/http"
+
+func Ready(reader string) []string { return []string{reader, "holds", AdminSocket, loadedApp} }
 
 type Box interface {
 	Ran(ctx context.Context, what string, argv []string) (string, error)

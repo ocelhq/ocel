@@ -574,7 +574,7 @@ func TestAVerbTheSwitchboardDoesNotCarryIsRefusedWithTheOnesItDoes(t *testing.T)
 		if code != exitRefused {
 			t.Errorf("%v = %d, want the usage refusal", argv, code)
 		}
-		for _, verb := range []string{"serve", "load", "gate", "flip", "idle", "upstreams", "leaf", "probe", "inodes"} {
+		for _, verb := range []string{"serve", "load", "gate", "flip", "idle", "upstreams", "leaf", "probe", "inodes", "holds"} {
 			if !strings.Contains(errs, verb) {
 				t.Errorf("the usage %q never names %s", errs, verb)
 			}

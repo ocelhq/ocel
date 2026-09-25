@@ -58,7 +58,7 @@ func standingBox() []scriptedAnswer {
 		{"publish=" + caddy.HTTPPort, answer{stdout: caddy.Container + "\n"}},
 		{"publish=443", answer{stdout: caddy.Container + "\n"}},
 		{"cat /proc/net/tcp /proc/net/tcp6", answer{stdout: ""}},
-		{"'test' '-S'", answer{}},
+		{"'holds'", answer{}},
 	}
 }
 
@@ -160,7 +160,7 @@ func TestABoxThatIsReadyRefusesNothingBeforeADeploy(t *testing.T) {
 		"the engine answering as this login": "docker version",
 		"what the docker data root has left": "docker info",
 		"the switchboard's upstreams":        "'upstreams'",
-		"the front proxy's admin socket":     "'test' '-S'",
+		"the front proxy's admin socket":     "'holds'",
 		"which container publishes port 80":  "publish=" + caddy.HTTPPort,
 		"which container publishes port 443": "publish=443",
 	} {
@@ -226,15 +226,23 @@ func proxyStates() map[string]map[string]answer {
 			"docker inspect": {stdout: runningState},
 		},
 		"the front proxy is not there at all": {
-			"'test' '-S'":    {code: 1, stderr: "Error: No such container: " + caddy.Container},
+			"'holds'":        {code: 1, stderr: "Error: No such container: " + caddy.Container},
 			"docker inspect": {code: 1, stdout: "Error: No such object: " + caddy.Container},
 		},
 		"the front proxy exited": {
-			"'test' '-S'":    {code: 1, stderr: "Error response from daemon: container is not running"},
+			"'holds'":        {code: 1, stderr: "Error response from daemon: container is not running"},
 			"docker inspect": {stdout: exitedState},
 		},
 		"the front proxy has no admin socket": {
-			"'test' '-S'":    {code: 1, stderr: ""},
+			"'holds'":        {code: 3, stderr: "ocel-switchboard: nothing answered on " + caddy.AdminSocket + ": dial unix " + caddy.AdminSocket + ": connect: no such file or directory"},
+			"docker inspect": {stdout: runningState},
+		},
+		"the front proxy's admin socket is left behind and nothing answers on it": {
+			"'holds'":        {code: 3, stderr: "ocel-switchboard: nothing answered on " + caddy.AdminSocket + ": dial unix " + caddy.AdminSocket + ": connect: connection refused"},
+			"docker inspect": {stdout: runningState},
+		},
+		"the front proxy answers with no http app loaded": {
+			"'holds'":        {code: 3, stderr: "ocel-switchboard: " + caddy.AdminSocket + " holds nothing at /config/apps/http"},
 			"docker inspect": {stdout: runningState},
 		},
 	}
@@ -259,13 +267,15 @@ func TestEachContainerTheBoxServesThroughIsRefusedByNameAndByWhatIsWrongWithIt(t
 		}
 	}
 	for what, wanted := range map[string][]string{
-		"the switchboard is not there at all":                     {host.SwitchboardContainer, "bootstrap"},
-		"the switchboard exited":                                  {host.SwitchboardContainer, "exited"},
-		"the switchboard is restarting":                           {host.SwitchboardContainer, "restarting"},
-		"the switchboard answers nothing over its control socket": {host.SwitchboardContainer, "control socket"},
-		"the front proxy is not there at all":                     {caddy.Container, "bootstrap"},
-		"the front proxy exited":                                  {caddy.Container, "exited"},
-		"the front proxy has no admin socket":                     {caddy.Container, "`test -S " + caddy.AdminSocket + "`"},
+		"the switchboard is not there at all":                                     {host.SwitchboardContainer, "bootstrap"},
+		"the switchboard exited":                                                  {host.SwitchboardContainer, "exited"},
+		"the switchboard is restarting":                                           {host.SwitchboardContainer, "restarting"},
+		"the switchboard answers nothing over its control socket":                 {host.SwitchboardContainer, "control socket"},
+		"the front proxy is not there at all":                                     {caddy.Container, "bootstrap"},
+		"the front proxy exited":                                                  {caddy.Container, "exited"},
+		"the front proxy has no admin socket":                                     {caddy.Container, caddy.AdminSocket, "no such file"},
+		"the front proxy's admin socket is left behind and nothing answers on it": {caddy.Container, caddy.AdminSocket, "connection refused"},
+		"the front proxy answers with no http app loaded":                         {caddy.Container, "holds nothing"},
 	} {
 		for _, named := range wanted {
 			if !strings.Contains(said[what], named) {
