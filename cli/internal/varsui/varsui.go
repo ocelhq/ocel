@@ -56,6 +56,20 @@ type State struct {
 	Environments []string       `json:"environments"`
 	Matrix       envgate.Matrix `json:"matrix"`
 	Recovery     *Recovery      `json:"recovery,omitempty"`
+	EnvSource    *EnvSource     `json:"envSource,omitempty"`
+}
+
+type EnvSource struct {
+	ID          string            `json:"id"`
+	Writable    bool              `json:"writable"`
+	Links       map[string]string `json:"links,omitempty"`
+	Credentials []string          `json:"credentials,omitempty"`
+}
+
+type EnvSourceStore interface {
+	Describe(ctx context.Context) (EnvSource, error)
+	Sync(ctx context.Context) error
+	Create(ctx context.Context, at envgate.Address, value, description string) (awaitingApproval bool, err error)
 }
 
 type Options struct {
@@ -63,8 +77,9 @@ type Options struct {
 
 	Gate *envgate.Gate
 
-	Store Store
-	Other Reader
+	Store     Store
+	Other     Reader
+	EnvSource EnvSourceStore
 
 	Slug    string
 	Preview bool
@@ -153,6 +168,7 @@ func (s *Session) handler() http.Handler {
 	api.HandleFunc("GET /api/state", s.handleState)
 	api.HandleFunc("PUT /api/value", s.handleSet)
 	api.HandleFunc("DELETE /api/value", s.handleDelete)
+	api.HandleFunc("POST /api/env-source/value", s.handleCreate)
 	api.HandleFunc("POST /api/reveal", s.handleReveal)
 	api.HandleFunc("GET /api/history", s.handleHistory)
 	api.HandleFunc("GET /api/other", s.handleOther)
@@ -219,6 +235,43 @@ func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
 
 	s.forget(at)
 	writeJSON(w, struct{}{})
+}
+
+func (s *Session) handleCreate(w http.ResponseWriter, r *http.Request) {
+	if s.opts.EnvSource == nil {
+		fail(w, http.StatusNotFound, errors.New("this tier reads from no env source ocel can write into"))
+		return
+	}
+	var req valueRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, fmt.Errorf("read this request: %w", err))
+		return
+	}
+	at := req.address()
+	if at.Environment != "" {
+		fail(w, http.StatusBadRequest, fmt.Errorf("a value for %s is ocel's own to hold, never the env source's: set it here as an override instead", at.Environment))
+		return
+	}
+	if err := s.writable(at); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	awaiting, err := s.opts.EnvSource.Create(r.Context(), at, req.Value, s.description(at.Cell.Key))
+	if err != nil {
+		fail(w, http.StatusBadGateway, err)
+		return
+	}
+	s.forget(at)
+	writeJSON(w, map[string]bool{"awaitingApproval": awaiting})
+}
+
+func (s *Session) description(key string) string {
+	for _, definition := range s.opts.Gate.Definitions() {
+		if definition.GetKey() == key {
+			return definition.GetDescription()
+		}
+	}
+	return ""
 }
 
 func (s *Session) handleDelete(w http.ResponseWriter, r *http.Request) {
@@ -487,6 +540,12 @@ func (s *Session) handleCopy(w http.ResponseWriter, r *http.Request) {
 
 func (s *Session) handleDone(w http.ResponseWriter, r *http.Request) {
 	if s.opts.Recovery != nil {
+		if s.opts.EnvSource != nil {
+			if err := s.opts.EnvSource.Sync(r.Context()); err != nil {
+				fail(w, http.StatusBadGateway, err)
+				return
+			}
+		}
 		if err := s.opts.Gate.Prefetch(r.Context()); err != nil {
 			fail(w, http.StatusBadGateway, err)
 			return
@@ -587,14 +646,23 @@ func (s *Session) writeState(ctx context.Context, w http.ResponseWriter) {
 	if environments == nil {
 		environments = []string{}
 	}
-	writeJSON(w, State{
+	out := State{
 		Slug:         s.opts.Slug,
 		Tier:         s.tier(),
 		Other:        s.otherTier(),
 		Environments: environments,
 		Matrix:       s.opts.Gate.Matrix(s.opts.Environments),
 		Recovery:     s.opts.Recovery,
-	})
+	}
+	if s.opts.EnvSource != nil {
+		described, err := s.opts.EnvSource.Describe(ctx)
+		if err != nil {
+			fail(w, http.StatusBadGateway, fmt.Errorf("read which env source this tier reads from: %w", err))
+			return
+		}
+		out.EnvSource = &described
+	}
+	writeJSON(w, out)
 }
 
 func (s *Session) tier() string {

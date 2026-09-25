@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/localsource"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/varsui"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
@@ -77,6 +78,70 @@ func CredentialDefinitions(cfg *projectconfig.Config, preview bool) []*resources
 		})
 	}
 	return out
+}
+
+func declareCredentials(ctx context.Context, gate *envgate.Gate, cfg *projectconfig.Config, preview bool) error {
+	declared := gate.Definitions()
+	var owed []*resourcesv1.VariableDefinition
+	for _, definition := range CredentialDefinitions(cfg, preview) {
+		if !slices.ContainsFunc(declared, func(held *resourcesv1.VariableDefinition) bool { return held.GetKey() == definition.GetKey() }) {
+			owed = append(owed, definition)
+		}
+	}
+	if len(owed) == 0 {
+		return nil
+	}
+	req := &resourcesv1.DeclareEnvRequest{Definitions: owed}
+	if !slices.ContainsFunc(gate.Groups(), func(held *resourcesv1.GroupDefinition) bool { return held.GetKey() == CredentialGroup }) {
+		req.Groups = []*resourcesv1.GroupDefinition{{Key: CredentialGroup, Required: true, Description: "how ocel signs in to " + DeployedSource(cfg, preview).ID()}}
+	}
+	_, err := gate.DeclareEnv(ctx, req)
+	return err
+}
+
+type EnvSourceValues struct {
+	Runner  *provider.Runner
+	Config  *projectconfig.Config
+	Preview bool
+}
+
+func (e EnvSourceValues) Describe(ctx context.Context) (varsui.EnvSource, error) {
+	vars, err := e.Runner.Vars()
+	if err != nil {
+		return varsui.EnvSource{}, err
+	}
+	resp, err := vars.DescribeEnvSource(ctx, &envvarsv1.DescribeEnvSourceRequest{Tier: Tier(e.Preview), Slug: e.Config.Slug})
+	if err != nil {
+		return varsui.EnvSource{}, err
+	}
+	source := StatusSource(resp.GetStatus())
+	out := varsui.EnvSource{ID: source.ID, Writable: source.Writable, Links: source.Links}
+	for _, definition := range CredentialDefinitions(e.Config, e.Preview) {
+		out.Credentials = append(out.Credentials, definition.GetKey())
+	}
+	return out, nil
+}
+
+func (e EnvSourceValues) Sync(ctx context.Context) error {
+	_, err := SyncEnvSource(ctx, e.Runner, e.Config, e.Preview)
+	return err
+}
+
+func (e EnvSourceValues) Create(ctx context.Context, at envgate.Address, value, description string) (bool, error) {
+	vars, err := e.Runner.Vars()
+	if err != nil {
+		return false, err
+	}
+	resp, err := vars.PutEnvSourceValue(ctx, &envvarsv1.PutEnvSourceValueRequest{
+		Tier:        Tier(e.Preview),
+		Coordinate:  &envvarsv1.Coordinate{Slug: e.Config.Slug, Folder: at.Cell.Folder, Key: at.Cell.Key},
+		Value:       value,
+		Description: description,
+	})
+	if err != nil {
+		return false, err
+	}
+	return resp.GetAwaitingApproval(), nil
 }
 
 func SourceOf(resp *envvarsv1.SyncEnvSourceResponse) envgate.Source {

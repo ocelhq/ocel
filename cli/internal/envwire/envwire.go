@@ -17,6 +17,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envsource"
 )
 
 const RootApp = "this project's app"
@@ -47,7 +48,7 @@ func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, runner *provide
 		}
 	}
 
-	return varsui.Serve(ctx, varsui.Options{
+	opts := varsui.Options{
 		Assets:       assets,
 		Gate:         gate,
 		Store:        store,
@@ -56,7 +57,14 @@ func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, runner *provide
 		Preview:      preview,
 		Environments: environments,
 		Recovery:     recovery,
-	})
+	}
+	if DeployedSource(cfg, preview).Kind != envsource.Builtin {
+		if err := declareCredentials(ctx, gate, cfg, preview); err != nil {
+			return nil, err
+		}
+		opts.EnvSource = EnvSourceValues{Runner: runner, Config: cfg, Preview: preview}
+	}
+	return varsui.Serve(ctx, opts)
 }
 
 func NamedEnvironments(ctx context.Context, runner *provider.Runner, slug string) ([]string, error) {
@@ -129,6 +137,7 @@ func (v Values) List(ctx context.Context) ([]envgate.Stored, error) {
 			},
 			Version:   value.GetVersion(),
 			Reference: referenceOf(value.GetTarget()),
+			EnvSource: value.GetEnvSource(),
 		})
 	}
 	return stored, nil

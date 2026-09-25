@@ -398,6 +398,54 @@ func TestMatrix(t *testing.T) {
 	})
 }
 
+func TestMatrixEnvSource(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a cell names the env source its value was read from", func(t *testing.T) {
+		t.Parallel()
+		values := newFakeValues()
+		values.sourced("DATABASE_URL", "", "infisical:p-1/prod")
+		values.set("STRIPE_KEY", "", "sk")
+		g := prefetched(t, values)
+		declare(t, g, def("DATABASE_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN), def("STRIPE_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
+
+		m := g.Matrix(nil)
+		if got := cell(t, row(t, m, "DATABASE_URL"), "").EnvSource; got != "infisical:p-1/prod" {
+			t.Errorf("DATABASE_URL env source = %q, want infisical:p-1/prod", got)
+		}
+		if got := cell(t, row(t, m, "STRIPE_KEY"), "").EnvSource; got != "" {
+			t.Errorf("STRIPE_KEY env source = %q, want none — ocel holds it itself", got)
+		}
+	})
+
+	t.Run("drift is what an env source holds and nothing declares", func(t *testing.T) {
+		t.Parallel()
+		values := newFakeValues()
+		values.sourced("DATABASE_URL", "", "infisical:p-1/prod")
+		values.sourced("OLD_TOKEN", "/web", "infisical:p-1/prod")
+		values.sourced("SCOPED", "/api", "infisical:p-1/prod")
+		values.set("LEFTOVER", "", "ocel's own")
+		g := prefetched(t, values)
+		declare(t, g, def("DATABASE_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN), scoped("SCOPED", "/web"))
+
+		want := []envgate.Cell{{Key: "OLD_TOKEN", Folder: "/web"}, {Key: "SCOPED", Folder: "/api"}}
+		if got := g.Matrix(nil).Drift; !reflect.DeepEqual(got, want) {
+			t.Errorf("drift = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("a matrix with no drift encodes none", func(t *testing.T) {
+		t.Parallel()
+		doc, err := json.Marshal(prefetched(t, newFakeValues()).Matrix(nil))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(doc), "drift") {
+			t.Errorf("matrix = %s, want no drift key", doc)
+		}
+	})
+}
+
 func TestForget(t *testing.T) {
 	t.Parallel()
 

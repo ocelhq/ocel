@@ -1,6 +1,7 @@
 package envgate
 
 import (
+	"cmp"
 	"maps"
 	"slices"
 
@@ -27,6 +28,8 @@ type MatrixCell struct {
 	Reference *Reference `json:"reference,omitempty"`
 
 	Problem string `json:"problem,omitempty"`
+
+	EnvSource string `json:"envSource,omitempty"`
 }
 
 type MatrixRow struct {
@@ -55,6 +58,7 @@ type Matrix struct {
 	Rows    []MatrixRow     `json:"rows"`
 	Groups  []MatrixGroup   `json:"groups,omitempty"`
 	Apps    []AppResolution `json:"apps"`
+	Drift   []Cell          `json:"drift,omitempty"`
 }
 
 var className = map[resourcesv1.VariableClass]string{
@@ -71,6 +75,12 @@ func (g *Gate) Matrix(environments []string) Matrix {
 	base := g.baseCells()
 	resolved := g.resolvedCells()
 	references := maps.Clone(g.references)
+	sourced := map[Cell]string{}
+	for _, stored := range g.cells {
+		if stored.EnvSource != "" && stored.EnvSource != builtinSource {
+			sourced[stored.Cell] = stored.EnvSource
+		}
+	}
 	overrides := make(map[Cell][]Override, len(g.overrides))
 	for cell, forCell := range g.overrides {
 		for _, override := range forCell {
@@ -111,6 +121,7 @@ func (g *Gate) Matrix(environments []string) Matrix {
 				Overrides: overrides[cell],
 				Reference: references[cell],
 				Problem:   complaints[cell],
+				EnvSource: sourced[cell],
 			})
 		}
 		m.Rows = append(m.Rows, row)
@@ -122,6 +133,12 @@ func (g *Gate) Matrix(environments []string) Matrix {
 			Description: group.GetDescription(),
 		})
 	}
+	for cell := range sourced {
+		if !declares(definitions, cell) {
+			m.Drift = append(m.Drift, cell)
+		}
+	}
+	slices.SortFunc(m.Drift, func(a, b Cell) int { return cmp.Or(cmp.Compare(a.Key, b.Key), cmp.Compare(a.Folder, b.Folder)) })
 	for _, app := range apps {
 		m.Apps = append(m.Apps, AppResolution{
 			Name:    app.Name,
