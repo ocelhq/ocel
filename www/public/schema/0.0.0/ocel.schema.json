@@ -135,7 +135,7 @@
     },
     "bindings": {
       "additionalProperties": false,
-      "description": "Resources this project declares that ocel binds to a record your own infrastructure published, instead of provisioning them itself. Keyed by resource type, then by the name the app declares; the value is \"@\" followed by the name the record is published under, such as \"@warehouse\" — the @ keeps it apart from the name the app declares. A name nothing has published refuses the deploy.",
+      "description": "Resources this project declares that ocel binds instead of provisioning them itself. Keyed by resource type, then by the name the app declares. The value is \"@\" followed by the name a record your own infrastructure published, such as \"@warehouse\", and a name nothing has published refuses the deploy; or the record written inline, checked at deploy rather than provisioned, optionally keyed by the tier it serves.",
       "properties": {
         "bucket": {
           "additionalProperties": {
@@ -147,10 +147,527 @@
         },
         "postgres": {
           "additionalProperties": {
-            "pattern": "^@\\S",
-            "type": "string"
+            "oneOf": [
+              {
+                "pattern": "^@\\S",
+                "type": "string"
+              },
+              {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "url": {
+                        "additionalProperties": false,
+                        "description": "The whole connection string, kept verbatim so its sslmode, options and pooler parameters reach the client.",
+                        "properties": {
+                          "$env": {
+                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "pattern": "^[A-Z_][A-Z0-9_]*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "$env"
+                        ],
+                        "title": "VariableRef",
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "url"
+                    ],
+                    "title": "PostgresUrlBinding",
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "database": {
+                        "description": "The database the app connects to.",
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "host": {
+                        "description": "The server's hostname.",
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "password": {
+                        "additionalProperties": false,
+                        "description": "The role's password.",
+                        "properties": {
+                          "$env": {
+                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "pattern": "^[A-Z_][A-Z0-9_]*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "$env"
+                        ],
+                        "title": "VariableRef",
+                        "type": "object"
+                      },
+                      "port": {
+                        "description": "The server's port. Left off, 5432.",
+                        "type": "integer"
+                      },
+                      "tls": {
+                        "additionalProperties": false,
+                        "description": "How the connection is encrypted. Left off, it is not.",
+                        "properties": {
+                          "ca": {
+                            "additionalProperties": false,
+                            "description": "The certificate authority the server's certificate chains to, as PEM, when it is not one the system trusts.",
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          },
+                          "mode": {
+                            "description": "require encrypts the connection; verify-full also checks the server's certificate and hostname.",
+                            "enum": [
+                              "require",
+                              "verify-full"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "mode"
+                        ],
+                        "title": "PostgresTLS",
+                        "type": "object"
+                      },
+                      "username": {
+                        "description": "The role the app connects as.",
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          }
+                        ]
+                      }
+                    },
+                    "required": [
+                      "host",
+                      "database",
+                      "username",
+                      "password"
+                    ],
+                    "title": "PostgresHostBinding",
+                    "type": "object"
+                  }
+                ],
+                "title": "PostgresBinding"
+              },
+              {
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "preview": {
+                    "description": "The record previews bind. Left off, previews provision their own.",
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "url": {
+                            "additionalProperties": false,
+                            "description": "The whole connection string, kept verbatim so its sslmode, options and pooler parameters reach the client.",
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "url"
+                        ],
+                        "title": "PostgresUrlBinding",
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "database": {
+                            "description": "The database the app connects to.",
+                            "oneOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "$env": {
+                                    "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "$env"
+                                ],
+                                "title": "VariableRef",
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "host": {
+                            "description": "The server's hostname.",
+                            "oneOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "$env": {
+                                    "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "$env"
+                                ],
+                                "title": "VariableRef",
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "password": {
+                            "additionalProperties": false,
+                            "description": "The role's password.",
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          },
+                          "port": {
+                            "description": "The server's port. Left off, 5432.",
+                            "type": "integer"
+                          },
+                          "tls": {
+                            "additionalProperties": false,
+                            "description": "How the connection is encrypted. Left off, it is not.",
+                            "properties": {
+                              "ca": {
+                                "additionalProperties": false,
+                                "description": "The certificate authority the server's certificate chains to, as PEM, when it is not one the system trusts.",
+                                "properties": {
+                                  "$env": {
+                                    "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "$env"
+                                ],
+                                "title": "VariableRef",
+                                "type": "object"
+                              },
+                              "mode": {
+                                "description": "require encrypts the connection; verify-full also checks the server's certificate and hostname.",
+                                "enum": [
+                                  "require",
+                                  "verify-full"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "mode"
+                            ],
+                            "title": "PostgresTLS",
+                            "type": "object"
+                          },
+                          "username": {
+                            "description": "The role the app connects as.",
+                            "oneOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "$env": {
+                                    "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "$env"
+                                ],
+                                "title": "VariableRef",
+                                "type": "object"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "host",
+                          "database",
+                          "username",
+                          "password"
+                        ],
+                        "title": "PostgresHostBinding",
+                        "type": "object"
+                      }
+                    ],
+                    "title": "PostgresBinding"
+                  },
+                  "production": {
+                    "description": "The record production binds. Left off, production provisions its own.",
+                    "oneOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "url": {
+                            "additionalProperties": false,
+                            "description": "The whole connection string, kept verbatim so its sslmode, options and pooler parameters reach the client.",
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "url"
+                        ],
+                        "title": "PostgresUrlBinding",
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "database": {
+                            "description": "The database the app connects to.",
+                            "oneOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "$env": {
+                                    "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "$env"
+                                ],
+                                "title": "VariableRef",
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "host": {
+                            "description": "The server's hostname.",
+                            "oneOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "$env": {
+                                    "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "$env"
+                                ],
+                                "title": "VariableRef",
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "password": {
+                            "additionalProperties": false,
+                            "description": "The role's password.",
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          },
+                          "port": {
+                            "description": "The server's port. Left off, 5432.",
+                            "type": "integer"
+                          },
+                          "tls": {
+                            "additionalProperties": false,
+                            "description": "How the connection is encrypted. Left off, it is not.",
+                            "properties": {
+                              "ca": {
+                                "additionalProperties": false,
+                                "description": "The certificate authority the server's certificate chains to, as PEM, when it is not one the system trusts.",
+                                "properties": {
+                                  "$env": {
+                                    "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "$env"
+                                ],
+                                "title": "VariableRef",
+                                "type": "object"
+                              },
+                              "mode": {
+                                "description": "require encrypts the connection; verify-full also checks the server's certificate and hostname.",
+                                "enum": [
+                                  "require",
+                                  "verify-full"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "mode"
+                            ],
+                            "title": "PostgresTLS",
+                            "type": "object"
+                          },
+                          "username": {
+                            "description": "The role the app connects as.",
+                            "oneOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "$env": {
+                                    "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "$env"
+                                ],
+                                "title": "VariableRef",
+                                "type": "object"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "host",
+                          "database",
+                          "username",
+                          "password"
+                        ],
+                        "title": "PostgresHostBinding",
+                        "type": "object"
+                      }
+                    ],
+                    "title": "PostgresBinding"
+                  }
+                },
+                "type": "object"
+              }
+            ]
           },
-          "description": "Each key is a postgres resource this project declares; its value is \"@\" followed by the name the record is published under, such as \"@warehouse\".",
+          "description": "Each key is a postgres resource this project declares. Its value is \"@\" followed by the name a record is published under, such as \"@warehouse\"; or the record itself, whose secrets are ocel variables written { \"$env\": \"NAME\" }; or that record keyed by the tier it serves, leaving the other tier to provision its own.",
           "type": "object"
         }
       },

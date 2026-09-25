@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"slices"
 	"strings"
@@ -622,7 +623,7 @@ export default {
 					{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", External: "sst-pg-orders"},
 					{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads", External: "legacy-uploads"},
 				}
-				if !slices.Equal(cfg.Bindings, want) {
+				if !reflect.DeepEqual(cfg.Bindings, want) {
 					t.Fatalf("Bindings = %v, want %v sorted by type then name so a golden manifest stays stable", cfg.Bindings, want)
 				}
 			},
@@ -654,7 +655,7 @@ export default {
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
 				want := []Binding{{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "analytics", External: "@warehouse"}}
-				if !slices.Equal(cfg.Bindings, want) {
+				if !reflect.DeepEqual(cfg.Bindings, want) {
 					t.Fatalf("Bindings = %v, want %v", cfg.Bindings, want)
 				}
 			},

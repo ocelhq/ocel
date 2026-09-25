@@ -123,7 +123,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		return nil, err
 	}
 
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Dir, cfg.Apps, usages, compute, images, functions), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.Bindings), functions, variablesByApp(variables, functions))
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Dir, cfg.Apps, usages, compute, images, functions), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.BindingsFor(projectconfig.Tier(gate.Scope().Preview))), functions, variablesByApp(variables, functions))
 	if err != nil {
 		return nil, err
 	}

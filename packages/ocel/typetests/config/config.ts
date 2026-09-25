@@ -112,6 +112,44 @@ export const bindingWithoutItsSigil = defineConfig({
   bindings: { postgres: { analytics: "warehouse" } },
 });
 
+export const bindingInlineByUrl = defineConfig({
+  slug: "test-app",
+  bindings: { postgres: { orders: { url: { $env: "ORDERS_DATABASE_URL" } } } },
+});
+
+export const bindingInlinePerTier = defineConfig({
+  slug: "test-app",
+  bindings: {
+    postgres: {
+      orders: {
+        production: {
+          host: "db.abcdefghijkl.supabase.co",
+          database: "postgres",
+          username: { $env: "SUPABASE_DB_USER" },
+          password: { $env: "SUPABASE_DB_PASSWORD" },
+          tls: { mode: "verify-full", ca: { $env: "SUPABASE_CA" } },
+        },
+      },
+    },
+  },
+});
+
+export const bindingPasswordAsText = defineConfig({
+  slug: "test-app",
+  bindings: {
+    postgres: {
+      // @ts-expect-error a secret takes an ocel variable, never text
+      orders: { host: "db", database: "d", username: "u", password: "hunter2" },
+    },
+  },
+});
+
+export const bindingUrlAsText = defineConfig({
+  slug: "test-app",
+  // @ts-expect-error a url carries its password, so it is an ocel variable
+  bindings: { postgres: { orders: { url: "postgres://u:p@db/d" } } },
+});
+
 export const registryPasswordAsAPlaceholder = defineConfig({
   slug: "test-app",
   registry: { server: "ghcr.io/acme", password: "${REGISTRY_TOKEN}" },

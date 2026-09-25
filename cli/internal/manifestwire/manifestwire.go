@@ -29,10 +29,10 @@ func Declarations(configDir string, resources []declare.Resource) []manifestbuil
 	return decls
 }
 
-func Bindings(bindings []projectconfig.Binding) []manifestbuilder.Binding {
+func Bindings(bindings []projectconfig.TierBinding) []manifestbuilder.Binding {
 	out := make([]manifestbuilder.Binding, 0, len(bindings))
 	for _, b := range bindings {
-		out = append(out, manifestbuilder.Binding{Type: b.Type, Name: b.Name, External: b.External})
+		out = append(out, manifestbuilder.Binding{Type: b.Type, Name: b.Name, External: b.RecordName()})
 	}
 	return out
 }

@@ -275,7 +275,7 @@ func runBindingsGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, opt
 		}
 
 		path := filepath.Join(cfg.Dir, bindingTypesFileName)
-		if err := os.WriteFile(path, []byte(renderBindingTypes(describeBindingCoordinate(opts), cfg.Bindings, resp.GetBindings())), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(renderBindingTypes(describeBindingCoordinate(opts), cfg.BindingsFor(projectconfig.Tier(opts.preview)), resp.GetBindings())), 0o644); err != nil {
 			return fmt.Errorf("write %s: %w", bindingTypesFileName, err)
 		}
 
