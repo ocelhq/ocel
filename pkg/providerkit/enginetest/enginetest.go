@@ -208,6 +208,9 @@ func reclaimed(root string) error {
 		"--volume", root+":/reclaimed", "--entrypoint", "find", constants.ObjectStoreImage(),
 		"/reclaimed", "-mindepth", "1", "!", "-path", "/reclaimed/"+runFile, "-delete").CombinedOutput()
 	if err != nil {
+		if _, gone := os.Stat(root); errors.Is(gone, fs.ErrNotExist) {
+			return nil
+		}
 		return fmt.Errorf("take back %s, which holds what a container wrote as a user this run is not: %w\n%s", root, err, strings.TrimSpace(string(said)))
 	}
 	if err := emptied(root); err != nil {
