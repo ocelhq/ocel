@@ -8,10 +8,10 @@ import (
 
 type Incomplete struct {
 	guarantees proxy.Guarantees
-	admitted   proxy.Admission
+	admitted   proxy.Spec
 }
 
-func (i *Incomplete) admit(_ context.Context, admission proxy.Admission) error {
-	i.admitted = admission
+func (i *Incomplete) admit(_ context.Context, spec proxy.Spec) error {
+	i.admitted = spec
 	return nil
 }

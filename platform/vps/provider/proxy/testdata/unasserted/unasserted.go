@@ -8,10 +8,10 @@ import (
 
 type Unasserted struct {
 	guarantees proxy.Guarantees
-	admitted   proxy.Admission
+	admitted   proxy.Spec
 }
 
-func (u *Unasserted) admit(_ context.Context, admission proxy.Admission) error {
-	u.admitted = admission
+func (u *Unasserted) admit(_ context.Context, spec proxy.Spec) error {
+	u.admitted = spec
 	return nil
 }

@@ -10,9 +10,9 @@ var _ proxy.Proxy = (*Incomplete)(nil)
 
 func (i *Incomplete) Guarantees() proxy.Guarantees { return i.guarantees }
 
-func (i *Incomplete) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+func (i *Incomplete) Render(proxy.Spec) ([]byte, error) { return nil, nil }
 
-func (i *Incomplete) Unrendered([]byte, proxy.Admission) string { return "" }
+func (i *Incomplete) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (i *Incomplete) Reload(context.Context) error { return nil }
 

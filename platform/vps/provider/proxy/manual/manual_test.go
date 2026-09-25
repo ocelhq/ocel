@@ -62,16 +62,16 @@ func TestManualRendersNothingForItsProxyWhateverTheBoxAdmits(t *testing.T) {
 	t.Parallel()
 
 	front := manual.Manual{Box: &box{}}
-	admission := proxy.Admission{
+	spec := proxy.Spec{
 		Upstream:   "ocel-switchboard:8080",
 		Edge:       "box",
 		Permission: proxy.Permission{Dial: "/run/ocel-front/admit.sock", Path: "/admit"},
 	}
-	rendered, err := front.Render(admission)
+	rendered, err := front.Render(spec)
 	if err != nil || rendered != nil {
 		t.Errorf("Render() = %q, %v; want nothing to write", rendered, err)
 	}
-	if declared := front.Unrendered([]byte(`{"apps":{}}`), admission); declared != "" {
+	if declared := front.Unrendered([]byte(`{"apps":{}}`), spec.Permission); declared != "" {
 		t.Errorf("Unrendered() = %q, want nothing: ocel renders no config it could spot a stranger in", declared)
 	}
 }

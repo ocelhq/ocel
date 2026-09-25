@@ -8,10 +8,10 @@ import (
 
 type Misnamed struct {
 	guarantees proxy.Guarantees
-	admitted   proxy.Admission
+	admitted   proxy.Spec
 }
 
-func (m *Misnamed) admit(_ context.Context, admission proxy.Admission) error {
-	m.admitted = admission
+func (m *Misnamed) admit(_ context.Context, spec proxy.Spec) error {
+	m.admitted = spec
 	return nil
 }

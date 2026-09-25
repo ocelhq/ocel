@@ -133,7 +133,7 @@ func Listen() string { return "unix/" + AdminSocket + "|" + socketMode }
 
 func PermissionEndpoint(path string) string { return "http://" + relayListen + path }
 
-func render(admission proxy.Admission) ([]byte, error) {
+func render(spec proxy.Spec) ([]byte, error) {
 	var seeded config
 	if err := json.Unmarshal(baseline, &seeded); err != nil {
 		return nil, fmt.Errorf("the baseline caddy config is not json: %w", err)
@@ -142,36 +142,36 @@ func render(admission proxy.Admission) ([]byte, error) {
 	if !held {
 		return nil, fmt.Errorf("the baseline caddy config declares no %s server", serverName)
 	}
-	if strings.TrimSpace(admission.Upstream) == "" {
-		return nil, errors.New("an admission names no upstream to forward to")
+	if strings.TrimSpace(spec.Upstream) == "" {
+		return nil, errors.New("a proxy spec names no upstream to forward to")
 	}
-	if strings.TrimSpace(admission.Edge) == "" {
-		return nil, errors.New("an admission names no edge for the proxy's answers to carry")
+	if strings.TrimSpace(spec.Edge) == "" {
+		return nil, errors.New("a proxy spec names no edge for the proxy's answers to carry")
 	}
-	if strings.TrimSpace(admission.Permission.Dial) == "" || !strings.HasPrefix(admission.Permission.Path, "/") {
-		return nil, errors.New("an admission names no endpoint to ask whether a hostname may be issued a certificate")
+	if strings.TrimSpace(spec.Permission.Dial) == "" || !strings.HasPrefix(spec.Permission.Path, "/") {
+		return nil, errors.New("a proxy spec names no endpoint to ask whether a hostname may be issued a certificate")
 	}
-	pinned, err := loaded(admission.Pins)
+	pinned, err := loaded(spec.Pins)
 	if err != nil {
 		return nil, err
 	}
 	front.Policies = []connectionPolicy{{}}
 	front.Routes = []route{{Handle: []forward{{
 		Handler:     forwardHandler,
-		Upstreams:   []dial{{Dial: admission.Upstream}},
+		Upstreams:   []dial{{Dial: spec.Upstream}},
 		StreamDelay: Grace.String(),
 	}}}}
 	front.Errors = &failing{Routes: []failure{{Handle: []answer{{
 		Handler: answerHandler,
 		Status:  errorStatus,
-		Headers: map[string][]string{http.CanonicalHeaderKey(edge.HeaderEdge): {admission.Edge}},
+		Headers: map[string][]string{http.CanonicalHeaderKey(edge.HeaderEdge): {spec.Edge}},
 	}}}}}
 	return json.Marshal(config{
 		Admin:   admin{Listen: Listen()},
 		Logging: seeded.Logging,
 		Apps: apps{
-			HTTP: httpApp{GracePeriod: Grace.String(), Servers: map[string]server{serverName: front, relayName: relayTo(admission.Permission.Dial)}},
-			TLS:  tlsApp{Certificates: pinned, Automation: onDemandThrough(admission.Permission.Path)},
+			HTTP: httpApp{GracePeriod: Grace.String(), Servers: map[string]server{serverName: front, relayName: relayTo(spec.Permission.Dial)}},
+			TLS:  tlsApp{Certificates: pinned, Automation: onDemandThrough(spec.Permission.Path)},
 			PKI:  seeded.Apps.PKI,
 		},
 	})
@@ -227,7 +227,7 @@ func pinMount(path string) (string, error) {
 	return PinsMount + "/" + leaf, nil
 }
 
-func unrendered(rendered []byte, admission proxy.Admission) string {
+func unrendered(rendered []byte, permission proxy.Permission) string {
 	var read struct {
 		Admin struct {
 			Config struct {
@@ -252,11 +252,11 @@ func unrendered(rendered []byte, admission proxy.Admission) string {
 	if len(read.Apps.TLS.Automation) == 0 {
 		return ""
 	}
-	if !sameJSON(read.Apps.TLS.Automation, onDemandThrough(admission.Permission.Path)) {
-		return "a tls automation policy other than ordering on demand what " + admission.Permission.Dial + " admits, so the proxy may order certificates for names nothing claims"
+	if !sameJSON(read.Apps.TLS.Automation, onDemandThrough(permission.Path)) {
+		return "a tls automation policy other than ordering on demand what " + permission.Dial + " admits, so the proxy may order certificates for names nothing claims"
 	}
-	if !sameJSON(read.Apps.HTTP.Servers[relayName], relayTo(admission.Permission.Dial)) {
-		return fmt.Sprintf("a relay server %q other than one forwarding %s to %s alone, so the proxy may order certificates on the word of something other than the switchboard", relayName, relayListen, admission.Permission.Dial)
+	if !sameJSON(read.Apps.HTTP.Servers[relayName], relayTo(permission.Dial)) {
+		return fmt.Sprintf("a relay server %q other than one forwarding %s to %s alone, so the proxy may order certificates on the word of something other than the switchboard", relayName, relayListen, permission.Dial)
 	}
 	return ""
 }

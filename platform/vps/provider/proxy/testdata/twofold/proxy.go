@@ -10,9 +10,9 @@ var _ proxy.Proxy = (*First)(nil)
 
 func (f *First) Guarantees() proxy.Guarantees { return f.guarantees }
 
-func (f *First) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+func (f *First) Render(proxy.Spec) ([]byte, error) { return nil, nil }
 
-func (f *First) Unrendered([]byte, proxy.Admission) string { return "" }
+func (f *First) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (f *First) Reload(context.Context) error { return nil }
 

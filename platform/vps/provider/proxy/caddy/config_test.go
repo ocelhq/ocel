@@ -23,8 +23,8 @@ const (
 
 var permission = proxy.Permission{Dial: "unix//run/ocel-front/admit.sock", Path: "/admit"}
 
-func admitting(pins ...string) proxy.Admission {
-	return proxy.Admission{Pins: pins, Upstream: switchboard, Edge: edgeName, Permission: permission}
+func specified(pins ...string) proxy.Spec {
+	return proxy.Spec{Pins: pins, Upstream: switchboard, Edge: edgeName, Permission: permission}
 }
 
 type policy struct {
@@ -80,9 +80,9 @@ type rendered struct {
 
 func (r rendered) front() server { return r.Apps.HTTP.Servers["ocel"] }
 
-func render(t *testing.T, admission proxy.Admission) ([]byte, rendered) {
+func render(t *testing.T, spec proxy.Spec) ([]byte, rendered) {
 	t.Helper()
-	written, err := (caddy.Builtin{}).Render(admission)
+	written, err := (caddy.Builtin{}).Render(spec)
 	if err != nil {
 		t.Fatalf("Render() = %v", err)
 	}
@@ -102,7 +102,7 @@ func render(t *testing.T, admission proxy.Admission) ([]byte, rendered) {
 func TestTheFrontProxyNamesNoHostnameAndForwardsEverythingToTheSwitchboard(t *testing.T) {
 	t.Parallel()
 
-	written, read := render(t, admitting())
+	written, read := render(t, specified())
 	if strings.Contains(string(written), `"host"`) {
 		t.Errorf("the config matches on a host, and every hostname it names is a reload the day that hostname is bound or unbound:\n%s", written)
 	}
@@ -132,7 +132,7 @@ func TestTheFrontProxyNamesNoHostnameAndForwardsEverythingToTheSwitchboard(t *te
 func TestTheProxyOrdersOnDemandOnlyWhatTheSwitchboardAdmits(t *testing.T) {
 	t.Parallel()
 
-	_, read := render(t, admitting())
+	_, read := render(t, specified())
 	onDemand := read.Apps.TLS.Automation.OnDemand
 	if onDemand.Ask != "" || onDemand.Permission["module"] != "http" || onDemand.Permission["endpoint"] != caddy.PermissionEndpoint(permission.Path) || len(onDemand.Permission) != 2 {
 		t.Errorf("on-demand issuance asks %q through %v, want the relay to the switchboard's admission at %s through the http permission module and nothing else", onDemand.Ask, onDemand.Permission, caddy.PermissionEndpoint(permission.Path))
@@ -189,7 +189,7 @@ func labelwise(name, subject string) bool {
 func TestEveryErrorTheFrontProxyAnswersItselfNamesTheEdge(t *testing.T) {
 	t.Parallel()
 
-	_, read := render(t, admitting())
+	_, read := render(t, specified())
 	for _, server := range []server{read.front()} {
 		if server.Errors == nil || len(server.Errors.Routes) != 1 || server.Errors.Routes[0].Match != nil || len(server.Errors.Routes[0].Handle) != 1 {
 			t.Fatalf("the front server handles its own errors with %+v, want one route answering every error", server.Errors)
@@ -204,7 +204,7 @@ func TestEveryErrorTheFrontProxyAnswersItselfNamesTheEdge(t *testing.T) {
 func TestAReloadLeavesEveryStreamTheGraceItTakesRatherThanCuttingIt(t *testing.T) {
 	t.Parallel()
 
-	_, read := render(t, admitting())
+	_, read := render(t, specified())
 	if read.Apps.HTTP.GracePeriod != "30s" {
 		t.Errorf("the config declares a grace period of %q, want 30s: caddy's default is eternal", read.Apps.HTTP.GracePeriod)
 	}
@@ -222,12 +222,12 @@ func TestAReloadLeavesEveryStreamTheGraceItTakesRatherThanCuttingIt(t *testing.T
 func TestWhatARenderSaysDependsOnWhichPairsArePinnedAndNotOnTheOrderTheyCameIn(t *testing.T) {
 	t.Parallel()
 
-	one, _ := render(t, admitting(caddy.PinsDir+"/b", caddy.PinsDir+"/a", caddy.PinsDir+"/b"))
-	two, _ := render(t, admitting(caddy.PinsDir+"/a", caddy.PinsDir+"/b"))
+	one, _ := render(t, specified(caddy.PinsDir+"/b", caddy.PinsDir+"/a", caddy.PinsDir+"/b"))
+	two, _ := render(t, specified(caddy.PinsDir+"/a", caddy.PinsDir+"/b"))
 	if !bytes.Equal(one, two) {
 		t.Error("two renders of the same pins differ by the order they were handed in, and a reshape that changes no pin would reload caddy")
 	}
-	three, _ := render(t, admitting(caddy.PinsDir+"/a"))
+	three, _ := render(t, specified(caddy.PinsDir+"/a"))
 	if bytes.Equal(one, three) {
 		t.Error("a render carrying one pin fewer says the same, so the running proxy keeps serving a pair the operator took away")
 	}
@@ -236,7 +236,7 @@ func TestWhatARenderSaysDependsOnWhichPairsArePinnedAndNotOnTheOrderTheyCameIn(t
 func TestEveryPinnedPairIsLoadedOnceOffTheDirectoryTheProxyMounts(t *testing.T) {
 	t.Parallel()
 
-	_, read := render(t, admitting(caddy.PinsDir+"/wild", caddy.PinsDir+"/shop", caddy.PinsDir+"/wild"))
+	_, read := render(t, specified(caddy.PinsDir+"/wild", caddy.PinsDir+"/shop", caddy.PinsDir+"/wild"))
 	if read.Apps.TLS.Certificates == nil || len(read.Apps.TLS.Certificates.LoadFiles) != 2 {
 		t.Fatalf("the config loads %+v, want each pinned pair once", read.Apps.TLS.Certificates)
 	}
@@ -249,7 +249,7 @@ func TestEveryPinnedPairIsLoadedOnceOffTheDirectoryTheProxyMounts(t *testing.T) 
 			t.Errorf("the pair pinned at %s is tagged %v, want no tag: a tag naming the hostnames it covers changes the config with every bind", leaf, loaded.Tags)
 		}
 	}
-	_, read = render(t, admitting())
+	_, read = render(t, specified())
 	if read.Apps.TLS.Certificates != nil {
 		t.Errorf("a box pinning nothing loads %+v", read.Apps.TLS.Certificates)
 	}
@@ -258,19 +258,19 @@ func TestEveryPinnedPairIsLoadedOnceOffTheDirectoryTheProxyMounts(t *testing.T) 
 func TestWhatTheProxyCouldNotHoldIsRefusedRatherThanRendered(t *testing.T) {
 	t.Parallel()
 
-	for what, admission := range map[string]proxy.Admission{
+	for what, spec := range map[string]proxy.Spec{
 		"no upstream":                     {Edge: edgeName, Permission: permission},
 		"no edge to name":                 {Upstream: switchboard, Permission: permission},
 		"no permission endpoint":          {Upstream: switchboard, Edge: edgeName},
 		"no admission to relay to":        {Upstream: switchboard, Edge: edgeName, Permission: proxy.Permission{Path: permission.Path}},
 		"no path to ask the admission at": {Upstream: switchboard, Edge: edgeName, Permission: proxy.Permission{Dial: permission.Dial}},
-		"a pin outside the pin root":      admitting("/etc/shadow"),
-		"a pin beneath the pin root":      admitting(caddy.PinsDir + "/nested/shop"),
-		"the pin root itself":             admitting(caddy.PinsDir),
-		"a pin climbing out of its root":  admitting(caddy.PinsDir + "/.."),
+		"a pin outside the pin root":      specified("/etc/shadow"),
+		"a pin beneath the pin root":      specified(caddy.PinsDir + "/nested/shop"),
+		"the pin root itself":             specified(caddy.PinsDir),
+		"a pin climbing out of its root":  specified(caddy.PinsDir + "/.."),
 	} {
-		if written, err := (caddy.Builtin{}).Render(admission); err == nil {
-			t.Errorf("an admission with %s rendered:\n%s", what, written)
+		if written, err := (caddy.Builtin{}).Render(spec); err == nil {
+			t.Errorf("a spec with %s rendered:\n%s", what, written)
 		}
 	}
 }
@@ -278,15 +278,14 @@ func TestWhatTheProxyCouldNotHoldIsRefusedRatherThanRendered(t *testing.T) {
 func TestTheAdminApiIsReachedOverItsSocketAloneAndNoConfigOrdersWithoutTheSwitchboardsWord(t *testing.T) {
 	t.Parallel()
 
-	admission := admitting(caddy.PinsDir + "/shop")
-	written, read := render(t, admission)
+	written, read := render(t, specified(caddy.PinsDir+"/shop"))
 	if read.Admin.Listen != "unix/"+caddy.AdminSocket+"|0600" {
 		t.Errorf("the admin endpoint listens at %q, want the socket only root inside the proxy reaches", read.Admin.Listen)
 	}
-	if foreign := (caddy.Builtin{}).Unrendered(written, admission); foreign != "" {
+	if foreign := (caddy.Builtin{}).Unrendered(written, permission); foreign != "" {
 		t.Errorf("the rendered config reads as declaring %s", foreign)
 	}
-	if foreign := (caddy.Builtin{}).Unrendered([]byte(`{"apps":{"http":{}}}`), admission); foreign != "" {
+	if foreign := (caddy.Builtin{}).Unrendered([]byte(`{"apps":{"http":{}}}`), permission); foreign != "" {
 		t.Errorf("a config ordering nothing at all reads as declaring %s: it is stale, not dangerous", foreign)
 	}
 
@@ -326,7 +325,7 @@ func TestTheAdminApiIsReachedOverItsSocketAloneAndNoConfigOrdersWithoutTheSwitch
 		}),
 		"a config loader": []byte(`{"admin":{"config":{"load":{"module":"http"}}}}`),
 	} {
-		if (caddy.Builtin{}).Unrendered(config, admission) == "" {
+		if (caddy.Builtin{}).Unrendered(config, permission) == "" {
 			t.Errorf("a config declaring %s reads as one ocel renders", foreign)
 		}
 	}
@@ -346,7 +345,7 @@ func TestTheAdminApiIsReachedOverItsSocketAloneAndNoConfigOrdersWithoutTheSwitch
 			relay(h)["listen"] = []any{":2020"}
 		}),
 	} {
-		said := (caddy.Builtin{}).Unrendered(config, admission)
+		said := (caddy.Builtin{}).Unrendered(config, permission)
 		if !strings.Contains(said, endpoint.Host) || strings.Contains(said, "automation") {
 			t.Errorf("a config declaring %s reads as declaring %q, want the refusal to name the relay at %s: its tls automation is the one ocel renders", foreign, said, endpoint.Host)
 		}
@@ -356,7 +355,7 @@ func TestTheAdminApiIsReachedOverItsSocketAloneAndNoConfigOrdersWithoutTheSwitch
 func TestTheProxyAsksTheSwitchboardsAdmissionThroughARelayOnlyItsOwnLoopbackReaches(t *testing.T) {
 	t.Parallel()
 
-	_, read := render(t, admitting())
+	_, read := render(t, specified())
 	endpoint, err := url.Parse(caddy.PermissionEndpoint(permission.Path))
 	if err != nil {
 		t.Fatal(err)
@@ -387,7 +386,7 @@ func TestTheProxyAsksTheSwitchboardsAdmissionThroughARelayOnlyItsOwnLoopbackReac
 func TestTheAccessLogKeepsThePathAndRedactsTheQuery(t *testing.T) {
 	t.Parallel()
 
-	_, read := render(t, admitting())
+	_, read := render(t, specified())
 	var logging struct {
 		Logs map[string]struct {
 			Encoder struct {

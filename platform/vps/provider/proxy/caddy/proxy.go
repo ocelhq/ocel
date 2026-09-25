@@ -25,10 +25,10 @@ func (Builtin) Guarantees() proxy.Guarantees {
 	}
 }
 
-func (Builtin) Render(admission proxy.Admission) ([]byte, error) { return render(admission) }
+func (Builtin) Render(spec proxy.Spec) ([]byte, error) { return render(spec) }
 
-func (Builtin) Unrendered(config []byte, admission proxy.Admission) string {
-	return unrendered(config, admission)
+func (Builtin) Unrendered(config []byte, permission proxy.Permission) string {
+	return unrendered(config, permission)
 }
 
 func (b Builtin) Reload(ctx context.Context) error {

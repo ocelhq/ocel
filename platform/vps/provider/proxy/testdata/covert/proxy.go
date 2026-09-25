@@ -10,9 +10,9 @@ var _ proxy.Proxy = (*Overt)(nil)
 
 func (o *Overt) Guarantees() proxy.Guarantees { return o.guarantees }
 
-func (o *Overt) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+func (o *Overt) Render(proxy.Spec) ([]byte, error) { return nil, nil }
 
-func (o *Overt) Unrendered([]byte, proxy.Admission) string { return "" }
+func (o *Overt) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (o *Overt) Reload(context.Context) error { return nil }
 

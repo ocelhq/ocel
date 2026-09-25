@@ -8,8 +8,8 @@ import (
 
 type Proxy interface {
 	Guarantees() Guarantees
-	Render(admission Admission) ([]byte, error)
-	Unrendered(config []byte, admission Admission) string
+	Render(spec Spec) ([]byte, error)
+	Unrendered(config []byte, permission Permission) string
 	Reload(ctx context.Context) error
 	Inspect(ctx context.Context) (Standing, error)
 	Certificate(ctx context.Context, hostname string) (Certificate, error)
@@ -31,7 +31,7 @@ type Guarantees struct {
 	ServesPreviewWildcards bool
 }
 
-type Admission struct {
+type Spec struct {
 	Pins       []string
 	Upstream   string
 	Edge       string
