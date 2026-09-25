@@ -62,7 +62,7 @@ func ReadableAs(binding Binding, declaredName string, declared BindingType, prox
 		return Refuse(CodeInvalid,
 			"`bindings` binds %s.%s to %q, and the record published under that name is a custom one: "+
 				"a custom binding is read by transforms; it is external by definition and never provisioned, so it is not bound here. "+
-				"Drop it from `bindings` and read it from a transform as `bindings.%s.<property>`",
+				"Drop it from `bindings` and read it from a transform as `bindings.custom.%s.<property>`",
 			declared, declaredName, binding.Name, binding.Name)
 	case binding.Type != declared:
 		return Refuse(CodeInvalid,
