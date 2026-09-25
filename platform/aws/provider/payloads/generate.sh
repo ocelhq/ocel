@@ -51,6 +51,10 @@ mkdir -p "$stage/upload-completer"
 build_lambda ./cmd/uploadcompleter "$stage/upload-completer/bootstrap"
 pack "$stage/upload-completer" "$dist/upload-completer.zip"
 
+mkdir -p "$stage/envsync"
+build_lambda ./cmd/envsync "$stage/envsync/bootstrap" arm64
+pack "$stage/envsync" "$dist/envsync.zip"
+
 for fn in $functions; do
   cp "$root/platform/aws/functions/$fn/dist/$fn.zip" "$dist/$fn.zip"
 done
