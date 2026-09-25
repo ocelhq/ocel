@@ -132,7 +132,7 @@ func (vm machine) stopsLoad(t *testing.T) []answered {
 	t.Helper()
 	vm.ssh(t, "touch "+loadDir+"/stop")
 	deadline := time.Now().Add(loadWait)
-	for strings.TrimSpace(vm.ssh(t, "pgrep -f "+quote(loadDir+"/loop.sh")+" >/dev/null && echo running || echo stopped")) != "stopped" {
+	for strings.TrimSpace(vm.ssh(t, "pgrep -f "+quote(loadDir+"/loop[.]sh")+" >/dev/null && echo running || echo stopped")) != "stopped" {
 		if time.Now().After(deadline) {
 			t.Fatalf("the load loops still run %s after they were told to stop", loadWait)
 		}
