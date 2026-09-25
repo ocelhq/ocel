@@ -27,9 +27,9 @@ func previewPlan(label string) providerkit.StackPlan {
 			HealthCheckPath: "/",
 			PreviewLabel:    label,
 			Functions: []providerkit.FunctionSpec{{
-				Name:    "fn--web--checkout",
-				Image:   "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:abc",
-				Runtime: providerkit.Framework{Name: "nodejs", Arch: string(providerkit.ArchX8664)},
+				Name:      "fn--web--checkout",
+				Image:     "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:abc",
+				Framework: providerkit.Framework{Name: "nodejs", Arch: string(providerkit.ArchX8664)},
 			}},
 		},
 	}

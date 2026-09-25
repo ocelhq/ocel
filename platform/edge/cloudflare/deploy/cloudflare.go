@@ -169,7 +169,7 @@ func (p *provider) SharedPreviewRemoval() edge.PlanGroup {
 	}
 }
 
-func (p *provider) CodeRuntime() (string, []string) { return compatDate, compatFlags }
+func (p *provider) Compatibility() (string, []string) { return compatDate, compatFlags }
 
 func (p *provider) Adoption(_ context.Context, class edge.Class) (edge.Adoption, error) {
 	name, err := cacheStoreNameFor(p.namespace, class)

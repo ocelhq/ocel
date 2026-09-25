@@ -32,10 +32,10 @@ type base struct {
 
 func functionBases() map[string]base {
 	return map[string]base{
-		providerkit.RuntimeNode:   {ref: nodeImage, bins: []string{nodeBinDir}},
-		providerkit.RuntimeGo:     {ref: staticImage},
-		providerkit.RuntimePython: {ref: pythonImage},
-		providerkit.RuntimeRust:   {ref: staticImage},
+		providerkit.FrameworkNode:   {ref: nodeImage, bins: []string{nodeBinDir}},
+		providerkit.FrameworkGo:     {ref: staticImage},
+		providerkit.FrameworkPython: {ref: pythonImage},
+		providerkit.FrameworkRust:   {ref: staticImage},
 	}
 }
 
@@ -52,15 +52,15 @@ func pullBase(ctx context.Context, ref string) (v1.Image, error) {
 		remote.WithPlatform(runOn))
 }
 
-func (p *Provider) FunctionBaseImage(ctx context.Context, runtime providerkit.Framework) (v1.Image, error) {
-	if err := runsX8664(runtime.Arch, "the "+runtime.Name+" function"); err != nil {
+func (p *Provider) FunctionBaseImage(ctx context.Context, framework providerkit.Framework) (v1.Image, error) {
+	if err := runsX8664(framework.Arch, "the "+framework.Name+" function"); err != nil {
 		return nil, err
 	}
-	on, carried := p.bases[runtime.Name]
+	on, carried := p.bases[framework.Name]
 	if !carried {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"a function on Cloud Run is a container, and this provider carries no base image a %s function could run in: it carries one for %s",
-			runtime.Name, strings.Join(slices.Sorted(maps.Keys(p.bases)), ", "))
+			framework.Name, strings.Join(slices.Sorted(maps.Keys(p.bases)), ", "))
 	}
 	image, err := p.based(ctx, on.ref)
 	if err != nil {

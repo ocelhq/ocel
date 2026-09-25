@@ -72,12 +72,12 @@ func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, std
 }
 
 func generateClientAccessors(cfg *projectconfig.Config, keys []clientenv.Key) (int, error) {
-	apps := []clientenv.App{{Dir: cfg.Dir, ClientBundle: discovery.ClientBundle(envwire.RootRuntime, cfg.Dir)}}
+	apps := []clientenv.App{{Dir: cfg.Dir, ClientBundle: discovery.ClientBundle(envwire.RootFramework, cfg.Dir)}}
 	if len(cfg.Apps) > 0 {
 		apps = apps[:0]
 		for _, a := range cfg.Apps {
 			dir := filepath.Join(cfg.Dir, a.Path)
-			apps = append(apps, clientenv.App{Name: a.Name, Dir: dir, ClientBundle: discovery.ClientBundle(a.Runtime.Name, dir)})
+			apps = append(apps, clientenv.App{Name: a.Name, Dir: dir, ClientBundle: discovery.ClientBundle(a.Framework.Name, dir)})
 		}
 	}
 	named := 0

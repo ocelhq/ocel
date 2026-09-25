@@ -68,7 +68,7 @@ func siblingAppPlan(t *testing.T, app string) providerkit.StackPlan {
 		Edge: fakeEdgeOf(cloudfront.Kind),
 		App: &providerkit.AppPlan{
 			App:        app,
-			Runtime:    runtimeNext,
+			Framework:  runtimeNext,
 			Entry:      "fn--" + app + "--entry",
 			Deployment: "d1",
 			Functions: []providerkit.FunctionSpec{

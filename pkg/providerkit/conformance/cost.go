@@ -48,12 +48,12 @@ func CostManifest() *contractv1.Manifest {
 		SchemaVersion: "provider.v1",
 		Slug:          "conformance",
 		Apps: []*contractv1.ManifestApp{
-			{Name: "web", Runtime: &contractv1.Runtime{Name: "node"}, Compute: "serverless",
+			{Name: "web", Framework: &contractv1.Framework{Name: "node"}, Compute: "serverless",
 				Domains: []*contractv1.TierDomains{{Tier: environmentv1.Tier_TIER_PRODUCTION, Hostnames: []string{"web.example.com"}}}},
-			{Name: "api", Runtime: &contractv1.Runtime{Name: "go"}, Compute: "container"},
+			{Name: "api", Framework: &contractv1.Framework{Name: "go"}, Compute: "container"},
 		},
 		Functions: []*contractv1.ManifestFunction{
-			{LogicalName: "fn--web--entry", App: "web", Runtime: &contractv1.Runtime{Name: "node"}},
+			{LogicalName: "fn--web--entry", App: "web", Framework: &contractv1.Framework{Name: "node"}},
 		},
 		Containers: []*contractv1.ManifestContainer{
 			{App: "api", Image: "registry.example.com/conformance/api@sha256:" + costImageDigest, HealthCheckPath: "/healthz"},

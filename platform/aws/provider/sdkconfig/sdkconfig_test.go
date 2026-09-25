@@ -47,7 +47,7 @@ func TestLoad(t *testing.T) {
 			t.Fatalf("control MaxAttempts() = %d, want %d", got, controlMaxAttempts)
 		}
 
-		runtime, err := Runtime(context.Background())
+		runtime, err := Workload(context.Background())
 		if err != nil {
 			t.Fatalf("Runtime: %v", err)
 		}

@@ -79,14 +79,14 @@ func deployRequest() *contractv1.DeployRequest {
 			}},
 			Apps: []*contractv1.ManifestApp{{
 				Name:         "web",
-				Runtime:      &contractv1.Runtime{Name: "next"},
+				Framework:    &contractv1.Framework{Name: "next"},
 				Compute:      string(providerkit.ComputeServerless),
 				DeploymentId: webDeploymentID,
 			}},
 			Functions: []*contractv1.ManifestFunction{{
 				LogicalName:  "server",
 				App:          "web",
-				Runtime:      &contractv1.Runtime{Name: "next"},
+				Framework:    &contractv1.Framework{Name: "next"},
 				Handler:      "index.handler",
 				ArtifactPath: artifactPath,
 			}},
@@ -211,14 +211,14 @@ func twoAppRequest() *contractv1.DeployRequest {
 	})
 	manifest.Apps = append(manifest.Apps, &contractv1.ManifestApp{
 		Name:         "admin",
-		Runtime:      &contractv1.Runtime{Name: "next"},
+		Framework:    &contractv1.Framework{Name: "next"},
 		Compute:      string(providerkit.ComputeServerless),
 		DeploymentId: adminDeploymentID,
 	})
 	manifest.Functions = append(manifest.Functions, &contractv1.ManifestFunction{
 		LogicalName:  "admin-server",
 		App:          "admin",
-		Runtime:      &contractv1.Runtime{Name: "next"},
+		Framework:    &contractv1.Framework{Name: "next"},
 		Handler:      "index.handler",
 		ArtifactPath: adminArtifactPath,
 	})

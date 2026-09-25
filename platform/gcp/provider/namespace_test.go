@@ -29,7 +29,7 @@ func TestEveryNameThisProviderDerivesCarriesTheNamespace(t *testing.T) {
 				"key ring":          names.KeyRing(),
 				"passphrase secret": names.PassphraseSecret(providerkit.ClassProduction),
 				"image repository":  names.Repository(providerkit.ClassProduction),
-				"runtime account":   names.RuntimeAccount(providerkit.ClassProduction),
+				"runtime account":   names.WorkloadAccount(providerkit.ClassProduction),
 			} {
 				if !strings.HasPrefix(got, tc.stem) {
 					t.Errorf("the %s is %q, want it derived from namespace %q", what, got, tc.stem)
@@ -50,10 +50,10 @@ func TestEveryNameThisProviderDerivesCarriesTheNamespace(t *testing.T) {
 			if got, want := names.RepositoryPath("europe-west1", providerkit.ClassPreview), "europe-west1-docker.pkg.dev/acme-prod/"+tc.stem+"-acme-prod-preview"; got != want {
 				t.Errorf("RepositoryPath() = %q, want %q: the deploy pushes images to that host", got, want)
 			}
-			if got, want := names.RuntimeAccount(providerkit.ClassProduction), tc.stem+"-production"; got != want {
+			if got, want := names.WorkloadAccount(providerkit.ClassProduction), tc.stem+"-production"; got != want {
 				t.Errorf("RuntimeAccount() = %q, want %q", got, want)
 			}
-			if got, want := names.RuntimeAccountEmail(providerkit.ClassProduction), tc.stem+"-production@acme-prod.iam.gserviceaccount.com"; got != want {
+			if got, want := names.WorkloadAccountEmail(providerkit.ClassProduction), tc.stem+"-production@acme-prod.iam.gserviceaccount.com"; got != want {
 				t.Errorf("RuntimeAccountEmail() = %q, want %q: a service runs as the account that address names", got, want)
 			}
 			if names.Database() != tc.stem || names.KeyRing() != tc.stem {

@@ -530,7 +530,7 @@ func TestTeardown(t *testing.T) {
 	})
 }
 
-func TestCodeRuntime(t *testing.T) {
+func TestCompatibility(t *testing.T) {
 	t.Parallel()
 
 	t.Run("reports the compat settings the uploaded script carries", func(t *testing.T) {
@@ -540,12 +540,12 @@ func TestCodeRuntime(t *testing.T) {
 		if !ok {
 			t.Fatalf("cloudflare provider does not implement edge.Programmable")
 		}
-		date, flags := program.CodeRuntime()
+		date, flags := program.Compatibility()
 		if date != compatDate {
-			t.Errorf("CodeRuntime date = %q, want %q", date, compatDate)
+			t.Errorf("Compatibility() date = %q, want %q", date, compatDate)
 		}
 		if len(flags) != len(compatFlags) || (len(flags) > 0 && flags[0] != compatFlags[0]) {
-			t.Errorf("CodeRuntime flags = %v, want %v", flags, compatFlags)
+			t.Errorf("Compatibility() flags = %v, want %v", flags, compatFlags)
 		}
 	})
 }

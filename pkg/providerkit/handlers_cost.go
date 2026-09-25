@@ -33,7 +33,7 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	if err != nil {
 		return nil, RefusalError(err)
 	}
-	features, err := RequiredFeatures(gate.Bootstrap.Catalogue(), runtimesOf(req.GetManifest()), string(gate.Edge))
+	features, err := RequiredFeatures(gate.Bootstrap.Catalogue(), frameworksOf(req.GetManifest()), string(gate.Edge))
 	if err != nil {
 		return nil, RefusalError(err)
 	}
@@ -68,10 +68,10 @@ func shapedFunctions(manifest *contractv1.Manifest) map[string][]FunctionSpec {
 	specs := make(map[string][]FunctionSpec, len(manifest.GetApps()))
 	for _, fn := range manifest.GetFunctions() {
 		specs[fn.GetApp()] = append(specs[fn.GetApp()], FunctionSpec{
-			Name:    fn.GetLogicalName(),
-			Route:   fn.GetRouteId(),
-			Handler: fn.GetHandler(),
-			Runtime: Framework{Name: fn.GetRuntime().GetName(), Arch: fn.GetRuntime().GetArch()},
+			Name:      fn.GetLogicalName(),
+			Route:     fn.GetRouteId(),
+			Handler:   fn.GetHandler(),
+			Framework: Framework{Name: fn.GetFramework().GetName(), Arch: fn.GetFramework().GetArch()},
 		})
 	}
 	return specs

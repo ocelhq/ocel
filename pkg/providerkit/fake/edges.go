@@ -249,7 +249,7 @@ const (
 	CompatFlag = "nodejs_compat"
 )
 
-func (e *Edge) CodeRuntime() (string, []string) {
+func (e *Edge) Compatibility() (string, []string) {
 	return CompatDate, []string{CompatFlag}
 }
 

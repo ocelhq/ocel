@@ -17,8 +17,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-func Run(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, runtimes []string, bootstrapHint string) (*contractv1.PreflightResponse, error) {
-	resp, err := announce(ctx, rep, runner, cfg, required, slug, domains, runtimes)
+func Run(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string) (*contractv1.PreflightResponse, error) {
+	resp, err := announce(ctx, rep, runner, cfg, required, slug, domains, frameworks)
 	if err != nil {
 		return nil, err
 	}
@@ -32,11 +32,11 @@ func Run(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *
 }
 
 func Announce(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier) error {
-	_, err := announce(ctx, rep, runner, cfg, required, cfg.Slug, nil, Runtimes(cfg))
+	_, err := announce(ctx, rep, runner, cfg, required, cfg.Slug, nil, Frameworks(cfg))
 	return err
 }
 
-func announce(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, runtimes []string) (*contractv1.PreflightResponse, error) {
+func announce(ctx context.Context, rep runui.Reporter, runner *provider.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string) (*contractv1.PreflightResponse, error) {
 	client, err := runner.Client()
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func announce(ctx context.Context, rep runui.Reporter, runner *provider.Runner, 
 		RequiredTier: required,
 		Slug:         slug,
 		Domains:      domains,
-		Runtimes:     runtimes,
+		Frameworks:   frameworks,
 		Containers:   Containers(cfg),
 		Edge:         edgewire.Selection(cfg),
 	})
@@ -67,22 +67,22 @@ func Credentials(ctx context.Context, rep runui.Reporter, runner *provider.Runne
 	return err
 }
 
-func Runtimes(cfg *projectconfig.Config) []string {
-	var runtimes []string
+func Frameworks(cfg *projectconfig.Config) []string {
+	var frameworks []string
 	for _, app := range cfg.Apps {
-		if app.Runtime.Name != "" {
-			runtimes = append(runtimes, app.Runtime.Name)
+		if app.Framework.Name != "" {
+			frameworks = append(frameworks, app.Framework.Name)
 		}
 	}
-	slices.Sort(runtimes)
-	return slices.Compact(runtimes)
+	slices.Sort(frameworks)
+	return slices.Compact(frameworks)
 }
 
 func Containers(cfg *projectconfig.Config) []*contractv1.ContainerApp {
 	var containers []*contractv1.ContainerApp
 	for _, app := range cfg.Apps {
 		if app.Compute == string(providerkit.ComputeContainer) {
-			containers = append(containers, &contractv1.ContainerApp{App: app.Name, Arch: app.Runtime.Arch})
+			containers = append(containers, &contractv1.ContainerApp{App: app.Name, Arch: app.Framework.Arch})
 		}
 	}
 	return containers

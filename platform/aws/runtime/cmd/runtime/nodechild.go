@@ -434,7 +434,7 @@ func nodeChildEnv(sockPath string, extraEnv []string) []string {
 }
 
 func entrypointPath(a providerkit.FunctionConfig) string {
-	if a.Runtime.Name == "next" {
+	if a.Framework.Name == "next" {
 		return "/opt/ocel/next/entrypoint.mjs"
 	}
 	return "/opt/ocel/node/entrypoint.mjs"

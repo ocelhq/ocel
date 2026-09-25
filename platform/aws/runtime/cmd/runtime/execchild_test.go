@@ -231,7 +231,7 @@ func TestReadArtifactCarriesTheCommandItIsServedBy(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("LAMBDA_TASK_ROOT", root)
 	if err := os.WriteFile(filepath.Join(root, "config.json"),
-		[]byte(`{"runtime":{"name":"go"},"handler":"web","command":["./web"]}`), 0o600); err != nil {
+		[]byte(`{"framework":{"name":"go"},"handler":"web","command":["./web"]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	served := readArtifact()
@@ -241,8 +241,8 @@ func TestReadArtifactCarriesTheCommandItIsServedBy(t *testing.T) {
 	if len(served.Command) != 1 || served.Command[0] != "./web" {
 		t.Errorf("command = %q, want the artifact's own binary", served.Command)
 	}
-	if readArtifact().Runtime.Name != "go" {
-		t.Errorf("runtime = %q, want what the artifact declares", served.Runtime.Name)
+	if readArtifact().Framework.Name != "go" {
+		t.Errorf("runtime = %q, want what the artifact declares", served.Framework.Name)
 	}
 }
 
@@ -250,7 +250,7 @@ func TestAnArtifactWithoutACommandIsHostedByNode(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("LAMBDA_TASK_ROOT", root)
 	if err := os.WriteFile(filepath.Join(root, "config.json"),
-		[]byte(`{"runtime":{"name":"node"},"handler":"index.mjs"}`), 0o600); err != nil {
+		[]byte(`{"framework":{"name":"node"},"handler":"index.mjs"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if executable(readArtifact()) {

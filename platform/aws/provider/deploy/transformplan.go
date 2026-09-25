@@ -92,7 +92,7 @@ func transformStackPlan(ctx context.Context, evaluator transformkit.Evaluator, p
 }
 
 func translateFunctionSpec(runtime string, spec providerkit.FunctionSpec) (functionArgs, error) {
-	execution, err := executionFor(spec.Runtime)
+	execution, err := executionFor(spec.Framework)
 	if err != nil {
 		return functionArgs{}, err
 	}
@@ -126,24 +126,24 @@ type execution struct {
 	Arch    string
 }
 
-func executionFor(runtime providerkit.Framework) (execution, error) {
-	if runtime.Name != "" && !providerkit.KnownRuntime(runtime.Name) {
-		return execution{}, providerkit.Refuse(providerkit.CodeInvalid, "this provider has no runtime named %q", runtime.Name)
+func executionFor(framework providerkit.Framework) (execution, error) {
+	if framework.Name != "" && !providerkit.KnownFramework(framework.Name) {
+		return execution{}, providerkit.Refuse(providerkit.CodeInvalid, "this provider has no runtime named %q", framework.Name)
 	}
-	arch := providerkit.Architecture(runtime.Arch)
+	arch := providerkit.Architecture(framework.Arch)
 	if arch != providerkit.ArchX8664 && arch != providerkit.ArchARM64 {
 		return execution{}, providerkit.Refuse(providerkit.CodeInvalid,
 			"this provider runs functions on %s and %s, and %q asks for %s",
-			providerkit.ArchX8664, providerkit.ArchARM64, runtime.Name, runtime.Arch)
+			providerkit.ArchX8664, providerkit.ArchARM64, framework.Name, framework.Arch)
 	}
-	return execution{Runtime: managedRuntime(runtime.Name), Arch: arch}, nil
+	return execution{Runtime: managedRuntime(framework.Name), Arch: arch}, nil
 }
 
 func managedRuntime(name string) string {
 	switch name {
-	case providerkit.RuntimePython:
+	case providerkit.FrameworkPython:
 		return pythonFunctionRuntime
-	case "", providerkit.RuntimeNode, providerkit.RuntimeNext:
+	case "", providerkit.FrameworkNode, providerkit.FrameworkNext:
 		return defaultFunctionRuntime
 	}
 	return providedFunctionRuntime

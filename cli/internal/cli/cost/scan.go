@@ -221,11 +221,11 @@ func scannedApps(cfg *projectconfig.Config) []manifestbuilder.App {
 	apps := make([]manifestbuilder.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		app := manifestbuilder.App{
-			Name:    a.Name,
-			Runtime: manifestwire.Runtime(a.Runtime),
-			Compute: a.Compute,
-			Domains: a.Domains,
-			Folder:  a.Folder,
+			Name:      a.Name,
+			Framework: manifestwire.Framework(a.Framework),
+			Compute:   a.Compute,
+			Domains:   a.Domains,
+			Folder:    a.Folder,
 		}
 		if a.Compute == string(providerkit.ComputeContainer) {
 			app.Image = cfg.Slug + "/" + a.Name + "@sha256:" + unbuiltDigest
@@ -244,7 +244,7 @@ func unbuiltFunctions(cfg *projectconfig.Config) []manifestbuilder.Function {
 		if a.Compute == string(providerkit.ComputeContainer) {
 			continue
 		}
-		functions = append(functions, manifestbuilder.Function{Route: a.Name, App: a.Name, Runtime: manifestwire.Runtime(a.Runtime)})
+		functions = append(functions, manifestbuilder.Function{Route: a.Name, App: a.Name, Framework: manifestwire.Framework(a.Framework)})
 	}
 	return functions
 }

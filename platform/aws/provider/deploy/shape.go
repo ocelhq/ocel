@@ -104,16 +104,16 @@ func (s shaper) plain(scope, typ, name string, properties map[string]any) {
 }
 
 func (s shaper) functions(scope, project string, app providerkit.AppEntry, specs []providerkit.FunctionSpec) error {
-	runtime := app.Manifest.GetRuntime().GetName()
+	runtime := app.Manifest.GetFramework().GetName()
 	if len(specs) == 0 {
 		specs = []providerkit.FunctionSpec{{Name: app.App}}
 	}
 	for _, spec := range specs {
-		if spec.Runtime.Name == "" {
-			spec.Runtime.Name = runtime
+		if spec.Framework.Name == "" {
+			spec.Framework.Name = runtime
 		}
-		if spec.Runtime.Arch == "" {
-			spec.Runtime.Arch = providerkit.Architecture(app.Manifest.GetRuntime().GetArch())
+		if spec.Framework.Arch == "" {
+			spec.Framework.Arch = providerkit.Architecture(app.Manifest.GetFramework().GetArch())
 		}
 		args, err := translateFunctionSpec(runtime, spec)
 		if err != nil {

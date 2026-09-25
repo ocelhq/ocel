@@ -36,7 +36,7 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 	}
 	cfg := &projectconfig.Config{
 		Dir:  root,
-		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Runtime: projectconfig.Runtime{Name: "rust"}}},
+		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: projectconfig.Framework{Name: "rust"}}},
 	}
 
 	ran := false
@@ -57,7 +57,7 @@ func TestARustAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 	}
 	assertFunctions(t, "CollectFunctions", fns, []manifestbuilder.Function{{
 		Route:        "index",
-		Runtime:      manifestbuilder.Runtime{Name: "rust", Arch: providerkit.ArchX8664},
+		Framework:    manifestbuilder.Framework{Name: "rust", Arch: providerkit.ArchX8664},
 		Handler:      "api",
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",

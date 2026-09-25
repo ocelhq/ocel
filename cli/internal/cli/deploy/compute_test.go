@@ -23,17 +23,17 @@ func TestAnAppOnlyItsUsagesNameCarriesTheRuntimeItsURLIsWrittenFor(t *testing.T)
 	t.Run("the node builder's runtime where no function names one", func(t *testing.T) {
 		t.Parallel()
 		got := toApps(t.TempDir(), nil, usages, "container", nil, nil)
-		if len(got) != 1 || got[0].Runtime.Name != providerkit.RuntimeNode {
-			t.Errorf("toApps() = %+v, want web on %q: the CLI writes %s for this project's unnamed app, so the provider must read the same runtime or record ocel's copy as declared", got, providerkit.RuntimeNode, providerkit.ClientURLEnvName)
+		if len(got) != 1 || got[0].Framework.Name != providerkit.FrameworkNode {
+			t.Errorf("toApps() = %+v, want web on %q: the CLI writes %s for this project's unnamed app, so the provider must read the same runtime or record ocel's copy as declared", got, providerkit.FrameworkNode, providerkit.ClientURLEnvName)
 		}
 	})
 
 	t.Run("the runtime its own functions name", func(t *testing.T) {
 		t.Parallel()
-		functions := []manifestbuilder.Function{{App: "web", Runtime: manifestbuilder.Runtime{Name: providerkit.RuntimeNext}}}
+		functions := []manifestbuilder.Function{{App: "web", Framework: manifestbuilder.Framework{Name: providerkit.FrameworkNext}}}
 		got := toApps(t.TempDir(), nil, usages, "serverless", nil, functions)
-		if len(got) != 1 || got[0].Runtime.Name != providerkit.RuntimeNext {
-			t.Errorf("toApps() = %+v, want web on %q: a next app keeps the runtime that serves its cache", got, providerkit.RuntimeNext)
+		if len(got) != 1 || got[0].Framework.Name != providerkit.FrameworkNext {
+			t.Errorf("toApps() = %+v, want web on %q: a next app keeps the runtime that serves its cache", got, providerkit.FrameworkNext)
 		}
 	})
 }
@@ -137,8 +137,8 @@ func TestTheManifestCarriesWhichAppsBundleReadsTheClientURL(t *testing.T) {
 		manifest string
 		want     bool
 	}{
-		{name: "a next app", app: projectconfig.App{Name: "web", Runtime: projectconfig.Runtime{Name: providerkit.RuntimeNext}}, want: true},
-		{name: "a go app", app: projectconfig.App{Name: "api", Runtime: projectconfig.Runtime{Name: providerkit.RuntimeGo}}, manifest: "go.mod"},
+		{name: "a next app", app: projectconfig.App{Name: "web", Framework: projectconfig.Framework{Name: providerkit.FrameworkNext}}, want: true},
+		{name: "a go app", app: projectconfig.App{Name: "api", Framework: projectconfig.Framework{Name: providerkit.FrameworkGo}}, manifest: "go.mod"},
 		{name: "a container app holding a package.json", app: projectconfig.App{Name: "store", Compute: string(providerkit.ComputeContainer)}, manifest: "package.json", want: true},
 		{name: "a container app holding a go.mod", app: projectconfig.App{Name: "worker", Compute: string(providerkit.ComputeContainer)}, manifest: "go.mod"},
 	} {

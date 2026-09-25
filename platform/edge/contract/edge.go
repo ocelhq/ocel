@@ -134,7 +134,7 @@ type Ledger interface {
 }
 
 type CodeHost interface {
-	CodeRuntime() (compatDate string, compatFlags []string)
+	Compatibility() (compatDate string, compatFlags []string)
 }
 
 type Programmable interface {

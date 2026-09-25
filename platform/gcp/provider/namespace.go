@@ -57,12 +57,12 @@ func (n Names) RepositoryPath(region string, class providerkit.Class) string {
 	return region + dockerRegistryHost + "/" + n.project + "/" + n.Repository(class)
 }
 
-func (n Names) RuntimeAccount(class providerkit.Class) string {
+func (n Names) WorkloadAccount(class providerkit.Class) string {
 	return string(n.namespace) + "-" + string(class)
 }
 
-func (n Names) RuntimeAccountEmail(class providerkit.Class) string {
-	return n.RuntimeAccount(class) + "@" + n.project + accountDomain
+func (n Names) WorkloadAccountEmail(class providerkit.Class) string {
+	return n.WorkloadAccount(class) + "@" + n.project + accountDomain
 }
 
 func (n Names) Service(project, env, app, function string) (string, error) {
@@ -161,7 +161,7 @@ func (n Names) fit() error {
 				"Name a namespace in %s that does not",
 			n.Database(), providerkit.NamespaceEnvVar)
 	}
-	if account := n.RuntimeAccount(longestClass); len(account) > maxAccountID {
+	if account := n.WorkloadAccount(longestClass); len(account) > maxAccountID {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"the %s service account this bootstrap names is %d characters and Google takes %d: "+
 				"every app in the %s class runs as it, so the class is part of its name.\n"+

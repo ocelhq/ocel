@@ -25,17 +25,17 @@ func detectFramework(dir string) (string, error) {
 	node := regularFile(filepath.Join(dir, nodeManifest))
 	named := make([]string, 0, 4)
 	if node {
-		named = append(named, providerkit.RuntimeNode)
+		named = append(named, providerkit.FrameworkNode)
 	}
 	if regularFile(filepath.Join(dir, goModule)) {
-		named = append(named, providerkit.RuntimeGo)
+		named = append(named, providerkit.FrameworkGo)
 	}
 	python := regularFile(filepath.Join(dir, pythonProject)) || regularFile(filepath.Join(dir, pythonRequirements))
 	if python {
-		named = append(named, providerkit.RuntimePython)
+		named = append(named, providerkit.FrameworkPython)
 	}
 	if !node && !python && regularFile(filepath.Join(dir, rustManifest)) {
-		named = append(named, providerkit.RuntimeRust)
+		named = append(named, providerkit.FrameworkRust)
 	}
 	switch len(named) {
 	case 1:
@@ -47,13 +47,13 @@ func detectFramework(dir string) (string, error) {
 			return "", err
 		}
 		if next {
-			return providerkit.RuntimeNext, nil
+			return providerkit.FrameworkNext, nil
 		}
-		return providerkit.RuntimeNode, nil
+		return providerkit.FrameworkNode, nil
 	case 0:
 		return "", fmt.Errorf(
 			"nothing in %s says what this app is built with: it holds no %s, %s, %s, %s or %s, so set \"framework\" to one of %s",
-			dir, nodeManifest, goModule, pythonProject, pythonRequirements, rustManifest, quoted(providerkit.Runtimes()),
+			dir, nodeManifest, goModule, pythonProject, pythonRequirements, rustManifest, quoted(providerkit.Frameworks()),
 		)
 	default:
 		return "", fmt.Errorf(
@@ -98,8 +98,8 @@ func directory(path string) bool {
 
 func frameworkOf(app string, dir string, named string, compute string) (string, error) {
 	if named != "" {
-		if !providerkit.KnownRuntime(named) {
-			return "", fmt.Errorf("app %q declares framework %q, which nothing builds: the frameworks are %s", app, named, quoted(providerkit.Runtimes()))
+		if !providerkit.KnownFramework(named) {
+			return "", fmt.Errorf("app %q declares framework %q, which nothing builds: the frameworks are %s", app, named, quoted(providerkit.Frameworks()))
 		}
 		return named, nil
 	}

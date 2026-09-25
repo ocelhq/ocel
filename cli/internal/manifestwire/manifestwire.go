@@ -7,8 +7,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
-func Runtime(runtime projectconfig.Runtime) manifestbuilder.Runtime {
-	return manifestbuilder.Runtime{Name: runtime.Name, Arch: runtime.Arch}
+func Framework(framework projectconfig.Framework) manifestbuilder.Framework {
+	return manifestbuilder.Framework{Name: framework.Name, Arch: framework.Arch}
 }
 
 func Declarations(configDir string, resources []declare.Resource) []manifestbuilder.Declaration {

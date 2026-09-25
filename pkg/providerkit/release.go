@@ -66,7 +66,7 @@ type Bindings interface {
 
 type AppPlan struct {
 	App        string
-	Runtime    string
+	Framework  string
 	Entry      string
 	Deployment string
 	Compute    Compute
@@ -127,8 +127,8 @@ const (
 	ClientURLEnvName = "NEXT_PUBLIC_OCEL_URL"
 )
 
-func RuntimeBundlesClient(runtime string) bool {
-	return runtime == RuntimeNode || runtime == RuntimeNext
+func FrameworkBundlesClient(framework string) bool {
+	return framework == FrameworkNode || framework == FrameworkNext
 }
 
 func OcelWritten(clientBundle bool, key string) bool {
@@ -183,15 +183,15 @@ type Framework struct {
 }
 
 type FunctionSpec struct {
-	Name     string
-	Route    string
-	Handler  string
-	Runtime  Framework
-	Artifact ArtifactRef
-	Image    string
-	Env      map[string]string
-	Memory   int
-	Timeout  time.Duration
+	Name      string
+	Route     string
+	Handler   string
+	Framework Framework
+	Artifact  ArtifactRef
+	Image     string
+	Env       map[string]string
+	Memory    int
+	Timeout   time.Duration
 }
 
 type StackResult struct {

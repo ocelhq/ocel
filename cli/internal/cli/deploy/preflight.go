@@ -33,7 +33,7 @@ type standing struct {
 }
 
 func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) (standing, error) {
-	resp, err := preflight.Run(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Names(preflight.Hostnames(cfg, "preview")), preflight.Runtimes(cfg), "ocel bootstrap preview")
+	resp, err := preflight.Run(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Names(preflight.Hostnames(cfg, "preview")), preflight.Frameworks(cfg), "ocel bootstrap preview")
 	if err != nil {
 		return standing{}, err
 	}
@@ -69,7 +69,7 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Sessio
 
 func preflightDeploy(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer, in io.Reader) (standing, error) {
 	domains := preflight.Names(preflight.Hostnames(cfg, "production"))
-	resp, err := preflight.Run(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slugToScopeBy(ui, domains, cfg), domains, preflight.Runtimes(cfg), "ocel bootstrap production")
+	resp, err := preflight.Run(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slugToScopeBy(ui, domains, cfg), domains, preflight.Frameworks(cfg), "ocel bootstrap production")
 	if err != nil {
 		return standing{}, err
 	}

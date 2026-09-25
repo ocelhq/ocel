@@ -39,7 +39,7 @@ const banner = `import { createRequire as __ocelCreateRequire } from "node:modul
 
 type Target struct {
 	App        string
-	Runtime    providerkit.Framework
+	Framework  providerkit.Framework
 	Entrypoint string
 	FuncDir    string
 	AppDir     string
@@ -57,8 +57,8 @@ func Bundle(ctx context.Context, t Target) error {
 		return fmt.Errorf("create %s: %w", t.FuncDir, err)
 	}
 
-	native := &addons{arch: t.Runtime.Arch}
-	platform := &platformPackages{arch: t.Runtime.Arch}
+	native := &addons{arch: t.Framework.Arch}
+	platform := &platformPackages{arch: t.Framework.Arch}
 	result := api.Build(api.BuildOptions{
 		EntryPoints:       []string{t.Entrypoint},
 		AbsWorkingDir:     filepath.Dir(t.Entrypoint),
@@ -99,16 +99,16 @@ func Bundle(ctx context.Context, t Target) error {
 	if err := platform.installInto(ctx, t.App, filepath.Dir(t.Entrypoint), t.FuncDir); err != nil {
 		return err
 	}
-	return describeArtifact(t.App, t.Runtime, HandlerFile, nil, t.FuncDir, t.AppDir)
+	return describeArtifact(t.App, t.Framework, HandlerFile, nil, t.FuncDir, t.AppDir)
 }
 
-func describeArtifact(app string, runtime providerkit.Framework, handler string, command []string, funcDir, appDir string) error {
+func describeArtifact(app string, framework providerkit.Framework, handler string, command []string, funcDir, appDir string) error {
 	if err := writeJSON(filepath.Join(funcDir, providerkit.FunctionConfigFile), providerkit.FunctionConfig{
-		Runtime: runtime,
-		Handler: handler,
-		Command: command,
-		ID:      entryRouteID,
-		App:     app,
+		Framework: framework,
+		Handler:   handler,
+		Command:   command,
+		ID:        entryRouteID,
+		App:       app,
 	}); err != nil {
 		return err
 	}
@@ -118,10 +118,10 @@ func describeArtifact(app string, runtime providerkit.Framework, handler string,
 		return err
 	}
 	return writeJSON(filepath.Join(appDir, edge.ServeDescriptorFile), edge.ServeDescriptor{
-		Runtime: runtime.Name,
-		BuildID: buildID,
-		Entry:   entryRouteID,
-		Needs:   map[edge.Need]edge.NeedDetail{},
+		Framework: framework.Name,
+		BuildID:   buildID,
+		Entry:     entryRouteID,
+		Needs:     map[edge.Need]edge.NeedDetail{},
 	})
 }
 
@@ -133,7 +133,7 @@ func (t Target) validate() error {
 		{"app", t.App},
 		{"appDir", t.AppDir},
 		{"entrypoint", t.Entrypoint},
-		{"runtime", t.Runtime.Name},
+		{"framework", t.Framework.Name},
 		{"funcDir", t.FuncDir},
 	}
 	var missing []string

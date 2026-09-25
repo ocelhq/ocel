@@ -10,16 +10,16 @@ import (
 func TestPythonIsARuntimeAnAppMayDeclare(t *testing.T) {
 	t.Parallel()
 
-	if !providerkit.KnownRuntime(providerkit.RuntimePython) {
-		t.Fatalf("Runtimes() = %v, and none of them is %q", providerkit.Runtimes(), providerkit.RuntimePython)
+	if !providerkit.KnownFramework(providerkit.FrameworkPython) {
+		t.Fatalf("Runtimes() = %v, and none of them is %q", providerkit.Frameworks(), providerkit.FrameworkPython)
 	}
 }
 
 func TestRustIsARuntimeAnAppMayDeclare(t *testing.T) {
 	t.Parallel()
 
-	if !providerkit.KnownRuntime(providerkit.RuntimeRust) {
-		t.Fatalf("Runtimes() = %v, and none of them is %q", providerkit.Runtimes(), providerkit.RuntimeRust)
+	if !providerkit.KnownFramework(providerkit.FrameworkRust) {
+		t.Fatalf("Runtimes() = %v, and none of them is %q", providerkit.Frameworks(), providerkit.FrameworkRust)
 	}
 }
 
@@ -69,7 +69,7 @@ func TestTheArchitecturesAreTheOnesEveryRuntimeSharesAVocabularyFor(t *testing.T
 			t.Errorf("PythonPlatformTag(%q) names no wheel platform", arch)
 		}
 	}
-	if !slices.Contains(providerkit.Runtimes(), providerkit.RuntimeGo) {
+	if !slices.Contains(providerkit.Frameworks(), providerkit.FrameworkGo) {
 		t.Error("Runtimes() no longer names the go runtime")
 	}
 }

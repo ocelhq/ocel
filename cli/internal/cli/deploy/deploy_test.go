@@ -101,7 +101,7 @@ export default {
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
 			{
 				Route:        "api",
-				Runtime:      manifestbuilder.Runtime{Name: "node"},
+				Framework:    manifestbuilder.Framework{Name: "node"},
 				Handler:      "src/server.js",
 				ArtifactPath: "output/api",
 				App:          "api",
@@ -467,7 +467,7 @@ export default {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "api", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
+			{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -505,8 +505,8 @@ export default {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "web", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/web", App: "web"},
-			{Route: "admin", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/admin", App: "admin"},
+			{Route: "web", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/web", App: "web"},
+			{Route: "admin", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/admin", App: "admin"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
@@ -561,7 +561,7 @@ export default {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "index", Runtime: manifestbuilder.Runtime{Name: "next"}, Handler: "h.js", ArtifactPath: "output/index", App: "express-app"},
+			{Route: "index", Framework: manifestbuilder.Framework{Name: "next"}, Handler: "h.js", ArtifactPath: "output/index", App: "express-app"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 

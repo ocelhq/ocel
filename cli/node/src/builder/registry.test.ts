@@ -25,8 +25,8 @@ function emptyDir(): string {
 describe("resolveRuntime", () => {
   it("resolves a known key", () => expect(resolveRuntime("node").name).toBe("node"));
   it("resolves next", () => expect(resolveRuntime("next").name).toBe("next"));
-  it("throws naming known runtimes for an unknown key", () => {
-    expect(() => resolveRuntime("svelte")).toThrow(/unknown runtime "svelte".*next.*node/s);
+  it("throws naming known frameworks for an unknown key", () => {
+    expect(() => resolveRuntime("svelte")).toThrow(/unknown framework "svelte".*next.*node/s);
   });
 });
 

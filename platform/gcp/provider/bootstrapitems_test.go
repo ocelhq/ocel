@@ -52,9 +52,9 @@ func TestTheRuntimeAccountStandsWhereverTheBootstrapDoes(t *testing.T) {
 	names := Names{namespace: "ocel", project: "acme-prod"}
 
 	for _, emulated := range []bool{false, true} {
-		if got := kindsOf(bootstrapItems(names, class, emulated))[KindServiceAccount]; got != names.RuntimeAccount(class) {
+		if got := kindsOf(bootstrapItems(names, class, emulated))[KindServiceAccount]; got != names.WorkloadAccount(class) {
 			t.Errorf("a bootstrap with emulated=%t names %q as its runtime account, want %q: an app has to run as something wherever it runs",
-				emulated, got, names.RuntimeAccount(class))
+				emulated, got, names.WorkloadAccount(class))
 		}
 	}
 }

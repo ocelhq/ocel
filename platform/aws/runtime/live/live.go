@@ -131,7 +131,7 @@ func FromManifest(ctx context.Context, raw []byte) (*Values, error) {
 		return nil, nil
 	}
 
-	cfg, err := sdkconfig.Runtime(ctx)
+	cfg, err := sdkconfig.Workload(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}

@@ -354,7 +354,7 @@ func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, s
 				RequiredTier:    tier,
 				Slug:            cfg.Slug,
 				Domains:         preflight.Names(preflight.Hostnames(cfg, bootstrap.Name(tier))),
-				Runtimes:        preflight.Runtimes(cfg),
+				Frameworks:      preflight.Frameworks(cfg),
 				Edge:            edgewire.Selection(cfg),
 				Standing:        standing,
 				StandingDomains: standingDomains(standing, cfg),

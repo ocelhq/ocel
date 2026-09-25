@@ -138,9 +138,9 @@ func TestEntrypointPath(t *testing.T) {
 		config string
 		want   string
 	}{
-		{"next runtime", `{"runtime":{"name":"next"}}`, nextEntry},
-		{"node runtime", `{"runtime":{"name":"node"}}`, nodeEntry},
-		{"empty runtime", `{"runtime":{"name":""}}`, nodeEntry},
+		{"next runtime", `{"framework":{"name":"next"}}`, nextEntry},
+		{"node runtime", `{"framework":{"name":"node"}}`, nodeEntry},
+		{"empty runtime", `{"framework":{"name":""}}`, nodeEntry},
 		{"no config file", "", nodeEntry},
 		{"invalid json", `{not json`, nodeEntry},
 	}

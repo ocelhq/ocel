@@ -21,8 +21,8 @@ const (
 	FeatureAPIGatewayEdge    = "apigateway-edge"
 	FeatureVarsKey           = providerkit.FeatureVarsKey
 
-	needsRuntimePrefix = providerkit.NeedsRuntimePrefix
-	needsEdgePrefix    = providerkit.NeedsEdgePrefix
+	needsFrameworkPrefix = providerkit.NeedsFrameworkPrefix
+	needsEdgePrefix      = providerkit.NeedsEdgePrefix
 )
 
 type stackRefs struct {

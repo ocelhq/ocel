@@ -87,7 +87,7 @@ func prebuiltConfig(root string) *projectconfig.Config {
 	return &projectconfig.Config{
 		Dir:  root,
 		Slug: "prebuilt",
-		Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "serverless", Runtime: projectconfig.Runtime{Name: providerkit.RuntimeNode}}},
+		Apps: []projectconfig.App{{Name: "api", Path: ".", Compute: "serverless", Framework: projectconfig.Framework{Name: providerkit.FrameworkNode}}},
 	}
 }
 

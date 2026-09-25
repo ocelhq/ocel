@@ -27,9 +27,9 @@ import (
 var liveRelease = naming.NewRelease("live", "wp4")
 
 var (
-	nodeRuntime   = providerkit.Framework{Name: providerkit.RuntimeNode, Arch: providerkit.ArchX8664}
-	goRuntime     = providerkit.Framework{Name: providerkit.RuntimeGo, Arch: providerkit.ArchX8664}
-	pythonRuntime = providerkit.Framework{Name: providerkit.RuntimePython, Arch: providerkit.ArchX8664}
+	nodeRuntime   = providerkit.Framework{Name: providerkit.FrameworkNode, Arch: providerkit.ArchX8664}
+	goRuntime     = providerkit.Framework{Name: providerkit.FrameworkGo, Arch: providerkit.ArchX8664}
+	pythonRuntime = providerkit.Framework{Name: providerkit.FrameworkPython, Arch: providerkit.ArchX8664}
 )
 
 func runnable(t *testing.T) *gcp.Provider {
@@ -98,10 +98,10 @@ func asked(t *testing.T, uri string) (int, string) {
 	return resp.StatusCode, strings.TrimSpace(string(said))
 }
 
-func staged(t *testing.T, dir string, runtime providerkit.Framework, handler string, command []string, files map[string]string) string {
+func staged(t *testing.T, dir string, framework providerkit.Framework, handler string, command []string, files map[string]string) string {
 	t.Helper()
 	config, err := json.Marshal(providerkit.FunctionConfig{
-		Runtime: runtime, Handler: handler, Command: command, ID: "live", App: "live",
+		Framework: framework, Handler: handler, Command: command, ID: "live", App: "live",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -178,14 +178,14 @@ func held(t *testing.T, repository string, image v1.Image) string {
 	return strings.TrimSuffix(target, ":"+naming.DigestTag(digest.String())) + "@" + digest.String()
 }
 
-func functionImage(t *testing.T, p *gcp.Provider, repository string, runtime providerkit.Framework, dir string) string {
+func functionImage(t *testing.T, p *gcp.Provider, repository string, framework providerkit.Framework, dir string) string {
 	t.Helper()
 	ctx := context.Background()
-	base, err := p.FunctionBaseImage(ctx, runtime)
+	base, err := p.FunctionBaseImage(ctx, framework)
 	if err != nil {
-		t.Fatalf("read the base a %s function is built on: %v", runtime.Name, err)
+		t.Fatalf("read the base a %s function is built on: %v", framework.Name, err)
 	}
-	payload, err := p.FunctionRuntime(ctx, runtime)
+	payload, err := p.FunctionRuntime(ctx, framework)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,18 +193,18 @@ func functionImage(t *testing.T, p *gcp.Provider, repository string, runtime pro
 	if len(payload) > 0 {
 		overlay[providerkit.NodeRuntimePath] = payload
 	}
-	image, err := providerkit.FunctionImage(base, runtime, dir, overlay)
+	image, err := providerkit.FunctionImage(base, framework, dir, overlay)
 	if err != nil {
-		t.Fatalf("build the %s function's image: %v", runtime.Name, err)
+		t.Fatalf("build the %s function's image: %v", framework.Name, err)
 	}
-	arch, _ := providerkit.GoArch(runtime.Arch)
+	arch, _ := providerkit.GoArch(framework.Arch)
 	binary, err := p.Runtime().Binary(ctx, arch)
 	if err != nil {
 		t.Fatal(err)
 	}
 	wrapped, err := providerkit.WrapContainer(image, binary)
 	if err != nil {
-		t.Fatalf("wrap the %s function's image in the runtime, as a deploy does: %v", runtime.Name, err)
+		t.Fatalf("wrap the %s function's image in the runtime, as a deploy does: %v", framework.Name, err)
 	}
 	return held(t, repository, wrapped)
 }
@@ -257,7 +257,7 @@ func serverlessPlan(app, image string, values map[string]string) providerkit.Sta
 	return serverlessPlanOn(app, image, nodeRuntime, values)
 }
 
-func serverlessPlanOn(app, image string, runtime providerkit.Framework, values map[string]string) providerkit.StackPlan {
+func serverlessPlanOn(app, image string, framework providerkit.Framework, values map[string]string) providerkit.StackPlan {
 	return providerkit.StackPlan{
 		Ref: providerkit.StackRef{
 			Project: "live",
@@ -270,7 +270,7 @@ func serverlessPlanOn(app, image string, runtime providerkit.Framework, values m
 			Compute: providerkit.ComputeServerless,
 			Values:  providerkit.AppValues{Delivered: values},
 			Functions: []providerkit.FunctionSpec{
-				{Name: app, Runtime: runtime, Image: image},
+				{Name: app, Framework: framework, Image: image},
 			},
 		},
 	}
@@ -387,12 +387,12 @@ func TestLiveAServiceTakenDownAnswersNothingAndIsTakenDownOnlyOnce(t *testing.T)
 	}
 }
 
-func servesItsOwn(t *testing.T, app string, runtime providerkit.Framework, stage func(*testing.T) string, mark string) {
+func servesItsOwn(t *testing.T, app string, framework providerkit.Framework, stage func(*testing.T) string, mark string) {
 	t.Helper()
 	ctx := context.Background()
 	p := runnable(t)
-	image := functionImage(t, p, "ocel-live/"+app, runtime, stage(t))
-	plan := serverlessPlanOn(app, image, runtime, map[string]string{"MARK": mark})
+	image := functionImage(t, p, "ocel-live/"+app, framework, stage(t))
+	plan := serverlessPlanOn(app, image, framework, map[string]string{"MARK": mark})
 	t.Cleanup(func() { _ = p.RemoveFunctions(ctx, plan.Ref, runningAs(t, p, plan), nil) })
 
 	functions, err := p.ProvisionFunctions(ctx, plan, nil)
@@ -406,11 +406,11 @@ func servesItsOwn(t *testing.T, app string, runtime providerkit.Framework, stage
 	at := reachable(t, functions[0].URL)
 	status, said := answering(t, at)
 	if status != http.StatusOK {
-		t.Fatalf("GET %s = %d %q, want the %s function to answer", at, status, said, runtime.Name)
+		t.Fatalf("GET %s = %d %q, want the %s function to answer", at, status, said, framework.Name)
 	}
 	if said != mark {
 		t.Errorf("GET %s said %q, want %q: a %s function is its own server, and the deploy hands it its values",
-			at, said, mark, runtime.Name)
+			at, said, mark, framework.Name)
 	}
 }
 

@@ -38,7 +38,7 @@ func newUploadCompleter(ctx context.Context, getenv func(string) string) (*bucke
 	if prefix == "" {
 		return nil, fmt.Errorf("%s is not set, so this upload completer would read a key space its role is not granted", sessionPrefixEnvVar)
 	}
-	cfg, err := sdkconfig.Runtime(ctx)
+	cfg, err := sdkconfig.Workload(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}

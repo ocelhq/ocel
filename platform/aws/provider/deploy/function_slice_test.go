@@ -24,8 +24,8 @@ func TestTranslateFunctionSpec(t *testing.T) {
 	t.Run("passes runtime and entrypoint", func(t *testing.T) {
 		t.Parallel()
 		got, err := translateFunctionSpec("", providerkit.FunctionSpec{
-			Runtime: providerkit.Framework{Name: providerkit.RuntimeNode},
-			Handler: "src/server.js",
+			Framework: providerkit.Framework{Name: providerkit.FrameworkNode},
+			Handler:   "src/server.js",
 		})
 		if err != nil {
 			t.Fatalf("translateFunctionSpec: %v", err)
@@ -79,7 +79,7 @@ func TestTranslateFunctionSpec(t *testing.T) {
 
 	t.Run("non-Next keeps the flat default", func(t *testing.T) {
 		t.Parallel()
-		got, err := translateFunctionSpec(providerkit.RuntimeNode, providerkit.FunctionSpec{})
+		got, err := translateFunctionSpec(providerkit.FrameworkNode, providerkit.FunctionSpec{})
 		if err != nil {
 			t.Fatalf("translateFunctionSpec: %v", err)
 		}
@@ -108,7 +108,7 @@ func TestExecutionFor(t *testing.T) {
 
 	t.Run("every runtime lands on a managed runtime its language runs on, on the architecture it named", func(t *testing.T) {
 		t.Parallel()
-		for _, name := range append([]string{""}, providerkit.Runtimes()...) {
+		for _, name := range append([]string{""}, providerkit.Frameworks()...) {
 			for arch, want := range map[string]string{
 				"":                    providerkit.ArchX8664,
 				providerkit.ArchX8664: providerkit.ArchX8664,
@@ -127,7 +127,7 @@ func TestExecutionFor(t *testing.T) {
 
 	t.Run("an architecture nothing runs on is refused by name", func(t *testing.T) {
 		t.Parallel()
-		_, err := executionFor(providerkit.Framework{Name: providerkit.RuntimeGo, Arch: "riscv"})
+		_, err := executionFor(providerkit.Framework{Name: providerkit.FrameworkGo, Arch: "riscv"})
 		var refusal providerkit.Refusal
 		if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 			t.Fatalf("executionFor(riscv) = %v, want a %s refusal", err, providerkit.CodeInvalid)
@@ -157,9 +157,9 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 		if err != nil {
 			return err
 		}
-		args, err := translateFunctionSpec(providerkit.RuntimeGo, providerkit.FunctionSpec{
-			Runtime: providerkit.Framework{Name: providerkit.RuntimeGo, Arch: providerkit.ArchARM64},
-			Handler: "web",
+		args, err := translateFunctionSpec(providerkit.FrameworkGo, providerkit.FunctionSpec{
+			Framework: providerkit.Framework{Name: providerkit.FrameworkGo, Arch: providerkit.ArchARM64},
+			Handler:   "web",
 		})
 		if err != nil {
 			return err
@@ -199,9 +199,9 @@ func TestAnARM64FunctionTakesTheARM64RuntimeLayerAndNamesItsArchitecture(t *test
 func TestAManagedRuntimeFunctionKeepsItsOwnEntryAsTheHandler(t *testing.T) {
 	t.Parallel()
 
-	args, err := translateFunctionSpec(providerkit.RuntimeNode, providerkit.FunctionSpec{
-		Runtime: providerkit.Framework{Name: providerkit.RuntimeNode},
-		Handler: "src/server.js",
+	args, err := translateFunctionSpec(providerkit.FrameworkNode, providerkit.FunctionSpec{
+		Framework: providerkit.Framework{Name: providerkit.FrameworkNode},
+		Handler:   "src/server.js",
 	})
 	if err != nil {
 		t.Fatalf("translateFunctionSpec: %v", err)
@@ -217,9 +217,9 @@ func TestAManagedRuntimeFunctionKeepsItsOwnEntryAsTheHandler(t *testing.T) {
 func TestACommandFunctionKeepsItsOwnEntryInTheEnvironment(t *testing.T) {
 	t.Parallel()
 
-	args, err := translateFunctionSpec(providerkit.RuntimeGo, providerkit.FunctionSpec{
-		Runtime: providerkit.Framework{Name: providerkit.RuntimeGo},
-		Handler: "web",
+	args, err := translateFunctionSpec(providerkit.FrameworkGo, providerkit.FunctionSpec{
+		Framework: providerkit.Framework{Name: providerkit.FrameworkGo},
+		Handler:   "web",
 	})
 	if err != nil {
 		t.Fatalf("translateFunctionSpec: %v", err)
@@ -235,9 +235,9 @@ func TestACommandFunctionKeepsItsOwnEntryInTheEnvironment(t *testing.T) {
 func TestARustFunctionBootsItsOwnBinaryOnTheProvidedRuntime(t *testing.T) {
 	t.Parallel()
 
-	args, err := translateFunctionSpec(providerkit.RuntimeRust, providerkit.FunctionSpec{
-		Runtime: providerkit.Framework{Name: providerkit.RuntimeRust, Arch: providerkit.ArchARM64},
-		Handler: "web",
+	args, err := translateFunctionSpec(providerkit.FrameworkRust, providerkit.FunctionSpec{
+		Framework: providerkit.Framework{Name: providerkit.FrameworkRust, Arch: providerkit.ArchARM64},
+		Handler:   "web",
 	})
 	if err != nil {
 		t.Fatalf("translateFunctionSpec: %v", err)
@@ -259,10 +259,10 @@ func TestARustFunctionBootsItsOwnBinaryOnTheProvidedRuntime(t *testing.T) {
 func TestEveryFunctionBootsTheRuntimeWhateverRuntimeItServes(t *testing.T) {
 	t.Parallel()
 
-	for _, name := range providerkit.Runtimes() {
+	for _, name := range providerkit.Frameworks() {
 		args, err := translateFunctionSpec(name, providerkit.FunctionSpec{
-			Runtime: providerkit.Framework{Name: name},
-			Handler: "web",
+			Framework: providerkit.Framework{Name: name},
+			Handler:   "web",
 		})
 		if err != nil {
 			t.Fatalf("translateFunctionSpec(%q): %v", name, err)
@@ -289,12 +289,12 @@ func TestAnAppThatShipsItsOwnBinaryRunsOnTheProvidedRuntime(t *testing.T) {
 	t.Parallel()
 
 	for name, want := range map[string]string{
-		providerkit.RuntimeGo:     providedFunctionRuntime,
-		"rust":                    providedFunctionRuntime,
-		providerkit.RuntimeNode:   defaultFunctionRuntime,
-		providerkit.RuntimeNext:   defaultFunctionRuntime,
-		"":                        defaultFunctionRuntime,
-		providerkit.RuntimePython: pythonFunctionRuntime,
+		providerkit.FrameworkGo:     providedFunctionRuntime,
+		"rust":                      providedFunctionRuntime,
+		providerkit.FrameworkNode:   defaultFunctionRuntime,
+		providerkit.FrameworkNext:   defaultFunctionRuntime,
+		"":                          defaultFunctionRuntime,
+		providerkit.FrameworkPython: pythonFunctionRuntime,
 	} {
 		if got := managedRuntime(name); got != want {
 			t.Errorf("a %q function runs on %q, want %q — a language this provider carries no interpreter for runs the binary the app ships", name, got, want)
@@ -306,12 +306,12 @@ func TestAFunctionRunsOnTheManagedRuntimeItsLanguageNeedsAnInterpreterFrom(t *te
 	t.Parallel()
 
 	for name, want := range map[string]string{
-		providerkit.RuntimeNode:   defaultFunctionRuntime,
-		providerkit.RuntimeNext:   defaultFunctionRuntime,
-		providerkit.RuntimeGo:     providedFunctionRuntime,
-		providerkit.RuntimePython: pythonFunctionRuntime,
+		providerkit.FrameworkNode:   defaultFunctionRuntime,
+		providerkit.FrameworkNext:   defaultFunctionRuntime,
+		providerkit.FrameworkGo:     providedFunctionRuntime,
+		providerkit.FrameworkPython: pythonFunctionRuntime,
 	} {
-		args, err := translateFunctionSpec(name, providerkit.FunctionSpec{Runtime: providerkit.Framework{Name: name}})
+		args, err := translateFunctionSpec(name, providerkit.FunctionSpec{Framework: providerkit.Framework{Name: name}})
 		if err != nil {
 			t.Fatalf("translateFunctionSpec(%q): %v", name, err)
 		}
@@ -330,8 +330,8 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 		handler string
 		want    string
 	}{
-		{"an exec artifact takes the bootstrap the layer carries", providerkit.RuntimeGo, "web", providedHandler},
-		{"a bundled node artifact takes its bundle", providerkit.RuntimeNode, "index.mjs", "index.mjs"},
+		{"an exec artifact takes the bootstrap the layer carries", providerkit.FrameworkGo, "web", providedHandler},
+		{"a bundled node artifact takes its bundle", providerkit.FrameworkNode, "index.mjs", "index.mjs"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -345,8 +345,8 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 					return err
 				}
 				args, err := translateFunctionSpec(tc.runtime, providerkit.FunctionSpec{
-					Runtime: providerkit.Framework{Name: tc.runtime},
-					Handler: tc.handler,
+					Framework: providerkit.Framework{Name: tc.runtime},
+					Handler:   tc.handler,
 				})
 				if err != nil {
 					return err
@@ -382,10 +382,10 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 func argsFor(functions []*contractv1.ManifestFunction) func(appFunction) functionArgs {
 	args := make(map[string]functionArgs, len(functions))
 	for _, fn := range functions {
-		translated, err := translateFunctionSpec(fn.GetRuntime().GetName(), providerkit.FunctionSpec{
-			Name:    fn.GetLogicalName(),
-			Runtime: providerkit.Framework{Name: fn.GetRuntime().GetName(), Arch: fn.GetRuntime().GetArch()},
-			Handler: fn.GetHandler(),
+		translated, err := translateFunctionSpec(fn.GetFramework().GetName(), providerkit.FunctionSpec{
+			Name:      fn.GetLogicalName(),
+			Framework: providerkit.Framework{Name: fn.GetFramework().GetName(), Arch: fn.GetFramework().GetArch()},
+			Handler:   fn.GetHandler(),
 		})
 		if err != nil {
 			panic(err)

@@ -253,7 +253,7 @@ type appPlan struct {
 
 func appPlans(cfg *projectconfig.Config, variables map[string][]manifestbuilder.Variable) []appPlan {
 	if len(cfg.Apps) == 0 {
-		return []appPlan{{dir: cfg.Dir, clientBundle: discovery.ClientBundle(envwire.RootRuntime, cfg.Dir), variables: variables[envwire.RootApp]}}
+		return []appPlan{{dir: cfg.Dir, clientBundle: discovery.ClientBundle(envwire.RootFramework, cfg.Dir), variables: variables[envwire.RootApp]}}
 	}
 	plans := make([]appPlan, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
@@ -261,7 +261,7 @@ func appPlans(cfg *projectconfig.Config, variables map[string][]manifestbuilder.
 		plans = append(plans, appPlan{
 			name:         a.Name,
 			dir:          dir,
-			clientBundle: discovery.ClientBundle(a.Runtime.Name, dir),
+			clientBundle: discovery.ClientBundle(a.Framework.Name, dir),
 			variables:    variables[a.Name],
 		})
 	}
@@ -327,8 +327,8 @@ func toApps(projectDir string, apps []projectconfig.App, usages []attribution.Us
 		named[a.Name] = true
 		out = append(out, manifestbuilder.App{
 			Name:            a.Name,
-			Runtime:         manifestwire.Runtime(a.Runtime),
-			ClientBundle:    discovery.ClientBundle(a.Runtime.Name, filepath.Join(projectDir, a.Path)),
+			Framework:       manifestwire.Framework(a.Framework),
+			ClientBundle:    discovery.ClientBundle(a.Framework.Name, filepath.Join(projectDir, a.Path)),
 			Compute:         a.Compute,
 			Domains:         a.Domains,
 			Folder:          a.Folder,
@@ -342,8 +342,8 @@ func toApps(projectDir string, apps []projectconfig.App, usages []attribution.Us
 			runtime := unnamedRuntime(name, functions)
 			out = append(out, manifestbuilder.App{
 				Name:         name,
-				Runtime:      runtime,
-				ClientBundle: providerkit.RuntimeBundlesClient(runtime.Name),
+				Framework:    runtime,
+				ClientBundle: providerkit.FrameworkBundlesClient(runtime.Name),
 				Compute:      compute,
 				Usages:       byApp[name],
 			})
@@ -352,13 +352,13 @@ func toApps(projectDir string, apps []projectconfig.App, usages []attribution.Us
 	return out
 }
 
-func unnamedRuntime(app string, functions []manifestbuilder.Function) manifestbuilder.Runtime {
+func unnamedRuntime(app string, functions []manifestbuilder.Function) manifestbuilder.Framework {
 	for _, f := range functions {
-		if f.App == app && f.Runtime.Name != "" {
-			return f.Runtime
+		if f.App == app && f.Framework.Name != "" {
+			return f.Framework
 		}
 	}
-	return manifestbuilder.Runtime{Name: envwire.RootRuntime}
+	return manifestbuilder.Framework{Name: envwire.RootFramework}
 }
 
 func healthPathOf(app projectconfig.App) string {
@@ -418,7 +418,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 		out = append(out, attribution.App{
 			Name:      a.Name,
 			Path:      a.Path,
-			Language:  discovery.LanguageOf(a.Runtime.Name, appDir),
+			Language:  discovery.LanguageOf(a.Framework.Name, appDir),
 			Roots:     roots,
 			Container: inAnImage,
 			Members:   workspaceMembers(inAnImage, appDir),

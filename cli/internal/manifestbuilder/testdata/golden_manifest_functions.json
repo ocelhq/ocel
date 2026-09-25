@@ -22,7 +22,7 @@
   "functions": [
     {
       "logical_name": "fn--web--api-documents",
-      "runtime": {
+      "framework": {
         "name": "next"
       },
       "handler": "app/api.ts",
@@ -31,7 +31,7 @@
     },
     {
       "logical_name": "fn--web--worker",
-      "runtime": {
+      "framework": {
         "name": "node"
       },
       "handler": "app/worker.ts",

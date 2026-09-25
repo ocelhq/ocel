@@ -45,14 +45,14 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 	if err != nil {
 		return nil, err
 	}
-	account := names.RuntimeAccountEmail(plan.Ref.Class)
+	account := names.WorkloadAccountEmail(plan.Ref.Class)
 	own, err := p.runtimeEnv(names, plan)
 	if err != nil {
 		return nil, err
 	}
 	standing := make([]providerkit.Function, 0, len(app.Functions))
 	for _, spec := range app.Functions {
-		if err := runsX8664(spec.Runtime.Arch, "function "+spec.Name); err != nil {
+		if err := runsX8664(spec.Framework.Arch, "function "+spec.Name); err != nil {
 			return nil, err
 		}
 		if strings.TrimSpace(spec.Image) == "" {
@@ -137,7 +137,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 		service: service,
 		image:   app.Image,
 		env:     values,
-		account: names.RuntimeAccountEmail(plan.Ref.Class),
+		account: names.WorkloadAccountEmail(plan.Ref.Class),
 		compute: providerkit.ComputeContainer,
 		health:  app.HealthCheckPath,
 		public:  true,

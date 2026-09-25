@@ -61,7 +61,7 @@ func newLayout(t *testing.T, files tree) layout {
 func (l layout) target(entry string) Target {
 	return Target{
 		App:        "api",
-		Runtime:    providerkit.Framework{Name: "node"},
+		Framework:  providerkit.Framework{Name: "node"},
 		Entrypoint: filepath.Join(l.appSrc, filepath.FromSlash(entry)),
 		FuncDir:    l.funcDir,
 		AppDir:     l.appDir,
@@ -125,7 +125,7 @@ func TestBundle(t *testing.T) {
 		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.funcDir, providerkit.FunctionConfigFile))), &cfg); err != nil {
 			t.Fatal(err)
 		}
-		want := providerkit.FunctionConfig{Runtime: providerkit.Framework{Name: "node"}, Handler: HandlerFile, ID: entryRouteID, App: "api"}
+		want := providerkit.FunctionConfig{Framework: providerkit.Framework{Name: "node"}, Handler: HandlerFile, ID: entryRouteID, App: "api"}
 		if !reflect.DeepEqual(cfg, want) {
 			t.Errorf("%s = %+v, want %+v", providerkit.FunctionConfigFile, cfg, want)
 		}
@@ -135,8 +135,8 @@ func TestBundle(t *testing.T) {
 		if err := json.Unmarshal([]byte(readFile(t, descriptorPath)), &descriptor); err != nil {
 			t.Fatal(err)
 		}
-		if descriptor.Runtime != "node" {
-			t.Errorf("%s runtime = %q, want node", edge.ServeDescriptorFile, descriptor.Runtime)
+		if descriptor.Framework != "node" {
+			t.Errorf("%s runtime = %q, want node", edge.ServeDescriptorFile, descriptor.Framework)
 		}
 		if len(descriptor.BuildID) != buildIDLength {
 			t.Errorf("%s buildId = %q, want %d hex characters", edge.ServeDescriptorFile, descriptor.BuildID, buildIDLength)
@@ -357,11 +357,11 @@ func TestBundle(t *testing.T) {
 			wants: []string{"server.js"},
 		},
 		{
-			name:  "an unnamed runtime fails the build",
+			name:  "an unnamed framework fails the build",
 			files: tree{"package.json": appPkg, "server.js": "console.log('hi');\n"},
 			entry: "server.js",
-			mut:   func(target *Target) { target.Runtime = providerkit.Framework{} },
-			wants: []string{"runtime"},
+			mut:   func(target *Target) { target.Framework = providerkit.Framework{} },
+			wants: []string{"framework"},
 		},
 		{
 			name:  "an unstated app fails the build",
@@ -495,7 +495,7 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 	}
 	on := func(l layout, arch string) Target {
 		target := l.target("server.js")
-		target.Runtime.Arch = arch
+		target.Framework.Arch = arch
 		return target
 	}
 

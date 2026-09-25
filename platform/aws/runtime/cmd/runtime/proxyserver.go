@@ -68,7 +68,7 @@ func serveProxy(ctx context.Context, values s3store.Records, table, sessionPrefi
 		return nil, nil, fmt.Errorf("%s is not set, so this deployment's sessions would share a key space with every other deployment in the account", sessionPrefixEnvVar)
 	}
 
-	cfg, err := sdkconfig.Runtime(ctx)
+	cfg, err := sdkconfig.Workload(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("load aws config: %w", err)
 	}

@@ -74,7 +74,7 @@ func TestRunPreviewUp(t *testing.T) {
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
 			{
 				Route:        "api",
-				Runtime:      manifestbuilder.Runtime{Name: "node"},
+				Framework:    manifestbuilder.Framework{Name: "node"},
 				Handler:      "index.handler",
 				ArtifactPath: "output/api",
 				App:          "api",
@@ -102,7 +102,7 @@ func TestRunPreviewUp(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		t.Setenv(clitest.FakeInfraPresentEnvVar, "1")
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "api", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
+			{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
 		})
 
 		var stdout, stderr bytes.Buffer

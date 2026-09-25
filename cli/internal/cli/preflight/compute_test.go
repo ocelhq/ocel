@@ -160,7 +160,7 @@ func TestAContainerAppThatDeclaresAFrameworkFailsThePlanByTheKeyOcelJSONHolds(t 
 
 	cfg := &projectconfig.Config{Apps: []projectconfig.App{
 		{Name: "web"},
-		{Name: "api", Compute: "container", Runtime: projectconfig.Runtime{Name: "next"}},
+		{Name: "api", Compute: "container", Framework: projectconfig.Framework{Name: "next"}},
 	}}
 
 	_, err := ResolveComputes(cfg, []string{"serverless", "container"}, "aws")
@@ -184,7 +184,7 @@ func TestAnAppThatFallsBackToContainerIsRefusedItsRuntimeToo(t *testing.T) {
 	t.Parallel()
 
 	cfg := &projectconfig.Config{Apps: []projectconfig.App{
-		{Name: "api", Runtime: projectconfig.Runtime{Name: "node"}},
+		{Name: "api", Framework: projectconfig.Framework{Name: "node"}},
 	}}
 
 	if _, err := ResolveComputes(cfg, []string{"container"}, "vps"); err == nil {
