@@ -6,8 +6,12 @@ import (
 	"maps"
 	"slices"
 	"time"
+)
 
-	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
+const (
+	DrainExpired = "drain-expired"
+	Drained      = "drained"
+	Ungated      = "ungated"
 )
 
 type Drain struct {
@@ -18,9 +22,9 @@ type Drain struct {
 
 func (d Drain) String() string {
 	if d.Expired {
-		return fmt.Sprintf("%s %s %d", caddyadmin.DrainExpired, d.Address, d.Held)
+		return fmt.Sprintf("%s %s %d", DrainExpired, d.Address, d.Held)
 	}
-	return caddyadmin.Drained + " " + d.Address
+	return Drained + " " + d.Address
 }
 
 type Upstream struct {

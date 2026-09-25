@@ -19,15 +19,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
-	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
 	controlEnv     = "OCEL_SWITCHBOARD_CONTROL"
 	defaultControl = "/run/ocel-switchboard/control.sock"
-	procRoot       = "/proc"
 	helperName     = "ocel-switchboard"
 )
 
@@ -53,12 +50,12 @@ const (
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	code := run(ctx, procRoot, os.Args[1:], os.Stdout, os.Stderr)
+	code := run(ctx, os.Args[1:], os.Stdout, os.Stderr)
 	stop()
 	os.Exit(code)
 }
 
-func run(ctx context.Context, proc string, argv []string, out, errs io.Writer) int {
+func run(ctx context.Context, argv []string, out, errs io.Writer) int {
 	control := os.Getenv(controlEnv)
 	if control == "" {
 		control = defaultControl
@@ -94,11 +91,6 @@ func run(ctx context.Context, proc string, argv []string, out, errs io.Writer) i
 		return leaf(rest, out, errs)
 	case "probe":
 		return probe(rest, out, errs)
-	case "listeners":
-		if len(rest) != 0 {
-			return usage(errs)
-		}
-		return netnsListeners(proc, out, errs)
 	default:
 		return usage(errs)
 	}
@@ -112,8 +104,7 @@ func usage(errs io.Writer) int {
 	fmt.Fprintln(errs, "       idle <host:port>... |")
 	fmt.Fprintln(errs, "       upstreams |")
 	fmt.Fprintln(errs, "       leaf [--at <host:port>] <hostname> |")
-	fmt.Fprintln(errs, "       probe [--at <host:port>] <hostname> |")
-	fmt.Fprintln(errs, "       listeners")
+	fmt.Fprintln(errs, "       probe [--at <host:port>] <hostname>")
 	return exitRefused
 }
 
@@ -331,7 +322,7 @@ func gate(argv []string, out, errs io.Writer) int {
 	for _, target := range targets {
 		address, path, _ := strings.Cut(target, "/")
 		if code := gating(address, "/"+path, max(time.Until(deadline), gateInterval), out, errs); code != 0 {
-			fmt.Fprintf(out, "%s %s\n", caddyadmin.Ungated, target)
+			fmt.Fprintf(out, "%s %s\n", switchboard.Ungated, target)
 			return code
 		}
 	}
@@ -365,34 +356,4 @@ func gating(target, path string, window time.Duration, out, errs io.Writer) int 
 	fmt.Fprintln(out, status)
 	fmt.Fprintf(errs, "%s answered %s with status %d, no 2xx within %s\n", target, path, status, window)
 	return exitNotServingYet
-}
-
-func netnsListeners(proc string, out, errs io.Writer) int {
-	var held []listeners.Listener
-	tables := 0
-	for _, name := range []string{listeners.TCPPath, listeners.TCP6Path} {
-		read, err := os.Open(filepath.Join(proc, strings.TrimPrefix(name, "/proc/")))
-		if errors.Is(err, fs.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return refuse(errs, err)
-		}
-		found, err := listeners.Parse(read)
-		_ = read.Close()
-		if err != nil {
-			fmt.Fprintf(errs, "%s: %s: %v\n", helperName, name, err)
-			return exitUnattributable
-		}
-		tables++
-		held = append(held, found...)
-	}
-	if tables == 0 {
-		fmt.Fprintf(errs, "%s: neither %s nor %s exists\n", helperName, listeners.TCPPath, listeners.TCP6Path)
-		return exitUnattributable
-	}
-	for _, line := range listeners.Lines(held) {
-		fmt.Fprintln(out, line)
-	}
-	return 0
 }

@@ -162,7 +162,7 @@ func (b *box) catting(command string) (session.Result, bool) {
 		return session.Result{}, false
 	}
 	if b.leaf == "" {
-		return session.Result{Code: 3, Stderr: "ocel-proxyctl: the proxy served no certificate"}, true
+		return session.Result{Code: 3, Stderr: "ocel-switchboard: 127.0.0.1:443 served no certificate for shop.example.com: EOF"}, true
 	}
 	return session.Result{Stdout: b.leaf}, true
 }

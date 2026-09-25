@@ -15,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -139,7 +138,7 @@ func TestAFlipUnderSustainedLoadDropsNothingAndEverythingAskedAfterItIsServedByT
 		if stale.Load() != 0 {
 			t.Errorf("keep-alive %t: %d requests asked after the flip returned were served by the retiree, want none", keepAlive, stale.Load())
 		}
-		if lines := told.lines(); !slices.Equal(lines, []string{caddyadmin.Drained + " " + blue}) {
+		if lines := told.lines(); !slices.Equal(lines, []string{switchboard.Drained + " " + blue}) {
 			t.Errorf("keep-alive %t: the flip told %v, want %s drained", keepAlive, lines, blue)
 		}
 	}
@@ -181,7 +180,7 @@ func TestADrainIsAcknowledgedOnlyOnceTheLastRequestOnTheRetireeHasReturned(t *te
 	case <-time.After(5 * time.Second):
 		t.Fatal("the flip never returned after the retiree's last request did")
 	}
-	if lines := told.lines(); !slices.Equal(lines, []string{caddyadmin.Drained + " " + blue.address}) {
+	if lines := told.lines(); !slices.Equal(lines, []string{switchboard.Drained + " " + blue.address}) {
 		t.Errorf("the flip told %v, want %s drained", lines, blue.address)
 	}
 	select {
@@ -209,8 +208,8 @@ func TestADrainWhoseCeilingPassesFirstNamesTheRetireeAndWhatItStillHeld(t *testi
 	if took := time.Since(started); took < time.Second || took > 3*time.Second {
 		t.Errorf("the flip returned after %s, want it to wait out its one second ceiling and no longer", took)
 	}
-	if lines := told.lines(); !slices.Equal(lines, []string{caddyadmin.DrainExpired + " " + blue.address + " 2"}) {
-		t.Errorf("the flip told %v, want %s %s 2", lines, caddyadmin.DrainExpired, blue.address)
+	if lines := told.lines(); !slices.Equal(lines, []string{switchboard.DrainExpired + " " + blue.address + " 2"}) {
+		t.Errorf("the flip told %v, want %s %s 2", lines, switchboard.DrainExpired, blue.address)
 	}
 }
 
@@ -294,8 +293,8 @@ func TestADrainCeilingCutsEveryRequestAndStreamStillOpenOnARetireeNoLongerRouted
 	if err := board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue}, 200*time.Millisecond, told.tell); err != nil {
 		t.Fatal(err)
 	}
-	if lines := told.lines(); !slices.Equal(lines, []string{caddyadmin.DrainExpired + " " + blue + " 2"}) {
-		t.Errorf("the flip told %v, want %s %s 2", lines, caddyadmin.DrainExpired, blue)
+	if lines := told.lines(); !slices.Equal(lines, []string{switchboard.DrainExpired + " " + blue + " 2"}) {
+		t.Errorf("the flip told %v, want %s %s 2", lines, switchboard.DrainExpired, blue)
 	}
 	select {
 	case said := <-held:
@@ -342,7 +341,7 @@ func TestAFlipCutShortAfterItsFirstDrainLineEndsItsAnswerIncomplete(t *testing.T
 	}
 	defer answer.Body.Close()
 	lines := bufio.NewReader(answer.Body)
-	if first, err := lines.ReadString('\n'); err != nil || first != caddyadmin.Drained+" "+idle+"\n" {
+	if first, err := lines.ReadString('\n'); err != nil || first != switchboard.Drained+" "+idle+"\n" {
 		t.Fatalf("the flip first answered %q, %v, want the idle retiree drained", first, err)
 	}
 	stop()

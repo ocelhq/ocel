@@ -18,14 +18,13 @@ import (
 	"time"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
-	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func ran(t *testing.T, argv ...string) (int, string, string) {
 	t.Helper()
 	var out, errs strings.Builder
-	return run(t.Context(), t.TempDir(), argv, &out, &errs), out.String(), errs.String()
+	return run(t.Context(), argv, &out, &errs), out.String(), errs.String()
 }
 
 func controlAt(t *testing.T) string {
@@ -110,7 +109,7 @@ func served(t *testing.T, table string, flags ...string) serving {
 	ctx, stop := context.WithCancel(t.Context())
 	stood.stop = stop
 	argv := append([]string{"serve", "--listen", stood.data, "--table", table}, flags...)
-	go func() { stood.done <- run(ctx, t.TempDir(), argv, io.Discard, stood.errs) }()
+	go func() { stood.done <- run(ctx, argv, io.Discard, stood.errs) }()
 	t.Cleanup(func() {
 		stop()
 		<-stood.done
@@ -199,7 +198,7 @@ func TestServeRefusesToTakeTheControlSocketFromASwitchboardStillAnsweringOnIt(t 
 	stood := served(t, tableFile(t, nil))
 
 	var errs strings.Builder
-	code := run(t.Context(), t.TempDir(), []string{"serve", "--listen", freeAddress(t), "--table", tableFile(t, nil)}, io.Discard, &errs)
+	code := run(t.Context(), []string{"serve", "--listen", freeAddress(t), "--table", tableFile(t, nil)}, io.Discard, &errs)
 	if code != exitRefused {
 		t.Errorf("a second serve on %s = %d, want %d: it would unlink the socket the first answers on and leave it unreachable", stood.control, code, exitRefused)
 	}
@@ -216,8 +215,8 @@ func TestOfServesStartedTogetherOnOneControlSocketExactlyOneTakesIt(t *testing.T
 	exited := make(chan int, racing)
 	var errs [racing]strings.Builder
 	for at := range racing {
-		proc, argv := t.TempDir(), []string{"serve", "--listen", freeAddress(t), "--table", table}
-		go func() { exited <- run(ctx, proc, argv, io.Discard, &errs[at]) }()
+		argv := []string{"serve", "--listen", freeAddress(t), "--table", table}
+		go func() { exited <- run(ctx, argv, io.Discard, &errs[at]) }()
 	}
 	refused := 0
 	t.Cleanup(func() {
@@ -319,8 +318,8 @@ func TestFlipSwitchesThenPrintsEachRetireeTheMomentItDrains(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("flip = %d, %q %q", code, out, errs)
 	}
-	if out != caddyadmin.Drained+" "+blue+"\n" {
-		t.Errorf("flip printed %q, want %q: the release reads each retiree's outcome off these lines", out, caddyadmin.Drained+" "+blue+"\n")
+	if out != switchboard.Drained+" "+blue+"\n" {
+		t.Errorf("flip printed %q, want %q: the release reads each retiree's outcome off these lines", out, switchboard.Drained+" "+blue+"\n")
 	}
 	if _, body, _ := stood.ask(t, "shop.example.com"); body != "green" {
 		t.Errorf("after the flip shop.example.com answered %q, want green", body)
@@ -355,7 +354,7 @@ func TestAFlipWhoseCeilingPassesPrintsWhatTheRetireeStillHeldAndSucceeds(t *test
 	if code != 0 {
 		t.Fatalf("a flip whose drain expired = %d, %q, want it borne as a warning: the new release is serving", code, errs)
 	}
-	if want := caddyadmin.DrainExpired + " " + blue + " 1\n"; out != want {
+	if want := switchboard.DrainExpired + " " + blue + " 1\n"; out != want {
 		t.Errorf("flip printed %q, want %q", out, want)
 	}
 }
@@ -367,7 +366,7 @@ func TestAFlipWhoseAnswerIsCutShortAfterADrainLineExitsRefused(t *testing.T) {
 		t.Fatal(err)
 	}
 	partial := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, caddyadmin.Drained+" 127.0.0.1:1\n")
+		_, _ = io.WriteString(w, switchboard.Drained+" 127.0.0.1:1\n")
 		_ = http.NewResponseController(w).Flush()
 		panic(http.ErrAbortHandler)
 	}))
@@ -529,10 +528,10 @@ func TestTheGateCallsATargetUpOnlyOnATwoHundredAndNamesTheOneThatWasNot(t *testi
 	if code != exitNotServingYet {
 		t.Errorf("gating a target answering 503 throughout = %d, %q, want %d", code, errs, exitNotServingYet)
 	}
-	if want := caddyadmin.Ungated + " " + strings.TrimPrefix(down.URL, "http://") + "/up\n"; !strings.HasSuffix(out, want) {
+	if want := switchboard.Ungated + " " + strings.TrimPrefix(down.URL, "http://") + "/up\n"; !strings.HasSuffix(out, want) {
 		t.Errorf("the gate printed %q, want it to end naming the target that failed: %q", out, want)
 	}
-	if code, out, errs := ran(t, "gate", "--deploy-timeout", "1", "127.0.0.1:1/up"); code != exitSilent || !strings.Contains(out, caddyadmin.Ungated) {
+	if code, out, errs := ran(t, "gate", "--deploy-timeout", "1", "127.0.0.1:1/up"); code != exitSilent || !strings.Contains(out, switchboard.Ungated) {
 		t.Errorf("gating a target that never answers = %d, %q %q, want %d naming it ungated", code, out, errs, exitSilent)
 	}
 	for what, argv := range map[string][]string{
@@ -546,46 +545,13 @@ func TestTheGateCallsATargetUpOnlyOnATwoHundredAndNamesTheOneThatWasNot(t *testi
 	}
 }
 
-func procWith(t *testing.T, tables map[string]string) string {
-	t.Helper()
-	proc := filepath.Join(t.TempDir(), "proc")
-	if err := os.MkdirAll(filepath.Join(proc, "net"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for name, body := range tables {
-		if err := os.WriteFile(filepath.Join(proc, "net", name), []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return proc
-}
-
-const listeningTable = `  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
-   0: 00000000:0050 00000000:0000 0A 00000000:00000000 00:00000000     0        0 1 1 0 100 0 0 10 0
-   1: 0100007F:07E3 00000000:0000 0A 00000000:00000000 00:00000000     0        0 2 1 0 100 0 0 10 0
-`
-
-func TestListenersNamesEverySocketBoundInsideThisNamespaceAndRefusesOneItNeverRead(t *testing.T) {
-	var out, errs strings.Builder
-	if code := run(t.Context(), procWith(t, map[string]string{"tcp": listeningTable}), []string{"listeners"}, &out, &errs); code != 0 {
-		t.Fatalf("listeners = %d, %q", code, errs.String())
-	}
-	if out.String() != "0.0.0.0:80\n127.0.0.1:2019\n" {
-		t.Errorf("listeners said %q, want both sockets the table holds", out.String())
-	}
-	out.Reset()
-	if code := run(t.Context(), procWith(t, nil), []string{"listeners"}, &out, &errs); code != exitUnattributable {
-		t.Errorf("listeners over a namespace with neither table = %d, %q, want %d: an answer nothing was read for reads as a namespace with nothing bound", code, out.String(), exitUnattributable)
-	}
-}
-
 func TestAVerbTheSwitchboardDoesNotCarryIsRefusedWithTheOnesItDoes(t *testing.T) {
-	for _, argv := range [][]string{{}, {"forget", "shop.example.com"}, {"config", "/"}} {
+	for _, argv := range [][]string{{}, {"forget", "shop.example.com"}, {"config", "/"}, {"listeners"}} {
 		code, _, errs := ran(t, argv...)
 		if code != exitRefused {
 			t.Errorf("%v = %d, want the usage refusal", argv, code)
 		}
-		for _, verb := range []string{"serve", "load", "gate", "flip", "idle", "upstreams", "leaf", "probe", "listeners"} {
+		for _, verb := range []string{"serve", "load", "gate", "flip", "idle", "upstreams", "leaf", "probe"} {
 			if !strings.Contains(errs, verb) {
 				t.Errorf("the usage %q never names %s", errs, verb)
 			}
