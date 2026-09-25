@@ -263,17 +263,17 @@ func settledHolding(t *testing.T, class providerkit.Class, table, config *string
 		}
 		standing = append(standing, item)
 	}
+	record, err := frontRecordItem(Front{}, "shop", class)
+	if err != nil {
+		t.Fatal(err)
+	}
 	stamp, err := Stamp{
 		Schema:  providerkit.BootstrapSchema,
 		State:   StateComplete,
 		Writer:  "the-suite",
 		Seal:    Seal{Fingerprint: contentSum(minted), Algorithm: SealAlgorithm, CreatedAt: "2026-01-01T00:00:00Z"},
-		Digests: digests(items),
+		Digests: digests(append(items, record)),
 	}.item(class)
-	if err != nil {
-		t.Fatal(err)
-	}
-	record, err := frontRecordItem(Front{}, "shop", class)
 	if err != nil {
 		t.Fatal(err)
 	}

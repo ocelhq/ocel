@@ -361,6 +361,7 @@ type Reading struct {
 	Observed map[string]string
 	Front    Front
 
+	recorded    []Item
 	unelevated  bool
 	rerendering bool
 }
@@ -374,7 +375,9 @@ func (r Reading) standing(kind, path string) bool {
 
 func (r Reading) unfinished() bool { return r.Present && r.Stamp.State != StateComplete }
 
-func (r Reading) Items() []Item { return Items(r.Class, r.Keys, r.Arch, r.Front) }
+func (r Reading) Items() []Item {
+	return append(Items(r.Class, r.Keys, r.Arch, r.Front), r.recorded...)
+}
 
 func (r Reading) settled() bool {
 	items := r.Items()
@@ -446,7 +449,11 @@ func (h *Host) observe(ctx context.Context, class providerkit.Class, keys []byte
 }
 
 func (h *Host) surveyed(ctx context.Context, class providerkit.Class, keys []byte, arch string, drawn drawing) (Reading, error) {
-	rendered, err := drawn.ask(ctx, "survey what "+string(class)+" holds", drawn.survey(Items(class, keys, arch, h.fronts), StampPath(class), FrontRecordPath), nil)
+	surveying := Items(class, keys, arch, h.fronts)
+	if h.fronts.adopted() {
+		surveying = append(surveying, frontProxy().item(""))
+	}
+	rendered, err := drawn.ask(ctx, "survey what "+string(class)+" holds", drawn.survey(surveying, StampPath(class), FrontRecordPath), nil)
 	if err != nil {
 		return Reading{}, err
 	}

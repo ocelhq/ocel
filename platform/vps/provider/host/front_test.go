@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -112,6 +113,10 @@ func TestTheConnectorOnABoxYourProxyFrontsSaysWhatToRouteToIt(t *testing.T) {
 	if want := manual.Route("box.example.com", manual.DefaultPort); report.at(want) < 0 {
 		t.Errorf("the install said %q, want %q: the console reaches the connector through your proxy", report.lines, want)
 	}
+}
+
+func frontRecordItem(front Front, project string, class providerkit.Class) (Item, error) {
+	return frontRecord{Proxy: front.recorded(), Project: project, Class: class}.item()
 }
 
 func recordOn(t *testing.T, stood *bench, class providerkit.Class, front Front, project string) {
@@ -250,5 +255,85 @@ func TestTheLastClassToGoTakesTheRecordWithIt(t *testing.T) {
 		return change.Name == FrontRecordPath && change.Action == providerkit.ActionDelete
 	}) {
 		t.Errorf("the removal plan %+v leaves %s behind, and the next bootstrap would read it as another project's", plan.Groups[0].Changes, FrontRecordPath)
+	}
+}
+
+func recordChange(t *testing.T, plan providerkit.Plan) providerkit.Change {
+	t.Helper()
+	for _, change := range plan.Groups[0].Changes {
+		if change.Name == FrontRecordPath {
+			return change
+		}
+	}
+	t.Fatalf("the plan %+v says nothing of %s", plan.Groups[0].Changes, FrontRecordPath)
+	return providerkit.Change{}
+}
+
+func TestABootstrapUnderAProxyRoutedByHandOntoABoxOcelsOwnProxyFrontsUnrecordedIsRefused(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	stood := settledOn(t, class)
+	stood.stands[class] = unrecorded(stood, class)
+	boot := Bootstrap(stood.fronted(routedByHand()), testVendor, "shop")
+	_, planned := boot.Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
+	applied := boot.Apply(context.Background(), providerkit.BootstrapRequest{Class: class, Writer: "the-suite"}, nil)
+	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
+		refused := refusal(t, err, providerkit.CodeInvalid)
+		for _, wanted := range []string{"ocel's own proxy", "remove `\"proxy\"`"} {
+			if !strings.Contains(refused.Message, wanted) {
+				t.Errorf("%s refused with %q, want %q in it: %s stands on this box, so it is fronted by ocel's own proxy whether or not a record says so", step, refused.Message, wanted, caddy.Container)
+			}
+		}
+	}
+	if at := stood.at("/dev/stdin " + quoted(FrontRecordPath)); at >= 0 {
+		t.Errorf("the refused bootstrap still wrote %s: %s", FrontRecordPath, stood.commands()[at])
+	}
+	survey := stood.commands()[stood.at("for p in")]
+	if !strings.Contains(survey, "docker inspect --type container") || !strings.Contains(survey, quoted(caddy.Container)) {
+		t.Errorf("the survey under a proxy routed by hand never asks after %s, so nothing it reads can say ocel's own proxy fronts the box:\n%s", caddy.Container, survey)
+	}
+}
+
+func TestABootstrapOverADeletedRecordPlansItAsDriftAndWritesItBack(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	stood := settledOn(t, class)
+	stood.stands[class] = unrecorded(stood, class)
+	boot := Bootstrap(stood.host(), testVendor, "shop")
+	described, err := boot.Describe(context.Background(), class)
+	if err != nil {
+		t.Fatalf("Describe() = %v", err)
+	}
+	if described.Stacks[0].DigestCurrent {
+		t.Error("Describe() calls a box whose record was deleted current, so no bootstrap would ever write it back and every deploy refuses")
+	}
+	plan, err := boot.Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
+	if err != nil {
+		t.Fatalf("Plan() = %v", err)
+	}
+	if plan.Groups[0].Action != providerkit.ActionUpdate {
+		t.Errorf("the plan acts %q on a box missing its record, want %q", plan.Groups[0].Action, providerkit.ActionUpdate)
+	}
+	if change := recordChange(t, plan); change.Action != providerkit.ActionCreate {
+		t.Errorf("the plan %s %s, want it created", change.Action, FrontRecordPath)
+	}
+}
+
+func TestABootstrapOfAFreshBoxUnderAProxyRoutedByHandPlansItsRecord(t *testing.T) {
+	t.Parallel()
+
+	fresh := machine(nil)
+	fresh.answer = func(command string) (session.Result, bool) {
+		return session.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
+	}
+	plan, err := Bootstrap(fresh.fronted(routedByHand()), testVendor, "shop").Plan(context.Background(),
+		providerkit.BootstrapRequest{Class: providerkit.ClassProduction})
+	if err != nil {
+		t.Fatalf("Plan() = %v, want a fresh box, where nothing of ocel's stands, free to take a proxy routed by hand", err)
+	}
+	if change := recordChange(t, plan); change.Action != providerkit.ActionCreate {
+		t.Errorf("the plan %s %s on a fresh box, want it created", change.Action, FrontRecordPath)
 	}
 }
