@@ -147,6 +147,7 @@ function record(current: State): Sent[] {
     set: async (at, value, version) => {
       sent.push({ verb: "set", at, value, version });
     },
+    create: async () => ({ awaitingApproval: false }),
     remove: async (at, version) => {
       sent.push({ verb: "remove", at, version });
     },

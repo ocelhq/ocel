@@ -74,7 +74,7 @@ func CredentialDefinitions(cfg *projectconfig.Config, preview bool) []*resources
 			Class:       resourcesv1.VariableClass_VARIABLE_CLASS_SECRET,
 			Required:    true,
 			Group:       CredentialGroup,
-			Description: "Signs " + descriptor.ID() + " in; read by ocel alone, never by an app",
+			Description: "read by ocel alone, never by an app",
 		})
 	}
 	return out
