@@ -209,7 +209,7 @@ func load(ctx context.Context, configPath string) (*Config, error) {
 		return nil, err
 	}
 
-	lookup, err := envLookup(dir)
+	lookup, err := EnvLookup(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +232,7 @@ func readJSON(_ context.Context, configPath string) ([]byte, error) {
 	return standard, nil
 }
 
-func envLookup(dir string) (configdoc.Lookup, error) {
+func EnvLookup(dir string) (configdoc.Lookup, error) {
 	file, err := dotenv.Load(dir)
 	if err != nil {
 		return nil, err

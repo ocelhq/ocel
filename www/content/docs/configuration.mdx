@@ -68,8 +68,8 @@ This is for values that differ per machine, not for secrets. Secrets belong in
 [variables](/docs/environments), which are stored in your own account.
 
 The one secret the CLI itself needs, the password `registry` pushes with, is written as
-the placeholder alone and read from your shell when the push authenticates, so the config
-says where the secret comes from and never holds it:
+the placeholder alone and read from your shell, then the project's `.env`, when the push
+authenticates, so the config says where the secret comes from and never holds it:
 
 ```json title="ocel.json"
 {
