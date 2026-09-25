@@ -24,6 +24,6 @@ export type {
  *
  * `custom` is the exception an app never sees: it publishes values ocel neither
  * types nor delivers, read only by a transform module through
- * `bindings.<name>.<property>`.
+ * `bindings.custom.<name>.<property>`.
  */
 export const bind = { postgres, custom };
