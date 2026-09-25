@@ -187,9 +187,6 @@ func bucketProperties(b *projectconfig.BucketInline, read func(string) (string, 
 	if props.SecretAccessKey, err = read(b.SecretAccessKey); err != nil {
 		return nil, err
 	}
-	if prefix := strings.Trim(props.GetPrefix(), "/"); prefix != "" && props.GetPublicBaseUrl() != "" {
-		props.PublicBaseUrl = strings.TrimRight(props.GetPublicBaseUrl(), "/") + "/" + prefix
-	}
 	return props, nil
 }
 

@@ -180,7 +180,7 @@ func TestBuildABucket(t *testing.T) {
 			Prefix:          projectconfig.Value{Literal: "uploads/"},
 			AccessKeyID:     "R2_KEY",
 			SecretAccessKey: "R2_SECRET",
-			PublicBaseURL:   projectconfig.Value{Literal: "https://cdn.acme.com/"},
+			PublicBaseURL:   projectconfig.Value{Literal: "https://cdn.acme.com/uploads"},
 		}},
 	}}, map[string]string{"UPLOADS_BUCKET": "acme", "R2_KEY": "AKID", "R2_SECRET": "s3cr3t"}, "ocel.json")
 	if err != nil {
@@ -191,7 +191,7 @@ func TestBuildABucket(t *testing.T) {
 		AccessKeyId: "AKID", SecretAccessKey: "s3cr3t", PublicBaseUrl: "https://cdn.acme.com/uploads",
 	}
 	if got := records[0].Binding.GetBucket(); !proto.Equal(got, want) {
-		t.Errorf("bucket = %v, want %v: an object's public address carries the prefix it is kept under", got, want)
+		t.Errorf("bucket = %v, want %v: the public base url is the one the binding names, as written", got, want)
 	}
 }
 
