@@ -413,7 +413,7 @@ func pairFed(pair routingPair) string {
 
 func (h *Host) writePair(ctx context.Context, expected tableDigest, pair routingPair) (tableDigest, error) {
 	elevation, refused := h.elevate(ctx)
-	result, err := h.stream(ctx, stagedWrite(expected), strings.NewReader(pairFed(pair)), elevation)
+	result, err := h.stream(ctx, stagedWrite(expected, pair.config != nil), strings.NewReader(pairFed(pair)), elevation)
 	if err != nil {
 		return "", err
 	}
@@ -441,30 +441,44 @@ func unelevated(refused, why error) error {
 		"%v\ncould not elevate: %v", why, refused)
 }
 
-func stagedWrite(expected tableDigest) string {
+func stagedWrite(expected tableDigest, rendering bool) string {
 	table, config := quoted(live.RoutingTable), quoted(ProxyConfig)
-	return strings.Join([]string{
+	lines := []string{
 		"set -e",
 		`staged=$(mktemp ` + quoted(live.RoutingTable+".XXXXXX") + `)`,
-		`rendered=$(mktemp ` + quoted(ProxyConfig+".XXXXXX") + `)`,
-		`trap 'rm -f "$staged" "$rendered"' EXIT`,
-		`IFS= read -r written`,
-		`IFS= read -r rendering`,
-		`printf '%s' "$written" | base64 -d > "$staged"`,
-		`printf '%s' "$rendering" | base64 -d > "$rendered"`,
+	}
+	seeded := `[ ! -f ` + table + ` ]`
+	if rendering {
+		lines = append(lines,
+			`rendered=$(mktemp `+quoted(ProxyConfig+".XXXXXX")+`)`,
+			`trap 'rm -f "$staged" "$rendered"' EXIT`)
+		seeded += ` || [ ! -f ` + config + ` ]`
+	} else {
+		lines = append(lines, `trap 'rm -f "$staged"' EXIT`)
+	}
+	lines = append(lines, `IFS= read -r written`, `IFS= read -r rendering`, `printf '%s' "$written" | base64 -d > "$staged"`)
+	if rendering {
+		lines = append(lines, `printf '%s' "$rendering" | base64 -d > "$rendered"`)
+	}
+	lines = append(lines,
 		strings.TrimSuffix(routingLocked("-x"), "\n"),
-		`if [ ! -f ` + table + ` ] || [ ! -f ` + config + ` ]; then exit ` + strconv.Itoa(routingUnseeded) + `; fi`,
-		`held=$(sha256sum ` + table + ` | cut -d' ' -f1)`,
-		`if [ "$held" != ` + quoted(string(expected)) + ` ]; then printf '%s' "$held" >&2; exit ` + strconv.Itoa(routingMoved) + `; fi`,
-		`chmod --reference=` + table + ` "$staged"`,
-		`chown --reference=` + table + ` "$staged"`,
-		`chmod --reference=` + config + ` "$rendered"`,
-		`chown --reference=` + config + ` "$rendered"`,
+		`if `+seeded+`; then exit `+strconv.Itoa(routingUnseeded)+`; fi`,
+		`held=$(sha256sum `+table+` | cut -d' ' -f1)`,
+		`if [ "$held" != `+quoted(string(expected))+` ]; then printf '%s' "$held" >&2; exit `+strconv.Itoa(routingMoved)+`; fi`,
+		`chmod --reference=`+table+` "$staged"`,
+		`chown --reference=`+table+` "$staged"`)
+	if rendering {
+		lines = append(lines,
+			`chmod --reference=`+config+` "$rendered"`,
+			`chown --reference=`+config+` "$rendered"`)
+	}
+	lines = append(lines,
 		`sha256sum "$staged" | cut -d' ' -f1`,
-		`mv "$staged" ` + table,
-		`mv "$rendered" ` + config,
-		"trap - EXIT",
-	}, "\n")
+		`mv "$staged" `+table)
+	if rendering {
+		lines = append(lines, `mv "$rendered" `+config)
+	}
+	return strings.Join(append(lines, "trap - EXIT"), "\n")
 }
 
 func moved(err error) bool {

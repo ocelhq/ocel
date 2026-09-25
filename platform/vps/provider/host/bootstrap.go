@@ -15,12 +15,13 @@ const (
 )
 
 type Bootstrapper struct {
-	host   *Host
-	vendor providerkit.Vendor
+	host    *Host
+	vendor  providerkit.Vendor
+	project string
 }
 
-func Bootstrap(h *Host, vendor providerkit.Vendor) Bootstrapper {
-	return Bootstrapper{host: h, vendor: vendor}
+func Bootstrap(h *Host, vendor providerkit.Vendor, project string) Bootstrapper {
+	return Bootstrapper{host: h, vendor: vendor, project: project}
 }
 
 func (b Bootstrapper) Catalogue() []providerkit.Feature { return nil }
@@ -43,6 +44,7 @@ func (b Bootstrapper) described(ctx context.Context, read Reading) (providerkit.
 			return providerkit.Bootstrap{}, err
 		}
 	}
+	recorded := read.standing(KindFile, FrontRecordPath)
 	return providerkit.Bootstrap{
 		Class:      read.Class,
 		Present:    read.Present,
@@ -52,7 +54,7 @@ func (b Bootstrapper) described(ctx context.Context, read Reading) (providerkit.
 			Name:          principal,
 			Present:       read.Present,
 			Schema:        uint32(read.Stamp.Schema),
-			DigestCurrent: read.settled(),
+			DigestCurrent: read.settled() && recorded,
 			Writer:        read.Stamp.Writer,
 		}},
 	}, nil
@@ -68,9 +70,13 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 		return providerkit.Plan{}, err
 	}
 	read = described.Held.(Reading)
+	recorded, err := b.fronted(ctx, req.Class)
+	if err != nil {
+		return providerkit.Plan{}, err
+	}
 	groups := providerkit.DeriveGroups(described, b.Catalogue(), req)
-	groups[0].Changes = planned(read)
-	if read.rerendering && groups[0].Action == providerkit.ActionKeep {
+	groups[0].Changes = append(planned(read), recorded.change())
+	if (read.rerendering || !recorded.present) && groups[0].Action == providerkit.ActionKeep {
 		groups[0].Action, groups[0].Reason = providerkit.ActionUpdate, ""
 	}
 	if groups[0].Reason == "" {
@@ -200,7 +206,14 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err := b.write(ctx, served, LiveItems(standing.Arch), report); err != nil {
 		return err
 	}
-	if err := b.write(ctx, served, ProxyItems(standing.Arch), report); err != nil {
+	recorded, err := b.fronted(ctx, req.Class)
+	if err != nil {
+		return err
+	}
+	if err := recorded.write(ctx, b.host, report); err != nil {
+		return err
+	}
+	if err := b.write(ctx, served, ProxyItems(standing.Arch, standing.Front), report); err != nil {
 		return err
 	}
 	if err := b.host.rerender(ctx); err != nil {

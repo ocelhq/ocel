@@ -163,7 +163,7 @@ func TestAClassDestroyTakesTheContainersAndNetworksItLabelledAndTheProxyOffThemF
 		return session.Result{}, false
 	}
 	report := &said{}
-	if err := Bootstrap(stood.host(), testVendor).Remove(context.Background(), class, report); err != nil {
+	if err := Bootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, report); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	for _, taken := range []string{
@@ -196,7 +196,7 @@ func TestAClassRunningNothingPlansNoContainerOrNetworkRemoval(t *testing.T) {
 
 	class := providerkit.ClassProduction
 	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
-	plan, err := Bootstrap(stood.host(), testVendor).PlanRemoval(context.Background(), class)
+	plan, err := Bootstrap(stood.host(), testVendor, "shop").PlanRemoval(context.Background(), class)
 	if err != nil {
 		t.Fatalf("PlanRemoval() = %v", err)
 	}
@@ -212,7 +212,7 @@ func TestAClassRunningNothingPlansNoContainerOrNetworkRemoval(t *testing.T) {
 func TestTheSwitchboardRejoinsEveryLabelledNetworkWhenItIsWrittenAgain(t *testing.T) {
 	t.Parallel()
 
-	command := switchboardStanding(nil).writing(containerRising)
+	command := switchboardStanding(nil, Front{}).writing(containerRising)
 	run := strings.Index(command, quoted("run")+" "+quoted("--detach"))
 	rejoin := strings.Index(command, "docker network ls --quiet --filter "+quoted("label="+LabelClass))
 	rising := strings.Index(command, "while :; do")

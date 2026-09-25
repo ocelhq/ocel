@@ -14,6 +14,9 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPr
 	if err := p.host.EngineStanding(ctx); err != nil {
 		return err
 	}
+	if err := p.host.FrontAgrees(ctx); err != nil {
+		return err
+	}
 	return refusing([]error{
 		p.host.DiskStanding(ctx, repositories(pre.Plan)),
 		p.host.ProxyStanding(ctx),

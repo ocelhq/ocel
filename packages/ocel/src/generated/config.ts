@@ -290,8 +290,60 @@ export interface VpsProviderOptions {
   certificates?: Record<string, string>;
   /** Path to the public key the ocel-deploy login accepts; defaults to the bootstrapping login's keys. */
   deployKey?: string;
+  /** What fronts this machine on ports 80 and 443. Leave it out and ocel runs its own proxy; name the one the machine already runs to deploy behind it. */
+  proxy?: VpsProxy;
   /** The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out. */
   ssh: string | VpsTarget;
+}
+
+/** What fronts this machine on ports 80 and 443. Leave it out and ocel runs its own proxy; name the one the machine already runs to deploy behind it. */
+export type VpsProxy =
+  | "coolify"
+  | "dokploy"
+  | "manual"
+  | {
+      /** A Traefik the machine already runs, reading ocel's routes from a directory its file provider watches. */
+      traefik: VpsTraefik;
+      caddy?: never;
+      manual?: never;
+    }
+  | {
+      /** A Caddy the machine already runs, importing ocel's site blocks from a directory. */
+      caddy: VpsCaddy;
+      traefik?: never;
+      manual?: never;
+    }
+  | {
+      /** A proxy you route to ocel yourself; ocel writes nothing to it. */
+      manual: VpsManual;
+      traefik?: never;
+      caddy?: never;
+    };
+
+/** A Traefik the machine already runs, reading ocel's routes from a directory its file provider watches. */
+export interface VpsTraefik {
+  /** The directory Traefik's file provider watches, where ocel writes its routers. */
+  directory: string;
+  /** The entrypoint that serves https; websecure when left out. */
+  entrypoint?: string;
+  /** The docker network Traefik reaches ocel's switchboard on. */
+  network?: string;
+  /** The certificate resolver ocel's routers ask for certificates. */
+  resolver: string;
+}
+
+/** A Caddy the machine already runs, importing ocel's site blocks from a directory. */
+export interface VpsCaddy {
+  /** The container Caddy runs in, when it runs in one. */
+  container?: string;
+  /** The directory the running Caddy imports site blocks from. */
+  directory: string;
+}
+
+/** A proxy you route to ocel yourself; ocel writes nothing to it. */
+export interface VpsManual {
+  /** The loopback port your proxy forwards to ocel's switchboard on; 8480 when left out. */
+  port?: number;
 }
 
 export interface VpsTarget {

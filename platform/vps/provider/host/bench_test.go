@@ -49,7 +49,9 @@ func machine(stands map[providerkit.Class][]Item) *bench {
 	}
 }
 
-func (b *bench) host() *Host { return New(b.dial, Keys{}, nil) }
+func (b *bench) host() *Host { return b.fronted(Front{}) }
+
+func (b *bench) fronted(front Front) *Host { return New(b.dial, Keys{}, nil, front) }
 
 type recorder struct{ said *[]string }
 
@@ -180,6 +182,15 @@ func (b *bench) rendered(command string) session.Result {
 			}
 		}
 		return session.Result{}
+	case command == frontReading():
+		for _, items := range b.stands {
+			for _, item := range items {
+				if item.Name == FrontRecordPath {
+					return session.Result{Stdout: string(item.Content)}
+				}
+			}
+		}
+		return session.Result{}
 	case strings.HasPrefix(command, "cat "):
 		for _, items := range b.stands {
 			for _, item := range items {
@@ -212,14 +223,14 @@ func bootstrapped(t *testing.T, class providerkit.Class) []Item {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return append(Items(class, []byte(aKey+"\n"), ArchAMD64), stamp)
+	return append(Items(class, []byte(aKey+"\n"), ArchAMD64, Front{}), stamp)
 }
 
 func TestASurveyedHostReadsBackAsTheItemsThatStandOnIt(t *testing.T) {
 	t.Parallel()
 
 	class := providerkit.ClassProduction
-	items := Items(class, []byte(aKey+"\n"), ArchAMD64)
+	items := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
 	stood := machine(map[providerkit.Class][]Item{class: items})
 
 	read, err := stood.host().Survey(context.Background(), class)
@@ -243,7 +254,7 @@ func settledHolding(t *testing.T, class providerkit.Class, table, config *string
 	t.Helper()
 
 	keys := []byte(aKey + "\n")
-	items := Items(class, keys, ArchAMD64)
+	items := Items(class, keys, ArchAMD64, Front{})
 	minted := []byte("the key this box minted for itself")
 	standing := make([]Item, 0, len(items)+1)
 	for _, item := range items {
@@ -262,7 +273,11 @@ func settledHolding(t *testing.T, class providerkit.Class, table, config *string
 	if err != nil {
 		t.Fatal(err)
 	}
-	stood := machine(map[providerkit.Class][]Item{class: append(standing, stamp)})
+	record, err := frontRecordItem(Front{}, "shop", class)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stood := machine(map[providerkit.Class][]Item{class: append(standing, stamp, record)})
 	proxied := servesPair(stood, table, config)
 	stood.answer = func(command string) (session.Result, bool) {
 		if command == "cat ~/.ssh/authorized_keys 2>/dev/null" {
@@ -279,7 +294,7 @@ func TestABoxStandingAtTheStampAWriteLeftDescribesItselfAsCurrent(t *testing.T) 
 	class := providerkit.ClassProduction
 	stood := settledOn(t, class)
 
-	described, err := Bootstrap(stood.host(), testVendor).Describe(context.Background(), class)
+	described, err := Bootstrap(stood.host(), testVendor, "shop").Describe(context.Background(), class)
 	if err != nil {
 		t.Fatalf("Describe() = %v", err)
 	}
@@ -305,7 +320,7 @@ func TestOneProbeThatCouldNotLookRefusesTheWholeReadingRatherThanPlanningOverIt(
 		return held(command)
 	}
 
-	described, err := Bootstrap(stood.host(), testVendor).Describe(context.Background(), class)
+	described, err := Bootstrap(stood.host(), testVendor, "shop").Describe(context.Background(), class)
 	if err == nil {
 		t.Fatalf("Describe() over a survey that could not run one of its probes = %+v, want a refusal: a plan built on it writes over whatever the probe could not see", described)
 	}

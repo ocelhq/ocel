@@ -226,7 +226,7 @@ func TestAReleaseWhoseFrontProxyRefusesTheReloadPutsBothFilesBackAndNeverFlips(t
 func TestTheSwitchboardRunsOnTheBoxNetworkBehindTheFrontProxyAndPublishesNothing(t *testing.T) {
 	t.Parallel()
 
-	argv := switchboardStanding(nil).run()
+	argv := switchboardStanding(nil, Front{}).run()
 	joined := strings.Join(argv, " ")
 	for what, wanted := range map[string]string{
 		"its name":                         "--name " + SwitchboardContainer,
@@ -285,7 +285,7 @@ func TestEveryProjectNetworkJoinsTheSwitchboardAndNeverTheFrontProxy(t *testing.
 	for what, script := range map[string]string{
 		"standing a network":   networkStanding(providerkit.ClassProduction, "shop"),
 		"forgetting a network": networkForgetting(providerkit.ClassProduction, "shop"),
-		"recreating the board": switchboardStanding(nil).writing(1),
+		"recreating the board": switchboardStanding(nil, Front{}).writing(1),
 	} {
 		if !strings.Contains(script, quoted(SwitchboardContainer)) {
 			t.Errorf("%s runs\n%s\nwhich never names %s: it reaches every upstream", what, script, SwitchboardContainer)

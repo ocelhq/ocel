@@ -214,7 +214,7 @@ func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.
 	t.Parallel()
 
 	class := providerkit.ClassProduction
-	items := Items(class, []byte(aKey+"\n"), ArchAMD64)
+	items := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
 
 	key := written(items, KindSealKey, SealKeyPath(class))
 	if key.Name == "" {
@@ -240,7 +240,7 @@ func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.
 func TestTheDeployLoginIsWhitelistedOnTheHelperAndOnNothingBeside(t *testing.T) {
 	t.Parallel()
 
-	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64)
+	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
 
 	var lines []Item
 	for _, item := range items {
@@ -369,7 +369,7 @@ func TestAReplacedKeyIsDriftThoughEveryPathStillStandsAsItWasWritten(t *testing.
 
 	class := providerkit.ClassProduction
 	keys := []byte(aKey + "\n")
-	observed := digests(Items(class, keys, ArchAMD64))
+	observed := digests(Items(class, keys, ArchAMD64, Front{}))
 	minted := Seal{Fingerprint: "9f86d081884c7d659a", Algorithm: SealAlgorithm, CreatedAt: "2026-08-26T09:00:00Z"}
 
 	read := Reading{
@@ -427,7 +427,7 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *
 
 	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
 	keys := []byte(aKey + "\n")
-	held := digests(Items(production, keys, ArchAMD64))
+	held := digests(Items(production, keys, ArchAMD64, Front{}))
 
 	alone := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsStanding{})
 	key := removalOf(alone, SealKeyPath(production))
@@ -446,7 +446,7 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *
 		}
 	}
 
-	beside := digests(Items(preview, keys, ArchAMD64))
+	beside := digests(Items(preview, keys, ArchAMD64, Front{}))
 	shared := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: beside}, appsStanding{})
 	if removalOf(shared, SealHelper).path != "" {
 		t.Errorf("destroying one class takes %s, which a standing sibling still seals through", SealHelper)

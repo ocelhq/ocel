@@ -46,3 +46,5 @@ func DNSVerdicts(ctx context.Context, look Lookup, hostnames []string, address s
 func ReachVerdict(ctx context.Context, dial Reach, address string) providerkit.StandingCheck {
 	return reachVerdict(ctx, dial, address)
 }
+
+func (p *Provider) Fronted() *Proxy { return p.options.Proxy }

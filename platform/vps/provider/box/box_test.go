@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
 )
 
 const (
@@ -40,6 +41,7 @@ type machine struct {
 	refusals    map[string]error
 	visited     []string
 	releasing   func(host.Release) error
+	byHand      int
 }
 
 func aMachine() *machine {
@@ -68,6 +70,13 @@ func (m *machine) Address(context.Context) (string, error) {
 }
 
 func (m *machine) Pins() []host.Pin { return m.pins }
+
+func (m *machine) RouteBy(hostname string) string {
+	if m.byHand == 0 {
+		return ""
+	}
+	return manual.Route(hostname, m.byHand)
+}
 
 func (m *machine) HoldsImage(_ context.Context, coordinate string) (bool, error) {
 	if err := m.refuse("HoldsImage"); err != nil {

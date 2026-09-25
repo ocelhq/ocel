@@ -101,8 +101,22 @@ func embedded(name, arch string) []byte {
 	return read
 }
 
-func ProxyItems(arch string) []Item {
+func ProxyItems(arch string, front Front) []Item {
 	binary := switchboardBinary(arch)
+	board := switchboardStanding(binary, front)
+	if front.adopted() {
+		return []Item{
+			dir(SwitchboardDir, 0o755, rootOwner, ""),
+			{Kind: KindFile, Name: SwitchboardBinary, Mode: 0o755, Owner: rootOwner, Content: binary,
+				Note: "routes every hostname and switches releases"},
+			dir(live.RoutingDir, 0o750, stateOwner, ""),
+			routingTable(nil),
+			networkItem(),
+			dir(switchboard.ControlDir, 0o755, rootOwner, "the switchboard's control socket"),
+			dir(switchboard.FrontDir, 0o700, rootOwner, ""),
+			board.item("routes what your proxy forwards to " + board.ports[0].String()),
+		}
+	}
 	return []Item{
 		dir(SwitchboardDir, 0o755, rootOwner, ""),
 		{Kind: KindFile, Name: SwitchboardBinary, Mode: 0o755, Owner: rootOwner, Content: binary,
@@ -116,7 +130,7 @@ func ProxyItems(arch string) []Item {
 		networkItem(),
 		dir(switchboard.ControlDir, 0o755, rootOwner, "the switchboard's control socket"),
 		dir(switchboard.FrontDir, 0o700, rootOwner, "where the front proxy reaches the switchboard"),
-		switchboardStanding(binary).item("routes :" + switchboardPort + " on the " + ProxyNetwork + " network"),
+		board.item("routes :" + switchboardPort + " on the " + ProxyNetwork + " network"),
 		frontProxy().item("serves :" + caddy.HTTPPort + " and :" + caddy.HTTPSPort),
 	}
 }
@@ -146,13 +160,19 @@ func proxyConfigItem() Item {
 }
 
 func routingTableItem() Item {
+	config := proxyConfigItem()
+	return routingTable(&config)
+}
+
+func routingTable(config *Item) Item {
 	return Item{
-		Kind:    KindRoutingTable,
-		Name:    live.RoutingTable,
-		Mode:    0o640,
-		Owner:   stateOwner,
-		Content: seededRows,
-		Note:    "seeded here, rewritten by deploys",
+		Kind:     KindRoutingTable,
+		Name:     live.RoutingTable,
+		Mode:     0o640,
+		Owner:    stateOwner,
+		Content:  seededRows,
+		Note:     "seeded here, rewritten by deploys",
+		rendered: config,
 	}
 }
 
@@ -160,10 +180,14 @@ func rewrittenByDeploys(item Item) bool {
 	return item.Kind == KindProxyConfig || item.Kind == KindRoutingTable
 }
 
-func seedingRouting(table, config Item) string {
+func seedingRouting(table Item) string {
+	seeded := []Item{table}
+	if table.rendered != nil {
+		seeded = append(seeded, *table.rendered)
+	}
 	var script strings.Builder
 	script.WriteString("set -e\n")
-	for _, item := range []Item{table, config} {
+	for _, item := range seeded {
 		at := quoted(item.Name)
 		script.WriteString("if [ -e " + at + " ] && [ ! -f " + at + " ]; then " + notAFile(item.Name) + "; fi\n")
 	}
@@ -175,9 +199,14 @@ func seedingRouting(table, config Item) string {
 			fmt.Sprintf("chown %s:%s \"$staged\"\nchmod %04o \"$staged\"\n", item.Owner, item.Owner, item.Mode) +
 			"mv \"$staged\" " + at + "\n"
 	}
-	script.WriteString("if [ ! -f " + quoted(table.Name) + " ]; then\n" + seed(table) + seed(config) +
-		"elif [ ! -f " + quoted(config.Name) + " ]; then\n" + seed(config) + "fi\n")
-	for _, item := range []Item{table, config} {
+	if table.rendered == nil {
+		script.WriteString("if [ ! -f " + quoted(table.Name) + " ]; then\n" + seed(table) + "fi\n")
+	} else {
+		config := *table.rendered
+		script.WriteString("if [ ! -f " + quoted(table.Name) + " ]; then\n" + seed(table) + seed(config) +
+			"elif [ ! -f " + quoted(config.Name) + " ]; then\n" + seed(config) + "fi\n")
+	}
+	for _, item := range seeded {
 		fmt.Fprintf(&script, "chown %s:%s %s\nchmod %04o %s\n", item.Owner, item.Owner, quoted(item.Name), item.Mode, quoted(item.Name))
 	}
 	return strings.TrimSuffix(script.String(), "\n")
@@ -212,13 +241,26 @@ func networkItem() Item {
 	}
 }
 
+type publish struct {
+	addr   string
+	port   string
+	target string
+}
+
+func (p publish) String() string {
+	if p.addr == "" {
+		return p.port
+	}
+	return p.addr + ":" + p.port
+}
+
 type boxContainer struct {
 	name     string
 	image    string
 	command  []string
 	config   string
 	binds    []string
-	ports    []string
+	ports    []publish
 	env      []string
 	caps     []string
 	fileCaps bool
@@ -242,7 +284,7 @@ func frontProxy() boxContainer {
 			switchboard.FrontDir + ":" + switchboard.FrontDir + ":ro",
 			SwitchboardDir + ":" + switchboardMount + ":ro",
 		},
-		ports:    proxyServing(),
+		ports:    servingPublished(),
 		env:      []string{proxyDataConfigEnv},
 		caps:     proxyCapabilities,
 		fileCaps: true,
@@ -289,15 +331,23 @@ func (s boxContainer) factsOver(binds []string) []byte {
 	return []byte(strings.Join(stated, "\n") + "\n")
 }
 
-func published(ports []string) map[string][]map[string]string {
+func published(ports []publish) map[string][]map[string]string {
 	held := map[string][]map[string]string{}
 	for _, port := range ports {
-		held[port+"/tcp"] = []map[string]string{{"HostIp": "", "HostPort": port}}
+		held[port.target+"/tcp"] = []map[string]string{{"HostIp": port.addr, "HostPort": port.port}}
 	}
 	return held
 }
 
 func proxyServing() []string { return []string{caddy.HTTPPort, caddy.HTTPSPort} }
+
+func servingPublished() []publish {
+	var held []publish
+	for _, port := range proxyServing() {
+		held = append(held, publish{port: port, target: port})
+	}
+	return held
+}
 
 func marshalled(value any) string {
 	written, err := json.Marshal(value)
@@ -328,7 +378,7 @@ func (s boxContainer) run(sysctls ...string) []string {
 	argv = append(argv, logging()...)
 	argv = append(argv, confined(s.caps, s.fileCaps)...)
 	for _, port := range s.ports {
-		argv = append(argv, "--publish", port+":"+port)
+		argv = append(argv, "--publish", port.String()+":"+port.target)
 	}
 	for _, bind := range s.binds {
 		argv = append(argv, "--volume", bind)
@@ -457,5 +507,6 @@ func proxyRemovals() []removal {
 		taking(KindDir, live.RoutingDir, ""),
 		taking(KindDir, proxyRoot, ""),
 		sharing(caddy.PinsDir, "only if empty"),
+		taking(KindFile, FrontRecordPath, "which proxy fronts this box"),
 	}
 }

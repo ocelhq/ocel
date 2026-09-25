@@ -191,7 +191,7 @@ func TestOneSurveyReadsBackBothTheAccountAndThePaths(t *testing.T) {
 
 	held := standing()
 	class := providerkit.ClassProduction
-	items := Items(class, []byte(aKey+"\n"), ArchAMD64)
+	items := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
 	observed, _, err := readSurvey(sh(t, stubs(t, &held), survey(items, StampPath(class))))
 	if err != nil {
 		t.Fatal(err)

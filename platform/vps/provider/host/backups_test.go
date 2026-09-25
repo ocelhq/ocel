@@ -299,7 +299,7 @@ func TestAnApplyOverAHostBootstrappedBeforeBackupsWritesThem(t *testing.T) {
 	stood := settledOn(t, class)
 	stood.stands[class] = slices.DeleteFunc(stood.stands[class], func(item Item) bool { return slices.Contains(missing, item.ID()) })
 	report := &said{}
-	if err := Bootstrap(stood.host(), testVendor).Apply(context.Background(),
+	if err := Bootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
 		providerkit.BootstrapRequest{Class: class, Writer: "the-suite"}, report); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}

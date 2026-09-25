@@ -53,8 +53,11 @@ func standingBox() []scriptedAnswer {
 		{"publish=443", answer{stdout: caddy.Container + "\n"}},
 		{"cat /proc/net/tcp /proc/net/tcp6", answer{stdout: ""}},
 		{"'holds'", answer{}},
+		{"proxy.json", answer{stdout: builtInRecord}},
 	}
 }
+
+const builtInRecord = `{"proxy":null,"project":"shop","class":"production"}`
 
 func boxSaying(overrides map[string]answer) *scripted {
 	held := standingBox()

@@ -32,6 +32,7 @@ type Machine interface {
 	UnrouteSurface(ctx context.Context, owner string) error
 	Claims(ctx context.Context) ([]host.HostClaim, error)
 	Pins() []host.Pin
+	RouteBy(hostname string) string
 	ClaimHosts(ctx context.Context, claims []host.HostClaim) error
 	DisclaimHost(ctx context.Context, hostname, owner string) error
 	DisclaimPointer(ctx context.Context, owner, pointer string) error
@@ -144,6 +145,9 @@ func (e *Edge) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWi
 	if err := e.machine.InstallPreviewEntry(ctx, spec.BaseDomain); err != nil {
 		return "", err
 	}
+	if route := e.machine.RouteBy(edge.PreviewWildcard(spec.BaseDomain)); route != "" && spec.Warn != nil {
+		spec.Warn(route)
+	}
 	return address, nil
 }
 
@@ -178,8 +182,11 @@ func (e *Edge) certificateKept(hostname string) edge.PlanChange {
 		return edge.PlanChange{Kind: CertificateKind, Name: certs.PinHandle(path), Action: edge.PlanKeep,
 			Reason: "pinned at " + path + "; you renew it"}
 	}
-	return edge.PlanChange{Kind: CertificateKind, Name: certs.ProxyHandle(hostname), Action: edge.PlanKeep,
-		Reason: "the proxy renews it"}
+	reason := "the proxy renews it"
+	if e.machine.RouteBy(hostname) != "" {
+		reason = "held by your proxy"
+	}
+	return edge.PlanChange{Kind: CertificateKind, Name: certs.ProxyHandle(hostname), Action: edge.PlanKeep, Reason: reason}
 }
 
 func (e *Edge) PreviewWildcardRemovals(wildcard string) (removed, kept edge.PlanGroup) {

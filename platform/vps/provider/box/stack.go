@@ -317,6 +317,9 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	}
 	s.state.Bind(binding.Hostname)
 	s.state.PublishFront(binding.Hostname, address)
+	if route := s.e.machine.RouteBy(binding.Hostname); route != "" && binding.Say != nil {
+		binding.Say(route)
+	}
 	return nil
 }
 

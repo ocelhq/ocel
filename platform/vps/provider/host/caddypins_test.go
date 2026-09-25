@@ -30,7 +30,7 @@ func pinnedBox(t *testing.T, pins []Pin, held map[string][]byte) *Host {
 		}
 		return serves(command)
 	}
-	return New(stood.dial, Keys{}, pins)
+	return New(stood.dial, Keys{}, pins, Front{})
 }
 
 func claiming(t *testing.T, pins []Pin, held map[string][]byte) error {
@@ -128,7 +128,7 @@ func TestAPinIsReadOffTheBoxOnceRatherThanOnEveryReshape(t *testing.T) {
 		}
 		return serves(command)
 	}
-	h := New(stood.dial, Keys{}, []Pin{{Hostname: wildcard, Path: at}})
+	h := New(stood.dial, Keys{}, []Pin{{Hostname: wildcard, Path: at}}, Front{})
 
 	ctx := context.Background()
 	for _, hostname := range []string{claimed, "blog.example.com", "www.example.com"} {

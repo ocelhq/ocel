@@ -220,7 +220,7 @@ func TestTheDocumentSaysWhereTheDaemonTheGroupReachesCameFrom(t *testing.T) {
 	if claim.Name == "" {
 		t.Fatal("the deploy login is written into the docker group and the document claims no membership of it")
 	}
-	if written(Items(class, nil, ArchAMD64), KindEngine, dockerEngine).Name == "" {
+	if written(Items(class, nil, ArchAMD64, Front{}), KindEngine, dockerEngine).Name == "" {
 		t.Fatal("the document names the daemon bootstrap installs and bootstrap installs no engine at all")
 	}
 	if !strings.Contains(claim.Detail, dockerSource) {
@@ -254,11 +254,11 @@ func TestDestroyKeepsTheEngineWhicheverClassIsTheLastOne(t *testing.T) {
 
 	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
 	keys := []byte(aKey + "\n")
-	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64))}
+	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
 
 	for name, sibling := range map[string]Reading{
 		"the last class on the host": {Class: preview, Observed: map[string]string{}},
-		"a class beside its sibling": {Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64))},
+		"a class beside its sibling": {Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))},
 	} {
 		taken := removing(standing, sibling, appsStanding{})
 		kept := removalOf(taken, dockerEngine)

@@ -20,6 +20,106 @@
         "description": "Path to the public key the ocel-deploy login accepts; defaults to the bootstrapping login's keys.",
         "type": "string"
       },
+      "proxy": {
+        "description": "What fronts this machine on ports 80 and 443. Leave it out and ocel runs its own proxy; name the one the machine already runs to deploy behind it.",
+        "oneOf": [
+          {
+            "enum": [
+              "coolify",
+              "dokploy",
+              "manual"
+            ],
+            "type": "string"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "traefik": {
+                "additionalProperties": false,
+                "description": "A Traefik the machine already runs, reading ocel's routes from a directory its file provider watches.",
+                "properties": {
+                  "directory": {
+                    "description": "The directory Traefik's file provider watches, where ocel writes its routers.",
+                    "type": "string"
+                  },
+                  "entrypoint": {
+                    "description": "The entrypoint that serves https; websecure when left out.",
+                    "type": "string"
+                  },
+                  "network": {
+                    "description": "The docker network Traefik reaches ocel's switchboard on.",
+                    "type": "string"
+                  },
+                  "resolver": {
+                    "description": "The certificate resolver ocel's routers ask for certificates.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "directory",
+                  "resolver"
+                ],
+                "title": "Traefik",
+                "type": "object"
+              }
+            },
+            "required": [
+              "traefik"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "caddy": {
+                "additionalProperties": false,
+                "description": "A Caddy the machine already runs, importing ocel's site blocks from a directory.",
+                "properties": {
+                  "container": {
+                    "description": "The container Caddy runs in, when it runs in one.",
+                    "type": "string"
+                  },
+                  "directory": {
+                    "description": "The directory the running Caddy imports site blocks from.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "directory"
+                ],
+                "title": "Caddy",
+                "type": "object"
+              }
+            },
+            "required": [
+              "caddy"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "manual": {
+                "additionalProperties": false,
+                "description": "A proxy you route to ocel yourself; ocel writes nothing to it.",
+                "properties": {
+                  "port": {
+                    "description": "The loopback port your proxy forwards to ocel's switchboard on; 8480 when left out.",
+                    "type": "integer"
+                  }
+                },
+                "title": "Manual",
+                "type": "object"
+              }
+            },
+            "required": [
+              "manual"
+            ],
+            "type": "object"
+          }
+        ],
+        "title": "Proxy"
+      },
       "ssh": {
         "description": "The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out.",
         "oneOf": [

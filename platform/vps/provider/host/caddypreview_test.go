@@ -365,7 +365,7 @@ func TestDescribingABoxRefusesOnDemandTlsAndNothingElseItsConfigHolds(t *testing
 	} {
 		stood := claimingBox(t, previewing())
 		stood.answer = servesPair(stood.bench, &stood.held, &config)
-		_, err := Bootstrap(stood.host(), testVendor).described(context.Background(), standingHost())
+		_, err := Bootstrap(stood.host(), testVendor, "shop").described(context.Background(), standingHost())
 		if refused := err != nil; refused != (strings.Contains(config, "on_demand") || strings.Contains(config, `"load"`)) {
 			t.Errorf("describing %s = %v: caddy only warns about an on-demand policy carrying no permission module and serves anyway, and a config loader serves whatever it fetches, so `ocel doctor` and the bootstrap refuse either; every other difference is a rendering the next write puts back from %s, and refusing it locks the box out of the write that would", what, err, live.RoutingTable)
 		}
@@ -387,7 +387,7 @@ func TestDescribingABoxBeforeItHoldsARoutingTableStillRefusesOnDemandTls(t *test
 		stood := machine(nil)
 		absent := ""
 		stood.answer = servesPair(stood, &absent, &config)
-		_, err := Bootstrap(stood.host(), testVendor).described(context.Background(), read)
+		_, err := Bootstrap(stood.host(), testVendor, "shop").described(context.Background(), read)
 		if refused := err != nil; refused != strings.Contains(config, "on_demand") {
 			t.Errorf("describing a box bootstrapped before its routing table, holding %s = %v, want it described so the plan can seed the table, unless its proxy declares on-demand tls", what, err)
 		}

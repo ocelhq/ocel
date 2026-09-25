@@ -14,7 +14,7 @@ func inspecting() map[string]string {
 		"what a release that fell over captures as evidence":                     stateCommand(physical),
 		"what a release that fell over captures as logs":                         logCommand(physical),
 		"what a proxy that did not come up reports":                              frontProxy().rising(3),
-		"what a switchboard that did not come up reports":                        switchboardStanding(nil).rising(3),
+		"what a switchboard that did not come up reports":                        switchboardStanding(nil, Front{}).rising(3),
 		"what a bootstrap probes the proxy with":                                 frontProxy().probe(),
 		"what a preflight reads the proxy's state with":                          stateCommand(caddy.Container),
 		"what a release reads to tell a stopped retiree from one still draining": runningCommand([]string{retiring}),
