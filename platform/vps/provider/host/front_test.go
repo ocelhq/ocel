@@ -337,3 +337,23 @@ func TestABootstrapOfAFreshBoxUnderAProxyRoutedByHandPlansItsRecord(t *testing.T
 		t.Errorf("the plan %s %s on a fresh box, want it created", change.Action, FrontRecordPath)
 	}
 }
+
+func TestWhatABoxStandsFollowsWhetherItsProxyOwnsThePorts(t *testing.T) {
+	t.Parallel()
+
+	for name, front := range map[string]Front{"ocel's own proxy": {}, "a proxy routed by hand": routedByHand()} {
+		owns := openFront(front, frontBox{}).Guarantees().OwnsPorts
+		standsProxy := slices.ContainsFunc(ProxyItems(ArchAMD64, front), func(item Item) bool {
+			return item.Kind == KindContainer && item.Name == caddy.Container
+		})
+		if standsProxy != owns {
+			t.Errorf("%s: the box stands %s = %v, want %v: only a proxy that owns 80 and 443 is one ocel runs", name, caddy.Container, standsProxy, owns)
+		}
+		if published := len(switchboardOf(t, front).ports) > 0; published == owns {
+			t.Errorf("%s: the switchboard publishes a port = %v, want it published only for a proxy that does not own the ports", name, published)
+		}
+		if recorded := front.recorded() != nil; recorded == owns {
+			t.Errorf("%s: the record names a proxy = %v, want one named only for a proxy that does not own the ports", name, recorded)
+		}
+	}
+}

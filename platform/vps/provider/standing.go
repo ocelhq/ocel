@@ -63,7 +63,7 @@ func (p *Provider) CheckStanding(ctx context.Context, req providerkit.StandingRe
 		}}, nil
 	}
 	checks := dnsVerdicts(ctx, p.lookup(), req.Hostnames, address)
-	if p.host.FrontProxy().Guarantees().IssuesCertificates {
+	if p.host.FrontProxy().Guarantees().OwnsPorts {
 		checks = append(checks, reachVerdict(ctx, p.reach(), address))
 	}
 	front, err := p.host.FrontProxy().Inspect(ctx)

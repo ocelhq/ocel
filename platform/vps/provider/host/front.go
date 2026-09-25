@@ -43,7 +43,7 @@ func (state RoutingTable) hostnames() []string {
 	return slices.Compact(named)
 }
 
-func (f Front) adopted() bool { return f.Manual != nil }
+func (f Front) adopted() bool { return !openFront(f, frontBox{}).Guarantees().OwnsPorts }
 
 func (h *Host) RouteBy(hostname string) string {
 	if h.proxyOption.Manual == nil {
