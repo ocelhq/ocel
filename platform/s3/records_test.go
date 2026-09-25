@@ -26,6 +26,7 @@ type heldRecords struct {
 
 func (h heldRecords) Value(key string) string  { return h.values[key] }
 func (h heldRecords) Bindings() []live.Binding { return h.bindings }
+func (h heldRecords) Generation() uint32       { return 1 }
 
 func TestBackendsAreBuiltForTheBucketsARecordPointsAtAStore(t *testing.T) {
 	held := heldRecords{
@@ -92,13 +93,22 @@ func TestAnUploadSessionStaysWithItsBindingWhenAnotherBindingsRecordChanges(t *t
 type arriving struct {
 	heldRecords
 	arrived bool
+	reads   int
 }
 
 func (a *arriving) Value(key string) string {
+	a.reads++
 	if !a.arrived {
 		return ""
 	}
 	return a.values[key]
+}
+
+func (a *arriving) Generation() uint32 {
+	if a.arrived {
+		return 2
+	}
+	return 1
 }
 
 func TestARouterOverRecordsServesThoseThatArriveAfterItStarted(t *testing.T) {
@@ -122,6 +132,31 @@ func TestARouterOverRecordsServesThoseThatArriveAfterItStarted(t *testing.T) {
 	}
 	if !strings.Contains(resp.GetTarget().GetUrl(), "127.0.0.1:1") {
 		t.Errorf("signed url = %q, want it signed for the store the record that arrived names", resp.GetTarget().GetUrl())
+	}
+}
+
+func TestARouterRereadsNoRecordUntilTheirGenerationMoves(t *testing.T) {
+	records := &arriving{arrived: true, heldRecords: heldRecords{
+		bindings: []live.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
+		values: map[string]string{
+			"OCEL_RESOURCE_BUCKET_uploads": `{"name":"ocel:bucket.uploads","bucket":{"bucket":"acme","endpoint":"http://127.0.0.1:1","region":"auto","accessKeyId":"AKID","secretAccessKey":"secret"}}`,
+		},
+	}}
+	router := RouteRecords(&ownBackend{}, records, &recordingPoster{})
+	head := func() {
+		t.Helper()
+		if _, err := router.Head(t.Context(), &bucketv1.HeadRequest{Bucket: "shop-prod-avatars", Key: "a.png"}); err != nil {
+			t.Fatalf("Head: %v", err)
+		}
+	}
+
+	head()
+	first := records.reads
+	head()
+	head()
+
+	if records.reads != first {
+		t.Errorf("the router read the records %d more times across two requests under one generation, want none: every request would copy every bucket credential", records.reads-first)
 	}
 }
 

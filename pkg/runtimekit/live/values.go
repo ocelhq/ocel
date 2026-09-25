@@ -94,6 +94,15 @@ func (l *Values) Value(key string) string {
 	return l.values[key]
 }
 
+func (l *Values) Generation() uint32 {
+	if l == nil {
+		return 0
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.generation
+}
+
 func (l *Values) Keys() []string {
 	if l == nil {
 		return nil

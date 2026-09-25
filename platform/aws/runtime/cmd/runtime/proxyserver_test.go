@@ -40,6 +40,8 @@ func (d declared) Bindings() []live.Binding { return d.bindings }
 
 func (d declared) Value(key string) string { return d.values[key] }
 
+func (d declared) Generation() uint32 { return 1 }
+
 func binds(bindings ...live.Binding) declared { return declared{bindings: bindings} }
 
 func TestServeProxy(t *testing.T) {

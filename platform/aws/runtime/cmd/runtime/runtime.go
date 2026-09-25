@@ -80,6 +80,7 @@ type liveValues interface {
 	Env() []string
 	Value(key string) string
 	Bindings() []vars.Binding
+	Generation() uint32
 }
 
 type compileCache interface {

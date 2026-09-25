@@ -149,6 +149,8 @@ func (s *stubValues) Env() []string { return s.env }
 
 func (s *stubValues) Bindings() []vars.Binding { return s.bindings }
 
+func (s *stubValues) Generation() uint32 { return 1 }
+
 func fakeSpawn(gotBudget *time.Duration) spawner {
 	return func(_ []string, budget time.Duration, onControl func(io.Writer), _ <-chan struct{}) (*nodeChild, error) {
 		*gotBudget = budget

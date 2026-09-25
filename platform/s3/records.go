@@ -14,6 +14,7 @@ import (
 type Records interface {
 	Value(key string) string
 	Bindings() []live.Binding
+	Generation() uint32
 }
 
 func backends(records Records, callbacks Poster) ([]*Service, error) {
