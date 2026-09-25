@@ -41,7 +41,6 @@ func (k RouteKey) identity() string {
 type AppRoute struct {
 	RouteKey
 	Upstream string `json:"upstream"`
-	Health   string `json:"health,omitempty"`
 }
 
 type HostClaim live.Claimed
@@ -263,10 +262,6 @@ func validRoute(route AppRoute) error {
 	if _, err := switchboard.UpstreamAddress(route.Upstream); err != nil {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"the route %s forwards to no upstream it can dial: %v", route.identity(), err)
-	}
-	if route.Health != "" && !strings.HasPrefix(route.Health, "/") {
-		return providerkit.Refuse(providerkit.CodeInvalid,
-			"the route %s has health path %q, which does not start with /", route.identity(), route.Health)
 	}
 	return nil
 }

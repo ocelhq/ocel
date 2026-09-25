@@ -45,8 +45,6 @@ func parityTables() map[string]RoutingTable {
 			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "web"}}},
 		"a route to an upstream over a unix socket": {Grace: DrainWindow,
 			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "unix//run/web.sock"}}},
-		"a route with a relative health path": {Grace: DrainWindow,
-			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "web:3000", Health: "up"}}},
 		"a preview base":           previewing(),
 		"a one-label preview base": {Grace: DrainWindow, PreviewBase: "localhost"},
 		"the connector":            connected,

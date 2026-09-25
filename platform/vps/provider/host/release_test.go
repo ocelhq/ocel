@@ -79,7 +79,7 @@ func configFor(t *testing.T, upstream string) string {
 	t.Helper()
 	return documentOf(t, RoutingTable{
 		Grace:  30 * time.Second,
-		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream, Health: "/healthz"}},
+		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
 	})
 }
 
@@ -88,8 +88,8 @@ func twoAppsServing(t *testing.T) string {
 	return documentOf(t, RoutingTable{
 		Grace: 30 * time.Second,
 		Routes: []AppRoute{
-			{RouteKey: keyed("web"), Upstream: retired, Health: "/healthz"},
-			{RouteKey: keyed("api"), Upstream: apiRetired, Health: "/up"},
+			{RouteKey: keyed("web"), Upstream: retired},
+			{RouteKey: keyed("api"), Upstream: apiRetired},
 		},
 	})
 }
@@ -334,8 +334,8 @@ func TestADigestThatMovesAfterTheGateIsRecomposedAndWrittenWithoutGatingAgain(t 
 	neighbour := documentOf(t, RoutingTable{
 		Grace: 30 * time.Second,
 		Routes: []AppRoute{
-			{RouteKey: keyed("web"), Upstream: retired, Health: "/healthz"},
-			{RouteKey: keyed("api"), Upstream: apiRetired, Health: "/up"},
+			{RouteKey: keyed("web"), Upstream: retired},
+			{RouteKey: keyed("api"), Upstream: apiRetired},
 			{RouteKey: RouteKey{Owner: otherSurface, Pointer: pointed, App: "web"}, Upstream: "blog-web-1:8080"},
 		},
 	})
@@ -632,7 +632,7 @@ func TestTheFlipConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUpstre
 	}
 	want, err := RenderProxyConfig(RoutingTable{
 		Grace:  30 * time.Second,
-		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: flipTo, Health: "/healthz"}},
+		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: flipTo}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1356,7 +1356,7 @@ func TestWhatFollowsTheFlipLeavesARouteAnotherReleaseFlippedSinceOnItsUpstream(t
 				stood.mu.Lock()
 				stood.held = documentOf(t, RoutingTable{
 					Grace:  30 * time.Second,
-					Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: overtaking, Health: "/healthz"}},
+					Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: overtaking}},
 				})
 				stood.mu.Unlock()
 			})

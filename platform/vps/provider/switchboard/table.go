@@ -61,7 +61,6 @@ type route struct {
 	Pointer  string `json:"pointer"`
 	App      string `json:"app"`
 	Upstream string `json:"upstream"`
-	Health   string `json:"health,omitempty"`
 }
 
 func (r route) identity() string {
@@ -187,9 +186,6 @@ func (r route) valid() (string, error) {
 		if field.named == "" || strings.Contains(field.named, claimSeparator) {
 			return "", fmt.Errorf("a route has an invalid %s %q", field.what, field.named)
 		}
-	}
-	if r.Health != "" && !strings.HasPrefix(r.Health, "/") {
-		return "", fmt.Errorf("the route %s has health path %q, which does not start with /", r.identity(), r.Health)
 	}
 	address, err := UpstreamAddress(r.Upstream)
 	if err != nil {

@@ -41,7 +41,7 @@ type AppRelease struct {
 func (a AppRelease) path() string { return "/" + strings.TrimPrefix(a.HealthPath, "/") }
 
 func (a AppRelease) route() AppRoute {
-	return AppRoute{RouteKey: a.RouteKey, Upstream: a.Target, Health: a.path()}
+	return AppRoute{RouteKey: a.RouteKey, Upstream: a.Target}
 }
 
 func (a AppRelease) gate() string { return a.Target + a.path() }

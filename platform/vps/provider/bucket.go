@@ -54,7 +54,6 @@ func storeRoute(ref providerkit.StackRef, store string) host.AppRoute {
 			App:     live.StoreLabel,
 		},
 		Upstream: store + ":" + storePort,
-		Health:   storeHealthPath,
 	}
 }
 
