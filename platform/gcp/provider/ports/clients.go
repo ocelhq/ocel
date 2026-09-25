@@ -20,6 +20,7 @@ import (
 const (
 	ProjectEnvVar = "OCEL_GCP_PROJECT"
 	RegionEnvVar  = "OCEL_GCP_REGION"
+	ClassEnvVar   = "OCEL_INFRA_CLASS"
 
 	CloudPlatformScope = "https://www.googleapis.com/auth/cloud-platform"
 
