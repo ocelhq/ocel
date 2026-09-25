@@ -2,6 +2,7 @@ package caddy
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -33,6 +34,11 @@ const (
 func PinCertificate(path string) string { return path + pinCertificate }
 
 func PinKey(path string) string { return path + pinKey }
+
+func Pinned(path string) (string, bool) {
+	leaf, beneath := strings.CutPrefix(path, PinsDir+"/")
+	return leaf, beneath && leaf != "" && !strings.Contains(leaf, "/") && leaf != "." && leaf != ".."
+}
 
 func Command() []string { return []string{"caddy", "run", "--config", ConfigMount} }
 
