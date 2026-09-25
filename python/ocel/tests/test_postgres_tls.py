@@ -116,3 +116,34 @@ async def test_a_record_naming_no_ca_leaves_tls_to_the_connection_string(monkeyp
     await postgres("main").pool()
 
     assert opened == [{}]
+
+
+@pytest.mark.asyncio
+async def test_a_ca_under_require_leaves_the_certificate_unchecked(monkeypatch):
+    _record(
+        monkeypatch,
+        {
+            "host": "db",
+            "port": 5432,
+            "database": "d",
+            "username": "u",
+            "password": "p",
+            "tlsMode": "POSTGRES_TLS_MODE_REQUIRE",
+            "tlsCa": _CA,
+        },
+    )
+    import asyncpg
+
+    opened = []
+
+    async def create_pool(dsn, **options):
+        opened.append((dsn, options))
+        return object()
+
+    monkeypatch.setattr(asyncpg, "create_pool", create_pool)
+
+    await postgres("main").pool()
+
+    ((dsn, options),) = opened
+    assert parse_qs(urlparse(dsn).query)["sslmode"] == ["require"]
+    assert options == {}
