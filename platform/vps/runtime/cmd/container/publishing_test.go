@@ -41,7 +41,7 @@ func TestAStoreWithNoClaimedAddressAnswersOnTheCallersOwnDeadline(t *testing.T) 
 	defer close(fetcher.held)
 	clock = clock.Add(time.Minute)
 
-	external := publishing(bucket.Store{}, "", values)
+	external := publishing(bucket.Store{}, values)
 	gone, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -75,7 +75,7 @@ func TestAStoreWithNoClaimedAddressIsNotRereadOnEveryCall(t *testing.T) {
 		t.Fatalf("Prefetch() = %v", err)
 	}
 
-	external := publishing(bucket.Store{}, "", values)
+	external := publishing(bucket.Store{}, values)
 	for range 5 {
 		clock = clock.Add(time.Minute)
 		if _, base := external(context.Background()); base != "" {

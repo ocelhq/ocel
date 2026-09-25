@@ -42,9 +42,9 @@ func droveHere(t *testing.T, spec BucketSpec, calls []storeCall) map[string]prob
 	return said
 }
 
-func reachedFromHere(t *testing.T, spec BucketSpec) ExternalStore {
+func reachedFromHere(t *testing.T, spec BucketSpec) signedStore {
 	t.Helper()
-	return ExternalStore{
+	return signedStore{
 		Endpoint: enginetest.AStore(t).Endpoint, Region: spec.Region, Bucket: spec.Bucket,
 		AccessKeyID: spec.AccessKeyID, SecretKey: spec.SecretKey, PathStyle: true,
 	}

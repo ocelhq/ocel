@@ -286,30 +286,12 @@ export interface GcpProviderOptions {
 }
 
 export interface VpsProviderOptions {
-  /** An S3-compatible store to keep this project's buckets in, each as a key prefix. */
-  bucket?: VpsExternalStore;
   /** Certificates to serve a hostname with, keyed by hostname, valued by the path to the certificate on the machine. */
   certificates?: Record<string, string>;
   /** Path to the public key the ocel-deploy login accepts; defaults to the bootstrapping login's keys. */
   deployKey?: string;
   /** The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out. */
   ssh: string | VpsTarget;
-}
-
-/** An S3-compatible store to keep this project's buckets in, each as a key prefix. */
-export interface VpsExternalStore {
-  /** The public half of the credential that reaches the store. */
-  accessKeyId: string;
-  /** The bucket every declared bucket takes a key prefix inside. */
-  bucket: string;
-  /** The address the store answers on. */
-  endpoint: string;
-  /** Address buckets as a path segment rather than a subdomain. */
-  pathStyle?: boolean;
-  /** The region the store signs requests against. */
-  region: string;
-  /** The secret half of the credential that reaches the store. */
-  secretAccessKey: string;
 }
 
 export interface VpsTarget {

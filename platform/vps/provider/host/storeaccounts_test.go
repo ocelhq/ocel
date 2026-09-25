@@ -65,7 +65,7 @@ func anAccountOn(t *testing.T, store enginetest.Store, account StoreAccount) err
 	return nil
 }
 
-func writingAs(t *testing.T, store ExternalStore, bucket, key string) string {
+func writingAs(t *testing.T, store signedStore, bucket, key string) string {
 	t.Helper()
 	held := store
 	held.Bucket = bucket
@@ -85,7 +85,7 @@ func TestAnAppsAccountReachesTheBucketsItWasGrantedAndNoOthers(t *testing.T) {
 		t.Skip("stands a real store up")
 	}
 	store := enginetest.AStore(t)
-	root := anExternalStore(t, store, "granted-bucket")
+	root := aSignedStore(t, store, "granted-bucket")
 	aBucketOn(t, store, "ungranted-bucket")
 
 	account := StoreAccount{
@@ -114,7 +114,7 @@ func TestGrantingTheSameAppTwiceHoldsItToWhatItDeclaresNow(t *testing.T) {
 		t.Skip("stands a real store up")
 	}
 	store := enginetest.AStore(t)
-	root := anExternalStore(t, store, "first-bucket")
+	root := aSignedStore(t, store, "first-bucket")
 	aBucketOn(t, store, "second-bucket")
 
 	account := StoreAccount{
@@ -184,7 +184,7 @@ func TestTheSecretAnAppReachesTheStoreWithNeverRidesTheCommandLine(t *testing.T)
 	}
 }
 
-func askingAs(t *testing.T, store ExternalStore, bucket, name, method, key, query string, body []byte) string {
+func askingAs(t *testing.T, store signedStore, bucket, name, method, key, query string, body []byte) string {
 	t.Helper()
 	held := store
 	held.Bucket = bucket
@@ -210,7 +210,7 @@ func TestAnAppsAccountDrivesTheDataPlaneAndNothingThatReshapesTheBucket(t *testi
 		t.Skip("stands a real store up")
 	}
 	store := enginetest.AStore(t)
-	root := anExternalStore(t, store, "scoped-bucket")
+	root := aSignedStore(t, store, "scoped-bucket")
 
 	account := StoreAccount{
 		AccessKeyID: StoreAccountKey("prod", "scoped"),

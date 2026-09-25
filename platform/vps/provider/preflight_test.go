@@ -29,12 +29,6 @@ type scripted struct {
 	answer func(command string) (answer, bool)
 }
 
-func (s *scripted) carried() []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]string(nil), s.fed...)
-}
-
 const (
 	dataRoot     = "/var/lib/docker"
 	roomySaid    = "root=" + dataRoot + "\nfree=104857600\nrepo=ocel-shop-web\nsize=100MB\n"

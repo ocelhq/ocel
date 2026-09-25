@@ -14,29 +14,11 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPr
 	if err := p.host.EngineStanding(ctx); err != nil {
 		return err
 	}
-	if err := refusing([]error{
+	return refusing([]error{
 		p.host.DiskStanding(ctx, repositories(pre.Plan)),
 		p.host.ProxyStanding(ctx),
 		p.host.ServingPortsHeld(ctx),
-	}); err != nil {
-		return err
-	}
-	return p.storeStanding(ctx, pre.Resources)
-}
-
-func (p *Provider) storeStanding(ctx context.Context, declared []providerkit.Resource) error {
-	external := p.options.Bucket
-	if !external.configured() || !slices.ContainsFunc(declared, func(resource providerkit.Resource) bool {
-		return resource.Type == providerkit.BindingBucket
-	}) {
-		return nil
-	}
-	probed, err := p.host.ProbeExternalStore(ctx, external.probing())
-	if err != nil {
-		return err
-	}
-	p.stores.probed(probed)
-	return nil
+	})
 }
 
 func repositories(plan providerkit.DeployPlan) []string {

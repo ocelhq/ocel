@@ -16,6 +16,37 @@ import (
 
 const storePage = 1000
 
+type probeAnswer struct {
+	code string
+	body []byte
+}
+
+type probeRunner func(what, script string) (string, error)
+
+func readProbe(said string) map[string]probeAnswer {
+	answers := map[string]probeAnswer{}
+	for line := range strings.Lines(said) {
+		name, value, cut := strings.Cut(strings.TrimSpace(line), "=")
+		if !cut {
+			continue
+		}
+		if held, is := strings.CutSuffix(name, ".body"); is {
+			decoded, err := base64.StdEncoding.DecodeString(value)
+			if err != nil {
+				continue
+			}
+			answer := answers[held]
+			answer.body = decoded
+			answers[held] = answer
+			continue
+		}
+		answer := answers[name]
+		answer.code = value
+		answers[name] = answer
+	}
+	return answers
+}
+
 type storedUpload struct {
 	Key      string `xml:"Key"`
 	UploadID string `xml:"UploadId"`
