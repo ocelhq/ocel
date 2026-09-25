@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -20,10 +21,11 @@ import (
 )
 
 const (
-	transferRepository = "ocel/live-transfer"
-	transferDigest     = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
-	transferTag        = "sha256-1111111111111111111111111111111111111111111111111111111111111111"
+	transferDigest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+	transferTag    = "sha256-1111111111111111111111111111111111111111111111111111111111111111"
 )
+
+var transferRepository = "ocel/live-transfer-" + strconv.Itoa(os.Getpid())
 
 func transferBase() string { return transferRepository + ":" + transferTag }
 
