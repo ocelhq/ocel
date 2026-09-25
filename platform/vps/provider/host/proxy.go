@@ -115,6 +115,7 @@ func ProxyItems(arch string) []Item {
 		routingTableItem(),
 		dir(ProxyData, 0o700, rootOwner, "certificates and acme key"),
 		networkItem(),
+		dir(SwitchboardControl, 0o755, rootOwner, "the switchboard's control socket"),
 		switchboardStanding(binary).item("routes :" + switchboardPort + " on the " + ProxyNetwork + " network"),
 		frontProxy().item("serves :" + caddy.HTTPPort + " and :" + caddy.HTTPSPort),
 	}
@@ -445,6 +446,7 @@ func proxyRemovals() []removal {
 	return []removal{
 		taking(KindContainer, caddy.Container, "ocel's front proxy"),
 		taking(KindContainer, SwitchboardContainer, "ocel's switchboard"),
+		taking(KindDir, SwitchboardControl, ""),
 		taking(KindDir, ProxyData, "certificates and acme key"),
 		taking(KindNetwork, ProxyNetwork, "kept while anything is attached"),
 		taking(KindProxyConfig, ProxyConfig, ""),
