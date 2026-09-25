@@ -11,6 +11,7 @@ import (
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const previewBase = "preview.example.com"
@@ -23,20 +24,28 @@ func previewing() RoutingTable {
 	return state
 }
 
-func skipped(t *testing.T, read map[string]any) []string {
+func skipped(t *testing.T, rendered []byte) []string {
 	t.Helper()
 
-	server, held := servers(t, read)[proxyServer].(map[string]any)
-	if !held {
-		t.Fatalf("the rendered config carries no %s server", proxyServer)
+	var read struct {
+		Apps struct {
+			HTTP struct {
+				Servers map[string]struct {
+					Automatic *struct {
+						Skip []string `json:"skip_certificates"`
+					} `json:"automatic_https"`
+				} `json:"servers"`
+			} `json:"http"`
+		} `json:"apps"`
 	}
-	automatic, held := server["automatic_https"].(map[string]any)
-	if !held {
-		return nil
+	if err := json.Unmarshal(rendered, &read); err != nil {
+		t.Fatal(err)
 	}
 	var names []string
-	for _, name := range automatic["skip_certificates"].([]any) {
-		names = append(names, name.(string))
+	for _, server := range read.Apps.HTTP.Servers {
+		if server.Automatic != nil {
+			names = append(names, server.Automatic.Skip...)
+		}
 	}
 	return names
 }
@@ -45,7 +54,7 @@ func TestThePreviewCatchAllIsTheOneRouteTheBoxKeepsOutOfTheAcmeSubjectCollection
 	t.Parallel()
 
 	wildcard := edge.PreviewWildcard(previewBase)
-	names := skipped(t, loading(t, previewing()))
+	names := skipped(t, mustRender(t, previewing()))
 	if !slices.Equal(names, []string{wildcard}) {
 		t.Fatalf("the config skips certificates for %v, want exactly [%s]: %s enters caddy's automatic-https subject collection like any other host matcher, and a wildcard order needs a dns-01 module this box has none of, so stock caddy retries an order it can never place for as long as the box stands",
 			names, wildcard, wildcard)
@@ -59,40 +68,8 @@ func TestThePreviewCatchAllIsTheOneRouteTheBoxKeepsOutOfTheAcmeSubjectCollection
 func TestABoxServingNoPreviewsDeclaresNoSkipAtAll(t *testing.T) {
 	t.Parallel()
 
-	if names := skipped(t, loading(t, routed())); len(names) != 0 {
+	if names := skipped(t, mustRender(t, routed())); len(names) != 0 {
 		t.Errorf("a box with no preview entry skips %v, want nothing: the exclusion is bought by the one route that cannot be issued for, and every hostname beside it is a name this box serves and holds a certificate for", names)
-	}
-}
-
-func TestThePreviewEntryAndItsProbeAreTwoRoutesMatchingOneHostnameEach(t *testing.T) {
-	t.Parallel()
-
-	wildcard := edge.PreviewWildcard(previewBase)
-	rendered := mustRender(t, previewing())
-	var read caddyConfig
-	if err := json.Unmarshal(rendered, &read); err != nil {
-		t.Fatal(err)
-	}
-	routes := read.Apps.HTTP.Servers[proxyServer].Routes
-	found := map[string][]string{}
-	for _, route := range routes {
-		if len(route.Match) == 1 {
-			found[route.Identity] = route.Match[0].hosts()
-		}
-	}
-	for identity, want := range map[string]string{
-		previewEntryIdentity(previewBase): wildcard,
-		previewProbeIdentity(previewBase): edge.ProbeHostname(wildcard),
-	} {
-		if !slices.Equal(found[identity], []string{want}) {
-			t.Errorf("%s matches %v, want exactly [%s]", identity, found[identity], want)
-		}
-	}
-	at := slices.IndexFunc(routes, func(route caddyRoute) bool {
-		return route.Identity == previewEntryIdentity(previewBase)
-	})
-	if at < 0 || at+1 >= len(routes) || routes[at+1].Identity != boxIdentity {
-		t.Errorf("the preview catch-all does not stand immediately ahead of %s: it answers the hostnames under the base that no preview claims, and every route ocel writes for one of them is written ahead of it", boxIdentity)
 	}
 }
 
@@ -157,7 +134,7 @@ func TestTheRendererHasNoWayToDeclareOnDemandTlsAtAll(t *testing.T) {
 }
 
 func TestAnUnclaimedHostnameUnderThePreviewBaseIsToldNothingAboutTheBox(t *testing.T) {
-	ask := probingConfig(t, issuedByNobody(t, mustRender(t, previewing())))
+	ask := probingConfig(t, previewing(), issuedByNobody(t, mustRender(t, previewing())))
 
 	for what, hostname := range map[string]string{
 		"a preview hostname nothing claims": "pr-7." + previewBase,
@@ -172,68 +149,15 @@ func TestAnUnclaimedHostnameUnderThePreviewBaseIsToldNothingAboutTheBox(t *testi
 			t.Errorf("%s (%s) answers with a body of %q, want nothing: anyone who resolves a name under the base reaches this, and it names no project, no box and no other preview",
 				what, hostname, said.body)
 		}
-		if said.edge != EdgeName {
-			t.Errorf("%s (%s) answers with %s: %q, want %q", what, hostname, EdgeHeader, said.edge, EdgeName)
-		}
-	}
-}
-
-const fellThrough = http.StatusGone
-
-func tellingTheFallthroughApart(t *testing.T, rendered []byte) []byte {
-	t.Helper()
-
-	var read caddyConfig
-	if err := json.Unmarshal(rendered, &read); err != nil {
-		t.Fatal(err)
-	}
-	server := read.Apps.HTTP.Servers[proxyServer]
-	at := slices.IndexFunc(server.Routes, func(route caddyRoute) bool { return route.Identity == boxIdentity })
-	if at < 0 {
-		t.Fatalf("the rendered config carries no %s route to tell the catch-all apart from", boxIdentity)
-	}
-	server.Routes[at].Handle[0].Status = fellThrough
-	read.Apps.HTTP.Servers[proxyServer] = server
-	written, err := json.Marshal(read)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return written
-}
-
-func TestARealProxyMatchesTheCatchAllOneLabelUnderTheBaseAndNoDeeper(t *testing.T) {
-	ask := probingConfig(t, issuedByNobody(t, tellingTheFallthroughApart(t, mustRender(t, previewing()))))
-
-	for _, reached := range []struct {
-		what     string
-		hostname string
-		caught   bool
-	}{
-		{"one label under the base", "pr-7." + previewBase, true},
-		{"one label carrying the app separator", "shop--pr-7--web." + previewBase, true},
-		{"two labels under the base", "pr-7.api." + previewBase, false},
-		{"the base itself", previewBase, false},
-		{"a base the wildcard is a suffix of", "notpreview.example.com", false},
-		{"a hostname outside the base", "pr-7.preview.example.org", false},
-	} {
-		said := ask(reached.hostname)
-		switch {
-		case said.status != http.StatusNotFound && said.status != fellThrough:
-			t.Errorf("%s (%s) was answered %d, and this config answers every hostname either off the preview catch-all or off the box's own route behind it", reached.what, reached.hostname, said.status)
-		case (said.status == http.StatusNotFound) != reached.caught:
-			t.Errorf("%s (%s) was answered %d, and the catch-all %s it: caddy's host matcher spends a leading `*.` on exactly one label, which is the whole of what keeps a preview base from swallowing names beneath it",
-				reached.what, reached.hostname, said.status,
-				map[bool]string{true: "did not catch", false: "caught"}[reached.caught])
-		}
-		if reached.caught && said.body != "" {
-			t.Errorf("%s (%s) answers with a body of %q, want nothing", reached.what, reached.hostname, said.body)
+		if said.edge != switchboard.EdgeName {
+			t.Errorf("%s (%s) answers with %s: %q, want %q", what, hostname, edge.HeaderEdge, said.edge, switchboard.EdgeName)
 		}
 	}
 }
 
 func TestARealProxyOrdersForThePreviewProbeAndNeverForTheWildcardBesideIt(t *testing.T) {
 	rendered := issuedByNobody(t, mustRender(t, previewing()))
-	ask := probingConfig(t, rendered)
+	ask := probingConfig(t, previewing(), rendered)
 	ask("pr-7." + previewBase)
 
 	wildcard := edge.PreviewWildcard(previewBase)
@@ -277,9 +201,7 @@ func TestInstallingThePreviewEntryLoadsItOntoTheRunningProxyAndTakingItDownUnloa
 	if held.PreviewBase != previewBase {
 		t.Fatalf("%s answers previews on %q after the install, want %q", ProxyConfig, held.PreviewBase, previewBase)
 	}
-	if !slices.ContainsFunc(stood.commands(), func(command string) bool {
-		return strings.Contains(command, quoted("flip"))
-	}) {
+	if !slices.ContainsFunc(stood.commands(), loadsSwitchboard) || !slices.ContainsFunc(stood.commands(), reloadsFront) {
 		t.Errorf("the preview entry was written and never loaded, so the running proxy answers no preview hostname at all: %v", stood.commands())
 	}
 
@@ -302,7 +224,7 @@ func TestInstallingThePreviewEntryTwiceWritesTheProxyOnce(t *testing.T) {
 		t.Fatalf("InstallPreviewEntry() = %v", err)
 	}
 	for _, command := range stood.commands() {
-		if writesProxy(command) || strings.Contains(command, quoted("flip")) {
+		if writesProxy(command) || loadsSwitchboard(command) || reloadsFront(command) {
 			t.Errorf("a preview entry already standing rewrote and reloaded the proxy (%q); every reload is a whole-box config post", command)
 		}
 	}
@@ -348,7 +270,7 @@ func TestABoxServingOnePreviewBaseRefusesASecondByName(t *testing.T) {
 func TestAPreviewBaseNoPublicCaWillIssueForIsManagedInternallyAndReachesNoCaAtAll(t *testing.T) {
 	state := routed()
 	state.PreviewBase = internalBase
-	ask := probingConfig(t, issuedByNobody(t, mustRender(t, state)))
+	ask := probingConfig(t, state, issuedByNobody(t, mustRender(t, state)))
 	ask("pr-7." + internalBase)
 
 	probe := edge.ProbeHostname(edge.PreviewWildcard(internalBase))

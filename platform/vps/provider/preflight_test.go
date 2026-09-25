@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -53,12 +54,11 @@ func standingBox() []scriptedAnswer {
 		{"docker info", answer{stdout: roomySaid}},
 		{"docker inspect", answer{stdout: "Status=running ExitCode=0 OOMKilled=false Error= StartedAt=x FinishedAt= RestartCount=0"}},
 		{"'upstreams'", answer{stdout: "[]\n"}},
-		{"'listeners'", answer{stdout: "0.0.0.0:80\n"}},
-		{"publish=" + host.RenewalPort, answer{stdout: host.ProxyContainer + "\n"}},
-		{"publish=443", answer{stdout: host.ProxyContainer + "\n"}},
-		{"cat /proc/net/tcp", answer{stdout: ""}},
-		{"test -x", answer{}},
-		{"test -S", answer{}},
+		{"/proc/net/tcp &&", answer{stdout: socketTable(80, 443)}},
+		{"publish=" + host.RenewalPort, answer{stdout: caddy.Container + "\n"}},
+		{"publish=443", answer{stdout: caddy.Container + "\n"}},
+		{"cat /proc/net/tcp /proc/net/tcp6", answer{stdout: ""}},
+		{"'test' '-S'", answer{}},
 	}
 }
 
@@ -159,7 +159,8 @@ func TestABoxThatIsReadyRefusesNothingBeforeADeploy(t *testing.T) {
 	for what, fragment := range map[string]string{
 		"the engine answering as this login": "docker version",
 		"what the docker data root has left": "docker info",
-		"the one read-only admin call":       "'upstreams'",
+		"the switchboard's upstreams":        "'upstreams'",
+		"the front proxy's admin socket":     "'test' '-S'",
 		"which container publishes port 80":  "publish=" + host.RenewalPort,
 		"which container publishes port 443": "publish=443",
 	} {
@@ -200,45 +201,53 @@ func TestADiskWithoutRoomForTheWindowRefusesAndNamesTheGuess(t *testing.T) {
 	}
 }
 
+const (
+	runningState    = "Status=running ExitCode=0 OOMKilled=false Error= StartedAt=x FinishedAt= RestartCount=0"
+	exitedState     = "Status=exited ExitCode=1 OOMKilled=false Error= StartedAt=x FinishedAt=y RestartCount=0"
+	restartingState = "Status=restarting ExitCode=1 OOMKilled=false Error= StartedAt=x FinishedAt=y RestartCount=9"
+)
+
 func proxyStates() map[string]map[string]answer {
 	return map[string]map[string]answer{
-		"the container is not there at all": {
-			"'upstreams'":    {code: 1, stderr: "Error: No such container: " + host.ProxyContainer},
-			"docker inspect": {code: 1, stdout: "Error: No such object: " + host.ProxyContainer},
+		"the switchboard is not there at all": {
+			"'upstreams'":    {code: 1, stderr: "Error: No such container: " + host.SwitchboardContainer},
+			"docker inspect": {code: 1, stdout: "Error: No such object: " + host.SwitchboardContainer},
 		},
-		"the container exited": {
+		"the switchboard exited": {
 			"'upstreams'":    {code: 1, stderr: "Error response from daemon: container is not running"},
-			"docker inspect": {stdout: "Status=exited ExitCode=1 OOMKilled=false Error= StartedAt=x FinishedAt=y RestartCount=0"},
+			"docker inspect": {stdout: exitedState},
 		},
-		"the container is restarting": {
+		"the switchboard is restarting": {
 			"'upstreams'":    {code: 1, stderr: "Error response from daemon: container is restarting"},
-			"docker inspect": {stdout: "Status=restarting ExitCode=1 OOMKilled=false Error= StartedAt=x FinishedAt=y RestartCount=9"},
+			"docker inspect": {stdout: restartingState},
 		},
-		"the flip helper is not executable": {
-			"'upstreams'":    {code: 1, stderr: "exec: \"" + host.ProxyHelperMount + "\": permission denied"},
-			"docker inspect": {stdout: "Status=running ExitCode=0 OOMKilled=false Error= StartedAt=x FinishedAt= RestartCount=0"},
-			"test -x":        {code: 1, stderr: "no such file"},
+		"the switchboard answers nothing over its control socket": {
+			"'upstreams'":    {code: 1, stderr: "ocel-switchboard: the switchboard answered nothing over /run/ocel-switchboard/control.sock"},
+			"docker inspect": {stdout: runningState},
 		},
-		"the admin socket is not there": {
-			"'upstreams'":    {code: 1, stderr: "ocel-proxyctl: the proxy answered nothing over " + host.ProxyAdminSocket},
-			"docker inspect": {stdout: "Status=running ExitCode=0 OOMKilled=false Error= StartedAt=x FinishedAt= RestartCount=0"},
-			"test -S":        {code: 1, stderr: "no such file"},
+		"the front proxy is not there at all": {
+			"'test' '-S'":    {code: 1, stderr: "Error: No such container: " + caddy.Container},
+			"docker inspect": {code: 1, stdout: "Error: No such object: " + caddy.Container},
 		},
-		"the admin socket is there and refusing": {
-			"'upstreams'":    {code: 1, stderr: "ocel-proxyctl: the proxy answered /reverse_proxy/upstreams with 403 Forbidden"},
-			"docker inspect": {stdout: "Status=running ExitCode=0 OOMKilled=false Error= StartedAt=x FinishedAt= RestartCount=0"},
+		"the front proxy exited": {
+			"'test' '-S'":    {code: 1, stderr: "Error response from daemon: container is not running"},
+			"docker inspect": {stdout: exitedState},
+		},
+		"the front proxy has no admin socket": {
+			"'test' '-S'":    {code: 1, stderr: ""},
+			"docker inspect": {stdout: runningState},
 		},
 	}
 }
 
-func TestTheProxyStatesAreSixDistinctRefusalsAndNoneOfThemSaysOnlyThatItIsDown(t *testing.T) {
+func TestEachContainerTheBoxServesThroughIsRefusedByNameAndByWhatIsWrongWithIt(t *testing.T) {
 	t.Parallel()
 
 	said := map[string]string{}
 	for what, script := range proxyStates() {
 		err := preflighting(boxSaying(script))
 		if err == nil {
-			t.Fatalf("PreflightDeploy() let a deploy past a box where %s, and a deploy into a box whose proxy cannot be flipped is a green deploy nothing routes to", what)
+			t.Fatalf("PreflightDeploy() let a deploy past a box where %s, and a deploy into a box that cannot route or terminate is a green deploy nothing reaches", what)
 		}
 		said[what] = err.Error()
 	}
@@ -249,16 +258,19 @@ func TestTheProxyStatesAreSixDistinctRefusalsAndNoneOfThemSaysOnlyThatItIsDown(t
 			}
 		}
 	}
-	for what, wanted := range map[string]string{
-		"the container is not there at all":      "bootstrap",
-		"the container exited":                   "exited",
-		"the container is restarting":            "restarting",
-		"the flip helper is not executable":      host.ProxyHelperMount,
-		"the admin socket is not there":          "no admin socket at " + host.ProxyAdminSocket,
-		"the admin socket is there and refusing": "refused a read",
+	for what, wanted := range map[string][]string{
+		"the switchboard is not there at all":                     {host.SwitchboardContainer, "bootstrap"},
+		"the switchboard exited":                                  {host.SwitchboardContainer, "exited"},
+		"the switchboard is restarting":                           {host.SwitchboardContainer, "restarting"},
+		"the switchboard answers nothing over its control socket": {host.SwitchboardContainer, "control socket"},
+		"the front proxy is not there at all":                     {caddy.Container, "bootstrap"},
+		"the front proxy exited":                                  {caddy.Container, "exited"},
+		"the front proxy has no admin socket":                     {caddy.Container, "no admin socket at " + caddy.AdminSocket},
 	} {
-		if !strings.Contains(said[what], wanted) {
-			t.Errorf("where %s the refusal is %q, want %q in it", what, said[what], wanted)
+		for _, named := range wanted {
+			if !strings.Contains(said[what], named) {
+				t.Errorf("where %s the refusal is %q, want %q in it", what, said[what], named)
+			}
 		}
 	}
 }

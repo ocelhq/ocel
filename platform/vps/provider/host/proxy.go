@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 const (
@@ -19,42 +20,22 @@ const (
 	KindRoutingTable = "ocel:routing-table"
 )
 
-const ProxyImage = "public.ecr.aws/docker/library/caddy@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d"
-
 const (
-	ProxyNetwork      = "ocel"
-	ProxyContainer    = "ocel-proxy"
-	proxyRestart      = "unless-stopped"
-	proxyPort         = "80"
-	proxyTLSPort      = "443"
-	proxyLabel        = "ocel.config"
-	proxyCommandLabel = "ocel.command"
+	ProxyNetwork       = "ocel"
+	containerRestart   = "unless-stopped"
+	configLabel        = "ocel.config"
+	containerCmdLabel  = "ocel.command"
+	proxyDataConfigEnv = "XDG_CONFIG_HOME=" + caddy.DataMount + "/config"
 )
 
 const (
-	ProxyHelper = helperRoot + "/" + proxyHelperName
 	proxyRoot   = live.ProxyDir
 	ProxyConfig = live.ProxyConfig
 	ProxyData   = proxyRoot + "/data"
-	ProxyPins   = classRoot + "/certs"
+	ProxyPins   = caddy.PinsDir
 )
 
-const (
-	proxyHelperName  = "ocel-proxyctl"
-	proxyConfigName  = "caddy.json"
-	proxyConfigDir   = "/etc/caddy/ocel"
-	ProxyConfigMount = proxyConfigDir + "/" + proxyConfigName
-	ProxyHelperMount = "/ocel/" + proxyHelperName
-	proxyDataMount   = "/data"
-	proxyPinsMount   = "/etc/caddy/pins"
-	ProxyAdminSocket = "/run/caddy-admin.sock"
-)
-
-const (
-	AdminPort       = "2019"
-	AdminPortNumber = 2019
-	RenewalPort     = proxyPort
-)
+const RenewalPort = caddy.HTTPPort
 
 const (
 	ArchAMD64 = "amd64"
@@ -62,8 +43,8 @@ const (
 )
 
 const (
-	proxyRising = 30
-	proxyPulls  = 5
+	containerRising = 30
+	containerPulls  = 5
 )
 
 var proxyCapabilities = []string{"NET_BIND_SERVICE", "DAC_OVERRIDE", "DAC_READ_SEARCH"}
@@ -77,19 +58,16 @@ const (
 
 //go:generate pnpm --dir ../../../.. exec turbo run generate --filter=@platform/vps-host
 
-//go:embed proxy.json
-var proxyBaseline []byte
-
 //go:embed dist
-var proxyHelpers embed.FS
+var helpers embed.FS
 
-const ProxyFactTemplate = `image={{.Config.Image}}
-command={{index .Config.Labels "` + proxyCommandLabel + `"}}
+const ContainerFactTemplate = `image={{.Config.Image}}
+command={{index .Config.Labels "` + containerCmdLabel + `"}}
 restart={{.HostConfig.RestartPolicy.Name}}
 network={{if index .NetworkSettings.Networks "` + ProxyNetwork + `"}}` + networkJoined + `{{else}}` + networkLeft + `{{end}}
 {{range .HostConfig.Binds}}bind={{.}}
 {{end}}ports={{json .HostConfig.PortBindings}}
-baseline={{index .Config.Labels "` + proxyLabel + `"}}
+config={{index .Config.Labels "` + configLabel + `"}}
 state={{.State.Status}}`
 
 func Architecture(reported string) (string, error) {
@@ -105,8 +83,8 @@ func Architecture(reported string) (string, error) {
 	}
 }
 
-func proxyHelper(arch string) []byte {
-	read, err := proxyHelpers.ReadFile("dist/" + proxyHelperName + "-" + arch)
+func embedded(name, arch string) []byte {
+	read, err := helpers.ReadFile("dist/" + name + "-" + arch)
 	if err != nil {
 		panic(err)
 	}
@@ -114,9 +92,11 @@ func proxyHelper(arch string) []byte {
 }
 
 func ProxyItems(arch string) []Item {
+	binary := switchboardBinary(arch)
 	return []Item{
-		{Kind: KindFile, Name: ProxyHelper, Mode: 0o750, Owner: rootOwner, Content: proxyHelper(arch),
-			Note: "proxy control"},
+		dir(SwitchboardDir, 0o755, rootOwner, ""),
+		{Kind: KindFile, Name: SwitchboardBinary, Mode: 0o755, Owner: rootOwner, Content: binary,
+			Note: "routes every hostname and switches releases"},
 		dir(proxyRoot, 0o750, stateOwner, ""),
 		dir(ProxyPins, 0o700, rootOwner, "your pinned certificates"),
 		proxyConfigItem(),
@@ -124,7 +104,8 @@ func ProxyItems(arch string) []Item {
 		routingTableItem(),
 		dir(ProxyData, 0o700, rootOwner, "certificates and acme key"),
 		networkItem(),
-		containerItem(),
+		switchboardStanding(binary).item("routes :" + switchboardPort + " on the " + ProxyNetwork + " network"),
+		frontProxy().item("serves :" + caddy.HTTPPort + " and :" + caddy.HTTPSPort),
 	}
 }
 
@@ -194,8 +175,6 @@ func notAFile(name string) string {
 	return "printf '%s\\n' " + quoted(name+" is not a regular file") + " >&2; exit 1"
 }
 
-func proxyFiles() []string { return []string{ProxyConfig, ProxyHelper} }
-
 func bindsStanding(files []string) string {
 	var written string
 	for _, name := range files {
@@ -221,27 +200,63 @@ func networkItem() Item {
 	}
 }
 
-func containerItem() Item {
-	return Item{
-		Kind:    KindContainer,
-		Name:    ProxyContainer,
-		Owner:   rootOwner,
-		Content: proxyFacts(),
-		Slow:    true,
-		Note:    "serves :" + proxyPort + " and :" + proxyTLSPort,
+type boxContainer struct {
+	name      string
+	image     string
+	command   []string
+	config    string
+	binds     []string
+	ports     []string
+	env       []string
+	caps      []string
+	fileCaps  bool
+	files     []string
+	answering string
+	answer    string
+	joins     bool
+}
+
+func frontProxy() boxContainer {
+	return boxContainer{
+		name:    caddy.Container,
+		image:   caddy.Image,
+		command: caddy.Command(),
+		binds: []string{
+			proxyRoot + ":" + caddy.ConfigDir + ":ro",
+			ProxyPins + ":" + caddy.PinsMount + ":ro",
+			ProxyData + ":" + caddy.DataMount,
+		},
+		ports:     proxyServing(),
+		env:       []string{proxyDataConfigEnv},
+		caps:      proxyCapabilities,
+		fileCaps:  true,
+		files:     []string{ProxyConfig},
+		answering: "test -S " + quoted(caddy.AdminSocket),
+		answer:    "did not answer over its admin socket",
 	}
 }
 
-func proxyFacts() []byte { return proxyFactsOver(proxyBinds()) }
+func (s boxContainer) item(note string) Item {
+	return Item{
+		Kind:    KindContainer,
+		Name:    s.name,
+		Owner:   rootOwner,
+		Content: s.facts(),
+		Slow:    true,
+		Note:    note,
+	}
+}
 
-func proxyFactsOver(binds []string) []byte {
+func (s boxContainer) facts() []byte { return s.factsOver(s.binds) }
+
+func (s boxContainer) factsOver(binds []string) []byte {
 	stated := []string{
-		"image=" + ProxyImage,
-		"command=" + strings.Join(proxyCommand(), " "),
-		"restart=" + proxyRestart,
+		"image=" + s.image,
+		"command=" + strings.Join(s.command, " "),
+		"restart=" + containerRestart,
 		"network=" + networkJoined,
-		"ports=" + marshalled(proxyPorts()),
-		"baseline=" + contentSum(proxyBaseline),
+		"ports=" + marshalled(published(s.ports)),
+		"config=" + s.config,
 		"state=running",
 	}
 	for _, bind := range binds {
@@ -251,27 +266,15 @@ func proxyFactsOver(binds []string) []byte {
 	return []byte(strings.Join(stated, "\n") + "\n")
 }
 
-func proxyBinds() []string {
-	return []string{
-		proxyRoot + ":" + proxyConfigDir + ":ro",
-		ProxyHelper + ":" + ProxyHelperMount + ":ro",
-		ProxyPins + ":" + proxyPinsMount + ":ro",
-		ProxyData + ":" + proxyDataMount,
-		ConnectorRun + ":" + ConnectorRun + ":ro",
+func published(ports []string) map[string][]map[string]string {
+	held := map[string][]map[string]string{}
+	for _, port := range ports {
+		held[port+"/tcp"] = []map[string]string{{"HostIp": "", "HostPort": port}}
 	}
+	return held
 }
 
-func proxyPorts() map[string][]map[string]string {
-	published := map[string][]map[string]string{}
-	for _, port := range proxyServing() {
-		published[port+"/tcp"] = []map[string]string{{"HostIp": "", "HostPort": port}}
-	}
-	return published
-}
-
-func proxyServing() []string { return []string{proxyPort, proxyTLSPort} }
-
-func ProxyServing() []string { return proxyServing() }
+func proxyServing() []string { return []string{caddy.HTTPPort, caddy.HTTPSPort} }
 
 func marshalled(value any) string {
 	written, err := json.Marshal(value)
@@ -286,44 +289,49 @@ func networkCommand() string {
 		"docker network create " + quoted(ProxyNetwork) + " >/dev/null"
 }
 
-func containerCommand() string { return containerWriting(proxyRising, proxyFiles()) }
-
-func proxyRun() []string {
+func (s boxContainer) run() []string {
 	argv := []string{"docker", "run", "--detach",
-		"--name", ProxyContainer,
-		"--restart", proxyRestart,
+		"--name", s.name,
+		"--restart", containerRestart,
 		"--network", ProxyNetwork,
-		"--label", proxyLabel + "=" + contentSum(proxyBaseline),
-		"--label", proxyCommandLabel + "=" + strings.Join(proxyCommand(), " "),
-		"--env", "XDG_CONFIG_HOME=" + proxyDataMount + "/config",
+		"--label", containerCmdLabel + "=" + strings.Join(s.command, " "),
+	}
+	if s.config != "" {
+		argv = append(argv, "--label", configLabel+"="+s.config)
+	}
+	for _, env := range s.env {
+		argv = append(argv, "--env", env)
 	}
 	argv = append(argv, logging()...)
-	argv = append(argv, confined(proxyCapabilities, true)...)
-	for _, port := range proxyServing() {
+	argv = append(argv, confined(s.caps, s.fileCaps)...)
+	for _, port := range s.ports {
 		argv = append(argv, "--publish", port+":"+port)
 	}
-	for _, bind := range proxyBinds() {
+	for _, bind := range s.binds {
 		argv = append(argv, "--volume", bind)
 	}
-	return append(append(argv, ProxyImage), proxyCommand()...)
+	return append(append(argv, s.image), s.command...)
 }
 
-func proxyCommand() []string { return []string{ProxyHelperMount, "serve", ProxyConfigMount} }
+func proxyRun() []string { return frontProxy().run() }
 
-func containerWriting(attempts int, files []string) string {
-	argv := proxyRun()
-	return "set -e\n" +
-		bindsStanding(files) +
-		imageHeld(ProxyImage, proxyPulls) +
-		"docker rm --force " + quoted(ProxyContainer) + " >/dev/null 2>&1 || true\n" +
-		words(argv) + " >/dev/null\n" +
-		proxyRejoining() +
-		containerRising(attempts)
+func (s boxContainer) writing(attempts int) string {
+	written := "set -e\n" +
+		bindsStanding(s.files) +
+		imageHeld(s.image, containerPulls) +
+		"docker rm --force " + quoted(s.name) + " >/dev/null 2>&1 || true\n" +
+		words(s.run()) + " >/dev/null\n"
+	if s.joins {
+		written += rejoining(s.name)
+	}
+	return written + s.rising(attempts)
 }
 
-func proxyRejoining() string {
+func proxyWriting(attempts int) string { return frontProxy().writing(attempts) }
+
+func rejoining(name string) string {
 	return "for net in $(docker network ls --quiet --filter " + quoted("label="+LabelClass) + "); do\n" +
-		"docker network connect \"$net\" " + quoted(ProxyContainer) + " >/dev/null\n" +
+		"docker network connect \"$net\" " + quoted(name) + " >/dev/null\n" +
 		"done\n"
 }
 
@@ -340,10 +348,10 @@ func imageHeld(coordinate string, attempts int) string {
 		"done\n"
 }
 
-func containerRising(attempts int) string {
-	name := quoted(ProxyContainer)
+func (s boxContainer) rising(attempts int) string {
+	name := quoted(s.name)
 	inspect := "docker inspect --type container --format "
-	answering := "docker exec " + name + " " + ProxyHelperMount + " config / >/dev/null 2>&1"
+	answering := "docker exec " + name + " " + s.answering + " >/dev/null 2>&1"
 	return "at=0\n" +
 		"while :; do\n" +
 		"if [ \"$(" + inspect + quoted("{{.State.Status}}") + " " + name + " 2>/dev/null)\" = running ] && " + answering + "; then exit 0; fi\n" +
@@ -351,8 +359,7 @@ func containerRising(attempts int) string {
 		"[ \"$at\" -lt " + fmt.Sprint(attempts) + " ] || break\n" +
 		"sleep 1\n" +
 		"done\n" +
-		"printf '%s\\n' " + quoted(fmt.Sprintf(
-		"%s was created and did not answer over its admin socket within %ds", ProxyContainer, attempts)) + " >&2\n" +
+		"printf '%s\\n' " + quoted(fmt.Sprintf("%s was created and %s within %ds", s.name, s.answer, attempts)) + " >&2\n" +
 		inspect + quoted("status={{.State.Status}} exit={{.State.ExitCode}} error={{.State.Error}}") +
 		" " + name + " >&2 2>&1 || true\n" +
 		"docker logs --tail 2 " + name + " >&2 2>&1 || true\n" +
@@ -370,16 +377,24 @@ func networkProbe() string {
 		"docker network inspect "+quoted(ProxyNetwork)+" >/dev/null 2>&1", networkFact)
 }
 
-func containerProbe() string {
+func (s boxContainer) probe() string {
 	return "if command -v " + quoted(dockerEngine) + " >/dev/null 2>&1 && " +
-		"facts=$(docker inspect --type container --format " + quoted(ProxyFactTemplate) + " " + quoted(ProxyContainer) + " 2>/dev/null); then\n" +
-		reports(quoted(KindContainer), quoted(ProxyContainer), "0", quoted(rootOwner),
+		"facts=$(docker inspect --type container --format " + quoted(ContainerFactTemplate) + " " + quoted(s.name) + " 2>/dev/null); then\n" +
+		reports(quoted(KindContainer), quoted(s.name), "0", quoted(rootOwner),
 			`"$(printf '%s\n' "$facts" | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"`) + "\nfi"
+}
+
+func standingOf(item Item) boxContainer {
+	if item.Name == SwitchboardContainer {
+		return switchboardOver(factOf(item.Content, "config"))
+	}
+	return frontProxy()
 }
 
 func proxyRemovals() []removal {
 	return []removal{
-		taking(KindContainer, ProxyContainer, "ocel's proxy"),
+		taking(KindContainer, caddy.Container, "ocel's front proxy"),
+		taking(KindContainer, SwitchboardContainer, "ocel's switchboard"),
 		taking(KindDir, ProxyData, "certificates and acme key"),
 		taking(KindNetwork, ProxyNetwork, "kept while anything is attached"),
 		taking(KindProxyConfig, ProxyConfig, ""),

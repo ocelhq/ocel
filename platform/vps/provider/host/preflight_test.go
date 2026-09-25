@@ -4,6 +4,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 const headroomSaid = `root=/var/lib/docker
@@ -119,7 +121,7 @@ func TestATableThisHostCouldNotAnswerIsRefusedRatherThanReadAsRoom(t *testing.T)
 func TestTheStateSelectorsSeparateExitedFromRestarting(t *testing.T) {
 	t.Parallel()
 
-	command := stateCommand(ProxyContainer)
+	command := stateCommand(caddy.Container)
 	for _, wanted := range []string{".State.Status", ".State.ExitCode", ".State.Error", ".RestartCount", ".State.OOMKilled"} {
 		if !strings.Contains(command, wanted) {
 			t.Errorf("the proxy's state is read with %q, which names no %s: exited and restarting are different failures with different fixes", command, wanted)

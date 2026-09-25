@@ -281,7 +281,7 @@ func TestEverySingletonIsNamedByThePlanThatTakesTheLastClassAndByNoOther(t *test
 	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64))}
 	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64))}
 	singletons := []string{
-		stateRoot, helperRoot, recordsHelper, SealHelper, ProxyHelper, ProxyConfig, live.RoutingTable, sshDir, classRoot, deployUser,
+		stateRoot, helperRoot, recordsHelper, SealHelper, SwitchboardBinary, ProxyConfig, live.RoutingTable, sshDir, classRoot, deployUser,
 	}
 
 	for _, singleton := range singletons {

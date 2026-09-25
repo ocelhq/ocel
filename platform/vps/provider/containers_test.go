@@ -62,7 +62,7 @@ func TestStandingAnAppUpEndsAtARunningLabelledContainerAndFlipsNothing(t *testin
 		t.Errorf("the container is reachable at %q, want the name and port the proxy dials it by", held.URL)
 	}
 	joined := strings.Join(machine.commands(), "\n")
-	if strings.Contains(joined, host.ProxyHelperMount) || strings.Contains(joined, host.ProxyConfig) {
+	if strings.Contains(joined, host.SwitchboardMounted) || strings.Contains(joined, host.ProxyConfig) {
 		t.Errorf("standing a container up reached the proxy:\n%s\nreleases end at a running container, and the flip is a separate call", joined)
 	}
 }

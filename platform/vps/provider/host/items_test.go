@@ -316,7 +316,7 @@ func TestOnlyTheOwnerDrawnSurveyPassesOverAFileItCannotRead(t *testing.T) {
 	if err := os.WriteFile(readable, []byte("what every login may hash\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	sealed := filepath.Join(root, proxyHelperName)
+	sealed := filepath.Join(root, "seal")
 	if err := os.WriteFile(sealed, []byte("what root alone may hash\n"), 0o750); err != nil {
 		t.Fatal(err)
 	}

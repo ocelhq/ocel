@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 const KeepWindow = 3
@@ -217,19 +218,63 @@ func sized(count int64) string {
 	return fmt.Sprintf("%.1f %s", value, scale)
 }
 
+type readiness struct {
+	name    string
+	command []string
+	refused func(host, said string) error
+}
+
+func switchboardAnswering() readiness {
+	return readiness{
+		name:    SwitchboardContainer,
+		command: switchboardCommand("upstreams"),
+		refused: func(host, said string) error {
+			return providerkit.Refuse(providerkit.CodeNotReady,
+				"%s on %s answered nothing over its control socket in %s: %s\n"+
+					"Run `ocel bootstrap %s`",
+				SwitchboardContainer, host, SwitchboardControl, said, providerkit.ClassProduction)
+		},
+	}
+}
+
+func frontAnswering() readiness {
+	return readiness{
+		name:    caddy.Container,
+		command: []string{"docker", "exec", caddy.Container, "test", "-S", caddy.AdminSocket},
+		refused: func(host, said string) error {
+			return providerkit.Refuse(providerkit.CodeNotReady,
+				"%s on %s has no admin socket at %s: %s\n"+
+					"Run `ocel bootstrap %s`",
+				caddy.Container, host, caddy.AdminSocket, said, providerkit.ClassProduction)
+		},
+	}
+}
+
 func (h *Host) ProxyStanding(ctx context.Context) error {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return err
 	}
-	result, err := h.stream(ctx, words(helperCommand("upstreams")), nil, elevation)
+	for _, asked := range []readiness{switchboardAnswering(), frontAnswering()} {
+		if err := h.answers(ctx, asked, elevation); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (h *Host) answers(ctx context.Context, asked readiness, elevation string) error {
+	result, err := h.stream(ctx, words(asked.command), nil, elevation)
 	if err != nil {
 		return err
 	}
 	if result.Code == 0 {
 		return nil
 	}
-	return h.proxyTrouble(ctx, elevation, spoken(result))
+	if err := h.containerTrouble(ctx, asked.name, elevation); err != nil {
+		return err
+	}
+	return asked.refused(h.named(), spoken(result))
 }
 
 const (
@@ -237,56 +282,32 @@ const (
 	proxyRestarting = "restarting"
 )
 
-func (h *Host) proxyTrouble(ctx context.Context, elevation, said string) error {
-	state := strings.TrimSpace(h.said(ctx, stateCommand(ProxyContainer), elevation))
+func (h *Host) containerTrouble(ctx context.Context, name, elevation string) error {
+	state := strings.TrimSpace(h.said(ctx, stateCommand(name), elevation))
 	status := stateField(state, "Status")
 	switch {
 	case status == "":
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"no %s container on %s: %s\n"+
 				"Run `ocel bootstrap %s`",
-			ProxyContainer, h.named(), state, providerkit.ClassProduction)
+			name, h.named(), state, providerkit.ClassProduction)
 	case status == proxyRestarting:
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"%s on %s keeps restarting: %s\n"+
 				"Check `docker logs %s`",
-			ProxyContainer, h.named(), state, ProxyContainer)
+			name, h.named(), state, name)
 	case status == proxyExited:
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"%s on %s has exited: %s\n"+
 				"Run `docker start %s` or `ocel bootstrap %s`",
-			ProxyContainer, h.named(), state, ProxyContainer, providerkit.ClassProduction)
+			name, h.named(), state, name, providerkit.ClassProduction)
 	case status != "running":
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"%s on %s is %s, not running: %s\n"+
 				"Run `docker start %s` or `ocel bootstrap %s`",
-			ProxyContainer, h.named(), status, state, ProxyContainer, providerkit.ClassProduction)
+			name, h.named(), status, state, name, providerkit.ClassProduction)
 	}
-
-	if _, err := h.ran(ctx, "ask whether the proxy's flip helper stands",
-		words(execCommand("test -x "+quoted(ProxyHelperMount))), nil, elevation); err != nil {
-		return providerkit.Refuse(providerkit.CodeNotReady,
-			"%s on %s has no executable flip helper at %s: %v\n"+
-				"Run `ocel bootstrap %s`",
-			ProxyContainer, h.named(), ProxyHelperMount, err, providerkit.ClassProduction)
-	}
-	if _, err := h.ran(ctx, "ask whether the proxy's admin socket stands",
-		words(execCommand("test -S "+quoted(ProxyAdminSocket))), nil, elevation); err != nil {
-		return providerkit.Refuse(providerkit.CodeNotReady,
-			"%s on %s has no admin socket at %s: %v\n"+
-				"Run `ocel bootstrap %s`",
-			ProxyContainer, h.named(), ProxyAdminSocket, err, providerkit.ClassProduction)
-	}
-	return providerkit.Refuse(providerkit.CodeNotReady,
-		"%s on %s refused a read on its admin socket %s: %s\n"+
-			"Check the socket is mode %s and owned by root",
-		ProxyContainer, h.named(), ProxyAdminSocket, said, caddySocketMode)
-}
-
-const caddySocketMode = "0600"
-
-func execCommand(script string) []string {
-	return []string{"docker", "exec", ProxyContainer, "sh", "-c", script}
+	return nil
 }
 
 func stateField(state, label string) string {
@@ -314,7 +335,7 @@ func (h *Host) ServingPortsHeld(ctx context.Context) error {
 	}
 	return providerkit.Refuse(providerkit.CodeNotReady,
 		"%s must hold ports %s: %s",
-		ProxyContainer, strings.Join(proxyServing(), " and "), strings.Join(found, "; "))
+		caddy.Container, strings.Join(proxyServing(), " and "), strings.Join(found, "; "))
 }
 
 func (h *Host) portHeld(ctx context.Context, port string) (string, error) {
@@ -322,12 +343,12 @@ func (h *Host) portHeld(ctx context.Context, port string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	foreign := slices.DeleteFunc(slices.Clone(named), func(name string) bool { return name == ProxyContainer })
+	foreign := slices.DeleteFunc(slices.Clone(named), func(name string) bool { return name == caddy.Container })
 	if len(foreign) > 0 {
 		return fmt.Sprintf("port %s is published by %s; stop it or move it off %s",
 			port, strings.Join(foreign, ", "), port), nil
 	}
-	if slices.Contains(named, ProxyContainer) {
+	if slices.Contains(named, caddy.Container) {
 		return "", nil
 	}
 	held, err := h.Listening(ctx)

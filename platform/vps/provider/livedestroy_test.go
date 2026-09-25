@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 const (
@@ -179,7 +180,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 	defer vm.ssh(t, "sudo docker rm -f "+workload+" >/dev/null 2>&1 || true")
 
 	singletons := []string{"/var/lib/ocel", "/usr/local/lib/ocel", "/usr/local/lib/ocel/seal", "/usr/local/lib/ocel/records",
-		host.ProxyHelper, host.ProxyConfig, vars.RoutingTable, "/etc/ocel"}
+		host.SwitchboardBinary, host.ProxyConfig, vars.RoutingTable, "/etc/ocel"}
 	sealGrant := func(class providerkit.Class) string { return "/etc/sudoers.d/ocel-seal-" + string(class) }
 
 	first, err := bootstrapper.PlanRemoval(ctx, production)
@@ -228,8 +229,8 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 	if !vm.running(t, workload) {
 		t.Errorf("%s is gone after the first destroy", workload)
 	}
-	if !vm.running(t, host.ProxyContainer) {
-		t.Errorf("%s went with the %s class, and the %s sibling is still served through it", host.ProxyContainer, production, preview)
+	if !vm.running(t, caddy.Container) {
+		t.Errorf("%s went with the %s class, and the %s sibling is still served through it", caddy.Container, production, preview)
 	}
 
 	last, err := bootstrapper.PlanRemoval(ctx, preview)

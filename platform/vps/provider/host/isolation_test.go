@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 func handedTo(spec Container) handoff {
@@ -18,6 +19,7 @@ func handedTo(spec Container) handoff {
 const (
 	appContainer      = "the app container a deploy stands up"
 	proxyContainer    = "the proxy container a bootstrap runs"
+	boardContainer    = "the switchboard container a bootstrap runs"
 	resourceContainer = "the resource container a deploy stands up"
 )
 
@@ -35,6 +37,7 @@ func running() map[string]string {
 	return map[string]string{
 		appContainer:      words(containerRun(valued(), handedTo(valued()))),
 		proxyContainer:    words(proxyRun()),
+		boardContainer:    words(switchboardRun()),
 		resourceContainer: words(resourceRun(resourced(), "0123456789ab", EnvFile(resourced().Class, resourced().Name))),
 	}
 }
@@ -43,6 +46,7 @@ func owed() map[string][]string {
 	return map[string][]string{
 		appContainer:      {EnvFile(valued().Class, valued().Name)},
 		proxyContainer:    {proxyRoot, ProxyPins, ProxyData},
+		boardContainer:    {live.RoutingDir, live.RoutingTable},
 		resourceContainer: {EnvFile(resourced().Class, resourced().Name)},
 	}
 }
@@ -155,6 +159,6 @@ func TestNothingAContainerIsOwedIsTheKeyTheRecordsOrTheClassStateItself(t *testi
 func TestEveryContainerThisPackageRunsIsHeldToTheIsolationRules(t *testing.T) {
 	t.Parallel()
 
-	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "proxyRun", "resourceRun"},
+	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "resourceRun", "run"},
 		"a container run built somewhere this bench does not read is held to none of the rules in this file")
 }

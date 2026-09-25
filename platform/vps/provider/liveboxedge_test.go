@@ -12,7 +12,8 @@ import (
 	"github.com/ocelhq/ocel/platform/edge/contract/edgeconformance"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -55,7 +56,7 @@ func fronting(t *testing.T, p *vps.Provider, slug string) front {
 func (f front) serves(t *testing.T, vm machine, path string) string {
 	t.Helper()
 	return strings.TrimSpace(vm.peers(t, "curl -sS -m 10 -H "+quote("Host: "+f.hostname)+
-		" http://"+host.ProxyContainer+path))
+		" http://"+caddy.Container+path))
 }
 
 func promotes(t *testing.T, stack edge.EdgeStack, id, tag string, held release, at int64) {
@@ -169,16 +170,16 @@ func TestLiveAClaimedHostnameIsLoadedOntoTheProxyAndChangesNothingItServes(t *te
 		t.Errorf("DomainOwner(%q) = %q, want %q read back off the configuration the running proxy was given", claimHostname, owner, want)
 	}
 
-	claimed := strings.TrimSpace(vm.peers(t, "curl -sS -m 10 -H "+quote("Host: "+claimHostname)+" http://"+host.ProxyContainer+"/"))
+	claimed := strings.TrimSpace(vm.peers(t, "curl -sS -m 10 -H "+quote("Host: "+claimHostname)+" http://"+caddy.Container+"/"))
 	if claimed != "one" {
 		t.Errorf("the proxy answered %q for the claimed hostname, want the release it serves: claiming a hostname records which project answers it and is not itself what answers it", claimed)
 	}
 	if served := f.serves(t, vm, "/"); served != "one" {
 		t.Errorf("the proxy served %q on the hostname it was already answering, want the release it served before the second claim: binding another name adds one, and a claim that moves what the names already bound answer breaks a site to add a domain to it", served)
 	}
-	refused := vm.peers(t, "curl -sS -m 10 -o /dev/null -D - -H "+quote("Host: unclaimed.example.invalid")+" http://"+host.ProxyContainer+"/")
-	if !strings.Contains(refused, "404") || !strings.Contains(strings.ToLower(refused), strings.ToLower(host.EdgeHeader)+": "+host.EdgeName) {
-		t.Errorf("a hostname nothing on this box claims was answered with\n%s\nwant a bare 404 carrying %s: %s, because an empty 200 reads as healthy to everything that checks it", refused, host.EdgeHeader, host.EdgeName)
+	refused := vm.peers(t, "curl -sS -m 10 -o /dev/null -D - -H "+quote("Host: unclaimed.example.invalid")+" http://"+caddy.Container+"/")
+	if !strings.Contains(refused, "404") || !strings.Contains(strings.ToLower(refused), strings.ToLower(edge.HeaderEdge)+": "+switchboard.EdgeName) {
+		t.Errorf("a hostname nothing on this box claims was answered with\n%s\nwant a bare 404 carrying %s: %s, because an empty 200 reads as healthy to everything that checks it", refused, edge.HeaderEdge, switchboard.EdgeName)
 	}
 
 	unclaimed, err := f.edge.DomainOwner(ctx, "unclaimed.example.invalid")

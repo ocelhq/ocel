@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 func (vm machine) ssh(t *testing.T, command string) string {
@@ -287,13 +288,13 @@ func onlyGroup(t *testing.T, plan providerkit.Plan) providerkit.ChangeGroup {
 func (vm machine) proxySaid(t *testing.T) string {
 	t.Helper()
 
-	state := vm.inspects(t, "container", host.ProxyContainer,
+	state := vm.inspects(t, "container", caddy.Container,
 		"{{.State.Status}} exit={{.State.ExitCode}} restarts={{.RestartCount}} error={{.State.Error}}")
 	if state == "" {
-		return host.ProxyContainer + " stands on this host as nothing the engine knows about"
+		return caddy.Container + " stands on this host as nothing the engine knows about"
 	}
-	return host.ProxyContainer + " is " + state + ", and it said:\n" +
-		vm.ssh(t, "sudo docker logs --tail 15 "+host.ProxyContainer+" 2>&1 || true")
+	return caddy.Container + " is " + state + ", and it said:\n" +
+		vm.ssh(t, "sudo docker logs --tail 15 "+caddy.Container+" 2>&1 || true")
 }
 
 func planFor(group providerkit.ChangeGroup, name string) providerkit.Change {

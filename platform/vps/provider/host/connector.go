@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -151,7 +152,7 @@ func (c *Connector) Install(ctx context.Context, hostname string, binary, config
 	if err := c.Route(ctx, hostname); err != nil {
 		return ConnectorStanding{}, err
 	}
-	say(report, "routed "+hostname+ConnectorPath)
+	say(report, "routed "+hostname+switchboard.ConnectorPath)
 	return c.Describe(ctx)
 }
 
@@ -159,7 +160,7 @@ func (c *Connector) Remove(ctx context.Context, report providerkit.Reporter) err
 	if err := c.Route(ctx, ""); err != nil {
 		return err
 	}
-	say(report, "unrouted "+ConnectorPath)
+	say(report, "unrouted "+switchboard.ConnectorPath)
 	if _, err := c.host.run(ctx, "take the connector off this host", connectorRemoval(), nil); err != nil {
 		return err
 	}

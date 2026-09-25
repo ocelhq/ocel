@@ -8,6 +8,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 const proxyNotServingYet = 3
@@ -39,7 +41,7 @@ func (h *Host) vouch(ctx context.Context, pin Pin) error {
 	if err != nil {
 		return err
 	}
-	leaf, err := certs.Parse(PinCertificate(pin.Path), block)
+	leaf, err := certs.Parse(caddy.PinCertificate(pin.Path), block)
 	if err != nil {
 		return refused(err)
 	}
@@ -59,7 +61,7 @@ const (
 )
 
 func pairCommand(path string) string {
-	certificate, key := quoted(PinCertificate(path)), quoted(PinKey(path))
+	certificate, key := quoted(caddy.PinCertificate(path)), quoted(caddy.PinKey(path))
 	return "if ! command -v openssl >/dev/null 2>&1; then echo " + pairUnchecked + "; exit 0; fi\n" +
 		"held=$(openssl x509 -in " + certificate + " -noout -pubkey 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | sha256sum)\n" +
 		"keyed=$(openssl pkey -in " + key + " -pubout -outform DER 2>/dev/null | sha256sum)\n" +
@@ -67,14 +69,14 @@ func pairCommand(path string) string {
 }
 
 func (h *Host) paired(ctx context.Context, pin Pin) error {
-	said, err := h.run(ctx, "check the key pinned beside "+PinCertificate(pin.Path), pairCommand(pin.Path), nil)
+	said, err := h.run(ctx, "check the key pinned beside "+caddy.PinCertificate(pin.Path), pairCommand(pin.Path), nil)
 	if err != nil {
 		return err
 	}
 	if strings.TrimSpace(said) == pairMismatched {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"the key at %s does not match the certificate at %s",
-			PinKey(pin.Path), PinCertificate(pin.Path))
+			caddy.PinKey(pin.Path), caddy.PinCertificate(pin.Path))
 	}
 	return nil
 }
@@ -85,58 +87,37 @@ func (h *Host) PinnedCertificate(ctx context.Context, path string) ([]byte, erro
 			"pinned certificate %q is outside %s",
 			path, ProxyPins)
 	}
-	read, err := h.run(ctx, "read the certificate pinned at "+PinCertificate(path),
-		"cat "+quoted(PinCertificate(path)), nil)
+	read, err := h.run(ctx, "read the certificate pinned at "+caddy.PinCertificate(path),
+		"cat "+quoted(caddy.PinCertificate(path)), nil)
 	if err != nil {
 		return nil, err
 	}
 	return []byte(read), nil
 }
 
+func (h *Host) FrontProxy() proxy.Proxy { return h.front }
+
 func (h *Host) CertificateTrouble(ctx context.Context, hostname string) error {
-	elevation, err := h.reachDocker(ctx)
+	trouble, err := h.front.Trouble(ctx, hostname)
 	if err != nil {
 		return err
 	}
-	limit, said := certs.RateLimited(h.said(ctx, logCommand(ProxyContainer), elevation))
-	if !said || !limit.Covers(hostname) || limit.Spent(time.Now()) {
-		return nil
-	}
-	return limit.Refusal(hostname)
+	return trouble
 }
 
 func (h *Host) ForgetCertificates(ctx context.Context, hostnames []string, report providerkit.Reporter) error {
-	if len(hostnames) == 0 {
-		return nil
-	}
-	elevation, err := h.reachDocker(ctx)
-	if err != nil {
+	removed, err := h.front.Forget(ctx, hostnames)
+	if err != nil || report == nil {
 		return err
 	}
-	said, err := h.ran(ctx, "forget what this box holds for "+strings.Join(hostnames, ", "),
-		words(helperCommand(append([]string{"forget"}, hostnames...)...)), nil, elevation)
-	if err != nil {
-		return err
-	}
-	if report == nil {
-		return nil
-	}
-	for line := range strings.Lines(said) {
-		removed := strings.TrimSpace(line)
-		if removed == "" {
-			continue
-		}
-		report.Detail("Removed " + removed + ": certificate for a hostname no longer served")
+	for _, taken := range removed {
+		report.Detail("Removed " + taken + ": certificate for a hostname no longer served")
 	}
 	return nil
 }
 
 func (h *Host) ServedCertificate(ctx context.Context, hostname string) ([]byte, error) {
-	elevation, err := h.reachDocker(ctx)
-	if err != nil {
-		return nil, err
-	}
-	result, err := h.stream(ctx, words(helperCommand("leaf", hostname)), nil, elevation)
+	result, err := h.stream(ctx, words([]string{SwitchboardBinary, "leaf", hostname}), nil, "")
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +127,7 @@ func (h *Host) ServedCertificate(ctx context.Context, hostname string) ([]byte, 
 	case proxyNotServingYet:
 		return nil, nil
 	default:
-		return nil, h.refuse("read what the proxy serves for "+hostname, result)
+		return nil, h.refuse("read what this box serves for "+hostname, result)
 	}
 }
 
@@ -156,11 +137,7 @@ type Answer struct {
 }
 
 func (h *Host) ServedEdge(ctx context.Context, hostname string) (Answer, error) {
-	elevation, err := h.reachDocker(ctx)
-	if err != nil {
-		return Answer{}, err
-	}
-	result, err := h.stream(ctx, words(helperCommand("probe", hostname)), nil, elevation)
+	result, err := h.stream(ctx, words([]string{SwitchboardBinary, "probe", hostname}), nil, "")
 	if err != nil {
 		return Answer{}, err
 	}
@@ -170,6 +147,28 @@ func (h *Host) ServedEdge(ctx context.Context, hostname string) (Answer, error) 
 	case proxyNotServingYet:
 		return Answer{Unreached: spoken(result)}, nil
 	default:
-		return Answer{}, h.refuse("probe "+hostname+" from inside the proxy", result)
+		return Answer{}, h.refuse("probe "+hostname+" on this box's own https port", result)
 	}
+}
+
+type frontBox struct{ h *Host }
+
+func (b frontBox) Ran(ctx context.Context, what, command string) (string, error) {
+	elevation, err := b.h.reachDocker(ctx)
+	if err != nil {
+		return "", err
+	}
+	return b.h.ran(ctx, what, command, nil, elevation)
+}
+
+func (b frontBox) Said(ctx context.Context, command string) (string, error) {
+	elevation, err := b.h.reachDocker(ctx)
+	if err != nil {
+		return "", err
+	}
+	return b.h.said(ctx, command, elevation), nil
+}
+
+func (b frontBox) Loopback(ctx context.Context, hostname string) ([]byte, error) {
+	return b.h.ServedCertificate(ctx, hostname)
 }

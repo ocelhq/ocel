@@ -58,9 +58,9 @@ func networkCreating(class providerkit.Class, project string) string {
 func networkStanding(class providerkit.Class, project string) string {
 	network := quoted(AppNetwork(class, project))
 	return networkCreating(class, project) + "\n" +
-		"if ! docker network connect " + network + " " + quoted(ProxyContainer) + " >/dev/null 2>&1 && " +
-		"! docker network inspect --format " + quoted(membersFormat) + " " + network + " | grep -qx " + quoted(ProxyContainer) + "; then\n" +
-		"printf '%s\\n' " + quoted(ProxyContainer+" could not join "+AppNetwork(class, project)) + " >&2\n" +
+		"if ! docker network connect " + network + " " + quoted(SwitchboardContainer) + " >/dev/null 2>&1 && " +
+		"! docker network inspect --format " + quoted(membersFormat) + " " + network + " | grep -qx " + quoted(SwitchboardContainer) + "; then\n" +
+		"printf '%s\\n' " + quoted(SwitchboardContainer+" could not join "+AppNetwork(class, project)) + " >&2\n" +
 		"exit 1\n" +
 		"fi"
 }
@@ -69,8 +69,8 @@ func networkForgetting(class providerkit.Class, project string) string {
 	network := quoted(AppNetwork(class, project))
 	return "if docker network inspect " + network + " >/dev/null 2>&1; then\n" +
 		"if docker network inspect --format " + quoted(membersFormat) + " " + network +
-		" | grep -qvx " + quoted(ProxyContainer) + "; then printf '%s\\n' " + quoted(networkHeld) + "; exit 0; fi\n" +
-		"docker network disconnect --force " + network + " " + quoted(ProxyContainer) + " >/dev/null 2>&1 || true\n" +
+		" | grep -qvx " + quoted(SwitchboardContainer) + "; then printf '%s\\n' " + quoted(networkHeld) + "; exit 0; fi\n" +
+		"docker network disconnect --force " + network + " " + quoted(SwitchboardContainer) + " >/dev/null 2>&1 || true\n" +
 		"docker network rm " + network + " >/dev/null\n" +
 		"fi"
 }

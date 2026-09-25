@@ -32,6 +32,8 @@ import (
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const lifecycleSlug = "ocel-vps-e2e"
@@ -354,7 +356,7 @@ func (j journey) over(t *testing.T, hostname, path string) reply {
 }
 
 func (a reply) fromTheBox() bool {
-	return strings.Contains(a.headers, strings.ToLower(edge.HeaderEdge)+": "+host.EdgeName)
+	return strings.Contains(a.headers, strings.ToLower(edge.HeaderEdge)+": "+switchboard.EdgeName)
 }
 
 type flight struct {
@@ -443,7 +445,7 @@ func (j journey) underLoad(t *testing.T, hostname, retiring string, flipping fun
 				return
 			case <-time.After(beat):
 			}
-			read, _ := j.vm.attempt(j.vm.user, "sudo docker exec "+host.ProxyContainer+" "+host.ProxyHelperMount+
+			read, _ := j.vm.attempt(j.vm.user, "sudo docker exec "+host.SwitchboardContainer+" "+host.SwitchboardMounted+
 				" upstreams 2>&1; echo '@@'; sudo docker inspect -f '{{.State.Status}}' "+quote(retiring)+" 2>/dev/null || true")
 			pool, state, _ := strings.Cut(read, "@@")
 			mu.Lock()
@@ -493,7 +495,7 @@ func (j journey) serving(t *testing.T, hostname, want string) {
 	for {
 		if last = j.over(t, hostname, "/"); last.status == http.StatusOK && strings.TrimSpace(last.body) == want {
 			if !last.fromTheBox() {
-				t.Errorf("%s answered %q with no %s: %s header:\n%s", hostname, want, edge.HeaderEdge, host.EdgeName, last.headers)
+				t.Errorf("%s answered %q with no %s: %s header:\n%s", hostname, want, edge.HeaderEdge, switchboard.EdgeName, last.headers)
 			}
 			return
 		}
@@ -726,7 +728,7 @@ func (j journey) plants(t *testing.T) decoy {
 	j.vm.ssh(t, "printf 'a caddy this machine already ran\n' | sudo install -m 0644 /dev/stdin "+quote(lifecycleDecoyProxyData+"/caddy.json"))
 	j.vm.ssh(t, "sudo docker rm -f "+lifecycleDecoyProxy+" >/dev/null 2>&1 || true")
 	j.vm.ssh(t, "sudo docker run -d --name "+lifecycleDecoyProxy+" --entrypoint sleep -v "+
-		quote(lifecycleDecoyProxyData)+":/data "+quote(host.ProxyImage)+" 3000")
+		quote(lifecycleDecoyProxyData)+":/data "+quote(caddy.Image)+" 3000")
 	t.Cleanup(func() {
 		j.vm.ssh(t, "sudo docker rm -f "+lifecycleDecoyProxy+" >/dev/null 2>&1 || true")
 		j.vm.ssh(t, "sudo rm -rf "+quote(lifecycleDecoyProxyData))
@@ -969,7 +971,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	for _, verdict := range []string{
 		lifecycleHostname + " resolves to " + run.vm.addr + ", which is this box",
 		"port " + host.RenewalPort + " answers from this machine",
-		"nothing listens on tcp " + host.AdminPort + " inside " + host.ProxyContainer,
+		"nothing listens on tcp " + adminPort + " inside " + caddy.Container,
 	} {
 		if !strings.Contains(standing, verdict) {
 			t.Errorf("`ocel doctor` never said %q, and this is the only command that runs thirty days after a deploy:\n%s", verdict, standing)
@@ -1222,7 +1224,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	missed := run.over(t, "unclaimed."+lifecyclePreviewBase, "/")
 	if missed.status != http.StatusNotFound || !missed.fromTheBox() || missed.body != "" {
 		t.Errorf("an unclaimed hostname under %s was answered %d %q\n%s\nwant a bare 404 carrying %s: %s, naming no project and no other preview",
-			lifecyclePreviewBase, missed.status, missed.body, missed.headers, edge.HeaderEdge, host.EdgeName)
+			lifecyclePreviewBase, missed.status, missed.body, missed.headers, edge.HeaderEdge, switchboard.EdgeName)
 	}
 	var wildcards []string
 	for _, served := range routed {
@@ -1236,7 +1238,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	}
 	if probed := run.over(t, edge.ProbeHostname(wildcard), "/"); !probed.fromTheBox() {
 		t.Errorf("%s was answered without %s: %s, and it is the hostname `ocel domain use --preview` reads the edge off:\n%s",
-			edge.ProbeHostname(wildcard), edge.HeaderEdge, host.EdgeName, probed.headers)
+			edge.ProbeHostname(wildcard), edge.HeaderEdge, switchboard.EdgeName, probed.headers)
 	}
 
 	if held := run.deploying(t, "env", "set", lifecycleSensitive+"="+run.value, "--preview"); !strings.Contains(held, "Set "+lifecycleSensitive) {
@@ -1259,7 +1261,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	fell := run.over(t, previewHost, "/")
 	if fell.status != http.StatusNotFound || !fell.fromTheBox() || fell.body != "" {
 		t.Errorf("%s was answered %d %q\n%s\nafter its preview came down, want the catch-all's bare 404 carrying %s: %s",
-			previewHost, fell.status, fell.body, fell.headers, edge.HeaderEdge, host.EdgeName)
+			previewHost, fell.status, fell.body, fell.headers, edge.HeaderEdge, switchboard.EdgeName)
 	}
 	if left := run.vm.routedHosts(t); slices.Contains(left, previewHost) {
 		t.Errorf("the loaded configuration still routes %s after `ocel preview rm`: %v", previewHost, left)
@@ -1286,13 +1288,13 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 		}
 	}
 
-	if reached := run.vm.peers(t, "curl -sS -m 5 -o /dev/null -w '%{http_code}' http://"+host.ProxyContainer+"/"); !strings.Contains(reached, "404") {
+	if reached := run.vm.peers(t, "curl -sS -m 5 -o /dev/null -w '%{http_code}' http://"+caddy.Container+"/"); !strings.Contains(reached, "404") {
 		t.Fatalf("a container on the shared network could not reach the proxy on port %s at all (%q), so nothing it fails to reach on %s means anything",
-			host.RenewalPort, strings.TrimSpace(reached), host.AdminPort)
+			host.RenewalPort, strings.TrimSpace(reached), adminPort)
 	}
-	if reached := run.vm.peers(t, "curl -sS -m 5 -o /dev/null -w '%{http_code}' http://"+host.ProxyContainer+":"+host.AdminPort+"/config/"); strings.Contains(reached, "200") {
+	if reached := run.vm.peers(t, "curl -sS -m 5 -o /dev/null -w '%{http_code}' http://"+caddy.Container+":"+adminPort+"/config/"); strings.Contains(reached, "200") {
 		t.Errorf("a container on the shared network reached the admin endpoint on %s and got %q: every app this box runs would hold arbitrary config replacement of its own edge",
-			host.AdminPort, strings.TrimSpace(reached))
+			adminPort, strings.TrimSpace(reached))
 	}
 
 	for _, tier := range []string{"production", "preview"} {
@@ -1358,17 +1360,17 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	run.gaveBack(t, repository)
 	for _, taken := range []string{
 		filepath.Dir(host.ClassDir(class)), host.ClassDir(class), host.StateDir(class),
-		filepath.Dir(host.SealHelper), host.ProxyData, host.ProxyConfig, vars.RoutingTable, host.ProxyHelper,
+		filepath.Dir(host.SealHelper), host.ProxyData, host.ProxyConfig, vars.RoutingTable, host.SwitchboardBinary,
 	} {
 		if run.vm.stands(t, taken) {
 			t.Errorf("%s stands after a destroy, so the machine was not given back", taken)
 		}
 	}
-	if run.vm.running(t, host.ProxyContainer) {
-		t.Errorf("%s is still running after both bootstrap destroys, and ocel takes back the proxy it installed", host.ProxyContainer)
+	if run.vm.running(t, caddy.Container) {
+		t.Errorf("%s is still running after both bootstrap destroys, and ocel takes back the proxy it installed", caddy.Container)
 	}
-	if left := run.vm.inspects(t, "container", host.ProxyContainer, "{{.Id}}"); left != "" {
-		t.Errorf("%s reads %q after both bootstrap destroys, and nothing ocel placed on this machine survives them", host.ProxyContainer, left)
+	if left := run.vm.inspects(t, "container", caddy.Container, "{{.Id}}"); left != "" {
+		t.Errorf("%s reads %q after both bootstrap destroys, and nothing ocel placed on this machine survives them", caddy.Container, left)
 	}
 	if strings.TrimSpace(run.vm.ssh(t, "id -u "+host.DeployUser()+" >/dev/null 2>&1 && echo standing || echo gone")) != "gone" {
 		t.Errorf("%s still logs in after the last class on this machine went", host.DeployUser())

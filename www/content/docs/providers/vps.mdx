@@ -42,7 +42,8 @@ Running it again changes only what has drifted, and `ocel destroy` removes it al
 | `/var/lib/ocel/<class>/records`, `/usr/local/lib/ocel/records` | What is deployed, per class. |
 | `/var/lib/ocel/releases`, `/usr/local/lib/ocel/releases` | The release window: which images a rollback can still reach. Older images are swept. |
 | Docker | Installed with Docker's install script, pinned by sha256. It stays after `ocel destroy`, and so do its containers. |
-| `ocel-proxy` container, the `ocel` network | Caddy on ports 80 and 443. Every app is reached through it. Its config at `/var/lib/ocel/proxy/caddy.json` is rendered from the routing table. |
+| `ocel-proxy` container, the `ocel` network | Caddy on ports 80 and 443. It holds a certificate for every hostname the box serves and forwards every request to the switchboard. Its config at `/var/lib/ocel/proxy/caddy.json` is rendered from the routing table and changes only when a hostname or a pinned certificate does. |
+| `ocel-switchboard` container, `/usr/local/lib/ocel/switchboard` | Routes each hostname to the app that serves it and switches releases over without reloading the proxy. It sits on each project's network and publishes no port. |
 | `/var/lib/ocel/routing/table.json` | The routing table: which project claims each hostname, where each app is served from, and the certificates you pin. Deploys rewrite it and the proxy's config together. |
 | `/var/lib/ocel/proxy/data` | Certificates, their keys and the ACME account key. |
 | `/etc/ocel/certs` | Certificates you pin yourself. `ocel destroy` removes the directory only if it is empty. |

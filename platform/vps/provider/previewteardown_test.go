@@ -7,6 +7,7 @@ import (
 
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -24,14 +25,14 @@ func forgetting(t *testing.T, machine *box) []string {
 
 	var driven []string
 	for _, command := range machine.commands() {
-		if strings.Contains(command, "'forget'") {
+		if strings.Contains(command, "/caddy/certificates") {
 			driven = append(driven, command)
 		}
 	}
 	return driven
 }
 
-func TestForgettingAPreviewsCertificatesDrivesTheHelperOnceForEveryHostnameItClaimed(t *testing.T) {
+func TestForgettingAPreviewsCertificatesReachesTheProxysStoreOnceForEveryHostnameItClaimed(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
@@ -43,10 +44,10 @@ func TestForgettingAPreviewsCertificatesDrivesTheHelperOnceForEveryHostnameItCla
 
 	driven := forgetting(t, machine)
 	if len(driven) != 1 {
-		t.Fatalf("the helper was driven %d times for %d hostnames: %v", len(driven), len(hostnames), driven)
+		t.Fatalf("the proxy's store was reached %d times for %d hostnames: %v", len(driven), len(hostnames), driven)
 	}
-	if !strings.HasPrefix(driven[0], "'docker' 'exec' '"+host.ProxyContainer+"' '"+host.ProxyHelperMount+"'") {
-		t.Errorf("the certificates were reached with %q, want the helper inside the proxy: the store is bound into that container alone and this session deploys as a login that cannot read it from the host", driven[0])
+	if !strings.HasPrefix(driven[0], "'docker' 'exec' '"+caddy.Container+"'") {
+		t.Errorf("the certificates were reached with %q, want a command inside the proxy: the store is bound into that container alone and this session deploys as a login that cannot read it from the host", driven[0])
 	}
 	for _, hostname := range hostnames {
 		if !strings.Contains(driven[0], "'"+hostname+"'") {
@@ -72,7 +73,7 @@ func TestForgettingReportsEachPairItTookOffTheBox(t *testing.T) {
 
 	removed := "/data/caddy/certificates/acme-v02.api.letsencrypt.org-directory/shop--pr-7--web.preview.example.com"
 	machine := &box{refuses: func(command string) (session.Result, bool) {
-		if !strings.Contains(command, "'forget'") {
+		if !strings.Contains(command, "/caddy/certificates") {
 			return session.Result{}, false
 		}
 		return session.Result{Stdout: removed + "\n"}, true
@@ -88,14 +89,14 @@ func TestForgettingReportsEachPairItTookOffTheBox(t *testing.T) {
 	}
 }
 
-func TestAHelperThatRefusesTheStoreIsSurfacedRatherThanCountedAsForgotten(t *testing.T) {
+func TestARemovalTheProxyRefusesIsSurfacedRatherThanCountedAsForgotten(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{refuses: func(command string) (session.Result, bool) {
-		if !strings.Contains(command, "'forget'") {
+		if !strings.Contains(command, "/caddy/certificates") {
 			return session.Result{}, false
 		}
-		return session.Result{Code: 2, Stderr: "ocel-proxyctl: open /data/caddy/certificates: permission denied"}, true
+		return session.Result{Code: 2, Stderr: "rm: can't remove '/data/caddy/certificates/x': permission denied"}, true
 	}}
 	spoken := &said{}
 

@@ -24,11 +24,12 @@ import (
 )
 
 type box struct {
-	ran      []string
-	answer   func(command string) (string, error)
-	logs     string
-	served   []byte
-	unserved error
+	ran       []string
+	answer    func(command string) (string, error)
+	logs      string
+	served    []byte
+	unserved  error
+	unreached error
 }
 
 func (b *box) Ran(_ context.Context, _, command string) (string, error) {
@@ -39,9 +40,9 @@ func (b *box) Ran(_ context.Context, _, command string) (string, error) {
 	return b.answer(command)
 }
 
-func (b *box) Said(_ context.Context, command string) string {
+func (b *box) Said(_ context.Context, command string) (string, error) {
 	b.ran = append(b.ran, command)
-	return b.logs
+	return b.logs, b.unreached
 }
 
 func (b *box) Loopback(context.Context, string) ([]byte, error) { return b.served, b.unserved }
@@ -172,6 +173,10 @@ func TestTheCertificateIsWhatTheBoxServesAndTheTroubleIsWhatTheProxyLogged(t *te
 	unreached := errors.New("the loopback read failed")
 	if _, err := caddy.New(&box{unserved: unreached}).Certificate(context.Background(), "shop.example.com"); !errors.Is(err, unreached) {
 		t.Errorf("Certificate() over a loopback that failed = %v, want the failure carried out", err)
+	}
+	engineless := errors.New("Cannot connect to the Docker daemon")
+	if _, err := caddy.New(&box{unreached: engineless}).Certificate(context.Background(), "shop.example.com"); !errors.Is(err, engineless) {
+		t.Errorf("Certificate() over an engine it could not reach = %v, want that carried out rather than read as a proxy with nothing to say", err)
 	}
 }
 

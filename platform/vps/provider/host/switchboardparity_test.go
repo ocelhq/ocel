@@ -1,67 +1,11 @@
 package host
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
-
-func renderedAnswer(routes []caddyRoute, host, path string) (switchboard.Forward, bool) {
-	for _, route := range routes {
-		if !caddyMatches(route.Match, host, path) || len(route.Handle) == 0 {
-			continue
-		}
-		strip := ""
-		for _, handler := range route.Handle {
-			switch handler.Handler {
-			case refuseHandler:
-				return switchboard.Forward{}, false
-			case rewriteHandler:
-				strip = handler.StripPathPrefix
-			case "reverse_proxy":
-				return switchboard.Forward{Upstream: handler.Upstreams[0].Dial, Strip: strip}, true
-			}
-		}
-	}
-	return switchboard.Forward{}, false
-}
-
-func caddyMatches(sets []caddyMatch, host, path string) bool {
-	if len(sets) == 0 {
-		return true
-	}
-	for _, set := range sets {
-		hosted := set.Host == nil
-		if set.Host != nil {
-			for _, pattern := range *set.Host {
-				hosted = hosted || caddyHost(pattern, host)
-			}
-		}
-		pathed := len(set.Path) == 0
-		for _, pattern := range set.Path {
-			if prefix, wild := strings.CutSuffix(pattern, "*"); wild {
-				pathed = pathed || strings.HasPrefix(strings.ToLower(path), strings.ToLower(prefix))
-				continue
-			}
-			pathed = pathed || strings.EqualFold(pattern, path)
-		}
-		if hosted && pathed {
-			return true
-		}
-	}
-	return false
-}
-
-func caddyHost(pattern, host string) bool {
-	if base, wild := strings.CutPrefix(pattern, "*."); wild {
-		label, under := strings.CutSuffix(strings.ToLower(host), "."+strings.ToLower(base))
-		return under && label != "" && !strings.Contains(label, ".")
-	}
-	return strings.EqualFold(pattern, host)
-}
 
 func parityTables() map[string]RoutingTable {
 	claimedBy := func(state RoutingTable, claims ...HostClaim) RoutingTable {
@@ -109,42 +53,14 @@ func parityTables() map[string]RoutingTable {
 	}
 }
 
-func TestTheSwitchboardAnswersEveryHostnameAndPathTheWayTheRenderedConfigDoes(t *testing.T) {
+func TestTheProviderRefusesExactlyTheRoutingTablesTheSwitchboardRefuses(t *testing.T) {
 	t.Parallel()
 
 	for what, table := range parityTables() {
-		rendered, renderErr := RenderProxyConfig(table)
-		read, readErr := switchboard.Read(mustWrite(t, table))
+		_, renderErr := RenderProxyConfig(table)
+		_, readErr := switchboard.Read(mustWrite(t, table))
 		if (renderErr == nil) != (readErr == nil) {
-			t.Errorf("%s: the renderer says %v and the switchboard says %v, want both to refuse or both to take it", what, renderErr, readErr)
-			continue
-		}
-		if renderErr != nil {
-			continue
-		}
-		var config caddyConfig
-		if err := json.Unmarshal(rendered, &config); err != nil {
-			t.Fatal(err)
-		}
-		routes := config.Apps.HTTP.Servers[proxyServer].Routes
-		hosts := []string{"unclaimed.example.com", table.Connector}
-		for _, held := range table.Claims {
-			hosts = append(hosts, held.Hostname, strings.ToUpper(held.Hostname))
-		}
-		if table.PreviewBase != "" {
-			wildcard := edge.PreviewWildcard(table.PreviewBase)
-			hosts = append(hosts, "web--pr-9."+table.PreviewBase, "a.b."+table.PreviewBase, edge.ProbeHostname(wildcard))
-		}
-		for _, host := range hosts {
-			for _, path := range []string{"/", "/bucket/key", "/rustfs", "/rustfs/admin", "/HEALTH/ready", "/health",
-				ConnectorPath, ConnectorPath + "/connector.v1.Box/Describe", ConnectorPath + "x"} {
-				want, wanted := renderedAnswer(routes, host, path)
-				got, forwarded := read.Forward(host, path)
-				if wanted != forwarded || want != got {
-					t.Errorf("%s: %s%s is answered %+v (forwarded %t) by the switchboard, want %+v (forwarded %t) as the rendered config answers it",
-						what, host, path, got, forwarded, want, wanted)
-				}
-			}
+			t.Errorf("%s: the provider says %v and the switchboard says %v, want both to refuse or both to take it: a table the provider writes and the switchboard cannot load strands the box on its old routes", what, renderErr, readErr)
 		}
 	}
 }

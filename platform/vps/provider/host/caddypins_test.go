@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -41,14 +43,15 @@ func TestAPinIsWrittenAtThePathTheProxyOpensAndReadBackAtThePathThisHostSpells(t
 
 	at := ProxyPins + "/wildcard"
 	state := routed()
+	state.Claims = []HostClaim{{Hostname: "shop.preview.example.com", Owner: surface, Pointer: pointed}}
 	state.Pins = []Pin{{Hostname: wildcard, Path: at}}
 	rendered, err := RenderProxyConfig(state)
 	if err != nil {
 		t.Fatalf("RenderProxyConfig() = %v", err)
 	}
-	if !strings.Contains(string(rendered), proxyPinsMount+"/wildcard"+pinCertificate) {
+	if !strings.Contains(string(rendered), caddy.PinCertificate(caddy.PinsMount+"/wildcard")) {
 		t.Errorf("the config hands the proxy %q, and the proxy opens a pair at %s: a path this host spells is a path the container has no such file at, and the whole config is refused with it:\n%s",
-			at, proxyPinsMount, rendered)
+			at, caddy.PinsMount, rendered)
 	}
 	if strings.Contains(string(rendered), ProxyPins+"/wildcard") {
 		t.Errorf("the config carries a path off this host's own filesystem:\n%s", rendered)
@@ -96,7 +99,7 @@ func TestAPinIsVerifiedWhereItIsBoundRatherThanWhereItIsRead(t *testing.T) {
 		"a pair nothing on this box renews and nobody replaced": expired,
 		"a file that is no certificate at all":                  []byte("-----BEGIN EC PRIVATE KEY-----\nMHcCAQE=\n-----END EC PRIVATE KEY-----\n"),
 	} {
-		err := claiming(t, []Pin{{Hostname: wildcard, Path: at}}, map[string][]byte{PinCertificate(at): held})
+		err := claiming(t, []Pin{{Hostname: wildcard, Path: at}}, map[string][]byte{caddy.PinCertificate(at): held})
 		var refusal providerkit.Refusal
 		if !errors.As(err, &refusal) {
 			t.Errorf("a claim on a box carrying %s = %v, want ocel's own refusal naming %s: the pin reaches the proxy on every reshape, so an unverified one turns a typo into a caddy error on somebody else's deploy",
@@ -104,7 +107,7 @@ func TestAPinIsVerifiedWhereItIsBoundRatherThanWhereItIsRead(t *testing.T) {
 		}
 	}
 
-	if err := claiming(t, []Pin{{Hostname: wildcard, Path: at}}, map[string][]byte{PinCertificate(at): covering}); err != nil {
+	if err := claiming(t, []Pin{{Hostname: wildcard, Path: at}}, map[string][]byte{caddy.PinCertificate(at): covering}); err != nil {
 		t.Errorf("a claim on a box carrying a pinned pair that covers what it is pinned for = %v, want the claim taken", err)
 	}
 }
@@ -118,7 +121,7 @@ func TestAPinIsReadOffTheBoxOnceRatherThanOnEveryReshape(t *testing.T) {
 	serves := stood.answer
 	reads := 0
 	stood.answer = func(command string) (session.Result, bool) {
-		if strings.HasPrefix(command, "cat "+quoted(PinCertificate(at))) {
+		if strings.HasPrefix(command, "cat "+quoted(caddy.PinCertificate(at))) {
 			reads++
 			return session.Result{Stdout: string(covering)}, true
 		}
@@ -161,14 +164,25 @@ func TestOneCertificateCoveringTwoHostnamesIsHandedToTheProxyOnce(t *testing.T) 
 
 	at := ProxyPins + "/pair"
 	state := routed()
+	state.Claims = []HostClaim{{Hostname: "shop.example.com", Owner: surface, Pointer: pointed}, {Hostname: "blog.example.com", Owner: surface, Pointer: pointed}}
 	state.Pins = []Pin{{Hostname: "shop.example.com", Path: at}, {Hostname: "blog.example.com", Path: at}}
 	rendered, err := RenderProxyConfig(state)
 	if err != nil {
 		t.Fatalf("RenderProxyConfig() = %v", err)
 	}
 
-	read, err := parsed(rendered)
-	if err != nil {
+	var read struct {
+		Apps struct {
+			TLS *struct {
+				Certificates struct {
+					LoadFiles []struct {
+						Tags []string `json:"tags"`
+					} `json:"load_files"`
+				} `json:"certificates"`
+			} `json:"tls"`
+		} `json:"apps"`
+	}
+	if err := json.Unmarshal(rendered, &read); err != nil {
 		t.Fatal(err)
 	}
 	if read.Apps.TLS == nil {

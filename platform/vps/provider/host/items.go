@@ -135,7 +135,7 @@ func (i Item) command() string {
 	case KindNetwork:
 		return networkCommand()
 	case KindContainer:
-		return containerCommand()
+		return standingOf(i).writing(containerRising)
 	case KindProxyConfig, KindRoutingTable:
 		return seedingRouting(routingTableItem(), proxyConfigItem())
 	case KindDir:
@@ -158,7 +158,7 @@ func (i Item) probe() string {
 	case KindNetwork:
 		return networkProbe()
 	case KindContainer:
-		return containerProbe()
+		return standingOf(i).probe()
 	case KindProxyConfig, KindRoutingTable:
 		return seededProbe(i)
 	default:

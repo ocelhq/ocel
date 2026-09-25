@@ -3,6 +3,7 @@ package vps_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"net/netip"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -213,28 +215,36 @@ func standingOver(machine *scripted) []providerkit.StandingCheck {
 	return checks
 }
 
+func socketTable(ports ...int) string {
+	written := "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"
+	for at, port := range ports {
+		written += fmt.Sprintf("   %d: 00000000:%04X 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 1 1 0000000000000000 100 0 0 10 0\n", at, port)
+	}
+	return written
+}
+
 func adminCheck(t *testing.T, checks []providerkit.StandingCheck) providerkit.StandingCheck {
 	t.Helper()
 	if len(checks) == 0 {
 		t.Fatal("CheckStanding() answered nothing at all, so there is no window to read a verdict out of")
 	}
 	for _, check := range checks {
-		if strings.Contains(check.Subject, host.AdminPort) {
+		if strings.Contains(check.Subject, adminPort) {
 			return check
 		}
 	}
-	t.Fatalf("CheckStanding() answered %+v and none of it is about tcp %s inside the proxy", checks, host.AdminPort)
+	t.Fatalf("CheckStanding() answered %+v and none of it is about tcp %s inside the proxy", checks, adminPort)
 	return providerkit.StandingCheck{}
 }
 
 func TestNothingOnTheStockAdminPortInsideTheProxyPasses(t *testing.T) {
 	t.Parallel()
 
-	check := adminCheck(t, standingOver(boxSaying(map[string]answer{"'listeners'": {stdout: "0.0.0.0:80\n[::]:443\n"}})))
+	check := adminCheck(t, standingOver(boxSaying(map[string]answer{"/proc/net/tcp &&": {stdout: socketTable(80, 443)}})))
 	if check.Verdict != providerkit.StandingPass {
-		t.Fatalf("verdict = %v (%q), want a pass where nothing is bound on %s", check.Verdict, check.Finding, host.AdminPort)
+		t.Fatalf("verdict = %v (%q), want a pass where nothing is bound on %s", check.Verdict, check.Finding, adminPort)
 	}
-	if !strings.Contains(check.Finding, host.ProxyAdminSocket) {
+	if !strings.Contains(check.Finding, caddy.AdminSocket) {
 		t.Errorf("finding = %q, want the socket the admin endpoint is reached over named", check.Finding)
 	}
 }
@@ -243,16 +253,16 @@ func TestTheStockAdminPortBoundInsideTheProxyFails(t *testing.T) {
 	t.Parallel()
 
 	check := adminCheck(t, standingOver(boxSaying(map[string]answer{
-		"'listeners'": {stdout: "0.0.0.0:80\n0.0.0.0:" + host.AdminPort + "\n"},
+		"/proc/net/tcp &&": {stdout: socketTable(80, caddy.AdminPort)},
 	})))
 	if check.Verdict != providerkit.StandingFail {
 		t.Fatalf("verdict = %v (%q), want a failure where the stock admin api is bound", check.Verdict, check.Finding)
 	}
-	if !strings.Contains(check.Finding, "0.0.0.0:"+host.AdminPort) {
+	if !strings.Contains(check.Finding, "0.0.0.0:"+adminPort) {
 		t.Errorf("finding = %q, want the bind named", check.Finding)
 	}
-	if !strings.Contains(check.Finding, "every app container") {
-		t.Errorf("finding = %q, want what the exposure reaches named: every container on the shared network", check.Finding)
+	if !strings.Contains(check.Finding, "anything that reaches the proxy") {
+		t.Errorf("finding = %q, want what the exposure reaches named", check.Finding)
 	}
 }
 
@@ -260,10 +270,10 @@ func TestAProxyThatCouldNotBeReadIsNotReadAsACleanNamespace(t *testing.T) {
 	t.Parallel()
 
 	check := adminCheck(t, standingOver(boxSaying(map[string]answer{
-		"'listeners'": {code: 1, stderr: "Error: No such container: " + host.ProxyContainer},
+		"/proc/net/tcp &&": {code: 1, stderr: "Error: No such container: " + caddy.Container},
 	})))
 	if check.Verdict == providerkit.StandingPass {
-		t.Fatalf("a proxy this box could not read passed as one with nothing bound on %s: %q", host.AdminPort, check.Finding)
+		t.Fatalf("a proxy this box could not read passed as one with nothing bound on %s: %q", adminPort, check.Finding)
 	}
 }
 
@@ -305,7 +315,7 @@ func TestABoxWhoseOwnAddressCouldNotBeReadReportsAndNeverRefuses(t *testing.T) {
 func TestAProxyThatNamedNoSocketAtAllIsNotReadAsACleanNamespace(t *testing.T) {
 	t.Parallel()
 
-	check := adminCheck(t, standingOver(boxSaying(map[string]answer{"'listeners'": {stdout: ""}})))
+	check := adminCheck(t, standingOver(boxSaying(map[string]answer{"/proc/net/tcp &&": {stdout: socketTable()}})))
 	if check.Verdict != providerkit.StandingFail {
 		t.Fatalf("verdict = %v (%q), want a failure: a running proxy always holds %s and %s, so a namespace naming nothing is one this box never read rather than one with a clean admin port",
 			check.Verdict, check.Finding, host.RenewalPort, "443")

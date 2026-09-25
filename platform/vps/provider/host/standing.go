@@ -9,19 +9,6 @@ import (
 
 const listenerCommand = "cat " + listeners.TCPPath + " " + listeners.TCP6Path
 
-func (h *Host) ProxyListeners(ctx context.Context) ([]listeners.Listener, error) {
-	elevation, err := h.reachDocker(ctx)
-	if err != nil {
-		return nil, err
-	}
-	said, err := h.ran(ctx, "read what listens inside "+ProxyContainer,
-		words(helperCommand("listeners")), nil, elevation)
-	if err != nil {
-		return nil, err
-	}
-	return listeners.Read(said)
-}
-
 func (h *Host) Listening(ctx context.Context) ([]listeners.Listener, error) {
 	said, err := h.ran(ctx, "read what listens on this host", listenerCommand, nil, "")
 	if err != nil {

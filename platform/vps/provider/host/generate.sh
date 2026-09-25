@@ -14,7 +14,7 @@ for arch in $arches; do
   (
     cd "$provider_dir"
     CGO_ENABLED=0 GOOS=linux GOARCH="$arch" \
-      go build -trimpath -buildvcs=false -ldflags="-s -w" -o "$dist/ocel-proxyctl-$arch" ./cmd/proxyctl
+      go build -trimpath -buildvcs=false -ldflags="-s -w" -o "$dist/ocel-switchboard-$arch" ./cmd/switchboard
   )
   (
     cd "$runtime_dir"
@@ -23,5 +23,5 @@ for arch in $arches; do
     CGO_ENABLED=0 GOOS=linux GOARCH="$arch" \
       go build -trimpath -buildvcs=false -ldflags="-s -w" -o "$dist/ocel-runtime-$arch" ./cmd/container
   )
-  chmod 755 "$dist/ocel-proxyctl-$arch" "$dist/ocel-live-$arch" "$dist/ocel-runtime-$arch"
+  chmod 755 "$dist/ocel-switchboard-$arch" "$dist/ocel-live-$arch" "$dist/ocel-runtime-$arch"
 done

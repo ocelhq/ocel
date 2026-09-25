@@ -20,6 +20,7 @@ import (
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 func placedOnTheBox(t *testing.T, vm machine, at string, names []string, until time.Duration) {
@@ -46,20 +47,20 @@ func placedOnTheBox(t *testing.T, vm machine, at string, names []string, until t
 	}
 	vm.ssh(t, "sudo mkdir -p "+quote(at[:strings.LastIndex(at, "/")]))
 	for path, block := range map[string][]byte{
-		host.PinCertificate(at): pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: raw}),
-		host.PinKey(at):         pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: sealed}),
+		caddy.PinCertificate(at): pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: raw}),
+		caddy.PinKey(at):         pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: sealed}),
 	} {
 		vm.ssh(t, "printf %s "+quote(base64.StdEncoding.EncodeToString(block))+
 			" | base64 -d | sudo tee "+quote(path)+" >/dev/null")
 	}
-	vm.ssh(t, "sudo chmod 0600 "+quote(host.PinKey(at)))
+	vm.ssh(t, "sudo chmod 0600 "+quote(caddy.PinKey(at)))
 }
 
 func (vm machine) proxyLogBytes(t *testing.T) int {
 	t.Helper()
 
 	counted, err := strconv.Atoi(strings.TrimSpace(
-		vm.ssh(t, "sudo docker logs "+host.ProxyContainer+" 2>&1 | wc -c")))
+		vm.ssh(t, "sudo docker logs "+caddy.Container+" 2>&1 | wc -c")))
 	if err != nil {
 		t.Fatalf("count what the proxy has already logged: %v", err)
 	}
@@ -69,7 +70,7 @@ func (vm machine) proxyLogBytes(t *testing.T) int {
 func (vm machine) proxyLogSince(t *testing.T, written int) string {
 	t.Helper()
 
-	return vm.ssh(t, "sudo docker logs "+host.ProxyContainer+" 2>&1 | tail -c +"+strconv.Itoa(written+1))
+	return vm.ssh(t, "sudo docker logs "+caddy.Container+" 2>&1 | tail -c +"+strconv.Itoa(written+1))
 }
 
 func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testing.T) {
@@ -81,33 +82,33 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 	promotes(t, site.stack, "p-one", "one", one, 1)
 
 	at := host.ProxyPins + "/live"
-	placedOnTheBox(t, vm, at, []string{host.ProxyContainer, liveHostname}, 90*24*time.Hour)
-	pinned := vm.provider(t, withPins(map[string]string{host.ProxyContainer: at}))
+	placedOnTheBox(t, vm, at, []string{caddy.Container, liveHostname}, 90*24*time.Hour)
+	pinned := vm.provider(t, withPins(map[string]string{caddy.Container: at}))
 	defer closing(t, pinned)
 	fronting(t, pinned, "pinned")
 
 	ctx := context.Background()
 	cert, err := pinned.Certificate(ctx, providerkit.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: host.ProxyContainer, Report: edge.DiscardReporter(),
+		Kind: boxedge.Kind, Hostname: caddy.Container, Report: edge.DiscardReporter(),
 	})
 	if err != nil {
-		t.Fatalf("Certificate(%s) = %v", host.ProxyContainer, err)
+		t.Fatalf("Certificate(%s) = %v", caddy.Container, err)
 	}
 	if cert.ID != certs.PinHandle(at) {
-		t.Fatalf("Certificate(%s) = %q, want %q: a hostname a pinned pair covers is served off that pair", host.ProxyContainer, cert.ID, certs.PinHandle(at))
+		t.Fatalf("Certificate(%s) = %q, want %q: a hostname a pinned pair covers is served off that pair", caddy.Container, cert.ID, certs.PinHandle(at))
 	}
 	if cert.Requested {
 		t.Error("Certificate().Requested = true on a box, and ocel placed no key material here so it holds authority to remove none")
 	}
 
 	spoken := vm.proxyLogBytes(t)
-	served, err := pinned.InspectCertificate(ctx, boxedge.Kind, host.ProxyContainer,
-		providerkit.Certificate{ID: certs.ProxyHandle(host.ProxyContainer)})
+	served, err := pinned.InspectCertificate(ctx, boxedge.Kind, caddy.Container,
+		providerkit.Certificate{ID: certs.ProxyHandle(caddy.Container)})
 	if err != nil {
 		t.Fatalf("InspectCertificate() over a proxy handle = %v", err)
 	}
 	if !served.Terminates || !served.Issued || !served.Covers {
-		t.Errorf("InspectCertificate() = %+v, want the leaf the proxy served over its own :443 read as issued and covering %s", served, host.ProxyContainer)
+		t.Errorf("InspectCertificate() = %+v, want the leaf the proxy served over its own :443 read as issued and covering %s", served, caddy.Container)
 	}
 	if served.ExpiresAt != 0 {
 		t.Errorf("InspectCertificate() reports expiry %d for a certificate the proxy renews, and the number is decorative wherever renewal is healthy", served.ExpiresAt)
@@ -155,7 +156,7 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 	if err := pinned.DiscardCertificate(ctx, cert, edge.DiscardReporter()); err != nil {
 		t.Errorf("DiscardCertificate() = %v, want nil", err)
 	}
-	if !vm.stands(t, host.PinKey(at)) {
-		t.Errorf("%s is gone from the box, and ocel never places or removes key material here", host.PinKey(at))
+	if !vm.stands(t, caddy.PinKey(at)) {
+		t.Errorf("%s is gone from the box, and ocel never places or removes key material here", caddy.PinKey(at))
 	}
 }
