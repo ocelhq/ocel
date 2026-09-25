@@ -24,7 +24,7 @@ func (r *deployRun) admitBindings(ctx context.Context, report Reporter) error {
 		published[binding.Name] = binding
 		names = append(names, binding.Name)
 	}
-	r.warnShadowed(report, resources, names)
+	r.warnShadowed(report, resources, published)
 
 	var missing []string
 	for _, resource := range resources {
@@ -122,9 +122,13 @@ func (r *deployRun) publishingClasses(ctx context.Context, missing []string) map
 	return found
 }
 
-func (r *deployRun) warnShadowed(report Reporter, resources []Resource, published []string) {
+func (r *deployRun) warnShadowed(report Reporter, resources []Resource, published map[string]Binding) {
 	for _, resource := range resources {
-		if resource.Binding != "" || !slices.Contains(published, resource.Declared) {
+		if resource.Binding != "" {
+			continue
+		}
+		namesake, held := published[resource.Declared]
+		if !held || ReadableAs(namesake, resource.Declared, resource.Type, r.proxied) != nil {
 			continue
 		}
 		report.Say(fmt.Sprintf(
