@@ -170,12 +170,12 @@ export const bucketSecretAsText = defineConfig({
   slug: "test-app",
   bindings: {
     bucket: {
-      // @ts-expect-error a secret key takes an ocel variable, never text
       uploads: {
         endpoint: "https://s3.example.com",
         region: "auto",
         bucket: "acme",
         accessKeyId: { $env: "K" },
+        // @ts-expect-error a secret key takes an ocel variable, never text
         secretAccessKey: "hunter2",
       },
     },
