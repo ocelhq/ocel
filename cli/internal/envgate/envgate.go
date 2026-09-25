@@ -64,6 +64,7 @@ type Scope struct {
 	Environment string
 	Browser     bool
 	Implied     []Implied
+	OtherTiers  []Implied
 }
 
 func (s Scope) OcelWrites(key string, folders []string) bool {

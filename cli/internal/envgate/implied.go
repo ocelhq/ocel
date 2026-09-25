@@ -76,6 +76,9 @@ func collision(definitions []*resourcesv1.VariableDefinition, scope Scope) error
 	for _, definition := range definitions {
 		implied, read := scope.impliedAt(definition.GetKey())
 		if !read {
+			implied, read = Scope{Implied: scope.OtherTiers}.impliedAt(definition.GetKey())
+		}
+		if !read {
 			continue
 		}
 		declaredBy := definition.GetSource()

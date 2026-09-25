@@ -124,6 +124,27 @@ func TestImpliedDeclarations(t *testing.T) {
 		}
 	})
 
+	t.Run("a key the app declares and a binding reads in another tier is refused, though this tier owes it nothing", func(t *testing.T) {
+		t.Parallel()
+		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}}, Preview: true, OtherTiers: []envgate.Implied{ordersBinding}})
+		if err := g.Check(); err != nil {
+			t.Fatalf("Check = %v, want nothing owed for a binding this tier does not take", err)
+		}
+		declare(t, g, &resourcesv1.VariableDefinition{
+			Key: "ORDERS_PASSWORD", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: false, Source: "resources/env.ts",
+		})
+
+		err := g.Check()
+		if err == nil {
+			t.Fatal("Check = nil, want the collision refused in every tier")
+		}
+		for _, want := range []string{"ORDERS_PASSWORD", "resources/env.ts", "bindings.postgres.orders"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("Check = %q, want it to name %q", err, want)
+			}
+		}
+	})
+
 	t.Run("the variables editor shows a binding's variables as its group", func(t *testing.T) {
 		t.Parallel()
 		g := prefetched(t, newFakeValues(), envgate.Scope{Implied: []envgate.Implied{ordersBinding}})

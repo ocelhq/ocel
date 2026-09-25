@@ -78,7 +78,7 @@ func NamedEnvironments(ctx context.Context, runner *provider.Runner, slug string
 }
 
 func Scope(cfg *projectconfig.Config, preview bool, environment string) envgate.Scope {
-	return envgate.Scope{Apps: Apps(cfg), Preview: preview, Environment: environment, Implied: Implied(cfg, preview)}
+	return envgate.Scope{Apps: Apps(cfg), Preview: preview, Environment: environment, Implied: Implied(cfg, preview), OtherTiers: Implied(cfg, !preview)}
 }
 
 func Implied(cfg *projectconfig.Config, preview bool) []envgate.Implied {
