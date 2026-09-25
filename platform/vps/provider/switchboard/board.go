@@ -38,6 +38,8 @@ var forwardedKept = []string{"X-Forwarded-Host", "X-Forwarded-Proto"}
 type Board struct {
 	table     atomic.Pointer[Table]
 	loading   sync.Mutex
+	retiring  sync.Mutex
+	draining  map[string]int
 	trusted   []netip.Prefix
 	ledger    ledger
 	connector string
@@ -47,7 +49,7 @@ type Board struct {
 }
 
 func New(table *Table, trusted []netip.Prefix) *Board {
-	board := &Board{trusted: slices.Clone(trusted), connector: ConnectorSocket}
+	board := &Board{trusted: slices.Clone(trusted), connector: ConnectorSocket, draining: map[string]int{}}
 	board.table.Store(table)
 	dialer := &net.Dialer{Timeout: dialTimeout, KeepAlive: dialKeepAlive}
 	board.tcp = upstreams(dialer.DialContext)
