@@ -10,6 +10,7 @@ import (
 	"mime/multipart"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -413,8 +414,8 @@ func TestFlipBoundIsTheRecordCacheWindow(t *testing.T) {
 	if !p.Facts().CachesRecords {
 		t.Fatal("Facts().CachesRecords = false, but the entry worker serves a promotion from a cached record for RECORD_TTL_MS")
 	}
-	if got := p.FlipBound(); got.Typical != recordTTL || got.Published {
-		t.Errorf("FlipBound() = %+v, want the entry worker's record cache window %v, unpublished", got, recordTTL)
+	if got := p.Facts().FlipBound; got.Typical != recordTTL || got.Published {
+		t.Errorf("Facts().FlipBound = %+v, want the entry worker's record cache window %v, unpublished", got, recordTTL)
 	}
 }
 
@@ -473,7 +474,7 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 		if hooks.VerifyCredentials == nil {
 			t.Error("the cloudflare edge checks no credentials, so a preflight cannot say whether its token answers")
 		}
-		if hooks.CodeEntitlement == nil {
+		if hooks.CheckCodeEntitlement == nil {
 			t.Error("the cloudflare edge checks no entitlement, so a free plan is found out only when the worker upload fails")
 		}
 	})
@@ -541,16 +542,15 @@ func TestCompatibility(t *testing.T) {
 	t.Run("reports the compat settings the uploaded script carries", func(t *testing.T) {
 		t.Parallel()
 
-		compatibility := New("ocel").Hooks().Compatibility
-		if compatibility == nil {
+		compatibility := New("ocel").Facts().Compatibility
+		if compatibility.IsZero() {
 			t.Fatal("the cloudflare edge names no compatibility, so the code it runs has nothing to load under")
 		}
-		date, flags := compatibility()
-		if date != compatDate {
-			t.Errorf("Compatibility() date = %q, want %q", date, compatDate)
+		if compatibility.Date != compatDate {
+			t.Errorf("Facts().Compatibility.Date = %q, want %q", compatibility.Date, compatDate)
 		}
-		if len(flags) != len(compatFlags) || (len(flags) > 0 && flags[0] != compatFlags[0]) {
-			t.Errorf("Compatibility() flags = %v, want %v", flags, compatFlags)
+		if !slices.Equal(compatibility.Flags, compatFlags) {
+			t.Errorf("Facts().Compatibility.Flags = %v, want %v", compatibility.Flags, compatFlags)
 		}
 	})
 }

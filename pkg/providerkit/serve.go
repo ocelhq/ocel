@@ -130,9 +130,6 @@ func (s *session) configure(ctx context.Context, settings Settings) error {
 	if provider == nil {
 		return connect.NewError(connect.CodeInternal, errors.New("the provider constructor returned nothing"))
 	}
-	if err := provider.Hooks().refuseHalfPairs(); err != nil {
-		return connect.NewError(connect.CodeInternal, err)
-	}
 	s.provider = provider
 	s.settings = settings
 	return nil

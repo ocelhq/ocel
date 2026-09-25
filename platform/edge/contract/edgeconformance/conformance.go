@@ -48,29 +48,29 @@ func Run(t *testing.T, suite Suite) {
 		t.Fatal("the suite names no hostname, and every edge must be able to bind one")
 	}
 
-	t.Run("the code fact and the compatibility hook are one answer", func(t *testing.T) {
+	t.Run("the code fact and the compatibility fact are one answer", func(t *testing.T) {
 		e, _ := suite.New(t)
 		runsCode := e.Facts().RunsCode
-		if names := e.Hooks().Compatibility != nil; runsCode != names {
-			t.Errorf("Facts().RunsCode = %v, but Hooks().Compatibility set = %v; the code an edge runs loads under the compatibility it names, so an edge cannot answer them differently", runsCode, names)
+		if names := !e.Facts().Compatibility.IsZero(); runsCode != names {
+			t.Errorf("Facts().RunsCode = %v, but Facts().Compatibility named = %v; the code an edge runs loads under the compatibility it names, so an edge cannot answer them differently", runsCode, names)
 		}
 		wants := slices.ContainsFunc(edge.CodeNeeds(), func(need edge.Need) bool {
 			return edge.Supports(e, need)
 		})
 		if runsCode != wants {
-			t.Errorf("Facts().RunsCode = %v, but Supported() names a code need = %v; an edge that runs code must declare one and one that does not must declare neither", runsCode, wants)
+			t.Errorf("Facts().RunsCode = %v, but Facts().Supported names a code need = %v; an edge that runs code must declare one and one that does not must declare neither", runsCode, wants)
 		}
 	})
 
 	t.Run("every declared need is a need, and declared once", func(t *testing.T) {
 		e, _ := suite.New(t)
-		supported := e.Supported()
+		supported := e.Facts().Supported
 		for i, need := range supported {
 			if !edge.ValidNeed(need) {
-				t.Errorf("Supported() names %q, which is not a need", need)
+				t.Errorf("Facts().Supported names %q, which is not a need", need)
 			}
 			if slices.Contains(supported[:i], need) {
-				t.Errorf("Supported() names %q twice", need)
+				t.Errorf("Facts().Supported names %q twice", need)
 			}
 		}
 	})
@@ -120,15 +120,15 @@ func Run(t *testing.T, suite Suite) {
 
 	t.Run("the flip bound is one a caller can wait out", func(t *testing.T) {
 		e, _ := suite.New(t)
-		bound := e.FlipBound()
+		bound := e.Facts().FlipBound
 		if bound.Typical < 0 {
-			t.Errorf("FlipBound().Typical = %v, want a duration a caller can wait out", bound.Typical)
+			t.Errorf("Facts().FlipBound.Typical = %v, want a duration a caller can wait out", bound.Typical)
 		}
 		if bound.Typical == 0 && bound.Published {
-			t.Error("FlipBound() publishes a bound it declares instant; Published is read only when Typical > 0")
+			t.Error("Facts().FlipBound publishes a bound it declares instant; Published is read only when Typical > 0")
 		}
 		if e.Facts().CachesRecords && bound.Typical == 0 {
-			t.Error("FlipBound().Typical = 0 on an edge whose Facts().CachesRecords is true; an edge that serves a promotion from a cached record keeps serving the old one until the cache lapses, and a caller waiting on the flip needs that bound")
+			t.Error("Facts().FlipBound.Typical = 0 on an edge whose Facts().CachesRecords is true; an edge that serves a promotion from a cached record keeps serving the old one until the cache lapses, and a caller waiting on the flip needs that bound")
 		}
 	})
 
@@ -626,10 +626,10 @@ func runBootstrap(t *testing.T, suite Suite) {
 			t.Errorf("second Bootstrap values = %v, want the %v the first published", second.Values, first.Values)
 		}
 
-		if adopt := e.Hooks().Adoption; adopt != nil {
+		if adopt := e.Hooks().PlanAdoption; adopt != nil {
 			adoption, err := adopt(ctx, class)
 			if err != nil {
-				t.Fatalf("Adoption: %v", err)
+				t.Fatalf("PlanAdoption: %v", err)
 			}
 			if !maps.Equal(adoption.Values, first.Values) {
 				t.Errorf("Adoption values = %v, want the %v Bootstrap published; an origin adopting a standing edge must land on the same coordinates", adoption.Values, first.Values)

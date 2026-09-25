@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -63,6 +62,7 @@ func standingBootstrapper(t *testing.T, class string) Bootstrap {
 		Buckets: &teardownBuckets{},
 		Edge:    front,
 		Edges:   registryOf(front),
+		Kinds:   kindsOf(front),
 
 		Namespace: defaultNamespace,
 	}
@@ -80,13 +80,16 @@ type edgeRegistry struct {
 	held map[edge.Kind]edge.Edge
 }
 
-func (r edgeRegistry) Supported() []edge.Kind {
-	kinds := slices.Collect(maps.Keys(r.held))
+func kindsOf(fronts ...edge.Edge) []edge.Kind {
+	kinds := make([]edge.Kind, 0, len(fronts))
+	for _, front := range fronts {
+		if !slices.Contains(kinds, front.Kind()) {
+			kinds = append(kinds, front.Kind())
+		}
+	}
 	slices.Sort(kinds)
 	return kinds
 }
-
-func (r edgeRegistry) Default() edge.Kind { return cloudfrontKind }
 
 func (r edgeRegistry) Open(kind edge.Kind) (edge.Edge, error) {
 	front, ok := r.held[kind]
@@ -197,6 +200,7 @@ func TestPlanShowsAnEdgeFeatureStandingUpBehindAnotherFront(t *testing.T) {
 	selected := &planningEdge{teardownEdge: teardownEdge{kind: cloudfrontKind}}
 	b := planningBootstrapper(selected)
 	b.Edges = registryOf(selected, standing)
+	b.Kinds = kindsOf(selected, standing)
 
 	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
 		Class:    providerkit.ClassProduction,
@@ -223,6 +227,7 @@ func TestPlanShowsAnEdgeFeatureGoingBehindAnotherFront(t *testing.T) {
 	selected := &planningEdge{teardownEdge: teardownEdge{kind: cloudfrontKind}}
 	b := planningBootstrapper(selected)
 	b.Edges = registryOf(selected, standing)
+	b.Kinds = kindsOf(selected, standing)
 
 	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
 		Class:    providerkit.ClassProduction,
@@ -318,7 +323,7 @@ type adoptingEdge struct {
 }
 
 func (e *adoptingEdge) Hooks() edge.Hooks {
-	return edge.Hooks{Adoption: func(_ context.Context, class edge.Class) (edge.Adoption, error) {
+	return edge.Hooks{PlanAdoption: func(_ context.Context, class edge.Class) (edge.Adoption, error) {
 		e.asked = append(e.asked, class)
 		return edge.Adoption{}, e.refusal
 	}}

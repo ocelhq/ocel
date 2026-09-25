@@ -111,20 +111,14 @@ func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Con
 func (p *provider) Kind() edge.Kind { return Kind }
 
 func (p *provider) Facts() edge.Facts {
-	return edge.Facts{InvalidatesByCacheTag: true}
+	return edge.Facts{
+		Supported:             []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming},
+		FlipBound:             edge.FlipBound{Typical: propagationBound},
+		InvalidatesByCacheTag: true,
+	}
 }
 
 func (p *provider) Hooks() edge.Hooks { return edge.Hooks{} }
-
-var supported = []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming}
-
-func (p *provider) Supported() []edge.Need {
-	return slices.Clone(supported)
-}
-
-func (p *provider) FlipBound() edge.FlipBound {
-	return edge.FlipBound{Typical: propagationBound}
-}
 
 func CertificateRegion(string) string { return certs.CloudFrontRegion }
 

@@ -310,7 +310,7 @@ func edgeKind(provider Provider, requested string) edge.Kind {
 	if requested != "" {
 		return edge.Kind(requested)
 	}
-	return provider.Edges().Default()
+	return provider.Facts().DefaultEdge
 }
 
 func (h *handlers) GetCredentialPermissions(_ context.Context, req *contractv1.CredentialPermissionsRequest) (*contractv1.CredentialPermissionsResponse, error) {
@@ -332,7 +332,7 @@ func (h *handlers) GetCredentialPermissions(_ context.Context, req *contractv1.C
 	}}
 
 	if front, err := provider.Edges().Open(edgeKind(provider, req.GetEdge().GetKind())); err == nil {
-		if document := front.Hooks().CredentialPermissions; document != nil {
+		if document := front.Hooks().DescribeCredentialPermissions; document != nil {
 			documented, err := document(tier)
 			if err != nil {
 				return nil, RefusalError(err)

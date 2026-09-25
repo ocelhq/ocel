@@ -17,9 +17,7 @@ import (
 const fakeStoreEndpoint = "https://store.fake"
 
 type recordingEdge struct {
-	kind        edge.Kind
-	compatDate  string
-	compatFlags []string
+	kind edge.Kind
 
 	opens        []edge.StackState
 	reconciles   []edge.StackSpec
@@ -80,13 +78,12 @@ func (f *recordingEdge) declared() edge.Edge {
 	return real
 }
 
-func (f *recordingEdge) Supported() []edge.Need { return f.declared().Supported() }
-
-func (f *recordingEdge) FlipBound() edge.FlipBound { return f.declared().FlipBound() }
-
 func (f *recordingEdge) Facts() edge.Facts {
 	declared := f.declared().Facts()
 	return edge.Facts{
+		Supported:             declared.Supported,
+		FlipBound:             declared.FlipBound,
+		Compatibility:         edge.Compatibility{Date: "2025-01-01", Flags: []string{"nodejs_compat"}},
 		RunsCode:              true,
 		ServesUnbound:         declared.ServesUnbound,
 		SignsOriginForwards:   declared.SignsOriginForwards,
@@ -113,7 +110,7 @@ func (f *recordingEdge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOu
 func (f *recordingEdge) Teardown(context.Context, edge.Class) error { return nil }
 
 func (f *recordingEdge) Hooks() edge.Hooks {
-	return edge.Hooks{Compatibility: func() (string, []string) { return f.compatDate, f.compatFlags }}
+	return edge.Hooks{}
 }
 
 func (f *recordingEdge) DomainOwner(_ context.Context, hostname string) (string, error) {
@@ -460,10 +457,9 @@ func TestRecordingEdge(t *testing.T) {
 
 type codelessEdge struct{ edge.Edge }
 
-func (u codelessEdge) Hooks() edge.Hooks { return edge.Hooks{} }
-
 func (u codelessEdge) Facts() edge.Facts {
 	facts := u.Edge.Facts()
 	facts.RunsCode = false
+	facts.Compatibility = edge.Compatibility{}
 	return facts
 }

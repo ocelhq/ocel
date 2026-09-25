@@ -42,15 +42,16 @@ func TestTheCredentialsPortAnswersOrSaysWhyItCannot(t *testing.T) {
 
 func TestTheEdgeRegistryOpensTheEdgesThisProviderFronts(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
-	registry := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Edges()
+	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	facts := p.Facts()
 
-	conformance.RunEdges(t, registry)
+	conformance.RunEdges(t, facts, p.Edges())
 
-	if got := registry.Supported(); !slices.Equal(got, []edge.Kind{direct.Kind, alb.Kind}) {
-		t.Errorf("Supported() = %v, want %q and %q", got, direct.Kind, alb.Kind)
+	if got := facts.Edges; !slices.Equal(got, []edge.Kind{direct.Kind, alb.Kind}) {
+		t.Errorf("Facts().Edges = %v, want %q and %q", got, direct.Kind, alb.Kind)
 	}
-	if got := registry.Default(); got != direct.Kind {
-		t.Errorf("Default() = %q, want %q: a deploy that names no edge is answered on the url Cloud Run gave it", got, direct.Kind)
+	if got := facts.DefaultEdge; got != direct.Kind {
+		t.Errorf("Facts().DefaultEdge = %q, want %q: a deploy that names no edge is answered on the url Cloud Run gave it", got, direct.Kind)
 	}
 }
 
@@ -81,7 +82,8 @@ func TestTheDirectEdgeBindsNoHostnameAndSaysSo(t *testing.T) {
 func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
-	conformance.RunDNS(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).DNS())
+	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
+	conformance.RunDNS(t, p.Facts(), p.DNS())
 }
 
 func buildProvider(t *testing.T) string {

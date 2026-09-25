@@ -91,10 +91,6 @@ func (c credentials) login() string {
 
 type edges struct{ provider *Provider }
 
-func (edges) Supported() []edge.Kind { return []edge.Kind{box.Kind} }
-
-func (edges) Default() edge.Kind { return box.Kind }
-
 func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 	if kind != box.Kind {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
@@ -106,10 +102,6 @@ func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 type dns struct{}
 
 const dnsCloudflare = providerkit.DNSKind(cloudflare.Kind)
-
-func (dns) Supported() []providerkit.DNSKind {
-	return []providerkit.DNSKind{dnsCloudflare}
-}
 
 func (dns) Open(kind providerkit.DNSKind, zone string, _ edge.Kind) (edge.DNSRecords, error) {
 	if kind != dnsCloudflare {

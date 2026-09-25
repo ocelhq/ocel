@@ -39,13 +39,14 @@ type Bootstrap struct {
 	Buckets cfn.BucketEmptierAPI
 	Edge    edge.Edge
 	Edges   providerkit.Edges
+	Kinds   []edge.Kind
 	Region  string
 	VarsKey string
 
 	Namespace bootstrap.Namespace
 }
 
-func BootstrapFor(cfg aws.Config, front edge.Edge, registry providerkit.Edges, varsKey string, ns bootstrap.Namespace) Bootstrap {
+func BootstrapFor(cfg aws.Config, front edge.Edge, registry providerkit.Edges, kinds []edge.Kind, varsKey string, ns bootstrap.Namespace) Bootstrap {
 	return Bootstrap{
 		CFN:     cloudformation.NewFromConfig(cfg),
 		SSM:     ssm.NewFromConfig(cfg),
@@ -55,6 +56,7 @@ func BootstrapFor(cfg aws.Config, front edge.Edge, registry providerkit.Edges, v
 		Buckets: s3.NewFromConfig(cfg),
 		Edge:    front,
 		Edges:   registry,
+		Kinds:   kinds,
 		Region:  cfg.Region,
 		VarsKey: varsKey,
 
@@ -151,7 +153,7 @@ func (b Bootstrap) adoptions(ctx context.Context, req providerkit.BootstrapReque
 		if err != nil {
 			return nil, err
 		}
-		adopt := front.Hooks().Adoption
+		adopt := front.Hooks().PlanAdoption
 		if adopt == nil {
 			continue
 		}

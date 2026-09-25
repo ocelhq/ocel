@@ -17,7 +17,7 @@ type loaded struct {
 	at   string
 }
 
-func (p *Provider) DirectImages(context.Context) (providerkit.ImageStore, error) {
+func (p *Provider) OpenDirectImages(context.Context) (providerkit.ImageStore, error) {
 	return loaded{host: p.host, at: p.options.SSH.session().Destination()}, nil
 }
 

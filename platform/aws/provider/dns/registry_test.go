@@ -15,14 +15,14 @@ import (
 func TestRegistryConformance(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
-	conformance.RunDNS(t, Registry{})
+	conformance.RunDNS(t, providerkit.Facts{DNSKinds: Kinds()}, Registry{})
 }
 
-func TestRegistrySupportedKinds(t *testing.T) {
+func TestKinds(t *testing.T) {
 	t.Parallel()
 
-	if got := (Registry{}).Supported(); !slices.Equal(got, []providerkit.DNSKind{providerkit.DNSKind(KindCloudflare), providerkit.DNSKind(KindRoute53)}) {
-		t.Errorf("Supported() = %v, want cloudflare and route53", got)
+	if got := Kinds(); !slices.Equal(got, []providerkit.DNSKind{providerkit.DNSKind(KindCloudflare), providerkit.DNSKind(KindRoute53)}) {
+		t.Errorf("Kinds() = %v, want cloudflare and route53", got)
 	}
 }
 

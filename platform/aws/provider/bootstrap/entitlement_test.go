@@ -13,7 +13,7 @@ type freePlanEdge struct {
 }
 
 func (f *freePlanEdge) Hooks() edge.Hooks {
-	return edge.Hooks{CodeEntitlement: func(context.Context) (edge.CodeEntitlement, error) {
+	return edge.Hooks{CheckCodeEntitlement: func(context.Context) (edge.CodeEntitlement, error) {
 		f.checks++
 		return edge.CodeEntitlement{Plan: "Workers Free", Granted: edge.EntitlementWithheld}, nil
 	}}

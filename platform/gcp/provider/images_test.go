@@ -77,12 +77,12 @@ func TestAnEmulatedDeployLoadsItsImagesIntoTheDaemonTheEmulatorShares(t *testing
 	ctx := context.Background()
 	emulated := pushing(t, "http://127.0.0.1:4588")
 
-	direct, err := emulated.DirectImages(ctx)
+	direct, err := emulated.OpenDirectImages(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(direct.Destination(), "daemon") {
-		t.Errorf("DirectImages() = %v, want the local docker daemon the emulator runs containers out of", direct)
+		t.Errorf("OpenDirectImages() = %v, want the local docker daemon the emulator runs containers out of", direct)
 	}
 
 	target, err := emulated.EnsureImageRegistry(ctx, providerkit.ClassProduction, []string{"web"})
@@ -106,7 +106,7 @@ func TestARealDeployPushesToTheRegistryItResolved(t *testing.T) {
 	if target.Server == "" {
 		t.Fatalf("ImageRegistry() = %v, want a registry a real deploy pushes to", target)
 	}
-	if p.Hooks().RegistryImages != nil {
-		t.Error("the provider sets a RegistryImages hook, and Artifact Registry takes its push from the kit's own registry store")
+	if p.Hooks().OpenRegistryImages != nil {
+		t.Error("the provider sets an OpenRegistryImages hook, and Artifact Registry takes its push from the kit's own registry store")
 	}
 }

@@ -43,9 +43,9 @@ func runHooks(t *testing.T, suite Suite) {
 	}
 	hooks := provider.Hooks()
 
-	t.Run("ShapeCost", func(t *testing.T) {
-		if hooks.ShapeCost == nil {
-			t.Skip("this provider sets no ShapeCost hook, so no deploy of it is priced")
+	t.Run("Cost", func(t *testing.T) {
+		if hooks.Cost == nil {
+			t.Skip("this provider sets no Cost hooks, so no deploy of it is priced")
 		}
 		runCost(t, suite)
 	})

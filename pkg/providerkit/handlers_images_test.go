@@ -324,11 +324,11 @@ type loadingProvider struct {
 
 func (p loadingProvider) Hooks() providerkit.Hooks {
 	hooks := p.Provider.Hooks()
-	hooks.DirectImages = p.DirectImages
+	hooks.OpenDirectImages = p.OpenDirectImages
 	return hooks
 }
 
-func (p loadingProvider) DirectImages(context.Context) (providerkit.ImageStore, error) {
+func (p loadingProvider) OpenDirectImages(context.Context) (providerkit.ImageStore, error) {
 	return p.direct, nil
 }
 
@@ -437,11 +437,11 @@ type addressingProvider struct {
 
 func (p addressingProvider) Hooks() providerkit.Hooks {
 	hooks := p.Provider.Hooks()
-	hooks.DirectImages = p.DirectImages
+	hooks.OpenDirectImages = p.OpenDirectImages
 	return hooks
 }
 
-func (p addressingProvider) DirectImages(context.Context) (providerkit.ImageStore, error) {
+func (p addressingProvider) OpenDirectImages(context.Context) (providerkit.ImageStore, error) {
 	return p.direct, nil
 }
 

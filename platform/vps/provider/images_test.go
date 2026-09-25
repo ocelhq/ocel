@@ -263,7 +263,7 @@ func standing(t *testing.T, machine *box) providerkit.ImageStore {
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
 		func(context.Context) (host.Conn, error) { return machine, nil },
 	)
-	store, err := p.DirectImages(context.Background())
+	store, err := p.OpenDirectImages(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -414,7 +414,7 @@ func TestAWrappedImagePulledOntoTheMachineIsPinnedToTheDigestOfWhatWasPushed(t *
 	served := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
 	t.Cleanup(served.Close)
 	server := strings.TrimPrefix(served.URL, "http://")
-	store, err := p.RegistryImages(context.Background(), providerkit.RegistryTarget{Server: server})
+	store, err := p.OpenRegistryImages(context.Background(), providerkit.RegistryTarget{Server: server})
 	if err != nil {
 		t.Fatal(err)
 	}

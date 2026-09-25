@@ -52,7 +52,7 @@ func (b Bootstrap) PlanRemove(ctx context.Context, class providerkit.Class) (pro
 func (b Bootstrap) standingEdges(ctx context.Context, class providerkit.Class, deployed bootstrap.Deployed) ([]edge.Edge, error) {
 	held := bootstrap.EdgeKindsFor(deployed.Features.Names())
 	fronts := []edge.Edge{b.Edge}
-	for _, kind := range b.Edges.Supported() {
+	for _, kind := range b.Kinds {
 		if kind == b.Edge.Kind() {
 			continue
 		}

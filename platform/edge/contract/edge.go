@@ -35,7 +35,7 @@ func NeedNames(needs []Need) []string {
 }
 
 func Supports(e Edge, need Need) bool {
-	return slices.Contains(e.Supported(), need)
+	return slices.Contains(e.Facts().Supported, need)
 }
 
 func ValidNeed(need Need) bool {
@@ -47,7 +47,19 @@ type FlipBound struct {
 	Published bool          `json:"published"`
 }
 
+type Compatibility struct {
+	Date  string
+	Flags []string
+}
+
+func (c Compatibility) IsZero() bool {
+	return c.Date == "" && len(c.Flags) == 0
+}
+
 type Facts struct {
+	Supported             []Need
+	FlipBound             FlipBound
+	Compatibility         Compatibility
 	RunsCode              bool
 	AddressesItself       bool
 	ServesUnbound         bool
@@ -65,10 +77,6 @@ type Edge interface {
 	Facts() Facts
 
 	Hooks() Hooks
-
-	Supported() []Need
-
-	FlipBound() FlipBound
 
 	Bootstrap(ctx context.Context, class Class) (BootstrapOutput, error)
 

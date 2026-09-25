@@ -59,6 +59,7 @@ func removingBootstrapper(t *testing.T, class string) Bootstrap {
 		{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanDelete, Slow: true},
 	}}
 	b.Edges = registryOf(b.Edge)
+	b.Kinds = kindsOf(b.Edge)
 	return b
 }
 
@@ -237,6 +238,7 @@ func frontedBootstrapper(t *testing.T, class string) (Bootstrap, *planningEdge, 
 	}
 	b.Edge = selected
 	b.Edges = registryOf(selected, standing)
+	b.Kinds = kindsOf(selected, standing)
 	return b, selected, standing
 }
 
@@ -283,6 +285,7 @@ func TestPlanRemovalLeavesOutAnEdgeThisAccountHoldsNothingFor(t *testing.T) {
 		removals:     []edge.PlanChange{{Kind: "Relay::Worker", Name: "ocel-relay", Action: edge.PlanDelete}},
 	}
 	b.Edges = registryOf(selected, standing, unused)
+	b.Kinds = kindsOf(selected, standing, unused)
 
 	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
@@ -360,6 +363,7 @@ func TestRemoveLeavesAloneAnEdgeThisAccountHoldsNothingFor(t *testing.T) {
 	b, selected, standing := frontedBootstrapper(t, bootstrap.ClassProduction)
 	unused := &planningEdge{teardownEdge: teardownEdge{kind: "relay"}}
 	b.Edges = registryOf(selected, standing, unused)
+	b.Kinds = kindsOf(selected, standing, unused)
 
 	if err := b.Remove(context.Background(), providerkit.ClassProduction, nil); err != nil {
 		t.Fatalf("Remove: %v", err)

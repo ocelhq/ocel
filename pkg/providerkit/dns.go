@@ -5,8 +5,6 @@ import (
 )
 
 type DNS interface {
-	Supported() []DNSKind
-
 	Open(kind DNSKind, zone string, front edge.Kind) (edge.DNSRecords, error)
 }
 

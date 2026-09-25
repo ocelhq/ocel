@@ -56,7 +56,7 @@ type stackSession struct {
 func (h *handlers) edgeFor(provider Provider, sel *contractv1.EdgeSelection) (edge.Edge, error) {
 	kind := edge.Kind(sel.GetKind())
 	if kind == "" {
-		kind = provider.Edges().Default()
+		kind = provider.Facts().DefaultEdge
 	}
 	return provider.Edges().Open(kind)
 }
@@ -110,7 +110,7 @@ func (h *handlers) openStack(ctx context.Context, class Class, slug string, sel 
 }
 
 func (s *stackSession) installSettler(writer edge.DNSRecords, zone string) {
-	s.settle = newSettler(s.front, writer, zone, probingFor(s.provider, s.front))
+	s.settle = newSettler(s.front, writer, zone, s.provider.Liveness())
 }
 
 func (s *stackSession) checkpoint(ctx context.Context) error {

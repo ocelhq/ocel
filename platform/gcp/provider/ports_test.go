@@ -42,9 +42,10 @@ func names(t *testing.T, p *gcp.Provider) gcp.Names {
 func TestTheAlbEdgeIsRegisteredAndOpensWithTheProvidersOwnPorts(t *testing.T) {
 	t.Parallel()
 
-	registry := standing(t).Edges()
-	if got := registry.Supported(); !slices.Contains(got, alb.Kind) {
-		t.Fatalf("Supported() = %v, want the %q edge among them: a config that names it would be refused", got, alb.Kind)
+	p := standing(t)
+	registry := p.Edges()
+	if got := p.Facts().Edges; !slices.Contains(got, alb.Kind) {
+		t.Fatalf("Facts().Edges = %v, want the %q edge among them: a config that names it would be refused", got, alb.Kind)
 	}
 	front, err := registry.Open(alb.Kind)
 	if err != nil {
@@ -89,8 +90,8 @@ func TestNamingTheCloudflareEdgeIsRefusedWhenTheBootstrapIsOpenedAndSaysWhy(t *t
 	t.Parallel()
 
 	p := standing(t)
-	if slices.Contains(p.Edges().Supported(), cloudflare.Kind) {
-		t.Errorf("Supported() = %v, and an edge this provider builds no program for is one every deploy through it is refused on", p.Edges().Supported())
+	if slices.Contains(p.Facts().Edges, cloudflare.Kind) {
+		t.Errorf("Facts().Edges = %v, and an edge this provider builds no program for is one every deploy through it is refused on", p.Facts().Edges)
 	}
 	var refusal providerkit.Refusal
 	_, err := p.Bootstrap(cloudflare.Kind)

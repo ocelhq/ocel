@@ -2,7 +2,6 @@ package gcp
 
 import (
 	"context"
-	"slices"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -25,10 +24,6 @@ type edges struct {
 }
 
 var supportedEdges = []edge.Kind{direct.Kind, alb.Kind}
-
-func (edges) Supported() []edge.Kind { return slices.Clone(supportedEdges) }
-
-func (edges) Default() edge.Kind { return direct.Kind }
 
 func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 	switch kind {
@@ -136,8 +131,6 @@ func (s cipher) Open(ctx context.Context, at providerkit.SealScope, sealed []byt
 type dns struct{}
 
 const dnsCloudflare = providerkit.DNSKind(cloudflare.Kind)
-
-func (dns) Supported() []providerkit.DNSKind { return []providerkit.DNSKind{dnsCloudflare} }
 
 func (dns) Open(kind providerkit.DNSKind, zone string, _ edge.Kind) (edge.DNSRecords, error) {
 	if kind != dnsCloudflare {

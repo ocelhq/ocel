@@ -127,20 +127,14 @@ func (p *provider) deleter() *Deleter {
 func (p *provider) Kind() edge.Kind { return Kind }
 
 func (p *provider) Facts() edge.Facts {
-	return edge.Facts{SignsOriginForwards: true}
+	return edge.Facts{
+		Supported:           []edge.Need{edge.NeedStreaming},
+		FlipBound:           edge.FlipBound{Typical: propagationBound},
+		SignsOriginForwards: true,
+	}
 }
 
 func (p *provider) Hooks() edge.Hooks { return edge.Hooks{} }
-
-var supported = []edge.Need{edge.NeedStreaming}
-
-func (p *provider) Supported() []edge.Need {
-	return slices.Clone(supported)
-}
-
-func (p *provider) FlipBound() edge.FlipBound {
-	return edge.FlipBound{Typical: propagationBound}
-}
 
 func CertificateRegion(apiRegion string) string { return apiRegion }
 

@@ -120,7 +120,7 @@ func (b bootstrap) tearFronts(ctx context.Context, class providerkit.Class, feat
 func (b bootstrap) frontStands(ctx context.Context, class providerkit.Class, feature string) (bool, error) {
 	standing := true
 	err := b.eachFront([]string{feature}, func(_ providerkit.Feature, front edge.Edge) error {
-		stands := front.Hooks().BootstrapStands
+		stands := front.Hooks().CheckBootstrapStands
 		if stands == nil {
 			return nil
 		}
@@ -136,7 +136,7 @@ func (b bootstrap) frontStands(ctx context.Context, class providerkit.Class, fea
 
 func (b bootstrap) frontsFree(ctx context.Context, class providerkit.Class, features []string) error {
 	return b.eachFront(features, func(_ providerkit.Feature, front edge.Edge) error {
-		boundHostnames := front.Hooks().BoundHostnames
+		boundHostnames := front.Hooks().ListBoundHostnames
 		if boundHostnames == nil {
 			return nil
 		}

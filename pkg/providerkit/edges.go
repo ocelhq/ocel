@@ -5,9 +5,5 @@ import (
 )
 
 type Edges interface {
-	Supported() []edge.Kind
-
-	Default() edge.Kind
-
 	Open(kind edge.Kind) (edge.Edge, error)
 }

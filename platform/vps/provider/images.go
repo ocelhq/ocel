@@ -15,7 +15,7 @@ type pulled struct {
 	target providerkit.RegistryTarget
 }
 
-func (p *Provider) RegistryImages(_ context.Context, target providerkit.RegistryTarget) (providerkit.ImageStore, error) {
+func (p *Provider) OpenRegistryImages(_ context.Context, target providerkit.RegistryTarget) (providerkit.ImageStore, error) {
 	if err := host.LoginStands(target); err != nil {
 		return nil, err
 	}

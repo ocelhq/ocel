@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
@@ -36,6 +35,7 @@ func (e *Edge) Kind() edge.Kind { return Kind }
 
 func (e *Edge) Facts() edge.Facts {
 	return edge.Facts{
+		Supported:             []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming},
 		InvalidatesByCacheTag: true,
 		ShieldsOrigin:         true,
 		RoutesPreviewsByLabel: true,
@@ -45,17 +45,11 @@ func (e *Edge) Facts() edge.Facts {
 
 func (e *Edge) Hooks() edge.Hooks {
 	return edge.Hooks{
-		BootstrapStands:       e.bootstrapStands,
-		BoundHostnames:        e.boundHostnames,
-		CredentialPermissions: e.credentialPermissions,
+		CheckBootstrapStands:          e.bootstrapStands,
+		ListBoundHostnames:            e.boundHostnames,
+		DescribeCredentialPermissions: e.credentialPermissions,
 	}
 }
-
-var supported = []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming}
-
-func (e *Edge) Supported() []edge.Need { return slices.Clone(supported) }
-
-func (e *Edge) FlipBound() edge.FlipBound { return edge.FlipBound{} }
 
 func (e *Edge) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {
 	if class == "" {

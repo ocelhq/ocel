@@ -11,11 +11,6 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type resolver interface {
-	Serving(ctx context.Context, hostname string) (edge.Kind, error)
-	Unreached(hostname string) string
-}
-
 const (
 	settleBudget   = time.Minute
 	attendedBudget = 15 * time.Minute
@@ -24,17 +19,17 @@ const (
 )
 
 type settler struct {
-	kind    edge.Kind
-	unbound bool
-	writer  edge.DNSRecords
-	zone    string
-	resolve resolver
-	budget  time.Duration
-	window  time.Duration
-	wait    time.Duration
-	sleep   func(context.Context, time.Duration) error
-	now     func() time.Time
-	owed    owedPolicy
+	kind     edge.Kind
+	unbound  bool
+	writer   edge.DNSRecords
+	zone     string
+	liveness Liveness
+	budget   time.Duration
+	window   time.Duration
+	wait     time.Duration
+	sleep    func(context.Context, time.Duration) error
+	now      func() time.Time
+	owed     owedPolicy
 }
 
 type owedPolicy struct {
@@ -59,36 +54,19 @@ func unattended(sender *eventSender) owedPolicy {
 	return policy
 }
 
-func newSettler(front edge.Edge, writer edge.DNSRecords, zone string, resolve resolver) settler {
+func newSettler(front edge.Edge, writer edge.DNSRecords, zone string, liveness Liveness) settler {
 	return settler{
-		kind:    front.Kind(),
-		unbound: front.Facts().ServesUnbound,
-		writer:  writer,
-		zone:    zone,
-		resolve: resolve,
-		budget:  settleBudget,
-		window:  attemptWindow,
-		wait:    settleWait,
-		sleep:   sleep,
-		now:     time.Now,
+		kind:     front.Kind(),
+		unbound:  front.Facts().ServesUnbound,
+		writer:   writer,
+		zone:     zone,
+		liveness: liveness,
+		budget:   settleBudget,
+		window:   attemptWindow,
+		wait:     settleWait,
+		sleep:    sleep,
+		now:      time.Now,
 	}
-}
-
-func probingFor(provider Provider, front edge.Edge) resolver {
-	return probing{liveness: provider.Liveness(), kind: front.Kind()}
-}
-
-type probing struct {
-	liveness Liveness
-	kind     edge.Kind
-}
-
-func (p probing) Serving(ctx context.Context, hostname string) (edge.Kind, error) {
-	return p.liveness.ServingEdge(ctx, p.kind, hostname)
-}
-
-func (p probing) Unreached(hostname string) string {
-	return p.liveness.Unreached(hostname)
 }
 
 func sleep(ctx context.Context, d time.Duration) error {
@@ -217,7 +195,7 @@ func (s settler) await(ctx context.Context, hostname string, say func(string)) (
 func (s settler) attempt(ctx context.Context, hostname string) (edge.Kind, error) {
 	asking, stop := context.WithTimeout(ctx, s.window)
 	defer stop()
-	return s.resolve.Serving(asking, hostname)
+	return s.liveness.ServingEdge(asking, s.kind, hostname)
 }
 
 func (s settler) unresolved(hostname string, serving edge.Kind, began time.Time, outlasted string) error {
@@ -237,7 +215,7 @@ func (s settler) unresolved(hostname string, serving edge.Kind, began time.Time,
 }
 
 func (s settler) unreached(hostname string) string {
-	cause := s.resolve.Unreached(hostname)
+	cause := s.liveness.Unreached(hostname)
 	if cause == "" {
 		return ""
 	}

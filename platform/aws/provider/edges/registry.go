@@ -40,10 +40,6 @@ type Registry struct {
 
 var _ providerkit.Edges = Registry{}
 
-func (r Registry) Supported() []edge.Kind { return SupportedEdges() }
-
-func (r Registry) Default() edge.Kind { return DefaultKind }
-
 func (r Registry) Open(kind edge.Kind) (edge.Edge, error) {
 	construct, ok := constructors[kind]
 	if !ok {

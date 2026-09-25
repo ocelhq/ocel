@@ -2,7 +2,6 @@ package direct
 
 import (
 	"context"
-	"slices"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -25,15 +24,14 @@ func New(records providerkit.RecordStore, pins pin.Pins) *Edge {
 
 func (e *Edge) Kind() edge.Kind { return Kind }
 
-func (e *Edge) Facts() edge.Facts { return edge.Facts{AddressesItself: true} }
+func (e *Edge) Facts() edge.Facts {
+	return edge.Facts{
+		Supported:       []edge.Need{edge.NeedStreaming},
+		AddressesItself: true,
+	}
+}
 
 func (e *Edge) Hooks() edge.Hooks { return edge.Hooks{} }
-
-var supported = []edge.Need{edge.NeedStreaming}
-
-func (e *Edge) Supported() []edge.Need { return slices.Clone(supported) }
-
-func (e *Edge) FlipBound() edge.FlipBound { return edge.FlipBound{} }
 
 func (e *Edge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOutput, error) {
 	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil

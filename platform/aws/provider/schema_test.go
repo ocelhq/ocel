@@ -10,7 +10,7 @@ import (
 )
 
 func TestProviderSchemaIsCommitted(t *testing.T) {
-	generated, err := configdoc.ProviderSchema(string(Vendor), Options{}, edges.Registry{}.Supported(), dns.Registry{}.Supported())
+	generated, err := configdoc.ProviderSchema(string(Vendor), Options{}, edges.SupportedEdges(), dns.Kinds())
 	if err != nil {
 		t.Fatalf("provider schema: %v", err)
 	}

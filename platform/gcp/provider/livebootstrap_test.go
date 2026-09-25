@@ -45,7 +45,7 @@ func servicesEnabled(t *testing.T) {
 
 func bootstrapOf(t *testing.T, p *gcp.Provider) providerkit.Bootstrap {
 	t.Helper()
-	bootstrapper, err := p.Bootstrap(p.Edges().Default())
+	bootstrapper, err := p.Bootstrap(p.Facts().DefaultEdge)
 	if err != nil {
 		t.Fatalf("Bootstrap() = %v", err)
 	}
@@ -73,7 +73,7 @@ func TestLiveBootstrapper(t *testing.T) {
 	p := live(t)
 	servicesEnabled(t)
 
-	conformance.RunBootstrap(t, bootstrapOf(t, p), p.Edges().Default())
+	conformance.RunBootstrap(t, bootstrapOf(t, p), p.Facts().DefaultEdge)
 }
 
 func TestLiveTheBootstrapStandsUpTheStackTheDataPortsRead(t *testing.T) {
@@ -98,7 +98,7 @@ func TestLiveTheBootstrapStandsUpTheStackTheDataPortsRead(t *testing.T) {
 	}
 
 	t.Run("Sealer", func(t *testing.T) { conformance.RunCipher(t, p.Cipher()) })
-	t.Run("ArtifactStore", func(t *testing.T) { conformance.RunArtifactStore(t, p.Artifacts()) })
+	t.Run("ArtifactStore", func(t *testing.T) { conformance.RunArtifactStore(t, p.Facts(), p.Artifacts()) })
 	t.Run("RecordStore", func(t *testing.T) { conformance.RunRecordStore(t, p.Records()) })
 }
 

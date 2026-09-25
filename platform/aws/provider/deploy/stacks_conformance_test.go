@@ -297,7 +297,7 @@ func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ providerkit.Class, 
 func TestReleaserRunsTheKitsPortTier(t *testing.T) {
 	store := newShippedArtifacts()
 	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: store}
-	conformance.RunStacks(t, conformingReleaser(engine), store, nil, Serves())
+	conformance.RunStacks(t, providerkit.Facts{Bindings: Serves(), StoresArtifacts: true}, conformingReleaser(engine), store, nil)
 }
 
 func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *testing.T) {

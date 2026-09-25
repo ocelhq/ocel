@@ -43,7 +43,7 @@ func (w *wildcards) settler(front edge.Edge) (settler, error) {
 	if err != nil {
 		return settler{}, err
 	}
-	s := newSettler(front, writer, w.sel.GetDns().GetZone(), probingFor(w.provider, front))
+	s := newSettler(front, writer, w.sel.GetDns().GetZone(), w.provider.Liveness())
 	if w.audience != nil {
 		s.attend(w.audience)
 	}

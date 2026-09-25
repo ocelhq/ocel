@@ -23,7 +23,7 @@ type uncosted struct{ providerkit.Provider }
 
 func (u uncosted) Hooks() providerkit.Hooks {
 	hooks := u.Provider.Hooks()
-	hooks.ShapeCost, hooks.EstimateCost = nil, nil
+	hooks.Cost = nil
 	return hooks
 }
 

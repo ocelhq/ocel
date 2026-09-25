@@ -127,13 +127,13 @@ func imageRef(repository, tag string, target RegistryTarget) string {
 func imageStoreFor(ctx context.Context, provider Provider, target RegistryTarget) (ImageStore, error) {
 	hooks := provider.Hooks()
 	if !target.Named() {
-		if hooks.DirectImages == nil {
+		if hooks.OpenDirectImages == nil {
 			return nil, nil
 		}
-		return hooks.DirectImages(ctx)
+		return hooks.OpenDirectImages(ctx)
 	}
-	if hooks.RegistryImages != nil {
-		return hooks.RegistryImages(ctx, target)
+	if hooks.OpenRegistryImages != nil {
+		return hooks.OpenRegistryImages(ctx, target)
 	}
 	return RegistryImages(target), nil
 }

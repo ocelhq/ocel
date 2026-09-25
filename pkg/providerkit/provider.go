@@ -29,7 +29,11 @@ type Facts struct {
 	Vendor            Vendor
 	Bindings          []BindingType
 	Computes          []Compute
+	Edges             []edge.Kind
+	DefaultEdge       edge.Kind
+	DNSKinds          []DNSKind
 	RendersTransforms bool
+	StoresArtifacts   bool
 }
 
 type EdgeProgramRequest struct {

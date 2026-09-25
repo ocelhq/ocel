@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 
-func (p *Provider) FunctionRuntime(_ context.Context, framework providerkit.Framework) ([]byte, error) {
+func (p *Provider) ReadFunctionRuntime(_ context.Context, framework providerkit.Framework) ([]byte, error) {
 	if !providerkit.BootsThroughRuntime(framework) {
 		return nil, nil
 	}

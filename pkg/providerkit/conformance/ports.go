@@ -37,23 +37,24 @@ func RunPorts(t *testing.T, provider providerkit.Provider) {
 
 	t.Run("RecordStore", func(t *testing.T) { RunRecordStore(t, provider.Records()) })
 	t.Run("Cipher", func(t *testing.T) { RunCipher(t, provider.Cipher()) })
-	t.Run("ArtifactStore", func(t *testing.T) { RunArtifactStore(t, provider.Artifacts()) })
+	facts := provider.Facts()
+	t.Run("ArtifactStore", func(t *testing.T) { RunArtifactStore(t, facts, provider.Artifacts()) })
 	t.Run("Stacks", func(t *testing.T) {
-		RunStacks(t, provider.Stacks(), provider.Artifacts(), provider.Records(), provider.Facts().Bindings)
+		RunStacks(t, facts, provider.Stacks(), provider.Artifacts(), provider.Records())
 	})
 	t.Run("Bootstrap", func(t *testing.T) {
-		RunBootstrap(t, bootstrapOf(t, provider), provider.Edges().Default())
+		RunBootstrap(t, bootstrapOf(t, provider), facts.DefaultEdge)
 	})
 	t.Run("Credentials", func(t *testing.T) { RunCredentials(t, provider.Credentials()) })
-	t.Run("Edges", func(t *testing.T) { RunEdges(t, provider.Edges()) })
-	t.Run("DNS", func(t *testing.T) { RunDNS(t, provider.DNS()) })
+	t.Run("Edges", func(t *testing.T) { RunEdges(t, facts, provider.Edges()) })
+	t.Run("DNS", func(t *testing.T) { RunDNS(t, facts, provider.DNS()) })
 }
 
 func bootstrapOf(t *testing.T, provider providerkit.Provider) providerkit.Bootstrap {
 	t.Helper()
-	bootstrapper, err := provider.Bootstrap(provider.Edges().Default())
+	bootstrapper, err := provider.Bootstrap(provider.Facts().DefaultEdge)
 	if err != nil {
-		t.Fatalf("Bootstrap(%q) error = %v, want the bootstrapper for this provider's default edge", provider.Edges().Default(), err)
+		t.Fatalf("Bootstrap(%q) error = %v, want the bootstrapper for this provider's default edge", provider.Facts().DefaultEdge, err)
 	}
 	return bootstrapper
 }
@@ -577,14 +578,14 @@ func permissionsRendered(credentials providerkit.Credentials, tier providerkit.C
 	return err
 }
 
-func RunArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore) {
+func RunArtifactStore(t *testing.T, facts providerkit.Facts, artifacts providerkit.ArtifactStore) {
 	t.Helper()
 
 	ctx := context.Background()
 	ref := providerkit.ArtifactRef{Class: providerkit.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
 	body := []byte("a build artifact")
 
-	if _, storeless := artifacts.(providerkit.NoArtifacts); storeless {
+	if !facts.StoresArtifacts {
 		runStorelessArtifactStore(t, artifacts, ref)
 		return
 	}
@@ -792,7 +793,7 @@ func writtenArtifact(t *testing.T) string {
 	return path
 }
 
-func RunStacks(t *testing.T, releaser providerkit.Stacks, artifacts providerkit.ArtifactStore, records providerkit.RecordStore, serves []providerkit.BindingType) {
+func RunStacks(t *testing.T, facts providerkit.Facts, releaser providerkit.Stacks, artifacts providerkit.ArtifactStore, records providerkit.RecordStore) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -811,7 +812,7 @@ func RunStacks(t *testing.T, releaser providerkit.Stacks, artifacts providerkit.
 	})
 
 	t.Run("Plan says what a provision would do before it does it", func(t *testing.T) {
-		resources := declared(serves)
+		resources := declared(facts.Bindings)
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a release asks for nothing")
 		}
@@ -829,7 +830,7 @@ func RunStacks(t *testing.T, releaser providerkit.Stacks, artifacts providerkit.
 	})
 
 	t.Run("an artifact the release must ship is a row the plan shows and an object the apply writes", func(t *testing.T) {
-		resources := declared(serves)
+		resources := declared(facts.Bindings)
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a release asks for nothing")
 		}
@@ -857,7 +858,7 @@ func RunStacks(t *testing.T, releaser providerkit.Stacks, artifacts providerkit.
 				"the plan and the apply must ship it down one path")
 		}
 
-		if _, storeless := artifacts.(providerkit.NoArtifacts); storeless {
+		if !facts.StoresArtifacts {
 			if _, err := releaser.Provision(ctx, shipping, nil); err == nil {
 				t.Fatal("Provision() shipped an artifact through a provider that keeps no artifact store, " +
 					"so the release reported a write that landed nowhere")
@@ -895,7 +896,7 @@ func RunStacks(t *testing.T, releaser providerkit.Stacks, artifacts providerkit.
 	})
 
 	t.Run("an image the release declares is a row the plan shows and a push the apply makes", func(t *testing.T) {
-		resources := declared(serves)
+		resources := declared(facts.Bindings)
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a release asks for nothing")
 		}
@@ -938,7 +939,7 @@ func RunStacks(t *testing.T, releaser providerkit.Stacks, artifacts providerkit.
 	})
 
 	t.Run("every binding a plan asks for comes back carrying the properties its type promises", func(t *testing.T) {
-		resources := declared(serves)
+		resources := declared(facts.Bindings)
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a plan can ask for nothing")
 		}

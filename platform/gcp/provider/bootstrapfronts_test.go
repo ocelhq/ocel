@@ -17,10 +17,6 @@ type frontRegistry struct {
 	front  *countingFront
 }
 
-func (r *frontRegistry) Supported() []edge.Kind { return []edge.Kind{alb.Kind} }
-
-func (r *frontRegistry) Default() edge.Kind { return alb.Kind }
-
 func (r *frontRegistry) Open(kind edge.Kind) (edge.Edge, error) {
 	r.opened = append(r.opened, kind)
 	return r.front, nil
@@ -41,8 +37,8 @@ func (f *countingFront) Hooks() edge.Hooks {
 		return edge.Hooks{}
 	}
 	return edge.Hooks{
-		BootstrapStands: func(context.Context, edge.Class) (bool, error) { return f.standing, nil },
-		BoundHostnames:  func(context.Context, edge.Class) ([]string, error) { return f.bound, nil },
+		CheckBootstrapStands: func(context.Context, edge.Class) (bool, error) { return f.standing, nil },
+		ListBoundHostnames:   func(context.Context, edge.Class) ([]string, error) { return f.bound, nil },
 	}
 }
 
