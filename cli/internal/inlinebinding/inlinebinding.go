@@ -35,12 +35,12 @@ type Record struct {
 	Binding  *bindingsv1.Binding
 }
 
-type Probe func(ctx context.Context, props *bindingsv1.PostgresProperties) (int, error)
+type PostgresProbe func(ctx context.Context, props *bindingsv1.PostgresProperties) (int, error)
 
 type BucketProbe func(ctx context.Context, props *bindingsv1.BucketProperties, public bool, origins []string) ([]string, error)
 
 type Probes struct {
-	Postgres Probe
+	Postgres PostgresProbe
 	Bucket   BucketProbe
 }
 
@@ -135,7 +135,7 @@ func Verify(ctx context.Context, records []Record, declared Declared, probes Pro
 	return warnings, nil
 }
 
-func verifyPostgres(ctx context.Context, r Record, props *bindingsv1.PostgresProperties, declared string, probe Probe) error {
+func verifyPostgres(ctx context.Context, r Record, props *bindingsv1.PostgresProperties, declared string, probe PostgresProbe) error {
 	served, err := probe(ctx, props)
 	if err != nil {
 		return fmt.Errorf("`%s` could not be reached to check it: %s. Ocel checks a database it is bound to rather than provisioning one, so the deploy stops here — check the host, the credentials and that this machine can reach it",

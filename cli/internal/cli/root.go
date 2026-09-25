@@ -117,7 +117,7 @@ func newDeps() cmddeps.Deps {
 		BuildAppImages:      appimages.Build,
 		CollectAppFunctions: appbuilder.CollectFunctions,
 		ProbePostgres:       inlinebinding.ProbePostgres,
-		CheckBucket:         inlinebinding.CheckBucket,
+		ProbeBucket:         inlinebinding.ProbeBucket,
 		DeploymentID:        appbuilder.DeploymentID,
 		CollectDeclarations: deploycollector.PrepareAndCollect,
 		OpenBrowser:         browser.OpenURL,

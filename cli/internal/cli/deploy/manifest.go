@@ -143,7 +143,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 }
 
 func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, resources []declare.Resource, ui *runui.Session) ([]inlinebinding.Record, error) {
-	values, err := gate.ResolveImplied(ctx)
+	values, err := gate.ResolveBindingVariables(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +160,7 @@ func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Co
 			declared.Buckets[resource.Name] = resource.Bucket
 		}
 	}
-	warnings, err := inlinebinding.Verify(ctx, records, declared, inlinebinding.Probes{Postgres: deps.ProbePostgres, Bucket: deps.CheckBucket})
+	warnings, err := inlinebinding.Verify(ctx, records, declared, inlinebinding.Probes{Postgres: deps.ProbePostgres, Bucket: deps.ProbeBucket})
 	for _, warning := range warnings {
 		ui.Warning(warning)
 	}

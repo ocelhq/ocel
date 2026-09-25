@@ -8,33 +8,33 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-type Implied struct {
+type BindingVariables struct {
 	Group string
 	Site  string
 	Keys  []string
 }
 
-func Declarations(implied []Implied) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition) {
-	scope := Scope{Implied: implied}
-	return scope.impliedDefinitions(), scope.impliedGroups()
+func Declarations(bound []BindingVariables) ([]*resourcesv1.VariableDefinition, []*resourcesv1.GroupDefinition) {
+	scope := Scope{Bindings: bound}
+	return scope.bindingDefinitions(), scope.bindingGroups()
 }
 
 func (g *Gate) Declared() []*resourcesv1.VariableDefinition {
-	return append(g.Definitions(), g.scope.impliedDefinitions()...)
+	return append(g.Definitions(), g.scope.bindingDefinitions()...)
 }
 
-func CheckImpliedWritable(implied []Implied, key, folder string) error {
-	at, read := Scope{Implied: implied}.impliedAt(key)
+func CheckBindingVariableWritable(bound []BindingVariables, key, folder string) error {
+	at, read := Scope{Bindings: bound}.readBy(key)
 	if !read || folder == "" {
 		return nil
 	}
 	return fmt.Errorf("%s is read by `%s`, which serves the whole project, so it reads the value at the project root and a value in %s would reach nothing: set it without --folder", key, at.Site, folder)
 }
 
-func (s Scope) impliedDefinitions() []*resourcesv1.VariableDefinition {
+func (s Scope) bindingDefinitions() []*resourcesv1.VariableDefinition {
 	var out []*resourcesv1.VariableDefinition
-	for _, implied := range s.Implied {
-		for _, key := range implied.Keys {
+	for _, bound := range s.Bindings {
+		for _, key := range bound.Keys {
 			if slices.ContainsFunc(out, func(held *resourcesv1.VariableDefinition) bool { return held.GetKey() == key }) {
 				continue
 			}
@@ -42,41 +42,41 @@ func (s Scope) impliedDefinitions() []*resourcesv1.VariableDefinition {
 				Key:         key,
 				Class:       resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE,
 				Required:    true,
-				Group:       implied.Group,
-				Source:      implied.Site,
-				Description: "Read by " + implied.Site + " at deploy; never handed to an app.",
+				Group:       bound.Group,
+				Source:      bound.Site,
+				Description: "Read by " + bound.Site + " at deploy; never handed to an app.",
 			})
 		}
 	}
 	return out
 }
 
-func (s Scope) impliedGroups() []*resourcesv1.GroupDefinition {
-	out := make([]*resourcesv1.GroupDefinition, 0, len(s.Implied))
-	for _, implied := range s.Implied {
+func (s Scope) bindingGroups() []*resourcesv1.GroupDefinition {
+	out := make([]*resourcesv1.GroupDefinition, 0, len(s.Bindings))
+	for _, bound := range s.Bindings {
 		out = append(out, &resourcesv1.GroupDefinition{
-			Key:         implied.Group,
+			Key:         bound.Group,
 			Required:    true,
-			Description: "What " + implied.Site + " connects with.",
+			Description: "What " + bound.Site + " connects with.",
 		})
 	}
 	return out
 }
 
-func (s Scope) impliedAt(key string) (Implied, bool) {
-	for _, implied := range s.Implied {
-		if slices.Contains(implied.Keys, key) {
-			return implied, true
+func (s Scope) readBy(key string) (BindingVariables, bool) {
+	for _, bound := range s.Bindings {
+		if slices.Contains(bound.Keys, key) {
+			return bound, true
 		}
 	}
-	return Implied{}, false
+	return BindingVariables{}, false
 }
 
 func collision(definitions []*resourcesv1.VariableDefinition, scope Scope) error {
 	for _, definition := range definitions {
-		implied, read := scope.impliedAt(definition.GetKey())
+		bound, read := scope.readBy(definition.GetKey())
 		if !read {
-			implied, read = Scope{Implied: scope.OtherTiers}.impliedAt(definition.GetKey())
+			bound, read = Scope{Bindings: scope.OtherTiers}.readBy(definition.GetKey())
 		}
 		if !read {
 			continue
@@ -88,12 +88,12 @@ func collision(definitions []*resourcesv1.VariableDefinition, scope Scope) error
 		return fmt.Errorf(
 			"%s is declared by %s and read by `%s`: a binding's variable reaches the binding alone, and declaring it too would hand the app the credential as a plain variable. "+
 				"Rename one of them",
-			definition.GetKey(), declaredBy, implied.Site)
+			definition.GetKey(), declaredBy, bound.Site)
 	}
 	return nil
 }
 
-func unsetImplied(definitions []*resourcesv1.VariableDefinition, held heldCells) []*resourcesv1.VariableProblem {
+func unsetBindingVariables(definitions []*resourcesv1.VariableDefinition, held heldCells) []*resourcesv1.VariableProblem {
 	var problems []*resourcesv1.VariableProblem
 	for _, definition := range definitions {
 		if held.has(Cell{Key: definition.GetKey()}) {
@@ -107,9 +107,9 @@ func unsetImplied(definitions []*resourcesv1.VariableDefinition, held heldCells)
 	return problems
 }
 
-func (g *Gate) ResolveImplied(ctx context.Context) (map[string]string, error) {
+func (g *Gate) ResolveBindingVariables(ctx context.Context) (map[string]string, error) {
 	var cells []Cell
-	for _, definition := range g.scope.impliedDefinitions() {
+	for _, definition := range g.scope.bindingDefinitions() {
 		cells = append(cells, Cell{Key: definition.GetKey()})
 	}
 	plaintext, err := g.reveal(ctx, cells)
@@ -120,8 +120,8 @@ func (g *Gate) ResolveImplied(ctx context.Context) (map[string]string, error) {
 	for _, cell := range cells {
 		held := plaintext[cell]
 		if !held.found {
-			implied, _ := g.scope.impliedAt(cell.Key)
-			return nil, fmt.Errorf("%s, which `%s` reads, has no value here", cell.Key, implied.Site)
+			bound, _ := g.scope.readBy(cell.Key)
+			return nil, fmt.Errorf("%s, which `%s` reads, has no value here", cell.Key, bound.Site)
 		}
 		out[cell.Key] = held.value
 	}

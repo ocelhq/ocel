@@ -14,7 +14,7 @@ import (
 
 func nowHere() time.Time { return time.Now().UTC() }
 
-func runsHere(t *testing.T) probeRunner {
+func runsHere(t *testing.T) storeRunner {
 	t.Helper()
 	return func(what, script string) (string, error) {
 		run := exec.Command("sh", "-c", script)
@@ -33,7 +33,7 @@ func aStoredBucket(t *testing.T, bucket string) BucketSpec {
 	return bucketOn(store, bucket)
 }
 
-func droveHere(t *testing.T, spec BucketSpec, calls []storeCall) map[string]probeAnswer {
+func droveHere(t *testing.T, spec BucketSpec, calls []storeCall) map[string]storeAnswer {
 	t.Helper()
 	said, err := droveStore(spec, calls, time.Now().UTC(), runsHere(t))
 	if err != nil {
@@ -69,7 +69,7 @@ func wroteObjects(t *testing.T, spec BucketSpec, count int) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for name, answer := range readProbe(said) {
+		for name, answer := range readAnswers(said) {
 			if !slices.Contains(storeWrote, answer.code) {
 				t.Fatalf("the store answered %s writing %s", answer.code, name)
 			}

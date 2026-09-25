@@ -87,8 +87,8 @@ func (g *Gate) Matrix(environments []string) Matrix {
 	g.mu.Unlock()
 
 	appDefinitions, appGroups := definitions, groups
-	definitions = append(slices.Clone(definitions), g.scope.impliedDefinitions()...)
-	groups = append(slices.Clone(groups), g.scope.impliedGroups()...)
+	definitions = append(slices.Clone(definitions), g.scope.bindingDefinitions()...)
+	groups = append(slices.Clone(groups), g.scope.bindingGroups()...)
 	columns := columns(definitions, apps, base, overrides)
 	m := Matrix{
 		Columns: columns,

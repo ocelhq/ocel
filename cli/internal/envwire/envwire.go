@@ -82,16 +82,16 @@ func Scope(cfg *projectconfig.Config, preview bool, environment string) envgate.
 	if preview {
 		tier, other = other, tier
 	}
-	return envgate.Scope{Apps: Apps(cfg), Preview: preview, Environment: environment, Implied: Implied(cfg, tier), OtherTiers: Implied(cfg, other)}
+	return envgate.Scope{Apps: Apps(cfg), Preview: preview, Environment: environment, Bindings: BindingVariables(cfg, tier), OtherTiers: BindingVariables(cfg, other)}
 }
 
-func Implied(cfg *projectconfig.Config, tier environmentv1.Tier) []envgate.Implied {
-	var out []envgate.Implied
+func BindingVariables(cfg *projectconfig.Config, tier environmentv1.Tier) []envgate.BindingVariables {
+	var out []envgate.BindingVariables
 	for _, binding := range cfg.BindingsFor(tier) {
 		if binding.Inline == nil {
 			continue
 		}
-		out = append(out, envgate.Implied{
+		out = append(out, envgate.BindingVariables{
 			Group: binding.Group(),
 			Site:  "bindings." + binding.Group(),
 			Keys:  binding.Inline.Variables(),
