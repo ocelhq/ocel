@@ -2,9 +2,12 @@ package host
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const listenerCommand = "cat " + listeners.TCPPath + " " + listeners.TCP6Path
@@ -37,4 +40,36 @@ func (h *Host) Publishing(ctx context.Context, port string) ([]string, error) {
 		}
 	}
 	return named, nil
+}
+
+func (h *Host) SwitchboardStanding(ctx context.Context, class providerkit.Class) providerkit.StandingCheck {
+	board := switchboardStanding(nil)
+	check := providerkit.StandingCheck{Subject: board.name, Verdict: providerkit.StandingFail,
+		Fix: "run `" + providerkit.BootstrapCommand(class) + "` to stand it again"}
+	elevation, err := h.reachDocker(ctx)
+	if err != nil {
+		check.Finding = fmt.Sprintf("ask the engine about %s: %v", board.name, err)
+		return check
+	}
+	result, err := h.stream(ctx, words(board.readiness()), nil, elevation)
+	switch {
+	case err != nil:
+		check.Finding = fmt.Sprintf("ask %s whether it answers: %v", board.name, err)
+		return check
+	case result.Code == 0:
+		check.Verdict, check.Fix = providerkit.StandingPass, ""
+		check.Finding = fmt.Sprintf("%s is running and answers over its control socket in %s", board.name, switchboard.ControlDir)
+		return check
+	}
+	state := strings.TrimSpace(h.said(ctx, stateCommand(board.name), elevation))
+	switch status := stateField(state, "Status"); status {
+	case "":
+		check.Finding = fmt.Sprintf("no %s container on this box, so nothing routes what the front proxy forwards: %s", board.name, state)
+	case "running":
+		check.Finding = fmt.Sprintf("%s %s: %s", board.name, board.unready, spoken(result))
+	default:
+		check.Finding = fmt.Sprintf("%s is %s, so nothing routes what the front proxy forwards: %s", board.name, status, state)
+		check.Fix = "check `docker logs " + board.name + "`, then " + check.Fix
+	}
+	return check
 }

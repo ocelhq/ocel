@@ -277,6 +277,62 @@ func TestAProxyThatCouldNotBeReadIsNotReadAsACleanNamespace(t *testing.T) {
 	}
 }
 
+func boardCheck(t *testing.T, checks []providerkit.StandingCheck) providerkit.StandingCheck {
+	t.Helper()
+	for _, check := range checks {
+		if check.Subject == host.SwitchboardContainer {
+			return check
+		}
+	}
+	t.Fatalf("CheckStanding() answered %+v and none of it is about %s, which routes every request the box serves", checks, host.SwitchboardContainer)
+	return providerkit.StandingCheck{}
+}
+
+func TestASwitchboardRunningAndAnsweringOverItsControlSocketPasses(t *testing.T) {
+	t.Parallel()
+
+	check := boardCheck(t, standingOver(boxSaying(nil)))
+	if check.Verdict != providerkit.StandingPass {
+		t.Fatalf("verdict = %v (%q), want a pass where the switchboard runs and answers", check.Verdict, check.Finding)
+	}
+	if !strings.Contains(check.Finding, "control socket") {
+		t.Errorf("finding = %q, want what was asked of it named", check.Finding)
+	}
+}
+
+func TestASwitchboardThatIsGoneStoppedOrSilentFailsByWhatIsWrongWithIt(t *testing.T) {
+	t.Parallel()
+
+	for what, state := range map[string]struct {
+		script map[string]answer
+		wanted string
+	}{
+		"not there at all": {map[string]answer{
+			"'upstreams'":    {code: 1, stderr: "Error: No such container: " + host.SwitchboardContainer},
+			"docker inspect": {code: 1, stdout: "Error: No such object: " + host.SwitchboardContainer},
+		}, "no " + host.SwitchboardContainer},
+		"exited": {map[string]answer{
+			"'upstreams'":    {code: 1, stderr: "Error response from daemon: container is not running"},
+			"docker inspect": {stdout: exitedState},
+		}, "exited"},
+		"silent over its control socket": {map[string]answer{
+			"'upstreams'":    {code: 1, stderr: "ocel-switchboard: the switchboard answered nothing over /run/ocel-switchboard/control.sock"},
+			"docker inspect": {stdout: runningState},
+		}, "answered nothing"},
+	} {
+		check := boardCheck(t, standingOver(boxSaying(state.script)))
+		if check.Verdict != providerkit.StandingFail {
+			t.Errorf("a switchboard %s = %v (%q), want a failure: nothing the box serves is routed without it", what, check.Verdict, check.Finding)
+		}
+		if !strings.Contains(check.Finding, state.wanted) {
+			t.Errorf("a switchboard %s is found %q, want %q in it", what, check.Finding, state.wanted)
+		}
+		if !strings.Contains(check.Fix, "bootstrap") {
+			t.Errorf("a switchboard %s carries the fix %q, want the bootstrap that stands it again named", what, check.Fix)
+		}
+	}
+}
+
 type addressless struct{ *scripted }
 
 func (a addressless) Destination() session.Destination {

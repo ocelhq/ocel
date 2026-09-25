@@ -68,7 +68,8 @@ func (p *Provider) CheckStanding(ctx context.Context, req providerkit.StandingRe
 	if err != nil {
 		return nil, err
 	}
-	return append(checks, front...), nil
+	checks = append(checks, front...)
+	return append(checks, p.host.SwitchboardStanding(ctx, req.Class)), nil
 }
 
 func dnsVerdicts(ctx context.Context, look Lookup, hostnames []string, address string) []providerkit.StandingCheck {
