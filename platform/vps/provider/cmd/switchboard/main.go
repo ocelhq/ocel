@@ -90,6 +90,10 @@ func run(ctx context.Context, proc string, argv []string, out, errs io.Writer) i
 			return usage(errs)
 		}
 		return speaking.speak(ctx, http.MethodGet, switchboard.UpstreamsPath, nil)
+	case "leaf":
+		return leaf(rest, out, errs)
+	case "probe":
+		return probe(rest, out, errs)
 	case "listeners":
 		if len(rest) != 0 {
 			return usage(errs)
@@ -107,6 +111,8 @@ func usage(errs io.Writer) int {
 	fmt.Fprintln(errs, "       flip [--drain-timeout <seconds> --retire <host:port>...] <table> |")
 	fmt.Fprintln(errs, "       idle <host:port>... |")
 	fmt.Fprintln(errs, "       upstreams |")
+	fmt.Fprintln(errs, "       leaf [--at <host:port>] <hostname> |")
+	fmt.Fprintln(errs, "       probe [--at <host:port>] <hostname> |")
 	fmt.Fprintln(errs, "       listeners")
 	return exitRefused
 }
