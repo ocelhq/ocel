@@ -96,7 +96,7 @@ func StorageItems(class providerkit.Class, keys []byte) []Item {
 }
 
 func Items(class providerkit.Class, keys []byte, arch string) []Item {
-	return slices.Concat(ClassItems(class), StorageItems(class, keys), EngineItems(), LiveItems(arch), ProxyItems(arch), BackupItems())
+	return slices.Concat(ClassItems(class), StorageItems(class, keys), EngineItems(), LiveItems(arch), EnvSyncItems(class, arch), ProxyItems(arch), BackupItems())
 }
 
 func dir(name string, mode fs.FileMode, owner string, note string) Item {

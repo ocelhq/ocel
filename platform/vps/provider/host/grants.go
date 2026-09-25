@@ -58,6 +58,15 @@ func grants(class providerkit.Class, arch string) []Grant {
 				"opens values under the class key, and answers no process outside a container",
 		})
 	}
+	if unit := written(items, KindUnit, EnvSyncService(class)); unit.Name != "" {
+		grants = append(grants, Grant{
+			Name: "no hand in " + unit.Name,
+			Detail: "root's env source syncer, " + LiveBinary + " " + envSyncCommand + ", run by systemd, not by " + held.name +
+				". Bounded to CAP_CHOWN and CAP_DAC_OVERRIDE on a read-only system, it writes " + RecordsDir(class) +
+				" and nothing beside, seals through " + SealHelper + " without sudo, and signs in to each env source with the credential " +
+				string(class) + " holds in ocel's own store",
+		})
+	}
 	for _, item := range items {
 		if item.Owner != held.name || item.Kind == KindUser {
 			continue

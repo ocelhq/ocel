@@ -29,6 +29,9 @@ func main() {
 }
 
 func run(argv []string, errs *os.File) int {
+	if len(argv) > 0 && argv[0] == envSyncCommand {
+		return envSync(argv[1:], errs)
+	}
 	flags := flag.NewFlagSet("ocel-live", flag.ContinueOnError)
 	flags.SetOutput(errs)
 	listen := flags.String("listen", live.SocketPath, "the unix socket to answer on when systemd hands over none")

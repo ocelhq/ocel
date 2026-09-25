@@ -200,6 +200,9 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err := b.write(ctx, served, LiveItems(standing.Arch), report); err != nil {
 		return err
 	}
+	if err := b.write(ctx, served, EnvSyncItems(req.Class, standing.Arch), report); err != nil {
+		return err
+	}
 	if err := b.write(ctx, served, ProxyItems(standing.Arch), report); err != nil {
 		return err
 	}
@@ -543,7 +546,8 @@ func removing(read, sibling Reading, apps appsStanding) []removal {
 	beside := sibling.Class
 	last := !sibling.standing(KindDir, ClassDir(beside)) && !sibling.standing(KindDir, StateDir(beside))
 
-	beneath := append(appsRemoving(read.Class, apps),
+	beneath := append([]removal{taking(KindUnit, EnvSyncService(read.Class), "")}, appsRemoving(read.Class, apps)...)
+	beneath = append(beneath,
 		taking(KindDir, StateDir(read.Class), "deploy records"),
 		taking(KindSealKey, SealKeyPath(read.Class), "sealed values become unreadable"),
 		taking(KindFile, sudoersSeal(read.Class), ""),
@@ -554,6 +558,7 @@ func removing(read, sibling Reading, apps appsStanding) []removal {
 	if last {
 		beneath = append(beneath, proxyRemovals()...)
 		beneath = append(beneath, liveRemovals()...)
+		beneath = append(beneath, envSyncRemovals()...)
 		beneath = append(beneath, backupRemovals()...)
 		beneath = append(beneath,
 			taking(KindDir, sshDir, ""),

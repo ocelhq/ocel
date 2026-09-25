@@ -20,6 +20,13 @@ const (
 )
 
 const (
+	envSyncTemplate     = "ocel-envsync@.service"
+	envSyncTemplateFile = "/etc/systemd/system/" + envSyncTemplate
+	envSyncCommand      = "envsync"
+	envSyncRestartWait  = "10s"
+)
+
+const (
 	liveBinaryName  = "ocel-live"
 	runtimeName     = "ocel-runtime"
 	liveSocketMode  = "0666"
@@ -113,6 +120,48 @@ func LiveItems(arch string) []Item {
 			Watch: []string{liveUnitFile, LiveBinary},
 			Slow:  true},
 	}
+}
+
+func EnvSyncService(class providerkit.Class) string {
+	return strings.Replace(envSyncTemplate, "@", "@"+string(class), 1)
+}
+
+func envSyncUnit() []byte {
+	return []byte(strings.Join([]string{
+		"[Unit]",
+		"Description=keeps the %i class's values in step with the env sources its deploys registered",
+		"Wants=network-online.target",
+		"After=network-online.target",
+		"",
+		"[Service]",
+		"ExecStart=" + LiveBinary + " " + envSyncCommand + " --class %i",
+		"Restart=on-failure",
+		"RestartSec=" + envSyncRestartWait,
+		"NoNewPrivileges=yes",
+		"ProtectSystem=strict",
+		"ReadWritePaths=" + stateRoot + "/%i/records",
+		"ProtectHome=yes",
+		"PrivateTmp=yes",
+		"CapabilityBoundingSet=CAP_CHOWN CAP_DAC_OVERRIDE",
+		"",
+		"[Install]",
+		"WantedBy=multi-user.target",
+		"",
+	}, "\n"))
+}
+
+func EnvSyncItems(class providerkit.Class, arch string) []Item {
+	template := envSyncUnit()
+	return []Item{
+		{Kind: KindFile, Name: envSyncTemplateFile, Mode: 0o644, Owner: rootOwner, Content: template},
+		{Kind: KindUnit, Name: EnvSyncService(class), Owner: rootOwner, Content: unitWatchFacts(template, liveAgent(arch)),
+			Watch: []string{envSyncTemplateFile, LiveBinary},
+			Slow:  true, Note: "keeps values in step with env sources"},
+	}
+}
+
+func envSyncRemovals() []removal {
+	return []removal{taking(KindFile, envSyncTemplateFile, "")}
 }
 
 func liveRemovals() []removal {
