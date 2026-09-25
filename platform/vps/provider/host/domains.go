@@ -32,7 +32,7 @@ func (h *Host) Serving(ctx context.Context, key RouteKey) (string, error) {
 }
 
 func (h *Host) RouteResource(ctx context.Context, route AppRoute) error {
-	if err := validRoute(route); err != nil {
+	if err := validTable(RoutingTable{Routes: []AppRoute{route}}); err != nil {
 		return err
 	}
 	return h.reshape(ctx, func(state RoutingTable) (RoutingTable, error) {
@@ -68,10 +68,8 @@ func (h *Host) UnrouteSurface(ctx context.Context, owner string) error {
 }
 
 func (h *Host) ClaimHosts(ctx context.Context, claims []HostClaim) error {
-	for _, claim := range claims {
-		if err := validClaim(claim); err != nil {
-			return err
-		}
+	if err := validTable(RoutingTable{Claims: claims}); err != nil {
+		return err
 	}
 	if len(claims) == 0 {
 		return nil
