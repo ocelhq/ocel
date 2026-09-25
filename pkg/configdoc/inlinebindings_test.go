@@ -103,16 +103,39 @@ func TestCheckRefusesAnInlineBindingOutOfShape(t *testing.T) {
 	}
 }
 
-func TestCheckRefusesAnInlineBucketUntilItHasAForm(t *testing.T) {
-	err := Check("", Document{}, map[string]any{
-		"slug":     "shop",
-		"bindings": map[string]any{"bucket": map[string]any{"uploads": map[string]any{"bucket": "acme"}}},
-	})
-	if err == nil {
-		t.Fatal("Check = nil, want an inline bucket refused")
+func TestDecodeKeepsABucketRecordInline(t *testing.T) {
+	doc, err := Decode([]byte(`{"slug":"shop","bindings":{"bucket":{"uploads":{
+		"endpoint":"https://${CF_ACCOUNT_ID}.r2.cloudflarestorage.com","region":"auto","bucket":{"$env":"UPLOADS_BUCKET"},
+		"prefix":"uploads/","pathStyle":true,
+		"accessKeyId":{"$env":"R2_ACCESS_KEY_ID"},"secretAccessKey":{"$env":"R2_SECRET_ACCESS_KEY"},
+		"publicBaseUrl":"https://cdn.acme.com"
+	}}}}`), env(map[string]string{"CF_ACCOUNT_ID": "abc"}))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
 	}
-	if !strings.Contains(err.Error(), `"@<name>"`) {
-		t.Errorf("Check = %v, want it to say a bucket binds a published record", err)
+	uploads := doc.Bindings["bucket"]["uploads"]
+	if uploads.Production == nil || uploads.Production != uploads.Preview || uploads.Production.Bucket == nil {
+		t.Fatalf("uploads = %+v, want one inline bucket record serving both tiers", uploads)
+	}
+	record := uploads.Production.Bucket
+	if record.Endpoint.Literal != "https://abc.r2.cloudflarestorage.com" || record.Bucket.Ref.Env != "UPLOADS_BUCKET" || !record.PathStyle {
+		t.Errorf("record = %+v, want the endpoint interpolated and the bucket read from its variable", record)
+	}
+	if record.SecretAccessKey.Env != "R2_SECRET_ACCESS_KEY" || record.PublicBaseURL.Literal != "https://cdn.acme.com" {
+		t.Errorf("record = %+v", record)
+	}
+}
+
+func TestCheckRefusesABucketSecretWrittenAsText(t *testing.T) {
+	err := Check("", Document{}, map[string]any{
+		"slug": "shop",
+		"bindings": map[string]any{"bucket": map[string]any{"uploads": map[string]any{
+			"endpoint": "https://s3.example.com", "region": "auto", "bucket": "acme",
+			"accessKeyId": map[string]any{"$env": "KEY"}, "secretAccessKey": "hunter2",
+		}}},
+	})
+	if err == nil || !strings.Contains(err.Error(), `"bindings.bucket.uploads.secretAccessKey"`) || !strings.Contains(err.Error(), `{ "$env": "NAME" }`) {
+		t.Fatalf("Check = %v, want the secret refused as text", err)
 	}
 }
 

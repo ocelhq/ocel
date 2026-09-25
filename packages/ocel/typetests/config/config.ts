@@ -150,6 +150,38 @@ export const bindingUrlAsText = defineConfig({
   bindings: { postgres: { orders: { url: "postgres://u:p@db/d" } } },
 });
 
+export const bucketInline = defineConfig({
+  slug: "test-app",
+  bindings: {
+    bucket: {
+      uploads: {
+        endpoint: "https://${CF_ACCOUNT_ID}.r2.cloudflarestorage.com",
+        region: "auto",
+        bucket: { $env: "UPLOADS_BUCKET" },
+        accessKeyId: { $env: "R2_ACCESS_KEY_ID" },
+        secretAccessKey: { $env: "R2_SECRET_ACCESS_KEY" },
+        publicBaseUrl: "https://cdn.acme.com",
+      },
+    },
+  },
+});
+
+export const bucketSecretAsText = defineConfig({
+  slug: "test-app",
+  bindings: {
+    bucket: {
+      // @ts-expect-error a secret key takes an ocel variable, never text
+      uploads: {
+        endpoint: "https://s3.example.com",
+        region: "auto",
+        bucket: "acme",
+        accessKeyId: { $env: "K" },
+        secretAccessKey: "hunter2",
+      },
+    },
+  },
+});
+
 export const registryPasswordAsAPlaceholder = defineConfig({
   slug: "test-app",
   registry: { server: "ghcr.io/acme", password: "${REGISTRY_TOKEN}" },

@@ -139,10 +139,518 @@
       "properties": {
         "bucket": {
           "additionalProperties": {
-            "pattern": "^@\\S",
-            "type": "string"
+            "oneOf": [
+              {
+                "pattern": "^@\\S",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "properties": {
+                  "accessKeyId": {
+                    "additionalProperties": false,
+                    "description": "The public half of the key pair the runtime reaches the store with.",
+                    "properties": {
+                      "$env": {
+                        "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                        "pattern": "^[A-Z_][A-Z0-9_]*$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "$env"
+                    ],
+                    "title": "VariableRef",
+                    "type": "object"
+                  },
+                  "bucket": {
+                    "description": "The bucket's name in that store.",
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "$env": {
+                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "pattern": "^[A-Z_][A-Z0-9_]*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "$env"
+                        ],
+                        "title": "VariableRef",
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "endpoint": {
+                    "description": "The address of the S3-compatible store the bucket lives in, such as https://<account>.r2.cloudflarestorage.com.",
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "$env": {
+                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "pattern": "^[A-Z_][A-Z0-9_]*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "$env"
+                        ],
+                        "title": "VariableRef",
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "pathStyle": {
+                    "description": "Address the bucket as a path on the endpoint rather than as a subdomain of it, for stores that serve no virtual hosts.",
+                    "type": "boolean"
+                  },
+                  "prefix": {
+                    "description": "The prefix every key the app writes is kept under, so one bucket can hold several resources or environments.",
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "$env": {
+                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "pattern": "^[A-Z_][A-Z0-9_]*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "$env"
+                        ],
+                        "title": "VariableRef",
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "publicBaseUrl": {
+                    "description": "The address the bucket's objects are served from publicly, when the code declares it public.",
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "$env": {
+                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "pattern": "^[A-Z_][A-Z0-9_]*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "$env"
+                        ],
+                        "title": "VariableRef",
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "region": {
+                    "description": "The region requests to the store are signed for; auto for R2.",
+                    "oneOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "$env": {
+                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "pattern": "^[A-Z_][A-Z0-9_]*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "$env"
+                        ],
+                        "title": "VariableRef",
+                        "type": "object"
+                      }
+                    ]
+                  },
+                  "secretAccessKey": {
+                    "additionalProperties": false,
+                    "description": "The secret half of that key pair.",
+                    "properties": {
+                      "$env": {
+                        "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                        "pattern": "^[A-Z_][A-Z0-9_]*$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "$env"
+                    ],
+                    "title": "VariableRef",
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "endpoint",
+                  "region",
+                  "bucket",
+                  "accessKeyId",
+                  "secretAccessKey"
+                ],
+                "title": "BucketBinding",
+                "type": "object"
+              },
+              {
+                "additionalProperties": false,
+                "minProperties": 1,
+                "properties": {
+                  "preview": {
+                    "additionalProperties": false,
+                    "description": "The record previews bind. Left off, previews provision their own.",
+                    "properties": {
+                      "accessKeyId": {
+                        "additionalProperties": false,
+                        "description": "The public half of the key pair the runtime reaches the store with.",
+                        "properties": {
+                          "$env": {
+                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "pattern": "^[A-Z_][A-Z0-9_]*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "$env"
+                        ],
+                        "title": "VariableRef",
+                        "type": "object"
+                      },
+                      "bucket": {
+                        "description": "The bucket's name in that store.",
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "endpoint": {
+                        "description": "The address of the S3-compatible store the bucket lives in, such as https://<account>.r2.cloudflarestorage.com.",
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "pathStyle": {
+                        "description": "Address the bucket as a path on the endpoint rather than as a subdomain of it, for stores that serve no virtual hosts.",
+                        "type": "boolean"
+                      },
+                      "prefix": {
+                        "description": "The prefix every key the app writes is kept under, so one bucket can hold several resources or environments.",
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "publicBaseUrl": {
+                        "description": "The address the bucket's objects are served from publicly, when the code declares it public.",
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "region": {
+                        "description": "The region requests to the store are signed for; auto for R2.",
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "secretAccessKey": {
+                        "additionalProperties": false,
+                        "description": "The secret half of that key pair.",
+                        "properties": {
+                          "$env": {
+                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "pattern": "^[A-Z_][A-Z0-9_]*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "$env"
+                        ],
+                        "title": "VariableRef",
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "endpoint",
+                      "region",
+                      "bucket",
+                      "accessKeyId",
+                      "secretAccessKey"
+                    ],
+                    "title": "BucketBinding",
+                    "type": "object"
+                  },
+                  "production": {
+                    "additionalProperties": false,
+                    "description": "The record production binds. Left off, production provisions its own.",
+                    "properties": {
+                      "accessKeyId": {
+                        "additionalProperties": false,
+                        "description": "The public half of the key pair the runtime reaches the store with.",
+                        "properties": {
+                          "$env": {
+                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "pattern": "^[A-Z_][A-Z0-9_]*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "$env"
+                        ],
+                        "title": "VariableRef",
+                        "type": "object"
+                      },
+                      "bucket": {
+                        "description": "The bucket's name in that store.",
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "endpoint": {
+                        "description": "The address of the S3-compatible store the bucket lives in, such as https://<account>.r2.cloudflarestorage.com.",
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "pathStyle": {
+                        "description": "Address the bucket as a path on the endpoint rather than as a subdomain of it, for stores that serve no virtual hosts.",
+                        "type": "boolean"
+                      },
+                      "prefix": {
+                        "description": "The prefix every key the app writes is kept under, so one bucket can hold several resources or environments.",
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "publicBaseUrl": {
+                        "description": "The address the bucket's objects are served from publicly, when the code declares it public.",
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "region": {
+                        "description": "The region requests to the store are signed for; auto for R2.",
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "$env": {
+                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "pattern": "^[A-Z_][A-Z0-9_]*$",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "$env"
+                            ],
+                            "title": "VariableRef",
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "secretAccessKey": {
+                        "additionalProperties": false,
+                        "description": "The secret half of that key pair.",
+                        "properties": {
+                          "$env": {
+                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "pattern": "^[A-Z_][A-Z0-9_]*$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "$env"
+                        ],
+                        "title": "VariableRef",
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "endpoint",
+                      "region",
+                      "bucket",
+                      "accessKeyId",
+                      "secretAccessKey"
+                    ],
+                    "title": "BucketBinding",
+                    "type": "object"
+                  }
+                },
+                "type": "object"
+              }
+            ]
           },
-          "description": "Each key is a bucket resource this project declares; its value is \"@\" followed by the name the record is published under, such as \"@warehouse\".",
+          "description": "Each key is a bucket resource this project declares. Its value is \"@\" followed by the name a record is published under, such as \"@warehouse\"; or the record itself, whose secrets are ocel variables written { \"$env\": \"NAME\" }; or that record keyed by the tier it serves, leaving the other tier to provision its own.",
           "type": "object"
         },
         "postgres": {

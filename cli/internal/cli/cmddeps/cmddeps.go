@@ -31,6 +31,7 @@ type Deps struct {
 	CollectDeclarations func(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) ([]declare.Resource, error)
 	OpenBrowser         func(url string) error
 	ProbePostgres       inlinebinding.Probe
+	CheckBucket         inlinebinding.BucketProbe
 	ServeVarsUI         func(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error)
 	CurrentGitBranch    func(dir string) (string, error)
 	DiscoverPRNumber    func() string

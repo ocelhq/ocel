@@ -3,6 +3,7 @@ package inlinebinding
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -85,19 +86,23 @@ func record(props *bindingsv1.PostgresProperties) Record {
 	}
 }
 
+func versions(version string) Declared {
+	return Declared{Postgres: map[string]string{"orders": version}}
+}
+
 func TestVerify(t *testing.T) {
 	props := &bindingsv1.PostgresProperties{Host: "db", Port: 5432, Database: "orders", Username: "app", Password: "hunter2"}
 
 	t.Run("a server of the declared major version passes", func(t *testing.T) {
 		probe := func(context.Context, *bindingsv1.PostgresProperties) (int, error) { return 170004, nil }
-		if err := Verify(context.Background(), []Record{record(props)}, map[string]string{"orders": "17"}, probe); err != nil {
+		if _, err := Verify(context.Background(), []Record{record(props)}, versions("17"), Probes{Postgres: probe}); err != nil {
 			t.Fatalf("Verify = %v", err)
 		}
 	})
 
 	t.Run("a server of another major version is refused, naming both", func(t *testing.T) {
 		probe := func(context.Context, *bindingsv1.PostgresProperties) (int, error) { return 150008, nil }
-		err := Verify(context.Background(), []Record{record(props)}, map[string]string{"orders": "17"}, probe)
+		_, err := Verify(context.Background(), []Record{record(props)}, versions("17"), Probes{Postgres: probe})
 		if err == nil {
 			t.Fatal("Verify = nil, want a version mismatch refused")
 		}
@@ -112,7 +117,7 @@ func TestVerify(t *testing.T) {
 		probe := func(context.Context, *bindingsv1.PostgresProperties) (int, error) {
 			return 0, errors.New("failed to connect to user=app database=orders password=hunter2: connection refused")
 		}
-		err := Verify(context.Background(), []Record{record(props)}, map[string]string{"orders": "17"}, probe)
+		_, err := Verify(context.Background(), []Record{record(props)}, versions("17"), Probes{Postgres: probe})
 		if err == nil {
 			t.Fatal("Verify = nil, want an unreachable server refused")
 		}
@@ -129,7 +134,7 @@ func TestVerify(t *testing.T) {
 		probe := func(context.Context, *bindingsv1.PostgresProperties) (int, error) {
 			return 0, errors.New("cannot parse postgres://app:s3cr%40t@db/orders: s3cr@t is wrong")
 		}
-		err := Verify(context.Background(), []Record{record(byURL)}, nil, probe)
+		_, err := Verify(context.Background(), []Record{record(byURL)}, Declared{}, Probes{Postgres: probe})
 		if err == nil {
 			t.Fatal("Verify = nil")
 		}
@@ -137,6 +142,88 @@ func TestVerify(t *testing.T) {
 			if strings.Contains(err.Error(), secret) {
 				t.Errorf("Verify = %v, repeats %q", err, secret)
 			}
+		}
+	})
+}
+
+func bucketRecord(props *bindingsv1.BucketProperties) Record {
+	return Record{
+		Declared: "uploads",
+		Site:     "bindings.bucket.uploads",
+		Type:     resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET,
+		Binding:  &bindingsv1.Binding{Name: "ocel:bucket.uploads", Properties: &bindingsv1.Binding_Bucket{Bucket: props}},
+	}
+}
+
+func TestBuildABucket(t *testing.T) {
+	records, err := Build([]projectconfig.TierBinding{{
+		Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads",
+		Inline: &projectconfig.Inline{Bucket: &projectconfig.BucketInline{
+			Endpoint:        projectconfig.Value{Literal: "https://abc.r2.cloudflarestorage.com"},
+			Region:          projectconfig.Value{Literal: "auto"},
+			Bucket:          projectconfig.Value{Variable: "UPLOADS_BUCKET"},
+			Prefix:          projectconfig.Value{Literal: "uploads/"},
+			AccessKeyID:     "R2_KEY",
+			SecretAccessKey: "R2_SECRET",
+			PublicBaseURL:   projectconfig.Value{Literal: "https://cdn.acme.com/"},
+		}},
+	}}, map[string]string{"UPLOADS_BUCKET": "acme", "R2_KEY": "AKID", "R2_SECRET": "s3cr3t"}, "ocel.json")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	want := &bindingsv1.BucketProperties{
+		Bucket: "acme", Endpoint: "https://abc.r2.cloudflarestorage.com", Region: "auto", Prefix: "uploads/",
+		AccessKeyId: "AKID", SecretAccessKey: "s3cr3t", PublicBaseUrl: "https://cdn.acme.com/uploads",
+	}
+	if got := records[0].Binding.GetBucket(); !proto.Equal(got, want) {
+		t.Errorf("bucket = %v, want %v: an object's public address carries the prefix it is kept under", got, want)
+	}
+}
+
+func TestVerifyABucket(t *testing.T) {
+	props := &bindingsv1.BucketProperties{Bucket: "acme", Endpoint: "https://s3.example.com", PublicBaseUrl: "https://cdn.acme.com"}
+
+	t.Run("hands the probe what the code declares, and passes its warnings on", func(t *testing.T) {
+		var asked []string
+		probe := func(_ context.Context, _ *bindingsv1.BucketProperties, public bool, origins []string) ([]string, error) {
+			if public {
+				asked = append(asked, "public")
+			}
+			asked = append(asked, origins...)
+			return []string{"could not read the policy"}, nil
+		}
+		declared := Declared{Buckets: map[string]*resourcesv1.BucketConfig{"uploads": {Public: true, AllowedOrigins: []string{"https://acme.com"}}}}
+		warnings, err := Verify(context.Background(), []Record{bucketRecord(props)}, declared, Probes{Bucket: probe})
+		if err != nil {
+			t.Fatalf("Verify = %v", err)
+		}
+		if !slices.Equal(asked, []string{"public", "https://acme.com"}) {
+			t.Errorf("probe asked for %v", asked)
+		}
+		if len(warnings) != 1 || !strings.Contains(warnings[0], "bindings.bucket.uploads") {
+			t.Errorf("warnings = %v, want the probe's warning, naming the binding", warnings)
+		}
+	})
+
+	t.Run("a public bucket with no public address is refused before the store is asked", func(t *testing.T) {
+		probe := func(context.Context, *bindingsv1.BucketProperties, bool, []string) ([]string, error) {
+			t.Fatal("the store was asked about a binding the config already rules out")
+			return nil, nil
+		}
+		declared := Declared{Buckets: map[string]*resourcesv1.BucketConfig{"uploads": {Public: true}}}
+		_, err := Verify(context.Background(), []Record{bucketRecord(&bindingsv1.BucketProperties{Bucket: "acme", Endpoint: "https://s3.example.com"})}, declared, Probes{Bucket: probe})
+		if err == nil || !strings.Contains(err.Error(), "publicBaseUrl") {
+			t.Fatalf("Verify = %v, want the missing publicBaseUrl named", err)
+		}
+	})
+
+	t.Run("a refusal from the store names the binding", func(t *testing.T) {
+		probe := func(context.Context, *bindingsv1.BucketProperties, bool, []string) ([]string, error) {
+			return nil, errors.New("bucket acme did not answer: NoSuchBucket")
+		}
+		_, err := Verify(context.Background(), []Record{bucketRecord(props)}, Declared{}, Probes{Bucket: probe})
+		if err == nil || !strings.Contains(err.Error(), "bindings.bucket.uploads") || !strings.Contains(err.Error(), "NoSuchBucket") {
+			t.Fatalf("Verify = %v", err)
 		}
 	})
 }
