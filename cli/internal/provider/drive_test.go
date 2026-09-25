@@ -20,6 +20,16 @@ func TestProviderConfigCarriesTheProjectTransformModules(t *testing.T) {
 	}
 }
 
+func TestProviderConfigCarriesTheProjectItConfigures(t *testing.T) {
+	config, err := providerConfig(&projectconfig.Config{Slug: "shop"}, &projectconfig.ProviderDescriptor{ID: "vps"})
+	if err != nil {
+		t.Fatalf("providerConfig: %v", err)
+	}
+	if config.GetSlug() != "shop" {
+		t.Errorf("slug = %q, want shop: a provider that records what it set on a shared machine names the project that set it", config.GetSlug())
+	}
+}
+
 func TestProviderConfigCarriesTheDescriptorOptionsOpaquely(t *testing.T) {
 	config, err := providerConfig(&projectconfig.Config{}, &projectconfig.ProviderDescriptor{
 		ID:      "aws",
