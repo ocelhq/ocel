@@ -241,7 +241,8 @@ func TestTheSwitchboardRunsOnTheBoxNetworkBehindTheFrontProxyAndPublishesNothing
 		"its control socket's directory":   "--volume " + switchboard.ControlDir + ":" + switchboard.ControlDir,
 		"no capability it was not handed":  "--cap-drop ALL",
 		"no new privileges":                "--security-opt " + noNewPrivileges,
-		"trust in the front proxy by name": "--trust " + caddy.Container,
+		"the front proxy's socket":         "--front " + switchboard.FrontSocket,
+		"the front socket's directory":     "--volume " + switchboard.FrontDir + ":" + switchboard.FrontDir,
 		"the table it serves":              "--table " + live.RoutingTable,
 	} {
 		if !strings.Contains(joined, wanted) {
@@ -269,7 +270,7 @@ func TestTheFrontProxyMountsNothingTheSwitchboardNowOwns(t *testing.T) {
 
 	joined := strings.Join(frontProxy().run(), " ")
 	for _, owned := range []string{ConnectorRun, live.RoutingDir, SwitchboardDir} {
-		if strings.Contains(joined, owned) {
+		if strings.Contains(joined, "--volume "+owned+":") {
 			t.Errorf("the front proxy runs as %q, which still reaches %s", joined, owned)
 		}
 	}

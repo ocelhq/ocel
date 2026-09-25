@@ -245,7 +245,7 @@ func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheBoxAsItsEdge(t *testi
 	if err != nil {
 		t.Fatalf("switchboard.Read() = %v", err)
 	}
-	served := httptest.NewTLSServer(switchboard.New(table, switchboard.Trust{}))
+	served := httptest.NewTLSServer(switchboard.New(table))
 	t.Cleanup(served.Close)
 
 	at, err := url.Parse(served.URL)

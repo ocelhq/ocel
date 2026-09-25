@@ -2,7 +2,6 @@ package host
 
 import (
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -15,7 +14,7 @@ const (
 	switchboardMount     = "/ocel/switchboard"
 	SwitchboardMounted   = switchboardMount + "/" + switchboard.Name
 	switchboardPort      = "8080"
-	SwitchboardAddress   = SwitchboardContainer + ":" + switchboardPort
+	SwitchboardUpstream  = "unix/" + switchboard.FrontSocket
 )
 
 var switchboardCapabilities = []string{"DAC_OVERRIDE", "DAC_READ_SEARCH"}
@@ -28,8 +27,8 @@ func switchboardStanding(binary []byte) boxContainer {
 		image: SwitchboardImage,
 		command: []string{SwitchboardMounted, "serve",
 			"--listen", ":" + switchboardPort,
+			"--front", switchboard.FrontSocket,
 			"--table", live.RoutingTable,
-			"--trust", caddy.Container,
 		},
 		config: contentSum(binary),
 		binds: []string{
@@ -37,6 +36,7 @@ func switchboardStanding(binary []byte) boxContainer {
 			live.RoutingDir + ":" + live.RoutingDir + ":ro",
 			ConnectorRun + ":" + ConnectorRun + ":ro",
 			switchboard.ControlDir + ":" + switchboard.ControlDir,
+			switchboard.FrontDir + ":" + switchboard.FrontDir,
 		},
 		caps:    switchboardCapabilities,
 		files:   []string{live.RoutingTable, SwitchboardBinary},

@@ -37,6 +37,15 @@ func controlAt(t *testing.T) string {
 	return control
 }
 
+func frontAt(t *testing.T) string {
+	t.Helper()
+	front := filepath.Join(t.TempDir(), "front.sock")
+	if len(front) > 100 {
+		t.Skipf("a unix socket path this host accepts does not fit under %s", front)
+	}
+	return front
+}
+
 func freeAddress(t *testing.T) string {
 	t.Helper()
 	held, err := net.Listen("tcp", "127.0.0.1:0")
@@ -97,6 +106,7 @@ func backend(t *testing.T, name string) string {
 
 type serving struct {
 	data    string
+	front   string
 	control string
 	stop    context.CancelFunc
 	done    chan int
@@ -105,10 +115,10 @@ type serving struct {
 
 func served(t *testing.T, table string, flags ...string) serving {
 	t.Helper()
-	stood := serving{data: freeAddress(t), control: controlAt(t), done: make(chan int, 1), errs: &strings.Builder{}}
+	stood := serving{data: freeAddress(t), front: frontAt(t), control: controlAt(t), done: make(chan int, 1), errs: &strings.Builder{}}
 	ctx, stop := context.WithCancel(t.Context())
 	stood.stop = stop
-	argv := append([]string{"serve", "--listen", stood.data, "--table", table}, flags...)
+	argv := append([]string{"serve", "--listen", stood.data, "--front", stood.front, "--table", table}, flags...)
 	go func() { stood.done <- run(ctx, argv, io.Discard, stood.errs) }()
 	t.Cleanup(func() {
 		stop()
@@ -158,39 +168,52 @@ func TestServeAnswersEachHostnameItsTableClaimsAndNamesTheBox(t *testing.T) {
 	}
 }
 
-func TestServeTrustsAFrontProxyNamedByTheNameItResolvesUnder(t *testing.T) {
-	seen := make(chan string, 1)
+func TestServeTrustsWhatArrivesOverTheFrontSocketAndNothingElse(t *testing.T) {
+	seen := make(chan string, 2)
 	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		seen <- r.Header.Get("X-Forwarded-Proto")
 	}))
 	t.Cleanup(upstream.Close)
-	stood := served(t, tableFile(t, map[string]string{"shop.example.com": strings.TrimPrefix(upstream.URL, "http://")}), "--trust", "localhost")
+	stood := served(t, tableFile(t, map[string]string{"shop.example.com": strings.TrimPrefix(upstream.URL, "http://")}))
+	dialer := &net.Dialer{}
+	fronting := &http.Client{Transport: &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return dialer.DialContext(ctx, "unix", stood.front)
+		},
+	}}
 
-	request, err := http.NewRequest(http.MethodGet, "http://"+stood.data+"/", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	request.Host = "shop.example.com"
-	request.Header.Set("X-Forwarded-Proto", "https")
-	said, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = said.Body.Close()
-	if proto := <-seen; proto != "https" {
-		t.Errorf("a peer at the address localhost resolves to said it forwarded https and the app heard %q: the front proxy is trusted by the name it answers to on the box's network, since its address changes whenever it is recreated", proto)
+	for what, client := range map[string]*http.Client{"http": http.DefaultClient, "https": fronting} {
+		request, err := http.NewRequest(http.MethodGet, "http://"+stood.data+"/", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Host = "shop.example.com"
+		request.Header.Set("X-Forwarded-Proto", "https")
+		said, err := client.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = said.Body.Close()
+		if proto := <-seen; proto != what {
+			t.Errorf("a request that said it forwarded https reached the app as %q, want %q: only what arrives over the front socket is the front proxy's, whatever address it was recreated at", proto, what)
+		}
 	}
 }
 
-func TestTheControlSocketIsTheServingUsersAlone(t *testing.T) {
+func TestTheControlAndFrontSocketsAreTheServingUsersAlone(t *testing.T) {
 	stood := served(t, tableFile(t, nil))
 
-	held, err := os.Stat(stood.control)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if mode := held.Mode().Perm(); mode != 0o600 {
-		t.Errorf("the control socket is mode %v, want 0600: whoever can connect to it can reroute every hostname on the box", mode)
+	for socket, why := range map[string]string{
+		stood.control: "whoever can connect to it can reroute every hostname on the box",
+		stood.front:   "whoever can connect to it is trusted to say who the client was",
+	} {
+		held, err := os.Stat(socket)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if mode := held.Mode().Perm(); mode != 0o600 {
+			t.Errorf("%s is mode %v, want 0600: %s", socket, mode, why)
+		}
 	}
 }
 
@@ -198,7 +221,7 @@ func TestServeRefusesToTakeTheControlSocketFromASwitchboardStillAnsweringOnIt(t 
 	stood := served(t, tableFile(t, nil))
 
 	var errs strings.Builder
-	code := run(t.Context(), []string{"serve", "--listen", freeAddress(t), "--table", tableFile(t, nil)}, io.Discard, &errs)
+	code := run(t.Context(), []string{"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", tableFile(t, nil)}, io.Discard, &errs)
 	if code != exitRefused {
 		t.Errorf("a second serve on %s = %d, want %d: it would unlink the socket the first answers on and leave it unreachable", stood.control, code, exitRefused)
 	}
@@ -215,7 +238,7 @@ func TestOfServesStartedTogetherOnOneControlSocketExactlyOneTakesIt(t *testing.T
 	exited := make(chan int, racing)
 	var errs [racing]strings.Builder
 	for at := range racing {
-		argv := []string{"serve", "--listen", freeAddress(t), "--table", table}
+		argv := []string{"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", table}
 		go func() { exited <- run(ctx, argv, io.Discard, &errs[at]) }()
 	}
 	refused := 0
@@ -258,15 +281,15 @@ func TestServeReplacesASocketNothingAnswersOn(t *testing.T) {
 	}
 }
 
-func TestServeRefusesATableOrATrustItCannotRead(t *testing.T) {
+func TestServeRefusesATableOrAFrontSocketItCannotTake(t *testing.T) {
 	controlAt(t)
 	for what, argv := range map[string][]string{
-		"a table that is not there": {"serve", "--listen", freeAddress(t), "--table", filepath.Join(t.TempDir(), "routing.json")},
-		"a table it cannot render":  {"serve", "--listen", freeAddress(t), "--table", documentAt(t, []byte(`{"grace":"soon"}`))},
-		"a trust that is no prefix": {"serve", "--listen", freeAddress(t), "--table", tableFile(t, nil), "--trust", "10.0.0.0/33"},
-		"a trust that is no name":   {"serve", "--listen", freeAddress(t), "--table", tableFile(t, nil), "--trust", "front proxy"},
-		"no listen address":         {"serve", "--table", tableFile(t, nil)},
-		"no table":                  {"serve", "--listen", freeAddress(t)},
+		"a table that is not there":     {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", filepath.Join(t.TempDir(), "routing.json")},
+		"a table it cannot render":      {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", documentAt(t, []byte(`{"grace":"soon"}`))},
+		"a front socket it cannot open": {"serve", "--listen", freeAddress(t), "--front", filepath.Join(t.TempDir(), "absent", "front.sock"), "--table", tableFile(t, nil)},
+		"no front socket":               {"serve", "--listen", freeAddress(t), "--table", tableFile(t, nil)},
+		"no listen address":             {"serve", "--front", frontAt(t), "--table", tableFile(t, nil)},
+		"no table":                      {"serve", "--listen", freeAddress(t), "--front", frontAt(t)},
 	} {
 		if code, _, errs := ran(t, argv...); code != exitRefused {
 			t.Errorf("serve with %s = %d, %q, want %d", what, code, errs, exitRefused)

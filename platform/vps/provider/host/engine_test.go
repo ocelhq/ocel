@@ -76,7 +76,7 @@ func proxyStanding(t *testing.T) standingProxy {
 	proxied, routing, switching := filepath.Join(dir, "proxy"), filepath.Join(dir, "routing"), filepath.Join(dir, "switchboard")
 	stood.pins, stood.table = filepath.Join(dir, "pins"), filepath.Join(routing, filepath.Base(live.RoutingTable))
 	stood.binary = filepath.Join(switching, switchboard.Name)
-	for _, made := range []string{proxied, filepath.Join(proxied, "data"), routing, switching, stood.pins, filepath.Join(dir, "control"), filepath.Join(dir, "connector")} {
+	for _, made := range []string{proxied, filepath.Join(proxied, "data"), routing, switching, stood.pins, filepath.Join(dir, "control"), filepath.Join(dir, "front"), filepath.Join(dir, "connector")} {
 		if err := os.MkdirAll(made, 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -94,7 +94,7 @@ func proxyStanding(t *testing.T) standingProxy {
 		t.Log("this engine refuses to exec anything under no-new-privileges, so the switchboard stands here without it")
 	}
 	stood.here = strings.NewReplacer(
-		SwitchboardAddress, board+":"+switchboardPort,
+		switchboard.FrontDir, filepath.Join(dir, "front"),
 		switchboard.ControlDir, filepath.Join(dir, "control"),
 		SwitchboardDir, switching,
 		ConnectorRun, filepath.Join(dir, "connector"),
@@ -153,12 +153,14 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 			filepath.Join(stood.dir, "proxy") + ":" + caddy.ConfigDir + ":ro",
 			stood.pins + ":" + caddy.PinsMount + ":ro",
 			filepath.Join(stood.dir, "proxy", "data") + ":" + caddy.DataMount,
+			filepath.Join(stood.dir, "front") + ":" + filepath.Join(stood.dir, "front") + ":ro",
 		}},
 		{stood.board, switchboardStanding(switchboardBinary(arch)), []string{
 			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
 			filepath.Join(stood.dir, "routing") + ":" + filepath.Join(stood.dir, "routing") + ":ro",
 			filepath.Join(stood.dir, "connector") + ":" + filepath.Join(stood.dir, "connector") + ":ro",
 			filepath.Join(stood.dir, "control") + ":" + filepath.Join(stood.dir, "control"),
+			filepath.Join(stood.dir, "front") + ":" + filepath.Join(stood.dir, "front"),
 		}},
 	} {
 		rendered, err := exec.Command("/bin/sh", "-c", stood.here(standing.as.probe())).Output()
@@ -195,18 +197,21 @@ func TestAProbeWithNoRootReadsABindWhoseSourceTheHostReplacedAsMoved(t *testing.
 			filepath.Join(stood.dir, "proxy") + ":" + caddy.ConfigDir + ":ro",
 			stood.pins + ":" + caddy.PinsMount + ":ro",
 			filepath.Join(stood.dir, "proxy", "data") + ":" + caddy.DataMount,
+			filepath.Join(stood.dir, "front") + ":" + filepath.Join(stood.dir, "front") + ":ro",
 		}},
 		{stood.board, switchboardStanding(switchboardBinary(arch)), filepath.Join(stood.dir, "connector"), false, []string{
 			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
 			filepath.Join(stood.dir, "routing") + ":" + filepath.Join(stood.dir, "routing") + ":ro",
 			filepath.Join(stood.dir, "connector") + ":" + filepath.Join(stood.dir, "connector") + ":ro",
 			filepath.Join(stood.dir, "control") + ":" + filepath.Join(stood.dir, "control"),
+			filepath.Join(stood.dir, "front") + ":" + filepath.Join(stood.dir, "front"),
 		}},
 		{stood.board, switchboardStanding(switchboardBinary(arch)), filepath.Dir(stood.binary), true, []string{
 			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
 			filepath.Join(stood.dir, "routing") + ":" + filepath.Join(stood.dir, "routing") + ":ro",
 			filepath.Join(stood.dir, "connector") + ":" + filepath.Join(stood.dir, "connector") + ":ro",
 			filepath.Join(stood.dir, "control") + ":" + filepath.Join(stood.dir, "control"),
+			filepath.Join(stood.dir, "front") + ":" + filepath.Join(stood.dir, "front"),
 		}},
 	} {
 		if err := os.Rename(standing.replaced, standing.replaced+".gone"); err != nil {
@@ -376,8 +381,8 @@ func TestTheSwitchboardTrustsWhatTheFrontProxyForwardsAndNothingAClientSays(t *t
 	forwarded, rest, _ := strings.Cut(string(body), "|")
 	proto, hostname, _ := strings.Cut(rest, "|")
 	hops := strings.Split(forwarded, ", ")
-	if len(hops) != 2 || slices.Contains(hops, "6.6.6.6") {
-		t.Errorf("the app heard X-Forwarded-For %q, want the client the front proxy saw and the front proxy itself: a switchboard that does not trust the front proxy by name drops the first, and a front proxy that trusts its client passes on the spoof", forwarded)
+	if len(hops) != 1 || slices.Contains(hops, "6.6.6.6") || hops[0] == "" {
+		t.Errorf("the app heard X-Forwarded-For %q, want the one client the front proxy saw: a switchboard that does not trust its front socket drops it, and a front proxy that trusts its client passes on the spoof", forwarded)
 	}
 	if proto != "http" {
 		t.Errorf("the app heard X-Forwarded-Proto %q over a plain http request that claimed https, want http", proto)

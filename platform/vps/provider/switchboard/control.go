@@ -11,6 +11,8 @@ const (
 	Name          = "ocel-switchboard"
 	ControlDir    = "/run/" + Name
 	ControlSocket = ControlDir + "/control.sock"
+	FrontDir      = "/run/ocel-front"
+	FrontSocket   = FrontDir + "/switchboard.sock"
 )
 
 const (

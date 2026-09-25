@@ -591,8 +591,8 @@ func TestEveryBoxRefusesTheHostnamesNothingOnItClaimsAndForwardsThemToTheSwitchb
 			}
 			for _, server := range read.Apps.HTTP.Servers {
 				last := server.Routes[len(server.Routes)-1]
-				if len(last.Match) != 0 || len(last.Handle) != 1 || len(last.Handle[0].Upstreams) != 1 || last.Handle[0].Upstreams[0].Dial != SwitchboardAddress {
-					t.Errorf("%s ends its front routes with %+v, want an unmatched forward to %s: the switchboard answers what nothing claims with the box's own 404, and caddy's own answer is an empty 200", box.what, last, SwitchboardAddress)
+				if len(last.Match) != 0 || len(last.Handle) != 1 || len(last.Handle[0].Upstreams) != 1 || last.Handle[0].Upstreams[0].Dial != SwitchboardUpstream {
+					t.Errorf("%s ends its front routes with %+v, want an unmatched forward to %s: the switchboard answers what nothing claims with the box's own 404, and caddy's own answer is an empty 200", box.what, last, SwitchboardUpstream)
 				}
 			}
 		})
