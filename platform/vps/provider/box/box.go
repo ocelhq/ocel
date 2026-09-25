@@ -26,7 +26,7 @@ type Machine interface {
 	ForgetNetwork(ctx context.Context, class providerkit.Class, project string) error
 	Promote(ctx context.Context, class providerkit.Class, project, app, coordinate string) error
 	Serving(ctx context.Context, key host.RouteKey) (string, error)
-	Release(ctx context.Context, rel host.Release, report providerkit.Reporter) error
+	Release(ctx context.Context, rel host.Release, progress providerkit.Progress) error
 	UnroutePointer(ctx context.Context, owner, pointer string) error
 	UnrouteSurface(ctx context.Context, owner string) error
 	Claims(ctx context.Context) ([]host.HostClaim, error)

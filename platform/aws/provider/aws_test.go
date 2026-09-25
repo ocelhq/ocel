@@ -47,23 +47,23 @@ type stubBootstrapper struct{ err error }
 
 func (stubBootstrapper) Catalogue() []providerkit.Feature { return nil }
 
-func (stubBootstrapper) Describe(context.Context, providerkit.Class) (providerkit.Bootstrap, error) {
-	return providerkit.Bootstrap{}, nil
+func (stubBootstrapper) Describe(context.Context, providerkit.Class) (providerkit.BootstrapReading, error) {
+	return providerkit.BootstrapReading{}, nil
 }
 
 func (s stubBootstrapper) Plan(context.Context, providerkit.BootstrapRequest) (providerkit.Plan, error) {
 	return providerkit.Plan{}, s.err
 }
 
-func (s stubBootstrapper) Apply(context.Context, providerkit.BootstrapRequest, providerkit.Reporter) error {
+func (s stubBootstrapper) Apply(context.Context, providerkit.BootstrapRequest, providerkit.Progress) error {
 	return s.err
 }
 
-func (stubBootstrapper) PlanRemoval(context.Context, providerkit.Class) (providerkit.Plan, error) {
+func (stubBootstrapper) PlanRemove(context.Context, providerkit.Class) (providerkit.Plan, error) {
 	return providerkit.Plan{}, nil
 }
 
-func (s stubBootstrapper) Remove(context.Context, providerkit.Class, providerkit.Reporter) error {
+func (s stubBootstrapper) Remove(context.Context, providerkit.Class, providerkit.Progress) error {
 	return s.err
 }
 
@@ -115,7 +115,7 @@ func TestBootstrapApplyForgetsWhatItStoodUp(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	primed(t, p, "before")
 
-	if err := (settling{Bootstrapper: stubBootstrapper{}, settled: settledBy(t, p)}).
+	if err := (settling{Bootstrap: stubBootstrapper{}, settled: settledBy(t, p)}).
 		Apply(context.Background(), providerkit.BootstrapRequest{Class: providerkit.ClassProduction}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestBootstrapRemoveForgetsWhatItTookDown(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	primed(t, p, "before")
 
-	if err := (settling{Bootstrapper: stubBootstrapper{}, settled: settledBy(t, p)}).
+	if err := (settling{Bootstrap: stubBootstrapper{}, settled: settledBy(t, p)}).
 		Remove(context.Background(), providerkit.ClassProduction, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestBootstrapKeepsWhatAFailedApplyNeverChanged(t *testing.T) {
 	primed(t, p, "before")
 
 	refused := errors.New("refused")
-	if err := (settling{Bootstrapper: stubBootstrapper{err: refused}, settled: settledBy(t, p)}).
+	if err := (settling{Bootstrap: stubBootstrapper{err: refused}, settled: settledBy(t, p)}).
 		Apply(context.Background(), providerkit.BootstrapRequest{Class: providerkit.ClassProduction}, nil); !errors.Is(err, refused) {
 		t.Fatalf("Apply() = %v, want the refusal it was given", err)
 	}
@@ -164,7 +164,7 @@ func TestBootstrapFrontsTheEdgeItWasAsked(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Bootstrap(%q) error = %v", kind, err)
 		}
-		held, ok := bootstrapper.(settling).Bootstrapper.(control.Bootstrapper)
+		held, ok := bootstrapper.(settling).Bootstrap.(control.Bootstrap)
 		if !ok {
 			t.Fatalf("Bootstrap(%q) = %T, want the AWS bootstrapper", kind, bootstrapper)
 		}

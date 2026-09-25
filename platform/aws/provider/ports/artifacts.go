@@ -169,7 +169,7 @@ func (a Artifacts) Open(ctx context.Context, ref providerkit.ArtifactRef) (io.Re
 	return out.Body, nil
 }
 
-func (a Artifacts) RemovePrefix(ctx context.Context, class providerkit.Class, prefix string, report providerkit.Reporter) error {
+func (a Artifacts) RemovePrefix(ctx context.Context, class providerkit.Class, prefix string, progress providerkit.Progress) error {
 	if prefix == "" {
 		return kit.Refuse(kit.CodeInvalid, "an empty prefix names every artifact this account keeps")
 	}
@@ -190,8 +190,8 @@ func (a Artifacts) RemovePrefix(ctx context.Context, class providerkit.Class, pr
 			errs = append(errs, err)
 		}
 	}
-	if report != nil {
-		report.Detail("removed " + prefix)
+	if progress != nil {
+		progress.Detail("removed " + prefix)
 	}
 	return errors.Join(errs...)
 }

@@ -17,6 +17,6 @@ func (NoArtifacts) Open(_ context.Context, ref ArtifactRef) (io.ReadCloser, erro
 	return nil, Refuse(CodeInvalid, "this provider keeps no artifact store, so there is no artifact at %s", ref.Key)
 }
 
-func (NoArtifacts) RemovePrefix(context.Context, Class, string, Reporter) error { return nil }
+func (NoArtifacts) RemovePrefix(context.Context, Class, string, Progress) error { return nil }
 
 var _ ArtifactStore = NoArtifacts{}

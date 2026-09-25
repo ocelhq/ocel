@@ -61,7 +61,7 @@ func newLayout(t *testing.T, files tree) layout {
 func (l layout) target(entry string) Target {
 	return Target{
 		App:        "api",
-		Runtime:    providerkit.Runtime{Name: "node"},
+		Runtime:    providerkit.Framework{Name: "node"},
 		Entrypoint: filepath.Join(l.appSrc, filepath.FromSlash(entry)),
 		FuncDir:    l.funcDir,
 		AppDir:     l.appDir,
@@ -125,7 +125,7 @@ func TestBundle(t *testing.T) {
 		if err := json.Unmarshal([]byte(readFile(t, filepath.Join(l.funcDir, providerkit.FunctionConfigFile))), &cfg); err != nil {
 			t.Fatal(err)
 		}
-		want := providerkit.FunctionConfig{Runtime: providerkit.Runtime{Name: "node"}, Handler: HandlerFile, ID: entryRouteID, App: "api"}
+		want := providerkit.FunctionConfig{Runtime: providerkit.Framework{Name: "node"}, Handler: HandlerFile, ID: entryRouteID, App: "api"}
 		if !reflect.DeepEqual(cfg, want) {
 			t.Errorf("%s = %+v, want %+v", providerkit.FunctionConfigFile, cfg, want)
 		}
@@ -360,7 +360,7 @@ func TestBundle(t *testing.T) {
 			name:  "an unnamed runtime fails the build",
 			files: tree{"package.json": appPkg, "server.js": "console.log('hi');\n"},
 			entry: "server.js",
-			mut:   func(target *Target) { target.Runtime = providerkit.Runtime{} },
+			mut:   func(target *Target) { target.Runtime = providerkit.Framework{} },
 			wants: []string{"runtime"},
 		},
 		{

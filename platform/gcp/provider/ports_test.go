@@ -139,10 +139,10 @@ func TestNoPortIsNilForTheKitToCallThrough(t *testing.T) {
 
 	p := standing(t)
 	for name, port := range map[string]any{
-		"Releases":    p.Releases(),
+		"Releases":    p.Stacks(),
 		"Artifacts":   p.Artifacts(),
 		"Records":     p.Records(),
-		"Sealer":      p.Sealer(),
+		"Sealer":      p.Cipher(),
 		"Credentials": p.Credentials(),
 		"Edges":       p.Edges(),
 		"DNS":         p.DNS(),
@@ -183,8 +183,8 @@ func TestSealingAValueThatNamesNoClassIsTheCallersMistake(t *testing.T) {
 	p := standing(t)
 
 	for name, refused := range map[string]error{
-		"Seal": errorOf(p.Sealer().Seal(ctx, providerkit.Coordinate{}, nil)),
-		"Open": errorOf(p.Sealer().Open(ctx, providerkit.Coordinate{}, nil)),
+		"Seal": errorOf(p.Cipher().Seal(ctx, providerkit.Coordinate{}, nil)),
+		"Open": errorOf(p.Cipher().Open(ctx, providerkit.Coordinate{}, nil)),
 	} {
 		var refusal providerkit.Refusal
 		if !errors.As(refused, &refusal) || refusal.Code != providerkit.CodeInvalid {

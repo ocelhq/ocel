@@ -63,20 +63,20 @@ const (
 
 type bootstrapGate struct{ p *Provider }
 
-func (g bootstrapGate) Catalogue() []providerkit.Feature { return bootstrapper{}.Catalogue() }
+func (g bootstrapGate) Catalogue() []providerkit.Feature { return bootstrap{}.Catalogue() }
 
-func (g bootstrapGate) stood(ctx context.Context) (bootstrapper, error) {
+func (g bootstrapGate) stood(ctx context.Context) (bootstrap, error) {
 	held, err := g.p.stood(ctx)
 	if err != nil {
-		return bootstrapper{}, err
+		return bootstrap{}, err
 	}
-	return bootstrapper{clients: held, fronts: g.p.Edges()}, nil
+	return bootstrap{clients: held, fronts: g.p.Edges()}, nil
 }
 
-func (g bootstrapGate) Describe(ctx context.Context, class providerkit.Class) (providerkit.Bootstrap, error) {
+func (g bootstrapGate) Describe(ctx context.Context, class providerkit.Class) (providerkit.BootstrapReading, error) {
 	b, err := g.stood(ctx)
 	if err != nil {
-		return providerkit.Bootstrap{}, err
+		return providerkit.BootstrapReading{}, err
 	}
 	return b.Describe(ctx, class)
 }
@@ -89,56 +89,56 @@ func (g bootstrapGate) Plan(ctx context.Context, req providerkit.BootstrapReques
 	return b.Plan(ctx, req)
 }
 
-func (g bootstrapGate) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
+func (g bootstrapGate) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
 	b, err := g.stood(ctx)
 	if err != nil {
 		return err
 	}
-	return b.Apply(ctx, req, report)
+	return b.Apply(ctx, req, progress)
 }
 
-func (g bootstrapGate) PlanRemoval(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
+func (g bootstrapGate) PlanRemove(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
 	b, err := g.stood(ctx)
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
-	return b.PlanRemoval(ctx, class)
+	return b.PlanRemove(ctx, class)
 }
 
-func (g bootstrapGate) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {
+func (g bootstrapGate) Remove(ctx context.Context, class providerkit.Class, progress providerkit.Progress) error {
 	b, err := g.stood(ctx)
 	if err != nil {
 		return err
 	}
-	return b.Remove(ctx, class, report)
+	return b.Remove(ctx, class, progress)
 }
 
-type bootstrapper struct {
+type bootstrap struct {
 	clients *clients
-	fronts  providerkit.EdgeRegistry
+	fronts  providerkit.Edges
 }
 
-func (b bootstrapper) Describe(ctx context.Context, class providerkit.Class) (providerkit.Bootstrap, error) {
+func (b bootstrap) Describe(ctx context.Context, class providerkit.Class) (providerkit.BootstrapReading, error) {
 	read, err := b.survey(ctx, class)
 	if err != nil {
-		return providerkit.Bootstrap{}, err
+		return providerkit.BootstrapReading{}, err
 	}
 	return b.described(ctx, read)
 }
 
-func (b bootstrapper) described(ctx context.Context, read survey) (providerkit.Bootstrap, error) {
+func (b bootstrap) described(ctx context.Context, read survey) (providerkit.BootstrapReading, error) {
 	items := bootstrapItems(read.Names, read.Class, read.Emulated)
 	stacks := []providerkit.BootstrapStack{{
 		Name:          read.Project + "/" + string(read.Class),
 		Present:       read.Present,
 		Schema:        uint32(read.Stamp.Schema),
 		DigestCurrent: read.Stamp.Digest == digestOf(read.Names.Namespace(), items) && read.current(items),
-		Writer:        read.Stamp.Writer,
+		WrittenBy:     read.Stamp.Writer,
 	}}
 	for _, feature := range read.Stamp.Features {
 		standing, err := b.frontStands(ctx, read.Class, feature)
 		if err != nil {
-			return providerkit.Bootstrap{}, err
+			return providerkit.BootstrapReading{}, err
 		}
 		stacks = append(stacks, providerkit.BootstrapStack{
 			Name:          read.Project + "/" + string(read.Class) + "/" + feature,
@@ -146,10 +146,10 @@ func (b bootstrapper) described(ctx context.Context, read survey) (providerkit.B
 			Present:       standing,
 			Schema:        uint32(read.Stamp.Schema),
 			DigestCurrent: standing,
-			Writer:        read.Stamp.Writer,
+			WrittenBy:     read.Stamp.Writer,
 		})
 	}
-	return providerkit.Bootstrap{
+	return providerkit.BootstrapReading{
 		Class:      read.Class,
 		Present:    read.Present,
 		Unfinished: read.Present && read.Stamp.State != stateComplete,
@@ -158,14 +158,14 @@ func (b bootstrapper) described(ctx context.Context, read survey) (providerkit.B
 	}, nil
 }
 
-func (b bootstrapper) held(ctx context.Context, req providerkit.BootstrapRequest) (survey, error) {
+func (b bootstrap) held(ctx context.Context, req providerkit.BootstrapRequest) (survey, error) {
 	if carried, held := req.Held.(survey); held && carried.Class == req.Class {
 		return carried, nil
 	}
 	return b.survey(ctx, req.Class)
 }
 
-func (b bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
+func (b bootstrap) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
 	read, err := b.held(ctx, req)
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -221,7 +221,7 @@ func sharedWith(class providerkit.Class) string {
 	return fmt.Sprintf(reasonShared, siblingOf(class))
 }
 
-func (b bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
+func (b bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
 	read, err := b.held(ctx, req)
 	if err != nil {
 		return err
@@ -232,17 +232,17 @@ func (b bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 
 	items := bootstrapItems(read.Names, req.Class, read.Emulated)
 	holder := item{Kind: KindBucket, Name: read.Names.Bucket(req.Class)}
-	if err := b.stand(ctx, read, stampHolder(items, holder), report); err != nil {
+	if err := b.stand(ctx, read, stampHolder(items, holder), progress); err != nil {
 		return err
 	}
-	if err := b.dropFronts(ctx, read, req, report); err != nil {
+	if err := b.dropFronts(ctx, read, req, progress); err != nil {
 		return err
 	}
 
 	written := stamp{
 		Schema:   providerkit.BootstrapSchema,
 		State:    stateApplying,
-		Writer:   req.Writer.String(),
+		Writer:   req.WrittenBy.String(),
 		Digest:   digestOf(read.Names.Namespace(), items),
 		Features: standingFeatures(b.Catalogue(), read.Stamp.Features, req),
 	}
@@ -254,11 +254,11 @@ func (b bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 		if item.ID() == holder.ID() {
 			continue
 		}
-		if err := b.stand(ctx, read, item, report); err != nil {
+		if err := b.stand(ctx, read, item, progress); err != nil {
 			return err
 		}
 	}
-	if err := b.raiseFronts(ctx, req, report); err != nil {
+	if err := b.raiseFronts(ctx, req, progress); err != nil {
 		return err
 	}
 	written.State = stateComplete
@@ -273,26 +273,26 @@ func stampHolder(items []item, holder item) item {
 	return holder
 }
 
-func (b bootstrapper) stand(ctx context.Context, read survey, held item, report providerkit.Reporter) error {
+func (b bootstrap) stand(ctx context.Context, read survey, held item, progress providerkit.Progress) error {
 	if mends := read.mends(held); mends != "" {
 		if err := b.mend(ctx, read, held); err != nil {
 			return err
 		}
-		say(report, "mended "+held.ID()+": "+mends)
+		say(progress, "mended "+held.ID()+": "+mends)
 		return nil
 	}
 	if read.holds(held) {
-		say(report, held.ID()+": "+reasonStanding)
+		say(progress, held.ID()+": "+reasonStanding)
 		return nil
 	}
 	if err := b.make(ctx, read, held); err != nil {
 		return err
 	}
-	say(report, "created "+held.ID())
+	say(progress, "created "+held.ID())
 	return nil
 }
 
-func (b bootstrapper) mend(ctx context.Context, read survey, held item) error {
+func (b bootstrap) mend(ctx context.Context, read survey, held item) error {
 	switch held.Kind {
 	case KindDatabase:
 		return b.protectDatabase(ctx)
@@ -305,7 +305,7 @@ func (b bootstrapper) mend(ctx context.Context, read survey, held item) error {
 	}
 }
 
-func (b bootstrapper) make(ctx context.Context, read survey, held item) error {
+func (b bootstrap) make(ctx context.Context, read survey, held item) error {
 	switch held.Kind {
 	case KindDatabase:
 		return b.makeDatabase(ctx, read)
@@ -326,7 +326,7 @@ func (b bootstrapper) make(ctx context.Context, read survey, held item) error {
 	}
 }
 
-func (b bootstrapper) stampWith(ctx context.Context, read survey, written stamp, generation int64) (int64, error) {
+func (b bootstrap) stampWith(ctx context.Context, read survey, written stamp, generation int64) (int64, error) {
 	client, err := b.clients.Storage()
 	if err != nil {
 		return 0, err
@@ -354,7 +354,7 @@ func onlyWriter(generation int64) storage.Conditions {
 	return storage.Conditions{GenerationMatch: generation}
 }
 
-func (b bootstrapper) stampRefusal(ctx context.Context, read survey, err error) error {
+func (b bootstrap) stampRefusal(ctx context.Context, read survey, err error) error {
 	if answeredCode(err) != http.StatusPreconditionFailed {
 		return fmt.Errorf("write %s: %w", StampObject, err)
 	}
@@ -365,7 +365,7 @@ func (b bootstrapper) stampRefusal(ctx context.Context, read survey, err error) 
 		writerNamed(read.Stamp.Writer), StampObject, read.Names.Bucket(read.Class))
 }
 
-func (b bootstrapper) writerNow(ctx context.Context, read survey) string {
+func (b bootstrap) writerNow(ctx context.Context, read survey) string {
 	now, err := b.stamped(ctx, read.Names.Bucket(read.Class))
 	if err != nil || !now.held {
 		return read.Stamp.Writer
@@ -380,7 +380,7 @@ func writerNamed(writer string) string {
 	return writer
 }
 
-func (b bootstrapper) makeBucket(ctx context.Context, read survey, held item) error {
+func (b bootstrap) makeBucket(ctx context.Context, read survey, held item) error {
 	client, err := b.clients.Storage()
 	if err != nil {
 		return err
@@ -404,7 +404,7 @@ func locked(attrs *storage.BucketAttrs) bool {
 	return attrs.UniformBucketLevelAccess.Enabled && attrs.PublicAccessPrevention == storage.PublicAccessPreventionEnforced
 }
 
-func (b bootstrapper) lockBucket(ctx context.Context, name string) error {
+func (b bootstrap) lockBucket(ctx context.Context, name string) error {
 	client, err := b.clients.Storage()
 	if err != nil {
 		return err
@@ -420,7 +420,7 @@ func (b bootstrapper) lockBucket(ctx context.Context, name string) error {
 
 func taken(err error) bool { return answeredCode(err) == http.StatusConflict }
 
-func (b bootstrapper) makeKeyRing(ctx context.Context) error {
+func (b bootstrap) makeKeyRing(ctx context.Context) error {
 	client, err := b.clients.KMS()
 	if err != nil {
 		return err
@@ -438,7 +438,7 @@ func (b bootstrapper) makeKeyRing(ctx context.Context) error {
 	return nil
 }
 
-func (b bootstrapper) makeKey(ctx context.Context, name string) error {
+func (b bootstrap) makeKey(ctx context.Context, name string) error {
 	client, err := b.clients.KMS()
 	if err != nil {
 		return err
@@ -487,7 +487,7 @@ func (b bootstrapper) makeKey(ctx context.Context, name string) error {
 	return nil
 }
 
-func (b bootstrapper) makeSecret(ctx context.Context, name string) error {
+func (b bootstrap) makeSecret(ctx context.Context, name string) error {
 	service, err := b.clients.Secrets()
 	if err != nil {
 		return err
@@ -521,7 +521,7 @@ func (b bootstrapper) makeSecret(ctx context.Context, name string) error {
 	return nil
 }
 
-func (b bootstrapper) makeAccount(ctx context.Context, read survey, name string) error {
+func (b bootstrap) makeAccount(ctx context.Context, read survey, name string) error {
 	service, err := b.clients.Accounts()
 	if err != nil {
 		return err
@@ -542,7 +542,7 @@ func (b bootstrapper) makeAccount(ctx context.Context, read survey, name string)
 	return b.grantReads(ctx, read.Class)
 }
 
-func (b bootstrapper) grantRunAs(ctx context.Context, name string) error {
+func (b bootstrap) grantRunAs(ctx context.Context, name string) error {
 	member, err := b.clients.Principal(ctx)
 	if err != nil {
 		return err
@@ -576,7 +576,7 @@ func (b bootstrapper) grantRunAs(ctx context.Context, name string) error {
 	return fmt.Errorf("let %s deploy apps that run as the %s service account: %w", member, name, refused)
 }
 
-func (b bootstrapper) takeAccount(ctx context.Context, class providerkit.Class, name string) error {
+func (b bootstrap) takeAccount(ctx context.Context, class providerkit.Class, name string) error {
 	if err := b.forgetReads(ctx, class); err != nil {
 		return err
 	}
@@ -590,7 +590,7 @@ func (b bootstrapper) takeAccount(ctx context.Context, class providerkit.Class, 
 	return nil
 }
 
-func (b bootstrapper) makeRepository(ctx context.Context, name string) error {
+func (b bootstrap) makeRepository(ctx context.Context, name string) error {
 	service, err := b.clients.Repositories()
 	if err != nil {
 		return err
@@ -606,7 +606,7 @@ func (b bootstrapper) makeRepository(ctx context.Context, name string) error {
 	return b.repositoryAwaited(ctx, fmt.Sprintf("creating the %s image repository", name), creating)
 }
 
-func (b bootstrapper) pruneRepository(ctx context.Context, name string) error {
+func (b bootstrap) pruneRepository(ctx context.Context, name string) error {
 	service, err := b.clients.Repositories()
 	if err != nil {
 		return err
@@ -641,7 +641,7 @@ func pruningUntaggedImages() map[string]artifactregistry.CleanupPolicy {
 	}
 }
 
-func (b bootstrapper) takeRepository(ctx context.Context, name string) error {
+func (b bootstrap) takeRepository(ctx context.Context, name string) error {
 	service, err := b.clients.Repositories()
 	if err != nil {
 		return err
@@ -656,7 +656,7 @@ func (b bootstrapper) takeRepository(ctx context.Context, name string) error {
 	return b.repositoryAwaited(ctx, fmt.Sprintf("deleting the %s image repository", name), deleting)
 }
 
-func (b bootstrapper) repositoryAwaited(ctx context.Context, doing string, operation *artifactregistry.Operation) error {
+func (b bootstrap) repositoryAwaited(ctx context.Context, doing string, operation *artifactregistry.Operation) error {
 	if operation == nil || operation.Done || operation.Name == "" {
 		return repositoryFailed(doing, operation)
 	}
@@ -680,7 +680,7 @@ func repositoryFailed(doing string, operation *artifactregistry.Operation) error
 	return fmt.Errorf("%s: %s", doing, operation.Error.Message)
 }
 
-func (b bootstrapper) makeDatabase(ctx context.Context, read survey) error {
+func (b bootstrap) makeDatabase(ctx context.Context, read survey) error {
 	service, err := b.clients.Databases()
 	if err != nil {
 		return err
@@ -699,7 +699,7 @@ func (b bootstrapper) makeDatabase(ctx context.Context, read survey) error {
 	return b.awaited(ctx, fmt.Sprintf("creating the %q Firestore database", b.clients.Database()), operation)
 }
 
-func (b bootstrapper) databaseServesThisRegion(ctx context.Context, read survey) error {
+func (b bootstrap) databaseServesThisRegion(ctx context.Context, read survey) error {
 	service, err := b.clients.Databases()
 	if err != nil {
 		return err
@@ -718,7 +718,7 @@ func (b bootstrapper) databaseServesThisRegion(ctx context.Context, read survey)
 		read.Project, b.clients.Database(), held.LocationId, read.Region, held.LocationId, b.clients.Database())
 }
 
-func (b bootstrapper) protectDatabase(ctx context.Context) error {
+func (b bootstrap) protectDatabase(ctx context.Context) error {
 	service, err := b.clients.Databases()
 	if err != nil {
 		return err
@@ -732,7 +732,7 @@ func (b bootstrapper) protectDatabase(ctx context.Context) error {
 	return b.awaited(ctx, fmt.Sprintf("holding the %q Firestore database under delete protection", b.clients.Database()), operation)
 }
 
-func (b bootstrapper) awaited(ctx context.Context, doing string, operation *firestoreadmin.GoogleLongrunningOperation) error {
+func (b bootstrap) awaited(ctx context.Context, doing string, operation *firestoreadmin.GoogleLongrunningOperation) error {
 	if operation == nil || operation.Done || operation.Name == "" {
 		return operationFailed(doing, operation)
 	}
@@ -762,7 +762,7 @@ type removal struct {
 	reason string
 }
 
-func (b bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
+func (b bootstrap) PlanRemove(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
 	read, err := b.survey(ctx, class)
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -850,7 +850,7 @@ func removing(read survey, held item) removal {
 	return taking
 }
 
-func (b bootstrapper) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {
+func (b bootstrap) Remove(ctx context.Context, class providerkit.Class, progress providerkit.Progress) error {
 	read, err := b.survey(ctx, class)
 	if err != nil {
 		return err
@@ -876,13 +876,13 @@ func (b bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 	}
 	for _, taking := range removals(read) {
 		if taking.action == providerkit.ActionKeep {
-			say(report, "kept "+taking.item.ID()+": "+taking.reason)
+			say(progress, "kept "+taking.item.ID()+": "+taking.reason)
 			continue
 		}
 		if err := b.take(ctx, read, taking.item); err != nil {
 			return err
 		}
-		say(report, "removed "+taking.item.ID())
+		say(progress, "removed "+taking.item.ID())
 	}
 	return nil
 }
@@ -894,7 +894,7 @@ func destroyIn(class providerkit.Class) string {
 	return "ocel destroy production"
 }
 
-func (b bootstrapper) take(ctx context.Context, read survey, held item) error {
+func (b bootstrap) take(ctx context.Context, read survey, held item) error {
 	switch held.Kind {
 	case KindSecret:
 		return b.takeSecret(ctx, held.Name)
@@ -913,7 +913,7 @@ func (b bootstrapper) take(ctx context.Context, read survey, held item) error {
 	}
 }
 
-func (b bootstrapper) takeSecret(ctx context.Context, name string) error {
+func (b bootstrap) takeSecret(ctx context.Context, name string) error {
 	service, err := b.clients.Secrets()
 	if err != nil {
 		return err
@@ -924,7 +924,7 @@ func (b bootstrapper) takeSecret(ctx context.Context, name string) error {
 	return nil
 }
 
-func (b bootstrapper) takeKey(ctx context.Context, name string) error {
+func (b bootstrap) takeKey(ctx context.Context, name string) error {
 	client, err := b.clients.KMS()
 	if err != nil {
 		return err
@@ -969,7 +969,7 @@ func destroyable(versions []*kmspb.CryptoKeyVersion) []string {
 	return named
 }
 
-func (b bootstrapper) takeDatabase(ctx context.Context, read survey) error {
+func (b bootstrap) takeDatabase(ctx context.Context, read survey) error {
 	service, err := b.clients.Databases()
 	if err != nil {
 		return err
@@ -999,7 +999,7 @@ func (b bootstrapper) takeDatabase(ctx context.Context, read survey) error {
 	return b.awaited(ctx, fmt.Sprintf("deleting the %q Firestore database", b.clients.Database()), deleting)
 }
 
-func (b bootstrapper) takeBucket(ctx context.Context, name string) error {
+func (b bootstrap) takeBucket(ctx context.Context, name string) error {
 	client, err := b.clients.Storage()
 	if err != nil {
 		return err
@@ -1033,8 +1033,8 @@ func (b bootstrapper) takeBucket(ctx context.Context, name string) error {
 	return nil
 }
 
-func say(report providerkit.Reporter, message string) {
-	if report != nil {
-		report.Say(message)
+func say(progress providerkit.Progress, message string) {
+	if progress != nil {
+		progress.Say(message)
 	}
 }

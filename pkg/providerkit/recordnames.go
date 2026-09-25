@@ -87,6 +87,6 @@ type Project struct {
 	Features []string `json:"features,omitempty"`
 }
 
-type BootstrapState struct {
+type BootstrapSettings struct {
 	AutoHeal bool `json:"auto_heal,omitempty"`
 }

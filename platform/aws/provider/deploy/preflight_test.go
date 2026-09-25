@@ -28,7 +28,7 @@ func preflightPlan() providerkit.DeployPlan {
 }
 
 func preflighting(cfg Config, pre providerkit.DeployPreflight) error {
-	return newReleaser(fixed(cfg), &Realized{}, nil).Preflight(context.Background(), pre)
+	return newStacks(fixed(cfg), &Realized{}, nil).Preflight(context.Background(), pre)
 }
 
 func TestPreflightPolicyBudget(t *testing.T) {

@@ -16,50 +16,50 @@ const BootstrapSchema = 1
 const FeatureVarsKey = "vars-key"
 
 type Gate struct {
-	Bootstrapper Bootstrapper
-	Records      RecordStore
-	Writer       Writer
-	Edge         edge.Kind
+	Bootstrap Bootstrap
+	Records   RecordStore
+	WrittenBy WrittenBy
+	Edge      edge.Kind
 }
 
-type Standing struct {
+type BootstrapState struct {
 	Class      Class
 	Present    bool
 	Stacks     []BootstrapStack
 	Features   []string
 	Schema     int
-	Writer     Writer
+	WrittenBy  WrittenBy
 	AutoHeal   bool
 	Unfinished bool
 	Held       any
 }
 
-func (g Gate) Standing(ctx context.Context, class Class) (Standing, error) {
-	described, err := g.Bootstrapper.Describe(ctx, class)
+func (g Gate) State(ctx context.Context, class Class) (BootstrapState, error) {
+	described, err := g.Bootstrap.Describe(ctx, class)
 	if err != nil {
-		return Standing{}, err
+		return BootstrapState{}, err
 	}
-	standing := Standing{Class: class, Present: described.Present, Stacks: described.Stacks,
+	standing := BootstrapState{Class: class, Present: described.Present, Stacks: described.Stacks,
 		Unfinished: described.Unfinished, Held: described.Held}
 	var carried []string
 	for _, stack := range described.Stacks {
 		if stack.Feature == "" {
 			standing.Schema = int(stack.Schema)
-			standing.Writer = Writer(stack.Writer)
+			standing.WrittenBy = WrittenBy(stack.WrittenBy)
 			continue
 		}
 		if stack.Present {
 			carried = append(carried, stack.Feature)
 		}
 	}
-	standing.Features = inCatalogueOrder(g.Bootstrapper.Catalogue(), carried)
+	standing.Features = inCatalogueOrder(g.Bootstrap.Catalogue(), carried)
 	if standing.AutoHeal, err = g.autoHeal(ctx, class); err != nil {
-		return Standing{}, err
+		return BootstrapState{}, err
 	}
 	return standing, nil
 }
 
-func (s Standing) Stale(required []string) []string {
+func (s BootstrapState) Stale(required []string) []string {
 	var out []string
 	for _, stack := range s.Stacks {
 		if !stack.Present || stack.DigestCurrent {
@@ -73,11 +73,11 @@ func (s Standing) Stale(required []string) []string {
 	return out
 }
 
-func (s Standing) Downgrade(writing Writer) bool {
-	return s.Writer.Newer(writing)
+func (s BootstrapState) Downgrade(writing WrittenBy) bool {
+	return s.WrittenBy.Newer(writing)
 }
 
-func (s Standing) healable(required []string) []string {
+func (s BootstrapState) healable(required []string) []string {
 	var out []string
 	for _, stack := range s.Stacks {
 		if stack.Feature == "" || stack.DigestCurrent || !stack.Present {
@@ -103,14 +103,14 @@ type ApplyRequest struct {
 }
 
 type intent struct {
-	standing  Standing
+	standing  BootstrapState
 	requested []string
 	removing  []string
 	ordered   []string
 }
 
-func (g Gate) intended(standing Standing, req ApplyRequest) (intent, error) {
-	catalogue := g.Bootstrapper.Catalogue()
+func (g Gate) intended(standing BootstrapState, req ApplyRequest) (intent, error) {
+	catalogue := g.Bootstrap.Catalogue()
 	class := standing.Class
 	if err := RefuseSchemaAhead(standing.Schema, standing.Present, class); err != nil {
 		return intent{}, err
@@ -163,32 +163,32 @@ func (g Gate) refuseUnfronting(catalogue []Feature, named, removing []string) er
 		strings.Join(named, ", "), fronting, fronting)
 }
 
-func (i intent) request(class Class, req ApplyRequest, writer Writer) BootstrapRequest {
+func (i intent) request(class Class, req ApplyRequest, writer WrittenBy) BootstrapRequest {
 	return BootstrapRequest{
 		Class:      class,
 		Features:   i.requested,
 		Remove:     i.ordered,
 		Unattended: !req.AcceptReplacements,
-		Writer:     writer,
+		WrittenBy:  writer,
 		Held:       i.standing.Held,
 	}
 }
 
 func (g Gate) Plan(ctx context.Context, class Class, req ApplyRequest) (Plan, error) {
-	standing, err := g.Standing(ctx, class)
+	standing, err := g.State(ctx, class)
 	if err != nil {
 		return Plan{}, err
 	}
 	return g.PlanFrom(ctx, standing, req)
 }
 
-func (g Gate) PlanFrom(ctx context.Context, standing Standing, req ApplyRequest) (Plan, error) {
+func (g Gate) PlanFrom(ctx context.Context, standing BootstrapState, req ApplyRequest) (Plan, error) {
 	intended, err := g.intended(standing, req)
 	if err != nil {
 		return Plan{}, err
 	}
 	class := standing.Class
-	plan, err := g.Bootstrapper.Plan(ctx, intended.request(class, req, g.Writer))
+	plan, err := g.Bootstrap.Plan(ctx, intended.request(class, req, g.WrittenBy))
 	if err != nil {
 		return Plan{}, err
 	}
@@ -222,8 +222,8 @@ func (g Gate) noteDependents(ctx context.Context, class Class, groups []ChangeGr
 	return nil
 }
 
-func (g Gate) Apply(ctx context.Context, shown Plan, class Class, req ApplyRequest, report Reporter) error {
-	standing, err := g.Standing(ctx, class)
+func (g Gate) Apply(ctx context.Context, shown Plan, class Class, req ApplyRequest, progress Progress) error {
+	standing, err := g.State(ctx, class)
 	if err != nil {
 		return err
 	}
@@ -234,7 +234,7 @@ func (g Gate) Apply(ctx context.Context, shown Plan, class Class, req ApplyReque
 	if err := g.admitRemovals(ctx, class, intended.removing, req.Force); err != nil {
 		return err
 	}
-	drawn, err := g.Bootstrapper.Plan(ctx, intended.request(class, req, g.Writer))
+	drawn, err := g.Bootstrap.Plan(ctx, intended.request(class, req, g.WrittenBy))
 	if err != nil {
 		return err
 	}
@@ -246,21 +246,21 @@ func (g Gate) Apply(ctx context.Context, shown Plan, class Class, req ApplyReque
 	if req.AutoHeal != nil {
 		autoHeal = *req.AutoHeal
 	}
-	if err := g.Bootstrapper.Apply(ctx, intended.request(class, req, g.Writer), report); err != nil {
+	if err := g.Bootstrap.Apply(ctx, intended.request(class, req, g.WrittenBy), progress); err != nil {
 		return err
 	}
-	if err := g.RecordBootstrap(ctx, class, BootstrapState{AutoHeal: autoHeal}); err != nil {
+	if err := g.RecordBootstrap(ctx, class, BootstrapSettings{AutoHeal: autoHeal}); err != nil {
 		return err
 	}
 	return EnsureRecordSchema(ctx, g.Records, class)
 }
 
-func (g Gate) Remove(ctx context.Context, shown Plan, class Class, report Reporter) error {
+func (g Gate) Remove(ctx context.Context, shown Plan, class Class, progress Progress) error {
 	if err := g.Vacant(ctx, class); err != nil {
 		return err
 	}
 	if len(shown.Groups) > 0 {
-		standing, err := g.Bootstrapper.PlanRemoval(ctx, class)
+		standing, err := g.Bootstrap.PlanRemove(ctx, class)
 		if err != nil {
 			return err
 		}
@@ -268,7 +268,7 @@ func (g Gate) Remove(ctx context.Context, shown Plan, class Class, report Report
 			return err
 		}
 	}
-	if err := g.Bootstrapper.Remove(ctx, class, report); err != nil {
+	if err := g.Bootstrap.Remove(ctx, class, progress); err != nil {
 		return err
 	}
 	return Forget(ctx, g.Records, BootstrapRecord(class))
@@ -333,10 +333,10 @@ func ProjectsDependingOn(recorded map[string][]string, dropped []string) []strin
 	return out
 }
 
-func (g Gate) Admit(ctx context.Context, class Class, required []string, heal bool, report Reporter) (Standing, error) {
-	standing, err := g.Standing(ctx, class)
+func (g Gate) Admit(ctx context.Context, class Class, required []string, heal bool, progress Progress) (BootstrapState, error) {
+	standing, err := g.State(ctx, class)
 	if err != nil {
-		return Standing{}, err
+		return BootstrapState{}, err
 	}
 	command := BootstrapCommand(class)
 	if err := CheckSchema(standing.Schema, standing.Present, class); err != nil {
@@ -345,20 +345,20 @@ func (g Gate) Admit(ctx context.Context, class Class, required []string, heal bo
 	if err := standing.lacking(required, command); err != nil {
 		return standing, err
 	}
-	if heal && g.heal(ctx, standing, required, report) {
-		if standing, err = g.Standing(ctx, class); err != nil {
-			return Standing{}, err
+	if heal && g.heal(ctx, standing, required, progress) {
+		if standing, err = g.State(ctx, class); err != nil {
+			return BootstrapState{}, err
 		}
 	}
 	if stale := standing.Stale(required); len(stale) > 0 {
-		detail(report, fmt.Sprintf(
+		detail(progress, fmt.Sprintf(
 			"this account's Ocel bootstrap is the shape this build needs but its content is behind: %s. Re-run `%s` to refresh it",
 			strings.Join(stale, ", "), command))
 	}
 	return standing, nil
 }
 
-func (s Standing) lacking(required []string, command string) error {
+func (s BootstrapState) lacking(required []string, command string) error {
 	missing := missingFeatures(s.Features, required)
 	if len(missing) == 0 {
 		return nil
@@ -368,34 +368,34 @@ func (s Standing) lacking(required []string, command string) error {
 		strings.Join(missing, ", "), command, strings.Join(missing, ","))
 }
 
-func (g Gate) heal(ctx context.Context, standing Standing, required []string, report Reporter) bool {
+func (g Gate) heal(ctx context.Context, standing BootstrapState, required []string, progress Progress) bool {
 	if !standing.AutoHeal || len(standing.healable(required)) == 0 {
 		return false
 	}
-	if !g.Writer.Release() {
-		detail(report, fmt.Sprintf(
-			"this provider is a development build (%s), so it leaves the account's stale bootstrap stacks as they are", g.Writer))
+	if !g.WrittenBy.Release() {
+		detail(progress, fmt.Sprintf(
+			"this provider is a development build (%s), so it leaves the account's stale bootstrap stacks as they are", g.WrittenBy))
 		return false
 	}
-	if !standing.Writer.Release() {
-		detail(report, fmt.Sprintf(
-			"this account's bootstrap was written by a development build (%s), so it is refreshed only by the run that writes it next", standing.Writer))
+	if !standing.WrittenBy.Release() {
+		detail(progress, fmt.Sprintf(
+			"this account's bootstrap was written by a development build (%s), so it is refreshed only by the run that writes it next", standing.WrittenBy))
 		return false
 	}
-	err := g.Bootstrapper.Apply(ctx, BootstrapRequest{
+	err := g.Bootstrap.Apply(ctx, BootstrapRequest{
 		Class:      standing.Class,
 		Features:   standing.Features,
 		Unattended: true,
 		Heal:       true,
-		Writer:     g.Writer,
-	}, report)
+		WrittenBy:  g.WrittenBy,
+	}, progress)
 	var refusal Refusal
 	if errors.As(err, &refusal) && refusal.Code == CodeDenied {
-		detail(report, denied(refusal))
+		detail(progress, denied(refusal))
 		return false
 	}
 	if err != nil {
-		detail(report, "could not refresh this account's bootstrap, and this run continues against it as it stands: "+err.Error())
+		detail(progress, "could not refresh this account's bootstrap, and this run continues against it as it stands: "+err.Error())
 		return false
 	}
 	return true
@@ -417,14 +417,14 @@ func (g Gate) autoHeal(ctx context.Context, class Class) (bool, error) {
 	if len(held.Bytes) == 0 {
 		return false, nil
 	}
-	var state BootstrapState
+	var state BootstrapSettings
 	if err := json.Unmarshal(held.Bytes, &state); err != nil {
 		return false, fmt.Errorf("read the %s bootstrap record: %w", class, err)
 	}
 	return state.AutoHeal, nil
 }
 
-func (g Gate) RecordBootstrap(ctx context.Context, class Class, state BootstrapState) error {
+func (g Gate) RecordBootstrap(ctx context.Context, class Class, state BootstrapSettings) error {
 	held, err := Held(ctx, g.Records, BootstrapRecord(class))
 	if err != nil {
 		return fmt.Errorf("read the %s bootstrap record: %w", class, err)
@@ -577,9 +577,9 @@ func destroyCommand(class Class) string {
 	return "ocel destroy production"
 }
 
-func detail(report Reporter, message string) {
-	if report == nil {
+func detail(progress Progress, message string) {
+	if progress == nil {
 		return
 	}
-	report.Detail(message)
+	progress.Detail(message)
 }

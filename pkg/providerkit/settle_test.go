@@ -17,6 +17,8 @@ type answering struct {
 	asked int
 }
 
+func (*answering) Unreached(string) string { return "" }
+
 func (a *answering) Serving(context.Context, string) (edge.Kind, error) {
 	a.asked++
 	if a.asked > a.after {
@@ -25,7 +27,7 @@ func (a *answering) Serving(context.Context, string) (edge.Kind, error) {
 	return "", nil
 }
 
-func waiting(resolve Resolver, attempts int) (settler, *int) {
+func waiting(resolve resolver, attempts int) (settler, *int) {
 	slept := 0
 	clock := time.Unix(1700000000, 0)
 	return settler{
@@ -102,7 +104,11 @@ type boxProvider struct {
 	kinds   []edge.Kind
 }
 
-func (p *boxProvider) Serving(_ context.Context, kind edge.Kind, hostname string) (edge.Kind, error) {
+func (p *boxProvider) Liveness() Liveness { return p }
+
+func (*boxProvider) Unreached(string) string { return "" }
+
+func (p *boxProvider) ServingEdge(_ context.Context, kind edge.Kind, hostname string) (edge.Kind, error) {
 	p.asked = append(p.asked, hostname)
 	p.kinds = append(p.kinds, kind)
 	return p.answers, nil
@@ -112,6 +118,8 @@ type diagnosingProvider struct {
 	*boxProvider
 	cause string
 }
+
+func (p diagnosingProvider) Liveness() Liveness { return p }
 
 func (p diagnosingProvider) Unreached(string) string { return p.cause }
 
@@ -166,13 +174,15 @@ type slowly struct {
 	asked *int
 }
 
+func (slowly) Unreached(string) string { return "" }
+
 func (s slowly) Serving(context.Context, string) (edge.Kind, error) {
 	*s.asked++
 	*s.clock = s.clock.Add(s.cost)
 	return "", nil
 }
 
-func onTheClock(resolve func(*time.Time) Resolver, budget time.Duration) settler {
+func onTheClock(resolve func(*time.Time) resolver, budget time.Duration) settler {
 	clock := time.Unix(1700000000, 0)
 	return settler{
 		kind:    "box",
@@ -192,7 +202,7 @@ func TestADeployGivesUpOnceItsMinuteHasPassedHoweverLongEachAttemptTakes(t *test
 	t.Parallel()
 
 	var asked int
-	settle := onTheClock(func(clock *time.Time) Resolver {
+	settle := onTheClock(func(clock *time.Time) resolver {
 		return slowly{clock: clock, cost: 15 * time.Second, asked: &asked}
 	}, settleBudget)
 
@@ -214,7 +224,7 @@ func TestAnAttendedSettleWaitsOutAFrontThatTakesMinutesToAnswer(t *testing.T) {
 
 	const minutes = 10 * time.Minute
 	for what, budget := range map[string]time.Duration{"domain add": attendedBudget, "a deploy": settleBudget} {
-		settle := onTheClock(func(clock *time.Time) Resolver {
+		settle := onTheClock(func(clock *time.Time) resolver {
 			return answeringAfter{clock: clock, at: clock.Add(minutes), kind: "box"}
 		}, budget)
 		_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
@@ -233,6 +243,8 @@ type answeringAfter struct {
 	kind  edge.Kind
 }
 
+func (answeringAfter) Unreached(string) string { return "" }
+
 func (a answeringAfter) Serving(context.Context, string) (edge.Kind, error) {
 	if a.clock.Before(a.at) {
 		return "", nil
@@ -241,6 +253,8 @@ func (a answeringAfter) Serving(context.Context, string) (edge.Kind, error) {
 }
 
 type hanging struct{ asked *atomic.Int32 }
+
+func (hanging) Unreached(string) string { return "" }
 
 func (h hanging) Serving(ctx context.Context, _ string) (edge.Kind, error) {
 	h.asked.Add(1)

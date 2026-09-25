@@ -20,7 +20,7 @@ import (
 func TestRegistryConformance(t *testing.T) {
 	t.Parallel()
 
-	conformance.RunEdgeRegistry(t, Registry{})
+	conformance.RunEdges(t, Registry{})
 }
 
 func TestIgnoredPinNote(t *testing.T) {

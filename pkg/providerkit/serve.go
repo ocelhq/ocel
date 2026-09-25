@@ -75,7 +75,7 @@ func newMux(spec Spec) *http.ServeMux {
 		validate.NewInterceptor(),
 	)
 
-	held := &session{spec: spec, writer: WriterFor(spec.Version)}
+	held := &session{spec: spec, writer: WrittenByVersion(spec.Version)}
 	kit := &handlers{session: held, VarsHandler: &VarsHandler{Source: sessionVars{session: held}}}
 
 	path, handler := contractv1connect.NewProviderServiceHandler(kit, interceptors)
@@ -104,7 +104,7 @@ var (
 
 type session struct {
 	spec   Spec
-	writer Writer
+	writer WrittenBy
 
 	mu       sync.Mutex
 	provider Provider

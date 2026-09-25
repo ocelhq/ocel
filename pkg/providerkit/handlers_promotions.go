@@ -40,7 +40,7 @@ func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnv
 }
 
 func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, report Reporter) error {
+	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, progress Progress) error {
 		pointer, err := envName(req.GetEnvironment())
 		if err != nil {
 			return err
@@ -53,15 +53,15 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		if err != nil {
 			return err
 		}
-		report.Say(fmt.Sprintf("Removing preview pointer %q from the store", pointer))
-		removed, err := session.stack.RemovePointer(ctx, pointer, report)
+		progress.Say(fmt.Sprintf("Removing preview pointer %q from the store", pointer))
+		removed, err := session.stack.RemovePointer(ctx, pointer, progress)
 		if err != nil {
 			return err
 		}
 		if err := session.checkpoint(ctx); err != nil {
 			return err
 		}
-		if err := ReclaimPreview(ctx, session.provider, req.GetSlug(), pointer, removed, report); err != nil {
+		if err := ReclaimPreview(ctx, session.provider, req.GetSlug(), pointer, removed, progress); err != nil {
 			return err
 		}
 		if err := forgetKeptRecords(ctx, session.provider, req.GetSlug(), pointer); err != nil {
@@ -71,14 +71,14 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 			return err
 		}
 		for _, line := range pruneLines(removed) {
-			report.Say(line)
+			progress.Say(line)
 		}
 		return nil
 	})
 }
 
 func forgetKeptRecords(ctx context.Context, provider Provider, slug, environment string) error {
-	store := values.Store{Records: provider.Records(), Sealer: provider.Sealer()}
+	store := values.Store{Records: provider.Records(), Cipher: provider.Cipher()}
 	scope := values.Scope{Project: slug, Class: ClassPreview}
 	held, err := store.ListBindings(ctx, scope, environment)
 	if err != nil {
@@ -139,7 +139,7 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		Tag:         target.Tag,
 		Flip:        &flip,
 	}
-	if err := session.stack.Promote(ctx, promoted, "", edge.DiscardReporter()); err != nil {
+	if err := session.stack.Promote(ctx, promoted, "", edge.DiscardProgress()); err != nil {
 		return nil, RefusalError(err)
 	}
 	if err := session.checkpoint(ctx); err != nil {
@@ -178,7 +178,7 @@ func rollbackTarget(history []edge.HistoryEntry, to, tag string) (edge.Promotion
 }
 
 func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitPromotion, promotionUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, report Reporter) error {
+	return streamed(ctx, stream, naming.UnitPromotion, promotionUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, progress Progress) error {
 		class, err := classOf(req.GetEnvironment().GetTier())
 		if err != nil {
 			return err
@@ -193,13 +193,13 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 
 		session, err := h.openStack(ctx, class, req.GetSlug(), req.GetEdge())
 		if undeployed(err) {
-			report.Say("Nothing to prune.")
+			progress.Say("Nothing to prune.")
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		report.Say("Diffing deployments to reclaim")
+		progress.Say("Diffing deployments to reclaim")
 		pruned, err := session.stack.Ledger().Prune(ctx, int(req.GetKeepN()), pointer)
 		if err != nil {
 			return err
@@ -216,11 +216,11 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err != nil {
 			return err
 		}
-		if err := reclaim(ctx, session.provider, req.GetSlug(), class, targets, report); err != nil {
+		if err := reclaim(ctx, session.provider, req.GetSlug(), class, targets, progress); err != nil {
 			return err
 		}
 		for _, line := range pruneLines(pruned) {
-			report.Say(line)
+			progress.Say(line)
 		}
 		return nil
 	})
@@ -269,20 +269,20 @@ func flipBoundProto(flip *edge.FlipBound) *progressv1.FlipBound {
 	return &progressv1.FlipBound{TypicalMs: flip.Typical.Milliseconds(), Published: flip.Published}
 }
 
-func ReclaimPreview(ctx context.Context, provider Provider, slug, pointer string, removed edge.PruneResult, report Reporter) error {
+func ReclaimPreview(ctx context.Context, provider Provider, slug, pointer string, removed edge.PruneResult, progress Progress) error {
 	targets, err := ReclaimTargets(slug, pointer,
 		removed.RemovedRecordKeys, removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys)
 	if err != nil {
 		return err
 	}
-	if err := reclaim(ctx, provider, slug, ClassPreview, targets, report); err != nil {
+	if err := reclaim(ctx, provider, slug, ClassPreview, targets, progress); err != nil {
 		return err
 	}
 	return reclaimStanding(ctx, provider, slug, pointer,
-		removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys, report)
+		removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys, progress)
 }
 
-func reclaimStanding(ctx context.Context, provider Provider, slug, pointer string, surviving, servingHere []string, report Reporter) error {
+func reclaimStanding(ctx context.Context, provider Provider, slug, pointer string, surviving, servingHere []string, progress Progress) error {
 	entries, err := ReadStacks(ctx, provider.Records(), ClassPreview, slug)
 	if err != nil {
 		return err
@@ -300,9 +300,9 @@ func reclaimStanding(ctx context.Context, provider Provider, slug, pointer strin
 
 	var errs []error
 	for _, entry := range standing {
-		report.Say("Destroying " + entry.Name.String())
+		progress.Say("Destroying " + entry.Name.String())
 		ref := StackRef{Project: slug, Class: ClassPreview, Name: entry.Name}
-		if err := provider.Releases().Destroy(ctx, ref, report); err != nil {
+		if err := provider.Stacks().Destroy(ctx, ref, progress); err != nil {
 			errs = append(errs, fmt.Errorf("destroy %s: %w", entry.Name, err))
 			continue
 		}
@@ -313,7 +313,7 @@ func reclaimStanding(ctx context.Context, provider Provider, slug, pointer strin
 			continue
 		}
 		for _, prefix := range reclaimedPrefixes(slug, pointer, entry.Name.App, entry.Name.Release, elsewhere, here) {
-			if err := provider.Artifacts().RemovePrefix(ctx, ClassPreview, prefix, report); err != nil {
+			if err := provider.Artifacts().RemovePrefix(ctx, ClassPreview, prefix, progress); err != nil {
 				errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
 			}
 		}

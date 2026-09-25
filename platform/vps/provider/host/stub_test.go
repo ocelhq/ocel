@@ -30,7 +30,7 @@ type misses struct {
 
 func newMisses() *misses { return &misses{held: make(chan string, 64)} }
 
-func (m *misses) report(what string) {
+func (m *misses) progress(what string) {
 	m.count.Add(1)
 	select {
 	case m.held <- what:
@@ -57,7 +57,7 @@ func TestEveryMissedCycleIsCountedAndNotJustTheOnesThatFitTheReport(t *testing.T
 		go func() {
 			defer reporting.Done()
 			for range 150 {
-				missed.report("worker " + string(rune('a'+worker)) + " read no account")
+				missed.progress("worker " + string(rune('a'+worker)) + " read no account")
 			}
 		}()
 	}
@@ -104,16 +104,16 @@ func TestAStubTheHarnessWritesRunsWhileTheRestOfTheSuiteForks(t *testing.T) {
 				cmd.Env = append(os.Environ(), "PATH="+stubs(t, &held)+":"+os.Getenv("PATH"))
 				rendered, err := cmd.CombinedOutput()
 				if err != nil {
-					missed.report(string(rendered))
+					missed.progress(string(rendered))
 					continue
 				}
 				observed, _, err := readSurvey(string(rendered))
 				if err != nil {
-					missed.report(err.Error())
+					missed.progress(err.Error())
 					continue
 				}
 				if _, stood := observed[principal().ID()]; !stood {
-					missed.report("the survey read no account where one stands")
+					missed.progress("the survey read no account where one stands")
 				}
 			}
 		}()

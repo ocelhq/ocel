@@ -148,7 +148,7 @@ func standingIAM() *iamServer {
 func TestTheRuntimeAccountIsHeldToReadingThisDatabaseAndOpeningUnderTheClassKeyAlone(t *testing.T) {
 	t.Parallel()
 	server := standingIAM()
-	b := bootstrapper{clients: server.open(t)}
+	b := bootstrap{clients: server.open(t)}
 	read := survey{Class: providerkit.ClassProduction, Names: b.clients.Names}
 	ctx := context.Background()
 
@@ -193,7 +193,7 @@ func TestTheRuntimeAccountIsHeldToReadingThisDatabaseAndOpeningUnderTheClassKeyA
 func TestAnAccountThatMayNotReadIsSurveyedAsMendable(t *testing.T) {
 	t.Parallel()
 	server := standingIAM()
-	b := bootstrapper{clients: server.open(t)}
+	b := bootstrap{clients: server.open(t)}
 
 	stands, err := b.accountStands(context.Background(), providerkit.ClassProduction, "ocel-production")
 	if err != nil {
@@ -207,7 +207,7 @@ func TestAnAccountThatMayNotReadIsSurveyedAsMendable(t *testing.T) {
 func TestRemovingTheAccountTakesItsReadsOffTheProjectAndTheKeyFirst(t *testing.T) {
 	t.Parallel()
 	server := standingIAM()
-	b := bootstrapper{clients: server.open(t)}
+	b := bootstrap{clients: server.open(t)}
 	read := survey{Class: providerkit.ClassProduction, Names: b.clients.Names}
 	ctx := context.Background()
 	if err := b.makeAccount(ctx, read, "ocel-production"); err != nil {

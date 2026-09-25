@@ -35,7 +35,7 @@ type Registry struct {
 	Deps Deps
 }
 
-var _ providerkit.DNSRegistry = Registry{}
+var _ providerkit.DNS = Registry{}
 
 func (r Registry) Supported() []providerkit.DNSKind {
 	kinds := make([]providerkit.DNSKind, 0, len(constructors))

@@ -14,8 +14,6 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
-var _ providerkit.ConnectorHost = (*Provider)(nil)
-
 const connectorCompute = providerkit.ComputeContainer
 
 func dialable(hostname string) error {
@@ -44,7 +42,9 @@ func hostKeyDigest(offered providerkit.HostKey) (string, error) {
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
 }
 
-func (p *Provider) DescribeConnectorTarget(ctx context.Context) (providerkit.ConnectorTarget, error) {
+type connector struct{ *Provider }
+
+func (p connector) Target(ctx context.Context) (providerkit.ConnectorTarget, error) {
 	live, err := p.Session(ctx)
 	if err != nil {
 		return providerkit.ConnectorTarget{}, err
@@ -89,7 +89,7 @@ func (p *Provider) DescribeConnectorTarget(ctx context.Context) (providerkit.Con
 	return described, nil
 }
 
-func (p *Provider) InstallConnector(ctx context.Context, install providerkit.ConnectorInstall, report providerkit.Reporter) (providerkit.ConnectorAddress, error) {
+func (p connector) Install(ctx context.Context, install providerkit.ConnectorInstall, progress providerkit.Progress) (providerkit.ConnectorAddress, error) {
 	compute, err := providerkit.ConnectorCompute(install.Compute, connectorCompute)
 	if err != nil {
 		return providerkit.ConnectorAddress{}, err
@@ -102,10 +102,10 @@ func (p *Provider) InstallConnector(ctx context.Context, install providerkit.Con
 	if err := dialable(hostname); err != nil {
 		return providerkit.ConnectorAddress{}, err
 	}
-	if report != nil {
-		report.Say("connector " + install.Version + " onto " + hostname)
+	if progress != nil {
+		progress.Say("connector " + install.Version + " onto " + hostname)
 	}
-	standing, err := host.NewConnector(p.host).Install(ctx, hostname, install.Binary, install.Config, report)
+	standing, err := host.NewConnector(p.host).Install(ctx, hostname, install.Binary, install.Config, progress)
 	if err != nil {
 		return providerkit.ConnectorAddress{}, err
 	}
@@ -116,9 +116,9 @@ func (p *Provider) InstallConnector(ctx context.Context, install providerkit.Con
 	}, nil
 }
 
-func (p *Provider) RemoveConnector(ctx context.Context, report providerkit.Reporter) error {
+func (p connector) Remove(ctx context.Context, progress providerkit.Progress) error {
 	if _, err := p.Session(ctx); err != nil {
 		return err
 	}
-	return host.NewConnector(p.host).Remove(ctx, report)
+	return host.NewConnector(p.host).Remove(ctx, progress)
 }

@@ -7,11 +7,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-func detailWriter(report providerkit.Reporter) *lineForwarder {
-	if report == nil {
+func detailWriter(progress providerkit.Progress) *lineForwarder {
+	if progress == nil {
 		return nil
 	}
-	return &lineForwarder{log: report.Detail}
+	return &lineForwarder{log: progress.Detail}
 }
 
 type lineForwarder struct {

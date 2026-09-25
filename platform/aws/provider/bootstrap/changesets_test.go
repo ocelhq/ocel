@@ -89,7 +89,7 @@ func TestADevRebuildLeavesAStackItDidNotChangeAlone(t *testing.T) {
 	}
 	for _, sha := range []string{"dev+1111111", "dev+2222222"} {
 		rebuilt := everything()
-		rebuilt.Writer = providerkit.Writer(sha)
+		rebuilt.Writer = providerkit.WrittenBy(sha)
 		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, rebuilt, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
@@ -156,7 +156,7 @@ func TestRestampingTurnsOnlyOnWhatTheStackHolds(t *testing.T) {
 		},
 		{
 			name:     "the stack was written by an unknown writer",
-			standing: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: providerkit.Writer("").String()},
+			standing: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: providerkit.WrittenBy("").String()},
 			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+2222222"},
 			writes:   true,
 		},

@@ -21,7 +21,7 @@ const (
 type Ledger interface {
 	edge.Ledger
 
-	Promote(ctx context.Context, promotion edge.Promotion, pointer string, report edge.Reporter) error
+	Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error
 
 	RemovePointer(ctx context.Context, pointer string) (edge.PruneResult, error)
 
@@ -421,11 +421,11 @@ func (s *Stack) State() edge.StackState {
 
 func (s *Stack) Ledger() edge.Ledger { return s.ledger }
 
-func (s *Stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, report edge.Reporter) error {
-	return s.ledger.Promote(ctx, promotion, pointer, report)
+func (s *Stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
+	return s.ledger.Promote(ctx, promotion, pointer, progress)
 }
 
-func (s *Stack) RemovePointer(ctx context.Context, pointer string, _ edge.Reporter) (edge.PruneResult, error) {
+func (s *Stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progress) (edge.PruneResult, error) {
 	return s.ledger.RemovePointer(ctx, pointer)
 }
 
@@ -553,12 +553,12 @@ func (w *DNSWriter) DeleteRecords(_ context.Context, records []edge.Record) erro
 }
 
 var (
-	_ providerkit.EdgeRegistry = (*Edges)(nil)
-	_ providerkit.DNSRegistry  = (*DNS)(nil)
-	_ edge.Edge                = (*Edge)(nil)
-	_ edge.EdgeStack           = (*Stack)(nil)
-	_ edge.DNSWriter           = (*DNSWriter)(nil)
-	_ edge.TTLBound            = (*DNSWriter)(nil)
-	_ edge.ZoneFinder          = (*DNSWriter)(nil)
-	_ Ledger                   = (*ledger.Ledger)(nil)
+	_ providerkit.Edges = (*Edges)(nil)
+	_ providerkit.DNS   = (*DNS)(nil)
+	_ edge.Edge         = (*Edge)(nil)
+	_ edge.EdgeStack    = (*Stack)(nil)
+	_ edge.DNSWriter    = (*DNSWriter)(nil)
+	_ edge.TTLBound     = (*DNSWriter)(nil)
+	_ edge.ZoneFinder   = (*DNSWriter)(nil)
+	_ Ledger            = (*ledger.Ledger)(nil)
 )

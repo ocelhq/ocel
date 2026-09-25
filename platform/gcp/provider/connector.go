@@ -41,11 +41,11 @@ const (
 	connectorAccountNote = "the identity the ocel connector answers the console as"
 )
 
-var _ providerkit.ConnectorHost = (*Provider)(nil)
-
 const connectorCompute = providerkit.ComputeServerless
 
-func (p *Provider) DescribeConnectorTarget(ctx context.Context) (providerkit.ConnectorTarget, error) {
+type connector struct{ *Provider }
+
+func (p connector) Target(ctx context.Context) (providerkit.ConnectorTarget, error) {
 	names, err := p.Names(ctx)
 	if err != nil {
 		return providerkit.ConnectorTarget{}, err
@@ -75,8 +75,8 @@ func (p *Provider) DescribeConnectorTarget(ctx context.Context) (providerkit.Con
 	return described, nil
 }
 
-func (p *Provider) InstallConnector(ctx context.Context, install providerkit.ConnectorInstall,
-	report providerkit.Reporter) (providerkit.ConnectorAddress, error) {
+func (p connector) Install(ctx context.Context, install providerkit.ConnectorInstall,
+	progress providerkit.Progress) (providerkit.ConnectorAddress, error) {
 	compute, err := providerkit.ConnectorCompute(install.Compute, connectorCompute)
 	if err != nil {
 		return providerkit.ConnectorAddress{}, err
@@ -102,14 +102,14 @@ func (p *Provider) InstallConnector(ctx context.Context, install providerkit.Con
 		return providerkit.ConnectorAddress{}, providerkit.Refuse(providerkit.CodeInvalid, "%s", err)
 	}
 
-	image, err := p.pushedConnector(ctx, install.Binary, report)
+	image, err := p.pushedConnector(ctx, install.Binary, progress)
 	if err != nil {
 		return providerkit.ConnectorAddress{}, err
 	}
-	if err := p.standConnectorAccount(ctx, trust.Grants, report); err != nil {
+	if err := p.standConnectorAccount(ctx, trust.Grants, progress); err != nil {
 		return providerkit.ConnectorAddress{}, err
 	}
-	publicKey, err := p.connectorKey(ctx, report)
+	publicKey, err := p.connectorKey(ctx, progress)
 	if err != nil {
 		return providerkit.ConnectorAddress{}, err
 	}
@@ -140,7 +140,7 @@ func (p *Provider) InstallConnector(ctx context.Context, install providerkit.Con
 			connectorPublicKeyEnv:             publicKey,
 			providerkit.ConnectorConfigEnvVar: string(config),
 		},
-	}, report)
+	}, progress)
 	if err != nil {
 		return providerkit.ConnectorAddress{}, err
 	}
@@ -151,17 +151,17 @@ func (p *Provider) InstallConnector(ctx context.Context, install providerkit.Con
 	return providerkit.ConnectorAddress{URL: released.url, PublicKey: publicKey, Compute: compute}, nil
 }
 
-func (p *Provider) RemoveConnector(ctx context.Context, report providerkit.Reporter) error {
+func (p connector) Remove(ctx context.Context, progress providerkit.Progress) error {
 	names, err := p.Names(ctx)
 	if err != nil {
 		return err
 	}
 	return everyStep(
-		func() error { return p.tearDown(ctx, names.Connector(), report) },
-		func() error { return p.forgetConnectorGrants(ctx, report) },
-		func() error { return p.takeConnectorKey(ctx, report) },
-		func() error { return p.takeConnectorAccount(ctx, report) },
-		func() error { return p.takeConnectorImages(ctx, report) },
+		func() error { return p.tearDown(ctx, names.Connector(), progress) },
+		func() error { return p.forgetConnectorGrants(ctx, progress) },
+		func() error { return p.takeConnectorKey(ctx, progress) },
+		func() error { return p.takeConnectorAccount(ctx, progress) },
+		func() error { return p.takeConnectorImages(ctx, progress) },
 	)
 }
 
@@ -209,7 +209,7 @@ func connectorVersionOf(held *run.GoogleCloudRunV2Service) string {
 	return ""
 }
 
-func (p *Provider) pushedConnector(ctx context.Context, binary []byte, report providerkit.Reporter) (string, error) {
+func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress providerkit.Progress) (string, error) {
 	if len(binary) == 0 {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
 			"this install carries no connector binary to put in an image")
@@ -247,10 +247,10 @@ func (p *Provider) pushedConnector(ctx context.Context, binary []byte, report pr
 	if held {
 		return ref, nil
 	}
-	if report != nil {
-		report.Say("Pushing the connector image to " + ref)
+	if progress != nil {
+		progress.Say("Pushing the connector image to " + ref)
 	}
-	if err := store.Push(ctx, push, report); err != nil {
+	if err := store.Push(ctx, push, progress); err != nil {
 		return "", err
 	}
 	return ref, nil
@@ -293,7 +293,7 @@ func connectorImage(base v1.Image, binary []byte) (v1.Image, error) {
 	return mutate.Config(appended, config)
 }
 
-func (p *Provider) standConnectorAccount(ctx context.Context, grants []string, report providerkit.Reporter) error {
+func (p *Provider) standConnectorAccount(ctx context.Context, grants []string, progress providerkit.Progress) error {
 	names, err := p.stood(ctx)
 	if err != nil {
 		return err
@@ -313,13 +313,13 @@ func (p *Provider) standConnectorAccount(ctx context.Context, grants []string, r
 	if err != nil && !taken(err) {
 		return fmt.Errorf("create the %s service account: %w", names.Connector(), err)
 	}
-	if report != nil {
-		report.Say("The connector runs as " + names.ConnectorAccountEmail())
+	if progress != nil {
+		progress.Say("The connector runs as " + names.ConnectorAccountEmail())
 	}
 	if err := p.bindConnectorProject(ctx, true); err != nil {
 		return err
 	}
-	return p.bindConnectorKeys(ctx, keyRolesFor(grants), report)
+	return p.bindConnectorKeys(ctx, keyRolesFor(grants), progress)
 }
 
 func keyRolesFor(grants []string) []string {
@@ -333,10 +333,10 @@ func keyRolesFor(grants []string) []string {
 	return roles
 }
 
-func (p *Provider) forgetConnectorGrants(ctx context.Context, report providerkit.Reporter) error {
+func (p *Provider) forgetConnectorGrants(ctx context.Context, progress providerkit.Progress) error {
 	return everyStep(
 		func() error { return p.bindConnectorProject(ctx, false) },
-		func() error { return p.bindConnectorKeys(ctx, nil, report) },
+		func() error { return p.bindConnectorKeys(ctx, nil, progress) },
 	)
 }
 
@@ -352,7 +352,7 @@ func (p *Provider) bindConnectorProject(ctx context.Context, granting bool) erro
 	return nil
 }
 
-func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, report providerkit.Reporter) error {
+func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, progress providerkit.Progress) error {
 	clients, err := p.stood(ctx)
 	if err != nil {
 		return err
@@ -364,8 +364,8 @@ func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, repor
 		if err != nil && len(wanted) > 0 {
 			return err
 		}
-		if changed && report != nil && len(wanted) > 0 {
-			report.Say("The connector holds " + strings.Join(wanted, " and ") + " on the " + string(class) + " key")
+		if changed && progress != nil && len(wanted) > 0 {
+			progress.Say("The connector holds " + strings.Join(wanted, " and ") + " on the " + string(class) + " key")
 		}
 		errs = append(errs, err)
 	}
@@ -388,7 +388,7 @@ func boundMembers(members []string, member string, granting bool) ([]string, boo
 	}
 }
 
-func (p *Provider) takeConnectorAccount(ctx context.Context, report providerkit.Reporter) error {
+func (p *Provider) takeConnectorAccount(ctx context.Context, progress providerkit.Progress) error {
 	clients, err := p.stood(ctx)
 	if err != nil {
 		return err
@@ -402,13 +402,13 @@ func (p *Provider) takeConnectorAccount(ctx context.Context, report providerkit.
 		accountPath(clients, name)).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the %s service account: %w", name, err)
 	}
-	if report != nil {
-		report.Say("Took away " + clients.ConnectorAccountEmail())
+	if progress != nil {
+		progress.Say("Took away " + clients.ConnectorAccountEmail())
 	}
 	return nil
 }
 
-func (p *Provider) takeConnectorImages(ctx context.Context, report providerkit.Reporter) error {
+func (p *Provider) takeConnectorImages(ctx context.Context, progress providerkit.Progress) error {
 	clients, err := p.stood(ctx)
 	if err != nil {
 		return err
@@ -423,8 +423,8 @@ func (p *Provider) takeConnectorImages(ctx context.Context, report providerkit.R
 		held).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the connector images at %s: %w", held, err)
 	}
-	if report != nil {
-		report.Say("Took away the connector images")
+	if progress != nil {
+		progress.Say("Took away the connector images")
 	}
 	return nil
 }

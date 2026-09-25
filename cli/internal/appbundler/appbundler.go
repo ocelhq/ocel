@@ -39,7 +39,7 @@ const banner = `import { createRequire as __ocelCreateRequire } from "node:modul
 
 type Target struct {
 	App        string
-	Runtime    providerkit.Runtime
+	Runtime    providerkit.Framework
 	Entrypoint string
 	FuncDir    string
 	AppDir     string
@@ -102,7 +102,7 @@ func Bundle(ctx context.Context, t Target) error {
 	return describeArtifact(t.App, t.Runtime, HandlerFile, nil, t.FuncDir, t.AppDir)
 }
 
-func describeArtifact(app string, runtime providerkit.Runtime, handler string, command []string, funcDir, appDir string) error {
+func describeArtifact(app string, runtime providerkit.Framework, handler string, command []string, funcDir, appDir string) error {
 	if err := writeJSON(filepath.Join(funcDir, providerkit.FunctionConfigFile), providerkit.FunctionConfig{
 		Runtime: runtime,
 		Handler: handler,

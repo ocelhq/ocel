@@ -66,7 +66,7 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 		}
 
 		pre := providerkit.DeployPreflight{Plan: providerkit.DeployPlan{Slug: "shop", Class: providerkit.ClassProduction, Env: "prod"}}
-		if err := newReleaser(fixed(storeOnly), &Realized{}, nil).Preflight(context.Background(), pre); err == nil {
+		if err := newStacks(fixed(storeOnly), &Realized{}, nil).Preflight(context.Background(), pre); err == nil {
 			t.Error("a bootstrap that disagrees with itself must fail preflight, before a byte of this deploy is uploaded")
 		}
 	})

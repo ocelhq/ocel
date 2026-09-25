@@ -82,7 +82,7 @@ func standsUp(t *testing.T, p *vps.Provider, tag string) release {
 	return release{physical: standing[0].Physical, address: standing[0].Physical + ":" + providerkit.InjectedPortText}
 }
 
-func releasing(p *vps.Provider, held release, drain time.Duration, report providerkit.Reporter) error {
+func releasing(p *vps.Provider, held release, drain time.Duration, progress providerkit.Progress) error {
 	return p.Host().Release(context.Background(), host.Release{
 		Apps: []host.AppRelease{{
 			RouteKey:   host.RouteKey{Owner: liveOwner, Pointer: livePointer, App: liveApp},
@@ -91,7 +91,7 @@ func releasing(p *vps.Provider, held release, drain time.Duration, report provid
 		}},
 		DeployTimeout: 30 * time.Second,
 		DrainTimeout:  drain,
-	}, report)
+	}, progress)
 }
 
 func inflightOn(t *testing.T, vm machine, held release) int {

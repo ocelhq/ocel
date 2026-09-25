@@ -14,8 +14,8 @@ const statesNoHostname = "OCEL_CERTIFIER_CHECKS_NAME_NO_HOSTNAME"
 
 func TestACertifierSuiteNamingNoHostnameSkipsItsLoopsRatherThanReportingThemPassed(t *testing.T) {
 	if os.Getenv(statesNoHostname) == "1" {
-		conformance.RunCertifier(t, fake.NewProvider(fake.Options{Region: "nowhere"}),
-			conformance.CertifierChecks{Kind: fake.KindRelay})
+		conformance.RunCertificates(t, fake.NewProvider(fake.Options{Region: "nowhere"}).Certificates(),
+			conformance.CertificateChecks{Kind: fake.KindRelay})
 		return
 	}
 

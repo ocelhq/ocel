@@ -71,7 +71,7 @@ func mintPostgresSecret() (string, error) {
 	return hex.EncodeToString(raw), nil
 }
 
-func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
+func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Instruction, progress providerkit.Progress) (providerkit.Binding, error) {
 	spec, err := postgresContainer(in)
 	if err != nil {
 		return providerkit.Binding{}, err
@@ -79,8 +79,8 @@ func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Instructi
 	if spec, err = p.reshaped(ctx, in, transformTypePostgres, spec); err != nil {
 		return providerkit.Binding{}, err
 	}
-	if report != nil {
-		report.Say("Standing postgres " + in.Resource.Name + " up as " + spec.Name)
+	if progress != nil {
+		progress.Say("Standing postgres " + in.Resource.Name + " up as " + spec.Name)
 	}
 	secret, err := p.held(ctx, in, spec.Name)
 	if err != nil {

@@ -14,7 +14,6 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 )
 
 const promotionUnitSpan = "Promotion"
@@ -99,7 +98,7 @@ func TestDeployStartsTheAppsStillQueuedWhenAnEarlyAppFails(t *testing.T) {
 	client, provider := deployServed(t)
 
 	inFlight := appBarrier(t, providerkit.AppConcurrency)
-	provider.Releases().(*fake.Releaser).Entering(func(plan providerkit.StackPlan) error {
+	provider.FakeStacks().Entering(func(plan providerkit.StackPlan) error {
 		if plan.App == nil {
 			return nil
 		}
@@ -140,7 +139,7 @@ func TestDeployStartsTheAppsStillQueuedWhenAnEarlyAppFails(t *testing.T) {
 func TestDeployProvisionsAppsAtTheSameTime(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
-	provider.Releases().(*fake.Releaser).Entering(appBarrier(t, 2))
+	provider.FakeStacks().Entering(appBarrier(t, 2))
 
 	result, _ := deploy(t, client, twoAppRequest())
 	if result == nil || !result.GetSuccess() {
@@ -153,7 +152,7 @@ func TestDeployFinishesASiblingOfAFailedAppAndWithholdsPromotion(t *testing.T) {
 	client, provider := deployServed(t)
 
 	webFailed := make(chan struct{})
-	provider.Releases().(*fake.Releaser).Entering(func(plan providerkit.StackPlan) error {
+	provider.FakeStacks().Entering(func(plan providerkit.StackPlan) error {
 		if plan.App == nil {
 			return nil
 		}
@@ -221,7 +220,7 @@ func TestDeployReportsAppOutcomesInManifestOrderWhicheverFinishesFirst(t *testin
 			client, provider := deployServed(t)
 
 			done := make(chan struct{})
-			provider.Releases().(*fake.Releaser).Entering(func(plan providerkit.StackPlan) error {
+			provider.FakeStacks().Entering(func(plan providerkit.StackPlan) error {
 				if plan.App == nil {
 					return nil
 				}
@@ -252,7 +251,7 @@ func TestDeployStartsNoAppWhenTheSharedInfrastructureFails(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 
-	provider.Releases().(*fake.Releaser).Entering(func(plan providerkit.StackPlan) error {
+	provider.FakeStacks().Entering(func(plan providerkit.StackPlan) error {
 		if plan.App == nil {
 			return errors.New("the environment's infrastructure would not stand up")
 		}

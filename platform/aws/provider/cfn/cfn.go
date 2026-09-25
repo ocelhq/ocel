@@ -597,8 +597,8 @@ func TemplateDigest(body string) string {
 }
 
 func onlyDevWriterMoved(have, want []cfntypes.Tag) bool {
-	from := providerkit.Writer(tagValue(have, TagBootstrappedBy))
-	to := providerkit.Writer(tagValue(want, TagBootstrappedBy))
+	from := providerkit.WrittenBy(tagValue(have, TagBootstrappedBy))
+	to := providerkit.WrittenBy(tagValue(want, TagBootstrappedBy))
 	if from == to || !from.Development() || !to.Development() {
 		return false
 	}

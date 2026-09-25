@@ -52,7 +52,7 @@ func pullBase(ctx context.Context, ref string) (v1.Image, error) {
 		remote.WithPlatform(runOn))
 }
 
-func (p *Provider) FunctionBaseImage(ctx context.Context, runtime providerkit.Runtime) (v1.Image, error) {
+func (p *Provider) FunctionBaseImage(ctx context.Context, runtime providerkit.Framework) (v1.Image, error) {
 	if err := runsX8664(runtime.Arch, "the "+runtime.Name+" function"); err != nil {
 		return nil, err
 	}

@@ -91,7 +91,7 @@ func run(addr, region, config, keyParameter string) error {
 		ConfigPath: config,
 		Vars: providerkit.Vars{
 			Records: awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: held},
-			Sealer:  awsports.Sealer{KMS: kms.NewFromConfig(cfg), Keys: held},
+			Cipher:  awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: held},
 		},
 	}
 	if keyParameter != "" {

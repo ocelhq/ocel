@@ -53,11 +53,11 @@ type SealTransport interface {
 	Seal(ctx context.Context, what string, argv []string, stdin io.Reader) (string, error)
 }
 
-type Sealer struct{ over SealTransport }
+type Cipher struct{ over SealTransport }
 
-func NewSealer(h *Host) *Sealer { return &Sealer{over: sshSeal{host: h}} }
+func NewCipher(h *Host) *Cipher { return &Cipher{over: sshSeal{host: h}} }
 
-func SealerOver(over SealTransport) *Sealer { return &Sealer{over: over} }
+func CipherOver(over SealTransport) *Cipher { return &Cipher{over: over} }
 
 type sshSeal struct{ host *Host }
 
@@ -65,15 +65,15 @@ func (s sshSeal) Seal(ctx context.Context, what string, argv []string, stdin io.
 	return s.host.granted(ctx, what, argv, stdin)
 }
 
-func (s *Sealer) Seal(ctx context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
+func (s *Cipher) Seal(ctx context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
 	return s.through(ctx, "seal", at, plaintext)
 }
 
-func (s *Sealer) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+func (s *Cipher) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
 	return s.through(ctx, "open", at, sealed)
 }
 
-func (s *Sealer) through(ctx context.Context, verb string, at providerkit.Coordinate, body []byte) ([]byte, error) {
+func (s *Cipher) through(ctx context.Context, verb string, at providerkit.Coordinate, body []byte) ([]byte, error) {
 	argv, err := sealArgv(verb, at)
 	if err != nil {
 		return nil, err
@@ -124,4 +124,4 @@ elif [ -f ` + name + " ]; then printf '%s\\t%s\\t%s\\t%s\\t%s\\t%s\\n' " +
 fi`
 }
 
-var _ providerkit.Sealer = (*Sealer)(nil)
+var _ providerkit.Cipher = (*Cipher)(nil)

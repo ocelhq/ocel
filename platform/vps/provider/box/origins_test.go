@@ -66,7 +66,7 @@ func TestAPreviewsHostnamesAreOriginsItsProjectsBucketsAnswer(t *testing.T) {
 		t.Errorf("the preview claimed its hostname and never held its project's buckets to it: %v", stood.calls)
 	}
 
-	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
+	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 	gone := slices.Index(stood.calls, "disclaim "+"ocel--"+slug+"--preview/pr-7")

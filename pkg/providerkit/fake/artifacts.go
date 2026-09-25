@@ -57,7 +57,7 @@ func (a *Artifacts) Open(_ context.Context, ref providerkit.ArtifactRef) (io.Rea
 	return io.NopCloser(bytes.NewReader(slices.Clone(blob))), nil
 }
 
-func (a *Artifacts) RemovePrefix(_ context.Context, class providerkit.Class, prefix string, report providerkit.Reporter) error {
+func (a *Artifacts) RemovePrefix(_ context.Context, class providerkit.Class, prefix string, progress providerkit.Progress) error {
 	a.journal.note("remove-prefix " + prefix)
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -66,8 +66,8 @@ func (a *Artifacts) RemovePrefix(_ context.Context, class providerkit.Class, pre
 			delete(a.objects, ref)
 		}
 	}
-	if report != nil {
-		report.Detail("removed " + prefix)
+	if progress != nil {
+		progress.Detail("removed " + prefix)
 	}
 	return nil
 }

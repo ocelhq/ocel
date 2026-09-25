@@ -199,7 +199,7 @@ func TestAPromotionUnderTheLoadBalancerPinsCloudRunBecauseTheUrlMapNeverMoves(t 
 	}
 	for _, step := range []struct{ id, identity string }{{"p1", "b1"}, {"p2", "b2"}, {"p3", "b1"}} {
 		err := stack.Promote(ctx, edge.Promotion{PromotionID: step.id, Builds: map[string]string{"web": step.identity}},
-			"", edge.DiscardReporter())
+			"", edge.DiscardProgress())
 		if err != nil {
 			t.Fatalf("Promote(%s) = %v", step.id, err)
 		}
@@ -446,7 +446,7 @@ func TestAPromotionOfAPreviewOnTheGlobalWildcardWritesNoHostRule(t *testing.T) {
 		t.Fatalf("PutStaged = %v", err)
 	}
 	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}},
-		"pr-7", edge.DiscardReporter()); err != nil {
+		"pr-7", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 
@@ -627,7 +627,7 @@ func TestTheFirstReleaseAfterABindTakesTheHostnameLive(t *testing.T) {
 		t.Fatalf("PutStaged = %v", err)
 	}
 	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}},
-		"", edge.DiscardReporter()); err != nil {
+		"", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 
@@ -650,7 +650,7 @@ func TestAHostnameBoundAfterAReleaseIsRoutedToThePromotedService(t *testing.T) {
 		t.Fatalf("PutStaged = %v", err)
 	}
 	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}},
-		"", edge.DiscardReporter()); err != nil {
+		"", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: "shop.example.com", App: "web"}); err != nil {
@@ -679,7 +679,7 @@ func TestAPromotionOfAnotherAppLeavesAHeldHostnameHeld(t *testing.T) {
 		t.Fatalf("PutStaged = %v", err)
 	}
 	if err := stack.Promote(ctx, edge.Promotion{PromotionID: "p1", Builds: map[string]string{"admin": "b1"}},
-		"", edge.DiscardReporter()); err != nil {
+		"", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote = %v", err)
 	}
 

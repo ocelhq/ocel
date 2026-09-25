@@ -28,7 +28,7 @@ type ArtifactStore interface {
 
 	Open(ctx context.Context, ref ArtifactRef) (io.ReadCloser, error)
 
-	RemovePrefix(ctx context.Context, class Class, prefix string, report Reporter) error
+	RemovePrefix(ctx context.Context, class Class, prefix string, progress Progress) error
 }
 
 type ArtifactRef struct {
@@ -73,19 +73,19 @@ func takeUploadSlot() func() {
 	return func() { <-uploadSlots }
 }
 
-func ShipUploads(ctx context.Context, store ArtifactStore, uploads []Upload, report Reporter) error {
+func ShipUploads(ctx context.Context, store ArtifactStore, uploads []Upload, progress Progress) error {
 	group, ctx := errgroup.WithContext(ctx)
 	group.SetLimit(uploadConcurrency)
 	for _, upload := range uploads {
 		group.Go(func() error {
 			defer takeUploadSlot()()
-			return ship(ctx, store, upload, report)
+			return ship(ctx, store, upload, progress)
 		})
 	}
 	return group.Wait()
 }
 
-func ship(ctx context.Context, store ArtifactStore, upload Upload, report Reporter) error {
+func ship(ctx context.Context, store ArtifactStore, upload Upload, progress Progress) error {
 	held, err := store.Has(ctx, upload.Ref)
 	if err != nil {
 		return fmt.Errorf("look for %s's artifact: %w", upload.Name, err)
@@ -98,8 +98,8 @@ func ship(ctx context.Context, store ArtifactStore, upload Upload, report Report
 		return fmt.Errorf("read %s's artifact: %w", upload.Name, err)
 	}
 	defer body.Close()
-	if report != nil {
-		report.Say("Uploading " + upload.Name)
+	if progress != nil {
+		progress.Say("Uploading " + upload.Name)
 	}
 	if err := store.Put(ctx, upload.Ref, body); err != nil {
 		return fmt.Errorf("upload %s's artifact: %w", upload.Name, err)
@@ -120,7 +120,7 @@ type AppPack struct {
 	Carry any
 }
 
-func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, report Reporter) (AppPack, error) {
+func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, progress Progress) (AppPack, error) {
 	packApp := r.provider.Hooks().PackApp
 	if packApp == nil {
 		return AppPack{}, nil
@@ -130,7 +130,7 @@ func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, 
 		Edge:   r.front.Kind(),
 		App:    entry.App,
 		Values: values,
-	}, report)
+	}, progress)
 	if err != nil {
 		return AppPack{}, fmt.Errorf("pack %s's function package: %w", entry.App, err)
 	}

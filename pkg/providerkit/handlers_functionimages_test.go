@@ -34,14 +34,14 @@ func (i imaging) Hooks() providerkit.Hooks {
 	return hooks
 }
 
-func (i imaging) FunctionBaseImage(context.Context, providerkit.Runtime) (v1.Image, error) {
+func (i imaging) FunctionBaseImage(context.Context, providerkit.Framework) (v1.Image, error) {
 	if i.base != nil {
 		return i.base, nil
 	}
 	return empty.Image, nil
 }
 
-func (imaging) FunctionRuntime(context.Context, providerkit.Runtime) ([]byte, error) {
+func (imaging) FunctionRuntime(context.Context, providerkit.Framework) ([]byte, error) {
 	return []byte("export const runtime = 1"), nil
 }
 
@@ -102,7 +102,7 @@ func TestDeployShipsAFunctionAsAnImageWhereTheProviderTakesItThatWay(t *testing.
 		}
 	}
 
-	plans := provider.Releaser().Plans()
+	plans := provider.FakeStacks().Plans()
 	app := plans[len(plans)-1]
 	if len(app.Uploads) != 0 {
 		t.Errorf("the app plan carries %d uploads, want none: the function travels as an image", len(app.Uploads))
@@ -134,7 +134,7 @@ func TestAFunctionsImageIsNeverMistakenForTheAppsOwn(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := provider.Releaser().Plans()
+	plans := provider.FakeStacks().Plans()
 	app := plans[len(plans)-1]
 	if app.App.Image != "" {
 		t.Errorf("the app plan runs the image %q, want none: the app is serverless and only its functions travel as images", app.App.Image)
@@ -208,7 +208,10 @@ func TestANodeFunctionsImageCarriesTheRuntimeTheProviderHandsIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	held := tarNames(t, layers[len(layers)-1])
+	var held []string
+	for _, layer := range layers {
+		held = append(held, tarNames(t, layer)...)
+	}
 	want := strings.TrimPrefix(providerkit.NodeRuntimePath, "/")
 	if !slices.Contains(held, want) {
 		t.Errorf("the image holds %v and nothing at %s, so nothing serves the node function it was built for", held, providerkit.NodeRuntimePath)
@@ -223,7 +226,7 @@ func (w imagingWithoutRuntime) Hooks() providerkit.Hooks {
 	return hooks
 }
 
-func (imagingWithoutRuntime) FunctionRuntime(context.Context, providerkit.Runtime) ([]byte, error) {
+func (imagingWithoutRuntime) FunctionRuntime(context.Context, providerkit.Framework) ([]byte, error) {
 	return nil, nil
 }
 
@@ -243,23 +246,10 @@ func TestANodeFunctionIsRefusedWhereTheProviderCarriesNoRuntime(t *testing.T) {
 	}
 }
 
-type wrappingImaging struct {
-	imaging
-	runtime []byte
-}
-
-func (w wrappingImaging) ContainerArch(ctx context.Context, app, declared string) (string, error) {
-	return w.Provider.WrappingContainers("amd64", w.runtime).ContainerArch(ctx, app, declared)
-}
-
-func (w wrappingImaging) ContainerRuntime(ctx context.Context, arch string) ([]byte, error) {
-	return w.Provider.WrappingContainers("amd64", w.runtime).ContainerRuntime(ctx, arch)
-}
-
 func wrappingImagingServed(t *testing.T, runtime []byte) (contractv1connect.ProviderServiceClient, *fake.Provider) {
 	t.Helper()
 	base := fake.NewProvider(fake.Options{})
-	served := servedBy(t, wrappingImaging{imaging{Provider: base}, runtime})
+	served := servedBy(t, imaging{Provider: base.WrappingContainers("amd64", runtime)})
 	standsBootstrapped(t, served)
 	return served, base
 }
@@ -334,7 +324,7 @@ func TestAFunctionImageIsWrappedInTheRuntimeWhereTheProviderCarriesOne(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	plans := provider.Releaser().Plans()
+	plans := provider.FakeStacks().Plans()
 	if spec := plans[len(plans)-1].App.Functions[0]; !strings.HasSuffix(spec.Image, "@"+digest.String()) {
 		t.Errorf("the function spec runs %q, want it pinned to the wrapped image's digest %s", spec.Image, digest)
 	}
@@ -376,7 +366,7 @@ func TestAWrappedFunctionIsHandedItsPlainAndSensitiveValuesAndNoSecretOrRecord(t
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := base.Releaser().Plans()
+	plans := base.FakeStacks().Plans()
 	delivered := plans[len(plans)-1].App.Values.Delivered
 	for key, want := range map[string]string{"REGION": "eu-west-1", "API_TOKEN": "sensitive-token"} {
 		if delivered[key] != want {

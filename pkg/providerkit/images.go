@@ -28,7 +28,7 @@ type ImageStore interface {
 
 	Has(ctx context.Context, push ImagePush) (bool, error)
 
-	Push(ctx context.Context, push ImagePush, report Reporter) error
+	Push(ctx context.Context, push ImagePush, progress Progress) error
 }
 
 type ImagePlan struct {
@@ -61,7 +61,7 @@ func (p ImagePlan) Rows(ctx context.Context) ([]Change, error) {
 	return rows, nil
 }
 
-func (p ImagePlan) Ship(ctx context.Context, report Reporter) error {
+func (p ImagePlan) Ship(ctx context.Context, progress Progress) error {
 	for _, push := range p.Pushes {
 		held, err := p.held(ctx, push)
 		if err != nil {
@@ -71,20 +71,20 @@ func (p ImagePlan) Ship(ctx context.Context, report Reporter) error {
 			continue
 		}
 		where := p.Store.Destination()
-		if report != nil {
-			report.Say("Sending " + push.App + "'s image to " + where)
+		if progress != nil {
+			progress.Say("Sending " + push.App + "'s image to " + where)
 		}
-		if err := p.push(ctx, push, report); err != nil {
+		if err := p.push(ctx, push, progress); err != nil {
 			return fmt.Errorf("send %s's image to %s: %w", push.App, where, err)
 		}
 	}
 	return nil
 }
 
-func (p ImagePlan) push(ctx context.Context, push ImagePush, report Reporter) error {
+func (p ImagePlan) push(ctx context.Context, push ImagePush, progress Progress) error {
 	if push.Wrap != nil {
-		if report != nil {
-			report.Detail("Wrapping the image in the ocel runtime")
+		if progress != nil {
+			progress.Detail("Wrapping the image in the ocel runtime")
 		}
 		built, done, err := push.Wrap(ctx)
 		if err != nil {
@@ -93,7 +93,7 @@ func (p ImagePlan) push(ctx context.Context, push ImagePush, report Reporter) er
 		defer done()
 		push.Built = built
 	}
-	return p.Store.Push(ctx, push, report)
+	return p.Store.Push(ctx, push, progress)
 }
 
 func (p ImagePlan) Coordinate(app string) string {
@@ -115,20 +115,6 @@ func (p ImagePlan) held(ctx context.Context, push ImagePush) (bool, error) {
 		return false, fmt.Errorf("look for %s's image in %s: %w", push.App, p.Store.Destination(), err)
 	}
 	return held, nil
-}
-
-func imagePush(app, ref string, target RegistryTarget) (ImagePush, error) {
-	repository, digest, pinned := strings.Cut(ref, "@")
-	if !pinned || repository == "" || digest == "" {
-		return ImagePush{}, Refuse(CodeInvalid,
-			"app %s carries the image %q, which pins no digest, so there is nothing to push under a coordinate", app, ref)
-	}
-	return ImagePush{
-		App:    app,
-		Source: ref,
-		Target: coordinate(repository, naming.DigestTag(digest), target),
-		Digest: digest,
-	}, nil
 }
 
 func coordinate(repository, tag string, target RegistryTarget) string {

@@ -16,7 +16,7 @@ type CryptoAPI interface {
 	Decrypt(context.Context, *kms.DecryptInput, ...func(*kms.Options)) (*kms.DecryptOutput, error)
 }
 
-type Sealer struct {
+type Cipher struct {
 	KMS  CryptoAPI
 	Keys Keys
 }
@@ -29,7 +29,7 @@ type Key string
 
 func (k Key) Key(context.Context, kit.Class) (string, error) { return string(k), nil }
 
-func (s Sealer) key(ctx context.Context, at kit.Coordinate) (string, error) {
+func (s Cipher) key(ctx context.Context, at kit.Coordinate) (string, error) {
 	if at.Class == "" {
 		return "", kit.Refuse(kit.CodeInvalid,
 			"a value names no class, and this account seals each class's values under the key its own bootstrap made")
@@ -51,7 +51,7 @@ func (s Sealer) key(ctx context.Context, at kit.Coordinate) (string, error) {
 	return key, nil
 }
 
-func (s Sealer) Seal(ctx context.Context, at kit.Coordinate, plaintext []byte) ([]byte, error) {
+func (s Cipher) Seal(ctx context.Context, at kit.Coordinate, plaintext []byte) ([]byte, error) {
 	bound, err := encryptionContext(at)
 	if err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func (s Sealer) Seal(ctx context.Context, at kit.Coordinate, plaintext []byte) (
 	return out.CiphertextBlob, nil
 }
 
-func (s Sealer) Open(ctx context.Context, at kit.Coordinate, sealed []byte) ([]byte, error) {
+func (s Cipher) Open(ctx context.Context, at kit.Coordinate, sealed []byte) ([]byte, error) {
 	bound, err := encryptionContext(at)
 	if err != nil {
 		return nil, err

@@ -512,7 +512,7 @@ func runsContainer(plan providerkit.StackPlan) bool {
 	return plan.App != nil && plan.App.Compute == providerkit.ComputeContainer
 }
 
-func (r *release) provisionContainer(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
+func (r *release) provisionContainer(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
 	work, err := r.checkContainer(plan)
 	if err != nil {
 		return providerkit.StackResult{}, err
@@ -520,22 +520,22 @@ func (r *release) provisionContainer(ctx context.Context, plan providerkit.Stack
 	if work.transformed, err = transformStackPlan(ctx, r.cfg.Transform, plan); err != nil {
 		return providerkit.StackResult{}, err
 	}
-	held, err := r.ensureSubstrate(ctx, plan.Ref, report)
+	held, err := r.ensureSubstrate(ctx, plan.Ref, progress)
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
 	work.substrate = held
-	result, err := r.runContainer(ctx, plan, work, report)
+	result, err := r.runContainer(ctx, plan, work, progress)
 	if err != nil {
-		return providerkit.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, report))
+		return providerkit.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, progress))
 	}
 	if err := work.transformed.refuseUnclaimed(); err != nil {
-		return providerkit.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, report))
+		return providerkit.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, progress))
 	}
 	return result, nil
 }
 
-func (r *release) runContainer(ctx context.Context, plan providerkit.StackPlan, work *containerWork, report providerkit.Reporter) (providerkit.StackResult, error) {
+func (r *release) runContainer(ctx context.Context, plan providerkit.StackPlan, work *containerWork, progress providerkit.Progress) (providerkit.StackResult, error) {
 	var err error
 	for attempt := range rulePlacements {
 		if err = r.placeRule(ctx, work); err != nil {
@@ -543,27 +543,27 @@ func (r *release) runContainer(ctx context.Context, plan providerkit.StackPlan, 
 		}
 		plan.Options = work
 		var result providerkit.StackResult
-		if result, err = r.adapter.Run(ctx, plan, report); err == nil {
+		if result, err = r.adapter.Run(ctx, plan, progress); err == nil {
 			return result, nil
 		}
 		if !priorityTaken(err) {
 			return providerkit.StackResult{}, err
 		}
-		if report != nil {
-			report.Detail(fmt.Sprintf("Another deploy claimed listener rule priority %d while %s was placing its own (attempt %d of %d); picking another", work.priority, work.app, attempt+1, rulePlacements))
+		if progress != nil {
+			progress.Detail(fmt.Sprintf("Another deploy claimed listener rule priority %d while %s was placing its own (attempt %d of %d); picking another", work.priority, work.app, attempt+1, rulePlacements))
 		}
 	}
 	return providerkit.StackResult{}, fmt.Errorf("place %s's listener rule: every priority it picked was claimed by another deploy before it could take it, %d times over: %w", work.app, rulePlacements, err)
 }
 
-func (r *release) abandonContainer(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
-	if err := r.adapter.Destroy(ctx, ref, report); err != nil {
+func (r *release) abandonContainer(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
+	if err := r.adapter.Destroy(ctx, ref, progress); err != nil {
 		return err
 	}
-	return r.releaseSubstrate(ctx, r.cfg.Records, ref, report)
+	return r.releaseSubstrate(ctx, r.cfg.Records, ref, progress)
 }
 
-func (r *release) planContainer(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.Plan, error) {
+func (r *release) planContainer(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
 	held, present, err := r.readSubstrate(ctx, plan.Ref.Class)
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -597,7 +597,7 @@ func (r *release) planContainer(ctx context.Context, plan providerkit.StackPlan,
 		return providerkit.Plan{}, err
 	}
 	plan.Options = work
-	previewed, err := r.adapter.Preview(ctx, plan, report)
+	previewed, err := r.adapter.Preview(ctx, plan, progress)
 	if err != nil {
 		return providerkit.Plan{}, err
 	}

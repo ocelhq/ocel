@@ -4,7 +4,7 @@ import "context"
 
 type Vars struct {
 	Records      RecordStore
-	Sealer       Sealer
+	Cipher       Cipher
 	VerifyGrants func(ctx context.Context, binding Binding) error
 }
 
@@ -16,9 +16,9 @@ type VarsHandler struct {
 	Source VarsSource
 }
 
-type StandingVars Vars
+type FixedVars Vars
 
-func (s StandingVars) Vars() (Vars, error) { return Vars(s), nil }
+func (s FixedVars) Vars() (Vars, error) { return Vars(s), nil }
 
 type sessionVars struct {
 	session *session
@@ -29,5 +29,5 @@ func (s sessionVars) Vars() (Vars, error) {
 	if err != nil {
 		return Vars{}, err
 	}
-	return Vars{Records: provider.Records(), Sealer: provider.Sealer(), VerifyGrants: provider.Hooks().VerifyGrants}, nil
+	return Vars{Records: provider.Records(), Cipher: provider.Cipher(), VerifyGrants: provider.Hooks().VerifyGrants}, nil
 }

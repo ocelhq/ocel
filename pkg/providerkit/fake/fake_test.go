@@ -120,7 +120,7 @@ func TestSealerBindsAValueToItsCoordinate(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	sealer := fake.NewSealer()
+	sealer := fake.NewCipher()
 	at := providerkit.Coordinate{Project: "shop", Class: providerkit.ClassProduction, Env: "production", Name: "DATABASE_URL"}
 
 	sealed, err := sealer.Seal(ctx, at, []byte("postgres://"))
@@ -186,7 +186,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 	t.Parallel()
 
 	provider := fake.NewProvider(fake.Options{})
-	releaser := resources.Releaser(provider.Records(), provider.Artifacts(), provider.ResourceHooks())
+	releaser := resources.Stacks(provider.Records(), provider.Artifacts(), provider.ResourceHooks())
 	ref := providerkit.StackRef{
 		Project: "shop",
 		Class:   providerkit.ClassProduction,
@@ -244,7 +244,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 	}, nil); err != nil {
 		t.Fatalf("Provision() of an app moving back to serverless = %v", err)
 	}
-	if taken := provider.Releaser().TakenDown(); !slices.Contains(taken, "web") {
+	if taken := provider.FakeStacks().TakenDown(); !slices.Contains(taken, "web") {
 		t.Errorf("the reference provider took down %v, want the container the app left behind: an app changing compute leaves the other primitive's work standing otherwise", taken)
 	}
 }

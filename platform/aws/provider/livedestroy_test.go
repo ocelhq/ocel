@@ -17,7 +17,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingStanding(t *testing.T) {
 	bootstrapper := a.emptied(t, class)
 	ctx := context.Background()
 
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: liveWriter}, nil); err != nil {
+	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, string(class))
@@ -25,7 +25,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingStanding(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	removal, err := bootstrapper.PlanRemoval(ctx, class)
+	removal, err := bootstrapper.PlanRemove(ctx, class)
 	if err != nil {
 		t.Fatalf("PlanRemoval() = %v", err)
 	}
@@ -88,7 +88,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingStanding(t *testing.T) {
 		t.Errorf("a second Remove() = %v, want an already-forgotten account to be a no-op", err)
 	}
 
-	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Writer: liveWriter})
+	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter})
 	if err != nil {
 		t.Fatalf("Plan() after Remove() = %v", err)
 	}
@@ -104,12 +104,12 @@ func TestLiveDestroyingOneClassLeavesTheSiblingAndThePassphraseItSharesStanding(
 	ctx := context.Background()
 
 	for _, class := range []providerkit.Class{production, preview} {
-		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Writer: liveWriter}, nil); err != nil {
+		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter}, nil); err != nil {
 			t.Fatalf("Apply(%s) = %v", class, err)
 		}
 	}
 
-	beside, err := bootstrapper.PlanRemoval(ctx, production)
+	beside, err := bootstrapper.PlanRemove(ctx, production)
 	if err != nil {
 		t.Fatalf("PlanRemoval(%s) = %v", production, err)
 	}
@@ -145,7 +145,7 @@ func TestLiveDestroyingOneClassLeavesTheSiblingAndThePassphraseItSharesStanding(
 		t.Errorf("Describe(%s) still claims a bootstrap after the class was destroyed", production)
 	}
 
-	last, err := bootstrapper.PlanRemoval(ctx, preview)
+	last, err := bootstrapper.PlanRemove(ctx, preview)
 	if err != nil {
 		t.Fatalf("PlanRemoval(%s) = %v", preview, err)
 	}

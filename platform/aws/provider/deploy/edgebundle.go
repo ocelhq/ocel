@@ -75,18 +75,18 @@ func edgeBundleSet(cfg Config, app string, coord naming.Coordinate, sealed appBu
 		app:    app,
 		files:  manifest.files,
 		digest: manifest.digest(),
-		push: func(ctx context.Context, report providerkit.Reporter) error {
+		push: func(ctx context.Context, progress providerkit.Progress) error {
 			phaseStart := time.Now()
 			stats := newUploadBatchStats()
-			err := putEdgeBundle(ctx, cfg, app, coord, bundle, sealed, stats, report)
-			emitUploadBatch(report, uploadKindEdgeBundle, stats, err, phaseStart)
+			err := putEdgeBundle(ctx, cfg, app, coord, bundle, sealed, stats, progress)
+			emitUploadBatch(progress, uploadKindEdgeBundle, stats, err, phaseStart)
 			return err
 		},
 	}, delivery, nil
 }
 
-func putEdgeBundle(ctx context.Context, cfg Config, app string, coord naming.Coordinate, bundle []byte, sealed appBundle, stats *uploadBatchStats, report providerkit.Reporter) error {
-	say(report, "Uploading "+app+"'s edge bundle")
+func putEdgeBundle(ctx context.Context, cfg Config, app string, coord naming.Coordinate, bundle []byte, sealed appBundle, stats *uploadBatchStats, progress providerkit.Progress) error {
+	say(progress, "Uploading "+app+"'s edge bundle")
 	if err := tracedPut(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, appEdgeBundleKey(coord), objectHeaders{contentType: "application/json"}, bundle, stats); err != nil {
 		return err
 	}

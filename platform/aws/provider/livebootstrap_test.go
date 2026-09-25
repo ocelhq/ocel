@@ -24,7 +24,7 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 		t.Fatal("Describe() claims a bootstrap on an account nothing has written to")
 	}
 
-	req := providerkit.BootstrapRequest{Class: class, Writer: liveWriter, Held: fresh.Held}
+	req := providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter, Held: fresh.Held}
 	plan, err := bootstrapper.Plan(ctx, req)
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
@@ -67,8 +67,8 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 	if !stack.Present || !stack.DigestCurrent {
 		t.Errorf("Describe() after Apply() = %+v, want the core stack standing at the digest applied", stack)
 	}
-	if stack.Writer != string(liveWriter) {
-		t.Errorf("the core stack records writer %q, want the writer that applied it", stack.Writer)
+	if stack.WrittenBy != string(liveWriter) {
+		t.Errorf("the core stack records writer %q, want the writer that applied it", stack.WrittenBy)
 	}
 	if stack.Schema != uint32(bootstrap.RequiredSchema) {
 		t.Errorf("the core stack records schema %d, want %d", stack.Schema, bootstrap.RequiredSchema)
@@ -109,7 +109,7 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 		}
 	}
 
-	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Writer: liveWriter, Held: standing.Held})
+	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter, Held: standing.Held})
 	if err != nil {
 		t.Fatalf("a second Plan() = %v", err)
 	}
@@ -132,7 +132,7 @@ func TestLiveApplyingTheImageOptimizerStandsItsOwnStackBesideTheCore(t *testing.
 	ctx := context.Background()
 
 	feature := bootstrap.FeatureImageOptimization
-	req := providerkit.BootstrapRequest{Class: class, Writer: liveWriter, Features: []string{feature}}
+	req := providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter, Features: []string{feature}}
 	if err := bootstrapper.Apply(ctx, req, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v", feature, err)
 	}
@@ -160,7 +160,7 @@ func TestLiveApplyingTheImageOptimizerStandsItsOwnStackBesideTheCore(t *testing.
 		t.Errorf("the account reads back features %v, want %s among them", held.Features.Names(), feature)
 	}
 
-	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Writer: liveWriter, Features: []string{feature}, Held: standing.Held})
+	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter, Features: []string{feature}, Held: standing.Held})
 	if err != nil {
 		t.Fatalf("a second Plan(%s) = %v", feature, err)
 	}
@@ -169,7 +169,7 @@ func TestLiveApplyingTheImageOptimizerStandsItsOwnStackBesideTheCore(t *testing.
 	}
 }
 
-func stackNamed(t *testing.T, described providerkit.Bootstrap, name string) providerkit.BootstrapStack {
+func stackNamed(t *testing.T, described providerkit.BootstrapReading, name string) providerkit.BootstrapStack {
 	t.Helper()
 	for _, stack := range described.Stacks {
 		if stack.Name == name {

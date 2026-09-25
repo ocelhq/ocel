@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) ([]providerkit.AppContainer, error) {
+func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) ([]providerkit.AppContainer, error) {
 	app := plan.App
 	if app == nil {
 		return nil, nil
@@ -48,8 +48,8 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 				"app %s sets %s, which ocel's runtime reserves: rename it", app.App, owned)
 		}
 	}
-	if report != nil {
-		report.Say("Standing " + app.App + " up as " + physical)
+	if progress != nil {
+		progress.Say("Standing " + app.App + " up as " + physical)
 	}
 	if err := p.host.StandUp(ctx, host.Container{
 		Name: physical, Project: plan.Ref.Project, App: app.App, Image: app.Image,
@@ -68,13 +68,13 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	}}, nil
 }
 
-func (p *Provider) RemoveContainers(ctx context.Context, ref providerkit.StackRef, containers []providerkit.AppContainer, report providerkit.Reporter) error {
+func (p *Provider) RemoveContainers(ctx context.Context, ref providerkit.StackRef, containers []providerkit.AppContainer, progress providerkit.Progress) error {
 	for _, container := range containers {
 		if container.Physical == "" {
 			continue
 		}
-		if report != nil {
-			report.Say("Taking " + container.Physical + " down")
+		if progress != nil {
+			progress.Say("Taking " + container.Physical + " down")
 		}
 		if err := p.host.TakeDown(ctx, ref.Class, container.Physical); err != nil {
 			return err

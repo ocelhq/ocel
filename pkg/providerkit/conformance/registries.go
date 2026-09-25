@@ -9,7 +9,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func RunEdgeRegistry(t *testing.T, edges providerkit.EdgeRegistry) {
+func RunEdges(t *testing.T, edges providerkit.Edges) {
 	t.Helper()
 
 	supported := edges.Supported()
@@ -71,7 +71,7 @@ func RunEdgeRegistry(t *testing.T, edges providerkit.EdgeRegistry) {
 	})
 }
 
-func RunDNSRegistry(t *testing.T, dns providerkit.DNSRegistry) {
+func RunDNS(t *testing.T, dns providerkit.DNS) {
 	t.Helper()
 
 	supported := dns.Supported()

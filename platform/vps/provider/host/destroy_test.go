@@ -29,9 +29,9 @@ func TestRemoveTakesWhatStandsAndSaysWhatItTookAndWhatItLeft(t *testing.T) {
 
 	class := providerkit.ClassProduction
 	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
-	report := &said{}
+	progress := &said{}
 
-	if err := Bootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, report); err != nil {
+	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, progress); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	for _, taken := range []string{
@@ -40,15 +40,15 @@ func TestRemoveTakesWhatStandsAndSaysWhatItTookAndWhatItLeft(t *testing.T) {
 		"removed " + KindUser + " " + deployUser,
 		"removed " + KindDir + " " + ClassDir(class),
 	} {
-		if !slices.Contains(report.lines, taken) {
-			t.Errorf("Remove() never said %q:\n%s", taken, strings.Join(report.lines, "\n"))
+		if !slices.Contains(progress.lines, taken) {
+			t.Errorf("Remove() never said %q:\n%s", taken, strings.Join(progress.lines, "\n"))
 		}
 	}
-	if !slices.Contains(report.lines, "kept "+KindEngine+" "+dockerEngine) {
-		t.Errorf("Remove() never says the engine stays:\n%s", strings.Join(report.lines, "\n"))
+	if !slices.Contains(progress.lines, "kept "+KindEngine+" "+dockerEngine) {
+		t.Errorf("Remove() never says the engine stays:\n%s", strings.Join(progress.lines, "\n"))
 	}
-	if report.at("ssh-keygen -R") < 0 {
-		t.Errorf("Remove() never spells the line that drops this host from known_hosts:\n%s", strings.Join(report.lines, "\n"))
+	if progress.at("ssh-keygen -R") < 0 {
+		t.Errorf("Remove() never spells the line that drops this host from known_hosts:\n%s", strings.Join(progress.lines, "\n"))
 	}
 	for _, command := range stood.taking() {
 		if strings.Contains(command, quoted(dockerEngine)) || strings.Contains(command, quoted(dockerUnit)) {
@@ -63,7 +63,7 @@ func TestRemoveTakesTheStampAfterEverythingBeneathIt(t *testing.T) {
 	class := providerkit.ClassProduction
 	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
 
-	if err := Bootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
+	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	stamp := stood.took(quoted(ClassDir(class)))
@@ -92,12 +92,12 @@ func TestADestroyThatLandedIsNotReportedAsFailedBecauseTheConnectionWentAfterIt(
 		b.dead = errors.New("connection closed by remote host")
 	}
 
-	report := &said{}
-	if err := Bootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, report); err != nil {
+	progress := &said{}
+	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, progress); err != nil {
 		t.Fatalf("Remove() = %v after every removal landed, and a host that is gone must not be reported as one that stayed", err)
 	}
-	if report.at("ssh-keygen -R") < 0 {
-		t.Errorf("Remove() never spells the line that drops this host from known_hosts:\n%s", strings.Join(report.lines, "\n"))
+	if progress.at("ssh-keygen -R") < 0 {
+		t.Errorf("Remove() never spells the line that drops this host from known_hosts:\n%s", strings.Join(progress.lines, "\n"))
 	}
 }
 
@@ -113,8 +113,8 @@ func TestAHostWhoseStampIsUnreadableCanStillBeDestroyed(t *testing.T) {
 		beside: {truncated(beside)},
 	})
 
-	bootstrapper := Bootstrap(stood.host(), testVendor, "shop")
-	if _, err := bootstrapper.PlanRemoval(context.Background(), class); err != nil {
+	bootstrapper := NewBootstrap(stood.host(), testVendor, "shop")
+	if _, err := bootstrapper.PlanRemove(context.Background(), class); err != nil {
 		t.Fatalf("PlanRemoval() = %v over a host an apply left half-written, and no verb can clear it if destroy cannot read it", err)
 	}
 	if err := bootstrapper.Remove(context.Background(), class, nil); err != nil {
@@ -158,7 +158,7 @@ func TestADeployLoginSomethingStillHoldsDoesNotStrandTheDestroy(t *testing.T) {
 		return session.Result{Code: 8, Stderr: "userdel: user " + deployUser + " is currently used by process 4021"}, true
 	}
 
-	if err := Bootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
+	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
 		t.Fatalf("Remove() = %v over a login a lingering session still holds, and every re-run would fail there again", err)
 	}
 	if stood.took(quoted(ClassDir(class))) < 0 {
@@ -172,7 +172,7 @@ func TestARootOtherClassesShareIsTakenOnlyWhileNothingElseIsUnderIt(t *testing.T
 	class := providerkit.ClassProduction
 	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
 
-	if err := Bootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
+	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	taken := stood.taking()
@@ -196,7 +196,7 @@ func TestTheLastDestroyLeavesNothingOcelEverWroteOnTheHost(t *testing.T) {
 	class := providerkit.ClassProduction
 	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
 
-	if err := Bootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
+	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	taken := stood.taking()
@@ -248,7 +248,7 @@ func TestPlanRemovalNamesTheGroupAfterTheMachineItRunsOn(t *testing.T) {
 	class := providerkit.ClassProduction
 	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
 
-	plan, err := Bootstrap(stood.host(), testVendor, "shop").PlanRemoval(context.Background(), class)
+	plan, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), class)
 	if err != nil {
 		t.Fatalf("PlanRemoval() = %v", err)
 	}
@@ -301,7 +301,7 @@ func TestPlanRemovalOfAHostCarryingNothingPlansNothing(t *testing.T) {
 	t.Parallel()
 
 	stood := machine(nil)
-	plan, err := Bootstrap(stood.host(), testVendor, "shop").PlanRemoval(context.Background(), providerkit.ClassProduction)
+	plan, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemoval() = %v", err)
 	}

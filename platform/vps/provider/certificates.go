@@ -12,7 +12,9 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
-func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
+type certificates struct{ *Provider }
+
+func (p certificates) Issue(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
 	path := p.host.PinFor(req.Hostname)
 	if path == "" {
 		if strings.HasPrefix(req.Hostname, "*.") {
@@ -22,8 +24,8 @@ func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateR
 		if held.Trouble != nil && refused(held.Trouble) {
 			return providerkit.Certificate{}, held.Trouble
 		}
-		if err != nil && req.Report != nil {
-			req.Report.Say("could not read what the proxy holds for " + req.Hostname + ": " + err.Error())
+		if err != nil && req.Progress != nil {
+			req.Progress.Say("could not read what the proxy holds for " + req.Hostname + ": " + err.Error())
 		}
 		return providerkit.Certificate{ID: certs.ProxyHandle(req.Hostname)}, nil
 	}
@@ -42,7 +44,7 @@ func refused(err error) bool {
 	return errors.As(err, &refusal) && refusal.Code == providerkit.CodeBusy
 }
 
-func (p *Provider) InspectCertificate(ctx context.Context, _ edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {
+func (p certificates) Inspect(ctx context.Context, _ edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {
 	health := providerkit.CertificateHealth{Terminates: true}
 	if !cert.Held() {
 		return health, nil
@@ -63,7 +65,7 @@ func (p *Provider) InspectCertificate(ctx context.Context, _ edge.Kind, hostname
 	return p.servedHealth(ctx, served, hostname, health)
 }
 
-func (p *Provider) DiscardCertificate(context.Context, providerkit.Certificate, providerkit.Reporter) error {
+func (p certificates) Discard(context.Context, providerkit.Certificate, providerkit.Progress) error {
 	return nil
 }
 
@@ -124,5 +126,3 @@ func (p *Provider) servedHealth(ctx context.Context, served, hostname string, he
 	health.Covers = leaf.Covers(hostname)
 	return health, nil
 }
-
-var _ providerkit.Certifier = (*Provider)(nil)

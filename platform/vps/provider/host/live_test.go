@@ -122,7 +122,7 @@ func TestTheLastDestroyTakesTheAgentAndItsUnitsAndASiblingClassKeepsThem(t *test
 	}
 
 	stood := machine(map[providerkit.Class][]Item{production: bootstrapped(t, production)})
-	if err := Bootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), production, nil); err != nil {
+	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), production, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	taken := strings.Join(stood.commands(), "\n")

@@ -111,21 +111,21 @@ func TestTheProviderWrapsEveryContainerInTheRuntimeItCarries(t *testing.T) {
 	t.Parallel()
 	p := pushing(t, "")
 
-	if _, err := p.ContainerArch(context.Background(), "web", providerkit.ArchARM64); err == nil || !strings.Contains(err.Error(), "web") {
+	if _, err := p.Runtime().Arch(context.Background(), "web", providerkit.ArchARM64); err == nil || !strings.Contains(err.Error(), "web") {
 		t.Errorf("ContainerArch(arm64) = %v, want the app refused by name before its image is built: Cloud Run runs x86_64 alone", err)
 	}
-	runs, err := p.ContainerArch(context.Background(), "web", "")
+	runs, err := p.Runtime().Arch(context.Background(), "web", "")
 	if err != nil || runs != payloads.ContainerArch {
 		t.Fatalf("ContainerArch() = %q, %v, want the %s Cloud Run runs: the image is built for whatever this names", runs, err, payloads.ContainerArch)
 	}
-	held, err := p.ContainerRuntime(context.Background(), runs)
+	held, err := p.Runtime().Binary(context.Background(), runs)
 	if err != nil {
 		t.Fatalf("ContainerRuntime(%s) = %v", runs, err)
 	}
 	if want, _ := payloads.ContainerRuntime(payloads.ContainerArch); !bytes.Equal(held, want) {
 		t.Error("ContainerRuntime() hands back something other than the embedded payload")
 	}
-	if _, err := p.ContainerRuntime(context.Background(), "arm64"); err == nil {
+	if _, err := p.Runtime().Binary(context.Background(), "arm64"); err == nil {
 		t.Error("ContainerRuntime(arm64) = nil, want a refusal: Cloud Run runs x86_64 alone")
 	}
 }

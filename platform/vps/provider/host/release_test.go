@@ -188,10 +188,10 @@ func benched(t *testing.T, gate, cutover session.Result) *flipped {
 	return benchedOn(t, configFor(t, retired), gate, cutover)
 }
 
-func released(t *testing.T, rel Release, gate, cutover session.Result, report providerkit.Reporter) (*flipped, error) {
+func released(t *testing.T, rel Release, gate, cutover session.Result, progress providerkit.Progress) (*flipped, error) {
 	t.Helper()
 	stood := benched(t, gate, cutover)
-	return stood, stood.host().Release(context.Background(), rel, report)
+	return stood, stood.host().Release(context.Background(), rel, progress)
 }
 
 func unserved(err error) bool {
@@ -667,29 +667,29 @@ func TestTheFlipConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUpstre
 func TestADrainThatReadZeroIsToldBeforeTheContainerItFreedIsStopped(t *testing.T) {
 	t.Parallel()
 
-	report := &watched{}
-	_, err := released(t, aRelease(), session.Result{}, session.Result{Stdout: switchboard.Drained + " " + retired + "\n"}, report)
+	progress := &watched{}
+	_, err := released(t, aRelease(), session.Result{}, session.Result{Stdout: switchboard.Drained + " " + retired + "\n"}, progress)
 	if err != nil {
 		t.Fatalf("Release() over a drain that read zero = %v", err)
 	}
-	drained := report.at(retiring + " reported nothing in flight")
+	drained := progress.at(retiring + " reported nothing in flight")
 	if drained < 0 {
-		t.Fatalf("the release said %v and never that the drain read the retired upstream empty: the count reaches zero for about one drain poll before the config that carries the upstream is rewritten, so the drain's own word is the only thing that can witness it", report.lines)
+		t.Fatalf("the release said %v and never that the drain read the retired upstream empty: the count reaches zero for about one drain poll before the config that carries the upstream is rewritten, so the drain's own word is the only thing that can witness it", progress.lines)
 	}
-	if stopping := report.at("Stopping " + retiring); stopping < 0 || drained > stopping {
-		t.Errorf("the release said %v, want the drain's outcome before %q: a report that names the stop first reads as though the container went while it was still serving", report.lines, "Stopping "+retiring)
+	if stopping := progress.at("Stopping " + retiring); stopping < 0 || drained > stopping {
+		t.Errorf("the release said %v, want the drain's outcome before %q: a report that names the stop first reads as though the container went while it was still serving", progress.lines, "Stopping "+retiring)
 	}
 }
 
 func TestADrainThatExpiresIsWarnedAboutRatherThanFailed(t *testing.T) {
 	t.Parallel()
 
-	report := &watched{}
-	_, err := released(t, aRelease(), session.Result{}, session.Result{Stdout: switchboard.DrainExpired + " " + retired + " 2\n"}, report)
+	progress := &watched{}
+	_, err := released(t, aRelease(), session.Result{}, session.Result{Stdout: switchboard.DrainExpired + " " + retired + " 2\n"}, progress)
 	if err != nil {
 		t.Fatalf("Release() over an expired drain = %v, want the new release serving", err)
 	}
-	warned := strings.Join(report.told, "\n")
+	warned := strings.Join(progress.told, "\n")
 	if !strings.Contains(warned, retired) || !strings.Contains(warned, "2") {
 		t.Errorf("an expired drain warned %q, want the count still in flight at expiry", warned)
 	}
@@ -977,7 +977,7 @@ func TestAReleaseComposesItsRouteOntoWhatAConcurrentDeployLeftRatherThanRefusing
 func TestAFailureAfterTheFlipSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(t *testing.T) {
 	t.Parallel()
 
-	report := &watched{}
+	progress := &watched{}
 	stood := benched(t, session.Result{}, session.Result{Stdout: switchboard.DrainExpired + " " + retired + " 2\n"})
 	proxied := stood.answer
 	stood.answer = func(command string) (session.Result, bool) {
@@ -987,7 +987,7 @@ func TestAFailureAfterTheFlipSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(t *
 		return proxied(command)
 	}
 
-	err := stood.host().Release(context.Background(), aRelease(), report)
+	err := stood.host().Release(context.Background(), aRelease(), progress)
 	if err == nil {
 		t.Fatal("the stop after the flip was refused and the release reported success")
 	}
@@ -1009,7 +1009,7 @@ func TestAFailureAfterTheFlipSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(t *
 			t.Errorf("a failure after the flip is refused with\n%s\nand that names no %s (%s)", said, what, wanted)
 		}
 	}
-	warned := strings.Join(report.told, "\n")
+	warned := strings.Join(progress.told, "\n")
 	if !strings.Contains(warned, retired) || !strings.Contains(warned, "502") {
 		t.Errorf("the release reported %q; the drain expired holding requests open and the stop that failed after the flip swallowed the warning", warned)
 	}
@@ -1246,11 +1246,11 @@ func TestAFlipConfigurationThatCannotBeWrittenBackEitherNamesTheFileARestartWoul
 func TestTheDrainContractIsStatedOnEveryReleaseThatRetiresSomething(t *testing.T) {
 	t.Parallel()
 
-	report := &watched{}
-	if _, err := released(t, aRelease(), session.Result{}, session.Result{}, report); err != nil {
+	progress := &watched{}
+	if _, err := released(t, aRelease(), session.Result{}, session.Result{}, progress); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
-	stated := strings.Join(report.told, "\n")
+	stated := strings.Join(progress.told, "\n")
 	for what, wanted := range map[string]string{
 		"the window in-flight requests are given": "30s",
 		"what a client past it receives":          "502",

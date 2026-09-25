@@ -90,13 +90,13 @@ func prerenderAssetSet(cfg Config, app string, cache *isrConfig) (*assetSet, err
 		app:    app,
 		files:  manifest.files,
 		digest: manifest.digest(),
-		push: func(ctx context.Context, report providerkit.Reporter) error {
-			return pushPrerenderAssets(ctx, cfg, app, cache, uploads, report)
+		push: func(ctx context.Context, progress providerkit.Progress) error {
+			return pushPrerenderAssets(ctx, cfg, app, cache, uploads, progress)
 		},
 	}, nil
 }
 
-func pushPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isrConfig, uploads []prerenderUpload, report providerkit.Reporter) error {
+func pushPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isrConfig, uploads []prerenderUpload, progress providerkit.Progress) error {
 	if err := seedTagSnapshot(ctx, cfg, cache, time.Now()); err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func pushPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isr
 		return nil
 	}
 
-	say(report, "Uploading "+app+"'s prerendered pages")
+	say(progress, "Uploading "+app+"'s prerendered pages")
 	phaseStart := time.Now()
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(uploadConcurrency)
@@ -121,7 +121,7 @@ func pushPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isr
 		})
 	}
 	err := g.Wait()
-	emitUploadBatch(report, uploadKindPrerenderAsset, stats, err, phaseStart)
+	emitUploadBatch(progress, uploadKindPrerenderAsset, stats, err, phaseStart)
 	return err
 }
 

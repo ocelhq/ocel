@@ -108,9 +108,9 @@ func dialing(routes map[string]string) func(context.Context, string, string) (ne
 
 func trusting() *tls.Config { return &tls.Config{InsecureSkipVerify: true} }
 
-func resolvedAt(t *testing.T, header string, handler http.HandlerFunc) *Liveness {
+func resolvedAt(t *testing.T, header string, handler http.HandlerFunc) *NetLiveness {
 	t.Helper()
-	return &Liveness{
+	return &NetLiveness{
 		System: &dnsBook{hosts: map[string][]string{"shop.example.com": {"203.0.113.4"}}},
 		Dial:   dialing(map[string]string{"203.0.113.4:443": answeringAs(t, header, handler)}),
 		TLS:    trusting(),
@@ -122,7 +122,7 @@ func TestTheLivenessProbeReadsWhichEdgeAnswersOffItsMarkerAndNotItsStatus(t *tes
 
 	for _, header := range []string{"cloudfront", "cloudflare", ""} {
 		probe := resolvedAt(t, header, nil)
-		kind, err := probe.Serving(context.Background(), "cloudfront", "shop.example.com")
+		kind, err := probe.ServingEdge(context.Background(), "cloudfront", "shop.example.com")
 		if err != nil {
 			t.Fatalf("Serving() = %v", err)
 		}
@@ -145,7 +145,7 @@ func TestTheLivenessProbeAsksForTheHostnameItProbesAndFollowsNoRedirect(t *testi
 		w.Header().Set(edge.HeaderEdge, "cloudflare")
 	})
 
-	kind, err := probe.Serving(context.Background(), "cloudflare", "shop.example.com")
+	kind, err := probe.ServingEdge(context.Background(), "cloudflare", "shop.example.com")
 	if err != nil {
 		t.Fatalf("Serving() = %v", err)
 	}
@@ -162,12 +162,12 @@ func TestAHostnameTheSystemResolverAnswersIsProbedWhereItResolvesAndNoNameserver
 
 	probe := resolvedAt(t, "cloudfront", nil)
 	var authorities []string
-	probe.Authority = func(nameserver string) Names {
+	probe.Authority = func(nameserver string) DNSLookup {
 		authorities = append(authorities, nameserver)
 		return &dnsBook{}
 	}
 
-	kind, err := probe.Serving(context.Background(), "cloudfront", "shop.example.com")
+	kind, err := probe.ServingEdge(context.Background(), "cloudfront", "shop.example.com")
 	if err != nil || kind != "cloudfront" {
 		t.Fatalf("Serving() = %q, %v, want the edge at the address the system resolver gave", kind, err)
 	}
@@ -180,8 +180,8 @@ func TestAWildcardIsProbedOnALabelUnderIt(t *testing.T) {
 	t.Parallel()
 
 	book := &dnsBook{}
-	probe := &Liveness{System: book, Authority: func(string) Names { return &dnsBook{} }}
-	if _, err := probe.Serving(context.Background(), "cloudflare", "*.preview.example.com"); err != nil {
+	probe := &NetLiveness{System: book, Authority: func(string) DNSLookup { return &dnsBook{} }}
+	if _, err := probe.ServingEdge(context.Background(), "cloudflare", "*.preview.example.com"); err != nil {
 		t.Fatal(err)
 	}
 	want := "A " + edge.ProbeHostname("*.preview.example.com")
@@ -195,7 +195,7 @@ func TestACertificateNothingTrustsIsUnservedAndSaysWhy(t *testing.T) {
 
 	probe := resolvedAt(t, "cloudfront", nil)
 	probe.TLS = nil
-	kind, err := probe.Serving(context.Background(), "cloudfront", "shop.example.com")
+	kind, err := probe.ServingEdge(context.Background(), "cloudfront", "shop.example.com")
 	if err != nil {
 		t.Fatalf("Serving() = %v, want it reported unserved so the settle keeps waiting", err)
 	}
@@ -207,14 +207,14 @@ func TestACertificateNothingTrustsIsUnservedAndSaysWhy(t *testing.T) {
 	}
 }
 
-func hinted(t *testing.T, zones map[string][]string, nameservers map[string]*dnsBook) *Liveness {
+func hinted(t *testing.T, zones map[string][]string, nameservers map[string]*dnsBook) *NetLiveness {
 	t.Helper()
-	return &Liveness{
+	return &NetLiveness{
 		System: &dnsBook{
 			zones: zones,
 			hosts: map[string][]string{"d111.cloudfront.net": {"198.51.100.7"}},
 		},
-		Authority: func(nameserver string) Names {
+		Authority: func(nameserver string) DNSLookup {
 			if book, ok := nameservers[nameserver]; ok {
 				return book
 			}
@@ -238,7 +238,7 @@ func TestAHostnameTheSystemResolverCannotSeeYetIsLocatedOffAnyOneOfItsZonesNames
 			"ns2.example.net": {hosts: map[string][]string{"shop.example.com": {"203.0.113.4"}}},
 		})
 
-	kind, err := probe.Serving(context.Background(), "cloudfront", "shop.example.com")
+	kind, err := probe.ServingEdge(context.Background(), "cloudfront", "shop.example.com")
 	if err != nil || kind != "cloudfront" {
 		t.Fatalf("Serving() = %q, %v (%s), want the edge located off the one nameserver that answered: the address is a hint, and one nameserver out of reach is no reason to call the hostname unserved", kind, err, probe.Unreached("shop.example.com"))
 	}
@@ -253,7 +253,7 @@ func TestAHostnameThatIsItsOwnZoneApexIsAskedOfItsOwnNameservers(t *testing.T) {
 			"ns1.example.net": {hosts: map[string][]string{"shop.example.co.uk": {"203.0.113.4"}}},
 		})
 
-	kind, err := probe.Serving(context.Background(), "cloudfront", "shop.example.co.uk")
+	kind, err := probe.ServingEdge(context.Background(), "cloudfront", "shop.example.co.uk")
 	if err != nil || kind != "cloudfront" {
 		t.Fatalf("Serving() = %q, %v (%s), want the apex located off the zone it heads", kind, err, probe.Unreached("shop.example.co.uk"))
 	}
@@ -268,7 +268,7 @@ func TestAHostnameTwoLabelsBelowItsZoneFindsTheZoneAboveIt(t *testing.T) {
 			"ns1.example.net": {hosts: map[string][]string{"a.b.example.com": {"203.0.113.4"}}},
 		})
 
-	if kind, err := probe.Serving(context.Background(), "cloudfront", "a.b.example.com"); err != nil || kind != "cloudfront" {
+	if kind, err := probe.ServingEdge(context.Background(), "cloudfront", "a.b.example.com"); err != nil || kind != "cloudfront" {
 		t.Fatalf("Serving() = %q, %v (%s)", kind, err, probe.Unreached("a.b.example.com"))
 	}
 }
@@ -282,7 +282,7 @@ func TestAHostnameAliasedToTheFrontIsLocatedWhereTheFrontIs(t *testing.T) {
 			"ns1.example.net": {aliases: map[string]string{"shop.example.com": "d111.cloudfront.net"}},
 		})
 
-	if kind, err := probe.Serving(context.Background(), "cloudfront", "shop.example.com"); err != nil || kind != "cloudfront" {
+	if kind, err := probe.ServingEdge(context.Background(), "cloudfront", "shop.example.com"); err != nil || kind != "cloudfront" {
 		t.Fatalf("Serving() = %q, %v (%s), want the edge where the alias the zone holds resolves", kind, err, probe.Unreached("shop.example.com"))
 	}
 }
@@ -294,7 +294,7 @@ func TestAHostnameNoNameserverAnswersForYetIsUnservedAndSaysWhy(t *testing.T) {
 		map[string][]string{"example.com": {"ns1.example.net", "ns2.example.net"}},
 		map[string]*dnsBook{"ns1.example.net": {}, "ns2.example.net": {}})
 
-	kind, err := probe.Serving(context.Background(), "cloudfront", "shop.example.com")
+	kind, err := probe.ServingEdge(context.Background(), "cloudfront", "shop.example.com")
 	if err != nil || kind != "" {
 		t.Fatalf("Serving() = %q, %v, want it unserved", kind, err)
 	}
@@ -312,7 +312,7 @@ func TestAProbeTheRunStoppedReportsTheStop(t *testing.T) {
 	ctx, stop := context.WithCancel(context.Background())
 	stop()
 	probe := resolvedAt(t, "cloudfront", nil)
-	if _, err := probe.Serving(ctx, "cloudfront", "shop.example.com"); !errors.Is(err, context.Canceled) {
+	if _, err := probe.ServingEdge(ctx, "cloudfront", "shop.example.com"); !errors.Is(err, context.Canceled) {
 		t.Errorf("Serving() under a cancelled context = %v, want the cancellation", err)
 	}
 }
@@ -332,9 +332,9 @@ func TestAFrontThatAnswersAtAKnownEndpointIsAskedThereForTheHostname(t *testing.
 		t.Fatal(err)
 	}
 	book := &dnsBook{}
-	probe := &Liveness{System: book, Front: front}
+	probe := &NetLiveness{System: book, Front: front}
 
-	kind, err := probe.Serving(context.Background(), "api-gateway", "web.journey.test")
+	kind, err := probe.ServingEdge(context.Background(), "api-gateway", "web.journey.test")
 	if err != nil || kind != "api-gateway" {
 		t.Fatalf("Serving() = %q, %v (%s), want the edge the endpoint answered as", kind, err, probe.Unreached("web.journey.test"))
 	}
@@ -351,7 +351,7 @@ func TestAFrontThatAnswersOnlyOnItsOwnMachineIsProbedThereForEveryName(t *testin
 
 	book := &dnsBook{}
 	var asked []string
-	probe := &Liveness{
+	probe := &NetLiveness{
 		System:       book,
 		LoopbackOnly: true,
 		Loopback: func(_ context.Context, hostname string) (edge.Kind, error) {
@@ -359,7 +359,7 @@ func TestAFrontThatAnswersOnlyOnItsOwnMachineIsProbedThereForEveryName(t *testin
 			return "box", nil
 		},
 	}
-	kind, err := probe.Serving(context.Background(), "box", "shop.example.com")
+	kind, err := probe.ServingEdge(context.Background(), "box", "shop.example.com")
 	if err != nil || kind != "box" {
 		t.Fatalf("Serving() = %q, %v, want box", kind, err)
 	}
@@ -375,14 +375,14 @@ func TestALoopbackNameIsProbedFromWhereItResolves(t *testing.T) {
 	t.Parallel()
 
 	var asked []string
-	probe := &Liveness{
+	probe := &NetLiveness{
 		System: &dnsBook{},
 		Loopback: func(_ context.Context, hostname string) (edge.Kind, error) {
 			asked = append(asked, hostname)
 			return "", Unanswered{Cause: "tls: no certificate for " + hostname + " yet"}
 		},
 	}
-	kind, err := probe.Serving(context.Background(), "box", "shop.localhost")
+	kind, err := probe.ServingEdge(context.Background(), "box", "shop.localhost")
 	if err != nil || kind != "" {
 		t.Fatalf("Serving() = %q, %v, want it unserved", kind, err)
 	}
@@ -392,7 +392,7 @@ func TestALoopbackNameIsProbedFromWhereItResolves(t *testing.T) {
 	if cause := probe.Unreached("shop.localhost"); !strings.Contains(cause, "no certificate") {
 		t.Errorf("Unreached() = %q, want what the loopback probe said", cause)
 	}
-	if _, err := probe.Serving(context.Background(), "box", "shop.example.com"); err != nil {
+	if _, err := probe.ServingEdge(context.Background(), "box", "shop.example.com"); err != nil {
 		t.Fatal(err)
 	}
 	if len(asked) != 1 {

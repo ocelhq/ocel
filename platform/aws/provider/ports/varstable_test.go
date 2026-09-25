@@ -33,7 +33,7 @@ func newSplitRecords() (awsports.Records, *fakeDynamo) {
 
 func TestASetValueOnlyEverTouchesTheVarsTable(t *testing.T) {
 	records, ddb := newSplitRecords()
-	store := values.Store{Records: records, Sealer: mustSealer()}
+	store := values.Store{Records: records, Cipher: mustSealer()}
 	scope := values.Scope{Project: "shop", Class: edge.ClassProduction}
 
 	if _, err := store.Set(context.Background(), scope, values.Coordinate{Cell: values.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
@@ -65,7 +65,7 @@ type keylessBootstrap struct{}
 func (keylessBootstrap) Key(context.Context, kit.Class) (string, error) { return "", nil }
 
 func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
-	sealer := awsports.Sealer{Keys: keylessBootstrap{}}
+	sealer := awsports.Cipher{Keys: keylessBootstrap{}}
 	at := kit.Coordinate{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
 
 	_, err := sealer.Seal(context.Background(), at, []byte("sk_live_secret"))
@@ -82,7 +82,7 @@ func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
 }
 
 func TestSealingBeforeAnyKeyIsWiredRefusesRatherThanPanics(t *testing.T) {
-	sealer := awsports.Sealer{}
+	sealer := awsports.Cipher{}
 	at := kit.Coordinate{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
 
 	_, err := sealer.Seal(context.Background(), at, []byte("sk_live_secret"))

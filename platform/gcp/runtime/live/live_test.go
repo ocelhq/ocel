@@ -19,15 +19,15 @@ import (
 
 type stores struct {
 	records providerkit.RecordStore
-	sealer  providerkit.Sealer
+	sealer  providerkit.Cipher
 }
 
 func fakeStores() stores {
-	return stores{records: fake.NewRecords(), sealer: fake.NewSealer()}
+	return stores{records: fake.NewRecords(), sealer: fake.NewCipher()}
 }
 
 func (s stores) store() values.Store {
-	return values.Store{Records: s.records, Sealer: s.sealer}
+	return values.Store{Records: s.records, Cipher: s.sealer}
 }
 
 func (s stores) set(t *testing.T, scope values.Scope, at values.Coordinate, plaintext string) {
@@ -177,7 +177,7 @@ func TestTheManifestDrivesTheFirestoreAndKmsClientsTheRuntimeOpens(t *testing.T)
 	t.Parallel()
 	endpoint := servingFirestoreAndKMS(t)
 	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: endpoint}
-	seeded := stores{records: ports.Records{Clients: clients}, sealer: ports.Sealer{Clients: clients}}
+	seeded := stores{records: ports.Records{Clients: clients}, sealer: ports.Cipher{Clients: clients}}
 	scope := values.Scope{Project: "shop", Class: providerkit.ClassProduction}
 	seeded.set(t, scope, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, "postgres://through-kms")
 

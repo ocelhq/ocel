@@ -166,15 +166,15 @@ func awaitTrace(result <-chan engineTrace, grace time.Duration) engineTrace {
 	}
 }
 
-func reportTrace(report providerkit.Reporter, trace engineTrace, runErr error) {
-	if report == nil || (trace.ResourceCount == 0 && runErr == nil) {
+func reportTrace(progress providerkit.Progress, trace engineTrace, runErr error) {
+	if progress == nil || (trace.ResourceCount == 0 && runErr == nil) {
 		return
 	}
 	batchErr := runErr
 	if batchErr == nil && trace.Failed {
 		batchErr = errResourceOperationFailed
 	}
-	report.Span(engineBatchSpanName, trace.Start, trace.End, batchErr, providerkit.AttrResourceCount(trace.ResourceCount))
+	progress.Span(engineBatchSpanName, trace.Start, trace.End, batchErr, providerkit.AttrResourceCount(trace.ResourceCount))
 
 	for _, s := range trace.Standouts {
 		var standoutErr error
@@ -188,7 +188,7 @@ func reportTrace(report providerkit.Reporter, trace engineTrace, runErr error) {
 		if s.Name != "" {
 			attrs = append(attrs, providerkit.AttrResourceName(s.Name))
 		}
-		report.Span(standoutName(s.Op, s.Failed), s.Start, s.End, standoutErr, attrs...)
+		progress.Span(standoutName(s.Op, s.Failed), s.Start, s.End, standoutErr, attrs...)
 	}
 }
 

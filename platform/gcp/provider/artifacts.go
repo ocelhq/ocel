@@ -104,7 +104,7 @@ func (a artifacts) Open(ctx context.Context, ref providerkit.ArtifactRef) (io.Re
 	return reader, nil
 }
 
-func (a artifacts) RemovePrefix(ctx context.Context, class providerkit.Class, prefix string, report providerkit.Reporter) error {
+func (a artifacts) RemovePrefix(ctx context.Context, class providerkit.Class, prefix string, progress providerkit.Progress) error {
 	if prefix == "" {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"an empty prefix names every artifact this project keeps")
@@ -122,8 +122,8 @@ func (a artifacts) RemovePrefix(ctx context.Context, class providerkit.Class, pr
 	if err := errors.Join(errs...); err != nil {
 		return err
 	}
-	if report != nil {
-		report.Detail("removed " + prefix)
+	if progress != nil {
+		progress.Detail("removed " + prefix)
 	}
 	return nil
 }

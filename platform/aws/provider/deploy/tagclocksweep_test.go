@@ -18,17 +18,17 @@ type fakeEngine struct {
 
 var _ kitpulumi.Engine = (*fakeEngine)(nil)
 
-func (f *fakeEngine) Preview(_ context.Context, setup kitpulumi.Setup, op kitpulumi.Op, _ providerkit.Reporter) ([]providerkit.Change, error) {
+func (f *fakeEngine) Preview(_ context.Context, setup kitpulumi.Setup, op kitpulumi.Op, _ providerkit.Progress) ([]providerkit.Change, error) {
 	f.record("preview-" + string(op) + " " + setup.Stack)
 	return nil, nil
 }
 
-func (f *fakeEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerkit.Reporter) (auto.OutputMap, error) {
+func (f *fakeEngine) Up(_ context.Context, setup kitpulumi.Setup, _ providerkit.Progress) (auto.OutputMap, error) {
 	f.record("up-stack " + setup.Stack)
 	return auto.OutputMap{}, nil
 }
 
-func (f *fakeEngine) Destroy(_ context.Context, setup kitpulumi.Setup, _ providerkit.Reporter) error {
+func (f *fakeEngine) Destroy(_ context.Context, setup kitpulumi.Setup, _ providerkit.Progress) error {
 	f.record("destroy-stack " + setup.Stack)
 	return nil
 }
@@ -47,7 +47,7 @@ func (s *sweepingClock) SweepTagClock(_ context.Context, project string, stack n
 	return s.err
 }
 
-func tearingDown(t *testing.T, clock TagSweeper, engine kitpulumi.Engine) *Releaser {
+func tearingDown(t *testing.T, clock TagSweeper, engine kitpulumi.Engine) *Stacks {
 	t.Helper()
 	cfg := Config{
 		PulumiProject: "ocel",
@@ -55,7 +55,7 @@ func tearingDown(t *testing.T, clock TagSweeper, engine kitpulumi.Engine) *Relea
 		BackendURL:    "file://" + t.TempDir(),
 		Tags:          clock,
 	}
-	return newReleaser(fixed(cfg), &Realized{}, engine)
+	return newStacks(fixed(cfg), &Realized{}, engine)
 }
 
 func teardownRef() providerkit.StackRef {

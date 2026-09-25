@@ -33,7 +33,7 @@ func (r *publishedReader) Published(context.Context) ([]providerkit.Binding, err
 	return r.bindings, nil
 }
 
-func (r *publishedReader) Resolve(_ context.Context, binding string) (providerkit.Binding, error) {
+func (r *publishedReader) Named(_ context.Context, binding string) (providerkit.Binding, error) {
 	r.mu.Lock()
 	r.asked = append(r.asked, binding)
 	r.mu.Unlock()

@@ -134,7 +134,7 @@ func connectorStanding(t *testing.T, at *console, grants []string) *httptest.Ser
 		Vendor:  "fake",
 		Vars: providerkit.Vars{
 			Records: fake.NewRecords(),
-			Sealer:  fake.NewSealer(),
+			Cipher:  fake.NewCipher(),
 		},
 	})
 	if err != nil {

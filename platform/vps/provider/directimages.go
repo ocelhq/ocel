@@ -31,15 +31,15 @@ func (l loaded) Has(ctx context.Context, push providerkit.ImagePush) (bool, erro
 	return l.host.HoldsImage(ctx, push.Target)
 }
 
-func (l loaded) Push(ctx context.Context, push providerkit.ImagePush, report providerkit.Reporter) error {
+func (l loaded) Push(ctx context.Context, push providerkit.ImagePush, progress providerkit.Progress) error {
 	if push.Built == nil {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"%s: this release carries no built image to load onto the box", push.App)
 	}
-	return l.load(ctx, push, report)
+	return l.load(ctx, push, progress)
 }
 
-func (l loaded) load(ctx context.Context, push providerkit.ImagePush, report providerkit.Reporter) error {
+func (l loaded) load(ctx context.Context, push providerkit.ImagePush, progress providerkit.Progress) error {
 	ref, err := name.NewTag(push.Target, name.Insecure)
 	if err != nil {
 		return fmt.Errorf("%q is not a valid image tag: %w", push.Target, err)
@@ -51,8 +51,8 @@ func (l loaded) load(ctx context.Context, push providerkit.ImagePush, report pro
 	if err != nil {
 		return err
 	}
-	if report != nil && said != "" {
-		report.Detail(said)
+	if progress != nil && said != "" {
+		progress.Detail(said)
 	}
 	return nil
 }

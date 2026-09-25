@@ -27,7 +27,7 @@ func liveScope() values.Scope {
 }
 
 func liveStore(p *vps.Provider) values.Store {
-	return values.Store{Records: p.Records(), Sealer: p.Sealer()}
+	return values.Store{Records: p.Records(), Cipher: p.Cipher()}
 }
 
 type liveValues struct {
@@ -56,7 +56,7 @@ func resolving(t *testing.T, p *vps.Provider) liveValues {
 		t.Fatalf("publishing a binding onto the box = %v", err)
 	}
 
-	reader := values.Reader{Records: p.Records(), Sealer: p.Sealer(), Scope: liveScope()}
+	reader := values.Reader{Records: p.Records(), Cipher: p.Cipher(), Scope: liveScope()}
 	records, err := reader.Bindings(ctx, []string{"main"})
 	if err != nil {
 		t.Fatalf("resolving a binding back through the helper = %v", err)

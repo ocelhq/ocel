@@ -16,10 +16,10 @@ import (
 func requested(t *testing.T, server *certServer, hostname string) (providerkit.Certificate, []edge.Record) {
 	t.Helper()
 	var proved []edge.Record
-	cert, err := server.open(t).Certificate(context.Background(), providerkit.CertificateRequest{
+	cert, err := server.open(t).Certificates().Issue(context.Background(), providerkit.CertificateRequest{
 		Kind:     alb.Kind,
 		Hostname: hostname,
-		Report:   edge.DiscardReporter(),
+		Progress: edge.DiscardProgress(),
 		Prove: func(_ context.Context, cert providerkit.Certificate, records []edge.Record) (providerkit.Certificate, error) {
 			proved = records
 			cert.Written = records
@@ -117,10 +117,10 @@ func TestACertificateManagerRefusedToIssueIsReportedRatherThanWaitedOutForever(t
 	server.failure = "the authorization record does not resolve"
 
 	var refusal providerkit.Refusal
-	_, err := server.open(t).Certificate(context.Background(), providerkit.CertificateRequest{
+	_, err := server.open(t).Certificates().Issue(context.Background(), providerkit.CertificateRequest{
 		Kind:     alb.Kind,
 		Hostname: "shop.example.com",
-		Report:   edge.DiscardReporter(),
+		Progress: edge.DiscardProgress(),
 		Prove: func(_ context.Context, cert providerkit.Certificate, _ []edge.Record) (providerkit.Certificate, error) {
 			return cert, nil
 		},
@@ -141,10 +141,10 @@ func TestACertificateStillProvisioningWhenThePatienceRunsOutIsLeftPending(t *tes
 	server := newCertServer()
 	server.provisioning = 5
 
-	_, err := server.open(t).Certificate(context.Background(), providerkit.CertificateRequest{
+	_, err := server.open(t).Certificates().Issue(context.Background(), providerkit.CertificateRequest{
 		Kind:     alb.Kind,
 		Hostname: "shop.example.com",
-		Report:   edge.DiscardReporter(),
+		Progress: edge.DiscardProgress(),
 		Prove: func(_ context.Context, cert providerkit.Certificate, _ []edge.Record) (providerkit.Certificate, error) {
 			return cert, nil
 		},
@@ -161,7 +161,7 @@ func TestACertificateStillProvisioningIsWaitedOutRatherThanReportedIssued(t *tes
 	server.provisioning = 2
 	cert, _ := requested(t, server, "shop.example.com")
 
-	health, err := server.open(t).InspectCertificate(context.Background(), alb.Kind, "shop.example.com", cert)
+	health, err := server.open(t).Certificates().Inspect(context.Background(), alb.Kind, "shop.example.com", cert)
 	if err != nil {
 		t.Fatalf("InspectCertificate(%s) = %v", cert.ID, err)
 	}
@@ -176,7 +176,7 @@ func TestAnInspectedCertificateSaysWhatItCoversAndWhenItLapses(t *testing.T) {
 	server := newCertServer()
 	cert, _ := requested(t, server, "shop.example.com")
 
-	health, err := server.open(t).InspectCertificate(context.Background(), alb.Kind, "shop.example.com", cert)
+	health, err := server.open(t).Certificates().Inspect(context.Background(), alb.Kind, "shop.example.com", cert)
 	if err != nil {
 		t.Fatalf("InspectCertificate(%s) = %v", cert.ID, err)
 	}
@@ -200,7 +200,7 @@ func TestDiscardingACertificateTakesTheAuthorizationItWasProvedThroughWithIt(t *
 	server := newCertServer()
 	cert, _ := requested(t, server, "shop.example.com")
 
-	if err := server.open(t).DiscardCertificate(context.Background(), cert, edge.DiscardReporter()); err != nil {
+	if err := server.open(t).Certificates().Discard(context.Background(), cert, edge.DiscardProgress()); err != nil {
 		t.Fatalf("DiscardCertificate(%s) = %v", cert.ID, err)
 	}
 	dropped := server.dropped()
@@ -222,7 +222,7 @@ func TestACertificateNothingRequestedIsNotThisProvidersToDelete(t *testing.T) {
 	t.Parallel()
 
 	server := newCertServer()
-	if err := server.open(t).DiscardCertificate(context.Background(), providerkit.Certificate{}, edge.DiscardReporter()); err != nil {
+	if err := server.open(t).Certificates().Discard(context.Background(), providerkit.Certificate{}, edge.DiscardProgress()); err != nil {
 		t.Errorf("DiscardCertificate() of a binding naming no certificate = %v, want it tolerated", err)
 	}
 	if got := server.dropped(); len(got) != 0 {

@@ -124,7 +124,7 @@ func (p warmPass) warmOne(ctx context.Context, target warmTarget) (string, warmR
 	if failure != "" {
 		return failure, warmReply{}, false
 	}
-	outcome, ok := reply.report()
+	outcome, ok := reply.progress()
 	return outcome, reply, ok
 }
 
@@ -202,7 +202,7 @@ type warmReply struct {
 	Error        string            `json:"error"`
 }
 
-func (r warmReply) report() (string, bool) {
+func (r warmReply) progress() (string, bool) {
 	switch r.State {
 	case warmStatePublished:
 		if !r.Uploaded {

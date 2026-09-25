@@ -38,7 +38,7 @@ type Registry struct {
 	Deps Deps
 }
 
-var _ providerkit.EdgeRegistry = Registry{}
+var _ providerkit.Edges = Registry{}
 
 func (r Registry) Supported() []edge.Kind { return SupportedEdges() }
 

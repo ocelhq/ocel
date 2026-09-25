@@ -10,7 +10,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
+func (b Bootstrap) PlanRemove(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
 	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(class))
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -49,7 +49,7 @@ func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 	return plan, nil
 }
 
-func (b Bootstrapper) standingEdges(ctx context.Context, class providerkit.Class, deployed bootstrap.Deployed) ([]edge.Edge, error) {
+func (b Bootstrap) standingEdges(ctx context.Context, class providerkit.Class, deployed bootstrap.Deployed) ([]edge.Edge, error) {
 	held := bootstrap.EdgeKindsFor(deployed.Features.Names())
 	fronts := []edge.Edge{b.Edge}
 	for _, kind := range b.Edges.Supported() {
@@ -75,7 +75,7 @@ func (b Bootstrapper) standingEdges(ctx context.Context, class providerkit.Class
 	return fronts, nil
 }
 
-func (b Bootstrapper) removedEdgeGroup(ctx context.Context, class providerkit.Class, front edge.Edge) (*providerkit.ChangeGroup, error) {
+func (b Bootstrap) removedEdgeGroup(ctx context.Context, class providerkit.Class, front edge.Edge) (*providerkit.ChangeGroup, error) {
 	remover, ok := front.(edge.BootstrapRemover)
 	if !ok {
 		return nil, nil

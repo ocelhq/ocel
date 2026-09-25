@@ -184,7 +184,7 @@ func TestTheProviderWrapsEveryContainerInTheRuntimeItCarries(t *testing.T) {
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 	for arch, machine := range map[string]elf.Machine{host.ArchAMD64: elf.EM_X86_64, host.ArchARM64: elf.EM_AARCH64} {
-		held, err := p.ContainerRuntime(context.Background(), arch)
+		held, err := p.Runtime().Binary(context.Background(), arch)
 		if err != nil {
 			t.Fatalf("ContainerRuntime(%s) = %v", arch, err)
 		}
@@ -196,7 +196,7 @@ func TestTheProviderWrapsEveryContainerInTheRuntimeItCarries(t *testing.T) {
 			t.Errorf("ContainerRuntime(%s) is built for %s", arch, binary.Machine)
 		}
 	}
-	if _, err := p.ContainerRuntime(context.Background(), "riscv64"); err == nil {
+	if _, err := p.Runtime().Binary(context.Background(), "riscv64"); err == nil {
 		t.Error("ContainerRuntime(riscv64) handed something back, and a riscv64 image would be wrapped in a runtime that cannot run on it")
 	}
 }

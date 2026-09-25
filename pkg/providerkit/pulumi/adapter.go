@@ -49,11 +49,11 @@ type Access struct {
 }
 
 type Engine interface {
-	Preview(ctx context.Context, setup Setup, op Op, report providerkit.Reporter) ([]providerkit.Change, error)
+	Preview(ctx context.Context, setup Setup, op Op, progress providerkit.Progress) ([]providerkit.Change, error)
 
-	Up(ctx context.Context, setup Setup, report providerkit.Reporter) (auto.OutputMap, error)
+	Up(ctx context.Context, setup Setup, progress providerkit.Progress) (auto.OutputMap, error)
 
-	Destroy(ctx context.Context, setup Setup, report providerkit.Reporter) error
+	Destroy(ctx context.Context, setup Setup, progress providerkit.Progress) error
 
 	Outputs(ctx context.Context, setup Setup) (auto.OutputMap, error)
 }
@@ -203,7 +203,7 @@ func (a *Adapter) Stack(ctx context.Context, plan providerkit.StackPlan) (auto.C
 	return a.config.Configure(ctx, plan)
 }
 
-func (a *Adapter) setup(ctx context.Context, plan providerkit.StackPlan, op Op, report providerkit.Reporter) (Setup, error) {
+func (a *Adapter) setup(ctx context.Context, plan providerkit.StackPlan, op Op, progress providerkit.Progress) (Setup, error) {
 	setup, err := a.workspace(plan, op)
 	if err != nil {
 		return Setup{}, err
@@ -212,7 +212,7 @@ func (a *Adapter) setup(ctx context.Context, plan providerkit.StackPlan, op Op, 
 		return Setup{}, err
 	}
 	if a.config.Engine == nil {
-		command, err := pinned.install(ctx, report)
+		command, err := pinned.install(ctx, progress)
 		if err != nil {
 			return Setup{}, err
 		}
@@ -228,20 +228,20 @@ func (a *Adapter) engine() Engine {
 	return autoEngine{}
 }
 
-func (a *Adapter) Preview(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.Plan, error) {
-	return a.preview(ctx, plan, OpProvision, report)
+func (a *Adapter) Preview(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
+	return a.preview(ctx, plan, OpProvision, progress)
 }
 
-func (a *Adapter) PreviewDestroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) (providerkit.Plan, error) {
-	return a.preview(ctx, providerkit.StackPlan{Ref: ref}, OpDestroy, report)
+func (a *Adapter) PreviewDestroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (providerkit.Plan, error) {
+	return a.preview(ctx, providerkit.StackPlan{Ref: ref}, OpDestroy, progress)
 }
 
-func (a *Adapter) preview(ctx context.Context, plan providerkit.StackPlan, op Op, report providerkit.Reporter) (providerkit.Plan, error) {
-	setup, err := a.setup(ctx, plan, op, report)
+func (a *Adapter) preview(ctx context.Context, plan providerkit.StackPlan, op Op, progress providerkit.Progress) (providerkit.Plan, error) {
+	setup, err := a.setup(ctx, plan, op, progress)
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
-	changes, err := a.engine().Preview(ctx, setup, op, report)
+	changes, err := a.engine().Preview(ctx, setup, op, progress)
 	if err != nil {
 		return providerkit.Plan{}, busy(err, setup)
 	}
@@ -307,12 +307,12 @@ func plannedAction(op apitype.OpType) (providerkit.ChangeAction, bool) {
 	}
 }
 
-func (a *Adapter) Run(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
-	setup, err := a.setup(ctx, plan, OpProvision, report)
+func (a *Adapter) Run(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
+	setup, err := a.setup(ctx, plan, OpProvision, progress)
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
-	outputs, err := a.engine().Up(ctx, setup, report)
+	outputs, err := a.engine().Up(ctx, setup, progress)
 	if err != nil {
 		return providerkit.StackResult{}, busy(err, setup)
 	}
@@ -322,19 +322,19 @@ func (a *Adapter) Run(ctx context.Context, plan providerkit.StackPlan, report pr
 	return a.config.Decode(ctx, plan, outputs)
 }
 
-func (a *Adapter) Destroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
-	setup, err := a.setup(ctx, providerkit.StackPlan{Ref: ref}, OpDestroy, report)
+func (a *Adapter) Destroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
+	setup, err := a.setup(ctx, providerkit.StackPlan{Ref: ref}, OpDestroy, progress)
 	if err != nil {
 		return err
 	}
-	if err := a.engine().Destroy(ctx, setup, report); err != nil {
+	if err := a.engine().Destroy(ctx, setup, progress); err != nil {
 		return busy(err, setup)
 	}
 	return nil
 }
 
-func (a *Adapter) Outputs(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) (auto.OutputMap, error) {
-	setup, err := a.setup(ctx, providerkit.StackPlan{Ref: ref}, OpProvision, report)
+func (a *Adapter) Outputs(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (auto.OutputMap, error) {
+	setup, err := a.setup(ctx, providerkit.StackPlan{Ref: ref}, OpProvision, progress)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +357,7 @@ func busy(err error, setup Setup) error {
 
 type autoEngine struct{}
 
-func (autoEngine) Preview(ctx context.Context, setup Setup, op Op, report providerkit.Reporter) ([]providerkit.Change, error) {
+func (autoEngine) Preview(ctx context.Context, setup Setup, op Op, progress providerkit.Progress) ([]providerkit.Change, error) {
 	stack, err := auto.UpsertStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), setup.Program, setup.Options...)
 	if err != nil {
 		return nil, fmt.Errorf("prepare stack %s: %w", setup.Stack, err)
@@ -368,8 +368,8 @@ func (autoEngine) Preview(ctx context.Context, setup Setup, op Op, report provid
 
 	engineEvents := make(chan events.EngineEvent, 256)
 	rows := drainRows(engineEvents)
-	if report != nil {
-		report.Say("Working out what would change")
+	if progress != nil {
+		progress.Say("Working out what would change")
 	}
 
 	if op == OpDestroy {
@@ -414,7 +414,7 @@ func awaitRows(drained <-chan []providerkit.Change, grace time.Duration) ([]prov
 	}
 }
 
-func (autoEngine) Up(ctx context.Context, setup Setup, report providerkit.Reporter) (auto.OutputMap, error) {
+func (autoEngine) Up(ctx context.Context, setup Setup, progress providerkit.Progress) (auto.OutputMap, error) {
 	stack, err := auto.UpsertStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), setup.Program, setup.Options...)
 	if err != nil {
 		return nil, fmt.Errorf("prepare stack %s: %w", setup.Stack, err)
@@ -423,7 +423,7 @@ func (autoEngine) Up(ctx context.Context, setup Setup, report providerkit.Report
 		return nil, err
 	}
 
-	lines := detailWriter(report)
+	lines := detailWriter(progress)
 	opts := []optup.Option{optup.Parallel(setup.Parallel)}
 	if lines != nil {
 		opts = append(opts, optup.ProgressStreams(lines))
@@ -445,7 +445,7 @@ func (autoEngine) Up(ctx context.Context, setup Setup, report providerkit.Report
 	if trace.Start.IsZero() {
 		trace.Start, trace.End = start, end
 	}
-	reportTrace(report, trace, upErr)
+	reportTrace(progress, trace, upErr)
 
 	if upErr != nil {
 		return nil, fmt.Errorf("provision stack %s: %w", setup.Stack, upErr)
@@ -453,11 +453,11 @@ func (autoEngine) Up(ctx context.Context, setup Setup, report providerkit.Report
 	return res.Outputs, nil
 }
 
-func (autoEngine) Destroy(ctx context.Context, setup Setup, report providerkit.Reporter) error {
+func (autoEngine) Destroy(ctx context.Context, setup Setup, progress providerkit.Progress) error {
 	stack, err := auto.SelectStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), nil, setup.Options...)
 	if auto.IsSelectStack404Error(err) {
-		if report != nil {
-			report.Say("No stack " + setup.Stack + " to destroy")
+		if progress != nil {
+			progress.Say("No stack " + setup.Stack + " to destroy")
 		}
 		return nil
 	}
@@ -465,10 +465,10 @@ func (autoEngine) Destroy(ctx context.Context, setup Setup, report providerkit.R
 		return fmt.Errorf("select stack %s: %w", setup.Stack, err)
 	}
 
-	if report != nil {
-		report.Say("Destroying resources (this can take several minutes)")
+	if progress != nil {
+		progress.Say("Destroying resources (this can take several minutes)")
 	}
-	lines := detailWriter(report)
+	lines := detailWriter(progress)
 	opts := []optdestroy.Option{optdestroy.Parallel(setup.Parallel)}
 	if lines != nil {
 		opts = append(opts, optdestroy.ProgressStreams(lines))

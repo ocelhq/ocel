@@ -4,7 +4,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type EdgeRegistry interface {
+type Edges interface {
 	Supported() []edge.Kind
 
 	Default() edge.Kind

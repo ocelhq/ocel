@@ -48,7 +48,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	if err != nil {
 		return deploy.Config{}, err
 	}
-	store := values.Store{Records: p.Records(), Sealer: p.Sealer()}
+	store := values.Store{Records: p.Records(), Cipher: p.Cipher()}
 	referenced, err := store.ReferenceOwners(ctx, values.Scope{Project: scope.Slug, Class: scope.Class})
 	if err != nil {
 		return deploy.Config{}, err

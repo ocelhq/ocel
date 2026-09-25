@@ -33,7 +33,7 @@ func compiled(t *testing.T, pkg, arch string) (string, string) {
 	funcDir := filepath.Join(appDir, "functions", "index.func")
 	err := Compile(context.Background(), Compilation{
 		App:     "web",
-		Runtime: providerkit.Runtime{Name: "go", Arch: arch},
+		Runtime: providerkit.Framework{Name: "go", Arch: arch},
 		Source:  pkg,
 		FuncDir: funcDir,
 		AppDir:  appDir,
@@ -91,7 +91,7 @@ func TestCompileDeclaresTheCommandTheArtifactIsServedBy(t *testing.T) {
 	if len(config.Command) != 1 || config.Command[0] != "./web" {
 		t.Errorf("command = %q, want the artifact's own binary, which whatever hosts it execs", config.Command)
 	}
-	if config.Runtime != (providerkit.Runtime{Name: "go", Arch: "x86_64"}) {
+	if config.Runtime != (providerkit.Framework{Name: "go", Arch: "x86_64"}) {
 		t.Errorf("runtime = %+v, want the go runtime at the architecture it was built for", config.Runtime)
 	}
 	if config.App != "web" {
@@ -154,7 +154,7 @@ func TestCompileRefusesAnAppDirectoryThatIsNotItsOwnModuleRoot(t *testing.T) {
 
 	err := Compile(context.Background(), Compilation{
 		App:        "web",
-		Runtime:    providerkit.Runtime{Name: "go", Arch: "x86_64"},
+		Runtime:    providerkit.Framework{Name: "go", Arch: "x86_64"},
 		Source:     source,
 		Entrypoint: filepath.Join("cmd", "server"),
 		FuncDir:    filepath.Join(t.TempDir(), "index.func"),
@@ -169,7 +169,7 @@ func TestCompileRefusesAnArchitectureGoBuildsNothingFor(t *testing.T) {
 	t.Parallel()
 	err := Compile(context.Background(), Compilation{
 		App:     "web",
-		Runtime: providerkit.Runtime{Name: "go", Arch: "riscv"},
+		Runtime: providerkit.Framework{Name: "go", Arch: "riscv"},
 		Source:  goModule(t),
 		FuncDir: filepath.Join(t.TempDir(), "index.func"),
 		AppDir:  t.TempDir(),
@@ -187,7 +187,7 @@ func TestCompileReportsWhatTheCompilerSaidWhenTheAppDoesNotBuild(t *testing.T) {
 	}
 	err := Compile(context.Background(), Compilation{
 		App:     "web",
-		Runtime: providerkit.Runtime{Name: "go", Arch: "x86_64"},
+		Runtime: providerkit.Framework{Name: "go", Arch: "x86_64"},
 		Source:  pkg,
 		FuncDir: filepath.Join(t.TempDir(), "index.func"),
 		AppDir:  t.TempDir(),

@@ -126,7 +126,7 @@ type execution struct {
 	Arch    string
 }
 
-func executionFor(runtime providerkit.Runtime) (execution, error) {
+func executionFor(runtime providerkit.Framework) (execution, error) {
 	if runtime.Name != "" && !providerkit.KnownRuntime(runtime.Name) {
 		return execution{}, providerkit.Refuse(providerkit.CodeInvalid, "this provider has no runtime named %q", runtime.Name)
 	}
@@ -258,12 +258,12 @@ func readPlanOutputs(ctx context.Context, plan providerkit.StackPlan, placed []p
 	return values, nil
 }
 
-func resolvePlanBindings(ctx context.Context, bindings providerkit.BindingReader, names []string) (map[string]providerkit.Binding, error) {
+func resolvePlanBindings(ctx context.Context, bindings providerkit.Bindings, names []string) (map[string]providerkit.Binding, error) {
 	held := make([]providerkit.Binding, len(names))
 	group, gctx := errgroup.WithContext(ctx)
 	for i, name := range names {
 		group.Go(func() error {
-			record, err := bindings.Resolve(gctx, name)
+			record, err := bindings.Named(gctx, name)
 			if err != nil {
 				return err
 			}

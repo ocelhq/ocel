@@ -70,7 +70,7 @@ func (u Unserved) Error() string { return u.Err.Error() }
 
 func (u Unserved) Unwrap() error { return u.Err }
 
-func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Reporter) error {
+func (h *Host) Release(ctx context.Context, rel Release, progress providerkit.Progress) error {
 	for _, app := range rel.Apps {
 		if strings.TrimSpace(app.HealthPath) == "" {
 			return Unserved{providerkit.Refuse(providerkit.CodeInvalid,
@@ -90,7 +90,7 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 	for _, app := range rel.Apps {
 		gates = append(gates, app.gate())
 	}
-	say(report, "Checking "+strings.Join(gates, ", ")+", then flipping the proxy")
+	say(progress, "Checking "+strings.Join(gates, ", ")+", then flipping the proxy")
 	gated, err := h.stream(ctx, words(gateCommand(rel.DeployTimeout, gates)), nil, elevation)
 	if err != nil {
 		return h.ungated(ctx, rel, "never came back with an exit code", err.Error(), "", elevation)
@@ -120,9 +120,9 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 		return h.unfronted(ctx, rel, err, elevation)
 	}
 
-	if report != nil {
+	if progress != nil {
 		for _, retiree := range cut.retiring {
-			report.Detail(fmt.Sprintf("%s has %s to drain, then %s",
+			progress.Detail(fmt.Sprintf("%s has %s to drain, then %s",
 				containerOf(retiree), rel.DrainTimeout, drainCeiling))
 		}
 	}
@@ -133,11 +133,11 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 	if flipped.Code != 0 {
 		return h.unflipped(ctx, rel, cut, fmt.Sprintf("exited %d", flipped.Code), strings.TrimSpace(flipped.Stderr), elevation)
 	}
-	tellDrain(report, flipped.Stdout)
-	return h.settle(ctx, rel, cut, report, elevation)
+	tellDrain(progress, flipped.Stdout)
+	return h.settle(ctx, rel, cut, progress, elevation)
 }
 
-func (h *Host) settle(ctx context.Context, rel Release, cut cutover, report providerkit.Reporter, elevation string) error {
+func (h *Host) settle(ctx context.Context, rel Release, cut cutover, progress providerkit.Progress, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	var failed, unstopped []string
@@ -149,7 +149,7 @@ func (h *Host) settle(ctx context.Context, rel Release, cut cutover, report prov
 	}
 	refused := map[string]error{}
 	for _, retiree := range idle {
-		say(report, "Stopping "+containerOf(retiree))
+		say(progress, "Stopping "+containerOf(retiree))
 		if err := h.StopContainer(ctx, containerOf(retiree)); err != nil {
 			unstopped = append(unstopped, retiree)
 			refused[retiree] = err
@@ -267,18 +267,18 @@ func (c cutover) back(standing RoutingTable) (RoutingTable, error) {
 	return standing, nil
 }
 
-func tellDrain(report providerkit.Reporter, said string) {
-	if report == nil {
+func tellDrain(progress providerkit.Progress, said string) {
+	if progress == nil {
 		return
 	}
 	for line := range strings.Lines(said) {
 		fields := strings.Fields(line)
 		switch {
 		case len(fields) == 3 && fields[0] == switchboard.DrainExpired:
-			report.Detail(fmt.Sprintf("%s still held %s request(s) when the drain window closed: %s",
+			progress.Detail(fmt.Sprintf("%s still held %s request(s) when the drain window closed: %s",
 				fields[1], fields[2], drainCeiling))
 		case len(fields) == 2 && fields[0] == switchboard.Drained:
-			report.Detail(containerOf(fields[1]) + " reported nothing in flight")
+			progress.Detail(containerOf(fields[1]) + " reported nothing in flight")
 		}
 	}
 }

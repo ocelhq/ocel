@@ -127,13 +127,13 @@ func row(raw string) (providerkit.Revision, []byte, error) {
 	return providerkit.Revision(revision), body, nil
 }
 
-type Sealer struct{ Root string }
+type Cipher struct{ Root string }
 
-func (Sealer) Seal(context.Context, providerkit.Coordinate, []byte) ([]byte, error) {
+func (Cipher) Seal(context.Context, providerkit.Coordinate, []byte) ([]byte, error) {
 	return nil, errors.New("the box seals values only through its helper")
 }
 
-func (s Sealer) Open(_ context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+func (s Cipher) Open(_ context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
 	if at.Class == "" {
 		return nil, fmt.Errorf("%s names no class", at.Name)
 	}
@@ -248,5 +248,5 @@ func decodeSegment(segment string) (string, error) {
 
 var (
 	_ ports.RecordStore = Records{}
-	_ ports.Sealer      = Sealer{}
+	_ ports.Cipher      = Cipher{}
 )

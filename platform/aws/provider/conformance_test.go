@@ -20,7 +20,7 @@ func TestAWSProvider(t *testing.T) {
 		Spec:    providerkit.Spec{Version: "test", New: provider.New},
 		Options: providerkit.Options{"region": "us-east-1"},
 		Binary:  buildProvider(t),
-		Certifier: &conformance.CertifierChecks{
+		Certificates: &conformance.CertificateChecks{
 			Kind: edges.DefaultKind,
 		},
 	})

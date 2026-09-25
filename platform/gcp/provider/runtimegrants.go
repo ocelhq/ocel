@@ -21,7 +21,7 @@ func runtimeMember(c *clients, class providerkit.Class) string {
 	return "serviceAccount:" + c.RuntimeAccountEmail(class)
 }
 
-func (b bootstrapper) grantReads(ctx context.Context, class providerkit.Class) error {
+func (b bootstrap) grantReads(ctx context.Context, class providerkit.Class) error {
 	member := runtimeMember(b.clients, class)
 	condition := databaseCondition(b.clients.project, b.clients.Namespace())
 	if err := b.clients.bindProjectRole(ctx, member, runtimeRecordsRole, condition, true); err != nil {
@@ -33,7 +33,7 @@ func (b bootstrapper) grantReads(ctx context.Context, class providerkit.Class) e
 	return nil
 }
 
-func (b bootstrapper) forgetReads(ctx context.Context, class providerkit.Class) error {
+func (b bootstrap) forgetReads(ctx context.Context, class providerkit.Class) error {
 	member := runtimeMember(b.clients, class)
 	condition := databaseCondition(b.clients.project, b.clients.Namespace())
 	return everyStep(
@@ -45,7 +45,7 @@ func (b bootstrapper) forgetReads(ctx context.Context, class providerkit.Class) 
 	)
 }
 
-func (b bootstrapper) readsHeld(ctx context.Context, class providerkit.Class) (bool, error) {
+func (b bootstrap) readsHeld(ctx context.Context, class providerkit.Class) (bool, error) {
 	member := runtimeMember(b.clients, class)
 	records, err := b.clients.projectRoleHeld(ctx, member, runtimeRecordsRole, databaseCondition(b.clients.project, b.clients.Namespace()))
 	if err != nil || !records {

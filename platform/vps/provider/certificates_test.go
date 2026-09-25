@@ -65,10 +65,10 @@ func pinning(t *testing.T, machine *box, block []byte, at string) *vps.Provider 
 
 func certificateFor(t *testing.T, p *vps.Provider, hostname string) providerkit.Certificate {
 	t.Helper()
-	cert, err := p.Certificate(context.Background(), providerkit.CertificateRequest{
+	cert, err := p.Certificates().Issue(context.Background(), providerkit.CertificateRequest{
 		Kind:     boxedge.Kind,
 		Hostname: hostname,
-		Report:   edge.DiscardReporter(),
+		Progress: edge.DiscardProgress(),
 		Prove: func(context.Context, providerkit.Certificate, []edge.Record) (providerkit.Certificate, error) {
 			t.Error("the box asked for a validation record to be proved, and ocel asks no CA on a box")
 			return providerkit.Certificate{}, nil
@@ -90,7 +90,7 @@ func TestInspectingAPinnedCertificateNeverOpensTheKeyBesideIt(t *testing.T) {
 	if cert.ID != certs.PinHandle(wildcardPin) {
 		t.Fatalf("Certificate() = %q, want %q", cert.ID, certs.PinHandle(wildcardPin))
 	}
-	if _, err := p.InspectCertificate(context.Background(), boxedge.Kind, "pr-7.preview.example.com", cert); err != nil {
+	if _, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, "pr-7.preview.example.com", cert); err != nil {
 		t.Fatalf("InspectCertificate() = %v", err)
 	}
 
@@ -113,7 +113,7 @@ func TestAPinnedCertificateReportsItsOwnExpiryAndNamesTheOperatorAsTheRenewer(t 
 	p := pinning(t, machine, selfSigned(t, []string{"*.preview.example.com"}, 11*24*time.Hour), wildcardPin)
 	cert := certificateFor(t, p, "pr-7.preview.example.com")
 
-	health, err := p.InspectCertificate(context.Background(), boxedge.Kind, "pr-7.preview.example.com", cert)
+	health, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, "pr-7.preview.example.com", cert)
 	if err != nil {
 		t.Fatalf("InspectCertificate() = %v", err)
 	}
@@ -143,8 +143,8 @@ func TestAPinThatDoesNotCoverTheHostnameIsRefusedAtBindWithAReasonThatNamesBoth(
 		func(context.Context) (host.Conn, error) { return machine, nil },
 	)
 
-	_, err := p.Certificate(context.Background(), providerkit.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.com", Report: edge.DiscardReporter(),
+	_, err := p.Certificates().Issue(context.Background(), providerkit.CertificateRequest{
+		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.com", Progress: edge.DiscardProgress(),
 	})
 	var refusal providerkit.Refusal
 	if !asRefusal(err, &refusal) {
@@ -169,8 +169,8 @@ func TestAnExpiredPinIsRefusedRatherThanServedUnderAHandleThatReadsHealthy(t *te
 		func(context.Context) (host.Conn, error) { return machine, nil },
 	)
 
-	_, err := p.Certificate(context.Background(), providerkit.CertificateRequest{
-		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.com", Report: edge.DiscardReporter(),
+	_, err := p.Certificates().Issue(context.Background(), providerkit.CertificateRequest{
+		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.com", Progress: edge.DiscardProgress(),
 	})
 	var refusal providerkit.Refusal
 	if !asRefusal(err, &refusal) || !strings.Contains(refusal.Message, "expired") {
@@ -208,7 +208,7 @@ func TestAnUnpinnedHostnameGetsTheProxysOwnHandleAndAsksNothingOfTheBox(t *testi
 	}) {
 		t.Errorf("minting a handle asked the proxy nothing (%v), so a box the CA has already refused for this registered domain names a slot it knows will stay empty and the user is told when the browser tells them", machine.commands())
 	}
-	if err := p.DiscardCertificate(context.Background(), cert, edge.DiscardReporter()); err != nil {
+	if err := p.Certificates().Discard(context.Background(), cert, edge.DiscardProgress()); err != nil {
 		t.Errorf("DiscardCertificate() = %v, want nil", err)
 	}
 }
@@ -224,7 +224,7 @@ func TestTheProxyHandleIsReadOffTheHandshakeAndNeverOffCaddysDataDirectory(t *te
 	)
 
 	cert := certificateFor(t, p, "shop.example.com")
-	health, err := p.InspectCertificate(context.Background(), boxedge.Kind, "shop.example.com", cert)
+	health, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, "shop.example.com", cert)
 	if err != nil {
 		t.Fatalf("InspectCertificate() = %v", err)
 	}
@@ -266,7 +266,7 @@ func TestAProxyServedLeafPastItsNotAfterReportsExpiredRatherThanServing(t *testi
 		)
 
 		cert := certificateFor(t, p, "shop.example.com")
-		health, err := p.InspectCertificate(context.Background(), boxedge.Kind, "shop.example.com", cert)
+		health, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, "shop.example.com", cert)
 		if err != nil {
 			t.Fatalf("InspectCertificate() over %s = %v", what, err)
 		}
@@ -299,7 +299,7 @@ func TestAProxyHandleWithNothingServedYetIsPendingRatherThanIssued(t *testing.T)
 	)
 
 	cert := certificateFor(t, p, "shop.example.com")
-	health, err := p.InspectCertificate(context.Background(), boxedge.Kind, "shop.example.com", cert)
+	health, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, "shop.example.com", cert)
 	if err != nil {
 		t.Fatalf("InspectCertificate() over a host the proxy serves nothing for = %v, want it reported rather than refused", err)
 	}
@@ -323,7 +323,7 @@ func TestAPinHandleNamingAPathOutsideTheProxysOwnDirectoryIsRefusedBeforeItIsRea
 		func(context.Context) (host.Conn, error) { return machine, nil },
 	)
 
-	_, err := p.InspectCertificate(context.Background(), boxedge.Kind, "pr-7.preview.example.com",
+	_, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, "pr-7.preview.example.com",
 		providerkit.Certificate{ID: certs.PinHandle(elsewhere)})
 	var refusal providerkit.Refusal
 	if !asRefusal(err, &refusal) || !strings.Contains(refusal.Message, caddy.PinsDir) {
@@ -353,7 +353,7 @@ func TestABoxHoldsNoCertificateForThePreviewWildcardItself(t *testing.T) {
 		t.Fatalf("Certificate(%s) = %q: the catch-all terminates nothing and every preview under it holds its own http-01 certificate, so a handle here names a certificate this box will never obtain and `ocel domain status` reports forever on a slot nothing fills",
 			wildcard, cert.ID)
 	}
-	health, err := p.InspectCertificate(context.Background(), boxedge.Kind, wildcard, cert)
+	health, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, wildcard, cert)
 	if err != nil {
 		t.Fatalf("InspectCertificate() = %v", err)
 	}

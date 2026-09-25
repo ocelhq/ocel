@@ -22,7 +22,9 @@ type connectorHost struct {
 	removed bool
 }
 
-func (h *connectorHost) DescribeConnectorTarget(context.Context) (providerkit.ConnectorTarget, error) {
+func (h *connectorHost) Connector() providerkit.Connector { return h }
+
+func (h *connectorHost) Target(context.Context) (providerkit.ConnectorTarget, error) {
 	return providerkit.ConnectorTarget{
 		Fingerprint: "vps/SHA256:AAAA/ocel",
 		Hostname:    "box.example.com",
@@ -31,9 +33,9 @@ func (h *connectorHost) DescribeConnectorTarget(context.Context) (providerkit.Co
 	}, nil
 }
 
-func (h *connectorHost) InstallConnector(_ context.Context, install providerkit.ConnectorInstall, report providerkit.Reporter) (providerkit.ConnectorAddress, error) {
+func (h *connectorHost) Install(_ context.Context, install providerkit.ConnectorInstall, progress providerkit.Progress) (providerkit.ConnectorAddress, error) {
 	h.install = install
-	report.Say("wrote the connector")
+	progress.Say("wrote the connector")
 	compute := install.Compute
 	if compute == "" {
 		compute = providerkit.ComputeContainer
@@ -45,7 +47,7 @@ func (h *connectorHost) InstallConnector(_ context.Context, install providerkit.
 	}, nil
 }
 
-func (h *connectorHost) RemoveConnector(context.Context, providerkit.Reporter) error {
+func (h *connectorHost) Remove(context.Context, providerkit.Progress) error {
 	h.removed = true
 	return nil
 }

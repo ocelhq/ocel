@@ -48,7 +48,7 @@ type ResolverFunc func(ctx context.Context, scope Scope) (Config, error)
 
 func (f ResolverFunc) Release(ctx context.Context, scope Scope) (Config, error) { return f(ctx, scope) }
 
-type Releaser struct {
+type Stacks struct {
 	resolve  Resolver
 	realized *Realized
 	engine   kitpulumi.Engine
@@ -67,17 +67,17 @@ type Releaser struct {
 }
 
 type release struct {
-	*Releaser
+	*Stacks
 	cfg     Config
 	adapter *kitpulumi.Adapter
 }
 
-func NewReleaser(resolve Resolver, realized *Realized) *Releaser {
-	return newReleaser(resolve, realized, nil)
+func NewStacks(resolve Resolver, realized *Realized) *Stacks {
+	return newStacks(resolve, realized, nil)
 }
 
-func newReleaser(resolve Resolver, realized *Realized, engine kitpulumi.Engine) *Releaser {
-	return &Releaser{
+func newStacks(resolve Resolver, realized *Realized, engine kitpulumi.Engine) *Stacks {
+	return &Stacks{
 		resolve:  resolve,
 		realized: realized,
 		engine:   engine,
@@ -87,12 +87,12 @@ func newReleaser(resolve Resolver, realized *Realized, engine kitpulumi.Engine) 
 	}
 }
 
-func (r *Releaser) assetSetPlugin() (kitpulumi.Plugin, error) {
+func (r *Stacks) assetSetPlugin() (kitpulumi.Plugin, error) {
 	r.pluginOnce.Do(func() { r.plugin, r.pluginErr = assetSetPlugin(r.pending) })
 	return r.plugin, r.pluginErr
 }
 
-func (r *Releaser) at(ctx context.Context, ref providerkit.StackRef, kind edge.Kind) (*release, error) {
+func (r *Stacks) at(ctx context.Context, ref providerkit.StackRef, kind edge.Kind) (*release, error) {
 	scope := scopeOf(ref, kind)
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -107,7 +107,7 @@ func (r *Releaser) at(ctx context.Context, ref providerkit.StackRef, kind edge.K
 	if err != nil {
 		return nil, err
 	}
-	held := &release{Releaser: r, cfg: cfg}
+	held := &release{Stacks: r, cfg: cfg}
 	held.adapter = kitpulumi.New(kitpulumi.Config{
 		Access: kitpulumi.Access{
 			BackendURL: cfg.BackendURL,
@@ -349,7 +349,7 @@ func (r *release) refuseHandover(ctx context.Context, plan providerkit.StackPlan
 	return &HandoverError{Bindings: handed, Stack: plan.Ref.Name.String()}
 }
 
-func (r *Releaser) PackApp(ctx context.Context, packing providerkit.AppPacking, _ providerkit.Reporter) (providerkit.AppPack, error) {
+func (r *Stacks) PackApp(ctx context.Context, packing providerkit.AppPacking, _ providerkit.Progress) (providerkit.AppPack, error) {
 	held, err := r.at(ctx, packing.Ref, packing.Edge)
 	if err != nil {
 		return providerkit.AppPack{}, err
@@ -361,44 +361,44 @@ func (r *Releaser) PackApp(ctx context.Context, packing providerkit.AppPacking, 
 	return providerkit.AppPack{Overlay: bundle.overlay(), Carry: bundle}, nil
 }
 
-func (r *Releaser) Plan(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.Plan, error) {
+func (r *Stacks) Plan(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
 	held, err := r.at(ctx, plan.Ref, edgeKindOf(plan))
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
-	return held.plan(ctx, plan, report)
+	return held.plan(ctx, plan, progress)
 }
 
-func (r *Releaser) PlanDestroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) (providerkit.Plan, error) {
+func (r *Stacks) PlanDestroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (providerkit.Plan, error) {
 	held, err := r.at(ctx, ref, "")
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
-	return held.adapter.PreviewDestroy(ctx, ref, report)
+	return held.adapter.PreviewDestroy(ctx, ref, progress)
 }
 
-func (r *Releaser) Provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
+func (r *Stacks) Provision(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
 	held, err := r.at(ctx, plan.Ref, edgeKindOf(plan))
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
-	return held.provision(ctx, plan, report)
+	return held.provision(ctx, plan, progress)
 }
 
-func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.StackResult, error) {
+func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
 	r.realized.mark(naming.Sanitize(plan.Ref.Project), plan.Ref.Name)
 	if runsContainer(plan) {
-		return r.provisionContainer(ctx, plan, report)
+		return r.provisionContainer(ctx, plan, progress)
 	}
 	prepared, work, err := r.prepare(ctx, plan)
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
 	if work != nil && len(work.sets) > 0 {
-		r.pending.hold(work.stack, work.sets, report)
+		r.pending.hold(work.stack, work.sets, progress)
 		defer r.pending.drop(work.stack, work.sets)
 	}
-	result, err := r.adapter.Run(ctx, prepared, report)
+	result, err := r.adapter.Run(ctx, prepared, progress)
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
@@ -411,15 +411,15 @@ func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, rep
 	return result, nil
 }
 
-func (r *release) plan(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) (providerkit.Plan, error) {
+func (r *release) plan(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
 	if runsContainer(plan) {
-		return r.planContainer(ctx, plan, report)
+		return r.planContainer(ctx, plan, progress)
 	}
 	prepared, _, err := r.prepare(ctx, plan)
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
-	previewed, err := r.adapter.Preview(ctx, prepared, report)
+	previewed, err := r.adapter.Preview(ctx, prepared, progress)
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
@@ -472,12 +472,12 @@ func (r *release) prepare(ctx context.Context, plan providerkit.StackPlan) (prov
 	return plan, work, nil
 }
 
-func (r *Releaser) Destroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
+func (r *Stacks) Destroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
 	held, err := r.at(ctx, ref, "")
 	if err != nil {
 		return err
 	}
-	if err := held.adapter.Destroy(ctx, ref, report); err != nil {
+	if err := held.adapter.Destroy(ctx, ref, progress); err != nil {
 		return err
 	}
 	if held.cfg.Tags != nil {
@@ -485,10 +485,10 @@ func (r *Releaser) Destroy(ctx context.Context, ref providerkit.StackRef, report
 			return err
 		}
 	}
-	return r.releaseSubstrate(ctx, held.cfg.Records, ref, report)
+	return r.releaseSubstrate(ctx, held.cfg.Records, ref, progress)
 }
 
-func (r *Releaser) Inspect(ctx context.Context, ref providerkit.StackRef) (providerkit.StackState, error) {
+func (r *Stacks) Inspect(ctx context.Context, ref providerkit.StackRef) (providerkit.StackState, error) {
 	outputs, err := r.Outputs(ctx, ref, nil)
 	if err != nil {
 		return providerkit.StackState{}, err
@@ -496,12 +496,12 @@ func (r *Releaser) Inspect(ctx context.Context, ref providerkit.StackRef) (provi
 	return providerkit.StackState{Present: len(outputs) > 0}, nil
 }
 
-func (r *Releaser) Outputs(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) (auto.OutputMap, error) {
+func (r *Stacks) Outputs(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (auto.OutputMap, error) {
 	held, err := r.at(ctx, ref, "")
 	if err != nil {
 		return nil, err
 	}
-	return held.adapter.Outputs(ctx, ref, report)
+	return held.adapter.Outputs(ctx, ref, progress)
 }
 
-var _ providerkit.Releaser = (*Releaser)(nil)
+var _ providerkit.Stacks = (*Stacks)(nil)

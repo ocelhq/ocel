@@ -29,7 +29,7 @@ func previewPlan(label string) providerkit.StackPlan {
 			Functions: []providerkit.FunctionSpec{{
 				Name:    "fn--web--checkout",
 				Image:   "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:abc",
-				Runtime: providerkit.Runtime{Name: "nodejs", Arch: string(providerkit.ArchX8664)},
+				Runtime: providerkit.Framework{Name: "nodejs", Arch: string(providerkit.ArchX8664)},
 			}},
 		},
 	}
@@ -71,7 +71,7 @@ func TestAPreviewFunctionIsNamedApartFromThePreviewItShipsIn(t *testing.T) {
 }
 
 type heard struct {
-	providerkit.Reporter
+	providerkit.Progress
 	said []string
 }
 
@@ -82,13 +82,13 @@ func (h *heard) Detail(string) {}
 func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	report := &heard{}
+	progress := &heard{}
 
-	if _, err := p.ProvisionContainers(context.Background(), previewPlan(""), report); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), previewPlan(""), progress); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	if !slices.ContainsFunc(report.said, func(said string) bool { return strings.Contains(said, "is a preview and answers anyone") }) {
-		t.Errorf("the release said %q, want it to say the preview answers anyone with its url: Cloud Run has no invoker a browser could satisfy, so the reader has to know", report.said)
+	if !slices.ContainsFunc(progress.said, func(said string) bool { return strings.Contains(said, "is a preview and answers anyone") }) {
+		t.Errorf("the release said %q, want it to say the preview answers anyone with its url: Cloud Run has no invoker a browser could satisfy, so the reader has to know", progress.said)
 	}
 
 	production := &heard{}

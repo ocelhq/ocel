@@ -288,7 +288,7 @@ func TestLiveTheCertificateBehindAnUnboundHostnameStaysOnTheBox(t *testing.T) {
 	}
 
 	held := providerkit.Certificate{ID: certs.ProxyHandle(hostname)}
-	if err := p.DiscardCertificate(context.Background(), held, edge.DiscardReporter()); err != nil {
+	if err := p.Certificates().Discard(context.Background(), held, edge.DiscardProgress()); err != nil {
 		t.Errorf("DiscardCertificate(%s) = %v, want nil: ocel places no key material on a box so it holds authority to remove none, and the retained certificate is what makes a re-bind free against the CA's per-week ceiling",
 			held.ID, err)
 	}

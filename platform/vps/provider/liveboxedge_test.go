@@ -75,7 +75,7 @@ func promotes(t *testing.T, stack edge.EdgeStack, id, tag string, held release, 
 	}
 	if err := stack.Promote(ctx, edge.Promotion{
 		PromotionID: id, Ts: at, Builds: map[string]string{liveApp: tag},
-	}, "", edge.DiscardReporter()); err != nil {
+	}, "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote(%s): %v", id, err)
 	}
 }
@@ -232,7 +232,7 @@ func TestLiveARollbackOntoAnImageTheBoxHasSweptIsRefusedAndLeavesTheSiteServing(
 
 	err := stack.Promote(context.Background(), edge.Promotion{
 		PromotionID: "p-rollback", Ts: 3, Builds: map[string]string{liveApp: "one"},
-	}, "", edge.DiscardReporter())
+	}, "", edge.DiscardProgress())
 	if err == nil {
 		t.Fatal("a rollback onto an image this box no longer holds succeeded, and docker run would then reach for a registry with no credentials on this path")
 	}

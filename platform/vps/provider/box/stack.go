@@ -49,7 +49,7 @@ type standing struct {
 	record edge.DeploymentRecord
 }
 
-func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, report edge.Reporter) error {
+func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
 	ready := make([]standing, 0, len(promotion.Builds))
 	for _, app := range slices.Sorted(maps.Keys(promotion.Builds)) {
 		held, serves, err := s.standing(ctx, app, pointer, promotion)
@@ -60,10 +60,10 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 			ready = append(ready, held)
 		}
 	}
-	if err := s.ledger().Promote(ctx, promotion, pointer, report); err != nil {
+	if err := s.ledger().Promote(ctx, promotion, pointer, progress); err != nil {
 		return err
 	}
-	err := s.serve(ctx, pointer, promotion, ready, report)
+	err := s.serve(ctx, pointer, promotion, ready, progress)
 	var unserved host.Unserved
 	if !errors.As(err, &unserved) {
 		return err
@@ -75,7 +75,7 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	return err
 }
 
-func (s *stack) serve(ctx context.Context, pointer string, promotion edge.Promotion, ready []standing, report edge.Reporter) error {
+func (s *stack) serve(ctx context.Context, pointer string, promotion edge.Promotion, ready []standing, progress edge.Progress) error {
 	claims, err := s.previewClaims(ctx, pointer, slices.Sorted(maps.Keys(promotion.Builds)))
 	if err != nil {
 		return host.Unserved{Err: err}
@@ -85,7 +85,7 @@ func (s *stack) serve(ctx context.Context, pointer string, promotion edge.Promot
 	}
 	apps := make([]host.AppRelease, 0, len(ready))
 	for _, held := range ready {
-		if err := s.standUp(ctx, held, report); err != nil {
+		if err := s.standUp(ctx, held, progress); err != nil {
 			return host.Unserved{Err: err}
 		}
 		apps = append(apps, host.AppRelease{
@@ -99,7 +99,7 @@ func (s *stack) serve(ctx context.Context, pointer string, promotion edge.Promot
 		DeployTimeout: host.DeployWindow,
 		DrainTimeout:  host.DrainWindow,
 		Holding:       func(ctx context.Context) error { return s.holding(ctx, pointer, promotion.PromotionID) },
-	}, report)
+	}, progress)
 }
 
 func (s *stack) holding(ctx context.Context, pointer, promotionID string) error {
@@ -165,10 +165,10 @@ func declaredBy(record edge.DeploymentRecord) []string {
 	return declared
 }
 
-func (s *stack) standUp(ctx context.Context, held standing, report edge.Reporter) error {
+func (s *stack) standUp(ctx context.Context, held standing, progress edge.Progress) error {
 	record := held.record
-	if report != nil {
-		report.Say("Standing " + held.app + " back up as " + record.Physical)
+	if progress != nil {
+		progress.Say("Standing " + held.app + " back up as " + record.Physical)
 	}
 	if err := s.e.machine.StandUp(ctx, host.Container{
 		Name: record.Physical, Project: s.state.Slug, App: held.app, Image: record.Image, Class: s.state.Class,
@@ -222,12 +222,12 @@ func (s *stack) previewClaims(ctx context.Context, pointer string, apps []string
 	return claims, nil
 }
 
-func (s *stack) RemovePointer(ctx context.Context, pointer string, report edge.Reporter) (edge.PruneResult, error) {
+func (s *stack) RemovePointer(ctx context.Context, pointer string, progress edge.Progress) (edge.PruneResult, error) {
 	if err := s.e.machine.DisclaimPointer(ctx, s.surface(), named(pointer)); err != nil {
 		return edge.PruneResult{}, err
 	}
 	if err := s.holdOrigins(ctx); err != nil {
-		report.Say(s.released("preview "+pointer, err).Error())
+		progress.Say(s.released("preview "+pointer, err).Error())
 	}
 	if err := s.e.machine.UnroutePointer(ctx, s.surface(), named(pointer)); err != nil {
 		return edge.PruneResult{}, err

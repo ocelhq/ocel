@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-func (r *Releaser) Preflight(ctx context.Context, pre providerkit.DeployPreflight) error {
+func (r *Stacks) Preflight(ctx context.Context, pre providerkit.DeployPreflight) error {
 	cfg, err := r.resolve.Release(ctx, Scope{Class: pre.Plan.Class, Slug: pre.Plan.Slug, Env: pre.Plan.Env, Edge: pre.Edge})
 	if err != nil {
 		return err

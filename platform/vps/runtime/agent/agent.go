@@ -308,7 +308,7 @@ type Store struct {
 func (s Store) Resolve(ctx context.Context, manifest live.Manifest) (map[string]string, error) {
 	reader := values.Reader{
 		Records:     live.Records{Root: s.StateRoot},
-		Sealer:      live.Sealer{Root: s.ClassRoot},
+		Cipher:      live.Cipher{Root: s.ClassRoot},
 		Scope:       values.Scope{Project: manifest.Slug, Class: providerkit.Class(manifest.Class)},
 		Environment: manifest.Environment,
 	}
@@ -371,7 +371,7 @@ func (s Store) storeSecret(ctx context.Context, manifest live.Manifest) (string,
 	if err != nil {
 		return "", fmt.Errorf("the manifest's %s is not valid base64", live.StoreSecretName)
 	}
-	opened, err := (live.Sealer{Root: s.ClassRoot}).Open(ctx, manifest.StoreCoordinate(), sealed)
+	opened, err := (live.Cipher{Root: s.ClassRoot}).Open(ctx, manifest.StoreCoordinate(), sealed)
 	if err != nil {
 		return "", err
 	}

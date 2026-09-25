@@ -209,8 +209,8 @@ func TestHealAsALoginThatIsNeitherRootNorSudoAsksForNeither(t *testing.T) {
 		return session.Result{Stdout: aKey + "\n"}, true
 	}
 
-	err := Bootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
-		providerkit.BootstrapRequest{Class: class, Writer: "the-suite", Heal: true, Unattended: true}, nil)
+	err := NewBootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
+		providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite", Heal: true, Unattended: true}, nil)
 	if err != nil {
 		t.Fatalf("heal driven by the deploy login = %v, want what that login owns reasserted without asking for root", err)
 	}

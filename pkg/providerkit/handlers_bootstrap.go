@@ -41,10 +41,10 @@ func (h *handlers) gate(requested string) (Provider, Gate, error) {
 		return nil, Gate{}, RefusalError(err)
 	}
 	return provider, Gate{
-		Bootstrapper: bootstrapper,
-		Records:      provider.Records(),
-		Writer:       h.session.writer,
-		Edge:         kind,
+		Bootstrap: bootstrapper,
+		Records:   provider.Records(),
+		WrittenBy: h.session.writer,
+		Edge:      kind,
 	}, nil
 }
 
@@ -65,7 +65,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 			return nil, err
 		}
 		if req.GetConsented() == nil {
-			standing, err := gate.Standing(ctx, class)
+			standing, err := gate.State(ctx, class)
 			if err != nil {
 				return nil, RefusalError(err)
 			}
@@ -78,8 +78,8 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 			return okResult(), nil
 		}
 		err = inUnit(sender, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_PROVISIONING,
-			func(_ *eventSender, report Reporter) error {
-				return gate.Apply(ctx, plan, class, intent, report)
+			func(_ *eventSender, progress Progress) error {
+				return gate.Apply(ctx, plan, class, intent, progress)
 			})
 		if err != nil {
 			return nil, err
@@ -107,7 +107,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	if err != nil {
 		return nil, err
 	}
-	standing, err := gate.Standing(ctx, class)
+	standing, err := gate.State(ctx, class)
 	if err != nil {
 		return nil, RefusalError(err)
 	}
@@ -121,7 +121,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	resp := &contractv1.DescribeBootstrapResponse{
 		Bootstrap: BootstrapStatusProto(standing, h.session.writer, req.GetTier(), standing.Features),
 	}
-	for _, f := range gate.Bootstrapper.Catalogue() {
+	for _, f := range gate.Bootstrap.Catalogue() {
 		resp.Features = append(resp.Features, &contractv1.Feature{
 			Name:       f.Name,
 			Summary:    f.Summary,
@@ -227,7 +227,7 @@ func changeAction(drawn planv1.Change_Action) (ChangeAction, error) {
 
 func planAction(action ChangeAction) planv1.Change_Action { return planActions[action] }
 
-func BootstrapStatusProto(standing Standing, writing Writer, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {
+func BootstrapStatusProto(standing BootstrapState, writing WrittenBy, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {
 	status := &contractv1.BootstrapStatus{
 		Tier:           tier,
 		Present:        standing.Present,
@@ -245,7 +245,7 @@ func BootstrapStatusProto(standing Standing, writing Writer, tier environmentv1.
 			Present:       stack.Present,
 			Schema:        stack.Schema,
 			DigestCurrent: stack.DigestCurrent,
-			WrittenBy:     stack.Writer,
+			WrittenBy:     stack.WrittenBy,
 			Required:      stack.Feature == "" || slices.Contains(required, stack.Feature),
 		})
 	}
@@ -264,7 +264,7 @@ func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.Boot
 	if err := gate.Vacant(ctx, class); err != nil {
 		return nil, RefusalError(err)
 	}
-	plan, err := gate.Bootstrapper.PlanRemoval(ctx, class)
+	plan, err := gate.Bootstrap.PlanRemove(ctx, class)
 	if err != nil {
 		return nil, RefusalError(err)
 	}
@@ -297,12 +297,12 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 		return err
 	}
 
-	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, report Reporter) error {
+	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, progress Progress) error {
 		shown, err := PlanOf(req.GetConsented())
 		if err != nil {
 			return err
 		}
-		return gate.Remove(ctx, shown, class, report)
+		return gate.Remove(ctx, shown, class, progress)
 	})
 }
 

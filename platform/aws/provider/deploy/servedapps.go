@@ -67,11 +67,11 @@ func (s *servedApps) warmed(physical string, reply warmReply) {
 	}
 }
 
-func (r *Releaser) Warm(ctx context.Context, targets []string, report providerkit.Reporter) error {
+func (r *Stacks) Warm(ctx context.Context, targets []string, progress providerkit.Progress) error {
 	if !bytecodeCacheEnabled() {
 		return nil
 	}
-	say := sayTo(report)
+	say := sayTo(progress)
 	warming := map[*release][]warmTarget{}
 	for _, physical := range targets {
 		held, known := r.served.byPhysicalName(physical)
@@ -89,11 +89,11 @@ func (r *Releaser) Warm(ctx context.Context, targets []string, report providerki
 	return nil
 }
 
-func (r *Releaser) EmbedCode(ctx context.Context, physical string, artifact providerkit.ArtifactRef, report providerkit.Reporter) error {
+func (r *Stacks) EmbedCode(ctx context.Context, physical string, artifact providerkit.ArtifactRef, progress providerkit.Progress) error {
 	if !bytecodeEmbedRequested() {
 		return nil
 	}
-	say := sayTo(report)
+	say := sayTo(progress)
 	if !bytecodeEmbedEnabled() {
 		say("ocel: " + bytecodeEmbedEnv + "=1 has nothing to embed without " + bytecodeCacheEnv + "=1; not embedding")
 		return nil
@@ -132,9 +132,9 @@ func (r *Releaser) EmbedCode(ctx context.Context, physical string, artifact prov
 	return nil
 }
 
-func sayTo(report providerkit.Reporter) func(string) {
-	if report == nil {
+func sayTo(progress providerkit.Progress) func(string) {
+	if progress == nil {
 		return func(string) {}
 	}
-	return report.Detail
+	return progress.Detail
 }

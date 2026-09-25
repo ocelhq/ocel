@@ -22,7 +22,7 @@ func Promote(
 	pins Pins,
 	promotion edge.Promotion,
 	pointer string,
-	report edge.Reporter,
+	progress edge.Progress,
 ) error {
 	var pinning []edge.DeploymentRecord
 	for _, app := range slices.Sorted(maps.Keys(promotion.Builds)) {
@@ -44,14 +44,14 @@ func Promote(
 		}
 		pinning = append(pinning, record)
 	}
-	if err := ledger.Promote(ctx, promotion, pointer, report); err != nil {
+	if err := ledger.Promote(ctx, promotion, pointer, progress); err != nil {
 		return err
 	}
 	for _, record := range pinning {
 		for _, service := range slices.Sorted(maps.Keys(record.Revisions)) {
 			revision := record.Revisions[service]
-			if report != nil {
-				report.Detail("Pinning " + service + " to " + revision)
+			if progress != nil {
+				progress.Detail("Pinning " + service + " to " + revision)
 			}
 			if err := pins.Pin(ctx, service, revision); err != nil {
 				if undo := ledger.Unpromote(ctx, promotion.PromotionID, pointer); undo != nil {

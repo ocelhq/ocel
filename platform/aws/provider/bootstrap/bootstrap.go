@@ -82,14 +82,14 @@ type APIs struct {
 	IAM   IAMAPI
 	Store ObjectStore
 	Edge  edge.Edge
-	Edges providerkit.EdgeRegistry
+	Edges providerkit.Edges
 }
 
 type Request struct {
 	VarsKey            string
 	Features           []string
 	Remove             []string
-	Writer             providerkit.Writer
+	Writer             providerkit.WrittenBy
 	AcceptReplacements bool
 }
 
@@ -371,7 +371,7 @@ func specFor(ns Namespace, class string) (spec, error) {
 
 func run(ctx context.Context, apis APIs, target spec, req Request, progress, log func(string)) error {
 	var reporting sync.Mutex
-	report := func(f func(string), msg string) {
+	say := func(f func(string), msg string) {
 		if f == nil {
 			return
 		}
@@ -379,8 +379,8 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 		defer reporting.Unlock()
 		f(msg)
 	}
-	progressf := func(msg string) { report(progress, msg) }
-	logf := func(msg string) { report(log, msg) }
+	progressf := func(msg string) { say(progress, msg) }
+	logf := func(msg string) { say(log, msg) }
 
 	requested := req.Features
 	levels, err := featureLevels(requested)

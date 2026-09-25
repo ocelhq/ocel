@@ -51,7 +51,7 @@ func TestRunStamps(t *testing.T) {
 		if stamp.WrittenBy != "dev+cafebabe" {
 			t.Errorf("written by %q, want dev+cafebabe", stamp.WrittenBy)
 		}
-		if providerkit.Writer(stamp.WrittenBy).Release() {
+		if providerkit.WrittenBy(stamp.WrittenBy).Release() {
 			t.Errorf("%q must never read as a release", stamp.WrittenBy)
 		}
 	})

@@ -37,6 +37,7 @@ func namingARegistry(req *contractv1.DeployRequest) *contractv1.DeployRequest {
 }
 
 func TestTheWireAcceptsAnAppNamingContainer(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -76,6 +77,7 @@ func TestTheWireRefusesAnAppNamingAComputeOutsideTheVocabulary(t *testing.T) {
 }
 
 func TestTheAppPlanCarriesTheImageAndProbeAContainerAppIsStoodUpFrom(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	provider := fake.NewProvider(fake.Options{})
 	client := servedBy(t, provider)
@@ -85,7 +87,7 @@ func TestTheAppPlanCarriesTheImageAndProbeAContainerAppIsStoodUpFrom(t *testing.
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := provider.Releases().(*fake.Releaser).Plans()
+	plans := provider.FakeStacks().Plans()
 	app := plans[len(plans)-1].App
 	if app == nil {
 		t.Fatal("the last plan the releaser saw stands up no app")
@@ -111,7 +113,7 @@ func TestAServerlessAppPlanNamesItsComputeAndCarriesNoImage(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := provider.Releases().(*fake.Releaser).Plans()
+	plans := provider.FakeStacks().Plans()
 	app := plans[len(plans)-1].App
 	if app.Compute != providerkit.ComputeServerless {
 		t.Errorf("Compute = %q, want %q", app.Compute, providerkit.ComputeServerless)
@@ -122,6 +124,7 @@ func TestAServerlessAppPlanNamesItsComputeAndCarriesNoImage(t *testing.T) {
 }
 
 func TestTheContainerAStoodUpAppRunsOnIsRecordedAgainstItsStack(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	provider := fake.NewProvider(fake.Options{})
 	client := servedBy(t, provider)
@@ -154,6 +157,7 @@ func TestTheContainerAStoodUpAppRunsOnIsRecordedAgainstItsStack(t *testing.T) {
 }
 
 func TestTheLedgerRecordAContainerDeployStagesIsTheOneItsPromotionLooksUp(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
 

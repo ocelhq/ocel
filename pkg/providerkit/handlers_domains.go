@@ -39,17 +39,17 @@ func (h *handlers) hostnames(ctx context.Context, req *contractv1.HostnameReques
 }
 
 func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(sender *eventSender, report Reporter) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(sender *eventSender, progress Progress) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
 			return err
 		}
 		session.settle.attend(sender)
-		return session.add(ctx, report)
+		return session.add(ctx, progress)
 	})
 }
 
-func (d *hostnames) add(ctx context.Context, report Reporter) error {
+func (d *hostnames) add(ctx context.Context, progress Progress) error {
 	if len(d.configured) == 0 {
 		return Refuse(CodeNotReady,
 			"this project declares no domains.production, so there is no production hostname to add; declare one in the config and run this again — no command edits the config")
@@ -70,14 +70,14 @@ func (d *hostnames) add(ctx context.Context, report Reporter) error {
 	}
 	var settledAny bool
 	for _, host := range d.addTargets() {
-		changed, err := d.settleHost(ctx, host, report)
+		changed, err := d.settleHost(ctx, host, progress)
 		if err != nil {
 			return err
 		}
 		settledAny = settledAny || changed
 	}
 	if !settledAny && d.host == "" {
-		report.Say(fmt.Sprintf("Every hostname this project declares is already served: %s", strings.Join(d.declared(), ", ")))
+		progress.Say(fmt.Sprintf("Every hostname this project declares is already served: %s", strings.Join(d.declared(), ", ")))
 	}
 	return nil
 }
@@ -91,28 +91,28 @@ func (d *hostnames) addTargets() []ConfiguredHost {
 	return slices.DeleteFunc(slices.Clone(d.configured), func(held ConfiguredHost) bool { return held.Hostname != d.host })
 }
 
-func (d *hostnames) settleHost(ctx context.Context, target ConfiguredHost, report Reporter) (bool, error) {
+func (d *hostnames) settleHost(ctx context.Context, target ConfiguredHost, progress Progress) (bool, error) {
 	host := target.Hostname
 	settled := d.state.Host(host)
 	serving := settled.Serving()
 	held := settled.Certificate.ID
 	certifying := d.certification(host, &settled)
 
-	if err := certifying.certify(ctx, host, report); err != nil {
+	if err := certifying.certify(ctx, host, progress); err != nil {
 		return false, err
 	}
 	if d.state.Ready(host, d.settle.kind) && settled.Certificate.ID == held {
-		return false, certifying.discardSuperseded(ctx, report)
+		return false, certifying.discardSuperseded(ctx, progress)
 	}
 
-	report.Say(fmt.Sprintf("Binding %s to the %s edge", host, d.settle.kind))
-	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: settled.Certificate.ID, App: target.App, Say: report.Say}); err != nil {
+	progress.Say(fmt.Sprintf("Binding %s to the %s edge", host, d.settle.kind))
+	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: settled.Certificate.ID, App: target.App, Say: progress.Say}); err != nil {
 		return true, err
 	}
 	if err := d.checkpoint(ctx); err != nil {
 		return true, err
 	}
-	if err := certifying.discardSuperseded(ctx, report); err != nil {
+	if err := certifying.discardSuperseded(ctx, progress); err != nil {
 		return true, err
 	}
 
@@ -121,7 +121,7 @@ func (d *hostnames) settleHost(ctx context.Context, target ConfiguredHost, repor
 		return true, err
 	}
 	written, err := d.settle.write(ctx, records,
-		fmt.Sprintf("Point %s at the %s edge", host, d.settle.kind), report.Say)
+		fmt.Sprintf("Point %s at the %s edge", host, d.settle.kind), progress.Say)
 	settled.Written, settled.Owed = written.Written, written.Owed
 	d.state.Settle(host, settled)
 	if cerr := d.checkpoint(ctx); cerr != nil {
@@ -131,7 +131,7 @@ func (d *hostnames) settleHost(ctx context.Context, target ConfiguredHost, repor
 		return true, err
 	}
 
-	probe, err := d.settle.await(ctx, host, report.Say)
+	probe, err := d.settle.await(ctx, host, progress.Say)
 	settled.Probe = probe
 	d.state.Settle(host, settled)
 	if cerr := d.checkpoint(ctx); cerr != nil {
@@ -140,8 +140,8 @@ func (d *hostnames) settleHost(ctx context.Context, target ConfiguredHost, repor
 	if err != nil {
 		return true, err
 	}
-	report.Say(fmt.Sprintf("%s is served by the %s edge", host, d.settle.kind))
-	return true, d.retire(ctx, host, serving, report)
+	progress.Say(fmt.Sprintf("%s is served by the %s edge", host, d.settle.kind))
+	return true, d.retire(ctx, host, serving, progress)
 }
 
 func (d *hostnames) certification(host string, settled *Settled) certification {
@@ -157,7 +157,7 @@ func (d *hostnames) certification(host string, settled *Settled) certification {
 	}
 }
 
-func (d *hostnames) retire(ctx context.Context, host string, serving edge.Kind, report Reporter) error {
+func (d *hostnames) retire(ctx context.Context, host string, serving edge.Kind, progress Progress) error {
 	if serving == "" || serving == d.settle.kind {
 		return nil
 	}
@@ -165,45 +165,45 @@ func (d *hostnames) retire(ctx context.Context, host string, serving edge.Kind, 
 	if err != nil {
 		return err
 	}
-	report.Say(fmt.Sprintf("Unbinding %s from the %s edge it moved off", host, serving))
-	if err := edge.Heeded(stack.UnbindDomain(ctx, host), report); err != nil {
+	progress.Say(fmt.Sprintf("Unbinding %s from the %s edge it moved off", host, serving))
+	if err := edge.Heeded(stack.UnbindDomain(ctx, host), progress); err != nil {
 		return err
 	}
-	report.Say(fmt.Sprintf("%s answers on both edges until resolvers drop the record they hold: %s",
+	progress.Say(fmt.Sprintf("%s answers on both edges until resolvers drop the record they hold: %s",
 		host, flipWindow(d.settle.writer)))
 	return nil
 }
 
 func (h *handlers) RemoveHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, report Reporter) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, progress Progress) error {
 		session, err := h.hostnames(ctx, req)
 		if err != nil {
 			return err
 		}
-		return session.remove(ctx, report)
+		return session.remove(ctx, progress)
 	})
 }
 
-func (d *hostnames) remove(ctx context.Context, report Reporter) error {
+func (d *hostnames) remove(ctx context.Context, progress Progress) error {
 	targets, err := d.removeTargets()
 	if err != nil {
 		return err
 	}
 	if len(targets) == 0 {
 		if len(d.state.Hosts) == 0 {
-			report.Say("Nothing to remove: this project serves no production hostname")
+			progress.Say("Nothing to remove: this project serves no production hostname")
 			return nil
 		}
-		report.Say("Nothing to remove: every hostname this project serves is still declared in its config")
+		progress.Say("Nothing to remove: every hostname this project serves is still declared in its config")
 		return nil
 	}
 	for _, host := range targets {
-		report.Say(fmt.Sprintf("Unbinding %s from the %s edge", host, d.settle.kind))
-		if err := edge.Heeded(d.stack.UnbindDomain(ctx, host), report); err != nil {
+		progress.Say(fmt.Sprintf("Unbinding %s from the %s edge", host, d.settle.kind))
+		if err := edge.Heeded(d.stack.UnbindDomain(ctx, host), progress); err != nil {
 			return err
 		}
 		settled := d.state.Host(host)
-		if err := d.settle.release(ctx, settled.Written, report.Say); err != nil {
+		if err := d.settle.release(ctx, settled.Written, progress.Say); err != nil {
 			return err
 		}
 		d.state.Forget(host)
@@ -214,7 +214,7 @@ func (d *hostnames) remove(ctx context.Context, report Reporter) error {
 			if d.state.Uses(cert.ID) {
 				continue
 			}
-			if err := retireCertificate(ctx, d.provider, d.settle, cert, Certificate{}, report); err != nil {
+			if err := retireCertificate(ctx, d.provider, d.settle, cert, Certificate{}, progress); err != nil {
 				return err
 			}
 		}
@@ -306,7 +306,7 @@ func (d *hostnames) statusOf(ctx context.Context, host string) (*contractv1.Prod
 	if bound && d.live {
 		probe = d.probe(ctx, host)
 	}
-	health, err := inspectCertificate(ctx, d.provider, d.settle.kind, host, settled.Certificate)
+	health, err := d.provider.Certificates().Inspect(ctx, d.settle.kind, host, settled.Certificate)
 	if err != nil {
 		return nil, err
 	}

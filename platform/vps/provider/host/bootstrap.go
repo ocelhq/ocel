@@ -14,40 +14,40 @@ const (
 	bootstrapDocs  = "https://ocel.dev/docs/providers/vps#bootstrap"
 )
 
-type Bootstrapper struct {
+type Bootstrap struct {
 	host    *Host
 	vendor  providerkit.Vendor
 	project string
 }
 
-func Bootstrap(h *Host, vendor providerkit.Vendor, project string) Bootstrapper {
-	return Bootstrapper{host: h, vendor: vendor, project: project}
+func NewBootstrap(h *Host, vendor providerkit.Vendor, project string) Bootstrap {
+	return Bootstrap{host: h, vendor: vendor, project: project}
 }
 
-func (b Bootstrapper) Catalogue() []providerkit.Feature { return nil }
+func (b Bootstrap) Catalogue() []providerkit.Feature { return nil }
 
-func (b Bootstrapper) Describe(ctx context.Context, class providerkit.Class) (providerkit.Bootstrap, error) {
+func (b Bootstrap) Describe(ctx context.Context, class providerkit.Class) (providerkit.BootstrapReading, error) {
 	read, err := b.host.Observe(ctx, class)
 	if err != nil {
-		return providerkit.Bootstrap{}, err
+		return providerkit.BootstrapReading{}, err
 	}
 	return b.described(ctx, read)
 }
 
-func (b Bootstrapper) described(ctx context.Context, read Reading) (providerkit.Bootstrap, error) {
+func (b Bootstrap) described(ctx context.Context, read Reading) (providerkit.BootstrapReading, error) {
 	principal, err := b.host.Principal(ctx)
 	if err != nil {
-		return providerkit.Bootstrap{}, err
+		return providerkit.BootstrapReading{}, err
 	}
 	if read, err = b.recorded(ctx, read); err != nil {
-		return providerkit.Bootstrap{}, err
+		return providerkit.BootstrapReading{}, err
 	}
 	if read.standing(KindRoutingTable, live.RoutingTable) || read.standing(KindProxyConfig, ProxyConfig) {
 		if read.rerendering, err = b.host.proxyInspected(ctx, read.Class); err != nil {
-			return providerkit.Bootstrap{}, err
+			return providerkit.BootstrapReading{}, err
 		}
 	}
-	return providerkit.Bootstrap{
+	return providerkit.BootstrapReading{
 		Class:      read.Class,
 		Present:    read.Present,
 		Unfinished: read.unfinished(),
@@ -57,12 +57,12 @@ func (b Bootstrapper) described(ctx context.Context, read Reading) (providerkit.
 			Present:       read.Present,
 			Schema:        uint32(read.Stamp.Schema),
 			DigestCurrent: read.settled(),
-			Writer:        read.Stamp.Writer,
+			WrittenBy:     read.Stamp.Writer,
 		}},
 	}, nil
 }
 
-func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
+func (b Bootstrap) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
 	read, err := b.reading(ctx, req)
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -132,14 +132,14 @@ func slowLast(changes []providerkit.Change) []providerkit.Change {
 	return changes
 }
 
-func (b Bootstrapper) reading(ctx context.Context, req providerkit.BootstrapRequest) (Reading, error) {
+func (b Bootstrap) reading(ctx context.Context, req providerkit.BootstrapRequest) (Reading, error) {
 	if held, carried := req.Held.(Reading); carried && held.Class == req.Class {
 		return held, nil
 	}
 	return b.read(ctx, req.Class)
 }
 
-func (b Bootstrapper) read(ctx context.Context, class providerkit.Class) (Reading, error) {
+func (b Bootstrap) read(ctx context.Context, class providerkit.Class) (Reading, error) {
 	read, err := b.host.Read(ctx, class)
 	if err != nil {
 		return Reading{}, err
@@ -147,9 +147,9 @@ func (b Bootstrapper) read(ctx context.Context, class providerkit.Class) (Readin
 	return b.recorded(ctx, read)
 }
 
-func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
+func (b Bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
 	if req.Heal {
-		return b.heal(ctx, req, report)
+		return b.heal(ctx, req, progress)
 	}
 	shown, err := b.reading(ctx, req)
 	if err != nil {
@@ -176,16 +176,16 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	stamp := Stamp{
 		Schema:  providerkit.BootstrapSchema,
 		State:   StateApplying,
-		Writer:  req.Writer.String(),
+		Writer:  req.WrittenBy.String(),
 		Digests: digests(items),
 	}
-	if err := b.write(ctx, standing, ClassItems(req.Class), report); err != nil {
+	if err := b.write(ctx, standing, ClassItems(req.Class), progress); err != nil {
 		return err
 	}
 	if err := b.host.Stamp(ctx, req.Class, stamp); err != nil {
 		return err
 	}
-	if err := b.write(ctx, standing, StorageItems(req.Class, standing.Keys), report); err != nil {
+	if err := b.write(ctx, standing, StorageItems(req.Class, standing.Keys), progress); err != nil {
 		return err
 	}
 
@@ -202,33 +202,33 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err := held.adopting(); err != nil {
 		return err
 	}
-	if err := b.write(ctx, standing, EngineItems(), report); err != nil {
+	if err := b.write(ctx, standing, EngineItems(), progress); err != nil {
 		return err
 	}
 	served, err := b.host.Read(ctx, req.Class)
 	if err != nil {
 		return err
 	}
-	if err := b.write(ctx, served, LiveItems(standing.Arch), report); err != nil {
+	if err := b.write(ctx, served, LiveItems(standing.Arch), progress); err != nil {
 		return err
 	}
-	if err := b.write(ctx, served, standing.recorded, report); err != nil {
+	if err := b.write(ctx, served, standing.recorded, progress); err != nil {
 		return err
 	}
-	if err := b.write(ctx, served, ProxyItems(standing.Arch, standing.Front), report); err != nil {
+	if err := b.write(ctx, served, ProxyItems(standing.Arch, standing.Front), progress); err != nil {
 		return err
 	}
 	if err := b.host.rerender(ctx); err != nil {
 		return err
 	}
-	if err := b.write(ctx, served, BackupItems(), report); err != nil {
+	if err := b.write(ctx, served, BackupItems(), progress); err != nil {
 		return err
 	}
 	stamp.State, stamp.Seal = StateComplete, minted.Seal
 	return b.host.Stamp(ctx, req.Class, stamp)
 }
 
-func (b Bootstrapper) heal(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
+func (b Bootstrap) heal(ctx context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
 	read, err := b.host.Own(ctx, req.Class)
 	if err != nil {
 		return err
@@ -238,9 +238,9 @@ func (b Bootstrapper) heal(ctx context.Context, req providerkit.BootstrapRequest
 		return err
 	}
 	for _, id := range left {
-		say(report, id+": left as is")
+		say(progress, id+": left as is")
 	}
-	return b.writing(ctx, read, work, report, b.host.Reassert)
+	return b.writing(ctx, read, work, progress, b.host.Reassert)
 }
 
 func healing(read Reading, unattended bool) ([]Item, []string, error) {
@@ -363,32 +363,32 @@ func (r Reading) adopting() error {
 		StampPath(r.Class), recorded, SealKeyPath(r.Class), standing)
 }
 
-func (b Bootstrapper) write(ctx context.Context, standing Reading, items []Item, report providerkit.Reporter) error {
-	return b.writing(ctx, standing, items, report, b.host.Install)
+func (b Bootstrap) write(ctx context.Context, standing Reading, items []Item, progress providerkit.Progress) error {
+	return b.writing(ctx, standing, items, progress, b.host.Install)
 }
 
-func (b Bootstrapper) writing(ctx context.Context, standing Reading, items []Item, report providerkit.Reporter,
+func (b Bootstrap) writing(ctx context.Context, standing Reading, items []Item, progress providerkit.Progress,
 	install func(context.Context, Item) error) error {
 	for _, item := range items {
 		if standing.current(item) {
-			say(report, item.ID()+": "+reasonStanding)
+			say(progress, item.ID()+": "+reasonStanding)
 			continue
 		}
 		if err := install(ctx, item); err != nil {
 			return err
 		}
-		say(report, "wrote "+item.ID())
+		say(progress, "wrote "+item.ID())
 	}
 	return nil
 }
 
-func say(report providerkit.Reporter, message string) {
-	if report != nil {
-		report.Say(message)
+func say(progress providerkit.Progress, message string) {
+	if progress != nil {
+		progress.Say(message)
 	}
 }
 
-func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
+func (b Bootstrap) PlanRemove(ctx context.Context, class providerkit.Class) (providerkit.Plan, error) {
 	removals, err := b.removals(ctx, class)
 	if err != nil || len(removals) == 0 {
 		return providerkit.Plan{}, err
@@ -415,7 +415,7 @@ func (b Bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 	return providerkit.Plan{Groups: providerkit.Vendored(b.vendor, []providerkit.ChangeGroup{group})}, nil
 }
 
-func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {
+func (b Bootstrap) Remove(ctx context.Context, class providerkit.Class, progress providerkit.Progress) error {
 	defer b.host.forgetTiers()
 	forget, err := b.host.forgetting(ctx)
 	if err != nil {
@@ -427,7 +427,7 @@ func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 	}
 	for _, removal := range removals {
 		if removal.action != providerkit.ActionDelete {
-			say(report, "kept "+removal.kind+" "+removal.path)
+			say(progress, "kept "+removal.kind+" "+removal.path)
 			continue
 		}
 		taken, err := b.host.remove(ctx, removal)
@@ -435,12 +435,12 @@ func (b Bootstrapper) Remove(ctx context.Context, class providerkit.Class, repor
 			return err
 		}
 		if !taken {
-			say(report, "kept "+removal.kind+" "+removal.path+", still in use")
+			say(progress, "kept "+removal.kind+" "+removal.path+", still in use")
 			continue
 		}
-		say(report, "removed "+removal.kind+" "+removal.path)
+		say(progress, "removed "+removal.kind+" "+removal.path)
 	}
-	say(report, leavingKnownHosts(forget))
+	say(progress, leavingKnownHosts(forget))
 	return nil
 }
 
@@ -493,7 +493,7 @@ func (r removal) command() string {
 	}
 }
 
-func (b Bootstrapper) removals(ctx context.Context, class providerkit.Class) ([]removal, error) {
+func (b Bootstrap) removals(ctx context.Context, class providerkit.Class) ([]removal, error) {
 	read, err := b.host.Survey(ctx, class)
 	if err != nil {
 		return nil, err

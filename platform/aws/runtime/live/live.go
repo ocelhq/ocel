@@ -138,7 +138,7 @@ func FromManifest(ctx context.Context, raw []byte) (*Values, error) {
 	return rt.New(&storeFetcher{
 		reader: values.Reader{
 			Records:     awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: awsports.Table(manifest.Table)},
-			Sealer:      awsports.Sealer{KMS: kms.NewFromConfig(cfg), Keys: awsports.Key(manifest.KeyARN)},
+			Cipher:      awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: awsports.Key(manifest.KeyARN)},
 			Scope:       values.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},
 			Environment: manifest.Environment,
 		},

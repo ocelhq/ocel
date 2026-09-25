@@ -67,7 +67,7 @@ func (s survey) current(items []item) bool {
 	return true
 }
 
-func (b bootstrapper) survey(ctx context.Context, class providerkit.Class) (survey, error) {
+func (b bootstrap) survey(ctx context.Context, class providerkit.Class) (survey, error) {
 	read := survey{
 		Class:    class,
 		Names:    b.clients.Names,
@@ -112,7 +112,7 @@ type stamped struct {
 	generation int64
 }
 
-func (b bootstrapper) stamped(ctx context.Context, bucket string) (stamped, error) {
+func (b bootstrap) stamped(ctx context.Context, bucket string) (stamped, error) {
 	client, err := b.clients.Storage()
 	if err != nil {
 		return stamped{}, err
@@ -138,7 +138,7 @@ func (b bootstrapper) stamped(ctx context.Context, bucket string) (stamped, erro
 
 const stateRoot = ".pulumi/stacks/"
 
-func (b bootstrapper) stateHeldIn(ctx context.Context, bucket string) (string, error) {
+func (b bootstrap) stateHeldIn(ctx context.Context, bucket string) (string, error) {
 	client, err := b.clients.Storage()
 	if err != nil {
 		return "", err
@@ -167,7 +167,7 @@ type standing struct {
 	mends string
 }
 
-func (b bootstrapper) stands(ctx context.Context, class providerkit.Class, held item) (standing, error) {
+func (b bootstrap) stands(ctx context.Context, class providerkit.Class, held item) (standing, error) {
 	switch held.Kind {
 	case KindDatabase:
 		return b.databaseStands(ctx)
@@ -189,7 +189,7 @@ func (b bootstrapper) stands(ctx context.Context, class providerkit.Class, held 
 
 func stood(held bool, err error) (standing, error) { return standing{held: held}, err }
 
-func (b bootstrapper) databaseStands(ctx context.Context) (standing, error) {
+func (b bootstrap) databaseStands(ctx context.Context) (standing, error) {
 	if b.clients.emulated() {
 		return standing{held: true}, nil
 	}
@@ -214,7 +214,7 @@ func databasePath(c *clients) string {
 	return "projects/" + c.project + "/databases/" + c.Database()
 }
 
-func (b bootstrapper) bucketStands(ctx context.Context, name string) (standing, error) {
+func (b bootstrap) bucketStands(ctx context.Context, name string) (standing, error) {
 	client, err := b.clients.Storage()
 	if err != nil {
 		return standing{}, err
@@ -236,7 +236,7 @@ func bucketStanding(attrs *storage.BucketAttrs, emulated bool) standing {
 	return standing{held: true}
 }
 
-func (b bootstrapper) keyRingStands(ctx context.Context) (bool, error) {
+func (b bootstrap) keyRingStands(ctx context.Context) (bool, error) {
 	client, err := b.clients.KMS()
 	if err != nil {
 		return false, err
@@ -252,7 +252,7 @@ func (b bootstrapper) keyRingStands(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (b bootstrapper) keyStands(ctx context.Context, name string) (bool, error) {
+func (b bootstrap) keyStands(ctx context.Context, name string) (bool, error) {
 	key, err := b.keyHeld(ctx, name)
 	if err != nil {
 		return false, err
@@ -260,7 +260,7 @@ func (b bootstrapper) keyStands(ctx context.Context, name string) (bool, error) 
 	return usable(key.GetPrimary()), nil
 }
 
-func (b bootstrapper) keyHeld(ctx context.Context, name string) (*kmspb.CryptoKey, error) {
+func (b bootstrap) keyHeld(ctx context.Context, name string) (*kmspb.CryptoKey, error) {
 	client, err := b.clients.KMS()
 	if err != nil {
 		return nil, err
@@ -286,7 +286,7 @@ func usable(version *kmspb.CryptoKeyVersion) bool {
 	}
 }
 
-func (b bootstrapper) secretStands(ctx context.Context, name string) (bool, error) {
+func (b bootstrap) secretStands(ctx context.Context, name string) (bool, error) {
 	service, err := b.clients.Secrets()
 	if err != nil {
 		return false, err
@@ -301,7 +301,7 @@ func (b bootstrapper) secretStands(ctx context.Context, name string) (bool, erro
 	return b.passphraseHeld(ctx, name)
 }
 
-func (b bootstrapper) passphraseHeld(ctx context.Context, name string) (bool, error) {
+func (b bootstrap) passphraseHeld(ctx context.Context, name string) (bool, error) {
 	service, err := b.clients.Secrets()
 	if err != nil {
 		return false, err
@@ -317,7 +317,7 @@ func (b bootstrapper) passphraseHeld(ctx context.Context, name string) (bool, er
 	return held.State == enabledVersion, nil
 }
 
-func (b bootstrapper) repositoryStands(ctx context.Context, name string) (standing, error) {
+func (b bootstrap) repositoryStands(ctx context.Context, name string) (standing, error) {
 	service, err := b.clients.Repositories()
 	if err != nil {
 		return standing{}, err
@@ -355,7 +355,7 @@ func pruned(policies map[string]artifactregistry.CleanupPolicy) bool {
 		policy.Condition.TagState == untaggedImages && policy.Condition.OlderThan == untaggedLifetime
 }
 
-func (b bootstrapper) accountStands(ctx context.Context, class providerkit.Class, name string) (standing, error) {
+func (b bootstrap) accountStands(ctx context.Context, class providerkit.Class, name string) (standing, error) {
 	service, err := b.clients.Accounts()
 	if err != nil {
 		return standing{}, err
@@ -388,7 +388,7 @@ func (b bootstrapper) accountStands(ctx context.Context, class providerkit.Class
 	return standing{held: true}, nil
 }
 
-func (b bootstrapper) accountPolicy(ctx context.Context, name string) (*iam.Policy, error) {
+func (b bootstrap) accountPolicy(ctx context.Context, name string) (*iam.Policy, error) {
 	service, err := b.clients.Accounts()
 	if err != nil {
 		return nil, err

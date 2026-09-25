@@ -13,7 +13,7 @@ import (
 )
 
 func fixture() (values.Store, values.Scope) {
-	return values.Store{Records: fake.NewRecords(), Sealer: fake.NewSealer()},
+	return values.Store{Records: fake.NewRecords(), Cipher: fake.NewCipher()},
 		values.Scope{Project: "shop", Class: ports.ClassProduction}
 }
 
@@ -127,13 +127,13 @@ func TestAnEnvironmentValueShadowsTheClassWideOne(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reader := values.Reader{Records: store.Records, Sealer: store.Sealer, Scope: scope, Environment: "pr-7"}
+	reader := values.Reader{Records: store.Records, Cipher: store.Cipher, Scope: scope, Environment: "pr-7"}
 	seen, err := reader.Values(ctx, []values.Cell{{Key: "KEY"}})
 	if err != nil || seen["KEY"] != "pr-7 only" {
 		t.Fatalf("the environment's reader saw %q, %v, want the environment's own value", seen["KEY"], err)
 	}
 
-	classWide := values.Reader{Records: store.Records, Sealer: store.Sealer, Scope: scope}
+	classWide := values.Reader{Records: store.Records, Cipher: store.Cipher, Scope: scope}
 	seen, err = classWide.Values(ctx, []values.Cell{{Key: "KEY"}})
 	if err != nil || seen["KEY"] != "class-wide" {
 		t.Fatalf("the class-wide reader saw %q, %v", seen["KEY"], err)
@@ -278,7 +278,7 @@ func TestARevealOverABrokenReferenceFailsRatherThanOmittingIt(t *testing.T) {
 		t.Fatalf("the failure does not name the broken reference: %v", err)
 	}
 
-	reader := values.Reader{Records: store.Records, Sealer: store.Sealer, Scope: scope}
+	reader := values.Reader{Records: store.Records, Cipher: store.Cipher, Scope: scope}
 	if _, err := reader.Values(ctx, []values.Cell{{Key: "DATABASE_URL"}}); !errors.Is(err, values.ErrDangling) {
 		t.Fatalf("a reader over a broken reference = %v, want it to refuse to boot the app", err)
 	}
@@ -453,7 +453,7 @@ func TestAReaderResolvesTheBindingsADeploymentWasBuiltToRead(t *testing.T) {
 	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", values.Pair{Record: []byte("{}"), Value: []byte("the sealed record")}); err != nil {
 		t.Fatal(err)
 	}
-	reader := values.Reader{Records: store.Records, Sealer: store.Sealer, Scope: scope}
+	reader := values.Reader{Records: store.Records, Cipher: store.Cipher, Scope: scope}
 
 	found, err := reader.Bindings(ctx, []string{"db"})
 	if err != nil || len(found) != 1 || string(found[0].Value) != "the sealed record" {
@@ -514,7 +514,7 @@ func TestTheClassWideEnvironmentIsReserved(t *testing.T) {
 
 type counted struct {
 	ports.RecordStore
-	ports.Sealer
+	ports.Cipher
 	mu     sync.Mutex
 	reads  int
 	lists  int
@@ -541,7 +541,7 @@ func (c *counted) Open(ctx context.Context, at ports.Coordinate, sealed []byte) 
 	c.mu.Lock()
 	c.opened++
 	c.mu.Unlock()
-	return c.Sealer.Open(ctx, at, sealed)
+	return c.Cipher.Open(ctx, at, sealed)
 }
 
 func TestRevealReadsTheProjectOnceAndOpensEachCiphertextOnce(t *testing.T) {
@@ -564,8 +564,8 @@ func TestRevealReadsTheProjectOnceAndOpensEachCiphertextOnce(t *testing.T) {
 		}
 	}
 
-	watched := &counted{RecordStore: store.Records, Sealer: store.Sealer}
-	store.Records, store.Sealer = watched, watched
+	watched := &counted{RecordStore: store.Records, Cipher: store.Cipher}
+	store.Records, store.Cipher = watched, watched
 	found, err := store.Reveal(ctx, scope, []values.Coordinate{
 		at("A"), at("B"), at("C"), at("PRIMARY_URL"), at("REPLICA_URL"), at("NEVER_SET"),
 	})
@@ -595,8 +595,8 @@ func TestResolvingABatchOfBindingsReadsEachEnvironmentOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	watched := &counted{RecordStore: store.Records, Sealer: store.Sealer}
-	store.Records, store.Sealer = watched, watched
+	watched := &counted{RecordStore: store.Records, Cipher: store.Cipher}
+	store.Records, store.Cipher = watched, watched
 	resolved, err := store.ResolveBindings(ctx, scope, "", []string{"db", "cache", "queue"})
 	if err != nil || len(resolved) != 3 {
 		t.Fatalf("ResolveBindings() = %+v, %v, want all three", resolved, err)
@@ -624,8 +624,8 @@ func TestResolvingOneBindingReadsThatBindingAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	watched := &counted{RecordStore: store.Records, Sealer: store.Sealer}
-	store.Records, store.Sealer = watched, watched
+	watched := &counted{RecordStore: store.Records, Cipher: store.Cipher}
+	store.Records, store.Cipher = watched, watched
 	resolved, err := store.ResolveBinding(ctx, scope, "pr-7", "db")
 	if err != nil || string(resolved.Value) != `"pr-7 db"` {
 		t.Fatalf("ResolveBinding() = %q, %v, want the pair published to the environment", resolved.Value, err)

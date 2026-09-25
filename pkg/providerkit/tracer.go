@@ -227,11 +227,11 @@ type unitRun struct {
 	stage Stage
 }
 
-func (u *unitRun) phase(phase progressv1.Phase, do func(Reporter) error) error {
+func (u *unitRun) phase(phase progressv1.Phase, do func(Progress) error) error {
 	working := PhaseStage(u.stage.Name, phase)
 	u.scope.declare(working)
 	start := time.Now()
-	err := do(newReporter(u.scope.sender, working))
+	err := do(newProgress(u.scope.sender, working))
 	u.scope.tracer.Span(working.ID, working.ParentID, working.Title, start, time.Now(), err)
 	return err
 }

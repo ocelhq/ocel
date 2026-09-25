@@ -25,9 +25,9 @@ func newRecords(t *testing.T) (awsports.Records, *fakeDynamo) {
 	return awsports.Records{Dynamo: ddb, Tables: awsports.Table("ocel-state")}, ddb
 }
 
-func newSealer() (awsports.Sealer, *fakeKMS) {
+func newSealer() (awsports.Cipher, *fakeKMS) {
 	crypto := &fakeKMS{}
-	return awsports.Sealer{KMS: crypto, Keys: awsports.Key(keyARN)}, crypto
+	return awsports.Cipher{KMS: crypto, Keys: awsports.Key(keyARN)}, crypto
 }
 
 func TestRecordsConformance(t *testing.T) {
@@ -37,13 +37,13 @@ func TestRecordsConformance(t *testing.T) {
 
 func TestSealerConformance(t *testing.T) {
 	sealer, _ := newSealer()
-	conformance.RunSealer(t, sealer)
+	conformance.RunCipher(t, sealer)
 }
 
 func TestValueRecordsPartitionOnTheProjectAndClass(t *testing.T) {
 	records, ddb := newRecords(t)
 	scope := values.Scope{Project: "shop", Class: edge.ClassProduction}
-	store := values.Store{Records: records, Sealer: mustSealer()}
+	store := values.Store{Records: records, Cipher: mustSealer()}
 
 	if _, err := store.Set(context.Background(), scope, values.Coordinate{Cell: values.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
@@ -75,7 +75,7 @@ func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 	records, _ := newRecords(t)
 	sealer, _ := newSealer()
 	scope := values.Scope{Project: "shop", Class: edge.ClassProduction}
-	store := values.Store{Records: records, Sealer: sealer}
+	store := values.Store{Records: records, Cipher: sealer}
 
 	if _, err := store.Set(context.Background(), scope, values.Coordinate{Cell: values.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
@@ -158,7 +158,7 @@ func TestACoordinateMissingAComponentIsRefused(t *testing.T) {
 	}
 }
 
-func mustSealer() kit.Sealer {
+func mustSealer() kit.Cipher {
 	sealer, _ := newSealer()
 	return sealer
 }
@@ -265,7 +265,7 @@ func TestOneProjectsStacksDoNotShareAPartitionWithAnothers(t *testing.T) {
 func TestABindingsPairSharesOnePrefixInsideTheProjectPartition(t *testing.T) {
 	records, ddb := newRecords(t)
 	scope := values.Scope{Project: "shop", Class: edge.ClassProduction}
-	store := values.Store{Records: records, Sealer: mustSealer()}
+	store := values.Store{Records: records, Cipher: mustSealer()}
 
 	if _, err := store.SetBinding(context.Background(), scope, "", values.OwnerOcel, "db",
 		values.Pair{Record: []byte("{}"), Value: []byte("{}")}); err != nil {

@@ -38,9 +38,9 @@ func estimateCost(context.Context, *costv1.PriceRequest) (*costv1.Estimate, erro
 	return &costv1.Estimate{}, nil
 }
 
-func functionBaseImage(context.Context, providerkit.Runtime) (v1.Image, error) { return nil, nil }
+func functionBaseImage(context.Context, providerkit.Framework) (v1.Image, error) { return nil, nil }
 
-func functionRuntime(context.Context, providerkit.Runtime) ([]byte, error) { return nil, nil }
+func functionRuntime(context.Context, providerkit.Framework) ([]byte, error) { return nil, nil }
 
 func TestConfigureRefusesAProviderWhoseHooksSetHalfOfAPair(t *testing.T) {
 	for _, tc := range []struct {

@@ -127,7 +127,7 @@ func TestTheSealerReadsTheClassKeyWhereBootstrapMintsIt(t *testing.T) {
 	if err := os.WriteFile(KeyPath(root, bound.Class), key, 0o400); err != nil {
 		t.Fatal(err)
 	}
-	sealer := Sealer{Root: root}
+	sealer := Cipher{Root: root}
 	opened, err := sealer.Open(context.Background(), bound, sealFor(t, key, bound, "hunter2"))
 	if err != nil || string(opened) != "hunter2" {
 		t.Fatalf("Open() = %q, %v", opened, err)

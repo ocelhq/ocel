@@ -21,8 +21,8 @@ type Stack struct {
 
 	Containers []AppContainer `json:"containers,omitempty"`
 
-	Writer    Writer `json:"writer,omitempty"`
-	UpdatedAt int64  `json:"updated_at,omitempty"`
+	WrittenBy WrittenBy `json:"writer,omitempty"`
+	UpdatedAt int64     `json:"updated_at,omitempty"`
 }
 
 type StackEntry struct {

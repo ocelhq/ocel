@@ -50,12 +50,12 @@ type buildPlan struct {
 }
 
 type functionSummary struct {
-	Name         string              `json:"name"`
-	Runtime      providerkit.Runtime `json:"runtime"`
-	Handler      string              `json:"handler"`
-	ArtifactPath string              `json:"artifactPath"`
-	Strategy     string              `json:"strategy"`
-	Entrypoint   string              `json:"entrypoint,omitempty"`
+	Name         string                `json:"name"`
+	Runtime      providerkit.Framework `json:"runtime"`
+	Handler      string                `json:"handler"`
+	ArtifactPath string                `json:"artifactPath"`
+	Strategy     string                `json:"strategy"`
+	Entrypoint   string                `json:"entrypoint,omitempty"`
 }
 
 type builderRequest struct {
@@ -248,7 +248,7 @@ func compile(ctx context.Context, cfg *projectconfig.Config, a projectconfig.App
 	}
 	return appbundler.Compile(ctx, appbundler.Compilation{
 		App:            a.Name,
-		Runtime:        providerkit.Runtime{Name: a.Runtime.Name, Arch: a.Runtime.Architecture()},
+		Runtime:        providerkit.Framework{Name: a.Runtime.Name, Arch: a.Runtime.Architecture()},
 		Source:         filepath.Join(cfg.Dir, a.Path),
 		Entrypoint:     a.Entrypoint,
 		FuncDir:        filepath.Join(appDir, functionsDirName, entryFuncDirName),

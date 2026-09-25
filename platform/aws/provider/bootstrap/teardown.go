@@ -125,7 +125,7 @@ func deleteFeatureStacks(ctx context.Context, stacks cfn.TeardownAPI, ns Namespa
 }
 
 func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string, progress, log func(string)) error {
-	report := func(f func(string), msg string) {
+	say := func(f func(string), msg string) {
 		if f != nil {
 			f(msg)
 		}
@@ -154,12 +154,12 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 	}
 	switch {
 	case core == nil:
-		report(log, fmt.Sprintf("no %s stack in this account; whatever stands beside it is still removed", stackName))
+		say(log, fmt.Sprintf("no %s stack in this account; whatever stands beside it is still removed", stackName))
 	case !deployed.Present:
-		report(log, fmt.Sprintf("%s is %s and names none of its resources; whatever stands beside it is still removed", stackName, core.StackStatus))
+		say(log, fmt.Sprintf("%s is %s and names none of its resources; whatever stands beside it is still removed", stackName, core.StackStatus))
 	}
 
-	report(progress, fmt.Sprintf("Deleting the access key of edge reader %s", userName))
+	say(progress, fmt.Sprintf("Deleting the access key of edge reader %s", userName))
 	if err := deleteAccessKeys(ctx, apis.IAM, userName); err != nil {
 		return err
 	}
@@ -168,7 +168,7 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 		if bucket == "" {
 			continue
 		}
-		report(progress, fmt.Sprintf("Emptying %s", bucket))
+		say(progress, fmt.Sprintf("Emptying %s", bucket))
 		if err := cfn.EmptyBucket(ctx, apis.Buckets, bucket); err != nil {
 			return err
 		}
@@ -180,38 +180,38 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 	}
 	present := standing.Names()
 	if len(present) > 0 {
-		report(progress, fmt.Sprintf("Deleting %s (CloudFormation)", strings.Join(featureStackNames(ns, present, class), ", ")))
-		if err := deleteFeatureStacks(ctx, apis.CFN, ns, class, present, func(msg string) { report(log, msg) }); err != nil {
+		say(progress, fmt.Sprintf("Deleting %s (CloudFormation)", strings.Join(featureStackNames(ns, present, class), ", ")))
+		if err := deleteFeatureStacks(ctx, apis.CFN, ns, class, present, func(msg string) { say(log, msg) }); err != nil {
 			return err
 		}
 	}
 
-	report(progress, fmt.Sprintf("Deleting %s (CloudFormation)", ns.runtimeStackName(class)))
-	if err := deleteRuntimeLayerStack(ctx, apis.CFN, ns, class, func(msg string) { report(log, msg) }); err != nil {
+	say(progress, fmt.Sprintf("Deleting %s (CloudFormation)", ns.runtimeStackName(class)))
+	if err := deleteRuntimeLayerStack(ctx, apis.CFN, ns, class, func(msg string) { say(log, msg) }); err != nil {
 		return err
 	}
 
 	if deployed.AppBoundaryARN != "" {
-		report(progress, "Releasing the app boundary from every role still under it")
-		if err := releaseAppBoundary(ctx, apis.IAM, deployed.AppBoundaryARN, func(msg string) { report(log, msg) }); err != nil {
+		say(progress, "Releasing the app boundary from every role still under it")
+		if err := releaseAppBoundary(ctx, apis.IAM, deployed.AppBoundaryARN, func(msg string) { say(log, msg) }); err != nil {
 			return err
 		}
 	}
 
 	if core != nil {
-		report(progress, fmt.Sprintf("Deleting %s (CloudFormation)", stackName))
+		say(progress, fmt.Sprintf("Deleting %s (CloudFormation)", stackName))
 		if err := cfn.Delete(ctx, apis.CFN, stackName); err != nil {
 			return err
 		}
 	}
 
-	report(progress, "Deleting the bootstrap's stored parameters (SSM)")
+	say(progress, "Deleting the bootstrap's stored parameters (SSM)")
 	shared, err := PassphraseHeldBySibling(ctx, apis.CFN, ns, class)
 	if err != nil {
 		return err
 	}
 	if shared {
-		report(log, fmt.Sprintf("the %s bootstrap still stands and its Pulumi state is encrypted under the shared passphrase in %s; it stays", siblingName(class), ns.PassphraseParamName()))
+		say(log, fmt.Sprintf("the %s bootstrap still stands and its Pulumi state is encrypted under the shared passphrase in %s; it stays", siblingName(class), ns.PassphraseParamName()))
 	} else {
 		params = append(params, ns.PassphraseParamName())
 	}

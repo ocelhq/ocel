@@ -186,14 +186,14 @@ func (s *uploadBatchStats) snapshot() uploadBatchSnapshot {
 	}
 }
 
-func say(report providerkit.Reporter, line string) {
-	if report != nil {
-		report.Say(line)
+func say(progress providerkit.Progress, line string) {
+	if progress != nil {
+		progress.Say(line)
 	}
 }
 
-func emitUploadBatch(report providerkit.Reporter, k uploadKind, stats *uploadBatchStats, phaseErr error, phaseStart time.Time) {
-	if report == nil || stats == nil {
+func emitUploadBatch(progress providerkit.Progress, k uploadKind, stats *uploadBatchStats, phaseErr error, phaseStart time.Time) {
+	if progress == nil || stats == nil {
 		return
 	}
 	snap := stats.snapshot()
@@ -212,14 +212,14 @@ func emitUploadBatch(report providerkit.Reporter, k uploadKind, stats *uploadBat
 	if end.IsZero() {
 		end = phaseStart
 	}
-	report.Span(uploadBatchSpanName(k), start, end, batchErr,
+	progress.Span(uploadBatchSpanName(k), start, end, batchErr,
 		providerkit.AttrResourceCount(snap.transferred), providerkit.AttrBytes(snap.bytes))
 
 	for _, f := range snap.failures {
-		report.Span(uploadStandoutName(k, true), f.Start, f.End, errorForKind(f.Kind), providerkit.AttrBytes(f.Bytes))
+		progress.Span(uploadStandoutName(k, true), f.Start, f.End, errorForKind(f.Kind), providerkit.AttrBytes(f.Bytes))
 	}
 	for _, s := range snap.slowest {
-		report.Span(uploadStandoutName(k, false), s.Start, s.End, nil,
+		progress.Span(uploadStandoutName(k, false), s.Start, s.End, nil,
 			providerkit.AttrDurationMS(s.End.Sub(s.Start)), providerkit.AttrBytes(s.Bytes))
 	}
 }

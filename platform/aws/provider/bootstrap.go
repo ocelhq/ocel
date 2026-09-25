@@ -12,20 +12,20 @@ func (p *Provider) forget() {
 }
 
 type settling struct {
-	providerkit.Bootstrapper
+	providerkit.Bootstrap
 	settled func()
 }
 
-func (s settling) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
-	if err := s.Bootstrapper.Apply(ctx, req, report); err != nil {
+func (s settling) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress providerkit.Progress) error {
+	if err := s.Bootstrap.Apply(ctx, req, progress); err != nil {
 		return err
 	}
 	s.settled()
 	return nil
 }
 
-func (s settling) Remove(ctx context.Context, class providerkit.Class, report providerkit.Reporter) error {
-	if err := s.Bootstrapper.Remove(ctx, class, report); err != nil {
+func (s settling) Remove(ctx context.Context, class providerkit.Class, progress providerkit.Progress) error {
+	if err := s.Bootstrap.Remove(ctx, class, progress); err != nil {
 		return err
 	}
 	s.settled()

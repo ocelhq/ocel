@@ -20,8 +20,8 @@ const cacheDirName = ".ocel"
 
 var pinned installer
 
-func Install(ctx context.Context, report providerkit.Reporter) error {
-	_, err := pinned.install(ctx, report)
+func Install(ctx context.Context, progress providerkit.Progress) error {
+	_, err := pinned.install(ctx, progress)
 	return err
 }
 
@@ -31,12 +31,12 @@ type installer struct {
 	err     error
 }
 
-func (i *installer) install(ctx context.Context, report providerkit.Reporter) (auto.PulumiCommand, error) {
-	i.once.Do(func() { i.command, i.err = install(ctx, report) })
+func (i *installer) install(ctx context.Context, progress providerkit.Progress) (auto.PulumiCommand, error) {
+	i.once.Do(func() { i.command, i.err = install(ctx, progress) })
 	return i.command, i.err
 }
 
-func install(ctx context.Context, report providerkit.Reporter) (auto.PulumiCommand, error) {
+func install(ctx context.Context, progress providerkit.Progress) (auto.PulumiCommand, error) {
 	version, err := semver.ParseTolerant(PinnedVersion)
 	if err != nil {
 		return nil, fmt.Errorf("parse pinned Pulumi version: %w", err)
@@ -50,8 +50,8 @@ func install(ctx context.Context, report providerkit.Reporter) (auto.PulumiComma
 	if command, err := auto.NewPulumiCommand(opts); err == nil {
 		return command, nil
 	}
-	if report != nil {
-		report.Say(fmt.Sprintf("Downloading Pulumi runtime %s (one-time setup)…", PinnedVersion))
+	if progress != nil {
+		progress.Say(fmt.Sprintf("Downloading Pulumi runtime %s (one-time setup)…", PinnedVersion))
 	}
 
 	staging := root + "-" + strconv.Itoa(os.Getpid())

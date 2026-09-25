@@ -41,7 +41,9 @@ func certificateName(hostname string, role ...string) string {
 
 func authorizedDomain(hostname string) string { return strings.TrimPrefix(hostname, "*.") }
 
-func (p *Provider) Certificate(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
+type certificates struct{ *Provider }
+
+func (p certificates) Issue(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
 	clients, err := p.stood(ctx)
 	if err != nil {
 		return providerkit.Certificate{}, err
@@ -87,8 +89,8 @@ func (p *Provider) authorized(
 	case !absent(err):
 		return nil, fmt.Errorf("read the dns authorization for %s: %w", req.Hostname, err)
 	}
-	if req.Report != nil {
-		req.Report.Say("Asking Certificate Manager to authorize " + authorizedDomain(req.Hostname))
+	if req.Progress != nil {
+		req.Progress.Say("Asking Certificate Manager to authorize " + authorizedDomain(req.Hostname))
 	}
 	err = p.awaitCertificates(ctx, certificates, "authorize "+req.Hostname,
 		func(call ...googleapi.CallOption) (*certmanager.Operation, error) {
@@ -143,8 +145,8 @@ func (p *Provider) certified(
 	case !absent(err):
 		return fmt.Errorf("read the certificate for %s: %w", req.Hostname, err)
 	default:
-		if req.Report != nil {
-			req.Report.Say("Asking Certificate Manager for a certificate covering " + req.Hostname)
+		if req.Progress != nil {
+			req.Progress.Say("Asking Certificate Manager for a certificate covering " + req.Hostname)
 		}
 		err = p.awaitCertificates(ctx, certificates, "certify "+req.Hostname,
 			func(call ...googleapi.CallOption) (*certmanager.Operation, error) {
@@ -204,7 +206,7 @@ func provisioningIssue(held *certmanager.Certificate) string {
 	return held.Managed.ProvisioningIssue.Reason
 }
 
-func (p *Provider) InspectCertificate(
+func (p certificates) Inspect(
 	ctx context.Context,
 	_ edge.Kind,
 	hostname string,
@@ -285,7 +287,7 @@ func (p *Provider) Entered(ctx context.Context, certificateMap string) ([]string
 	return bound, nil
 }
 
-func (p *Provider) DiscardCertificate(ctx context.Context, cert providerkit.Certificate, report providerkit.Reporter) error {
+func (p certificates) Discard(ctx context.Context, cert providerkit.Certificate, progress providerkit.Progress) error {
 	if !cert.Held() {
 		return nil
 	}
@@ -302,7 +304,7 @@ func (p *Provider) DiscardCertificate(ctx context.Context, cert providerkit.Cert
 	if err != nil {
 		return fmt.Errorf("read the certificate %s: %w", cert.ID, err)
 	}
-	say(report, "discarding the certificate "+cert.ID)
+	say(progress, "discarding the certificate "+cert.ID)
 	if err := p.awaitCertificates(ctx, certificates, "discard "+cert.ID,
 		func(call ...googleapi.CallOption) (*certmanager.Operation, error) {
 			return certificates.Projects.Locations.Certificates.Delete(cert.ID).Context(ctx).Do(call...)
@@ -350,5 +352,3 @@ func (p *Provider) awaitCertificates(
 	}
 	return nil
 }
-
-var _ providerkit.Certifier = (*Provider)(nil)

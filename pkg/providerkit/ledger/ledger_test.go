@@ -146,7 +146,7 @@ func TestPromoteRefusesAPointerAnotherDeployMoved(t *testing.T) {
 	l, records := fixture()
 	ctx := context.Background()
 
-	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1"}, "", edge.DiscardReporter()); err != nil {
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1"}, "", edge.DiscardProgress()); err != nil {
 		t.Fatal(err)
 	}
 	pointer := l.pointerName(edge.DefaultPointer).String()
@@ -160,7 +160,7 @@ func TestPromoteRefusesAPointerAnotherDeployMoved(t *testing.T) {
 		records.held[pointer] = held
 	}
 
-	err := l.Promote(ctx, edge.Promotion{PromotionID: "p2"}, "", edge.DiscardReporter())
+	err := l.Promote(ctx, edge.Promotion{PromotionID: "p2"}, "", edge.DiscardProgress())
 	var refusal ports.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != ports.CodeBusy {
 		t.Fatalf("promote onto a moved pointer = %v, want a busy refusal", err)
@@ -181,7 +181,7 @@ func TestHistoryOrdersNewestFirstAndMarksActive(t *testing.T) {
 	ctx := context.Background()
 
 	for _, id := range []string{"p1", "p2", "p3"} {
-		if err := l.Promote(ctx, edge.Promotion{PromotionID: id}, "", edge.DiscardReporter()); err != nil {
+		if err := l.Promote(ctx, edge.Promotion{PromotionID: id}, "", edge.DiscardProgress()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -209,7 +209,7 @@ func TestPruneKeepsNAndTheActivePromotion(t *testing.T) {
 		if err := l.PutStaged(ctx, edge.DeploymentRecord{App: "web", Identity: id}); err != nil {
 			t.Fatal(err)
 		}
-		if err := l.Promote(ctx, edge.Promotion{PromotionID: id, Builds: map[string]string{"web": id}}, "", edge.DiscardReporter()); err != nil {
+		if err := l.Promote(ctx, edge.Promotion{PromotionID: id, Builds: map[string]string{"web": id}}, "", edge.DiscardProgress()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -239,11 +239,11 @@ func TestPruneKeepsAnActivePromotionThatFellOutOfTheWindow(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 
-	if err := l.Promote(ctx, edge.Promotion{PromotionID: "old"}, "", edge.DiscardReporter()); err != nil {
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "old"}, "", edge.DiscardProgress()); err != nil {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"p2", "p3", "p4"} {
-		if err := l.Promote(ctx, edge.Promotion{PromotionID: id}, "staging", edge.DiscardReporter()); err != nil {
+		if err := l.Promote(ctx, edge.Promotion{PromotionID: id}, "staging", edge.DiscardProgress()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -264,7 +264,7 @@ func TestPruneKeepsARecordAnUnprunedPromotionStillNames(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, id := range []string{"p1", "p2"} {
-		if err := l.Promote(ctx, edge.Promotion{PromotionID: id, Builds: map[string]string{"web": "b1"}}, "", edge.DiscardReporter()); err != nil {
+		if err := l.Promote(ctx, edge.Promotion{PromotionID: id, Builds: map[string]string{"web": "b1"}}, "", edge.DiscardProgress()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -287,10 +287,10 @@ func TestATagIsFreedWithThePromotionItNamed(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 
-	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1", Tag: "live"}, "", edge.DiscardReporter()); err != nil {
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1", Tag: "live"}, "", edge.DiscardProgress()); err != nil {
 		t.Fatal(err)
 	}
-	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p2"}, "", edge.DiscardReporter()); err != nil {
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p2"}, "", edge.DiscardProgress()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := l.Prune(ctx, 1, ""); err != nil {
@@ -322,7 +322,7 @@ func TestPointersAndDestroy(t *testing.T) {
 	ctx := context.Background()
 
 	for _, pointer := range []string{"", "staging"} {
-		if err := l.Promote(ctx, edge.Promotion{PromotionID: "p-" + pointer}, pointer, edge.DiscardReporter()); err != nil {
+		if err := l.Promote(ctx, edge.Promotion{PromotionID: "p-" + pointer}, pointer, edge.DiscardProgress()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -371,7 +371,7 @@ func TestUnpromotingPutsThePointerBackOnThePromotionItDisplaced(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 	for _, id := range []string{"p1", "p2"} {
-		if err := l.Promote(ctx, edge.Promotion{PromotionID: id}, "", edge.DiscardReporter()); err != nil {
+		if err := l.Promote(ctx, edge.Promotion{PromotionID: id}, "", edge.DiscardProgress()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -391,7 +391,7 @@ func TestUnpromotingPutsThePointerBackOnThePromotionItDisplaced(t *testing.T) {
 func TestUnpromotingTheFirstPromotionLeavesThePointerAtNothing(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
-	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1"}, "staging", edge.DiscardReporter()); err != nil {
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1"}, "staging", edge.DiscardProgress()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -407,7 +407,7 @@ func TestUnpromotingLeavesAPointerAnotherPromotionHasSinceTaken(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 	for _, id := range []string{"p1", "p2", "p3"} {
-		if err := l.Promote(ctx, edge.Promotion{PromotionID: id}, "", edge.DiscardReporter()); err != nil {
+		if err := l.Promote(ctx, edge.Promotion{PromotionID: id}, "", edge.DiscardProgress()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -439,7 +439,7 @@ func TestUnpromotingUnderAnInterruptedDeployStillPutsThePointerBack(t *testing.T
 	if held := activeIn(t, l, ""); held != "p1" {
 		t.Errorf("the pointer holds %q, want p1", held)
 	}
-	if err := l.Promote(context.Background(), edge.Promotion{PromotionID: "p3", Tag: "v2"}, "", edge.DiscardReporter()); err != nil {
+	if err := l.Promote(context.Background(), edge.Promotion{PromotionID: "p3", Tag: "v2"}, "", edge.DiscardProgress()); err != nil {
 		t.Errorf("a retried deploy tagged v2 = %v, want the tag the interrupted one claimed freed", err)
 	}
 }
@@ -447,7 +447,7 @@ func TestUnpromotingUnderAnInterruptedDeployStillPutsThePointerBack(t *testing.T
 func promoting(t *testing.T, l *Ledger, promotions ...edge.Promotion) {
 	t.Helper()
 	for _, promotion := range promotions {
-		if err := l.Promote(context.Background(), promotion, "", edge.DiscardReporter()); err != nil {
+		if err := l.Promote(context.Background(), promotion, "", edge.DiscardProgress()); err != nil {
 			t.Fatalf("Promote(%s) = %v", promotion.PromotionID, err)
 		}
 	}
@@ -512,7 +512,7 @@ func TestATagTheEdgeNeverServedIsFreeForTheDeployThatRetriesIt(t *testing.T) {
 	if err := l.Unpromote(ctx, "p1", ""); err != nil {
 		t.Fatalf("Unpromote(p1) = %v", err)
 	}
-	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p2", Tag: "v1"}, "", edge.DiscardReporter()); err != nil {
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p2", Tag: "v1"}, "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("a retried deploy tagged v1 = %v, want it to claim the tag: p1 was taken back and never served", err)
 	}
 	entries, err := l.History(ctx, "")
@@ -536,7 +536,7 @@ func TestARollbackTakenBackKeepsTheTagItsReleaseAlreadyHeld(t *testing.T) {
 		t.Fatalf("Unpromote(p1) = %v", err)
 	}
 	var refusal ports.Refusal
-	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p3", Tag: "v1"}, "", edge.DiscardReporter()); !errors.As(err, &refusal) || refusal.Code != ports.CodeInvalid {
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p3", Tag: "v1"}, "", edge.DiscardProgress()); !errors.As(err, &refusal) || refusal.Code != ports.CodeInvalid {
 		t.Errorf("a new deploy tagged v1 = %v, want it refused: v1 still names p1, which served before the rollback onto it was taken back", err)
 	}
 }
@@ -555,11 +555,11 @@ func TestAPromotionThatLostThePointerRaceFreesItsTag(t *testing.T) {
 		held.Revision = "another deploy got here"
 		records.held[pointer] = held
 	}
-	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p2", Tag: "v1"}, "", edge.DiscardReporter()); err == nil {
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p2", Tag: "v1"}, "", edge.DiscardProgress()); err == nil {
 		t.Fatal("a promotion onto a moved pointer succeeded")
 	}
 
-	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p3", Tag: "v1"}, "", edge.DiscardReporter()); err != nil {
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p3", Tag: "v1"}, "", edge.DiscardProgress()); err != nil {
 		t.Errorf("re-running the deploy tagged v1 = %v, want the tag free: the refusal told the user to re-run it", err)
 	}
 }
@@ -567,7 +567,7 @@ func TestAPromotionThatLostThePointerRaceFreesItsTag(t *testing.T) {
 func TestPromoteRefusesAPointerThatMovedAfterItWasRead(t *testing.T) {
 	l, records := fixture()
 	ctx := context.Background()
-	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1"}, "", edge.DiscardReporter()); err != nil {
+	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p1"}, "", edge.DiscardProgress()); err != nil {
 		t.Fatal(err)
 	}
 	pointer := l.pointerName(edge.DefaultPointer).String()
@@ -583,7 +583,7 @@ func TestPromoteRefusesAPointerThatMovedAfterItWasRead(t *testing.T) {
 		}
 	}
 
-	err := l.Promote(ctx, edge.Promotion{PromotionID: "p2"}, "", edge.DiscardReporter())
+	err := l.Promote(ctx, edge.Promotion{PromotionID: "p2"}, "", edge.DiscardProgress())
 	var refusal ports.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != ports.CodeBusy {
 		t.Fatalf("promote onto a pointer another deploy moved after it was read = %v, want a busy refusal: the promotion records what it displaced, and a pointer that moved displaced something else", err)

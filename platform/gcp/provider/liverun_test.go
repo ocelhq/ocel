@@ -27,9 +27,9 @@ import (
 var liveRelease = naming.NewRelease("live", "wp4")
 
 var (
-	nodeRuntime   = providerkit.Runtime{Name: providerkit.RuntimeNode, Arch: providerkit.ArchX8664}
-	goRuntime     = providerkit.Runtime{Name: providerkit.RuntimeGo, Arch: providerkit.ArchX8664}
-	pythonRuntime = providerkit.Runtime{Name: providerkit.RuntimePython, Arch: providerkit.ArchX8664}
+	nodeRuntime   = providerkit.Framework{Name: providerkit.RuntimeNode, Arch: providerkit.ArchX8664}
+	goRuntime     = providerkit.Framework{Name: providerkit.RuntimeGo, Arch: providerkit.ArchX8664}
+	pythonRuntime = providerkit.Framework{Name: providerkit.RuntimePython, Arch: providerkit.ArchX8664}
 )
 
 func runnable(t *testing.T) *gcp.Provider {
@@ -98,7 +98,7 @@ func asked(t *testing.T, uri string) (int, string) {
 	return resp.StatusCode, strings.TrimSpace(string(said))
 }
 
-func staged(t *testing.T, dir string, runtime providerkit.Runtime, handler string, command []string, files map[string]string) string {
+func staged(t *testing.T, dir string, runtime providerkit.Framework, handler string, command []string, files map[string]string) string {
 	t.Helper()
 	config, err := json.Marshal(providerkit.FunctionConfig{
 		Runtime: runtime, Handler: handler, Command: command, ID: "live", App: "live",
@@ -178,7 +178,7 @@ func held(t *testing.T, repository string, image v1.Image) string {
 	return strings.TrimSuffix(target, ":"+naming.DigestTag(digest.String())) + "@" + digest.String()
 }
 
-func functionImage(t *testing.T, p *gcp.Provider, repository string, runtime providerkit.Runtime, dir string) string {
+func functionImage(t *testing.T, p *gcp.Provider, repository string, runtime providerkit.Framework, dir string) string {
 	t.Helper()
 	ctx := context.Background()
 	base, err := p.FunctionBaseImage(ctx, runtime)
@@ -198,7 +198,7 @@ func functionImage(t *testing.T, p *gcp.Provider, repository string, runtime pro
 		t.Fatalf("build the %s function's image: %v", runtime.Name, err)
 	}
 	arch, _ := providerkit.GoArch(runtime.Arch)
-	binary, err := p.ContainerRuntime(ctx, arch)
+	binary, err := p.Runtime().Binary(ctx, arch)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -257,7 +257,7 @@ func serverlessPlan(app, image string, values map[string]string) providerkit.Sta
 	return serverlessPlanOn(app, image, nodeRuntime, values)
 }
 
-func serverlessPlanOn(app, image string, runtime providerkit.Runtime, values map[string]string) providerkit.StackPlan {
+func serverlessPlanOn(app, image string, runtime providerkit.Framework, values map[string]string) providerkit.StackPlan {
 	return providerkit.StackPlan{
 		Ref: providerkit.StackRef{
 			Project: "live",
@@ -387,7 +387,7 @@ func TestLiveAServiceTakenDownAnswersNothingAndIsTakenDownOnlyOnce(t *testing.T)
 	}
 }
 
-func servesItsOwn(t *testing.T, app string, runtime providerkit.Runtime, stage func(*testing.T) string, mark string) {
+func servesItsOwn(t *testing.T, app string, runtime providerkit.Framework, stage func(*testing.T) string, mark string) {
 	t.Helper()
 	ctx := context.Background()
 	p := runnable(t)

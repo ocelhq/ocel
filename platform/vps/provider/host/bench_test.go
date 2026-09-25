@@ -55,7 +55,7 @@ func (b *bench) fronted(front Front) *Host { return New(b.dial, Keys{}, nil, fro
 
 type recorder struct{ said *[]string }
 
-func saying(said *[]string) providerkit.Reporter { return recorder{said: said} }
+func saying(said *[]string) providerkit.Progress { return recorder{said: said} }
 
 func (r recorder) Say(message string) { *r.said = append(*r.said, message) }
 
@@ -294,7 +294,7 @@ func TestABoxStandingAtTheStampAWriteLeftDescribesItselfAsCurrent(t *testing.T) 
 	class := providerkit.ClassProduction
 	stood := settledOn(t, class)
 
-	described, err := Bootstrap(stood.host(), testVendor, "shop").Describe(context.Background(), class)
+	described, err := NewBootstrap(stood.host(), testVendor, "shop").Describe(context.Background(), class)
 	if err != nil {
 		t.Fatalf("Describe() = %v", err)
 	}
@@ -320,7 +320,7 @@ func TestOneProbeThatCouldNotLookRefusesTheWholeReadingRatherThanPlanningOverIt(
 		return held(command)
 	}
 
-	described, err := Bootstrap(stood.host(), testVendor, "shop").Describe(context.Background(), class)
+	described, err := NewBootstrap(stood.host(), testVendor, "shop").Describe(context.Background(), class)
 	if err == nil {
 		t.Fatalf("Describe() over a survey that could not run one of its probes = %+v, want a refusal: a plan built on it writes over whatever the probe could not see", described)
 	}

@@ -25,7 +25,7 @@ func (h *VarsHandler) values(tier environmentv1.Tier) (values.Store, Class, erro
 	if tier == environmentv1.Tier_TIER_PREVIEW {
 		class = ClassPreview
 	}
-	return values.Store{Records: vars.Records, Sealer: vars.Sealer}, class, nil
+	return values.Store{Records: vars.Records, Cipher: vars.Cipher}, class, nil
 }
 
 func (h *VarsHandler) verifyGrants(ctx context.Context, binding *bindingsv1.Binding) error {

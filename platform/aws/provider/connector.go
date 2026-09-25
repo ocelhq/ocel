@@ -13,8 +13,6 @@ import (
 	awsconnector "github.com/ocelhq/ocel/platform/aws/provider/connector"
 )
 
-var _ providerkit.ConnectorHost = (*Provider)(nil)
-
 const connectorCompute = providerkit.ComputeServerless
 
 func (p *Provider) connectorAPIs() awsconnector.APIs {
@@ -26,7 +24,9 @@ func (p *Provider) connectorAPIs() awsconnector.APIs {
 	}
 }
 
-func (p *Provider) DescribeConnectorTarget(ctx context.Context) (providerkit.ConnectorTarget, error) {
+type connector struct{ *Provider }
+
+func (p connector) Target(ctx context.Context) (providerkit.ConnectorTarget, error) {
 	account, err := p.accountID(ctx)
 	if err != nil {
 		return providerkit.ConnectorTarget{}, err
@@ -54,8 +54,8 @@ func (p *Provider) DescribeConnectorTarget(ctx context.Context) (providerkit.Con
 	return described, nil
 }
 
-func (p *Provider) InstallConnector(ctx context.Context, install providerkit.ConnectorInstall,
-	report providerkit.Reporter) (providerkit.ConnectorAddress, error) {
+func (p connector) Install(ctx context.Context, install providerkit.ConnectorInstall,
+	progress providerkit.Progress) (providerkit.ConnectorAddress, error) {
 	compute, err := providerkit.ConnectorCompute(install.Compute, connectorCompute)
 	if err != nil {
 		return providerkit.ConnectorAddress{}, err
@@ -64,15 +64,15 @@ func (p *Provider) InstallConnector(ctx context.Context, install providerkit.Con
 		Binary:  install.Binary,
 		Version: install.Version,
 		Config:  install.Config,
-	}, providerkit.WriterFor(install.Version), saying(report))
+	}, providerkit.WrittenByVersion(install.Version), saying(progress))
 	if err != nil {
 		return providerkit.ConnectorAddress{}, err
 	}
 	return providerkit.ConnectorAddress{URL: standing.URL, PublicKey: standing.PublicKey, Compute: compute}, nil
 }
 
-func (p *Provider) RemoveConnector(ctx context.Context, report providerkit.Reporter) error {
-	return awsconnector.Remove(ctx, p.connectorAPIs(), p.namespace, saying(report))
+func (p connector) Remove(ctx context.Context, progress providerkit.Progress) error {
+	return awsconnector.Remove(ctx, p.connectorAPIs(), p.namespace, saying(progress))
 }
 
 func hostOf(held string) string {

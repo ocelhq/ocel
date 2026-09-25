@@ -36,9 +36,9 @@ type Provider struct {
 	params   memo[classEdge, bootstrap.ClassParams]
 	account  memo[struct{}, string]
 
-	releases *deploy.Releaser
+	releases *deploy.Stacks
 
-	providerkit.Liveness
+	providerkit.NetLiveness
 }
 
 func New(ctx context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
@@ -60,7 +60,7 @@ func New(ctx context.Context, settings providerkit.Settings) (providerkit.Provid
 func NewProvider(options Options, transforms []string, cfg aws.Config, ns bootstrap.Namespace) *Provider {
 	p := &Provider{options: options, transforms: transforms, aws: cfg, namespace: ns}
 	p.Front = emulatedFront(cfg)
-	p.releases = deploy.NewReleaser(deploy.ResolverFunc(p.release), &deploy.Realized{})
+	p.releases = deploy.NewStacks(deploy.ResolverFunc(p.release), &deploy.Realized{})
 	return p
 }
 
@@ -89,15 +89,15 @@ func (p *Provider) Hooks() providerkit.Hooks {
 	}
 }
 
-func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {
+func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrap, error) {
 	front, err := p.edges().Open(kind)
 	if err != nil {
 		return nil, err
 	}
-	return settling{Bootstrapper: control.BootstrapperFor(p.aws, front, p.edges(), p.options.VarsKey, p.namespace), settled: p.forget}, nil
+	return settling{Bootstrap: control.BootstrapFor(p.aws, front, p.edges(), p.options.VarsKey, p.namespace), settled: p.forget}, nil
 }
 
-func (p *Provider) Releases() providerkit.Releaser { return p.releases }
+func (p *Provider) Stacks() providerkit.Stacks { return p.releases }
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore {
 	return awsports.Artifacts{S3: s3.NewFromConfig(p.aws), Stores: p}
@@ -107,22 +107,24 @@ func (p *Provider) Records() providerkit.RecordStore {
 	return awsports.Records{Dynamo: dynamodb.NewFromConfig(p.aws), Tables: p}
 }
 
-func (p *Provider) Sealer() providerkit.Sealer {
-	return awsports.Sealer{KMS: kms.NewFromConfig(p.aws), Keys: p}
+func (p *Provider) Cipher() providerkit.Cipher {
+	return awsports.Cipher{KMS: kms.NewFromConfig(p.aws), Keys: p}
 }
 
 func (p *Provider) Credentials() providerkit.Credentials {
 	return control.CredentialsFor(p.aws, p.namespace)
 }
 
-func (p *Provider) Edges() providerkit.EdgeRegistry { return p.edges() }
+func (p *Provider) Edges() providerkit.Edges { return p.edges() }
 
-func (p *Provider) DNS() providerkit.DNSRegistry {
+func (p *Provider) DNS() providerkit.DNS {
 	return dns.Registry{Deps: dns.Deps{AWS: p.aws}}
 }
 
-var (
-	_ providerkit.Diagnoser         = (*Provider)(nil)
-	_ providerkit.Certifier         = (*Provider)(nil)
-	_ providerkit.ContainerRuntimer = (*Provider)(nil)
-)
+func (p *Provider) Certificates() providerkit.Certificates { return certificates{p} }
+
+func (p *Provider) Connector() providerkit.Connector { return connector{p} }
+
+func (p *Provider) Runtime() providerkit.Runtime { return containerRuntime{p} }
+
+func (p *Provider) Liveness() providerkit.Liveness { return &p.NetLiveness }

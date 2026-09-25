@@ -12,33 +12,33 @@ const (
 	unknownWriter = "unknown"
 )
 
-type Writer string
+type WrittenBy string
 
-func WriterFor(version string) Writer {
+func WrittenByVersion(version string) WrittenBy {
 	return writerFor(version, vcsRevision())
 }
 
-func writerFor(version, revision string) Writer {
-	w := Writer(strings.TrimSpace(version))
+func writerFor(version, revision string) WrittenBy {
+	w := WrittenBy(strings.TrimSpace(version))
 	if w.Release() {
 		return w
 	}
 	if revision == "" {
 		return devWriter
 	}
-	return Writer(devWriter + "+" + revision)
+	return WrittenBy(devWriter + "+" + revision)
 }
 
-func (w Writer) Release() bool {
+func (w WrittenBy) Release() bool {
 	_, ok := w.release()
 	return ok
 }
 
-func (w Writer) Development() bool {
+func (w WrittenBy) Development() bool {
 	return w.String() != unknownWriter && !w.Release()
 }
 
-func (w Writer) Newer(than Writer) bool {
+func (w WrittenBy) Newer(than WrittenBy) bool {
 	mine, ok := w.release()
 	if !ok {
 		return false
@@ -56,7 +56,7 @@ type releaseVersion struct {
 	pre  string
 }
 
-func (w Writer) release() (releaseVersion, bool) {
+func (w WrittenBy) release() (releaseVersion, bool) {
 	core, _, _ := strings.Cut(string(w), "+")
 	core, pre, _ := strings.Cut(core, "-")
 	parts := strings.Split(strings.TrimPrefix(core, "v"), ".")
@@ -75,7 +75,7 @@ func (w Writer) release() (releaseVersion, bool) {
 	return out, true
 }
 
-func (w Writer) String() string {
+func (w WrittenBy) String() string {
 	if w == "" {
 		return unknownWriter
 	}

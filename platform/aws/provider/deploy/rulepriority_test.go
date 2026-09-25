@@ -64,7 +64,7 @@ func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFir
 	}
 	releaser := standingUp(cfg, engine)
 
-	if _, err := releaser.Provision(context.Background(), plan, edge.DiscardReporter()); err != nil {
+	if _, err := releaser.Provision(context.Background(), plan, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Provision() = %v, want the rule placed again at the next free priority", err)
 	}
 	if attempts != 2 {

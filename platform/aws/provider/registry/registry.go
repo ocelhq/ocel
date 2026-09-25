@@ -84,7 +84,7 @@ func (i images) Has(ctx context.Context, push providerkit.ImagePush) (bool, erro
 	return i.pushed.Has(ctx, push)
 }
 
-func (i images) Push(ctx context.Context, push providerkit.ImagePush, report providerkit.Reporter) error {
+func (i images) Push(ctx context.Context, push providerkit.ImagePush, progress providerkit.Progress) error {
 	repository, err := repositoryOf(i.target, push.Target)
 	if err != nil {
 		return err
@@ -92,7 +92,7 @@ func (i images) Push(ctx context.Context, push providerkit.ImagePush, report pro
 	if err := ensure(ctx, i.api, repository); err != nil {
 		return err
 	}
-	return i.pushed.Push(ctx, push, report)
+	return i.pushed.Push(ctx, push, progress)
 }
 
 func repositoryOf(target providerkit.RegistryTarget, coordinate string) (string, error) {

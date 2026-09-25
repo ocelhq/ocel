@@ -48,7 +48,7 @@ func compileRust(t *testing.T, source, arch string) (string, string, error) {
 	funcDir := filepath.Join(appDir, "functions", "index.func")
 	err := Compile(context.Background(), Compilation{
 		App:     "web",
-		Runtime: providerkit.Runtime{Name: providerkit.RuntimeRust, Arch: arch},
+		Runtime: providerkit.Framework{Name: providerkit.RuntimeRust, Arch: arch},
 		Source:  source,
 		FuncDir: funcDir,
 		AppDir:  appDir,
@@ -222,7 +222,7 @@ func TestCompileDeclaresTheCommandARustArtifactIsServedBy(t *testing.T) {
 	if len(config.Command) != 1 || config.Command[0] != "./web" {
 		t.Errorf("command = %q, want the artifact's own binary, which whatever hosts it execs", config.Command)
 	}
-	if config.Runtime != (providerkit.Runtime{Name: "rust", Arch: "x86_64"}) {
+	if config.Runtime != (providerkit.Framework{Name: "rust", Arch: "x86_64"}) {
 		t.Errorf("runtime = %+v, want the rust runtime at the architecture it was built for", config.Runtime)
 	}
 
@@ -320,7 +320,7 @@ func TestCompileRefusesAnEntrypointForARustApp(t *testing.T) {
 	}
 	err := Compile(context.Background(), Compilation{
 		App:        "web",
-		Runtime:    providerkit.Runtime{Name: providerkit.RuntimeRust},
+		Runtime:    providerkit.Framework{Name: providerkit.RuntimeRust},
 		Source:     source,
 		Entrypoint: "bin",
 		FuncDir:    filepath.Join(t.TempDir(), "index.func"),

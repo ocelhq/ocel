@@ -5,7 +5,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type Reporter = edge.Reporter
+type Progress = edge.Progress
 
 type Attr = edge.Attr
 

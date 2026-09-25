@@ -34,7 +34,7 @@ var (
 
 type Store struct {
 	Records ports.RecordStore
-	Sealer  ports.Sealer
+	Cipher  ports.Cipher
 	Now     func() time.Time
 }
 
@@ -97,7 +97,7 @@ func (s Store) Set(ctx context.Context, scope Scope, at Coordinate, plaintext st
 		return Metadata{}, fmt.Errorf("%s is a reference to %s, which is where that value is edited: %w", at, current.Target, ErrIsReference)
 	}
 
-	sealed, err := s.Sealer.Seal(ctx, coordinateOf(scope, at), []byte(plaintext))
+	sealed, err := s.Cipher.Seal(ctx, coordinateOf(scope, at), []byte(plaintext))
 	if err != nil {
 		return Metadata{}, err
 	}
@@ -175,7 +175,7 @@ func (s Store) open(ctx context.Context, scope Scope, at Coordinate, held cell) 
 	if err != nil {
 		return "", err
 	}
-	plaintext, err := s.Sealer.Open(ctx, coordinateOf(from, holds), holder.Sealed)
+	plaintext, err := s.Cipher.Open(ctx, coordinateOf(from, holds), holder.Sealed)
 	if err != nil {
 		return "", err
 	}
@@ -294,7 +294,7 @@ func (s Store) Reveal(ctx context.Context, scope Scope, cells []Coordinate) ([]V
 	plaintexts := make([]string, len(opening))
 	if err := each(ctx, len(opening), func(ctx context.Context, slot int) error {
 		i := opening[slot]
-		plaintext, err := s.Sealer.Open(ctx, coordinateOf(from[i], holds[i]), sealed[i].Sealed)
+		plaintext, err := s.Cipher.Open(ctx, coordinateOf(from[i], holds[i]), sealed[i].Sealed)
 		if err != nil {
 			return err
 		}

@@ -105,7 +105,7 @@ func TestAReleaseThatNeverReachedItsRecordSweepsItsOwnImageAnyway(t *testing.T) 
 	}}
 	p := over(machine)
 
-	if _, err := p.Releases().Provision(context.Background(), aStack(t, anApp()), nil); err == nil {
+	if _, err := p.Stacks().Provision(context.Background(), aStack(t, anApp()), nil); err == nil {
 		t.Fatal("Provision() succeeded over a box whose record tier refused, and this test needs the failure path")
 	}
 	called := helperCalls(machine, "reconcile")

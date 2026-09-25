@@ -31,9 +31,9 @@ func (t Target) Prefix() string {
 }
 
 type Stacks interface {
-	Up(ctx context.Context, target Target, program Program, report edge.Reporter) (map[string]string, error)
+	Up(ctx context.Context, target Target, program Program, progress edge.Progress) (map[string]string, error)
 
-	Destroy(ctx context.Context, target Target, report edge.Reporter) error
+	Destroy(ctx context.Context, target Target, progress edge.Progress) error
 
 	Outputs(ctx context.Context, target Target) (map[string]string, error)
 }

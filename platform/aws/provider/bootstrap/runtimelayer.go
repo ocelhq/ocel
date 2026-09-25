@@ -153,7 +153,7 @@ func applyRuntimeLayers(ctx context.Context, apis APIs, target spec, req Request
 
 type RuntimeLayerRequest struct {
 	ArtifactBucket string
-	Writer         providerkit.Writer
+	Writer         providerkit.WrittenBy
 }
 
 func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class string, req RuntimeLayerRequest, log func(string)) (map[string]string, error) {

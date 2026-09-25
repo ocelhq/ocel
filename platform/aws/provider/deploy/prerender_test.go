@@ -132,19 +132,19 @@ func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked 
 	return builds
 }
 
-type quietReporter struct{}
+type quietProgress struct{}
 
-func (quietReporter) Say(string) {}
+func (quietProgress) Say(string) {}
 
-func (quietReporter) Detail(string) {}
+func (quietProgress) Detail(string) {}
 
-func (quietReporter) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
+func (quietProgress) Span(string, time.Time, time.Time, error, ...providerkit.Attr) {}
 
 func pushSet(ctx context.Context, set *assetSet, err error) error {
 	if err != nil || set == nil {
 		return err
 	}
-	return set.push(ctx, quietReporter{})
+	return set.push(ctx, quietProgress{})
 }
 
 func pushStaticAssetSet(ctx context.Context, cfg Config, app, runtime string, coord naming.Coordinate) error {

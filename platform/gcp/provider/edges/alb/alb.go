@@ -54,7 +54,7 @@ func (e *Edge) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapO
 		return edge.BootstrapOutput{}, providerkit.Refuse(providerkit.CodeInvalid,
 			"the %q edge stands one load balancer up per class, and this bootstrap names none", Kind)
 	}
-	front, err := e.raise(ctx, class, edge.DiscardReporter())
+	front, err := e.raise(ctx, class, edge.DiscardProgress())
 	if err != nil {
 		return edge.BootstrapOutput{}, err
 	}
@@ -66,7 +66,7 @@ func (e *Edge) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapO
 	}}, nil
 }
 
-func (e *Edge) raise(ctx context.Context, class edge.Class, report edge.Reporter) (Front, error) {
+func (e *Edge) raise(ctx context.Context, class edge.Class, progress edge.Progress) (Front, error) {
 	var held previewEntry
 	if class == edge.ClassPreview {
 		heldPreview, err := e.heldPreview(ctx)
@@ -75,16 +75,16 @@ func (e *Edge) raise(ctx context.Context, class edge.Class, report edge.Reporter
 		}
 		held = heldPreview
 	}
-	return e.raiseServing(ctx, class, held, report)
+	return e.raiseServing(ctx, class, held, progress)
 }
 
-func (e *Edge) raiseServing(ctx context.Context, class edge.Class, held previewEntry, report edge.Reporter) (Front, error) {
+func (e *Edge) raiseServing(ctx context.Context, class edge.Class, held previewEntry, progress edge.Progress) (Front, error) {
 	names := frontNames(class)
 	outputs, err := e.deps.Stacks.Up(ctx, Target{Class: class}, frontProgram(frontSpec{
 		Region:  e.deps.Region,
 		Names:   names,
 		Preview: held,
-	}), report)
+	}), progress)
 	if err != nil {
 		return Front{}, err
 	}
@@ -131,7 +131,7 @@ func (e *Edge) Teardown(ctx context.Context, class edge.Class) error {
 				"release those hostnames with `ocel domain remove` in the projects that bound them, then take this bootstrap down",
 			Kind, class, strings.Join(bound, ", "))
 	}
-	return e.deps.Stacks.Destroy(ctx, Target{Class: class}, edge.DiscardReporter())
+	return e.deps.Stacks.Destroy(ctx, Target{Class: class}, edge.DiscardProgress())
 }
 
 type held struct {

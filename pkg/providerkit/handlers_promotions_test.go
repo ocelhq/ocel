@@ -36,7 +36,7 @@ func seedPromotions(t *testing.T, provider *fake.Provider, class providerkit.Cla
 	}
 	for i, id := range ids {
 		promotion := edge.Promotion{PromotionID: id, Ts: int64(i + 1), Builds: map[string]string{"web": buildIdentity(i)}}
-		if err := held.Promote(context.Background(), promotion, pointer, edge.DiscardReporter()); err != nil {
+		if err := held.Promote(context.Background(), promotion, pointer, edge.DiscardProgress()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -123,25 +123,25 @@ type capturingLedger struct {
 	fake.Ledger
 	marker string
 
-	mu     sync.Mutex
-	report edge.Reporter
-	heard  bool
+	mu       sync.Mutex
+	progress edge.Progress
+	heard    bool
 }
 
-func (c *capturingLedger) Promote(ctx context.Context, promotion edge.Promotion, pointer string, report edge.Reporter) error {
+func (c *capturingLedger) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
 	c.mu.Lock()
-	c.report, c.heard = report, true
+	c.progress, c.heard = progress, true
 	c.mu.Unlock()
-	report.Say(c.marker)
-	report.Detail(c.marker)
-	report.Span(c.marker, time.Now(), time.Now(), nil)
-	return c.Ledger.Promote(ctx, promotion, pointer, report)
+	progress.Say(c.marker)
+	progress.Detail(c.marker)
+	progress.Span(c.marker, time.Now(), time.Now(), nil)
+	return c.Ledger.Promote(ctx, promotion, pointer, progress)
 }
 
-func (c *capturingLedger) flipped() (edge.Reporter, bool) {
+func (c *capturingLedger) flipped() (edge.Progress, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.report, c.heard
+	return c.progress, c.heard
 }
 
 func capturing(t *testing.T, provider *fake.Provider, class providerkit.Class, slug, marker string) *capturingLedger {
@@ -161,11 +161,11 @@ func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnReporter(t *testing.T) {
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	report, heard := held.flipped()
+	progress, heard := held.flipped()
 	if !heard {
 		t.Fatal("the deploy never reached Promote, so nothing was reported from the flip")
 	}
-	if report == edge.DiscardReporter() {
+	if progress == edge.DiscardProgress() {
 		t.Fatal("the deploy handed the flip a discarding reporter, want the Promotion stage's own")
 	}
 
@@ -203,12 +203,12 @@ func TestTheRollbackFlipIsHandedAReporterThatDiscards(t *testing.T) {
 	if _, err := client.Rollback(context.Background(), &contractv1.RollbackRequest{Slug: "shop", To: "p1"}); err != nil {
 		t.Fatalf("Rollback() error = %v", err)
 	}
-	report, heard := held.flipped()
+	progress, heard := held.flipped()
 	if !heard {
 		t.Fatal("the rollback never reached Promote")
 	}
-	if report != edge.DiscardReporter() {
-		t.Errorf("the rollback handed the flip %#v, want the discarding reporter: Rollback is a unary RPC that streams nothing", report)
+	if progress != edge.DiscardProgress() {
+		t.Errorf("the rollback handed the flip %#v, want the discarding reporter: Rollback is a unary RPC that streams nothing", progress)
 	}
 }
 
@@ -316,7 +316,7 @@ func (m *memoryLedger) Prune(_ context.Context, keepN int, _ string) (edge.Prune
 	return edge.PruneResult{KeptPromotionIDs: []string{"own-1"}}, nil
 }
 
-func (*memoryLedger) Promote(context.Context, edge.Promotion, string, edge.Reporter) error {
+func (*memoryLedger) Promote(context.Context, edge.Promotion, string, edge.Progress) error {
 	return nil
 }
 
@@ -477,7 +477,7 @@ func TestRemoveEnvironmentRemovesTheRecordsOcelKeptThere(t *testing.T) {
 	deployed(t, provider, providerkit.ClassPreview, "shop")
 	seedPromotions(t, provider, providerkit.ClassPreview, "shop", "pr-7", "p1")
 
-	store := values.Store{Records: provider.Records(), Sealer: provider.Sealer()}
+	store := values.Store{Records: provider.Records(), Cipher: provider.Cipher()}
 	scope := values.Scope{Project: "shop", Class: providerkit.ClassPreview}
 	publish := func(environment, owner string, binding *bindingsv1.Binding) {
 		pair, err := providerkit.BindingPair(owner, binding)
@@ -610,22 +610,22 @@ type sweeper struct {
 	forgotten  []string
 }
 
-func (s *sweeper) ProvisionContainers(context.Context, providerkit.StackPlan, providerkit.Reporter) ([]providerkit.AppContainer, error) {
+func (s *sweeper) ProvisionContainers(context.Context, providerkit.StackPlan, providerkit.Progress) ([]providerkit.AppContainer, error) {
 	return nil, nil
 }
 
-func (s *sweeper) RemoveContainers(context.Context, providerkit.StackRef, []providerkit.AppContainer, providerkit.Reporter) error {
+func (s *sweeper) RemoveContainers(context.Context, providerkit.StackRef, []providerkit.AppContainer, providerkit.Progress) error {
 	return nil
 }
 
-func (s *sweeper) ReconcileImages(_ context.Context, _ providerkit.StackRef, app, coordinate string, _ providerkit.Reporter) error {
+func (s *sweeper) ReconcileImages(_ context.Context, _ providerkit.StackRef, app, coordinate string, _ providerkit.Progress) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.reconciled = append(s.reconciled, app+" "+coordinate)
 	return nil
 }
 
-func (s *sweeper) ForgetReleases(_ context.Context, _ providerkit.StackRef, app string, _ providerkit.Reporter) error {
+func (s *sweeper) ForgetReleases(_ context.Context, _ providerkit.StackRef, app string, _ providerkit.Progress) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.forgotten = append(s.forgotten, app)
@@ -762,7 +762,7 @@ func TestASecondPreviewRemovalTakesDownWhatTheFirstOneLeftStanding(t *testing.T)
 	deployed(t, provider, providerkit.ClassPreview, "shop")
 	seedPromotions(t, provider, providerkit.ClassPreview, "shop", "pr-7", "p1")
 	stack := seedContainerStack(t, provider, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")
-	provider.Releaser().RefuseNextDestroy(errors.New("the box answered nothing"))
+	provider.FakeStacks().RefuseNextDestroy(errors.New("the box answered nothing"))
 
 	if result := removeEnvironment(t, client, "shop", "pr-7"); result.GetSuccess() {
 		t.Fatal("a teardown whose first destroy refused reported success")

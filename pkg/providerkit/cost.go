@@ -17,7 +17,7 @@ type ShapeRequest struct {
 	Transforms []string
 }
 
-func EdgePricers(registry EdgeRegistry) ([]costkit.EdgePricer, error) {
+func EdgePricers(registry Edges) ([]costkit.EdgePricer, error) {
 	var pricers []costkit.EdgePricer
 	for _, kind := range registry.Supported() {
 		front, err := registry.Open(kind)

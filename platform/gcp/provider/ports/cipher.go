@@ -11,18 +11,18 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-type Sealer struct {
+type Cipher struct {
 	Clients *Clients
 }
 
-func (s Sealer) key(at providerkit.Coordinate) (string, error) {
+func (s Cipher) key(at providerkit.Coordinate) (string, error) {
 	if at.Class == "" {
 		return "", Classless("a value")
 	}
 	return s.Clients.KeyPath(string(at.Class)), nil
 }
 
-func (s Sealer) Seal(ctx context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
+func (s Cipher) Seal(ctx context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
 	key, err := s.key(at)
 	if err != nil {
 		return nil, err
@@ -42,7 +42,7 @@ func (s Sealer) Seal(ctx context.Context, at providerkit.Coordinate, plaintext [
 	return sealed.GetCiphertext(), nil
 }
 
-func (s Sealer) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+func (s Cipher) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
 	key, err := s.key(at)
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func (s Sealer) Open(ctx context.Context, at providerkit.Coordinate, sealed []by
 	return opened.GetPlaintext(), nil
 }
 
-func (s Sealer) keyless(class providerkit.Class, doing string, err error) error {
+func (s Cipher) keyless(class providerkit.Class, doing string, err error) error {
 	if status.Code(err) == codes.NotFound {
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"this project holds no %s key on the %s ring to seal a %s value under, and a key is the one bootstrap item with a standing cost.\nRun `%s` to add one, then try again",

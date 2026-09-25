@@ -27,7 +27,7 @@ func (r *interceptedRecords) List(ctx context.Context, under providerkit.RecordN
 	return held, err
 }
 
-func containerReleaser(t *testing.T, records providerkit.RecordStore) (*Releaser, *mockedEngine, providerkit.StackPlan) {
+func containerReleaser(t *testing.T, records providerkit.RecordStore) (*Stacks, *mockedEngine, providerkit.StackPlan) {
 	t.Helper()
 	cfg, plan := plannedContainerStack(t)
 	cfg.Records = records
@@ -50,7 +50,7 @@ func TestTheLastContainerLeavingKeepsTheSubstrateWhenAnotherDeployClaimsItMeanwh
 	shared := fake.NewRecords()
 	records := &interceptedRecords{RecordStore: shared}
 	releaser, engine, shop := containerReleaser(t, records)
-	if _, err := releaser.Provision(ctx, shop, edge.DiscardReporter()); err != nil {
+	if _, err := releaser.Provision(ctx, shop, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 
@@ -62,12 +62,12 @@ func TestTheLastContainerLeavingKeepsTheSubstrateWhenAnotherDeployClaimsItMeanwh
 			return
 		}
 		claimed = true
-		if _, err := other.Provision(ctx, blog, edge.DiscardReporter()); err != nil {
+		if _, err := other.Provision(ctx, blog, edge.DiscardProgress()); err != nil {
 			t.Errorf("Provision(blog) during shop's release = %v", err)
 		}
 	}
 
-	if err := releaser.Destroy(ctx, shop.Ref, edge.DiscardReporter()); err != nil {
+	if err := releaser.Destroy(ctx, shop.Ref, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Destroy(shop) = %v", err)
 	}
 	if !claimed {
@@ -93,7 +93,7 @@ func TestAContainerDeployIsRefusedWhileTheSubstrateIsGoingDown(t *testing.T) {
 	ctx := context.Background()
 	shared := fake.NewRecords()
 	releaser, engine, shop := containerReleaser(t, shared)
-	if _, err := releaser.Provision(ctx, shop, edge.DiscardReporter()); err != nil {
+	if _, err := releaser.Provision(ctx, shop, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 	held, err := ports.Held(ctx, shared, leaseRecord(providerkit.ClassProduction))
@@ -106,7 +106,7 @@ func TestAContainerDeployIsRefusedWhileTheSubstrateIsGoingDown(t *testing.T) {
 
 	other, _, blog := containerReleaser(t, shared)
 	blog.Ref = providerkit.StackRef{Project: "blog", Class: providerkit.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
-	_, err = other.Provision(ctx, blog, edge.DiscardReporter())
+	_, err = other.Provision(ctx, blog, edge.DiscardProgress())
 	var refusal providerkit.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeBusy {
 		t.Fatalf("Provision(blog) = %v, want the busy refusal a substrate on its way down earns", err)

@@ -17,7 +17,7 @@ func TestDestroyingAStackTakesTheProjectsNetworkAfterItsRoutes(t *testing.T) {
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	if err := stack.Promote(context.Background(), edge.Promotion{
 		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
-	}, "", edge.DiscardReporter()); err != nil {
+	}, "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 	if err := stack.Destroy(context.Background()); err != nil {

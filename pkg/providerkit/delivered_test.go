@@ -26,7 +26,7 @@ func declaring(req *contractv1.DeployRequest, class resourcesv1.VariableClass, k
 
 func sealValue(t *testing.T, p *fake.Provider, key, plaintext string) {
 	t.Helper()
-	store := values.Store{Records: p.Records(), Sealer: p.Sealer()}
+	store := values.Store{Records: p.Records(), Cipher: p.Cipher()}
 	scope := values.Scope{Project: "shop", Class: providerkit.ClassProduction}
 	if _, err := store.Set(context.Background(), scope, values.Coordinate{Cell: values.Cell{Key: key}}, plaintext, nil); err != nil {
 		t.Fatalf("Set(%s): %v", key, err)
@@ -45,7 +45,7 @@ func deliveredBy(t *testing.T, req *contractv1.DeployRequest, publish func(*fake
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	plans := provider.Releases().(*fake.Releaser).Plans()
+	plans := provider.FakeStacks().Plans()
 	for i := len(plans) - 1; i >= 0; i-- {
 		if plans[i].App != nil {
 			return plans[i].App.Values.Delivered
@@ -67,6 +67,7 @@ func TestAResourceIsNamedAsTheRuntimeReadsIt(t *testing.T) {
 }
 
 func TestADeployThatProvisionsNamesNoPhase(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	delivered := deliveredBy(t, namingARegistry(containerDeployRequest("/healthz")), nil)
 
 	if got, held := delivered[constants.PhaseEnvName]; held {
@@ -108,7 +109,7 @@ func deliveredByWrapping(t *testing.T, req *contractv1.DeployRequest, publish fu
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	plans := provider.Releaser().Plans()
+	plans := provider.FakeStacks().Plans()
 	for i := len(plans) - 1; i >= 0; i-- {
 		if plans[i].App != nil {
 			return plans[i].App.Values.Delivered
@@ -229,6 +230,7 @@ func TestTheStagedRecordNamesEveryValueAWrappingProvidersAppDeclares(t *testing.
 }
 
 func TestTheDeploymentURLIsDeliveredToAContainerRatherThanRefusedAsAnOcelName(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	req := namingARegistry(containerDeployRequest("/healthz"))
 	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, constants.AppURLEnvName, "https://shop.example")
 	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, providerkit.ClientURLEnvName, "https://shop.example")
@@ -355,6 +357,7 @@ func TestAServerlessAppIsHeldToNeitherReservation(t *testing.T) {
 }
 
 func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheApp(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	for name, tc := range map[string]struct {
 		clientBundle bool
 		want         []string
@@ -394,6 +397,7 @@ func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheApp(t *testing.T) {
 }
 
 func TestTheStagedRecordNamesEveryValueTheAppDeclaresAndCarriesNone(t *testing.T) {
+	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
 	held := staging(t, provider)

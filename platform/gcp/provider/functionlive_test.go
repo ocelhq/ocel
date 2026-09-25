@@ -26,7 +26,7 @@ func functionPlanDeclaring(class providerkit.Class, env string, values providerk
 			Functions: []providerkit.FunctionSpec{{
 				Name:    "fn--api--index",
 				Image:   "europe-west1-docker.pkg.dev/acme/ocel/api-index@sha256:abc",
-				Runtime: providerkit.Runtime{Name: providerkit.RuntimeNode, Arch: providerkit.ArchX8664},
+				Runtime: providerkit.Framework{Name: providerkit.RuntimeNode, Arch: providerkit.ArchX8664},
 				Env:     map[string]string{"OCEL_ROUTE": "index"},
 			}},
 		},

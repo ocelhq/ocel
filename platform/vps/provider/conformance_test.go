@@ -47,7 +47,7 @@ func TestTheEdgeRegistryOpensTheBoxEdge(t *testing.T) {
 
 	registry := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}}).Edges()
 
-	conformance.RunEdgeRegistry(t, registry)
+	conformance.RunEdges(t, registry)
 
 	if got := registry.Supported(); !slices.Equal(got, []edge.Kind{boxedge.Kind}) {
 		t.Errorf("Supported() = %v, want %q alone: a machine is fronted by the proxy ocel puts on it", got, boxedge.Kind)
@@ -73,7 +73,7 @@ func TestVPSProvider(t *testing.T) {
 		Spec:    providerkit.Spec{Version: "test", New: vps.New},
 		Options: providerkit.Options{"ssh": map[string]any{"host": "203.0.113.10"}},
 		Binary:  buildProvider(t),
-		Certifier: &conformance.CertifierChecks{
+		Certificates: &conformance.CertificateChecks{
 			Kind:      boxedge.Kind,
 			Hostnames: []string{"shop.example.com", "www.shop.example.com"},
 			Handle:    certs.ProxyHandle,
@@ -105,13 +105,6 @@ func TestTheProviderCarriesTheVendorAndSetsTheHooksABoxImplements(t *testing.T) 
 			t.Errorf("the box's hooks set %s, a step no box takes", name)
 		}
 	}
-	var root providerkit.Provider = p
-	if !held[providerkit.Certifier](root) {
-		t.Error("the root carries no Certifier, and a provider without one blanks the certificate and renewal lines in `ocel domain status` entirely, which reads as no tls rather than tls you do not manage")
-	}
-	if !held[providerkit.Prober](root) {
-		t.Error("the root carries no Prober, and the settle then answers from what it just bound rather than from what the hostname serves")
-	}
 	if hooks.PreflightDeploy == nil {
 		t.Error("the box's hooks leave PreflightDeploy nil, and a box then learns its engine, its disk, its proxy or its ports are not ready halfway through an image transfer")
 	}
@@ -124,7 +117,7 @@ func TestTheReleasePortRefusesTheResourcesThisProviderServesNoneOf(t *testing.T)
 	t.Parallel()
 
 	ctx := context.Background()
-	release := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}}).Releases()
+	release := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}}).Stacks()
 	plan := providerkit.StackPlan{
 		Ref: providerkit.StackRef{
 			Project: "shop",
@@ -142,11 +135,6 @@ func TestTheReleasePortRefusesTheResourcesThisProviderServesNoneOf(t *testing.T)
 	if _, err := release.Provision(ctx, plan, nil); !errors.As(err, &refusal) {
 		t.Errorf("Provision() of a resource this provider serves none of = %v, want a refusal rather than a release that reads as done", err)
 	}
-}
-
-func held[T any](root providerkit.Provider) bool {
-	_, ok := root.(T)
-	return ok
 }
 
 func buildProvider(t *testing.T) string {

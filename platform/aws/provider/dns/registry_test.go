@@ -15,7 +15,7 @@ import (
 func TestRegistryConformance(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
-	conformance.RunDNSRegistry(t, Registry{})
+	conformance.RunDNS(t, Registry{})
 }
 
 func TestRegistrySupportedKinds(t *testing.T) {

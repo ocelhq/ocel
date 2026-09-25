@@ -14,7 +14,7 @@ import (
 func TestTheLoadBalancerIsAFeatureOnlyTheEdgeThatNeedsItPullsIn(t *testing.T) {
 	t.Parallel()
 
-	catalogue := bootstrapper{}.Catalogue()
+	catalogue := bootstrap{}.Catalogue()
 	at := slices.IndexFunc(catalogue, func(f providerkit.Feature) bool { return f.Name == albFeature })
 	if at < 0 {
 		t.Fatalf("Catalogue() = %v, want the %q feature: a standing cost is consented to by being planned", catalogue, albFeature)
@@ -104,7 +104,7 @@ func TestAnAlbBootstrapChecksTheComputeAndCertificateManagerPermissionsAndNamesT
 func TestThePlanNamesTheLoadBalancerGroupOnlyForTheEdgeThatStandsItUp(t *testing.T) {
 	t.Parallel()
 
-	b := bootstrapper{}
+	b := bootstrap{}
 	catalogue := b.Catalogue()
 	read, err := b.described(context.Background(),
 		survey{Names: Names{namespace: "ocel", project: "acme-prod"}, Class: providerkit.ClassProduction, Project: "acme-prod"})

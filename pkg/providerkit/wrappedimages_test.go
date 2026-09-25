@@ -185,7 +185,7 @@ func TestAWrappedContainerRunsTheCoordinateItWasPushedUnder(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := provider.Releaser().Plans()
+	plans := provider.FakeStacks().Plans()
 	var image string
 	for i := len(plans) - 1; i >= 0; i-- {
 		if plans[i].App != nil {
@@ -228,7 +228,7 @@ func (s *stubStore) Has(context.Context, providerkit.ImagePush) (bool, error) {
 
 func (s *stubStore) Destination() string { return "the stub registry" }
 
-func (s *stubStore) Push(_ context.Context, push providerkit.ImagePush, _ providerkit.Reporter) error {
+func (s *stubStore) Push(_ context.Context, push providerkit.ImagePush, _ providerkit.Progress) error {
 	s.pushed = append(s.pushed, push)
 	return nil
 }
