@@ -96,7 +96,7 @@ func releasing(p *vps.Provider, held release, drain time.Duration, report provid
 
 func inflightOn(t *testing.T, vm machine, held release) int {
 	t.Helper()
-	read := strings.TrimSpace(vm.inside(t, "curl -sS -m 5 http://"+held.address+"/inflight"))
+	read := strings.TrimSpace(vm.beside(t, held.physical, "curl -sS -m 5 http://127.0.0.1:"+providerkit.InjectedPortText+"/inflight"))
 	count, err := strconv.Atoi(read)
 	if err != nil {
 		return -1
