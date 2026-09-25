@@ -961,27 +961,27 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 		t.Errorf("the stamp the CLI left reads state %q, want %q", stamped.State, host.StateComplete)
 	}
 
-	standing := run.must(t, "doctor")
-	if !strings.Contains(standing, "bootstrapped — schema") {
-		t.Fatalf("`ocel doctor` after an apply still calls production unbootstrapped:\n%s", standing)
+	report := run.must(t, "doctor")
+	if !strings.Contains(report, "bootstrapped — schema") {
+		t.Fatalf("`ocel doctor` after an apply still calls production unbootstrapped:\n%s", report)
 	}
-	if !strings.Contains(standing, "\nStanding\n") {
-		t.Fatalf("`ocel doctor` on a bootstrapped box printed no standing section, so there is no output an absence can be read over:\n%s", standing)
+	if !strings.Contains(report, "\nHost checks\n") {
+		t.Fatalf("`ocel doctor` on a bootstrapped box printed no host checks section, so there is no output an absence can be read over:\n%s", report)
 	}
 	for _, verdict := range []string{
 		lifecycleHostname + " resolves to " + run.vm.addr + ", which is this box",
 		"port " + caddy.HTTPPort + " answers from this machine",
 		"nothing listens on tcp " + adminPort + " inside " + caddy.Container,
 	} {
-		if !strings.Contains(standing, verdict) {
-			t.Errorf("`ocel doctor` never said %q, and this is the only command that runs thirty days after a deploy:\n%s", verdict, standing)
+		if !strings.Contains(report, verdict) {
+			t.Errorf("`ocel doctor` never said %q, and this is the only command that runs thirty days after a deploy:\n%s", verdict, report)
 		}
 	}
-	if strings.Contains(standing, "✗") {
-		t.Errorf("`ocel doctor` refused something on a box whose one owed thing is a dns record a human has not written:\n%s", standing)
+	if strings.Contains(report, "✗") {
+		t.Errorf("`ocel doctor` refused something on a box whose one owed thing is a dns record a human has not written:\n%s", report)
 	}
-	if strings.Contains(standing, "\nCertificates\n") {
-		t.Errorf("`ocel doctor` printed a certificates section over a box holding no hostname at all, so it read a renewal off something other than a certificate this box serves:\n%s", standing)
+	if strings.Contains(report, "\nCertificates\n") {
+		t.Errorf("`ocel doctor` printed a certificates section over a box holding no hostname at all, so it read a renewal off something other than a certificate this box serves:\n%s", report)
 	}
 
 	replanned := run.must(t, "bootstrap", "production", "--dry")
