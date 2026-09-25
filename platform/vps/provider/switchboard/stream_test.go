@@ -14,7 +14,6 @@ import (
 	"time"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
-	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -137,7 +136,7 @@ func TestAnUpgradedConnectionOpenedBeforeAFlipDrainsWithItsRetireeAndIsCutAtTheC
 	if err := <-flipped; err != nil {
 		t.Fatal(err)
 	}
-	if lines := told.lines(); !slices.Equal(lines, []string{caddyadmin.DrainExpired + " " + blue + " 1"}) {
+	if lines := told.lines(); !slices.Equal(lines, []string{switchboard.DrainExpired + " " + blue + " 1"}) {
 		t.Errorf("the flip told %v, want the socket still open when the ceiling passed", lines)
 	}
 	_ = opened.conn.SetDeadline(time.Now().Add(5 * time.Second))
@@ -180,7 +179,7 @@ func TestAnUpgradeTheRetireeAnswersOnlyAfterItsDrainExpiredIsNeverCarried(t *tes
 	if err := board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue}, 200*time.Millisecond, told.tell); err != nil {
 		t.Fatal(err)
 	}
-	if lines := told.lines(); !slices.Equal(lines, []string{caddyadmin.DrainExpired + " " + blue + " 1"}) {
+	if lines := told.lines(); !slices.Equal(lines, []string{switchboard.DrainExpired + " " + blue + " 1"}) {
 		t.Fatalf("the flip told %v, want the pending upgrade still held when the ceiling passed", lines)
 	}
 	close(release)

@@ -11,8 +11,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
@@ -278,10 +279,10 @@ func tellDrain(report providerkit.Reporter, said string) {
 	for line := range strings.Lines(said) {
 		fields := strings.Fields(line)
 		switch {
-		case len(fields) == 3 && fields[0] == caddyadmin.DrainExpired:
+		case len(fields) == 3 && fields[0] == switchboard.DrainExpired:
 			report.Detail(fmt.Sprintf("%s still held %s request(s) when the drain window closed: %s",
 				fields[1], fields[2], drainCeiling))
-		case len(fields) == 2 && fields[0] == caddyadmin.Drained:
+		case len(fields) == 2 && fields[0] == switchboard.Drained:
 			report.Detail(containerOf(fields[1]) + " reported nothing in flight")
 		}
 	}
@@ -528,7 +529,7 @@ func (h *Host) ungated(ctx context.Context, rel Release, outcome, verdict, said,
 	failed := rel.Apps
 	for line := range strings.Lines(said) {
 		fields := strings.Fields(line)
-		if len(fields) != 2 || fields[0] != caddyadmin.Ungated {
+		if len(fields) != 2 || fields[0] != switchboard.Ungated {
 			continue
 		}
 		if at := slices.IndexFunc(rel.Apps, func(app AppRelease) bool { return app.gate() == fields[1] }); at >= 0 {

@@ -13,8 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
+
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -265,7 +266,7 @@ func TestAGateOneAppFailsWritesNothingAndFlipsNoApp(t *testing.T) {
 
 	before := twoAppsServing(t)
 	stood := benchedOn(t, before,
-		session.Result{Code: 4, Stdout: caddyadmin.Ungated + " " + apiFlipTo + "/up\n", Stderr: apiFlipTo + " never answered /up within 30s"},
+		session.Result{Code: 4, Stdout: switchboard.Ungated + " " + apiFlipTo + "/up\n", Stderr: apiFlipTo + " never answered /up within 30s"},
 		session.Result{})
 	err := stood.host().Release(context.Background(), bothApps(), nil)
 	if err == nil {
@@ -666,7 +667,7 @@ func TestADrainThatReadZeroIsToldBeforeTheContainerItFreedIsStopped(t *testing.T
 	t.Parallel()
 
 	report := &watched{}
-	_, err := released(t, aRelease(), session.Result{}, session.Result{Stdout: caddyadmin.Drained + " " + retired + "\n"}, report)
+	_, err := released(t, aRelease(), session.Result{}, session.Result{Stdout: switchboard.Drained + " " + retired + "\n"}, report)
 	if err != nil {
 		t.Fatalf("Release() over a drain that read zero = %v", err)
 	}
@@ -683,7 +684,7 @@ func TestADrainThatExpiresIsWarnedAboutRatherThanFailed(t *testing.T) {
 	t.Parallel()
 
 	report := &watched{}
-	_, err := released(t, aRelease(), session.Result{}, session.Result{Stdout: caddyadmin.DrainExpired + " " + retired + " 2\n"}, report)
+	_, err := released(t, aRelease(), session.Result{}, session.Result{Stdout: switchboard.DrainExpired + " " + retired + " 2\n"}, report)
 	if err != nil {
 		t.Fatalf("Release() over an expired drain = %v, want the new release serving", err)
 	}
@@ -976,7 +977,7 @@ func TestAFailureAfterTheFlipSaysTheReleaseIsServingAndNamesWhatIsLeftBehind(t *
 	t.Parallel()
 
 	report := &watched{}
-	stood := benched(t, session.Result{}, session.Result{Stdout: caddyadmin.DrainExpired + " " + retired + " 2\n"})
+	stood := benched(t, session.Result{}, session.Result{Stdout: switchboard.DrainExpired + " " + retired + " 2\n"})
 	proxied := stood.answer
 	stood.answer = func(command string) (session.Result, bool) {
 		if command == "docker stop "+quoted(retiring)+" >/dev/null" {
