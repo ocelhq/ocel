@@ -57,7 +57,14 @@ If the machine already runs a proxy on ports 80 and 443, ocel can sit behind it 
 running its own:
 
 ```json title="ocel.json"
-"vps": { "ssh": "prod", "proxy": "manual" }
+{
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
+  "provider": {
+    "vps": { "ssh": "prod", "proxy": "manual" }
+  },
+  "apps": [{ "name": "web", "path": ".", "compute": "container" }]
+}
 ```
 
 Bootstrap then stands no `ocel-proxy`. The switchboard, which routes each hostname to its
