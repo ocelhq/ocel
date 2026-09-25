@@ -101,7 +101,7 @@ func TestAProjectRegistryCarriesTheNamespaceItsImagesLandUnder(t *testing.T) {
 		t.Fatalf("Resolve() error = %v", err)
 	}
 
-	if got, want := target.Coordinate("web", "sha256-abc"), "ghcr.io/acme/web:sha256-abc"; got != want {
+	if got, want := target.ImageRef("web", "sha256-abc"), "ghcr.io/acme/web:sha256-abc"; got != want {
 		t.Errorf("Coordinate() = %q, want %q — ghcr takes no repository at its root", got, want)
 	}
 }

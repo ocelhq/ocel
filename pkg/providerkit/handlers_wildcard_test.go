@@ -44,7 +44,7 @@ func seedWildcard(t *testing.T, provider *fake.Provider, held providerkit.Wildca
 		t.Fatal(err)
 	}
 	name := providerkit.WildcardRecord(providerkit.ClassPreview)
-	record, err := providerkit.Held(context.Background(), provider.Records(), name)
+	record, err := providerkit.ReadOrEmpty(context.Background(), provider.Records(), name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func seedWildcard(t *testing.T, provider *fake.Provider, held providerkit.Wildca
 
 func readHeldWildcard(t *testing.T, provider *fake.Provider) providerkit.Wildcard {
 	t.Helper()
-	record, err := providerkit.Held(context.Background(), provider.Records(), providerkit.WildcardRecord(providerkit.ClassPreview))
+	record, err := providerkit.ReadOrEmpty(context.Background(), provider.Records(), providerkit.WildcardRecord(providerkit.ClassPreview))
 	if err != nil {
 		t.Fatal(err)
 	}

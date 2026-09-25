@@ -24,7 +24,7 @@ type Settled struct {
 }
 
 func (s *Settled) Supersede(cert Certificate) {
-	if !cert.Held() || cert.ID == s.Certificate.ID || holds(s.Superseded, cert) {
+	if !cert.Issued() || cert.ID == s.Certificate.ID || holds(s.Superseded, cert) {
 		return
 	}
 	s.Superseded = append(s.Superseded, cert)
@@ -33,7 +33,7 @@ func (s *Settled) Supersede(cert Certificate) {
 func (s Settled) certificates() []Certificate {
 	held := make([]Certificate, 0, 1+len(s.Superseded))
 	for _, cert := range append([]Certificate{s.Certificate}, s.Superseded...) {
-		if cert.Held() && !holds(held, cert) {
+		if cert.Issued() && !holds(held, cert) {
 			held = append(held, cert)
 		}
 	}

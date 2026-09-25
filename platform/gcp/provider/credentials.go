@@ -71,7 +71,7 @@ func (c Credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
 		return providerkit.Identity{}, err
 	}
 	identity := providerkit.Identity{
-		Provider:  Vendor,
+		Vendor:    Vendor,
 		Account:   project,
 		Principal: emulatorPrincipal,
 		Location:  c.Region,

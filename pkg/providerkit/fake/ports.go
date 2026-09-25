@@ -44,7 +44,7 @@ func (b *Bootstrap) fronting(kind edge.Kind) {
 	b.front = kind
 }
 
-func (b *Bootstrap) Standing(kinds ...edge.Kind) {
+func (b *Bootstrap) Stands(kinds ...edge.Kind) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.standing = append(make([]edge.Kind, 0, len(kinds)), kinds...)
@@ -460,7 +460,7 @@ func (c *Credentials) Whoami(context.Context) (providerkit.Identity, error) {
 		return providerkit.Identity{}, c.refusal
 	}
 	return providerkit.Identity{
-		Provider:  Vendor,
+		Vendor:    Vendor,
 		Account:   "000000000000",
 		Principal: "fake/reference",
 		Details:   []providerkit.Detail{{Label: "region", Value: c.region}},

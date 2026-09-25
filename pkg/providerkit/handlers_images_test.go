@@ -129,8 +129,8 @@ func TestADeployPushesTheImageTheBuildProducedUnderTheRegistryCoordinate(t *test
 	if pushed[0].Source != containerTestImage {
 		t.Errorf("the push read %q from the local store, want the image the build produced, %q", pushed[0].Source, containerTestImage)
 	}
-	if pushed[0].Target != pushedCoordinate {
-		t.Errorf("the push wrote %q, want %q", pushed[0].Target, pushedCoordinate)
+	if pushed[0].ImageRef != pushedCoordinate {
+		t.Errorf("the push wrote %q, want %q", pushed[0].ImageRef, pushedCoordinate)
 	}
 }
 
@@ -271,7 +271,7 @@ func TestAnImageRowRidesInsideTheAppsOwnStackGroup(t *testing.T) {
 
 func TestTheImageStoreIsOpenedFromTheTargetTheDeployCarries(t *testing.T) {
 	store := fake.NewImages()
-	push := providerkit.ImagePush{App: "web", Source: containerTestImage, Target: pushedCoordinate}
+	push := providerkit.ImagePush{App: "web", Source: containerTestImage, ImageRef: pushedCoordinate}
 	plan := providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{push}}
 
 	if err := plan.Ship(context.Background(), nil); err != nil {
@@ -300,7 +300,7 @@ func (s refusingStore) Push(context.Context, providerkit.ImagePush, providerkit.
 func TestATransferThatFailsNamesWhereItWasSendingRatherThanTheCoordinate(t *testing.T) {
 	store := refusingStore{where: "box.invalid"}
 	plan := providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{{
-		App: "web", Source: containerTestImage, Target: loadedCoordinate,
+		App: "web", Source: containerTestImage, ImageRef: loadedCoordinate,
 	}}}
 
 	err := plan.Ship(context.Background(), nil)
@@ -355,9 +355,9 @@ func TestAProviderThatTakesImagesDirectlyIsHandedTheOneTheBuildProduced(t *testi
 	if handed[0].Source != containerTestImage {
 		t.Errorf("the transfer read %q from the local store, want %q", handed[0].Source, containerTestImage)
 	}
-	if handed[0].Target != loadedCoordinate {
+	if handed[0].ImageRef != loadedCoordinate {
 		t.Errorf("the transfer landed %q, want the cli-owned coordinate %q verbatim, so release, rollback and retention never learn which path carried it",
-			handed[0].Target, loadedCoordinate)
+			handed[0].ImageRef, loadedCoordinate)
 	}
 	if pushed := provider.Registry().Pushed(); len(pushed) != 0 {
 		t.Errorf("a deploy naming no registry pushed %v to one", pushed)
@@ -393,7 +393,7 @@ func TestANamedRegistryTakesTheImageFromAProviderThatWouldOtherwiseLoadItDirectl
 	}
 
 	pushed := provider.Registry().Pushed()
-	if len(pushed) != 1 || pushed[0].Target != pushedCoordinate {
+	if len(pushed) != 1 || pushed[0].ImageRef != pushedCoordinate {
 		t.Fatalf("the deploy pushed %v, want the one registry coordinate %q", pushed, pushedCoordinate)
 	}
 	if handed := provider.direct.Pushed(); len(handed) != 0 {

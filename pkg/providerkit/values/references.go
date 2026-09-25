@@ -98,7 +98,7 @@ func (s Store) ReferenceOwners(ctx context.Context, scope Scope) (map[Coordinate
 func (s Store) indexReference(ctx context.Context, scope Scope, at Coordinate, target Target) error {
 	to := Scope{Project: target.Project, Class: scope.Class}
 	name := refName(to, Coordinate{Cell: target.Cell}, scope, at)
-	held, err := ports.Held(ctx, s.Records, name)
+	held, err := ports.ReadOrEmpty(ctx, s.Records, name)
 	if err != nil {
 		return fmt.Errorf("record that %s references %s: %w", at, &target, err)
 	}

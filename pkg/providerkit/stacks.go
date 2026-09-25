@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
-type Stack struct {
+type RecordedStack struct {
 	Kind      StackKind  `json:"kind"`
 	App       string     `json:"app,omitempty"`
 	Release   string     `json:"release,omitempty"`
@@ -27,28 +27,28 @@ type Stack struct {
 
 type StackEntry struct {
 	Name naming.StackName
-	Stack
+	RecordedStack
 }
 
-func ReadStack(ctx context.Context, records RecordStore, class Class, slug string, stack naming.StackName) (Stack, bool, error) {
+func ReadStack(ctx context.Context, records RecordStore, class Class, slug string, stack naming.StackName) (RecordedStack, bool, error) {
 	name := StackRecord(class, slug, stack)
-	held, err := Held(ctx, records, name)
+	held, err := ReadOrEmpty(ctx, records, name)
 	if err != nil {
-		return Stack{}, false, fmt.Errorf("read %s: %w", name, err)
+		return RecordedStack{}, false, fmt.Errorf("read %s: %w", name, err)
 	}
 	if len(held.Bytes) == 0 {
-		return Stack{}, false, nil
+		return RecordedStack{}, false, nil
 	}
-	var recorded Stack
+	var recorded RecordedStack
 	if err := json.Unmarshal(held.Bytes, &recorded); err != nil {
-		return Stack{}, false, fmt.Errorf("read %s: %w", name, err)
+		return RecordedStack{}, false, fmt.Errorf("read %s: %w", name, err)
 	}
 	return recorded, true, nil
 }
 
-func WriteStack(ctx context.Context, records RecordStore, class Class, slug string, stack naming.StackName, recorded Stack) error {
+func WriteStack(ctx context.Context, records RecordStore, class Class, slug string, stack naming.StackName, recorded RecordedStack) error {
 	name := StackRecord(class, slug, stack)
-	held, err := Held(ctx, records, name)
+	held, err := ReadOrEmpty(ctx, records, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
@@ -84,7 +84,7 @@ func ReadStacks(ctx context.Context, records RecordStore, class Class, slug stri
 		}
 		entry := StackEntry{Name: name}
 		if len(record.Bytes) > 0 {
-			if err := json.Unmarshal(record.Bytes, &entry.Stack); err != nil {
+			if err := json.Unmarshal(record.Bytes, &entry.RecordedStack); err != nil {
 				return nil, fmt.Errorf("read %s: %w", record.Name, err)
 			}
 		}

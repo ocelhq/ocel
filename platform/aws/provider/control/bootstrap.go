@@ -84,7 +84,7 @@ func (b Bootstrap) Describe(ctx context.Context, class providerkit.Class) (provi
 		return providerkit.BootstrapReading{}, err
 	}
 	held := described(class, read.Deployed)
-	held.Held = read
+	held.Reading = read
 	return held, nil
 }
 
@@ -131,7 +131,7 @@ func (b Bootstrap) Plan(ctx context.Context, req providerkit.BootstrapRequest) (
 }
 
 func (b Bootstrap) reading(ctx context.Context, req providerkit.BootstrapRequest) (bootstrap.Reading, error) {
-	if held, carried := req.Held.(bootstrap.Reading); carried && held.Class() == string(req.Class) {
+	if held, carried := req.Reading.(bootstrap.Reading); carried && held.Class() == string(req.Class) {
 		return held, nil
 	}
 	return bootstrap.Read(ctx, b.CFN, b.Namespace, string(req.Class))

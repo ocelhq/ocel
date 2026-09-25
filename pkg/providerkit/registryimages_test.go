@@ -22,10 +22,10 @@ func registryServing(t *testing.T, handler http.HandlerFunc) (providerkit.ImageS
 	host := strings.TrimPrefix(server.URL, "http://")
 	target := providerkit.RegistryTarget{Server: host, Namespace: "acme", Username: "acme-bot", Password: "hunter2"}
 	return providerkit.RegistryImages(target), providerkit.ImagePush{
-		App:    "web",
-		Source: "ocel/web@sha256:abc",
-		Target: target.Coordinate("web", "sha256-abc"),
-		Digest: "sha256:abc",
+		App:      "web",
+		Source:   "ocel/web@sha256:abc",
+		ImageRef: target.ImageRef("web", "sha256-abc"),
+		Digest:   "sha256:abc",
 	}
 }
 
@@ -248,10 +248,10 @@ func daemonServing(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 
 func pushTo(target providerkit.RegistryTarget) (providerkit.ImageStore, providerkit.ImagePush) {
 	return providerkit.RegistryImages(target), providerkit.ImagePush{
-		App:    "web",
-		Source: "ocel/web@sha256:abc",
-		Target: target.Coordinate("web", "sha256-abc"),
-		Digest: "sha256:abc",
+		App:      "web",
+		Source:   "ocel/web@sha256:abc",
+		ImageRef: target.ImageRef("web", "sha256-abc"),
+		Digest:   "sha256:abc",
 	}
 }
 

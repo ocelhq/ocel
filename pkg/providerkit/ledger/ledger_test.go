@@ -96,7 +96,7 @@ func TestNextSequenceRetriesPastAClaimerThatGotThereFirst(t *testing.T) {
 	if err != nil || first != 1 {
 		t.Fatalf("first sequence = %d, %v", first, err)
 	}
-	stale, err := ports.Held(ctx, records, l.sequenceName())
+	stale, err := ports.ReadOrEmpty(ctx, records, l.sequenceName())
 	if err != nil {
 		t.Fatal(err)
 	}

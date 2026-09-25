@@ -129,9 +129,9 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry AppEntry) (ImagePush,
 			"this provider carries no container runtime built for %s, and %s's image is built for it", arch, app)
 	}
 	return ImagePush{
-		App:    app,
-		Source: ref,
-		Target: coordinate(repository, RuntimeTag(digest, runtime), r.registry),
+		App:      app,
+		Source:   ref,
+		ImageRef: imageRef(repository, RuntimeTag(digest, runtime), r.registry),
 		Wrap: func(ctx context.Context) (v1.Image, func(), error) {
 			return wrapFromDaemon(ctx, repository, digest, runtime)
 		},
@@ -139,7 +139,7 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry AppEntry) (ImagePush,
 }
 
 func builtArchitecture(ctx context.Context, repository, digest string) (string, error) {
-	host, err := OpenDockerHost()
+	host, err := DockerHostFromEnv()
 	if err != nil {
 		return "", err
 	}
@@ -149,7 +149,7 @@ func builtArchitecture(ctx context.Context, repository, digest string) (string, 
 }
 
 func wrapFromDaemon(ctx context.Context, repository, digest string, runtime []byte) (v1.Image, func(), error) {
-	host, err := OpenDockerHost()
+	host, err := DockerHostFromEnv()
 	if err != nil {
 		return nil, nil, err
 	}

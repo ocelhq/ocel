@@ -34,12 +34,12 @@ func issue(ctx context.Context, issuer certs.Issuer, req providerkit.Certificate
 	cover := []string{req.Hostname}
 	say := req.Progress.Say
 
-	cert, err := recalled(ctx, issuer, req.Held, cover, say)
+	cert, err := recalled(ctx, issuer, req.Current, cover, say)
 	if err != nil {
-		return req.Held, err
+		return req.Current, err
 	}
 	if cert.Issued() {
-		return req.Held, nil
+		return req.Current, nil
 	}
 	if cert.ARN == "" {
 		if cert, err = adoptOrRequest(ctx, issuer, cover, say); err != nil {

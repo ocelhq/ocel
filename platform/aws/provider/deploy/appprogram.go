@@ -385,7 +385,7 @@ func grantMessages(grants []providerkit.Grant) []*bindingsv1.Grant {
 }
 
 func (r *release) decodeApp(plan providerkit.StackPlan, outputs auto.OutputMap) (providerkit.StackResult, error) {
-	work, held := plan.Options.(*appWork)
+	work, held := plan.Work.(*appWork)
 	if !held {
 		return providerkit.StackResult{}, fmt.Errorf("this stack was not planned as an app stack")
 	}

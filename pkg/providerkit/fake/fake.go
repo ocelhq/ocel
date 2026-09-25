@@ -262,8 +262,8 @@ func (p certificates) Issue(ctx context.Context, req providerkit.CertificateRequ
 		return providerkit.Certificate{}, nil
 	}
 	cert := providerkit.Certificate{ID: issuedFor(req.Hostname, rotation), Requested: true}
-	if req.Held.Requested && req.Held.ID == cert.ID {
-		return req.Held, nil
+	if req.Current.Requested && req.Current.ID == cert.ID {
+		return req.Current, nil
 	}
 	settled, err := req.Prove(ctx, cert, validation)
 	if err != nil {

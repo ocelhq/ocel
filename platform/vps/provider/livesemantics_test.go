@@ -67,7 +67,7 @@ func stillMoving(t *testing.T, planner planning, class providerkit.Class, held a
 	t.Helper()
 
 	plan, err := planner.Plan(context.Background(),
-		providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Held: held})
+		providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: held})
 	if err != nil {
 		return "and a re-plan over it said " + err.Error()
 	}
@@ -135,7 +135,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 		t.Errorf("heal over a half-applied host says %q, want it to name the stamp that says so", refusal.Message)
 	}
 
-	plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Held: described.Held})
+	plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: described.Reading})
 	if err != nil {
 		t.Fatalf("Plan() over a half-applied host = %v", err)
 	}
@@ -155,7 +155,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	}
 
 	var said sayings
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Held: described.Held}, &said); err != nil {
+	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: described.Reading}, &said); err != nil {
 		t.Fatalf("the same command over a half-applied host = %v, want recovery to be the first run's command", err)
 	}
 	standing := host.KindFile + " " + host.SealHelper + ": already current"
@@ -171,7 +171,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	}
 	if !finished.Stacks[0].DigestCurrent {
 		t.Errorf("Describe() still reads the host as drifted after the apply that finished it, %s",
-			stillMoving(t, bootstrapper, class, finished.Held))
+			stillMoving(t, bootstrapper, class, finished.Reading))
 	}
 	if finished.Unfinished {
 		t.Error("Describe() still banners the host as half-applied after the apply that finished it")
@@ -210,7 +210,7 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	unattended.Held = converging.Held
+	unattended.Reading = converging.Reading
 	if err := bootstrapper.Apply(ctx, unattended, nil); err != nil {
 		t.Fatalf("an unattended apply over a host whose %s has moved mode = %v, want a converge that destroys nothing to proceed", helperDir, err)
 	}
@@ -223,7 +223,7 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	unattended.Held = moved.Held
+	unattended.Reading = moved.Reading
 	refusal := refused(t, bootstrapper.Apply(ctx, unattended, nil), providerkit.CodeNotReady)
 	if !strings.Contains(refusal.Message, recordsHelper) {
 		t.Errorf("the refusal says %q, want it to name %s as what it would write over", refusal.Message, recordsHelper)
@@ -232,7 +232,7 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 		t.Errorf("%s stands at %q after the apply that refused it, want the refusal to have written nothing", recordsHelper, held)
 	}
 
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Held: moved.Held}, nil); err != nil {
+	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: moved.Reading}, nil); err != nil {
 		t.Fatalf("the same apply with somebody there to accept it = %v", err)
 	}
 	if held := mode(t, vm, recordsHelper); held != "755" {

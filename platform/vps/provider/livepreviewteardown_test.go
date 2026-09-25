@@ -135,7 +135,7 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 	if len(stood.Containers) != 1 {
 		t.Fatalf("Provision(%s) stood up %v", pointer, stood.Containers)
 	}
-	if err := providerkit.WriteStack(ctx, p.Records(), providerkit.ClassPreview, slug, plan.Ref.Name, providerkit.Stack{
+	if err := providerkit.WriteStack(ctx, p.Records(), providerkit.ClassPreview, slug, plan.Ref.Name, providerkit.RecordedStack{
 		Kind:       providerkit.StackApp,
 		App:        app,
 		Release:    build.Release().String(),

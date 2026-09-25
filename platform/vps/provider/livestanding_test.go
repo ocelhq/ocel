@@ -12,9 +12,9 @@ import (
 
 const adminDecoy = "ocel-live-admin-decoy"
 
-func standingOn(t *testing.T, p *vps.Provider, hostnames []string) []providerkit.StandingCheck {
+func standingOn(t *testing.T, p *vps.Provider, hostnames []string) []providerkit.HostCheck {
 	t.Helper()
-	checks, err := p.CheckHost(context.Background(), providerkit.StandingRequest{
+	checks, err := p.CheckHost(context.Background(), providerkit.HostCheckRequest{
 		Class:     providerkit.ClassProduction,
 		Hostnames: hostnames,
 	})
@@ -27,7 +27,7 @@ func standingOn(t *testing.T, p *vps.Provider, hostnames []string) []providerkit
 	return checks
 }
 
-func about(t *testing.T, checks []providerkit.StandingCheck, subject string) providerkit.StandingCheck {
+func about(t *testing.T, checks []providerkit.HostCheck, subject string) providerkit.HostCheck {
 	t.Helper()
 	for _, check := range checks {
 		if strings.Contains(check.Subject, subject) {
@@ -35,7 +35,7 @@ func about(t *testing.T, checks []providerkit.StandingCheck, subject string) pro
 		}
 	}
 	t.Fatalf("CheckStanding() answered %+v, and none of it is about %q", checks, subject)
-	return providerkit.StandingCheck{}
+	return providerkit.HostCheck{}
 }
 
 func TestLiveTheStandingVerdictsReadOffABootstrappedBoxAndGateNothing(t *testing.T) {
@@ -45,23 +45,23 @@ func TestLiveTheStandingVerdictsReadOffABootstrappedBoxAndGateNothing(t *testing
 	checks := standingOn(t, p, []string{owed, "*.preview." + owed})
 
 	dns := about(t, checks, owed)
-	if dns.Verdict != providerkit.StandingOwed {
+	if dns.Verdict != providerkit.HostOwed {
 		t.Errorf("the verdict for %s is %v (%q), want it owed: a name nothing resolves is a record a human has not written yet", owed, dns.Verdict, dns.Finding)
 	}
 
 	reach := about(t, checks, ":"+caddy.HTTPPort)
-	if reach.Verdict != providerkit.StandingPass {
+	if reach.Verdict != providerkit.HostPass {
 		t.Errorf("port %s on this box = %v (%q), want a connection from here to succeed: the proxy renews every certificate on it over http-01", caddy.HTTPPort, reach.Verdict, reach.Finding)
 	}
 
 	admin := about(t, checks, adminPort)
-	if admin.Verdict != providerkit.StandingPass {
+	if admin.Verdict != providerkit.HostPass {
 		t.Errorf("tcp %s inside %s = %v (%q), want nothing bound: the stock admin api hands every container on the shared network arbitrary config replacement",
 			adminPort, caddy.Container, admin.Verdict, admin.Finding)
 	}
 
 	for _, check := range checks {
-		if check.Verdict == providerkit.StandingFail {
+		if check.Verdict == providerkit.HostFail {
 			t.Errorf("a bootstrapped box whose only owed thing is a dns record failed %q: %s", check.Subject, check.Finding)
 		}
 	}
@@ -74,7 +74,7 @@ func TestLiveTheAdminPortBoundInsideTheProxyFailsTheStandingVerdict(t *testing.T
 	vm, p := onABoxServingContainers(t)
 
 	before := about(t, standingOn(t, p, nil), adminPort)
-	if before.Verdict != providerkit.StandingPass {
+	if before.Verdict != providerkit.HostPass {
 		t.Fatalf("tcp %s inside %s is already %v (%q), so this test cannot tell what it induced from what it found",
 			adminPort, caddy.Container, before.Verdict, before.Finding)
 	}
@@ -89,7 +89,7 @@ func TestLiveTheAdminPortBoundInsideTheProxyFailsTheStandingVerdict(t *testing.T
 	}
 
 	after := about(t, standingOn(t, p, nil), adminPort)
-	if after.Verdict != providerkit.StandingFail {
+	if after.Verdict != providerkit.HostFail {
 		t.Fatalf("tcp %s inside %s reads %v (%q) with a listener deliberately bound on it",
 			adminPort, caddy.Container, after.Verdict, after.Finding)
 	}

@@ -24,7 +24,7 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 		t.Fatal("Describe() claims a bootstrap on an account nothing has written to")
 	}
 
-	req := providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter, Held: fresh.Held}
+	req := providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter, Reading: fresh.Reading}
 	plan, err := bootstrapper.Plan(ctx, req)
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
@@ -109,7 +109,7 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 		}
 	}
 
-	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter, Held: standing.Held})
+	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter, Reading: standing.Reading})
 	if err != nil {
 		t.Fatalf("a second Plan() = %v", err)
 	}
@@ -160,7 +160,7 @@ func TestLiveApplyingTheImageOptimizerStandsItsOwnStackBesideTheCore(t *testing.
 		t.Errorf("the account reads back features %v, want %s among them", held.Features.Names(), feature)
 	}
 
-	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter, Features: []string{feature}, Held: standing.Held})
+	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter, Features: []string{feature}, Reading: standing.Reading})
 	if err != nil {
 		t.Fatalf("a second Plan(%s) = %v", feature, err)
 	}

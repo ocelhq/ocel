@@ -52,7 +52,7 @@ func (w *wildcards) settler(front edge.Edge) (settler, error) {
 
 func readWildcard(ctx context.Context, records RecordStore) (Wildcard, error) {
 	name := WildcardRecord(ClassPreview)
-	record, err := Held(ctx, records, name)
+	record, err := ReadOrEmpty(ctx, records, name)
 	if err != nil {
 		return Wildcard{}, fmt.Errorf("read %s: %w", name, err)
 	}
@@ -68,7 +68,7 @@ func readWildcard(ctx context.Context, records RecordStore) (Wildcard, error) {
 
 func (w *wildcards) save(ctx context.Context) error {
 	name := WildcardRecord(ClassPreview)
-	record, err := Held(ctx, w.records, name)
+	record, err := ReadOrEmpty(ctx, w.records, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}

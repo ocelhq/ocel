@@ -36,10 +36,10 @@ func (b Builtin) Reload(ctx context.Context) error {
 }
 
 func (b Builtin) Inspect(ctx context.Context) (proxy.Standing, error) {
-	check := providerkit.StandingCheck{Subject: fmt.Sprintf("%s tcp %d", Container, AdminPort)}
+	check := providerkit.HostCheck{Subject: fmt.Sprintf("%s tcp %d", Container, AdminPort)}
 	said, err := b.Box.Ran(ctx, "read what listens inside "+Container, listening())
 	if err != nil {
-		check.Verdict = providerkit.StandingFail
+		check.Verdict = providerkit.HostFail
 		check.Finding = fmt.Sprintf("read listeners inside %s: %v", Container, err)
 		check.Fix = "check the proxy is running"
 		return proxy.Standing{check}, nil
@@ -47,21 +47,21 @@ func (b Builtin) Inspect(ctx context.Context) (proxy.Standing, error) {
 	held, err := listeners.Parse(strings.NewReader(said))
 	switch {
 	case err != nil:
-		check.Verdict = providerkit.StandingFail
+		check.Verdict = providerkit.HostFail
 		check.Finding = fmt.Sprintf("read listeners inside %s: %v", Container, err)
 		check.Fix = "check the proxy is running with its own /proc mounted"
 	case len(held) == 0:
-		check.Verdict = providerkit.StandingFail
+		check.Verdict = providerkit.HostFail
 		check.Finding = fmt.Sprintf("%s reports no listening sockets; a serving proxy holds at least %s and %s",
 			Container, HTTPPort, HTTPSPort)
 		check.Fix = "check the proxy is running with its own /proc mounted"
 	case len(listeners.On(held, AdminPort)) > 0:
-		check.Verdict = providerkit.StandingFail
+		check.Verdict = providerkit.HostFail
 		check.Finding = fmt.Sprintf("%s listens on %d inside %s: the admin api is open to anything that reaches the proxy",
 			strings.Join(listeners.Lines(listeners.On(held, AdminPort)), ", "), AdminPort, Container)
 		check.Fix = "run `ocel bootstrap production` to bind the admin endpoint to " + AdminSocket
 	default:
-		check.Verdict = providerkit.StandingPass
+		check.Verdict = providerkit.HostPass
 		check.Finding = fmt.Sprintf("nothing listens on tcp %d inside %s; admin is on %s only", AdminPort, Container, AdminSocket)
 	}
 	return proxy.Standing{check}, nil

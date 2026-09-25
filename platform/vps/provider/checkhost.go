@@ -52,12 +52,12 @@ func (p *Provider) reach() Reach {
 	return systemReach
 }
 
-func (p *Provider) CheckHost(ctx context.Context, req providerkit.StandingRequest) ([]providerkit.StandingCheck, error) {
+func (p *Provider) CheckHost(ctx context.Context, req providerkit.HostCheckRequest) ([]providerkit.HostCheck, error) {
 	address, err := p.host.Address(ctx)
 	if err != nil {
-		return []providerkit.StandingCheck{{
+		return []providerkit.HostCheck{{
 			Subject: caddy.Container,
-			Verdict: providerkit.StandingFail,
+			Verdict: providerkit.HostFail,
 			Finding: fmt.Sprintf("read this box's address: %v", err),
 			Fix:     "check the machine answers over ssh",
 		}}, nil
@@ -74,7 +74,7 @@ func (p *Provider) CheckHost(ctx context.Context, req providerkit.StandingReques
 	return append(checks, p.host.SwitchboardStanding(ctx, req.Class)), nil
 }
 
-func dnsVerdicts(ctx context.Context, look Lookup, hostnames []string, address string) []providerkit.StandingCheck {
+func dnsVerdicts(ctx context.Context, look Lookup, hostnames []string, address string) []providerkit.HostCheck {
 	var asked []string
 	for _, hostname := range hostnames {
 		named := edge.ProbeHostname(hostname)
@@ -87,48 +87,48 @@ func dnsVerdicts(ctx context.Context, look Lookup, hostnames []string, address s
 		return nil
 	}
 	here, unread := look(ctx, address)
-	checks := make([]providerkit.StandingCheck, 0, len(asked))
+	checks := make([]providerkit.HostCheck, 0, len(asked))
 	for _, named := range asked {
 		checks = append(checks, dnsVerdict(ctx, look, named, address, here, unread))
 	}
 	return checks
 }
 
-func dnsVerdict(ctx context.Context, look Lookup, hostname, address string, here []netip.Addr, unread error) providerkit.StandingCheck {
-	check := providerkit.StandingCheck{Subject: hostname}
+func dnsVerdict(ctx context.Context, look Lookup, hostname, address string, here []netip.Addr, unread error) providerkit.HostCheck {
+	check := providerkit.HostCheck{Subject: hostname}
 	if unread != nil {
-		check.Verdict = providerkit.StandingFail
+		check.Verdict = providerkit.HostFail
 		check.Finding = fmt.Sprintf("resolve this box's address %s: %v", address, unread)
 		return check
 	}
 	found, err := look(ctx, hostname)
 	switch {
 	case notResolved(err):
-		check.Verdict = providerkit.StandingOwed
+		check.Verdict = providerkit.HostOwed
 		check.Finding = fmt.Sprintf("%s does not resolve; the record pointing it at %s is owed", hostname, address)
 		check.Fix = "add the record `ocel domain add` printed"
 		return check
 	case err != nil:
-		check.Verdict = providerkit.StandingFail
+		check.Verdict = providerkit.HostFail
 		check.Finding = fmt.Sprintf("resolve %s: %v", hostname, err)
 		return check
 	case len(found) == 0:
-		check.Verdict = providerkit.StandingOwed
+		check.Verdict = providerkit.HostOwed
 		check.Finding = fmt.Sprintf("%s does not resolve; the record pointing it at %s is owed", hostname, address)
 		check.Fix = "add the record `ocel domain add` printed"
 		return check
 	case pointsHere(found, here):
-		check.Verdict = providerkit.StandingPass
+		check.Verdict = providerkit.HostPass
 		check.Finding = fmt.Sprintf("%s resolves to %s, which is this box", hostname, spell(found))
 		return check
 	case loopbackOnly(found):
-		check.Verdict = providerkit.StandingOwed
+		check.Verdict = providerkit.HostOwed
 		check.Finding = fmt.Sprintf("%s resolves to loopback %s; the record pointing it at %s is owed",
 			hostname, spell(found), address)
 		check.Fix = "add the record `ocel domain add` printed"
 		return check
 	default:
-		check.Verdict = providerkit.StandingFail
+		check.Verdict = providerkit.HostFail
 		check.Finding = fmt.Sprintf("%s resolves to %s, and this box is %s", hostname, spell(found), spell(here))
 		check.Fix = fmt.Sprintf("point %s at %s in your zone", hostname, spell(here))
 		return check
@@ -161,17 +161,17 @@ func spell(addrs []netip.Addr) string {
 	return strings.Join(written, ", ")
 }
 
-func reachVerdict(ctx context.Context, dial Reach, address string) providerkit.StandingCheck {
+func reachVerdict(ctx context.Context, dial Reach, address string) providerkit.HostCheck {
 	at := net.JoinHostPort(address, caddy.HTTPPort)
-	check := providerkit.StandingCheck{Subject: at}
+	check := providerkit.HostCheck{Subject: at}
 	if err := dial(ctx, at); err != nil {
-		check.Verdict = providerkit.StandingFail
+		check.Verdict = providerkit.HostFail
 		check.Finding = fmt.Sprintf("%s is unreachable, so the proxy cannot renew certificates over http-01: %v",
 			at, err)
 		check.Fix = "open port " + caddy.HTTPPort + " in your provider's firewall or security group; docker's iptables rules bypass ufw"
 		return check
 	}
-	check.Verdict = providerkit.StandingPass
+	check.Verdict = providerkit.HostPass
 	check.Finding = fmt.Sprintf("port %s answers from this machine (not proof the internet reaches it)",
 		caddy.HTTPPort)
 	return check

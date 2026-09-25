@@ -16,7 +16,7 @@ type stackStore struct {
 }
 
 func (s stackStore) read(ctx context.Context) (EdgeStackState, error) {
-	held, err := Held(ctx, s.records, s.name)
+	held, err := ReadOrEmpty(ctx, s.records, s.name)
 	if err != nil {
 		return EdgeStackState{}, fmt.Errorf("read %s: %w", s.name, err)
 	}
@@ -31,7 +31,7 @@ func (s stackStore) read(ctx context.Context) (EdgeStackState, error) {
 }
 
 func (s stackStore) write(ctx context.Context, state EdgeStackState) error {
-	held, err := Held(ctx, s.records, s.name)
+	held, err := ReadOrEmpty(ctx, s.records, s.name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", s.name, err)
 	}

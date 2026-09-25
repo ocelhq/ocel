@@ -91,7 +91,7 @@ func (m *memRecords) List(_ context.Context, under providerkit.RecordName) ([]pr
 
 type goSealer struct{ key []byte }
 
-func (s goSealer) Seal(_ context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
+func (s goSealer) Seal(_ context.Context, at providerkit.SealScope, plaintext []byte) ([]byte, error) {
 	block, err := aes.NewCipher(s.key)
 	if err != nil {
 		return nil, err
@@ -107,7 +107,7 @@ func (s goSealer) Seal(_ context.Context, at providerkit.Coordinate, plaintext [
 	return append(nonce, gcm.Seal(nil, nonce, plaintext, at.AAD())...), nil
 }
 
-func (s goSealer) Open(_ context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+func (s goSealer) Open(_ context.Context, at providerkit.SealScope, sealed []byte) ([]byte, error) {
 	return live.Open(s.key, at, sealed)
 }
 
@@ -312,7 +312,7 @@ func TestTheStoreOpensNothingUnderAClassWhoseKeyIsGone(t *testing.T) {
 func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	at := providerkit.Coordinate{
+	at := providerkit.SealScope{
 		Project: "shop", Class: providerkit.ClassProduction, Env: "shop-prod",
 		Folder: live.StoreSecretFolder, Binding: live.StoreSecretBinding, Name: live.StoreSecretName,
 	}
@@ -346,7 +346,7 @@ func TestTheStoreOpensTheObjectStoreCredentialSealedIntoTheCallersManifest(t *te
 func TestTheStoreRefusesAStoreCredentialSealedForAnotherProject(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	elsewhere := providerkit.Coordinate{
+	elsewhere := providerkit.SealScope{
 		Project: "other", Class: providerkit.ClassProduction, Env: "other-prod",
 		Folder: live.StoreSecretFolder, Binding: live.StoreSecretBinding, Name: live.StoreSecretName,
 	}

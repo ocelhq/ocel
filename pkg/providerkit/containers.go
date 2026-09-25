@@ -11,8 +11,8 @@ var (
 	healthCheckPath = regexp.MustCompile(HealthCheckPathPattern)
 )
 
-func PinnedImage(ref string) bool {
-	return pinnedImage.MatchString(ref)
+func PinnedImage(imageRef string) bool {
+	return pinnedImage.MatchString(imageRef)
 }
 
 func HealthCheckPath(path string) bool {

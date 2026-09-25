@@ -26,7 +26,7 @@ func ContainerFrontRecord(class kit.Class) kit.RecordName {
 }
 
 func ReadContainerFront(ctx context.Context, records kit.RecordStore, class kit.Class) (ContainerFront, bool, error) {
-	held, err := kit.Held(ctx, records, ContainerFrontRecord(class))
+	held, err := kit.ReadOrEmpty(ctx, records, ContainerFrontRecord(class))
 	if err != nil {
 		return ContainerFront{}, false, err
 	}
@@ -44,7 +44,7 @@ func ReadContainerFront(ctx context.Context, records kit.RecordStore, class kit.
 }
 
 func WriteContainerFront(ctx context.Context, records kit.RecordStore, class kit.Class, front ContainerFront) error {
-	held, err := kit.Held(ctx, records, ContainerFrontRecord(class))
+	held, err := kit.ReadOrEmpty(ctx, records, ContainerFrontRecord(class))
 	if err != nil {
 		return err
 	}

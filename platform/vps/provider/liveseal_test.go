@@ -56,8 +56,8 @@ func dirties(t *testing.T, vm machine) {
 	})
 }
 
-func sealedAt(class providerkit.Class, name string) providerkit.Coordinate {
-	return providerkit.Coordinate{Project: "shop", Class: class, Env: "*", Folder: "/", Name: name}
+func sealedAt(class providerkit.Class, name string) providerkit.SealScope {
+	return providerkit.SealScope{Project: "shop", Class: class, Env: "*", Folder: "/", Name: name}
 }
 
 func TestLiveTheSealKeyIsRootsAloneAndTheDeployLoginNeverReadsIt(t *testing.T) {

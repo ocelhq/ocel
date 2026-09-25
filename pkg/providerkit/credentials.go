@@ -20,7 +20,7 @@ const (
 )
 
 type Identity struct {
-	Provider  Vendor
+	Vendor    Vendor
 	Account   string
 	Principal string
 	Location  string

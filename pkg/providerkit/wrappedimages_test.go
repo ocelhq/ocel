@@ -102,8 +102,8 @@ func TestAWrappingProviderPushesTheImageUnderTheCoordinateTheRuntimeItCarriesNam
 	if len(asked) != 1 {
 		t.Fatalf("the deploy asked the registry about %v, want the one image its container app runs", asked)
 	}
-	if asked[0].Target != wrappedCoordinate() {
-		t.Errorf("the deploy asked about %q, want %q: a wrapped image is reached under a tag naming the runtime it boots through", asked[0].Target, wrappedCoordinate())
+	if asked[0].ImageRef != wrappedCoordinate() {
+		t.Errorf("the deploy asked about %q, want %q: a wrapped image is reached under a tag naming the runtime it boots through", asked[0].ImageRef, wrappedCoordinate())
 	}
 	if asked[0].Wrap == nil {
 		t.Error("the push carries no wrap, so the image would reach the registry without the runtime the tag promises")
@@ -239,8 +239,8 @@ func TestShipHandsTheStoreTheWrappedImageAndClearsUpAfterIt(t *testing.T) {
 	store := &stubStore{}
 	cleaned := false
 	plan := providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{{
-		App:    "web",
-		Target: "ghcr.io/acme/web:sha256-abc-ocel-0123456789ab",
+		App:      "web",
+		ImageRef: "ghcr.io/acme/web:sha256-abc-ocel-0123456789ab",
 		Wrap: func(context.Context) (v1.Image, func(), error) {
 			return empty.Image, func() { cleaned = true }, nil
 		},
@@ -262,8 +262,8 @@ func TestShipRunsNoWrapForACoordinateTheStoreAlreadyHolds(t *testing.T) {
 
 	store := &stubStore{held: true}
 	plan := providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{{
-		App:    "web",
-		Target: "ghcr.io/acme/web:sha256-abc-ocel-0123456789ab",
+		App:      "web",
+		ImageRef: "ghcr.io/acme/web:sha256-abc-ocel-0123456789ab",
 		Wrap: func(context.Context) (v1.Image, func(), error) {
 			return nil, nil, errors.New("the image was wrapped for a push that was never needed")
 		},

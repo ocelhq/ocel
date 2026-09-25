@@ -86,11 +86,11 @@ func (r *deployRun) imageFunction(
 		return ImagePush{}, fmt.Errorf("build %s's image: %w", name, err)
 	}
 	repository := functionRepository(entry.App, name)
-	target := coordinate(repository, naming.DigestTag(digest.String()), r.registry)
+	target := imageRef(repository, naming.DigestTag(digest.String()), r.registry)
 	return ImagePush{
 		App:      name,
-		Source:   pinnedCoordinate(target, digest.String()),
-		Target:   target,
+		Source:   pinnedImageRef(target, digest.String()),
+		ImageRef: target,
 		Digest:   digest.String(),
 		Function: true,
 		Built:    image,
@@ -155,7 +155,7 @@ func functionRepository(app, function string) string {
 	return app + "-" + FunctionRoute(app, function)
 }
 
-func pinnedCoordinate(target, digest string) string {
+func pinnedImageRef(target, digest string) string {
 	repository := target[:strings.LastIndex(target, ":")]
 	return repository + "@" + digest
 }

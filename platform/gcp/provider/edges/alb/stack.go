@@ -229,7 +229,7 @@ func (s *stack) serving(ctx context.Context, app string) (string, error) {
 
 func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 	name := s.e.claim(s.state.Class, hostname)
-	record, err := providerkit.Held(ctx, s.e.deps.Records, name)
+	record, err := providerkit.ReadOrEmpty(ctx, s.e.deps.Records, name)
 	if err != nil {
 		return false, fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
 	}
@@ -260,7 +260,7 @@ func (s *stack) claim(ctx context.Context, hostname string) (bool, error) {
 }
 
 func (s *stack) claimedMeanwhile(ctx context.Context, hostname string, name providerkit.RecordName) error {
-	record, err := providerkit.Held(ctx, s.e.deps.Records, name)
+	record, err := providerkit.ReadOrEmpty(ctx, s.e.deps.Records, name)
 	if err != nil || len(record.Bytes) == 0 {
 		return providerkit.Refuse(providerkit.CodeBusy,
 			"%s was claimed on the %s edge while this bind was claiming it: bind it again once the other run has finished", hostname, Kind)

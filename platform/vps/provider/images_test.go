@@ -291,10 +291,10 @@ func daemonHolding(t *testing.T, tar string) *int {
 func aPush(t *testing.T) providerkit.ImagePush {
 	t.Helper()
 	return providerkit.ImagePush{
-		App:    "web",
-		Source: "ocel/shop/web@sha256:abc",
-		Target: loadedCoordinate,
-		Built:  wrapped(t),
+		App:      "web",
+		Source:   "ocel/shop/web@sha256:abc",
+		ImageRef: loadedCoordinate,
+		Built:    wrapped(t),
 	}
 }
 
@@ -423,7 +423,7 @@ func TestAWrappedImagePulledOntoTheMachineIsPinnedToTheDigestOfWhatWasPushed(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	push := providerkit.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", Target: server + "/shop/web:sha256-abc-ocel-0123", Built: built}
+	push := providerkit.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: server + "/shop/web:sha256-abc-ocel-0123", Built: built}
 	if err := store.Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}

@@ -317,7 +317,7 @@ func TestARemovalRefusesWorkTheConsentedProjectPlanNeverShowed(t *testing.T) {
 	}
 
 	admin := naming.AppStack(providerkit.ProductionEnv, "admin", naming.NewRelease(adminDeploymentID, "1"))
-	if err := providerkit.WriteStack(ctx, provider.Records(), providerkit.ClassProduction, "shop", admin, providerkit.Stack{App: "admin"}); err != nil {
+	if err := providerkit.WriteStack(ctx, provider.Records(), providerkit.ClassProduction, "shop", admin, providerkit.RecordedStack{App: "admin"}); err != nil {
 		t.Fatalf("WriteStack() error = %v", err)
 	}
 

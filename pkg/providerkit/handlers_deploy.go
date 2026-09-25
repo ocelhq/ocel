@@ -299,7 +299,7 @@ func (r *deployRun) admitDomains(ctx context.Context) error {
 
 func (r *deployRun) rememberProject(ctx context.Context) error {
 	name := ProjectRecord(r.plan.Class, r.plan.Slug)
-	held, err := Held(ctx, r.provider.Records(), name)
+	held, err := ReadOrEmpty(ctx, r.provider.Records(), name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
@@ -718,7 +718,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 				return err
 			}
 			r.bindings = result.Bindings
-			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, r.plan.Infra, Stack{
+			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, r.plan.Infra, RecordedStack{
 				Kind:      StackInfra,
 				Bindings:  result.Bindings,
 				WrittenBy: WrittenByVersion(""),
@@ -789,7 +789,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 					AssetPrefix:     facts.AssetPrefix,
 					PreviewLabel:    r.previewLabel(slot),
 					Guard:           facts.Guard,
-					Packed:          pack.Carry,
+					Packed:          pack.Packed,
 					Proxied:         anyProxied(proxied, grants),
 				},
 			}
@@ -815,7 +815,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 			if err := r.stage(ctx, entry, facts, images, values, result); err != nil {
 				return err
 			}
-			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, entry.Stack, Stack{
+			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, entry.Stack, RecordedStack{
 				Kind:       StackApp,
 				App:        entry.App,
 				Release:    entry.Build.Release().String(),
@@ -1097,7 +1097,7 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFact
 		DeploymentID:     entry.Build.DeploymentID(),
 		Entry:            facts.Entry,
 		EntryFunction:    physicalByLogical[entryLogicalName(r.manifest, entry.App, facts.Entry)],
-		Image:            images.Coordinate(entry.App),
+		Image:            images.ImageRef(entry.App),
 		Physical:         physicalOf(result.Containers, entry.App),
 		Revisions:        revisionsOf(result, entry.App, logical),
 		Origin:           originOf(result.Containers, entry.App),
@@ -1443,7 +1443,7 @@ func originOf(containers []AppContainer, app string) string {
 }
 
 func runs(images ImagePlan, entry AppEntry) string {
-	if pushed := images.Coordinate(entry.App); pushed != "" {
+	if pushed := images.ImageRef(entry.App); pushed != "" {
 		return pushed
 	}
 	return entry.Image

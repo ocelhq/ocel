@@ -121,7 +121,7 @@ func TestSealerBindsAValueToItsCoordinate(t *testing.T) {
 
 	ctx := context.Background()
 	sealer := fake.NewCipher()
-	at := providerkit.Coordinate{Project: "shop", Class: providerkit.ClassProduction, Env: "production", Name: "DATABASE_URL"}
+	at := providerkit.SealScope{Project: "shop", Class: providerkit.ClassProduction, Env: "production", Name: "DATABASE_URL"}
 
 	sealed, err := sealer.Seal(ctx, at, []byte("postgres://"))
 	if err != nil {
@@ -226,7 +226,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 		t.Fatalf("Provision() of a container app = %+v, want it to reach AppContainers alone", contained)
 	}
 
-	if err := providerkit.WriteStack(context.Background(), provider.Records(), ref.Class, ref.Project, ref.Name, providerkit.Stack{
+	if err := providerkit.WriteStack(context.Background(), provider.Records(), ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
 		Kind:       providerkit.StackApp,
 		Containers: contained.Containers,
 	}); err != nil {

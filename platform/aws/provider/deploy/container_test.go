@@ -65,7 +65,7 @@ func plannedContainerStack(t *testing.T) (Config, providerkit.StackPlan) {
 		Ref:    providerkit.StackRef{Project: "shop", Class: providerkit.ClassProduction, Name: stack},
 		Kind:   providerkit.StackApp,
 		Tags:   map[string]string{"ocel:managed-by": "ocel"},
-		Images: providerkit.ImagePlan{Pushes: []providerkit.ImagePush{{App: "web", Target: containerImage}}},
+		Images: providerkit.ImagePlan{Pushes: []providerkit.ImagePush{{App: "web", ImageRef: containerImage}}},
 		App: &providerkit.AppPlan{
 			App:             "web",
 			Deployment:      "d1",
@@ -327,7 +327,7 @@ func TestAContainerStackDecodesIntoTheContainerItStoodUp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
-	plan.Options = work
+	plan.Work = work
 	outputs := auto.OutputMap{"web": auto.OutputValue{Value: map[string]any{
 		outputKeyContainerURL:      "http://" + fixtureOrigin,
 		outputKeyContainerPhysical: "shop-prod-web-container-r3f8a1c90",

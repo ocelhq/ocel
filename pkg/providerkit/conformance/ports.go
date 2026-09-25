@@ -253,7 +253,7 @@ func RunCipher(t *testing.T, sealer providerkit.Cipher) {
 
 	ctx := context.Background()
 
-	at := providerkit.Coordinate{
+	at := providerkit.SealScope{
 		Project: "shop",
 		Class:   providerkit.ClassProduction,
 		Env:     "*",
@@ -278,7 +278,7 @@ func RunCipher(t *testing.T, sealer providerkit.Cipher) {
 		t.Fatalf("Open() = %q, want %q", opened, plaintext)
 	}
 
-	for name, moved := range map[string]providerkit.Coordinate{
+	for name, moved := range map[string]providerkit.SealScope{
 		"another project":     {Project: "other", Class: at.Class, Env: at.Env, Folder: at.Folder, Name: at.Name},
 		"another class":       {Project: at.Project, Class: providerkit.ClassPreview, Env: at.Env, Folder: at.Folder, Name: at.Name},
 		"another environment": {Project: at.Project, Class: at.Class, Env: "staging", Folder: at.Folder, Name: at.Name},
@@ -548,7 +548,7 @@ func RunCredentials(t *testing.T, credentials providerkit.Credentials) {
 			}
 			return
 		}
-		if identity.Provider == "" {
+		if identity.Vendor == "" {
 			t.Error("Whoami() answered an identity naming no provider")
 		}
 		for _, detail := range identity.Details {
@@ -908,10 +908,10 @@ func RunStacks(t *testing.T, releaser providerkit.Stacks, artifacts providerkit.
 		store := &countedImages{}
 		pushing := bare
 		pushing.Images = providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{{
-			App:    "conformance",
-			Source: "ocel/conformance@sha256:" + conformanceImageDigest,
-			Target: "registry.invalid/conformance:sha256-" + conformanceImageDigest,
-			Digest: "sha256:" + conformanceImageDigest,
+			App:      "conformance",
+			Source:   "ocel/conformance@sha256:" + conformanceImageDigest,
+			ImageRef: "registry.invalid/conformance:sha256-" + conformanceImageDigest,
+			Digest:   "sha256:" + conformanceImageDigest,
 		}}}
 		with, err := releaser.Plan(ctx, pushing, nil)
 		if err != nil {
@@ -960,7 +960,7 @@ func RunStacks(t *testing.T, releaser providerkit.Stacks, artifacts providerkit.
 		}
 
 		if records != nil {
-			recorded := providerkit.Stack{Kind: providerkit.StackInfra, Bindings: result.Bindings}
+			recorded := providerkit.RecordedStack{Kind: providerkit.StackInfra, Bindings: result.Bindings}
 			if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, recorded); err != nil {
 				t.Fatalf("recording what the release returned, as the kit does after every Provision() = %v", err)
 			}

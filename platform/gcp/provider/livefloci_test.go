@@ -61,7 +61,7 @@ func TestLiveCredentials(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Whoami() against the emulator = %v, want an identity: the project the run targets answers there", err)
 	}
-	if identity.Provider != gcp.Vendor || identity.Account != liveProject() {
+	if identity.Vendor != gcp.Vendor || identity.Account != liveProject() {
 		t.Errorf("Whoami() = %+v, want %s naming project %s", identity, gcp.Vendor, liveProject())
 	}
 }
@@ -118,7 +118,7 @@ func TestLiveSealingWhereNoKeyRingStandsSaysWhatToRun(t *testing.T) {
 
 	elsewhere := newProvider(t, gcp.Options{Project: liveProject(), Region: "australia-southeast2"})
 	var refusal providerkit.Refusal
-	_, err := elsewhere.Cipher().Seal(context.Background(), providerkit.Coordinate{
+	_, err := elsewhere.Cipher().Seal(context.Background(), providerkit.SealScope{
 		Project: "shop",
 		Class:   providerkit.ClassProduction,
 		Env:     "*",

@@ -124,7 +124,7 @@ func held(t *testing.T, ctx context.Context, certificates providerkit.Certificat
 	if err != nil {
 		t.Fatalf("Issue(%s) = %v", hostname, err)
 	}
-	if !cert.Held() {
+	if !cert.Issued() {
 		t.Fatalf("Issue(%s) minted no handle, which renders as no certificate covering %s yet on a hostname that is served", hostname, hostname)
 	}
 	return cert

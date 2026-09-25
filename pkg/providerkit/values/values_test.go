@@ -537,7 +537,7 @@ func (c *counted) List(ctx context.Context, under ports.RecordName) ([]ports.Rec
 	return c.RecordStore.List(ctx, under)
 }
 
-func (c *counted) Open(ctx context.Context, at ports.Coordinate, sealed []byte) ([]byte, error) {
+func (c *counted) Open(ctx context.Context, at ports.SealScope, sealed []byte) ([]byte, error) {
 	c.mu.Lock()
 	c.opened++
 	c.mu.Unlock()

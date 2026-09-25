@@ -65,7 +65,7 @@ func rootfs(t *testing.T) []byte {
 
 func localDaemon(t *testing.T) (providerkit.DockerHost, *http.Client) {
 	t.Helper()
-	daemon, err := providerkit.OpenDockerHost()
+	daemon, err := providerkit.DockerHostFromEnv()
 	if err != nil {
 		t.Fatalf("no docker daemon this machine can name, and the image a transfer carries is read out of one: %v", err)
 	}
@@ -147,10 +147,10 @@ func forget(client *http.Client) {
 
 func transferPush(daemon providerkit.DockerHost, client *http.Client, runtime []byte) providerkit.ImagePush {
 	return providerkit.ImagePush{
-		App:    "live-transfer",
-		Source: transferRepository + "@" + transferDigest,
-		Target: transferCoordinate(runtime),
-		Digest: transferDigest,
+		App:      "live-transfer",
+		Source:   transferRepository + "@" + transferDigest,
+		ImageRef: transferCoordinate(runtime),
+		Digest:   transferDigest,
 		Wrap: func(ctx context.Context) (v1.Image, func(), error) {
 			return wrappedAsADeployDoes(ctx, daemon, client, runtime)
 		},

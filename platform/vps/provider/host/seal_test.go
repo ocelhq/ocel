@@ -93,7 +93,7 @@ func TestTheSealHelperMintsAKeyOnceAndMintsNothingOverIt(t *testing.T) {
 	}
 }
 
-var bound = providerkit.Coordinate{
+var bound = providerkit.SealScope{
 	Project: "shop",
 	Class:   sealClass,
 	Env:     "*",
@@ -103,7 +103,7 @@ var bound = providerkit.Coordinate{
 
 var aCoordinate = sealFlags(bound)
 
-func sealFlags(at providerkit.Coordinate) []string {
+func sealFlags(at providerkit.SealScope) []string {
 	argv, err := sealArgv("seal", at)
 	if err != nil {
 		panic(err)
@@ -136,7 +136,7 @@ func TestTheSealHelperRoundTripsAValueAndOpensItNowhereElse(t *testing.T) {
 		t.Errorf("open answered %q, want %q", got, plaintext)
 	}
 
-	for name, moved := range map[string]providerkit.Coordinate{
+	for name, moved := range map[string]providerkit.SealScope{
 		"another project":     {Project: "other", Class: bound.Class, Env: bound.Env, Folder: bound.Folder, Name: bound.Name},
 		"another environment": {Project: bound.Project, Class: bound.Class, Env: "staging", Folder: bound.Folder, Name: bound.Name},
 		"another folder":      {Project: bound.Project, Class: bound.Class, Env: bound.Env, Folder: "/a/b", Name: bound.Name},
@@ -465,7 +465,7 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *
 func TestTheProviderReachesTheKeyOnlyThroughTheHelperItInstalled(t *testing.T) {
 	t.Parallel()
 
-	at := providerkit.Coordinate{
+	at := providerkit.SealScope{
 		Project: "shop",
 		Class:   providerkit.ClassProduction,
 		Env:     "*",
@@ -513,7 +513,7 @@ func handed(argv []string, flag string) string {
 func TestTheHelperIsRunInTheShapeTheSudoersLineWhitelists(t *testing.T) {
 	t.Parallel()
 
-	argv, err := sealArgv("seal", providerkit.Coordinate{
+	argv, err := sealArgv("seal", providerkit.SealScope{
 		Project: "shop", Class: providerkit.ClassProduction, Env: "*", Folder: "/", Name: "DATABASE_URL",
 	})
 	if err != nil {
@@ -532,7 +532,7 @@ func TestTheHelperIsRunInTheShapeTheSudoersLineWhitelists(t *testing.T) {
 func TestAValueSealedToNoClassIsRefusedRatherThanSealedToWhateverStands(t *testing.T) {
 	t.Parallel()
 
-	_, err := sealArgv("seal", providerkit.Coordinate{Project: "shop", Name: "DATABASE_URL"})
+	_, err := sealArgv("seal", providerkit.SealScope{Project: "shop", Name: "DATABASE_URL"})
 	var refusal providerkit.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 		t.Fatalf("sealing at a coordinate naming no class = %v, want a refusal: a key is minted per class", err)
@@ -542,14 +542,14 @@ func TestAValueSealedToNoClassIsRefusedRatherThanSealedToWhateverStands(t *testi
 func TestACoordinateMissingAnyPartButTheBindingIsRefused(t *testing.T) {
 	t.Parallel()
 
-	whole := providerkit.Coordinate{
+	whole := providerkit.SealScope{
 		Project: "shop", Class: providerkit.ClassProduction, Env: "*", Folder: "/", Binding: "db", Name: "DATABASE_URL",
 	}
-	for name, blanked := range map[string]func(*providerkit.Coordinate){
-		"project": func(at *providerkit.Coordinate) { at.Project = "" },
-		"env":     func(at *providerkit.Coordinate) { at.Env = "" },
-		"folder":  func(at *providerkit.Coordinate) { at.Folder = "" },
-		"name":    func(at *providerkit.Coordinate) { at.Name = "" },
+	for name, blanked := range map[string]func(*providerkit.SealScope){
+		"project": func(at *providerkit.SealScope) { at.Project = "" },
+		"env":     func(at *providerkit.SealScope) { at.Env = "" },
+		"folder":  func(at *providerkit.SealScope) { at.Folder = "" },
+		"name":    func(at *providerkit.SealScope) { at.Name = "" },
 	} {
 		at := whole
 		blanked(&at)

@@ -117,7 +117,7 @@ func (s cipher) stood(ctx context.Context) (ports.Cipher, error) {
 	return ports.Cipher{Clients: held.Workload()}, nil
 }
 
-func (s cipher) Seal(ctx context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
+func (s cipher) Seal(ctx context.Context, at providerkit.SealScope, plaintext []byte) ([]byte, error) {
 	held, err := s.stood(ctx)
 	if err != nil {
 		return nil, err
@@ -125,7 +125,7 @@ func (s cipher) Seal(ctx context.Context, at providerkit.Coordinate, plaintext [
 	return held.Seal(ctx, at, plaintext)
 }
 
-func (s cipher) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+func (s cipher) Open(ctx context.Context, at providerkit.SealScope, sealed []byte) ([]byte, error) {
 	held, err := s.stood(ctx)
 	if err != nil {
 		return nil, err

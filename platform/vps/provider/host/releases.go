@@ -37,11 +37,11 @@ func (h *Host) Forget(ctx context.Context, class providerkit.Class, project, app
 	return err
 }
 
-func (h *Host) Reconcile(ctx context.Context, project, app, coordinate string, progress providerkit.Progress) error {
-	repository, named := Repository(coordinate)
+func (h *Host) Reconcile(ctx context.Context, project, app, imageRef string, progress providerkit.Progress) error {
+	repository, named := Repository(imageRef)
 	if !named {
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"%s runs %s, which names no repository and tag", app, coordinate)
+			"%s runs %s, which names no repository and tag", app, imageRef)
 	}
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {

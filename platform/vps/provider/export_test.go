@@ -12,7 +12,7 @@ var ProviderOver = newProvider
 
 var MintStoreSecret = mintStoreSecret
 
-func StoreCoordinate(ref providerkit.StackRef) providerkit.Coordinate { return storeCoordinate(ref) }
+func StoreCoordinate(ref providerkit.StackRef) providerkit.SealScope { return storeCoordinate(ref) }
 
 func StoreName(ref providerkit.StackRef) string { return storeName(ref) }
 
@@ -34,16 +34,16 @@ func (p *Provider) Reaching(dial Reach) { p.reaches = dial }
 
 func (p *Provider) Transforming(pass transformkit.Evaluator) { p.transform = pass }
 
-func DNSVerdict(ctx context.Context, look Lookup, hostname, address string) providerkit.StandingCheck {
+func DNSVerdict(ctx context.Context, look Lookup, hostname, address string) providerkit.HostCheck {
 	here, unread := look(ctx, address)
 	return dnsVerdict(ctx, look, hostname, address, here, unread)
 }
 
-func DNSVerdicts(ctx context.Context, look Lookup, hostnames []string, address string) []providerkit.StandingCheck {
+func DNSVerdicts(ctx context.Context, look Lookup, hostnames []string, address string) []providerkit.HostCheck {
 	return dnsVerdicts(ctx, look, hostnames, address)
 }
 
-func ReachVerdict(ctx context.Context, dial Reach, address string) providerkit.StandingCheck {
+func ReachVerdict(ctx context.Context, dial Reach, address string) providerkit.HostCheck {
 	return reachVerdict(ctx, dial, address)
 }
 

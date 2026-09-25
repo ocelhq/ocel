@@ -333,7 +333,7 @@ func (d *hostnames) pendingOn(host string, cert Certificate, health CertificateH
 	switch {
 	case !slices.Contains(d.declared(), host):
 		return fmt.Sprintf("this project no longer declares %s; `ocel domain rm` gives it back", host)
-	case health.Terminates && !cert.Held():
+	case health.Terminates && !cert.Issued():
 		return fmt.Sprintf("no certificate covers %s yet; run `ocel domain add`", host)
 	case health.Terminates && !health.Issued:
 		return fmt.Sprintf("certificate %s is %s, not issued", cert.ID, certificateStatusWord(health.Status))

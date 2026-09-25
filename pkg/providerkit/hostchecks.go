@@ -7,27 +7,27 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-type StandingVerdict int
+type HostVerdict int
 
 const (
-	StandingPass StandingVerdict = iota
-	StandingOwed
-	StandingFail
+	HostPass HostVerdict = iota
+	HostOwed
+	HostFail
 )
 
-type StandingCheck struct {
+type HostCheck struct {
 	Subject string
-	Verdict StandingVerdict
+	Verdict HostVerdict
 	Finding string
 	Fix     string
 }
 
-type StandingRequest struct {
+type HostCheckRequest struct {
 	Class     Class
 	Hostnames []string
 }
 
-func StandingProto(checks []StandingCheck) []*contractv1.StandingCheck {
+func HostChecksProto(checks []HostCheck) []*contractv1.StandingCheck {
 	if len(checks) == 0 {
 		return nil
 	}
@@ -43,29 +43,29 @@ func StandingProto(checks []StandingCheck) []*contractv1.StandingCheck {
 	return wired
 }
 
-func verdictProto(verdict StandingVerdict) contractv1.StandingCheck_Verdict {
+func verdictProto(verdict HostVerdict) contractv1.StandingCheck_Verdict {
 	switch verdict {
-	case StandingOwed:
+	case HostOwed:
 		return contractv1.StandingCheck_VERDICT_OWED
-	case StandingFail:
+	case HostFail:
 		return contractv1.StandingCheck_VERDICT_FAIL
 	default:
 		return contractv1.StandingCheck_VERDICT_PASS
 	}
 }
 
-func (h *handlers) standingChecks(ctx context.Context, provider Provider, class Class, hostnames []string) []*contractv1.StandingCheck {
+func (h *handlers) hostChecks(ctx context.Context, provider Provider, class Class, hostnames []string) []*contractv1.StandingCheck {
 	checkHost := provider.Hooks().CheckHost
 	if checkHost == nil {
 		return nil
 	}
-	checks, err := checkHost(ctx, StandingRequest{Class: class, Hostnames: hostnames})
+	checks, err := checkHost(ctx, HostCheckRequest{Class: class, Hostnames: hostnames})
 	if err != nil {
-		return StandingProto([]StandingCheck{{
-			Verdict: StandingFail,
+		return HostChecksProto([]HostCheck{{
+			Verdict: HostFail,
 			Finding: fmt.Sprintf("what stands on this box for the life of it could not be read, so none of it was judged: %v", err),
 			Fix:     "run `ocel doctor` once the machine answers again",
 		}})
 	}
-	return StandingProto(checks)
+	return HostChecksProto(checks)
 }

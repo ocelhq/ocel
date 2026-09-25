@@ -238,7 +238,7 @@ func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress 
 	}
 	ref := names.RepositoryPath(p.options.Region, providerkit.ClassProduction) +
 		"/" + connectorImageName + ":" + naming.DigestTag(digest.String())
-	push := providerkit.ImagePush{App: connectorImageName, Target: ref, Digest: digest.String(), Built: built}
+	push := providerkit.ImagePush{App: connectorImageName, ImageRef: ref, Digest: digest.String(), Built: built}
 
 	held, err := store.Has(ctx, push)
 	if err != nil {

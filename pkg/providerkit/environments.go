@@ -27,7 +27,7 @@ type EnvironmentMeta struct {
 
 func recordEnvironmentMeta(ctx context.Context, records RecordStore, class Class, slug, env, label string) error {
 	name := EnvironmentRecord(class, slug, env)
-	held, err := Held(ctx, records, name)
+	held, err := ReadOrEmpty(ctx, records, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}

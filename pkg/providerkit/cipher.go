@@ -6,4 +6,4 @@ import (
 
 type Cipher = ports.Cipher
 
-type Coordinate = ports.Coordinate
+type SealScope = ports.SealScope

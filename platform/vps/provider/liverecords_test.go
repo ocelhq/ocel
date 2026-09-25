@@ -18,7 +18,7 @@ func TestLiveTheDeployPrincipalReadsAndWritesTheRecordsARootBootstrapWrote(t *te
 	name := providerkit.ProjectRecord(providerkit.ClassProduction, "records-induction")
 	ctx := context.Background()
 
-	held, err := providerkit.Held(ctx, records, name)
+	held, err := providerkit.ReadOrEmpty(ctx, records, name)
 	if err != nil {
 		t.Fatalf("read %s as %s = %v, want the tier a bootstrap wrote as root readable by the login every deploy runs as: the whole deploy path reads before it writes, so a tier this login cannot open is a box nothing can deploy to",
 			name, deployLogin, err)

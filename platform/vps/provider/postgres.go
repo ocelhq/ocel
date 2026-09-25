@@ -108,7 +108,7 @@ func (p *Provider) held(ctx context.Context, in resources.Instruction, name stri
 }
 
 func (p *Provider) heldSecret(ctx context.Context, in resources.Instruction, name, folder, item string, mint func() (string, error)) (string, error) {
-	at := providerkit.Coordinate{
+	at := providerkit.SealScope{
 		Project: in.Ref.Project, Class: in.Ref.Class, Env: in.Ref.Name.String(),
 		Folder: folder, Binding: in.Resource.Name, Name: item,
 	}

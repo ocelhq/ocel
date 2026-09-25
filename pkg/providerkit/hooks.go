@@ -20,7 +20,7 @@ type Hooks struct {
 	EnsureImageRegistry func(ctx context.Context, class Class, repositories []string) (RegistryTarget, error)
 	RegistryImages      func(ctx context.Context, target RegistryTarget) (ImageStore, error)
 	DirectImages        func(ctx context.Context) (ImageStore, error)
-	CheckHost           func(ctx context.Context, req StandingRequest) ([]StandingCheck, error)
+	CheckHost           func(ctx context.Context, req HostCheckRequest) ([]HostCheck, error)
 	ShapeCost           func(ctx context.Context, req ShapeRequest) (*costv1.ResourceSet, error)
 	EstimateCost        func(ctx context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error)
 	FunctionBaseImage   func(ctx context.Context, framework Framework) (v1.Image, error)

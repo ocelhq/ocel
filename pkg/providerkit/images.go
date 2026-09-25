@@ -13,10 +13,10 @@ import (
 const ImageKind = "image"
 
 type ImagePush struct {
-	App    string
-	Source string
-	Target string
-	Digest string
+	App      string
+	Source   string
+	ImageRef string
+	Digest   string
 
 	Function bool
 	Built    v1.Image
@@ -39,7 +39,7 @@ type ImagePlan struct {
 func (p ImagePlan) String() string {
 	targets := make([]string, 0, len(p.Pushes))
 	for _, push := range p.Pushes {
-		targets = append(targets, push.App+" to "+push.Target)
+		targets = append(targets, push.App+" to "+push.ImageRef)
 	}
 	if len(targets) == 0 {
 		return "no image push"
@@ -96,10 +96,10 @@ func (p ImagePlan) push(ctx context.Context, push ImagePush, progress Progress) 
 	return p.Store.Push(ctx, push, progress)
 }
 
-func (p ImagePlan) Coordinate(app string) string {
+func (p ImagePlan) ImageRef(app string) string {
 	for _, push := range p.Pushes {
 		if !push.Function && push.App == app {
-			return push.Target
+			return push.ImageRef
 		}
 	}
 	return ""
@@ -108,7 +108,7 @@ func (p ImagePlan) Coordinate(app string) string {
 func (p ImagePlan) held(ctx context.Context, push ImagePush) (bool, error) {
 	if p.Store == nil {
 		return false, Refuse(CodeInvalid,
-			"%s's image is pushed to %s and this release carries nothing to push it with", push.App, push.Target)
+			"%s's image is pushed to %s and this release carries nothing to push it with", push.App, push.ImageRef)
 	}
 	held, err := p.Store.Has(ctx, push)
 	if err != nil {
@@ -117,11 +117,11 @@ func (p ImagePlan) held(ctx context.Context, push ImagePush) (bool, error) {
 	return held, nil
 }
 
-func coordinate(repository, tag string, target RegistryTarget) string {
+func imageRef(repository, tag string, target RegistryTarget) string {
 	if !target.Named() {
 		return repository + ":" + tag
 	}
-	return target.Coordinate(naming.RepositorySegment(repository), tag)
+	return target.ImageRef(naming.RepositorySegment(repository), tag)
 }
 
 func imageStoreFor(ctx context.Context, provider Provider, target RegistryTarget) (ImageStore, error) {

@@ -258,12 +258,12 @@ func servesBehind(t *testing.T, front string) machine {
 
 	servesAPreviewBehind(t, vm, d, opened, front)
 
-	checks, err := d.CheckHost(ctx, providerkit.StandingRequest{Class: providerkit.ClassProduction})
+	checks, err := d.CheckHost(ctx, providerkit.HostCheckRequest{Class: providerkit.ClassProduction})
 	if err != nil {
 		t.Fatalf("CheckStanding() = %v", err)
 	}
 	for _, check := range checks {
-		if check.Verdict == providerkit.StandingFail {
+		if check.Verdict == providerkit.HostFail {
 			t.Errorf("%s fails behind %s: %s", check.Subject, front, check.Finding)
 		}
 	}

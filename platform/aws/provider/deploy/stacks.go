@@ -165,7 +165,7 @@ func (r *release) Run(pctx *sdk.Context, plan providerkit.StackPlan) error {
 	if err != nil {
 		return err
 	}
-	switch work := plan.Options.(type) {
+	switch work := plan.Work.(type) {
 	case *stackWork:
 		return work.program(pctx)
 	case *appWork:
@@ -240,7 +240,7 @@ func provisionsBucket(plan providerkit.StackPlan) bool {
 
 func (r *release) Configure(_ context.Context, plan providerkit.StackPlan) (auto.ConfigMap, error) {
 	tags := plan.Tags
-	if work, held := plan.Options.(*stackWork); held {
+	if work, held := plan.Work.(*stackWork); held {
 		tags = work.tags
 	}
 	if len(tags) == 0 {
@@ -254,15 +254,15 @@ func (r *release) Configure(_ context.Context, plan providerkit.StackPlan) (auto
 }
 
 func (r *release) Decode(ctx context.Context, plan providerkit.StackPlan, outputs auto.OutputMap) (providerkit.StackResult, error) {
-	if work, held := plan.Options.(*stackWork); held {
+	if work, held := plan.Work.(*stackWork); held {
 		work.outputs = outputs
 		return providerkit.StackResult{}, nil
 	}
-	if work, held := plan.Options.(*substrateWork); held {
+	if work, held := plan.Work.(*substrateWork); held {
 		work.outputs = outputs
 		return providerkit.StackResult{}, nil
 	}
-	if work, held := plan.Options.(*containerWork); held {
+	if work, held := plan.Work.(*containerWork); held {
 		return r.decodeContainer(work, outputs)
 	}
 	if plan.App != nil {
@@ -358,7 +358,7 @@ func (r *Stacks) PackApp(ctx context.Context, packing providerkit.AppPacking, _ 
 	if err != nil {
 		return providerkit.AppPack{}, err
 	}
-	return providerkit.AppPack{Overlay: bundle.overlay(), Carry: bundle}, nil
+	return providerkit.AppPack{Overlay: bundle.overlay(), Packed: bundle}, nil
 }
 
 func (r *Stacks) Plan(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
@@ -430,7 +430,7 @@ func (r *release) plan(ctx context.Context, plan providerkit.StackPlan, progress
 }
 
 func transformedIn(plan providerkit.StackPlan) *transformPatches {
-	switch work := plan.Options.(type) {
+	switch work := plan.Work.(type) {
 	case *appWork:
 		return work.transformed
 	case *infraWork:
@@ -440,7 +440,7 @@ func transformedIn(plan providerkit.StackPlan) *transformPatches {
 }
 
 func (r *release) prepare(ctx context.Context, plan providerkit.StackPlan) (providerkit.StackPlan, *appWork, error) {
-	if plan.Options != nil {
+	if plan.Work != nil {
 		return plan, nil, nil
 	}
 	if len(plan.Images.Pushes) > 0 {
@@ -461,14 +461,14 @@ func (r *release) prepare(ctx context.Context, plan providerkit.StackPlan) (prov
 				return providerkit.StackPlan{}, nil, err
 			}
 		}
-		plan.Options = work
+		plan.Work = work
 		return plan, nil, nil
 	}
 	work, err := r.appWork(plan, transformed)
 	if err != nil {
 		return providerkit.StackPlan{}, nil, err
 	}
-	plan.Options = work
+	plan.Work = work
 	return plan, work, nil
 }
 

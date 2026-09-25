@@ -204,8 +204,8 @@ func (s *standingStores) once(name string, stand func() (storeCredential, error)
 	return held, nil
 }
 
-func storeCoordinate(ref providerkit.StackRef) providerkit.Coordinate {
-	return providerkit.Coordinate{
+func storeCoordinate(ref providerkit.StackRef) providerkit.SealScope {
+	return providerkit.SealScope{
 		Project: ref.Project, Class: ref.Class, Env: storeRef(ref).Name.String(),
 		Folder: live.StoreSecretFolder, Binding: live.StoreSecretBinding, Name: live.StoreSecretName,
 	}

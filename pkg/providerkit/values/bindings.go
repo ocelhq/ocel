@@ -183,7 +183,7 @@ func (s Store) writePair(ctx context.Context, scope Scope, environment, owner, n
 	if owner != OwnerOcel && record.Version > 0 && record.owner() != owner {
 		return 0, s.claimRefusal(scope, name, record.owner(), owner)
 	}
-	heldValue, err := ports.Held(ctx, s.Records, bindingValueName(scope, name, environment))
+	heldValue, err := ports.ReadOrEmpty(ctx, s.Records, bindingValueName(scope, name, environment))
 	if err != nil {
 		return 0, fmt.Errorf("read binding %s's value: %w", name, err)
 	}
@@ -569,7 +569,7 @@ func (s Store) unclaim(ctx context.Context, scope Scope, owner, environment stri
 func (s Store) reindex(ctx context.Context, scope Scope, owner, environment string, apply func([]string) []string) error {
 	at := bindingOwnerName(scope, owner, environment)
 	for range bindingAttempts {
-		held, err := ports.Held(ctx, s.Records, at)
+		held, err := ports.ReadOrEmpty(ctx, s.Records, at)
 		if err != nil {
 			return fmt.Errorf("read %s's published bindings: %w", owner, err)
 		}
@@ -616,7 +616,7 @@ func (s Store) reindex(ctx context.Context, scope Scope, owner, environment stri
 }
 
 func (s Store) bindingRecordAt(ctx context.Context, scope Scope, environment, name string) (ports.Record, bindingRecord, error) {
-	held, err := ports.Held(ctx, s.Records, bindingRecordName(scope, name, environment))
+	held, err := ports.ReadOrEmpty(ctx, s.Records, bindingRecordName(scope, name, environment))
 	if err != nil {
 		return ports.Record{}, bindingRecord{}, fmt.Errorf("read binding %s's record: %w", name, err)
 	}
@@ -649,8 +649,8 @@ func decodeBindingValue(name string, held ports.Record) (bindingValue, error) {
 	return value, nil
 }
 
-func bindingCoordinate(scope Scope, environment, name string) ports.Coordinate {
-	return ports.Coordinate{
+func bindingCoordinate(scope Scope, environment, name string) ports.SealScope {
+	return ports.SealScope{
 		Project: scope.Project,
 		Class:   scope.Class,
 		Env:     canonicalEnvironment(environment),

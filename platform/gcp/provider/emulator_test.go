@@ -36,8 +36,8 @@ func TestWhoamiNamesTheProviderTheIdentityCameFrom(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Whoami() = %v, want an identity", err)
 	}
-	if identity.Provider != gcp.Vendor {
-		t.Errorf("Whoami().Provider = %q, want %q: the CLI renders a credential section per provider and drops the ones naming none", identity.Provider, gcp.Vendor)
+	if identity.Vendor != gcp.Vendor {
+		t.Errorf("Whoami().Provider = %q, want %q: the CLI renders a credential section per provider and drops the ones naming none", identity.Vendor, gcp.Vendor)
 	}
 }
 

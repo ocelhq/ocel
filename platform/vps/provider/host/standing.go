@@ -42,9 +42,9 @@ func (h *Host) Publishing(ctx context.Context, port string) ([]string, error) {
 	return named, nil
 }
 
-func (h *Host) SwitchboardStanding(ctx context.Context, class providerkit.Class) providerkit.StandingCheck {
+func (h *Host) SwitchboardStanding(ctx context.Context, class providerkit.Class) providerkit.HostCheck {
 	board := switchboardStanding(nil, h.proxyOption)
-	check := providerkit.StandingCheck{Subject: board.name, Verdict: providerkit.StandingFail,
+	check := providerkit.HostCheck{Subject: board.name, Verdict: providerkit.HostFail,
 		Fix: "run `" + providerkit.BootstrapCommand(class) + "` to stand it again"}
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
@@ -57,7 +57,7 @@ func (h *Host) SwitchboardStanding(ctx context.Context, class providerkit.Class)
 		check.Finding = fmt.Sprintf("ask %s whether it answers: %v", board.name, err)
 		return check
 	case result.Code == 0:
-		check.Verdict, check.Fix = providerkit.StandingPass, ""
+		check.Verdict, check.Fix = providerkit.HostPass, ""
 		check.Finding = fmt.Sprintf("%s is running and answers over its control socket in %s", board.name, switchboard.ControlDir)
 		return check
 	}

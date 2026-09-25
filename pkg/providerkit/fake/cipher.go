@@ -21,7 +21,7 @@ func NewCipher() *Cipher {
 	return &Cipher{key: key}
 }
 
-func (s *Cipher) Seal(_ context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
+func (s *Cipher) Seal(_ context.Context, at providerkit.SealScope, plaintext []byte) ([]byte, error) {
 	gcm, err := s.gcm()
 	if err != nil {
 		return nil, err
@@ -33,7 +33,7 @@ func (s *Cipher) Seal(_ context.Context, at providerkit.Coordinate, plaintext []
 	return gcm.Seal(nonce, nonce, plaintext, at.AAD()), nil
 }
 
-func (s *Cipher) Open(_ context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+func (s *Cipher) Open(_ context.Context, at providerkit.SealScope, sealed []byte) ([]byte, error) {
 	gcm, err := s.gcm()
 	if err != nil {
 		return nil, err

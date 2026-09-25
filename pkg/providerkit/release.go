@@ -53,7 +53,7 @@ type StackPlan struct {
 
 	App *AppPlan
 
-	Options any
+	Work any
 }
 
 type Bindings interface {

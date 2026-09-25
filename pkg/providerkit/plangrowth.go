@@ -2,7 +2,7 @@ package providerkit
 
 import "strings"
 
-func RefuseGrowth(shown, standing Plan) error {
+func RefuseGrowth(shown, fresh Plan) error {
 	rows := map[string]ChangeAction{}
 	for _, group := range shown.Groups {
 		rows[group.Name] = group.Action
@@ -12,7 +12,7 @@ func RefuseGrowth(shown, standing Plan) error {
 	}
 
 	var grown []string
-	for _, group := range standing.Groups {
+	for _, group := range fresh.Groups {
 		if len(group.Changes) == 0 {
 			grown = appendGrown(grown, group.Name, rows[group.Name], group.Action)
 			continue

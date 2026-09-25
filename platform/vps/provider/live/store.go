@@ -129,11 +129,11 @@ func row(raw string) (providerkit.Revision, []byte, error) {
 
 type Cipher struct{ Root string }
 
-func (Cipher) Seal(context.Context, providerkit.Coordinate, []byte) ([]byte, error) {
+func (Cipher) Seal(context.Context, providerkit.SealScope, []byte) ([]byte, error) {
 	return nil, errors.New("the box seals values only through its helper")
 }
 
-func (s Cipher) Open(_ context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+func (s Cipher) Open(_ context.Context, at providerkit.SealScope, sealed []byte) ([]byte, error) {
 	if at.Class == "" {
 		return nil, fmt.Errorf("%s names no class", at.Name)
 	}
@@ -144,7 +144,7 @@ func (s Cipher) Open(_ context.Context, at providerkit.Coordinate, sealed []byte
 	return Open(key, at, sealed)
 }
 
-func Open(key []byte, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+func Open(key []byte, at providerkit.SealScope, sealed []byte) ([]byte, error) {
 	if len(key) != sealKeyBytes {
 		return nil, fmt.Errorf("the seal key is %d bytes, want %d", len(key), sealKeyBytes)
 	}

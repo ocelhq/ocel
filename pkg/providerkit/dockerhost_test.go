@@ -11,7 +11,7 @@ import (
 func TestWithNoDockerHostSetTheDaemonIsThePlatformsOwnSocket(t *testing.T) {
 	t.Setenv(providerkit.DockerHostEnv, "")
 
-	d, err := providerkit.OpenDockerHost()
+	d, err := providerkit.DockerHostFromEnv()
 	if err != nil {
 		t.Fatalf("providerkit.OpenDockerHost() with no %s set = %v, so ocel rejects the address it chose for itself", providerkit.DockerHostEnv, err)
 	}
@@ -30,7 +30,7 @@ func TestWithNoDockerHostSetTheDaemonIsThePlatformsOwnSocket(t *testing.T) {
 func TestAWindowsPipeIsDialledOnWindowsAndRefusedWhereThereIsNoPipe(t *testing.T) {
 	t.Setenv(providerkit.DockerHostEnv, "npipe:////./pipe/docker_engine")
 
-	d, err := providerkit.OpenDockerHost()
+	d, err := providerkit.DockerHostFromEnv()
 	if runtime.GOOS != "windows" {
 		if err == nil {
 			t.Fatalf("providerkit.OpenDockerHost() accepted a named pipe on %s, where nothing can dial one", runtime.GOOS)
@@ -48,7 +48,7 @@ func TestAWindowsPipeIsDialledOnWindowsAndRefusedWhereThereIsNoPipe(t *testing.T
 func TestDockerHostBeatsThePlatformSocket(t *testing.T) {
 	t.Setenv(providerkit.DockerHostEnv, "tcp://10.0.0.4:2375")
 
-	d, err := providerkit.OpenDockerHost()
+	d, err := providerkit.DockerHostFromEnv()
 	if err != nil {
 		t.Fatalf("providerkit.OpenDockerHost() = %v", err)
 	}
@@ -65,7 +65,7 @@ func TestATLSPostureOnARemoteDaemonIsRefusedRatherThanDowngraded(t *testing.T) {
 			t.Setenv(providerkit.DockerCertPathEnv, "")
 			t.Setenv(stated, "1")
 
-			_, err := providerkit.OpenDockerHost()
+			_, err := providerkit.DockerHostFromEnv()
 			if err == nil {
 				t.Fatal("providerkit.OpenDockerHost() dialled a daemon the user asked to be reached over tls, so the build context crosses the network in the clear")
 			}
@@ -81,7 +81,7 @@ func TestARemoteDaemonWithNoTLSAskedForIsDialledAsGiven(t *testing.T) {
 	t.Setenv(providerkit.DockerTLSVerifyEnv, "")
 	t.Setenv(providerkit.DockerCertPathEnv, "")
 
-	d, err := providerkit.OpenDockerHost()
+	d, err := providerkit.DockerHostFromEnv()
 	if err != nil {
 		t.Fatalf("providerkit.OpenDockerHost() = %v, want the plain tcp daemon nothing asked to be secured", err)
 	}

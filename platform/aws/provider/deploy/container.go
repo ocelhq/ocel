@@ -541,7 +541,7 @@ func (r *release) runContainer(ctx context.Context, plan providerkit.StackPlan, 
 		if err = r.placeRule(ctx, work); err != nil {
 			return providerkit.StackResult{}, err
 		}
-		plan.Options = work
+		plan.Work = work
 		var result providerkit.StackResult
 		if result, err = r.adapter.Run(ctx, plan, progress); err == nil {
 			return result, nil
@@ -596,7 +596,7 @@ func (r *release) planContainer(ctx context.Context, plan providerkit.StackPlan,
 	if err := r.placeRule(ctx, work); err != nil {
 		return providerkit.Plan{}, err
 	}
-	plan.Options = work
+	plan.Work = work
 	previewed, err := r.adapter.Preview(ctx, plan, progress)
 	if err != nil {
 		return providerkit.Plan{}, err
