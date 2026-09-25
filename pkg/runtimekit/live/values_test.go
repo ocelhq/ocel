@@ -861,3 +861,45 @@ func TestBindingColdStart(t *testing.T) {
 		}
 	})
 }
+
+func TestABucketBoundToAStoreIsShownToTheAppWithoutItsCredential(t *testing.T) {
+	binding := Binding{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}
+	stored := record(t, &bindingsv1.Binding{Name: "ocel:bucket.uploads", Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{
+		Bucket: "acme", PublicBaseUrl: "https://cdn.acme.com", Public: true,
+		Endpoint: "https://abc.r2.cloudflarestorage.com", Region: "auto", PathStyle: true, Prefix: "uploads/",
+		AccessKeyId: "AKIDVALUE", SecretAccessKey: "SECRETVALUE",
+	}}})
+	out := &sink{}
+	l := New(resolves(map[string]string{binding.Key: stored}), []string{binding.Key}, []Binding{binding}, nil)
+	l.Attach(out)
+	root := t.TempDir()
+	if err := l.Project(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Join(l.Prefetch(context.Background())); err != nil {
+		t.Fatalf("join: %v", err)
+	}
+
+	projected, err := os.ReadFile(filepath.Join(root, binding.Key))
+	if err != nil {
+		t.Fatal(err)
+	}
+	msgs := out.messages(t)
+	if len(msgs) != 1 {
+		t.Fatalf("pushed %d messages, want the cold start's generation", len(msgs))
+	}
+	for channel, raw := range map[string]string{"projected": string(projected), "pushed": msgs[0].Values[binding.Key]} {
+		for _, held := range []string{"AKIDVALUE", "SECRETVALUE", "abc.r2.cloudflarestorage.com", `"acme"`, "uploads/", "auto"} {
+			if strings.Contains(raw, held) {
+				t.Errorf("%s record %s holds %s, want the store and its credential kept with the proxy", channel, raw, held)
+			}
+		}
+		shown := decodeBinding(t, raw).GetBucket()
+		if shown.GetBucket() != binding.Key || shown.GetPublicBaseUrl() != "https://cdn.acme.com" || !shown.GetPublic() {
+			t.Errorf("%s bucket = %+v, want the binding's key, public base url and public flag the app addresses it by", channel, shown)
+		}
+	}
+	if l.Value(binding.Key) != stored {
+		t.Errorf("Value = %q, want the proxy handed the whole record", l.Value(binding.Key))
+	}
+}
