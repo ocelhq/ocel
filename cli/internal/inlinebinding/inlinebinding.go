@@ -35,7 +35,7 @@ type Declared struct {
 	Buckets  map[string]*resourcesv1.BucketConfig
 }
 
-func Build(bound []projectconfig.TierBinding, values map[string]string, source string) ([]Record, error) {
+func Build(bound []projectconfig.Binding, values map[string]string, source string) ([]Record, error) {
 	var out []Record
 	for _, b := range bound {
 		if b.Inline == nil {

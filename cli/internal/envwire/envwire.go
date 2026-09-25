@@ -78,12 +78,16 @@ func NamedEnvironments(ctx context.Context, runner *provider.Runner, slug string
 }
 
 func Scope(cfg *projectconfig.Config, preview bool, environment string) envgate.Scope {
-	return envgate.Scope{Apps: Apps(cfg), Preview: preview, Environment: environment, Implied: Implied(cfg, preview), OtherTiers: Implied(cfg, !preview)}
+	tier, other := environmentv1.Tier_TIER_PRODUCTION, environmentv1.Tier_TIER_PREVIEW
+	if preview {
+		tier, other = other, tier
+	}
+	return envgate.Scope{Apps: Apps(cfg), Preview: preview, Environment: environment, Implied: Implied(cfg, tier), OtherTiers: Implied(cfg, other)}
 }
 
-func Implied(cfg *projectconfig.Config, preview bool) []envgate.Implied {
+func Implied(cfg *projectconfig.Config, tier environmentv1.Tier) []envgate.Implied {
 	var out []envgate.Implied
-	for _, binding := range cfg.BindingsFor(projectconfig.Tier(preview)) {
+	for _, binding := range cfg.BindingsFor(tier) {
 		if binding.Inline == nil {
 			continue
 		}

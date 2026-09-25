@@ -16,13 +16,13 @@ import (
 
 const postgres = resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES
 
-func inline(p projectconfig.PostgresInline) projectconfig.TierBinding {
-	return projectconfig.TierBinding{Type: postgres, Name: "orders", Inline: &projectconfig.Inline{Postgres: &p}}
+func inline(p projectconfig.PostgresInline) projectconfig.Binding {
+	return projectconfig.Binding{Type: postgres, Name: "orders", Inline: &projectconfig.Inline{Postgres: &p}}
 }
 
 func TestBuild(t *testing.T) {
 	t.Run("a url binding carries the url whole", func(t *testing.T) {
-		records, err := Build([]projectconfig.TierBinding{inline(projectconfig.PostgresInline{URL: "ORDERS_URL"})},
+		records, err := Build([]projectconfig.Binding{inline(projectconfig.PostgresInline{URL: "ORDERS_URL"})},
 			map[string]string{"ORDERS_URL": "postgres://u:p@ep-cool.neon.tech/orders?sslmode=require&options=endpoint%3Dep-cool"}, "ocel.json")
 		if err != nil {
 			t.Fatalf("Build: %v", err)
@@ -43,7 +43,7 @@ func TestBuild(t *testing.T) {
 	})
 
 	t.Run("a host binding reads each field from its literal or its variable", func(t *testing.T) {
-		records, err := Build([]projectconfig.TierBinding{inline(projectconfig.PostgresInline{
+		records, err := Build([]projectconfig.Binding{inline(projectconfig.PostgresInline{
 			Host:     projectconfig.Value{Literal: "db.example.com"},
 			Database: projectconfig.Value{Variable: "ORDERS_DB"},
 			Username: projectconfig.Value{Literal: "app"},
@@ -63,14 +63,14 @@ func TestBuild(t *testing.T) {
 	})
 
 	t.Run("a published binding is no record ocel writes", func(t *testing.T) {
-		records, err := Build([]projectconfig.TierBinding{{Type: postgres, Name: "analytics", External: "warehouse"}}, nil, "ocel.json")
+		records, err := Build([]projectconfig.Binding{{Type: postgres, Name: "analytics", External: "warehouse"}}, nil, "ocel.json")
 		if err != nil || len(records) != 0 {
 			t.Fatalf("Build = %v, %v, want nothing", records, err)
 		}
 	})
 
 	t.Run("a variable with no value is refused naming it", func(t *testing.T) {
-		_, err := Build([]projectconfig.TierBinding{inline(projectconfig.PostgresInline{URL: "ORDERS_URL"})}, map[string]string{}, "ocel.json")
+		_, err := Build([]projectconfig.Binding{inline(projectconfig.PostgresInline{URL: "ORDERS_URL"})}, map[string]string{}, "ocel.json")
 		if err == nil || !strings.Contains(err.Error(), "ORDERS_URL") {
 			t.Fatalf("Build = %v, want ORDERS_URL named", err)
 		}
@@ -171,7 +171,7 @@ func bucketRecord(props *bindingsv1.BucketProperties) Record {
 }
 
 func TestBuildABucket(t *testing.T) {
-	records, err := Build([]projectconfig.TierBinding{{
+	records, err := Build([]projectconfig.Binding{{
 		Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, Name: "uploads",
 		Inline: &projectconfig.Inline{Bucket: &projectconfig.BucketInline{
 			Endpoint:        projectconfig.Value{Literal: "https://abc.r2.cloudflarestorage.com"},

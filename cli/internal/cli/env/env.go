@@ -186,7 +186,7 @@ func runEnvSetPairs(ctx context.Context, deps cmddeps.Deps, cwd string, pairs []
 			return err
 		}
 		for _, pair := range pairs {
-			if err := envgate.CheckImpliedWritable(envwire.Implied(cfg, opts.preview), pair.key, opts.folder); err != nil {
+			if err := envgate.CheckImpliedWritable(envwire.Implied(cfg, envTier(opts)), pair.key, opts.folder); err != nil {
 				return err
 			}
 			if err := envgate.CheckWritable(definitions, pair.key, opts.folder); err != nil {
@@ -251,7 +251,7 @@ func withImplied(cfg *projectconfig.Config, opts envOptions, definitions []*reso
 	if opts.dev {
 		return definitions, groups, nil
 	}
-	implied, impliedGroups := envgate.Declarations(envwire.Implied(cfg, opts.preview))
+	implied, impliedGroups := envgate.Declarations(envwire.Implied(cfg, envTier(opts)))
 	return append(definitions, implied...), append(groups, impliedGroups...), nil
 }
 

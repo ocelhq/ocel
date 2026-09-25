@@ -12,23 +12,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-)
-
-const (
-	TierProduction = configdoc.TierProduction
-	TierPreview    = configdoc.TierPreview
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 type Binding struct {
 	Type     resourcesv1.ResourceType
 	Name     string
-	External string
-	Inline   map[string]*Inline
-}
-
-type TierBinding struct {
-	Type     resourcesv1.ResourceType
-	Name     string
+	Tier     environmentv1.Tier
 	External string
 	Inline   *Inline
 }
@@ -69,32 +59,21 @@ type PostgresTLS struct {
 	CA   string
 }
 
-func Tier(preview bool) string {
-	if preview {
-		return TierPreview
-	}
-	return TierProduction
-}
-
-func (c *Config) BindingsFor(tier string) []TierBinding {
-	out := make([]TierBinding, 0, len(c.Bindings))
+func (c *Config) BindingsFor(tier environmentv1.Tier) []Binding {
+	out := make([]Binding, 0, len(c.Bindings))
 	for _, b := range c.Bindings {
-		if b.Inline == nil {
-			out = append(out, TierBinding{Type: b.Type, Name: b.Name, External: b.External})
-			continue
-		}
-		if inline, bound := b.Inline[tier]; bound {
-			out = append(out, TierBinding{Type: b.Type, Name: b.Name, Inline: inline})
+		if b.Tier == environmentv1.Tier_TIER_UNSPECIFIED || b.Tier == tier {
+			out = append(out, b)
 		}
 	}
 	return out
 }
 
-func (b TierBinding) Group() string {
+func (b Binding) Group() string {
 	return naming.ResourceTypeName(b.Type) + "." + b.Name
 }
 
-func (b TierBinding) RecordName() string {
+func (b Binding) RecordName() string {
 	if b.Inline != nil {
 		return naming.InlineRecordName(b.Type, b.Name)
 	}
@@ -147,47 +126,60 @@ func normalizeBindings(raw configdoc.Bindings) ([]Binding, error) {
 			if strings.TrimSpace(declared) == "" {
 				return nil, fmt.Errorf("`bindings.%s` is keyed by an empty name — the key is the name an app declares the resource under, and the value is the record it binds, written as \"@<name>\"", key)
 			}
-			binding, err := normalizeBinding(key, typ, declared, named[declared])
+			bindings, err := normalizeBinding(key, typ, declared, named[declared])
 			if err != nil {
 				return nil, err
 			}
-			out = append(out, binding)
+			out = append(out, bindings...)
 		}
 	}
 	slices.SortFunc(out, func(a, b Binding) int {
 		if a.Type != b.Type {
 			return cmp.Compare(a.Type, b.Type)
 		}
-		return strings.Compare(a.Name, b.Name)
+		if c := strings.Compare(a.Name, b.Name); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Tier, b.Tier)
 	})
 	return out, nil
 }
 
-func normalizeBinding(key string, typ resourcesv1.ResourceType, declared string, raw configdoc.Binding) (Binding, error) {
+func normalizeBinding(key string, typ resourcesv1.ResourceType, declared string, raw configdoc.Binding) ([]Binding, error) {
 	path := "bindings." + key + "." + declared
 	if raw.Production == nil && raw.Preview == nil {
 		external, err := publishedName(path, raw.Published)
 		if err != nil {
-			return Binding{}, err
+			return nil, err
 		}
-		return Binding{Type: typ, Name: declared, External: external}, nil
+		return []Binding{{Type: typ, Name: declared, External: external}}, nil
 	}
-	inline := map[string]*Inline{}
-	for tier, record := range map[string]*configdoc.InlineRecord{TierProduction: raw.Production, TierPreview: raw.Preview} {
-		if record == nil {
+	if raw.Production == raw.Preview {
+		inline, err := normalizeInline(path, raw.Production)
+		if err != nil {
+			return nil, err
+		}
+		return []Binding{{Type: typ, Name: declared, Inline: inline}}, nil
+	}
+	var out []Binding
+	for _, tiered := range []struct {
+		tier   environmentv1.Tier
+		key    string
+		record *configdoc.InlineRecord
+	}{
+		{environmentv1.Tier_TIER_PRODUCTION, configdoc.TierProduction, raw.Production},
+		{environmentv1.Tier_TIER_PREVIEW, configdoc.TierPreview, raw.Preview},
+	} {
+		if tiered.record == nil {
 			continue
 		}
-		at := path
-		if raw.Production != raw.Preview {
-			at = path + "." + tier
-		}
-		normalized, err := normalizeInline(at, record)
+		inline, err := normalizeInline(path+"."+tiered.key, tiered.record)
 		if err != nil {
-			return Binding{}, err
+			return nil, err
 		}
-		inline[tier] = normalized
+		out = append(out, Binding{Type: typ, Name: declared, Tier: tiered.tier, Inline: inline})
 	}
-	return Binding{Type: typ, Name: declared, Inline: inline}, nil
+	return out, nil
 }
 
 func publishedName(path, spelled string) (string, error) {

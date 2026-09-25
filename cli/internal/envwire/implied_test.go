@@ -7,16 +7,17 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 func TestScopeImpliesTheVariablesATiersInlineBindingsRead(t *testing.T) {
 	cfg := &projectconfig.Config{Bindings: []projectconfig.Binding{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "analytics", External: "warehouse"},
-		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", Inline: map[string]*projectconfig.Inline{
-			projectconfig.TierProduction: {Postgres: &projectconfig.PostgresInline{
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", Tier: environmentv1.Tier_TIER_PRODUCTION, Inline: &projectconfig.Inline{
+			Postgres: &projectconfig.PostgresInline{
 				Host: projectconfig.Value{Literal: "db"}, Database: projectconfig.Value{Literal: "orders"},
 				Username: projectconfig.Value{Variable: "ORDERS_USER"}, Password: "ORDERS_PASSWORD",
-			}},
+			},
 		}},
 	}}
 

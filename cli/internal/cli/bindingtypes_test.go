@@ -18,7 +18,7 @@ func shape(name, jsonType string, list bool) *envvarsv1.PropertyShape {
 
 func TestRenderBindingTypes(t *testing.T) {
 	t.Run("writes what the checked-in fixture the transform package typechecks holds", func(t *testing.T) {
-		got := renderBindingTypes("production", []projectconfig.TierBinding{
+		got := renderBindingTypes("production", []projectconfig.Binding{
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", External: "sst-pg-orders"},
 		}, []*envvarsv1.BindingSummary{
 			{
@@ -101,7 +101,7 @@ func TestRenderBindingTypes(t *testing.T) {
 	})
 
 	t.Run("types a binding written inline from the record ocel keeps for it", func(t *testing.T) {
-		got := renderBindingTypes("production", []projectconfig.TierBinding{
+		got := renderBindingTypes("production", []projectconfig.Binding{
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", Inline: &projectconfig.Inline{Postgres: &projectconfig.PostgresInline{URL: "ORDERS_URL"}}},
 		}, []*envvarsv1.BindingSummary{
 			{
@@ -116,7 +116,7 @@ func TestRenderBindingTypes(t *testing.T) {
 	})
 
 	t.Run("gives every resource bound to one record its own entry", func(t *testing.T) {
-		got := renderBindingTypes("production", []projectconfig.TierBinding{
+		got := renderBindingTypes("production", []projectconfig.Binding{
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", External: "shared-pg"},
 			{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "invoices", External: "shared-pg"},
 		}, []*envvarsv1.BindingSummary{
