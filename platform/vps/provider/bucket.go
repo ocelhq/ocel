@@ -345,7 +345,6 @@ func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan)
 		Volume:       spec.VolumeName(),
 		Sessions:     sessionsPrefix(plan),
 		Granted:      grantedBuckets(plan.App),
-		PostPolicies: true,
 		SweepUploads: sweptUploads(plan.App),
 		Sealed:       base64.StdEncoding.EncodeToString(own.held.sealed),
 	}, nil

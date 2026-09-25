@@ -39,7 +39,6 @@ type Store struct {
 	Sessions     string   `json:"sessions,omitempty"`
 	Granted      []string `json:"granted,omitempty"`
 	PathStyle    bool     `json:"pathStyle,omitempty"`
-	PostPolicies bool     `json:"postPolicies,omitempty"`
 	SweepUploads bool     `json:"sweepUploads,omitempty"`
 	Pointer      string   `json:"pointer,omitempty"`
 	Volume       string   `json:"volume,omitempty"`

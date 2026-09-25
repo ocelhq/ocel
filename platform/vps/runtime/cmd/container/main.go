@@ -195,7 +195,7 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (pr
 		Internal:     internal.Presigner(),
 		External:     publishing(internal, values),
 		Callbacks:    callbacks,
-		PostPolicies: manifest.Store.PostPolicies,
+		PostPolicies: true,
 		SweepUploads: manifest.Store.SweepUploads,
 		Sessions:     manifest.Store.Sessions,
 		Granted:      manifest.Store.Granted,
