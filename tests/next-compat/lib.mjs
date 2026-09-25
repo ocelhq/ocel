@@ -116,7 +116,7 @@ export function renderOcelConfig({ slug }) {
     `  slug: ${JSON.stringify(slug)},`,
     `  provider: awsProvider(),`,
     `  edge: cloudflare(),`,
-    `  apps: [{ name: ${JSON.stringify(APP_NAME)}, path: ".", runtime: "next" }],`,
+    `  apps: [{ name: ${JSON.stringify(APP_NAME)}, path: ".", framework: "next" }],`,
     `});`,
     ``,
   ].join("\n");
