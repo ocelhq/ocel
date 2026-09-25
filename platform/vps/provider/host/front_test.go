@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
-func routedByHand() Front { return Front{Manual: &Loopback{Port: manual.DefaultPort}} }
+func routedByHand() Front { return Front{Manual: &ManualFront{Port: manual.DefaultPort}} }
 
 func TestABoxFrontedByHandStandsNothingOfOcelsOwnProxy(t *testing.T) {
 	t.Parallel()
@@ -44,7 +44,7 @@ func switchboardOf(t *testing.T, front Front) boxContainer {
 func TestTheSwitchboardPublishesOnLoopbackOnlyForAProxyRoutedByHand(t *testing.T) {
 	t.Parallel()
 
-	byHand := strings.Join(switchboardOf(t, Front{Manual: &Loopback{Port: 9000}}).run(), " ")
+	byHand := strings.Join(switchboardOf(t, Front{Manual: &ManualFront{Port: 9000}}).run(), " ")
 	if !strings.Contains(byHand, "--publish 127.0.0.1:9000:"+switchboardPort) {
 		t.Errorf("the switchboard runs as %q, want it published on 127.0.0.1:9000 for your proxy to reach", byHand)
 	}
@@ -197,7 +197,7 @@ func TestADeployOntoABoxRecordedForAnotherProxyIsRefusedNamingWhoSetIt(t *testin
 			wanted: []string{"a proxy you route yourself", "set by blog/preview", "add `\"proxy\": \"manual\"`"},
 		},
 		"the box routes by hand on another port": {
-			recorded: Front{Manual: &Loopback{Port: 9000}}, ours: routedByHand(),
+			recorded: Front{Manual: &ManualFront{Port: 9000}}, ours: routedByHand(),
 			wanted: []string{"set by blog/preview", "add `\"proxy\": { \"manual\": { \"port\": 9000 } }`"},
 		},
 		"the box runs ocel's own proxy, the project routes by hand": {

@@ -43,7 +43,7 @@ func (h *Host) Publishing(ctx context.Context, port string) ([]string, error) {
 }
 
 func (h *Host) SwitchboardStanding(ctx context.Context, class providerkit.Class) providerkit.StandingCheck {
-	board := switchboardStanding(nil, h.fronts)
+	board := switchboardStanding(nil, h.proxyOption)
 	check := providerkit.StandingCheck{Subject: board.name, Verdict: providerkit.StandingFail,
 		Fix: "run `" + providerkit.BootstrapCommand(class) + "` to stand it again"}
 	elevation, err := h.reachDocker(ctx)

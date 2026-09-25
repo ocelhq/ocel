@@ -24,8 +24,8 @@ type Manual struct {
 	Port int
 }
 
-func Loopback(port int) string { return "http://127.0.0.1:" + strconv.Itoa(port) }
+func ForwardTo(port int) string { return "http://127.0.0.1:" + strconv.Itoa(port) }
 
 func Route(hostname string, port int) string {
-	return fmt.Sprintf("Route %s → %s (keep Host, set X-Forwarded-Proto)", hostname, Loopback(port))
+	return fmt.Sprintf("Route %s → %s (keep Host, set X-Forwarded-Proto)", hostname, ForwardTo(port))
 }

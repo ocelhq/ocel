@@ -12,10 +12,10 @@ import (
 )
 
 type Front struct {
-	Manual *Loopback `json:"manual,omitempty"`
+	Manual *ManualFront `json:"manual,omitempty"`
 }
 
-type Loopback struct {
+type ManualFront struct {
 	Port int `json:"port"`
 }
 
@@ -46,10 +46,10 @@ func (state RoutingTable) hostnames() []string {
 func (f Front) adopted() bool { return f.Manual != nil }
 
 func (h *Host) RouteBy(hostname string) string {
-	if h.fronts.Manual == nil {
+	if h.proxyOption.Manual == nil {
 		return ""
 	}
-	return manual.Route(hostname, h.fronts.Manual.Port)
+	return manual.Route(hostname, h.proxyOption.Manual.Port)
 }
 
 func (f Front) published() []publish {
