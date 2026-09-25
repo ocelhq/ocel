@@ -250,8 +250,8 @@ export interface VpsTarget {
 
 /** Where this project's container images are pushed. */
 export interface RegistryConfig {
-  /** The name of the environment variable holding the password or token — not the secret itself. */
-  password: string;
+  /** The environment variable holding the password or token, written as "${REGISTRY_TOKEN}" and read where the push authenticates — never the secret itself. */
+  password: `\${${string}`;
   /** The registry host and the namespace images sit under, such as ghcr.io/acme. No scheme, and no credentials. */
   server: string;
   /** The username the push authenticates as, where the registry wants one. */

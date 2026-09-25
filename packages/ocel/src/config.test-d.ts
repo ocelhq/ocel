@@ -75,13 +75,13 @@ describe("a project's registry", () => {
     defineConfig({ slug: "shop" });
   });
 
-  it("names a server, and takes a username and the name of a password variable", () => {
+  it("names a server, and takes a username and the placeholder of a password variable", () => {
     defineConfig({
       slug: "shop",
       registry: {
         server: "ghcr.io",
         username: "acme-bot",
-        password: "GHCR_TOKEN",
+        password: "${GHCR_TOKEN}",
       },
     });
   });
@@ -89,7 +89,7 @@ describe("a project's registry", () => {
   it("takes no username, for a registry that authenticates on the token alone", () => {
     defineConfig({
       slug: "shop",
-      registry: { server: "registry.fly.io", password: "FLY_TOKEN" },
+      registry: { server: "registry.fly.io", password: "${FLY_TOKEN}" },
     });
   });
 
@@ -97,7 +97,7 @@ describe("a project's registry", () => {
     defineConfig({
       slug: "shop",
       // @ts-expect-error a registry with no server names nowhere to push to
-      registry: { password: "GHCR_TOKEN" },
+      registry: { password: "${GHCR_TOKEN}" },
     });
   });
 
@@ -118,7 +118,7 @@ describe("a project's registry", () => {
           path: "services/api",
           compute: "container",
           // @ts-expect-error one project pushes to one registry
-          registry: { server: "ghcr.io", password: "GHCR_TOKEN" },
+          registry: { server: "ghcr.io", password: "${GHCR_TOKEN}" },
         },
       ],
     });

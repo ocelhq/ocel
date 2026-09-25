@@ -214,8 +214,10 @@ class Emitter {
 }
 
 function prefixed(pattern) {
-  const prefix = /^\^([^\\^$.|?*+()[\]{}`]+)/.exec(pattern ?? "")?.[1];
-  return prefix ? `\`${prefix}\${string}\`` : "string";
+  const spelled = /^\^((?:[^\\^$.|?*+()[\]{}`]|\\[$.|?*+()[\]{}^\\])+)/.exec(pattern ?? "")?.[1];
+  if (!spelled) return "string";
+  const prefix = spelled.replace(/\\(.)/g, "$1").replace(/\\/g, "\\\\").replace(/\$\{/g, "\\${");
+  return `\`${prefix}\${string}\``;
 }
 
 function doc(node) {

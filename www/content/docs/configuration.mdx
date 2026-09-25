@@ -52,7 +52,7 @@ holding two forms of the same target, such as `ocel.vps.json` and `ocel.vps.yaml
 
 Any string may interpolate an environment variable with `${NAME}`. The value comes from
 your shell, or from a `.env` beside the config. A name nothing sets refuses the deploy
-rather than deploying a config with a hole in it. Write `$$` for a literal dollar.
+rather than deploying a config with a hole in it. Write `$${` where a literal `${` belongs.
 
 ```json title="ocel.json"
 {
@@ -66,6 +66,19 @@ rather than deploying a config with a hole in it. Write `$$` for a literal dolla
 
 This is for values that differ per machine, not for secrets. Secrets belong in
 [variables](/docs/environments), which are stored in your own account.
+
+The one secret the CLI itself needs, the password `registry` pushes with, is written as
+the placeholder alone and read from your shell when the push authenticates, so the config
+says where the secret comes from and never holds it:
+
+```json title="ocel.json"
+{
+  "registry": { "server": "ghcr.io/acme", "password": "${REGISTRY_TOKEN}" }
+}
+```
+
+Anything else there is refused: the secret itself, a bare `REGISTRY_TOKEN`, text around the
+placeholder, or in `ocel.config.ts` a value read with `buildEnv`.
 
 ## ocel.lock
 

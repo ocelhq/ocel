@@ -59,7 +59,7 @@ type ProjectDomainConfig struct {
 type RegistryConfig struct {
 	Server   string `json:"server" doc:"The registry host and the namespace images sit under, such as ghcr.io/acme. No scheme, and no credentials."`
 	Username string `json:"username,omitempty" doc:"The username the push authenticates as, where the registry wants one."`
-	Password string `json:"password" doc:"The name of the environment variable holding the password or token — not the secret itself."`
+	Password string `json:"password" secret:"REGISTRY_TOKEN" doc:"The environment variable holding the password or token, written as \"${REGISTRY_TOKEN}\" and read where the push authenticates — never the secret itself."`
 }
 
 type StringList []string

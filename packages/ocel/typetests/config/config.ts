@@ -111,3 +111,22 @@ export const bindingWithoutItsSigil = defineConfig({
   // @ts-expect-error a published record is written "@name"
   bindings: { postgres: { analytics: "warehouse" } },
 });
+
+export const registryPasswordAsAPlaceholder = defineConfig({
+  slug: "test-app",
+  registry: { server: "ghcr.io/acme", password: "${REGISTRY_TOKEN}" },
+});
+
+export const registryPasswordAsABareName = defineConfig({
+  slug: "test-app",
+  // @ts-expect-error the password is written as the placeholder "${REGISTRY_TOKEN}"
+  registry: { server: "ghcr.io/acme", password: "REGISTRY_TOKEN" },
+});
+
+declare const readWithBuildEnv: string;
+
+export const registryPasswordFromBuildEnv = defineConfig({
+  slug: "test-app",
+  // @ts-expect-error a value read with buildEnv is the secret itself, never its placeholder
+  registry: { server: "ghcr.io/acme", password: readWithBuildEnv },
+});
