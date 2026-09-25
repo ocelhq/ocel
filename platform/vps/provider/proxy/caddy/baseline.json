@@ -1,0 +1,31 @@
+{
+  "admin": { "listen": "unix//run/caddy-admin.sock|0600" },
+  "logging": {
+    "logs": {
+      "default": { "exclude": ["http.log.access.ocel"] },
+      "ocel": {
+        "include": ["http.log.access.ocel"],
+        "writer": { "output": "stdout" },
+        "encoder": {
+          "format": "filter",
+          "wrap": { "format": "json" },
+          "fields": {
+            "request>uri": { "filter": "regexp", "regexp": "\\?.*$", "value": "?redacted" }
+          }
+        }
+      }
+    }
+  },
+  "apps": {
+    "pki": { "certificate_authorities": { "local": { "install_trust": false } } },
+    "http": {
+      "servers": {
+        "ocel": {
+          "listen": [":80", ":443"],
+          "logs": { "default_logger_name": "ocel" },
+          "routes": []
+        }
+      }
+    }
+  }
+}
