@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -212,4 +213,52 @@ func (p standingProxy) ordered(t *testing.T, hostname string) string {
 	}
 	t.Fatalf("the proxy never ordered a certificate for %s on its first handshake, so a domain bound on this box waits on a name that will never terminate tls:\n%s", hostname, logs)
 	return logs
+}
+
+func (p standingProxy) servedLeaf(t *testing.T, hostname string) *x509.Certificate {
+	t.Helper()
+
+	var read []byte
+	for range 100 {
+		if out, err := exec.Command(p.binary, "leaf", hostname).Output(); err == nil {
+			read = out
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	block, _ := pem.Decode(read)
+	if block == nil {
+		t.Fatalf("the proxy served no certificate for %s:\n%s", hostname, logsOf(p.name))
+	}
+	leaf, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatalf("parse the leaf served for %s: %v", hostname, err)
+	}
+	return leaf
+}
+
+func TestARealProxyServesAPinAddedOverAHostnameItAlreadyOrderedFor(t *testing.T) {
+	const (
+		hostname = "shop.ocel.home.arpa"
+		wildcard = "*.ocel.home.arpa"
+	)
+	state := routed()
+	state.Claims = []HostClaim{{Hostname: hostname, Owner: surface, Pointer: pointed}}
+	stood, _ := probedBox(t, state, issuedByNobody(t, mustRender(t, state)))
+	if ordered := stood.servedLeaf(t, hostname); ordered.Subject.CommonName == wildcard || !slices.Contains(ordered.DNSNames, hostname) {
+		t.Fatalf("the proxy served %q %v for %s before any pin, want the one it ordered for that name: nothing below is a pin taking over from it",
+			ordered.Subject.CommonName, ordered.DNSNames, hostname)
+	}
+
+	held := mustWrite(t, state)
+	pinnedPair(t, stood.pins, "wildcard", []string{wildcard})
+	state.Pins = []Pin{{Hostname: wildcard, Path: caddy.PinsDir + "/wildcard"}}
+	stood.stages(t, held, state, issuedByNobody(t, mustRender(t, state)))
+	stood.drives(t, "load", stood.table)
+	stood.reloads(t)
+
+	if served := stood.servedLeaf(t, hostname); served.Subject.CommonName != wildcard {
+		t.Errorf("the proxy serves %q for %s after %s was pinned over it, want the pin: the certificate it ordered is the exact match caddy serves ahead of any wildcard, and it goes on serving and renewing it until caddy restarts",
+			served.Subject.CommonName, hostname, wildcard)
+	}
 }

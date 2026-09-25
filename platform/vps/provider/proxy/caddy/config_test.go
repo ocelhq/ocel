@@ -23,7 +23,11 @@ const (
 
 var permission = proxy.Permission{Dial: "unix//run/ocel-front/admit.sock", Path: "/admit"}
 
-func specified(pins ...string) proxy.Spec {
+func pinned(hostname, leaf string) proxy.Pin {
+	return proxy.Pin{Hostname: hostname, Path: caddy.PinsDir + "/" + leaf}
+}
+
+func specified(pins ...proxy.Pin) proxy.Spec {
 	return proxy.Spec{Pins: pins, Upstream: switchboard, Edge: edgeName, Permission: permission}
 }
 
@@ -222,12 +226,12 @@ func TestAReloadLeavesEveryStreamTheGraceItTakesRatherThanCuttingIt(t *testing.T
 func TestWhatARenderSaysDependsOnWhichPairsArePinnedAndNotOnTheOrderTheyCameIn(t *testing.T) {
 	t.Parallel()
 
-	one, _ := render(t, specified(caddy.PinsDir+"/b", caddy.PinsDir+"/a", caddy.PinsDir+"/b"))
-	two, _ := render(t, specified(caddy.PinsDir+"/a", caddy.PinsDir+"/b"))
+	one, _ := render(t, specified(pinned("b.example.com", "b"), pinned("a.example.com", "a"), pinned("b.example.com", "b")))
+	two, _ := render(t, specified(pinned("a.example.com", "a"), pinned("b.example.com", "b")))
 	if !bytes.Equal(one, two) {
 		t.Error("two renders of the same pins differ by the order they were handed in, and a reshape that changes no pin would reload caddy")
 	}
-	three, _ := render(t, specified(caddy.PinsDir+"/a"))
+	three, _ := render(t, specified(pinned("a.example.com", "a")))
 	if bytes.Equal(one, three) {
 		t.Error("a render carrying one pin fewer says the same, so the running proxy keeps serving a pair the operator took away")
 	}
@@ -236,22 +240,76 @@ func TestWhatARenderSaysDependsOnWhichPairsArePinnedAndNotOnTheOrderTheyCameIn(t
 func TestEveryPinnedPairIsLoadedOnceOffTheDirectoryTheProxyMounts(t *testing.T) {
 	t.Parallel()
 
-	_, read := render(t, specified(caddy.PinsDir+"/wild", caddy.PinsDir+"/shop", caddy.PinsDir+"/wild"))
+	_, read := render(t, specified(pinned("*.example.com", "wild"), pinned("shop.example.com", "shop"), pinned("*.shop.example.com", "wild")))
 	if read.Apps.TLS.Certificates == nil || len(read.Apps.TLS.Certificates.LoadFiles) != 2 {
 		t.Fatalf("the config loads %+v, want each pinned pair once", read.Apps.TLS.Certificates)
 	}
 	for at, leaf := range []string{"shop", "wild"} {
 		loaded := read.Apps.TLS.Certificates.LoadFiles[at]
-		if loaded.Certificate != caddy.PinCertificate(caddy.PinsMount+"/"+leaf) || loaded.Key != caddy.PinKey(caddy.PinsMount+"/"+leaf) {
+		mounted := caddy.PinsMount + "/" + leaf
+		if loaded.Certificate != caddy.PinCertificate(mounted) || loaded.Key != caddy.PinKey(mounted) {
 			t.Errorf("the pair pinned at %s is loaded from %s and %s, want the path it stands at inside the proxy", leaf, loaded.Certificate, loaded.Key)
 		}
-		if len(loaded.Tags) != 0 {
-			t.Errorf("the pair pinned at %s is tagged %v, want no tag: a tag naming the hostnames it covers changes the config with every bind", leaf, loaded.Tags)
+		if !slices.Equal(loaded.Tags, []string{mounted}) {
+			t.Errorf("the pair pinned at %s is tagged %v, want its own path and nothing else: a tag is how a handshake is handed this pair, and one that names a claimed hostname changes the config with every bind", leaf, loaded.Tags)
 		}
 	}
 	_, read = render(t, specified())
 	if read.Apps.TLS.Certificates != nil {
 		t.Errorf("a box pinning nothing loads %+v", read.Apps.TLS.Certificates)
+	}
+}
+
+type connectionPolicy struct {
+	Match     map[string][]string `json:"match"`
+	Selection map[string][]string `json:"certificate_selection"`
+}
+
+func connectionPolicies(t *testing.T, read rendered) []connectionPolicy {
+	t.Helper()
+	var policies []connectionPolicy
+	for _, server := range read.Apps.HTTP.Servers {
+		for _, held := range server.Policies {
+			var policy connectionPolicy
+			if err := json.Unmarshal(held, &policy); err != nil {
+				t.Fatalf("read the connection policy %s: %v", held, err)
+			}
+			policies = append(policies, policy)
+		}
+	}
+	if len(policies) == 0 {
+		t.Fatal("the front server declares no connection policy, so caddy terminates no tls on :443 for a config that names no host")
+	}
+	return policies
+}
+
+func TestAHandshakeForAPinnedNameIsHandedItsPinAheadOfAnythingOrderedOnDemand(t *testing.T) {
+	t.Parallel()
+
+	_, read := render(t, specified(pinned("*.Example.com", "wild"), pinned("shop.example.com", "shop"), pinned("api.example.com", "wild")))
+	policies := connectionPolicies(t, read)
+	type handed struct{ sni, tag string }
+	var got []handed
+	for _, policy := range policies[:len(policies)-1] {
+		if len(policy.Match) != 1 || len(policy.Match["sni"]) != 1 || len(policy.Selection) != 1 || len(policy.Selection["any_tag"]) != 1 {
+			t.Fatalf("a pin's connection policy is %+v, want one sni matched and one tag selected", policy)
+		}
+		got = append(got, handed{policy.Match["sni"][0], policy.Selection["any_tag"][0]})
+	}
+	want := []handed{
+		{"api.example.com", caddy.PinsMount + "/wild"},
+		{"shop.example.com", caddy.PinsMount + "/shop"},
+		{"*.example.com", caddy.PinsMount + "/wild"},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("the pins hand handshakes %v, want %v: caddy takes the first policy whose sni matches, and a name pinned exactly is served off that pin ahead of any wildcard, as the removal plan reads it", got, want)
+	}
+	if last := policies[len(policies)-1]; last.Match != nil || last.Selection != nil {
+		t.Errorf("the last connection policy is %+v, want the catch-all that serves whatever the proxy ordered on demand", last)
+	}
+	_, read = render(t, specified())
+	if policies := connectionPolicies(t, read); len(policies) != 1 || policies[0].Match != nil || policies[0].Selection != nil {
+		t.Errorf("a box pinning nothing declares connection policies %+v, want the one empty policy that turns tls on without naming a host", policies)
 	}
 }
 
@@ -264,10 +322,11 @@ func TestWhatTheProxyCouldNotHoldIsRefusedRatherThanRendered(t *testing.T) {
 		"no permission endpoint":          {Upstream: switchboard, Edge: edgeName},
 		"no admission to relay to":        {Upstream: switchboard, Edge: edgeName, Permission: proxy.Permission{Path: permission.Path}},
 		"no path to ask the admission at": {Upstream: switchboard, Edge: edgeName, Permission: proxy.Permission{Dial: permission.Dial}},
-		"a pin outside the pin root":      specified("/etc/shadow"),
-		"a pin beneath the pin root":      specified(caddy.PinsDir + "/nested/shop"),
-		"the pin root itself":             specified(caddy.PinsDir),
-		"a pin climbing out of its root":  specified(caddy.PinsDir + "/.."),
+		"a pin outside the pin root":      specified(proxy.Pin{Hostname: "shop.example.com", Path: "/etc/shadow"}),
+		"a pin beneath the pin root":      specified(pinned("shop.example.com", "nested/shop")),
+		"the pin root itself":             specified(proxy.Pin{Hostname: "shop.example.com", Path: caddy.PinsDir}),
+		"a pin climbing out of its root":  specified(pinned("shop.example.com", "..")),
+		"a pin naming no hostname":        specified(pinned("", "shop")),
 	} {
 		if written, err := (caddy.Builtin{}).Render(spec); err == nil {
 			t.Errorf("a spec with %s rendered:\n%s", what, written)
@@ -278,7 +337,7 @@ func TestWhatTheProxyCouldNotHoldIsRefusedRatherThanRendered(t *testing.T) {
 func TestTheAdminApiIsReachedOverItsSocketAloneAndNoConfigOrdersWithoutTheSwitchboardsWord(t *testing.T) {
 	t.Parallel()
 
-	written, read := render(t, specified(caddy.PinsDir+"/shop"))
+	written, read := render(t, specified(pinned("shop.example.com", "shop")))
 	if read.Admin.Listen != "unix/"+caddy.AdminSocket+"|0600" {
 		t.Errorf("the admin endpoint listens at %q, want the socket only root inside the proxy reaches", read.Admin.Listen)
 	}
