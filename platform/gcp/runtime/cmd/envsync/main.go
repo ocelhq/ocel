@@ -15,31 +15,49 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
-const requestWindow = 30 * time.Second
+const (
+	requestWindow = 30 * time.Second
+	headerWindow  = 10 * time.Second
+)
 
 type poller interface {
 	Poll(ctx context.Context) error
 }
 
-type execution struct {
-	syncer poller
-	errs   io.Writer
-}
-
-func (e execution) run(ctx context.Context) int {
-	if err := e.syncer.Poll(ctx); err != nil {
-		fmt.Fprintf(e.errs, "ocel envsync: %s\n", err)
-	}
-	return 0
+func serving(syncer poller, errs io.Writer) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			http.Error(w, "only a POST polls", http.StatusMethodNotAllowed)
+			return
+		}
+		if err := syncer.Poll(r.Context()); err != nil {
+			fmt.Fprintf(errs, "ocel envsync: %s\n", err)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 }
 
 func main() {
+	port := os.Getenv(providerkit.InjectedPortName)
+	if port == "" {
+		fmt.Fprintf(os.Stderr, "ocel envsync: %s is not set, so there is no port to answer Cloud Scheduler on\n", providerkit.InjectedPortName)
+		os.Exit(1)
+	}
 	syncer, err := newSyncer(os.Getenv)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel envsync: %v\n", err)
 		os.Exit(1)
 	}
-	os.Exit(execution{syncer: syncer, errs: os.Stderr}.run(context.Background()))
+	server := &http.Server{Addr: ":" + port, Handler: serving(syncer, os.Stderr), ReadHeaderTimeout: headerWindow}
+	if err := server.ListenAndServe(); err != nil {
+		fmt.Fprintf(os.Stderr, "ocel envsync: %v\n", err)
+		os.Exit(1)
+	}
 }
 
 func newSyncer(getenv func(string) string) (*envsource.Syncer, error) {

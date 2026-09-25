@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -82,29 +84,61 @@ func (p *poll) Poll(context.Context) error {
 	return p.err
 }
 
-func TestAnExecutionPollsOnce(t *testing.T) {
-	t.Run("and reports a failure without failing the execution", func(t *testing.T) {
-		source := &poll{err: errors.New("infisical answered 503")}
-		var said strings.Builder
-		if code := (execution{syncer: source, errs: &said}).run(context.Background()); code != 0 {
-			t.Errorf("run = %d, want 0: the status record already holds the failure and the backoff, and the next minute's execution is the retry", code)
+func asked(t *testing.T, syncer poller, method, path string) (*httptest.ResponseRecorder, string) {
+	t.Helper()
+	var said strings.Builder
+	answered := httptest.NewRecorder()
+	serving(syncer, &said).ServeHTTP(answered, httptest.NewRequest(method, path, nil))
+	return answered, said.String()
+}
+
+func TestAPostPollsOnce(t *testing.T) {
+	t.Run("and answers 204 when every source is in step", func(t *testing.T) {
+		source := &poll{}
+		answered, said := asked(t, source, http.MethodPost, "/")
+		if answered.Code != http.StatusNoContent {
+			t.Errorf("POST / = %d, want 204", answered.Code)
 		}
 		if source.calls != 1 {
-			t.Errorf("Poll ran %d times, want once per execution", source.calls)
+			t.Errorf("Poll ran %d times, want once per request", source.calls)
 		}
-		if !strings.Contains(said.String(), "infisical answered 503") {
-			t.Errorf("logged %q, want the failure in the job's log", said.String())
+		if said != "" {
+			t.Errorf("logged %q on a clean poll", said)
 		}
 	})
 
-	t.Run("and says nothing when every source is in step", func(t *testing.T) {
-		source := &poll{}
-		var said strings.Builder
-		if code := (execution{syncer: source, errs: &said}).run(context.Background()); code != 0 {
-			t.Errorf("run = %d", code)
+	t.Run("and reports a failure without failing the request", func(t *testing.T) {
+		source := &poll{err: errors.New("infisical answered 503")}
+		answered, said := asked(t, source, http.MethodPost, "/")
+		if answered.Code != http.StatusNoContent {
+			t.Errorf("POST / = %d, want 204: the status record already holds the failure and the backoff, and a 5xx would have Cloud Scheduler retry on top of it", answered.Code)
 		}
-		if said.Len() != 0 {
-			t.Errorf("logged %q on a clean poll", said.String())
+		if source.calls != 1 {
+			t.Errorf("Poll ran %d times, want once per request", source.calls)
+		}
+		if !strings.Contains(said, "infisical answered 503") {
+			t.Errorf("logged %q, want the failure in the service's log", said)
 		}
 	})
+}
+
+func TestNothingButAPostToTheRootPolls(t *testing.T) {
+	for _, tc := range []struct {
+		method, path string
+		want         int
+	}{
+		{http.MethodGet, "/", http.StatusMethodNotAllowed},
+		{http.MethodPut, "/", http.StatusMethodNotAllowed},
+		{http.MethodPost, "/sync", http.StatusNotFound},
+		{http.MethodGet, "/healthz", http.StatusNotFound},
+	} {
+		source := &poll{}
+		answered, _ := asked(t, source, tc.method, tc.path)
+		if answered.Code != tc.want {
+			t.Errorf("%s %s = %d, want %d", tc.method, tc.path, answered.Code, tc.want)
+		}
+		if source.calls != 0 {
+			t.Errorf("%s %s polled %d times, want none", tc.method, tc.path, source.calls)
+		}
+	}
 }
