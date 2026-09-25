@@ -248,7 +248,10 @@ func (s *Session) writable(at envgate.Address) error {
 	if err := addressable(at.Cell.Folder); err != nil {
 		return err
 	}
-	if err := envgate.CheckWritable(s.opts.Gate.Definitions(), at.Cell.Key, at.Cell.Folder); err != nil {
+	if err := envgate.CheckImpliedWritable(s.opts.Gate.Scope().Implied, at.Cell.Key, at.Cell.Folder); err != nil {
+		return err
+	}
+	if err := envgate.CheckWritable(s.opts.Gate.Declared(), at.Cell.Key, at.Cell.Folder); err != nil {
 		return err
 	}
 	if at.Environment == "" || slices.Contains(s.opts.Environments, at.Environment) {
@@ -411,7 +414,7 @@ var className = map[resourcesv1.VariableClass]string{
 
 func (s *Session) classes() map[string]string {
 	out := map[string]string{}
-	for _, definition := range s.opts.Gate.Definitions() {
+	for _, definition := range s.opts.Gate.Declared() {
 		out[definition.GetKey()] = className[definition.GetClass()]
 	}
 	return out

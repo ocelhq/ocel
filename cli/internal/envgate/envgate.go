@@ -63,6 +63,7 @@ type Scope struct {
 	Preview     bool
 	Environment string
 	Browser     bool
+	Implied     []Implied
 }
 
 func (s Scope) OcelWrites(key string, folders []string) bool {
@@ -279,10 +280,17 @@ func (g *Gate) Check() error {
 	held := g.resolvedCells()
 	g.mu.Unlock()
 
+	if err := collision(definitions, g.scope); err != nil {
+		return err
+	}
+	implied := g.scope.impliedDefinitions()
 	problems = append(problems, unresolved(definitions, groups, apps, held, problems)...)
+	problems = append(problems, unsetImplied(implied, held)...)
 	if len(problems) == 0 {
 		return nil
 	}
+	definitions = append(definitions, implied...)
+	groups = append(groups, g.scope.impliedGroups()...)
 	slices.SortStableFunc(problems, func(a, b *resourcesv1.VariableProblem) int {
 		if c := cmp.Compare(declaredAt(definitions, a.GetKey()), declaredAt(definitions, b.GetKey())); c != 0 {
 			return c

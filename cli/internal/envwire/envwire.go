@@ -78,7 +78,22 @@ func NamedEnvironments(ctx context.Context, runner *provider.Runner, slug string
 }
 
 func Scope(cfg *projectconfig.Config, preview bool, environment string) envgate.Scope {
-	return envgate.Scope{Apps: Apps(cfg), Preview: preview, Environment: environment}
+	return envgate.Scope{Apps: Apps(cfg), Preview: preview, Environment: environment, Implied: Implied(cfg, preview)}
+}
+
+func Implied(cfg *projectconfig.Config, preview bool) []envgate.Implied {
+	var out []envgate.Implied
+	for _, binding := range cfg.BindingsFor(projectconfig.Tier(preview)) {
+		if binding.Inline == nil {
+			continue
+		}
+		out = append(out, envgate.Implied{
+			Group: binding.Group(),
+			Site:  "bindings." + binding.Group(),
+			Keys:  binding.Inline.Variables(),
+		})
+	}
+	return out
 }
 
 func DevScope(cfg *projectconfig.Config) envgate.Scope {
