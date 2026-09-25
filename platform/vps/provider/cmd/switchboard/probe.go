@@ -57,24 +57,20 @@ func leaf(argv []string, out, errs io.Writer) int {
 	if !ok {
 		return usage(errs)
 	}
-	held, err := net.DialTimeout("tcp", at, servingTimeout)
-	if err != nil {
+	spoken, err := handshake(at, hostname)
+	var dialled *net.OpError
+	switch {
+	case errors.As(err, &dialled) && dialled.Op == "dial":
 		fmt.Fprintf(errs, "%s: nothing answered %s: %v\n", switchboard.Name, at, err)
 		return exitRefused
-	}
-	spoken := tls.Client(held, &tls.Config{ServerName: hostname, InsecureSkipVerify: true})
-	defer spoken.Close()
-	if err := spoken.SetDeadline(time.Now().Add(servingTimeout)); err != nil {
-		return refuse(errs, err)
-	}
-	if err := spoken.Handshake(); err != nil {
-		if !declined(err) {
-			fmt.Fprintf(errs, "%s: tls handshake for %s failed: %v\n", switchboard.Name, hostname, err)
-			return exitUnservable
-		}
+	case err != nil && declined(err):
 		fmt.Fprintf(errs, "%s: %s served no certificate for %s: %v\n", switchboard.Name, at, hostname, err)
 		return exitNotServingYet
+	case err != nil:
+		fmt.Fprintf(errs, "%s: tls handshake for %s failed: %v\n", switchboard.Name, hostname, err)
+		return exitUnservable
 	}
+	defer spoken.Close()
 	chain := spoken.ConnectionState().PeerCertificates
 	if len(chain) == 0 {
 		fmt.Fprintf(errs, "%s: %s completed a handshake for %s and presented no certificate\n", switchboard.Name, at, hostname)
