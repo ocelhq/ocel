@@ -1,7 +1,6 @@
 package host
 
 import (
-	"encoding/json"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -22,53 +21,16 @@ func storing() RoutingTable {
 	}
 }
 
-func matchedHosts(t *testing.T, rendered []byte, identity string) []string {
-	t.Helper()
-	var read struct {
-		Apps struct {
-			HTTP struct {
-				Servers map[string]struct {
-					Routes []struct {
-						Identity string `json:"@id"`
-						Match    []struct {
-							Host []string `json:"host"`
-						} `json:"match"`
-						Handle []struct {
-							Upstreams []struct {
-								Dial string `json:"dial"`
-							} `json:"upstreams"`
-						} `json:"handle"`
-					} `json:"routes"`
-				} `json:"servers"`
-			} `json:"http"`
-		} `json:"apps"`
-	}
-	if err := json.Unmarshal(rendered, &read); err != nil {
-		t.Fatal(err)
-	}
-	for _, route := range read.Apps.HTTP.Servers[proxyServer].Routes {
-		if route.Identity != identity {
-			continue
-		}
-		if len(route.Match) != 1 {
-			t.Fatalf("%s matches %d host sets", identity, len(route.Match))
-		}
-		return route.Match[0].Host
-	}
-	t.Fatalf("%s is not among the routes the box renders", identity)
-	return nil
-}
-
 func TestAStoreRouteAnswersItsOwnHostnameBesideAnAppClaimingTheProjectsOwn(t *testing.T) {
 	t.Parallel()
 
-	rendered := mustRender(t, storing())
-	if held := matchedHosts(t, rendered, keyed("web").identity()); len(held) != 1 || held[0] != "shop.example.com" {
-		t.Errorf("the app answers %v, want the hostname the project claims with no app of its own", held)
+	state := storing()
+	answer := routedBy(t, state)
+	if upstream, ok := answer("shop.example.com", "/"); !ok || upstream != state.Routes[0].Upstream {
+		t.Errorf("the project's own hostname is answered from %q (%v), want the app it runs", upstream, ok)
 	}
-	held := matchedHosts(t, rendered, keyed(live.StoreLabel).identity())
-	if len(held) != 1 || held[0] != "storage.shop.example.com" {
-		t.Errorf("the store answers %v, want the hostname claimed for it alone: the store is not an app and never answers the project's own name", held)
+	if upstream, ok := answer("storage.shop.example.com", "/bucket/key"); !ok || upstream != state.Routes[1].Upstream {
+		t.Errorf("the store's hostname is answered from %q (%v), want the store alone: it is not an app and never answers the project's own name", upstream, ok)
 	}
 }
 
@@ -87,7 +49,7 @@ func TestAStoreRouteIsNotAnAppTheProjectsOwnHostnameCouldBeAmbiguousBetween(t *t
 	}
 }
 
-func TestAStoreStandingBeforeAnyDomainIsBoundIsAConfigCaddyLoads(t *testing.T) {
+func TestAStoreStandingBeforeAnyDomainIsBoundIsATableTheBoxServes(t *testing.T) {
 	t.Parallel()
 
 	state := storing()

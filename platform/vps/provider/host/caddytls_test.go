@@ -16,6 +16,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func pinnedBlocks(t *testing.T, names []string, until time.Duration) (cert, key []byte) {
@@ -49,10 +52,10 @@ func pinnedPair(t *testing.T, dir, name string, names []string) string {
 
 	cert, key := pinnedBlocks(t, names, 90*24*time.Hour)
 	at := filepath.Join(dir, name)
-	if err := os.WriteFile(PinCertificate(at), cert, 0o644); err != nil {
+	if err := os.WriteFile(caddy.PinCertificate(at), cert, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(PinKey(at), key, 0o600); err != nil {
+	if err := os.WriteFile(caddy.PinKey(at), key, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return at
@@ -72,19 +75,20 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 		t.Fatalf("RenderProxyConfig() = %v", err)
 	}
 
-	if !strings.Contains(string(rendered), proxyPinsMount+"/wildcard"+pinCertificate) {
+	if !strings.Contains(string(rendered), caddy.PinCertificate(caddy.PinsMount+"/wildcard")) {
 		t.Fatalf("the config names a pinned pair by a path other than the one the proxy is handed it at:\n%s", rendered)
 	}
 	stood.stages(t, routingTableItem().Content, state, issuedByNobody(t, rendered))
-	flip := exec.Command(dockerEngine, "exec", stood.name, ProxyHelperMount, "flip", ProxyConfigMount)
-	if out, err := flip.CombinedOutput(); err != nil {
+	stood.drives(t, "load", stood.table)
+	reload := exec.Command(dockerEngine, "exec", stood.name, "caddy", "reload", "--config", caddy.ConfigMount, "--address", "unix/"+caddy.AdminSocket)
+	if out, err := reload.CombinedOutput(); err != nil {
 		t.Fatalf("the proxy stood up as the box stands it would not take a config carrying an operator's pin, so every reshape on a box with one pinned — claim, release and retire alike — fails: %v\n%s\n%s",
 			err, out, logsOf(stood.name))
 	}
 
 	var read []byte
 	for range 100 {
-		asked := exec.Command(dockerEngine, "exec", stood.name, ProxyHelperMount, "leaf", "pr-7.preview.example.com")
+		asked := exec.Command(stood.binary, "leaf", "pr-7.preview.example.com")
 		if out, err := asked.Output(); err == nil {
 			read = out
 			break
@@ -92,7 +96,7 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 		time.Sleep(100 * time.Millisecond)
 	}
 	if len(read) == 0 {
-		t.Fatalf("the helper read no leaf off the proxy's own :443 for a hostname a pinned pair covers:\n%s", logsOf(stood.name))
+		t.Fatalf("the switchboard read no leaf off the box's own :443 for a hostname a pinned pair covers:\n%s", logsOf(stood.name))
 	}
 	block, _ := pem.Decode(read)
 	if block == nil {
@@ -121,13 +125,13 @@ func TestARealProxyAsksACAForEveryHostnameSomethingOnTheBoxClaims(t *testing.T) 
 	if err != nil {
 		t.Fatalf("RenderProxyConfig() = %v", err)
 	}
-	ask := probingConfig(t, issuedByNobody(t, rendered))
+	ask := probingConfig(t, state, issuedByNobody(t, rendered))
 
 	if said := ask(claimed); said.status/100 == 3 {
-		t.Errorf("a claimed hostname over plain http answers %d, want it served. Caddy does inject http->https redirect routes into the %s server and says so in its log; what keeps them off every hostname this box serves is that each ocel route is terminal and rendered ahead of them, with the terminal 404 ahead of the appended catch-all. A matcher-less route rendered before the claims, or an ocel route that stops being terminal, turns the redirects on and takes the http-01 challenge and the journey's plain-http leg with them",
-			said.status, proxyServer)
+		t.Errorf("a claimed hostname over plain http answers %d, want it served. Caddy does inject http->https redirect routes into the %s server and says so in its log; what keeps them off every hostname this box serves is that both front routes are terminal forwards rendered ahead of them. A front route that stops being terminal turns the redirects on and takes the http-01 challenge and the journey's plain-http leg with them",
+			said.status, "ocel")
 	}
-	if said := ask("unclaimed.example.com"); said.status != http.StatusNotFound || said.edge != EdgeName {
+	if said := ask("unclaimed.example.com"); said.status != http.StatusNotFound || said.edge != switchboard.EdgeName {
 		t.Errorf("a hostname nothing claims answers %d as %q over plain http, want the box's own refusal on both ports", said.status, said.edge)
 	}
 
@@ -189,7 +193,7 @@ func managed(logs, managing, hostname string) bool {
 
 func TestAHostnameClaimedBeforeAnythingServesItIsOrderedForAllTheSame(t *testing.T) {
 	state := RoutingTable{Grace: DrainWindow, Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}}
-	probingConfig(t, issuedByNobody(t, mustRender(t, state)))
+	probingConfig(t, state, issuedByNobody(t, mustRender(t, state)))
 
 	const managing = "enabling automatic TLS certificate management"
 	var logs string

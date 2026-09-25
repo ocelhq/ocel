@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
@@ -39,7 +40,7 @@ func Command() []string { return []string{"caddy", "run", "--config", ConfigMoun
 
 type Box interface {
 	Ran(ctx context.Context, what, command string) (string, error)
-	Said(ctx context.Context, command string) string
+	Said(ctx context.Context, command string) (string, error)
 	Loopback(ctx context.Context, hostname string) ([]byte, error)
 }
 
@@ -61,4 +62,15 @@ func words(argv []string) string {
 
 func inside(argv ...string) string {
 	return words(append([]string{"docker", "exec", Container}, argv...))
+}
+
+func (b *Builtin) Trouble(ctx context.Context, hostname string) (error, error) {
+	logged, err := b.box.Said(ctx, logging())
+	if err != nil {
+		return nil, err
+	}
+	if limit, said := certs.RateLimited(logged); said && limit.Covers(hostname) && !limit.Spent(time.Now()) {
+		return limit.Refusal(hostname), nil
+	}
+	return nil, nil
 }

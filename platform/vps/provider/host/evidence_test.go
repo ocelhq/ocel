@@ -4,6 +4,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 func inspecting() map[string]string {
@@ -11,9 +13,10 @@ func inspecting() map[string]string {
 		"what a release reads to see if the app is already serving":              servingCommand(physical),
 		"what a release that fell over captures as evidence":                     stateCommand(physical),
 		"what a release that fell over captures as logs":                         logCommand(physical),
-		"what a proxy that did not come up reports":                              containerRising(3),
-		"what a bootstrap probes the proxy with":                                 containerProbe(),
-		"what a preflight reads the proxy's state with":                          stateCommand(ProxyContainer),
+		"what a proxy that did not come up reports":                              frontProxy().rising(3),
+		"what a switchboard that did not come up reports":                        switchboardStanding(nil).rising(3),
+		"what a bootstrap probes the proxy with":                                 frontProxy().probe(),
+		"what a preflight reads the proxy's state with":                          stateCommand(caddy.Container),
 		"what a release reads to tell a stopped retiree from one still draining": runningCommand([]string{retiring}),
 	}
 }
@@ -46,7 +49,7 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 	t.Parallel()
 
 	held := inspecting()
-	held["the fact template a bootstrap compares the proxy against"] = ProxyFactTemplate
+	held["the fact template a bootstrap compares the proxy against"] = ContainerFactTemplate
 	held["what a preflight reads the disk headroom with"] = headroomCommand([]string{"ocel-shop-web"})
 	for what, command := range held {
 		for _, leak := range []string{".Config.Env", ".Env}}", "{{json .}}", "--format '{{.}}'"} {
@@ -69,7 +72,7 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 
 func inspectRosters() map[string][]string {
 	return map[string][]string{
-		"docker inspect":         {"containerProbe", "containerRising", "runningCommand", "servingCommand", "stateCommand"},
+		"docker inspect":         {"probe", "rising", "runningCommand", "servingCommand", "stateCommand"},
 		"docker network inspect": {"command", "networkCommand", "networkCreating", "networkForgetting", "networkProbe", "networkStanding"},
 		"docker image inspect":   {"imageHeld"},
 	}
@@ -129,7 +132,7 @@ func TestNoNetworkInspectCanNameAContainerToInspectInstead(t *testing.T) {
 				if !strings.Contains(ask, quoted(held.network)) {
 					t.Errorf("%s runs %q, which inspects something other than %s by name", what, strings.TrimSpace(line), held.network)
 				}
-				if strings.Contains(ask, "--type container") || strings.Contains(ask, ProxyContainer) {
+				if strings.Contains(ask, "--type container") || strings.Contains(ask, caddy.Container) || strings.Contains(ask, SwitchboardContainer) {
 					t.Errorf("%s runs %q and inspects a container: a network inspect is exempt from naming its fields because a network carries no value a container was handed, and one that reaches a container is not",
 						what, strings.TrimSpace(line))
 				}
@@ -156,8 +159,8 @@ func TestTheLogsARefusalQuotesAreBounded(t *testing.T) {
 
 func expiring() map[string]string {
 	return map[string]string{
-		"what doctor reads a served leaf with": words(helperCommand("leaf", "shop.example.com")),
-		"what a pinned pair is read off":       "cat " + quoted(PinCertificate(ProxyPins+"/wildcard")),
+		"what doctor reads a served leaf with": words([]string{SwitchboardBinary, "leaf", "shop.example.com"}),
+		"what a pinned pair is read off":       "cat " + quoted(caddy.PinCertificate(ProxyPins+"/wildcard")),
 	}
 }
 
@@ -177,19 +180,5 @@ func TestNothingThisPackageReadsAnExpiryOffReachesTheProxysDataDirectory(t *test
 	}
 	if named != len(expiring()) {
 		t.Fatalf("this guard read %d of %d commands", named, len(expiring()))
-	}
-}
-
-func TestForgettingAPairIsTheOneHelperVerbThatSpendsTheProxysDataDirectory(t *testing.T) {
-	t.Parallel()
-
-	forgetting := words(helperCommand("forget", "shop.example.com"))
-	if !strings.Contains(forgetting, "forget") || !strings.Contains(forgetting, "shop.example.com") {
-		t.Fatalf("a pair is forgotten by %q, which names neither the verb nor a hostname, so the exemption this bench states is read over a window that holds nothing", forgetting)
-	}
-	for what := range expiring() {
-		if what == "what a hostname's pair is forgotten by" {
-			t.Fatalf("%q is read as an expiry, and it is the one verb that spends %s: the rule above would then forbid what the code must do", what, ProxyData)
-		}
 	}
 }

@@ -9,7 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func connectorConfig() []byte {
@@ -214,7 +215,7 @@ func TestWhatTheConnectorSaysAboutItselfIsReadBack(t *testing.T) {
 	}
 }
 
-func TestTheProxyForwardsTheConnectorPathAheadOfEverySurface(t *testing.T) {
+func TestTheConnectorPathOnTheBoxHostnameReachesTheConnectorAheadOfEverySurface(t *testing.T) {
 	t.Parallel()
 
 	state := RoutingTable{
@@ -223,32 +224,15 @@ func TestTheProxyForwardsTheConnectorPathAheadOfEverySurface(t *testing.T) {
 		Claims:    []HostClaim{{Hostname: "box.example.com", Owner: surface, Pointer: pointed, App: "web"}},
 		Routes:    []AppRoute{{RouteKey: keyed("web"), Upstream: "web:3000"}},
 	}
-	rendered := mustRender(t, state)
-
-	var read caddyConfig
-	if err := json.Unmarshal(rendered, &read); err != nil {
-		t.Fatal(err)
+	answer := routedBy(t, state)
+	if upstream, ok := answer("box.example.com", switchboard.ConnectorPath+"/connector.v1.Box/Describe"); !ok || upstream == "web:3000" {
+		t.Errorf("the connector path on the box hostname is answered from %q (%v), want the connector: a surface claiming this box's hostname would answer the console instead", upstream, ok)
 	}
-	routes := read.Apps.HTTP.Servers[proxyServer].Routes
-	if len(routes) == 0 || routes[0].Identity != connectorRoute {
-		t.Fatalf("the routes lead with %v, want the connector: a reverse_proxy handler is terminal, so a surface claiming this box's hostname would answer the console instead",
-			identities(routes))
+	if upstream, ok := answer("box.example.com", "/"); !ok || upstream != "web:3000" {
+		t.Errorf("the box hostname off the connector path is answered from %q (%v), want the surface that claims it", upstream, ok)
 	}
-	first := routes[0]
-	if len(first.Match) != 1 || !slices.Equal(first.Match[0].hosts(), []string{"box.example.com"}) {
-		t.Errorf("the connector route matches %v, want the box hostname: a route with no host matcher is one Caddy orders no certificate for, and the console dials the connector over https",
-			first.Match)
-	}
-	if !slices.Equal(first.Match[0].Path, []string{ConnectorPath, ConnectorPath + "/*"}) {
-		t.Errorf("the connector route matches paths %v, want %s and everything under it", first.Match[0].Path, ConnectorPath)
-	}
-	stripped := slices.IndexFunc(first.Handle, func(handled caddyForward) bool { return handled.Handler == rewriteHandler })
-	if stripped < 0 || first.Handle[stripped].StripPathPrefix != ConnectorPath {
-		t.Errorf("the connector route forwards %s unstripped, so the connector is asked for a procedure under a prefix it serves nothing at", ConnectorPath)
-	}
-	dialled := first.Handle[len(first.Handle)-1]
-	if dialled.Handler != caddyadmin.ForwardHandler || len(dialled.Upstreams) != 1 || dialled.Upstreams[0].Dial != ConnectorDial {
-		t.Errorf("the connector route dials %v, want %s", dialled.Upstreams, ConnectorDial)
+	if hosts := admission(state).Entries; !slices.ContainsFunc(hosts, func(entry proxy.Entry) bool { return entry.Hostname == "box.example.com" }) {
+		t.Errorf("the front proxy is admitted %v, and the console dials the connector over https", hosts)
 	}
 
 	held, err := ReadRoutingTable(mustWrite(t, state))
@@ -263,9 +247,9 @@ func TestTheProxyForwardsTheConnectorPathAheadOfEverySurface(t *testing.T) {
 func TestABoxWithNoConnectorForwardsNothingToOne(t *testing.T) {
 	t.Parallel()
 
-	rendered := mustRender(t, RoutingTable{Grace: DeployWindow})
-	if strings.Contains(string(rendered), ConnectorPath) {
-		t.Errorf("a box nothing was added to still routes %s:\n%s", ConnectorPath, rendered)
+	state := RoutingTable{Grace: DeployWindow, Claims: []HostClaim{{Hostname: "box.example.com", Owner: surface, Pointer: pointed}}}
+	if upstream, ok := routedBy(t, state)("box.example.com", switchboard.ConnectorPath); ok {
+		t.Errorf("a box nothing was added to still routes %s to %q", switchboard.ConnectorPath, upstream)
 	}
 	held, err := ReadRoutingTable(mustWrite(t, RoutingTable{Grace: DeployWindow}))
 	if err != nil {
@@ -276,34 +260,16 @@ func TestABoxWithNoConnectorForwardsNothingToOne(t *testing.T) {
 	}
 }
 
-func TestASurfaceThatClaimsNothingStillMatchesNothing(t *testing.T) {
+func TestASurfaceThatClaimsNothingStillAnswersNothing(t *testing.T) {
 	t.Parallel()
 
-	rendered := mustRender(t, RoutingTable{
+	answer := routedBy(t, RoutingTable{
 		Grace:  DeployWindow,
 		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: "web:3000"}},
 	})
-	var read caddyConfig
-	if err := json.Unmarshal(rendered, &read); err != nil {
-		t.Fatal(err)
-	}
-	for _, route := range read.Apps.HTTP.Servers[proxyServer].Routes {
-		if route.Identity == boxIdentity {
-			continue
-		}
-		if len(route.Match) == 1 && route.Match[0].Host != nil && len(*route.Match[0].Host) == 0 && len(route.Match[0].Path) == 0 {
-			continue
-		}
-		if len(route.Match) == 0 {
-			t.Errorf("%s matches everything, and an app claiming no hostname is a route nothing should reach", route.Identity)
+	for _, hostname := range []string{"anything.example.com", "web", ""} {
+		if upstream, ok := answer(hostname, "/"); ok {
+			t.Errorf("%q is answered from %q, and an app claiming no hostname is a route nothing should reach", hostname, upstream)
 		}
 	}
-}
-
-func identities(routes []caddyRoute) []string {
-	named := make([]string, 0, len(routes))
-	for _, route := range routes {
-		named = append(named, route.Identity)
-	}
-	return named
 }

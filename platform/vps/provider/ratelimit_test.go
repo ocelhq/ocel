@@ -12,6 +12,7 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -26,7 +27,7 @@ func refusedBy(said string) string {
 func boxWhoseProxyWasRefused(said string) *box {
 	machine := &box{}
 	machine.refuses = func(command string) (session.Result, bool) {
-		if strings.Contains(command, "docker logs") && strings.Contains(command, host.ProxyContainer) {
+		if strings.Contains(command, "docker logs") && strings.Contains(command, caddy.Container) {
 			return session.Result{Stdout: said}, true
 		}
 		return session.Result{}, false

@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 var _ providerkit.ConnectorHost = (*Provider)(nil)
@@ -109,7 +110,7 @@ func (p *Provider) InstallConnector(ctx context.Context, install providerkit.Con
 		return providerkit.ConnectorAddress{}, err
 	}
 	return providerkit.ConnectorAddress{
-		URL:       "https://" + hostname + host.ConnectorPath,
+		URL:       "https://" + hostname + switchboard.ConnectorPath,
 		PublicKey: standing.PublicKey,
 		Compute:   compute,
 	}, nil

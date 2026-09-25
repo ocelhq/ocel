@@ -17,6 +17,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 const (
@@ -43,8 +44,8 @@ func onABoxServingContainers(t *testing.T) (machine, *vps.Provider) {
 		}
 		vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 	})
-	if err := p.Host().ClaimHosts(context.Background(), []host.HostClaim{{Hostname: host.ProxyContainer, Owner: liveOwner, Pointer: edge.DefaultPointer}}); err != nil {
-		t.Fatalf("ClaimHosts(%s) = %v", host.ProxyContainer, err)
+	if err := p.Host().ClaimHosts(context.Background(), []host.HostClaim{{Hostname: caddy.Container, Owner: liveOwner, Pointer: edge.DefaultPointer}}); err != nil {
+		t.Fatalf("ClaimHosts(%s) = %v", caddy.Container, err)
 	}
 	return vm, p
 }
@@ -119,7 +120,7 @@ func heldOpenAgainst(t *testing.T, vm machine, held release, want int) {
 
 func servedBy(t *testing.T, vm machine, path string) string {
 	t.Helper()
-	return strings.TrimSpace(vm.peers(t, "curl -sS -m 10 http://"+host.ProxyContainer+path))
+	return strings.TrimSpace(vm.peers(t, "curl -sS -m 10 http://"+caddy.Container+path))
 }
 
 func TestLiveAReleaseServesThroughTheProxyAndNothingElseOnTheBoxCanReachIt(t *testing.T) {
@@ -146,17 +147,17 @@ func TestLiveAReleaseServesThroughTheProxyAndNothingElseOnTheBoxCanReachIt(t *te
 		t.Errorf("the app is restarted %q, and a reboot would take the box's only workload down", policy)
 	}
 
-	if reached := vm.peers(t, "curl -sS -m 5 -o /dev/null -w '%{http_code}' http://"+host.ProxyContainer+"/"); !strings.Contains(reached, "200") {
+	if reached := vm.peers(t, "curl -sS -m 5 -o /dev/null -w '%{http_code}' http://"+caddy.Container+"/"); !strings.Contains(reached, "200") {
 		t.Fatalf("a peer on the shared network cannot reach the proxy on port 80 at all (%q), so what it cannot reach proves nothing", reached)
 	}
-	if reached := vm.peers(t, "curl -sS -m 5 -o /dev/null -w '%{http_code}' http://"+host.ProxyContainer+":"+adminPort+"/"); strings.Contains(reached, "200") {
+	if reached := vm.peers(t, "curl -sS -m 5 -o /dev/null -w '%{http_code}' http://"+caddy.Container+":"+adminPort+"/"); strings.Contains(reached, "200") {
 		t.Errorf("a peer on the shared network reached the admin endpoint on %s and got %q", adminPort, strings.TrimSpace(reached))
 	}
 	if bound := vm.ssh(t, "ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null || true"); strings.Contains(bound, ":"+adminPort) {
 		t.Errorf("something on this host listens on %s:\n%s", adminPort, bound)
 	}
-	if mode := strings.TrimSpace(vm.inside(t, "stat -c %a "+quote(host.ProxyAdminSocket))); mode != "600" {
-		t.Errorf("%s stands at %q, want 600: the socket's permissions are the whole of its access control", host.ProxyAdminSocket, mode)
+	if mode := strings.TrimSpace(vm.inside(t, "stat -c %a "+quote(caddy.AdminSocket))); mode != "600" {
+		t.Errorf("%s stands at %q, want 600: the socket's permissions are the whole of its access control", caddy.AdminSocket, mode)
 	}
 }
 
@@ -184,11 +185,11 @@ func TestLiveARedeployUnderContinuousLoadDropsNothingAndDrainsWhenTheHeldRequest
 	go func() {
 		defer group.Done()
 		hammered = vm.peers(t, "for i in $(seq 1 200); do curl -sS -m 10 -o /dev/null -w '%{http_code} ' http://"+
-			host.ProxyContainer+"/; sleep 0.1; done")
+			caddy.Container+"/; sleep 0.1; done")
 	}()
 	go func() {
 		defer group.Done()
-		held = vm.peers(t, "curl -sS -m 30 -w ' %{http_code}' 'http://"+host.ProxyContainer+"/hold?s=8'")
+		held = vm.peers(t, "curl -sS -m 30 -w ' %{http_code}' 'http://"+caddy.Container+"/hold?s=8'")
 	}()
 	go func() {
 		defer group.Done()
@@ -282,7 +283,7 @@ func TestLiveARequestOutstandingPastTheDrainWindowGetsFiveOhTwo(t *testing.T) {
 	group.Add(1)
 	go func() {
 		defer group.Done()
-		held = vm.peers(t, "curl -sS -m 60 -o /dev/null -w '%{http_code}' 'http://"+host.ProxyContainer+"/hold?s=25'")
+		held = vm.peers(t, "curl -sS -m 60 -o /dev/null -w '%{http_code}' 'http://"+caddy.Container+"/hold?s=25'")
 	}()
 	heldOpenAgainst(t, vm, one, 1)
 
@@ -392,12 +393,12 @@ func TestLiveAHijackedConnectionDrainsWithItsRetireeRatherThanBeingCutAtCutover(
 	group.Add(3)
 	go func() {
 		defer group.Done()
-		streamed = vm.peers(t, "curl -sS -m 40 -o /dev/null -w '%{http_code} %{time_total}' http://"+host.ProxyContainer+"/sse")
+		streamed = vm.peers(t, "curl -sS -m 40 -o /dev/null -w '%{http_code} %{time_total}' http://"+caddy.Container+"/sse")
 	}()
 	go func() {
 		defer group.Done()
 		upgraded = vm.peers(t, "curl -sS -m 40 -o /dev/null -w '%{http_code} %{time_total}' -H 'Connection: Upgrade' -H 'Upgrade: websocket' http://"+
-			host.ProxyContainer+"/ws")
+			caddy.Container+"/ws")
 		hungUp = time.Now()
 	}()
 	go func() {

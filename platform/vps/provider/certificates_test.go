@@ -21,6 +21,7 @@ import (
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 var wildcardPin = host.ProxyPins + "/wildcard"
@@ -50,8 +51,8 @@ func pinning(t *testing.T, machine *box, block []byte, at string) *vps.Provider 
 	if machine.reads == nil {
 		machine.reads = map[string]string{}
 	}
-	machine.reads[host.PinCertificate(at)] = string(block)
-	machine.reads[host.PinKey(at)] = "-----BEGIN EC PRIVATE KEY-----\nnothing here may ever reach the cli process\n-----END EC PRIVATE KEY-----\n"
+	machine.reads[caddy.PinCertificate(at)] = string(block)
+	machine.reads[caddy.PinKey(at)] = "-----BEGIN EC PRIVATE KEY-----\nnothing here may ever reach the cli process\n-----END EC PRIVATE KEY-----\n"
 	p := vps.ProviderOver(
 		vps.Options{
 			SSH:          vps.Target{Host: "box.invalid", User: "ada"},
@@ -93,15 +94,15 @@ func TestInspectingAPinnedCertificateNeverOpensTheKeyBesideIt(t *testing.T) {
 		t.Fatalf("InspectCertificate() = %v", err)
 	}
 
-	key := host.PinKey(wildcardPin)
+	key := caddy.PinKey(wildcardPin)
 	for _, command := range machine.commands() {
 		if strings.Contains(command, key) {
 			t.Errorf("the box ran %q, which names %s: ocel reads the certificate to report on it and never the key, and a wildcard private key must not enter the CLI process or the ssh session",
 				command, key)
 		}
 	}
-	if machine.at(host.PinCertificate(wildcardPin)) < 0 {
-		t.Errorf("nothing read %s, so the expiry reported for a pinned certificate came from somewhere other than the certificate", host.PinCertificate(wildcardPin))
+	if machine.at(caddy.PinCertificate(wildcardPin)) < 0 {
+		t.Errorf("nothing read %s, so the expiry reported for a pinned certificate came from somewhere other than the certificate", caddy.PinCertificate(wildcardPin))
 	}
 }
 
@@ -132,7 +133,7 @@ func TestAPinThatDoesNotCoverTheHostnameIsRefusedAtBindWithAReasonThatNamesBoth(
 	t.Parallel()
 
 	machine := &box{reads: map[string]string{
-		host.PinCertificate(wildcardPin): string(selfSigned(t, []string{"*.staging.example.com"}, 90*24*time.Hour)),
+		caddy.PinCertificate(wildcardPin): string(selfSigned(t, []string{"*.staging.example.com"}, 90*24*time.Hour)),
 	}}
 	p := vps.ProviderOver(
 		vps.Options{
@@ -158,7 +159,7 @@ func TestAnExpiredPinIsRefusedRatherThanServedUnderAHandleThatReadsHealthy(t *te
 	t.Parallel()
 
 	machine := &box{reads: map[string]string{
-		host.PinCertificate(wildcardPin): string(selfSigned(t, []string{"*.preview.example.com"}, -time.Hour)),
+		caddy.PinCertificate(wildcardPin): string(selfSigned(t, []string{"*.preview.example.com"}, -time.Hour)),
 	}}
 	p := vps.ProviderOver(
 		vps.Options{
@@ -203,7 +204,7 @@ func TestAnUnpinnedHostnameGetsTheProxysOwnHandleAndAsksNothingOfTheBox(t *testi
 		t.Errorf("minting a handle reached the box with %q: a handle names a slot rather than a certificate that exists, and the one thing the box is asked is what its own proxy was told by the CA", command)
 	}
 	if !slices.ContainsFunc(machine.commands(), func(command string) bool {
-		return strings.Contains(command, "docker logs") && strings.Contains(command, host.ProxyContainer)
+		return strings.Contains(command, "docker logs") && strings.Contains(command, caddy.Container)
 	}) {
 		t.Errorf("minting a handle asked the proxy nothing (%v), so a box the CA has already refused for this registered domain names a slot it knows will stay empty and the user is told when the browser tells them", machine.commands())
 	}
@@ -315,7 +316,7 @@ func TestAPinHandleNamingAPathOutsideTheProxysOwnDirectoryIsRefusedBeforeItIsRea
 
 	const elsewhere = "/etc/ocel/preview/certs/wildcard"
 	machine := &box{reads: map[string]string{
-		host.PinCertificate(elsewhere): string(selfSigned(t, []string{"*.preview.example.com"}, 90*24*time.Hour)),
+		caddy.PinCertificate(elsewhere): string(selfSigned(t, []string{"*.preview.example.com"}, 90*24*time.Hour)),
 	}}
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},

@@ -53,31 +53,17 @@ func TestTwoLivePreviewsOfOneAppAnswerOnTheirOwnHostnameEach(t *testing.T) {
 	if !slices.Equal(read.Claims, want) {
 		t.Fatalf("the claims read back as %v, want %v: the pointer is what tells one branch's hostname from another's", read.Claims, want)
 	}
-	answered := map[string][]string{}
-	for _, route := range routesOf(t, rendered) {
-		named, keyed := strings.CutPrefix(route.Identity, routeIdentity)
-		if !keyed || len(route.Match) != 1 {
-			continue
-		}
-		pointer := strings.Split(named, claimSeparator)[1]
-		answered[pointer] = route.Match[0].hosts()
+	if len(rendered) == 0 {
+		t.Fatal("the front proxy's config rendered empty")
 	}
+	answer := routedBy(t, twoBranchesOfOneApp())
 	for _, claim := range twoBranchesOfOneApp().Claims {
-		if !slices.Equal(answered[claim.Pointer], []string{claim.Hostname}) {
-			t.Errorf("the route of branch %s answers %v, want exactly [%s]: a reverse proxy handler is terminal, so a route carrying the other branch's hostname takes a live preview off the air, and a route carrying none serves nothing at all",
-				claim.Pointer, answered[claim.Pointer], claim.Hostname)
+		at := slices.IndexFunc(twoBranchesOfOneApp().Routes, func(route AppRoute) bool { return route.Pointer == claim.Pointer })
+		if upstream, ok := answer(claim.Hostname, "/"); !ok || upstream != twoBranchesOfOneApp().Routes[at].Upstream {
+			t.Errorf("%s is answered from %q (%v), want branch %s's own app: a hostname answered by the other branch takes a live preview off the air",
+				claim.Hostname, upstream, ok, claim.Pointer)
 		}
 	}
-}
-
-func routesOf(t *testing.T, rendered []byte) []caddyRoute {
-	t.Helper()
-
-	read, err := parsed(rendered)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return read.Apps.HTTP.Servers[proxyServer].Routes
 }
 
 func TestAClaimNamingNoPointerIsRefusedRatherThanAnsweredForEveryBranch(t *testing.T) {
@@ -105,11 +91,8 @@ func TestAProductionBindClaimsUnderTheDefaultPointerAndKeepsItsRoute(t *testing.
 	if !slices.Equal(read.Claims, state.Claims) {
 		t.Fatalf("the claims read back as %v, want %v", read.Claims, state.Claims)
 	}
-	at := slices.IndexFunc(routesOf(t, mustRender(t, state)), func(route caddyRoute) bool {
-		return strings.HasPrefix(route.Identity, routeIdentity)
-	})
-	if at < 0 {
-		t.Fatal("the box renders no forwarding route for a claimed hostname")
+	if _, ok := routedBy(t, state)(claimed, "/"); !ok {
+		t.Fatal("the box answers nothing for a hostname claimed under the default pointer")
 	}
 }
 
@@ -138,7 +121,7 @@ func TestARealProxyServesOnePreviewHostPerAppAndOnePerBranch(t *testing.T) {
 		for at := range state.Routes {
 			state.Routes[at].Upstream = web
 		}
-		ask := probingConfig(t, issuedByNobody(t, mustRender(t, state)), network)
+		ask := probingConfig(t, state, issuedByNobody(t, mustRender(t, state)), network)
 
 		for _, claim := range state.Claims {
 			if said := ask(claim.Hostname); said.body != "the web preview answered" {
@@ -151,7 +134,7 @@ func TestARealProxyServesOnePreviewHostPerAppAndOnePerBranch(t *testing.T) {
 	})
 
 	t.Run("one hostname per app", func(t *testing.T) {
-		ask := probingConfig(t, issuedByNobody(t, mustRender(t, twoAppsOfOneBranch(web, api))), network)
+		ask := probingConfig(t, twoAppsOfOneBranch(web, api), issuedByNobody(t, mustRender(t, twoAppsOfOneBranch(web, api))), network)
 
 		for hostname, want := range map[string]string{
 			"shop--pr-7--web." + previewBase: "the web preview answered",

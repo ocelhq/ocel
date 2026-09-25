@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 const adminDecoy = "ocel-live-admin-decoy"
@@ -54,10 +55,10 @@ func TestLiveTheStandingVerdictsReadOffABootstrappedBoxAndGateNothing(t *testing
 		t.Errorf("port %s on this box = %v (%q), want a connection from here to succeed: the proxy renews every certificate on it over http-01", host.RenewalPort, reach.Verdict, reach.Finding)
 	}
 
-	admin := about(t, checks, host.AdminPort)
+	admin := about(t, checks, adminPort)
 	if admin.Verdict != providerkit.StandingPass {
 		t.Errorf("tcp %s inside %s = %v (%q), want nothing bound: the stock admin api hands every container on the shared network arbitrary config replacement",
-			host.AdminPort, host.ProxyContainer, admin.Verdict, admin.Finding)
+			adminPort, caddy.Container, admin.Verdict, admin.Finding)
 	}
 
 	for _, check := range checks {
@@ -65,35 +66,35 @@ func TestLiveTheStandingVerdictsReadOffABootstrappedBoxAndGateNothing(t *testing
 			t.Errorf("a bootstrapped box whose only owed thing is a dns record failed %q: %s", check.Subject, check.Finding)
 		}
 	}
-	if !vm.running(t, host.ProxyContainer) {
-		t.Fatalf("%s is not running, so the verdicts above were read off a box that was never standing", host.ProxyContainer)
+	if !vm.running(t, caddy.Container) {
+		t.Fatalf("%s is not running, so the verdicts above were read off a box that was never standing", caddy.Container)
 	}
 }
 
 func TestLiveTheAdminPortBoundInsideTheProxyFailsTheStandingVerdict(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
-	before := about(t, standingOn(t, p, nil), host.AdminPort)
+	before := about(t, standingOn(t, p, nil), adminPort)
 	if before.Verdict != providerkit.StandingPass {
 		t.Fatalf("tcp %s inside %s is already %v (%q), so this test cannot tell what it induced from what it found",
-			host.AdminPort, host.ProxyContainer, before.Verdict, before.Finding)
+			adminPort, caddy.Container, before.Verdict, before.Finding)
 	}
 
 	vm.ssh(t, "sudo docker rm -f "+adminDecoy+" >/dev/null 2>&1 || true")
 	vm.ssh(t, "sudo docker run -d --name "+adminDecoy+
-		" --network container:"+host.ProxyContainer+
-		" -e PORT="+host.AdminPort+" "+fixtureAt("one"))
+		" --network container:"+caddy.Container+
+		" -e PORT="+adminPort+" "+fixtureAt("one"))
 	defer vm.ssh(t, "sudo docker rm -f "+adminDecoy+" >/dev/null 2>&1 || true")
 	if !vm.running(t, adminDecoy) {
-		t.Fatalf("%s never came up, so nothing is listening on tcp %s and there is no regression to catch", adminDecoy, host.AdminPort)
+		t.Fatalf("%s never came up, so nothing is listening on tcp %s and there is no regression to catch", adminDecoy, adminPort)
 	}
 
-	after := about(t, standingOn(t, p, nil), host.AdminPort)
+	after := about(t, standingOn(t, p, nil), adminPort)
 	if after.Verdict != providerkit.StandingFail {
 		t.Fatalf("tcp %s inside %s reads %v (%q) with a listener deliberately bound on it",
-			host.AdminPort, host.ProxyContainer, after.Verdict, after.Finding)
+			adminPort, caddy.Container, after.Verdict, after.Finding)
 	}
-	if !strings.Contains(after.Finding, host.AdminPort) {
+	if !strings.Contains(after.Finding, adminPort) {
 		t.Errorf("the finding is %q, want the port named", after.Finding)
 	}
 }

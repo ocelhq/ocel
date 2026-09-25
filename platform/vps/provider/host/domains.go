@@ -3,13 +3,13 @@ package host
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"slices"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 func (h *Host) Claims(ctx context.Context) ([]HostClaim, error) {
@@ -189,7 +189,7 @@ func (h *Host) proxyInspected(ctx context.Context, class providerkit.Class) (boo
 		}
 		stale = held.config != nil && !bytes.Equal(held.config, rendered)
 	}
-	declared := foreignSource(held.config)
+	declared := caddy.Foreign(held.config)
 	if declared == "" {
 		return stale, nil
 	}
@@ -197,31 +197,6 @@ func (h *Host) proxyInspected(ctx context.Context, class providerkit.Class) (boo
 		"%s on %s declares %s, which ocel never renders\n"+
 			"Remove %s and run `%s` to render it again from %s",
 		ProxyConfig, h.named(), declared, ProxyConfig, providerkit.BootstrapCommand(class), live.RoutingTable)
-}
-
-func foreignSource(config []byte) string {
-	var read struct {
-		Admin struct {
-			Config struct {
-				Load json.RawMessage `json:"load"`
-			} `json:"config"`
-		} `json:"admin"`
-		Apps struct {
-			TLS struct {
-				Automation json.RawMessage `json:"automation"`
-			} `json:"tls"`
-		} `json:"apps"`
-	}
-	switch {
-	case json.Unmarshal(config, &read) != nil:
-		return ""
-	case len(read.Apps.TLS.Automation) > 0:
-		return "a tls automation policy, so the proxy may order certificates for any name it is asked for"
-	case len(read.Admin.Config.Load) > 0:
-		return "a config loader, so the proxy serves whatever that loader fetches rather than the routing table"
-	default:
-		return ""
-	}
 }
 
 func (h *Host) reshape(ctx context.Context, change func(RoutingTable) (RoutingTable, error)) error {
@@ -250,24 +225,33 @@ func (h *Host) recomposed(ctx context.Context, compose func(RoutingTable) (Routi
 	if err != nil || !shaped.changed {
 		return err
 	}
-	if _, err := h.ran(ctx, "reload the proxy",
-		words(helperCommand("flip", ProxyConfigMount)), nil, elevation); err != nil {
+	if err := h.served(ctx, shaped.is, shaped.admitting, elevation); err != nil {
 		return h.reverted(ctx, shaped, err, elevation)
 	}
 	return nil
 }
 
+func (h *Host) served(ctx context.Context, table RoutingTable, admitting bool, elevation string) error {
+	if _, err := h.ran(ctx, "load the switchboard onto "+live.RoutingTable,
+		words(switchboardCommand("load", live.RoutingTable)), nil, elevation); err != nil {
+		return err
+	}
+	if !admitting {
+		return nil
+	}
+	return h.front.Admit(ctx, admission(table))
+}
+
 func (h *Host) reverted(ctx context.Context, shaped composed, why error, elevation string) error {
 	if _, err := h.writePair(ctx, shaped.written, shaped.prior); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"reloading the proxy onto %s failed: %v\nrestoring %s and %s also failed: %v",
-			ProxyConfig, why, live.RoutingTable, ProxyConfig, err)
+			"serving %s failed: %v\nrestoring %s and %s also failed: %v",
+			live.RoutingTable, why, live.RoutingTable, ProxyConfig, err)
 	}
-	if _, err := h.ran(ctx, "reload the proxy onto what it served before",
-		words(helperCommand("flip", ProxyConfigMount)), nil, elevation); err != nil {
+	if err := h.served(ctx, shaped.was, shaped.admitting, elevation); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"reloading the proxy onto %s failed: %v\n%s and %s were restored, but reloading the proxy onto them failed too, so it may still serve what they no longer record: %v\nRun the deploy again",
-			ProxyConfig, why, live.RoutingTable, ProxyConfig, err)
+			"serving %s failed: %v\n%s and %s were restored, but serving them again failed too, so the box may still serve what they no longer record: %v\nRun the deploy again",
+			live.RoutingTable, why, live.RoutingTable, ProxyConfig, err)
 	}
 	return why
 }

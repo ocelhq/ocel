@@ -3,22 +3,20 @@ package vps_test
 import (
 	"context"
 	"crypto/tls"
-	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"slices"
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -223,85 +221,31 @@ func TestAHostnameNothingAnswersIsNotAnErrorTheSettleGivesUpOn(t *testing.T) {
 	}
 }
 
-func edgeNamed(t *testing.T, rendered []byte, hostname string) http.Header {
-	t.Helper()
-
-	var read struct {
-		Apps struct {
-			HTTP struct {
-				Servers map[string]struct {
-					Routes []struct {
-						Match []struct {
-							Host []string `json:"host"`
-						} `json:"match"`
-						Handle []struct {
-							Handler   string `json:"handler"`
-							Upstreams []struct {
-								Dial string `json:"dial"`
-							} `json:"upstreams"`
-							Response struct {
-								Set map[string][]string `json:"set"`
-							} `json:"response"`
-						} `json:"handle"`
-					} `json:"routes"`
-				} `json:"servers"`
-			} `json:"http"`
-		} `json:"apps"`
-	}
-	if err := json.Unmarshal(rendered, &read); err != nil {
-		t.Fatal(err)
-	}
-	said := http.Header{}
-	for _, server := range read.Apps.HTTP.Servers {
-		for _, route := range server.Routes {
-			forwards := false
-			for _, handled := range route.Handle {
-				forwards = forwards || len(handled.Upstreams) > 0
-			}
-			matches := false
-			for _, match := range route.Match {
-				matches = matches || slices.Contains(match.Host, hostname)
-			}
-			if !forwards || !matches {
-				continue
-			}
-			for _, handled := range route.Handle {
-				for name, values := range handled.Response.Set {
-					for _, value := range values {
-						said.Add(name, value)
-					}
-				}
-			}
-		}
-	}
-	return said
-}
-
 func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheBoxAsItsEdge(t *testing.T) {
 	t.Parallel()
 
 	const hostname = "shop.example.com"
 	const owner = "ocel--shop--production"
-	rendered, err := host.RenderProxyConfig(host.RoutingTable{
+	app := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("the body of the app the project runs"))
+	}))
+	t.Cleanup(app.Close)
+	written, err := host.WriteRoutingTable(host.RoutingTable{
 		Grace:  host.DrainWindow,
 		Claims: []host.HostClaim{{Hostname: hostname, Owner: owner, Pointer: edge.DefaultPointer}},
 		Routes: []host.AppRoute{{
 			RouteKey: host.RouteKey{Owner: owner, Pointer: "@production", App: "web"},
-			Upstream: "shop-web-2222:" + providerkit.InjectedPortText,
+			Upstream: strings.TrimPrefix(app.URL, "http://"),
 		}},
 	})
 	if err != nil {
-		t.Fatalf("RenderProxyConfig() = %v", err)
+		t.Fatal(err)
 	}
-
-	served := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		for name, values := range edgeNamed(t, rendered, hostname) {
-			for _, value := range values {
-				w.Header().Add(name, value)
-			}
-		}
-		_, _ = w.Write([]byte("the body of the app the project runs"))
-	}))
+	table, err := switchboard.Read(written)
+	if err != nil {
+		t.Fatalf("switchboard.Read() = %v", err)
+	}
+	served := httptest.NewTLSServer(switchboard.New(table, switchboard.Trust{}))
 	t.Cleanup(served.Close)
 
 	at, err := url.Parse(served.URL)
@@ -316,7 +260,7 @@ func TestAHostnameOneOfTheBoxesProjectsAnswersStillNamesTheBoxAsItsEdge(t *testi
 		t.Fatalf("Serving() = %v", err)
 	}
 	if kind != boxedge.Kind {
-		t.Errorf("Serving() over a hostname a project on the box claims and routes = %q, want %q: the box names the edge only on the route nothing claims, so the first bind on a project already deployed probes its own app, reads no header and burns every attempt before refusing", kind, boxedge.Kind)
+		t.Errorf("Serving() over a hostname a project on the box claims and routes = %q, want %q: a box that names the edge only on the route nothing claims makes the first bind on a project already deployed probe its own app, read no header and burn every attempt before refusing", kind, boxedge.Kind)
 	}
 }
 
@@ -324,7 +268,7 @@ func probedOnTheBox(t *testing.T, answer session.Result) (*vps.Provider, *box) {
 	t.Helper()
 
 	machine := &box{refuses: func(command string) (session.Result, bool) {
-		if strings.Contains(command, "ocel-proxyctl' 'probe'") {
+		if strings.Contains(command, "ocel-switchboard' 'probe'") {
 			return answer, true
 		}
 		return session.Result{}, false
@@ -352,7 +296,7 @@ func TestALocalhostNameIsProbedOnTheBoxItResolvesOn(t *testing.T) {
 	if kind != boxedge.Kind {
 		t.Errorf("Serving() = %q, want %q read off the box's own proxy", kind, boxedge.Kind)
 	}
-	if machine.at("ocel-proxyctl' 'probe' 'web.localhost'") < 0 {
+	if machine.at("ocel-switchboard' 'probe' 'web.localhost'") < 0 {
 		t.Errorf("the box was never asked to probe web.localhost: %v", machine.commands())
 	}
 }
@@ -361,7 +305,7 @@ func TestALocalhostNameTheBoxCannotReachKeepsConvergingAndSaysWhy(t *testing.T) 
 	t.Parallel()
 
 	p, _ := probedOnTheBox(t, session.Result{Code: 3,
-		Stderr: "ocel-proxyctl: web.localhost answered nothing from inside the proxy: tls: failed to verify certificate: x509: certificate signed by unknown authority"})
+		Stderr: "web.localhost at 127.0.0.1:443: the certificate served is for fallback.localhost, not this name"})
 
 	kind, err := p.Serving(context.Background(), boxedge.Kind, "web.localhost")
 	if err != nil {
@@ -370,7 +314,7 @@ func TestALocalhostNameTheBoxCannotReachKeepsConvergingAndSaysWhy(t *testing.T) 
 	if kind != "" {
 		t.Errorf("Serving() = %q, want nothing", kind)
 	}
-	if cause := p.Unreached("web.localhost"); !strings.Contains(cause, "x509") {
+	if cause := p.Unreached("web.localhost"); !strings.Contains(cause, "fallback.localhost") {
 		t.Errorf("Unreached() = %q, want what stopped the probe on the box", cause)
 	}
 }
@@ -378,7 +322,7 @@ func TestALocalhostNameTheBoxCannotReachKeepsConvergingAndSaysWhy(t *testing.T) 
 func TestALocalhostProbeTheBoxRefusesIsAnError(t *testing.T) {
 	t.Parallel()
 
-	p, _ := probedOnTheBox(t, session.Result{Code: 2, Stderr: "ocel-proxyctl: the proxy answered nothing over /run/caddy-admin.sock"})
+	p, _ := probedOnTheBox(t, session.Result{Code: 2, Stderr: "usage: ocel-switchboard serve"})
 
 	if _, err := p.Serving(context.Background(), boxedge.Kind, "web.localhost"); err == nil {
 		t.Error("Serving() = nil over a proxy that could not be asked at all, and the settle burns a minute on a box whose proxy is down")

@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 const (
@@ -100,7 +101,7 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 
 	var cut cutover
 	var overtaken error
-	if _, err := h.composeRouting(ctx, func(standing RoutingTable) (RoutingTable, error) {
+	shaped, err := h.composeRouting(ctx, func(standing RoutingTable) (RoutingTable, error) {
 		if rel.Holding != nil {
 			if overtaken = rel.Holding(ctx); overtaken != nil {
 				return standing, overtaken
@@ -108,7 +109,8 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 		}
 		cut = cutting(rel, standing)
 		return cut.routed(standing), nil
-	}); err != nil {
+	})
+	if err != nil {
 		if overtaken != nil {
 			return h.overtaken(ctx, rel, overtaken, elevation)
 		}
@@ -129,13 +131,20 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 		return h.unflipped(ctx, rel, cut, fmt.Sprintf("exited %d", flipped.Code), strings.TrimSpace(flipped.Stderr), elevation)
 	}
 	tellDrain(report, flipped.Stdout)
-	return h.settle(ctx, rel, cut, report, elevation)
+	var admitted error
+	if shaped.admitting {
+		admitted = h.front.Admit(ctx, admission(shaped.is))
+	}
+	return h.settle(ctx, rel, cut, admitted, report, elevation)
 }
 
-func (h *Host) settle(ctx context.Context, rel Release, cut cutover, report providerkit.Reporter, elevation string) error {
+func (h *Host) settle(ctx context.Context, rel Release, cut cutover, admitted error, report providerkit.Reporter, elevation string) error {
 	ctx, stop := sparing(ctx)
 	defer stop()
 	var failed, unstopped []string
+	if admitted != nil {
+		failed = append(failed, fmt.Sprintf("%s was not reloaded onto %s, so it still terminates what it did before: %v", caddy.Container, ProxyConfig, admitted))
+	}
 	idle, err := h.unheld(ctx, cut.retiring, elevation)
 	if err != nil {
 		for _, retiree := range cut.retiring {
@@ -351,9 +360,11 @@ func (h *Host) tableHeld(ctx context.Context) (routingPair, error) {
 const routingRewrites = 5
 
 type composed struct {
-	prior   routingPair
-	written tableDigest
-	changed bool
+	prior     routingPair
+	written   tableDigest
+	changed   bool
+	admitting bool
+	was, is   RoutingTable
 }
 
 func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (RoutingTable, error)) (composed, error) {
@@ -387,6 +398,12 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 		if bytes.Equal(before, after) && bytes.Equal(held.config, rendered) {
 			return shaped, nil
 		}
+		admitted, err := RenderProxyConfig(next)
+		if err != nil {
+			return shaped, err
+		}
+		shaped.was, shaped.is = standing, next
+		shaped.admitting = !bytes.Equal(held.config, admitted)
 		shaped.written, err = h.writeRouting(ctx, held.digest(), next)
 		shaped.changed = true
 		rewrites++
@@ -473,16 +490,12 @@ func moved(err error) bool {
 	return errors.As(err, &refusal) && refusal.Code == providerkit.CodeBusy
 }
 
-func helperCommand(argv ...string) []string {
-	return append([]string{"docker", "exec", ProxyContainer, ProxyHelperMount}, argv...)
-}
-
 func gateCommand(window time.Duration, gates []string) []string {
-	return helperCommand(append([]string{"gate", "--deploy-timeout", seconds(window)}, gates...)...)
+	return switchboardCommand(append([]string{"gate", "--deploy-timeout", seconds(window)}, gates...)...)
 }
 
 func idleCommand(targets []string) []string {
-	return helperCommand(append([]string{"idle"}, targets...)...)
+	return switchboardCommand(append([]string{"idle"}, targets...)...)
 }
 
 func flipCommand(window time.Duration, retiring []string) []string {
@@ -493,7 +506,7 @@ func flipCommand(window time.Duration, retiring []string) []string {
 			argv = append(argv, "--retire", retiree)
 		}
 	}
-	return helperCommand(append(argv, ProxyConfigMount)...)
+	return switchboardCommand(append(argv, live.RoutingTable)...)
 }
 
 func seconds(window time.Duration) string {
@@ -589,7 +602,7 @@ func (h *Host) putBack(ctx context.Context, cut cutover, elevation string) (bool
 		return false, err
 	}
 	_, err = h.ran(ctx, "put the proxy back onto the previous release",
-		words(helperCommand("flip", ProxyConfigMount)), nil, elevation)
+		words(switchboardCommand("flip", live.RoutingTable)), nil, elevation)
 	return true, err
 }
 

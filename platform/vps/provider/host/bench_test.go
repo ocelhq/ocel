@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 type bench struct {
@@ -319,7 +320,7 @@ func TestOneItemTheReadingCannotHashIsDriftRatherThanAnAbsence(t *testing.T) {
 	stood := settledOn(t, class)
 	held := stood.stands[class]
 	for at, item := range held {
-		if item.Name == ProxyHelper {
+		if item.Name == SwitchboardBinary {
 			held[at].Content = nil
 		}
 	}
@@ -331,12 +332,12 @@ func TestOneItemTheReadingCannotHashIsDriftRatherThanAnAbsence(t *testing.T) {
 	if read.current(proxyItem(KindFile)) {
 		t.Fatal("the reading calls a helper it read no bytes of current, so this test proves nothing about what drift is")
 	}
-	if !read.standing(KindFile, ProxyHelper) {
+	if !read.standing(KindFile, SwitchboardBinary) {
 		t.Errorf("%s is absent from a reading every write is planned against, and absence is a lie there: a file this reading could not hash is drift it must name",
-			ProxyHelper)
+			SwitchboardBinary)
 	}
 	if read.settled() {
-		t.Errorf("a box whose %s does not hash as ocel writes it reports itself settled", ProxyHelper)
+		t.Errorf("a box whose %s does not hash as ocel writes it reports itself settled", SwitchboardBinary)
 	}
 }
 
@@ -426,18 +427,14 @@ func servesPair(b *bench, held, config *string) func(string) (session.Result, bo
 	}
 }
 
-func (m caddyMatch) hosts() []string {
-	if m.Host == nil {
-		return nil
+func routedBy(t *testing.T, state RoutingTable) func(hostname, path string) (string, bool) {
+	t.Helper()
+	table, err := switchboard.Read(mustWrite(t, state))
+	if err != nil {
+		t.Fatalf("the switchboard refuses the table this state writes: %v", err)
 	}
-	return *m.Host
-}
-
-func forwardedTo(route caddyRoute) string {
-	for _, handled := range route.Handle {
-		if len(handled.Upstreams) > 0 {
-			return handled.Upstreams[0].Dial
-		}
+	return func(hostname, path string) (string, bool) {
+		forward, ok := table.Forward(hostname, path)
+		return forward.Upstream, ok
 	}
-	return ""
 }

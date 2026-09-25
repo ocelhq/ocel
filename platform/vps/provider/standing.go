@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
-	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 const (
@@ -57,7 +57,7 @@ func (p *Provider) CheckStanding(ctx context.Context, req providerkit.StandingRe
 	address, err := p.host.Address(ctx)
 	if err != nil {
 		return []providerkit.StandingCheck{{
-			Subject: host.ProxyContainer,
+			Subject: caddy.Container,
 			Verdict: providerkit.StandingFail,
 			Finding: fmt.Sprintf("read this box's address: %v", err),
 			Fix:     "check the machine answers over ssh",
@@ -65,8 +65,11 @@ func (p *Provider) CheckStanding(ctx context.Context, req providerkit.StandingRe
 	}
 	checks := dnsVerdicts(ctx, p.lookup(), req.Hostnames, address)
 	checks = append(checks, reachVerdict(ctx, p.reach(), address))
-	checks = append(checks, p.adminVerdict(ctx))
-	return checks, nil
+	front, err := p.host.FrontProxy().Inspect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return append(checks, front...), nil
 }
 
 func dnsVerdicts(ctx context.Context, look Lookup, hostnames []string, address string) []providerkit.StandingCheck {
@@ -169,35 +172,6 @@ func reachVerdict(ctx context.Context, dial Reach, address string) providerkit.S
 	check.Verdict = providerkit.StandingPass
 	check.Finding = fmt.Sprintf("port %s answers from this machine (not proof the internet reaches it)",
 		host.RenewalPort)
-	return check
-}
-
-func (p *Provider) adminVerdict(ctx context.Context) providerkit.StandingCheck {
-	check := providerkit.StandingCheck{Subject: host.ProxyContainer + " tcp " + host.AdminPort}
-	held, err := p.host.ProxyListeners(ctx)
-	if err != nil {
-		check.Verdict = providerkit.StandingFail
-		check.Finding = fmt.Sprintf("read listeners inside %s: %v", host.ProxyContainer, err)
-		check.Fix = "check the proxy is running"
-		return check
-	}
-	if len(held) == 0 {
-		check.Verdict = providerkit.StandingFail
-		check.Finding = fmt.Sprintf("%s reports no listening sockets; a serving proxy holds at least %s",
-			host.ProxyContainer, strings.Join(host.ProxyServing(), " and "))
-		check.Fix = "check the proxy is running with its own /proc mounted"
-		return check
-	}
-	if bound := listeners.On(held, host.AdminPortNumber); len(bound) > 0 {
-		check.Verdict = providerkit.StandingFail
-		check.Finding = fmt.Sprintf("%s listens on %s inside %s: the admin api is open to every app container",
-			strings.Join(listeners.Lines(bound), ", "), host.AdminPort, host.ProxyContainer)
-		check.Fix = "run `ocel bootstrap production` to bind the admin endpoint to " + host.ProxyAdminSocket
-		return check
-	}
-	check.Verdict = providerkit.StandingPass
-	check.Finding = fmt.Sprintf("nothing listens on tcp %s inside %s; admin is on %s only",
-		host.AdminPort, host.ProxyContainer, host.ProxyAdminSocket)
 	return check
 }
 

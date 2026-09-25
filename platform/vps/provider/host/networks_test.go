@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -65,7 +66,7 @@ func TestStandingAContainerUpPutsItsNetworkAndTheProxyOnItBeforeTheRun(t *testin
 		"a create that carries the class label":   quoted(LabelClass + "=" + string(spec.Class)),
 		"a create that carries the project label": quoted(LabelProject + "=shop"),
 		"the create itself":                       "docker network create",
-		"the proxy attached to it":                "docker network connect " + network + " " + quoted(ProxyContainer),
+		"the proxy attached to it":                "docker network connect " + network + " " + quoted(SwitchboardContainer),
 		"a create that tolerates a neighbour's":   "&& ! docker network inspect " + network,
 	} {
 		if !strings.Contains(script, wanted) {
@@ -122,10 +123,10 @@ func TestAProjectsNetworkIsForgottenOnlyOnceNothingButTheProxyIsOnIt(t *testing.
 
 	class, project := providerkit.ClassProduction, "shop"
 	for members, want := range map[string]string{
-		ProxyContainer + "\n":                "",
-		ProxyContainer + "\nshop-web-1111\n": networkHeld,
-		"shop-web-1111\n":                    networkHeld,
-		"":                                   "",
+		SwitchboardContainer + "\n":                "",
+		SwitchboardContainer + "\nshop-web-1111\n": networkHeld,
+		"shop-web-1111\n":                          networkHeld,
+		"":                                         "",
 	} {
 		log := filepath.Join(t.TempDir(), "log")
 		stub := dockerStubbing(t, "printf '%s\\n' \"$*\" >>"+log+"\n"+
@@ -183,7 +184,8 @@ func TestAClassDestroyTakesTheContainersAndNetworksItLabelledAndTheProxyOffThemF
 		if strings.Contains(command, "docker network rm") && !strings.Contains(command, quoted("label="+classSelector(class))) && !strings.Contains(command, quoted(ProxyNetwork)) {
 			t.Errorf("Remove() ran %q, which names a network ocel did not label", command)
 		}
-		if strings.Contains(command, "docker rm --force") && !strings.Contains(command, quoted("label="+classSelector(class))) && !strings.Contains(command, quoted(ProxyContainer)) {
+		if strings.Contains(command, "docker rm --force") && !strings.Contains(command, quoted("label="+classSelector(class))) &&
+			!strings.Contains(command, quoted(SwitchboardContainer)) && !strings.Contains(command, quoted(caddy.Container)) {
 			t.Errorf("Remove() ran %q, which names a container ocel did not label", command)
 		}
 	}
@@ -207,30 +209,30 @@ func TestAClassRunningNothingPlansNoContainerOrNetworkRemoval(t *testing.T) {
 	}
 }
 
-func TestTheProxyRejoinsEveryLabelledNetworkWhenItIsWrittenAgain(t *testing.T) {
+func TestTheSwitchboardRejoinsEveryLabelledNetworkWhenItIsWrittenAgain(t *testing.T) {
 	t.Parallel()
 
-	command := containerCommand()
+	command := switchboardWriting(containerRising)
 	run := strings.Index(command, quoted("run")+" "+quoted("--detach"))
 	rejoin := strings.Index(command, "docker network ls --quiet --filter "+quoted("label="+LabelClass))
 	rising := strings.Index(command, "while :; do")
 	if run < 0 || rejoin < 0 || rising < 0 || rejoin < run || rejoin > rising {
-		t.Fatalf("the proxy write runs at %d, rejoins at %d and waits at %d: a proxy written again is a new container on %s alone, and every project's app is unreachable until it is put back on that project's network:\n%s",
+		t.Fatalf("the switchboard write runs at %d, rejoins at %d and waits at %d: a switchboard written again is a new container on %s alone, and every project's app is unreachable until it is put back on that project's network:\n%s",
 			run, rejoin, rising, ProxyNetwork, command)
 	}
-	if !strings.Contains(command, "docker network connect \"$net\" "+quoted(ProxyContainer)+" >/dev/null\n") {
-		t.Errorf("the proxy write rejoins with a connect whose failure is swallowed, and a proxy off a project's network serves that project nothing:\n%s", command)
+	if !strings.Contains(command, "docker network connect \"$net\" "+quoted(SwitchboardContainer)+" >/dev/null\n") {
+		t.Errorf("the switchboard write rejoins with a connect whose failure is swallowed, and a switchboard off a project's network serves that project nothing:\n%s", command)
 	}
 }
 
 func TestTheProxysNetworkFactReadsItsOwnMembershipAndNotTheNetworksDeploysAttachIt(t *testing.T) {
 	t.Parallel()
 
-	if strings.Contains(ProxyFactTemplate, "range $n, $v := .NetworkSettings.Networks") {
-		t.Fatalf("the proxy's facts list every network it is on, so every deploy that attaches it to a project's network reads as drift a bootstrap would recreate the proxy over:\n%s", ProxyFactTemplate)
+	if strings.Contains(ContainerFactTemplate, "range $n, $v := .NetworkSettings.Networks") {
+		t.Fatalf("the proxy's facts list every network it is on, so every deploy that attaches it to a project's network reads as drift a bootstrap would recreate the proxy over:\n%s", ContainerFactTemplate)
 	}
-	if !strings.Contains(ProxyFactTemplate, `index .NetworkSettings.Networks "`+ProxyNetwork+`"`) {
-		t.Errorf("the proxy's facts never ask whether it sits on %s:\n%s", ProxyNetwork, ProxyFactTemplate)
+	if !strings.Contains(ContainerFactTemplate, `index .NetworkSettings.Networks "`+ProxyNetwork+`"`) {
+		t.Errorf("the proxy's facts never ask whether it sits on %s:\n%s", ProxyNetwork, ContainerFactTemplate)
 	}
 }
 
@@ -242,7 +244,7 @@ func TestStandingAResourceUpPutsTheProxyOnItsNetworkBeforeTheRun(t *testing.T) {
 	if err := stand.host().StandResource(context.Background(), spec, "secret"); err != nil {
 		t.Fatalf("StandResource() = %v", err)
 	}
-	joined := stand.at("docker network connect " + quoted(AppNetwork(spec.Class, spec.Project)) + " " + quoted(ProxyContainer))
+	joined := stand.at("docker network connect " + quoted(AppNetwork(spec.Class, spec.Project)) + " " + quoted(SwitchboardContainer))
 	ran := stand.at(quoted("run") + " " + quoted("--detach"))
 	if joined < 0 || ran < 0 || joined > ran {
 		t.Fatalf("the proxy joined %s at %d and %s ran at %d: a store is routed as soon as it stands, and a proxy off its network resolves no upstream until some app of the project deploys: %v",

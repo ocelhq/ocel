@@ -4,14 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"maps"
-	"net/http"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -59,64 +56,22 @@ func TestAClaimedHostnameReadsBackAsTheSurfaceThatClaimedIt(t *testing.T) {
 	}
 }
 
-func TestAHostnameClaimForwardsNothingAndIsReachedBeforeTheAppItSitsBeside(t *testing.T) {
+func TestAClaimedHostnameIsHeldByTheFrontProxyAndAnsweredByTheAppItsSurfaceRuns(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	rendered, err := RenderProxyConfig(state)
-	if err != nil {
-		t.Fatalf("RenderProxyConfig() = %v", err)
+	if upstream, ok := routedBy(t, state)(claimed, "/"); !ok || upstream != state.Routes[0].Upstream {
+		t.Errorf("the switchboard answers %s from %q (%v), want the app its surface runs on %s", claimed, upstream, ok, state.Routes[0].Upstream)
 	}
-
-	var read struct {
-		Apps struct {
-			HTTP struct {
-				Servers map[string]struct {
-					Routes []struct {
-						Identity string           `json:"@id"`
-						Match    []map[string]any `json:"match"`
-						Handle   []map[string]any `json:"handle"`
-					} `json:"routes"`
-				} `json:"servers"`
-			} `json:"http"`
-		} `json:"apps"`
+	if hosts := admission(state).Entries; len(hosts) != 1 || hosts[0].Hostname != claimed {
+		t.Errorf("the front proxy is admitted %v, want %s alone: a hostname it holds no certificate for is one https never reaches", hosts, claimed)
 	}
-	if err := json.Unmarshal(rendered, &read); err != nil {
-		t.Fatal(err)
+	unrouted := state
+	unrouted.Routes = nil
+	if hosts := admission(unrouted).Entries; len(hosts) != 1 || hosts[0].Hostname != claimed {
+		t.Errorf("a hostname claimed before anything serves it is admitted as %v, want it held all the same: the certificate is ordered at the bind, not at the first deploy", hosts)
 	}
-	routes := read.Apps.HTTP.Servers[proxyServer].Routes
-	if len(routes) != 3 {
-		t.Fatalf("the rendered server carries %d routes, want the claim, the app route and the box's own default: %s", len(routes), rendered)
-	}
-	if routes[len(routes)-1].Identity != boxIdentity || len(routes[len(routes)-1].Match) != 0 {
-		t.Errorf("the last route is %q matching %v, want the box's single unmatched default: every other route ocel writes names the hostnames it answers", routes[len(routes)-1].Identity, routes[len(routes)-1].Match)
-	}
-	for _, route := range routes[:len(routes)-1] {
-		if len(route.Match) == 0 {
-			t.Errorf("the route %q matches every hostname this box receives, and the route after it is then dead configuration", route.Identity)
-		}
-	}
-	if !strings.HasPrefix(routes[0].Identity, live.ClaimPrefix) {
-		t.Errorf("route 0 is %q, want the claim first: the proxy takes the first route that matches, so a claim reached after a catch-all is never reached at all", routes[0].Identity)
-	}
-	if len(routes[0].Handle) != 0 {
-		t.Errorf("the claim carries handlers %v, want none: what a claimed hostname is served by is the domain binding's answer and not this one, and a claim that answers takes the hostname off the app already serving it", routes[0].Handle)
-	}
-	if len(routes[0].Match) != 1 || !slices.Equal(hosts(t, routes[0].Match[0]), []string{claimed}) {
-		t.Errorf("the claim matches %v, want %q alone", routes[0].Match, claimed)
-	}
-}
-
-func hosts(t *testing.T, match map[string]any) []string {
-	t.Helper()
-	raw, _ := match["host"].([]any)
-	named := make([]string, 0, len(raw))
-	for _, value := range raw {
-		spelled, _ := value.(string)
-		named = append(named, spelled)
-	}
-	return named
 }
 
 func TestASurfaceNamedWithTheSeparatorIsRefusedRatherThanRenderedAmbiguously(t *testing.T) {
@@ -154,9 +109,7 @@ func TestClaimingAHostnameLoadsItOntoTheRunningProxy(t *testing.T) {
 	if !slices.Equal(held.Claims, []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}) {
 		t.Errorf("%s holds claims %v after the claim, want %q claimed by %q", ProxyConfig, held.Claims, claimed, surface)
 	}
-	if !slices.ContainsFunc(stood.commands(), func(command string) bool {
-		return strings.Contains(command, quoted("flip"))
-	}) {
+	if !slices.ContainsFunc(stood.commands(), loadsSwitchboard) || !slices.ContainsFunc(stood.commands(), reloadsFront) {
 		t.Errorf("the claim was written and never loaded, so the running proxy answers a hostname nothing on this box says it claims: %v", stood.commands())
 	}
 }
@@ -171,7 +124,7 @@ func TestClaimingAHostnameTwiceWritesTheProxyOnce(t *testing.T) {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
 	for _, command := range stood.commands() {
-		if writesProxy(command) || strings.Contains(command, quoted("flip")) {
+		if writesProxy(command) || loadsSwitchboard(command) || reloadsFront(command) {
 			t.Errorf("a claim already standing rewrote and reloaded the proxy (%q); every reload is a whole-box config post and re-posting one that changes nothing is a window for nothing", command)
 		}
 	}
@@ -183,7 +136,7 @@ func TestAClaimTheProxyRefusesLeavesTheFileTheProxyWouldRestartOnto(t *testing.T
 	stood := claimingBox(t, routed())
 	previous := stood.held
 	stood.broke = func(command string) error {
-		if strings.Contains(command, quoted("flip")) {
+		if reloadsFront(command) {
 			return errors.New("the proxy would not take it")
 		}
 		return nil
@@ -479,31 +432,12 @@ func TestAppRoutesAreReachedByTheHostnamesTheirOwnSurfaceClaims(t *testing.T) {
 
 	state := twoProjects()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}, {Hostname: "blog.example.com", Owner: otherSurface, Pointer: pointed}}
-	rendered := mustRender(t, state)
-
-	var read struct {
-		Apps struct {
-			HTTP struct {
-				Servers map[string]struct{ Routes []caddyRoute } `json:"servers"`
-			} `json:"http"`
-		} `json:"apps"`
-	}
-	if err := json.Unmarshal(rendered, &read); err != nil {
-		t.Fatal(err)
-	}
-	for _, route := range read.Apps.HTTP.Servers[proxyServer].Routes {
-		if forwardedTo(route) == "" {
-			continue
-		}
-		if len(route.Match) != 1 {
-			t.Fatalf("the route %q forwards and matches %v; with two projects on this box an unmatched forwarding route answers for both of them", route.Identity, route.Match)
-		}
-		want := claimed
-		if strings.Contains(route.Identity, otherSurface) {
-			want = "blog.example.com"
-		}
-		if !slices.Equal(route.Match[0].hosts(), []string{want}) {
-			t.Errorf("the route %q answers %v, want the %q its own surface claims", route.Identity, route.Match[0].hosts(), want)
+	answer := routedBy(t, state)
+	for hostname, owner := range map[string]string{claimed: surface, "blog.example.com": otherSurface} {
+		at := slices.IndexFunc(state.Routes, func(route AppRoute) bool { return route.Owner == owner })
+		if upstream, ok := answer(hostname, "/"); !ok || upstream != state.Routes[at].Upstream {
+			t.Errorf("%s is answered from %q (%v), want %s's own app on %s: with two projects on this box, a route answering a hostname its surface never claimed answers for both of them",
+				hostname, upstream, ok, owner, state.Routes[at].Upstream)
 		}
 	}
 }
@@ -539,45 +473,14 @@ func TestOneSurfacesHostnameIsNotHandedToEveryAppThatSurfaceRuns(t *testing.T) {
 	}
 }
 
-func matchedBy(t *testing.T, rendered []byte) map[string][]string {
-	t.Helper()
-
-	var read struct {
-		Apps struct {
-			HTTP struct {
-				Servers map[string]struct{ Routes []caddyRoute } `json:"servers"`
-			} `json:"http"`
-		} `json:"apps"`
-	}
-	if err := json.Unmarshal(rendered, &read); err != nil {
-		t.Fatal(err)
-	}
-	answered := map[string][]string{}
-	for _, route := range read.Apps.HTTP.Servers[proxyServer].Routes {
-		if forwardedTo(route) == "" {
-			continue
-		}
-		answered[route.Identity] = []string{}
-		for _, match := range route.Match {
-			answered[route.Identity] = append(answered[route.Identity], match.hosts()...)
-		}
-	}
-	return answered
-}
-
 func TestAHostnameDeclaredUnderOneAppOfAMultiAppSurfaceReachesThatAppAlone(t *testing.T) {
 	t.Parallel()
 
 	state := twoApps()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed, App: "api"}}
 
-	answered := matchedBy(t, mustRender(t, state))
-	want := map[string][]string{
-		keyed("api").identity(): {claimed},
-		keyed("web").identity(): {},
-	}
-	if !maps.EqualFunc(answered, want, slices.Equal) {
-		t.Errorf("the surface's routes answer %v, want %v: the project declared the hostname under api, reverse_proxy is terminal so web carrying it too is dead configuration, and a box that cannot honour the declaration refuses every multi-app project a domain at all", answered, want)
+	if upstream, ok := routedBy(t, state)(claimed, "/"); !ok || upstream != state.Routes[0].Upstream {
+		t.Errorf("%s is answered from %q (%v), want api on %s alone: the project declared the hostname under api, and a box that cannot honour the declaration refuses every multi-app project a domain at all", claimed, upstream, ok, state.Routes[0].Upstream)
 	}
 }
 
@@ -607,15 +510,13 @@ func TestAProjectWideClaimStillNamesNoAppOnTheWireItIsWrittenTo(t *testing.T) {
 
 	wide := routed()
 	wide.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	rendered := mustRender(t, wide)
-
-	if want := live.ClaimPrefix + surface + claimSeparator + claimed + claimSeparator + pointed; !strings.Contains(string(rendered), `"@id":"`+want+`"`) {
-		t.Errorf("a project-wide claim renders its identity as something other than %q:\n%s", want, rendered)
+	if written := string(mustWrite(t, wide)); strings.Contains(written, `"app":""`) || strings.Count(written, `"app"`) != len(wide.Routes) {
+		t.Errorf("a project-wide claim is written as\n%s\nwant it carrying no app at all", written)
 	}
 	attributed := routed()
 	attributed.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed, App: "web"}}
-	if want := live.ClaimPrefix + surface + claimSeparator + claimed + claimSeparator + pointed + claimSeparator + "web"; !strings.Contains(string(mustRender(t, attributed)), `"@id":"`+want+`"`) {
-		t.Errorf("a claim declared under an app renders its identity without the app, so nothing distinguishes it from the project-wide claim it is not")
+	if written := string(mustWrite(t, attributed)); strings.Count(written, `"app":"web"`) != 2 {
+		t.Errorf("a claim declared under an app is written as\n%s\nwithout the app, so nothing distinguishes it from the project-wide claim it is not", written)
 	}
 }
 
@@ -650,7 +551,7 @@ func TestTwoAppsOnASurfaceThatClaimsNothingAreBothStillWritten(t *testing.T) {
 	}
 }
 
-func TestEveryBoxRefusesTheHostnamesNothingOnItClaimsAndNamesItselfDoingIt(t *testing.T) {
+func TestEveryBoxRefusesTheHostnamesNothingOnItClaimsAndForwardsThemToTheSwitchboardToSaySo(t *testing.T) {
 	t.Parallel()
 
 	for _, box := range []struct {
@@ -664,38 +565,33 @@ func TestEveryBoxRefusesTheHostnamesNothingOnItClaimsAndNamesItselfDoingIt(t *te
 		t.Run(box.what, func(t *testing.T) {
 			t.Parallel()
 
+			if upstream, ok := routedBy(t, box.state)("unclaimed.example.com", "/"); ok {
+				t.Errorf("%s answers a hostname nothing claims from %q, want it refused", box.what, upstream)
+			}
 			var read struct {
 				Apps struct {
 					HTTP struct {
-						Servers map[string]struct{ Routes []caddyRoute } `json:"servers"`
+						Servers map[string]struct {
+							Routes []struct {
+								Match  []json.RawMessage `json:"match"`
+								Handle []struct {
+									Upstreams []struct {
+										Dial string `json:"dial"`
+									} `json:"upstreams"`
+								} `json:"handle"`
+							} `json:"routes"`
+						} `json:"servers"`
 					} `json:"http"`
 				} `json:"apps"`
 			}
 			if err := json.Unmarshal(mustRender(t, box.state), &read); err != nil {
 				t.Fatal(err)
 			}
-			routes := read.Apps.HTTP.Servers[proxyServer].Routes
-			last := routes[len(routes)-1]
-			if last.Identity != boxIdentity || len(last.Match) != 0 {
-				t.Fatalf("%s ends its routes at %q matching %v, want the box's own named default last: every configuration renders it, so what the bare address answers is one decision and never a count of the routes that happen to stand", box.what, last.Identity, last.Match)
-			}
-			unmatched := 0
-			for _, route := range routes {
-				if len(route.Match) == 0 {
-					unmatched++
+			for _, server := range read.Apps.HTTP.Servers {
+				last := server.Routes[len(server.Routes)-1]
+				if len(last.Match) != 0 || len(last.Handle) != 1 || len(last.Handle[0].Upstreams) != 1 || last.Handle[0].Upstreams[0].Dial != SwitchboardAddress {
+					t.Errorf("%s ends its front routes with %+v, want an unmatched forward to %s: the switchboard answers what nothing claims with the box's own 404, and caddy's own answer is an empty 200", box.what, last, SwitchboardAddress)
 				}
-			}
-			if unmatched != 1 {
-				t.Errorf("%s renders %d routes matching no hostname, want the box's default alone: a second one is dead configuration and a forwarding one hands whichever app sorted first every hostname pointed at this machine", box.what, unmatched)
-			}
-			if handled := last.Handle; len(handled) != 1 || handled[0].Handler != "static_response" || len(handled[0].Upstreams) != 0 {
-				t.Fatalf("%s answers its bare address with %v, want a static refusal: a box forwards a hostname a project claimed and nothing else, which is what Facts().ServesUnbound = false says of it", box.what, handled)
-			}
-			if last.Handle[0].Status != http.StatusNotFound {
-				t.Errorf("%s answers its bare address with %d, want 404: an empty 200 reads as healthy to every uptime check pointed at it", box.what, last.Handle[0].Status)
-			}
-			if named := last.Handle[0].Headers[EdgeHeader]; !slices.Equal(named, []string{EdgeName}) {
-				t.Errorf("%s answers its bare address carrying %s: %v, want %q: the refusal names the edge that made it and says nothing about what else this box serves", box.what, EdgeHeader, named, EdgeName)
 			}
 		})
 	}
@@ -765,7 +661,7 @@ func TestAConfigComposedOntoAFileAnotherDeployHasSinceRewrittenIsRefusedRatherTh
 	if stood.held != string(moved) {
 		t.Errorf("%s was left as\n%s\nwant what the deploy that moved it wrote: the write stages beside the file and checks the digest before it moves anything into place", ProxyConfig, stood.held)
 	}
-	if slices.ContainsFunc(stood.commands(), func(command string) bool { return strings.Contains(command, quoted("flip")) }) {
+	if slices.ContainsFunc(stood.commands(), func(command string) bool { return loadsSwitchboard(command) || reloadsFront(command) }) {
 		t.Errorf("a write that was refused still posted a configuration to the running proxy: %v", stood.commands())
 	}
 }
@@ -779,7 +675,7 @@ func TestAWildcardIsRefusedAsAnOrdinaryClaim(t *testing.T) {
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 		t.Fatalf("ClaimHosts() of a wildcard = %v, want a refusal: a claim is a hostname the proxy orders one certificate for over http-01, and a wildcard is a match every hostname pointed at this box falls under", err)
 	}
-	if stood.at(quoted("flip")) >= 0 || strings.Contains(stood.held, "*.preview") {
+	if stood.count(loadsSwitchboard) > 0 || strings.Contains(stood.held, "*.preview") {
 		t.Errorf("a refused wildcard claim still reached the proxy: %v", stood.commands())
 	}
 }
@@ -791,7 +687,7 @@ func flippingBox(t *testing.T, config *string, flipped func(at int) session.Resu
 	proxied := servesPair(stood.bench, &stood.held, config)
 	flips := 0
 	stood.answer = func(command string) (session.Result, bool) {
-		if strings.Contains(command, quoted("flip")) {
+		if reloadsFront(command) {
 			flips++
 			return flipped(flips), true
 		}
@@ -827,7 +723,7 @@ func TestAReloadThatFailsPutsBackTheExactBytesOfBothFilesAndReloadsThem(t *testi
 			restored = at
 		}
 	}
-	if restored < 0 || !slices.ContainsFunc(commands[restored:], func(command string) bool { return strings.Contains(command, quoted("flip")) }) {
+	if restored < 0 || !slices.ContainsFunc(commands[restored:], reloadsFront) || !slices.ContainsFunc(commands[restored:], loadsSwitchboard) {
 		t.Errorf("the files were put back and the proxy never reloaded them: a reload whose answer was lost may have loaded the rendering all the same, and the proxy then serves routes no table records: %v", commands)
 	}
 }

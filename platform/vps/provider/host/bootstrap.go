@@ -463,7 +463,7 @@ func (r removal) command() string {
 		return "docker volume ls --quiet --filter " + quoted("label="+r.path) + " | xargs -r docker volume rm >/dev/null"
 	case r.kind == KindAppNetworks:
 		return "for net in $(docker network ls --quiet --filter " + quoted("label="+r.path) + "); do\n" +
-			"docker network disconnect --force \"$net\" " + quoted(ProxyContainer) + " >/dev/null 2>&1 || true\n" +
+			"docker network disconnect --force \"$net\" " + quoted(SwitchboardContainer) + " >/dev/null 2>&1 || true\n" +
 			"docker network rm \"$net\" >/dev/null\n" +
 			"done"
 	case r.kind == KindNetwork:
@@ -567,7 +567,8 @@ func removing(read, sibling Reading, apps appsStanding) []removal {
 			taking(KindFile, recordsHelper, ""),
 			taking(KindFile, releasesHelper, ""),
 			taking(KindFile, SealHelper, ""),
-			taking(KindFile, ProxyHelper, ""),
+			taking(KindFile, SwitchboardBinary, ""),
+			taking(KindDir, SwitchboardDir, ""),
 			sharing(helperRoot, ""),
 		)
 		above = []removal{sharing(classRoot, "")}

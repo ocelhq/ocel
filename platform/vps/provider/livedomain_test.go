@@ -20,6 +20,8 @@ import (
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const domainSlug = "bound"
@@ -117,13 +119,13 @@ func servingTheBox(t *testing.T) (machine, *vps.Provider, contractv1connect.Prov
 func (vm machine) asks(t *testing.T, hostname, path string) string {
 	t.Helper()
 	return strings.TrimSpace(vm.peers(t, "curl -sS -m 10 -H "+quote("Host: "+hostname)+
-		" http://"+host.ProxyContainer+path))
+		" http://"+caddy.Container+path))
 }
 
 func (vm machine) heads(t *testing.T, hostname string) string {
 	t.Helper()
 	return vm.peers(t, "curl -sS -m 10 -o /dev/null -D - -H "+quote("Host: "+hostname)+
-		" http://"+host.ProxyContainer+"/")
+		" http://"+caddy.Container+"/")
 }
 
 func TestLiveDomainAddOwesAnARecordNamingTheBoxAndTheBoxThenServesTheHostname(t *testing.T) {
@@ -164,9 +166,9 @@ func TestLiveDomainAddOwesAnARecordNamingTheBoxAndTheBoxThenServesTheHostname(t 
 	if served := vm.asks(t, hostname, "/"); served != "one" {
 		t.Errorf("the box answered %q for the hostname it just bound, want the release the project serves", served)
 	}
-	if head := vm.heads(t, hostname); !strings.Contains(strings.ToLower(head), strings.ToLower(edge.HeaderEdge)+": "+host.EdgeName) {
+	if head := vm.heads(t, hostname); !strings.Contains(strings.ToLower(head), strings.ToLower(edge.HeaderEdge)+": "+switchboard.EdgeName) {
 		t.Errorf("the box answered the bound hostname with\n%s\nwant %s: %s, which is what the settle reads to decide this edge serves it",
-			head, edge.HeaderEdge, host.EdgeName)
+			head, edge.HeaderEdge, switchboard.EdgeName)
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -99,7 +100,7 @@ func TestHealLeavesWhatADaemonHoldsRatherThanRefusingOverIt(t *testing.T) {
 	t.Parallel()
 
 	class := providerkit.ClassProduction
-	held := []string{dockerEngine, dockerUnit, ProxyNetwork, ProxyContainer}
+	held := []string{dockerEngine, dockerUnit, ProxyNetwork, caddy.Container, SwitchboardContainer}
 	for _, name := range held {
 		read := drifted(t, drifted(t, standingHost(), RecordsDir(class)), name)
 		work, left, err := healing(read, true)
@@ -172,7 +173,7 @@ func TestHealIsNotWedgedByWhatItsOwnLoginCannotSee(t *testing.T) {
 		unread = append(unread, item.ID())
 		delete(read.Observed, item.ID())
 	}
-	for _, hidden := range []string{KindFile + " " + sudoersSeal(providerkit.ClassProduction), KindFile + " " + ProxyHelper} {
+	for _, hidden := range []string{KindFile + " " + sudoersSeal(providerkit.ClassProduction)} {
 		if !slices.Contains(unread, hidden) {
 			t.Fatalf("%s reads as one %s can hash, and a survey drawn by that login reports nothing for it: %v", hidden, deployUser, unread)
 		}

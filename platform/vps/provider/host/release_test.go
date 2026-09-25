@@ -637,14 +637,14 @@ func TestTheFlipConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUpstre
 		t.Fatal(err)
 	}
 	if handed := renderedFrom(posted); handed != string(want) {
-		t.Errorf("the config the helper was handed is\n%s\nwant the running one with only the route moved:\n%s\nanything else it declares changes what caddy runs, and caddy restarts every server to take it", handed, want)
+		t.Errorf("the config the flip left beside the table is\n%s\nwant the running one with only the route moved:\n%s\nanything else it declares changes what caddy runs, and caddy restarts every server to take it", handed, want)
 	}
 	gated := stood.commands()[stood.at(quoted("gate"))]
 	for _, wanted := range []string{
 		quoted(flipTo + "/healthz"),
 		quoted("--deploy-timeout") + " " + quoted("30"),
-		quoted(ProxyHelperMount),
-		quoted(ProxyContainer),
+		quoted(SwitchboardMounted),
+		quoted(SwitchboardContainer),
 	} {
 		if !strings.Contains(gated, wanted) {
 			t.Errorf("the gate is made as %q, which carries no %s", gated, wanted)
@@ -654,7 +654,7 @@ func TestTheFlipConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUpstre
 	for _, wanted := range []string{
 		quoted("--retire") + " " + quoted(retired),
 		quoted("--drain-timeout") + " " + quoted("30"),
-		quoted(ProxyConfigMount),
+		quoted(live.RoutingTable),
 	} {
 		if !strings.Contains(cut, wanted) {
 			t.Errorf("the flip is made as %q, which carries no %s", cut, wanted)

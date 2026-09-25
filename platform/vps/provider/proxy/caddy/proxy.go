@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
@@ -67,9 +66,11 @@ func (b *Builtin) Inspect(ctx context.Context) (proxy.Standing, error) {
 
 func (b *Builtin) Certificate(ctx context.Context, hostname string) (proxy.Certificate, error) {
 	held := proxy.Certificate{Renewal: certs.ProxyRenewal}
-	if limit, said := certs.RateLimited(b.box.Said(ctx, logging())); said && limit.Covers(hostname) && !limit.Spent(time.Now()) {
-		held.Trouble = limit.Refusal(hostname)
+	trouble, err := b.Trouble(ctx, hostname)
+	if err != nil {
+		return held, err
 	}
+	held.Trouble = trouble
 	block, err := b.box.Loopback(ctx, hostname)
 	if err != nil || len(block) == 0 {
 		return held, err

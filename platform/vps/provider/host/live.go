@@ -68,7 +68,7 @@ func liveServiceUnit() []byte {
 }
 
 func liveAgent(arch string) []byte {
-	read, err := proxyHelpers.ReadFile("dist/" + liveBinaryName + "-" + arch)
+	read, err := helpers.ReadFile("dist/" + liveBinaryName + "-" + arch)
 	if err != nil {
 		panic(err)
 	}
@@ -92,7 +92,7 @@ func ContainerRuntime(arch string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	read, err := proxyHelpers.ReadFile("dist/" + runtimeName + "-" + named)
+	read, err := helpers.ReadFile("dist/" + runtimeName + "-" + named)
 	if err != nil {
 		panic(err)
 	}

@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 const foreignContainer = "not-ocels"
@@ -62,7 +63,7 @@ func TestLiveAStandingBoxIsLetThroughAndAnEngineThatDoesNotAnswerIsNot(t *testin
 			}
 			time.Sleep(time.Second)
 		}
-		vm.waitsFor(t, host.ProxyContainer)
+		vm.waitsFor(t, caddy.Container)
 	}()
 
 	err := preflightedOn(t, vm.deploying(t))
@@ -200,25 +201,25 @@ func TestLiveTheFourProxyStatesAreFourInducedConditionsAndFourMessages(t *testin
 	}{
 		{
 			what:    "the proxy container is stopped",
-			induce:  func() { vm.ssh(t, "sudo docker stop "+host.ProxyContainer) },
-			restore: func() { vm.ssh(t, "sudo docker start "+host.ProxyContainer); vm.waitsFor(t, host.ProxyContainer) },
+			induce:  func() { vm.ssh(t, "sudo docker stop "+caddy.Container) },
+			restore: func() { vm.ssh(t, "sudo docker start "+caddy.Container); vm.waitsFor(t, caddy.Container) },
 			wants:   []string{"exited"},
 		},
 		{
-			what:    "the flip helper is not executable at its bootstrap path",
-			induce:  func() { vm.ssh(t, "sudo chmod 000 "+quote(host.ProxyHelper)) },
-			restore: func() { vm.ssh(t, "sudo chmod 750 "+quote(host.ProxyHelper)) },
-			wants:   []string{host.ProxyHelperMount, "bootstrap"},
+			what:    "the switchboard is not executable at its bootstrap path",
+			induce:  func() { vm.ssh(t, "sudo chmod 000 "+quote(host.SwitchboardBinary)) },
+			restore: func() { vm.ssh(t, "sudo chmod 755 "+quote(host.SwitchboardBinary)) },
+			wants:   []string{host.SwitchboardContainer, "bootstrap"},
 		},
 		{
 			what: "the admin socket is not there",
 			induce: func() {
-				vm.ssh(t, "sudo docker exec "+host.ProxyContainer+" mv "+quote(host.ProxyAdminSocket)+" "+quote(host.ProxyAdminSocket+".moved"))
+				vm.ssh(t, "sudo docker exec "+caddy.Container+" mv "+quote(caddy.AdminSocket)+" "+quote(caddy.AdminSocket+".moved"))
 			},
 			restore: func() {
-				vm.ssh(t, "sudo docker exec "+host.ProxyContainer+" mv "+quote(host.ProxyAdminSocket+".moved")+" "+quote(host.ProxyAdminSocket))
+				vm.ssh(t, "sudo docker exec "+caddy.Container+" mv "+quote(caddy.AdminSocket+".moved")+" "+quote(caddy.AdminSocket))
 			},
-			wants: []string{"no admin socket at " + host.ProxyAdminSocket},
+			wants: []string{"no admin socket at " + caddy.AdminSocket},
 		},
 		{
 			what:    "the admin socket is there and nothing is listening on it",
@@ -256,7 +257,7 @@ func TestLiveTheFourProxyStatesAreFourInducedConditionsAndFourMessages(t *testin
 	}
 }
 
-const deafSocket = host.ProxyAdminSocket + ".listening"
+const deafSocket = caddy.AdminSocket + ".listening"
 
 const deafPid = "/run/ocel-live-deafened.pid"
 
@@ -267,41 +268,41 @@ func (vm machine) deafens(t *testing.T) {
 	if strings.TrimSpace(vm.ssh(t, "command -v python3 >/dev/null && echo held || echo gone")) != "held" {
 		t.Skip("this box carries no python3, and a socket that is bound and not listening is what an admin endpoint that refuses looks like")
 	}
-	pid := strings.TrimSpace(vm.ssh(t, "sudo docker inspect -f '{{.State.Pid}}' "+host.ProxyContainer))
+	pid := strings.TrimSpace(vm.ssh(t, "sudo docker inspect -f '{{.State.Pid}}' "+caddy.Container))
 	if pid == "" {
-		t.Fatalf("%s named no pid, so its filesystem cannot be reached from this host", host.ProxyContainer)
+		t.Fatalf("%s named no pid, so its filesystem cannot be reached from this host", caddy.Container)
 	}
-	vm.ssh(t, "sudo docker exec "+host.ProxyContainer+" mv "+quote(host.ProxyAdminSocket)+" "+quote(deafSocket))
+	vm.ssh(t, "sudo docker exec "+caddy.Container+" mv "+quote(caddy.AdminSocket)+" "+quote(deafSocket))
 	vm.ssh(t, "sudo sh -c "+quote(
-		"python3 -c "+quote(fmt.Sprintf(deafScript, "/proc/"+pid+"/root"+host.ProxyAdminSocket))+" >/dev/null 2>&1 </dev/null & echo $!")+
+		"python3 -c "+quote(fmt.Sprintf(deafScript, "/proc/"+pid+"/root"+caddy.AdminSocket))+" >/dev/null 2>&1 </dev/null & echo $!")+
 		" | sudo tee "+quote(deafPid)+" >/dev/null")
 	for range 40 {
-		if strings.TrimSpace(vm.ssh(t, "sudo docker exec "+host.ProxyContainer+" sh -c "+quote("test -S "+host.ProxyAdminSocket+" && echo bound || echo gone"))) == "bound" {
+		if strings.TrimSpace(vm.ssh(t, "sudo docker exec "+caddy.Container+" sh -c "+quote("test -S "+caddy.AdminSocket+" && echo bound || echo gone"))) == "bound" {
 			return
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
 	vm.hears(t)
-	t.Fatalf("a socket bound and not listening never appeared at %s, and this induction proves nothing without one: a run that reports green having induced nothing is the shape this tier exists to rule out", host.ProxyAdminSocket)
+	t.Fatalf("a socket bound and not listening never appeared at %s, and this induction proves nothing without one: a run that reports green having induced nothing is the shape this tier exists to rule out", caddy.AdminSocket)
 }
 
 func (vm machine) hears(t *testing.T) {
 	t.Helper()
 	vm.ssh(t, "sudo sh -c "+quote("kill $(cat "+deafPid+") || true; rm -f "+deafPid))
-	vm.ssh(t, "sudo docker exec "+host.ProxyContainer+" sh -c "+quote(
-		"rm -f "+host.ProxyAdminSocket+"; mv "+deafSocket+" "+host.ProxyAdminSocket))
+	vm.ssh(t, "sudo docker exec "+caddy.Container+" sh -c "+quote(
+		"rm -f "+caddy.AdminSocket+"; mv "+deafSocket+" "+caddy.AdminSocket))
 }
 
 func TestLiveAForeignContainerHoldingPortEightyIsRefusedByName(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
-	vm.ssh(t, "sudo docker stop "+host.ProxyContainer)
+	vm.ssh(t, "sudo docker stop "+caddy.Container)
 	vm.ssh(t, "sudo docker rm -f "+foreignContainer+" >/dev/null 2>&1 || true")
 	vm.ssh(t, "sudo docker run -d --name "+foreignContainer+" -p "+host.RenewalPort+":8080 "+fixtureAt("one"))
 	defer func() {
 		vm.ssh(t, "sudo docker rm -f "+foreignContainer+" >/dev/null 2>&1 || true")
-		vm.ssh(t, "sudo docker start "+host.ProxyContainer)
-		vm.waitsFor(t, host.ProxyContainer)
+		vm.ssh(t, "sudo docker start "+caddy.Container)
+		vm.waitsFor(t, caddy.Container)
 	}()
 	if !vm.running(t, foreignContainer) {
 		t.Fatalf("%s never came up, so nothing on this box is holding port %s and there is no condition to refuse", foreignContainer, host.RenewalPort)
