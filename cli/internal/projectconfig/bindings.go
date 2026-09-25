@@ -44,6 +44,13 @@ type Value struct {
 	Variable string
 }
 
+func (v Value) Resolve(read func(variable string) (string, error)) (string, error) {
+	if v.Variable == "" {
+		return v.Literal, nil
+	}
+	return read(v.Variable)
+}
+
 type PostgresInline struct {
 	URL      string
 	Host     Value
