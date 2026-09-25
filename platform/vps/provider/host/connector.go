@@ -17,7 +17,6 @@ const (
 	ConnectorUnit     = "ocel-connector.service"
 	connectorUnitFile = "/etc/systemd/system/" + ConnectorUnit
 	ConnectorRun      = "/run/ocel"
-	ConnectorSocket   = ConnectorRun + "/connector.sock"
 	connectorTmpfiles = "/etc/tmpfiles.d/ocel-connector.conf"
 )
 
@@ -31,7 +30,7 @@ func connectorUnit() []byte {
 		"[Service]",
 		"User=" + deployUser,
 		"Group=" + deployUser,
-		"ExecStart=" + ConnectorBinary + " --config " + ConnectorConfig + " --listen unix://" + ConnectorSocket,
+		"ExecStart=" + ConnectorBinary + " --config " + ConnectorConfig + " --listen unix://" + switchboard.ConnectorSocket,
 		"Restart=on-failure",
 		"RestartSec=5s",
 		"",
@@ -177,7 +176,7 @@ func connectorRemoval() string {
 		"rm -f " + quoted(ConnectorBinary),
 		"rm -rf " + quoted(connectorRoot),
 		"rm -f " + quoted(connectorTmpfiles),
-		"rm -f " + quoted(ConnectorSocket),
+		"rm -f " + quoted(switchboard.ConnectorSocket),
 	}, "\n")
 }
 
