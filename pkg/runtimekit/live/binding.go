@@ -109,7 +109,12 @@ func (l Binding) shown(raw string) string {
 	if err := protojson.Unmarshal([]byte(raw), binding); err != nil || binding.GetBucket().GetEndpoint() == "" {
 		return raw
 	}
-	binding.GetBucket().Bucket = l.Key
+	stored := binding.GetBucket()
+	binding.Properties = &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{
+		Bucket:        l.Key,
+		PublicBaseUrl: stored.GetPublicBaseUrl(),
+		Public:        stored.GetPublic(),
+	}}
 	out, err := protojson.Marshal(binding)
 	if err != nil {
 		return raw
