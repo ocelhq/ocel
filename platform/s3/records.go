@@ -1,8 +1,9 @@
 package s3
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
-	"strconv"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -29,7 +30,12 @@ func backends(records Records, callbacks Poster) ([]*Service, error) {
 		if !Endpointed(bucket) {
 			continue
 		}
-		backends = append(backends, Bound("b"+strconv.Itoa(len(backends)), l.Key, bucket, callbacks))
+		backends = append(backends, Bound(bindingTag(l.Key), l.Key, bucket, callbacks))
 	}
 	return backends, nil
+}
+
+func bindingTag(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(sum[:6])
 }

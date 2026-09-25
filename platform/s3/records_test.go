@@ -50,6 +50,45 @@ func TestBackendsAreBuiltForTheBucketsARecordPointsAtAStore(t *testing.T) {
 	}
 }
 
+func TestAnUploadSessionStaysWithItsBindingWhenAnotherBindingsRecordChanges(t *testing.T) {
+	held := heldRecords{
+		bindings: []live.Binding{
+			{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET},
+			{Name: "avatars", Key: "OCEL_RESOURCE_BUCKET_avatars", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET},
+		},
+		values: map[string]string{
+			"OCEL_RESOURCE_BUCKET_uploads": `{"name":"ocel:bucket.uploads","bucket":{"bucket":"acme","endpoint":"https://abc.r2.cloudflarestorage.com","region":"auto","accessKeyId":"AKID","secretAccessKey":"secret"}}`,
+			"OCEL_RESOURCE_BUCKET_avatars": `{"name":"ocel:bucket.avatars","bucket":{"bucket":"acme","prefix":"avatars","endpoint":"https://abc.r2.cloudflarestorage.com","region":"auto","accessKeyId":"AKID","secretAccessKey":"secret"}}`,
+		},
+	}
+	before, err := backends(held, &recordingPoster{})
+	if err != nil {
+		t.Fatalf("backends: %v", err)
+	}
+	var session string
+	for _, backend := range before {
+		if backend.holds("OCEL_RESOURCE_BUCKET_avatars") {
+			session = backend.newID()
+		}
+	}
+
+	held.values["OCEL_RESOURCE_BUCKET_uploads"] = `{"name":"bucket--uploads","bucket":{"bucket":"shop-prod-uploads"}}`
+	after, err := backends(held, &recordingPoster{})
+	if err != nil {
+		t.Fatalf("backends: %v", err)
+	}
+
+	for _, backend := range after {
+		if backend.opened(session) {
+			if !backend.holds("OCEL_RESOURCE_BUCKET_avatars") {
+				t.Fatal("the session avatars opened is claimed by another binding's backend after the uploads record changed")
+			}
+			return
+		}
+	}
+	t.Fatal("no backend claims the session avatars opened once the uploads record changed")
+}
+
 type arriving struct {
 	heldRecords
 	arrived bool
