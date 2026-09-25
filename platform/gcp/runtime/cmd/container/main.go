@@ -20,6 +20,7 @@ import (
 	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/runtime/live"
+	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
 const (
@@ -67,8 +68,15 @@ func run(ctx context.Context, command []string, environ []string) int {
 	if err != nil {
 		return fatal(fmt.Sprintf("find a loopback port for the app: %v", err))
 	}
+	fronting, err := s3store.ServeBound(values, "127.0.0.1:"+strconv.Itoa(internal))
+	if err != nil {
+		return fatal(err.Error())
+	}
+	defer fronting.Close()
+
 	env = append(env, providerkit.InjectedPortName+"="+strconv.Itoa(internal))
 	env = append(env, values.Env()...)
+	env = append(env, fronting.Env...)
 
 	proc, err := child.Start(child.Options{Command: command, Env: env, Stdout: os.Stdout, Stderr: os.Stderr})
 	if err != nil {

@@ -165,8 +165,19 @@ func pinned(manifest string) (vars.Manifest, error) {
 }
 
 func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (proxy.Served, error) {
-	if manifest.Store == nil || !slices.ContainsFunc(manifest.Bindings, func(l rt.Binding) bool { return naming.Proxied(l.Type) }) {
+	if values == nil || !slices.ContainsFunc(manifest.Bindings, func(l rt.Binding) bool { return naming.Proxied(l.Type) }) {
 		return proxy.Served{}, nil
+	}
+	callbacks := bucket.HTTPPoster{App: app}
+	bound, own, err := bucket.Backends(values, callbacks)
+	if err != nil {
+		return proxy.Served{}, err
+	}
+	if !own {
+		return proxy.Serve(bucket.Route(nil, bound...))
+	}
+	if manifest.Store == nil {
+		return proxy.Served{}, errors.New("this deployment binds a bucket this box keeps, and its manifest names no store to reach it in")
 	}
 	secret := values.Value(vars.StoreSecretKey)
 	if secret == "" {
@@ -183,7 +194,7 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (pr
 		Objects:      internal.Client(),
 		Internal:     internal.Presigner(),
 		External:     publishing(internal, manifest.Store.PublicBaseURL, values),
-		Callbacks:    bucket.HTTPPoster{App: app},
+		Callbacks:    callbacks,
 		PostPolicies: manifest.Store.PostPolicies,
 		SweepUploads: manifest.Store.SweepUploads,
 		Sessions:     manifest.Store.Sessions,
@@ -192,7 +203,7 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (pr
 	if manifest.Store.Volume != "" {
 		cfg.Volume = live.FreeSpace(socket)
 	}
-	return proxy.Serve(bucket.New(cfg))
+	return proxy.Serve(bucket.Route(bucket.New(cfg), bound...))
 }
 
 const unclaimedWindow = 10 * time.Second

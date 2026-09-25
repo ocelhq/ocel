@@ -134,6 +134,43 @@ func TestTheRuntimeFrontsAProxiedBindingAndKeepsTheStoreCredentialToItself(t *te
 	}
 }
 
+func TestTheRuntimeFrontsABucketBoundToAStoreWithNoStoreOfItsOwn(t *testing.T) {
+	manifest, _ := bucketManifest(t, nil)
+	bound, err := protojson.Marshal(&bindingsv1.Binding{
+		Name: "ocel:bucket.uploads",
+		Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{
+			Bucket: "acme", Endpoint: "https://abc.r2.cloudflarestorage.com", Region: "auto",
+			AccessKeyId: "AKID", SecretAccessKey: "r2-s3cr3t",
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	socket := answering(t, map[string]string{"OCEL_RESOURCE_BUCKET_uploads": string(bound)})
+	rendered, err := vars.Render(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values, err := resolve(context.Background(), string(rendered), socket, filepath.Join(t.TempDir(), "live"))
+	if err != nil {
+		t.Fatalf("resolve() = %v", err)
+	}
+
+	served, err := proxying(manifest, values, socket, "127.0.0.1:1")
+	if err != nil {
+		t.Fatalf("proxying() = %v", err)
+	}
+	t.Cleanup(func() { _ = served.Close() })
+	if len(served.Env) == 0 {
+		t.Fatal("proxying() stood nothing up, and the app reaches its bound bucket only through the proxy")
+	}
+	for _, entry := range served.Env {
+		if strings.Contains(entry, "r2-s3cr3t") {
+			t.Errorf("the app is handed %q: the store's secret key is the proxy's alone", entry)
+		}
+	}
+}
+
 func TestTheRuntimeFrontsNothingWhereNoBindingIsProxied(t *testing.T) {
 	manifest := vars.Manifest{Slug: "shop", Class: "production", Keys: []rt.Key{{Key: "DATABASE_URL"}}}
 	served, err := proxying(manifest, nil, filepath.Join(t.TempDir(), "absent.sock"), "127.0.0.1:1")

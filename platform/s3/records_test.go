@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 )
@@ -39,6 +40,42 @@ func TestBackendsAreBuiltForTheBucketsARecordPointsAtAStore(t *testing.T) {
 	}
 	if !own {
 		t.Error("own = false, want the bucket the runtime's own backend reaches reported")
+	}
+}
+
+type arriving struct {
+	heldRecords
+	arrived bool
+}
+
+func (a *arriving) Value(key string) string {
+	if !a.arrived {
+		return ""
+	}
+	return a.values[key]
+}
+
+func TestARouterOverRecordsServesThoseThatArriveAfterItStarted(t *testing.T) {
+	records := &arriving{heldRecords: heldRecords{
+		bindings: []live.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
+		values: map[string]string{
+			"OCEL_RESOURCE_BUCKET_uploads": `{"name":"ocel:bucket.uploads","bucket":{"bucket":"acme","endpoint":"http://127.0.0.1:1","region":"auto","accessKeyId":"AKID","secretAccessKey":"secret"}}`,
+		},
+	}}
+	router := RouteRecords(&ownBackend{}, records, &recordingPoster{})
+
+	records.arrived = true
+	resp, err := router.Sign(t.Context(), &bucketv1.SignRequest{
+		Bucket:    "acme",
+		Key:       "a.png",
+		Operation: bucketv1.SignedOperation_SIGNED_OPERATION_GET,
+		Audience:  bucketv1.SignedAudience_SIGNED_AUDIENCE_INTERNAL,
+	})
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+	if !strings.Contains(resp.GetTarget().GetUrl(), "127.0.0.1:1") {
+		t.Errorf("signed url = %q, want it signed for the store the record that arrived names", resp.GetTarget().GetUrl())
 	}
 }
 

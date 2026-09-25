@@ -104,6 +104,38 @@ func TestServeProxy(t *testing.T) {
 	})
 }
 
+func TestABucketBoundToAStoreIsSignedForThatStore(t *testing.T) {
+	t.Setenv("AWS_REGION", "us-east-1")
+	t.Setenv("AWS_ACCESS_KEY_ID", "test")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "test")
+	values := declared{
+		bindings: []live.Binding{{Name: "uploads", Key: "OCEL_RESOURCE_BUCKET_uploads", Type: bindingsv1.BindingType_BINDING_TYPE_BUCKET}},
+		values: map[string]string{
+			"OCEL_RESOURCE_BUCKET_uploads": `{"name":"ocel:bucket.uploads","bucket":{"bucket":"acme","endpoint":"https://abc.r2.cloudflarestorage.com","region":"auto","accessKeyId":"AKID","secretAccessKey":"secret"}}`,
+		},
+	}
+
+	env, _, err := serveProxy(context.Background(), values, "state", testSessionPrefix)
+	if err != nil {
+		t.Fatalf("serveProxy: %v", err)
+	}
+	client := bucketv1connect.NewBucketServiceClient(&http.Client{Transport: bearerToken(proxyEnvValue(t, env, channel.SessionTokenEnvVar))}, proxyEnvValue(t, env, constants.RuntimeAddressEnvName))
+	signed, err := client.Sign(context.Background(), &bucketv1.SignRequest{
+		Bucket: "acme", Key: "a.png",
+		Operation: bucketv1.SignedOperation_SIGNED_OPERATION_GET,
+		Audience:  bucketv1.SignedAudience_SIGNED_AUDIENCE_INTERNAL,
+	})
+	if err != nil {
+		t.Fatalf("Sign: %v", err)
+	}
+	if !strings.Contains(signed.GetTarget().GetUrl(), "r2.cloudflarestorage.com") {
+		t.Errorf("signed url = %q, want it signed for the store the record names, not the account's s3", signed.GetTarget().GetUrl())
+	}
+	if granted := grantedBuckets(values)(); len(granted) != 0 {
+		t.Errorf("granted = %v, want the store-bound bucket kept off the account's own backend", granted)
+	}
+}
+
 type bearerToken string
 
 func (b bearerToken) RoundTrip(req *http.Request) (*http.Response, error) {
