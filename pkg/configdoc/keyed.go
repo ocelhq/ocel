@@ -33,12 +33,19 @@ func keyedSchema(target reflect.Type, shorthands []string) object {
 	return schema
 }
 
-func checkKeyed(path string, target reflect.Type, shorthands []string, value any) error {
-	fields := jsonFields(target)
+func KeysOf(union Keyed) []string { return fieldNames(jsonFields(reflect.TypeOf(union))) }
+
+func fieldNames(fields []jsonField) []string {
 	keys := make([]string, 0, len(fields))
 	for _, field := range fields {
 		keys = append(keys, field.name)
 	}
+	return keys
+}
+
+func checkKeyed(path string, target reflect.Type, shorthands []string, value any) error {
+	fields := jsonFields(target)
+	keys := fieldNames(fields)
 	switch spelled := value.(type) {
 	case string:
 		if slices.Contains(shorthands, spelled) {

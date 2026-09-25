@@ -115,3 +115,9 @@ func TestAKeyedUnionRefusesAnythingButOneKnownKeyOrAShorthand(t *testing.T) {
 		})
 	}
 }
+
+func TestAKeyedUnionNamesItsKeysInTheOrderItDeclaresThem(t *testing.T) {
+	if got, want := strings.Join(KeysOf(route{}), " "), "lane road"; got != want {
+		t.Errorf("KeysOf(route) = %q, want %q", got, want)
+	}
+}
