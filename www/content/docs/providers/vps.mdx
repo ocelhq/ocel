@@ -42,13 +42,72 @@ Running it again changes only what has drifted, and `ocel destroy` removes it al
 | `/var/lib/ocel/<class>/records`, `/usr/local/lib/ocel/records` | What is deployed, per class. |
 | `/var/lib/ocel/releases`, `/usr/local/lib/ocel/releases` | The release window: which images a rollback can still reach. Older images are swept. |
 | Docker | Installed with Docker's install script, pinned by sha256. It stays after `ocel destroy`, and so do its containers. |
-| `ocel-proxy` container, the `ocel` network, `/var/lib/ocel/proxy/caddy.json` | Caddy on ports 80 and 443. It holds a certificate for every hostname the box serves. |
-| `ocel-switchboard` container, `/usr/local/lib/ocel/switchboard`, `/run/ocel-switchboard`, `/run/ocel-front` | Routes each hostname to the app that serves it. |
+| `/var/lib/ocel/proxy.json` | Which proxy fronts the box, and which project and class set it. A deploy whose `proxy` option disagrees is refused. |
+| `ocel-proxy` container, `/var/lib/ocel/proxy/caddy.json` | Caddy on ports 80 and 443. It holds a certificate for every hostname the box serves. Left out [behind your own proxy](#behind-your-own-proxy). |
+| `ocel-switchboard` container, the `ocel` network, `/usr/local/lib/ocel/switchboard`, `/run/ocel-switchboard`, `/run/ocel-front` | Routes each hostname to the app that serves it. Behind your own proxy it is published on `127.0.0.1:8480`. |
 | `/var/lib/ocel/routing/table.json` | The routing table: which project claims each hostname, where each app is served from, and the certificates you pin. Deploys rewrite it and the proxy's config together. |
-| `/var/lib/ocel/proxy/data` | Certificates, their keys and the ACME account key. |
-| `/etc/ocel/certs` | Certificates you pin yourself. `ocel destroy` removes the directory only if it is empty. |
+| `/var/lib/ocel/proxy/data` | Certificates, their keys and the ACME account key. Left out behind your own proxy. |
+| `/etc/ocel/certs` | Certificates you pin yourself. Left out behind your own proxy. `ocel destroy` removes the directory only if it is empty. |
 | `ocel-live.socket`, `ocel-live.service` | Serve each app container its secret values over a unix socket. |
 | `ocel-backups.timer` | Dumps every resource once a day, and at boot if a day was missed. |
+
+## Behind your own proxy
+
+If the machine already runs a proxy on ports 80 and 443, ocel can sit behind it instead of
+running its own:
+
+```json title="ocel.json"
+"vps": { "ssh": "prod", "proxy": "manual" }
+```
+
+Bootstrap then stands no `ocel-proxy`. The switchboard, which routes each hostname to its
+app, listens on `127.0.0.1:8480`. Name another port with
+`"proxy": { "manual": { "port": 9000 } }`. Ocel never writes to your proxy. You route each
+hostname yourself, and `ocel domain add` prints the route it needs:
+
+```
+Route shop.example.com → http://127.0.0.1:8480 (keep Host, set X-Forwarded-Proto)
+```
+
+A catch-all works too. In nginx:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8480;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+A proxy running in a container can't reach the host's loopback. Connect it to the `ocel`
+network (`docker network connect ocel <container>`) and forward to
+`http://ocel-switchboard:8080`.
+
+After printing the route, `ocel domain add` waits until the box proves it: a request to
+`127.0.0.1:443` for the hostname must come back from ocel, with a certificate that covers the
+name, `X-Forwarded-Proto: https` and the hostname in `Host`. A preview base asks for
+`*.<base>` and is proved on `ocel-edge-probe.<base>`.
+
+The switchboard keeps `X-Forwarded-Proto` and `X-Forwarded-Host` from your proxy, because apps
+build their URLs from them. It never takes `X-Forwarded-For` from it: every process on the
+machine reaches the same port, so any of them could claim to be any client. Apps see your
+proxy's address as the client.
+
+Your proxy holds the certificates, so `certificates` and `proxy` can't be set together. One
+proxy fronts a box. Every project on it must name the same `proxy`, and a deploy that
+doesn't is refused with the value to write. Moving a box from one proxy to another isn't
+supported yet. `"coolify"`, `"dokploy"`, `{ "traefik": … }` and `{ "caddy": … }` are
+reserved and refused for now.
+
+| | Ocel's own proxy | `manual` |
+| --- | --- | --- |
+| Holds ports 80 and 443 | ocel | you |
+| Issues and renews certificates | ocel, over http-01 | your proxy |
+| Serves the certificates you pin | yes | no, configure them in your proxy |
+| Forgets a certificate when a hostname goes | yes | no, your proxy keeps it |
+| Reports a Let's Encrypt rate limit | yes | no |
+| Answers every preview hostname under a base | yes | once you route `*.<base>` |
+| Switches releases without dropping requests | yes | yes, the switchboard does it |
 
 ## Postgres
 
@@ -87,4 +146,5 @@ the box keeps none for it. See [Bucket](/docs/sdk/bucket#on-a-vps).
 | --- | --- |
 | `ssh` | The machine to deploy onto: a `Host` alias, or an object of `host`, `user`, `port` and `identityFile`. |
 | `deployKey` | The public key the `ocel-deploy` login is to answer to, as a path. Omit it and bootstrap mirrors the keys the login it bootstraps with already answers to. |
-| `certificates` | Paths on the machine to the certificate to serve a hostname with, keyed by hostname. |
+| `certificates` | Paths on the machine to the certificate to serve a hostname with, keyed by hostname. Refused alongside `proxy`. |
+| `proxy` | What fronts the machine on ports 80 and 443. Omit it and ocel runs its own. `"manual"` puts ocel [behind your own proxy](#behind-your-own-proxy). |
