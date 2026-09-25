@@ -15,8 +15,8 @@ import (
 func everything() RoutingTable {
 	table := storing()
 	table.Routes = []AppRoute{
-		{RouteKey: keyed(live.StoreLabel), Upstream: "shop-prod-store-s3:9000", Health: "/health/ready"},
-		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + providerkit.InjectedPortText, Health: "/up"},
+		{RouteKey: keyed(live.StoreLabel), Upstream: "shop-prod-store-s3:9000"},
+		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + providerkit.InjectedPortText},
 	}
 	table.Grace = 12 * time.Second
 	table.Pins = []Pin{{Hostname: "shop.example.com", Path: ProxyPins + "/shop"}}

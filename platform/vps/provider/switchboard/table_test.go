@@ -155,7 +155,7 @@ func TestATableCarryingEveryKindOfRowOcelWritesIsRead(t *testing.T) {
 
 	mustRead(t, `{"grace":"12s",
 		"claims":[{"owner":"ocel--shop--production","hostname":"shop.example.com","pointer":"@production"}],
-		"routes":[{"owner":"ocel--shop--production","pointer":"@production","app":"web","upstream":"shop-web-1:3000","health":"/up"}],
+		"routes":[{"owner":"ocel--shop--production","pointer":"@production","app":"web","upstream":"shop-web-1:3000"}],
 		"pins":[{"hostname":"shop.example.com","path":"/var/lib/ocel/certs/shop"}],
 		"preview":"preview.example.com",
 		"connector":"box.example.com"}`)
@@ -180,7 +180,7 @@ func TestATableOcelCouldNotHaveWrittenIsRefusedWhole(t *testing.T) {
 		"a route naming no upstream":          `{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"web","upstream":""}]}`,
 		"a route whose upstream has no port":  `{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"web","upstream":"shop-web-1"}]}`,
 		"a route whose port is not a port":    `{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"web","upstream":"shop-web-1:99999"}]}`,
-		"a health path not under /":           `{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"web","upstream":"a:1","health":"up"}]}`,
+		"a route naming a health path":        `{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"web","upstream":"a:1","health":"/up"}]}`,
 		"a preview base of one label":         `{"grace":"30s","routes":[` + web + `],"preview":"localhost"}`,
 		"a preview base no dns label spells":  `{"grace":"30s","preview":"pre_view.example.com"}`,
 		"two tables":                          `{"grace":"30s"}{"grace":"30s"}`,

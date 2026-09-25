@@ -442,7 +442,7 @@ func TestARealProxyDropsNoRequestWhileAFlipMovesAStandingRouteBetweenUpstreams(t
 	}
 }
 
-func TestARealProxyServesTheNewReleaseWhenTheRetiredOneStopsUnderAHealthProbe(t *testing.T) {
+func TestARealBoxServesTheNewReleaseTheMomentTheRetiredOneIsRemoved(t *testing.T) {
 	stood := proxyStanding(t)
 
 	retired, next := "shop-web-1111:"+providerkit.InjectedPortText, "shop-web-2222:"+providerkit.InjectedPortText
@@ -451,7 +451,7 @@ func TestARealProxyServesTheNewReleaseWhenTheRetiredOneStopsUnderAHealthProbe(t 
 	serving := func(upstream string) RoutingTable {
 		return RoutingTable{
 			Grace:  DrainWindow,
-			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream, Health: "/up"}},
+			Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: upstream}},
 			Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}},
 		}
 	}
@@ -481,7 +481,7 @@ func TestARealProxyServesTheNewReleaseWhenTheRetiredOneStopsUnderAHealthProbe(t 
 		}
 	}
 	if len(answered) > 0 {
-		t.Errorf("%s was answered %v after the release whose gate passed took over from one stopped once the drain returned: the proxy's probe of the retired release began before the flip, the stop cut it, and the failed probe marked the route down until the next probe",
+		t.Errorf("%s was answered %v after the release whose gate passed took over from one removed once the drain returned: a route that stays down after its retiree goes serves nothing to the deploy that recovers a crashed app",
 			claimed, answered)
 	}
 }
