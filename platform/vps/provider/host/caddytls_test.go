@@ -64,7 +64,7 @@ func pinnedPair(t *testing.T, dir, name string, names []string) string {
 func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testing.T) {
 	stood := proxyStanding(t)
 
-	at := ProxyPins + "/wildcard"
+	at := caddy.PinsDir + "/wildcard"
 	pinnedPair(t, stood.pins, "wildcard", []string{"*.preview.example.com"})
 
 	state := routed()

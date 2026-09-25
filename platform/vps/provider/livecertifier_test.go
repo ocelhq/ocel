@@ -19,7 +19,6 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
@@ -81,7 +80,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 	one := standsUp(t, p, "one")
 	promotes(t, site.stack, "p-one", "one", one, 1)
 
-	at := host.ProxyPins + "/live"
+	at := caddy.PinsDir + "/live"
 	placedOnTheBox(t, vm, at, []string{caddy.Container, liveHostname}, 90*24*time.Hour)
 	pinned := vm.provider(t, withPins(map[string]string{caddy.Container: at}))
 	defer closing(t, pinned)
@@ -130,7 +129,7 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 	vm, p := onABoxServingContainers(t)
 	defer closing(t, p)
 
-	at := host.ProxyPins + "/live-pin"
+	at := caddy.PinsDir + "/live-pin"
 	placedOnTheBox(t, vm, at, []string{"*.preview.example.invalid"}, 11*24*time.Hour)
 	pinned := vm.provider(t, withPins(map[string]string{"*.preview.example.invalid": at}))
 	defer closing(t, pinned)

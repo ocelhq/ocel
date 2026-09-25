@@ -298,24 +298,24 @@ func TestLiveAForeignContainerHoldingPortEightyIsRefusedByName(t *testing.T) {
 
 	vm.ssh(t, "sudo docker stop "+caddy.Container)
 	vm.ssh(t, "sudo docker rm -f "+foreignContainer+" >/dev/null 2>&1 || true")
-	vm.ssh(t, "sudo docker run -d --name "+foreignContainer+" -p "+host.RenewalPort+":8080 "+fixtureAt("one"))
+	vm.ssh(t, "sudo docker run -d --name "+foreignContainer+" -p "+caddy.HTTPPort+":8080 "+fixtureAt("one"))
 	defer func() {
 		vm.ssh(t, "sudo docker rm -f "+foreignContainer+" >/dev/null 2>&1 || true")
 		vm.ssh(t, "sudo docker start "+caddy.Container)
 		vm.waitsFor(t, caddy.Container)
 	}()
 	if !vm.running(t, foreignContainer) {
-		t.Fatalf("%s never came up, so nothing on this box is holding port %s and there is no condition to refuse", foreignContainer, host.RenewalPort)
+		t.Fatalf("%s never came up, so nothing on this box is holding port %s and there is no condition to refuse", foreignContainer, caddy.HTTPPort)
 	}
 
 	err := preflightedOn(t, p)
 	if err == nil {
-		t.Fatalf("PreflightDeploy() let a deploy onto a box where %s holds port %s", foreignContainer, host.RenewalPort)
+		t.Fatalf("PreflightDeploy() let a deploy onto a box where %s holds port %s", foreignContainer, caddy.HTTPPort)
 	}
 	if !strings.Contains(err.Error(), foreignContainer) {
 		t.Errorf("PreflightDeploy() = %q, want %q named: a foreign listener is refused by name", err, foreignContainer)
 	}
-	for _, want := range []string{"stop it", "move it off " + host.RenewalPort} {
+	for _, want := range []string{"stop it", "move it off " + caddy.HTTPPort} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("PreflightDeploy() = %q, want %q in it: a refusal an operator cannot act on is a wall", err, want)
 		}

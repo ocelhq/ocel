@@ -7,7 +7,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
@@ -50,9 +49,9 @@ func TestLiveTheStandingVerdictsReadOffABootstrappedBoxAndGateNothing(t *testing
 		t.Errorf("the verdict for %s is %v (%q), want it owed: a name nothing resolves is a record a human has not written yet", owed, dns.Verdict, dns.Finding)
 	}
 
-	reach := about(t, checks, ":"+host.RenewalPort)
+	reach := about(t, checks, ":"+caddy.HTTPPort)
 	if reach.Verdict != providerkit.StandingPass {
-		t.Errorf("port %s on this box = %v (%q), want a connection from here to succeed: the proxy renews every certificate on it over http-01", host.RenewalPort, reach.Verdict, reach.Finding)
+		t.Errorf("port %s on this box = %v (%q), want a connection from here to succeed: the proxy renews every certificate on it over http-01", caddy.HTTPPort, reach.Verdict, reach.Finding)
 	}
 
 	admin := about(t, checks, adminPort)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 func handedTo(spec Container) handoff {
@@ -45,7 +46,7 @@ func running() map[string]string {
 func owed() map[string][]string {
 	return map[string][]string{
 		appContainer:      {EnvFile(valued().Class, valued().Name)},
-		proxyContainer:    {proxyRoot, ProxyPins, ProxyData},
+		proxyContainer:    {proxyRoot, caddy.PinsDir, ProxyData},
 		boardContainer:    {live.RoutingDir, live.RoutingTable},
 		resourceContainer: {EnvFile(resourced().Class, resourced().Name)},
 	}

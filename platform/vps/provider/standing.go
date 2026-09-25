@@ -12,7 +12,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
-	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
@@ -160,18 +159,18 @@ func spell(addrs []netip.Addr) string {
 }
 
 func reachVerdict(ctx context.Context, dial Reach, address string) providerkit.StandingCheck {
-	at := net.JoinHostPort(address, host.RenewalPort)
+	at := net.JoinHostPort(address, caddy.HTTPPort)
 	check := providerkit.StandingCheck{Subject: at}
 	if err := dial(ctx, at); err != nil {
 		check.Verdict = providerkit.StandingFail
 		check.Finding = fmt.Sprintf("%s is unreachable, so the proxy cannot renew certificates over http-01: %v",
 			at, err)
-		check.Fix = "open port " + host.RenewalPort + " in your provider's firewall or security group; docker's iptables rules bypass ufw"
+		check.Fix = "open port " + caddy.HTTPPort + " in your provider's firewall or security group; docker's iptables rules bypass ufw"
 		return check
 	}
 	check.Verdict = providerkit.StandingPass
 	check.Finding = fmt.Sprintf("port %s answers from this machine (not proof the internet reaches it)",
-		host.RenewalPort)
+		caddy.HTTPPort)
 	return check
 }
 

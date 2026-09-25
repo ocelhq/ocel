@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 const (
@@ -844,7 +845,7 @@ func TestTheKeptCertificateIsNamedByTheHandleThatHoldsItAndSaysWhoRenewsIt(t *te
 	t.Parallel()
 
 	const pinned = "pr-7.preview.example.com"
-	at := host.ProxyPins + "/wildcard"
+	at := caddy.PinsDir + "/wildcard"
 	stood := aMachine()
 	stood.pins = []host.Pin{{Hostname: "*.preview.example.com", Path: at}}
 	front := edgeOver(stood, fake.NewRecords())

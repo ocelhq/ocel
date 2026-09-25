@@ -32,10 +32,7 @@ const (
 	proxyRoot   = live.ProxyDir
 	ProxyConfig = live.ProxyConfig
 	ProxyData   = proxyRoot + "/data"
-	ProxyPins   = caddy.PinsDir
 )
-
-const RenewalPort = caddy.HTTPPort
 
 const (
 	ArchAMD64 = "amd64"
@@ -109,7 +106,7 @@ func ProxyItems(arch string) []Item {
 		{Kind: KindFile, Name: SwitchboardBinary, Mode: 0o755, Owner: rootOwner, Content: binary,
 			Note: "routes every hostname and switches releases"},
 		dir(proxyRoot, 0o750, stateOwner, ""),
-		dir(ProxyPins, 0o700, rootOwner, "your pinned certificates"),
+		dir(caddy.PinsDir, 0o700, rootOwner, "your pinned certificates"),
 		proxyConfigItem(),
 		dir(live.RoutingDir, 0o750, stateOwner, ""),
 		routingTableItem(),
@@ -236,7 +233,7 @@ func frontProxy() boxContainer {
 		command: caddy.Command(),
 		binds: []string{
 			proxyRoot + ":" + caddy.ConfigDir + ":ro",
-			ProxyPins + ":" + caddy.PinsMount + ":ro",
+			caddy.PinsDir + ":" + caddy.PinsMount + ":ro",
 			ProxyData + ":" + caddy.DataMount,
 		},
 		ports:     proxyServing(),
@@ -453,6 +450,6 @@ func proxyRemovals() []removal {
 		taking(KindRoutingTable, live.RoutingTable, "every app's routes"),
 		taking(KindDir, live.RoutingDir, ""),
 		taking(KindDir, proxyRoot, ""),
-		sharing(ProxyPins, "only if empty"),
+		sharing(caddy.PinsDir, "only if empty"),
 	}
 }

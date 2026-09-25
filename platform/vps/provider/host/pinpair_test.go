@@ -15,7 +15,7 @@ import (
 func TestAPinnedPairWhoseKeyIsNotTheCertificatesIsRefusedBeforeTheProxyLoadsIt(t *testing.T) {
 	t.Parallel()
 
-	pin := Pin{Hostname: "shop.example.com", Path: ProxyPins + "/shop"}
+	pin := Pin{Hostname: "shop.example.com", Path: caddy.PinsDir + "/shop"}
 	for verdict, refuses := range map[string]bool{pairMatched: false, pairMismatched: true, pairUnchecked: false, "": false} {
 		leaf, _ := pinnedBlocks(t, []string{pin.Hostname}, 90*24*time.Hour)
 		stand := machine(nil)
@@ -47,10 +47,10 @@ func TestAPinnedPairWhoseKeyIsNotTheCertificatesIsRefusedBeforeTheProxyLoadsIt(t
 func TestThePairCheckReadsOnlyPublicHalvesAndSaysWhenItCouldNotRun(t *testing.T) {
 	t.Parallel()
 
-	command := pairCommand(ProxyPins + "/shop")
+	command := pairCommand(caddy.PinsDir + "/shop")
 	for what, wanted := range map[string]string{
-		"the certificate's public key":          "openssl x509 -in " + quoted(ProxyPins+"/shop.crt") + " -noout -pubkey",
-		"the key's public half":                 "openssl pkey -in " + quoted(ProxyPins+"/shop.key") + " -pubout",
+		"the certificate's public key":          "openssl x509 -in " + quoted(caddy.PinsDir+"/shop.crt") + " -noout -pubkey",
+		"the key's public half":                 "openssl pkey -in " + quoted(caddy.PinsDir+"/shop.key") + " -pubout",
 		"a verdict when openssl is absent":      "echo " + pairUnchecked,
 		"a digest rather than the bytes":        "sha256sum",
 		"one word for a pair that does not fit": "echo " + pairMismatched,

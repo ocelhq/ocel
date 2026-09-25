@@ -85,7 +85,7 @@ func (h *Host) PinnedCertificate(ctx context.Context, path string) ([]byte, erro
 	if !pinnedUnderProxyPins(path) {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"pinned certificate %q is outside %s",
-			path, ProxyPins)
+			path, caddy.PinsDir)
 	}
 	read, err := h.run(ctx, "read the certificate pinned at "+caddy.PinCertificate(path),
 		"cat "+quoted(caddy.PinCertificate(path)), nil)
