@@ -64,6 +64,15 @@ const (
 	// EnvVarsServiceListBindingsProcedure is the fully-qualified name of the EnvVarsService's
 	// ListBindings RPC.
 	EnvVarsServiceListBindingsProcedure = "/provider.envvars.v1.EnvVarsService/ListBindings"
+	// EnvVarsServiceSyncEnvSourceProcedure is the fully-qualified name of the EnvVarsService's
+	// SyncEnvSource RPC.
+	EnvVarsServiceSyncEnvSourceProcedure = "/provider.envvars.v1.EnvVarsService/SyncEnvSource"
+	// EnvVarsServiceDescribeEnvSourceProcedure is the fully-qualified name of the EnvVarsService's
+	// DescribeEnvSource RPC.
+	EnvVarsServiceDescribeEnvSourceProcedure = "/provider.envvars.v1.EnvVarsService/DescribeEnvSource"
+	// EnvVarsServicePutEnvSourceValueProcedure is the fully-qualified name of the EnvVarsService's
+	// PutEnvSourceValue RPC.
+	EnvVarsServicePutEnvSourceValueProcedure = "/provider.envvars.v1.EnvVarsService/PutEnvSourceValue"
 )
 
 // EnvVarsServiceClient is a client for the provider.envvars.v1.EnvVarsService service.
@@ -79,6 +88,9 @@ type EnvVarsServiceClient interface {
 	SetBinding(context.Context, *v1.SetBindingRequest) (*v1.SetBindingResponse, error)
 	RemoveBinding(context.Context, *v1.RemoveBindingRequest) (*v1.RemoveBindingResponse, error)
 	ListBindings(context.Context, *v1.ListBindingsRequest) (*v1.ListBindingsResponse, error)
+	SyncEnvSource(context.Context, *v1.SyncEnvSourceRequest) (*v1.SyncEnvSourceResponse, error)
+	DescribeEnvSource(context.Context, *v1.DescribeEnvSourceRequest) (*v1.DescribeEnvSourceResponse, error)
+	PutEnvSourceValue(context.Context, *v1.PutEnvSourceValueRequest) (*v1.PutEnvSourceValueResponse, error)
 }
 
 // NewEnvVarsServiceClient constructs a client for the provider.envvars.v1.EnvVarsService service.
@@ -158,22 +170,43 @@ func NewEnvVarsServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(envVarsServiceMethods.ByName("ListBindings")),
 			connect.WithClientOptions(opts...),
 		),
+		syncEnvSource: connect.NewClient[v1.SyncEnvSourceRequest, v1.SyncEnvSourceResponse](
+			httpClient,
+			baseURL+EnvVarsServiceSyncEnvSourceProcedure,
+			connect.WithSchema(envVarsServiceMethods.ByName("SyncEnvSource")),
+			connect.WithClientOptions(opts...),
+		),
+		describeEnvSource: connect.NewClient[v1.DescribeEnvSourceRequest, v1.DescribeEnvSourceResponse](
+			httpClient,
+			baseURL+EnvVarsServiceDescribeEnvSourceProcedure,
+			connect.WithSchema(envVarsServiceMethods.ByName("DescribeEnvSource")),
+			connect.WithClientOptions(opts...),
+		),
+		putEnvSourceValue: connect.NewClient[v1.PutEnvSourceValueRequest, v1.PutEnvSourceValueResponse](
+			httpClient,
+			baseURL+EnvVarsServicePutEnvSourceValueProcedure,
+			connect.WithSchema(envVarsServiceMethods.ByName("PutEnvSourceValue")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // envVarsServiceClient implements EnvVarsServiceClient.
 type envVarsServiceClient struct {
-	setValue       *connect.Client[v1.SetValueRequest, v1.SetValueResponse]
-	listValues     *connect.Client[v1.ListValuesRequest, v1.ListValuesResponse]
-	getValue       *connect.Client[v1.GetValueRequest, v1.GetValueResponse]
-	revealValues   *connect.Client[v1.RevealValuesRequest, v1.RevealValuesResponse]
-	deleteValue    *connect.Client[v1.DeleteValueRequest, v1.DeleteValueResponse]
-	setReference   *connect.Client[v1.SetReferenceRequest, v1.SetReferenceResponse]
-	listReferences *connect.Client[v1.ListReferencesRequest, v1.ListReferencesResponse]
-	listVersions   *connect.Client[v1.ListVersionsRequest, v1.ListVersionsResponse]
-	setBinding     *connect.Client[v1.SetBindingRequest, v1.SetBindingResponse]
-	removeBinding  *connect.Client[v1.RemoveBindingRequest, v1.RemoveBindingResponse]
-	listBindings   *connect.Client[v1.ListBindingsRequest, v1.ListBindingsResponse]
+	setValue          *connect.Client[v1.SetValueRequest, v1.SetValueResponse]
+	listValues        *connect.Client[v1.ListValuesRequest, v1.ListValuesResponse]
+	getValue          *connect.Client[v1.GetValueRequest, v1.GetValueResponse]
+	revealValues      *connect.Client[v1.RevealValuesRequest, v1.RevealValuesResponse]
+	deleteValue       *connect.Client[v1.DeleteValueRequest, v1.DeleteValueResponse]
+	setReference      *connect.Client[v1.SetReferenceRequest, v1.SetReferenceResponse]
+	listReferences    *connect.Client[v1.ListReferencesRequest, v1.ListReferencesResponse]
+	listVersions      *connect.Client[v1.ListVersionsRequest, v1.ListVersionsResponse]
+	setBinding        *connect.Client[v1.SetBindingRequest, v1.SetBindingResponse]
+	removeBinding     *connect.Client[v1.RemoveBindingRequest, v1.RemoveBindingResponse]
+	listBindings      *connect.Client[v1.ListBindingsRequest, v1.ListBindingsResponse]
+	syncEnvSource     *connect.Client[v1.SyncEnvSourceRequest, v1.SyncEnvSourceResponse]
+	describeEnvSource *connect.Client[v1.DescribeEnvSourceRequest, v1.DescribeEnvSourceResponse]
+	putEnvSourceValue *connect.Client[v1.PutEnvSourceValueRequest, v1.PutEnvSourceValueResponse]
 }
 
 // SetValue calls provider.envvars.v1.EnvVarsService.SetValue.
@@ -275,6 +308,33 @@ func (c *envVarsServiceClient) ListBindings(ctx context.Context, req *v1.ListBin
 	return nil, err
 }
 
+// SyncEnvSource calls provider.envvars.v1.EnvVarsService.SyncEnvSource.
+func (c *envVarsServiceClient) SyncEnvSource(ctx context.Context, req *v1.SyncEnvSourceRequest) (*v1.SyncEnvSourceResponse, error) {
+	response, err := c.syncEnvSource.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// DescribeEnvSource calls provider.envvars.v1.EnvVarsService.DescribeEnvSource.
+func (c *envVarsServiceClient) DescribeEnvSource(ctx context.Context, req *v1.DescribeEnvSourceRequest) (*v1.DescribeEnvSourceResponse, error) {
+	response, err := c.describeEnvSource.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// PutEnvSourceValue calls provider.envvars.v1.EnvVarsService.PutEnvSourceValue.
+func (c *envVarsServiceClient) PutEnvSourceValue(ctx context.Context, req *v1.PutEnvSourceValueRequest) (*v1.PutEnvSourceValueResponse, error) {
+	response, err := c.putEnvSourceValue.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // EnvVarsServiceHandler is an implementation of the provider.envvars.v1.EnvVarsService service.
 type EnvVarsServiceHandler interface {
 	SetValue(context.Context, *v1.SetValueRequest) (*v1.SetValueResponse, error)
@@ -288,6 +348,9 @@ type EnvVarsServiceHandler interface {
 	SetBinding(context.Context, *v1.SetBindingRequest) (*v1.SetBindingResponse, error)
 	RemoveBinding(context.Context, *v1.RemoveBindingRequest) (*v1.RemoveBindingResponse, error)
 	ListBindings(context.Context, *v1.ListBindingsRequest) (*v1.ListBindingsResponse, error)
+	SyncEnvSource(context.Context, *v1.SyncEnvSourceRequest) (*v1.SyncEnvSourceResponse, error)
+	DescribeEnvSource(context.Context, *v1.DescribeEnvSourceRequest) (*v1.DescribeEnvSourceResponse, error)
+	PutEnvSourceValue(context.Context, *v1.PutEnvSourceValueRequest) (*v1.PutEnvSourceValueResponse, error)
 }
 
 // NewEnvVarsServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -363,6 +426,24 @@ func NewEnvVarsServiceHandler(svc EnvVarsServiceHandler, opts ...connect.Handler
 		connect.WithSchema(envVarsServiceMethods.ByName("ListBindings")),
 		connect.WithHandlerOptions(opts...),
 	)
+	envVarsServiceSyncEnvSourceHandler := connect.NewUnaryHandlerSimple(
+		EnvVarsServiceSyncEnvSourceProcedure,
+		svc.SyncEnvSource,
+		connect.WithSchema(envVarsServiceMethods.ByName("SyncEnvSource")),
+		connect.WithHandlerOptions(opts...),
+	)
+	envVarsServiceDescribeEnvSourceHandler := connect.NewUnaryHandlerSimple(
+		EnvVarsServiceDescribeEnvSourceProcedure,
+		svc.DescribeEnvSource,
+		connect.WithSchema(envVarsServiceMethods.ByName("DescribeEnvSource")),
+		connect.WithHandlerOptions(opts...),
+	)
+	envVarsServicePutEnvSourceValueHandler := connect.NewUnaryHandlerSimple(
+		EnvVarsServicePutEnvSourceValueProcedure,
+		svc.PutEnvSourceValue,
+		connect.WithSchema(envVarsServiceMethods.ByName("PutEnvSourceValue")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/provider.envvars.v1.EnvVarsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case EnvVarsServiceSetValueProcedure:
@@ -387,6 +468,12 @@ func NewEnvVarsServiceHandler(svc EnvVarsServiceHandler, opts ...connect.Handler
 			envVarsServiceRemoveBindingHandler.ServeHTTP(w, r)
 		case EnvVarsServiceListBindingsProcedure:
 			envVarsServiceListBindingsHandler.ServeHTTP(w, r)
+		case EnvVarsServiceSyncEnvSourceProcedure:
+			envVarsServiceSyncEnvSourceHandler.ServeHTTP(w, r)
+		case EnvVarsServiceDescribeEnvSourceProcedure:
+			envVarsServiceDescribeEnvSourceHandler.ServeHTTP(w, r)
+		case EnvVarsServicePutEnvSourceValueProcedure:
+			envVarsServicePutEnvSourceValueHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -438,4 +525,16 @@ func (UnimplementedEnvVarsServiceHandler) RemoveBinding(context.Context, *v1.Rem
 
 func (UnimplementedEnvVarsServiceHandler) ListBindings(context.Context, *v1.ListBindingsRequest) (*v1.ListBindingsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.envvars.v1.EnvVarsService.ListBindings is not implemented"))
+}
+
+func (UnimplementedEnvVarsServiceHandler) SyncEnvSource(context.Context, *v1.SyncEnvSourceRequest) (*v1.SyncEnvSourceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.envvars.v1.EnvVarsService.SyncEnvSource is not implemented"))
+}
+
+func (UnimplementedEnvVarsServiceHandler) DescribeEnvSource(context.Context, *v1.DescribeEnvSourceRequest) (*v1.DescribeEnvSourceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.envvars.v1.EnvVarsService.DescribeEnvSource is not implemented"))
+}
+
+func (UnimplementedEnvVarsServiceHandler) PutEnvSourceValue(context.Context, *v1.PutEnvSourceValueRequest) (*v1.PutEnvSourceValueResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.envvars.v1.EnvVarsService.PutEnvSourceValue is not implemented"))
 }

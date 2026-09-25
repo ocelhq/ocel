@@ -21,6 +21,8 @@ type Status struct {
 	LastError     string `json:"lastError,omitempty"`
 	Failures      int    `json:"failures,omitempty"`
 	RetryAt       int64  `json:"retryAt,omitempty"`
+
+	Links map[string]string `json:"links,omitempty"`
 }
 
 func statusName(class ports.Class, identity string) ports.RecordName {

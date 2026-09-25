@@ -23,17 +23,20 @@ const sneakProcedure = "/provider.envvars.v1.EnvVarsService/Sneak"
 
 func TestEveryProcedureTheServiceDeclaresMapsToAScope(t *testing.T) {
 	declared := map[string]string{
-		envvarsv1connect.EnvVarsServiceSetValueProcedure:       CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceDeleteValueProcedure:    CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceSetReferenceProcedure:   CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceSetBindingProcedure:     CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceRemoveBindingProcedure:  CapabilityEnvVarsWrite,
-		envvarsv1connect.EnvVarsServiceRevealValuesProcedure:   CapabilityEnvVarsReveal,
-		envvarsv1connect.EnvVarsServiceGetValueProcedure:       CapabilityEnvVarsRead,
-		envvarsv1connect.EnvVarsServiceListValuesProcedure:     CapabilityEnvVarsRead,
-		envvarsv1connect.EnvVarsServiceListReferencesProcedure: CapabilityEnvVarsRead,
-		envvarsv1connect.EnvVarsServiceListVersionsProcedure:   CapabilityEnvVarsRead,
-		envvarsv1connect.EnvVarsServiceListBindingsProcedure:   CapabilityEnvVarsRead,
+		envvarsv1connect.EnvVarsServiceSetValueProcedure:          CapabilityEnvVarsWrite,
+		envvarsv1connect.EnvVarsServiceDeleteValueProcedure:       CapabilityEnvVarsWrite,
+		envvarsv1connect.EnvVarsServiceSetReferenceProcedure:      CapabilityEnvVarsWrite,
+		envvarsv1connect.EnvVarsServiceSetBindingProcedure:        CapabilityEnvVarsWrite,
+		envvarsv1connect.EnvVarsServiceRemoveBindingProcedure:     CapabilityEnvVarsWrite,
+		envvarsv1connect.EnvVarsServiceRevealValuesProcedure:      CapabilityEnvVarsReveal,
+		envvarsv1connect.EnvVarsServiceGetValueProcedure:          CapabilityEnvVarsRead,
+		envvarsv1connect.EnvVarsServiceListValuesProcedure:        CapabilityEnvVarsRead,
+		envvarsv1connect.EnvVarsServiceListReferencesProcedure:    CapabilityEnvVarsRead,
+		envvarsv1connect.EnvVarsServiceListVersionsProcedure:      CapabilityEnvVarsRead,
+		envvarsv1connect.EnvVarsServiceListBindingsProcedure:      CapabilityEnvVarsRead,
+		envvarsv1connect.EnvVarsServiceSyncEnvSourceProcedure:     CapabilityEnvVarsWrite,
+		envvarsv1connect.EnvVarsServicePutEnvSourceValueProcedure: CapabilityEnvVarsWrite,
+		envvarsv1connect.EnvVarsServiceDescribeEnvSourceProcedure: CapabilityEnvVarsRead,
 	}
 
 	methods := envvarsv1.File_provider_envvars_v1_envvars_proto.Services().ByName("EnvVarsService").Methods()

@@ -109,17 +109,29 @@ func (s *Syncer) Sync(ctx context.Context, registration Registration) (Report, e
 	return reports[0], nil
 }
 
+func (s *Syncer) SyncFrom(ctx context.Context, registration Registration, source Source) (Report, error) {
+	identity := Identity(ctx, s.Store, s.scope(registration), registration.Descriptor)
+	s.mu.Lock()
+	if s.opened == nil {
+		s.opened = map[string]Source{}
+	}
+	s.opened[identity] = source
+	s.mu.Unlock()
+	return s.Sync(ctx, registration)
+}
+
 func (s *Syncer) Source(ctx context.Context, registration Registration) (Source, error) {
 	return s.source(ctx, Identity(ctx, s.Store, s.scope(registration), registration.Descriptor), registration)
 }
 
 func (s *Syncer) sync(ctx context.Context, identity string, group []Registration) ([]Report, error, error) {
 	attempted := s.now()
-	reports, failure := s.mirror(ctx, identity, group)
+	reports, links, failure := s.mirror(ctx, identity, group)
 	err := recordStatus(ctx, s.Store.Records, s.Class, identity, func(status *Status) {
 		status.LastAttemptAt = attempted.Unix()
 		if failure == nil {
 			status.Source = reports[0].Source
+			status.Links = links
 			status.LastSuccessAt = attempted.Unix()
 			status.LastError = ""
 			status.Failures = 0
@@ -136,29 +148,36 @@ func (s *Syncer) sync(ctx context.Context, identity string, group []Registration
 	return reports, failure, err
 }
 
-func (s *Syncer) mirror(ctx context.Context, identity string, group []Registration) ([]Report, error) {
+func (s *Syncer) mirror(ctx context.Context, identity string, group []Registration) ([]Report, map[string]string, error) {
 	source, err := s.source(ctx, identity, group[0])
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var folders []string
 	for _, registration := range group {
 		folders = append(folders, registration.Folders...)
 	}
 	slices.Sort(folders)
-	resolved, err := source.Resolve(ctx, slices.Compact(folders))
+	folders = slices.Compact(folders)
+	resolved, err := source.Resolve(ctx, folders)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	reports := make([]Report, 0, len(group))
 	for _, registration := range group {
 		report, err := Apply(ctx, s.Store, s.scope(registration), source.ID(), resolved, registration.Folders, registration.Credentials())
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		reports = append(reports, report)
 	}
-	return reports, nil
+	links := map[string]string{}
+	for _, folder := range folders {
+		if link := source.Link(values.Cell{Folder: folder}); link != "" {
+			links[folder] = link
+		}
+	}
+	return reports, links, nil
 }
 
 func (s *Syncer) source(ctx context.Context, identity string, registration Registration) (Source, error) {

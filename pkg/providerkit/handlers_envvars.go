@@ -106,6 +106,9 @@ func (h *VarsHandler) SetValue(ctx context.Context, req *envvarsv1.SetValueReque
 	if err != nil {
 		return nil, err
 	}
+	if err := h.refuseSourceOwned(ctx, store, scope, coordinateOf(req.GetCoordinate()), false); err != nil {
+		return nil, err
+	}
 	metadata, err := store.Set(ctx, scope, coordinateOf(req.GetCoordinate()), req.GetValue(), req.ExpectedVersion)
 	if err != nil {
 		return nil, valuesError(err)
@@ -176,6 +179,9 @@ func (h *VarsHandler) DeleteValue(ctx context.Context, req *envvarsv1.DeleteValu
 	if err != nil {
 		return nil, err
 	}
+	if err := h.refuseSourceOwned(ctx, store, scope, coordinateOf(req.GetCoordinate()), true); err != nil {
+		return nil, err
+	}
 	deleted, err := store.Delete(ctx, scope, coordinateOf(req.GetCoordinate()), req.ExpectedVersion)
 	if err != nil {
 		return nil, valuesError(err)
@@ -195,6 +201,9 @@ func (h *VarsHandler) SetReference(ctx context.Context, req *envvarsv1.SetRefere
 	}
 	store, scope, err := h.scoped(req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
+		return nil, err
+	}
+	if err := h.refuseSourceOwned(ctx, store, scope, coordinateOf(req.GetCoordinate()), false); err != nil {
 		return nil, err
 	}
 	metadata, err := store.SetReference(ctx, scope, coordinateOf(req.GetCoordinate()), values.Target{
@@ -362,6 +371,7 @@ func metadataProto(scope values.Scope, m values.Metadata) *envvarsv1.ValueMetada
 		Version:    m.Version,
 		UpdatedAt:  m.UpdatedAt,
 		Size:       m.Size,
+		EnvSource:  m.Provenance.EnvSource,
 	}
 	if m.Target != nil {
 		out.Target = &envvarsv1.Coordinate{

@@ -1,9 +1,16 @@
 package providerkit
 
+import "github.com/ocelhq/ocel/pkg/providerkit/envsource"
+
 type Vars struct {
-	Records RecordStore
-	Sealer  Sealer
-	Grants  GrantVerifier
+	Records  RecordStore
+	Sealer   Sealer
+	Grants   GrantVerifier
+	Identity envsource.Target
+}
+
+type EnvSourceIdentity interface {
+	EnvSourceTarget() envsource.Target
 }
 
 type VarsSource interface {
@@ -30,6 +37,9 @@ func (s sessionVars) Vars() (Vars, error) {
 	out := Vars{Records: provider.Records(), Sealer: provider.Sealer()}
 	if verifier, vets := provider.(GrantVerifier); vets {
 		out.Grants = verifier
+	}
+	if identity, holds := provider.(EnvSourceIdentity); holds {
+		out.Identity = identity.EnvSourceTarget()
 	}
 	return out, nil
 }

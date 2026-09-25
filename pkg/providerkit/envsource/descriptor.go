@@ -112,3 +112,10 @@ func (a InfisicalAuth) Vars() []string {
 	}
 	return []string{a.ClientIDVar, a.ClientSecretVar}
 }
+
+func (d Descriptor) ID() string {
+	if d.Kind == Infisical && d.Infisical != nil {
+		return InfisicalID(*d.Infisical)
+	}
+	return string(d.Kind)
+}

@@ -196,7 +196,9 @@ func scopeOf(procedure string, message any) (string, bool) {
 		envvarsv1connect.EnvVarsServiceDeleteValueProcedure,
 		envvarsv1connect.EnvVarsServiceSetReferenceProcedure,
 		envvarsv1connect.EnvVarsServiceSetBindingProcedure,
-		envvarsv1connect.EnvVarsServiceRemoveBindingProcedure:
+		envvarsv1connect.EnvVarsServiceRemoveBindingProcedure,
+		envvarsv1connect.EnvVarsServiceSyncEnvSourceProcedure,
+		envvarsv1connect.EnvVarsServicePutEnvSourceValueProcedure:
 		return CapabilityEnvVarsWrite, true
 	case envvarsv1connect.EnvVarsServiceRevealValuesProcedure:
 		return CapabilityEnvVarsReveal, true
@@ -208,7 +210,8 @@ func scopeOf(procedure string, message any) (string, bool) {
 	case envvarsv1connect.EnvVarsServiceListValuesProcedure,
 		envvarsv1connect.EnvVarsServiceListReferencesProcedure,
 		envvarsv1connect.EnvVarsServiceListVersionsProcedure,
-		envvarsv1connect.EnvVarsServiceListBindingsProcedure:
+		envvarsv1connect.EnvVarsServiceListBindingsProcedure,
+		envvarsv1connect.EnvVarsServiceDescribeEnvSourceProcedure:
 		return CapabilityEnvVarsRead, true
 	}
 	return "", false

@@ -496,13 +496,26 @@ func TestEveryValueRPCRefusesBeforeConfigure(t *testing.T) {
 			_, err := vars.RemoveBinding(ctx, &envvarsv1.RemoveBindingRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Name: "db"})
 			return err
 		},
+		"SyncEnvSource": func() error {
+			_, err := vars.SyncEnvSource(ctx, &envvarsv1.SyncEnvSourceRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, EnvSource: &envvarsv1.EnvSource{Kind: &envvarsv1.EnvSource_Builtin{Builtin: &envvarsv1.BuiltinEnvSource{}}}})
+			return err
+		},
+		"DescribeEnvSource": func() error {
+			_, err := vars.DescribeEnvSource(ctx, &envvarsv1.DescribeEnvSourceRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION})
+			return err
+		},
+		"PutEnvSourceValue": func() error {
+			_, err := vars.PutEnvSourceValue(ctx, &envvarsv1.PutEnvSourceValueRequest{Tier: environmentv1.Tier_TIER_PRODUCTION, Coordinate: cell("KEY")})
+			return err
+		},
 		"ListBindings": func() error {
 			_, err := vars.ListBindings(ctx, &envvarsv1.ListBindingsRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION})
 			return err
 		},
 	}
-	if len(calls) != 11 {
-		t.Fatalf("the suite drives %d of EnvVarsService's 11 RPCs", len(calls))
+	methods := envvarsv1.File_provider_envvars_v1_envvars_proto.Services().ByName("EnvVarsService").Methods().Len()
+	if len(calls) != methods {
+		t.Fatalf("the suite drives %d of EnvVarsService's %d RPCs", len(calls), methods)
 	}
 	for name, call := range calls {
 		t.Run(name, func(t *testing.T) {

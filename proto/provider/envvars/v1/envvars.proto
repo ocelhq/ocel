@@ -29,6 +29,12 @@ service EnvVarsService {
     rpc RemoveBinding(RemoveBindingRequest) returns (RemoveBindingResponse);
 
     rpc ListBindings(ListBindingsRequest) returns (ListBindingsResponse);
+
+    rpc SyncEnvSource(SyncEnvSourceRequest) returns (SyncEnvSourceResponse);
+
+    rpc DescribeEnvSource(DescribeEnvSourceRequest) returns (DescribeEnvSourceResponse);
+
+    rpc PutEnvSourceValue(PutEnvSourceValueRequest) returns (PutEnvSourceValueResponse);
 }
 
 message Coordinate {
@@ -65,6 +71,8 @@ message ValueMetadata {
   int64 size = 4;
 
   optional Coordinate target = 5;
+
+  string env_source = 6;
 }
 
 message VersionEntry {
@@ -262,4 +270,162 @@ message PropertyShape {
   string json_type = 2;
 
   bool list = 3;
+}
+
+message EnvSource {
+  oneof kind {
+    BuiltinEnvSource builtin = 1;
+
+    InfisicalEnvSource infisical = 2;
+
+    ExecEnvSource exec = 3;
+  }
+}
+
+message BuiltinEnvSource {
+}
+
+message InfisicalEnvSource {
+  string project = 1 [(buf.validate.field).string.min_len = 1];
+
+  string environment = 2 [(buf.validate.field).string.min_len = 1];
+
+  string path = 3 [(buf.validate.field).string.pattern = "^/"];
+
+  string host = 4 [(buf.validate.field).string.pattern = "^https?://"];
+
+  InfisicalAuth auth = 5 [(buf.validate.field).required = true];
+
+  bool write_missing = 6;
+}
+
+message InfisicalAuth {
+  oneof method {
+    option (buf.validate.oneof).required = true;
+
+    InfisicalUniversalAuth universal = 1;
+
+    InfisicalIdentityAuth aws = 2;
+
+    InfisicalIdentityAuth gcp = 3;
+  }
+}
+
+message InfisicalUniversalAuth {
+  string client_id_var = 1 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+
+  string client_secret_var = 2 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+}
+
+message InfisicalIdentityAuth {
+  string identity_id = 1 [(buf.validate.field).string.min_len = 1];
+}
+
+message ExecEnvSource {
+  repeated string command = 1 [(buf.validate.field).repeated.min_items = 1];
+
+  repeated SourcedValue values = 2;
+}
+
+message SourcedValue {
+  string folder = 1 [(buf.validate.field).string.pattern = "^(/[^/#[:cntrl:]]+)*$"];
+
+  string key = 2 [(buf.validate.field).string = {min_len: 1, pattern: "^[^#[:cntrl:]]*$"}];
+
+  string value = 3 [debug_redact = true];
+
+  string version = 4;
+}
+
+message EnvSourceStatus {
+  string env_source = 1;
+
+  bool standing = 2;
+
+  bool writable = 3;
+
+  int64 last_attempt_at = 4;
+
+  int64 last_success_at = 5;
+
+  string last_error = 6;
+
+  repeated FolderLink links = 7;
+
+  repeated string credentials = 8;
+}
+
+message FolderLink {
+  string folder = 1;
+
+  string link = 2;
+}
+
+message SourcedCell {
+  string folder = 1;
+
+  string key = 2;
+}
+
+message SyncEnvSourceRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).cel = {
+    id: "envvars.envsource.tier"
+    message: "an env source is kept per deployed tier: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
+
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+
+  EnvSource env_source = 3 [(buf.validate.field).required = true];
+
+  repeated string folders = 4 [(buf.validate.field).repeated = {
+    unique: true
+    items: {string: {pattern: "^(/[^/#[:cntrl:]]+)*$"}}
+  }];
+}
+
+message SyncEnvSourceResponse {
+  EnvSourceStatus status = 1;
+
+  repeated SourcedCell present = 2;
+
+  int32 written = 3;
+
+  int32 removed = 4;
+
+  repeated SourcedCell refused = 5;
+}
+
+message DescribeEnvSourceRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).cel = {
+    id: "envvars.envsource.tier"
+    message: "an env source is kept per deployed tier: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
+
+  string slug = 2 [(buf.validate.field).string = {pattern: "^[a-z0-9]+(-[a-z0-9]+)*$", max_len: 63}];
+}
+
+message DescribeEnvSourceResponse {
+  EnvSourceStatus status = 1;
+}
+
+message PutEnvSourceValueRequest {
+  common.environment.v1.Tier tier = 1 [(buf.validate.field).cel = {
+    id: "envvars.envsource.tier"
+    message: "an env source is kept per deployed tier: name the preview or the production tier"
+    expression: "this in [1, 2]"
+  }];
+
+  Coordinate coordinate = 2 [(buf.validate.field).required = true];
+
+  string value = 3 [debug_redact = true];
+
+  string description = 4 [(buf.validate.field).string.max_len = 120];
+}
+
+message PutEnvSourceValueResponse {
+  bool awaiting_approval = 1;
+
+  optional ValueMetadata metadata = 2;
 }
