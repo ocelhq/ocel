@@ -1,6 +1,7 @@
 package switchboard_test
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptrace"
 	"os"
@@ -90,6 +91,7 @@ func TestLoadingTablesUnderLoadNeverDropsARequestOrTheConnectionItCameOn(t *test
 					failed.Add(1)
 					continue
 				}
+				_, _ = io.Copy(io.Discard, said.Body)
 				_ = said.Body.Close()
 				if said.StatusCode != http.StatusOK {
 					failed.Add(1)
