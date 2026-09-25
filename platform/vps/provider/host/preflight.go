@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
 )
 
 const KeepWindow = 3
@@ -344,25 +345,11 @@ func (h *Host) portHeld(ctx context.Context, port string) (string, error) {
 }
 
 func (h *Host) portAdopted(ctx context.Context, port string) (string, error) {
-	named, err := h.Publishing(ctx, port)
-	if err != nil {
+	held, err := manual.PortHeld(ctx, frontBox{h}, port)
+	if err != nil || held.Trouble == "" {
 		return "", err
 	}
-	if slices.Contains(named, caddy.Container) {
-		return fmt.Sprintf("port %s is published by %s, ocel's own proxy; run `docker rm -f %s` and start your proxy on %s",
-			port, caddy.Container, caddy.Container, port), nil
-	}
-	if len(named) > 0 {
-		return "", nil
-	}
-	held, err := h.Listening(ctx)
-	if err != nil {
-		return "", err
-	}
-	if len(listeners.On(held, portNumber(port))) > 0 {
-		return "", nil
-	}
-	return fmt.Sprintf("nothing holds port %s; start your proxy on it", port), nil
+	return held.Trouble + "; " + held.Fix, nil
 }
 
 func portNumber(port string) int {

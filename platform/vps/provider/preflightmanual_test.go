@@ -69,7 +69,7 @@ func TestABoxYourProxyFrontsRefusesAServingPortNothingHolds(t *testing.T) {
 	if err == nil {
 		t.Fatal("PreflightDeploy() let a deploy onto a box where nothing holds 443, and nothing would reach what it serves")
 	}
-	if !strings.Contains(err.Error(), "nothing holds port 443") || !strings.Contains(err.Error(), "your proxy") {
+	if !strings.Contains(err.Error(), "nothing listens on 443") || !strings.Contains(err.Error(), "your proxy") {
 		t.Errorf("PreflightDeploy() = %q, want 443 named as the port your proxy must hold", err)
 	}
 }
