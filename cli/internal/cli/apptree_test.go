@@ -87,7 +87,6 @@ func TestProcessTreeDiesWithTheCLI(t *testing.T) {
 	t.Run("a standalone `ocel run` kills its worker's grandchildren", func(t *testing.T) {
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
@@ -95,7 +94,6 @@ func TestProcessTreeDiesWithTheCLI(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		appArgs, startedPath, pidPath := fixtureWorkerTree(t, root, "run")
@@ -124,7 +122,6 @@ export default { slug: "test-app" };
 	t.Run("a standalone `ocel run` kills a 3-level deep descendant, non-tty", func(t *testing.T) {
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
@@ -132,7 +129,6 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		appArgs, startedPath, leafPidPath := fixtureDeepWorkerTree(t, root, "run-deep")
@@ -161,7 +157,6 @@ export default { slug: "test-app" };
 	t.Run("a leader `ocel dev` kills its app's grandchildren", func(t *testing.T) {
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
@@ -169,7 +164,6 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		appArgs, startedPath, pidPath := fixtureWorkerTree(t, root, "leader")
@@ -198,13 +192,10 @@ export default { slug: "test-app" };
 
 	t.Run("a follower `ocel dev` kills its app's grandchildren", func(t *testing.T) {
 		deps := devDeps()
-		clitest.SetLoggedIn(&deps)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		projectID := testProjectID(t)
-		const apiURL = "https://api.example.com"
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatalf("listen: %v", err)
@@ -223,7 +214,6 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeLink(t, root, apiURL, projectID)
 
 		appArgs, startedPath, pidPath := fixtureWorkerTree(t, root, "follower")
 

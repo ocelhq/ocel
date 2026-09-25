@@ -23,7 +23,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/devstack"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
-	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/election"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
@@ -93,11 +92,15 @@ func runDev(ctx context.Context, deps cmddeps.Deps, reset bool, cwd string, appA
 }
 
 func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, reset bool, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	file, err := dotenv.Load(cfg.Dir)
+	source, err := readDevSource(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	reportDotfile(stdout, cfg.Dir, file.Values, dotfileWatchedAdvice)
+	values, err := source.read(cfg.Dir)
+	if err != nil {
+		return err
+	}
+	reportDevValues(stdout, cfg.Dir, values, true)
 
 	if reset {
 		if err := devstack.Reset(ctx, deps.OpenDocker, devStateDir(cfg), devstack.ProjectName(cfg.Dir)); err != nil {
@@ -105,7 +108,7 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, r
 		}
 	}
 
-	host, err := startDevHost(ctx, deps, cfg, stdout, stderr)
+	host, err := startDevHost(ctx, deps, cfg, source, stdout, stderr)
 	if err != nil {
 		return err
 	}
@@ -116,8 +119,8 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, r
 			_ = result.Release()
 		}
 	}()
-	srv, shared := host.srv, host.shared
-	run := invocation{name: "dev", loggedOut: shared.loggedOut}
+	srv := host.srv
+	run := invocation{name: "dev", source: source}
 
 	background, stopBackground := context.WithCancel(ctx)
 	defer stopBackground()
@@ -127,11 +130,11 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, r
 	}
 	claimed = true
 
-	resolved, err := resolveOnce(ctx, srv, cfg, shared.values, run, stdout, stderr)
+	resolved, err := resolveOnce(ctx, srv, cfg, run, stdout, stderr)
 	if err != nil {
 		return err
 	}
-	watching, err := startWatching(background, srv, cfg, shared.values, run, stdout, stderr)
+	watching, err := startWatching(background, srv, cfg, run, stdout, stderr)
 	if err != nil {
 		return fmt.Errorf("watch discovery paths: %w", err)
 	}
@@ -153,14 +156,14 @@ func runLeader(ctx context.Context, deps cmddeps.Deps, result election.Result, r
 	return appExitError(ctx, child.wait())
 }
 
-func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
-	file, err := dotenv.Load(cfg.Dir)
+func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
+	values, err := run.source.read(cfg.Dir)
 	if err != nil {
 		return nil, err
 	}
-	reportUnreadableLines(stdout, file.Unreadable)
-	srv.UseValues(storeValues(projectEnv, file.Values), envwire.Scope(cfg, false, ""))
-	return discoverAndSync(ctx, srv, cfg, projectEnv, file.Values, envwire.DevScope(cfg), run, stdout, stderr)
+	reportUnreadableLines(stdout, values)
+	srv.UseValues(values.merged(), envwire.Scope(cfg, false, ""))
+	return discoverAndSync(ctx, srv, cfg, values, envwire.DevScope(cfg), run, stdout, stderr)
 }
 
 func targetScope(cfg *projectconfig.Config, cwd string) envgate.Scope {
@@ -181,13 +184,13 @@ func targetScope(cfg *projectconfig.Config, cwd string) envgate.Scope {
 	return scope
 }
 
-func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv, dotfile map[string]string, scope envgate.Scope, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
+func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, values devValues, scope envgate.Scope, run invocation, stdout, stderr io.Writer) (map[string]string, error) {
 	if err := srv.Discover(ctx, cfg, stdout, stderr); err != nil {
 		return nil, refusedSync(srv, err)
 	}
 
 	if err := srv.CheckEnv(ctx); err != nil {
-		return nil, devRefusal(err, dotfileKeySet(dotfile), run)
+		return nil, devRefusal(err, values.keys(), run)
 	}
 
 	appFolder := appbuilder.AppFolder(cfg.Apps)
@@ -209,7 +212,7 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 	}
 
 	reportLiveValues(stdout, syncResult.LiveKeys)
-	return resolvedEnv(projectEnv, syncResult.LiveValues, dotfile, syncResult.Resources, runtimeAccess{address: syncResult.DevServerAddress, token: syncResult.AppToken}, appFolder, scope), nil
+	return resolvedEnv(syncResult.LiveValues, values.merged(), syncResult.Resources, runtimeAccess{address: syncResult.DevServerAddress, token: syncResult.AppToken}, appFolder, scope), nil
 }
 
 func refusedSync(srv *devserver.Server, err error) error {
@@ -224,24 +227,22 @@ func refusedSync(srv *devserver.Server, err error) error {
 }
 
 type devHost struct {
-	srv    *devserver.Server
-	shared sharedEnv
-	addr   string
-	close  func()
+	srv   *devserver.Server
+	addr  string
+	close func()
 }
 
-func startDevHost(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, stdout, stderr io.Writer) (*devHost, error) {
+func startDevHost(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, source devSource, stdout, stderr io.Writer) (*devHost, error) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, fmt.Errorf("start dev server: %w", err)
 	}
 	addr := listener.Addr().String()
 
-	shared := readSharedEnv(ctx, deps, cfg.Dir, stderr)
 	stack := devstack.New(devstack.ProjectName(cfg.Dir), devstack.Env{
 		Open:       deps.OpenDocker,
 		StateDir:   devStateDir(cfg),
-		AppOrigins: devAppOrigins(cfg.Dir),
+		AppOrigins: devAppOrigins(cfg.Dir, source),
 		Stdout:     stdout,
 		Report:     func(err error) { fmt.Fprintln(stderr, "dev resources:", err) },
 	})
@@ -250,7 +251,7 @@ func startDevHost(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Con
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 
-	return &devHost{srv: srv, shared: shared, addr: addr, close: func() {
+	return &devHost{srv: srv, addr: addr, close: func() {
 		_ = httpSrv.Close()
 		stopping, cancel := context.WithTimeout(context.WithoutCancel(ctx), devStackStopsWithin)
 		defer cancel()
@@ -264,13 +265,13 @@ func devStateDir(cfg *projectconfig.Config) string {
 	return filepath.Join(cfg.Dir, constants.ProjectStateDirName, "devstack")
 }
 
-func devAppOrigins(dir string) func() []string {
+func devAppOrigins(dir string, source devSource) func() []string {
 	return func() []string {
-		var inFile string
-		if file, err := dotenv.Load(dir); err == nil {
-			inFile = file.Values[portEnv]
+		var held string
+		if values, err := source.read(dir); err == nil {
+			held = values.merged()[portEnv]
 		}
-		port := cmp.Or(inFile, os.Getenv(portEnv), defaultDevPort)
+		port := cmp.Or(held, os.Getenv(portEnv), defaultDevPort)
 		return []string{"http://localhost:" + port, "http://127.0.0.1:" + port}
 	}
 }
@@ -284,7 +285,7 @@ func reportLiveValues(stdout io.Writer, liveKeys []string) {
 	fmt.Fprintf(stdout, "resolved %s the way dev resolves every other value. Deployed, a rotated value is picked up within a bounded window.\n", strings.Join(keys, ", "))
 }
 
-func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, run invocation, stdout, stderr io.Writer) (*watcher.Watcher, error) {
+func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, run invocation, stdout, stderr io.Writer) (*watcher.Watcher, error) {
 	roots, err := discovery.RootsOf(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("resolve watch directories: %w", err)
@@ -295,11 +296,14 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 		return nil, fmt.Errorf("resolve watch directories: %w", err)
 	}
 
-	set := watcher.Set{Dirs: dirs, Files: []string{filepath.Join(cfg.Dir, dotenv.FileName)}}
+	set := watcher.Set{Dirs: dirs}
+	for _, name := range run.source.files() {
+		set.Files = append(set.Files, filepath.Join(cfg.Dir, name))
+	}
 
 	return watcher.Start(ctx, watcher.Config{Set: set, Debounce: watchDebounce, OnChange: func() {
 		srv.ResetManifest()
-		resolved, err := resolveOnce(ctx, srv, cfg, projectEnv, run, stdout, stderr)
+		resolved, err := resolveOnce(ctx, srv, cfg, run, stdout, stderr)
 		if err != nil {
 			if ctx.Err() == nil {
 				fmt.Fprintln(stderr, "re-resolve failed:", err)
@@ -402,19 +406,16 @@ type runtimeAccess struct {
 	token   string
 }
 
-func mergeEnv(base []string, projectEnv, liveValues, dotfile map[string]string, resources []resolve.Resource, runtime runtimeAccess, appFolder string, scope envgate.Scope) []string {
-	return applyEnv(base, resolvedEnv(projectEnv, liveValues, dotfile, resources, runtime, appFolder, scope))
+func mergeEnv(base []string, liveValues, values map[string]string, resources []resolve.Resource, runtime runtimeAccess, appFolder string, scope envgate.Scope) []string {
+	return applyEnv(base, resolvedEnv(liveValues, values, resources, runtime, appFolder, scope))
 }
 
-func resolvedEnv(projectEnv, liveValues, dotfile map[string]string, resources []resolve.Resource, runtime runtimeAccess, appFolder string, scope envgate.Scope) map[string]string {
-	merged := make(map[string]string, len(projectEnv)+len(liveValues)+len(dotfile)+1)
-	for k, v := range projectEnv {
-		merged[k] = v
-	}
+func resolvedEnv(liveValues, values map[string]string, resources []resolve.Resource, runtime runtimeAccess, appFolder string, scope envgate.Scope) map[string]string {
+	merged := make(map[string]string, len(liveValues)+len(values)+1)
 	for k, v := range liveValues {
 		merged[k] = v
 	}
-	for k, v := range dotfile {
+	for k, v := range values {
 		merged[k] = v
 	}
 	for _, r := range resources {

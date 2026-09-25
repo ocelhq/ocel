@@ -29,7 +29,6 @@ func TestRunRun(t *testing.T) {
 		}
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
@@ -37,7 +36,6 @@ func TestRunRun(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		envDumpPath := filepath.Join(root, "env.out")
@@ -85,7 +83,6 @@ export default { slug: "test-app" };
 		}
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
@@ -93,7 +90,6 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -149,13 +145,10 @@ export default { slug: "test-app" };
 		}
 
 		deps := devDeps()
-		clitest.SetLoggedIn(&deps)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		projectID := testProjectID(t)
-		const apiURL = "https://api.example.com"
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatalf("listen: %v", err)
@@ -174,7 +167,6 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeLink(t, root, apiURL, projectID)
 
 		var stdout, stderr bytes.Buffer
 		done := make(chan error, 1)

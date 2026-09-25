@@ -3,22 +3,19 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
 	"runtime"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
-	"github.com/ocelhq/ocel/cli/internal/console"
-	"github.com/ocelhq/ocel/cli/internal/console/credentials"
-	"github.com/ocelhq/ocel/cli/internal/console/httpapi"
 	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -32,21 +29,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
-
-func withCredentials(deps *cmddeps.Deps, apiURL string) {
-	deps.LoadCredentials = func() (credentials.Credentials, error) {
-		return credentials.Credentials{APIURL: apiURL, AccessToken: "tok"}, nil
-	}
-}
-
-func withProjectEnv(deps *cmddeps.Deps, envVars map[string]string) *atomic.Int32 {
-	var calls atomic.Int32
-	deps.FetchAccount = func(context.Context, string, string, string) (map[string]string, error) {
-		calls.Add(1)
-		return envVars, nil
-	}
-	return &calls
-}
 
 func declareEnvScript(definitions ...string) string {
 	return fmt.Sprintf(`
@@ -68,18 +50,17 @@ export {};
 func TestResolvedEnv(t *testing.T) {
 	t.Parallel()
 
-	t.Run("the dotfile outranks every other source but a resource", func(t *testing.T) {
+	t.Run("the dev values outrank every other source but a resource", func(t *testing.T) {
 		t.Parallel()
 
 		base := []string{"PATH=/bin", "CONTESTED=shell", "SHELL_ONLY=s"}
-		projectEnv := map[string]string{"CONTESTED": "project"}
 		live := map[string]string{"CONTESTED": "live"}
 		dotfile := map[string]string{"CONTESTED": "dotfile", "DOTFILE_ONLY": "d"}
 		resources := []resolve.Resource{
 			{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
-		got := toMap(mergeEnv(base, projectEnv, live, dotfile, resources, runtimeAccess{}, "", envgate.Scope{}))
+		got := toMap(mergeEnv(base, live, dotfile, resources, runtimeAccess{}, "", envgate.Scope{}))
 
 		cases := map[string]string{
 			"PATH":                        "/bin",
@@ -98,18 +79,17 @@ func TestResolvedEnv(t *testing.T) {
 	t.Run("live values are delivered at startup", func(t *testing.T) {
 		t.Parallel()
 
-		projectEnv := map[string]string{"PROJECT_ONLY": "p", "OVERRIDDEN": "from-project"}
-		live := map[string]string{"WEBHOOK_SECRET": "whsec_live", "OVERRIDDEN": "from-live"}
+		values := map[string]string{"VALUE_ONLY": "v"}
+		live := map[string]string{"WEBHOOK_SECRET": "whsec_live"}
 		resources := []resolve.Resource{
 			{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
-		got := resolvedEnv(projectEnv, live, nil, resources, runtimeAccess{}, "", envgate.Scope{})
+		got := resolvedEnv(live, values, resources, runtimeAccess{}, "", envgate.Scope{})
 
 		cases := map[string]string{
-			"PROJECT_ONLY":                "p",
+			"VALUE_ONLY":                  "v",
 			"WEBHOOK_SECRET":              "whsec_live",
-			"OVERRIDDEN":                  "from-live",
 			"OCEL_RESOURCE_POSTGRES_main": "conn",
 		}
 		for k, want := range cases {
@@ -122,12 +102,12 @@ func TestResolvedEnv(t *testing.T) {
 	t.Run("the runtime address travels with the token its routes answer to, and neither alone", func(t *testing.T) {
 		t.Parallel()
 
-		reached := resolvedEnv(nil, nil, nil, nil, runtimeAccess{address: "http://127.0.0.1:4242", token: "app-token"}, "", envgate.Scope{})
+		reached := resolvedEnv(nil, nil, nil, runtimeAccess{address: "http://127.0.0.1:4242", token: "app-token"}, "", envgate.Scope{})
 		if reached[constants.RuntimeAddressEnvName] != "http://127.0.0.1:4242" || reached[channel.SessionTokenEnvVar] != "app-token" {
 			t.Errorf("env = %v, want %s and %s stated together", reached, constants.RuntimeAddressEnvName, channel.SessionTokenEnvVar)
 		}
 
-		unreached := resolvedEnv(nil, nil, nil, nil, runtimeAccess{}, "", envgate.Scope{})
+		unreached := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", envgate.Scope{})
 		for _, name := range []string{constants.RuntimeAddressEnvName, channel.SessionTokenEnvVar} {
 			if _, ok := unreached[name]; ok {
 				t.Errorf("%s stated for an app with no runtime to reach", name)
@@ -138,12 +118,12 @@ func TestResolvedEnv(t *testing.T) {
 	t.Run("the app folder is always stated", func(t *testing.T) {
 		t.Parallel()
 
-		bound := resolvedEnv(nil, nil, nil, nil, runtimeAccess{}, "/web", envgate.Scope{})
+		bound := resolvedEnv(nil, nil, nil, runtimeAccess{}, "/web", envgate.Scope{})
 		if bound[constants.AppFolderEnvName] != "/web" {
 			t.Errorf("%s = %q, want %q", constants.AppFolderEnvName, bound[constants.AppFolderEnvName], "/web")
 		}
 
-		unbound := resolvedEnv(nil, nil, nil, nil, runtimeAccess{}, "", envgate.Scope{})
+		unbound := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", envgate.Scope{})
 		folder, ok := unbound[constants.AppFolderEnvName]
 		if !ok {
 			t.Fatalf("resolvedEnv = %v, want %s written even for an unbound app", unbound, constants.AppFolderEnvName)
@@ -152,13 +132,12 @@ func TestResolvedEnv(t *testing.T) {
 			t.Errorf("%s = %q, want the project root spelled as the empty string", constants.AppFolderEnvName, folder)
 		}
 
-		stale := toMap(mergeEnv([]string{constants.AppFolderEnvName + "=/stale"}, nil, nil, nil, nil, runtimeAccess{}, "", envgate.Scope{}))
+		stale := toMap(mergeEnv([]string{constants.AppFolderEnvName + "=/stale"}, nil, nil, nil, runtimeAccess{}, "", envgate.Scope{}))
 		if stale[constants.AppFolderEnvName] != "" {
 			t.Errorf("%s = %q, want the shell's stale binding overwritten", constants.AppFolderEnvName, stale[constants.AppFolderEnvName])
 		}
 
 		contested := resolvedEnv(
-			map[string]string{constants.AppFolderEnvName: "/from-project-env"},
 			map[string]string{constants.AppFolderEnvName: "/from-live"},
 			map[string]string{constants.AppFolderEnvName: "/from-dotfile"},
 			[]resolve.Resource{{Name: "main", Env: map[string]string{constants.AppFolderEnvName: "/from-resource"}}},
@@ -182,7 +161,7 @@ func TestDevRefusal(t *testing.T) {
 			Scope: envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}},
 		}
 
-		got := devRefusal(refusal, nil, invocation{name: "dev"}).Error()
+		got := devRefusal(refusal, nil, invocation{name: "dev", source: devSource{id: "dotenv"}}).Error()
 
 		for _, want := range []string{
 			"DATABASE_URL",
@@ -205,6 +184,18 @@ func TestDevRefusal(t *testing.T) {
 		}
 	})
 
+	t.Run("under another dev source it names that source and "+dotenv.LocalFileName, func(t *testing.T) {
+		refusal := &envgate.Refusal{Problems: []*resourcesv1.VariableProblem{{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING}}}
+
+		got := devRefusal(refusal, nil, invocation{name: "dev", source: devSource{id: "infisical:p-1/dev", values: map[string]string{}}}).Error()
+
+		for _, want := range []string{"set DATABASE_URL in infisical:p-1/dev", "DATABASE_URL=<VALUE> to " + dotenv.LocalFileName, "Set the values above in infisical:p-1/dev and " + dotenv.LocalFileName} {
+			if !strings.Contains(got, want) {
+				t.Errorf("refusal = %q, want it to say %q", got, want)
+			}
+		}
+	})
+
 	t.Run("it says so when the key is only in the shell", func(t *testing.T) {
 		t.Setenv("DATABASE_URL", "postgres://from-the-shell")
 
@@ -214,7 +205,7 @@ func TestDevRefusal(t *testing.T) {
 			},
 		}
 
-		got := devRefusal(refusal, nil, invocation{name: "dev"}).Error()
+		got := devRefusal(refusal, nil, invocation{name: "dev", source: devSource{id: "dotenv"}}).Error()
 
 		if !strings.Contains(got, "shell") {
 			t.Errorf("refusal = %q, want it to say the key was seen in the environment", got)
@@ -223,7 +214,7 @@ func TestDevRefusal(t *testing.T) {
 			t.Errorf("refusal = %q, want it to disclose no value", got)
 		}
 
-		inFile := devRefusal(refusal, dotfileKeySet(map[string]string{"DATABASE_URL": "postgres://from-the-file"}), invocation{name: "dev"}).Error()
+		inFile := devRefusal(refusal, dotfileValues(map[string]string{"DATABASE_URL": "postgres://from-the-file"}).keys(), invocation{name: "dev", source: devSource{id: "dotenv"}}).Error()
 		if strings.Contains(inFile, "set in this shell") {
 			t.Errorf("refusal = %q, want no shell hint for a key the file does hold", inFile)
 		}
@@ -246,7 +237,7 @@ func TestDevRefusal(t *testing.T) {
 			"API_TOKEN":    "sk-live-must-not-appear",
 		}
 
-		got := devRefusal(refusal, dotfileKeySet(dotfile), invocation{name: "dev"}).Error()
+		got := devRefusal(refusal, dotfileValues(dotfile).keys(), invocation{name: "dev", source: devSource{id: "dotenv"}}).Error()
 
 		for _, value := range dotfile {
 			if strings.Contains(got, value) {
@@ -266,7 +257,7 @@ func TestRefusalsNameTheCommandThatRan(t *testing.T) {
 	t.Run("a variable refusal names the command that was run", func(t *testing.T) {
 		t.Setenv("DATABASE_URL", "postgres://from-the-shell")
 
-		got := devRefusal(refusal, nil, invocation{name: "run"}).Error()
+		got := devRefusal(refusal, nil, invocation{name: "run", source: devSource{id: "dotenv"}}).Error()
 
 		if !strings.Contains(got, "`ocel run` again") {
 			t.Errorf("refusal = %q, want it to name the command that was run", got)
@@ -278,125 +269,22 @@ func TestRefusalsNameTheCommandThatRan(t *testing.T) {
 			t.Errorf("refusal = %q, want no login hint for a run that was not logged out of a linked project", got)
 		}
 	})
-
-	t.Run("a linked project that is logged out is pointed at `ocel login`", func(t *testing.T) {
-		got := devRefusal(refusal, nil, invocation{name: "dev", loggedOut: true}).Error()
-
-		if !strings.Contains(got, "ocel login") {
-			t.Errorf("refusal = %q, want it to say the missing value may be one `ocel login` brings in", got)
-		}
-	})
 }
 
-func TestSharedValuesAreReadOnlyWhereTheDirectorySaysTo(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("uses a POSIX shell fixture command")
-	}
-
-	declaresRequired := declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true}`)
-
-	for _, command := range []struct {
-		name string
-		run  func(deps cmddeps.Deps, root string, appCmd []string, stdout, stderr io.Writer) error
-	}{
-		{"dev", func(deps cmddeps.Deps, root string, appCmd []string, stdout, stderr io.Writer) error {
-			return runDev(context.Background(), deps, false, root, appCmd, stdout, stderr, strings.NewReader(""))
-		}},
-		{"run", func(deps cmddeps.Deps, root string, appCmd []string, stdout, stderr io.Writer) error {
-			return runRun(context.Background(), deps, root, appCmd, stdout, stderr, strings.NewReader(""))
-		}},
-	} {
-		t.Run(command.name+": an unlinked project runs on the dotfile alone, logged out, and says nothing of it", func(t *testing.T) {
-			root := t.TempDir()
-			t.Cleanup(func() { _ = devlock.Remove(root) })
-
-			deps := devDeps()
-			deps.LoadCredentials = func() (credentials.Credentials, error) {
-				return credentials.Credentials{}, credentials.ErrNotLoggedIn
-			}
-			deps.FetchAccount = func(context.Context, string, string, string) (map[string]string, error) {
-				t.Error("an unlinked project reached the console")
-				return nil, errors.New("no console")
-			}
-			clitest.WriteFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
-			clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declaresRequired)
-
-			var stdout, stderr syncBuffer
-			err := command.run(deps, root, []string{"sh", "-c", "exit 7"}, &stdout, &stderr)
-
-			var exitErr *exitsig.ExitError
-			if !errors.As(err, &exitErr) || exitErr.Code != 7 {
-				t.Fatalf("err = %v, want exit 7; stderr=%s", err, stderr.String())
-			}
-			if said := stderr.String(); strings.Contains(said, "ocel login") || strings.Contains(said, "ocel link") {
-				t.Errorf("stderr = %q, want no mention of a login or a link nothing asked for", said)
-			}
-		})
-
-		t.Run(command.name+": a linked project that is logged out warns once, runs on the dotfile, and its refusal names `ocel login`", func(t *testing.T) {
-			root := t.TempDir()
-			t.Cleanup(func() { _ = devlock.Remove(root) })
-
-			deps := devDeps()
-			deps.LoadCredentials = func() (credentials.Credentials, error) {
-				return credentials.Credentials{}, credentials.ErrNotLoggedIn
-			}
-			deps.FetchAccount = func(context.Context, string, string, string) (map[string]string, error) {
-				t.Error("a logged-out run reached the console")
-				return nil, errors.New("no token")
-			}
-			t.Setenv(console.URLEnvVar, testAPIURL)
-			writeLink(t, root, testAPIURL, testProjectID(t))
-			clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declaresRequired)
-
-			var stdout, stderr syncBuffer
-			err := command.run(deps, root, []string{"sh", "-c", "exit 0"}, &stdout, &stderr)
-
-			if err == nil || !strings.Contains(err.Error(), "API_BASE") || !strings.Contains(err.Error(), "ocel login") {
-				t.Fatalf("err = %v, want a refusal of API_BASE that names `ocel login`", err)
-			}
-			if warnings := strings.Count(stderr.String(), "not logged in"); warnings != 1 {
-				t.Errorf("stderr = %q, want exactly one warning that the shared values were not read", stderr.String())
-			}
-		})
-
-		for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden} {
-			t.Run(fmt.Sprintf("%s: a linked project whose login the console answers %d is treated as logged out", command.name, status), func(t *testing.T) {
-				root := t.TempDir()
-				t.Cleanup(func() { _ = devlock.Remove(root) })
-
-				deps := devDeps()
-				deps.FetchAccount = func(context.Context, string, string, string) (map[string]string, error) {
-					return nil, &httpapi.Error{StatusCode: status, Message: "token expired"}
-				}
-				t.Setenv(console.URLEnvVar, testAPIURL)
-				writeLink(t, root, testAPIURL, testProjectID(t))
-				clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declaresRequired)
-
-				var stdout, stderr syncBuffer
-				err := command.run(deps, root, []string{"sh", "-c", "exit 0"}, &stdout, &stderr)
-
-				if err == nil || !strings.Contains(err.Error(), "API_BASE") || !strings.Contains(err.Error(), "ocel login") {
-					t.Fatalf("err = %v, want a refusal of API_BASE that names `ocel login`", err)
-				}
-				if said := stderr.String(); strings.Count(said, "ocel login") != 1 || strings.Contains(said, "could not reach") {
-					t.Errorf("stderr = %q, want one warning that says to log in again, not that the console is unreachable", said)
-				}
-			})
-		}
-	}
+func dotfileValues(values map[string]string) devValues {
+	return devValues{{from: dotenv.FileName, file: true, values: values}}
 }
 
-func TestReportDotfile(t *testing.T) {
+func TestReportDevValues(t *testing.T) {
 	t.Parallel()
 
 	t.Run("it states what the file costs and prints no value", func(t *testing.T) {
 		t.Parallel()
 
 		var quiet bytes.Buffer
-		reportDotfile(&quiet, t.TempDir(), nil, dotfileWatchedAdvice)
+		reportDevValues(&quiet, t.TempDir(), dotfileValues(nil), true)
 		if quiet.Len() != 0 {
-			t.Errorf("reportDotfile wrote %q for a run with no dotfile values, want nothing", quiet.String())
+			t.Errorf("reportDevValues wrote %q for a run with no dotfile values, want nothing", quiet.String())
 		}
 
 		dir := t.TempDir()
@@ -405,7 +293,7 @@ func TestReportDotfile(t *testing.T) {
 		}
 
 		var out bytes.Buffer
-		reportDotfile(&out, dir, map[string]string{"API_TOKEN": "sk-live-must-not-appear", "DATABASE_URL": "postgres://secret"}, dotfileWatchedAdvice)
+		reportDevValues(&out, dir, dotfileValues(map[string]string{"API_TOKEN": "sk-live-must-not-appear", "DATABASE_URL": "postgres://secret"}), true)
 		got := out.String()
 
 		for _, want := range []string{"API_TOKEN", "DATABASE_URL", dotenv.FileName} {
@@ -433,7 +321,7 @@ func TestReportDotfile(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		reportDotfile(&out, t.TempDir(), map[string]string{"API_TOKEN": "x"}, dotfileWatchedAdvice)
+		reportDevValues(&out, t.TempDir(), dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
 
 		if got := out.String(); !strings.Contains(got, ".gitignore") {
 			t.Errorf("notice = %q, want it to say the file is not ignored by git", got)
@@ -444,9 +332,42 @@ func TestReportDotfile(t *testing.T) {
 			t.Fatalf("write .gitignore: %v", err)
 		}
 		var reincluded bytes.Buffer
-		reportDotfile(&reincluded, dir, map[string]string{"API_TOKEN": "x"}, dotfileWatchedAdvice)
+		reportDevValues(&reincluded, dir, dotfileValues(map[string]string{"API_TOKEN": "x"}), true)
 		if got := reincluded.String(); !strings.Contains(got, ".gitignore") {
 			t.Errorf("notice = %q, want the warning when a later line re-includes the file", got)
+		}
+	})
+
+	t.Run("it names where each value came from, and checks "+dotenv.LocalFileName+" against .gitignore on its own", func(t *testing.T) {
+		t.Parallel()
+
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".env\n"), 0o644); err != nil {
+			t.Fatalf("write .gitignore: %v", err)
+		}
+		var out bytes.Buffer
+		reportDevValues(&out, dir, devValues{
+			{from: "infisical:p-1/dev", values: map[string]string{"API_TOKEN": "sk-live-must-not-appear"}},
+			{from: dotenv.LocalFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}},
+		}, true)
+		got := out.String()
+
+		for _, want := range []string{"API_TOKEN from infisical:p-1/dev", "LOG_LEVEL from " + dotenv.LocalFileName, dotenv.LocalFileName + " is not matched by this project's .gitignore", "editing " + dotenv.LocalFileName + " re-resolves"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("notice = %q, want it to say %q", got, want)
+			}
+		}
+		if strings.Contains(got, "sk-live") {
+			t.Fatalf("notice = %q, want it to disclose no value", got)
+		}
+
+		if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("*.local\n"), 0o644); err != nil {
+			t.Fatalf("write .gitignore: %v", err)
+		}
+		var ignored bytes.Buffer
+		reportDevValues(&ignored, dir, devValues{{from: dotenv.LocalFileName, file: true, values: map[string]string{"LOG_LEVEL": "debug"}}}, false)
+		if strings.Contains(ignored.String(), ".gitignore") {
+			t.Errorf("notice = %q, want no warning for a file a glob ignores", ignored.String())
 		}
 	})
 }
@@ -458,7 +379,7 @@ func TestReportUnreadableLines(t *testing.T) {
 		t.Parallel()
 
 		var out bytes.Buffer
-		reportUnreadableLines(&out, []int{2, 5})
+		reportUnreadableLines(&out, devValues{{from: dotenv.FileName, file: true, unreadable: []int{2, 5}}})
 		got := out.String()
 
 		for _, want := range []string{dotenv.FileName, "2, 5"} {
@@ -472,7 +393,10 @@ func TestReportUnreadableLines(t *testing.T) {
 		t.Parallel()
 
 		var one bytes.Buffer
-		reportUnreadableLines(&one, []int{4})
+		reportUnreadableLines(&one, devValues{{from: dotenv.LocalFileName, file: true, unreadable: []int{4}}})
+		if !strings.Contains(one.String(), dotenv.LocalFileName) {
+			t.Errorf("notice = %q, want the file named", one.String())
+		}
 		if !strings.Contains(one.String(), "line 4 is") {
 			t.Errorf("notice = %q, want a singular line reported singularly", one.String())
 		}
@@ -585,8 +509,6 @@ func TestRunDevEnvironment(t *testing.T) {
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
@@ -632,7 +554,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 			if !strings.Contains(stdout.String(), "NEXT_PUBLIC_SITE_URL") {
 				t.Errorf("stdout = %q, want a declarable key accounted for", stdout.String())
 			}
-			if !strings.Contains(stdout.String(), dotfileWatchedAdvice) {
+			if !strings.Contains(stdout.String(), devValues{{from: dotenv.FileName, file: true}, {from: dotenv.LocalFileName, file: true}}.advice(true)) {
 				t.Errorf("stdout = %q, want the advice for a run that re-resolves on save", stdout.String())
 			}
 		})
@@ -647,8 +569,6 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		startedPath := filepath.Join(root, "started")
@@ -677,8 +597,6 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
 `)
@@ -711,8 +629,6 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
 `)
@@ -734,7 +650,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		}
 	})
 
-	t.Run("a control plane value satisfies the gate without a dotfile", func(t *testing.T) {
+	t.Run("a dev source's value satisfies the gate without a dotfile", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
@@ -742,38 +658,27 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		calls := withProjectEnv(&deps, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
-		writeLink(t, root, testAPIURL, testProjectID(t))
+		counted := filepath.Join(root, "reads")
+		writeDevSource(t, root, `{ exec: { command: ["sh", "-c", "echo read >> `+counted+`; printf 'STRIPE_API_KEY=sk_from_source'"], format: "dotenv" } }`)
+		clitest.WriteFile(t, filepath.Join(root, ".env"), "STRIPE_API_KEY=sk_from_dotenv\n")
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
-		envDumpPath := filepath.Join(root, "env.out")
-		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
-
-		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
-
-		var exitErr *exitsig.ExitError
-		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
-			t.Fatalf("runDev err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
+		env, stdout := dumpDevEnv(t, devDeps(), root)
+		if env["STRIPE_API_KEY"] != "sk_from_source" {
+			t.Errorf("STRIPE_API_KEY = %q, want the dev source's value, and .env left unread under another source", env["STRIPE_API_KEY"])
 		}
-
-		dumped, readErr := os.ReadFile(envDumpPath)
-		if readErr != nil {
-			t.Fatalf("read env dump: %v", readErr)
+		if !strings.Contains(stdout, "STRIPE_API_KEY") || !strings.Contains(stdout, "exec") {
+			t.Errorf("stdout = %q, want it to say STRIPE_API_KEY came from exec", stdout)
 		}
-		env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
-		if env["STRIPE_API_KEY"] != "sk_from_store" {
-			t.Errorf("STRIPE_API_KEY = %q, want the control plane's value", env["STRIPE_API_KEY"])
+		if strings.Contains(stdout, "sk_from_source") {
+			t.Errorf("stdout = %q, want no value printed", stdout)
 		}
-
-		if got := calls.Load(); got != 1 {
-			t.Errorf("project config fetched %d times, want exactly 1 for the run", got)
+		if reads := strings.Count(readTestFile(t, counted), "read"); reads != 1 {
+			t.Errorf("the source was read %d times, want once for the run", reads)
 		}
 	})
 
-	t.Run("the dotfile still outranks the control plane at the gate", func(t *testing.T) {
+	t.Run("a folder's value outranks the root's for the folder the app binds", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
@@ -781,35 +686,22 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		withProjectEnv(&deps, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
-		writeLink(t, root, testAPIURL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, ".env"), "STRIPE_API_KEY=sk_from_file\n")
-		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  apps: [{ name: "web", path: "apps/web", folder: "/web" }],
+  envSource: { dev: { exec: { command: ["sh", "-c", "if [ \"$1\" = /web ]; then printf 'API_BASE=from-web'; else printf 'API_BASE=from-root\\nROOT_ONLY=r'; fi", "exec", "{folder}"], format: "dotenv" } } },
+};
+`)
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
 
-		envDumpPath := filepath.Join(root, "env.out")
-		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
-
-		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
-
-		var exitErr *exitsig.ExitError
-		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
-			t.Fatalf("runDev err = %v, want exit 7; stderr=%s", err, stderr.String())
-		}
-
-		dumped, readErr := os.ReadFile(envDumpPath)
-		if readErr != nil {
-			t.Fatalf("read env dump: %v", readErr)
-		}
-		env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
-		if env["STRIPE_API_KEY"] != "sk_from_file" {
-			t.Errorf("STRIPE_API_KEY = %q, want the dotfile's value", env["STRIPE_API_KEY"])
+		env, _ := dumpDevEnv(t, devDeps(), root)
+		if env["API_BASE"] != "from-web" || env["ROOT_ONLY"] != "r" {
+			t.Errorf("API_BASE = %q, ROOT_ONLY = %q, want /web's value over the root's, and the root's where /web holds none", env["API_BASE"], env["ROOT_ONLY"])
 		}
 	})
 
-	t.Run("it falls back to the dotfile when the control plane is unreachable", func(t *testing.T) {
+	t.Run(dotenv.LocalFileName+" outranks the dev source", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
@@ -817,39 +709,102 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		deps.FetchAccount = func(context.Context, string, string, string) (map[string]string, error) {
-			return nil, errors.New("dial tcp: connection refused")
+		writeDevSource(t, root, `{ exec: { command: ["sh", "-c", "printf 'STRIPE_API_KEY=sk_from_source\\nLOG_LEVEL=info'"], format: "dotenv" } }`)
+		clitest.WriteFile(t, filepath.Join(root, dotenv.LocalFileName), "STRIPE_API_KEY=sk_mine\n")
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+
+		env, stdout := dumpDevEnv(t, devDeps(), root)
+		if env["STRIPE_API_KEY"] != "sk_mine" || env["LOG_LEVEL"] != "info" {
+			t.Errorf("STRIPE_API_KEY = %q, LOG_LEVEL = %q, want %s over the source and the source beneath it", env["STRIPE_API_KEY"], env["LOG_LEVEL"], dotenv.LocalFileName)
+		}
+		if !strings.Contains(stdout, dotenv.LocalFileName) {
+			t.Errorf("stdout = %q, want it to say what came from %s", stdout, dotenv.LocalFileName)
+		}
+	})
+
+	t.Run(dotenv.LocalFileName+" outranks .env under the default source", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		writeLink(t, root, testAPIURL, testProjectID(t))
-		clitest.WriteFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
-		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+		root := t.TempDir()
+		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		envDumpPath := filepath.Join(root, "env.out")
-		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
+		clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "STRIPE_API_KEY=sk_shared\nLOG_LEVEL=info\n")
+		clitest.WriteFile(t, filepath.Join(root, dotenv.LocalFileName), "STRIPE_API_KEY=sk_mine\n")
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+
+		env, _ := dumpDevEnv(t, devDeps(), root)
+		if env["STRIPE_API_KEY"] != "sk_mine" || env["LOG_LEVEL"] != "info" {
+			t.Errorf("STRIPE_API_KEY = %q, LOG_LEVEL = %q, want %s over %s", env["STRIPE_API_KEY"], env["LOG_LEVEL"], dotenv.LocalFileName, dotenv.FileName)
+		}
+	})
+
+	t.Run("a dev source that cannot be read stops the run and says why", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("uses a POSIX shell fixture command")
+		}
+
+		root := t.TempDir()
+		t.Cleanup(func() { _ = devlock.Remove(root) })
+
+		writeDevSource(t, root, `{ exec: { command: ["sh", "-c", "echo 'vault is sealed' >&2; exit 3"], format: "json" } }`)
+		startedPath := filepath.Join(root, "started")
 
 		var stdout, stderr syncBuffer
-		err := runDev(context.Background(), deps, false, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runDev(context.Background(), devDeps(), false, root, []string{"sh", "-c", "touch " + startedPath}, &stdout, &stderr, strings.NewReader(""))
+		if err == nil || !strings.Contains(err.Error(), "vault is sealed") {
+			t.Fatalf("runDev err = %v, want the source's own complaint", err)
+		}
+		if _, statErr := os.Stat(startedPath); statErr == nil {
+			t.Error("the app was started without its dev source")
+		}
+	})
 
-		var exitErr *exitsig.ExitError
-		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
-			t.Fatalf("runDev err = %v, want exit 7 (offline is not a failure); stderr=%s", err, stderr.String())
+	t.Run("an Infisical dev source with no way in says how to sign in", func(t *testing.T) {
+		root := t.TempDir()
+		t.Cleanup(func() { _ = devlock.Remove(root) })
+
+		clitest.WriteFile(t, filepath.Join(root, projectconfig.DefaultFileName), `{"slug":"test-app","envSource":{"dev":{"infisical":{"project":"p-1","environment":"dev"}}}}`)
+		t.Setenv("PATH", t.TempDir())
+		t.Setenv("INFISICAL_TOKEN", "")
+
+		var stdout, stderr syncBuffer
+		err := runDev(context.Background(), devDeps(), false, root, []string{"true"}, &stdout, &stderr, strings.NewReader(""))
+		if err == nil || !strings.Contains(err.Error(), "INFISICAL_TOKEN") || !strings.Contains(err.Error(), "infisical login") {
+			t.Fatalf("runDev err = %v, want both ways in named", err)
+		}
+	})
+
+	t.Run("an Infisical dev source reads with the token in the shell", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("uses a POSIX shell fixture command")
 		}
 
-		dumped, readErr := os.ReadFile(envDumpPath)
-		if readErr != nil {
-			t.Fatalf("read env dump: %v", readErr)
-		}
-		env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
-		if env["API_BASE"] != "http://localhost:3000" {
-			t.Errorf("API_BASE = %q, want the dotfile's value", env["API_BASE"])
-		}
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Header.Get("Authorization") != "Bearer developer-token" || r.URL.Path != "/api/v4/secrets" || r.URL.Query().Get("environment") != "dev" {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"secrets": []map[string]any{
+				{"id": "s1", "secretKey": "STRIPE_API_KEY", "secretValue": "sk_from_infisical", "version": 1},
+			}})
+		}))
+		t.Cleanup(server.Close)
 
-		notice := stdout.String() + stderr.String()
-		if !strings.Contains(notice, dotenv.FileName) || !strings.Contains(notice, "connection refused") {
-			t.Errorf("output = %q, want a warning naming what was unreachable and that only %s is in play", notice, dotenv.FileName)
+		root := t.TempDir()
+		t.Cleanup(func() { _ = devlock.Remove(root) })
+
+		t.Setenv("INFISICAL_TOKEN", "developer-token")
+		writeDevSource(t, root, `{ infisical: { project: "p-1", environment: "dev", host: "`+server.URL+`" } }`)
+		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+
+		env, stdout := dumpDevEnv(t, devDeps(), root)
+		if env["STRIPE_API_KEY"] != "sk_from_infisical" {
+			t.Errorf("STRIPE_API_KEY = %q, want Infisical's value", env["STRIPE_API_KEY"])
+		}
+		if !strings.Contains(stdout, "infisical:p-1/dev") {
+			t.Errorf("stdout = %q, want it to name the Infisical source", stdout)
 		}
 	})
 
@@ -862,8 +817,6 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"DB_PASSWORD","class":"VARIABLE_CLASS_SECRET","required":true}`))
 
 		startedPath := filepath.Join(root, "started")
@@ -893,8 +846,6 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "tsconfig.json"), "{\n  \"compilerOptions\": {}\n}\n")
 		clitest.WriteFile(t, filepath.Join(root, ".env"), "PUBLIC_SITE_URL=https://local.example.com\nSTRIPE_API_KEY=sk_local\n")
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(
@@ -951,8 +902,6 @@ func TestRunRunEnvironment(t *testing.T) {
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
 `)
@@ -983,8 +932,6 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
@@ -1014,7 +961,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		if env[constants.AppFolderEnvName] != "/web" {
 			t.Errorf("%s = %q, want the folder the only app binds", constants.AppFolderEnvName, env[constants.AppFolderEnvName])
 		}
-		if !strings.Contains(stdout.String(), dotfileReadOnceAdvice) {
+		if !strings.Contains(stdout.String(), devValues{{from: dotenv.FileName, file: true}, {from: dotenv.LocalFileName, file: true}}.advice(false)) {
 			t.Errorf("stdout = %q, want the advice for a run that reads the file once", stdout.String())
 		}
 	})
@@ -1028,8 +975,6 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		startedPath := filepath.Join(root, "started")
@@ -1052,7 +997,7 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		}
 	})
 
-	t.Run("a control plane value satisfies the gate without a dotfile", func(t *testing.T) {
+	t.Run("it resolves the dev source like dev", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
@@ -1060,32 +1005,39 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		withProjectEnv(&deps, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
-		writeLink(t, root, testAPIURL, testProjectID(t))
+		writeDevSource(t, root, `{ exec: { command: ["sh", "-c", "printf '{\"STRIPE_API_KEY\":\"sk_from_source\"}'"], format: "json" } }`)
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
 
 		envDumpPath := filepath.Join(root, "env.out")
-		appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
-
 		var stdout, stderr syncBuffer
-		err := runRun(context.Background(), deps, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+		err := runRun(context.Background(), devDeps(), root, []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}, &stdout, &stderr, strings.NewReader(""))
 
 		var exitErr *exitsig.ExitError
 		if !errors.As(err, &exitErr) || exitErr.Code != 7 {
 			t.Fatalf("runRun err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
 		}
-
-		dumped, readErr := os.ReadFile(envDumpPath)
-		if readErr != nil {
-			t.Fatalf("read env dump: %v", readErr)
-		}
-		env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
-		if env["STRIPE_API_KEY"] != "sk_from_store" {
-			t.Errorf("STRIPE_API_KEY = %q, want the control plane's value", env["STRIPE_API_KEY"])
+		env := toMap(strings.Split(strings.TrimRight(readTestFile(t, envDumpPath), "\n"), "\n"))
+		if env["STRIPE_API_KEY"] != "sk_from_source" {
+			t.Errorf("STRIPE_API_KEY = %q, want the dev source's value", env["STRIPE_API_KEY"])
 		}
 	})
+}
+
+func writeDevSource(t *testing.T, root, descriptor string) {
+	t.Helper()
+	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), "export default { slug: \"test-app\", envSource: { dev: "+descriptor+" } };\n")
+}
+
+func dumpDevEnv(t *testing.T, deps cmddeps.Deps, root string) (map[string]string, string) {
+	t.Helper()
+	envDumpPath := filepath.Join(root, "env.out")
+	var stdout, stderr syncBuffer
+	err := runDev(context.Background(), deps, false, root, []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}, &stdout, &stderr, strings.NewReader(""))
+	var exitErr *exitsig.ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 7 {
+		t.Fatalf("runDev err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
+	}
+	return toMap(strings.Split(strings.TrimRight(readTestFile(t, envDumpPath), "\n"), "\n")), stdout.String()
 }
 
 func TestDevGivesEveryAppItsURL(t *testing.T) {
@@ -1094,7 +1046,7 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 	t.Run("localhost on the default port where nothing names one", func(t *testing.T) {
 		t.Setenv("PORT", "")
 
-		got := resolvedEnv(nil, nil, nil, nil, runtimeAccess{}, "", node)
+		got := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", node)
 		for _, key := range []string{constants.AppURLEnvName, providerkit.ClientURLEnvName} {
 			if want := "http://localhost:3000"; got[key] != want {
 				t.Errorf("%s = %q, want %q — dev never leaves it unset, so an app may read it without a fallback", key, got[key], want)
@@ -1106,7 +1058,7 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 		t.Setenv("PORT", "")
 		dotfile := map[string]string{providerkit.ClientURLEnvName: "https://mine.example"}
 
-		got := resolvedEnv(nil, nil, dotfile, nil, runtimeAccess{}, "", envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+		got := resolvedEnv(nil, dotfile, nil, runtimeAccess{}, "", envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
 		if want := "http://localhost:3000"; got[constants.AppURLEnvName] != want {
 			t.Errorf("%s = %q, want %q for every app", constants.AppURLEnvName, got[constants.AppURLEnvName], want)
 		}
@@ -1118,7 +1070,7 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 	t.Run("the port the project names", func(t *testing.T) {
 		t.Setenv("PORT", "")
 
-		got := resolvedEnv(nil, nil, map[string]string{"PORT": "4321"}, nil, runtimeAccess{}, "", node)
+		got := resolvedEnv(nil, map[string]string{"PORT": "4321"}, nil, runtimeAccess{}, "", node)
 		if want := "http://localhost:4321"; got[constants.AppURLEnvName] != want {
 			t.Errorf("%s = %q, want %q", constants.AppURLEnvName, got[constants.AppURLEnvName], want)
 		}
@@ -1127,7 +1079,7 @@ func TestDevGivesEveryAppItsURL(t *testing.T) {
 	t.Run("the port the shell exports", func(t *testing.T) {
 		t.Setenv("PORT", "8080")
 
-		got := resolvedEnv(nil, nil, nil, nil, runtimeAccess{}, "", node)
+		got := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", node)
 		if want := "http://localhost:8080"; got[constants.AppURLEnvName] != want {
 			t.Errorf("%s = %q, want %q — the app is spawned with the shell's environment under it", constants.AppURLEnvName, got[constants.AppURLEnvName], want)
 		}
@@ -1160,7 +1112,7 @@ func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {
 		{name: "at the project root, where no one app is the target", cwd: root, written: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := resolvedEnv(nil, nil, nil, nil, runtimeAccess{}, "", targetScope(cfg, tc.cwd))
+			got := resolvedEnv(nil, nil, nil, runtimeAccess{}, "", targetScope(cfg, tc.cwd))
 			if _, written := got[providerkit.ClientURLEnvName]; written != tc.written {
 				t.Errorf("%s written = %v, want %v — a command run inside one app reads only that app's runtime, and elsewhere any app in the project", providerkit.ClientURLEnvName, written, tc.written)
 			}

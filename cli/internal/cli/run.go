@@ -11,7 +11,6 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/devlock"
-	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/election"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
@@ -78,22 +77,25 @@ func runOnceAsFollower(ctx context.Context, deps cmddeps.Deps, leader devlock.Le
 }
 
 func runStandalone(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, scope envgate.Scope, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	file, err := dotenv.Load(cfg.Dir)
+	source, err := readDevSource(ctx, cfg)
 	if err != nil {
 		return err
 	}
-	reportUnreadableLines(stdout, file.Unreadable)
-	reportDotfile(stdout, cfg.Dir, file.Values, dotfileReadOnceAdvice)
+	values, err := source.read(cfg.Dir)
+	if err != nil {
+		return err
+	}
+	reportUnreadableLines(stdout, values)
+	reportDevValues(stdout, cfg.Dir, values, false)
 
-	host, err := startDevHost(ctx, deps, cfg, stdout, stderr)
+	host, err := startDevHost(ctx, deps, cfg, source, stdout, stderr)
 	if err != nil {
 		return err
 	}
 	defer host.close()
-	srv, shared := host.srv, host.shared
-	srv.UseValues(storeValues(shared.values, file.Values), envwire.Scope(cfg, false, ""))
+	host.srv.UseValues(values.merged(), envwire.Scope(cfg, false, ""))
 
-	resolved, err := discoverAndSync(ctx, srv, cfg, shared.values, file.Values, scope, invocation{name: "run", loggedOut: shared.loggedOut}, stdout, stderr)
+	resolved, err := discoverAndSync(ctx, host.srv, cfg, values, scope, invocation{name: "run", source: source}, stdout, stderr)
 	if err != nil {
 		return err
 	}

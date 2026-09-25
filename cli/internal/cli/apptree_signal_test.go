@@ -49,7 +49,7 @@ func runProcessTreeSubprocess() int {
 	return 1
 }
 
-func procTreeSubprocessCmd(t *testing.T, root, apiURL string, appArgs []string) *exec.Cmd {
+func procTreeSubprocessCmd(t *testing.T, root string, appArgs []string) *exec.Cmd {
 	t.Helper()
 	self, err := filepath.Abs(os.Args[0])
 	if err != nil {
@@ -61,27 +61,25 @@ func procTreeSubprocessCmd(t *testing.T, root, apiURL string, appArgs []string) 
 		procTreeModeEnvVar+"=1",
 		"OCEL_TEST_PROCTREE_ROOT="+root,
 		"OCEL_TEST_PROCTREE_ARGS="+strings.Join(appArgs, procTreeArgsSep),
-		"OCEL_ACCESS_TOKEN=tok",
-		"OCEL_CONSOLE_URL="+apiURL,
 	)
 	return cmd
 }
 
-func setUpProcTreeFixtureProject(t *testing.T) (root, apiURL string) {
+func setUpProcTreeFixtureProject(t *testing.T) string {
 	t.Helper()
 
-	root = t.TempDir()
+	root := t.TempDir()
 	clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-	return root, testAPIURL
+	return root
 }
 
 func TestProcessTreeRealSIGINTKillsTheWholeTree(t *testing.T) {
-	root, apiURL := setUpProcTreeFixtureProject(t)
+	root := setUpProcTreeFixtureProject(t)
 	appArgs, startedPath, pidPath := fixtureWorkerTree(t, root, "sigint")
 
-	cmd := procTreeSubprocessCmd(t, root, apiURL, appArgs)
+	cmd := procTreeSubprocessCmd(t, root, appArgs)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	if err := cmd.Start(); err != nil {
@@ -108,7 +106,7 @@ func TestProcessTreeRealSIGINTKillsTheWholeTree(t *testing.T) {
 }
 
 func TestProcessTreeSetsidNonControllingTTYStillStarts(t *testing.T) {
-	root, apiURL := setUpProcTreeFixtureProject(t)
+	root := setUpProcTreeFixtureProject(t)
 	appArgs, startedPath, pidPath := fixtureWorkerTree(t, root, "setsid-noctty")
 
 	ptmx, ttySlave, err := pty.Open()
@@ -117,7 +115,7 @@ func TestProcessTreeSetsidNonControllingTTYStillStarts(t *testing.T) {
 	}
 	defer ptmx.Close()
 
-	cmd := procTreeSubprocessCmd(t, root, apiURL, appArgs)
+	cmd := procTreeSubprocessCmd(t, root, appArgs)
 	cmd.Stdin = ttySlave
 	cmd.Stdout = ttySlave
 	cmd.Stderr = ttySlave
@@ -148,7 +146,7 @@ func TestProcessTreeSetsidNonControllingTTYStillStarts(t *testing.T) {
 }
 
 func TestProcessTreeOrphanedGroupTTYPassthrough(t *testing.T) {
-	root, apiURL := setUpProcTreeFixtureProject(t)
+	root := setUpProcTreeFixtureProject(t)
 
 	appArgs := []string{"sh", "-c", "read line; echo got:$line; stty raw -echo; echo raw-set; stty sane; echo done"}
 
@@ -158,7 +156,7 @@ func TestProcessTreeOrphanedGroupTTYPassthrough(t *testing.T) {
 	}
 	defer ptmx.Close()
 
-	cmd := procTreeSubprocessCmd(t, root, apiURL, appArgs)
+	cmd := procTreeSubprocessCmd(t, root, appArgs)
 	cmd.Stdin = ttySlave
 	cmd.Stdout = ttySlave
 	cmd.Stderr = ttySlave
@@ -270,7 +268,7 @@ func runProcessTreeSessionHarness() int {
 	return 1
 }
 
-func procTreeSessionCmd(t *testing.T, root, apiURL string, appArgs []string) (cmd *exec.Cmd, ptmx *os.File) {
+func procTreeSessionCmd(t *testing.T, root string, appArgs []string) (cmd *exec.Cmd, ptmx *os.File) {
 	t.Helper()
 	ptmx, ttySlave, err := pty.Open()
 	if err != nil {
@@ -278,7 +276,7 @@ func procTreeSessionCmd(t *testing.T, root, apiURL string, appArgs []string) (cm
 	}
 	t.Cleanup(func() { ptmx.Close() })
 
-	cmd = procTreeSubprocessCmd(t, root, apiURL, appArgs)
+	cmd = procTreeSubprocessCmd(t, root, appArgs)
 	cmd.Env = append(cmd.Env, procTreeSessionHarnessEnvVar+"=1")
 	cmd.Stdin = ttySlave
 	cmd.Stdout = ttySlave
@@ -319,10 +317,10 @@ func drainPTY(ptmx *os.File) func() string {
 }
 
 func TestProcessTreeNonOrphanedCtrlCReachesCLIAndApp(t *testing.T) {
-	root, apiURL := setUpProcTreeFixtureProject(t)
+	root := setUpProcTreeFixtureProject(t)
 	appArgs, startedPath, leafPidPath := fixtureDeepWorkerTree(t, root, "nonorphan-ctrlc")
 
-	cmd, ptmx := procTreeSessionCmd(t, root, apiURL, appArgs)
+	cmd, ptmx := procTreeSessionCmd(t, root, appArgs)
 	tty := drainPTY(ptmx)
 
 	waitForFile(t, startedPath)
@@ -360,10 +358,10 @@ func fixtureStubbornWorkerTree(t *testing.T, root, name string) (appArgs []strin
 }
 
 func TestProcessTreeNonOrphanedSecondCtrlCIsFatal(t *testing.T) {
-	root, apiURL := setUpProcTreeFixtureProject(t)
+	root := setUpProcTreeFixtureProject(t)
 	appArgs, startedPath, pidPath := fixtureStubbornWorkerTree(t, root, "nonorphan-second-ctrlc")
 
-	cmd, ptmx := procTreeSessionCmd(t, root, apiURL, appArgs)
+	cmd, ptmx := procTreeSessionCmd(t, root, appArgs)
 
 	waitForFile(t, startedPath)
 

@@ -37,10 +37,10 @@ func waitForRawMode(t *testing.T, ptmx *os.File) {
 }
 
 func TestProcessTreeTermiosRestoredAfterGraceKill(t *testing.T) {
-	root, apiURL := setUpProcTreeFixtureProject(t)
+	root := setUpProcTreeFixtureProject(t)
 	appArgs := []string{"sh", "-c", stubbornRawModeFixture}
 
-	cmd, ptmx := procTreeSessionCmd(t, root, apiURL, appArgs)
+	cmd, ptmx := procTreeSessionCmd(t, root, appArgs)
 	before := termiosOf(t, ptmx)
 	waitForRawMode(t, ptmx)
 
@@ -64,10 +64,10 @@ func TestProcessTreeTermiosRestoredAfterGraceKill(t *testing.T) {
 }
 
 func TestProcessTreeTermiosRestoredAfterSecondCtrlCForcedExit(t *testing.T) {
-	root, apiURL := setUpProcTreeFixtureProject(t)
+	root := setUpProcTreeFixtureProject(t)
 	appArgs := []string{"sh", "-c", stubbornRawModeFixture}
 
-	cmd, ptmx := procTreeSessionCmd(t, root, apiURL, appArgs)
+	cmd, ptmx := procTreeSessionCmd(t, root, appArgs)
 	before := termiosOf(t, ptmx)
 	waitForRawMode(t, ptmx)
 

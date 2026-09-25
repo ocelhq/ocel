@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/devlock"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/devstack"
@@ -48,12 +47,12 @@ func TestMergeEnv(t *testing.T) {
 		t.Parallel()
 
 		base := []string{"PATH=/bin", "SHARED=base"}
-		projectEnv := map[string]string{"SHARED": "project", "PROJECT_ONLY": "p"}
+		values := map[string]string{"SHARED": "project", "PROJECT_ONLY": "p"}
 		resources := []resolve.Resource{
 			{Name: "main", Env: map[string]string{"SHARED": "resource", "OCEL_RESOURCE_POSTGRES_main": "conn"}},
 		}
 
-		got := toMap(mergeEnv(base, projectEnv, nil, nil, resources, runtimeAccess{}, "", envgate.Scope{}))
+		got := toMap(mergeEnv(base, nil, values, resources, runtimeAccess{}, "", envgate.Scope{}))
 
 		cases := map[string]string{
 			"PATH":                        "/bin",
@@ -73,7 +72,7 @@ func TestMergeEnv(t *testing.T) {
 
 		live := map[string]string{"WEBHOOK_SECRET": "whsec_live"}
 
-		got := mergeEnv([]string{"PATH=/usr/bin"}, map[string]string{"PROJECT_ONLY": "p"}, live, nil, nil, runtimeAccess{}, "", envgate.Scope{})
+		got := mergeEnv([]string{"PATH=/usr/bin"}, live, map[string]string{"PROJECT_ONLY": "p"}, nil, runtimeAccess{}, "", envgate.Scope{})
 
 		for _, kv := range got {
 			if strings.HasPrefix(kv, "OCEL_LIVE_KEYS=") {
@@ -120,12 +119,10 @@ func TestRunDev(t *testing.T) {
 		}
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		envDumpPath := filepath.Join(root, "env.out")
@@ -167,12 +164,10 @@ func TestRunDev(t *testing.T) {
 		}
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		var stdout, stderr syncBuffer
@@ -198,7 +193,6 @@ func TestRunDev(t *testing.T) {
 		}
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
@@ -206,7 +200,6 @@ func TestRunDev(t *testing.T) {
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -264,24 +257,19 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		}
 	})
 
-	t.Run("a second root linked to the same project elects its own leader", func(t *testing.T) {
+	t.Run("a second clone of the project elects its own leader", func(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			t.Skip("uses a POSIX shell fixture command")
 		}
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-
-		projectID := "proj_" + t.Name()
 
 		firstClone := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(firstClone) })
-		writeLink(t, firstClone, testAPIURL, projectID)
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(firstClone), "main.ts"), declareResourceScript("first"))
 
 		secondClone := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(secondClone) })
-		writeLink(t, secondClone, testAPIURL, projectID)
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(secondClone), "main.ts"), declareResourceScript("second"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -336,7 +324,6 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		}
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
@@ -344,7 +331,6 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(clitest.DiscoveryDir(root), "main.ts"), declareResourceScript("main"))
 
 		leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -400,8 +386,6 @@ export default { slug: "test-app" };
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
@@ -460,8 +444,6 @@ export default { slug: "test-app" };
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
@@ -522,9 +504,9 @@ export default { slug: "test-app" };
 		}
 
 		stalled := startWatching
-		startWatching = func(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, run invocation, stdout, stderr io.Writer) (*watcher.Watcher, error) {
+		startWatching = func(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, run invocation, stdout, stderr io.Writer) (*watcher.Watcher, error) {
 			time.Sleep(300 * time.Millisecond)
-			return stalled(ctx, srv, cfg, projectEnv, run, stdout, stderr)
+			return stalled(ctx, srv, cfg, run, stdout, stderr)
 		}
 		t.Cleanup(func() { startWatching = stalled })
 
@@ -532,8 +514,6 @@ export default { slug: "test-app" };
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
@@ -591,8 +571,6 @@ export default { slug: "test-app" };
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
 		deps := devDeps()
-		withCredentials(&deps, testAPIURL)
-		writeLink(t, root, testAPIURL, testProjectID(t))
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
@@ -628,13 +606,10 @@ export default { slug: "test-app" };
 		}
 
 		deps := devDeps()
-		clitest.SetLoggedIn(&deps)
 
 		root := t.TempDir()
 		t.Cleanup(func() { _ = devlock.Remove(root) })
 
-		projectID := "proj_" + t.Name()
-		const apiURL = "https://api.example.com"
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
 			t.Fatalf("listen: %v", err)
@@ -652,7 +627,6 @@ export default { slug: "test-app" };
 		clitest.WriteFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-		writeLink(t, root, apiURL, projectID)
 
 		startedPath := filepath.Join(root, "started")
 		appArgs := []string{"sh", "-c", "touch " + startedPath + "; sleep 10"}
@@ -898,7 +872,7 @@ func TestDevLeavesNothingBehind(t *testing.T) {
 
 func TestTheAppsOriginsFollowThePortInTheDotfile(t *testing.T) {
 	root := t.TempDir()
-	origins := devAppOrigins(root)
+	origins := devAppOrigins(root, devSource{id: "dotenv"})
 
 	clitest.WriteFile(t, filepath.Join(root, dotenv.FileName), "PORT=4100\n")
 	if got := origins(); !slices.Contains(got, "http://localhost:4100") || !slices.Contains(got, "http://127.0.0.1:4100") {
@@ -908,11 +882,6 @@ func TestTheAppsOriginsFollowThePortInTheDotfile(t *testing.T) {
 	if got := origins(); !slices.Contains(got, "http://localhost:4200") || slices.Contains(got, "http://localhost:4100") {
 		t.Fatalf("origins = %v after the port moved to 4200", got)
 	}
-}
-
-func testProjectID(t *testing.T) string {
-	t.Helper()
-	return "proj_" + strings.ReplaceAll(t.Name(), "/", "_")
 }
 
 func goroutineStacks(t *testing.T) string {
@@ -934,14 +903,9 @@ func toMap(env []string) map[string]string {
 	return m
 }
 
-const testAPIURL = "https://console.example.test"
-
 func devDeps() cmddeps.Deps {
 	deps := newDeps()
 	deps.OpenDocker = (&dockertest.Engine{}).Opener()
-	deps.FetchAccount = func(_ context.Context, _, _, _ string) (map[string]string, error) {
-		return map[string]string{}, nil
-	}
 	return deps
 }
 
@@ -1061,12 +1025,4 @@ func waitForFile(t *testing.T, path string) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("%q never appeared", path)
-}
-
-func writeLink(t *testing.T, dir, apiURL, projectID string) {
-	t.Helper()
-	record := link.Link{APIURL: apiURL, OrganizationID: "org_1", ProjectID: projectID, ProjectName: "Test"}
-	if err := link.Write(dir, record); err != nil {
-		t.Fatalf("write link: %v", err)
-	}
 }
