@@ -106,7 +106,7 @@ func (d *hostnames) settleHost(ctx context.Context, target ConfiguredHost, repor
 	}
 
 	report.Say(fmt.Sprintf("Binding %s to the %s edge", host, d.settle.kind))
-	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: settled.Certificate.ID, App: target.App}); err != nil {
+	if err := d.stack.BindDomain(ctx, edge.DomainBinding{Hostname: host, Certificate: settled.Certificate.ID, App: target.App, Say: report.Say}); err != nil {
 		return true, err
 	}
 	if err := d.checkpoint(ctx); err != nil {

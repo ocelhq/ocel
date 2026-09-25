@@ -120,6 +120,7 @@ type DomainBinding struct {
 	Hostname    string
 	Certificate string
 	App         string
+	Say         func(string)
 }
 
 type Ledger interface {

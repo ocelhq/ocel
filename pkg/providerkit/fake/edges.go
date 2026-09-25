@@ -136,6 +136,7 @@ type Edge struct {
 	byLabel  bool
 	refusal  error
 	unbound  error
+	bindSays string
 
 	unreadable error
 }
@@ -151,6 +152,9 @@ func (e *Edge) bound(binding edge.DomainBinding) {
 	defer e.mu.Unlock()
 	e.bindings = append(e.bindings, binding)
 	e.serving[binding.Hostname] = binding.Certificate
+	if e.bindSays != "" && binding.Say != nil {
+		binding.Say(e.bindSays)
+	}
 }
 
 func (e *Edge) release(hostname string) error {
@@ -183,6 +187,12 @@ func (e *Edge) UseLedger(ledgers func(edge.StackState) Ledger) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.ledgers = ledgers
+}
+
+func (e *Edge) SayOnBind(said string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.bindSays = said
 }
 
 func (e *Edge) WarnOnUnbind(err error) {
