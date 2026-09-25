@@ -39,10 +39,11 @@ const (
 
 const (
 	controlTimeout    = 30 * time.Second
-	controlDial       = time.Second
 	readHeaderTimeout = 10 * time.Second
 	socketMask        = 0o177
 	controlDirMode    = 0o700
+	lockMode          = 0o600
+	lockSuffix        = ".lock"
 )
 
 const (
@@ -147,10 +148,11 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 		return refuse(errs, fmt.Errorf("%s: %w", *path, err))
 	}
 	board := switchboard.New(table, trusted)
-	controlling, err := controlListener(control)
+	controlling, lock, err := controlListener(control)
 	if err != nil {
 		return refuse(errs, err)
 	}
+	defer lock.Close()
 	data, err := net.Listen("tcp", *listen)
 	if err != nil {
 		_ = controlling.Close()
@@ -195,21 +197,33 @@ func prefixes(trusting []string) ([]netip.Prefix, error) {
 	return trusted, nil
 }
 
-func controlListener(path string) (net.Listener, error) {
-	if conn, err := net.DialTimeout("unix", path, controlDial); err == nil {
-		_ = conn.Close()
-		return nil, fmt.Errorf("another switchboard answers on %s", path)
+func controlListener(path string) (net.Listener, io.Closer, error) {
+	if err := os.MkdirAll(filepath.Dir(path), controlDirMode); err != nil {
+		return nil, nil, err
+	}
+	lock, err := os.OpenFile(path+lockSuffix, os.O_RDWR|os.O_CREATE, lockMode)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		_ = lock.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return nil, nil, fmt.Errorf("another switchboard holds %s", path)
+		}
+		return nil, nil, err
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
-		return nil, err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), controlDirMode); err != nil {
-		return nil, err
+		_ = lock.Close()
+		return nil, nil, err
 	}
 	mask := syscall.Umask(socketMask)
 	listener, err := net.Listen("unix", path)
 	syscall.Umask(mask)
-	return listener, err
+	if err != nil {
+		_ = lock.Close()
+		return nil, nil, err
+	}
+	return listener, lock, nil
 }
 
 func load(ctx context.Context, control, path string, out, errs io.Writer) int {
