@@ -73,12 +73,15 @@ says where the secret comes from and never holds it:
 
 ```json title="ocel.json"
 {
+  "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
+  "slug": "my-app",
   "registry": { "server": "ghcr.io/acme", "password": "${REGISTRY_TOKEN}" }
 }
 ```
 
 Anything else there is refused: the secret itself, a bare `REGISTRY_TOKEN`, text around the
-placeholder, or in `ocel.config.ts` a value read with `buildEnv`.
+placeholder, or in a [TypeScript config](/docs/typescript-config) a value read with
+`buildEnv`.
 
 ## ocel.lock
 
