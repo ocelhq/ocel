@@ -89,6 +89,18 @@ func TestRefusalIsOneLinePerCell(t *testing.T) {
 			}, "\n"),
 		},
 		{
+			name:     "a named preview environment is named in the command",
+			problems: []*resourcesv1.VariableProblem{missing("STRIPE_KEY", "")},
+			scope:    envgate.Scope{Apps: apps, Preview: true, Environment: "pr-12"},
+			want: strings.Join([]string{
+				"✗ 1 variable is not ready — nothing has been built.",
+				"",
+				"  ✗ STRIPE_KEY  root  no value",
+				"",
+				"  Fill them in: ocel env set STRIPE_KEY=<VALUE> --preview --environment pr-12",
+			}, "\n"),
+		},
+		{
 			name:     "a reachable browser is sent to the editor",
 			problems: []*resourcesv1.VariableProblem{missing("DATABASE_URL", ""), missing("STRIPE_KEY", "/web")},
 			scope:    envgate.Scope{Apps: apps, Browser: true},

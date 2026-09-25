@@ -1,0 +1,33 @@
+package envwire
+
+import (
+	"reflect"
+	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+)
+
+func TestScopeImpliesTheVariablesATiersInlineBindingsRead(t *testing.T) {
+	cfg := &projectconfig.Config{Bindings: []projectconfig.Binding{
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "analytics", External: "warehouse"},
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, Name: "orders", Inline: map[string]*projectconfig.Inline{
+			projectconfig.TierProduction: {Postgres: &projectconfig.PostgresInline{
+				Host: projectconfig.Value{Literal: "db"}, Database: projectconfig.Value{Literal: "orders"},
+				Username: projectconfig.Value{Variable: "ORDERS_USER"}, Password: "ORDERS_PASSWORD",
+			}},
+		}},
+	}}
+
+	want := []envgate.Implied{{Group: "postgres.orders", Site: "bindings.postgres.orders", Keys: []string{"ORDERS_PASSWORD", "ORDERS_USER"}}}
+	if got := Scope(cfg, false, "").Implied; !reflect.DeepEqual(got, want) {
+		t.Errorf("production Implied = %+v, want %+v", got, want)
+	}
+	if got := Scope(cfg, true, "pr-12").Implied; len(got) != 0 {
+		t.Errorf("preview Implied = %+v, want none: orders binds production alone", got)
+	}
+	if got := DevScope(cfg).Implied; len(got) != 0 {
+		t.Errorf("dev Implied = %+v, want none: ocel dev stands up its own resources", got)
+	}
+}

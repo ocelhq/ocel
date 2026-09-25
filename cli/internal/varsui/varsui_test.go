@@ -538,6 +538,31 @@ func TestPutValue(t *testing.T) {
 		}
 	})
 
+	t.Run("a variable a binding reads is written at the root and refused in a folder", func(t *testing.T) {
+		t.Parallel()
+		store := newFakeStore()
+		gate := envgate.New(store, envgate.Scope{
+			Apps:    []envgate.App{{Name: "web", Folder: "/web"}},
+			Implied: []envgate.Implied{{Group: "postgres.orders", Site: "bindings.postgres.orders", Keys: []string{"ORDERS_URL"}}},
+		})
+		if err := gate.Prefetch(context.Background()); err != nil {
+			t.Fatalf("Prefetch: %v", err)
+		}
+		s := serve(t, store, gate)
+
+		folder := request(t, s, http.MethodPut, "/api/value", map[string]string{"key": "ORDERS_URL", "folder": "/web", "value": "postgres://db/orders"})
+		if folder.StatusCode != http.StatusBadRequest {
+			t.Errorf("PUT in a folder = %d, want %d", folder.StatusCode, http.StatusBadRequest)
+		}
+		root := request(t, s, http.MethodPut, "/api/value", map[string]string{"key": "ORDERS_URL", "folder": "", "value": "postgres://db/orders"})
+		if root.StatusCode != http.StatusOK {
+			t.Fatalf("PUT at the root = %d: %s", root.StatusCode, bodyOf(t, root))
+		}
+		if got := store.cells[envgate.Cell{Key: "ORDERS_URL"}]; got != "postgres://db/orders" {
+			t.Errorf("store holds %q for ORDERS_URL, want the value written", got)
+		}
+	})
+
 	t.Run("a write to a permitted cell reaches the store and the matrix shows it filled", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()

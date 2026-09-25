@@ -78,6 +78,10 @@ func (c *Config) BindingsFor(tier string) []TierBinding {
 	return out
 }
 
+func (b TierBinding) Group() string {
+	return naming.ResourceTypeName(b.Type) + "." + b.Name
+}
+
 func (b TierBinding) RecordName() string {
 	if b.Inline != nil {
 		return naming.InlineRecordName(b.Type, b.Name)

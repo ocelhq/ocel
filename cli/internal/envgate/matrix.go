@@ -86,6 +86,9 @@ func (g *Gate) Matrix(environments []string) Matrix {
 	}
 	g.mu.Unlock()
 
+	appDefinitions, appGroups := definitions, groups
+	definitions = append(slices.Clone(definitions), g.scope.impliedDefinitions()...)
+	groups = append(slices.Clone(groups), g.scope.impliedGroups()...)
 	columns := columns(definitions, apps, base, overrides)
 	m := Matrix{
 		Columns: columns,
@@ -126,7 +129,7 @@ func (g *Gate) Matrix(environments []string) Matrix {
 		m.Apps = append(m.Apps, AppResolution{
 			Name:    app.Name,
 			Folder:  app.Folder,
-			Missing: missing(definitions, groups, app.Folder, resolved),
+			Missing: missing(appDefinitions, appGroups, app.Folder, resolved),
 		})
 	}
 	return m

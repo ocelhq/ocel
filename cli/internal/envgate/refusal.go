@@ -76,12 +76,20 @@ func (r *Refusal) remedy() string {
 	if inFolder {
 		cmd += " --folder " + folder
 	}
-	return withPreview(cmd, r.Scope)
+	return withEnvironment(cmd, r.Scope)
 }
 
 func withPreview(cmd string, scope Scope) string {
 	if scope.Preview {
 		return cmd + " --preview"
+	}
+	return cmd
+}
+
+func withEnvironment(cmd string, scope Scope) string {
+	cmd = withPreview(cmd, scope)
+	if scope.Preview && scope.Environment != "" {
+		return cmd + " --environment " + scope.Environment
 	}
 	return cmd
 }
