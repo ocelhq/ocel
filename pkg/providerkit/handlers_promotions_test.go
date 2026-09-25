@@ -14,6 +14,8 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -21,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -465,6 +468,62 @@ func readEnvironmentMeta(t *testing.T, provider *fake.Provider, slug, env string
 		t.Fatal(err)
 	}
 	return meta
+}
+
+func TestRemoveEnvironmentRemovesTheRecordsOcelKeptThere(t *testing.T) {
+	t.Parallel()
+	client, provider := contractServed(t, "1.0.0")
+	deployed(t, provider, providerkit.ClassPreview, "shop")
+	seedPromotions(t, provider, providerkit.ClassPreview, "shop", "pr-7", "p1")
+
+	store := values.Store{Records: provider.Records(), Sealer: provider.Sealer()}
+	scope := values.Scope{Project: "shop", Class: providerkit.ClassPreview}
+	publish := func(environment, owner string, binding *bindingsv1.Binding) {
+		pair, err := providerkit.BindingPair(owner, binding)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.SetBindings(context.Background(), scope, environment, owner, []values.Publishing{{Name: binding.GetName(), Pair: pair}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	inline := naming.InlineRecordName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "orders")
+	publish("pr-7", naming.InlineRecordOwner, postgresRecord(inline, "ocel.json"))
+	publish("pr-7", values.OwnerOcel, postgresRecord("db--cache", ""))
+	publish("pr-7", "terraform", postgresRecord("warehouse", "terraform"))
+	publish("pr-8", naming.InlineRecordOwner, postgresRecord(inline, "ocel.json"))
+
+	stream, err := client.RemoveEnvironment(context.Background(), &contractv1.RemoveEnvironmentRequest{
+		Slug:        "shop",
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PREVIEW, Identity: "pr-7"},
+	})
+	if err != nil {
+		t.Fatalf("RemoveEnvironment() error = %v", err)
+	}
+	if result, err := drain(stream); err != nil || !result.GetSuccess() {
+		t.Fatalf("RemoveEnvironment() = %v, %v", result.GetError(), err)
+	}
+
+	names := func(environment string) []string {
+		held, err := store.ListBindings(context.Background(), scope, environment)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, record := range held {
+			if record.Environment == environment {
+				out = append(out, record.Name)
+			}
+		}
+		slices.Sort(out)
+		return out
+	}
+	if got := names("pr-7"); !slices.Equal(got, []string{"warehouse"}) {
+		t.Errorf("pr-7 holds %v, want only the record another publisher keeps: what ocel wrote for pr-7 goes with it", got)
+	}
+	if got := names("pr-8"); !slices.Equal(got, []string{inline}) {
+		t.Errorf("pr-8 holds %v, want its own record untouched", got)
+	}
 }
 
 func TestRemoveEnvironmentDropsItsPointer(t *testing.T) {
