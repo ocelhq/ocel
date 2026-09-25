@@ -22,11 +22,17 @@ const upgradeProtocol = "echo"
 
 func echoing(t *testing.T, name string) string {
 	t.Helper()
+	return echoingOnce(t, name, func() {})
+}
+
+func echoingOnce(t *testing.T, name string, answering func()) string {
+	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Upgrade") != upgradeProtocol {
 			_, _ = io.WriteString(w, name)
 			return
 		}
+		answering()
 		conn, buffered, err := http.NewResponseController(w).Hijack()
 		if err != nil {
 			return
@@ -140,6 +146,53 @@ func TestAnUpgradedConnectionOpenedBeforeAFlipDrainsWithItsRetireeAndIsCutAtTheC
 	}
 	if idle, err := board.Idle([]string{blue, green}); err != nil || !slices.Equal(idle, []string{blue}) {
 		t.Errorf("Idle(%s, %s) = %v, %v once the flip returned, want only the retiree", blue, green, idle, err)
+	}
+}
+
+func TestAnUpgradeTheRetireeAnswersOnlyAfterItsDrainExpiredIsNeverCarried(t *testing.T) {
+	t.Parallel()
+
+	arrived, release := make(chan struct{}, 1), make(chan struct{})
+	blue := echoingOnce(t, "blue", func() {
+		arrived <- struct{}{}
+		<-release
+	})
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	green := echoing(t, "green")
+	board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue}))
+
+	conn, err := net.Dial("tcp", at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	_ = conn.SetDeadline(time.Now().Add(10 * time.Second))
+	fmt.Fprintf(conn, "GET /socket HTTP/1.1\r\nHost: shop.example.com\r\nConnection: Upgrade\r\nUpgrade: %s\r\n\r\n", upgradeProtocol)
+	<-arrived
+
+	var told drains
+	if err := board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue}, 200*time.Millisecond, told.tell); err != nil {
+		t.Fatal(err)
+	}
+	if lines := told.lines(); !slices.Equal(lines, []string{caddyadmin.DrainExpired + " " + blue + " 1"}) {
+		t.Fatalf("the flip told %v, want the pending upgrade still held when the ceiling passed", lines)
+	}
+	close(release)
+
+	reader := bufio.NewReader(conn)
+	response, err := http.ReadResponse(reader, nil)
+	if err != nil || response.StatusCode != http.StatusSwitchingProtocols {
+		return
+	}
+	late := socket{conn: conn, reader: reader}
+	if said, err := late.exchange("late"); err == nil {
+		t.Errorf("an upgrade the retiree answered after its drain expired still carried %q, want the ceiling to have cut it before it ever upgraded", said)
 	}
 }
 

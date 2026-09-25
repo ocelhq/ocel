@@ -69,10 +69,9 @@ func (b *Board) Flip(ctx context.Context, path string, retiring []string, window
 			return ctx.Err()
 		case <-ceiling.C:
 			for _, address := range slices.Sorted(maps.Keys(pending)) {
-				tell(Drain{Address: address, Held: b.ledger.inFlight(address), Expired: true})
-				if !b.table.Load().routed[address] {
-					b.ledger.cut(address)
-				}
+				held := b.ledger.inFlight(address)
+				b.cutUnrouted(address)
+				tell(Drain{Address: address, Held: held, Expired: true})
 			}
 			return nil
 		}

@@ -1,7 +1,7 @@
 package switchboard
 
 import (
-	"net"
+	"context"
 	"sync"
 )
 
@@ -11,75 +11,66 @@ type ledger struct {
 }
 
 type flight struct {
-	requests int
-	hijacked map[net.Conn]bool
-	quiet    []chan struct{}
+	calls map[*call]struct{}
+	quiet []chan struct{}
 }
 
-func (l *ledger) held(address string) *flight {
+type call struct {
+	cancel context.CancelFunc
+}
+
+func (l *ledger) take(address string, asked context.Context) (context.Context, func()) {
+	ctx, cancel := context.WithCancel(asked)
+	placed := &call{cancel: cancel}
+	l.mu.Lock()
 	if l.flights == nil {
 		l.flights = map[string]*flight{}
 	}
-	held, ok := l.flights[address]
+	upstream, ok := l.flights[address]
 	if !ok {
-		held = &flight{hijacked: map[net.Conn]bool{}}
-		l.flights[address] = held
+		upstream = &flight{calls: map[*call]struct{}{}}
+		l.flights[address] = upstream
 	}
-	return held
+	upstream.calls[placed] = struct{}{}
+	l.mu.Unlock()
+	return ctx, func() {
+		cancel()
+		l.drop(address, placed)
+	}
 }
 
-func (l *ledger) take(address string) {
+func (l *ledger) drop(address string, placed *call) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.held(address).requests++
-}
-
-func (l *ledger) drop(address string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	held := l.held(address)
-	held.requests--
-	if held.requests > 0 {
+	upstream := l.flights[address]
+	delete(upstream.calls, placed)
+	if len(upstream.calls) > 0 {
 		return
 	}
-	for _, quiet := range held.quiet {
+	for _, quiet := range upstream.quiet {
 		close(quiet)
 	}
 	delete(l.flights, address)
-}
-
-func (l *ledger) hijack(address string, conn net.Conn) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	l.held(address).hijacked[conn] = true
-}
-
-func (l *ledger) release(address string, conn net.Conn) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if held, ok := l.flights[address]; ok {
-		delete(held.hijacked, conn)
-	}
 }
 
 func (l *ledger) quiet(address string) <-chan struct{} {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	quiet := make(chan struct{})
-	held, ok := l.flights[address]
+	upstream, ok := l.flights[address]
 	if !ok {
 		close(quiet)
 		return quiet
 	}
-	held.quiet = append(held.quiet, quiet)
+	upstream.quiet = append(upstream.quiet, quiet)
 	return quiet
 }
 
 func (l *ledger) inFlight(address string) int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if held, ok := l.flights[address]; ok {
-		return held.requests
+	if upstream, ok := l.flights[address]; ok {
+		return len(upstream.calls)
 	}
 	return 0
 }
@@ -88,23 +79,23 @@ func (l *ledger) counts() map[string]int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	counted := make(map[string]int, len(l.flights))
-	for address, held := range l.flights {
-		counted[address] = held.requests
+	for address, upstream := range l.flights {
+		counted[address] = len(upstream.calls)
 	}
 	return counted
 }
 
 func (l *ledger) cut(address string) {
 	l.mu.Lock()
-	var conns []net.Conn
-	if held, ok := l.flights[address]; ok {
-		for conn := range held.hijacked {
-			conns = append(conns, conn)
+	var cancels []context.CancelFunc
+	if upstream, ok := l.flights[address]; ok {
+		for placed := range upstream.calls {
+			cancels = append(cancels, placed.cancel)
 		}
 	}
 	l.mu.Unlock()
-	for _, conn := range conns {
-		_ = conn.Close()
+	for _, cancel := range cancels {
+		cancel()
 	}
 }
 
