@@ -7,8 +7,8 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
-func Bound(tag string, record *bindingsv1.BucketProperties, callbacks Poster) *Service {
-	return bound(tag, record, callbacks, storeOf(record).Client())
+func Bound(tag, name string, record *bindingsv1.BucketProperties, callbacks Poster) *Service {
+	return bound(tag, name, record, callbacks, storeOf(record).Client())
 }
 
 func storeOf(record *bindingsv1.BucketProperties) Store {
@@ -21,7 +21,7 @@ func storeOf(record *bindingsv1.BucketProperties) Store {
 	}
 }
 
-func bound(tag string, record *bindingsv1.BucketProperties, callbacks Poster, objects ObjectAPI) *Service {
+func bound(tag, name string, record *bindingsv1.BucketProperties, callbacks Poster, objects ObjectAPI) *Service {
 	signer := storeOf(record).Presigner()
 	held := scope{bucket: record.GetBucket()}
 	if prefix := strings.Trim(record.GetPrefix(), "/"); prefix != "" {
@@ -36,7 +36,7 @@ func bound(tag string, record *bindingsv1.BucketProperties, callbacks Poster, ob
 		SweepUploads: true,
 	})
 	svc.sessions = held
-	svc.granted = map[string]scope{record.GetBucket(): held}
+	svc.granted = map[string]scope{name: held}
 	return svc
 }
 

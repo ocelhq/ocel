@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 
 	"google.golang.org/protobuf/encoding/protojson"
 
@@ -88,4 +89,30 @@ func Keys(keys []Key, bindings []Binding) []string {
 		out = append(out, l.Key)
 	}
 	return out
+}
+
+func shown(bindings []Binding, values map[string]string) map[string]string {
+	held := maps.Clone(values)
+	for _, l := range bindings {
+		if raw, ok := values[l.Key]; ok {
+			held[l.Key] = l.shown(raw)
+		}
+	}
+	return held
+}
+
+func (l Binding) shown(raw string) string {
+	if l.Type != bindingsv1.BindingType_BINDING_TYPE_BUCKET {
+		return raw
+	}
+	binding := &bindingsv1.Binding{}
+	if err := protojson.Unmarshal([]byte(raw), binding); err != nil || binding.GetBucket().GetEndpoint() == "" {
+		return raw
+	}
+	binding.GetBucket().Bucket = l.Key
+	out, err := protojson.Marshal(binding)
+	if err != nil {
+		return raw
+	}
+	return string(out)
 }

@@ -21,17 +21,17 @@ func boundRecord() *bindingsv1.BucketProperties {
 	}
 }
 
-func TestABoundBucketIsServedUnderTheNameItsRecordGivesAndThePrefixItNames(t *testing.T) {
+func TestABoundBucketIsServedUnderItsBindingsKeyAndThePrefixItNames(t *testing.T) {
 	store := newFakeStore()
-	svc := bound("b0", boundRecord(), &recordingPoster{}, store)
+	svc := bound("b0", "OCEL_RESOURCE_BUCKET_uploads", boundRecord(), &recordingPoster{}, store)
 
-	if !svc.holds("acme") {
-		t.Fatal("the backend holds no bucket called acme, the name the app reads off the record")
+	if !svc.holds("OCEL_RESOURCE_BUCKET_uploads") {
+		t.Fatal("the backend holds nothing under the binding's key, the name the app reads off the record")
 	}
 	store.put("acme", "uploads/a.png", []byte("abc"), "image/png")
 	store.put("acme", "elsewhere/b.png", []byte("abc"), "image/png")
 
-	listed, err := svc.List(context.Background(), &bucketv1.ListRequest{Bucket: "acme"})
+	listed, err := svc.List(context.Background(), &bucketv1.ListRequest{Bucket: "OCEL_RESOURCE_BUCKET_uploads"})
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -40,7 +40,7 @@ func TestABoundBucketIsServedUnderTheNameItsRecordGivesAndThePrefixItNames(t *te
 	}
 
 	resp, err := svc.PresignUpload(context.Background(), &bucketv1.PresignUploadRequest{
-		Bucket: "acme",
+		Bucket: "OCEL_RESOURCE_BUCKET_uploads",
 		Files:  []*bucketv1.PresignFile{{Key: "c.png", Name: "c.png", Size: 3, MimeType: "image/png"}},
 	})
 	if err != nil {
