@@ -37,8 +37,8 @@ func resourced() ResourceContainer {
 func running() map[string]string {
 	return map[string]string{
 		appContainer:      words(containerRun(valued(), handedTo(valued()))),
-		proxyContainer:    words(proxyRun()),
-		boardContainer:    words(switchboardRun()),
+		proxyContainer:    words(frontProxy().run()),
+		boardContainer:    words(switchboardStanding(nil).run()),
 		resourceContainer: words(resourceRun(resourced(), "0123456789ab", EnvFile(resourced().Class, resourced().Name))),
 	}
 }

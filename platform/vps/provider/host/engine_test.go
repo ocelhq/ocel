@@ -113,7 +113,7 @@ func proxyStanding(t *testing.T) standingProxy {
 	taken(t, name)
 	for what, script := range map[string]string{
 		"the switchboard": switchboardStanding(switchboardBinary(arch)).writing(containerRising),
-		"the proxy":       proxyWriting(containerRising),
+		"the proxy":       frontProxy().writing(containerRising),
 	} {
 		if out, err := exec.Command("/bin/sh", "-c", stood.here(script)).CombinedOutput(); err != nil {
 			t.Fatalf("the write that stands %s up = %v\n%s", what, err, out)

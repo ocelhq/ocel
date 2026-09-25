@@ -212,7 +212,7 @@ func TestAClassRunningNothingPlansNoContainerOrNetworkRemoval(t *testing.T) {
 func TestTheSwitchboardRejoinsEveryLabelledNetworkWhenItIsWrittenAgain(t *testing.T) {
 	t.Parallel()
 
-	command := switchboardWriting(containerRising)
+	command := switchboardStanding(nil).writing(containerRising)
 	run := strings.Index(command, quoted("run")+" "+quoted("--detach"))
 	rejoin := strings.Index(command, "docker network ls --quiet --filter "+quoted("label="+LabelClass))
 	rising := strings.Index(command, "while :; do")

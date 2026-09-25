@@ -50,7 +50,7 @@ func TestAnAppContainerIsConfinedAndItsLogIsRotated(t *testing.T) {
 func TestTheProxyIsConfinedToBindingItsPortsAndItsLogIsRotated(t *testing.T) {
 	t.Parallel()
 
-	argv := proxyRun()
+	argv := frontProxy().run()
 	command := words(argv)
 	if strings.Contains(command, quoted(noNewPrivileges)) {
 		t.Errorf("the proxy is run under %s, and its image carries cap_net_bind_service=ep as a file capability on the binary, which the kernel refuses to exec once no_new_privs is set:\n%s", noNewPrivileges, command)

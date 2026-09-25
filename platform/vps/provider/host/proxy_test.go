@@ -47,7 +47,7 @@ func frontItem() Item { return containerNamed(caddy.Container) }
 
 func boardItem() Item { return containerNamed(SwitchboardContainer) }
 
-func containerCommand() string { return proxyWriting(containerRising) }
+func containerCommand() string { return frontProxy().writing(containerRising) }
 
 func dockered(t *testing.T, held engineHolding) map[string]string {
 	t.Helper()
@@ -256,7 +256,7 @@ func TestTheProxyIsRestartedUnlessSomebodyStopsItAndSitsOnTheOneSharedNetwork(t 
 func TestOnlyTheFrontProxyPublishesAPortAndOnlyThePortsRequestsArriveOn(t *testing.T) {
 	t.Parallel()
 
-	command := words(proxyRun())
+	command := words(frontProxy().run())
 	if strings.Count(command, "--publish") != len(proxyServing()) {
 		t.Errorf("the proxy is run with something other than the ports requests arrive on:\n%s", command)
 	}
@@ -277,8 +277,8 @@ func TestOnlyTheFrontProxyPublishesAPortAndOnlyThePortsRequestsArriveOn(t *testi
 	if strings.Contains(starting(t, command), caddy.AdminSocket) {
 		t.Errorf("the admin socket is named on the host side of the run command, and a socket that leaves the container is one anything on the box can dial:\n%s", command)
 	}
-	if strings.Contains(switchboardWriting(containerRising), "--publish") {
-		t.Errorf("the switchboard publishes a port, and nothing but the front proxy is reached from off the box:\n%s", switchboardWriting(containerRising))
+	if strings.Contains(switchboardStanding(nil).writing(containerRising), "--publish") {
+		t.Errorf("the switchboard publishes a port, and nothing but the front proxy is reached from off the box:\n%s", switchboardStanding(nil).writing(containerRising))
 	}
 }
 
