@@ -210,8 +210,8 @@ func TestOneCertificateCoveringTwoHostnamesIsHandedToTheProxyOnce(t *testing.T) 
 		t.Fatalf("the proxy is handed %s %d times, want once: a pair loaded twice is one certificate cached under two tags, and which of them the proxy answers a handshake from is whichever load ran last",
 			at, len(files))
 	}
-	if len(files[0].Tags) != 0 {
-		t.Errorf("the one entry is tagged %v, want no tag: a tag naming the hostnames a pair covers changes the proxy's config with every bind under it", files[0].Tags)
+	if want := []string{caddy.PinsMount + "/pair"}; !slices.Equal(files[0].Tags, want) {
+		t.Errorf("the one entry is tagged %v, want %v: the pair's own path is what a handshake for either hostname selects it by, and a tag naming the hostnames it covers changes the proxy's config with every bind under it", files[0].Tags, want)
 	}
 
 	held, err := ReadRoutingTable(mustWrite(t, state))
