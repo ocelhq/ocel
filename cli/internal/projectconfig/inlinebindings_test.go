@@ -149,6 +149,48 @@ func TestAnInlineBindingIsRefusedWhereItCannotConnect(t *testing.T) {
 	}
 }
 
+func TestAnInlineBucketNamesItsStoreAndTheVariablesItReads(t *testing.T) {
+	cfg := mustResolveJSON(t, `{"slug":"shop","bindings":{"bucket":{"uploads":{
+		"endpoint":"https://abc.r2.cloudflarestorage.com","region":"auto","bucket":{"$env":"UPLOADS_BUCKET"},
+		"prefix":"uploads/","accessKeyId":{"$env":"R2_KEY"},"secretAccessKey":{"$env":"R2_SECRET"},
+		"publicBaseUrl":"https://cdn.acme.com"
+	}}}}`)
+	bound := cfg.BindingsFor(TierPreview)
+	if len(bound) != 1 || bound[0].Inline == nil || bound[0].Inline.Bucket == nil {
+		t.Fatalf("bound = %+v, want the inline bucket", bound)
+	}
+	want := BucketInline{
+		Endpoint:        Value{Literal: "https://abc.r2.cloudflarestorage.com"},
+		Region:          Value{Literal: "auto"},
+		Bucket:          Value{Variable: "UPLOADS_BUCKET"},
+		Prefix:          Value{Literal: "uploads/"},
+		AccessKeyID:     "R2_KEY",
+		SecretAccessKey: "R2_SECRET",
+		PublicBaseURL:   Value{Literal: "https://cdn.acme.com"},
+	}
+	if !reflect.DeepEqual(*bound[0].Inline.Bucket, want) {
+		t.Errorf("bucket = %+v, want %+v", *bound[0].Inline.Bucket, want)
+	}
+	if got := bound[0].Inline.Variables(); !slices.Equal(got, []string{"R2_KEY", "R2_SECRET", "UPLOADS_BUCKET"}) {
+		t.Errorf("Variables() = %v", got)
+	}
+}
+
+func TestAnInlineBucketIsRefusedWhereNoStoreCouldBeReached(t *testing.T) {
+	for name, binding := range map[string]string{
+		"no secret":       `{"endpoint":"https://s3.example.com","region":"auto","bucket":"acme","accessKeyId":{"$env":"K"}}`,
+		"no endpoint":     `{"region":"auto","bucket":"acme","accessKeyId":{"$env":"K"},"secretAccessKey":{"$env":"S"}}`,
+		"a bare endpoint": `{"endpoint":"s3.example.com","region":"auto","bucket":"acme","accessKeyId":{"$env":"K"},"secretAccessKey":{"$env":"S"}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := resolveJSON(t, `{"slug":"shop","bindings":{"bucket":{"uploads":`+binding+`}}}`)
+			if err == nil || !strings.Contains(err.Error(), "bindings.bucket.uploads") {
+				t.Fatalf("resolve = %v, want the binding refused by path", err)
+			}
+		})
+	}
+}
+
 func TestAnInlineBindingIsBoundUnderANameNoPublisherHolds(t *testing.T) {
 	_, err := resolveJSON(t, `{"slug":"shop","bindings":{"postgres":{"orders":"@`+naming.InlineRecordPrefix+`postgres.orders"}}}`)
 	if err == nil {

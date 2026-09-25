@@ -16,8 +16,18 @@ export interface OcelConfig {
   apps?: AppConfig[];
   /** Resources this project declares that ocel binds instead of provisioning them itself. Keyed by resource type, then by the name the app declares. The value is "@" followed by the name a record your own infrastructure published, such as "@warehouse", and a name nothing has published refuses the deploy; or the record written inline, checked at deploy rather than provisioned, optionally keyed by the tier it serves. */
   bindings?: {
-    /** Each key is a bucket resource this project declares; its value is "@" followed by the name the record is published under, such as "@warehouse". */
-    bucket?: Record<string, `@${string}`>;
+    /** Each key is a bucket resource this project declares. Its value is "@" followed by the name a record is published under, such as "@warehouse"; or the record itself, whose secrets are ocel variables written { "$env": "NAME" }; or that record keyed by the tier it serves, leaving the other tier to provision its own. */
+    bucket?: Record<
+      string,
+      | `@${string}`
+      | BucketBinding
+      | {
+          /** The record previews bind. Left off, previews provision their own. */
+          preview?: BucketBinding;
+          /** The record production binds. Left off, production provisions its own. */
+          production?: BucketBinding;
+        }
+    >;
     /** Each key is a postgres resource this project declares. Its value is "@" followed by the name a record is published under, such as "@warehouse"; or the record itself, whose secrets are ocel variables written { "$env": "NAME" }; or that record keyed by the tier it serves, leaving the other tier to provision its own. */
     postgres?: Record<
       string,
@@ -94,17 +104,36 @@ export interface HealthConfig {
   path?: string;
 }
 
+export interface BucketBinding {
+  /** The public half of the key pair the runtime reaches the store with. */
+  accessKeyId: VariableRef;
+  /** The bucket's name in that store. */
+  bucket: string | VariableRef;
+  /** The address of the S3-compatible store the bucket lives in, such as https://<account>.r2.cloudflarestorage.com. */
+  endpoint: string | VariableRef;
+  /** Address the bucket as a path on the endpoint rather than as a subdomain of it, for stores that serve no virtual hosts. */
+  pathStyle?: boolean;
+  /** The prefix every key the app writes is kept under, so one bucket can hold several resources or environments. */
+  prefix?: string | VariableRef;
+  /** The address the bucket's objects are served from publicly, when the code declares it public. */
+  publicBaseUrl?: string | VariableRef;
+  /** The region requests to the store are signed for; auto for R2. */
+  region: string | VariableRef;
+  /** The secret half of that key pair. */
+  secretAccessKey: VariableRef;
+}
+
+/** The public half of the key pair the runtime reaches the store with. */
+export interface VariableRef {
+  /** The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own. */
+  $env: string;
+}
+
 export type PostgresBinding = PostgresUrlBinding | PostgresHostBinding;
 
 export interface PostgresUrlBinding {
   /** The whole connection string, kept verbatim so its sslmode, options and pooler parameters reach the client. */
   url: VariableRef;
-}
-
-/** The whole connection string, kept verbatim so its sslmode, options and pooler parameters reach the client. */
-export interface VariableRef {
-  /** The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own. */
-  $env: string;
 }
 
 export interface PostgresHostBinding {

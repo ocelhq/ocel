@@ -35,6 +35,18 @@ type TierBinding struct {
 
 type Inline struct {
 	Postgres *PostgresInline
+	Bucket   *BucketInline
+}
+
+type BucketInline struct {
+	Endpoint        Value
+	Region          Value
+	Bucket          Value
+	Prefix          Value
+	PathStyle       bool
+	AccessKeyID     string
+	SecretAccessKey string
+	PublicBaseURL   Value
 }
 
 type Value struct {
@@ -105,6 +117,15 @@ func (i *Inline) Variables() []string {
 		if p.TLS != nil {
 			add(p.TLS.CA)
 		}
+	}
+	if b := i.Bucket; b != nil {
+		add(b.Endpoint.Variable)
+		add(b.Region.Variable)
+		add(b.Bucket.Variable)
+		add(b.Prefix.Variable)
+		add(b.AccessKeyID)
+		add(b.SecretAccessKey)
+		add(b.PublicBaseURL.Variable)
 	}
 	slices.Sort(out)
 	return out
@@ -198,6 +219,13 @@ func normalizeInline(path string, record *configdoc.InlineRecord) (*Inline, erro
 		}
 		return &Inline{Postgres: postgres}, nil
 	}
+	if record.Bucket != nil {
+		bucket, err := normalizeBucket(path, record.Bucket)
+		if err != nil {
+			return nil, err
+		}
+		return &Inline{Bucket: bucket}, nil
+	}
 	return nil, fmt.Errorf("`%s` holds no record", path)
 }
 
@@ -274,6 +302,43 @@ func normalizePostgres(path string, raw *configdoc.PostgresBinding) (*PostgresIn
 				return nil, err
 			}
 		}
+	}
+	return out, nil
+}
+
+func optionalText(path, field string, text *configdoc.Text) (Value, error) {
+	if text == nil {
+		return Value{}, nil
+	}
+	return textOf(path, field, text)
+}
+
+func normalizeBucket(path string, raw *configdoc.BucketBinding) (*BucketInline, error) {
+	out := &BucketInline{PathStyle: raw.PathStyle}
+	var err error
+	if out.Endpoint, err = textOf(path, "endpoint", raw.Endpoint); err != nil {
+		return nil, err
+	}
+	if literal := out.Endpoint.Literal; literal != "" && !strings.HasPrefix(literal, "https://") && !strings.HasPrefix(literal, "http://") {
+		return nil, fmt.Errorf("`%s.endpoint` is %q, and an endpoint is the store's address with its scheme, such as \"https://%s\"", path, literal, literal)
+	}
+	if out.Region, err = textOf(path, "region", raw.Region); err != nil {
+		return nil, err
+	}
+	if out.Bucket, err = textOf(path, "bucket", raw.Bucket); err != nil {
+		return nil, err
+	}
+	if out.Prefix, err = optionalText(path, "prefix", raw.Prefix); err != nil {
+		return nil, err
+	}
+	if out.PublicBaseURL, err = optionalText(path, "publicBaseUrl", raw.PublicBaseURL); err != nil {
+		return nil, err
+	}
+	if out.AccessKeyID, err = requiredVariable(path, "accessKeyId", raw.AccessKeyID); err != nil {
+		return nil, err
+	}
+	if out.SecretAccessKey, err = requiredVariable(path, "secretAccessKey", raw.SecretAccessKey); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

@@ -36,6 +36,7 @@ require (
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
 	github.com/ocelhq/ocel/platform/aws/runtime v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
+	github.com/ocelhq/ocel/platform/s3 v0.0.0
 	github.com/pelletier/go-toml/v2 v2.3.1
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/railwayapp/railpack v0.38.0
@@ -192,6 +193,7 @@ require (
 	github.com/morikuni/aec v1.1.0 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
+	github.com/ocelhq/ocel/pkg/runtimekit v0.0.0 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
@@ -282,3 +284,5 @@ replace github.com/ocelhq/ocel/platform/aws/provider => ../platform/aws/provider
 replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../platform/edge/cloudflare/deploy
 
 replace github.com/ocelhq/ocel/pkg/runtimekit => ../pkg/runtimekit
+
+replace github.com/ocelhq/ocel/platform/s3 => ../platform/s3

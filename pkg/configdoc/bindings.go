@@ -21,6 +21,7 @@ type Binding struct {
 
 type InlineRecord struct {
 	Postgres *PostgresBinding
+	Bucket   *BucketBinding
 }
 
 type Ref struct {
@@ -60,6 +61,28 @@ type postgresHost struct {
 	TLS      *PostgresTLS `json:"tls,omitempty" doc:"How the connection is encrypted. Left off, each client library connects as it does by default."`
 }
 
+type BucketBinding struct {
+	Endpoint        *Text `json:"endpoint,omitempty"`
+	Region          *Text `json:"region,omitempty"`
+	Bucket          *Text `json:"bucket,omitempty"`
+	Prefix          *Text `json:"prefix,omitempty"`
+	PathStyle       bool  `json:"pathStyle,omitempty"`
+	AccessKeyID     *Ref  `json:"accessKeyId,omitempty"`
+	SecretAccessKey *Ref  `json:"secretAccessKey,omitempty"`
+	PublicBaseURL   *Text `json:"publicBaseUrl,omitempty"`
+}
+
+type bucketShape struct {
+	Endpoint        Text  `json:"endpoint" doc:"The address of the S3-compatible store the bucket lives in, such as https://<account>.r2.cloudflarestorage.com."`
+	Region          Text  `json:"region" doc:"The region requests to the store are signed for; auto for R2."`
+	Bucket          Text  `json:"bucket" doc:"The bucket's name in that store."`
+	Prefix          *Text `json:"prefix,omitempty" doc:"The prefix every key the app writes is kept under, so one bucket can hold several resources or environments."`
+	PathStyle       bool  `json:"pathStyle,omitempty" doc:"Address the bucket as a path on the endpoint rather than as a subdomain of it, for stores that serve no virtual hosts."`
+	AccessKeyID     Ref   `json:"accessKeyId" doc:"The public half of the key pair the runtime reaches the store with."`
+	SecretAccessKey Ref   `json:"secretAccessKey" doc:"The secret half of that key pair."`
+	PublicBaseURL   *Text `json:"publicBaseUrl,omitempty" doc:"The address the bucket's objects are served from publicly, when the code declares it public."`
+}
+
 const (
 	TierProduction = "production"
 	TierPreview    = "preview"
@@ -74,6 +97,19 @@ type inlineForm struct {
 }
 
 var inlineForms = map[string]inlineForm{
+	"bucket": {
+		check: func(path string, record map[string]any) error {
+			return checkObject(path, reflect.TypeFor[bucketShape](), record)
+		},
+		schema: func() object { return titled(objectSchema(reflect.TypeFor[bucketShape]()), "BucketBinding") },
+		decode: func(raw json.RawMessage) (*InlineRecord, error) {
+			record := &BucketBinding{}
+			if err := json.Unmarshal(raw, record); err != nil {
+				return nil, err
+			}
+			return &InlineRecord{Bucket: record}, nil
+		},
+	},
 	"postgres": {
 		check:  checkPostgres,
 		schema: PostgresBinding{}.jsonSchema,

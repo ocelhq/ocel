@@ -54,7 +54,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	if err := gate.Check(); err != nil {
 		return nil, nil, err
 	}
-	inline, err := inlineRecords(ctx, deps, cfg, gate, resources)
+	inline, err := inlineRecords(ctx, deps, cfg, gate, resources, ui)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -142,7 +142,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	return manifest, inline, nil
 }
 
-func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, resources []declare.Resource) ([]inlinebinding.Record, error) {
+func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, resources []declare.Resource, ui *runui.Session) ([]inlinebinding.Record, error) {
 	values, err := gate.ResolveImplied(ctx)
 	if err != nil {
 		return nil, err
@@ -151,13 +151,20 @@ func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Co
 	if err != nil || len(records) == 0 {
 		return records, err
 	}
-	versions := map[string]string{}
+	declared := inlinebinding.Declared{Postgres: map[string]string{}, Buckets: map[string]*resourcesv1.BucketConfig{}}
 	for _, resource := range resources {
 		if resource.Postgres != nil {
-			versions[resource.Name] = resource.Postgres.GetVersion()
+			declared.Postgres[resource.Name] = resource.Postgres.GetVersion()
+		}
+		if resource.Bucket != nil {
+			declared.Buckets[resource.Name] = resource.Bucket
 		}
 	}
-	return records, inlinebinding.Verify(ctx, records, versions, deps.ProbePostgres)
+	warnings, err := inlinebinding.Verify(ctx, records, declared, inlinebinding.Probes{Postgres: deps.ProbePostgres, Bucket: deps.CheckBucket})
+	for _, warning := range warnings {
+		ui.Warning(warning)
+	}
+	return records, err
 }
 
 const maxCapturedDiscoveryOutput = 4096

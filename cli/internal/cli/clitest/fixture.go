@@ -48,6 +48,7 @@ func NewDeps() cmddeps.Deps {
 		BuildAppImages:      appimages.Build,
 		CollectAppFunctions: appbuilder.CollectFunctions,
 		ProbePostgres:       fakeProbePostgres,
+		CheckBucket:         fakeCheckBucket,
 		DeploymentID:        appbuilder.DeploymentID,
 		CollectDeclarations: deploycollector.PrepareAndCollect,
 		ServeVarsUI:         envwire.ServeVarsUI,
