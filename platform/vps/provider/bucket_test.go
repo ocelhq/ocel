@@ -389,31 +389,6 @@ func TestAnAppWhoseBucketIsBoundToAStoreIsHandedNoStoreOfTheBoxs(t *testing.T) {
 	}
 }
 
-func TestAnAppBoundToAnExternalStoreIsHandedThatStoreAndItsOwnPrefix(t *testing.T) {
-	t.Parallel()
-
-	machine := &box{}
-	manifest := storeManifest(t, machine, vps.Options{
-		SSH: vps.Target{Host: "box.invalid", User: "ada"},
-		Bucket: vps.ExternalStore{
-			Endpoint: "https://s3.example.com", Region: "eu-west-1", Bucket: "shared",
-			AccessKeyID: "AKIA", SecretAccessKey: "elsewhere", PathStyle: true,
-		},
-	})
-	if manifest.Store == nil || manifest.Store.Endpoint != "https://s3.example.com" {
-		t.Fatalf("the manifest points the runtime at %+v, want the store the project was pointed at", manifest.Store)
-	}
-	if manifest.Store.Sessions != "shared/shop/prod/web" {
-		t.Errorf("upload sessions live under %q, want the prefix this project, environment and app own inside the named bucket", manifest.Store.Sessions)
-	}
-	if manifest.Store.Volume != "" {
-		t.Errorf("the manifest names volume %q for a store this box does not run", manifest.Store.Volume)
-	}
-	if strings.Contains(manifest.Store.Sealed, "elsewhere") {
-		t.Errorf("the external store's credential rides the manifest in plaintext: %q", manifest.Store.Sealed)
-	}
-}
-
 func TestRemovingABucketTakesItsObjectsWithIt(t *testing.T) {
 	t.Parallel()
 

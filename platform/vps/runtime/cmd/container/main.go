@@ -193,7 +193,7 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (pr
 	cfg := bucket.Config{
 		Objects:      internal.Client(),
 		Internal:     internal.Presigner(),
-		External:     publishing(internal, manifest.Store.PublicBaseURL, values),
+		External:     publishing(internal, values),
 		Callbacks:    callbacks,
 		PostPolicies: manifest.Store.PostPolicies,
 		SweepUploads: manifest.Store.SweepUploads,
@@ -208,7 +208,7 @@ func proxying(manifest vars.Manifest, values *rt.Values, socket, app string) (pr
 
 const unclaimedWindow = 10 * time.Second
 
-func publishing(store bucket.Store, configured string, values *rt.Values) func(context.Context) (bucket.PresignAPI, string) {
+func publishing(store bucket.Store, values *rt.Values) func(context.Context) (bucket.PresignAPI, string) {
 	var mu sync.Mutex
 	var base string
 	var signer bucket.PresignAPI
@@ -227,10 +227,7 @@ func publishing(store bucket.Store, configured string, values *rt.Values) func(c
 				claimed = values.Value(vars.StorePublicKey)
 			}
 		}
-		now := configured
-		if claimed != "" {
-			now = claimed
-		}
+		now := claimed
 		if now == "" {
 			return nil, ""
 		}

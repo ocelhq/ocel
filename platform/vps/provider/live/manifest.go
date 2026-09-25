@@ -32,19 +32,18 @@ const (
 )
 
 type Store struct {
-	Env           string   `json:"env"`
-	Endpoint      string   `json:"endpoint"`
-	Region        string   `json:"region"`
-	AccessKeyID   string   `json:"accessKeyId"`
-	Sessions      string   `json:"sessions,omitempty"`
-	Granted       []string `json:"granted,omitempty"`
-	PathStyle     bool     `json:"pathStyle,omitempty"`
-	PostPolicies  bool     `json:"postPolicies,omitempty"`
-	SweepUploads  bool     `json:"sweepUploads,omitempty"`
-	PublicBaseURL string   `json:"publicBaseUrl,omitempty"`
-	Pointer       string   `json:"pointer,omitempty"`
-	Volume        string   `json:"volume,omitempty"`
-	Sealed        string   `json:"sealed"`
+	Env          string   `json:"env"`
+	Endpoint     string   `json:"endpoint"`
+	Region       string   `json:"region"`
+	AccessKeyID  string   `json:"accessKeyId"`
+	Sessions     string   `json:"sessions,omitempty"`
+	Granted      []string `json:"granted,omitempty"`
+	PathStyle    bool     `json:"pathStyle,omitempty"`
+	PostPolicies bool     `json:"postPolicies,omitempty"`
+	SweepUploads bool     `json:"sweepUploads,omitempty"`
+	Pointer      string   `json:"pointer,omitempty"`
+	Volume       string   `json:"volume,omitempty"`
+	Sealed       string   `json:"sealed"`
 }
 
 type Manifest struct {

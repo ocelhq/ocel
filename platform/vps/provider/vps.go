@@ -25,48 +25,6 @@ type Options struct {
 	SSH          Target            `json:"ssh" doc:"The machine to deploy onto: a Host alias from ssh_config, or the destination spelled out."`
 	DeployKey    string            `json:"deployKey,omitempty" doc:"Path to the public key the ocel-deploy login accepts; defaults to the bootstrapping login's keys."`
 	Certificates map[string]string `json:"certificates,omitempty" doc:"Certificates to serve a hostname with, keyed by hostname, valued by the path to the certificate on the machine."`
-	Bucket       ExternalStore     `json:"bucket,omitempty" doc:"An S3-compatible store to keep this project's buckets in, each as a key prefix."`
-}
-
-type ExternalStore struct {
-	Endpoint        string `json:"endpoint" doc:"The address the store answers on."`
-	Region          string `json:"region" doc:"The region the store signs requests against."`
-	Bucket          string `json:"bucket" doc:"The bucket every declared bucket takes a key prefix inside."`
-	AccessKeyID     string `json:"accessKeyId" doc:"The public half of the credential that reaches the store."`
-	SecretAccessKey string `json:"secretAccessKey" doc:"The secret half of the credential that reaches the store."`
-	PathStyle       bool   `json:"pathStyle,omitempty" doc:"Address buckets as a path segment rather than a subdomain."`
-}
-
-func (s ExternalStore) probing() host.ExternalStore {
-	return host.ExternalStore{
-		Endpoint:    s.Endpoint,
-		Region:      s.Region,
-		Bucket:      s.Bucket,
-		AccessKeyID: s.AccessKeyID,
-		SecretKey:   s.SecretAccessKey,
-		PathStyle:   s.PathStyle,
-	}
-}
-
-func (s ExternalStore) configured() bool {
-	return strings.TrimSpace(s.Endpoint) != "" || strings.TrimSpace(s.Bucket) != ""
-}
-
-func (s ExternalStore) usable() error {
-	for _, field := range []struct {
-		name  string
-		value string
-	}{
-		{"endpoint", s.Endpoint}, {"region", s.Region}, {"bucket", s.Bucket},
-		{"accessKeyId", s.AccessKeyID}, {"secretAccessKey", s.SecretAccessKey},
-	} {
-		if strings.TrimSpace(field.value) == "" {
-			return providerkit.Refuse(providerkit.CodeInvalid,
-				"option %q leaves %q empty: set all of endpoint, region, bucket, accessKeyId and secretAccessKey",
-				"bucket", field.name)
-		}
-	}
-	return nil
 }
 
 type Target struct {
@@ -179,11 +137,6 @@ func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider
 	}
 	if port := decoded.SSH.Port; port != 0 && (port < 1 || port > 65535) {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid, "option %q names port %d, which is outside 1-65535", "ssh", port)
-	}
-	if decoded.Bucket.configured() {
-		if err := decoded.Bucket.usable(); err != nil {
-			return nil, err
-		}
 	}
 	p := NewProvider(decoded)
 	if len(settings.Transforms) > 0 {

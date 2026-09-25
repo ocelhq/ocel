@@ -78,25 +78,6 @@ func TestAStoreThatRefusedToExpireItsUploadsIsSweptByADeployThatOnlyBuildsTheApp
 	}
 }
 
-func TestAnExternalStoreIsSweptAndItsLifecycleLeftAlone(t *testing.T) {
-	t.Parallel()
-
-	machine := &box{}
-	manifest := storeManifest(t, machine, vps.Options{
-		SSH: vps.Target{Host: "box.invalid", User: "ada"},
-		Bucket: vps.ExternalStore{
-			Endpoint: "https://s3.example.com", Region: "eu-west-1", Bucket: "shared",
-			AccessKeyID: "AKIA", SecretAccessKey: "elsewhere", PathStyle: true,
-		},
-	})
-	if manifest.Store == nil || !manifest.Store.SweepUploads {
-		t.Error("a bucket ocel was pointed at is left to expire its own unfinished uploads, and ocel writes no lifecycle rule on a bucket it does not own")
-	}
-	if joined := strings.Join(machine.commands(), "\n"); strings.Contains(joined, "?lifecycle") {
-		t.Errorf("ocel wrote a lifecycle rule onto the customer's own bucket:\n%s", joined)
-	}
-}
-
 func (b *box) forget() {
 	b.mu.Lock()
 	defer b.mu.Unlock()

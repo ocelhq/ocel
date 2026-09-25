@@ -132,7 +132,6 @@ type standingStores struct {
 	sweeps  bool
 	spec    *host.ResourceContainer
 	shaper  string
-	probe   host.StoreProbe
 }
 
 func droppedBucket(stack naming.StackName, binding string) string {
@@ -164,18 +163,6 @@ func (s *standingStores) sweeping() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.sweeps
-}
-
-func (s *standingStores) probed(probe host.StoreProbe) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.probe = probe
-}
-
-func (s *standingStores) probing() host.StoreProbe {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.probe
 }
 
 func (s *standingStores) shaped(resource string, spec host.ResourceContainer) (host.ResourceContainer, error) {
@@ -256,9 +243,6 @@ func (p *Provider) storeCredential(ctx context.Context, ref providerkit.StackRef
 }
 
 func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
-	if external := p.options.Bucket; external.configured() {
-		return p.externalBucket(in, report)
-	}
 
 	spec := storeContainer(in)
 	spec, err := p.reshaped(ctx, in, transformTypeBucket, spec)
@@ -330,51 +314,11 @@ func (p *Provider) Bucket(ctx context.Context, in resources.Instruction, report 
 	}, nil
 }
 
-func (p *Provider) externalBucket(in resources.Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
-	if declaredPublic(in.Resource.Bucket) {
-		return providerkit.Binding{}, providerkit.Refuse(providerkit.CodeInvalid,
-			"bucket %s is public, but option %q names an external store ocel cannot open\nDrop `public` from %s, or serve it through your app or a signed url",
-			in.Resource.Name, "bucket", in.Resource.Name)
-	}
-	prefix := naming.Sanitize(in.Ref.Project) + "/" + naming.Sanitize(in.Ref.Name.Env) + "/" + naming.Sanitize(in.Resource.Name)
-	if report != nil {
-		report.Say("Binding bucket " + in.Resource.Name + " to " + p.options.Bucket.Bucket + "/" + prefix)
-	}
-	return providerkit.Binding{
-		Type:     providerkit.BindingBucket,
-		Name:     in.Resource.Name,
-		Resource: in.Resource.Declared,
-		Properties: map[string]string{
-			providerkit.PropertyBucket: p.options.Bucket.Bucket + "/" + prefix,
-		},
-	}, nil
-}
-
 func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan) (*live.Store, error) {
 	if !slices.ContainsFunc(plan.App.Values.Bindings, func(binding providerkit.Binding) bool {
 		return binding.Type == providerkit.BindingBucket && !binding.Endpointed()
 	}) {
 		return nil, nil
-	}
-	if external := p.options.Bucket; external.configured() {
-		sealed, err := p.sealer.Seal(ctx, storeCoordinate(plan.Ref), []byte(external.SecretAccessKey))
-		if err != nil {
-			return nil, err
-		}
-		return &live.Store{
-			Env:           storeRef(plan.Ref).Name.String(),
-			Endpoint:      external.Endpoint,
-			PublicBaseURL: external.Endpoint,
-			Region:        external.Region,
-			AccessKeyID:   external.AccessKeyID,
-			PathStyle:     external.PathStyle,
-			Sessions: external.Bucket + "/" + naming.Sanitize(plan.Ref.Project) + "/" +
-				naming.Sanitize(plan.Ref.Name.Env) + "/" + naming.Sanitize(appNameOf(plan.App)),
-			Granted:      grantedBuckets(plan.App),
-			PostPolicies: p.stores.probing().PostPolicies,
-			SweepUploads: true,
-			Sealed:       base64.StdEncoding.EncodeToString(sealed),
-		}, nil
 	}
 	spec := p.stores.shape()
 	if spec == nil {
@@ -518,9 +462,6 @@ func corsOrigins(ref providerkit.StackRef, declared []string, claims []host.Host
 }
 
 func (p *Provider) holdOrigins(ctx context.Context, project string, class providerkit.Class) error {
-	if p.options.Bucket.configured() {
-		return nil
-	}
 	entries, err := providerkit.ReadStacks(ctx, p.records, class, project)
 	if err != nil {
 		return err
@@ -570,13 +511,6 @@ func declaredPublic(spec *providerkit.BucketSpec) bool {
 }
 
 func (p *Provider) removeBucket(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, report providerkit.Reporter) error {
-	if external := p.options.Bucket; external.configured() {
-		if report != nil {
-			report.Say("Leaving bucket " + binding.Name + "'s objects under " +
-				binding.Properties[providerkit.PropertyBucket])
-		}
-		return nil
-	}
 	if err := p.dropBucket(ctx, ref, binding, report); err != nil {
 		return err
 	}
@@ -688,9 +622,6 @@ func (p *Provider) storeAccounts(ctx context.Context, ref providerkit.StackRef) 
 }
 
 func (p *Provider) removeStoreAccount(ctx context.Context, ref providerkit.StackRef, app string) error {
-	if external := p.options.Bucket; external.configured() {
-		return nil
-	}
 	store := storeName(ref)
 	key := host.StoreAccountKey(storeRef(ref).Name.String(), app)
 	sealed, err := p.host.Kept(ctx, ref.Class, key)
