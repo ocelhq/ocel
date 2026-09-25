@@ -32,7 +32,7 @@ type Guarantees struct {
 }
 
 type Spec struct {
-	Pins       []string
+	Pins       []Pin
 	Upstream   string
 	Edge       string
 	Permission Permission
@@ -41,6 +41,11 @@ type Spec struct {
 type Permission struct {
 	Dial string
 	Path string
+}
+
+type Pin struct {
+	Hostname string
+	Path     string
 }
 
 type Standing []providerkit.StandingCheck

@@ -103,9 +103,9 @@ func RenderProxyConfig(front proxy.Proxy, state RoutingTable) ([]byte, error) {
 }
 
 func proxySpec(state RoutingTable) proxy.Spec {
-	pins := make([]string, 0, len(state.Pins))
+	pins := make([]proxy.Pin, 0, len(state.Pins))
 	for _, pin := range state.Pins {
-		pins = append(pins, pin.Path)
+		pins = append(pins, proxy.Pin(pin))
 	}
 	return proxy.Spec{Pins: pins, Upstream: SwitchboardUpstream, Edge: switchboard.EdgeName, Permission: SwitchboardPermission}
 }

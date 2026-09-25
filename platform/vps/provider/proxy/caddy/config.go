@@ -1,6 +1,7 @@
 package caddy
 
 import (
+	"cmp"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -58,8 +59,9 @@ type certificates struct {
 }
 
 type loadFile struct {
-	Certificate string `json:"certificate"`
-	Key         string `json:"key"`
+	Certificate string   `json:"certificate"`
+	Key         string   `json:"key"`
+	Tags        []string `json:"tags"`
 }
 
 type automation struct {
@@ -99,7 +101,18 @@ type server struct {
 	Errors   *failing           `json:"errors,omitempty"`
 }
 
-type connectionPolicy struct{}
+type connectionPolicy struct {
+	Match     *handshakeMatch `json:"match,omitempty"`
+	Selection *selection      `json:"certificate_selection,omitempty"`
+}
+
+type handshakeMatch struct {
+	SNI []string `json:"sni"`
+}
+
+type selection struct {
+	AnyTag []string `json:"any_tag"`
+}
 
 type route struct {
 	Handle []forward `json:"handle"`
@@ -151,11 +164,11 @@ func render(spec proxy.Spec) ([]byte, error) {
 	if strings.TrimSpace(spec.Permission.Dial) == "" || !strings.HasPrefix(spec.Permission.Path, "/") {
 		return nil, errors.New("a proxy spec names no endpoint to ask whether a hostname may be issued a certificate")
 	}
-	pinned, err := loaded(spec.Pins)
+	pinned, selecting, err := loaded(spec.Pins)
 	if err != nil {
 		return nil, err
 	}
-	front.Policies = []connectionPolicy{{}}
+	front.Policies = slices.Concat(selecting, []connectionPolicy{{}})
 	front.Routes = []route{{Handle: []forward{{
 		Handler:     forwardHandler,
 		Upstreams:   []dial{{Dial: spec.Upstream}},
@@ -204,19 +217,48 @@ func internalSubjects() []string {
 	return subjects
 }
 
-func loaded(pins []string) (*certificates, error) {
+func loaded(pins []proxy.Pin) (*certificates, []connectionPolicy, error) {
 	var files []loadFile
-	for _, pin := range slices.Compact(slices.Sorted(slices.Values(pins))) {
-		mounted, err := pinMount(pin)
+	var selecting []connectionPolicy
+	for _, pin := range slices.SortedFunc(slices.Values(pins), byPrecedence) {
+		mounted, err := pinMount(pin.Path)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		files = append(files, loadFile{Certificate: PinCertificate(mounted), Key: PinKey(mounted)})
+		if strings.TrimSpace(pin.Hostname) == "" {
+			return nil, nil, fmt.Errorf("the certificate pinned at %q names no hostname it serves", pin.Path)
+		}
+		if !slices.ContainsFunc(files, func(held loadFile) bool { return held.Tags[0] == mounted }) {
+			files = append(files, loadFile{Certificate: PinCertificate(mounted), Key: PinKey(mounted), Tags: []string{mounted}})
+		}
+		selecting = append(selecting, connectionPolicy{
+			Match:     &handshakeMatch{SNI: []string{strings.ToLower(pin.Hostname)}},
+			Selection: &selection{AnyTag: []string{mounted}},
+		})
 	}
+	selecting = slices.CompactFunc(selecting, func(a, b connectionPolicy) bool {
+		return a.Match.SNI[0] == b.Match.SNI[0]
+	})
+	slices.SortFunc(files, func(a, b loadFile) int { return strings.Compare(a.Certificate, b.Certificate) })
 	if len(files) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
-	return &certificates{LoadFiles: files}, nil
+	return &certificates{LoadFiles: files}, selecting, nil
+}
+
+func byPrecedence(a, b proxy.Pin) int {
+	return cmp.Or(
+		cmp.Compare(wildcarded(a.Hostname), wildcarded(b.Hostname)),
+		strings.Compare(strings.ToLower(a.Hostname), strings.ToLower(b.Hostname)),
+		strings.Compare(a.Path, b.Path),
+	)
+}
+
+func wildcarded(hostname string) int {
+	if strings.HasPrefix(hostname, "*.") {
+		return 1
+	}
+	return 0
 }
 
 func pinMount(path string) (string, error) {
