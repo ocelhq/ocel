@@ -70,7 +70,7 @@ func TestAnArtifactTheReleaseShipsIsAnEngineResourceInThePlan(t *testing.T) {
 
 	upload := shipping(t)
 	engine := &mockedEngine{outputs: auto.OutputMap{}}
-	planned, err := conformingReleaser(engine).Plan(context.Background(), shippingPlan(upload), nil)
+	planned, err := conformingStacks(engine).Plan(context.Background(), shippingPlan(upload), nil)
 	if err != nil {
 		t.Fatalf("Plan() of a release shipping an artifact = %v", err)
 	}
@@ -92,7 +92,7 @@ func TestAnArtifactTheReleaseShipsIsAnEngineResourceInTheApply(t *testing.T) {
 	upload := shipping(t)
 	watcher := &declaring{inner: standInCloud{}}
 	engine := &mockedEngine{outputs: auto.OutputMap{}, mocks: watcher}
-	if _, err := conformingReleaser(engine).Provision(context.Background(), shippingPlan(upload), nil); err != nil {
+	if _, err := conformingStacks(engine).Provision(context.Background(), shippingPlan(upload), nil); err != nil {
 		t.Fatalf("Provision() of a release shipping an artifact = %v", err)
 	}
 

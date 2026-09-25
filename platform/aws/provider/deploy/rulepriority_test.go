@@ -62,9 +62,9 @@ func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFir
 		rules.claim(rulePriority(containerPhysical, nil))
 		return errors.New("creating ELBv2 Listener Rule: PriorityInUse: Priority '" + strconv.Itoa(rulePriority(containerPhysical, nil)) + "' is currently in use")
 	}
-	releaser := standingUp(cfg, engine)
+	stacks := standingUp(cfg, engine)
 
-	if _, err := releaser.Provision(context.Background(), plan, edge.DiscardProgress()); err != nil {
+	if _, err := stacks.Provision(context.Background(), plan, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Provision() = %v, want the rule placed again at the next free priority", err)
 	}
 	if attempts != 2 {

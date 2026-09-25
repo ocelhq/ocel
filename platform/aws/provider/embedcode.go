@@ -7,5 +7,5 @@ import (
 )
 
 func (p *Provider) EmbedCode(ctx context.Context, function string, artifact providerkit.ArtifactRef, progress providerkit.Progress) error {
-	return p.releases.EmbedCode(ctx, function, artifact, progress)
+	return p.stacks.EmbedCode(ctx, function, artifact, progress)
 }

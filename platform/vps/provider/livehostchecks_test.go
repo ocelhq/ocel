@@ -12,17 +12,17 @@ import (
 
 const adminDecoy = "ocel-live-admin-decoy"
 
-func standingOn(t *testing.T, p *vps.Provider, hostnames []string) []providerkit.HostCheck {
+func hostChecksOn(t *testing.T, p *vps.Provider, hostnames []string) []providerkit.HostCheck {
 	t.Helper()
 	checks, err := p.CheckHost(context.Background(), providerkit.HostCheckRequest{
 		Class:     providerkit.ClassProduction,
 		Hostnames: hostnames,
 	})
 	if err != nil {
-		t.Fatalf("CheckStanding() = %v", err)
+		t.Fatalf("CheckHost() = %v", err)
 	}
 	if len(checks) == 0 {
-		t.Fatal("CheckStanding() answered nothing, so there is no window a verdict can be read out of")
+		t.Fatal("CheckHost() answered nothing, so there is no window a verdict can be read out of")
 	}
 	return checks
 }
@@ -34,15 +34,15 @@ func about(t *testing.T, checks []providerkit.HostCheck, subject string) provide
 			return check
 		}
 	}
-	t.Fatalf("CheckStanding() answered %+v, and none of it is about %q", checks, subject)
+	t.Fatalf("CheckHost() answered %+v, and none of it is about %q", checks, subject)
 	return providerkit.HostCheck{}
 }
 
-func TestLiveTheStandingVerdictsReadOffABootstrappedBoxAndGateNothing(t *testing.T) {
+func TestLiveTheHostCheckVerdictsReadOffABootstrappedBoxAndGateNothing(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
-	owed := "ocel-live-standing.invalid"
-	checks := standingOn(t, p, []string{owed, "*.preview." + owed})
+	owed := "ocel-live-host-checks.invalid"
+	checks := hostChecksOn(t, p, []string{owed, "*.preview." + owed})
 
 	dns := about(t, checks, owed)
 	if dns.Verdict != providerkit.HostOwed {
@@ -70,10 +70,10 @@ func TestLiveTheStandingVerdictsReadOffABootstrappedBoxAndGateNothing(t *testing
 	}
 }
 
-func TestLiveTheAdminPortBoundInsideTheProxyFailsTheStandingVerdict(t *testing.T) {
+func TestLiveTheAdminPortBoundInsideTheProxyFailsTheHostCheckVerdict(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
-	before := about(t, standingOn(t, p, nil), adminPort)
+	before := about(t, hostChecksOn(t, p, nil), adminPort)
 	if before.Verdict != providerkit.HostPass {
 		t.Fatalf("tcp %s inside %s is already %v (%q), so this test cannot tell what it induced from what it found",
 			adminPort, caddy.Container, before.Verdict, before.Finding)
@@ -88,7 +88,7 @@ func TestLiveTheAdminPortBoundInsideTheProxyFailsTheStandingVerdict(t *testing.T
 		t.Fatalf("%s never came up, so nothing is listening on tcp %s and there is no regression to catch", adminDecoy, adminPort)
 	}
 
-	after := about(t, standingOn(t, p, nil), adminPort)
+	after := about(t, hostChecksOn(t, p, nil), adminPort)
 	if after.Verdict != providerkit.HostFail {
 		t.Fatalf("tcp %s inside %s reads %v (%q) with a listener deliberately bound on it",
 			adminPort, caddy.Container, after.Verdict, after.Finding)

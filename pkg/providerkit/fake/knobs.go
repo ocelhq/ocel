@@ -32,7 +32,7 @@ func (p *Provider) ResourceHooks() resources.Hooks {
 
 func (p *Provider) Ships(store providerkit.ArtifactStore) *Provider {
 	p.artifacts = store
-	p.releases.artifacts = store
+	p.stacks.artifacts = store
 	return p
 }
 
@@ -44,9 +44,9 @@ func (p *Provider) FakeBootstrap() *Bootstrap { return p.bootstrap }
 
 func (p *Provider) Journal() []string { return p.journal.Entries() }
 
-func (p *Provider) Releasing(hooks resources.Hooks) *Provider {
-	p.releasing = resources.Stacks(p.records, p.artifacts, hooks)
+func (p *Provider) ResourceStacks(hooks resources.Hooks) *Provider {
+	p.resourceStacks = resources.Stacks(p.records, p.artifacts, hooks)
 	return p
 }
 
-func (p *Provider) FakeStacks() *Stacks { return p.releases }
+func (p *Provider) FakeStacks() *Stacks { return p.stacks }

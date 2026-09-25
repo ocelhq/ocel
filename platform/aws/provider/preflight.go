@@ -32,7 +32,7 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPr
 	if err := p.publishRuntimeLayers(ctx, pre); err != nil {
 		return err
 	}
-	return p.releases.Preflight(ctx, pre)
+	return p.stacks.Preflight(ctx, pre)
 }
 
 func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre providerkit.DeployPreflight) error {

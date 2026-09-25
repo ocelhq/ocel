@@ -140,10 +140,10 @@ func TestNoPortIsNilForTheKitToCallThrough(t *testing.T) {
 
 	p := standing(t)
 	for name, port := range map[string]any{
-		"Releases":    p.Stacks(),
+		"Stacks":      p.Stacks(),
 		"Artifacts":   p.Artifacts(),
 		"Records":     p.Records(),
-		"Sealer":      p.Cipher(),
+		"Cipher":      p.Cipher(),
 		"Credentials": p.Credentials(),
 		"Edges":       p.Edges(),
 		"DNS":         p.DNS(),

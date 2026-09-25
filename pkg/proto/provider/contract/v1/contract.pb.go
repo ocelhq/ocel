@@ -7,6 +7,10 @@
 package contractv1
 
 import (
+	reflect "reflect"
+	sync "sync"
+	unsafe "unsafe"
+
 	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	v11 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	v1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -16,9 +20,6 @@ import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
-	reflect "reflect"
-	sync "sync"
-	unsafe "unsafe"
 )
 
 const (
@@ -184,24 +185,24 @@ func (HostTrustReason) EnumDescriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{2}
 }
 
-type StandingCheck_Verdict int32
+type HostCheck_Verdict int32
 
 const (
-	StandingCheck_VERDICT_UNSPECIFIED StandingCheck_Verdict = 0
-	StandingCheck_VERDICT_PASS        StandingCheck_Verdict = 1
-	StandingCheck_VERDICT_OWED        StandingCheck_Verdict = 2
-	StandingCheck_VERDICT_FAIL        StandingCheck_Verdict = 3
+	HostCheck_VERDICT_UNSPECIFIED HostCheck_Verdict = 0
+	HostCheck_VERDICT_PASS        HostCheck_Verdict = 1
+	HostCheck_VERDICT_OWED        HostCheck_Verdict = 2
+	HostCheck_VERDICT_FAIL        HostCheck_Verdict = 3
 )
 
-// Enum value maps for StandingCheck_Verdict.
+// Enum value maps for HostCheck_Verdict.
 var (
-	StandingCheck_Verdict_name = map[int32]string{
+	HostCheck_Verdict_name = map[int32]string{
 		0: "VERDICT_UNSPECIFIED",
 		1: "VERDICT_PASS",
 		2: "VERDICT_OWED",
 		3: "VERDICT_FAIL",
 	}
-	StandingCheck_Verdict_value = map[string]int32{
+	HostCheck_Verdict_value = map[string]int32{
 		"VERDICT_UNSPECIFIED": 0,
 		"VERDICT_PASS":        1,
 		"VERDICT_OWED":        2,
@@ -209,30 +210,30 @@ var (
 	}
 )
 
-func (x StandingCheck_Verdict) Enum() *StandingCheck_Verdict {
-	p := new(StandingCheck_Verdict)
+func (x HostCheck_Verdict) Enum() *HostCheck_Verdict {
+	p := new(HostCheck_Verdict)
 	*p = x
 	return p
 }
 
-func (x StandingCheck_Verdict) String() string {
+func (x HostCheck_Verdict) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (StandingCheck_Verdict) Descriptor() protoreflect.EnumDescriptor {
+func (HostCheck_Verdict) Descriptor() protoreflect.EnumDescriptor {
 	return file_provider_contract_v1_contract_proto_enumTypes[3].Descriptor()
 }
 
-func (StandingCheck_Verdict) Type() protoreflect.EnumType {
+func (HostCheck_Verdict) Type() protoreflect.EnumType {
 	return &file_provider_contract_v1_contract_proto_enumTypes[3]
 }
 
-func (x StandingCheck_Verdict) Number() protoreflect.EnumNumber {
+func (x HostCheck_Verdict) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use StandingCheck_Verdict.Descriptor instead.
-func (StandingCheck_Verdict) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use HostCheck_Verdict.Descriptor instead.
+func (HostCheck_Verdict) EnumDescriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{46, 0}
 }
 
@@ -3017,17 +3018,17 @@ func (x *PreviewEnvironment) GetCreatedAt() int64 {
 }
 
 type PreflightRequest struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	RequiredTier    v1.Tier                `protobuf:"varint,1,opt,name=required_tier,json=requiredTier,proto3,enum=common.environment.v1.Tier" json:"required_tier,omitempty"`
-	Slug            string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
-	Domains         []string               `protobuf:"bytes,3,rep,name=domains,proto3" json:"domains,omitempty"`
-	Edge            *EdgeSelection         `protobuf:"bytes,4,opt,name=edge,proto3" json:"edge,omitempty"`
-	Frameworks      []string               `protobuf:"bytes,6,rep,name=frameworks,proto3" json:"frameworks,omitempty"`
-	Standing        bool                   `protobuf:"varint,7,opt,name=standing,proto3" json:"standing,omitempty"`
-	StandingDomains []string               `protobuf:"bytes,8,rep,name=standing_domains,json=standingDomains,proto3" json:"standing_domains,omitempty"`
-	Containers      []*ContainerApp        `protobuf:"bytes,9,rep,name=containers,proto3" json:"containers,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	RequiredTier     v1.Tier                `protobuf:"varint,1,opt,name=required_tier,json=requiredTier,proto3,enum=common.environment.v1.Tier" json:"required_tier,omitempty"`
+	Slug             string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
+	Domains          []string               `protobuf:"bytes,3,rep,name=domains,proto3" json:"domains,omitempty"`
+	Edge             *EdgeSelection         `protobuf:"bytes,4,opt,name=edge,proto3" json:"edge,omitempty"`
+	Frameworks       []string               `protobuf:"bytes,6,rep,name=frameworks,proto3" json:"frameworks,omitempty"`
+	CheckHosts       bool                   `protobuf:"varint,7,opt,name=check_hosts,json=checkHosts,proto3" json:"check_hosts,omitempty"`
+	HostCheckDomains []string               `protobuf:"bytes,8,rep,name=host_check_domains,json=hostCheckDomains,proto3" json:"host_check_domains,omitempty"`
+	Containers       []*ContainerApp        `protobuf:"bytes,9,rep,name=containers,proto3" json:"containers,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *PreflightRequest) Reset() {
@@ -3095,16 +3096,16 @@ func (x *PreflightRequest) GetFrameworks() []string {
 	return nil
 }
 
-func (x *PreflightRequest) GetStanding() bool {
+func (x *PreflightRequest) GetCheckHosts() bool {
 	if x != nil {
-		return x.Standing
+		return x.CheckHosts
 	}
 	return false
 }
 
-func (x *PreflightRequest) GetStandingDomains() []string {
+func (x *PreflightRequest) GetHostCheckDomains() []string {
 	if x != nil {
-		return x.StandingDomains
+		return x.HostCheckDomains
 	}
 	return nil
 }
@@ -3179,7 +3180,7 @@ type PreflightResponse struct {
 	PreviewWildcard       *PreviewWildcard       `protobuf:"bytes,7,opt,name=preview_wildcard,json=previewWildcard,proto3" json:"preview_wildcard,omitempty"`
 	Bootstrap             *BootstrapStatus       `protobuf:"bytes,8,opt,name=bootstrap,proto3" json:"bootstrap,omitempty"`
 	Computes              []string               `protobuf:"bytes,9,rep,name=computes,proto3" json:"computes,omitempty"`
-	Standing              []*StandingCheck       `protobuf:"bytes,10,rep,name=standing,proto3" json:"standing,omitempty"`
+	HostChecks            []*HostCheck           `protobuf:"bytes,10,rep,name=host_checks,json=hostChecks,proto3" json:"host_checks,omitempty"`
 	ContainerArchs        map[string]string      `protobuf:"bytes,12,rep,name=container_archs,json=containerArchs,proto3" json:"container_archs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
@@ -3278,9 +3279,9 @@ func (x *PreflightResponse) GetComputes() []string {
 	return nil
 }
 
-func (x *PreflightResponse) GetStanding() []*StandingCheck {
+func (x *PreflightResponse) GetHostChecks() []*HostCheck {
 	if x != nil {
-		return x.Standing
+		return x.HostChecks
 	}
 	return nil
 }
@@ -3520,30 +3521,30 @@ func (x *PreviewWildcard) GetExpiringSoon() bool {
 	return false
 }
 
-type StandingCheck struct {
+type HostCheck struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Subject       string                 `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
-	Verdict       StandingCheck_Verdict  `protobuf:"varint,2,opt,name=verdict,proto3,enum=provider.contract.v1.StandingCheck_Verdict" json:"verdict,omitempty"`
+	Verdict       HostCheck_Verdict      `protobuf:"varint,2,opt,name=verdict,proto3,enum=provider.contract.v1.HostCheck_Verdict" json:"verdict,omitempty"`
 	Finding       string                 `protobuf:"bytes,3,opt,name=finding,proto3" json:"finding,omitempty"`
 	Fix           string                 `protobuf:"bytes,4,opt,name=fix,proto3" json:"fix,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *StandingCheck) Reset() {
-	*x = StandingCheck{}
+func (x *HostCheck) Reset() {
+	*x = HostCheck{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *StandingCheck) String() string {
+func (x *HostCheck) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*StandingCheck) ProtoMessage() {}
+func (*HostCheck) ProtoMessage() {}
 
-func (x *StandingCheck) ProtoReflect() protoreflect.Message {
+func (x *HostCheck) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3555,33 +3556,33 @@ func (x *StandingCheck) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use StandingCheck.ProtoReflect.Descriptor instead.
-func (*StandingCheck) Descriptor() ([]byte, []int) {
+// Deprecated: Use HostCheck.ProtoReflect.Descriptor instead.
+func (*HostCheck) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{46}
 }
 
-func (x *StandingCheck) GetSubject() string {
+func (x *HostCheck) GetSubject() string {
 	if x != nil {
 		return x.Subject
 	}
 	return ""
 }
 
-func (x *StandingCheck) GetVerdict() StandingCheck_Verdict {
+func (x *HostCheck) GetVerdict() HostCheck_Verdict {
 	if x != nil {
 		return x.Verdict
 	}
-	return StandingCheck_VERDICT_UNSPECIFIED
+	return HostCheck_VERDICT_UNSPECIFIED
 }
 
-func (x *StandingCheck) GetFinding() string {
+func (x *HostCheck) GetFinding() string {
 	if x != nil {
 		return x.Finding
 	}
 	return ""
 }
 
-func (x *StandingCheck) GetFix() string {
+func (x *HostCheck) GetFix() string {
 	if x != nil {
 		return x.Fix
 	}
@@ -4957,7 +4958,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\tlifecycle\x18\x02 \x01(\x0e2 .common.environment.v1.LifecycleR\tlifecycle\x12\x14\n" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\x03R\tcreatedAt\"\x96\x03\n" +
+	"created_at\x18\x04 \x01(\x03R\tcreatedAt\"\x9e\x03\n" +
 	"\x10PreflightRequest\x12J\n" +
 	"\rrequired_tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\frequiredTier\x128\n" +
 	"\x04slug\x18\x02 \x01(\tB$\xbaH!\xd8\x01\x01r\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\x18\n" +
@@ -4965,15 +4966,16 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x1e\n" +
 	"\n" +
 	"frameworks\x18\x06 \x03(\tR\n" +
-	"frameworks\x12\x1a\n" +
-	"\bstanding\x18\a \x01(\bR\bstanding\x12)\n" +
-	"\x10standing_domains\x18\b \x03(\tR\x0fstandingDomains\x12B\n" +
+	"frameworks\x12\x1f\n" +
+	"\vcheck_hosts\x18\a \x01(\bR\n" +
+	"checkHosts\x12,\n" +
+	"\x12host_check_domains\x18\b \x03(\tR\x10hostCheckDomains\x12B\n" +
 	"\n" +
 	"containers\x18\t \x03(\v2\".provider.contract.v1.ContainerAppR\n" +
 	"containers\"V\n" +
 	"\fContainerApp\x12\x19\n" +
 	"\x03app\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03app\x12+\n" +
-	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\xbc\x06\n" +
+	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\xbd\x06\n" +
 	"\x11PreflightResponse\x12:\n" +
 	"\n" +
 	"infra_tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\tinfraTier\x125\n" +
@@ -4985,9 +4987,10 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\rdomain_claims\x18\x06 \x03(\v2!.provider.contract.v1.DomainClaimR\fdomainClaims\x12P\n" +
 	"\x10preview_wildcard\x18\a \x01(\v2%.provider.contract.v1.PreviewWildcardR\x0fpreviewWildcard\x12C\n" +
 	"\tbootstrap\x18\b \x01(\v2%.provider.contract.v1.BootstrapStatusR\tbootstrap\x12\x1a\n" +
-	"\bcomputes\x18\t \x03(\tR\bcomputes\x12?\n" +
-	"\bstanding\x18\n" +
-	" \x03(\v2#.provider.contract.v1.StandingCheckR\bstanding\x12~\n" +
+	"\bcomputes\x18\t \x03(\tR\bcomputes\x12@\n" +
+	"\vhost_checks\x18\n" +
+	" \x03(\v2\x1f.provider.contract.v1.HostCheckR\n" +
+	"hostChecks\x12~\n" +
 	"\x0fcontainer_archs\x18\f \x03(\v2;.provider.contract.v1.PreflightResponse.ContainerArchsEntryB\x18\xbaH\x15\x9a\x01\x12*\x10r\x0eR\x05amd64R\x05arm64R\x0econtainerArchs\x1aA\n" +
 	"\x13ContainerArchsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
@@ -5014,10 +5017,10 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x0erenewal_status\x18\a \x01(\tR\rrenewalStatus\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\b \x01(\x03R\texpiresAt\x12#\n" +
-	"\rexpiring_soon\x18\t \x01(\bR\fexpiringSoon\"\xf6\x01\n" +
-	"\rStandingCheck\x12\x18\n" +
-	"\asubject\x18\x01 \x01(\tR\asubject\x12E\n" +
-	"\averdict\x18\x02 \x01(\x0e2+.provider.contract.v1.StandingCheck.VerdictR\averdict\x12\x18\n" +
+	"\rexpiring_soon\x18\t \x01(\bR\fexpiringSoon\"\xee\x01\n" +
+	"\tHostCheck\x12\x18\n" +
+	"\asubject\x18\x01 \x01(\tR\asubject\x12A\n" +
+	"\averdict\x18\x02 \x01(\x0e2'.provider.contract.v1.HostCheck.VerdictR\averdict\x12\x18\n" +
 	"\afinding\x18\x03 \x01(\tR\afinding\x12\x10\n" +
 	"\x03fix\x18\x04 \x01(\tR\x03fix\"X\n" +
 	"\aVerdict\x12\x17\n" +
@@ -5179,7 +5182,7 @@ var file_provider_contract_v1_contract_proto_goTypes = []any{
 	(CredentialTier)(0),                     // 0: provider.contract.v1.CredentialTier
 	(RefusalCode)(0),                        // 1: provider.contract.v1.RefusalCode
 	(HostTrustReason)(0),                    // 2: provider.contract.v1.HostTrustReason
-	(StandingCheck_Verdict)(0),              // 3: provider.contract.v1.StandingCheck.Verdict
+	(HostCheck_Verdict)(0),                  // 3: provider.contract.v1.HostCheck.Verdict
 	(DomainClaim_Status)(0),                 // 4: provider.contract.v1.DomainClaim.Status
 	(*ProviderConfig)(nil),                  // 5: provider.contract.v1.ProviderConfig
 	(*ConfigureRequest)(nil),                // 6: provider.contract.v1.ConfigureRequest
@@ -5227,7 +5230,7 @@ var file_provider_contract_v1_contract_proto_goTypes = []any{
 	(*ResolveImageRegistryRequest)(nil),     // 48: provider.contract.v1.ResolveImageRegistryRequest
 	(*ResolveImageRegistryResponse)(nil),    // 49: provider.contract.v1.ResolveImageRegistryResponse
 	(*PreviewWildcard)(nil),                 // 50: provider.contract.v1.PreviewWildcard
-	(*StandingCheck)(nil),                   // 51: provider.contract.v1.StandingCheck
+	(*HostCheck)(nil),                       // 51: provider.contract.v1.HostCheck
 	(*DomainClaim)(nil),                     // 52: provider.contract.v1.DomainClaim
 	(*Identity)(nil),                        // 53: provider.contract.v1.Identity
 	(*Detail)(nil),                          // 54: provider.contract.v1.Detail
@@ -5328,11 +5331,11 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	52,  // 62: provider.contract.v1.PreflightResponse.domain_claims:type_name -> provider.contract.v1.DomainClaim
 	50,  // 63: provider.contract.v1.PreflightResponse.preview_wildcard:type_name -> provider.contract.v1.PreviewWildcard
 	32,  // 64: provider.contract.v1.PreflightResponse.bootstrap:type_name -> provider.contract.v1.BootstrapStatus
-	51,  // 65: provider.contract.v1.PreflightResponse.standing:type_name -> provider.contract.v1.StandingCheck
+	51,  // 65: provider.contract.v1.PreflightResponse.host_checks:type_name -> provider.contract.v1.HostCheck
 	71,  // 66: provider.contract.v1.PreflightResponse.container_archs:type_name -> provider.contract.v1.PreflightResponse.ContainerArchsEntry
 	74,  // 67: provider.contract.v1.ResolveImageRegistryRequest.tier:type_name -> common.environment.v1.Tier
 	14,  // 68: provider.contract.v1.PreviewWildcard.certificate:type_name -> provider.contract.v1.CertificateState
-	3,   // 69: provider.contract.v1.StandingCheck.verdict:type_name -> provider.contract.v1.StandingCheck.Verdict
+	3,   // 69: provider.contract.v1.HostCheck.verdict:type_name -> provider.contract.v1.HostCheck.Verdict
 	4,   // 70: provider.contract.v1.DomainClaim.status:type_name -> provider.contract.v1.DomainClaim.Status
 	54,  // 71: provider.contract.v1.Identity.details:type_name -> provider.contract.v1.Detail
 	72,  // 72: provider.contract.v1.Promotion.builds:type_name -> provider.contract.v1.Promotion.BuildsEntry

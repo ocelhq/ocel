@@ -90,7 +90,7 @@ func TestTheAppPlanCarriesTheImageAndProbeAContainerAppIsStoodUpFrom(t *testing.
 	plans := provider.FakeStacks().Plans()
 	app := plans[len(plans)-1].App
 	if app == nil {
-		t.Fatal("the last plan the releaser saw stands up no app")
+		t.Fatal("the last plan the stacks port saw stands up no app")
 	}
 	if app.Compute != providerkit.ComputeContainer {
 		t.Errorf("Compute = %q, want %q: the primitive is chosen by what the plan names", app.Compute, providerkit.ComputeContainer)

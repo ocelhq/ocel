@@ -360,9 +360,9 @@ func TestRemovalTakesNoKeyFromAnAccountThatBroughtItsOwn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	groups, err := PlanRemoval(ctx, unlistable{stacks}, read)
+	groups, err := PlanRemove(ctx, unlistable{stacks}, read)
 	if err != nil {
-		t.Fatalf("PlanRemoval: %v", err)
+		t.Fatalf("PlanRemove: %v", err)
 	}
 	group := groupNamed(t, groups, defaultNamespace.FeatureStackName(FeatureVarsKey, ClassProduction))
 	for _, change := range group.Changes {

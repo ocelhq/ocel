@@ -63,7 +63,7 @@ func TestProjectTheImageRepositoryStandsWhereTheDeployPushesTo(t *testing.T) {
 func TestProjectARepositoryWhoseCleanupPolicyWasEditedAwayIsMendedByTheNextBootstrap(t *testing.T) {
 	p := againstAProject(t)
 	class := providerkit.ClassProduction
-	bootstrapper := bootstrapped(t, p, class)
+	bootstrap := bootstrapped(t, p, class)
 
 	ctx := context.Background()
 	service, err := artifactregistry.NewService(ctx)
@@ -76,7 +76,7 @@ func TestProjectARepositoryWhoseCleanupPolicyWasEditedAwayIsMendedByTheNextBoots
 		t.Fatalf("take the cleanup policies off %s: %v", name, err)
 	}
 
-	plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"})
+	plan, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"})
 	if err != nil {
 		t.Fatalf("Plan(%s) = %v", class, err)
 	}
@@ -92,7 +92,7 @@ func TestProjectARepositoryWhoseCleanupPolicyWasEditedAwayIsMendedByTheNextBoots
 		t.Errorf("Plan() after the policies were edited away shows %+v, want the repository row reading as an update: a survey that only asks whether a repository exists never mends one", plan.Groups)
 	}
 
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v", class, err)
 	}
 	if _, named := repositoryHeld(t, p, class).CleanupPolicies["drop-untagged"]; !named {

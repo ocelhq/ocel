@@ -156,10 +156,10 @@ func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 
 	plans := provider.FakeStacks().Plans()
 	if len(plans) != 2 {
-		t.Fatalf("the releaser saw %d plans, want the infra stack and the app stack", len(plans))
+		t.Fatalf("the stacks port saw %d plans, want the infra stack and the app stack", len(plans))
 	}
 	if plans[0].Kind != providerkit.StackInfra || plans[1].Kind != providerkit.StackApp {
-		t.Fatalf("the releaser saw %s then %s, want infra before the apps that binding to it", plans[0].Kind, plans[1].Kind)
+		t.Fatalf("the stacks port saw %s then %s, want infra before the apps that binding to it", plans[0].Kind, plans[1].Kind)
 	}
 	if !slices.ContainsFunc(plans[1].App.Grants, func(binding providerkit.Binding) bool { return binding.Name == "orders" }) {
 		t.Errorf("the app plan grants %v, want the infra binding the app binds a client to", plans[1].App.Grants)
@@ -252,7 +252,7 @@ func TestDeployGrantsAnAppOnlyWhatItsUsageEdgesName(t *testing.T) {
 		}
 	}
 	if len(apps) != 2 {
-		t.Fatalf("the releaser stood up %d apps, want web and admin", len(apps))
+		t.Fatalf("the stacks port stood up %d apps, want web and admin", len(apps))
 	}
 
 	if want := []string{"orders", "uploads"}; !slices.Equal(grantNames(apps["admin"]), want) {
@@ -367,10 +367,10 @@ func TestDeployPublishesEveryInfraBindingForItsAppsToRead(t *testing.T) {
 
 type refusingStacks struct {
 	*fake.Provider
-	releaser providerkit.Stacks
+	stacks providerkit.Stacks
 }
 
-func (r refusingStacks) Stacks() providerkit.Stacks { return r.releaser }
+func (r refusingStacks) Stacks() providerkit.Stacks { return r.stacks }
 
 type halfBindingStacks struct{}
 
@@ -401,7 +401,7 @@ func (halfBindingStacks) Destroy(context.Context, providerkit.StackRef, provider
 func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{})
-	client := servedBy(t, refusingStacks{Provider: base, releaser: halfBindingStacks{}})
+	client := servedBy(t, refusingStacks{Provider: base, stacks: halfBindingStacks{}})
 
 	stream, err := client.Deploy(context.Background(), deployRequest())
 	if err != nil {
@@ -447,22 +447,22 @@ func (c *countingCipher) count() int {
 
 type sealCounting struct {
 	*fake.Provider
-	sealer *countingCipher
+	cipher *countingCipher
 }
 
-func (s sealCounting) Cipher() providerkit.Cipher { return s.sealer }
+func (s sealCounting) Cipher() providerkit.Cipher { return s.cipher }
 
 func TestDeployResolvesThePublishedBindingsOnce(t *testing.T) {
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{})
-	sealer := &countingCipher{Cipher: base.Cipher()}
-	client := servedBy(t, sealCounting{Provider: base, sealer: sealer})
+	cipher := &countingCipher{Cipher: base.Cipher()}
+	client := servedBy(t, sealCounting{Provider: base, cipher: cipher})
 
 	if result, _ := deploy(t, client, twoAppRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	if opened := sealer.count(); opened != 2 {
+	if opened := cipher.count(); opened != 2 {
 		t.Fatalf("the deploy opened %d sealed binding values, want one per published binding: "+
 			"two apps over two bindings resolve the same set, and the run reads it once", opened)
 	}
@@ -526,18 +526,18 @@ func (r *resolvingStacks) Destroy(ctx context.Context, ref providerkit.StackRef,
 func TestDeployProvisionsInfraBeforeEveryAppSoATransformReadsThisDeploysBinding(t *testing.T) {
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{})
-	releaser := &resolvingStacks{inner: base.Stacks(), host: "db-one.invalid"}
-	client := servedBy(t, refusingStacks{Provider: base, releaser: releaser})
+	stacks := &resolvingStacks{inner: base.Stacks(), host: "db-one.invalid"}
+	client := servedBy(t, refusingStacks{Provider: base, stacks: stacks})
 
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	releaser.publishes("db-two.invalid")
+	stacks.publishes("db-two.invalid")
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("a second Deploy() = %q", result.GetError())
 	}
 
-	resolved := releaser.Resolved()
+	resolved := stacks.Resolved()
 	if len(resolved) != 2 {
 		t.Fatalf("the app stack resolved %d bindings over two deploys, want one per deploy", len(resolved))
 	}
@@ -1109,7 +1109,7 @@ func TestDeployAnnouncesThePreviewHostnameOfTheGlobalWildcard(t *testing.T) {
 	}
 }
 
-func TestAGlobalPreviewDeployOnAnEdgeThatRoutesByLabelHandsTheReleaserTheLabelItsHostnameCarries(t *testing.T) {
+func TestAGlobalPreviewDeployOnAnEdgeThatRoutesByLabelHandsTheStacksTheLabelItsHostnameCarries(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 	previewBootstrapped(t, client)
@@ -1135,7 +1135,7 @@ func TestAGlobalPreviewDeployOnAnEdgeThatRoutesByLabelHandsTheReleaserTheLabelIt
 	}
 }
 
-func TestAGlobalPreviewDeployOnAnEdgeThatDoesNotRouteByLabelHandsTheReleaserNoLabel(t *testing.T) {
+func TestAGlobalPreviewDeployOnAnEdgeThatDoesNotRouteByLabelHandsTheStacksNoLabel(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 	previewBootstrapped(t, client)
@@ -1198,7 +1198,7 @@ func TestAGlobalPreviewDeployLabelsEachAppWithTheFirstLabelOfTheHostnameItAnnoun
 	}
 }
 
-func TestAPreviewDeployOnTheProjectsOwnWildcardHandsTheReleaserNoLabel(t *testing.T) {
+func TestAPreviewDeployOnTheProjectsOwnWildcardHandsTheStacksNoLabel(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 	previewBootstrapped(t, client)

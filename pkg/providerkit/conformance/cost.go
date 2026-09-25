@@ -65,7 +65,7 @@ func CostManifest() *contractv1.Manifest {
 	}
 }
 
-func RunCost(t *testing.T, provider contractv1connect.ProviderServiceClient, pricer costv1connect.CostServiceClient, vendor string) {
+func RunCost(t *testing.T, provider contractv1connect.ProviderServiceClient, rates costv1connect.CostServiceClient, vendor string) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -86,7 +86,7 @@ func RunCost(t *testing.T, provider contractv1connect.ProviderServiceClient, pri
 
 	estimates := map[costv1.Profile]*costv1.Estimate{}
 	for _, profile := range costkit.Profiles() {
-		est, err := pricer.Price(ctx, &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: profile}})
+		est, err := rates.Price(ctx, &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: profile}})
 		if connect.CodeOf(err) == connect.CodeUnimplemented {
 			t.Fatal("this provider shapes a deploy and prices nothing, so a scan would list resources with no number beside them")
 		}
@@ -103,7 +103,7 @@ func RunCost(t *testing.T, provider contractv1connect.ProviderServiceClient, pri
 		profilesAreMonotone(t, estimates)
 	})
 	t.Run("an unknown property is never priced as zero", func(t *testing.T) {
-		unknownIsNeverZero(t, pricer, set, estimates[costkit.DefaultProfile])
+		unknownIsNeverZero(t, rates, set, estimates[costkit.DefaultProfile])
 	})
 }
 
@@ -168,7 +168,7 @@ func estimateHoldsTogether(t *testing.T, set *costv1.ResourceSet, est *costv1.Es
 		t.Errorf("coverage counts %d, the shape lists %d", total, len(set.GetResources()))
 	}
 	if cov.GetUnsupported() != 0 {
-		t.Errorf("the pricer does not recognise %v, which its own shape listed", cov.GetUnsupportedTypes())
+		t.Errorf("the rate card does not recognise %v, which its own shape listed", cov.GetUnsupportedTypes())
 	}
 	var fixed, usage decimal.Decimal
 	for i, r := range est.GetResources() {
@@ -237,7 +237,7 @@ func profilesAreMonotone(t *testing.T, estimates map[costv1.Profile]*costv1.Esti
 	}
 }
 
-func unknownIsNeverZero(t *testing.T, pricer costv1connect.CostServiceClient, set *costv1.ResourceSet, priced *costv1.Estimate) {
+func unknownIsNeverZero(t *testing.T, rates costv1connect.CostServiceClient, set *costv1.ResourceSet, priced *costv1.Estimate) {
 	t.Helper()
 	blurred := proto.Clone(set).(*costv1.ResourceSet)
 	for _, resource := range blurred.GetResources() {
@@ -247,7 +247,7 @@ func unknownIsNeverZero(t *testing.T, pricer costv1connect.CostServiceClient, se
 		slices.Sort(resource.Unknown)
 		resource.Properties = nil
 	}
-	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: blurred})
+	est, err := rates.Price(context.Background(), &costv1.PriceRequest{Resources: blurred})
 	if err != nil {
 		t.Fatalf("Price() of a shape with every property unknown = %v", err)
 	}

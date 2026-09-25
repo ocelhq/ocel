@@ -66,7 +66,7 @@ func TestAContainerCarriesTheArchitectureItsAppDeclares(t *testing.T) {
 	}
 
 	if got := containerOf(t, manifest, "api").GetArch(); got != "arm64" {
-		t.Errorf("arch = %q, want arm64: a container app names no runtime, so the container is the only place its architecture rides", got)
+		t.Errorf("arch = %q, want arm64: a container app names no framework, so the container is the only place its architecture rides", got)
 	}
 }
 

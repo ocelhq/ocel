@@ -178,7 +178,7 @@ func withServeDescriptors(t *testing.T, files map[string]string) map[string]stri
 		if _, written := out[descriptor]; written {
 			continue
 		}
-		out[descriptor] = serveDescriptor(t, runtimeNext, buildIDOf(t, contents))
+		out[descriptor] = serveDescriptor(t, providerkit.FrameworkNext, buildIDOf(t, contents))
 	}
 	return out
 }

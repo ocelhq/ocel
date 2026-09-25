@@ -47,7 +47,7 @@ func routedCoordinate(t *testing.T) naming.Coordinate {
 }
 
 func routedApp() *contractv1.ManifestApp {
-	return &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: runtimeNext}}
+	return &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: providerkit.FrameworkNext}}
 }
 
 func servingPlan(t *testing.T, cfg Config, app, runtime string, coord naming.Coordinate) providerkit.StackPlan {
@@ -84,7 +84,7 @@ func servingPlan(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 
 func routedPlan(t *testing.T, cfg Config) providerkit.StackPlan {
 	t.Helper()
-	return servingPlan(t, cfg, "web", runtimeNext, routedCoordinate(t))
+	return servingPlan(t, cfg, "web", providerkit.FrameworkNext, routedCoordinate(t))
 }
 
 func routedRouter(t *testing.T, cfg Config) *routerHost {
@@ -126,8 +126,8 @@ func TestRouterHostNamesTheEntryAndWhatTheRouterReads(t *testing.T) {
 
 func routedFunctions() []*contractv1.ManifestFunction {
 	return []*contractv1.ManifestFunction{
-		{LogicalName: "fn--web--entry", App: "web", Framework: &contractv1.Framework{Name: runtimeNext}, RouteId: "/"},
-		{LogicalName: "fn--web--admin", App: "web", Framework: &contractv1.Framework{Name: runtimeNext}, RouteId: "/admin"},
+		{LogicalName: "fn--web--entry", App: "web", Framework: &contractv1.Framework{Name: providerkit.FrameworkNext}, RouteId: "/"},
+		{LogicalName: "fn--web--admin", App: "web", Framework: &contractv1.Framework{Name: providerkit.FrameworkNext}, RouteId: "/admin"},
 	}
 }
 

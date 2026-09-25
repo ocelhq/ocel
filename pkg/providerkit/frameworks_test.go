@@ -11,7 +11,7 @@ func TestPythonIsARuntimeAnAppMayDeclare(t *testing.T) {
 	t.Parallel()
 
 	if !providerkit.KnownFramework(providerkit.FrameworkPython) {
-		t.Fatalf("Runtimes() = %v, and none of them is %q", providerkit.Frameworks(), providerkit.FrameworkPython)
+		t.Fatalf("Frameworks() = %v, and none of them is %q", providerkit.Frameworks(), providerkit.FrameworkPython)
 	}
 }
 
@@ -19,7 +19,7 @@ func TestRustIsARuntimeAnAppMayDeclare(t *testing.T) {
 	t.Parallel()
 
 	if !providerkit.KnownFramework(providerkit.FrameworkRust) {
-		t.Fatalf("Runtimes() = %v, and none of them is %q", providerkit.Frameworks(), providerkit.FrameworkRust)
+		t.Fatalf("Frameworks() = %v, and none of them is %q", providerkit.Frameworks(), providerkit.FrameworkRust)
 	}
 }
 
@@ -70,6 +70,6 @@ func TestTheArchitecturesAreTheOnesEveryRuntimeSharesAVocabularyFor(t *testing.T
 		}
 	}
 	if !slices.Contains(providerkit.Frameworks(), providerkit.FrameworkGo) {
-		t.Error("Runtimes() no longer names the go runtime")
+		t.Error("Frameworks() no longer names the go framework")
 	}
 }

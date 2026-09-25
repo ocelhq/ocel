@@ -123,7 +123,7 @@ const (
 	FakeGlobalDomainCertEnvVar      = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_CERT"
 	FakeGlobalDomainRenewalEnvVar   = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_RENEWAL"
 	FakeGlobalDomainExpiresEnvVar   = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_EXPIRES"
-	FakeStandingEnvVar              = "OCEL_TEST_FAKE_STANDING"
+	FakeHostChecksEnvVar            = "OCEL_TEST_FAKE_HOST_CHECKS"
 	FakeGlobalDomainRecordsEnvVar   = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_RECORDS"
 	FakeGlobalDomainOwedEnvVar      = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_OWED"
 	FakeGlobalDomainProbeEnvVar     = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROBE"
@@ -872,7 +872,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *contractv
 	}
 	resp.Bootstrap = fakeBootstrap(req.GetRequiredTier())
 	resp.PreviewWildcard = fakeGlobalDomain()
-	resp.Standing = fakeStanding(req.GetDomains())
+	resp.HostChecks = fakeHostChecks(req.GetDomains())
 	if p := os.Getenv(FakeCredProblemEnvVar); p != "" {
 		resp.CredentialProblems = append(resp.CredentialProblems, &contractv1.CredentialProblem{
 			Provider: p,
@@ -1057,20 +1057,20 @@ func fakeGlobalDomain() *contractv1.PreviewWildcard {
 	}
 }
 
-func fakeStanding(domains []string) []*contractv1.StandingCheck {
-	said := os.Getenv(FakeStandingEnvVar)
+func fakeHostChecks(domains []string) []*contractv1.HostCheck {
+	said := os.Getenv(FakeHostChecksEnvVar)
 	if said == "" {
 		return nil
 	}
-	checks := []*contractv1.StandingCheck{{
+	checks := []*contractv1.HostCheck{{
 		Subject: "203.0.113.10:80",
-		Verdict: contractv1.StandingCheck_VERDICT_PASS,
+		Verdict: contractv1.HostCheck_VERDICT_PASS,
 		Finding: "something listens on port 80 and a connection from this machine succeeded — that is one path in",
 	}}
 	for _, host := range domains {
-		checks = append(checks, &contractv1.StandingCheck{
+		checks = append(checks, &contractv1.HostCheck{
 			Subject: host,
-			Verdict: contractv1.StandingCheck_VERDICT_OWED,
+			Verdict: contractv1.HostCheck_VERDICT_OWED,
 			Finding: host + " does not resolve; the record pointing it at 203.0.113.10 is owed",
 			Fix:     "add the record `ocel domain add` printed",
 		})
@@ -1494,16 +1494,16 @@ func describeEnv(env *environmentv1.Environment) string {
 		env.GetTier(), env.GetLifecycle(), env.GetIdentity())
 }
 
-func describeRuntime(r *contractv1.Framework) string {
-	if r.GetArch() == "" {
-		return r.GetName()
+func describeFramework(f *contractv1.Framework) string {
+	if f.GetArch() == "" {
+		return f.GetName()
 	}
-	return r.GetName() + "/" + r.GetArch()
+	return f.GetName() + "/" + f.GetArch()
 }
 
 func describeFunction(f *contractv1.ManifestFunction) string {
-	return fmt.Sprintf("logical_name=%s runtime=%s handler=%s artifact_path=%s app=%s",
-		f.GetLogicalName(), describeRuntime(f.GetFramework()), f.GetHandler(), f.GetArtifactPath(), f.GetApp())
+	return fmt.Sprintf("logical_name=%s framework=%s handler=%s artifact_path=%s app=%s",
+		f.GetLogicalName(), describeFramework(f.GetFramework()), f.GetHandler(), f.GetArtifactPath(), f.GetApp())
 }
 
 func describeUsage(u *contractv1.ManifestUsage) string {
@@ -1567,8 +1567,8 @@ func describeApp(a *contractv1.ManifestApp) string {
 	for _, v := range a.GetVariables() {
 		keys = append(keys, v.GetKey())
 	}
-	return fmt.Sprintf("name=%s runtime=%s production_domain=%s vars=%s deployment=%s",
-		a.GetName(), describeRuntime(a.GetFramework()), strings.Join(productionHostnames(a.GetDomains()), ","), strings.Join(keys, ","), a.GetDeploymentId())
+	return fmt.Sprintf("name=%s framework=%s production_domain=%s vars=%s deployment=%s",
+		a.GetName(), describeFramework(a.GetFramework()), strings.Join(productionHostnames(a.GetDomains()), ","), strings.Join(keys, ","), a.GetDeploymentId())
 }
 
 func parseInfraTier(s string) environmentv1.Tier {

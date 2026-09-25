@@ -41,7 +41,7 @@ type clients struct {
 	region   string
 	endpoint string
 
-	runtime   memo[*ports.Clients]
+	workload  memo[*ports.Clients]
 	storage   memo[*storage.Client]
 	databases memo[*firestoreadmin.Service]
 	secrets   memo[*secretmanager.Service]
@@ -171,7 +171,7 @@ func (c *clients) backendLink(backend string) string {
 }
 
 func (c *clients) Workload() *ports.Clients {
-	held, _ := c.runtime.held(func() (*ports.Clients, error) {
+	held, _ := c.workload.held(func() (*ports.Clients, error) {
 		return &ports.Clients{
 			Namespace: c.namespace,
 			Project:   c.project,

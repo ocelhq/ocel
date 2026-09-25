@@ -226,14 +226,14 @@ func socketTable(ports ...int) string {
 func adminCheck(t *testing.T, checks []providerkit.HostCheck) providerkit.HostCheck {
 	t.Helper()
 	if len(checks) == 0 {
-		t.Fatal("CheckStanding() answered nothing at all, so there is no window to read a verdict out of")
+		t.Fatal("CheckHost() answered nothing at all, so there is no window to read a verdict out of")
 	}
 	for _, check := range checks {
 		if strings.Contains(check.Subject, adminPort) {
 			return check
 		}
 	}
-	t.Fatalf("CheckStanding() answered %+v and none of it is about tcp %s inside the proxy", checks, adminPort)
+	t.Fatalf("CheckHost() answered %+v and none of it is about tcp %s inside the proxy", checks, adminPort)
 	return providerkit.HostCheck{}
 }
 
@@ -284,7 +284,7 @@ func boardCheck(t *testing.T, checks []providerkit.HostCheck) providerkit.HostCh
 			return check
 		}
 	}
-	t.Fatalf("CheckStanding() answered %+v and none of it is about %s, which routes every request the box serves", checks, host.SwitchboardContainer)
+	t.Fatalf("CheckHost() answered %+v and none of it is about %s, which routes every request the box serves", checks, host.SwitchboardContainer)
 	return providerkit.HostCheck{}
 }
 
@@ -353,10 +353,10 @@ func TestABoxWhoseOwnAddressCouldNotBeReadReportsAndNeverRefuses(t *testing.T) {
 		Hostnames: []string{"shop.example.com"},
 	})
 	if err != nil {
-		t.Fatalf("CheckStanding() = %v, and this same rpc runs on every `ocel deploy`: a standing concern is a report and never a gate", err)
+		t.Fatalf("CheckHost() = %v, and this same rpc runs on every `ocel deploy`: a standing concern is a report and never a gate", err)
 	}
 	if len(checks) == 0 {
-		t.Fatal("CheckStanding() answered nothing at all over a box whose address could not be read, and an empty report is read as a box with nothing wrong")
+		t.Fatal("CheckHost() answered nothing at all over a box whose address could not be read, and an empty report is read as a box with nothing wrong")
 	}
 	for _, check := range checks {
 		if check.Verdict != providerkit.HostFail {

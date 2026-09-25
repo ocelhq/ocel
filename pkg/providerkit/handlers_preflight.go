@@ -64,8 +64,8 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		if err != nil {
 			return nil, RefusalError(err)
 		}
-		if req.GetStanding() {
-			resp.Standing = h.hostChecks(ctx, provider, class, req.GetStandingDomains())
+		if req.GetCheckHosts() {
+			resp.HostChecks = h.hostChecks(ctx, provider, class, req.GetHostCheckDomains())
 		}
 		if class == ClassPreview {
 			resp.PreviewWildcard, err = heldPreviewWildcard(ctx, provider)

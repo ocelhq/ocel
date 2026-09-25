@@ -50,7 +50,7 @@ const (
 var registryTimeout = 30 * time.Second
 
 func (r registryImages) Has(ctx context.Context, push ImagePush) (bool, error) {
-	server, repository, tag, err := splitCoordinate(push.ImageRef)
+	server, repository, tag, err := splitImageRef(push.ImageRef)
 	if err != nil {
 		return false, err
 	}
@@ -271,14 +271,14 @@ func unquotedFields(value string) []string {
 	return append(fields, value[start:])
 }
 
-func splitCoordinate(coordinate string) (server, repository, tag string, err error) {
-	host, path, split := strings.Cut(coordinate, "/")
+func splitImageRef(imageRef string) (server, repository, tag string, err error) {
+	host, path, split := strings.Cut(imageRef, "/")
 	if !split {
-		return "", "", "", fmt.Errorf("%q names no registry to push to", coordinate)
+		return "", "", "", fmt.Errorf("%q names no registry to push to", imageRef)
 	}
 	colon := strings.LastIndex(path, ":")
 	if colon < 0 {
-		return "", "", "", fmt.Errorf("%q carries no tag, and an image is pushed under one", coordinate)
+		return "", "", "", fmt.Errorf("%q carries no tag, and an image is pushed under one", imageRef)
 	}
 	return host, path[:colon], path[colon+1:], nil
 }
@@ -307,7 +307,7 @@ func (r registryImages) Push(ctx context.Context, push ImagePush, progress Progr
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport}
 
-	server, repository, tag, err := splitCoordinate(push.ImageRef)
+	server, repository, tag, err := splitImageRef(push.ImageRef)
 	if err != nil {
 		return err
 	}

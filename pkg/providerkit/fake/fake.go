@@ -28,18 +28,18 @@ type Provider struct {
 	runtimeBinary    []byte
 	hooks            providerkit.Hooks
 
-	journal   *Journal
-	options   Options
-	records   *Records
-	artifacts providerkit.ArtifactStore
-	images    *Images
-	sealer    *Cipher
-	bootstrap *Bootstrap
-	releases  *Stacks
-	releasing providerkit.Stacks
-	creds     *Credentials
-	edges     *Edges
-	dns       *DNS
+	journal        *Journal
+	options        Options
+	records        *Records
+	artifacts      providerkit.ArtifactStore
+	images         *Images
+	cipher         *Cipher
+	bootstrap      *Bootstrap
+	stacks         *Stacks
+	resourceStacks providerkit.Stacks
+	creds          *Credentials
+	edges          *Edges
+	dns            *DNS
 }
 
 func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
@@ -63,9 +63,9 @@ func NewProvider(options Options) *Provider {
 		records:   records,
 		artifacts: artifacts,
 		images:    NewImages(),
-		sealer:    NewCipher(),
+		cipher:    NewCipher(),
 		bootstrap: NewBootstrap(),
-		releases:  NewStacks(artifacts).journalling(journal),
+		stacks:    NewStacks(artifacts).journalling(journal),
 		creds:     NewCredentials(options.Region),
 		edges:     NewEdges(records),
 		dns:       NewDNS(),
@@ -108,17 +108,17 @@ func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrap, error) {
 }
 
 func (p *Provider) Stacks() providerkit.Stacks {
-	if p.releasing != nil {
-		return p.releasing
+	if p.resourceStacks != nil {
+		return p.resourceStacks
 	}
-	return p.releases
+	return p.stacks
 }
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore { return p.artifacts }
 
 func (p *Provider) Records() providerkit.RecordStore { return p.records }
 
-func (p *Provider) Cipher() providerkit.Cipher { return p.sealer }
+func (p *Provider) Cipher() providerkit.Cipher { return p.cipher }
 
 func (p *Provider) Credentials() providerkit.Credentials { return p.creds }
 

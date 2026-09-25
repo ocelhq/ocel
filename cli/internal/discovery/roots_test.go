@@ -341,8 +341,8 @@ func TestRootsOfAddsTheCratesAProjectDeclaresFrom(t *testing.T) {
 
 func TestLanguageOfTakesTheRuntimeAnAppNamesOverTheManifestBesideIt(t *testing.T) {
 	for _, tc := range []struct {
-		runtime string
-		want    Language
+		framework string
+		want      Language
 	}{
 		{providerkit.FrameworkNode, JS},
 		{providerkit.FrameworkNext, JS},
@@ -350,22 +350,22 @@ func TestLanguageOfTakesTheRuntimeAnAppNamesOverTheManifestBesideIt(t *testing.T
 		{providerkit.FrameworkPython, Python},
 		{providerkit.FrameworkRust, Rust},
 	} {
-		t.Run(tc.runtime, func(t *testing.T) {
+		t.Run(tc.framework, func(t *testing.T) {
 			dir := t.TempDir()
 			write(t, filepath.Join(dir, "package.json"), "{}")
 
-			if got := LanguageOf(tc.runtime, dir); got != tc.want {
-				t.Errorf("LanguageOf(%q) = %q, want %q — every runtime an app may declare says which language attribution reads it in, and a package.json beside it holds only what its tooling reads", tc.runtime, got, tc.want)
+			if got := LanguageOf(tc.framework, dir); got != tc.want {
+				t.Errorf("LanguageOf(%q) = %q, want %q — every runtime an app may declare says which language attribution reads it in, and a package.json beside it holds only what its tooling reads", tc.framework, got, tc.want)
 			}
 		})
 	}
 
-	t.Run("no runtime named", func(t *testing.T) {
+	t.Run("no framework named", func(t *testing.T) {
 		dir := t.TempDir()
 		write(t, filepath.Join(dir, "Cargo.toml"), "")
 
 		if got := LanguageOf("", dir); got != Rust {
-			t.Errorf("LanguageOf(\"\") = %q, want %q — a container app names no runtime and is read in the language of the manifest beside it", got, Rust)
+			t.Errorf("LanguageOf(\"\") = %q, want %q — a container app names no framework and is read in the language of the manifest beside it", got, Rust)
 		}
 	})
 }
@@ -411,14 +411,14 @@ func TestLanguageOfApp(t *testing.T) {
 
 func TestClientBundle(t *testing.T) {
 	for _, tc := range []struct {
-		name     string
-		runtime  string
-		manifest string
-		want     bool
+		name      string
+		framework string
+		manifest  string
+		want      bool
 	}{
-		{name: "a next app", runtime: providerkit.FrameworkNext, want: true},
-		{name: "a node app", runtime: providerkit.FrameworkNode, want: true},
-		{name: "a go app", runtime: providerkit.FrameworkGo, manifest: "go.mod"},
+		{name: "a next app", framework: providerkit.FrameworkNext, want: true},
+		{name: "a node app", framework: providerkit.FrameworkNode, want: true},
+		{name: "a go app", framework: providerkit.FrameworkGo, manifest: "go.mod"},
 		{name: "a container app holding a package.json", manifest: "package.json", want: true},
 		{name: "a container app holding a go.mod", manifest: "go.mod"},
 		{name: "a container app naming no language at all", manifest: ""},
@@ -429,7 +429,7 @@ func TestClientBundle(t *testing.T) {
 				write(t, filepath.Join(dir, tc.manifest), "")
 			}
 
-			if got := ClientBundle(tc.runtime, dir); got != tc.want {
+			if got := ClientBundle(tc.framework, dir); got != tc.want {
 				t.Errorf("ClientBundle = %v, want %v: %s is written for an app whose bundle reads it", got, tc.want, providerkit.ClientURLEnvName)
 			}
 		})

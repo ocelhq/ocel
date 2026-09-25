@@ -97,23 +97,23 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 		t.Fatalf("Certificate(%s) = %q, want %q: a hostname a pinned pair covers is served off that pair", caddy.Container, cert.ID, certs.PinHandle(at))
 	}
 	if cert.Requested {
-		t.Error("Certificate().Requested = true on a box, and ocel placed no key material here so it holds authority to remove none")
+		t.Error("Issue().Requested = true on a box, and ocel placed no key material here so it holds authority to remove none")
 	}
 
 	spoken := vm.proxyLogBytes(t)
 	served, err := pinned.Certificates().Inspect(ctx, boxedge.Kind, caddy.Container,
 		providerkit.Certificate{ID: certs.ProxyHandle(caddy.Container)})
 	if err != nil {
-		t.Fatalf("InspectCertificate() over a proxy handle = %v", err)
+		t.Fatalf("Inspect() over a proxy handle = %v", err)
 	}
 	if !served.Terminates || !served.Issued || !served.Covers {
-		t.Errorf("InspectCertificate() = %+v, want the leaf the proxy served over its own :443 read as issued and covering %s", served, caddy.Container)
+		t.Errorf("Inspect() = %+v, want the leaf the proxy served over its own :443 read as issued and covering %s", served, caddy.Container)
 	}
 	if served.ExpiresAt != 0 {
-		t.Errorf("InspectCertificate() reports expiry %d for a certificate the proxy renews, and the number is decorative wherever renewal is healthy", served.ExpiresAt)
+		t.Errorf("Inspect() reports expiry %d for a certificate the proxy renews, and the number is decorative wherever renewal is healthy", served.ExpiresAt)
 	}
 	if served.Renewal != certs.ProxyRenewal {
-		t.Errorf("InspectCertificate().Renewal = %q, want %q", served.Renewal, certs.ProxyRenewal)
+		t.Errorf("Inspect().Renewal = %q, want %q", served.Renewal, certs.ProxyRenewal)
 	}
 
 	logs := vm.proxyLogSince(t, spoken)
@@ -139,21 +139,21 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.invalid", Progress: edge.DiscardProgress(),
 	})
 	if err != nil {
-		t.Fatalf("Certificate() over a pinned wildcard = %v", err)
+		t.Fatalf("Issue() over a pinned wildcard = %v", err)
 	}
 	health, err := pinned.Certificates().Inspect(ctx, boxedge.Kind, "pr-7.preview.example.invalid", cert)
 	if err != nil {
-		t.Fatalf("InspectCertificate() = %v", err)
+		t.Fatalf("Inspect() = %v", err)
 	}
 	if !health.Issued || !health.Covers || health.ExpiresAt == 0 || !health.ExpiringSoon {
-		t.Errorf("InspectCertificate() = %+v, want the pinned pair read off the box, covering, and warned about: nothing here renews it", health)
+		t.Errorf("Inspect() = %+v, want the pinned pair read off the box, covering, and warned about: nothing here renews it", health)
 	}
 	if health.Renewal != certs.PinRenewal {
-		t.Errorf("InspectCertificate().Renewal = %q, want %q", health.Renewal, certs.PinRenewal)
+		t.Errorf("Inspect().Renewal = %q, want %q", health.Renewal, certs.PinRenewal)
 	}
 
 	if err := pinned.Certificates().Discard(ctx, cert, edge.DiscardProgress()); err != nil {
-		t.Errorf("DiscardCertificate() = %v, want nil", err)
+		t.Errorf("Discard() = %v, want nil", err)
 	}
 	if !vm.stands(t, caddy.PinKey(at)) {
 		t.Errorf("%s is gone from the box, and ocel never places or removes key material here", caddy.PinKey(at))

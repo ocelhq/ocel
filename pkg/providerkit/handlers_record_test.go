@@ -126,10 +126,10 @@ func TestTheStagedRecordCarriesTheCodeAndVariablesAnEdgeRunsTheAppWith(t *testin
 		t.Errorf("edgeWorkers.id = %q, want the sha256 of the bundle and the runtime it loads under", record.EdgeWorkers.ID)
 	}
 	if record.EdgeWorkers.ID != providerkit.LoaderID(bundle, fake.CompatDate, []string{fake.CompatFlag}) {
-		t.Errorf("edgeWorkers.id = %q, want the id derived from the bundle on disk and the edge's own runtime", record.EdgeWorkers.ID)
+		t.Errorf("edgeWorkers.id = %q, want the id derived from the bundle on disk and the edge's own compatibility", record.EdgeWorkers.ID)
 	}
 	if record.EdgeWorkers.CompatDate != fake.CompatDate || !slices.Equal(record.EdgeWorkers.CompatFlags, []string{fake.CompatFlag}) {
-		t.Errorf("edgeWorkers runtime = %q %v, want the one the edge names", record.EdgeWorkers.CompatDate, record.EdgeWorkers.CompatFlags)
+		t.Errorf("edgeWorkers compatibility = %q %v, want the one the edge names", record.EdgeWorkers.CompatDate, record.EdgeWorkers.CompatFlags)
 	}
 	if record.Env["PUBLIC_MODE"] != "loud" {
 		t.Errorf("env = %v, want the app's plain variables, which the edge passes into the worker", record.Env)
@@ -165,7 +165,7 @@ func TestTheStagedRecordNamesTheISRPrefixTheFunctionWritesUnder(t *testing.T) {
 	plans := provider.FakeStacks().Plans()
 	app := plans[len(plans)-1].App
 	if app == nil || app.ISR == nil {
-		t.Fatal("the last plan the releaser saw carries no ISR plan")
+		t.Fatal("the last plan the stacks port saw carries no ISR plan")
 	}
 	if staged[0].IsrPrefix != app.ISR.Prefix {
 		t.Errorf("isrPrefix = %q, want %q: the edge reads entries at <isrPrefix>/cache/<route>.cache.json, so a prefix that differs from the one the function writes under misses every prerender",

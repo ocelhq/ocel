@@ -12,22 +12,22 @@ import (
 //go:embed releases.sh
 var releasesScript []byte
 
-func Repository(coordinate string) (string, bool) {
-	if strings.Contains(coordinate, "@") {
+func Repository(imageRef string) (string, bool) {
+	if strings.Contains(imageRef, "@") {
 		return "", false
 	}
-	at := strings.LastIndex(coordinate, ":")
-	if at <= 0 || strings.Contains(coordinate[at+1:], "/") || at+1 == len(coordinate) {
+	at := strings.LastIndex(imageRef, ":")
+	if at <= 0 || strings.Contains(imageRef[at+1:], "/") || at+1 == len(imageRef) {
 		return "", false
 	}
-	return coordinate[:at], true
+	return imageRef[:at], true
 }
 
 func Scope(project, app string) string { return naming.Sanitize(project) + "/" + app }
 
-func (h *Host) Promote(ctx context.Context, class providerkit.Class, project, app, coordinate string) error {
-	_, err := h.releases(ctx, "record "+coordinate+" as "+app+"'s release", "",
-		Scope(project, app), "promote", string(class), coordinate)
+func (h *Host) Promote(ctx context.Context, class providerkit.Class, project, app, imageRef string) error {
+	_, err := h.releases(ctx, "record "+imageRef+" as "+app+"'s release", "",
+		Scope(project, app), "promote", string(class), imageRef)
 	return err
 }
 

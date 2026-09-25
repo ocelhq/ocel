@@ -95,17 +95,17 @@ func (i images) Push(ctx context.Context, push providerkit.ImagePush, progress p
 	return i.pushed.Push(ctx, push, progress)
 }
 
-func repositoryOf(target providerkit.RegistryTarget, coordinate string) (string, error) {
-	rest, found := strings.CutPrefix(coordinate, target.Server+"/")
+func repositoryOf(target providerkit.RegistryTarget, imageRef string) (string, error) {
+	rest, found := strings.CutPrefix(imageRef, target.Server+"/")
 	if !found {
-		return "", fmt.Errorf("%s is not a coordinate under %s, so there is no repository of this account's to hold it", coordinate, target.Server)
+		return "", fmt.Errorf("%s is not an image ref under %s, so there is no repository of this account's to hold it", imageRef, target.Server)
 	}
 	repository, _, _ := strings.Cut(rest, "@")
 	if at := strings.LastIndex(repository, ":"); at > strings.LastIndex(repository, "/") {
 		repository = repository[:at]
 	}
 	if repository == "" {
-		return "", fmt.Errorf("%s names no repository", coordinate)
+		return "", fmt.Errorf("%s names no repository", imageRef)
 	}
 	return repository, nil
 }

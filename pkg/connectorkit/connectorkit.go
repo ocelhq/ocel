@@ -46,7 +46,7 @@ func Serve(spec Spec) error {
 		return errors.New("connectorkit: Spec.Vars.Records is required")
 	}
 	if spec.Vars.Cipher == nil {
-		return errors.New("connectorkit: Spec.Vars.Sealer is required")
+		return errors.New("connectorkit: Spec.Vars.Cipher is required")
 	}
 
 	if spec.KeyPath != "" && !spec.Identity.Held() {

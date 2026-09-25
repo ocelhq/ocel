@@ -35,12 +35,12 @@ func servingRoot(t *testing.T, app string, desc edge.ServeDescriptor, manifest [
 	return root
 }
 
-func servingQuery(root, app, runtime string) providerkit.ServingQuery {
+func servingQuery(root, app, framework string) providerkit.ServingQuery {
 	return providerkit.ServingQuery{
 		Root:       root,
 		Project:    "shop",
 		App:        app,
-		Framework:  runtime,
+		Framework:  framework,
 		Stack:      naming.AppStack("production", app, naming.NewRelease("dep1", "fp1")),
 		Coordinate: naming.Coordinate{Project: "shop", Env: "production", App: app, Release: naming.NewRelease("dep1", "fp1")},
 	}
@@ -55,7 +55,7 @@ func TestEveryAppCarriesTheAssetPrefixAndBytecodeCacheItServesFrom(t *testing.T)
 		t.Error("an app with no asset prefix serves its static files from nowhere")
 	}
 	if facts.Bytecode == nil || facts.Bytecode.Prefix == "" {
-		t.Fatalf("Bytecode = %+v, want a prefix every runtime can warm a cache under", facts.Bytecode)
+		t.Fatalf("Bytecode = %+v, want a prefix every framework can warm a cache under", facts.Bytecode)
 	}
 	if strings.HasSuffix(facts.Bytecode.Prefix, naming.PathSeparator) {
 		t.Errorf("Bytecode.Prefix = %q, want it free of the trailing separator a key policy appends", facts.Bytecode.Prefix)
@@ -78,7 +78,7 @@ func TestOnlyNextAsksForAnISRLedger(t *testing.T) {
 		t.Fatalf("ServingFactsFor() = %v", err)
 	}
 	if other.ISR != nil {
-		t.Errorf("ISR = %+v for a runtime that revalidates nothing, want none", other.ISR)
+		t.Errorf("ISR = %+v for a framework that revalidates nothing, want none", other.ISR)
 	}
 }
 

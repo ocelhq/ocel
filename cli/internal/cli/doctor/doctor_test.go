@@ -437,11 +437,11 @@ export default {
 	}
 }
 
-func TestRunDoctorPrintsTheStandingFindingsAndTheCertificatesAndRefusesNothing(t *testing.T) {
+func TestRunDoctorPrintsTheHostCheckFindingsAndTheCertificatesAndRefusesNothing(t *testing.T) {
 	root := healthyProject(t)
 	t.Setenv(clitest.FakeBootstrapEnvVar, "current")
 	t.Setenv(clitest.FakePreviewBootstrapEnvVar, "current")
-	t.Setenv(clitest.FakeStandingEnvVar, "1")
+	t.Setenv(clitest.FakeHostChecksEnvVar, "1")
 	t.Setenv(clitest.FakeGlobalDomainEnvVar, "preview.example.com")
 	t.Setenv(clitest.FakeGlobalDomainRenewalEnvVar, "you placed it on this box and you renew it")
 	t.Setenv(clitest.FakeGlobalDomainExpiresEnvVar, "4102444800")
@@ -456,7 +456,7 @@ func TestRunDoctorPrintsTheStandingFindingsAndTheCertificatesAndRefusesNothing(t
 	err := Run(context.Background(), deps, root, &stdout, &stderr)
 	out := rendered(t, stdout.String())
 
-	if !strings.Contains(out, "Standing") || !strings.Contains(out, "Certificates") {
+	if !strings.Contains(out, "Host checks") || !strings.Contains(out, "Certificates") {
 		t.Fatalf("doctor printed neither section, so this run is not the window an absence can be read over:\n%s", out)
 	}
 	for _, want := range []string{
@@ -472,7 +472,7 @@ func TestRunDoctorPrintsTheStandingFindingsAndTheCertificatesAndRefusesNothing(t
 		}
 	}
 	if code := exitCode(t, err); code != 0 {
-		t.Errorf("exit code = %d over the output above, want 0: a standing check is a report and never a gate, and an owed record is the normal state", code)
+		t.Errorf("exit code = %d over the output above, want 0: a host check is a report and never a gate, and an owed record is the normal state", code)
 	}
 	if strings.Contains(out, failGlyph) {
 		t.Errorf("doctor refused something on a bootstrapped box whose only finding is an owed record:\n%s", out)

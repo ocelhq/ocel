@@ -32,7 +32,7 @@ func TestAStoodUpReleaseIsRecordedAtTheHeadOfItsWindow(t *testing.T) {
 	if len(called) != 1 {
 		t.Fatalf("standing the release up ran %d promotes, want the one that names what the box most recently served", len(called))
 	}
-	for _, want := range []string{"'shop/web'", "'production'", "'" + loadedCoordinate + "'"} {
+	for _, want := range []string{"'shop/web'", "'production'", "'" + loadedImageRef + "'"} {
 		if !strings.Contains(called[0], want) {
 			t.Errorf("the promote ran as %q and never names %s", called[0], want)
 		}
@@ -112,7 +112,7 @@ func TestAReleaseThatNeverReachedItsRecordSweepsItsOwnImageAnyway(t *testing.T) 
 	if len(called) != 1 {
 		t.Fatalf("the failed release ran %d reconciles, want the one that sweeps the image it left: no timer, no cron and no unit sweeps this box between deploys", len(called))
 	}
-	repository, _ := host.Repository(loadedCoordinate)
+	repository, _ := host.Repository(loadedImageRef)
 	if !strings.Contains(called[0], "'"+repository+"'") {
 		t.Errorf("the sweep ran as %q and never names %q, the repository the release it could not finish left an image under", called[0], repository)
 	}
@@ -142,14 +142,14 @@ func TestASweepListsOneRepositoryAndNeverForces(t *testing.T) {
 
 	machine := &box{}
 	ref := aStack(t, anApp()).Ref
-	if err := over(machine).ReconcileImages(context.Background(), ref, "web", loadedCoordinate, nil); err != nil {
+	if err := over(machine).ReconcileImages(context.Background(), ref, "web", loadedImageRef, nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 	called := helperCalls(machine, "reconcile")
 	if len(called) != 1 {
 		t.Fatalf("the sweep ran %d reconciles, want one", len(called))
 	}
-	repository, _ := host.Repository(loadedCoordinate)
+	repository, _ := host.Repository(loadedImageRef)
 	if !strings.Contains(called[0], "'"+repository+"'") {
 		t.Errorf("the reconcile ran as %q, want it scoped to %q: the filter and the desired set are computed over one scope", called[0], repository)
 	}
@@ -167,7 +167,7 @@ func TestAnAppNameOfMetacharactersReachesTheHelperAsOneWord(t *testing.T) {
 	for _, app := range []string{"web; rm -rf /", "$(id)", "'; docker rmi $(docker images -q); #"} {
 		machine := &box{}
 		ref := aStack(t, anApp()).Ref
-		_ = over(machine).ReconcileImages(context.Background(), ref, app, loadedCoordinate, nil)
+		_ = over(machine).ReconcileImages(context.Background(), ref, app, loadedImageRef, nil)
 		carried := 0
 		for _, command := range machine.commands() {
 			if !strings.Contains(command, app) {
@@ -188,7 +188,7 @@ func TestAnAppNameOfMetacharactersReachesTheHelperAsOneWord(t *testing.T) {
 func TestACoordinateNamingNoRepositoryIsRefusedRatherThanSwept(t *testing.T) {
 	t.Parallel()
 
-	for _, coordinate := range []string{
+	for _, imageRef := range []string{
 		"ocel/shop/web",
 		"ocel/shop/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		"ocel/shop/web:",
@@ -196,12 +196,12 @@ func TestACoordinateNamingNoRepositoryIsRefusedRatherThanSwept(t *testing.T) {
 	} {
 		machine := &box{}
 		ref := aStack(t, anApp()).Ref
-		err := over(machine).ReconcileImages(context.Background(), ref, "web", coordinate, nil)
+		err := over(machine).ReconcileImages(context.Background(), ref, "web", imageRef, nil)
 		if err == nil {
-			t.Errorf("%s swept anyway, and a filter that names anything but one repository removes the wrong thing", coordinate)
+			t.Errorf("%s swept anyway, and a filter that names anything but one repository removes the wrong thing", imageRef)
 		}
 		if len(helperCalls(machine, "reconcile")) != 0 {
-			t.Errorf("%s reached the sweep before it was read", coordinate)
+			t.Errorf("%s reached the sweep before it was read", imageRef)
 		}
 	}
 }

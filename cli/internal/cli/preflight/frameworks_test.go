@@ -16,15 +16,15 @@ func TestProjectRuntimes(t *testing.T) {
 		want []string
 	}{
 		{
-			name: "a project with no apps names no runtime",
+			name: "a project with no apps names no framework",
 			cfg:  &projectconfig.Config{},
 		},
 		{
-			name: "an app with no runtime is left out",
+			name: "an app with no framework is left out",
 			cfg:  &projectconfig.Config{Apps: []projectconfig.App{{Name: "web"}}},
 		},
 		{
-			name: "each app's runtime is named",
+			name: "each app's framework is named",
 			cfg: &projectconfig.Config{Apps: []projectconfig.App{
 				{Framework: projectconfig.Framework{Name: "next"}},
 				{Framework: projectconfig.Framework{Name: "node"}},

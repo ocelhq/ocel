@@ -22,14 +22,14 @@ const rustLinker = "rust-lld"
 func (c Compilation) compileRust(ctx context.Context) error {
 	manifest, err := os.Stat(filepath.Join(c.Source, cargoManifestFile))
 	if err != nil || !manifest.Mode().IsRegular() {
-		return fmt.Errorf("app %q runs on the rust runtime and %s holds no %s: an app is compiled from the crate rooted in its own directory", c.App, c.Source, cargoManifestFile)
+		return fmt.Errorf("app %q is built with rust and %s holds no %s: an app is compiled from the crate rooted in its own directory", c.App, c.Source, cargoManifestFile)
 	}
 	target, runs := providerkit.RustTarget(c.Framework.Arch)
 	if !runs {
 		return fmt.Errorf("app %q asks to be compiled for %q, which names no architecture rust builds for", c.App, c.Framework.Arch)
 	}
 	if _, err := exec.LookPath("cargo"); err != nil {
-		return fmt.Errorf("app %q runs on the rust runtime and no cargo is on PATH: %w", c.App, err)
+		return fmt.Errorf("app %q is built with rust and no cargo is on PATH: %w", c.App, err)
 	}
 	source, err := filepath.Abs(c.Source)
 	if err != nil {
@@ -41,7 +41,7 @@ func (c Compilation) compileRust(ctx context.Context) error {
 	}
 	crate, ok := workspace.PackageAt(source)
 	if !ok {
-		return fmt.Errorf("app %q runs on the rust runtime and the %s in %s names no package to build", c.App, cargoManifestFile, source)
+		return fmt.Errorf("app %q is built with rust and the %s in %s names no package to build", c.App, cargoManifestFile, source)
 	}
 	bins := crate.Bins()
 	if len(bins) != 1 {

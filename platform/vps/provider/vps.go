@@ -21,7 +21,7 @@ type Provider struct {
 	project string
 	host    *host.Host
 	records providerkit.RecordStore
-	sealer  *host.Cipher
+	cipher  *host.Cipher
 
 	transform transformkit.Pass
 	resolve   Lookup
@@ -109,7 +109,7 @@ func (p *Provider) Artifacts() providerkit.ArtifactStore { return providerkit.No
 
 func (p *Provider) Records() providerkit.RecordStore { return p.records }
 
-func (p *Provider) Cipher() providerkit.Cipher { return p.sealer }
+func (p *Provider) Cipher() providerkit.Cipher { return p.cipher }
 
 func (p *Provider) Credentials() providerkit.Credentials { return credentials{p} }
 

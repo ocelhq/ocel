@@ -66,7 +66,7 @@ func TestWrittenByVersion(t *testing.T) {
 	})
 }
 
-func TestWriterDevelopment(t *testing.T) {
+func TestWrittenByDevelopment(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -89,7 +89,7 @@ func TestWriterDevelopment(t *testing.T) {
 	}
 }
 
-func TestWriterNewer(t *testing.T) {
+func TestWrittenByNewer(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {

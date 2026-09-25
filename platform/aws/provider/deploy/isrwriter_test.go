@@ -117,7 +117,7 @@ func isrPlan(app, prefix string) providerkit.StackPlan {
 		Kind: providerkit.StackApp,
 		App: &providerkit.AppPlan{
 			App:       app,
-			Framework: runtimeNext,
+			Framework: providerkit.FrameworkNext,
 			ISR:       &providerkit.ISRPlan{Prefix: prefix, TagNamespace: "tag:proj"},
 		},
 	}

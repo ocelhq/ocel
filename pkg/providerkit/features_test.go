@@ -217,7 +217,7 @@ func TestRequiredFeatures(t *testing.T) {
 	}{
 		{name: "a project needing nothing needs no feature"},
 		{
-			name:       "a runtime pulls the features that name it",
+			name:       "a framework pulls the features that name it",
 			frameworks: []string{"next"},
 			want:       []string{"isr", "image-optimization"},
 		},
@@ -233,7 +233,7 @@ func TestRequiredFeatures(t *testing.T) {
 			want:       []string{"isr", "image-optimization", "cloudflare-edge"},
 		},
 		{
-			name:       "a runtime no feature names pulls nothing",
+			name:       "a framework no feature names pulls nothing",
 			frameworks: []string{"astro"},
 		},
 	} {

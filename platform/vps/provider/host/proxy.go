@@ -417,13 +417,13 @@ func rejoining(name string) string {
 		"done\n"
 }
 
-func imageHeld(coordinate string, attempts int) string {
-	image := quoted(coordinate)
+func imageHeld(imageRef string, attempts int) string {
+	image := quoted(imageRef)
 	return "at=0\n" + pullHold.start() +
 		"until docker image inspect " + image + " >/dev/null 2>&1 || docker pull " + image + " >/dev/null; do\n" +
 		"at=$((at + 1))\n" +
 		"if [ \"$at\" -ge " + fmt.Sprint(attempts) + " ]; then\n" +
-		"printf '%s\\n' " + quoted(fmt.Sprintf("%s was not pulled in %d attempts", coordinate, attempts)) + " >&2\n" +
+		"printf '%s\\n' " + quoted(fmt.Sprintf("%s was not pulled in %d attempts", imageRef, attempts)) + " >&2\n" +
 		"exit 1\n" +
 		"fi\n" +
 		pullHold.again() +

@@ -113,11 +113,11 @@ func TestAHostWhoseStampIsUnreadableCanStillBeDestroyed(t *testing.T) {
 		beside: {truncated(beside)},
 	})
 
-	bootstrapper := NewBootstrap(stood.host(), testVendor, "shop")
-	if _, err := bootstrapper.PlanRemove(context.Background(), class); err != nil {
-		t.Fatalf("PlanRemoval() = %v over a host an apply left half-written, and no verb can clear it if destroy cannot read it", err)
+	bootstrap := NewBootstrap(stood.host(), testVendor, "shop")
+	if _, err := bootstrap.PlanRemove(context.Background(), class); err != nil {
+		t.Fatalf("PlanRemove() = %v over a host an apply left half-written, and no verb can clear it if destroy cannot read it", err)
 	}
-	if err := bootstrapper.Remove(context.Background(), class, nil); err != nil {
+	if err := bootstrap.Remove(context.Background(), class, nil); err != nil {
 		t.Fatalf("Remove() = %v over a host an apply left half-written", err)
 	}
 	if stood.took(quoted(ClassDir(class))) < 0 {
@@ -250,25 +250,25 @@ func TestPlanRemovalNamesTheGroupAfterTheMachineItRunsOn(t *testing.T) {
 
 	plan, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), class)
 	if err != nil {
-		t.Fatalf("PlanRemoval() = %v", err)
+		t.Fatalf("PlanRemove() = %v", err)
 	}
 	if len(plan.Groups) != 1 {
-		t.Fatalf("PlanRemoval() carries %d groups, want the one machine being destroyed", len(plan.Groups))
+		t.Fatalf("PlanRemove() carries %d groups, want the one machine being destroyed", len(plan.Groups))
 	}
 	group := plan.Groups[0]
 	if want := "vps/ada@ocelbox"; group.Name != want {
-		t.Errorf("PlanRemoval() named the group %q, want %q", group.Name, want)
+		t.Errorf("PlanRemove() named the group %q, want %q", group.Name, want)
 	}
 	if group.Action != providerkit.ActionDelete {
-		t.Errorf("PlanRemoval() plans the group as %q, want a delete", group.Action)
+		t.Errorf("PlanRemove() plans the group as %q, want a delete", group.Action)
 	}
 	for _, bearing := range []string{StateDir(class), SealKeyPath(class)} {
 		at := slices.IndexFunc(group.Changes, func(c providerkit.Change) bool { return c.Name == bearing })
 		if at < 0 {
-			t.Fatalf("PlanRemoval() never plans %s", bearing)
+			t.Fatalf("PlanRemove() never plans %s", bearing)
 		}
 		if group.Changes[at].Reason == "" {
-			t.Errorf("PlanRemoval() takes %s with no reason, and the typed confirmation must name what is unrecoverable before a user types", bearing)
+			t.Errorf("PlanRemove() takes %s with no reason, and the typed confirmation must name what is unrecoverable before a user types", bearing)
 		}
 	}
 }
@@ -303,9 +303,9 @@ func TestPlanRemovalOfAHostCarryingNothingPlansNothing(t *testing.T) {
 	stood := machine(nil)
 	plan, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
-		t.Fatalf("PlanRemoval() = %v", err)
+		t.Fatalf("PlanRemove() = %v", err)
 	}
 	if len(plan.Groups) != 0 {
-		t.Errorf("PlanRemoval() over a machine with no ocel on it plans %d groups, want nothing to destroy", len(plan.Groups))
+		t.Errorf("PlanRemove() over a machine with no ocel on it plans %d groups, want nothing to destroy", len(plan.Groups))
 	}
 }

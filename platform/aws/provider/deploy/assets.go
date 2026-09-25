@@ -111,8 +111,8 @@ type assetUpload struct {
 	headers  objectHeaders
 }
 
-func staticAssetSet(cfg Config, app, runtime string, coord naming.Coordinate) (*assetSet, error) {
-	if runtime != runtimeNext {
+func staticAssetSet(cfg Config, app, framework string, coord naming.Coordinate) (*assetSet, error) {
+	if framework != providerkit.FrameworkNext {
 		return nil, nil
 	}
 	if cfg.CacheStoreBucket == "" || cfg.CacheStoreObjects == nil {

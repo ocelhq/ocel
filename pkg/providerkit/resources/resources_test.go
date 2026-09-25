@@ -101,9 +101,9 @@ func TestReleaserFansEachResourceOutToItsPrimitive(t *testing.T) {
 	t.Parallel()
 
 	records := fake.NewRecords()
-	releaser := resources.Stacks(records, fake.NewArtifacts(), neon{&buckets{}}.hooks())
+	stacks := resources.Stacks(records, fake.NewArtifacts(), neon{&buckets{}}.hooks())
 
-	result, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+	result, err := stacks.Provision(context.Background(), providerkit.StackPlan{
 		Ref:  infraRef(),
 		Kind: providerkit.StackInfra,
 		Resources: []providerkit.Resource{
@@ -125,9 +125,9 @@ func TestReleaserFansEachResourceOutToItsPrimitive(t *testing.T) {
 func TestReleaserRefusesAPrimitiveNothingServes(t *testing.T) {
 	t.Parallel()
 
-	releaser := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), (&buckets{}).hooks())
+	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), (&buckets{}).hooks())
 
-	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+	_, err := stacks.Provision(context.Background(), providerkit.StackPlan{
 		Ref:       infraRef(),
 		Kind:      providerkit.StackInfra,
 		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.BindingPostgres}},
@@ -158,9 +158,9 @@ func TestPlanRefusesAPrimitiveNothingServes(t *testing.T) {
 func TestReleaserRefusesABindingMissingAPropertyItsTypePromises(t *testing.T) {
 	t.Parallel()
 
-	releaser := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), halfBinding{}.hooks())
+	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), halfBinding{}.hooks())
 
-	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+	_, err := stacks.Provision(context.Background(), providerkit.StackPlan{
 		Ref:       infraRef(),
 		Kind:      providerkit.StackInfra,
 		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.BindingPostgres}},
@@ -179,7 +179,7 @@ func TestReleaserRemovesAResourceThePlanNoLongerDeclares(t *testing.T) {
 	ctx := context.Background()
 	records := fake.NewRecords()
 	own := &buckets{}
-	releaser := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
+	stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
 	ref := infraRef()
 
 	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
@@ -192,7 +192,7 @@ func TestReleaserRemovesAResourceThePlanNoLongerDeclares(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := releaser.Provision(ctx, providerkit.StackPlan{
+	if _, err := stacks.Provision(ctx, providerkit.StackPlan{
 		Ref:       ref,
 		Kind:      providerkit.StackInfra,
 		Resources: []providerkit.Resource{{Name: "uploads", Type: providerkit.BindingBucket}},
@@ -209,9 +209,9 @@ func TestDestroyOfAStackNothingRecordedIsANoOp(t *testing.T) {
 	t.Parallel()
 
 	own := &buckets{}
-	releaser := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
+	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 
-	if err := releaser.Destroy(context.Background(), infraRef(), nil); err != nil {
+	if err := stacks.Destroy(context.Background(), infraRef(), nil); err != nil {
 		t.Fatalf("Destroy() of a stack nothing recorded = %v, want nil", err)
 	}
 	if len(own.removed) != 0 {
@@ -337,8 +337,8 @@ func TestPlanDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	releaser := resources.Stacks(records, fake.NewArtifacts(), (&buckets{}).hooks())
-	plan, err := releaser.PlanDestroy(ctx, ref, nil)
+	stacks := resources.Stacks(records, fake.NewArtifacts(), (&buckets{}).hooks())
+	plan, err := stacks.PlanDestroy(ctx, ref, nil)
 	if err != nil {
 		t.Fatalf("PlanDestroy() = %v", err)
 	}
@@ -348,7 +348,7 @@ func TestPlanDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 
 	absent := ref
 	absent.Name = naming.InfraStack("never-provisioned")
-	empty, err := releaser.PlanDestroy(ctx, absent, nil)
+	empty, err := stacks.PlanDestroy(ctx, absent, nil)
 	if err != nil {
 		t.Fatalf("PlanDestroy() of a stack nothing recorded = %v", err)
 	}
@@ -414,7 +414,7 @@ func TestTheFanOutTakesDownTheFunctionItsPlanShowsGoing(t *testing.T) {
 	recordFunctions(t, records, ref, "api", "legacy")
 
 	own := &withFunctions{buckets: &buckets{}}
-	releaser := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
+	stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
 	plan := providerkit.StackPlan{
 		Ref:  ref,
 		Kind: providerkit.StackApp,
@@ -425,7 +425,7 @@ func TestTheFanOutTakesDownTheFunctionItsPlanShowsGoing(t *testing.T) {
 		},
 	}
 
-	shown, err := releaser.Plan(ctx, plan, nil)
+	shown, err := stacks.Plan(ctx, plan, nil)
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
@@ -433,7 +433,7 @@ func TestTheFanOutTakesDownTheFunctionItsPlanShowsGoing(t *testing.T) {
 		t.Fatalf("legacy reads %q, want the function this release stopped declaring shown as going", rows["legacy"])
 	}
 
-	if _, err := releaser.Provision(ctx, plan, nil); err != nil {
+	if _, err := stacks.Provision(ctx, plan, nil); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
 	if len(own.removed) != 1 || own.removed[0].Name != "legacy" {
@@ -450,10 +450,10 @@ func TestAReleaseDeclaringNoAppTakesDownTheFunctionsItsPlanShowsGoing(t *testing
 	recordFunctions(t, records, ref, "api")
 
 	own := &withFunctions{buckets: &buckets{}}
-	releaser := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
+	stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
 	plan := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackInfra}
 
-	shown, err := releaser.Plan(ctx, plan, nil)
+	shown, err := stacks.Plan(ctx, plan, nil)
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
@@ -461,7 +461,7 @@ func TestAReleaseDeclaringNoAppTakesDownTheFunctionsItsPlanShowsGoing(t *testing
 		t.Fatalf("api reads %q, want the function no release declares shown as going", rows["api"])
 	}
 
-	if _, err := releaser.Provision(ctx, plan, nil); err != nil {
+	if _, err := stacks.Provision(ctx, plan, nil); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
 	if len(own.removed) != 1 || own.removed[0].Name != "api" {
@@ -523,9 +523,9 @@ func TestAContainerAppReachesTheContainerPrimitiveCarryingItsImageAndProbe(t *te
 
 	ref := appRef()
 	own := &withContainers{buckets: &buckets{}}
-	releaser := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
+	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 
-	result, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+	result, err := stacks.Provision(context.Background(), providerkit.StackPlan{
 		Ref:  ref,
 		Kind: providerkit.StackApp,
 		App:  containerApp("web"),
@@ -552,9 +552,9 @@ func TestAServerlessAppStillReachesFunctions(t *testing.T) {
 	t.Parallel()
 
 	own := &withFunctions{buckets: &buckets{}}
-	releaser := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
+	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 
-	result, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+	result, err := stacks.Provision(context.Background(), providerkit.StackPlan{
 		Ref:  appRef(),
 		Kind: providerkit.StackApp,
 		App: &providerkit.AppPlan{
@@ -577,9 +577,9 @@ func TestAServerlessAppStillReachesFunctions(t *testing.T) {
 func TestAProviderStandingUpNoContainersRefusesAContainerAppByName(t *testing.T) {
 	t.Parallel()
 
-	releaser := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks())
+	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks())
 
-	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+	_, err := stacks.Provision(context.Background(), providerkit.StackPlan{
 		Ref:  appRef(),
 		Kind: providerkit.StackApp,
 		App:  containerApp("web"),
@@ -596,9 +596,9 @@ func TestAProviderStandingUpNoContainersRefusesAContainerAppByName(t *testing.T)
 func TestAProviderStandingUpNoFunctionsRefusesAServerlessAppByName(t *testing.T) {
 	t.Parallel()
 
-	releaser := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), (&withContainers{buckets: &buckets{}}).hooks())
+	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), (&withContainers{buckets: &buckets{}}).hooks())
 
-	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+	_, err := stacks.Provision(context.Background(), providerkit.StackPlan{
 		Ref:  appRef(),
 		Kind: providerkit.StackApp,
 		App:  &providerkit.AppPlan{App: "web", Compute: providerkit.ComputeServerless},
@@ -615,9 +615,9 @@ func TestAProviderStandingUpNoFunctionsRefusesAServerlessAppByName(t *testing.T)
 func TestAnAppNamingNoComputeIsRefusedRatherThanAssumedServerless(t *testing.T) {
 	t.Parallel()
 
-	releaser := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks())
+	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks())
 
-	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+	_, err := stacks.Provision(context.Background(), providerkit.StackPlan{
 		Ref:  appRef(),
 		Kind: providerkit.StackApp,
 		App:  &providerkit.AppPlan{App: "web"},
@@ -637,10 +637,10 @@ func TestTheFanOutTakesDownTheContainerItsPlanShowsGoing(t *testing.T) {
 	recordContainers(t, records, ref, "web", "legacy")
 
 	own := &withContainers{buckets: &buckets{}}
-	releaser := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
+	stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
 	plan := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackApp, App: containerApp("web")}
 
-	shown, err := releaser.Plan(ctx, plan, nil)
+	shown, err := stacks.Plan(ctx, plan, nil)
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
@@ -652,7 +652,7 @@ func TestTheFanOutTakesDownTheContainerItsPlanShowsGoing(t *testing.T) {
 		t.Errorf("web reads %q, want the container this release still declares kept", rows["web"])
 	}
 
-	if _, err := releaser.Provision(ctx, plan, nil); err != nil {
+	if _, err := stacks.Provision(ctx, plan, nil); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
 	if len(own.removed) != 1 || own.removed[0].Name != "legacy" {
@@ -668,9 +668,9 @@ func TestAProviderStandingUpNoContainersRefusesToOrphanTheOnesItRecorded(t *test
 	ref := appRef()
 	recordContainers(t, records, ref, "legacy")
 
-	releaser := resources.Stacks(records, fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks())
+	stacks := resources.Stacks(records, fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks())
 
-	_, err := releaser.Provision(ctx, providerkit.StackPlan{
+	_, err := stacks.Provision(ctx, providerkit.StackPlan{
 		Ref:  ref,
 		Kind: providerkit.StackApp,
 		App: &providerkit.AppPlan{
@@ -694,16 +694,16 @@ func TestDestroyTakesDownEveryContainerTheStackRecorded(t *testing.T) {
 	recordContainers(t, records, ref, "web")
 
 	own := &withContainers{buckets: &buckets{}}
-	releaser := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
+	stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
 
-	shown, err := releaser.PlanDestroy(ctx, ref, nil)
+	shown, err := stacks.PlanDestroy(ctx, ref, nil)
 	if err != nil {
 		t.Fatalf("PlanDestroy() = %v", err)
 	}
 	if rows := rowsOf(shown); rows["web"] != providerkit.ActionDelete {
 		t.Errorf("web reads %q, want the recorded container shown as going", rows["web"])
 	}
-	if err := releaser.Destroy(ctx, ref, nil); err != nil {
+	if err := stacks.Destroy(ctx, ref, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(own.removed) != 1 || own.removed[0].Name != "web" {
@@ -800,10 +800,10 @@ func TestAContainerStandingUnderAnyNameButItsAppsIsSweptOnTheNextRelease(t *test
 	records := fake.NewRecords()
 	ref := appRef()
 	own := &withContainers{buckets: &buckets{}}
-	releaser := resources.Stacks(records, fake.NewArtifacts(), misnaming{own}.hooks())
+	stacks := resources.Stacks(records, fake.NewArtifacts(), misnaming{own}.hooks())
 	plan := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackApp, App: containerApp("web")}
 
-	stood, err := releaser.Provision(ctx, plan, nil)
+	stood, err := stacks.Provision(ctx, plan, nil)
 	if err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
@@ -812,7 +812,7 @@ func TestAContainerStandingUnderAnyNameButItsAppsIsSweptOnTheNextRelease(t *test
 	}
 	recordContainers(t, records, ref, stood.Containers[0].Name)
 
-	if _, err := releaser.Provision(ctx, plan, nil); err != nil {
+	if _, err := stacks.Provision(ctx, plan, nil); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
 	if len(own.removed) != 1 || own.removed[0].Name != "web-svc" {
@@ -834,7 +834,7 @@ func TestTheImageIsPushedBeforeTheContainerItIsStoodUpFrom(t *testing.T) {
 
 	own := &withContainers{buckets: &buckets{}}
 	registry := fake.NewImages()
-	releaser := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
+	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 	plan := providerkit.StackPlan{
 		Ref:    appRef(),
 		Kind:   providerkit.StackApp,
@@ -842,7 +842,7 @@ func TestTheImageIsPushedBeforeTheContainerItIsStoodUpFrom(t *testing.T) {
 		Images: imagePlan(registry),
 	}
 
-	if _, err := releaser.Provision(context.Background(), plan, nil); err != nil {
+	if _, err := stacks.Provision(context.Background(), plan, nil); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
 	if pushed := registry.Pushed(); len(pushed) != 1 || pushed[0].Source != testImage {
@@ -859,7 +859,7 @@ func TestAReleaseWhoseImageCannotBePushedStandsNothingUp(t *testing.T) {
 	own := &withContainers{buckets: &buckets{}}
 	registry := fake.NewImages()
 	registry.Refusing(errors.New("the registry refused the token"))
-	releaser := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
+	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 	plan := providerkit.StackPlan{
 		Ref:    appRef(),
 		Kind:   providerkit.StackApp,
@@ -867,7 +867,7 @@ func TestAReleaseWhoseImageCannotBePushedStandsNothingUp(t *testing.T) {
 		Images: imagePlan(registry),
 	}
 
-	if _, err := releaser.Provision(context.Background(), plan, nil); err == nil {
+	if _, err := stacks.Provision(context.Background(), plan, nil); err == nil {
 		t.Fatal("Provision() succeeded with an image that never reached the registry, so the box would be pointed at an image it cannot pull")
 	}
 	if len(own.stood) != 0 {
@@ -887,15 +887,15 @@ type retaining struct {
 	forgetting func() error
 }
 
-func (r *retaining) promote(app, coordinate string) {
+func (r *retaining) promote(app, imageRef string) {
 	if r.window == nil {
 		r.window = map[string][]string{}
 	}
 	if r.holding == nil {
 		r.holding = map[string]bool{}
 	}
-	r.window[app] = append([]string{coordinate}, r.window[app]...)
-	r.holding[coordinate] = true
+	r.window[app] = append([]string{imageRef}, r.window[app]...)
+	r.holding[imageRef] = true
 }
 
 func (r *retaining) hooks() resources.Hooks {
@@ -906,7 +906,7 @@ func (r *retaining) hooks() resources.Hooks {
 	return hooks
 }
 
-func (r *retaining) holds(coordinate string) bool { return r.holding[coordinate] }
+func (r *retaining) holds(imageRef string) bool { return r.holding[imageRef] }
 
 func (r *retaining) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Progress) ([]providerkit.AppContainer, error) {
 	if r.stood != nil {
@@ -934,8 +934,8 @@ func (r *retaining) ProvisionBucket(ctx context.Context, in resources.Instructio
 	return r.buckets.ProvisionBucket(ctx, in, progress)
 }
 
-func (r *retaining) ReconcileImages(_ context.Context, _ providerkit.StackRef, app, coordinate string, _ providerkit.Progress) error {
-	r.swept = append(r.swept, app+" "+coordinate)
+func (r *retaining) ReconcileImages(_ context.Context, _ providerkit.StackRef, app, imageRef string, _ providerkit.Progress) error {
+	r.swept = append(r.swept, app+" "+imageRef)
 	if r.sweeping != nil {
 		if err := r.sweeping(); err != nil {
 			return err
@@ -1003,9 +1003,9 @@ func TestAContainerReleaseReconcilesItsImagesOnEveryPathOutOfProvision(t *testin
 		t.Run(name, func(t *testing.T) {
 			own := &retaining{buckets: &buckets{}}
 			plan := breaking(own)
-			releaser := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
+			stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 
-			_, err := releaser.Provision(context.Background(), plan, nil)
+			_, err := stacks.Provision(context.Background(), plan, nil)
 			if name != "the release succeeds" && err == nil {
 				t.Fatal("Provision() succeeded, and this case is the failure path")
 			}
@@ -1045,9 +1045,9 @@ func TestAContainerReleaseReconcilesEvenWhenItNeverReachedTheWork(t *testing.T) 
 
 			own := &retaining{buckets: &buckets{}}
 			records, plan := breaking()
-			releaser := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
+			stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
 
-			if _, err := releaser.Provision(context.Background(), plan, nil); err == nil {
+			if _, err := stacks.Provision(context.Background(), plan, nil); err == nil {
 				t.Fatal("Provision() succeeded, and this case is the failure path")
 			}
 			if len(own.swept) != 1 || own.swept[0] != "web "+testImage {
@@ -1061,11 +1061,11 @@ func TestAServerlessReleaseReconcilesNoImages(t *testing.T) {
 	t.Parallel()
 
 	own := &retaining{buckets: &buckets{}}
-	releaser := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
+	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 
 	plan := containerPlan()
 	plan.App = nil
-	if _, err := releaser.Provision(context.Background(), plan, nil); err != nil {
+	if _, err := stacks.Provision(context.Background(), plan, nil); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
 	if len(own.swept) != 0 {
@@ -1088,8 +1088,8 @@ func TestATeardownSweepsTheImageTheContainerItTookDownWasHolding(t *testing.T) {
 
 	own := &retaining{buckets: &buckets{}}
 	own.promote("web", testImage)
-	releaser := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
-	if err := releaser.Destroy(ctx, ref, nil); err != nil {
+	stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
+	if err := stacks.Destroy(ctx, ref, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(own.swept) != 1 || own.swept[0] != "web "+testImage {
@@ -1123,9 +1123,9 @@ func TestATeardownThatStoppedReconcilingSaysSoWithNoProgressListening(t *testing
 
 			own := &retaining{buckets: &buckets{}}
 			breaking(own)
-			releaser := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
+			stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
 
-			err := releaser.Destroy(ctx, ref, nil)
+			err := stacks.Destroy(ctx, ref, nil)
 			if !errors.Is(err, refused) {
 				t.Errorf("Destroy() = %v, want %v: a destroy run with no reporter attached is where the only trace of a box that stopped reconciling would be lost", err, refused)
 			}

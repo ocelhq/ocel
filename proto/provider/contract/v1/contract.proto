@@ -473,9 +473,9 @@ message PreflightRequest {
 
   repeated string frameworks = 6;
 
-  bool standing = 7;
+  bool check_hosts = 7;
 
-  repeated string standing_domains = 8;
+  repeated string host_check_domains = 8;
 
   repeated ContainerApp containers = 9;
 }
@@ -505,7 +505,7 @@ message PreflightResponse {
 
   repeated string computes = 9;
 
-  repeated StandingCheck standing = 10;
+  repeated HostCheck host_checks = 10;
 
   map<string, string> container_archs = 12 [(buf.validate.field).map.values.string = {in: ["amd64", "arm64"]}];
 }
@@ -546,7 +546,7 @@ message PreviewWildcard {
   bool expiring_soon = 9;
 }
 
-message StandingCheck {
+message HostCheck {
   enum Verdict {
     VERDICT_UNSPECIFIED = 0;
     VERDICT_PASS = 1;

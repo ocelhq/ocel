@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	coordinate = "ocel/shop/web:sha256-abc"
-	imageID    = "sha256:abcdef"
+	imageRef = "ocel/shop/web:sha256-abc"
+	imageID  = "sha256:abcdef"
 )
 
 func (b *bench) carried() []string {
@@ -30,7 +30,7 @@ func imaged(b *bench, holds bool) {
 			return session.Result{}, true
 		case strings.Contains(command, "docker load"):
 			holds = true
-			return session.Result{Stdout: "Loaded image: " + coordinate + "\n"}, true
+			return session.Result{Stdout: "Loaded image: " + imageRef + "\n"}, true
 		default:
 			return session.Result{}, false
 		}
@@ -41,26 +41,26 @@ func TestAnImageTheMachineAlreadyHoldsIsAnswered(t *testing.T) {
 	stood := machine(nil)
 	imaged(stood, true)
 
-	held, err := stood.host().HoldsImage(context.Background(), coordinate)
+	held, err := stood.host().HoldsImage(context.Background(), imageRef)
 	if err != nil {
 		t.Fatalf("HoldsImage() = %v", err)
 	}
 	if !held {
-		t.Error("HoldsImage() says no over a machine whose daemon names the coordinate, so an unchanged redeploy would stream the whole image again")
+		t.Error("HoldsImage() says no over a machine whose daemon names the image ref, so an unchanged redeploy would stream the whole image again")
 	}
 	for _, command := range stood.commands() {
-		if strings.Contains(command, quoted(coordinate)) {
+		if strings.Contains(command, quoted(imageRef)) {
 			return
 		}
 	}
-	t.Errorf("no command named %s, so the answer is about something else: %v", coordinate, stood.commands())
+	t.Errorf("no command named %s, so the answer is about something else: %v", imageRef, stood.commands())
 }
 
 func TestAnImageTheMachineDoesNotHoldIsAbsentRatherThanAFailure(t *testing.T) {
 	stood := machine(nil)
 	imaged(stood, false)
 
-	held, err := stood.host().HoldsImage(context.Background(), coordinate)
+	held, err := stood.host().HoldsImage(context.Background(), imageRef)
 	if err != nil {
 		t.Fatalf("HoldsImage() over a machine that does not hold it = %v, want an absence", err)
 	}
@@ -78,7 +78,7 @@ func TestADaemonThatDoesNotAnswerIsRefusedRatherThanReadAsAnAbsence(t *testing.T
 		return session.Result{}, false
 	}
 
-	_, err := stood.host().HoldsImage(context.Background(), coordinate)
+	_, err := stood.host().HoldsImage(context.Background(), imageRef)
 	if err == nil {
 		t.Fatal("HoldsImage() read a daemon that is not running as an image that is merely absent, so the transfer would be attempted against nothing")
 	}
@@ -91,11 +91,11 @@ func TestTheImageIsFedToTheDaemonAndTheCoordinateIsCheckedAfterwards(t *testing.
 	stood := machine(nil)
 	imaged(stood, false)
 
-	said, err := stood.host().LoadImage(context.Background(), coordinate, strings.NewReader("tar-bytes"))
+	said, err := stood.host().LoadImage(context.Background(), imageRef, strings.NewReader("tar-bytes"))
 	if err != nil {
 		t.Fatalf("LoadImage() = %v", err)
 	}
-	if !strings.Contains(said, coordinate) {
+	if !strings.Contains(said, imageRef) {
 		t.Errorf("LoadImage() said %q, want what the daemon said it loaded", said)
 	}
 	if !strings.Contains(strings.Join(stood.carried(), "\n"), "tar-bytes") {
@@ -115,7 +115,7 @@ func TestTheImageIsFedToTheDaemonAndTheCoordinateIsCheckedAfterwards(t *testing.
 		}
 	}
 	if !loaded || !checked {
-		t.Errorf("a load that is never checked promotes a coordinate the machine may not answer to: %v", stood.commands())
+		t.Errorf("a load that is never checked promotes an image ref the machine may not answer to: %v", stood.commands())
 	}
 }
 
@@ -134,11 +134,11 @@ func TestALoadThatLeavesTheCoordinateUnansweredIsRefused(t *testing.T) {
 		}
 	}
 
-	_, err := stood.host().LoadImage(context.Background(), coordinate, strings.NewReader("tar-bytes"))
+	_, err := stood.host().LoadImage(context.Background(), imageRef, strings.NewReader("tar-bytes"))
 	if err == nil {
-		t.Fatal("LoadImage() succeeded where the machine answers to no such coordinate afterwards")
+		t.Fatal("LoadImage() succeeded where the machine answers to no such imageRef afterwards")
 	}
-	for _, named := range []string{coordinate, "content digest sha256:abc", "95%"} {
+	for _, named := range []string{imageRef, "content digest sha256:abc", "95%"} {
 		if !strings.Contains(err.Error(), named) {
 			t.Errorf("LoadImage() = %v, want %q in it: a load the box took and then does not hold explains itself with what the box's engine and disk say, or the cause is read off the wrong machine", err, named)
 		}
@@ -219,7 +219,7 @@ func TestALoginOutsideTheDockerGroupReachesTheDaemonAsRoot(t *testing.T) {
 		return session.Result{}, false
 	}
 
-	held, err := stood.host().HoldsImage(context.Background(), coordinate)
+	held, err := stood.host().HoldsImage(context.Background(), imageRef)
 	if err != nil {
 		t.Fatalf("HoldsImage() as a login the docker group does not hold = %v", err)
 	}
@@ -244,7 +244,7 @@ func TestADaemonThatIsDownIsNotReadAsALoginOutsideTheDockerGroup(t *testing.T) {
 	}
 	h := stood.host()
 
-	_, err := h.HoldsImage(context.Background(), coordinate)
+	_, err := h.HoldsImage(context.Background(), imageRef)
 	if err == nil {
 		t.Fatal("HoldsImage() over a machine whose daemon is down succeeded")
 	}
@@ -255,7 +255,7 @@ func TestADaemonThatIsDownIsNotReadAsALoginOutsideTheDockerGroup(t *testing.T) {
 		t.Errorf("HoldsImage() = %v: a daemon that is down is reported as a login that cannot become root", err)
 	}
 
-	if _, err := h.HoldsImage(context.Background(), coordinate); err == nil {
+	if _, err := h.HoldsImage(context.Background(), imageRef); err == nil {
 		t.Fatal("HoldsImage() = nil on a second ask over the same dead daemon")
 	}
 	if probes != 2 {
@@ -269,7 +269,7 @@ func TestTheDaemonIsFoundOnceHoweverManyImagesAreAskedAbout(t *testing.T) {
 	h := stood.host()
 
 	for range 3 {
-		if _, err := h.HoldsImage(context.Background(), coordinate); err != nil {
+		if _, err := h.HoldsImage(context.Background(), imageRef); err != nil {
 			t.Fatal(err)
 		}
 	}

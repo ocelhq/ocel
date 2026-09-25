@@ -120,10 +120,10 @@ func TestSealerBindsAValueToItsCoordinate(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	sealer := fake.NewCipher()
+	cipher := fake.NewCipher()
 	at := providerkit.SealScope{Project: "shop", Class: providerkit.ClassProduction, Env: "production", Name: "DATABASE_URL"}
 
-	sealed, err := sealer.Seal(ctx, at, []byte("postgres://"))
+	sealed, err := cipher.Seal(ctx, at, []byte("postgres://"))
 	if err != nil {
 		t.Fatalf("Seal() error = %v", err)
 	}
@@ -131,7 +131,7 @@ func TestSealerBindsAValueToItsCoordinate(t *testing.T) {
 		t.Fatal("Seal() left the plaintext in the sealed bytes")
 	}
 
-	opened, err := sealer.Open(ctx, at, sealed)
+	opened, err := cipher.Open(ctx, at, sealed)
 	if err != nil {
 		t.Fatalf("Open() error = %v", err)
 	}
@@ -141,7 +141,7 @@ func TestSealerBindsAValueToItsCoordinate(t *testing.T) {
 
 	elsewhere := at
 	elsewhere.Name = "OTHER_URL"
-	if _, err := sealer.Open(ctx, elsewhere, sealed); err == nil {
+	if _, err := cipher.Open(ctx, elsewhere, sealed); err == nil {
 		t.Fatal("Open() at another coordinate succeeded, want the coordinate to bind the value")
 	}
 }
@@ -186,14 +186,14 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 	t.Parallel()
 
 	provider := fake.NewProvider(fake.Options{})
-	releaser := resources.Stacks(provider.Records(), provider.Artifacts(), provider.ResourceHooks())
+	stacks := resources.Stacks(provider.Records(), provider.Artifacts(), provider.ResourceHooks())
 	ref := providerkit.StackRef{
 		Project: "shop",
 		Class:   providerkit.ClassProduction,
 		Name:    naming.AppStack("prod", "web", naming.NewRelease("d1", "f1")),
 	}
 
-	served, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+	served, err := stacks.Provision(context.Background(), providerkit.StackPlan{
 		Ref:  ref,
 		Kind: providerkit.StackApp,
 		App: &providerkit.AppPlan{
@@ -209,7 +209,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 		t.Fatalf("Provision() of a serverless app = %+v, want it to reach Functions alone", served)
 	}
 
-	contained, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+	contained, err := stacks.Provision(context.Background(), providerkit.StackPlan{
 		Ref:  ref,
 		Kind: providerkit.StackApp,
 		App: &providerkit.AppPlan{
@@ -223,7 +223,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 		t.Fatalf("Provision() of a container app = %v", err)
 	}
 	if len(contained.Containers) != 1 || len(contained.Functions) != 0 {
-		t.Fatalf("Provision() of a container app = %+v, want it to reach AppContainers alone", contained)
+		t.Fatalf("Provision() of a container app = %+v, want it to reach the Containers hooks alone", contained)
 	}
 
 	if err := providerkit.WriteStack(context.Background(), provider.Records(), ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
@@ -233,7 +233,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 		t.Fatal(err)
 	}
 
-	if _, err := releaser.Provision(context.Background(), providerkit.StackPlan{
+	if _, err := stacks.Provision(context.Background(), providerkit.StackPlan{
 		Ref:  ref,
 		Kind: providerkit.StackApp,
 		App: &providerkit.AppPlan{

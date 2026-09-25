@@ -176,8 +176,8 @@ func build(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io
 	for _, tier := range tiers {
 		found.add(tierSection(tier, hosts[tier], answers))
 	}
-	if standing, held := standingSection(answers); held {
-		found.add(standing)
+	if checks, held := hostCheckSection(answers); held {
+		found.add(checks)
 	}
 	if certificates, held := certificateSection(answers); held {
 		found.add(certificates)
@@ -185,16 +185,16 @@ func build(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr io
 	return found
 }
 
-func standingSection(got *answers) (section, bool) {
-	if len(got.standing) == 0 {
+func hostCheckSection(got *answers) (section, bool) {
+	if len(got.hostChecks) == 0 {
 		return section{}, false
 	}
-	s := section{name: "Standing"}
-	for _, check := range got.standing {
+	s := section{name: "Host checks"}
+	for _, check := range got.hostChecks {
 		switch check.GetVerdict() {
-		case contractv1.StandingCheck_VERDICT_PASS:
+		case contractv1.HostCheck_VERDICT_PASS:
 			s.pass(check.GetFinding())
-		case contractv1.StandingCheck_VERDICT_OWED:
+		case contractv1.HostCheck_VERDICT_OWED:
 			s.warn(check.GetFinding(), check.GetFix())
 		default:
 			s.fail(check.GetFinding(), check.GetFix())
@@ -294,35 +294,35 @@ type tierAnswer struct {
 }
 
 type answers struct {
-	pkg       string
-	problem   string
-	fix       string
-	identity  *contractv1.Identity
-	problems  []*contractv1.CredentialProblem
-	tiers     map[environmentv1.Tier]*tierAnswer
-	standing  []*contractv1.StandingCheck
-	hostnames []*contractv1.ProductionHostname
-	wildcard  *contractv1.PreviewWildcard
+	pkg        string
+	problem    string
+	fix        string
+	identity   *contractv1.Identity
+	problems   []*contractv1.CredentialProblem
+	tiers      map[environmentv1.Tier]*tierAnswer
+	hostChecks []*contractv1.HostCheck
+	hostnames  []*contractv1.ProductionHostname
+	wildcard   *contractv1.PreviewWildcard
 }
 
-func (a *answers) stand(checks []*contractv1.StandingCheck) {
+func (a *answers) addHostChecks(checks []*contractv1.HostCheck) {
 	for _, check := range checks {
 		seen := false
-		for _, held := range a.standing {
+		for _, held := range a.hostChecks {
 			if held.GetSubject() == check.GetSubject() && held.GetFinding() == check.GetFinding() {
 				seen = true
 				break
 			}
 		}
 		if !seen {
-			a.standing = append(a.standing, check)
+			a.hostChecks = append(a.hostChecks, check)
 		}
 	}
 }
 
 const upgradeProvider = "upgrade the provider pinned in this project"
 
-func standingDomains(asking bool, cfg *projectconfig.Config) []string {
+func hostCheckDomains(asking bool, cfg *projectconfig.Config) []string {
 	if !asking {
 		return nil
 	}
@@ -349,15 +349,15 @@ func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, s
 			return err
 		}
 		for _, tier := range tiers {
-			standing := tier == environmentv1.Tier_TIER_PRODUCTION
+			checkHosts := tier == environmentv1.Tier_TIER_PRODUCTION
 			resp, err := client.Preflight(ctx, &contractv1.PreflightRequest{
-				RequiredTier:    tier,
-				Slug:            cfg.Slug,
-				Domains:         preflight.Names(preflight.Hostnames(cfg, bootstrap.Name(tier))),
-				Frameworks:      preflight.Frameworks(cfg),
-				Edge:            edgewire.Selection(cfg),
-				Standing:        standing,
-				StandingDomains: standingDomains(standing, cfg),
+				RequiredTier:     tier,
+				Slug:             cfg.Slug,
+				Domains:          preflight.Names(preflight.Hostnames(cfg, bootstrap.Name(tier))),
+				Frameworks:       preflight.Frameworks(cfg),
+				Edge:             edgewire.Selection(cfg),
+				CheckHosts:       checkHosts,
+				HostCheckDomains: hostCheckDomains(checkHosts, cfg),
 			})
 			if err != nil {
 				if connect.CodeOf(err) == connect.CodeUnimplemented {
@@ -371,7 +371,7 @@ func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, s
 				got.identity = resp.GetIdentity()
 			}
 			got.keep(resp.GetCredentialProblems())
-			got.stand(resp.GetStanding())
+			got.addHostChecks(resp.GetHostChecks())
 			if tier == environmentv1.Tier_TIER_PREVIEW {
 				got.wildcard = resp.GetPreviewWildcard()
 			}

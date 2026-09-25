@@ -59,10 +59,10 @@ func TestEveryAssetSetIsARowThePlanShowsAndAnUploadTheApplyMakes(t *testing.T) {
 	cfg.CacheStoreObjects = store
 
 	engine := &mockedEngine{outputs: siblingAppOutputs("web")}
-	releaser := standingUp(cfg, engine)
+	stacks := standingUp(cfg, engine)
 	plan := siblingAppPlan(t, "web")
 
-	planned, err := releaser.Plan(ctx, plan, nil)
+	planned, err := stacks.Plan(ctx, plan, nil)
 	if err != nil {
 		t.Fatalf("Plan() of an app shipping assets = %v", err)
 	}
@@ -75,7 +75,7 @@ func TestEveryAssetSetIsARowThePlanShowsAndAnUploadTheApplyMakes(t *testing.T) {
 			assets.puts, store.puts)
 	}
 
-	if _, err := releaser.Provision(ctx, siblingAppPlan(t, "web"), nil); err != nil {
+	if _, err := stacks.Provision(ctx, siblingAppPlan(t, "web"), nil); err != nil {
 		t.Fatalf("Provision() of the app whose plan showed the asset sets = %v", err)
 	}
 	if !slices.ContainsFunc(store.puts, func(key string) bool { return strings.HasSuffix(key, "/web.txt") }) {
@@ -160,11 +160,11 @@ func TestAStaticAssetSetIsPlannedOnceAndPushedOnce(t *testing.T) {
 	cfg.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
 	coord := storageCoordinate("prod", "shop", "web", fixedRelease(t))
 
-	first, err := staticAssetSet(cfg, "web", runtimeNext, coord)
+	first, err := staticAssetSet(cfg, "web", providerkit.FrameworkNext, coord)
 	if err != nil {
 		t.Fatalf("staticAssetSet: %v", err)
 	}
-	second, err := staticAssetSet(cfg, "web", runtimeNext, coord)
+	second, err := staticAssetSet(cfg, "web", providerkit.FrameworkNext, coord)
 	if err != nil {
 		t.Fatalf("staticAssetSet: %v", err)
 	}

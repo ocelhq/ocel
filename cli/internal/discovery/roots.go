@@ -148,7 +148,7 @@ func HoldsJS(cfg *projectconfig.Config) (bool, error) {
 	return slices.ContainsFunc(roots, func(root Root) bool { return root.Language == JS }), nil
 }
 
-var runtimeLanguages = map[string]Language{
+var frameworkLanguages = map[string]Language{
 	providerkit.FrameworkNode:   JS,
 	providerkit.FrameworkNext:   JS,
 	providerkit.FrameworkGo:     Go,
@@ -156,16 +156,16 @@ var runtimeLanguages = map[string]Language{
 	providerkit.FrameworkRust:   Rust,
 }
 
-func LanguageOf(runtime, dir string) Language {
-	if language, ok := runtimeLanguages[runtime]; ok {
+func LanguageOf(framework, dir string) Language {
+	if language, ok := frameworkLanguages[framework]; ok {
 		return language
 	}
 	return LanguageOfApp(dir)
 }
 
-func ClientBundle(runtime, dir string) bool {
-	if runtime != "" {
-		return providerkit.FrameworkBundlesClient(runtime)
+func ClientBundle(framework, dir string) bool {
+	if framework != "" {
+		return providerkit.FrameworkBundlesClient(framework)
 	}
 	language, manifested := languageOfManifest(dir)
 	return manifested && language == JS

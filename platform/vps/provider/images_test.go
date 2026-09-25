@@ -29,7 +29,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-const loadedCoordinate = "ocel/shop/web:sha256-abc"
+const loadedImageRef = "ocel/shop/web:sha256-abc"
 
 type box struct {
 	mu         sync.Mutex
@@ -93,8 +93,8 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 		switch {
 		case fields[1] == "load":
 			b.holds = true
-			b.name(loadedCoordinate, loadedCoordinate)
-			said = "Loaded image: " + loadedCoordinate + "\n"
+			b.name(loadedImageRef, loadedImageRef)
+			said = "Loaded image: " + loadedImageRef + "\n"
 		case fields[1] == "pull" && len(fields) > 2:
 			ref := unquoted(fields[2])
 			b.holds = true
@@ -293,7 +293,7 @@ func aPush(t *testing.T) providerkit.ImagePush {
 	return providerkit.ImagePush{
 		App:      "web",
 		Source:   "ocel/shop/web@sha256:abc",
-		ImageRef: loadedCoordinate,
+		ImageRef: loadedImageRef,
 		Built:    wrapped(t),
 	}
 }
