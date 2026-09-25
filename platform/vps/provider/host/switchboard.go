@@ -51,10 +51,6 @@ func switchboardOver(sum string) boxContainer {
 	}
 }
 
-func switchboardRun() []string { return switchboardStanding(nil).run() }
-
-func switchboardWriting(attempts int) string { return switchboardStanding(nil).writing(attempts) }
-
 func switchboardCommand(argv ...string) []string {
 	return append([]string{"docker", "exec", SwitchboardContainer, SwitchboardMounted}, argv...)
 }

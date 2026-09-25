@@ -191,7 +191,7 @@ func TestAReleaseWhoseFrontProxyRefusedTheReloadLeavesItsConfigAsTheProxyServesI
 func TestTheSwitchboardRunsOnTheBoxNetworkBehindTheFrontProxyAndPublishesNothing(t *testing.T) {
 	t.Parallel()
 
-	argv := switchboardRun()
+	argv := switchboardStanding(nil).run()
 	joined := strings.Join(argv, " ")
 	for what, wanted := range map[string]string{
 		"its name":                         "--name " + SwitchboardContainer,
@@ -229,14 +229,14 @@ func TestTheSwitchboardRunsOnTheBoxNetworkBehindTheFrontProxyAndPublishesNothing
 func TestTheFrontProxyMountsNothingTheSwitchboardNowOwns(t *testing.T) {
 	t.Parallel()
 
-	joined := strings.Join(proxyRun(), " ")
+	joined := strings.Join(frontProxy().run(), " ")
 	for _, owned := range []string{ConnectorRun, live.RoutingDir, SwitchboardDir} {
 		if strings.Contains(joined, owned) {
 			t.Errorf("the front proxy runs as %q, which still reaches %s", joined, owned)
 		}
 	}
-	if !slices.Equal(proxyRun()[len(proxyRun())-len(caddy.Command()):], caddy.Command()) {
-		t.Errorf("the front proxy runs %q, want caddy started straight off its config", proxyRun())
+	if !slices.Equal(frontProxy().run()[len(frontProxy().run())-len(caddy.Command()):], caddy.Command()) {
+		t.Errorf("the front proxy runs %q, want caddy started straight off its config", frontProxy().run())
 	}
 }
 
@@ -246,7 +246,7 @@ func TestEveryProjectNetworkJoinsTheSwitchboardAndNeverTheFrontProxy(t *testing.
 	for what, script := range map[string]string{
 		"standing a network":   networkStanding(providerkit.ClassProduction, "shop"),
 		"forgetting a network": networkForgetting(providerkit.ClassProduction, "shop"),
-		"recreating the board": switchboardWriting(1),
+		"recreating the board": switchboardStanding(nil).writing(1),
 	} {
 		if !strings.Contains(script, quoted(SwitchboardContainer)) {
 			t.Errorf("%s runs\n%s\nwhich never names %s: it reaches every upstream", what, script, SwitchboardContainer)

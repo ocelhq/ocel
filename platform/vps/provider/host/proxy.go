@@ -334,8 +334,6 @@ func (s boxContainer) run(sysctls ...string) []string {
 	return append(append(argv, s.image), s.command...)
 }
 
-func proxyRun() []string { return frontProxy().run() }
-
 func (s boxContainer) writing(attempts int) string {
 	written := "set -e\n" +
 		bindsStanding(s.files) +
@@ -357,8 +355,6 @@ func (s boxContainer) started() string {
 		words(s.run(migrateSysctl+"=1")) + " >/dev/null\n" +
 		"else\n" + run + "fi\n"
 }
-
-func proxyWriting(attempts int) string { return frontProxy().writing(attempts) }
 
 func rejoining(name string) string {
 	return "for net in $(docker network ls --quiet --filter " + quoted("label="+LabelClass) + "); do\n" +
