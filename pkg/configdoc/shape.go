@@ -58,6 +58,9 @@ func checkValue(path string, target reflect.Type, value any) error {
 	if checker, ok := zero.(shapeChecker); ok {
 		return checker.checkShape(path, value)
 	}
+	if keyed, ok := zero.(Keyed); ok {
+		return checkKeyed(path, target, keyed.Shorthands(), value)
+	}
 	if _, ok := zero.(AlsoAString); ok {
 		if _, spelled := value.(string); spelled {
 			return nil

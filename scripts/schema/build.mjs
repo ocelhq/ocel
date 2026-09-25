@@ -134,15 +134,29 @@ class Emitter {
   }
 
   union(node, indent) {
+    const keys = node.oneOf.filter(soleKey).map((one) => Object.keys(one.properties)[0]);
+    const member = (one, at) => (soleKey(one) ? this.keyed(one, keys, at) : this.type(one, at));
     if (!node.title || RESERVED.has(node.title)) {
-      return node.oneOf.map((one) => this.type(one, indent)).join(" | ");
+      return node.oneOf.map((one) => member(one, indent)).join(" | ");
     }
     if (!this.interfaces.has(node.title)) {
       this.interfaces.set(node.title, "");
-      const union = node.oneOf.map((one) => this.type(one, "")).join("\n  | ");
+      const union = node.oneOf.map((one) => member(one, "")).join("\n  | ");
       this.interfaces.set(node.title, `${doc(node)}export type ${node.title} =\n  | ${union};\n`);
     }
     return node.title;
+  }
+
+  keyed(node, keys, indent) {
+    const inner = `${indent}  `;
+    const [key] = Object.keys(node.properties);
+    const property = node.properties[key];
+    const lines = property.description ? [`${inner}/** ${property.description} */`] : [];
+    lines.push(`${inner}${quoted(key)}: ${this.type(property, inner)};`);
+    for (const other of keys.filter((each) => each !== key)) {
+      lines.push(`${inner}${quoted(other)}?: never;`);
+    }
+    return `{\n${lines.join("\n")}\n${indent}}`;
   }
 
   exclusive(node, indent) {
@@ -211,6 +225,16 @@ class Emitter {
   render() {
     return [...this.interfaces.values()].join("\n");
   }
+}
+
+function soleKey(node) {
+  return (
+    !node.title &&
+    node.type === "object" &&
+    node.additionalProperties === false &&
+    Object.keys(node.properties ?? {}).length === 1 &&
+    node.required?.length === 1
+  );
 }
 
 function prefixed(pattern) {
