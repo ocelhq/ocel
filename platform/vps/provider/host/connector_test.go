@@ -65,7 +65,7 @@ func TestTheUnitRunsUnelevatedOverASocketAndComesBackOnABoot(t *testing.T) {
 	written := string(connectorUnit())
 	for _, want := range []string{
 		"User=" + deployUser,
-		"ExecStart=" + ConnectorBinary + " --config " + ConnectorConfig + " --listen unix://" + ConnectorSocket,
+		"ExecStart=" + ConnectorBinary + " --config " + ConnectorConfig + " --listen unix://" + switchboard.ConnectorSocket,
 		"Restart=on-failure",
 		"WantedBy=multi-user.target",
 		"After=docker.service",
@@ -183,7 +183,7 @@ func TestTakingTheConnectorOffLeavesNoUnitBinaryOrKey(t *testing.T) {
 	t.Parallel()
 
 	written := connectorRemoval()
-	for _, want := range []string{connectorUnitFile, ConnectorBinary, connectorRoot, connectorTmpfiles, ConnectorSocket} {
+	for _, want := range []string{connectorUnitFile, ConnectorBinary, connectorRoot, connectorTmpfiles, switchboard.ConnectorSocket} {
 		if !strings.Contains(written, quoted(want)) {
 			t.Errorf("the removal leaves %s behind:\n%s", want, written)
 		}

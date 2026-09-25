@@ -9,12 +9,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/connector/hostports"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 var version = "dev"
 
 func main() {
-	listen := flag.String("listen", "unix://"+host.ConnectorSocket, "address to serve on, as unix://<path> or host:port")
+	listen := flag.String("listen", "unix://"+switchboard.ConnectorSocket, "address to serve on, as unix://<path> or host:port")
 	config := flag.String("config", os.Getenv("OCEL_CONNECTOR_CONFIG"), "path to the connector config")
 	printing := flag.Bool("print-public-key", false, "print the connector's public key, creating it if absent, and exit")
 	reporting := flag.Bool("version", false, "print the version of this connector and exit")

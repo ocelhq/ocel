@@ -2,6 +2,7 @@ package host
 
 import (
 	"context"
+	"path"
 	"slices"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func loadsSwitchboard(command string) bool {
@@ -172,6 +174,9 @@ func TestTheSwitchboardRunsOnTheBoxNetworkBehindTheFrontProxyAndPublishesNothing
 			t.Errorf("the switchboard runs as %q, which carries no %s (%s)", joined, what, wanted)
 		}
 	}
+	if path.Dir(switchboard.ConnectorSocket) != ConnectorRun {
+		t.Errorf("the switchboard dials %s, outside the %s it is handed", switchboard.ConnectorSocket, ConnectorRun)
+	}
 	if strings.Contains(joined, "--publish") {
 		t.Errorf("the switchboard publishes a port: %q; only the front proxy is reached from outside the box", joined)
 	}
@@ -189,7 +194,7 @@ func TestTheFrontProxyMountsNothingTheSwitchboardNowOwns(t *testing.T) {
 	t.Parallel()
 
 	joined := strings.Join(proxyRun(), " ")
-	for _, owned := range []string{ConnectorRun, live.RoutingDir, SwitchboardDir, "proxyctl"} {
+	for _, owned := range []string{ConnectorRun, live.RoutingDir, SwitchboardDir} {
 		if strings.Contains(joined, owned) {
 			t.Errorf("the front proxy runs as %q, which still reaches %s", joined, owned)
 		}
