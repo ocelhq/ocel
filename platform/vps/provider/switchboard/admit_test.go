@@ -54,6 +54,40 @@ func TestTheTableAdmitsEveryNameTheBoxAnswersWithACertificateAndNoOther(t *testi
 	}
 }
 
+func TestTheTableRefusesEveryNameAPinnedCertificateCovers(t *testing.T) {
+	t.Parallel()
+
+	table := mustRead(t, `{"grace":"30s",
+		"claims":[
+			{"owner":"ocel--shop--production","hostname":"shop.example.com","pointer":"@production"},
+			{"owner":"ocel--shop--production","hostname":"api.shop.example.com","pointer":"@production"},
+			{"owner":"ocel--shop--production","hostname":"deep.api.shop.example.com","pointer":"@production"},
+			{"owner":"ocel--blog--production","hostname":"blog.example.com","pointer":"@production"}],
+		"pins":[
+			{"hostname":"Shop.Example.com","path":"/var/lib/ocel/certs/shop"},
+			{"hostname":"*.shop.example.com","path":"/var/lib/ocel/certs/wild"}],
+		"connector":"box.shop.example.com"}`)
+
+	for what, hostname := range map[string]string{
+		"a claimed hostname pinned by name":          "shop.example.com",
+		"a claimed hostname under a pinned wildcard": "api.shop.example.com",
+		"the connector under a pinned wildcard":      "box.shop.example.com",
+		"a pinned hostname spelled in another case":  "SHOP.example.COM",
+	} {
+		if table.Admits(hostname) {
+			t.Errorf("%s (%s) is admitted: the proxy serves a pinned name off its pin, and a certificate ordered for it stays the exact match caddy serves ahead of the pin until caddy restarts", what, hostname)
+		}
+	}
+	for what, hostname := range map[string]string{
+		"a claimed hostname no pin covers":                 "blog.example.com",
+		"a claimed hostname two labels under the wildcard": "deep.api.shop.example.com",
+	} {
+		if !table.Admits(hostname) {
+			t.Errorf("%s (%s) is refused, and no pin serves it", what, hostname)
+		}
+	}
+}
+
 func TestATableWithNoPreviewEntryAdmitsNoProbe(t *testing.T) {
 	t.Parallel()
 
