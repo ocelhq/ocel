@@ -34,6 +34,7 @@ on:
       - "scripts/incus.sh"
       - "scripts/incus-fanout.sh"
       - "scripts/assert-ran.sh"
+      - "tests/fronts/**"
       - ".github/workflows/provider-vps.yml"
       - ".github/actions/incus-vm/**"
       - ".github/actions/suite-gate/**"
