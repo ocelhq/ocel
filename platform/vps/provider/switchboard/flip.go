@@ -29,23 +29,23 @@ type Upstream struct {
 }
 
 func (b *Board) Flip(ctx context.Context, path string, retiring []string, window time.Duration, tell func(Drain)) error {
-	keyed, err := addresses(retiring)
+	retirees, err := upstreamAddresses(retiring)
 	if err != nil {
 		return err
 	}
-	b.retire(keyed, 1)
-	defer b.retire(keyed, -1)
+	b.retire(retirees, 1)
+	defer b.retire(retirees, -1)
 	if err := b.Load(path); err != nil {
 		return err
 	}
-	if len(keyed) == 0 {
+	if len(retirees) == 0 {
 		return nil
 	}
-	drained := make(chan string, len(keyed))
+	drained := make(chan string, len(retirees))
 	stop := make(chan struct{})
 	defer close(stop)
 	pending := map[string]bool{}
-	for _, address := range keyed {
+	for _, address := range retirees {
 		pending[address] = true
 		quiet := b.ledger.quiet(address)
 		go func() {
@@ -92,7 +92,7 @@ func (b *Board) retire(addresses []string, by int) {
 }
 
 func (b *Board) Idle(targets []string) ([]string, error) {
-	keyed, err := addresses(targets)
+	addresses, err := upstreamAddresses(targets)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +100,7 @@ func (b *Board) Idle(targets []string) ([]string, error) {
 	b.retiring.Lock()
 	defer b.retiring.Unlock()
 	var idle []string
-	for at, address := range keyed {
+	for at, address := range addresses {
 		if !routed[address] && b.draining[address] == 0 {
 			idle = append(idle, targets[at])
 		}
@@ -111,7 +111,7 @@ func (b *Board) Idle(targets []string) ([]string, error) {
 func (b *Board) Upstreams() []Upstream {
 	counted := b.ledger.counts()
 	for address := range b.table.Load().routed {
-		if _, held := counted[address]; !held {
+		if _, listed := counted[address]; !listed {
 			counted[address] = 0
 		}
 	}
@@ -122,14 +122,14 @@ func (b *Board) Upstreams() []Upstream {
 	return listed
 }
 
-func addresses(dials []string) ([]string, error) {
-	keyed := make([]string, 0, len(dials))
+func upstreamAddresses(dials []string) ([]string, error) {
+	addresses := make([]string, 0, len(dials))
 	for _, dial := range dials {
 		address, err := UpstreamAddress(dial)
 		if err != nil {
 			return nil, err
 		}
-		keyed = append(keyed, address)
+		addresses = append(addresses, address)
 	}
-	return keyed, nil
+	return addresses, nil
 }

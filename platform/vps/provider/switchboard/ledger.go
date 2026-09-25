@@ -154,8 +154,8 @@ func (l *ledger) cut(address string) {
 	for _, cancel := range cancels {
 		cancel()
 	}
-	for held := range opened {
-		_ = held.Conn.Close()
+	for upstream := range opened {
+		_ = upstream.Conn.Close()
 	}
 }
 

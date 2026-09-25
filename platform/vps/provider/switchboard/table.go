@@ -79,7 +79,7 @@ type pin struct {
 	Path     string `json:"path"`
 }
 
-type rows struct {
+type writtenTable struct {
 	Grace       string  `json:"grace"`
 	Claims      []claim `json:"claims,omitempty"`
 	Routes      []route `json:"routes,omitempty"`
@@ -95,7 +95,7 @@ type surfaceKey struct{ owner, pointer string }
 func Read(document []byte) (*Table, error) {
 	decoder := json.NewDecoder(bytes.NewReader(document))
 	decoder.DisallowUnknownFields()
-	var read rows
+	var read writtenTable
 	if err := decoder.Decode(&read); err != nil {
 		return nil, fmt.Errorf("the routing table is not one ocel wrote: %w", err)
 	}
@@ -112,23 +112,23 @@ func Read(document []byte) (*Table, error) {
 		}
 	}
 	claimed := map[claimKey][]string{}
-	for _, held := range slices.SortedFunc(slices.Values(read.Claims), byHostname) {
-		if err := held.valid(); err != nil {
+	for _, hostClaim := range slices.SortedFunc(slices.Values(read.Claims), byHostname) {
+		if err := hostClaim.valid(); err != nil {
 			return nil, err
 		}
-		key := claimKey{held.Owner, held.Pointer, held.App}
-		claimed[key] = append(claimed[key], held.Hostname)
+		key := claimKey{hostClaim.Owner, hostClaim.Pointer, hostClaim.App}
+		claimed[key] = append(claimed[key], hostClaim.Hostname)
 	}
 	standing := slices.SortedFunc(slices.Values(read.Routes), byIdentity)
 	running := map[surfaceKey][]string{}
-	for at, held := range standing {
-		address, err := held.valid()
+	for at, appRoute := range standing {
+		address, err := appRoute.valid()
 		if err != nil {
 			return nil, err
 		}
 		standing[at].Upstream = address
-		if held.app() && !slices.Contains(running[held.surface()], held.App) {
-			running[held.surface()] = append(running[held.surface()], held.App)
+		if appRoute.app() && !slices.Contains(running[appRoute.surface()], appRoute.App) {
+			running[appRoute.surface()] = append(running[appRoute.surface()], appRoute.App)
 		}
 	}
 	for _, serving := range slices.SortedFunc(maps.Keys(running), bySurface) {
@@ -145,22 +145,22 @@ func Read(document []byte) (*Table, error) {
 		routed:    map[string]bool{},
 	}
 	answeredBy := map[string]route{}
-	for _, held := range standing {
-		hostnames := claimed[held.key()]
-		if held.app() && len(running[held.surface()]) == 1 {
-			hostnames = append(slices.Clone(hostnames), claimed[claimKey{held.Owner, held.Pointer, ""}]...)
+	for _, appRoute := range standing {
+		hostnames := claimed[appRoute.key()]
+		if appRoute.app() && len(running[appRoute.surface()]) == 1 {
+			hostnames = append(slices.Clone(hostnames), claimed[claimKey{appRoute.Owner, appRoute.Pointer, ""}]...)
 		}
 		slices.Sort(hostnames)
 		for _, hostname := range hostnames {
 			named := strings.ToLower(hostname)
-			if taken, answered := answeredBy[named]; answered {
+			if first, answered := answeredBy[named]; answered {
 				return nil, fmt.Errorf("%s would be forwarded by both %s and %s",
-					hostname, taken.identity(), held.identity())
+					hostname, first.identity(), appRoute.identity())
 			}
-			answeredBy[named] = held
-			table.answering[named] = answer{upstream: held.Upstream, store: !held.app()}
+			answeredBy[named] = appRoute
+			table.answering[named] = answer{upstream: appRoute.Upstream, store: !appRoute.app()}
 		}
-		table.routed[held.Upstream] = true
+		table.routed[appRoute.Upstream] = true
 	}
 	return table, nil
 }
@@ -191,11 +191,11 @@ func (r route) valid() (string, error) {
 	if r.Health != "" && !strings.HasPrefix(r.Health, "/") {
 		return "", fmt.Errorf("the route %s has health path %q, which does not start with /", r.identity(), r.Health)
 	}
-	keyed, err := UpstreamAddress(r.Upstream)
+	address, err := UpstreamAddress(r.Upstream)
 	if err != nil {
 		return "", fmt.Errorf("the route %s forwards to no upstream it can dial: %w", r.identity(), err)
 	}
-	return keyed, nil
+	return address, nil
 }
 
 func UpstreamAddress(dial string) (string, error) {
@@ -243,13 +243,13 @@ func (t *Table) Forward(host, requested string) (Forward, bool) {
 	if t.connector != "" && named == t.connector && under(requested, ConnectorPath) {
 		return Forward{Upstream: connectorDial, Strip: ConnectorPath}, true
 	}
-	held, ok := t.answering[named]
-	if !ok || held.store && slices.ContainsFunc(storeAdminPaths, func(admin string) bool {
+	answered, ok := t.answering[named]
+	if !ok || answered.store && slices.ContainsFunc(storeAdminPaths, func(admin string) bool {
 		return under(requested, admin) || under(path.Clean(requested), admin)
 	}) {
 		return Forward{}, false
 	}
-	return Forward{Upstream: held.upstream}, true
+	return Forward{Upstream: answered.upstream}, true
 }
 
 func under(requested, prefix string) bool {
