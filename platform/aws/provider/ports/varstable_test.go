@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/envsource"
 	kit "github.com/ocelhq/ocel/pkg/providerkit/ports"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -42,6 +43,28 @@ func TestASetValueOnlyEverTouchesTheVarsTable(t *testing.T) {
 
 	if got := ddb.tablesUsed(); !slices.Equal(got, []string{fakeVarsTable}) {
 		t.Errorf("a set value reached tables %v, want %v alone", got, []string{fakeVarsTable})
+	}
+}
+
+func TestAnEnvSourceRegistrationAndItsSyncStatusLiveBesideTheValues(t *testing.T) {
+	records, ddb := newSplitRecords()
+	ctx := context.Background()
+	registration := envsource.Registration{Project: "shop", Descriptor: envsource.Descriptor{Kind: envsource.Exec, Exec: &envsource.ExecOptions{Command: []string{"op"}}}, Folders: []string{""}}
+	if err := envsource.Register(ctx, records, edge.ClassProduction, registration); err != nil {
+		t.Fatalf("Register err = %v", err)
+	}
+	listed, err := envsource.Registrations(ctx, records, edge.ClassProduction)
+	if err != nil || len(listed) != 1 || listed[0].Project != "shop" {
+		t.Fatalf("Registrations = %+v, %v", listed, err)
+	}
+	store := values.Store{Records: records, Sealer: mustSealer()}
+	syncer := envsource.Syncer{Store: store, Class: edge.ClassProduction}
+	if _, err := syncer.SyncFrom(ctx, registration, envsource.Static("exec", nil)); err != nil {
+		t.Fatalf("SyncFrom err = %v", err)
+	}
+
+	if got := ddb.tablesUsed(); !slices.Equal(got, []string{fakeVarsTable}) {
+		t.Errorf("an env source reached tables %v, want %v alone: the syncer's role reaches the vars table and nothing else", got, []string{fakeVarsTable})
 	}
 }
 

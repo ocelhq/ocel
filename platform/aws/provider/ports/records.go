@@ -30,6 +30,8 @@ const (
 var partitionSegments = map[string]int{
 	kit.RootValues:       3,
 	kit.RootValueRefs:    3,
+	kit.RootEnvSources:   2,
+	kit.RootEnvSyncs:     2,
 	kit.RootStacks:       3,
 	kit.RootEnvironments: 3,
 	kit.RootConformance:  3,
@@ -66,7 +68,14 @@ func (t Table) Table(context.Context, kit.Class) (string, error) { return string
 func (t Table) ValuesTable(context.Context, kit.Class) (string, error) { return string(t), nil }
 
 func holdsValues(name kit.RecordName) bool {
-	return len(name) > 0 && (name[0] == kit.RootValues || name[0] == kit.RootValueRefs)
+	if len(name) == 0 {
+		return false
+	}
+	switch name[0] {
+	case kit.RootValues, kit.RootValueRefs, kit.RootEnvSources, kit.RootEnvSyncs:
+		return true
+	}
+	return false
 }
 
 func (r Records) table(ctx context.Context, name kit.RecordName) (string, error) {
