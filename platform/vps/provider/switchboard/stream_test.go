@@ -115,7 +115,7 @@ func TestAnUpgradedConnectionOpenedBeforeAFlipDrainsWithItsRetireeAndIsCutAtTheC
 	go func() {
 		flipped <- board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue}, 2*time.Second, told.tell)
 	}()
-	time.Sleep(200 * time.Millisecond)
+	switchedTo(t, at, "shop.example.com", "green")
 
 	if said, err := opened.exchange("still"); err != nil || said != "blue still" {
 		t.Errorf("the socket opened before the flip answered %q, %v, want its retiree still answering it through the drain", said, err)
