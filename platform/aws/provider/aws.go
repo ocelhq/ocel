@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envsource"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -33,6 +34,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/dns"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
+	"github.com/ocelhq/ocel/platform/aws/provider/envidentity"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
@@ -643,11 +645,16 @@ var (
 	_ providerkit.ImageRegistry     = (*Provider)(nil)
 	_ providerkit.ContainerRuntimer = (*Provider)(nil)
 	_ providerkit.ImagePusher       = (*Provider)(nil)
+	_ providerkit.EnvSourceIdentity = (*Provider)(nil)
 	_ providerkit.Bootstrapper      = settling{}
 	_ awsports.Tables               = (*Provider)(nil)
 	_ awsports.Keys                 = (*Provider)(nil)
 	_ awsports.Stores               = (*Provider)(nil)
 )
+
+func (p *Provider) EnvSourceTarget() envsource.Target {
+	return envsource.Target{Signer: envidentity.Signer{Config: p.aws}}
+}
 
 const s3Scheme = "s3"
 
