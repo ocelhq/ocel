@@ -13,9 +13,11 @@ from ocel.gen.app.resources.v1.resources_pb import (
     ResourceIdentifier,
     ResourceType,
 )
+from ocel.gen.common.bindings.v1.bindings_pb import PostgresTlsMode
 
 _KIND = "postgres"
 _DEFAULT_VERSION = "17"
+_SSLMODES = {PostgresTlsMode.REQUIRE: "require", PostgresTlsMode.VERIFY_FULL: "verify-full"}
 
 
 class Postgres:
@@ -42,7 +44,8 @@ class Postgres:
         user = quote(properties.username, safe="")
         password = quote(properties.password, safe="")
         database = quote(properties.database, safe="")
-        query = f"?sslmode={quote(properties.tls_mode, safe='')}" if properties.tls_mode else ""
+        sslmode = _SSLMODES.get(properties.tls_mode)
+        query = f"?sslmode={sslmode}" if sslmode else ""
         return f"postgres://{user}:{password}@{properties.host}:{properties.port}/{database}{query}"
 
     async def pool(self):

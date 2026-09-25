@@ -77,13 +77,18 @@ func (p *PostgresDB) ConnectionString() (string, error) {
 	return connectionString(properties), nil
 }
 
+var sslmodes = map[bindingsv1.PostgresTlsMode]string{
+	bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_REQUIRE:     "require",
+	bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL: "verify-full",
+}
+
 func connectionString(properties *bindingsv1.PostgresProperties) string {
 	if properties.GetUrl() != "" {
 		return properties.GetUrl()
 	}
 	query := url.Values{}
-	if properties.GetTlsMode() != "" {
-		query.Set("sslmode", properties.GetTlsMode())
+	if mode := sslmodes[properties.GetTlsMode()]; mode != "" {
+		query.Set("sslmode", mode)
 	}
 	dsn := url.URL{
 		Scheme:   "postgres",

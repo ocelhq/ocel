@@ -117,6 +117,11 @@ func propertyScalar(fd protoreflect.FieldDescriptor, v protoreflect.Value) any {
 		return float64(v.Uint())
 	case protoreflect.FloatKind, protoreflect.DoubleKind:
 		return v.Float()
+	case protoreflect.EnumKind:
+		if named := fd.Enum().Values().ByNumber(v.Enum()); named != nil {
+			return string(named.Name())
+		}
+		return float64(v.Enum())
 	}
 	return v.String()
 }

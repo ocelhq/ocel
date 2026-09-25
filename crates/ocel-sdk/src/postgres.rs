@@ -1,6 +1,6 @@
 use crate::binding::{encoded, postgres};
 use crate::declare::discovering;
-use crate::proto::common::bindings::v1::PostgresProperties;
+use crate::proto::common::bindings::v1::{PostgresProperties, PostgresTlsMode};
 use crate::Error;
 
 pub(crate) const KIND: &str = "postgres";
@@ -75,10 +75,10 @@ fn connection_string(properties: &PostgresProperties) -> String {
     if !properties.url.is_empty() {
         return properties.url.clone();
     }
-    let sslmode = if properties.tls_mode.is_empty() {
-        String::new()
-    } else {
-        format!("?sslmode={}", encoded(&properties.tls_mode))
+    let sslmode = match properties.tls_mode.as_known() {
+        Some(PostgresTlsMode::POSTGRES_TLS_MODE_REQUIRE) => "?sslmode=require",
+        Some(PostgresTlsMode::POSTGRES_TLS_MODE_VERIFY_FULL) => "?sslmode=verify-full",
+        _ => "",
     };
     format!(
         "postgres://{}:{}@{}:{}/{}{}",
@@ -107,7 +107,7 @@ mod tests {
     use super::*;
     use sqlx::postgres::PgSslMode;
 
-    fn properties(tls_mode: &str, tls_ca: &str) -> PostgresProperties {
+    fn properties(tls_mode: PostgresTlsMode, tls_ca: &str) -> PostgresProperties {
         PostgresProperties {
             host: "db.example.com".into(),
             port: 5432,
@@ -137,14 +137,22 @@ mod tests {
     #[test]
     fn verify_full_trusts_the_records_ca() {
         let ca = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n";
-        let options = connect_options(&properties("verify-full", ca)).expect("options");
+        let options = connect_options(&properties(
+            PostgresTlsMode::POSTGRES_TLS_MODE_VERIFY_FULL,
+            ca,
+        ))
+        .expect("options");
         assert!(matches!(options.get_ssl_mode(), PgSslMode::VerifyFull));
         assert!(format!("{options:?}").contains("ssl_root_cert: Some(Inline("));
     }
 
     #[test]
     fn no_mode_leaves_the_drivers_default() {
-        let options = connect_options(&properties("", "")).expect("options");
+        let options = connect_options(&properties(
+            PostgresTlsMode::POSTGRES_TLS_MODE_UNSPECIFIED,
+            "",
+        ))
+        .expect("options");
         assert!(matches!(options.get_ssl_mode(), PgSslMode::Prefer));
     }
 }

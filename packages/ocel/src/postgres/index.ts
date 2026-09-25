@@ -1,5 +1,8 @@
 import { Pool, type PoolConfig } from "pg";
-import type { PostgresProperties } from "../gen/proto/common/bindings/v1/bindings_pb.js";
+import {
+  type PostgresProperties,
+  PostgresTlsMode,
+} from "../gen/proto/common/bindings/v1/bindings_pb.js";
 import { unprovisionedPhase, unprovisionedProxy } from "../utils/phase.js";
 import { Postgres, type PostgresConfig } from "./pg.js";
 
@@ -36,10 +39,10 @@ function poolConfig(properties: PostgresProperties): PoolConfig {
   const { host, port, database, username, password } = properties;
   const config: PoolConfig = { host, port, database, user: username, password };
   switch (properties.tlsMode) {
-    case "require":
+    case PostgresTlsMode.REQUIRE:
       config.ssl = { rejectUnauthorized: false };
       break;
-    case "verify-full":
+    case PostgresTlsMode.VERIFY_FULL:
       config.ssl = properties.tlsCa
         ? { rejectUnauthorized: true, ca: properties.tlsCa }
         : { rejectUnauthorized: true };
@@ -48,14 +51,21 @@ function poolConfig(properties: PostgresProperties): PoolConfig {
   return config;
 }
 
+const sslmodes: Record<PostgresTlsMode, string | undefined> = {
+  [PostgresTlsMode.UNSPECIFIED]: undefined,
+  [PostgresTlsMode.REQUIRE]: "require",
+  [PostgresTlsMode.VERIFY_FULL]: "verify-full",
+};
+
 function connectionStringOf(properties: PostgresProperties): string {
   if (properties.url) {
     return properties.url;
   }
   const { host, port, database, username, password } = properties;
   const url = new URL(connectionStringFor(host, port, database, username, password));
-  if (properties.tlsMode) {
-    url.searchParams.set("sslmode", properties.tlsMode);
+  const sslmode = sslmodes[properties.tlsMode];
+  if (sslmode) {
+    url.searchParams.set("sslmode", sslmode);
   }
   return url.toString();
 }

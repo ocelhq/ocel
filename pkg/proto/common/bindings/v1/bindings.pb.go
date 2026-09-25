@@ -74,6 +74,55 @@ func (BindingType) EnumDescriptor() ([]byte, []int) {
 	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{0}
 }
 
+type PostgresTlsMode int32
+
+const (
+	PostgresTlsMode_POSTGRES_TLS_MODE_UNSPECIFIED PostgresTlsMode = 0
+	PostgresTlsMode_POSTGRES_TLS_MODE_REQUIRE     PostgresTlsMode = 1
+	PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL PostgresTlsMode = 2
+)
+
+// Enum value maps for PostgresTlsMode.
+var (
+	PostgresTlsMode_name = map[int32]string{
+		0: "POSTGRES_TLS_MODE_UNSPECIFIED",
+		1: "POSTGRES_TLS_MODE_REQUIRE",
+		2: "POSTGRES_TLS_MODE_VERIFY_FULL",
+	}
+	PostgresTlsMode_value = map[string]int32{
+		"POSTGRES_TLS_MODE_UNSPECIFIED": 0,
+		"POSTGRES_TLS_MODE_REQUIRE":     1,
+		"POSTGRES_TLS_MODE_VERIFY_FULL": 2,
+	}
+)
+
+func (x PostgresTlsMode) Enum() *PostgresTlsMode {
+	p := new(PostgresTlsMode)
+	*p = x
+	return p
+}
+
+func (x PostgresTlsMode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (PostgresTlsMode) Descriptor() protoreflect.EnumDescriptor {
+	return file_common_bindings_v1_bindings_proto_enumTypes[1].Descriptor()
+}
+
+func (PostgresTlsMode) Type() protoreflect.EnumType {
+	return &file_common_bindings_v1_bindings_proto_enumTypes[1]
+}
+
+func (x PostgresTlsMode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use PostgresTlsMode.Descriptor instead.
+func (PostgresTlsMode) EnumDescriptor() ([]byte, []int) {
+	return file_common_bindings_v1_bindings_proto_rawDescGZIP(), []int{1}
+}
+
 type Binding struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -204,7 +253,7 @@ type PostgresProperties struct {
 	Username      string                 `protobuf:"bytes,4,opt,name=username,proto3" json:"username,omitempty"`
 	Password      string                 `protobuf:"bytes,5,opt,name=password,proto3" json:"password,omitempty"`
 	Url           string                 `protobuf:"bytes,6,opt,name=url,proto3" json:"url,omitempty"`
-	TlsMode       string                 `protobuf:"bytes,7,opt,name=tls_mode,json=tlsMode,proto3" json:"tls_mode,omitempty"`
+	TlsMode       PostgresTlsMode        `protobuf:"varint,7,opt,name=tls_mode,json=tlsMode,proto3,enum=common.bindings.v1.PostgresTlsMode" json:"tls_mode,omitempty"`
 	TlsCa         string                 `protobuf:"bytes,8,opt,name=tls_ca,json=tlsCa,proto3" json:"tls_ca,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -282,11 +331,11 @@ func (x *PostgresProperties) GetUrl() string {
 	return ""
 }
 
-func (x *PostgresProperties) GetTlsMode() string {
+func (x *PostgresProperties) GetTlsMode() PostgresTlsMode {
 	if x != nil {
 		return x.TlsMode
 	}
-	return ""
+	return PostgresTlsMode_POSTGRES_TLS_MODE_UNSPECIFIED
 }
 
 func (x *PostgresProperties) GetTlsCa() string {
@@ -545,15 +594,15 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\x06grants\x18\x04 \x03(\v2\x19.common.bindings.v1.GrantR\x06grants\x12\x16\n" +
 	"\x06source\x18\x05 \x01(\tR\x06sourceB\f\n" +
 	"\n" +
-	"properties\"\xde\x01\n" +
+	"properties\"\x83\x02\n" +
 	"\x12PostgresProperties\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n" +
 	"\bdatabase\x18\x03 \x01(\tR\bdatabase\x12\x1a\n" +
 	"\busername\x18\x04 \x01(\tR\busername\x12\x1f\n" +
 	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword\x12\x15\n" +
-	"\x03url\x18\x06 \x01(\tB\x03\x80\x01\x01R\x03url\x12\x19\n" +
-	"\btls_mode\x18\a \x01(\tR\atlsMode\x12\x15\n" +
+	"\x03url\x18\x06 \x01(\tB\x03\x80\x01\x01R\x03url\x12>\n" +
+	"\btls_mode\x18\a \x01(\x0e2#.common.bindings.v1.PostgresTlsModeR\atlsMode\x12\x15\n" +
 	"\x06tls_ca\x18\b \x01(\tR\x05tlsCa\"\xaa\x02\n" +
 	"\x10BucketProperties\x12\x16\n" +
 	"\x06bucket\x18\x01 \x01(\tR\x06bucket\x12&\n" +
@@ -581,7 +630,11 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\x18BINDING_TYPE_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15BINDING_TYPE_POSTGRES\x10\x01\x12\x17\n" +
 	"\x13BINDING_TYPE_BUCKET\x10\x02\x12\x17\n" +
-	"\x13BINDING_TYPE_CUSTOM\x10\x03B@Z>github.com/ocelhq/ocel/pkg/proto/common/bindings/v1;bindingsv1b\x06proto3"
+	"\x13BINDING_TYPE_CUSTOM\x10\x03*v\n" +
+	"\x0fPostgresTlsMode\x12!\n" +
+	"\x1dPOSTGRES_TLS_MODE_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19POSTGRES_TLS_MODE_REQUIRE\x10\x01\x12!\n" +
+	"\x1dPOSTGRES_TLS_MODE_VERIFY_FULL\x10\x02B@Z>github.com/ocelhq/ocel/pkg/proto/common/bindings/v1;bindingsv1b\x06proto3"
 
 var (
 	file_common_bindings_v1_bindings_proto_rawDescOnce sync.Once
@@ -595,28 +648,30 @@ func file_common_bindings_v1_bindings_proto_rawDescGZIP() []byte {
 	return file_common_bindings_v1_bindings_proto_rawDescData
 }
 
-var file_common_bindings_v1_bindings_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_common_bindings_v1_bindings_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_common_bindings_v1_bindings_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_common_bindings_v1_bindings_proto_goTypes = []any{
 	(BindingType)(0),           // 0: common.bindings.v1.BindingType
-	(*Binding)(nil),            // 1: common.bindings.v1.Binding
-	(*PostgresProperties)(nil), // 2: common.bindings.v1.PostgresProperties
-	(*BucketProperties)(nil),   // 3: common.bindings.v1.BucketProperties
-	(*Grant)(nil),              // 4: common.bindings.v1.Grant
-	(*GrantCondition)(nil),     // 5: common.bindings.v1.GrantCondition
-	(*structpb.Struct)(nil),    // 6: google.protobuf.Struct
+	(PostgresTlsMode)(0),       // 1: common.bindings.v1.PostgresTlsMode
+	(*Binding)(nil),            // 2: common.bindings.v1.Binding
+	(*PostgresProperties)(nil), // 3: common.bindings.v1.PostgresProperties
+	(*BucketProperties)(nil),   // 4: common.bindings.v1.BucketProperties
+	(*Grant)(nil),              // 5: common.bindings.v1.Grant
+	(*GrantCondition)(nil),     // 6: common.bindings.v1.GrantCondition
+	(*structpb.Struct)(nil),    // 7: google.protobuf.Struct
 }
 var file_common_bindings_v1_bindings_proto_depIdxs = []int32{
-	2, // 0: common.bindings.v1.Binding.postgres:type_name -> common.bindings.v1.PostgresProperties
-	3, // 1: common.bindings.v1.Binding.bucket:type_name -> common.bindings.v1.BucketProperties
-	6, // 2: common.bindings.v1.Binding.custom:type_name -> google.protobuf.Struct
-	4, // 3: common.bindings.v1.Binding.grants:type_name -> common.bindings.v1.Grant
-	5, // 4: common.bindings.v1.Grant.conditions:type_name -> common.bindings.v1.GrantCondition
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	3, // 0: common.bindings.v1.Binding.postgres:type_name -> common.bindings.v1.PostgresProperties
+	4, // 1: common.bindings.v1.Binding.bucket:type_name -> common.bindings.v1.BucketProperties
+	7, // 2: common.bindings.v1.Binding.custom:type_name -> google.protobuf.Struct
+	5, // 3: common.bindings.v1.Binding.grants:type_name -> common.bindings.v1.Grant
+	1, // 4: common.bindings.v1.PostgresProperties.tls_mode:type_name -> common.bindings.v1.PostgresTlsMode
+	6, // 5: common.bindings.v1.Grant.conditions:type_name -> common.bindings.v1.GrantCondition
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_common_bindings_v1_bindings_proto_init() }
@@ -634,7 +689,7 @@ func file_common_bindings_v1_bindings_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_bindings_v1_bindings_proto_rawDesc), len(file_common_bindings_v1_bindings_proto_rawDesc)),
-			NumEnums:      1,
+			NumEnums:      2,
 			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,

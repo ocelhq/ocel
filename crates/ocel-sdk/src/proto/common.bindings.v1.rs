@@ -161,6 +161,159 @@ impl ::buffa::Enumeration for BindingType {
         ]
     }
 }
+#[allow(non_camel_case_types)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+#[repr(i32)]
+pub enum PostgresTlsMode {
+    POSTGRES_TLS_MODE_UNSPECIFIED = 0i32,
+    POSTGRES_TLS_MODE_REQUIRE = 1i32,
+    POSTGRES_TLS_MODE_VERIFY_FULL = 2i32,
+}
+impl PostgresTlsMode {
+    ///Idiomatic alias for [`Self::POSTGRES_TLS_MODE_UNSPECIFIED`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Unspecified: Self = Self::POSTGRES_TLS_MODE_UNSPECIFIED;
+    ///Idiomatic alias for [`Self::POSTGRES_TLS_MODE_REQUIRE`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const Require: Self = Self::POSTGRES_TLS_MODE_REQUIRE;
+    ///Idiomatic alias for [`Self::POSTGRES_TLS_MODE_VERIFY_FULL`]; `Debug` prints the variant name.
+    #[allow(non_upper_case_globals)]
+    pub const VerifyFull: Self = Self::POSTGRES_TLS_MODE_VERIFY_FULL;
+}
+impl ::core::default::Default for PostgresTlsMode {
+    fn default() -> Self {
+        Self::POSTGRES_TLS_MODE_UNSPECIFIED
+    }
+}
+impl ::serde::Serialize for PostgresTlsMode {
+    fn serialize<S: ::serde::Serializer>(
+        &self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        s.serialize_str(::buffa::Enumeration::proto_name(self))
+    }
+}
+impl<'de> ::serde::Deserialize<'de> for PostgresTlsMode {
+    fn deserialize<D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        struct _V;
+        impl ::serde::de::Visitor<'_> for _V {
+            type Value = PostgresTlsMode;
+            fn expecting(
+                &self,
+                f: &mut ::core::fmt::Formatter<'_>,
+            ) -> ::core::fmt::Result {
+                f.write_str(
+                    concat!(
+                        "a string, integer, or null for ", stringify!(PostgresTlsMode)
+                    ),
+                )
+            }
+            fn visit_str<E: ::serde::de::Error>(
+                self,
+                v: &str,
+            ) -> ::core::result::Result<PostgresTlsMode, E> {
+                <PostgresTlsMode as ::buffa::Enumeration>::from_proto_name(v)
+                    .ok_or_else(|| { ::serde::de::Error::unknown_variant(v, &[]) })
+            }
+            fn visit_i64<E: ::serde::de::Error>(
+                self,
+                v: i64,
+            ) -> ::core::result::Result<PostgresTlsMode, E> {
+                let v32 = i32::try_from(v)
+                    .map_err(|_| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("enum value {v} out of i32 range"),
+                        )
+                    })?;
+                <PostgresTlsMode as ::buffa::Enumeration>::from_i32(v32)
+                    .ok_or_else(|| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("unknown enum value {v32}"),
+                        )
+                    })
+            }
+            fn visit_u64<E: ::serde::de::Error>(
+                self,
+                v: u64,
+            ) -> ::core::result::Result<PostgresTlsMode, E> {
+                let v32 = i32::try_from(v)
+                    .map_err(|_| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("enum value {v} out of i32 range"),
+                        )
+                    })?;
+                <PostgresTlsMode as ::buffa::Enumeration>::from_i32(v32)
+                    .ok_or_else(|| {
+                        ::serde::de::Error::custom(
+                            ::buffa::alloc::format!("unknown enum value {v32}"),
+                        )
+                    })
+            }
+            fn visit_unit<E: ::serde::de::Error>(
+                self,
+            ) -> ::core::result::Result<PostgresTlsMode, E> {
+                ::core::result::Result::Ok(::core::default::Default::default())
+            }
+        }
+        d.deserialize_any(_V)
+    }
+}
+impl ::buffa::json_helpers::ProtoElemJson for PostgresTlsMode {
+    fn serialize_proto_json<S: ::serde::Serializer>(
+        v: &Self,
+        s: S,
+    ) -> ::core::result::Result<S::Ok, S::Error> {
+        ::serde::Serialize::serialize(v, s)
+    }
+    fn deserialize_proto_json<'de, D: ::serde::Deserializer<'de>>(
+        d: D,
+    ) -> ::core::result::Result<Self, D::Error> {
+        <Self as ::serde::Deserialize>::deserialize(d)
+    }
+}
+impl ::buffa::Enumeration for PostgresTlsMode {
+    fn from_i32(value: i32) -> ::core::option::Option<Self> {
+        match value {
+            0i32 => ::core::option::Option::Some(Self::POSTGRES_TLS_MODE_UNSPECIFIED),
+            1i32 => ::core::option::Option::Some(Self::POSTGRES_TLS_MODE_REQUIRE),
+            2i32 => ::core::option::Option::Some(Self::POSTGRES_TLS_MODE_VERIFY_FULL),
+            _ => ::core::option::Option::None,
+        }
+    }
+    fn to_i32(&self) -> i32 {
+        *self as i32
+    }
+    fn proto_name(&self) -> &'static str {
+        match self {
+            Self::POSTGRES_TLS_MODE_UNSPECIFIED => "POSTGRES_TLS_MODE_UNSPECIFIED",
+            Self::POSTGRES_TLS_MODE_REQUIRE => "POSTGRES_TLS_MODE_REQUIRE",
+            Self::POSTGRES_TLS_MODE_VERIFY_FULL => "POSTGRES_TLS_MODE_VERIFY_FULL",
+        }
+    }
+    fn from_proto_name(name: &str) -> ::core::option::Option<Self> {
+        match name {
+            "POSTGRES_TLS_MODE_UNSPECIFIED" => {
+                ::core::option::Option::Some(Self::POSTGRES_TLS_MODE_UNSPECIFIED)
+            }
+            "POSTGRES_TLS_MODE_REQUIRE" => {
+                ::core::option::Option::Some(Self::POSTGRES_TLS_MODE_REQUIRE)
+            }
+            "POSTGRES_TLS_MODE_VERIFY_FULL" => {
+                ::core::option::Option::Some(Self::POSTGRES_TLS_MODE_VERIFY_FULL)
+            }
+            _ => ::core::option::Option::None,
+        }
+    }
+    fn values() -> &'static [Self] {
+        &[
+            Self::POSTGRES_TLS_MODE_UNSPECIFIED,
+            Self::POSTGRES_TLS_MODE_REQUIRE,
+            Self::POSTGRES_TLS_MODE_VERIFY_FULL,
+        ]
+    }
+}
 #[derive(Clone, PartialEq, Default)]
 #[derive(::serde::Serialize)]
 #[serde(default)]
@@ -706,10 +859,10 @@ pub struct PostgresProperties {
     #[serde(
         rename = "tlsMode",
         alias = "tls_mode",
-        with = "::buffa::json_helpers::proto_string",
-        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+        with = "::buffa::json_helpers::proto_enum",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_default_enum_value"
     )]
-    pub tls_mode: ::buffa::alloc::string::String,
+    pub tls_mode: ::buffa::EnumValue<PostgresTlsMode>,
     /// Field 8: `tls_ca`
     #[serde(
         rename = "tlsCa",
@@ -781,8 +934,11 @@ impl ::buffa::Message for PostgresProperties {
         if !self.url.is_empty() {
             size += 1u64 + ::buffa::types::string_encoded_len(&self.url) as u64;
         }
-        if !self.tls_mode.is_empty() {
-            size += 1u64 + ::buffa::types::string_encoded_len(&self.tls_mode) as u64;
+        {
+            let val = self.tls_mode.to_i32();
+            if val != 0 {
+                size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
+            }
         }
         if !self.tls_ca.is_empty() {
             size += 1u64 + ::buffa::types::string_encoded_len(&self.tls_ca) as u64;
@@ -815,8 +971,11 @@ impl ::buffa::Message for PostgresProperties {
         if !self.url.is_empty() {
             ::buffa::types::put_string_field(6u32, &self.url, buf);
         }
-        if !self.tls_mode.is_empty() {
-            ::buffa::types::put_string_field(7u32, &self.tls_mode, buf);
+        {
+            let val = self.tls_mode.to_i32();
+            if val != 0 {
+                ::buffa::types::put_int32_field(7u32, val, buf);
+            }
         }
         if !self.tls_ca.is_empty() {
             ::buffa::types::put_string_field(8u32, &self.tls_ca, buf);
@@ -879,9 +1038,11 @@ impl ::buffa::Message for PostgresProperties {
             7u32 => {
                 ::buffa::encoding::check_wire_type(
                     tag,
-                    ::buffa::encoding::WireType::LengthDelimited,
+                    ::buffa::encoding::WireType::Varint,
                 )?;
-                ::buffa::types::merge_string(&mut self.tls_mode, buf)?;
+                self.tls_mode = ::buffa::EnumValue::from(
+                    ::buffa::types::decode_int32(buf)?,
+                );
             }
             8u32 => {
                 ::buffa::encoding::check_wire_type(
@@ -904,7 +1065,7 @@ impl ::buffa::Message for PostgresProperties {
         self.username.clear();
         self.password.clear();
         self.url.clear();
-        self.tls_mode.clear();
+        self.tls_mode = ::buffa::EnumValue::from(0);
         self.tls_ca.clear();
         self.__buffa_unknown_fields.clear();
     }
@@ -2237,7 +2398,7 @@ pub mod __buffa {
             /// Field 6: `url`
             pub url: &'a str,
             /// Field 7: `tls_mode`
-            pub tls_mode: &'a str,
+            pub tls_mode: ::buffa::EnumValue<super::super::PostgresTlsMode>,
             /// Field 8: `tls_ca`
             pub tls_ca: &'a str,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
@@ -2337,9 +2498,11 @@ pub mod __buffa {
                     7u32 => {
                         ::buffa::encoding::check_wire_type(
                             tag,
-                            ::buffa::encoding::WireType::LengthDelimited,
+                            ::buffa::encoding::WireType::Varint,
                         )?;
-                        view.tls_mode = ::buffa::types::borrow_str(&mut cur)?;
+                        view.tls_mode = ::buffa::EnumValue::from(
+                            ::buffa::types::decode_int32(&mut cur)?,
+                        );
                     }
                     8u32 => {
                         ::buffa::encoding::check_wire_type(
@@ -2383,7 +2546,7 @@ pub mod __buffa {
                     username: self.username.to_string(),
                     password: self.password.to_string(),
                     url: self.url.to_string(),
-                    tls_mode: self.tls_mode.to_string(),
+                    tls_mode: self.tls_mode,
                     tls_ca: self.tls_ca.to_string(),
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
@@ -2423,10 +2586,11 @@ pub mod __buffa {
                 if !self.url.is_empty() {
                     size += 1u64 + ::buffa::types::string_encoded_len(&self.url) as u64;
                 }
-                if !self.tls_mode.is_empty() {
-                    size
-                        += 1u64
-                            + ::buffa::types::string_encoded_len(&self.tls_mode) as u64;
+                {
+                    let val = self.tls_mode.to_i32();
+                    if val != 0 {
+                        size += 1u64 + ::buffa::types::int32_encoded_len(val) as u64;
+                    }
                 }
                 if !self.tls_ca.is_empty() {
                     size
@@ -2462,8 +2626,11 @@ pub mod __buffa {
                 if !self.url.is_empty() {
                     ::buffa::types::put_string_field(6u32, &self.url, buf);
                 }
-                if !self.tls_mode.is_empty() {
-                    ::buffa::types::put_string_field(7u32, &self.tls_mode, buf);
+                {
+                    let val = self.tls_mode.to_i32();
+                    if val != 0 {
+                        ::buffa::types::put_int32_field(7u32, val, buf);
+                    }
                 }
                 if !self.tls_ca.is_empty() {
                     ::buffa::types::put_string_field(8u32, &self.tls_ca, buf);
@@ -2511,8 +2678,10 @@ pub mod __buffa {
                 if !::buffa::json_helpers::skip_if::is_empty_str(self.url) {
                     __map.serialize_entry("url", self.url)?;
                 }
-                if !::buffa::json_helpers::skip_if::is_empty_str(self.tls_mode) {
-                    __map.serialize_entry("tlsMode", self.tls_mode)?;
+                if !::buffa::json_helpers::skip_if::is_default_enum_value(
+                    &self.tls_mode,
+                ) {
+                    __map.serialize_entry("tlsMode", &self.tls_mode)?;
                 }
                 if !::buffa::json_helpers::skip_if::is_empty_str(self.tls_ca) {
                     __map.serialize_entry("tlsCa", self.tls_ca)?;
@@ -2644,7 +2813,7 @@ pub mod __buffa {
             }
             /// Field 7: `tls_mode`
             #[must_use]
-            pub fn tls_mode(&self) -> &'_ str {
+            pub fn tls_mode(&self) -> ::buffa::EnumValue<super::super::PostgresTlsMode> {
                 self.0.reborrow().tls_mode
             }
             /// Field 8: `tls_ca`

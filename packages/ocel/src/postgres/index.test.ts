@@ -70,7 +70,7 @@ describe("postgres()", () => {
           database: "d",
           username: "u",
           password: "p",
-          tlsMode: "require",
+          tlsMode: "POSTGRES_TLS_MODE_REQUIRE",
         },
       }),
     );
@@ -93,7 +93,7 @@ describe("postgres()", () => {
           database: "d",
           username: "u",
           password: "p",
-          tlsMode: "verify-full",
+          tlsMode: "POSTGRES_TLS_MODE_VERIFY_FULL",
           tlsCa: ca,
         },
       }),

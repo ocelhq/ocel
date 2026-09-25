@@ -41,7 +41,7 @@ fn a_records_tls_mode_is_the_connection_strings_sslmode() {
     let _env = env();
     std::env::set_var(
         "OCEL_RESOURCE_POSTGRES_tls",
-        r#"{"name":"tls","postgres":{"host":"h","port":5432,"database":"d","username":"u","password":"p","tlsMode":"verify-full"}}"#,
+        r#"{"name":"tls","postgres":{"host":"h","port":5432,"database":"d","username":"u","password":"p","tlsMode":"POSTGRES_TLS_MODE_VERIFY_FULL"}}"#,
     );
     assert_eq!(
         Postgres::new("tls")

@@ -57,7 +57,7 @@ func TestConnConfig(t *testing.T) {
 	t.Run("verify-full checks the server against the CA the binding names", func(t *testing.T) {
 		config, err := ConnConfig(&bindingsv1.PostgresProperties{
 			Host: "db.example.com", Port: 6543, Database: "orders", Username: "app", Password: "p@ss:word/#?",
-			TlsMode: "verify-full", TlsCa: selfSignedPEM(t),
+			TlsMode: bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL, TlsCa: selfSignedPEM(t),
 		})
 		if err != nil {
 			t.Fatalf("ConnConfig: %v", err)
@@ -77,7 +77,7 @@ func TestConnConfig(t *testing.T) {
 	})
 
 	t.Run("a CA holding no certificate is refused", func(t *testing.T) {
-		_, err := ConnConfig(&bindingsv1.PostgresProperties{Host: "db", Port: 5432, Database: "d", Username: "u", Password: "p", TlsMode: "verify-full", TlsCa: "not a pem"})
+		_, err := ConnConfig(&bindingsv1.PostgresProperties{Host: "db", Port: 5432, Database: "d", Username: "u", Password: "p", TlsMode: bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL, TlsCa: "not a pem"})
 		if err == nil {
 			t.Fatal("ConnConfig = nil error, want the CA refused")
 		}
