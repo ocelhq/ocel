@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 )
 
 func resolveJSON(t *testing.T, config string) (*Config, error) {
@@ -35,9 +36,9 @@ func TestAnInlineBindingServesTheTiersItNames(t *testing.T) {
 		"billing":{"production":{"host":"db.example.com","database":"billing","username":"app","password":{"$env":"BILLING_PASSWORD"}}}
 	}}}`)
 
-	production := cfg.BindingsFor(TierProduction)
-	preview := cfg.BindingsFor(TierPreview)
-	names := func(bound []TierBinding) []string {
+	production := cfg.BindingsFor(environmentv1.Tier_TIER_PRODUCTION)
+	preview := cfg.BindingsFor(environmentv1.Tier_TIER_PREVIEW)
+	names := func(bound []Binding) []string {
 		out := make([]string, 0, len(bound))
 		for _, b := range bound {
 			out = append(out, b.Name)
@@ -81,7 +82,7 @@ func TestAnInlineBindingNamesTheVariablesItReads(t *testing.T) {
 		"host":{"$env":"ORDERS_HOST"},"database":"orders","username":{"$env":"ORDERS_USER"},
 		"password":{"$env":"ORDERS_PASSWORD"},"tls":{"mode":"verify-full","ca":{"$env":"ORDERS_CA"}}
 	}}}}`)
-	bound := cfg.BindingsFor(TierProduction)
+	bound := cfg.BindingsFor(environmentv1.Tier_TIER_PRODUCTION)
 	if len(bound) != 1 || bound[0].Inline == nil {
 		t.Fatalf("bound = %+v", bound)
 	}
@@ -155,7 +156,7 @@ func TestAnInlineBucketNamesItsStoreAndTheVariablesItReads(t *testing.T) {
 		"prefix":"uploads/","accessKeyId":{"$env":"R2_KEY"},"secretAccessKey":{"$env":"R2_SECRET"},
 		"publicBaseUrl":"https://cdn.acme.com"
 	}}}}`)
-	bound := cfg.BindingsFor(TierPreview)
+	bound := cfg.BindingsFor(environmentv1.Tier_TIER_PREVIEW)
 	if len(bound) != 1 || bound[0].Inline == nil || bound[0].Inline.Bucket == nil {
 		t.Fatalf("bound = %+v, want the inline bucket", bound)
 	}

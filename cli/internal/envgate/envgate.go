@@ -10,6 +10,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
@@ -65,6 +66,13 @@ type Scope struct {
 	Browser     bool
 	Implied     []Implied
 	OtherTiers  []Implied
+}
+
+func (s Scope) Tier() environmentv1.Tier {
+	if s.Preview {
+		return environmentv1.Tier_TIER_PREVIEW
+	}
+	return environmentv1.Tier_TIER_PRODUCTION
 }
 
 func (s Scope) OcelWrites(key string, folders []string) bool {

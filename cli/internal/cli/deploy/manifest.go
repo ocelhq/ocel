@@ -128,7 +128,7 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 		return nil, nil, err
 	}
 
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Dir, cfg.Apps, usages, compute, images, functions), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.BindingsFor(projectconfig.Tier(gate.Scope().Preview))), functions, variablesByApp(variables, functions))
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Dir, cfg.Apps, usages, compute, images, functions), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.BindingsFor(gate.Scope().Tier())), functions, variablesByApp(variables, functions))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -147,7 +147,7 @@ func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Co
 	if err != nil {
 		return nil, err
 	}
-	records, err := inlinebinding.Build(cfg.BindingsFor(projectconfig.Tier(gate.Scope().Preview)), values, filepath.Base(cfg.Path))
+	records, err := inlinebinding.Build(cfg.BindingsFor(gate.Scope().Tier()), values, filepath.Base(cfg.Path))
 	if err != nil || len(records) == 0 {
 		return records, err
 	}
