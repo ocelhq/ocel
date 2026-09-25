@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -204,5 +205,39 @@ func TestOneCertificateCoveringTwoHostnamesIsHandedToTheProxyOnce(t *testing.T) 
 	want := []Pin{{Hostname: "blog.example.com", Path: at}, {Hostname: "shop.example.com", Path: at}}
 	if !slices.Equal(held.Pins, want) {
 		t.Errorf("the pins read back are %v, want %v: a deploy renders this file whole off what it reads, and a hostname lost in the round trip is a pair the next reshape stops loading", held.Pins, want)
+	}
+}
+
+type loadedPair struct {
+	Certificate string   `json:"certificate"`
+	Tags        []string `json:"tags"`
+}
+
+func TestAPinnedPreviewWildcardServesTheProbeBeforeAnyPreviewIsClaimed(t *testing.T) {
+	t.Parallel()
+
+	state := previewing()
+	state.Pins = []Pin{{Hostname: wildcard, Path: caddy.PinsDir + "/wildcard"}}
+	var read struct {
+		Apps struct {
+			TLS *struct {
+				Certificates struct {
+					LoadFiles []loadedPair `json:"load_files"`
+				} `json:"certificates"`
+			} `json:"tls"`
+		} `json:"apps"`
+	}
+	if err := json.Unmarshal(mustRender(t, state), &read); err != nil {
+		t.Fatal(err)
+	}
+	probe := edge.ProbeHostname(wildcard)
+	var loaded []loadedPair
+	if read.Apps.TLS != nil {
+		loaded = read.Apps.TLS.Certificates.LoadFiles
+	}
+	if !slices.ContainsFunc(loaded, func(pair loadedPair) bool {
+		return pair.Certificate == caddy.PinCertificate(caddy.PinsMount+"/wildcard") && slices.Contains(pair.Tags, probe)
+	}) {
+		t.Errorf("a box answering previews under a pinned %s hands the proxy %+v, want that pair tagged %s: the probe is in the proxy's host matchers whether or not a preview is claimed, and with no pair loaded for it the proxy orders one from acme, which a dns-01-only setup never gets", wildcard, loaded, probe)
 	}
 }
