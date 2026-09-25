@@ -211,15 +211,15 @@ func TestAFrontProxyTrustedByNameIsTrustedAtWhateverAddressItsNameResolvesToNow(
 	asked := 0
 	board, at := trusting(t, routing(t, map[string]string{"shop.example.com": web}), switchboard.Trust{
 		Names: []string{"ocel-proxy"},
-		Resolve: func(_ context.Context, name string) ([]netip.Addr, error) {
-			mu.Lock()
-			defer mu.Unlock()
-			asked++
-			if name != "ocel-proxy" {
-				return nil, fmt.Errorf("asked to resolve %q", name)
-			}
-			return []netip.Addr{resolved}, nil
-		},
+	})
+	board.LookUpNamesWith(func(_ context.Context, name string) ([]netip.Addr, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		asked++
+		if name != "ocel-proxy" {
+			return nil, fmt.Errorf("asked to resolve %q", name)
+		}
+		return []netip.Addr{resolved}, nil
 	})
 	board.RefreshTrustEvery(50 * time.Millisecond)
 	spoofed := []string{"X-Forwarded-Proto", "https"}

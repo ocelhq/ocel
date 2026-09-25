@@ -39,7 +39,7 @@ type Board struct {
 	loading   sync.Mutex
 	retiring  sync.Mutex
 	draining  map[string]int
-	trust     *trust
+	trust     *trustedPeers
 	ledger    ledger
 	connector string
 	tcp       *http.Transport

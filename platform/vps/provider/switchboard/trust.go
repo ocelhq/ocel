@@ -6,6 +6,7 @@ import (
 	"net/netip"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -14,66 +15,99 @@ const (
 	trustLookup  = 2 * time.Second
 )
 
-type Resolver func(ctx context.Context, name string) ([]netip.Addr, error)
+type lookup func(ctx context.Context, name string) ([]netip.Addr, error)
 
 type Trust struct {
 	Prefixes []netip.Prefix
 	Names    []string
-	Resolve  Resolver
 }
 
-type trust struct {
+type trustedPeers struct {
 	prefixes []netip.Prefix
 	names    []string
-	resolve  Resolver
-	every    time.Duration
+	named    atomic.Pointer[[]netip.Addr]
+
 	mu       sync.Mutex
-	held     []netip.Addr
+	lookUp   lookup
+	every    time.Duration
 	asked    time.Time
+	resolved chan struct{}
 }
 
-func trusting(given Trust) *trust {
-	resolve := given.Resolve
-	if resolve == nil {
-		resolve = func(ctx context.Context, name string) ([]netip.Addr, error) {
+func trusting(given Trust) *trustedPeers {
+	return &trustedPeers{
+		prefixes: slices.Clone(given.Prefixes),
+		names:    slices.Clone(given.Names),
+		lookUp: func(ctx context.Context, name string) ([]netip.Addr, error) {
 			return net.DefaultResolver.LookupNetIP(ctx, "ip", name)
-		}
+		},
+		every: trustRefresh,
 	}
-	return &trust{prefixes: slices.Clone(given.Prefixes), names: slices.Clone(given.Names), resolve: resolve, every: trustRefresh}
 }
 
-func (t *trust) trusts(ctx context.Context, peer netip.Addr) bool {
+func (t *trustedPeers) trusts(ctx context.Context, peer netip.Addr) bool {
 	if slices.ContainsFunc(t.prefixes, func(prefix netip.Prefix) bool { return prefix.Contains(peer) }) {
 		return true
 	}
 	if len(t.names) == 0 {
 		return false
 	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if slices.Contains(t.held, peer) {
+	if t.namedAt(peer) {
 		return true
 	}
-	if !t.asked.IsZero() && time.Since(t.asked) < t.every {
+	resolved := t.refreshed(ctx)
+	if resolved == nil {
 		return false
 	}
+	select {
+	case <-resolved:
+		return t.namedAt(peer)
+	case <-ctx.Done():
+		return false
+	}
+}
+
+func (t *trustedPeers) namedAt(peer netip.Addr) bool {
+	named := t.named.Load()
+	return named != nil && slices.Contains(*named, peer)
+}
+
+func (t *trustedPeers) refreshed(ctx context.Context) <-chan struct{} {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.resolved != nil {
+		return t.resolved
+	}
+	if !t.asked.IsZero() && time.Since(t.asked) < t.every {
+		return nil
+	}
 	t.asked = time.Now()
-	asking, stop := context.WithTimeout(context.WithoutCancel(ctx), trustLookup)
+	resolved := make(chan struct{})
+	t.resolved = resolved
+	go t.resolve(context.WithoutCancel(ctx), t.lookUp, resolved)
+	return resolved
+}
+
+func (t *trustedPeers) resolve(ctx context.Context, lookUp lookup, resolved chan struct{}) {
+	asking, stop := context.WithTimeout(ctx, trustLookup)
 	defer stop()
-	var held []netip.Addr
-	resolved := false
+	var named []netip.Addr
+	answered := false
 	for _, name := range t.names {
-		found, err := t.resolve(asking, name)
+		found, err := lookUp(asking, name)
 		if err != nil {
 			continue
 		}
-		resolved = true
+		answered = true
 		for _, addr := range found {
-			held = append(held, addr.Unmap())
+			named = append(named, addr.Unmap())
 		}
 	}
-	if resolved {
-		t.held = held
+	if answered {
+		t.named.Store(&named)
 	}
-	return slices.Contains(t.held, peer)
+	t.mu.Lock()
+	t.resolved = nil
+	t.mu.Unlock()
+	close(resolved)
 }
