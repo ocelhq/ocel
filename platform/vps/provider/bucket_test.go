@@ -367,6 +367,28 @@ func TestAnAppBindingNoBucketIsHandedNoStore(t *testing.T) {
 	}
 }
 
+func TestAnAppWhoseBucketIsBoundToAStoreIsHandedNoStoreOfTheBoxs(t *testing.T) {
+	t.Parallel()
+
+	machine := &box{}
+	app := anApp()
+	app.Values = providerkit.AppValues{Bindings: []providerkit.Binding{{
+		Type: providerkit.BindingBucket, Name: "ocel:bucket.uploads", Source: "ocel.json",
+		Properties: map[string]string{
+			providerkit.PropertyBucket:   "acme",
+			providerkit.PropertyEndpoint: "https://abc.r2.cloudflarestorage.com",
+		},
+	}}}
+	if _, err := over(machine).ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
+		t.Fatalf("ProvisionContainers() = %v", err)
+	}
+	for _, command := range machine.commands() {
+		if strings.Contains(command, `"store"`) {
+			t.Errorf("an app whose one bucket lives in a store of its own was handed the box's store:\n%s", command)
+		}
+	}
+}
+
 func TestAnAppBoundToAnExternalStoreIsHandedThatStoreAndItsOwnPrefix(t *testing.T) {
 	t.Parallel()
 

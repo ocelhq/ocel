@@ -58,7 +58,12 @@ const (
 	PropertyBucket        = "bucket"
 	PropertyPublicBaseURL = "publicBaseUrl"
 	PropertyPublic        = "public"
+	PropertyEndpoint      = "endpoint"
 )
+
+func (b Binding) Endpointed() bool {
+	return b.Type == BindingBucket && b.Properties[PropertyEndpoint] != ""
+}
 
 func RequiredProperties(t BindingType) []string {
 	switch t {

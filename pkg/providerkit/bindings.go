@@ -76,10 +76,10 @@ func ReadableAs(binding Binding, declaredName string, declared BindingType, prox
 				"Every app that uses %s would fail at its first cold start, so this deploy stops here. "+
 				"Declare it as what was published, or republish %q as a %s",
 			declaredName, declared, binding.Name, binding.Type, declaredName, binding.Name, declared)
-	case binding.Source != "" && proxied(declared):
+	case binding.Source != "" && proxied(declared) && !binding.Endpointed():
 		return Refuse(CodeInvalid,
-			"`bindings` binds %s to the %s record %q published by %s, and ocel's %s client cannot serve one it did not provision. "+
-				"Hand the app its name as an env var (`ocel env set`) instead",
+			"`bindings` binds %s to the %s record %q published by %s, and the record names no store for ocel's %s client to reach it in. "+
+				"Bind it inline instead, with the store's endpoint and a key pair, or publish a record that carries them",
 			declaredName, declared, binding.Name, binding.Source, declared)
 	}
 	return nil
