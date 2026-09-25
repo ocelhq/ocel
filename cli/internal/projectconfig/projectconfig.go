@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envsource"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -92,6 +93,7 @@ type Config struct {
 	Bindings      []Binding
 	Domains       map[string][]string
 	Registry      *Registry
+	EnvSource     envsource.Tiers
 	Dir           string
 	Path          string
 }
@@ -170,6 +172,7 @@ func normalize(doc *configdoc.Document, configPath string) (*Config, error) {
 		Bindings:      bindings,
 		Domains:       domains,
 		Registry:      registry,
+		EnvSource:     normalizeEnvSource(doc.EnvSource),
 		Dir:           filepath.Dir(configPath),
 		Path:          configPath,
 	}, nil
@@ -338,6 +341,60 @@ func normalizeBindings(raw configdoc.Bindings) ([]Binding, error) {
 
 func knownNeeds() []string {
 	return edge.NeedNames(edge.AllNeeds())
+}
+
+func normalizeEnvSource(raw *configdoc.EnvSourceConfig) envsource.Tiers {
+	tiers := envsource.DefaultTiers()
+	if raw == nil {
+		return tiers
+	}
+	if raw.Production != nil {
+		tiers.Production = deployedEnvSource(*raw.Production)
+	}
+	if raw.Preview != nil {
+		tiers.Preview = deployedEnvSource(*raw.Preview)
+	}
+	if raw.Dev != nil {
+		tiers.Dev = envSourceOf(raw.Dev.ID, raw.Dev.Infisical, raw.Dev.Exec)
+	}
+	return tiers
+}
+
+func deployedEnvSource(raw configdoc.EnvSourceDescriptor) envsource.Descriptor {
+	return envSourceOf(raw.ID, raw.Infisical, raw.Exec)
+}
+
+func envSourceOf(id string, infisical *configdoc.InfisicalOptions, exec *configdoc.ExecOptions) envsource.Descriptor {
+	out := envsource.Descriptor{Kind: envsource.Kind(id)}
+	if infisical != nil {
+		options := envsource.InfisicalOptions{
+			Project:     infisical.Project,
+			Environment: infisical.Environment,
+			Path:        infisical.Path,
+			Host:        infisical.Host,
+			Write:       envsource.WritePolicy(infisical.Write),
+			Auth:        infisicalAuth(infisical.Auth),
+		}.Normalized()
+		out.Infisical = &options
+	}
+	if exec != nil {
+		out.Exec = &envsource.ExecOptions{Command: exec.Command, Format: envsource.Format(exec.Format)}
+	}
+	return out
+}
+
+func infisicalAuth(raw *configdoc.InfisicalAuth) envsource.InfisicalAuth {
+	switch {
+	case raw == nil:
+		return envsource.InfisicalAuth{}
+	case raw.Universal != nil:
+		return envsource.InfisicalAuth{Method: envsource.AuthUniversal, ClientIDVar: raw.Universal.ClientID.Var, ClientSecretVar: raw.Universal.ClientSecret.Var}
+	case raw.AWS != nil:
+		return envsource.InfisicalAuth{Method: envsource.AuthAWS, IdentityID: raw.AWS.IdentityID}
+	case raw.GCP != nil:
+		return envsource.InfisicalAuth{Method: envsource.AuthGCP, IdentityID: raw.GCP.IdentityID}
+	}
+	return envsource.InfisicalAuth{}
 }
 
 func normalizeDNS(raw *configdoc.DnsDescriptor) *DNSDescriptor {
