@@ -133,7 +133,7 @@ class PostgresProperties(Message[_PostgresPropertiesFields]):
         tls_mode: str
         tls_ca: str
 
-_BucketPropertiesFields: TypeAlias = Literal["bucket", "public_base_url", "public"]
+_BucketPropertiesFields: TypeAlias = Literal["bucket", "public_base_url", "public", "endpoint", "region", "path_style", "prefix", "access_key_id", "secret_access_key"]
 
 class BucketProperties(Message[_BucketPropertiesFields]):
     """
@@ -154,9 +154,33 @@ class BucketProperties(Message[_BucketPropertiesFields]):
             ```proto
             bool public = 3;
             ```
+        endpoint:
+            ```proto
+            string endpoint = 4;
+            ```
+        region:
+            ```proto
+            string region = 5;
+            ```
+        path_style:
+            ```proto
+            bool path_style = 6;
+            ```
+        prefix:
+            ```proto
+            string prefix = 7;
+            ```
+        access_key_id:
+            ```proto
+            string access_key_id = 8;
+            ```
+        secret_access_key:
+            ```proto
+            string secret_access_key = 9;
+            ```
     """
 
-    __slots__ = ("bucket", "public_base_url", "public")
+    __slots__ = ("bucket", "public_base_url", "public", "endpoint", "region", "path_style", "prefix", "access_key_id", "secret_access_key")
 
     if TYPE_CHECKING:
 
@@ -166,12 +190,24 @@ class BucketProperties(Message[_BucketPropertiesFields]):
             bucket: str = "",
             public_base_url: str = "",
             public: bool = False,
+            endpoint: str = "",
+            region: str = "",
+            path_style: bool = False,
+            prefix: str = "",
+            access_key_id: str = "",
+            secret_access_key: str = "",
         ) -> None:
             pass
 
         bucket: str
         public_base_url: str
         public: bool
+        endpoint: str
+        region: str
+        path_style: bool
+        prefix: str
+        access_key_id: str
+        secret_access_key: str
 
 _GrantFields: TypeAlias = Literal["actions", "resources", "label", "conditions"]
 
@@ -291,7 +327,7 @@ class BindingType(Enum):
 
 
 _DESC = file_desc(
-    b'\n!common/bindings/v1/bindings.proto\x12\x12common.bindings.v1\x1a\x1cgoogle/protobuf/struct.proto"\xaf\x02\n\x07Binding\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12D\n\x08postgres\x18\x02 \x01(\x0b2&.common.bindings.v1.PostgresPropertiesH\x00R\x08postgres\x12>\n\x06bucket\x18\x03 \x01(\x0b2$.common.bindings.v1.BucketPropertiesH\x00R\x06bucket\x121\n\x06custom\x18\x06 \x01(\x0b2\x17.google.protobuf.StructH\x00R\x06custom\x121\n\x06grants\x18\x04 \x03(\x0b2\x19.common.bindings.v1.GrantR\x06grants\x12\x16\n\x06source\x18\x05 \x01(\tR\x06sourceB\x0c\n\nproperties"\xde\x01\n\x12PostgresProperties\x12\x12\n\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n\x08database\x18\x03 \x01(\tR\x08database\x12\x1a\n\x08username\x18\x04 \x01(\tR\x08username\x12\x1f\n\x08password\x18\x05 \x01(\tR\x08passwordB\x03\x80\x01\x01\x12\x15\n\x03url\x18\x06 \x01(\tR\x03urlB\x03\x80\x01\x01\x12\x19\n\x08tls_mode\x18\x07 \x01(\tR\x07tlsMode\x12\x15\n\x06tls_ca\x18\x08 \x01(\tR\x05tlsCa"j\n\x10BucketProperties\x12\x16\n\x06bucket\x18\x01 \x01(\tR\x06bucket\x12&\n\x0fpublic_base_url\x18\x02 \x01(\tR\rpublicBaseUrl\x12\x16\n\x06public\x18\x03 \x01(\x08R\x06public"\x99\x01\n\x05Grant\x12\x18\n\x07actions\x18\x01 \x03(\tR\x07actions\x12\x1c\n\tresources\x18\x02 \x03(\tR\tresources\x12\x14\n\x05label\x18\x03 \x01(\tR\x05label\x12B\n\nconditions\x18\x04 \x03(\x0b2".common.bindings.v1.GrantConditionR\nconditions"V\n\x0eGrantCondition\x12\x1a\n\x08operator\x18\x01 \x01(\tR\x08operator\x12\x10\n\x03key\x18\x02 \x01(\tR\x03key\x12\x16\n\x06values\x18\x03 \x03(\tR\x06values*x\n\x0bBindingType\x12\x1c\n\x18BINDING_TYPE_UNSPECIFIED\x10\x00\x12\x19\n\x15BINDING_TYPE_POSTGRES\x10\x01\x12\x17\n\x13BINDING_TYPE_BUCKET\x10\x02\x12\x17\n\x13BINDING_TYPE_CUSTOM\x10\x03B@Z>github.com/ocelhq/ocel/pkg/proto/common/bindings/v1;bindingsv1b\x06proto3',
+    b'\n!common/bindings/v1/bindings.proto\x12\x12common.bindings.v1\x1a\x1cgoogle/protobuf/struct.proto"\xaf\x02\n\x07Binding\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12D\n\x08postgres\x18\x02 \x01(\x0b2&.common.bindings.v1.PostgresPropertiesH\x00R\x08postgres\x12>\n\x06bucket\x18\x03 \x01(\x0b2$.common.bindings.v1.BucketPropertiesH\x00R\x06bucket\x121\n\x06custom\x18\x06 \x01(\x0b2\x17.google.protobuf.StructH\x00R\x06custom\x121\n\x06grants\x18\x04 \x03(\x0b2\x19.common.bindings.v1.GrantR\x06grants\x12\x16\n\x06source\x18\x05 \x01(\tR\x06sourceB\x0c\n\nproperties"\xde\x01\n\x12PostgresProperties\x12\x12\n\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n\x08database\x18\x03 \x01(\tR\x08database\x12\x1a\n\x08username\x18\x04 \x01(\tR\x08username\x12\x1f\n\x08password\x18\x05 \x01(\tR\x08passwordB\x03\x80\x01\x01\x12\x15\n\x03url\x18\x06 \x01(\tR\x03urlB\x03\x80\x01\x01\x12\x19\n\x08tls_mode\x18\x07 \x01(\tR\x07tlsMode\x12\x15\n\x06tls_ca\x18\x08 \x01(\tR\x05tlsCa"\xaa\x02\n\x10BucketProperties\x12\x16\n\x06bucket\x18\x01 \x01(\tR\x06bucket\x12&\n\x0fpublic_base_url\x18\x02 \x01(\tR\rpublicBaseUrl\x12\x16\n\x06public\x18\x03 \x01(\x08R\x06public\x12\x1a\n\x08endpoint\x18\x04 \x01(\tR\x08endpoint\x12\x16\n\x06region\x18\x05 \x01(\tR\x06region\x12\x1d\n\npath_style\x18\x06 \x01(\x08R\tpathStyle\x12\x16\n\x06prefix\x18\x07 \x01(\tR\x06prefix\x12"\n\raccess_key_id\x18\x08 \x01(\tR\x0baccessKeyId\x12/\n\x11secret_access_key\x18\t \x01(\tR\x0fsecretAccessKeyB\x03\x80\x01\x01"\x99\x01\n\x05Grant\x12\x18\n\x07actions\x18\x01 \x03(\tR\x07actions\x12\x1c\n\tresources\x18\x02 \x03(\tR\tresources\x12\x14\n\x05label\x18\x03 \x01(\tR\x05label\x12B\n\nconditions\x18\x04 \x03(\x0b2".common.bindings.v1.GrantConditionR\nconditions"V\n\x0eGrantCondition\x12\x1a\n\x08operator\x18\x01 \x01(\tR\x08operator\x12\x10\n\x03key\x18\x02 \x01(\tR\x03key\x12\x16\n\x06values\x18\x03 \x03(\tR\x06values*x\n\x0bBindingType\x12\x1c\n\x18BINDING_TYPE_UNSPECIFIED\x10\x00\x12\x19\n\x15BINDING_TYPE_POSTGRES\x10\x01\x12\x17\n\x13BINDING_TYPE_BUCKET\x10\x02\x12\x17\n\x13BINDING_TYPE_CUSTOM\x10\x03B@Z>github.com/ocelhq/ocel/pkg/proto/common/bindings/v1;bindingsv1b\x06proto3',
     [
         struct_pb.desc(),
     ],

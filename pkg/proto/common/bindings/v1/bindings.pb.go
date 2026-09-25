@@ -297,12 +297,18 @@ func (x *PostgresProperties) GetTlsCa() string {
 }
 
 type BucketProperties struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Bucket        string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
-	PublicBaseUrl string                 `protobuf:"bytes,2,opt,name=public_base_url,json=publicBaseUrl,proto3" json:"public_base_url,omitempty"`
-	Public        bool                   `protobuf:"varint,3,opt,name=public,proto3" json:"public,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Bucket          string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	PublicBaseUrl   string                 `protobuf:"bytes,2,opt,name=public_base_url,json=publicBaseUrl,proto3" json:"public_base_url,omitempty"`
+	Public          bool                   `protobuf:"varint,3,opt,name=public,proto3" json:"public,omitempty"`
+	Endpoint        string                 `protobuf:"bytes,4,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
+	Region          string                 `protobuf:"bytes,5,opt,name=region,proto3" json:"region,omitempty"`
+	PathStyle       bool                   `protobuf:"varint,6,opt,name=path_style,json=pathStyle,proto3" json:"path_style,omitempty"`
+	Prefix          string                 `protobuf:"bytes,7,opt,name=prefix,proto3" json:"prefix,omitempty"`
+	AccessKeyId     string                 `protobuf:"bytes,8,opt,name=access_key_id,json=accessKeyId,proto3" json:"access_key_id,omitempty"`
+	SecretAccessKey string                 `protobuf:"bytes,9,opt,name=secret_access_key,json=secretAccessKey,proto3" json:"secret_access_key,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *BucketProperties) Reset() {
@@ -354,6 +360,48 @@ func (x *BucketProperties) GetPublic() bool {
 		return x.Public
 	}
 	return false
+}
+
+func (x *BucketProperties) GetEndpoint() string {
+	if x != nil {
+		return x.Endpoint
+	}
+	return ""
+}
+
+func (x *BucketProperties) GetRegion() string {
+	if x != nil {
+		return x.Region
+	}
+	return ""
+}
+
+func (x *BucketProperties) GetPathStyle() bool {
+	if x != nil {
+		return x.PathStyle
+	}
+	return false
+}
+
+func (x *BucketProperties) GetPrefix() string {
+	if x != nil {
+		return x.Prefix
+	}
+	return ""
+}
+
+func (x *BucketProperties) GetAccessKeyId() string {
+	if x != nil {
+		return x.AccessKeyId
+	}
+	return ""
+}
+
+func (x *BucketProperties) GetSecretAccessKey() string {
+	if x != nil {
+		return x.SecretAccessKey
+	}
+	return ""
 }
 
 type Grant struct {
@@ -506,11 +554,18 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword\x12\x15\n" +
 	"\x03url\x18\x06 \x01(\tB\x03\x80\x01\x01R\x03url\x12\x19\n" +
 	"\btls_mode\x18\a \x01(\tR\atlsMode\x12\x15\n" +
-	"\x06tls_ca\x18\b \x01(\tR\x05tlsCa\"j\n" +
+	"\x06tls_ca\x18\b \x01(\tR\x05tlsCa\"\xaa\x02\n" +
 	"\x10BucketProperties\x12\x16\n" +
 	"\x06bucket\x18\x01 \x01(\tR\x06bucket\x12&\n" +
 	"\x0fpublic_base_url\x18\x02 \x01(\tR\rpublicBaseUrl\x12\x16\n" +
-	"\x06public\x18\x03 \x01(\bR\x06public\"\x99\x01\n" +
+	"\x06public\x18\x03 \x01(\bR\x06public\x12\x1a\n" +
+	"\bendpoint\x18\x04 \x01(\tR\bendpoint\x12\x16\n" +
+	"\x06region\x18\x05 \x01(\tR\x06region\x12\x1d\n" +
+	"\n" +
+	"path_style\x18\x06 \x01(\bR\tpathStyle\x12\x16\n" +
+	"\x06prefix\x18\a \x01(\tR\x06prefix\x12\"\n" +
+	"\raccess_key_id\x18\b \x01(\tR\vaccessKeyId\x12/\n" +
+	"\x11secret_access_key\x18\t \x01(\tB\x03\x80\x01\x01R\x0fsecretAccessKey\"\x99\x01\n" +
 	"\x05Grant\x12\x18\n" +
 	"\aactions\x18\x01 \x03(\tR\aactions\x12\x1c\n" +
 	"\tresources\x18\x02 \x03(\tR\tresources\x12\x14\n" +

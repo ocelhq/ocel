@@ -964,6 +964,51 @@ pub struct BucketProperties {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_false"
     )]
     pub public: bool,
+    /// Field 4: `endpoint`
+    #[serde(
+        rename = "endpoint",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub endpoint: ::buffa::alloc::string::String,
+    /// Field 5: `region`
+    #[serde(
+        rename = "region",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub region: ::buffa::alloc::string::String,
+    /// Field 6: `path_style`
+    #[serde(
+        rename = "pathStyle",
+        alias = "path_style",
+        with = "::buffa::json_helpers::proto_bool",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_false"
+    )]
+    pub path_style: bool,
+    /// Field 7: `prefix`
+    #[serde(
+        rename = "prefix",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub prefix: ::buffa::alloc::string::String,
+    /// Field 8: `access_key_id`
+    #[serde(
+        rename = "accessKeyId",
+        alias = "access_key_id",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub access_key_id: ::buffa::alloc::string::String,
+    /// Field 9: `secret_access_key`
+    #[serde(
+        rename = "secretAccessKey",
+        alias = "secret_access_key",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub secret_access_key: ::buffa::alloc::string::String,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -974,6 +1019,12 @@ impl ::core::fmt::Debug for BucketProperties {
             .field("bucket", &self.bucket)
             .field("public_base_url", &self.public_base_url)
             .field("public", &self.public)
+            .field("endpoint", &self.endpoint)
+            .field("region", &self.region)
+            .field("path_style", &self.path_style)
+            .field("prefix", &self.prefix)
+            .field("access_key_id", &self.access_key_id)
+            .field("secret_access_key", &::core::format_args!("[REDACTED]"))
             .finish()
     }
 }
@@ -1015,6 +1066,27 @@ impl ::buffa::Message for BucketProperties {
         if self.public {
             size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
         }
+        if !self.endpoint.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.endpoint) as u64;
+        }
+        if !self.region.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.region) as u64;
+        }
+        if self.path_style {
+            size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
+        }
+        if !self.prefix.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.prefix) as u64;
+        }
+        if !self.access_key_id.is_empty() {
+            size
+                += 1u64 + ::buffa::types::string_encoded_len(&self.access_key_id) as u64;
+        }
+        if !self.secret_access_key.is_empty() {
+            size
+                += 1u64
+                    + ::buffa::types::string_encoded_len(&self.secret_access_key) as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -1033,6 +1105,24 @@ impl ::buffa::Message for BucketProperties {
         }
         if self.public {
             ::buffa::types::put_bool_field(3u32, self.public, buf);
+        }
+        if !self.endpoint.is_empty() {
+            ::buffa::types::put_string_field(4u32, &self.endpoint, buf);
+        }
+        if !self.region.is_empty() {
+            ::buffa::types::put_string_field(5u32, &self.region, buf);
+        }
+        if self.path_style {
+            ::buffa::types::put_bool_field(6u32, self.path_style, buf);
+        }
+        if !self.prefix.is_empty() {
+            ::buffa::types::put_string_field(7u32, &self.prefix, buf);
+        }
+        if !self.access_key_id.is_empty() {
+            ::buffa::types::put_string_field(8u32, &self.access_key_id, buf);
+        }
+        if !self.secret_access_key.is_empty() {
+            ::buffa::types::put_string_field(9u32, &self.secret_access_key, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -1068,6 +1158,48 @@ impl ::buffa::Message for BucketProperties {
                 )?;
                 self.public = ::buffa::types::decode_bool(buf)?;
             }
+            4u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.endpoint, buf)?;
+            }
+            5u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.region, buf)?;
+            }
+            6u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::Varint,
+                )?;
+                self.path_style = ::buffa::types::decode_bool(buf)?;
+            }
+            7u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.prefix, buf)?;
+            }
+            8u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.access_key_id, buf)?;
+            }
+            9u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.secret_access_key, buf)?;
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -1079,6 +1211,12 @@ impl ::buffa::Message for BucketProperties {
         self.bucket.clear();
         self.public_base_url.clear();
         self.public = false;
+        self.endpoint.clear();
+        self.region.clear();
+        self.path_style = false;
+        self.prefix.clear();
+        self.access_key_id.clear();
+        self.secret_access_key.clear();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -2545,7 +2683,7 @@ pub mod __buffa {
                 ::serde::Serialize::serialize(&self.0, __s)
             }
         }
-        #[derive(Clone, Debug, Default)]
+        #[derive(Clone, Default)]
         pub struct BucketPropertiesView<'a> {
             /// Field 1: `bucket`
             pub bucket: &'a str,
@@ -2553,7 +2691,34 @@ pub mod __buffa {
             pub public_base_url: &'a str,
             /// Field 3: `public`
             pub public: bool,
+            /// Field 4: `endpoint`
+            pub endpoint: &'a str,
+            /// Field 5: `region`
+            pub region: &'a str,
+            /// Field 6: `path_style`
+            pub path_style: bool,
+            /// Field 7: `prefix`
+            pub prefix: &'a str,
+            /// Field 8: `access_key_id`
+            pub access_key_id: &'a str,
+            /// Field 9: `secret_access_key`
+            pub secret_access_key: &'a str,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
+        }
+        impl<'a> ::core::fmt::Debug for BucketPropertiesView<'a> {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+                f.debug_struct("BucketPropertiesView")
+                    .field("bucket", &self.bucket)
+                    .field("public_base_url", &self.public_base_url)
+                    .field("public", &self.public)
+                    .field("endpoint", &self.endpoint)
+                    .field("region", &self.region)
+                    .field("path_style", &self.path_style)
+                    .field("prefix", &self.prefix)
+                    .field("access_key_id", &self.access_key_id)
+                    .field("secret_access_key", &::core::format_args!("[REDACTED]"))
+                    .finish()
+            }
         }
         impl<'a> ::buffa::MessageView<'a> for BucketPropertiesView<'a> {
             type Owned = super::super::BucketProperties;
@@ -2612,6 +2777,48 @@ pub mod __buffa {
                         )?;
                         view.public = ::buffa::types::decode_bool(&mut cur)?;
                     }
+                    4u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.endpoint = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    5u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.region = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    6u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::Varint,
+                        )?;
+                        view.path_style = ::buffa::types::decode_bool(&mut cur)?;
+                    }
+                    7u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.prefix = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    8u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.access_key_id = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    9u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.secret_access_key = ::buffa::types::borrow_str(&mut cur)?;
+                    }
                     _ => {
                         ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
                         let span_len = before_tag.len() - cur.len();
@@ -2644,6 +2851,12 @@ pub mod __buffa {
                     bucket: self.bucket.to_string(),
                     public_base_url: self.public_base_url.to_string(),
                     public: self.public,
+                    endpoint: self.endpoint.to_string(),
+                    region: self.region.to_string(),
+                    path_style: self.path_style,
+                    prefix: self.prefix.to_string(),
+                    access_key_id: self.access_key_id.to_string(),
+                    secret_access_key: self.secret_access_key.to_string(),
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
                         .to_owned()?
@@ -2672,6 +2885,36 @@ pub mod __buffa {
                 if self.public {
                     size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
                 }
+                if !self.endpoint.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.endpoint) as u64;
+                }
+                if !self.region.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.region) as u64;
+                }
+                if self.path_style {
+                    size += 1u64 + ::buffa::types::BOOL_ENCODED_LEN as u64;
+                }
+                if !self.prefix.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.prefix) as u64;
+                }
+                if !self.access_key_id.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.access_key_id)
+                                as u64;
+                }
+                if !self.secret_access_key.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.secret_access_key)
+                                as u64;
+                }
                 size += self.__buffa_unknown_fields.encoded_len() as u64;
                 ::buffa::saturate_size(size)
             }
@@ -2691,6 +2934,24 @@ pub mod __buffa {
                 }
                 if self.public {
                     ::buffa::types::put_bool_field(3u32, self.public, buf);
+                }
+                if !self.endpoint.is_empty() {
+                    ::buffa::types::put_string_field(4u32, &self.endpoint, buf);
+                }
+                if !self.region.is_empty() {
+                    ::buffa::types::put_string_field(5u32, &self.region, buf);
+                }
+                if self.path_style {
+                    ::buffa::types::put_bool_field(6u32, self.path_style, buf);
+                }
+                if !self.prefix.is_empty() {
+                    ::buffa::types::put_string_field(7u32, &self.prefix, buf);
+                }
+                if !self.access_key_id.is_empty() {
+                    ::buffa::types::put_string_field(8u32, &self.access_key_id, buf);
+                }
+                if !self.secret_access_key.is_empty() {
+                    ::buffa::types::put_string_field(9u32, &self.secret_access_key, buf);
                 }
                 self.__buffa_unknown_fields.write_to(buf);
             }
@@ -2721,6 +2982,26 @@ pub mod __buffa {
                 }
                 if self.public {
                     __map.serialize_entry("public", &self.public)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.endpoint) {
+                    __map.serialize_entry("endpoint", self.endpoint)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.region) {
+                    __map.serialize_entry("region", self.region)?;
+                }
+                if self.path_style {
+                    __map.serialize_entry("pathStyle", &self.path_style)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.prefix) {
+                    __map.serialize_entry("prefix", self.prefix)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.access_key_id) {
+                    __map.serialize_entry("accessKeyId", self.access_key_id)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(
+                    self.secret_access_key,
+                ) {
+                    __map.serialize_entry("secretAccessKey", self.secret_access_key)?;
                 }
                 __map.end()
             }
@@ -2831,6 +3112,36 @@ pub mod __buffa {
             #[must_use]
             pub fn public(&self) -> bool {
                 self.0.reborrow().public
+            }
+            /// Field 4: `endpoint`
+            #[must_use]
+            pub fn endpoint(&self) -> &'_ str {
+                self.0.reborrow().endpoint
+            }
+            /// Field 5: `region`
+            #[must_use]
+            pub fn region(&self) -> &'_ str {
+                self.0.reborrow().region
+            }
+            /// Field 6: `path_style`
+            #[must_use]
+            pub fn path_style(&self) -> bool {
+                self.0.reborrow().path_style
+            }
+            /// Field 7: `prefix`
+            #[must_use]
+            pub fn prefix(&self) -> &'_ str {
+                self.0.reborrow().prefix
+            }
+            /// Field 8: `access_key_id`
+            #[must_use]
+            pub fn access_key_id(&self) -> &'_ str {
+                self.0.reborrow().access_key_id
+            }
+            /// Field 9: `secret_access_key`
+            #[must_use]
+            pub fn secret_access_key(&self) -> &'_ str {
+                self.0.reborrow().secret_access_key
             }
         }
         impl ::core::convert::From<::buffa::OwnedView<BucketPropertiesView<'static>>>
