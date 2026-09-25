@@ -15,9 +15,9 @@ type PgReturn = Pool & { connectionString: string };
  *
  * At deploy the database is provisioned in your account, or bound to the record
  * `bindings` names; the pool connects through the record's url when it carries
- * one, and otherwise through its host, port, database, username and password,
- * encrypted as its tls mode asks. `connectionString` is the same connection as a
- * URL, for tools that take one.
+ * one, reading its `sslmode` as libpq does, and otherwise through its host, port,
+ * database, username and password, encrypted as its tls mode asks.
+ * `connectionString` is the same connection as a URL, for tools that take one.
  */
 export function postgres(id: string, config?: PostgresConfig): PgReturn {
   const pg = new Postgres(id, config);
@@ -34,7 +34,7 @@ export function postgres(id: string, config?: PostgresConfig): PgReturn {
 
 function poolConfig(properties: PostgresProperties): PoolConfig {
   if (properties.url) {
-    return { connectionString: properties.url };
+    return { connectionString: withLibpqSslmodes(properties.url) };
   }
   const { host, port, database, username, password } = properties;
   const config: PoolConfig = { host, port, database, user: username, password };
@@ -49,6 +49,13 @@ function poolConfig(properties: PostgresProperties): PoolConfig {
       break;
   }
   return config;
+}
+
+function withLibpqSslmodes(url: string): string {
+  if (/[?&]uselibpqcompat=/.test(url)) {
+    return url;
+  }
+  return `${url}${url.includes("?") ? "&" : "?"}uselibpqcompat=true`;
 }
 
 const sslmodes: Record<PostgresTlsMode, string | undefined> = {
