@@ -55,12 +55,12 @@ describe("postgres()", () => {
 
     const pool = postgres("orders");
 
-    expect(new Client(pool.options).connectionParameters).toMatchObject({
+    expect(new Client(pool.options)).toMatchObject({
       host: "ep-cool.neon.tech",
       user: "app",
       database: "orders",
-      options: "endpoint=ep-cool",
     });
+    expect(pool.options.connectionString).toContain("options=endpoint%3Dep-cool");
     expect(pool.options).not.toHaveProperty("host");
     expect(pool.connectionString).toBe(url);
   });
