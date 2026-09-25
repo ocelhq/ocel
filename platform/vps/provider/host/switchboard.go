@@ -46,6 +46,7 @@ func switchboardOver(sum string) boxContainer {
 		files:   []string{live.RoutingTable, SwitchboardBinary},
 		ready:   []string{SwitchboardMounted, "upstreams"},
 		unready: "answered nothing over its control socket in " + switchboard.ControlDir,
+		inodes:  []string{SwitchboardMounted, "inodes"},
 		joins:   true,
 	}
 }

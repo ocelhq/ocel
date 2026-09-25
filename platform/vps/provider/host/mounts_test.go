@@ -13,9 +13,9 @@ import (
 )
 
 type engineReport struct {
-	facts string
-	pid   string
-	stats map[string]string
+	facts  string
+	inside map[string]string
+	stats  map[string]string
 }
 
 func probedAs(t *testing.T, k kernel, container boxContainer, engine engineReport) string {
@@ -25,16 +25,26 @@ func probedAs(t *testing.T, k kernel, container boxContainer, engine engineRepor
 	if err := os.WriteFile(said, []byte(engine.facts), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	pid := "[ -n " + quoted(engine.pid) + " ] || exit 1; echo " + quoted(engine.pid)
+	inside := "exit 1"
+	if engine.inside != nil {
+		inside = "shift 2\nfor path; do\ncase \"$path\" in\n"
+		for path, held := range engine.inside {
+			inside += quoted(path) + ") echo " + quoted(path+" "+held) + " ;;\n"
+		}
+		inside += "esac\ndone\nexit 0"
+	}
 	executable(t, filepath.Join(dir, dockerEngine), "#!/bin/sh\n"+
-		"[ \"$1\" = inspect ] || exit 1\n"+
-		"case \"$*\" in *State.Pid*) "+pid+" ;; *) cat "+quoted(said)+" ;; esac\n")
+		"case \"$1\" in\n"+
+		"inspect) case \"$*\" in *State.Pid*) echo 4242 ;; *) cat "+quoted(said)+" ;; esac ;;\n"+
+		"exec) "+inside+" ;;\n"+
+		"*) exit 1 ;;\n"+
+		"esac\n")
 	stat := "#!/bin/sh\nfor last; do :; done\ncase \"$last\" in\n"
 	for path, held := range engine.stats {
 		stat += quoted(path) + ") echo " + quoted(held) + " ;;\n"
 	}
 	executable(t, filepath.Join(dir, "stat"), stat+"*) echo \"stat: cannot statx '$last': Permission denied\" >&2; exit 1 ;;\nesac\n")
-	for _, tool := range []string{"sha256sum", "cut", "cat", "sort"} {
+	for _, tool := range []string{"sha256sum", "cut", "cat", "sort", "grep"} {
 		found, err := exec.LookPath(tool)
 		if err != nil {
 			t.Fatal(err)
@@ -69,21 +79,19 @@ func engineSays(container boxContainer, migrate string) string {
 	return strings.Join(said, "\n")
 }
 
-func mountedAs(container boxContainer, pid string, moved int) map[string]string {
-	stats := map[string]string{}
+func mountedAs(container boxContainer, moved int) (inside, stats map[string]string) {
+	inside, stats = map[string]string{}, map[string]string{}
 	for at, bind := range container.binds {
 		source, dest, _ := strings.Cut(bind, ":")
 		dest, _, _ = strings.Cut(dest, ":")
 		held := fmt.Sprintf("2049:%d", 100+at)
+		inside[dest] = held
 		stats[source] = held
 		if at == moved {
 			stats[source] = fmt.Sprintf("2049:%d", 900+at)
 		}
-		if pid != "" {
-			stats["/proc/"+pid+"/root"+dest] = held
-		}
 	}
-	return stats
+	return inside, stats
 }
 
 func TestAContainerHoldingAMountTheHostNoLongerHasIsDrift(t *testing.T) {
@@ -92,19 +100,22 @@ func TestAContainerHoldingAMountTheHostNoLongerHasIsDrift(t *testing.T) {
 	for _, container := range []boxContainer{frontProxy(), switchboardStanding(nil)} {
 		stated := container.item("").Digest()
 		facts := engineSays(container, migrateHeld)
-		for what, held := range map[string]struct {
+		current, _ := mountedAs(container, -1)
+		inside, moved := mountedAs(container, len(container.binds)-1)
+		_, held := mountedAs(container, -1)
+		for what, probed := range map[string]struct {
 			engine  engineReport
 			current bool
 		}{
-			"every mount still the host's own":  {engineReport{facts: facts, pid: "4242", stats: mountedAs(container, "4242", -1)}, true},
-			"a mount whose source was replaced": {engineReport{facts: facts, pid: "4242", stats: mountedAs(container, "4242", len(container.binds)-1)}, false},
-			"a /proc the probe cannot read":     {engineReport{facts: facts, pid: "4242", stats: mountedAs(container, "", len(container.binds)-1)}, true},
-			"no pid the engine will name":       {engineReport{facts: facts, stats: mountedAs(container, "", 0)}, true},
+			"every mount still the host's own":                      {engineReport{facts: facts, inside: current, stats: held}, true},
+			"a mount whose source was replaced, read with no /proc": {engineReport{facts: facts, inside: inside, stats: moved}, false},
+			"a container the engine will not exec into":             {engineReport{facts: facts, stats: moved}, true},
+			"a source the host will not stat":                       {engineReport{facts: facts, inside: inside}, true},
 		} {
-			observed := probedAs(t, kernelMigrating(t, true), container, held.engine)
-			if (observed == stated) != held.current {
+			observed := probedAs(t, kernelMigrating(t, true), container, probed.engine)
+			if (observed == stated) != probed.current {
 				t.Errorf("%s with %s reads as current=%v, want %v: a container reading a mount the host replaced serves what is no longer there, and only a new container picks the new one up",
-					container.name, what, observed == stated, held.current)
+					container.name, what, observed == stated, probed.current)
 			}
 		}
 	}
