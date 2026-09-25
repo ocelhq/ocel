@@ -72,7 +72,7 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 
 func inspectRosters() map[string][]string {
 	return map[string][]string{
-		"docker inspect":         {"mountsProbe", "probe", "rising", "runningCommand", "servingCommand", "stateCommand"},
+		"docker inspect":         {"probe", "rising", "runningCommand", "servingCommand", "stateCommand"},
 		"docker network inspect": {"command", "networkCommand", "networkCreating", "networkForgetting", "networkProbe", "networkStanding"},
 		"docker image inspect":   {"imageHeld"},
 	}

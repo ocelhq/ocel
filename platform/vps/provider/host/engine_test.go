@@ -1,6 +1,7 @@
 package host
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -175,6 +176,53 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 			box, _ := exec.Command(dockerEngine, "inspect", "--type", "container", "--format", ContainerFactTemplate, standing.name).Output()
 			t.Errorf("a real engine reports %s as something other than the item ocel writes it from, so every re-run plans an update over a container that stands:\n%s",
 				standing.name, compared(canonical(stood.here(string(box))), strings.TrimSpace(string(stated.Content))))
+		}
+	}
+}
+
+func TestAProbeWithNoRootReadsABindWhoseSourceTheHostReplacedAsMoved(t *testing.T) {
+	stood := proxyStanding(t)
+	arch, _ := Architecture(runtime.GOARCH)
+
+	for _, standing := range []struct {
+		name     string
+		as       boxContainer
+		replaced string
+		binds    []string
+	}{
+		{stood.name, frontProxy(), stood.pins, []string{
+			filepath.Join(stood.dir, "proxy") + ":" + caddy.ConfigDir + ":ro",
+			stood.pins + ":" + caddy.PinsMount + ":ro",
+			filepath.Join(stood.dir, "proxy", "data") + ":" + caddy.DataMount,
+		}},
+		{stood.board, switchboardStanding(switchboardBinary(arch)), filepath.Join(stood.dir, "connector"), []string{
+			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
+			filepath.Join(stood.dir, "routing") + ":" + filepath.Join(stood.dir, "routing") + ":ro",
+			filepath.Join(stood.dir, "connector") + ":" + filepath.Join(stood.dir, "connector") + ":ro",
+			filepath.Join(stood.dir, "control") + ":" + filepath.Join(stood.dir, "control"),
+		}},
+	} {
+		if err := os.Rename(standing.replaced, standing.replaced+".gone"); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Mkdir(standing.replaced, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		rendered, err := exec.Command("/bin/sh", "-c", stood.here(standing.as.probe())).Output()
+		if err != nil {
+			t.Fatalf("probe %s on this machine: %v", standing.name, err)
+		}
+		observed, _, err := readSurvey(string(rendered))
+		if err != nil {
+			t.Fatal(err)
+		}
+		moved := standing.as.item("")
+		moved.Name = standing.name
+		moved.Content = bytes.Replace([]byte(stood.here(string(standing.as.factsOver(standing.binds)))),
+			[]byte(mountsFact+mountsHeld), []byte(mountsFact+mountsMoved), 1)
+		if observed[moved.ID()] != moved.Digest() {
+			t.Errorf("%s reads %s, a directory the host replaced after it started, and a probe with no root reports it as something other than a moved mount: an unelevated describe then calls a container current that serves a directory which is gone",
+				standing.name, standing.replaced)
 		}
 	}
 }

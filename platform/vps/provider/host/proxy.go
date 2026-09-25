@@ -223,6 +223,7 @@ type boxContainer struct {
 	files    []string
 	ready    []string
 	unready  string
+	inodes   []string
 	joins    bool
 	migrates bool
 }
@@ -243,6 +244,7 @@ func frontProxy() boxContainer {
 		fileCaps: true,
 		files:    []string{ProxyConfig},
 		ready:    caddy.Ready(),
+		inodes:   []string{"stat", "-c", "%n %d:%i"},
 		unready:  "did not pass `" + strings.Join(caddy.Ready(), " ") + "`",
 		migrates: true,
 	}
@@ -425,15 +427,17 @@ func (s boxContainer) probe() string {
 }
 
 func (s boxContainer) mountsProbe() string {
-	probe := "mounts=" + mountsHeld + "\n" +
-		"if pid=$(docker inspect --type container --format '{{.State.Pid}}' " + quoted(s.name) + " 2>/dev/null); then\n"
+	asked := append([]string{"docker", "exec", s.name}, s.inodes...)
+	var compared string
 	for _, bind := range s.binds {
 		source, dest, _ := strings.Cut(bind, ":")
 		dest, _, _ = strings.Cut(dest, ":")
-		probe += "if inside=$(stat -c %d:%i \"/proc/$pid/root\"" + quoted(dest) + " 2>/dev/null) && " +
-			"[ \"$inside\" != \"$(stat -c %d:%i " + quoted(source) + " 2>/dev/null)\" ]; then mounts=" + mountsMoved + "; fi\n"
+		asked = append(asked, dest)
+		compared += "if outside=$(stat -c %d:%i " + quoted(source) + " 2>/dev/null) && " +
+			"! printf '%s\\n' \"$inside\" | grep -Fqx -- " + quoted(dest) + "\" $outside\"; then mounts=" + mountsMoved + "; fi\n"
 	}
-	return probe + "fi\n" +
+	return "mounts=" + mountsHeld + "\n" +
+		"if inside=$(" + words(asked) + " 2>/dev/null); then\n" + compared + "fi\n" +
 		"facts=\"$facts\n" + mountsFact + "$mounts\"\n"
 }
 
