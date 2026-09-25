@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
@@ -104,21 +103,11 @@ func RenderProxyConfig(front proxy.Proxy, state RoutingTable) ([]byte, error) {
 }
 
 func admission(state RoutingTable) proxy.Admission {
-	hostnames := make([]string, 0, len(state.Claims)+2)
-	for _, claim := range state.Claims {
-		hostnames = append(hostnames, claim.Hostname)
+	pins := make([]string, 0, len(state.Pins))
+	for _, pin := range state.Pins {
+		pins = append(pins, pin.Path)
 	}
-	if state.Connector != "" {
-		hostnames = append(hostnames, state.Connector)
-	}
-	if state.PreviewBase != "" {
-		hostnames = append(hostnames, edge.ProbeHostname(edge.PreviewWildcard(state.PreviewBase)))
-	}
-	entries := make([]proxy.Entry, 0, len(hostnames))
-	for _, hostname := range hostnames {
-		entries = append(entries, proxy.Entry{Hostname: hostname, Pin: Covering(state.Pins, hostname)})
-	}
-	return proxy.Admission{Entries: entries, PreviewBase: state.PreviewBase, Upstream: SwitchboardUpstream, Edge: switchboard.EdgeName}
+	return proxy.Admission{Pins: pins, Upstream: SwitchboardUpstream, Edge: switchboard.EdgeName, Permission: SwitchboardPermission}
 }
 
 func validTable(state RoutingTable) error {

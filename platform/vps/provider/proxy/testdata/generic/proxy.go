@@ -12,7 +12,7 @@ func (*Generic[T]) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
 func (*Generic[T]) Render(proxy.Admission) ([]byte, error) { return nil, nil }
 
-func (*Generic[T]) Unrendered([]byte) string { return "" }
+func (*Generic[T]) Unrendered([]byte, proxy.Admission) string { return "" }
 
 func (*Generic[T]) Reload(context.Context) error { return nil }
 

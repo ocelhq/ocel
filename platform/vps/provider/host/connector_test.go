@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -231,8 +230,8 @@ func TestTheConnectorPathOnTheBoxHostnameReachesTheConnectorAheadOfEverySurface(
 	if upstream, ok := answer("box.example.com", "/"); !ok || upstream != "web:3000" {
 		t.Errorf("the box hostname off the connector path is answered from %q (%v), want the surface that claims it", upstream, ok)
 	}
-	if hosts := admission(state).Entries; !slices.ContainsFunc(hosts, func(entry proxy.Entry) bool { return entry.Hostname == "box.example.com" }) {
-		t.Errorf("the front proxy is admitted %v, and the console dials the connector over https", hosts)
+	if table, err := switchboard.Read(mustWrite(t, RoutingTable{Grace: DeployWindow, Connector: "box.example.com"})); err != nil || !table.Admits("box.example.com") {
+		t.Errorf("the switchboard refuses the front proxy a certificate for the connector hostname nothing else claims (%v), and the console dials the connector over https", err)
 	}
 
 	held, err := ReadRoutingTable(mustWrite(t, state))

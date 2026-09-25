@@ -12,7 +12,7 @@ func (c *Conforming) Guarantees() proxy.Guarantees { return c.guarantees }
 
 func (c *Conforming) Render(proxy.Admission) ([]byte, error) { return nil, nil }
 
-func (c *Conforming) Unrendered([]byte) string { return "" }
+func (c *Conforming) Unrendered([]byte, proxy.Admission) string { return "" }
 
 func (c *Conforming) Reload(context.Context) error { return nil }
 

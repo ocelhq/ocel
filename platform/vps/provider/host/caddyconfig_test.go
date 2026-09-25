@@ -29,6 +29,29 @@ func TestTheFrontProxysConfigHoldsStillThroughEveryReleaseAndDrainWindow(t *test
 	}
 }
 
+func TestTheFrontProxysConfigChangesWithItsPinsAndWithNothingABindOrAPreviewDoes(t *testing.T) {
+	t.Parallel()
+
+	seeded := mustRender(t, seededTable)
+	bound := routed()
+	bound.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}, previewClaim("pr-7", "", "shop--pr-7."+previewBase)}
+	bound.PreviewBase = previewBase
+	bound.Connector = "box.example.com"
+	if !bytes.Equal(seeded, mustRender(t, bound)) {
+		t.Error("binding a hostname, raising a preview or installing the connector renders the front proxy's config anew, and every reload drops requests on every hostname the box serves (#1280)")
+	}
+	pinned := bound
+	pinned.Pins = []Pin{{Hostname: claimed, Path: caddy.PinsDir + "/shop"}}
+	if bytes.Equal(seeded, mustRender(t, pinned)) {
+		t.Error("pinning a pair renders the same config, so the running proxy never loads the certificate the operator pinned")
+	}
+	unclaimed := pinned
+	unclaimed.Claims = nil
+	if !bytes.Equal(mustRender(t, pinned), mustRender(t, unclaimed)) {
+		t.Error("a pinned pair is loaded only while a claim sits under it, so the first bind under a pin reloads the proxy")
+	}
+}
+
 func TestARedeployThatChangesNothingRendersTheSameBytes(t *testing.T) {
 	t.Parallel()
 

@@ -443,6 +443,15 @@ func servesPair(b *bench, held, config *string) func(string) (session.Result, bo
 	}
 }
 
+func admittedBy(t *testing.T, state RoutingTable) func(hostname string) bool {
+	t.Helper()
+	table, err := switchboard.Read(mustWrite(t, state))
+	if err != nil {
+		t.Fatalf("the switchboard refuses the table this state writes: %v", err)
+	}
+	return table.Admits
+}
+
 func routedBy(t *testing.T, state RoutingTable) func(hostname, path string) (string, bool) {
 	t.Helper()
 	table, err := switchboard.Read(mustWrite(t, state))

@@ -12,7 +12,7 @@ func (s *Scattered) Guarantees() proxy.Guarantees { return s.guarantees }
 
 func (s *Scattered) Render(proxy.Admission) ([]byte, error) { return nil, nil }
 
-func (s *Scattered) Unrendered([]byte) string { return "" }
+func (s *Scattered) Unrendered([]byte, proxy.Admission) string { return "" }
 
 func (s *Scattered) Reload(context.Context) error { return nil }
 

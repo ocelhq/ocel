@@ -118,37 +118,27 @@ func TestARealProxyServesAPinnedPairOffTheOneDirectoryTheBoxBindsIntoIt(t *testi
 	}
 }
 
-func TestARealProxyAsksACAForEveryHostnameSomethingOnTheBoxClaims(t *testing.T) {
+func TestARealProxyOrdersOnTheFirstHandshakeForAClaimedHostnameAndNeverForAnUnclaimedOne(t *testing.T) {
 	state := twoProjects()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	rendered, err := RenderProxyConfig(caddy.Builtin{}, state)
-	if err != nil {
-		t.Fatalf("RenderProxyConfig(caddy.Builtin{}, ) = %v", err)
-	}
-	ask := probingConfig(t, state, issuedByNobody(t, rendered))
+	stood, ask := probedBox(t, state, issuedByNobody(t, mustRender(t, state)))
 
 	if said := ask(claimed); said.status/100 == 3 {
-		t.Errorf("a claimed hostname over plain http answers %d, want it served. Caddy does inject http->https redirect routes into the %s server and says so in its log; what keeps them off every hostname this box serves is that both front routes are terminal forwards rendered ahead of them. A front route that stops being terminal turns the redirects on and takes the http-01 challenge and the journey's plain-http leg with them",
-			said.status, "ocel")
+		t.Errorf("a claimed hostname over plain http answers %d, want it served. Caddy appends its catch-all http->https redirect behind the one terminal forward this config renders, so a forward that stops being terminal turns the redirect on and takes the http-01 challenge and the journey's plain-http leg with it",
+			said.status)
 	}
 	if said := ask("unclaimed.example.com"); said.status != http.StatusNotFound || said.edge != switchboard.EdgeName {
 		t.Errorf("a hostname nothing claims answers %d as %q over plain http, want the box's own refusal on both ports", said.status, said.edge)
 	}
 
-	const managing = "enabling automatic TLS certificate management"
-	var logs string
-	for range 100 {
-		if logs = logsOf(probeName(t)); managed(logs, managing, claimed) {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	if !managed(logs, managing, claimed) {
-		t.Errorf("the proxy manages certificates for nothing naming %s, so the hostname this box claims is outside its automatic-https subject collection and `proxy:%s` would name a certificate nothing ever asks for:\n%s",
-			claimed, claimed, logs)
+	stood.handshake("unclaimed.example.com")
+	stood.handshake(claimed)
+	logs := stood.ordered(t, claimed)
+	if managed(logs, onDemandOrder, "unclaimed.example.com") {
+		t.Errorf("the proxy ordered a certificate for a hostname nothing on this box claims, so anyone who points a name at the box spends its CA allowance:\n%s", logs)
 	}
 	if strings.Contains(logs, acmeDirectory) {
-		t.Errorf("the proxy reached a public CA from a package-level `go test`: the subject collection is read off the log line above, and the order behind it must never leave this machine:\n%s", logs)
+		t.Errorf("the proxy reached a public CA from a package-level `go test`: the order is read off the log line above, and it must never leave this machine:\n%s", logs)
 	}
 }
 
@@ -163,18 +153,21 @@ func issuedByNobody(t *testing.T, rendered []byte) []byte {
 	if err := json.Unmarshal(rendered, &config); err != nil {
 		t.Fatal(err)
 	}
-	apps, held := config["apps"].(map[string]any)
-	if !held {
-		t.Fatalf("the rendered config declares no apps to point at a CA of this machine's own:\n%s", rendered)
-	}
+	apps, _ := config["apps"].(map[string]any)
 	tls, _ := apps["tls"].(map[string]any)
-	if tls == nil {
-		tls = map[string]any{}
+	automation, _ := tls["automation"].(map[string]any)
+	policies, _ := automation["policies"].([]any)
+	caught := false
+	for _, held := range policies {
+		policy := held.(map[string]any)
+		if _, scoped := policy["subjects"]; !scoped {
+			policy["issuers"] = []any{map[string]any{"module": "acme", "ca": unreachableCA}}
+			caught = true
+		}
 	}
-	tls["automation"] = map[string]any{"policies": []any{map[string]any{
-		"issuers": []any{map[string]any{"module": "acme", "ca": unreachableCA}},
-	}}}
-	apps["tls"] = tls
+	if !caught {
+		t.Fatalf("the rendered config declares no catch-all policy to point at a CA of this machine's own:\n%s", rendered)
+	}
 	written, err := json.Marshal(config)
 	if err != nil {
 		t.Fatal(err)
@@ -193,20 +186,30 @@ func managed(logs, managing, hostname string) bool {
 
 func TestAHostnameClaimedBeforeAnythingServesItIsOrderedForAllTheSame(t *testing.T) {
 	state := RoutingTable{Grace: DrainWindow, Claims: []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}}
-	probingConfig(t, state, issuedByNobody(t, mustRender(t, state)))
+	stood, _ := probedBox(t, state, issuedByNobody(t, mustRender(t, state)))
 
-	const managing = "enabling automatic TLS certificate management"
+	stood.handshake(claimed)
+	if logs := stood.ordered(t, claimed); strings.Contains(logs, acmeDirectory) {
+		t.Errorf("the proxy reached a public CA from a package-level `go test`:\n%s", logs)
+	}
+}
+
+const onDemandOrder = "obtaining new certificate"
+
+func (p standingProxy) handshake(hostname string) {
+	_ = exec.Command(p.binary, "leaf", hostname).Run()
+}
+
+func (p standingProxy) ordered(t *testing.T, hostname string) string {
+	t.Helper()
+
 	var logs string
 	for range 100 {
-		if logs = logsOf(probeName(t)); managed(logs, managing, claimed) {
-			break
+		if logs = logsOf(p.name); managed(logs, onDemandOrder, hostname) {
+			return logs
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	if !managed(logs, managing, claimed) {
-		t.Errorf("a hostname claimed on this box with nothing yet serving it is outside the automatic-https subject collection, so a project that binds a domain before its first deploy never gets a certificate and `ocel domain add` waits on a name that will never terminate tls:\n%s", logs)
-	}
-	if strings.Contains(logs, acmeDirectory) {
-		t.Errorf("the proxy reached a public CA from a package-level `go test`:\n%s", logs)
-	}
+	t.Fatalf("the proxy never ordered a certificate for %s on its first handshake, so a domain bound on this box waits on a name that will never terminate tls:\n%s", hostname, logs)
+	return logs
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"slices"
 	"strings"
 	"testing"
@@ -16,6 +15,7 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
+	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -210,29 +210,23 @@ func (vm machine) teardownImages(t *testing.T) string {
 func (vm machine) routedHosts(t *testing.T) []string {
 	t.Helper()
 
-	routes, held := nestedIn(t, vm.loadedProxyConfig(t), "apps", "http", "servers", "ocel", "routes").([]any)
-	if !held {
-		t.Fatal("the loaded configuration carries no routes at all")
-	}
-	written, err := json.Marshal(routes)
+	table, err := host.ReadRoutingTable([]byte(vm.ssh(t, "sudo cat "+quote(vars.RoutingTable))))
 	if err != nil {
-		t.Fatal(err)
-	}
-	var read []struct {
-		Match []struct {
-			Host []string `json:"host"`
-		} `json:"match"`
-	}
-	if err := json.Unmarshal(written, &read); err != nil {
-		t.Fatal(err)
+		t.Fatalf("read the routing table the switchboard serves: %v", err)
 	}
 	var hosts []string
-	for _, route := range read {
-		for _, match := range route.Match {
-			hosts = append(hosts, match.Host...)
-		}
+	for _, claim := range table.Claims {
+		hosts = append(hosts, claim.Hostname)
+	}
+	if table.PreviewBase != "" {
+		hosts = append(hosts, edge.PreviewWildcard(table.PreviewBase))
 	}
 	return hosts
+}
+
+func (vm machine) handshakes(t *testing.T, hostname string) {
+	t.Helper()
+	vm.ssh(t, quote(host.SwitchboardBinary)+" leaf "+quote(hostname)+" >/dev/null 2>&1 || true")
 }
 
 func TestLiveAPreviewTornDownLeavesNoRouteNoCertificateAndNoImageBehind(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 type Proxy interface {
 	Guarantees() Guarantees
 	Render(admission Admission) ([]byte, error)
-	Unrendered(config []byte) string
+	Unrendered(config []byte, admission Admission) string
 	Reload(ctx context.Context) error
 	Inspect(ctx context.Context) (Standing, error)
 	Certificate(ctx context.Context, hostname string) (Certificate, error)
@@ -32,15 +32,15 @@ type Guarantees struct {
 }
 
 type Admission struct {
-	Entries     []Entry
-	PreviewBase string
-	Upstream    string
-	Edge        string
+	Pins       []string
+	Upstream   string
+	Edge       string
+	Permission Permission
 }
 
-type Entry struct {
-	Hostname string
-	Pin      string
+type Permission struct {
+	Dial string
+	Path string
 }
 
 type Standing []providerkit.StandingCheck

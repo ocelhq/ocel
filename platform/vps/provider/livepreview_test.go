@@ -64,7 +64,7 @@ func previewEntryOn(t *testing.T, vm machine) edge.Edge {
 	return front
 }
 
-func TestLiveThePreviewCatchAllIsInstalledAndOrdersNoWildcardCertificate(t *testing.T) {
+func TestLiveThePreviewProbeIsOrderedOnItsFirstHandshakeAndTheWildcardNever(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 	defer closing(t, p)
 
@@ -73,42 +73,39 @@ func TestLiveThePreviewCatchAllIsInstalledAndOrdersNoWildcardCertificate(t *test
 	wildcard := edge.PreviewWildcard(livePreviewBase)
 	probe := edge.ProbeHostname(wildcard)
 
-	server, held := nestedIn(t, vm.loadedProxyConfig(t), "apps", "http", "servers", "ocel").(map[string]any)
-	if !held {
-		t.Fatalf("the loaded configuration carries no ocel server")
+	if written, err := json.Marshal(vm.loadedProxyConfig(t)); err != nil || strings.Contains(string(written), wildcard) {
+		t.Errorf("the loaded configuration names %s (%v), and a config naming a hostname is reloaded the day it changes:\n%s", wildcard, err, written)
 	}
-	automatic, held := server["automatic_https"].(map[string]any)
-	if !held {
-		t.Fatalf("the loaded configuration declares no automatic_https block, so %s is a subject caddy orders a wildcard certificate for and no dns-01 module on this box can answer that challenge", wildcard)
-	}
-	if skipped, _ := json.Marshal(automatic["skip_certificates"]); string(skipped) != `["`+wildcard+`"]` {
-		t.Errorf("the loaded configuration skips certificates for %s, want exactly [%s]", skipped, wildcard)
-	}
+	vm.handshakes(t, probe)
 
 	logs := vm.proxyLogSince(t, spoken)
 	if !strings.Contains(logs, probe) {
-		t.Fatalf("the proxy said nothing about %s since the entry was installed, so this window carries no subject collection to read an absence out of:\n%s", probe, logs)
+		t.Fatalf("the proxy said nothing about %s after a handshake asked for it, so this window carries no order to read an absence out of:\n%s", probe, logs)
 	}
 	if strings.Contains(logs, wildcard) {
-		t.Errorf("the proxy names %s in what it logged since the entry was installed:\n%s\nA wildcard subject needs dns-01 at every ca, so the order behind that line fails and is retried for as long as the box stands.", wildcard, logs)
+		t.Errorf("the proxy names %s in what it logged since the entry was installed:\n%s\nA wildcard subject needs dns-01 at every ca, so an order for it fails on every attempt.", wildcard, logs)
 	}
 }
 
-func TestLiveTheLoadedConfigurationDeclaresNoOnDemandTlsPolicy(t *testing.T) {
+func TestLiveTheLoadedConfigurationOrdersOnDemandOnlyWhatTheSwitchboardAdmits(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 	defer closing(t, p)
 
 	previewEntryOn(t, vm)
 
-	written, err := json.Marshal(vm.loadedProxyConfig(t))
-	if err != nil {
-		t.Fatal(err)
+	loaded := vm.loadedProxyConfig(t)
+	onDemand, _ := nestedIn(t, loaded, "apps", "tls", "automation", "on_demand").(map[string]any)
+	permission, _ := onDemand["permission"].(map[string]any)
+	endpoint := caddy.PermissionEndpoint(host.SwitchboardPermission.Path)
+	if len(onDemand) != 1 || permission["module"] != "http" || permission["endpoint"] != endpoint {
+		t.Fatalf("the loaded configuration orders on demand through %v, want the switchboard's %s alone: an on-demand policy nobody guards is an acme trigger a stranger drives with a junk subdomain until this box is locked out of its own tls", onDemand, endpoint)
 	}
-	if strings.Contains(string(written), "on_demand") {
-		t.Fatalf("the loaded configuration declares an on-demand tls policy:\n%s\nCaddy only warns when one carries no permission module and serves anyway, so a catch-all beside it is an unauthenticated acme trigger a stranger drives with a junk subdomain until this box is locked out of its own tls.", written)
+	relayed, _ := json.Marshal(nestedIn(t, loaded, "apps", "http", "servers", "admit", "routes"))
+	if !strings.Contains(string(relayed), `"dial":"`+host.SwitchboardPermission.Dial+`"`) {
+		t.Fatalf("the loaded configuration relays %s to %s, want the switchboard's admission at %s", endpoint, relayed, host.SwitchboardPermission.Dial)
 	}
-	if !strings.Contains(string(written), edge.PreviewWildcard(livePreviewBase)) {
-		t.Fatalf("the loaded configuration names no preview entry at all, so the absence above is the absence of the whole feature:\n%s", written)
+	if status := vm.asksFor(t, "pr-7."+livePreviewBase); status != http.StatusNotFound {
+		t.Errorf("an unclaimed preview hostname was answered %d, want the switchboard's 404", status)
 	}
 }
 

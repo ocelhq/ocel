@@ -48,11 +48,26 @@ func TestARouteChangeLoadsTheSwitchboardAndLeavesTheFrontProxyRunningAsItWas(t *
 	}
 }
 
-func TestAClaimLoadsTheSwitchboardBeforeTheFrontProxyTakesTheHostname(t *testing.T) {
+func TestAClaimLoadsTheSwitchboardAndLeavesTheFrontProxyRunningAsItWas(t *testing.T) {
 	t.Parallel()
 
 	stood := claimingBox(t, routed())
 	if err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+		t.Fatalf("ClaimHosts() = %v", err)
+	}
+	if loads := stood.count(loadsSwitchboard); loads != 1 {
+		t.Errorf("a claim loaded the switchboard %d times, want once: it routes the hostname and admits it for a certificate", loads)
+	}
+	if reloads := stood.count(reloadsFront); reloads != 0 {
+		t.Errorf("a claim reloaded %s %d times, want never: its config names no hostname, and a reload drops requests on every hostname the box serves (#1280)", caddy.Container, reloads)
+	}
+}
+
+func TestAPinnedPairLoadsTheSwitchboardBeforeTheFrontProxyReloadsOntoIt(t *testing.T) {
+	t.Parallel()
+
+	stood, h := pinning(t)
+	if err := h.ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
 	loaded, reloaded := stood.at(words(switchboardCommand("load", live.RoutingTable))), -1
@@ -62,10 +77,10 @@ func TestAClaimLoadsTheSwitchboardBeforeTheFrontProxyTakesTheHostname(t *testing
 		}
 	}
 	if loaded < 0 || reloaded < 0 || loaded > reloaded {
-		t.Fatalf("the switchboard was loaded at %d and %s reloaded at %d: a hostname the front proxy forwards before the switchboard knows it answers the box's 404", loaded, caddy.Container, reloaded)
+		t.Fatalf("the switchboard was loaded at %d and %s reloaded at %d: the pin changes what the front proxy loads, and the switchboard must know the table first", loaded, caddy.Container, reloaded)
 	}
 	if again := stood.count(reloadsFront); again != 1 {
-		t.Errorf("a claim reloaded %s %d times, want once", caddy.Container, again)
+		t.Errorf("a reshape carrying a new pin reloaded %s %d times, want once", caddy.Container, again)
 	}
 }
 
@@ -83,10 +98,10 @@ func TestClaimingAHostnameTheBoxAlreadyServesReloadsNothing(t *testing.T) {
 	}
 }
 
-func TestAFrontProxyThatRefusesTheNewHostnameSetPutsTheTableAndTheSwitchboardBack(t *testing.T) {
+func TestAFrontProxyThatRefusesANewPinPutsTheTableAndTheSwitchboardBack(t *testing.T) {
 	t.Parallel()
 
-	stood := claimingBox(t, routed())
+	stood, h := pinning(t)
 	before := stood.held
 	proxied := stood.answer
 	stood.answer = func(command string) (session.Result, bool) {
@@ -95,7 +110,7 @@ func TestAFrontProxyThatRefusesTheNewHostnameSetPutsTheTableAndTheSwitchboardBac
 		}
 		return proxied(command)
 	}
-	err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
+	err := h.ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 	if err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("ClaimHosts() under a front proxy that refused the reload = %v, want its refusal", err)
 	}
