@@ -57,8 +57,8 @@ func TestAProxyRoutedByHandIsTrustedForItsSchemeAndHostButNeverTheClientItNames(
 	t.Parallel()
 
 	byHand := switchboardOf(t, routedByHand()).command
-	if !slices.Contains(byHand, "--relay") {
-		t.Errorf("the switchboard serves as %q beside your proxy, want it relaying from its own network and trusting nobody's X-Forwarded-For", byHand)
+	if at := slices.Index(byHand, "--relay-network"); at < 0 || byHand[at+1] != ProxyNetwork {
+		t.Errorf("the switchboard serves as %q beside your proxy, want it relaying from the %s network alone, never an app network it joins, and trusting nobody's X-Forwarded-For", byHand, ProxyNetwork)
 	}
 	builtIn := switchboardOf(t, Front{}).command
 	if at := slices.Index(builtIn, "--front"); at < 0 || builtIn[at+1] != switchboard.FrontSocket || slices.Contains(builtIn, "--relay") {

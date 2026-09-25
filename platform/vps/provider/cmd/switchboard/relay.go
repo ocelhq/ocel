@@ -1,92 +1,78 @@
 package main
 
 import (
-	"bufio"
-	"errors"
+	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/netip"
-	"os"
-	"strings"
+	"slices"
+	"time"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
-const routesPath = "/proc/net/route"
+const networkLookup = 10 * time.Second
 
-const defaultDestination = "00000000"
+type resolving func(ctx context.Context, name string) ([]netip.Addr, error)
 
-func relayOf(relaying []string) ([]netip.Prefix, error) {
+func relayOf(ctx context.Context, relaying, networks []string) ([]netip.Prefix, error) {
 	var relayed []netip.Prefix
 	for _, spelled := range relaying {
-		if spelled == switchboard.OwnNetwork {
-			held, err := ownNetworkHere()
-			if err != nil {
-				return nil, fmt.Errorf("--relay %s: %w", spelled, err)
-			}
-			relayed = append(relayed, held...)
-			continue
-		}
 		if addr, err := netip.ParseAddr(spelled); err == nil {
 			relayed = append(relayed, netip.PrefixFrom(addr.Unmap(), addr.Unmap().BitLen()))
 			continue
 		}
 		prefix, err := netip.ParsePrefix(spelled)
 		if err != nil {
-			return nil, fmt.Errorf("--relay %q is neither an address, a prefix nor %s", spelled, switchboard.OwnNetwork)
+			return nil, fmt.Errorf("--relay %q is neither an address nor a prefix", spelled)
 		}
 		relayed = append(relayed, prefix.Masked())
+	}
+	for _, network := range networks {
+		asking, stop := context.WithTimeout(ctx, networkLookup)
+		held, err := networkHeld(asking, network, func(ctx context.Context, name string) ([]netip.Addr, error) {
+			return net.DefaultResolver.LookupNetIP(ctx, "ip", name)
+		}, net.InterfaceAddrs)
+		stop()
+		if err != nil {
+			return nil, err
+		}
+		relayed = append(relayed, held...)
 	}
 	return relayed, nil
 }
 
-func ownNetworkHere() ([]netip.Prefix, error) {
-	routes, err := os.Open(routesPath)
-	if err != nil {
-		return nil, err
+func networkHeld(ctx context.Context, network string, resolve resolving, addresses func() ([]net.Addr, error)) ([]netip.Prefix, error) {
+	if network == "" {
+		return nil, fmt.Errorf("--relay-network names no network")
 	}
-	defer routes.Close()
-	return ownNetwork(routes, func(name string) ([]net.Addr, error) {
-		held, err := net.InterfaceByName(name)
-		if err != nil {
-			return nil, err
-		}
-		return held.Addrs()
-	})
-}
-
-func ownNetwork(routes io.Reader, addresses func(name string) ([]net.Addr, error)) ([]netip.Prefix, error) {
-	scanner := bufio.NewScanner(routes)
-	for scanner.Scan() {
-		fields := strings.Fields(scanner.Text())
-		if len(fields) < 2 || fields[1] != defaultDestination {
+	named := switchboard.Name + "." + network
+	resolved, err := resolve(ctx, named)
+	if err != nil {
+		return nil, fmt.Errorf("--relay-network %s: %s resolves to nothing: %w", network, named, err)
+	}
+	for i, addr := range resolved {
+		resolved[i] = addr.Unmap()
+	}
+	held, err := addresses()
+	if err != nil {
+		return nil, fmt.Errorf("--relay-network %s: %w", network, err)
+	}
+	var prefixes []netip.Prefix
+	for _, addr := range held {
+		interfaced, ok := addr.(*net.IPNet)
+		if !ok {
 			continue
 		}
-		held, err := addresses(fields[0])
-		if err != nil {
-			return nil, err
+		ip, ok := netip.AddrFromSlice(interfaced.IP)
+		if !ok || !slices.Contains(resolved, ip.Unmap()) {
+			continue
 		}
-		var prefixes []netip.Prefix
-		for _, addr := range held {
-			network, ok := addr.(*net.IPNet)
-			if !ok {
-				continue
-			}
-			ip, ok := netip.AddrFromSlice(network.IP)
-			if !ok {
-				continue
-			}
-			bits, _ := network.Mask.Size()
-			prefixes = append(prefixes, netip.PrefixFrom(ip.Unmap(), bits).Masked())
-		}
-		if len(prefixes) == 0 {
-			return nil, fmt.Errorf("%s carries the default route and holds no address", fields[0])
-		}
-		return prefixes, nil
+		bits, _ := interfaced.Mask.Size()
+		prefixes = append(prefixes, netip.PrefixFrom(ip.Unmap(), bits).Masked())
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
+	if len(prefixes) == 0 {
+		return nil, fmt.Errorf("--relay-network %s: %s resolves to %v, which no interface of this switchboard holds", network, named, resolved)
 	}
-	return nil, errors.New("no default route leaves this switchboard, so it sits on no network to relay from")
+	return prefixes, nil
 }

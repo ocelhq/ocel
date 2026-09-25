@@ -95,7 +95,7 @@ func run(ctx context.Context, argv []string, out, errs io.Writer) int {
 }
 
 func usage(errs io.Writer) int {
-	fmt.Fprintln(errs, "usage: "+switchboard.Name+" serve --listen <host:port> --front <socket> --table <path> [--relay <addr|cidr|"+switchboard.OwnNetwork+">]... |")
+	fmt.Fprintln(errs, "usage: "+switchboard.Name+" serve --listen <host:port> --front <socket> --table <path> [--relay <addr|cidr>]... [--relay-network <docker network>]... |")
 	fmt.Fprintln(errs, "       load <table> |")
 	fmt.Fprintln(errs, "       gate --deploy-timeout <seconds> <host:port/path>... |")
 	fmt.Fprintln(errs, "       flip [--drain-timeout <seconds> --retire <host:port>...] <table> |")
@@ -128,12 +128,13 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	listen := flags.String("listen", "", "")
 	fronting := flags.String("front", "", "")
 	path := flags.String("table", "", "")
-	var relaying repeated
+	var relaying, networks repeated
 	flags.Var(&relaying, "relay", "")
+	flags.Var(&networks, "relay-network", "")
 	if err := flags.Parse(argv); err != nil || *listen == "" || *fronting == "" || *path == "" || flags.NArg() != 0 {
 		return usage(errs)
 	}
-	relayed, err := relayOf(relaying)
+	relayed, err := relayOf(ctx, relaying, networks)
 	if err != nil {
 		return refuse(errs, err)
 	}

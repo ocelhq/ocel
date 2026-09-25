@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
@@ -308,31 +309,48 @@ func TestServeHearsARelayingPeerOnTheSchemeAndNeverOnTheClient(t *testing.T) {
 	}
 }
 
-func TestTheOwnNetworkIsThePrefixOfTheInterfaceTheDefaultRouteLeavesBy(t *testing.T) {
-	routes := "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n" +
-		"eth1\t00001BAC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0\n" +
-		"eth0\t00000000\t010012AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n" +
-		"eth0\t000012AC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0\n"
-	addresses := func(name string) ([]net.Addr, error) {
-		if name != "eth0" {
-			return nil, fmt.Errorf("asked for %s", name)
+func TestARelayedNetworkIsTheOneTheSwitchboardIsNamedOnNeverTheOneItsDefaultRouteLeavesBy(t *testing.T) {
+	held := func() ([]net.Addr, error) {
+		return []net.Addr{
+			&net.IPNet{IP: net.ParseIP("127.0.0.1"), Mask: net.CIDRMask(8, 32)},
+			&net.IPNet{IP: net.ParseIP("172.19.0.2"), Mask: net.CIDRMask(16, 32)},
+			&net.IPNet{IP: net.ParseIP("172.21.0.2"), Mask: net.CIDRMask(16, 32)},
+		}, nil
+	}
+	resolve := func(_ context.Context, name string) ([]netip.Addr, error) {
+		switch name {
+		case switchboard.Name + ".ocel":
+			return []netip.Addr{netip.MustParseAddr("172.19.0.2")}, nil
+		case switchboard.Name + ".ocel--shop--production":
+			return []netip.Addr{netip.MustParseAddr("172.21.0.2")}, nil
+		default:
+			return nil, fmt.Errorf("no such host %s", name)
 		}
-		return []net.Addr{&net.IPNet{IP: net.ParseIP("172.18.0.3"), Mask: net.CIDRMask(16, 32)}}, nil
 	}
-	got, err := ownNetwork(strings.NewReader(routes), addresses)
+	got, err := networkHeld(t.Context(), "ocel", resolve, held)
 	if err != nil {
-		t.Fatalf("ownNetwork() = %v", err)
+		t.Fatalf("networkHeld() = %v", err)
 	}
-	if want := []netip.Prefix{netip.MustParsePrefix("172.18.0.0/16")}; !slices.Equal(got, want) {
-		t.Errorf("ownNetwork() = %v, want %v: the network the switchboard was started on, where its gateway and every proxy joined to it sit", got, want)
+	if want := []netip.Prefix{netip.MustParsePrefix("172.19.0.0/16")}; !slices.Equal(got, want) {
+		t.Errorf("networkHeld(ocel) = %v, want %v: an app network the switchboard joins may carry its default route, and every app container on it would be heard on the scheme it claims", got, want)
 	}
 }
 
-func TestTheOwnNetworkIsRefusedWhereNoDefaultRouteLeaves(t *testing.T) {
-	routes := "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n" +
-		"eth0\t000012AC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0\n"
-	if _, err := ownNetwork(strings.NewReader(routes), func(string) ([]net.Addr, error) { return nil, nil }); err == nil {
-		t.Error("ownNetwork() over a table with no default route = nil, want a refusal: relaying from nowhere would hear nobody's scheme")
+func TestARelayedNetworkTheSwitchboardHoldsNoAddressOnIsRefused(t *testing.T) {
+	held := func() ([]net.Addr, error) {
+		return []net.Addr{&net.IPNet{IP: net.ParseIP("172.21.0.2"), Mask: net.CIDRMask(16, 32)}}, nil
+	}
+	for name, resolve := range map[string]func(context.Context, string) ([]netip.Addr, error){
+		"a name nothing answers for": func(context.Context, string) ([]netip.Addr, error) {
+			return nil, errors.New("no such host")
+		},
+		"a name answered with an address held elsewhere": func(context.Context, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("172.19.0.9")}, nil
+		},
+	} {
+		if got, err := networkHeld(t.Context(), "ocel", resolve, held); err == nil {
+			t.Errorf("%s: networkHeld() = %v, want a refusal: relaying from a network this switchboard is not on hears nobody it should", name, got)
+		}
 	}
 }
 
@@ -344,6 +362,7 @@ func TestServeRefusesATableAFrontSocketOrARelayItCannotTake(t *testing.T) {
 		"a front socket it cannot open": {"serve", "--listen", freeAddress(t), "--front", filepath.Join(t.TempDir(), "absent", "front.sock"), "--table", tableFile(t, nil)},
 		"no front socket":               {"serve", "--listen", freeAddress(t), "--table", tableFile(t, nil)},
 		"a relay that is no prefix":     {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", tableFile(t, nil), "--relay", "ocel-proxy"},
+		"a relayed network unnamed":     {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", tableFile(t, nil), "--relay-network", ""},
 		"no listen address":             {"serve", "--front", frontAt(t), "--table", tableFile(t, nil)},
 		"no table":                      {"serve", "--listen", freeAddress(t), "--front", frontAt(t)},
 	} {
