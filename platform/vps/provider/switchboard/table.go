@@ -37,6 +37,7 @@ type Table struct {
 	answering map[string]answer
 	connector string
 	routed    map[string]bool
+	admitted  map[string]bool
 }
 
 type answer struct {
@@ -142,6 +143,16 @@ func Read(document []byte) (*Table, error) {
 		answering: map[string]answer{},
 		connector: strings.ToLower(read.Connector),
 		routed:    map[string]bool{},
+		admitted:  map[string]bool{},
+	}
+	for _, hostClaim := range read.Claims {
+		table.admitted[strings.ToLower(hostClaim.Hostname)] = true
+	}
+	if table.connector != "" {
+		table.admitted[table.connector] = true
+	}
+	if read.PreviewBase != "" {
+		table.admitted[strings.ToLower(edge.ProbeHostname(edge.PreviewWildcard(read.PreviewBase)))] = true
 	}
 	answeredBy := map[string]route{}
 	for _, appRoute := range standing {
@@ -255,6 +266,8 @@ func (t *Table) Forward(host, requested string) (Forward, bool) {
 	}
 	return Forward{Upstream: answered.upstream}, true
 }
+
+func (t *Table) Admits(hostname string) bool { return t.admitted[strings.ToLower(hostname)] }
 
 func under(requested, prefix string) bool {
 	lowered := strings.ToLower(requested)

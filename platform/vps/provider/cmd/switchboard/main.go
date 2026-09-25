@@ -95,7 +95,7 @@ func run(ctx context.Context, argv []string, out, errs io.Writer) int {
 }
 
 func usage(errs io.Writer) int {
-	fmt.Fprintln(errs, "usage: "+switchboard.Name+" serve --listen <host:port> --front <socket> --table <path> [--relay <addr|cidr>]... [--relay-network <docker network>]... |")
+	fmt.Fprintln(errs, "usage: "+switchboard.Name+" serve --listen <host:port> --front <socket> --admit <socket> --table <path> [--relay <addr|cidr>]... [--relay-network <docker network>]... |")
 	fmt.Fprintln(errs, "       load <table> |")
 	fmt.Fprintln(errs, "       gate --deploy-timeout <seconds> <host:port/path>... |")
 	fmt.Fprintln(errs, "       flip [--drain-timeout <seconds> --retire <host:port>...] <table> |")
@@ -127,11 +127,12 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	flags.SetOutput(errs)
 	listen := flags.String("listen", "", "")
 	fronting := flags.String("front", "", "")
+	admit := flags.String("admit", "", "")
 	path := flags.String("table", "", "")
 	var relaying, networks repeated
 	flags.Var(&relaying, "relay", "")
 	flags.Var(&networks, "relay-network", "")
-	if err := flags.Parse(argv); err != nil || *listen == "" || *fronting == "" || *path == "" || flags.NArg() != 0 {
+	if err := flags.Parse(argv); err != nil || *listen == "" || *fronting == "" || *admit == "" || *path == "" || flags.NArg() != 0 {
 		return usage(errs)
 	}
 	relayed, err := relayOf(ctx, relaying, networks)
@@ -163,8 +164,20 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 		_ = front.Close()
 		return refuse(errs, err)
 	}
+	admitting, err := socketListener(*admit)
+	if err != nil {
+		_ = controlling.Close()
+		_ = front.Close()
+		_ = data.Close()
+		return refuse(errs, err)
+	}
 	controller := &http.Server{Handler: board.Control(), ReadHeaderTimeout: switchboard.ReadHeaderTimeout}
-	failed := make(chan error, 3)
+	failed := make(chan error, 4)
+	go func() {
+		if err := board.ServeAdmit(admitting); err != nil {
+			failed <- err
+		}
+	}()
 	go func() {
 		if err := board.Serve(data); err != nil {
 			failed <- err
