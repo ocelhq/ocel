@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
@@ -24,11 +25,11 @@ func (g *Gate) Declared() []*resourcesv1.VariableDefinition {
 }
 
 func CheckBindingVariableWritable(bound []BindingVariables, key, folder string) error {
-	at, read := Scope{Bindings: bound}.readBy(key)
-	if !read || folder == "" {
+	readers := Scope{Bindings: bound}.readers(key)
+	if len(readers) == 0 || folder == "" {
 		return nil
 	}
-	return fmt.Errorf("%s is read by `%s`, which serves the whole project, so it reads the value at the project root and a value in %s would reach nothing: set it without --folder", key, at.Site, folder)
+	return fmt.Errorf("%s is read by %s, and a binding serves the whole project, so it reads the value at the project root and a value in %s would reach nothing: set it without --folder", key, sites(readers), folder)
 }
 
 func (s Scope) bindingDefinitions() []*resourcesv1.VariableDefinition {
@@ -44,7 +45,7 @@ func (s Scope) bindingDefinitions() []*resourcesv1.VariableDefinition {
 				Required:    true,
 				Group:       bound.Group,
 				Source:      bound.Site,
-				Description: "Read by " + bound.Site + " at deploy; never handed to an app.",
+				Description: "Read by " + sites(s.readers(key)) + " at deploy; never handed to an app.",
 			})
 		}
 	}
@@ -52,8 +53,12 @@ func (s Scope) bindingDefinitions() []*resourcesv1.VariableDefinition {
 }
 
 func (s Scope) bindingGroups() []*resourcesv1.GroupDefinition {
+	definitions := s.bindingDefinitions()
 	out := make([]*resourcesv1.GroupDefinition, 0, len(s.Bindings))
 	for _, bound := range s.Bindings {
+		if !slices.ContainsFunc(definitions, func(held *resourcesv1.VariableDefinition) bool { return held.GetGroup() == bound.Group }) {
+			continue
+		}
 		out = append(out, &resourcesv1.GroupDefinition{
 			Key:         bound.Group,
 			Required:    true,
@@ -63,22 +68,34 @@ func (s Scope) bindingGroups() []*resourcesv1.GroupDefinition {
 	return out
 }
 
-func (s Scope) readBy(key string) (BindingVariables, bool) {
+func (s Scope) readers(key string) []string {
+	var out []string
 	for _, bound := range s.Bindings {
 		if slices.Contains(bound.Keys, key) {
-			return bound, true
+			out = append(out, bound.Site)
 		}
 	}
-	return BindingVariables{}, false
+	return out
+}
+
+func sites(readers []string) string {
+	quoted := make([]string, len(readers))
+	for i, site := range readers {
+		quoted[i] = "`" + site + "`"
+	}
+	if len(quoted) < 2 {
+		return strings.Join(quoted, "")
+	}
+	return strings.Join(quoted[:len(quoted)-1], ", ") + " and " + quoted[len(quoted)-1]
 }
 
 func collision(definitions []*resourcesv1.VariableDefinition, scope Scope) error {
 	for _, definition := range definitions {
-		bound, read := scope.readBy(definition.GetKey())
-		if !read {
-			bound, read = Scope{Bindings: scope.OtherTiers}.readBy(definition.GetKey())
+		readers := scope.readers(definition.GetKey())
+		if len(readers) == 0 {
+			readers = Scope{Bindings: scope.OtherTiers}.readers(definition.GetKey())
 		}
-		if !read {
+		if len(readers) == 0 {
 			continue
 		}
 		declaredBy := definition.GetSource()
@@ -86,9 +103,9 @@ func collision(definitions []*resourcesv1.VariableDefinition, scope Scope) error
 			declaredBy = "the app's code"
 		}
 		return fmt.Errorf(
-			"%s is declared by %s and read by `%s`: a binding's variable reaches the binding alone, and declaring it too would hand the app the credential as a plain variable. "+
+			"%s is declared by %s and read by %s: a binding's variable reaches the binding alone, and declaring it too would hand the app the credential as a plain variable. "+
 				"Rename one of them",
-			definition.GetKey(), declaredBy, bound.Site)
+			definition.GetKey(), declaredBy, sites(readers))
 	}
 	return nil
 }
@@ -120,8 +137,7 @@ func (g *Gate) ResolveBindingVariables(ctx context.Context) (map[string]string, 
 	for _, cell := range cells {
 		held := plaintext[cell]
 		if !held.found {
-			bound, _ := g.scope.readBy(cell.Key)
-			return nil, fmt.Errorf("%s, which `%s` reads, has no value here", cell.Key, bound.Site)
+			return nil, fmt.Errorf("%s, which %s reads, has no value here", cell.Key, sites(g.scope.readers(cell.Key)))
 		}
 		out[cell.Key] = held.value
 	}

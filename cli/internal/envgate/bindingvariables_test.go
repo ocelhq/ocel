@@ -167,4 +167,36 @@ func TestBindingVariables(t *testing.T) {
 			t.Errorf("groups = %+v, want postgres.orders, required", matrix.Groups)
 		}
 	})
+
+	t.Run("a variable two bindings read names both readers and leaves no group empty", func(t *testing.T) {
+		t.Parallel()
+		first := envgate.BindingVariables{Group: "bucket.first", Site: "bindings.bucket.first", Keys: []string{"FIRST_BUCKET", "R2_ACCESS_KEY_ID"}}
+		second := envgate.BindingVariables{Group: "bucket.second", Site: "bindings.bucket.second", Keys: []string{"R2_ACCESS_KEY_ID"}}
+		bound := []envgate.BindingVariables{first, second}
+
+		definitions, groups := envgate.Declarations(bound)
+		for _, group := range groups {
+			members := 0
+			for _, definition := range definitions {
+				if definition.GetGroup() == group.GetKey() {
+					members++
+				}
+			}
+			if members == 0 {
+				t.Errorf("group %s is declared with no variable in it", group.GetKey())
+			}
+		}
+		for _, definition := range definitions {
+			if definition.GetKey() == "R2_ACCESS_KEY_ID" && !strings.Contains(definition.GetDescription(), second.Site) {
+				t.Errorf("R2_ACCESS_KEY_ID is described as %q, want it to name %s, which reads it too", definition.GetDescription(), second.Site)
+			}
+		}
+
+		err := envgate.CheckBindingVariableWritable(bound, "R2_ACCESS_KEY_ID", "/web")
+		for _, site := range []string{first.Site, second.Site} {
+			if err == nil || !strings.Contains(err.Error(), site) {
+				t.Errorf("CheckBindingVariableWritable = %v, want it to name %s", err, site)
+			}
+		}
+	})
 }
