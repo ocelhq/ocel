@@ -74,24 +74,18 @@ func postgresProperties(p *projectconfig.PostgresInline, read func(string) (stri
 		value, err := read(p.URL)
 		return &bindingsv1.PostgresProperties{Url: value}, err
 	}
-	text := func(v projectconfig.Value) (string, error) {
-		if v.Variable == "" {
-			return v.Literal, nil
-		}
-		return read(v.Variable)
-	}
 	props := &bindingsv1.PostgresProperties{Port: defaultPostgresPort}
 	if p.Port != 0 {
 		props.Port = int32(p.Port)
 	}
 	var err error
-	if props.Host, err = text(p.Host); err != nil {
+	if props.Host, err = p.Host.Resolve(read); err != nil {
 		return nil, err
 	}
-	if props.Database, err = text(p.Database); err != nil {
+	if props.Database, err = p.Database.Resolve(read); err != nil {
 		return nil, err
 	}
-	if props.Username, err = text(p.Username); err != nil {
+	if props.Username, err = p.Username.Resolve(read); err != nil {
 		return nil, err
 	}
 	if props.Password, err = read(p.Password); err != nil {
@@ -159,12 +153,6 @@ func verifyBucket(ctx context.Context, r Record, props *bindingsv1.BucketPropert
 }
 
 func bucketProperties(b *projectconfig.BucketInline, read func(string) (string, error)) (*bindingsv1.BucketProperties, error) {
-	text := func(v projectconfig.Value) (string, error) {
-		if v.Variable == "" {
-			return v.Literal, nil
-		}
-		return read(v.Variable)
-	}
 	props := &bindingsv1.BucketProperties{PathStyle: b.PathStyle}
 	var err error
 	for _, field := range []struct {
@@ -177,7 +165,7 @@ func bucketProperties(b *projectconfig.BucketInline, read func(string) (string, 
 		{&props.Prefix, b.Prefix},
 		{&props.PublicBaseUrl, b.PublicBaseURL},
 	} {
-		if *field.into, err = text(field.from); err != nil {
+		if *field.into, err = field.from.Resolve(read); err != nil {
 			return nil, err
 		}
 	}
