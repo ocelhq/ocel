@@ -246,8 +246,6 @@ func PreviewBaseDomain(previewDomain string) string {
 	return previewDomain[len("*."):]
 }
 
-var envVarName = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
-
 func normalizeRegistry(raw *configdoc.RegistryConfig) (*Registry, error) {
 	if raw == nil {
 		return nil, nil
@@ -256,18 +254,15 @@ func normalizeRegistry(raw *configdoc.RegistryConfig) (*Registry, error) {
 	if err != nil {
 		return nil, err
 	}
-	password := strings.TrimSpace(raw.Password)
-	if password == "" {
-		return nil, errors.New("`password` names the environment variable holding the registry password or token, and a push authenticates, so there is no anonymous form to fall back to")
-	}
-	if !envVarName.MatchString(password) {
-		return nil, errors.New("`password` is the name of an environment variable, not the secret itself, and this value is no variable name — write it as \"REGISTRY_TOKEN\", in upper case, and put the secret in the environment under that name")
+	variable, ok := configdoc.SecretVariable(raw.Password)
+	if !ok {
+		return nil, errors.New("`password` is the environment variable holding the registry password or token, written as \"${REGISTRY_TOKEN}\", and a push authenticates, so there is no anonymous form to fall back to")
 	}
 	return &Registry{
 		Server:    server,
 		Namespace: namespace,
 		Username:  strings.TrimSpace(raw.Username),
-		Password:  password,
+		Password:  variable,
 	}, nil
 }
 

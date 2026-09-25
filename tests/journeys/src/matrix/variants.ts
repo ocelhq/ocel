@@ -20,5 +20,5 @@ export const cloudflare = variant("cloudflare", {
 
 export const registry = variant("registry", {
   offeredOn: ["vps"],
-  config: { registry: { server: JOURNEY_REGISTRY, password: REGISTRY_TOKEN_ENV } },
+  config: { registry: { server: JOURNEY_REGISTRY, password: `\${${REGISTRY_TOKEN_ENV}}` } },
 });

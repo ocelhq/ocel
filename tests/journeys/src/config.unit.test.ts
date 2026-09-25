@@ -146,7 +146,7 @@ describe("overlayFor", () => {
       registry: {
         server: "ghcr.io/ocelhq/journey-vps",
         username: "octocat",
-        password: "OCEL_JOURNEY_REGISTRY_TOKEN",
+        password: "${OCEL_JOURNEY_REGISTRY_TOKEN}",
       },
     });
   });

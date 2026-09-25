@@ -220,3 +220,70 @@ func TestDecodeRejectsWrongType(t *testing.T) {
 		t.Fatalf("error %q does not name the key path", err)
 	}
 }
+
+func TestDecodeEscapesOnlyAnOpeningInterpolation(t *testing.T) {
+	doc, err := Decode([]byte(`{"slug":"acme","apps":[{"name":"web","path":"a$$b$"}]}`), env(nil))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if doc.Apps[0].Path != "a$$b$" {
+		t.Fatalf("path = %q, want the dollars kept where no ${ follows them", doc.Apps[0].Path)
+	}
+}
+
+func TestDecodeKeepsASecretFieldAsItsPlaceholder(t *testing.T) {
+	doc, err := Decode(
+		[]byte(`{"slug":"acme","registry":{"server":"ghcr.io","password":"${GHCR_TOKEN}"}}`),
+		env(map[string]string{"GHCR_TOKEN": "ghp_secret"}),
+	)
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if doc.Registry.Password != "${GHCR_TOKEN}" {
+		t.Fatalf("password = %q, want the placeholder left for the CLI to resolve where it pushes", doc.Registry.Password)
+	}
+}
+
+func TestDecodeKeepsASecretPlaceholderWhoseVariableIsUnset(t *testing.T) {
+	doc, err := Decode([]byte(`{"slug":"acme","registry":{"server":"ghcr.io","password":"${GHCR_TOKEN}"}}`), env(nil))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if doc.Registry.Password != "${GHCR_TOKEN}" {
+		t.Fatalf("password = %q", doc.Registry.Password)
+	}
+}
+
+func TestDecodeRefusesASecretFieldThatIsNotOnePlaceholder(t *testing.T) {
+	cases := []struct {
+		name     string
+		password string
+		want     []string
+		unspoken string
+	}{
+		{name: "a bare variable name", password: "GHCR_TOKEN", want: []string{`"registry.password"`, `"${GHCR_TOKEN}"`}},
+		{name: "the secret itself", password: "ghp_16C7e42F292c6912E7710c838347Ae178B4a", want: []string{`"registry.password"`, `"${REGISTRY_TOKEN}"`, "buildEnv"}, unspoken: "ghp_16C7e42F292c6912E7710c838347Ae178B4a"},
+		{name: "a partial interpolation", password: "ghp_${SUFFIX}", want: []string{`"registry.password"`, "whole value"}, unspoken: "ghp_"},
+		{name: "two placeholders", password: "${A}${B}", want: []string{`"registry.password"`, "whole value"}},
+		{name: "an escaped placeholder", password: "$${GHCR_TOKEN}", want: []string{`"registry.password"`}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := Decode(
+				[]byte(`{"slug":"acme","registry":{"server":"ghcr.io","password":"`+c.password+`"}}`),
+				env(map[string]string{"GHCR_TOKEN": "x", "SUFFIX": "y", "A": "a", "B": "b"}),
+			)
+			if err == nil {
+				t.Fatalf("decoded password %q without error", c.password)
+			}
+			for _, want := range c.want {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error %q does not say %s", err, want)
+				}
+			}
+			if c.unspoken != "" && strings.Contains(err.Error(), c.unspoken) {
+				t.Errorf("error %q repeats the secret", err)
+			}
+		})
+	}
+}

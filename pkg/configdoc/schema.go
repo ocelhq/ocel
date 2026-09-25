@@ -110,6 +110,9 @@ func objectSchema(target reflect.Type) object {
 				object{"pattern": interpolationPattern},
 			}
 		}
+		if field.secret != "" {
+			property["pattern"] = secretPlaceholder.String()
+		}
 		if len(field.enum) > 0 {
 			if items, ok := property["items"].(object); ok {
 				items["enum"] = toAny(field.enum)

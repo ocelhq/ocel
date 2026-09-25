@@ -263,7 +263,8 @@
       "description": "Where this project's container images are pushed.",
       "properties": {
         "password": {
-          "description": "The name of the environment variable holding the password or token — not the secret itself.",
+          "description": "The environment variable holding the password or token, written as \"${REGISTRY_TOKEN}\" and read where the push authenticates — never the secret itself.",
+          "pattern": "^\\$\\{([A-Za-z_][A-Za-z0-9_]*)\\}$",
           "type": "string"
         },
         "server": {

@@ -45,7 +45,7 @@ export default {
 
 func TestARegistryWhoseVariableIsUnsetStopsTheDeployBeforeAnythingIsBuilt(t *testing.T) {
 	deps, root, built := registryProject(t, `
-  registry: { server: "ghcr.io", password: "OCEL_TEST_REGISTRY_TOKEN" },`)
+  registry: { server: "ghcr.io", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`)
 
 	var stdout, stderr bytes.Buffer
 	err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
@@ -88,7 +88,7 @@ func TestARegistryPasswordPastedAsATokenIsRefusedWithoutEchoingIt(t *testing.T) 
 func TestARegistryWhoseVariableIsSetDeploysAsUsual(t *testing.T) {
 	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
 	deps, root, _ := registryProject(t, `
-  registry: { server: "ghcr.io", password: "OCEL_TEST_REGISTRY_TOKEN" },`)
+  registry: { server: "ghcr.io", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`)
 
 	var stdout, stderr bytes.Buffer
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -188,7 +188,7 @@ func TestAContainerAppRendersADigestPinnedManifestUnderDry(t *testing.T) {
 func TestTheRegistryTheProjectNamesRidesTheDeployWithItsSecretResolved(t *testing.T) {
 	t.Setenv("OCEL_TEST_REGISTRY_TOKEN", "hunter2")
 	deps, root, _ := registryProject(t, `
-  registry: { server: "ghcr.io", username: "acme-bot", password: "OCEL_TEST_REGISTRY_TOKEN" },`)
+  registry: { server: "ghcr.io", username: "acme-bot", password: "${OCEL_TEST_REGISTRY_TOKEN}" },`)
 
 	var stdout, stderr bytes.Buffer
 	if err := runDeploy(context.Background(), deps, root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
@@ -227,7 +227,7 @@ export default {
   provider: { aws: {} },
   domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", compute: "serverless", framework: "node" }],
-  registry: { server: "ghcr.io", password: "OCEL_TEST_REGISTRY_TOKEN" },
+  registry: { server: "ghcr.io", password: "${OCEL_TEST_REGISTRY_TOKEN}" },
 };
 `)
 	clitest.WriteFile(t, filepath.Join(root, "apps", "api", "src", "server.ts"), "export {};\n")

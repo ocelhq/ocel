@@ -271,7 +271,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  registry: { server: "ghcr.io", username: "acme-bot", password: "GHCR_TOKEN" },
+  registry: { server: "ghcr.io", username: "acme-bot", password: "${GHCR_TOKEN}" },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
@@ -297,7 +297,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  registry: { server: "ghcr.io/acme/team-1", password: "GHCR_TOKEN" },
+  registry: { server: "ghcr.io/acme/team-1", password: "${GHCR_TOKEN}" },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
@@ -327,7 +327,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  registry: { server: "registry.fly.io", password: "FLY_TOKEN" },
+  registry: { server: "registry.fly.io", password: "${FLY_TOKEN}" },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
@@ -342,7 +342,7 @@ export default {
 export default {
   slug: "test-app",
   provider: { aws: { region: "eu-west-2" } },
-  registry: { server: "ghcr.io", password: "GHCR_TOKEN" },
+  registry: { server: "ghcr.io", password: "${GHCR_TOKEN}" },
 };
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
@@ -1115,7 +1115,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  registry: { password: "GHCR_TOKEN" },
+  registry: { password: "${GHCR_TOKEN}" },
 };
 `,
 			wantErr: []string{`invalid "registry"`, "server"},
@@ -1125,7 +1125,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  registry: { server: "https://ghcr.io/acme", password: "GHCR_TOKEN" },
+  registry: { server: "https://ghcr.io/acme", password: "${GHCR_TOKEN}" },
 };
 `,
 			wantErr: []string{`invalid "registry"`, "server", "scheme"},
@@ -1135,7 +1135,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  registry: { server: "bot:ghp_16C7e42F292c6912E7710c838347Ae178B4a@ghcr.io/acme", password: "GHCR_TOKEN" },
+  registry: { server: "bot:ghp_16C7e42F292c6912E7710c838347Ae178B4a@ghcr.io/acme", password: "${GHCR_TOKEN}" },
 };
 `,
 			wantErr:  []string{`invalid "registry"`, "server"},
@@ -1146,7 +1146,7 @@ export default {
 			config: `
 export default {
   slug: "test-app",
-  registry: { server: "ghcr.io/Acme Corp", password: "GHCR_TOKEN" },
+  registry: { server: "ghcr.io/Acme Corp", password: "${GHCR_TOKEN}" },
 };
 `,
 			wantErr: []string{`invalid "registry"`, "server", "namespace"},
@@ -1159,7 +1159,7 @@ export default {
   registry: { server: "ghcr.io", password: "ghp_16C7e42F292c6912E7710c838347Ae178B4a" },
 };
 `,
-			wantErr:  []string{`invalid "registry"`, "password", "environment variable"},
+			wantErr:  []string{`"registry.password" is a secret`, `"${REGISTRY_TOKEN}"`},
 			unspoken: []string{"ghp_16C7e42F292c6912E7710c838347Ae178B4a"},
 		},
 		{
@@ -1170,7 +1170,7 @@ export default {
   registry: { server: "ghcr.io", password: "dckr_pat_abcDEF123" },
 };
 `,
-			wantErr:  []string{`invalid "registry"`, "password", "environment variable"},
+			wantErr:  []string{`"registry.password" is a secret`, `"${REGISTRY_TOKEN}"`},
 			unspoken: []string{"dckr_pat_abcDEF123"},
 		},
 		{
@@ -1182,6 +1182,16 @@ export default {
 };
 `,
 			wantErr: []string{`invalid "registry"`, "password"},
+		},
+		{
+			name: "rejects a registry password written as the bare variable name, showing the placeholder that replaces it",
+			config: `
+export default {
+  slug: "test-app",
+  registry: { server: "ghcr.io", password: "GHCR_TOKEN" },
+};
+`,
+			wantErr: []string{`"registry.password" is a secret`, `"${GHCR_TOKEN}"`},
 		},
 	}
 
