@@ -281,3 +281,23 @@ func TestAReadOnlySourceTakesNoWrite(t *testing.T) {
 		t.Fatalf("PutEnvSourceValue() to a read-only source = %v", err)
 	}
 }
+
+func TestAnIdentityAuthOnATargetWithNoIdentityIsRefusedBeforeItIsRegistered(t *testing.T) {
+	vars, _ := served(t)
+	production := environmentv1.Tier_TIER_PRODUCTION
+	for method, auth := range map[string]*envvarsv1.InfisicalAuth{
+		"aws": {Method: &envvarsv1.InfisicalAuth_Aws{Aws: &envvarsv1.InfisicalIdentityAuth{IdentityId: "identity-1"}}},
+		"gcp": {Method: &envvarsv1.InfisicalAuth_Gcp{Gcp: &envvarsv1.InfisicalIdentityAuth{IdentityId: "identity-1"}}},
+	} {
+		source := infisicalSource("https://infisical.example.com", false)
+		source.GetInfisical().Auth = auth
+		_, err := syncSource(vars, production, source)
+		if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), method) || !strings.Contains(err.Error(), "universal") {
+			t.Errorf("SyncEnvSource() with %s auth on a target with no %s identity = %v, want a refusal that names universal auth as the one this target signs in with", method, method, err)
+		}
+		described, err := vars.DescribeEnvSource(context.Background(), &envvarsv1.DescribeEnvSourceRequest{Tier: production, Slug: slug})
+		if err != nil || described.GetStatus().GetEnvSource() != "builtin" {
+			t.Errorf("DescribeEnvSource() after a refused %s source = %+v, %v, want nothing registered for a syncer to fail on every poll", method, described, err)
+		}
+	}
+}

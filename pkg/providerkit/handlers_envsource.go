@@ -35,6 +35,14 @@ func (h *VarsHandler) SyncEnvSource(ctx context.Context, req *envvarsv1.SyncEnvS
 		return &envvarsv1.SyncEnvSourceResponse{Status: &envvarsv1.EnvSourceStatus{EnvSource: string(envsource.Builtin)}}, nil
 	}
 
+	vars, err := h.Source.Vars()
+	if err != nil {
+		return nil, err
+	}
+	if err := refuseAbsentIdentity(descriptor, vars.Identity); err != nil {
+		return nil, err
+	}
+
 	folders := slices.Clone(req.GetFolders())
 	if !slices.Contains(folders, "") {
 		folders = append(folders, "")
@@ -212,6 +220,30 @@ func (h *VarsHandler) refuseSourceOwned(ctx context.Context, store values.Store,
 	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 		"%s is read from %s, which owns every value %s sets for all of %s: change it there%s, and ocel picks it up on its next sync.%s",
 		at, owner, scope.Project, scope.Class, linked(status.Links[at.Folder]), elsewhere))
+}
+
+func refuseAbsentIdentity(descriptor envsource.Descriptor, target envsource.Target) error {
+	if descriptor.Infisical == nil {
+		return nil
+	}
+	var identity string
+	switch descriptor.Infisical.Auth.Method {
+	case envsource.AuthAWS:
+		if target.Signer != nil {
+			return nil
+		}
+		identity = "AWS role"
+	case envsource.AuthGCP:
+		if target.Issuer != nil {
+			return nil
+		}
+		identity = "GCP service account"
+	default:
+		return nil
+	}
+	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+		"%s signs in with %s auth, which proves the target's own %s, and this target has none: sign in with universal auth (clientId and clientSecret) instead",
+		descriptor.ID(), descriptor.Infisical.Auth.Method, identity))
 }
 
 func linked(link string) string {
