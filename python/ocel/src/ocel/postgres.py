@@ -58,10 +58,10 @@ class Postgres:
                     import asyncpg
 
                     options = {}
-                    ca = postgres_binding(self.name).tls_ca
-                    if ca:
+                    properties = postgres_binding(self.name)
+                    if properties.tls_mode == PostgresTlsMode.VERIFY_FULL and properties.tls_ca:
                         context = ssl.create_default_context()
-                        context.load_verify_locations(cadata=ca)
+                        context.load_verify_locations(cadata=properties.tls_ca)
                         options["ssl"] = context
                     self._pool = await asyncpg.create_pool(self.connection_string, **options)
         return self._pool
