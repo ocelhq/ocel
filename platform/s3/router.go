@@ -27,20 +27,26 @@ func route(own bucketv1connect.BucketServiceHandler, bound ...*Service) bucketv1
 
 func RouteRecords(own bucketv1connect.BucketServiceHandler, records Records, callbacks Poster) bucketv1connect.BucketServiceHandler {
 	var mu sync.Mutex
+	var ready bool
+	var seen uint32
 	var read string
 	var built []*Service
 	return &router{own: own, bound: func() ([]*Service, error) {
-		held := bucketRecords(records)
 		mu.Lock()
 		defer mu.Unlock()
-		if held == read && built != nil {
+		generation := records.Generation()
+		if ready && generation == seen {
 			return built, nil
 		}
-		fresh, err := backends(records, callbacks)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		held := bucketRecords(records)
+		if !ready || held != read {
+			fresh, err := backends(records, callbacks)
+			if err != nil {
+				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+			}
+			read, built = held, fresh
 		}
-		read, built = held, fresh
+		ready, seen = true, generation
 		return built, nil
 	}}
 }
