@@ -23,8 +23,8 @@ type Hooks struct {
 	CheckHost           func(ctx context.Context, req StandingRequest) ([]StandingCheck, error)
 	ShapeCost           func(ctx context.Context, req ShapeRequest) (*costv1.ResourceSet, error)
 	EstimateCost        func(ctx context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error)
-	FunctionBaseImage   func(ctx context.Context, runtime Framework) (v1.Image, error)
-	FunctionRuntime     func(ctx context.Context, runtime Framework) ([]byte, error)
+	FunctionBaseImage   func(ctx context.Context, framework Framework) (v1.Image, error)
+	FunctionRuntime     func(ctx context.Context, framework Framework) ([]byte, error)
 }
 
 func (h Hooks) refuseHalfPairs() error {

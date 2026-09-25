@@ -64,7 +64,7 @@ func (r records) stood(ctx context.Context) (ports.Records, error) {
 	if err != nil {
 		return ports.Records{}, err
 	}
-	return ports.Records{Clients: held.Runtime()}, nil
+	return ports.Records{Clients: held.Workload()}, nil
 }
 
 func (r records) Read(ctx context.Context, name providerkit.RecordName) (providerkit.Record, error) {
@@ -114,7 +114,7 @@ func (s cipher) stood(ctx context.Context) (ports.Cipher, error) {
 	if err != nil {
 		return ports.Cipher{}, err
 	}
-	return ports.Cipher{Clients: held.Runtime()}, nil
+	return ports.Cipher{Clients: held.Workload()}, nil
 }
 
 func (s cipher) Seal(ctx context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {

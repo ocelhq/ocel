@@ -74,7 +74,7 @@ func TestAPackageShippingOnePackagePerPlatformIsInstalledForTheDeclaredArchitect
 			npm := installFakeNpm(t, linuxInstall(t, cpu, "glibc"))
 			l := newLayout(t, platformSplitApp())
 			target := l.target("server.js")
-			target.Runtime.Arch = arch
+			target.Framework.Arch = arch
 
 			if err := Bundle(context.Background(), target); err != nil {
 				t.Fatalf("Bundle: %v", err)

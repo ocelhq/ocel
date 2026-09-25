@@ -9,10 +9,12 @@ export type { Placement } from "./trace.js";
 export { placeFile } from "./trace.js";
 
 export async function buildApp(input: AppInput, options: BuildOptions): Promise<FunctionSummary[]> {
-  const rt = input.runtime?.name ? resolveRuntime(input.runtime.name) : detectRuntime(input.cwd);
+  const rt = input.framework?.name
+    ? resolveRuntime(input.framework.name)
+    : detectRuntime(input.cwd);
   if (!rt) {
     throw new Error(
-      `ocel: could not detect a runtime in ${input.cwd}; set "runtime" in the app config`,
+      `ocel: could not detect a framework in ${input.cwd}; set "framework" in the app config`,
     );
   }
   return rt.build(input, options);
@@ -43,6 +45,6 @@ export function detectApp(projectRoot: string): AppInput | undefined {
   return {
     name: sanitizeName(path.basename(projectRoot)) || "app",
     cwd: projectRoot,
-    runtime: { name: rt.name },
+    framework: { name: rt.name },
   };
 }

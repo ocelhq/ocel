@@ -1138,9 +1138,9 @@ func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {
 	t.Setenv("PORT", "")
 	root := t.TempDir()
 	cfg := &projectconfig.Config{Dir: root, Apps: []projectconfig.App{
-		{Name: "web", Path: filepath.Join("apps", "web"), Folder: "/web", Runtime: projectconfig.Runtime{Name: providerkit.RuntimeNext}},
-		{Name: "api", Path: filepath.Join("apps", "api"), Folder: "/api", Runtime: projectconfig.Runtime{Name: providerkit.RuntimeGo}},
-		{Name: "webhooks", Path: filepath.Join("apps", "web-hooks"), Runtime: projectconfig.Runtime{Name: providerkit.RuntimePython}},
+		{Name: "web", Path: filepath.Join("apps", "web"), Folder: "/web", Framework: projectconfig.Framework{Name: providerkit.FrameworkNext}},
+		{Name: "api", Path: filepath.Join("apps", "api"), Folder: "/api", Framework: projectconfig.Framework{Name: providerkit.FrameworkGo}},
+		{Name: "webhooks", Path: filepath.Join("apps", "web-hooks"), Framework: projectconfig.Framework{Name: providerkit.FrameworkPython}},
 		{Name: "store", Path: filepath.Join("apps", "store"), Folder: "/store", Compute: string(providerkit.ComputeContainer)},
 		{Name: "worker", Path: filepath.Join("apps", "worker"), Folder: "/worker", Compute: string(providerkit.ComputeContainer)},
 	}}

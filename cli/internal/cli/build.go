@@ -87,13 +87,13 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 
 func builtInClients(cfg *projectconfig.Config, urls map[string]string) []clientenv.App {
 	if len(cfg.Apps) == 0 {
-		bundle := discovery.ClientBundle(envwire.RootRuntime, cfg.Dir)
+		bundle := discovery.ClientBundle(envwire.RootFramework, cfg.Dir)
 		return []clientenv.App{{Dir: cfg.Dir, ClientBundle: bundle, Variables: appurl.Variables(bundle, urls[envwire.RootApp])}}
 	}
 	apps := make([]clientenv.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		dir := filepath.Join(cfg.Dir, a.Path)
-		bundle := discovery.ClientBundle(a.Runtime.Name, dir)
+		bundle := discovery.ClientBundle(a.Framework.Name, dir)
 		apps = append(apps, clientenv.App{
 			Name:         a.Name,
 			Dir:          dir,

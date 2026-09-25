@@ -105,8 +105,8 @@ func TestPrepend(t *testing.T) {
 	t.Parallel()
 
 	cfg := &projectconfig.Config{Apps: []projectconfig.App{
-		{Name: "web", Runtime: projectconfig.Runtime{Name: providerkit.RuntimeNext}},
-		{Name: "api", Runtime: projectconfig.Runtime{Name: providerkit.RuntimeGo}},
+		{Name: "web", Framework: projectconfig.Framework{Name: providerkit.FrameworkNext}},
+		{Name: "api", Framework: projectconfig.Framework{Name: providerkit.FrameworkGo}},
 		{Name: "docs"},
 	}}
 	byApp := map[string][]manifestbuilder.Variable{
@@ -154,7 +154,7 @@ func TestBuildEnv(t *testing.T) {
 		t.Errorf("build env %s = %q, want %q: an app `apps` does not name is built by the node builder", providerkit.ClientURLEnvName, got, want)
 	}
 
-	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "api", Runtime: projectconfig.Runtime{Name: providerkit.RuntimePython}}}}
+	cfg := &projectconfig.Config{Apps: []projectconfig.App{{Name: "api", Framework: projectconfig.Framework{Name: providerkit.FrameworkPython}}}}
 	if got := appurl.BuildEnv(cfg, map[string]string{"api": "https://api.acme.com"})["api"]; !maps.Equal(got, map[string]string{constants.AppURLEnvName: "https://api.acme.com"}) {
 		t.Errorf("build env = %v, want only %s for a python app", got, constants.AppURLEnvName)
 	}

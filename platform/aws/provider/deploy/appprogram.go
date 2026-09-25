@@ -81,7 +81,7 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformPatc
 	logical := make([]string, 0, len(app.Functions))
 	vpcAccess := false
 	for _, spec := range app.Functions {
-		declared, err := translateFunctionSpec(app.Runtime, spec)
+		declared, err := translateFunctionSpec(app.Framework, spec)
 		if err != nil {
 			return nil, err
 		}
@@ -134,7 +134,7 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformPatc
 
 	r.served.plan(r, app.App, logical, bytecode)
 
-	sets, delivery, err := r.assetSets(plan, app.App, app.Runtime, bundle, cache)
+	sets, delivery, err := r.assetSets(plan, app.App, app.Framework, bundle, cache)
 	if err != nil {
 		return nil, err
 	}

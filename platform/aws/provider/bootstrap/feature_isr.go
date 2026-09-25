@@ -8,7 +8,7 @@ import (
 var isrFeature = feature{
 	name:       FeatureISR,
 	summary:    "incremental static regeneration — queue, revalidator, invalidator",
-	needs:      []string{needsRuntimePrefix + "next"},
+	needs:      []string{needsFrameworkPrefix + "next"},
 	template:   isrTemplate,
 	payloads:   isrPayloads,
 	placements: isrPlacements,

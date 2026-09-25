@@ -21,7 +21,7 @@ import (
 
 const RootApp = "this project's app"
 
-const RootRuntime = providerkit.RuntimeNode
+const RootFramework = providerkit.FrameworkNode
 
 func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error) {
 	assets, err := node.VarsUI()
@@ -106,14 +106,14 @@ func DevScope(cfg *projectconfig.Config) envgate.Scope {
 
 func Apps(cfg *projectconfig.Config) []envgate.App {
 	if len(cfg.Apps) == 0 {
-		return []envgate.App{{Name: RootApp, ClientBundle: discovery.ClientBundle(RootRuntime, cfg.Dir)}}
+		return []envgate.App{{Name: RootApp, ClientBundle: discovery.ClientBundle(RootFramework, cfg.Dir)}}
 	}
 	apps := make([]envgate.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
 		apps = append(apps, envgate.App{
 			Name:         a.Name,
 			Folder:       a.Folder,
-			ClientBundle: discovery.ClientBundle(a.Runtime.Name, filepath.Join(cfg.Dir, a.Path)),
+			ClientBundle: discovery.ClientBundle(a.Framework.Name, filepath.Join(cfg.Dir, a.Path)),
 		})
 	}
 	return apps

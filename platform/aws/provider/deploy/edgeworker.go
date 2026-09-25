@@ -23,16 +23,16 @@ func manifestApps(manifest *contractv1.Manifest) []*contractv1.ManifestApp {
 		if name := fn.GetApp(); !seen[name] {
 			seen[name] = true
 			apps = append(apps, &contractv1.ManifestApp{
-				Name:    name,
-				Runtime: fn.GetRuntime(),
-				Compute: string(providerkit.ComputeServerless),
+				Name:      name,
+				Framework: fn.GetFramework(),
+				Compute:   string(providerkit.ComputeServerless),
 			})
 		}
 	}
 	return apps
 }
 
-const runtimeNext = providerkit.RuntimeNext
+const runtimeNext = providerkit.FrameworkNext
 
 const appsDirName = "apps"
 

@@ -42,8 +42,8 @@ func shapeRequest(t *testing.T) providerkit.ShapeRequest {
 			Env:   "prod",
 			Infra: naming.InfraStack("prod"),
 			Apps: []providerkit.AppEntry{
-				{App: "web", Stack: naming.AppStack("prod", "web", release), Manifest: &contractv1.ManifestApp{Name: "web", Runtime: &contractv1.Runtime{Name: "next"}, Compute: "serverless"}},
-				{App: "api", Stack: naming.AppStack("prod", "api", release), Manifest: &contractv1.ManifestApp{Name: "api", Runtime: &contractv1.Runtime{Name: "go"}, Compute: "container"}},
+				{App: "web", Stack: naming.AppStack("prod", "web", release), Manifest: &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: "next"}, Compute: "serverless"}},
+				{App: "api", Stack: naming.AppStack("prod", "api", release), Manifest: &contractv1.ManifestApp{Name: "api", Framework: &contractv1.Framework{Name: "go"}, Compute: "container"}},
 			},
 		},
 		Resources: []providerkit.Resource{

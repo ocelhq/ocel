@@ -42,7 +42,7 @@ func TestResolveReadsJSONWithoutNode(t *testing.T) {
 	if string(cfg.Provider.Options) != `{"region":"eu-west-2"}` {
 		t.Fatalf("options = %s", cfg.Provider.Options)
 	}
-	if len(cfg.Apps) != 1 || cfg.Apps[0].Runtime.Name != "go" {
+	if len(cfg.Apps) != 1 || cfg.Apps[0].Framework.Name != "go" {
 		t.Fatalf("apps = %+v", cfg.Apps)
 	}
 	if cfg.Path != filepath.Join(dir, DefaultFileName) {

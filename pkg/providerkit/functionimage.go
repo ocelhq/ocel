@@ -17,7 +17,7 @@ import (
 
 const FunctionImageRoot = "/ocel/app"
 
-func FunctionImage(base v1.Image, runtime Framework, dir string, overlay map[string][]byte) (v1.Image, error) {
+func FunctionImage(base v1.Image, framework Framework, dir string, overlay map[string][]byte) (v1.Image, error) {
 	rels, err := artifactFiles(dir)
 	if err != nil {
 		return nil, err
@@ -44,7 +44,7 @@ func FunctionImage(base v1.Image, runtime Framework, dir string, overlay map[str
 	if err != nil {
 		return nil, err
 	}
-	command, err := functionCommand(runtime, staged)
+	command, err := functionCommand(framework, staged)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func FunctionImage(base v1.Image, runtime Framework, dir string, overlay map[str
 	config.Cmd = command
 	config.WorkingDir = FunctionImageRoot
 	config.Env = boundPort(config.Env)
-	if BootsThroughRuntime(runtime) {
+	if BootsThroughRuntime(framework) {
 		config.Env = append(config.Env, servedHandler(staged))
 	}
 	return mutate.Config(appended, config)
@@ -76,8 +76,8 @@ const NodeRuntimePath = NodeRuntimeRoot + "/entrypoint.mjs"
 
 const HandlerName = "OCEL_HANDLER"
 
-func BootsThroughRuntime(runtime Framework) bool {
-	return runtime.Name == RuntimeNode || runtime.Name == RuntimeNext
+func BootsThroughRuntime(framework Framework) bool {
+	return framework.Name == FrameworkNode || framework.Name == FrameworkNext
 }
 
 func servedHandler(staged FunctionConfig) string {
@@ -95,16 +95,16 @@ func boundPort(env []string) []string {
 	return append(kept, InjectedPortName+"="+InjectedPortText)
 }
 
-func functionCommand(runtime Framework, staged FunctionConfig) ([]string, error) {
+func functionCommand(framework Framework, staged FunctionConfig) ([]string, error) {
 	switch {
 	case len(staged.Command) > 0:
 		return staged.Command, nil
-	case BootsThroughRuntime(runtime):
+	case BootsThroughRuntime(framework):
 		return []string{"node", NodeRuntimePath}, nil
 	default:
 		return nil, Refuse(CodeInvalid,
 			"the %s function staged at %s names no command to run, and only a node function boots through a runtime this image could run in its place",
-			runtime.Name, staged.ID)
+			framework.Name, staged.ID)
 	}
 }
 

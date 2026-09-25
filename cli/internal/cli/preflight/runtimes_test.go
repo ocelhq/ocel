@@ -26,24 +26,24 @@ func TestProjectRuntimes(t *testing.T) {
 		{
 			name: "each app's runtime is named",
 			cfg: &projectconfig.Config{Apps: []projectconfig.App{
-				{Runtime: projectconfig.Runtime{Name: "next"}},
-				{Runtime: projectconfig.Runtime{Name: "node"}},
+				{Framework: projectconfig.Framework{Name: "next"}},
+				{Framework: projectconfig.Framework{Name: "node"}},
 			}},
 			want: []string{"next", "node"},
 		},
 		{
 			name: "an arch does not split one runtime in two",
 			cfg: &projectconfig.Config{Apps: []projectconfig.App{
-				{Runtime: projectconfig.Runtime{Name: "next"}},
-				{Runtime: projectconfig.Runtime{Name: "next", Arch: "x86_64"}},
+				{Framework: projectconfig.Framework{Name: "next"}},
+				{Framework: projectconfig.Framework{Name: "next", Arch: "x86_64"}},
 			}},
 			want: []string{"next"},
 		},
 		{
 			name: "two apps on one runtime name it once",
 			cfg: &projectconfig.Config{Apps: []projectconfig.App{
-				{Runtime: projectconfig.Runtime{Name: "next"}},
-				{Runtime: projectconfig.Runtime{Name: "next"}},
+				{Framework: projectconfig.Framework{Name: "next"}},
+				{Framework: projectconfig.Framework{Name: "next"}},
 			}},
 			want: []string{"next"},
 		},
@@ -51,7 +51,7 @@ func TestProjectRuntimes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := Runtimes(tc.cfg)
+			got := Frameworks(tc.cfg)
 			if !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("Runtimes = %v, want %v", got, tc.want)
 			}

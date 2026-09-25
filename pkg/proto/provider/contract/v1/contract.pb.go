@@ -1265,7 +1265,7 @@ func (x *TierDomains) GetHostnames() []string {
 	return nil
 }
 
-type Runtime struct {
+type Framework struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Arch          string                 `protobuf:"bytes,2,opt,name=arch,proto3" json:"arch,omitempty"`
@@ -1273,20 +1273,20 @@ type Runtime struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *Runtime) Reset() {
-	*x = Runtime{}
+func (x *Framework) Reset() {
+	*x = Framework{}
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *Runtime) String() string {
+func (x *Framework) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*Runtime) ProtoMessage() {}
+func (*Framework) ProtoMessage() {}
 
-func (x *Runtime) ProtoReflect() protoreflect.Message {
+func (x *Framework) ProtoReflect() protoreflect.Message {
 	mi := &file_provider_contract_v1_contract_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -1298,19 +1298,19 @@ func (x *Runtime) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use Runtime.ProtoReflect.Descriptor instead.
-func (*Runtime) Descriptor() ([]byte, []int) {
+// Deprecated: Use Framework.ProtoReflect.Descriptor instead.
+func (*Framework) Descriptor() ([]byte, []int) {
 	return file_provider_contract_v1_contract_proto_rawDescGZIP(), []int{15}
 }
 
-func (x *Runtime) GetName() string {
+func (x *Framework) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *Runtime) GetArch() string {
+func (x *Framework) GetArch() string {
 	if x != nil {
 		return x.Arch
 	}
@@ -1320,7 +1320,7 @@ func (x *Runtime) GetArch() string {
 type ManifestApp struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Runtime       *Runtime               `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	Framework     *Framework             `protobuf:"bytes,2,opt,name=framework,proto3" json:"framework,omitempty"`
 	Domains       []*TierDomains         `protobuf:"bytes,3,rep,name=domains,proto3" json:"domains,omitempty"`
 	Variables     []*ManifestVariable    `protobuf:"bytes,4,rep,name=variables,proto3" json:"variables,omitempty"`
 	Folder        string                 `protobuf:"bytes,5,opt,name=folder,proto3" json:"folder,omitempty"`
@@ -1368,9 +1368,9 @@ func (x *ManifestApp) GetName() string {
 	return ""
 }
 
-func (x *ManifestApp) GetRuntime() *Runtime {
+func (x *ManifestApp) GetFramework() *Framework {
 	if x != nil {
-		return x.Runtime
+		return x.Framework
 	}
 	return nil
 }
@@ -1504,7 +1504,7 @@ func (x *ManifestVariable) GetDescription() string {
 type ManifestFunction struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	LogicalName   string                 `protobuf:"bytes,1,opt,name=logical_name,json=logicalName,proto3" json:"logical_name,omitempty"`
-	Runtime       *Runtime               `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	Framework     *Framework             `protobuf:"bytes,2,opt,name=framework,proto3" json:"framework,omitempty"`
 	Handler       string                 `protobuf:"bytes,3,opt,name=handler,proto3" json:"handler,omitempty"`
 	ArtifactPath  string                 `protobuf:"bytes,4,opt,name=artifact_path,json=artifactPath,proto3" json:"artifact_path,omitempty"`
 	RouteId       string                 `protobuf:"bytes,6,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
@@ -1550,9 +1550,9 @@ func (x *ManifestFunction) GetLogicalName() string {
 	return ""
 }
 
-func (x *ManifestFunction) GetRuntime() *Runtime {
+func (x *ManifestFunction) GetFramework() *Framework {
 	if x != nil {
-		return x.Runtime
+		return x.Framework
 	}
 	return nil
 }
@@ -3022,7 +3022,7 @@ type PreflightRequest struct {
 	Slug            string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`
 	Domains         []string               `protobuf:"bytes,3,rep,name=domains,proto3" json:"domains,omitempty"`
 	Edge            *EdgeSelection         `protobuf:"bytes,4,opt,name=edge,proto3" json:"edge,omitempty"`
-	Runtimes        []string               `protobuf:"bytes,6,rep,name=runtimes,proto3" json:"runtimes,omitempty"`
+	Frameworks      []string               `protobuf:"bytes,6,rep,name=frameworks,proto3" json:"frameworks,omitempty"`
 	Standing        bool                   `protobuf:"varint,7,opt,name=standing,proto3" json:"standing,omitempty"`
 	StandingDomains []string               `protobuf:"bytes,8,rep,name=standing_domains,json=standingDomains,proto3" json:"standing_domains,omitempty"`
 	Containers      []*ContainerApp        `protobuf:"bytes,9,rep,name=containers,proto3" json:"containers,omitempty"`
@@ -3088,9 +3088,9 @@ func (x *PreflightRequest) GetEdge() *EdgeSelection {
 	return nil
 }
 
-func (x *PreflightRequest) GetRuntimes() []string {
+func (x *PreflightRequest) GetFrameworks() []string {
 	if x != nil {
-		return x.Runtimes
+		return x.Frameworks
 	}
 	return nil
 }
@@ -4819,13 +4819,13 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\vTierDomains\x12;\n" +
 	"\x04tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\n" +
 	"\xbaH\a\x82\x01\x04\x10\x01 \x00R\x04tier\x12\x1c\n" +
-	"\thostnames\x18\x02 \x03(\tR\thostnames\"o\n" +
-	"\aRuntime\x127\n" +
+	"\thostnames\x18\x02 \x03(\tR\thostnames\"q\n" +
+	"\tFramework\x127\n" +
 	"\x04name\x18\x01 \x01(\tB#\xbaH r\x1eR\x04nodeR\x04nextR\x02goR\x06pythonR\x04rustR\x04name\x12+\n" +
-	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\x95\x03\n" +
+	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\x9b\x03\n" +
 	"\vManifestApp\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x127\n" +
-	"\aruntime\x18\x02 \x01(\v2\x1d.provider.contract.v1.RuntimeR\aruntime\x12;\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12=\n" +
+	"\tframework\x18\x02 \x01(\v2\x1f.provider.contract.v1.FrameworkR\tframework\x12;\n" +
 	"\adomains\x18\x03 \x03(\v2!.provider.contract.v1.TierDomainsR\adomains\x12D\n" +
 	"\tvariables\x18\x04 \x03(\v2&.provider.contract.v1.ManifestVariableR\tvariables\x124\n" +
 	"\x06folder\x18\x05 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12#\n" +
@@ -4839,10 +4839,10 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\x05value\x18\x03 \x01(\tB\x03\x80\x01\x01R\x05value\x124\n" +
 	"\x06folder\x18\x04 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12\x18\n" +
 	"\aversion\x18\x05 \x01(\x03R\aversion\x12 \n" +
-	"\vdescription\x18\x06 \x01(\tR\vdescription\"\xda\x01\n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\"\xe0\x01\n" +
 	"\x10ManifestFunction\x12!\n" +
-	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x127\n" +
-	"\aruntime\x18\x02 \x01(\v2\x1d.provider.contract.v1.RuntimeR\aruntime\x12\x18\n" +
+	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12=\n" +
+	"\tframework\x18\x02 \x01(\v2\x1f.provider.contract.v1.FrameworkR\tframework\x12\x18\n" +
 	"\ahandler\x18\x03 \x01(\tR\ahandler\x12#\n" +
 	"\rartifact_path\x18\x04 \x01(\tR\fartifactPath\x12\x19\n" +
 	"\broute_id\x18\x06 \x01(\tR\arouteId\x12\x10\n" +
@@ -4957,13 +4957,15 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\tlifecycle\x18\x02 \x01(\x0e2 .common.environment.v1.LifecycleR\tlifecycle\x12\x14\n" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1d\n" +
 	"\n" +
-	"created_at\x18\x04 \x01(\x03R\tcreatedAt\"\x92\x03\n" +
+	"created_at\x18\x04 \x01(\x03R\tcreatedAt\"\x96\x03\n" +
 	"\x10PreflightRequest\x12J\n" +
 	"\rrequired_tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierB\b\xbaH\x05\x82\x01\x02\x10\x01R\frequiredTier\x128\n" +
 	"\x04slug\x18\x02 \x01(\tB$\xbaH!\xd8\x01\x01r\x1c\x18?2\x18^[a-z0-9]+(-[a-z0-9]+)*$R\x04slug\x12\x18\n" +
 	"\adomains\x18\x03 \x03(\tR\adomains\x127\n" +
-	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x1a\n" +
-	"\bruntimes\x18\x06 \x03(\tR\bruntimes\x12\x1a\n" +
+	"\x04edge\x18\x04 \x01(\v2#.provider.contract.v1.EdgeSelectionR\x04edge\x12\x1e\n" +
+	"\n" +
+	"frameworks\x18\x06 \x03(\tR\n" +
+	"frameworks\x12\x1a\n" +
 	"\bstanding\x18\a \x01(\bR\bstanding\x12)\n" +
 	"\x10standing_domains\x18\b \x03(\tR\x0fstandingDomains\x12B\n" +
 	"\n" +
@@ -5194,7 +5196,7 @@ var file_provider_contract_v1_contract_proto_goTypes = []any{
 	(*ManifestContainer)(nil),               // 17: provider.contract.v1.ManifestContainer
 	(*ManifestUsage)(nil),                   // 18: provider.contract.v1.ManifestUsage
 	(*TierDomains)(nil),                     // 19: provider.contract.v1.TierDomains
-	(*Runtime)(nil),                         // 20: provider.contract.v1.Runtime
+	(*Framework)(nil),                       // 20: provider.contract.v1.Framework
 	(*ManifestApp)(nil),                     // 21: provider.contract.v1.ManifestApp
 	(*ManifestVariable)(nil),                // 22: provider.contract.v1.ManifestVariable
 	(*ManifestFunction)(nil),                // 23: provider.contract.v1.ManifestFunction
@@ -5279,11 +5281,11 @@ var file_provider_contract_v1_contract_proto_depIdxs = []int32{
 	18,  // 15: provider.contract.v1.Manifest.usages:type_name -> provider.contract.v1.ManifestUsage
 	17,  // 16: provider.contract.v1.Manifest.containers:type_name -> provider.contract.v1.ManifestContainer
 	74,  // 17: provider.contract.v1.TierDomains.tier:type_name -> common.environment.v1.Tier
-	20,  // 18: provider.contract.v1.ManifestApp.runtime:type_name -> provider.contract.v1.Runtime
+	20,  // 18: provider.contract.v1.ManifestApp.framework:type_name -> provider.contract.v1.Framework
 	19,  // 19: provider.contract.v1.ManifestApp.domains:type_name -> provider.contract.v1.TierDomains
 	22,  // 20: provider.contract.v1.ManifestApp.variables:type_name -> provider.contract.v1.ManifestVariable
 	75,  // 21: provider.contract.v1.ManifestVariable.class:type_name -> app.resources.v1.VariableClass
-	20,  // 22: provider.contract.v1.ManifestFunction.runtime:type_name -> provider.contract.v1.Runtime
+	20,  // 22: provider.contract.v1.ManifestFunction.framework:type_name -> provider.contract.v1.Framework
 	76,  // 23: provider.contract.v1.ManifestResource.resource:type_name -> app.resources.v1.ResourceIdentifier
 	77,  // 24: provider.contract.v1.ManifestResource.postgres:type_name -> app.resources.v1.PostgresConfig
 	78,  // 25: provider.contract.v1.ManifestResource.bucket:type_name -> app.resources.v1.BucketConfig

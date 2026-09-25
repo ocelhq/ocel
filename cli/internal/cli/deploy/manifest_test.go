@@ -40,7 +40,7 @@ func TestANamedRuntimeTellsOcelWhichLanguageAnAppIs(t *testing.T) {
 
 	cfg := &projectconfig.Config{
 		Dir:  root,
-		Apps: []projectconfig.App{{Name: "web", Path: "server", Runtime: projectconfig.Runtime{Name: "python"}}},
+		Apps: []projectconfig.App{{Name: "web", Path: "server", Framework: projectconfig.Framework{Name: "python"}}},
 	}
 	apps, err := toAttributionApps(cfg, []manifestbuilder.Function{{App: "web"}}, "", "ocel.config.ts")
 	if err != nil {
@@ -59,7 +59,7 @@ func TestTheFixturePythonAppIsReadAsPython(t *testing.T) {
 
 	cfg := &projectconfig.Config{
 		Dir:  root,
-		Apps: []projectconfig.App{{Name: "web", Path: "server", Runtime: projectconfig.Runtime{Name: "python"}}},
+		Apps: []projectconfig.App{{Name: "web", Path: "server", Framework: projectconfig.Framework{Name: "python"}}},
 	}
 	apps, err := toAttributionApps(cfg, []manifestbuilder.Function{{App: "web"}}, "", "ocel.config.ts")
 	if err != nil {

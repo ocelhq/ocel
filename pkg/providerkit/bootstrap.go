@@ -46,8 +46,8 @@ type Feature struct {
 }
 
 const (
-	NeedsRuntimePrefix = "runtime:"
-	NeedsEdgePrefix    = "edge:"
+	NeedsFrameworkPrefix = "framework:"
+	NeedsEdgePrefix      = "edge:"
 )
 
 type BootstrapRequest struct {

@@ -24,9 +24,9 @@ func (c Compilation) compileRust(ctx context.Context) error {
 	if err != nil || !manifest.Mode().IsRegular() {
 		return fmt.Errorf("app %q runs on the rust runtime and %s holds no %s: an app is compiled from the crate rooted in its own directory", c.App, c.Source, cargoManifestFile)
 	}
-	target, runs := providerkit.RustTarget(c.Runtime.Arch)
+	target, runs := providerkit.RustTarget(c.Framework.Arch)
 	if !runs {
-		return fmt.Errorf("app %q asks to be compiled for %q, which names no architecture rust builds for", c.App, c.Runtime.Arch)
+		return fmt.Errorf("app %q asks to be compiled for %q, which names no architecture rust builds for", c.App, c.Framework.Arch)
 	}
 	if _, err := exec.LookPath("cargo"); err != nil {
 		return fmt.Errorf("app %q runs on the rust runtime and no cargo is on PATH: %w", c.App, err)
@@ -71,7 +71,7 @@ func (c Compilation) compileRust(ctx context.Context) error {
 	if err := copyFile(built, filepath.Join(c.FuncDir, c.App), 0o755); err != nil {
 		return fmt.Errorf("app %q: cargo reported a build and left no binary at %s: %w", c.App, built, err)
 	}
-	return describeArtifact(c.App, c.Runtime, c.App, []string{"./" + c.App}, c.FuncDir, c.AppDir)
+	return describeArtifact(c.App, c.Framework, c.App, []string{"./" + c.App}, c.FuncDir, c.AppDir)
 }
 
 func cargoConfigNamesLinker(workspaceRoot, target string) bool {

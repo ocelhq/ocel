@@ -71,14 +71,14 @@ describe("buildApp", () => {
 
     const config = JSON.parse(readFileSync(path.join(funcDir, "config.json"), "utf8"));
     expect(config).toEqual({
-      runtime: { name: "node" },
+      framework: { name: "node" },
       handler: "src/server.js",
       id: NODE_ENTRY_ROUTE_ID,
       app: "api",
     });
 
     expect(summary.name).toBe("api");
-    expect(summary.runtime).toEqual({ name: "node" });
+    expect(summary.framework).toEqual({ name: "node" });
     expect(summary.handler).toBe("src/server.js");
     expect(summary.artifactPath).toBe(path.join("apps", "api", "functions", "index.func"));
     expect(summary.strategy).toBe("trace");
@@ -355,7 +355,7 @@ describe("a node app is one server behind one origin", () => {
     const summaries = await buildApp({ name: "api", cwd: nodeApp("express") }, { outDir });
 
     expect(summaries).toHaveLength(1);
-    expect(summaries[0]?.runtime).toEqual({ name: "node" });
+    expect(summaries[0]?.framework).toEqual({ name: "node" });
     expect(summaries[0]?.strategy).toBe("trace");
     expect(readdirSync(path.join(appOutDir(outDir, "api"), "functions"))).toEqual(["index.func"]);
   });
@@ -368,7 +368,7 @@ describe("a node app is one server behind one origin", () => {
     const summaries = await buildApp({ name: "api", cwd: nodeApp("hono") }, { outDir });
 
     expect(summaries).toHaveLength(1);
-    expect(summaries[0]?.runtime).toEqual({ name: "node" });
+    expect(summaries[0]?.framework).toEqual({ name: "node" });
     expect(summaries[0]?.strategy).toBe("bundle");
     expect(summaries[0]?.artifactPath).toBe(path.join("apps", "api", "functions", "index.func"));
   });
@@ -378,15 +378,15 @@ describe("a node app is one server behind one origin", () => {
     dirs.push(outDir);
 
     const [summary] = await buildApp(
-      { name: "api", cwd: fixtureDir, runtime: { name: "node", arch: "arm64" } },
+      { name: "api", cwd: fixtureDir, framework: { name: "node", arch: "arm64" } },
       { outDir },
     );
 
-    expect(summary?.runtime).toEqual({ name: "node", arch: "arm64" });
+    expect(summary?.framework).toEqual({ name: "node", arch: "arm64" });
     const config = JSON.parse(
       readFileSync(path.join(appFuncDir(outDir, "api"), "config.json"), "utf8"),
     );
-    expect(config.runtime).toEqual({ name: "node", arch: "arm64" });
+    expect(config.framework).toEqual({ name: "node", arch: "arm64" });
   });
 });
 
@@ -403,7 +403,7 @@ describe("writeBuildPlan", () => {
       functions: [
         {
           name: "api",
-          runtime: { name: "node" },
+          framework: { name: "node" },
           handler: BUNDLE_HANDLER,
           artifactPath: path.join("apps", "api", "functions", "index.func"),
           strategy: "bundle",
@@ -425,7 +425,7 @@ describe("build strategy", () => {
 
     expect(summary).toEqual({
       name: "api",
-      runtime: { name: "node" },
+      framework: { name: "node" },
       handler: BUNDLE_HANDLER,
       artifactPath: path.join("apps", "api", "functions", "index.func"),
       strategy: "bundle",
@@ -470,7 +470,7 @@ describe("runtime resolution", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "nb-nort-"));
     dirs.push(dir);
     await expect(buildApp({ name: "x", cwd: dir }, { outDir: dir })).rejects.toThrow(
-      /could not detect a runtime/,
+      /could not detect a framework in .*; set "framework" in the app config/,
     );
   });
 });
@@ -486,7 +486,7 @@ describe("detectApp", () => {
     expect(detectApp(dir)).toEqual({
       name: sanitizeName(path.basename(dir)),
       cwd: dir,
-      runtime: { name: "node" },
+      framework: { name: "node" },
     });
   });
   it("returns undefined when no runtime is detected", () => {

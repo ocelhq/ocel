@@ -37,7 +37,7 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 	writeGoApp(t, root, "apps/api")
 	cfg := &projectconfig.Config{
 		Dir:  root,
-		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Runtime: projectconfig.Runtime{Name: "go"}}},
+		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: projectconfig.Framework{Name: "go"}}},
 	}
 
 	ran := false
@@ -58,7 +58,7 @@ func TestAGoAppIsCompiledHereRatherThanHandedToTheNodeBuilder(t *testing.T) {
 	}
 	assertFunctions(t, "CollectFunctions", fns, []manifestbuilder.Function{{
 		Route:        "index",
-		Runtime:      manifestbuilder.Runtime{Name: "go", Arch: providerkit.ArchX8664},
+		Framework:    manifestbuilder.Framework{Name: "go", Arch: providerkit.ArchX8664},
 		Handler:      "api",
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",

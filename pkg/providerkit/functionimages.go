@@ -64,20 +64,20 @@ func (r *deployRun) imageFunction(
 	if err != nil {
 		return ImagePush{}, err
 	}
-	runtime := Framework{Name: fn.GetRuntime().GetName(), Arch: fn.GetRuntime().GetArch()}
-	base, err := hooks.FunctionBaseImage(ctx, runtime)
+	framework := Framework{Name: fn.GetFramework().GetName(), Arch: fn.GetFramework().GetArch()}
+	base, err := hooks.FunctionBaseImage(ctx, framework)
 	if err != nil {
-		return ImagePush{}, fmt.Errorf("read the base image %s's %s function is built on: %w", name, runtime.Name, err)
+		return ImagePush{}, fmt.Errorf("read the base image %s's %s function is built on: %w", name, framework.Name, err)
 	}
-	carried, err := runtimeOverlay(ctx, hooks, runtime, name, overlay)
+	carried, err := runtimeOverlay(ctx, hooks, framework, name, overlay)
 	if err != nil {
 		return ImagePush{}, err
 	}
-	image, err := FunctionImage(base, runtime, dir, carried)
+	image, err := FunctionImage(base, framework, dir, carried)
 	if err != nil {
 		return ImagePush{}, fmt.Errorf("build %s's image: %w", name, err)
 	}
-	image, err = r.wrapFunction(ctx, name, runtime, image)
+	image, err = r.wrapFunction(ctx, name, framework, image)
 	if err != nil {
 		return ImagePush{}, err
 	}
@@ -97,12 +97,12 @@ func (r *deployRun) imageFunction(
 	}, nil
 }
 
-func (r *deployRun) wrapFunction(ctx context.Context, name string, runtime Framework, image v1.Image) (v1.Image, error) {
-	arch, known := GoArch(runtime.Arch)
+func (r *deployRun) wrapFunction(ctx context.Context, name string, framework Framework, image v1.Image) (v1.Image, error) {
+	arch, known := GoArch(framework.Arch)
 	if !known {
 		return nil, Refuse(CodeInvalid,
 			"%s is built for %s, and this provider carries a container runtime for %s and %s alone",
-			name, runtime.Arch, ArchX8664, ArchARM64)
+			name, framework.Arch, ArchX8664, ArchARM64)
 	}
 	body, err := r.provider.Runtime().Binary(ctx, arch)
 	if err != nil {
@@ -122,20 +122,20 @@ func (r *deployRun) wrapFunction(ctx context.Context, name string, runtime Frame
 func runtimeOverlay(
 	ctx context.Context,
 	hooks Hooks,
-	runtime Framework,
+	framework Framework,
 	name string,
 	overlay map[string][]byte,
 ) (map[string][]byte, error) {
-	if !BootsThroughRuntime(runtime) {
+	if !BootsThroughRuntime(framework) {
 		return overlay, nil
 	}
-	body, err := hooks.FunctionRuntime(ctx, runtime)
+	body, err := hooks.FunctionRuntime(ctx, framework)
 	if err != nil {
 		return nil, fmt.Errorf("read the runtime %s boots through: %w", name, err)
 	}
 	if len(body) == 0 {
 		return nil, Refuse(CodeNotReady,
-			"this provider carries no runtime for a %s function to boot through, and %s is one", runtime.Name, name)
+			"this provider carries no runtime for a %s function to boot through, and %s is one", framework.Name, name)
 	}
 	carried := make(map[string][]byte, len(overlay)+1)
 	maps.Copy(carried, overlay)

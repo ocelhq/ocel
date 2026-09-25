@@ -50,17 +50,17 @@ type Health struct {
 	Path string
 }
 
-type Runtime struct {
+type Framework struct {
 	Name string
 	Arch string
 }
 
-func (r Runtime) Architecture() string { return providerkit.Architecture(r.Arch) }
+func (r Framework) Architecture() string { return providerkit.Architecture(r.Arch) }
 
 type App struct {
 	Name       string
 	Path       string
-	Runtime    Runtime
+	Framework  Framework
 	Entrypoint string
 	Domains    map[string][]string
 	Compute    string
@@ -365,7 +365,7 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 		if err != nil {
 			return nil, fmt.Errorf("app %q: %w", a.Name, err)
 		}
-		runtime, err := resolveRuntime(a.Name, filepath.Join(dir, filepath.FromSlash(a.Path)), a.Framework, a.Arch, a.Compute)
+		framework, err := resolveFramework(a.Name, filepath.Join(dir, filepath.FromSlash(a.Path)), a.Framework, a.Arch, a.Compute)
 		if err != nil {
 			return nil, err
 		}
@@ -380,7 +380,7 @@ func normalizeApps(raw []configdoc.AppConfig, dir string) ([]App, error) {
 		apps = append(apps, App{
 			Name:       a.Name,
 			Path:       a.Path,
-			Runtime:    runtime,
+			Framework:  framework,
 			Entrypoint: a.Entrypoint,
 			Domains:    domains,
 			Compute:    a.Compute,
@@ -426,14 +426,14 @@ func normalizeHealth(a configdoc.AppConfig) (*Health, error) {
 	return &Health{Path: path}, nil
 }
 
-func resolveRuntime(app, dir, framework, arch, compute string) (Runtime, error) {
+func resolveFramework(app, dir, framework, arch, compute string) (Framework, error) {
 	name, err := frameworkOf(app, dir, strings.TrimSpace(framework), strings.TrimSpace(compute))
 	if err != nil {
-		return Runtime{}, err
+		return Framework{}, err
 	}
 	architecture, err := architectureOf(app, strings.TrimSpace(arch))
 	if err != nil {
-		return Runtime{}, err
+		return Framework{}, err
 	}
-	return Runtime{Name: name, Arch: architecture}, nil
+	return Framework{Name: name, Arch: architecture}, nil
 }

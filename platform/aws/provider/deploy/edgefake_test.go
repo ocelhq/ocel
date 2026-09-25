@@ -136,7 +136,7 @@ func (f *recordingEdge) FindApp(_ context.Context, name string) (bool, error) {
 	return slices.ContainsFunc(f.deployed, func(app edge.AppDeployment) bool { return app.Name == name }), nil
 }
 
-func (f *recordingEdge) CodeRuntime() (string, []string) { return f.compatDate, f.compatFlags }
+func (f *recordingEdge) Compatibility() (string, []string) { return f.compatDate, f.compatFlags }
 
 func (f *recordingEdge) DomainOwner(_ context.Context, hostname string) (string, error) {
 	return f.bound[hostname], nil

@@ -51,10 +51,10 @@ func stagedProject(t *testing.T, apps ...string) {
 	for _, app := range apps {
 		dir := filepath.Join(providerkit.ArtifactRoot(), filepath.FromSlash(appArtifactPath(app)))
 		raw, err := json.Marshal(map[string]any{
-			"runtime": map[string]string{"name": "node", "arch": "x86_64"},
-			"handler": "index.handler",
-			"id":      "server",
-			"app":     app,
+			"framework": map[string]string{"name": "node", "arch": "x86_64"},
+			"handler":   "index.handler",
+			"id":        "server",
+			"app":       app,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -67,7 +67,7 @@ func stagedProject(t *testing.T, apps ...string) {
 
 func imagingDeployRequest() *contractv1.DeployRequest {
 	req := namingARegistry(deployRequest())
-	req.Manifest.Functions[0].Runtime = &contractv1.Runtime{Name: "node", Arch: "x86_64"}
+	req.Manifest.Functions[0].Framework = &contractv1.Framework{Name: "node", Arch: "x86_64"}
 	return req
 }
 

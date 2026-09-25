@@ -22,7 +22,7 @@ func TestServeDescriptorRoundTripsNeeds(t *testing.T) {
 	}
 
 	want := ServeDescriptor{
-		Runtime:     "next",
+		Framework:   "next",
 		BuildID:     "b1",
 		EdgeRouting: true,
 		Needs: map[Need]NeedDetail{

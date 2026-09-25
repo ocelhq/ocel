@@ -7,8 +7,8 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 
-func (p *Provider) FunctionRuntime(_ context.Context, runtime providerkit.Framework) ([]byte, error) {
-	if !providerkit.BootsThroughRuntime(runtime) {
+func (p *Provider) FunctionRuntime(_ context.Context, framework providerkit.Framework) ([]byte, error) {
+	if !providerkit.BootsThroughRuntime(framework) {
 		return nil, nil
 	}
 	return payloads.NodeRuntime(), nil

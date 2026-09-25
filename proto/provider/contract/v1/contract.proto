@@ -204,7 +204,7 @@ message TierDomains {
   repeated string hostnames = 2;
 }
 
-message Runtime {
+message Framework {
   string name = 1 [(buf.validate.field).string = {in: ["node", "next", "go", "python", "rust"]}];
 
   string arch = 2 [(buf.validate.field).string = {in: ["x86_64", "arm64"]}, (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE];
@@ -212,7 +212,7 @@ message Runtime {
 
 message ManifestApp {
   string name = 1;
-  Runtime runtime = 2;
+  Framework framework = 2;
   repeated TierDomains domains = 3;
 
   repeated ManifestVariable variables = 4;
@@ -241,7 +241,7 @@ message ManifestVariable {
 
 message ManifestFunction {
   string logical_name = 1;
-  Runtime runtime = 2;
+  Framework framework = 2;
   string handler = 3;
   string artifact_path = 4;
   string route_id = 6;
@@ -471,7 +471,7 @@ message PreflightRequest {
 
   EdgeSelection edge = 4;
 
-  repeated string runtimes = 6;
+  repeated string frameworks = 6;
 
   bool standing = 7;
 

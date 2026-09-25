@@ -590,7 +590,7 @@ func appSource(t *testing.T) edge.WorkerSource {
 	t.Helper()
 
 	root := t.TempDir()
-	descriptor, err := json.Marshal(edge.ServeDescriptor{Runtime: "next", BuildID: "conformance", EdgeRouting: true, Entry: "/"})
+	descriptor, err := json.Marshal(edge.ServeDescriptor{Framework: "next", BuildID: "conformance", EdgeRouting: true, Entry: "/"})
 	if err != nil {
 		t.Fatal(err)
 	}

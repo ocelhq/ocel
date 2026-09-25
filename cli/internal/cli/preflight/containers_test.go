@@ -10,9 +10,9 @@ func TestOnlyContainerAppsAreNamedEachWithTheArchitectureItDeclares(t *testing.T
 	t.Parallel()
 
 	cfg := &projectconfig.Config{Apps: []projectconfig.App{
-		{Name: "web", Compute: "container", Runtime: projectconfig.Runtime{Arch: "arm64"}},
+		{Name: "web", Compute: "container", Framework: projectconfig.Framework{Arch: "arm64"}},
 		{Name: "worker", Compute: "container"},
-		{Name: "api", Compute: "serverless", Runtime: projectconfig.Runtime{Name: "node", Arch: "arm64"}},
+		{Name: "api", Compute: "serverless", Framework: projectconfig.Framework{Name: "node", Arch: "arm64"}},
 		{Name: "site"},
 	}}
 

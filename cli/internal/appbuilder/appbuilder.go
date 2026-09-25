@@ -51,7 +51,7 @@ type buildPlan struct {
 
 type functionSummary struct {
 	Name         string                `json:"name"`
-	Runtime      providerkit.Framework `json:"runtime"`
+	Framework    providerkit.Framework `json:"framework"`
 	Handler      string                `json:"handler"`
 	ArtifactPath string                `json:"artifactPath"`
 	Strategy     string                `json:"strategy"`
@@ -70,19 +70,19 @@ type appInput struct {
 	Name       string            `json:"name"`
 	Cwd        string            `json:"cwd"`
 	Entrypoint string            `json:"entrypoint,omitempty"`
-	Runtime    *runtimeInput     `json:"runtime,omitempty"`
+	Framework  *frameworkInput   `json:"framework,omitempty"`
 	Env        map[string]string `json:"env,omitempty"`
 	Folder     string            `json:"folder,omitempty"`
 }
 
-func runtimeInputOf(runtime projectconfig.Runtime) *runtimeInput {
-	if runtime.Name == "" && runtime.Arch == "" {
+func frameworkInputOf(framework projectconfig.Framework) *frameworkInput {
+	if framework.Name == "" && framework.Arch == "" {
 		return nil
 	}
-	return &runtimeInput{Name: runtime.Name, Arch: runtime.Arch}
+	return &frameworkInput{Name: framework.Name, Arch: framework.Arch}
 }
 
-type runtimeInput struct {
+type frameworkInput struct {
 	Name string `json:"name,omitempty"`
 	Arch string `json:"arch,omitempty"`
 }
@@ -176,7 +176,7 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 		Apps:          make([]appInput, 0, len(cfg.Apps)),
 	}
 	for _, a := range packable(cfg.Apps) {
-		if compiledFromSource(a.Runtime.Name) {
+		if compiledFromSource(a.Framework.Name) {
 			if err := compile(ctx, cfg, a, outputDir, stderr); err != nil {
 				return err
 			}
@@ -186,7 +186,7 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 			Name:       a.Name,
 			Cwd:        filepath.Join(cfg.Dir, a.Path),
 			Entrypoint: a.Entrypoint,
-			Runtime:    runtimeInputOf(a.Runtime),
+			Framework:  frameworkInputOf(a.Framework),
 			Env:        withDeploymentID(envByApp[a.Name], deploymentIDs[a.Name]),
 			Folder:     a.Folder,
 		})
@@ -236,19 +236,19 @@ func (b Builder) Build(ctx context.Context, cfg *projectconfig.Config, envByApp 
 	return recordDetectedDeploymentID(cfg.Dir, outputDir, detectedID)
 }
 
-func compiledFromSource(runtime string) bool {
-	return runtime == providerkit.RuntimeGo || runtime == providerkit.RuntimePython || runtime == providerkit.RuntimeRust
+func compiledFromSource(framework string) bool {
+	return framework == providerkit.FrameworkGo || framework == providerkit.FrameworkPython || framework == providerkit.FrameworkRust
 }
 
 func compile(ctx context.Context, cfg *projectconfig.Config, a projectconfig.App, outputDir string, stderr io.Writer) error {
 	appDir := filepath.Join(outputDir, appsDirName, a.Name)
-	roots, err := discoveryRootsFor(cfg, a.Runtime.Name)
+	roots, err := discoveryRootsFor(cfg, a.Framework.Name)
 	if err != nil {
 		return err
 	}
 	return appbundler.Compile(ctx, appbundler.Compilation{
 		App:            a.Name,
-		Runtime:        providerkit.Framework{Name: a.Runtime.Name, Arch: a.Runtime.Architecture()},
+		Framework:      providerkit.Framework{Name: a.Framework.Name, Arch: a.Framework.Architecture()},
 		Source:         filepath.Join(cfg.Dir, a.Path),
 		Entrypoint:     a.Entrypoint,
 		FuncDir:        filepath.Join(appDir, functionsDirName, entryFuncDirName),
@@ -258,8 +258,8 @@ func compile(ctx context.Context, cfg *projectconfig.Config, a projectconfig.App
 	})
 }
 
-func discoveryRootsFor(cfg *projectconfig.Config, runtime string) ([]string, error) {
-	if runtime != providerkit.RuntimePython {
+func discoveryRootsFor(cfg *projectconfig.Config, framework string) ([]string, error) {
+	if framework != providerkit.FrameworkPython {
 		return nil, nil
 	}
 	roots, err := discovery.RootsOf(cfg)
@@ -338,7 +338,7 @@ func bundlePlanned(ctx context.Context, outputDir string, stderr io.Writer) erro
 		}
 		if err := appbundler.Bundle(ctx, appbundler.Target{
 			App:        filepath.Base(appDir),
-			Runtime:    fn.Runtime,
+			Framework:  fn.Framework,
 			Entrypoint: fn.Entrypoint,
 			FuncDir:    funcDir,
 			AppDir:     appDir,
@@ -497,13 +497,13 @@ func readFunction(outputDir, functionsDir, funcDir string) (manifestbuilder.Func
 	if err := json.Unmarshal(data, &fc); err != nil {
 		return manifestbuilder.Function{}, fmt.Errorf("%s: invalid %s: %w", configPath, configFileName, err)
 	}
-	if fc.Runtime.Name == "" || fc.Handler == "" || fc.App == "" {
+	if fc.Framework.Name == "" || fc.Handler == "" || fc.App == "" {
 		return manifestbuilder.Function{}, fmt.Errorf("%s: %s requires runtime, handler, and app", configPath, configFileName)
 	}
 
 	return manifestbuilder.Function{
 		Route:        route,
-		Runtime:      manifestbuilder.Runtime{Name: fc.Runtime.Name, Arch: fc.Runtime.Arch},
+		Framework:    manifestbuilder.Framework{Name: fc.Framework.Name, Arch: fc.Framework.Arch},
 		Handler:      fc.Handler,
 		ArtifactPath: filepath.ToSlash(artifactRel),
 		RouteID:      fc.ID,

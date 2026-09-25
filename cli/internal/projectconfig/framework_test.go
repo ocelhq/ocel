@@ -221,7 +221,7 @@ export default {
 		if err != nil {
 			t.Fatalf("Resolve: %v", err)
 		}
-		if got, want := cfg.Apps[0].Runtime, (Runtime{Name: "next"}); got != want {
+		if got, want := cfg.Apps[0].Framework, (Framework{Name: "next"}); got != want {
 			t.Fatalf("Apps[0].Runtime = %+v, want %+v: the app's own manifest says what it is", got, want)
 		}
 	})
@@ -242,7 +242,7 @@ export default {
 		if err != nil {
 			t.Fatalf("Resolve: %v", err)
 		}
-		if got, want := cfg.Apps[0].Runtime, (Runtime{Name: "node"}); got != want {
+		if got, want := cfg.Apps[0].Framework, (Framework{Name: "node"}); got != want {
 			t.Fatalf("Apps[0].Runtime = %+v, want %+v: a named framework decides it", got, want)
 		}
 	})
@@ -285,8 +285,8 @@ export default {
 		if err != nil {
 			t.Fatalf("Resolve: %v", err)
 		}
-		if cfg.Apps[0].Runtime != (Runtime{}) {
-			t.Fatalf("Apps[0].Runtime = %+v, want none: nothing stands at the path to be read", cfg.Apps[0].Runtime)
+		if cfg.Apps[0].Framework != (Framework{}) {
+			t.Fatalf("Apps[0].Runtime = %+v, want none: nothing stands at the path to be read", cfg.Apps[0].Framework)
 		}
 	})
 
@@ -306,8 +306,8 @@ export default {
 		if err != nil {
 			t.Fatalf("Resolve: %v", err)
 		}
-		if cfg.Apps[0].Runtime != (Runtime{}) {
-			t.Fatalf("Apps[0].Runtime = %+v, want none: a container runs the image it is given", cfg.Apps[0].Runtime)
+		if cfg.Apps[0].Framework != (Framework{}) {
+			t.Fatalf("Apps[0].Runtime = %+v, want none: a container runs the image it is given", cfg.Apps[0].Framework)
 		}
 	})
 }

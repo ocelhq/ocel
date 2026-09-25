@@ -156,9 +156,9 @@ func TestTheRuntimeAccountIsHeldToReadingThisDatabaseAndOpeningUnderTheClassKeyA
 		t.Fatalf("makeAccount() = %v", err)
 	}
 	const member = "serviceAccount:ocel-production@acme-prod.iam.gserviceaccount.com"
-	members, condition := server.projectMembers(runtimeRecordsRole)
+	members, condition := server.projectMembers(workloadRecordsRole)
 	if !slices.Contains(members, member) {
-		t.Errorf("the project binds %v to %s, want the runtime account: a container's runtime reads its records with it", members, runtimeRecordsRole)
+		t.Errorf("the project binds %v to %s, want the runtime account: a container's runtime reads its records with it", members, workloadRecordsRole)
 	}
 	if condition == nil || !strings.Contains(condition.Expression, "projects/acme-prod/databases/ocel") {
 		t.Errorf("the read is conditioned on %+v, want this namespace's one database: IAM fences Firestore no finer than a database", condition)
@@ -167,8 +167,8 @@ func TestTheRuntimeAccountIsHeldToReadingThisDatabaseAndOpeningUnderTheClassKeyA
 		t.Errorf("the runtime account holds roles/datastore.user, and a runtime writes nothing")
 	}
 	key := "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production"
-	if held := server.keyMembers(key, runtimeOpeningRole); !slices.Contains(held, member) {
-		t.Errorf("the production key binds %v to %s, want the runtime account: it opens what the deploy sealed", held, runtimeOpeningRole)
+	if held := server.keyMembers(key, workloadOpeningRole); !slices.Contains(held, member) {
+		t.Errorf("the production key binds %v to %s, want the runtime account: it opens what the deploy sealed", held, workloadOpeningRole)
 	}
 	if held := server.keyMembers(key, connectorSealingRole); len(held) > 0 {
 		t.Errorf("the runtime account holds %s, and a runtime seals nothing", connectorSealingRole)
@@ -218,12 +218,12 @@ func TestRemovingTheAccountTakesItsReadsOffTheProjectAndTheKeyFirst(t *testing.T
 		t.Fatalf("takeAccount() = %v", err)
 	}
 	const member = "serviceAccount:ocel-production@acme-prod.iam.gserviceaccount.com"
-	if held, _ := server.projectMembers(runtimeRecordsRole); slices.Contains(held, member) {
-		t.Errorf("the project still binds the deleted account to %s, and a deleted principal's binding lingers in the policy for anyone to read", runtimeRecordsRole)
+	if held, _ := server.projectMembers(workloadRecordsRole); slices.Contains(held, member) {
+		t.Errorf("the project still binds the deleted account to %s, and a deleted principal's binding lingers in the policy for anyone to read", workloadRecordsRole)
 	}
 	key := "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production"
-	if held := server.keyMembers(key, runtimeOpeningRole); slices.Contains(held, member) {
-		t.Errorf("the key still binds the deleted account to %s", runtimeOpeningRole)
+	if held := server.keyMembers(key, workloadOpeningRole); slices.Contains(held, member) {
+		t.Errorf("the key still binds the deleted account to %s", workloadOpeningRole)
 	}
 }
 

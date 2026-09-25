@@ -344,11 +344,11 @@ func TestLanguageOfTakesTheRuntimeAnAppNamesOverTheManifestBesideIt(t *testing.T
 		runtime string
 		want    Language
 	}{
-		{providerkit.RuntimeNode, JS},
-		{providerkit.RuntimeNext, JS},
-		{providerkit.RuntimeGo, Go},
-		{providerkit.RuntimePython, Python},
-		{providerkit.RuntimeRust, Rust},
+		{providerkit.FrameworkNode, JS},
+		{providerkit.FrameworkNext, JS},
+		{providerkit.FrameworkGo, Go},
+		{providerkit.FrameworkPython, Python},
+		{providerkit.FrameworkRust, Rust},
 	} {
 		t.Run(tc.runtime, func(t *testing.T) {
 			dir := t.TempDir()
@@ -416,9 +416,9 @@ func TestClientBundle(t *testing.T) {
 		manifest string
 		want     bool
 	}{
-		{name: "a next app", runtime: providerkit.RuntimeNext, want: true},
-		{name: "a node app", runtime: providerkit.RuntimeNode, want: true},
-		{name: "a go app", runtime: providerkit.RuntimeGo, manifest: "go.mod"},
+		{name: "a next app", runtime: providerkit.FrameworkNext, want: true},
+		{name: "a node app", runtime: providerkit.FrameworkNode, want: true},
+		{name: "a go app", runtime: providerkit.FrameworkGo, manifest: "go.mod"},
 		{name: "a container app holding a package.json", manifest: "package.json", want: true},
 		{name: "a container app holding a go.mod", manifest: "go.mod"},
 		{name: "a container app naming no language at all", manifest: ""},

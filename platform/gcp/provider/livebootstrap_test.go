@@ -151,7 +151,7 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 	}
 	rows := map[string]string{
 		"firestore:database/" + liveNames(t).Database():                providerkit.StackGroupKind,
-		"iam:serviceaccount/" + liveNames(t).RuntimeAccount(class):     providerkit.StackGroupKind,
+		"iam:serviceaccount/" + liveNames(t).WorkloadAccount(class):    providerkit.StackGroupKind,
 		"storage:bucket/" + liveNames(t).Bucket(class):                 providerkit.StackGroupKind,
 		"storage:bucket/" + liveNames(t).StateBucket(class):            providerkit.StackGroupKind,
 		"kms:keyring/" + liveNames(t).KeyRing():                        providerkit.StackGroupKind,
@@ -800,7 +800,7 @@ func TestLiveTheRuntimeAccountStandsWithTheGrantADeployNeeds(t *testing.T) {
 
 	ctx := context.Background()
 	service := accounts(t)
-	path := "projects/" + liveProject() + "/serviceAccounts/" + names(t, p).RuntimeAccountEmail(class)
+	path := "projects/" + liveProject() + "/serviceAccounts/" + names(t, p).WorkloadAccountEmail(class)
 	if _, err := service.Projects.ServiceAccounts.Get(path).Context(ctx).Do(); err != nil {
 		t.Fatalf("Get(%s) after a bootstrap = %v, want the account every app in the class runs as", path, err)
 	}
@@ -835,7 +835,7 @@ func TestLiveRemovingABootstrapTakesTheRuntimeAccountWithIt(t *testing.T) {
 		t.Fatalf("Remove(%s) = %v", class, err)
 	}
 
-	path := "projects/" + liveProject() + "/serviceAccounts/" + names(t, p).RuntimeAccountEmail(class)
+	path := "projects/" + liveProject() + "/serviceAccounts/" + names(t, p).WorkloadAccountEmail(class)
 	if _, err := accounts(t).Projects.ServiceAccounts.Get(path).Context(ctx).Do(); err == nil {
 		t.Errorf("%s still stands after the bootstrap that named it was removed, and an identity nothing runs as is one more thing to explain", path)
 	}

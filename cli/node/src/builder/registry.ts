@@ -50,7 +50,7 @@ const byName = new Map(REGISTRY.map((rt) => [rt.name, rt]));
 export function resolveRuntime(key: string): Runtime {
   const rt = byName.get(key);
   if (!rt) {
-    throw new Error(`ocel: unknown runtime "${key}"; known: ${[...byName.keys()].join(", ")}`);
+    throw new Error(`ocel: unknown framework "${key}"; known: ${[...byName.keys()].join(", ")}`);
   }
   return rt;
 }

@@ -17,7 +17,7 @@ const goModuleFile = "go.mod"
 
 type Compilation struct {
 	App            string
-	Runtime        providerkit.Framework
+	Framework      providerkit.Framework
 	Source         string
 	Entrypoint     string
 	FuncDir        string
@@ -37,15 +37,15 @@ func Compile(ctx context.Context, c Compilation) error {
 	if err := c.validate(); err != nil {
 		return err
 	}
-	switch c.Runtime.Name {
-	case providerkit.RuntimeGo:
+	switch c.Framework.Name {
+	case providerkit.FrameworkGo:
 		return c.compileGo(ctx)
-	case providerkit.RuntimePython:
+	case providerkit.FrameworkPython:
 		return c.vendorPython(ctx)
-	case providerkit.RuntimeRust:
+	case providerkit.FrameworkRust:
 		return c.compileRust(ctx)
 	}
-	return fmt.Errorf("app %q runs on runtime %q, which is not built from its own source tree", c.App, c.Runtime.Name)
+	return fmt.Errorf("app %q runs on runtime %q, which is not built from its own source tree", c.App, c.Framework.Name)
 }
 
 func (c Compilation) compileGo(ctx context.Context) error {
@@ -53,9 +53,9 @@ func (c Compilation) compileGo(ctx context.Context) error {
 	if err != nil || !module.Mode().IsRegular() {
 		return fmt.Errorf("app %q runs on the go runtime and %s holds no %s: an app is compiled from the module rooted in its own directory", c.App, c.Source, goModuleFile)
 	}
-	arch, runs := providerkit.GoArch(c.Runtime.Arch)
+	arch, runs := providerkit.GoArch(c.Framework.Arch)
 	if !runs {
-		return fmt.Errorf("app %q asks to be compiled for %q, which names no architecture go builds for", c.App, c.Runtime.Arch)
+		return fmt.Errorf("app %q asks to be compiled for %q, which names no architecture go builds for", c.App, c.Framework.Arch)
 	}
 	if _, err := exec.LookPath("go"); err != nil {
 		return fmt.Errorf("app %q runs on the go runtime and no go toolchain is on PATH: %w", c.App, err)
@@ -74,7 +74,7 @@ func (c Compilation) compileGo(ctx context.Context) error {
 		return fmt.Errorf("compile app %q in %s for linux/%s (%w):\n%s", c.App, c.pkg(), arch, err, said.String())
 	}
 	c.report("compiling", said.String())
-	return describeArtifact(c.App, c.Runtime, c.App, []string{"./" + c.App}, c.FuncDir, c.AppDir)
+	return describeArtifact(c.App, c.Framework, c.App, []string{"./" + c.App}, c.FuncDir, c.AppDir)
 }
 
 func (c Compilation) report(what, said string) {
@@ -91,7 +91,7 @@ func (c Compilation) validate() error {
 		{"app", c.App},
 		{"appDir", c.AppDir},
 		{"source", c.Source},
-		{"runtime", c.Runtime.Name},
+		{"framework", c.Framework.Name},
 		{"funcDir", c.FuncDir},
 	}
 	var missing []string
@@ -103,10 +103,10 @@ func (c Compilation) validate() error {
 	if len(missing) > 0 {
 		return fmt.Errorf("cannot compile: %s not stated", strings.Join(missing, ", "))
 	}
-	if c.Runtime.Name == providerkit.RuntimePython && c.Entrypoint != "" {
+	if c.Framework.Name == providerkit.FrameworkPython && c.Entrypoint != "" {
 		return fmt.Errorf("app %q runs on the python runtime and names entrypoint %q: a python app is served by the %s in its own directory, and both the artifact and the image are built from that, so an entrypoint here would name a file nothing boots", c.App, c.Entrypoint, pythonEntryFile)
 	}
-	if c.Runtime.Name == providerkit.RuntimeRust && c.Entrypoint != "" {
+	if c.Framework.Name == providerkit.FrameworkRust && c.Entrypoint != "" {
 		return fmt.Errorf("app %q runs on the rust runtime and names entrypoint %q: a rust app is compiled from the one binary the %s in its own directory builds, so an entrypoint here would name nothing that is built", c.App, c.Entrypoint, cargoManifestFile)
 	}
 	pkg := c.pkg()

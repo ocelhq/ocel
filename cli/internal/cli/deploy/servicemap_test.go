@@ -23,7 +23,7 @@ func TestServiceMap(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "api", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
+			{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteUsageMonorepo(t, root)
@@ -55,7 +55,7 @@ func TestServiceMap(t *testing.T) {
 		deps := clitest.NewDeps()
 		clitest.SetLoggedIn(&deps)
 		clitest.StubBuild(&deps, []manifestbuilder.Function{
-			{Route: "api", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
+			{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
 		})
 		root, sockPath := clitest.SetUpDeployFixture(t)
 		clitest.WriteUsageMonorepo(t, root)

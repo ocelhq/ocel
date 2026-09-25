@@ -32,7 +32,7 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 	writePythonApp(t, root, "apps/api")
 	cfg := &projectconfig.Config{
 		Dir:  root,
-		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Runtime: projectconfig.Runtime{Name: "python"}}},
+		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: projectconfig.Framework{Name: "python"}}},
 	}
 
 	ran := false
@@ -53,7 +53,7 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 	}
 	assertFunctions(t, "CollectFunctions", fns, []manifestbuilder.Function{{
 		Route:        "index",
-		Runtime:      manifestbuilder.Runtime{Name: "python", Arch: providerkit.ArchX8664},
+		Framework:    manifestbuilder.Framework{Name: "python", Arch: providerkit.ArchX8664},
 		Handler:      "main.py",
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",

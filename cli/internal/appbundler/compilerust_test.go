@@ -47,11 +47,11 @@ func compileRust(t *testing.T, source, arch string) (string, string, error) {
 	appDir := filepath.Join(out, "apps", "web")
 	funcDir := filepath.Join(appDir, "functions", "index.func")
 	err := Compile(context.Background(), Compilation{
-		App:     "web",
-		Runtime: providerkit.Framework{Name: providerkit.RuntimeRust, Arch: arch},
-		Source:  source,
-		FuncDir: funcDir,
-		AppDir:  appDir,
+		App:       "web",
+		Framework: providerkit.Framework{Name: providerkit.FrameworkRust, Arch: arch},
+		Source:    source,
+		FuncDir:   funcDir,
+		AppDir:    appDir,
 	})
 	return appDir, funcDir, err
 }
@@ -222,14 +222,14 @@ func TestCompileDeclaresTheCommandARustArtifactIsServedBy(t *testing.T) {
 	if len(config.Command) != 1 || config.Command[0] != "./web" {
 		t.Errorf("command = %q, want the artifact's own binary, which whatever hosts it execs", config.Command)
 	}
-	if config.Runtime != (providerkit.Framework{Name: "rust", Arch: "x86_64"}) {
-		t.Errorf("runtime = %+v, want the rust runtime at the architecture it was built for", config.Runtime)
+	if config.Framework != (providerkit.Framework{Name: "rust", Arch: "x86_64"}) {
+		t.Errorf("runtime = %+v, want the rust runtime at the architecture it was built for", config.Framework)
 	}
 
 	var descriptor edge.ServeDescriptor
 	readJSON(t, filepath.Join(appDir, edge.ServeDescriptorFile), &descriptor)
-	if descriptor.Runtime != "rust" {
-		t.Errorf("the serve descriptor names runtime %q, want %q", descriptor.Runtime, "rust")
+	if descriptor.Framework != "rust" {
+		t.Errorf("the serve descriptor names runtime %q, want %q", descriptor.Framework, "rust")
 	}
 	if descriptor.BuildID == "" {
 		t.Error("the serve descriptor names no build id, and a release is identified by one")
@@ -320,7 +320,7 @@ func TestCompileRefusesAnEntrypointForARustApp(t *testing.T) {
 	}
 	err := Compile(context.Background(), Compilation{
 		App:        "web",
-		Runtime:    providerkit.Framework{Name: providerkit.RuntimeRust},
+		Framework:  providerkit.Framework{Name: providerkit.FrameworkRust},
 		Source:     source,
 		Entrypoint: "bin",
 		FuncDir:    filepath.Join(t.TempDir(), "index.func"),

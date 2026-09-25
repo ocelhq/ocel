@@ -25,11 +25,11 @@ function transpileTs(source: string, ext: string): string {
 
 const RESOLVE_EXT = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
-export function functionRuntime(
+export function functionFramework(
   input: AppInput,
   spec: RuntimeSpec,
 ): { name: string; arch?: string } {
-  const arch = input.runtime?.arch;
+  const arch = input.framework?.arch;
   return arch ? { name: spec.name, arch } : { name: spec.name };
 }
 
@@ -251,7 +251,7 @@ export async function traceBuild(
   spec: RuntimeSpec,
 ): Promise<FunctionSummary> {
   const entrypoint = resolveEntrypoint(input, spec);
-  const runtime = functionRuntime(input, spec);
+  const framework = functionFramework(input, spec);
 
   const funcRel = functionRel(input.name);
   const funcDir = path.join(options.outDir, funcRel);
@@ -284,7 +284,7 @@ export async function traceBuild(
     .join("/");
   await writeFile(
     path.join(funcDir, "config.json"),
-    `${JSON.stringify({ runtime, handler, id: NODE_ENTRY_ROUTE_ID, app: input.name }, null, 2)}\n`,
+    `${JSON.stringify({ framework, handler, id: NODE_ENTRY_ROUTE_ID, app: input.name }, null, 2)}\n`,
   );
 
   await writeServeDescriptor(options.outDir, input.name, {
@@ -297,7 +297,7 @@ export async function traceBuild(
 
   return {
     name: input.name,
-    runtime,
+    framework,
     handler,
     artifactPath: funcRel,
     strategy: "trace",

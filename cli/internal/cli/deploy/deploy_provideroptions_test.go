@@ -49,7 +49,7 @@ export default {
 	deps = clitest.NewDeps()
 	clitest.SetLoggedIn(&deps)
 	clitest.StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "api", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
+		{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	return root, journal, deps
 }

@@ -14,20 +14,20 @@ import (
 )
 
 const (
-	RuntimeNode = "node"
-	RuntimeNext = "next"
-	RuntimeGo   = "go"
+	FrameworkNode = "node"
+	FrameworkNext = "next"
+	FrameworkGo   = "go"
 
-	RuntimePython = "python"
+	FrameworkPython = "python"
 
-	RuntimeRust = "rust"
+	FrameworkRust = "rust"
 )
 
-func Runtimes() []string {
-	return []string{RuntimeNode, RuntimeNext, RuntimeGo, RuntimePython, RuntimeRust}
+func Frameworks() []string {
+	return []string{FrameworkNode, FrameworkNext, FrameworkGo, FrameworkPython, FrameworkRust}
 }
 
-func KnownRuntime(name string) bool { return slices.Contains(Runtimes(), name) }
+func KnownFramework(name string) bool { return slices.Contains(Frameworks(), name) }
 
 const (
 	ArchX8664 = "x86_64"
@@ -117,7 +117,7 @@ type ServingQuery struct {
 	Root              string
 	Project           string
 	App               string
-	Runtime           string
+	Framework         string
 	Stack             naming.StackName
 	Coordinate        naming.Coordinate
 	EdgeRunsCode      bool
@@ -146,7 +146,7 @@ func ServingFactsFor(q ServingQuery) (ServingFacts, error) {
 	if present {
 		facts.Entry = desc.Entry
 	}
-	if q.Runtime == RuntimeNext {
+	if q.Framework == FrameworkNext {
 		facts.ISR = &ISRPlan{
 			Prefix:       withoutSlash(q.Coordinate.ISRPrefix()),
 			TagNamespace: naming.ISRTagPrefix(q.Project, q.Stack),

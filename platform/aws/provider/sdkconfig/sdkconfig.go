@@ -29,7 +29,7 @@ func ControlRetryer() aws.Retryer {
 	})
 }
 
-func Runtime(ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error) {
+func Workload(ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error) {
 	opts := append([]func(*config.LoadOptions) error{config.WithRetryer(runtimeRetryer)}, optFns...)
 	return config.LoadDefaultConfig(ctx, opts...)
 }

@@ -18,7 +18,7 @@ func nextManifest() *contractv1.Manifest {
 	return &contractv1.Manifest{
 		Slug: "proj",
 		Functions: []*contractv1.ManifestFunction{
-			{LogicalName: "web_index", Runtime: &contractv1.Runtime{Name: "next"}, App: "web"},
+			{LogicalName: "web_index", Framework: &contractv1.Framework{Name: "next"}, App: "web"},
 		},
 	}
 }
@@ -26,9 +26,9 @@ func nextManifest() *contractv1.Manifest {
 func nodeManifest() *contractv1.Manifest {
 	return &contractv1.Manifest{
 		Slug: "proj",
-		Apps: []*contractv1.ManifestApp{{Name: "api", Runtime: &contractv1.Runtime{Name: "node"}}},
+		Apps: []*contractv1.ManifestApp{{Name: "api", Framework: &contractv1.Framework{Name: "node"}}},
 		Functions: []*contractv1.ManifestFunction{
-			{LogicalName: "api_handler", Runtime: &contractv1.Runtime{Name: "node"}, App: "api", RouteId: "/"},
+			{LogicalName: "api_handler", Framework: &contractv1.Framework{Name: "node"}, App: "api", RouteId: "/"},
 		},
 	}
 }
@@ -46,8 +46,8 @@ func twoAppManifest() *contractv1.Manifest {
 	return &contractv1.Manifest{
 		Slug: "proj",
 		Functions: []*contractv1.ManifestFunction{
-			{LogicalName: "web_index", Runtime: &contractv1.Runtime{Name: "next"}, App: "web"},
-			{LogicalName: "admin_index", Runtime: &contractv1.Runtime{Name: "next"}, App: "admin"},
+			{LogicalName: "web_index", Framework: &contractv1.Framework{Name: "next"}, App: "web"},
+			{LogicalName: "admin_index", Framework: &contractv1.Framework{Name: "next"}, App: "admin"},
 		},
 	}
 }
@@ -111,7 +111,7 @@ func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked 
 		}
 		coord := storageCoordinate(cfg.Env, manifest.GetSlug(), name, releaseOf(id))
 		builds.coords[name] = coord
-		if app.GetRuntime().GetName() != runtimeNext {
+		if app.GetFramework().GetName() != runtimeNext {
 			continue
 		}
 		prefix := isrPrefixOf(coord)
@@ -155,7 +155,7 @@ func pushStaticAssetSet(ctx context.Context, cfg Config, app, runtime string, co
 func uploadStaticAssets(ctx context.Context, cfg Config, manifest *contractv1.Manifest, builds appBuilds) error {
 	for _, app := range manifestApps(deployedManifest(manifest)) {
 		name := app.GetName()
-		if err := pushStaticAssetSet(ctx, deployedConfig(cfg), name, app.GetRuntime().GetName(), builds.coords[name]); err != nil {
+		if err := pushStaticAssetSet(ctx, deployedConfig(cfg), name, app.GetFramework().GetName(), builds.coords[name]); err != nil {
 			return err
 		}
 	}

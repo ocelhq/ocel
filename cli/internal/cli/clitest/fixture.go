@@ -69,9 +69,9 @@ func WritePrebuiltFunction(t *testing.T, root, app, route string) {
 		t.Fatal(err)
 	}
 	config, err := json.Marshal(map[string]any{
-		"runtime": map[string]string{"name": "node"},
-		"handler": "index.handler",
-		"app":     app,
+		"framework": map[string]string{"name": "node"},
+		"handler":   "index.handler",
+		"app":       app,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -333,7 +333,7 @@ func SetUpEdgeFixture(t *testing.T, declaration string) (root, journal string, d
 	deps = NewDeps()
 	SetLoggedIn(&deps)
 	StubBuild(&deps, []manifestbuilder.Function{
-		{Route: "api", Runtime: manifestbuilder.Runtime{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
+		{Route: "api", Framework: manifestbuilder.Framework{Name: "node"}, Handler: "src/server.js", ArtifactPath: "output/api", App: "api"},
 	})
 	return root, journal, deps
 }

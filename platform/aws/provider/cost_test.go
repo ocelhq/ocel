@@ -48,11 +48,11 @@ func shopManifest() *contractv1.Manifest {
 		SchemaVersion: "provider.v1",
 		Slug:          "shop",
 		Apps: []*contractv1.ManifestApp{
-			{Name: "web", Runtime: &contractv1.Runtime{Name: "next", Arch: "arm64"}, Compute: "serverless"},
-			{Name: "api", Runtime: &contractv1.Runtime{Name: "go"}, Compute: "container"},
+			{Name: "web", Framework: &contractv1.Framework{Name: "next", Arch: "arm64"}, Compute: "serverless"},
+			{Name: "api", Framework: &contractv1.Framework{Name: "go"}, Compute: "container"},
 		},
 		Functions: []*contractv1.ManifestFunction{
-			{LogicalName: "fn--web--entry", App: "web", Runtime: &contractv1.Runtime{Name: "next", Arch: "arm64"}},
+			{LogicalName: "fn--web--entry", App: "web", Framework: &contractv1.Framework{Name: "next", Arch: "arm64"}},
 		},
 		Containers: []*contractv1.ManifestContainer{
 			{App: "api", Image: "ghcr.io/shop/api@sha256:" + "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", HealthCheckPath: "/healthz"},

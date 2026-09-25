@@ -34,11 +34,11 @@ func vendored(t *testing.T, source, arch string) (string, string) {
 	appDir := filepath.Join(out, "apps", "web")
 	funcDir := filepath.Join(appDir, "functions", "index.func")
 	err := Compile(context.Background(), Compilation{
-		App:     "web",
-		Runtime: providerkit.Framework{Name: "python", Arch: arch},
-		Source:  source,
-		FuncDir: funcDir,
-		AppDir:  appDir,
+		App:       "web",
+		Framework: providerkit.Framework{Name: "python", Arch: arch},
+		Source:    source,
+		FuncDir:   funcDir,
+		AppDir:    appDir,
 	})
 	if err != nil {
 		t.Fatalf("compile: %v", err)
@@ -51,11 +51,11 @@ func TestCompileRefusesAPythonAppDirectoryHoldingNoEntrypoint(t *testing.T) {
 
 	source := pythonApp(t, map[string]string{"server/main.py": "print('hi')\n"})
 	err := Compile(context.Background(), Compilation{
-		App:     "web",
-		Runtime: providerkit.Framework{Name: "python", Arch: "x86_64"},
-		Source:  source,
-		FuncDir: filepath.Join(t.TempDir(), "index.func"),
-		AppDir:  t.TempDir(),
+		App:       "web",
+		Framework: providerkit.Framework{Name: "python", Arch: "x86_64"},
+		Source:    source,
+		FuncDir:   filepath.Join(t.TempDir(), "index.func"),
+		AppDir:    t.TempDir(),
 	})
 	if err == nil || !strings.Contains(err.Error(), source) || !strings.Contains(err.Error(), pythonEntryFile) {
 		t.Fatalf("err = %v, want a refusal naming %s and %s — nothing else in the directory says which module serves the app", err, source, pythonEntryFile)
@@ -96,8 +96,8 @@ func TestCompileDeclaresTheCommandAPythonArtifactIsServedBy(t *testing.T) {
 	if len(config.Command) != 2 || config.Command[0] != pythonRuntimeCommand || config.Command[1] != pythonEntryFile {
 		t.Errorf("command = %q, want the interpreter and the module it runs, which whatever hosts the artifact execs", config.Command)
 	}
-	if config.Runtime != (providerkit.Framework{Name: "python", Arch: "arm64"}) {
-		t.Errorf("runtime = %+v, want the python runtime at the architecture it was vendored for", config.Runtime)
+	if config.Framework != (providerkit.Framework{Name: "python", Arch: "arm64"}) {
+		t.Errorf("runtime = %+v, want the python runtime at the architecture it was vendored for", config.Framework)
 	}
 	if config.App != "web" {
 		t.Errorf("app = %q, want %q", config.App, "web")
@@ -105,8 +105,8 @@ func TestCompileDeclaresTheCommandAPythonArtifactIsServedBy(t *testing.T) {
 
 	var descriptor edge.ServeDescriptor
 	readJSON(t, filepath.Join(appDir, edge.ServeDescriptorFile), &descriptor)
-	if descriptor.Runtime != "python" {
-		t.Errorf("the serve descriptor names runtime %q, want %q", descriptor.Runtime, "python")
+	if descriptor.Framework != "python" {
+		t.Errorf("the serve descriptor names runtime %q, want %q", descriptor.Framework, "python")
 	}
 	if descriptor.BuildID == "" {
 		t.Error("the serve descriptor names no build id, and a release is identified by one")
@@ -125,7 +125,7 @@ func TestCompileRefusesAPythonAppThatNamesAnEntrypointOfItsOwn(t *testing.T) {
 	})
 	err := Compile(context.Background(), Compilation{
 		App:        "web",
-		Runtime:    providerkit.Framework{Name: "python", Arch: "x86_64"},
+		Framework:  providerkit.Framework{Name: "python", Arch: "x86_64"},
 		Source:     source,
 		Entrypoint: "api",
 		FuncDir:    filepath.Join(t.TempDir(), "index.func"),
@@ -142,7 +142,7 @@ func TestCompileRefusesAPythonAppsEntrypointBeforeLookingForTheDirectoryItNames(
 	source := pythonApp(t, map[string]string{"main.py": "print('hi')\n"})
 	err := Compile(context.Background(), Compilation{
 		App:        "web",
-		Runtime:    providerkit.Framework{Name: "python", Arch: "x86_64"},
+		Framework:  providerkit.Framework{Name: "python", Arch: "x86_64"},
 		Source:     source,
 		Entrypoint: "api",
 		FuncDir:    filepath.Join(t.TempDir(), "index.func"),
@@ -185,11 +185,11 @@ func TestCompileRefusesAPythonAppWithDependenciesAndNoInterpreterToVendorThemWit
 	t.Setenv("PATH", "")
 
 	err := Compile(context.Background(), Compilation{
-		App:     "web",
-		Runtime: providerkit.Framework{Name: "python", Arch: "x86_64"},
-		Source:  source,
-		FuncDir: filepath.Join(t.TempDir(), "index.func"),
-		AppDir:  t.TempDir(),
+		App:       "web",
+		Framework: providerkit.Framework{Name: "python", Arch: "x86_64"},
+		Source:    source,
+		FuncDir:   filepath.Join(t.TempDir(), "index.func"),
+		AppDir:    t.TempDir(),
 	})
 	if err == nil || !strings.Contains(err.Error(), pythonRuntimeCommand) || !strings.Contains(err.Error(), pythonRequirementsFile) {
 		t.Fatalf("err = %v, want a refusal naming %s and %s — a package shipped without its dependencies fails at the app's first import instead", err, pythonRuntimeCommand, pythonRequirementsFile)
@@ -225,11 +225,11 @@ func TestCompileRefusesAnArchitectureNoWheelIsBuiltFor(t *testing.T) {
 	t.Parallel()
 
 	err := Compile(context.Background(), Compilation{
-		App:     "web",
-		Runtime: providerkit.Framework{Name: "python", Arch: "riscv"},
-		Source:  pythonApp(t, map[string]string{"main.py": "print('hi')\n"}),
-		FuncDir: filepath.Join(t.TempDir(), "index.func"),
-		AppDir:  t.TempDir(),
+		App:       "web",
+		Framework: providerkit.Framework{Name: "python", Arch: "riscv"},
+		Source:    pythonApp(t, map[string]string{"main.py": "print('hi')\n"}),
+		FuncDir:   filepath.Join(t.TempDir(), "index.func"),
+		AppDir:    t.TempDir(),
 	})
 	if err == nil || !strings.Contains(err.Error(), "riscv") {
 		t.Fatalf("err = %v, want a refusal naming riscv", err)
@@ -245,11 +245,11 @@ func TestCompileRefusesAPythonAppCarryingWhatCannotBeCopiedIntoTheArtifact(t *te
 		t.Fatal(err)
 	}
 	err := Compile(context.Background(), Compilation{
-		App:     "web",
-		Runtime: providerkit.Framework{Name: "python", Arch: "x86_64"},
-		Source:  source,
-		FuncDir: filepath.Join(t.TempDir(), "index.func"),
-		AppDir:  t.TempDir(),
+		App:       "web",
+		Framework: providerkit.Framework{Name: "python", Arch: "x86_64"},
+		Source:    source,
+		FuncDir:   filepath.Join(t.TempDir(), "index.func"),
+		AppDir:    t.TempDir(),
 	})
 	if err == nil || !strings.Contains(err.Error(), linked) {
 		t.Fatalf("err = %v, want a refusal naming %s — an artifact quietly missing a file the app imports fails only once it is running", err, linked)
@@ -264,11 +264,11 @@ func TestCompileRefusesAPythonAppWhoseDeclaredDependenciesCannotBeRead(t *testin
 		"requirements.txt/held-as-dir": "six==1.17.0\n",
 	})
 	err := Compile(context.Background(), Compilation{
-		App:     "web",
-		Runtime: providerkit.Framework{Name: "python", Arch: "x86_64"},
-		Source:  source,
-		FuncDir: filepath.Join(t.TempDir(), "index.func"),
-		AppDir:  t.TempDir(),
+		App:       "web",
+		Framework: providerkit.Framework{Name: "python", Arch: "x86_64"},
+		Source:    source,
+		FuncDir:   filepath.Join(t.TempDir(), "index.func"),
+		AppDir:    t.TempDir(),
 	})
 	if err == nil || !strings.Contains(err.Error(), pythonRequirementsFile) {
 		t.Fatalf("err = %v, want a refusal naming %s — a package that silently ships without the dependencies it declares fails at the app's first import instead", err, pythonRequirementsFile)
@@ -284,11 +284,11 @@ func TestVendoringReportsAnythingButAMissingRequirementsFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := Compilation{
-		App:     "web",
-		Runtime: providerkit.Framework{Name: "python", Arch: "x86_64"},
-		Source:  source,
-		FuncDir: filepath.Join(t.TempDir(), "index.func"),
-		AppDir:  t.TempDir(),
+		App:       "web",
+		Framework: providerkit.Framework{Name: "python", Arch: "x86_64"},
+		Source:    source,
+		FuncDir:   filepath.Join(t.TempDir(), "index.func"),
+		AppDir:    t.TempDir(),
 	}
 
 	err := c.installRequirements(context.Background(), "manylinux2014_x86_64")
@@ -335,7 +335,7 @@ func TestCompileCarriesTheDiscoveryRootsThePythonAppImportsIntoTheArtifact(t *te
 	funcDir := filepath.Join(appDir, "functions", "index.func")
 	err := Compile(context.Background(), Compilation{
 		App:            "web",
-		Runtime:        providerkit.Framework{Name: "python", Arch: "x86_64"},
+		Framework:      providerkit.Framework{Name: "python", Arch: "x86_64"},
 		Source:         filepath.Join(project, "server"),
 		DiscoveryRoots: []string{filepath.Join(project, constants.DefaultDiscoveryDirName), filepath.Join(project, "server")},
 		FuncDir:        funcDir,
@@ -367,7 +367,7 @@ func TestCompileCarriesNoDiscoveryRootTheAppsOwnDirectoryAlreadyHolds(t *testing
 	funcDir := filepath.Join(appDir, "functions", "index.func")
 	err := Compile(context.Background(), Compilation{
 		App:            "web",
-		Runtime:        providerkit.Framework{Name: "python", Arch: "x86_64"},
+		Framework:      providerkit.Framework{Name: "python", Arch: "x86_64"},
 		Source:         filepath.Join(project, "server"),
 		DiscoveryRoots: []string{filepath.Join(project, "server", "..infra")},
 		FuncDir:        funcDir,

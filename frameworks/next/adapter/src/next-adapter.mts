@@ -287,7 +287,7 @@ const adapter = {
         await writeFile(
           join(funcDir, "config.json"),
           JSON.stringify({
-            runtime: { name: "next" },
+            framework: { name: "next" },
             handler: launcherRel,
             id: bundle.name,
             app: appName,

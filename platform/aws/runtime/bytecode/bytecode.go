@@ -593,7 +593,7 @@ func resolve(ctx context.Context, nodeVersion func(context.Context) (string, err
 		return nil
 	}
 
-	cfg, err := sdkconfig.Runtime(ctx)
+	cfg, err := sdkconfig.Workload(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: no aws config for the compile cache: %v\n", err)
 		return nil

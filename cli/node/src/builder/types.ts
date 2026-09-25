@@ -2,7 +2,7 @@ export interface AppInput {
   name: string;
   cwd: string;
   entrypoint?: string;
-  runtime?: { name?: string; arch?: string };
+  framework?: { name?: string; arch?: string };
   env?: Record<string, string>;
   folder?: string;
 }
@@ -20,7 +20,7 @@ export interface BuildOptions {
 
 export interface FunctionSummary {
   name: string;
-  runtime: { name: string; arch?: string };
+  framework: { name: string; arch?: string };
   handler: string;
   artifactPath: string;
   strategy: "trace" | "bundle";

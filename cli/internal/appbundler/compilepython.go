@@ -30,9 +30,9 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 	if err != nil || !entry.Mode().IsRegular() {
 		return fmt.Errorf("app %q runs on the python runtime and %s holds no %s: an app is served by the module rooted in its own directory", c.App, c.Source, pythonEntryFile)
 	}
-	platform, runs := providerkit.PythonPlatformTag(c.Runtime.Arch)
+	platform, runs := providerkit.PythonPlatformTag(c.Framework.Arch)
 	if !runs {
-		return fmt.Errorf("app %q asks to be vendored for %q, which names no architecture wheels are built for", c.App, c.Runtime.Arch)
+		return fmt.Errorf("app %q asks to be vendored for %q, which names no architecture wheels are built for", c.App, c.Framework.Arch)
 	}
 	if err := os.RemoveAll(c.FuncDir); err != nil {
 		return fmt.Errorf("reset %s: %w", c.FuncDir, err)
@@ -49,7 +49,7 @@ func (c Compilation) vendorPython(ctx context.Context) error {
 	if err := c.installRequirements(ctx, platform); err != nil {
 		return err
 	}
-	return describeArtifact(c.App, c.Runtime, pythonEntryFile, []string{pythonRuntimeCommand, pythonEntryFile}, c.FuncDir, c.AppDir)
+	return describeArtifact(c.App, c.Framework, pythonEntryFile, []string{pythonRuntimeCommand, pythonEntryFile}, c.FuncDir, c.AppDir)
 }
 
 func (c Compilation) carryDiscoveryRoots() error {

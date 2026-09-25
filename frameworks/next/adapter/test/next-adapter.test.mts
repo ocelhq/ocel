@@ -1232,7 +1232,7 @@ test("writes the bundle name into its config.json", async () => {
 
   expect(config.id).toBe("bundle-0");
   expect(config.handler).toBe("__next_launcher.cjs");
-  expect(config.runtime).toEqual({ name: "next" });
+  expect(config.framework).toEqual({ name: "next" });
 });
 
 test("records the owning app in each function's config.json", async () => {

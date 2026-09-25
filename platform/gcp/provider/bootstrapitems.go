@@ -68,7 +68,7 @@ func stackItems(names Names, class providerkit.Class, emulated bool) []item {
 			Note: "the key every value this class holds is sealed under",
 		},
 		{
-			Kind: KindServiceAccount, Name: names.RuntimeAccount(class),
+			Kind: KindServiceAccount, Name: names.WorkloadAccount(class),
 			Note: "the identity every app in this class runs as, and the one the deploy hands Cloud Run",
 		},
 		{

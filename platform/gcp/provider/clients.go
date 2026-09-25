@@ -170,7 +170,7 @@ func (c *clients) backendLink(backend string) string {
 	return "projects/" + c.project + "/global/backendServices/" + backend
 }
 
-func (c *clients) Runtime() *ports.Clients {
+func (c *clients) Workload() *ports.Clients {
 	held, _ := c.runtime.held(func() (*ports.Clients, error) {
 		return &ports.Clients{
 			Namespace: c.namespace,
@@ -182,6 +182,6 @@ func (c *clients) Runtime() *ports.Clients {
 	return held
 }
 
-func (c *clients) Firestore() (*firestore.Client, error) { return c.Runtime().Firestore() }
+func (c *clients) Firestore() (*firestore.Client, error) { return c.Workload().Firestore() }
 
-func (c *clients) KMS() (*kms.KeyManagementClient, error) { return c.Runtime().KMS() }
+func (c *clients) KMS() (*kms.KeyManagementClient, error) { return c.Workload().KMS() }

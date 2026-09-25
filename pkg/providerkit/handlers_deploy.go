@@ -152,7 +152,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if err != nil {
 		return nil, err
 	}
-	features, err := RequiredFeatures(gate.Bootstrap.Catalogue(), runtimesOf(req.GetManifest()), string(gate.Edge))
+	features, err := RequiredFeatures(gate.Bootstrap.Catalogue(), frameworksOf(req.GetManifest()), string(gate.Edge))
 	if err != nil {
 		return nil, RefusalError(err)
 	}
@@ -773,7 +773,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 				Bindings: r.reader(),
 				App: &AppPlan{
 					App:             entry.App,
-					Runtime:         entry.Manifest.GetRuntime().GetName(),
+					Framework:       entry.Manifest.GetFramework().GetName(),
 					Entry:           entryLogicalName(r.manifest, entry.App, facts.Entry),
 					Deployment:      entry.Build.DeploymentID(),
 					Compute:         entry.Compute(),
@@ -855,7 +855,7 @@ func (r *deployRun) serving(entry AppEntry) (ServingFacts, error) {
 		Root:              ArtifactRoot(),
 		Project:           naming.Sanitize(r.plan.Slug),
 		App:               entry.App,
-		Runtime:           entry.Manifest.GetRuntime().GetName(),
+		Framework:         entry.Manifest.GetFramework().GetName(),
 		Stack:             entry.Stack,
 		Coordinate:        r.plan.coordinate(entry.App, entry.Build.Release()),
 		EdgeRunsCode:      r.front.Facts().RunsCode,
@@ -980,26 +980,26 @@ func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
 		}
 		artifact, _ := r.artifact(fn.GetLogicalName())
 		specs = append(specs, FunctionSpec{
-			Name:     fn.GetLogicalName(),
-			Route:    fn.GetRouteId(),
-			Handler:  fn.GetHandler(),
-			Runtime:  Framework{Name: fn.GetRuntime().GetName(), Arch: fn.GetRuntime().GetArch()},
-			Artifact: artifact,
-			Image:    r.functionImage(fn.GetLogicalName()),
+			Name:      fn.GetLogicalName(),
+			Route:     fn.GetRouteId(),
+			Handler:   fn.GetHandler(),
+			Framework: Framework{Name: fn.GetFramework().GetName(), Arch: fn.GetFramework().GetArch()},
+			Artifact:  artifact,
+			Image:     r.functionImage(fn.GetLogicalName()),
 		})
 	}
 	return specs
 }
 
-func runtimesOf(manifest *contractv1.Manifest) []string {
-	var runtimes []string
+func frameworksOf(manifest *contractv1.Manifest) []string {
+	var frameworks []string
 	for _, app := range manifest.GetApps() {
-		if name := app.GetRuntime().GetName(); name != "" && !slices.Contains(runtimes, name) {
-			runtimes = append(runtimes, name)
+		if name := app.GetFramework().GetName(); name != "" && !slices.Contains(frameworks, name) {
+			frameworks = append(frameworks, name)
 		}
 	}
-	slices.Sort(runtimes)
-	return runtimes
+	slices.Sort(frameworks)
+	return frameworks
 }
 
 func entryLogicalName(manifest *contractv1.Manifest, app, entry string) string {
@@ -1092,7 +1092,7 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFact
 	record := edge.DeploymentRecord{
 		RoutingManifest:  routing,
 		App:              entry.App,
-		Runtime:          entry.Manifest.GetRuntime().GetName(),
+		Framework:        entry.Manifest.GetFramework().GetName(),
 		Identity:         r.plan.Builds[entry.App],
 		DeploymentID:     entry.Build.DeploymentID(),
 		Entry:            facts.Entry,
@@ -1144,7 +1144,7 @@ func (r *deployRun) edgeCode(entry AppEntry, result StackResult) (*edge.Code, er
 	if err != nil {
 		return nil, fmt.Errorf("read the edge bundle %s runs: %w", entry.App, err)
 	}
-	compatDate, compatFlags := host.CodeRuntime()
+	compatDate, compatFlags := host.Compatibility()
 	return &edge.Code{
 		BundleKey:   result.EdgeBundleKey,
 		ID:          loaderID(bundle, compatDate, compatFlags),

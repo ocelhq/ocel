@@ -32,11 +32,11 @@ func compiled(t *testing.T, pkg, arch string) (string, string) {
 	appDir := filepath.Join(out, "apps", "web")
 	funcDir := filepath.Join(appDir, "functions", "index.func")
 	err := Compile(context.Background(), Compilation{
-		App:     "web",
-		Runtime: providerkit.Framework{Name: "go", Arch: arch},
-		Source:  pkg,
-		FuncDir: funcDir,
-		AppDir:  appDir,
+		App:       "web",
+		Framework: providerkit.Framework{Name: "go", Arch: arch},
+		Source:    pkg,
+		FuncDir:   funcDir,
+		AppDir:    appDir,
 	})
 	if err != nil {
 		t.Fatalf("compile: %v", err)
@@ -91,8 +91,8 @@ func TestCompileDeclaresTheCommandTheArtifactIsServedBy(t *testing.T) {
 	if len(config.Command) != 1 || config.Command[0] != "./web" {
 		t.Errorf("command = %q, want the artifact's own binary, which whatever hosts it execs", config.Command)
 	}
-	if config.Runtime != (providerkit.Framework{Name: "go", Arch: "x86_64"}) {
-		t.Errorf("runtime = %+v, want the go runtime at the architecture it was built for", config.Runtime)
+	if config.Framework != (providerkit.Framework{Name: "go", Arch: "x86_64"}) {
+		t.Errorf("runtime = %+v, want the go runtime at the architecture it was built for", config.Framework)
 	}
 	if config.App != "web" {
 		t.Errorf("app = %q, want %q", config.App, "web")
@@ -100,8 +100,8 @@ func TestCompileDeclaresTheCommandTheArtifactIsServedBy(t *testing.T) {
 
 	var descriptor edge.ServeDescriptor
 	readJSON(t, filepath.Join(appDir, edge.ServeDescriptorFile), &descriptor)
-	if descriptor.Runtime != "go" {
-		t.Errorf("the serve descriptor names runtime %q, want %q", descriptor.Runtime, "go")
+	if descriptor.Framework != "go" {
+		t.Errorf("the serve descriptor names runtime %q, want %q", descriptor.Framework, "go")
 	}
 	if descriptor.BuildID == "" {
 		t.Error("the serve descriptor names no build id, and a release is identified by one")
@@ -154,7 +154,7 @@ func TestCompileRefusesAnAppDirectoryThatIsNotItsOwnModuleRoot(t *testing.T) {
 
 	err := Compile(context.Background(), Compilation{
 		App:        "web",
-		Runtime:    providerkit.Framework{Name: "go", Arch: "x86_64"},
+		Framework:  providerkit.Framework{Name: "go", Arch: "x86_64"},
 		Source:     source,
 		Entrypoint: filepath.Join("cmd", "server"),
 		FuncDir:    filepath.Join(t.TempDir(), "index.func"),
@@ -168,11 +168,11 @@ func TestCompileRefusesAnAppDirectoryThatIsNotItsOwnModuleRoot(t *testing.T) {
 func TestCompileRefusesAnArchitectureGoBuildsNothingFor(t *testing.T) {
 	t.Parallel()
 	err := Compile(context.Background(), Compilation{
-		App:     "web",
-		Runtime: providerkit.Framework{Name: "go", Arch: "riscv"},
-		Source:  goModule(t),
-		FuncDir: filepath.Join(t.TempDir(), "index.func"),
-		AppDir:  t.TempDir(),
+		App:       "web",
+		Framework: providerkit.Framework{Name: "go", Arch: "riscv"},
+		Source:    goModule(t),
+		FuncDir:   filepath.Join(t.TempDir(), "index.func"),
+		AppDir:    t.TempDir(),
 	})
 	if err == nil || !strings.Contains(err.Error(), "riscv") {
 		t.Fatalf("err = %v, want a refusal naming riscv", err)
@@ -186,11 +186,11 @@ func TestCompileReportsWhatTheCompilerSaidWhenTheAppDoesNotBuild(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := Compile(context.Background(), Compilation{
-		App:     "web",
-		Runtime: providerkit.Framework{Name: "go", Arch: "x86_64"},
-		Source:  pkg,
-		FuncDir: filepath.Join(t.TempDir(), "index.func"),
-		AppDir:  t.TempDir(),
+		App:       "web",
+		Framework: providerkit.Framework{Name: "go", Arch: "x86_64"},
+		Source:    pkg,
+		FuncDir:   filepath.Join(t.TempDir(), "index.func"),
+		AppDir:    t.TempDir(),
 	})
 	if err == nil || !strings.Contains(err.Error(), "undefinedCall") {
 		t.Fatalf("err = %v, want the compiler's own account of what did not build", err)

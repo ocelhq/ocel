@@ -149,11 +149,11 @@ func HoldsJS(cfg *projectconfig.Config) (bool, error) {
 }
 
 var runtimeLanguages = map[string]Language{
-	providerkit.RuntimeNode:   JS,
-	providerkit.RuntimeNext:   JS,
-	providerkit.RuntimeGo:     Go,
-	providerkit.RuntimePython: Python,
-	providerkit.RuntimeRust:   Rust,
+	providerkit.FrameworkNode:   JS,
+	providerkit.FrameworkNext:   JS,
+	providerkit.FrameworkGo:     Go,
+	providerkit.FrameworkPython: Python,
+	providerkit.FrameworkRust:   Rust,
 }
 
 func LanguageOf(runtime, dir string) Language {
@@ -165,7 +165,7 @@ func LanguageOf(runtime, dir string) Language {
 
 func ClientBundle(runtime, dir string) bool {
 	if runtime != "" {
-		return providerkit.RuntimeBundlesClient(runtime)
+		return providerkit.FrameworkBundlesClient(runtime)
 	}
 	language, manifested := languageOfManifest(dir)
 	return manifested && language == JS
