@@ -3,6 +3,7 @@ package providerkit
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"time"
 
@@ -20,7 +21,8 @@ type eventStream struct {
 	done   chan struct{}
 	ctx    context.Context
 
-	detail func(*progressv1.ResultEvent)
+	detail  func(*progressv1.ResultEvent)
+	refuses []connect.Code
 
 	mu     sync.RWMutex
 	closed bool
@@ -35,6 +37,10 @@ func newEventStream(ctx context.Context, send func(*progressv1.OperationEvent) e
 	}
 	go s.drain(send)
 	return s
+}
+
+func (s *eventStream) refusing(code connect.Code) {
+	s.refuses = append(s.refuses, code)
 }
 
 func (s *eventStream) detailing(detail func(*progressv1.ResultEvent)) {
@@ -67,7 +73,7 @@ func (s *eventStream) fail(err error) error {
 	if s.detail != nil {
 		s.detail(event.GetResult())
 	}
-	refused := refusedRequest(err)
+	refused := refusedRequest(err) || slices.Contains(s.refuses, connect.CodeOf(err))
 	event.GetResult().Refused = refused
 	s.send(event)
 	if refused {
@@ -199,11 +205,7 @@ func logEvent(id StageID, message string) *progressv1.OperationEvent {
 }
 
 func refusedRequest(err error) bool {
-	switch connect.CodeOf(err) {
-	case connect.CodeInvalidArgument, connect.CodeUnimplemented:
-		return true
-	}
-	return false
+	return connect.CodeOf(err) == connect.CodeInvalidArgument
 }
 
 func failureResult(err error) *progressv1.OperationEvent {
