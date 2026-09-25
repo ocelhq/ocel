@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+import ssl
 from urllib.parse import quote
 
 from protobuf import Oneof
@@ -32,22 +33,34 @@ class Postgres:
 
     @property
     def connection_string(self) -> str:
-        """The postgres URL of the delivered binding, with the credentials percent-encoded."""
+        """The postgres URL of the delivered binding: the record's url verbatim when it
+        carries one, and otherwise one built from its host, port, database and credentials,
+        percent-encoded, with its tls mode as ``sslmode``."""
         properties = postgres_binding(self.name)
+        if properties.url:
+            return properties.url
         user = quote(properties.username, safe="")
         password = quote(properties.password, safe="")
         database = quote(properties.database, safe="")
-        return f"postgres://{user}:{password}@{properties.host}:{properties.port}/{database}"
+        query = f"?sslmode={quote(properties.tls_mode, safe='')}" if properties.tls_mode else ""
+        return f"postgres://{user}:{password}@{properties.host}:{properties.port}/{database}{query}"
 
     async def pool(self):
         """The asyncpg pool over the delivered binding, opened on the first call and returned
-        as it stands on every one after."""
+        as it stands on every one after. A record under verify-full that names a CA trusts
+        that CA for the server's certificate."""
         if self._pool is None:
             async with self._opening:
                 if self._pool is None:
                     import asyncpg
 
-                    self._pool = await asyncpg.create_pool(self.connection_string)
+                    options = {}
+                    ca = postgres_binding(self.name).tls_ca
+                    if ca:
+                        context = ssl.create_default_context()
+                        context.load_verify_locations(cadata=ca)
+                        options["ssl"] = context
+                    self._pool = await asyncpg.create_pool(self.connection_string, **options)
         return self._pool
 
     async def fetch(self, query: str, *args):
