@@ -7,7 +7,7 @@ import (
 	"time"
 
 	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
-	bucket "github.com/ocelhq/ocel/platform/s3"
+	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
 type stalling struct {
@@ -41,7 +41,7 @@ func TestAStoreWithNoClaimedAddressAnswersOnTheCallersOwnDeadline(t *testing.T) 
 	defer close(fetcher.held)
 	clock = clock.Add(time.Minute)
 
-	external := publishing(bucket.Store{}, values)
+	external := publishing(s3store.Store{}, values)
 	gone, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -75,7 +75,7 @@ func TestAStoreWithNoClaimedAddressIsNotRereadOnEveryCall(t *testing.T) {
 		t.Fatalf("Prefetch() = %v", err)
 	}
 
-	external := publishing(bucket.Store{}, values)
+	external := publishing(s3store.Store{}, values)
 	for range 5 {
 		clock = clock.Add(time.Minute)
 		if _, base := external(context.Background()); base != "" {

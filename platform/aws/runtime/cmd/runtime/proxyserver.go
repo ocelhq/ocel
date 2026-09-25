@@ -34,9 +34,7 @@ func proxyWanted(bindings []live.Binding) bool {
 	return false
 }
 
-type bindingValues = s3store.Records
-
-func grantedBuckets(values bindingValues) func() []string {
+func grantedBuckets(values s3store.Records) func() []string {
 	return func() []string {
 		var held []string
 		for _, l := range values.Bindings() {
@@ -58,7 +56,7 @@ func grantedBuckets(values bindingValues) func() []string {
 	}
 }
 
-func serveProxy(ctx context.Context, values bindingValues, table, sessionPrefix string) ([]string, <-chan error, error) {
+func serveProxy(ctx context.Context, values s3store.Records, table, sessionPrefix string) ([]string, <-chan error, error) {
 	bindings := values.Bindings()
 	if !proxyWanted(bindings) {
 		return nil, nil, nil
