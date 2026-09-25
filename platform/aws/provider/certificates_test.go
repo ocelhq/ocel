@@ -61,8 +61,8 @@ func (s *stubACM) ListCertificates(context.Context, *acm.ListCertificatesInput, 
 	return &acm.ListCertificatesOutput{}, nil
 }
 
-func issuerOver(api certs.ACMAPI) certs.Issuer {
-	return certs.Issuer{
+func issuerOver(api certs.ACMAPI) certs.ACM {
+	return certs.ACM{
 		API:      api,
 		Region:   certs.CloudFrontRegion,
 		Wait:     func(context.Context, time.Duration) error { return nil },

@@ -11,14 +11,14 @@ import (
 func TestIssuerFor(t *testing.T) {
 	t.Parallel()
 
-	uncertified := IssuerFor("", Deps{AWS: aws.Config{Region: "eu-west-2"}})
+	uncertified := ACMFor("", Deps{AWS: aws.Config{Region: "eu-west-2"}})
 	if uncertified.API != nil {
 		t.Error("an edge that certifies nothing was handed an ACM client; it terminates TLS itself")
 	}
 
-	pinned := IssuerFor(CloudFrontRegion, Deps{AWS: aws.Config{Region: "eu-west-2"}})
+	pinned := ACMFor(CloudFrontRegion, Deps{AWS: aws.Config{Region: "eu-west-2"}})
 	if pinned.API == nil || pinned.Region != CloudFrontRegion {
-		t.Errorf("issuer = %+v, want an ACM client in %s", pinned, CloudFrontRegion)
+		t.Errorf("acm = %+v, want an ACM client in %s", pinned, CloudFrontRegion)
 	}
 }
 
@@ -30,17 +30,17 @@ func TestDiscardIssuerFor(t *testing.T) {
 	t.Run("deletes in the region the certificate was issued in", func(t *testing.T) {
 		t.Parallel()
 
-		issuer := DiscardIssuerFor(Certificate{ARN: testARN, Region: CloudFrontRegion}, deps)
-		if issuer.API == nil || issuer.Region != CloudFrontRegion {
-			t.Errorf("issuer = %+v, want an ACM client in %s, whatever edge is in front now", issuer, CloudFrontRegion)
+		acm := DiscardACMFor(Certificate{ARN: testARN, Region: CloudFrontRegion}, deps)
+		if acm.API == nil || acm.Region != CloudFrontRegion {
+			t.Errorf("acm = %+v, want an ACM client in %s, whatever edge is in front now", acm, CloudFrontRegion)
 		}
 	})
 
 	t.Run("nothing recorded is nothing to delete", func(t *testing.T) {
 		t.Parallel()
 
-		if issuer := DiscardIssuerFor(Certificate{}, deps); issuer.API != nil {
-			t.Errorf("issuer = %+v, want no client for a certificate that was never issued", issuer)
+		if acm := DiscardACMFor(Certificate{}, deps); acm.API != nil {
+			t.Errorf("acm = %+v, want no client for a certificate that was never issued", acm)
 		}
 	})
 }

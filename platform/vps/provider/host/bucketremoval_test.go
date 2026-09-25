@@ -14,7 +14,7 @@ import (
 
 func nowHere() time.Time { return time.Now().UTC() }
 
-func runsHere(t *testing.T) storeRunner {
+func runsHere(t *testing.T) storeShell {
 	t.Helper()
 	return func(what, script string) (string, error) {
 		run := exec.Command("sh", "-c", script)

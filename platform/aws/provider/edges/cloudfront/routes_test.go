@@ -16,7 +16,7 @@ func TestRoutesAreKeyedByTheHostnameLowercased(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
-	writer := routeWriter{clients: w.clients(), arn: fakeStoreARN}
+	writer := routeStore{clients: w.clients(), arn: fakeStoreARN}
 
 	if err := writer.apply(context.Background(), map[string]route{
 		"Shop.Example.com": {Origin: fakeEntryHost, Release: "d1.f1"},
@@ -61,7 +61,7 @@ func TestAThrottledStoreIsWaitedOutRatherThanGivenUpOn(t *testing.T) {
 
 		w := newWorld()
 		w.store.describeErr = throttlingError()
-		writer := routeWriter{
+		writer := routeStore{
 			clients: w.clients(),
 			arn:     fakeStoreARN,
 			wait:    func(context.Context, time.Duration) error { return nil },

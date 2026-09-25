@@ -22,7 +22,7 @@ import (
 )
 
 type storeSource struct {
-	reader   values.Reader
+	reader   values.View
 	cells    []values.Cell
 	bindings []live.Binding
 
@@ -134,7 +134,7 @@ func FromManifest(ctx context.Context, raw []byte) (*live.Values, error) {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
 	return live.New(&storeSource{
-		reader: values.Reader{
+		reader: values.View{
 			Records:     awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: awsports.Table(manifest.Table)},
 			Cipher:      awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: awsports.Key(manifest.KeyARN)},
 			Scope:       values.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},

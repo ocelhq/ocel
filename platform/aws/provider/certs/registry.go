@@ -25,26 +25,26 @@ func (d Deps) http() *http.Client {
 	return &http.Client{Timeout: acmCallTimeout}
 }
 
-func IssuerFor(region string, deps Deps) Issuer {
+func ACMFor(region string, deps Deps) ACM {
 	if region == "" {
-		return Issuer{}
+		return ACM{}
 	}
-	return newIssuer(deps, region)
+	return newACM(deps, region)
 }
 
-func DiscardIssuerFor(cert Certificate, deps Deps) Issuer {
+func DiscardACMFor(cert Certificate, deps Deps) ACM {
 	if cert.ARN == "" {
-		return Issuer{}
+		return ACM{}
 	}
 	region := cert.Region
 	if region == "" {
 		region = deps.AWS.Region
 	}
-	return newIssuer(deps, region)
+	return newACM(deps, region)
 }
 
-func newIssuer(deps Deps, region string) Issuer {
-	return Issuer{
+func newACM(deps Deps, region string) ACM {
+	return ACM{
 		API: acm.NewFromConfig(deps.AWS, func(o *acm.Options) {
 			o.Region = region
 			o.HTTPClient = deps.http()

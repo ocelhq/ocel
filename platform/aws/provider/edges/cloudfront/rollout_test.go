@@ -15,7 +15,7 @@ func TestSettler(t *testing.T) {
 		t.Parallel()
 
 		held := 0
-		s := Settler{
+		s := Rollout{
 			Wait:     func(context.Context, time.Duration) error { held++; return nil },
 			Attempts: 5,
 			Every:    time.Second,
@@ -44,7 +44,7 @@ func TestSettler(t *testing.T) {
 	t.Run("it gives up naming roughly how long it waited", func(t *testing.T) {
 		t.Parallel()
 
-		s := Settler{
+		s := Rollout{
 			Wait:     func(context.Context, time.Duration) error { return nil },
 			Attempts: 3,
 			Every:    time.Second,
@@ -68,7 +68,7 @@ func TestSettler(t *testing.T) {
 	t.Run("a cancelled command stops waiting", func(t *testing.T) {
 		t.Parallel()
 
-		s := Settler{
+		s := Rollout{
 			Wait:     func(context.Context, time.Duration) error { return context.Canceled },
 			Attempts: 5,
 			Every:    time.Second,
@@ -87,7 +87,7 @@ func TestSettler(t *testing.T) {
 	t.Run("a throttled status check is another attempt", func(t *testing.T) {
 		t.Parallel()
 
-		s := Settler{
+		s := Rollout{
 			Wait:     func(context.Context, time.Duration) error { return nil },
 			Attempts: 5,
 			Every:    time.Second,

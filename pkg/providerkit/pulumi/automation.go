@@ -76,20 +76,20 @@ type Config struct {
 	Plugins []Plugin
 }
 
-type Adapter struct {
+type Automation struct {
 	config  Config
 	plugins *hostedPlugins
 }
 
-func New(config Config) *Adapter {
-	return &Adapter{config: config, plugins: &hostedPlugins{declared: config.Plugins}}
+func New(config Config) *Automation {
+	return &Automation{config: config, plugins: &hostedPlugins{declared: config.Plugins}}
 }
 
-func (a *Adapter) Access() Access { return a.config.Access }
+func (a *Automation) Access() Access { return a.config.Access }
 
-func (a *Adapter) StackName(ref providerkit.StackRef) string { return ref.Name.String() }
+func (a *Automation) StackName(ref providerkit.StackRef) string { return ref.Name.String() }
 
-func (a *Adapter) ProjectName(ref providerkit.StackRef) string {
+func (a *Automation) ProjectName(ref providerkit.StackRef) string {
 	if a.config.Access.Project != "" {
 		return a.config.Access.Project
 	}
@@ -116,11 +116,11 @@ type Setup struct {
 	Refresh bool
 }
 
-func (a *Adapter) Workspace(plan providerkit.StackPlan) (Setup, error) {
+func (a *Automation) Workspace(plan providerkit.StackPlan) (Setup, error) {
 	return a.workspace(plan, OpProvision)
 }
 
-func (a *Adapter) workspace(plan providerkit.StackPlan, op Op) (Setup, error) {
+func (a *Automation) workspace(plan providerkit.StackPlan, op Op) (Setup, error) {
 	access := a.config.Access
 	switch {
 	case access.BackendURL == "":
@@ -131,7 +131,7 @@ func (a *Adapter) workspace(plan providerkit.StackPlan, op Op) (Setup, error) {
 			"this provider names no state passphrase, and %s's state would be written unsealed", plan.Ref.Name)
 	case a.config.Program == nil:
 		return Setup{}, providerkit.Refuse(providerkit.CodeNotReady,
-			"this adapter carries no program, so there is nothing for the engine to run over %s", plan.Ref.Name)
+			"this automation carries no program, so there is nothing for the engine to run over %s", plan.Ref.Name)
 	}
 
 	project := workspace.Project{
@@ -162,18 +162,18 @@ func (a *Adapter) workspace(plan providerkit.StackPlan, op Op) (Setup, error) {
 	}, nil
 }
 
-func (a *Adapter) parallel() int {
+func (a *Automation) parallel() int {
 	if a.config.Parallel > 0 {
 		return a.config.Parallel
 	}
 	return DefaultParallel
 }
 
-func (a *Adapter) refreshes(ref providerkit.StackRef, op Op) bool {
+func (a *Automation) refreshes(ref providerkit.StackRef, op Op) bool {
 	return a.config.Refresh != nil && a.config.Refresh(ref, op)
 }
 
-func (a *Adapter) env() (map[string]string, error) {
+func (a *Automation) env() (map[string]string, error) {
 	env := map[string]string{
 		passphraseEnvVar:           a.config.Access.Passphrase,
 		backendEnvVar:              a.config.Access.BackendURL,
@@ -193,7 +193,7 @@ func (a *Adapter) env() (map[string]string, error) {
 	return env, nil
 }
 
-func (a *Adapter) Stack(ctx context.Context, plan providerkit.StackPlan) (auto.ConfigMap, error) {
+func (a *Automation) Stack(ctx context.Context, plan providerkit.StackPlan) (auto.ConfigMap, error) {
 	if _, err := a.Workspace(plan); err != nil {
 		return nil, err
 	}
@@ -203,7 +203,7 @@ func (a *Adapter) Stack(ctx context.Context, plan providerkit.StackPlan) (auto.C
 	return a.config.Configure(ctx, plan)
 }
 
-func (a *Adapter) setup(ctx context.Context, plan providerkit.StackPlan, op Op, progress providerkit.Progress) (Setup, error) {
+func (a *Automation) setup(ctx context.Context, plan providerkit.StackPlan, op Op, progress providerkit.Progress) (Setup, error) {
 	setup, err := a.workspace(plan, op)
 	if err != nil {
 		return Setup{}, err
@@ -221,22 +221,22 @@ func (a *Adapter) setup(ctx context.Context, plan providerkit.StackPlan, op Op, 
 	return setup, nil
 }
 
-func (a *Adapter) engine() Engine {
+func (a *Automation) engine() Engine {
 	if a.config.Engine != nil {
 		return a.config.Engine
 	}
 	return autoEngine{}
 }
 
-func (a *Adapter) Preview(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
+func (a *Automation) Preview(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
 	return a.preview(ctx, plan, OpProvision, progress)
 }
 
-func (a *Adapter) PreviewDestroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (providerkit.Plan, error) {
+func (a *Automation) PreviewDestroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (providerkit.Plan, error) {
 	return a.preview(ctx, providerkit.StackPlan{Ref: ref}, OpDestroy, progress)
 }
 
-func (a *Adapter) preview(ctx context.Context, plan providerkit.StackPlan, op Op, progress providerkit.Progress) (providerkit.Plan, error) {
+func (a *Automation) preview(ctx context.Context, plan providerkit.StackPlan, op Op, progress providerkit.Progress) (providerkit.Plan, error) {
 	setup, err := a.setup(ctx, plan, op, progress)
 	if err != nil {
 		return providerkit.Plan{}, err
@@ -307,7 +307,7 @@ func plannedAction(op apitype.OpType) (providerkit.ChangeAction, bool) {
 	}
 }
 
-func (a *Adapter) Run(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
+func (a *Automation) Run(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
 	setup, err := a.setup(ctx, plan, OpProvision, progress)
 	if err != nil {
 		return providerkit.StackResult{}, err
@@ -322,7 +322,7 @@ func (a *Adapter) Run(ctx context.Context, plan providerkit.StackPlan, progress 
 	return a.config.Decode(ctx, plan, outputs)
 }
 
-func (a *Adapter) Destroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
+func (a *Automation) Destroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
 	setup, err := a.setup(ctx, providerkit.StackPlan{Ref: ref}, OpDestroy, progress)
 	if err != nil {
 		return err
@@ -333,7 +333,7 @@ func (a *Adapter) Destroy(ctx context.Context, ref providerkit.StackRef, progres
 	return nil
 }
 
-func (a *Adapter) Outputs(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (auto.OutputMap, error) {
+func (a *Automation) Outputs(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (auto.OutputMap, error) {
 	setup, err := a.setup(ctx, providerkit.StackPlan{Ref: ref}, OpProvision, progress)
 	if err != nil {
 		return nil, err

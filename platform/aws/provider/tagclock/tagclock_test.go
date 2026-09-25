@@ -126,10 +126,10 @@ func TestSweepTakesEveryTagRowTheStackWrote(t *testing.T) {
 		tagRow("shop", stack, "carts"),
 		tagRow("shop", survivor, "products"),
 	}}
-	sweeper := &Sweeper{Dynamo: ddb, Table: "state"}
+	table := &Table{Dynamo: ddb, Table: "state"}
 
-	if err := sweeper.SweepTagClock(context.Background(), "shop", stack); err != nil {
-		t.Fatalf("SweepTagClock: %v", err)
+	if err := table.Sweep(context.Background(), "shop", stack); err != nil {
+		t.Fatalf("Sweep: %v", err)
 	}
 
 	want := []string{

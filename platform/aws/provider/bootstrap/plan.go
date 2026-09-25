@@ -171,7 +171,7 @@ func renderGroup(target spec, feature string, in featureInputs) (featureStack, b
 
 func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, group providerkit.ChangeGroup, stack featureStack, writer providerkit.WrittenBy) providerkit.ChangeGroup {
 	tags := stampTags(ns, Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(stack.body), WrittenBy: writer.String()})
-	id, changes, err := cfn.Plan(ctx, stacks, ns, group.Name, stack.body, stack.params,
+	id, changes, err := cfn.Plan(ctx, stacks, ns.ChangeSetNameFor, group.Name, stack.body, stack.params,
 		[]cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}, tags)
 	if err != nil {
 		group.Reason = providerkit.WithoutDetail(group.Reason)

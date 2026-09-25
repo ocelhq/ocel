@@ -68,11 +68,11 @@ func PlanParameters(ctx context.Context, apis ParamAPIs, ns Namespace, class str
 		}
 		adopted = append(adopted, changes...)
 	}
-	written, err := featureParams(ctx, apis, ns, class, req, req.Features, func(f feature) paramPlanner { return f.afterPlan })
+	written, err := featureParams(ctx, apis, ns, class, req, req.Features, func(f feature) paramChanges { return f.afterPlan })
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
-	severed, err := featureParams(ctx, apis, ns, class, req, Removing(req.Features, req.Remove), func(f feature) paramPlanner { return f.dropPlan })
+	severed, err := featureParams(ctx, apis, ns, class, req, Removing(req.Features, req.Remove), func(f feature) paramChanges { return f.dropPlan })
 	if err != nil {
 		return providerkit.ChangeGroup{}, err
 	}
@@ -82,9 +82,9 @@ func PlanParameters(ctx context.Context, apis ParamAPIs, ns Namespace, class str
 	return group, nil
 }
 
-type paramPlanner func(context.Context, ParamAPIs, Namespace, string, Request) ([]providerkit.Change, error)
+type paramChanges func(context.Context, ParamAPIs, Namespace, string, Request) ([]providerkit.Change, error)
 
-func featureParams(ctx context.Context, apis ParamAPIs, ns Namespace, class string, req Request, named []string, hook func(feature) paramPlanner) ([]providerkit.Change, error) {
+func featureParams(ctx context.Context, apis ParamAPIs, ns Namespace, class string, req Request, named []string, hook func(feature) paramChanges) ([]providerkit.Change, error) {
 	var changes []providerkit.Change
 	for _, f := range featureRegistry {
 		plan := hook(f)

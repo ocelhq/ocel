@@ -207,7 +207,7 @@ func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale
 	}
 	tags := stampTags(ns, Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(stack.body), WrittenBy: writer.String()})
 	capabilities := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
-	if err := cfn.Update(ctx, apis.CFN, ns, stale.Name, stack.body, stack.params, capabilities, tags, healable(ns)); err != nil {
+	if err := cfn.Update(ctx, apis.CFN, ns.ChangeSetNameFor, stale.Name, stack.body, stack.params, capabilities, tags, healable(ns)); err != nil {
 		return false, err
 	}
 	log(fmt.Sprintf("refreshed %s", stale.Name))

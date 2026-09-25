@@ -13,12 +13,12 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 )
 
-func TestEventTracerDeclareStagesSendsAStagePlanEvent(t *testing.T) {
+func TestEventTraceDeclareStagesSendsAStagePlanEvent(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
-	sender := newEventSender(context.Background(), stream.send)
-	tracer := newEventTracer(sender)
+	sender := newEventStream(context.Background(), stream.send)
+	tracer := newEventTrace(sender)
 
 	unit := UnitStage(naming.UnitEnvironment, "Environment")
 	phase := PhaseStage(unit.Name, progressv1.Phase_PHASE_PROVISIONING)
@@ -57,8 +57,8 @@ func TestDeclaredUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
-	sender := newEventSender(context.Background(), stream.send)
-	tracer := newEventTracer(sender)
+	sender := newEventStream(context.Background(), stream.send)
+	tracer := newEventTrace(sender)
 
 	unit := UnitStage(naming.UnitEnvironment, "Environment")
 	tracer.DeclareStages(
@@ -97,12 +97,12 @@ func TestDetailStagesMintTheirOwnIDUnderTheirPhase(t *testing.T) {
 	}
 }
 
-func TestEventTracerSpanUsesTheStageIDAsTheSpanID(t *testing.T) {
+func TestEventTraceSpanUsesTheStageIDAsTheSpanID(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
-	sender := newEventSender(context.Background(), stream.send)
-	tracer := newEventTracer(sender)
+	sender := newEventStream(context.Background(), stream.send)
+	tracer := newEventTrace(sender)
 
 	root := UnitStage(naming.UnitEnvironment, "Environment")
 	child := NewStage(root, "web")
@@ -137,12 +137,12 @@ func TestEventTracerSpanUsesTheStageIDAsTheSpanID(t *testing.T) {
 	}
 }
 
-func TestEventTracerSpanRecordsAFailureAsAnErrorKindNeverRawText(t *testing.T) {
+func TestEventTraceSpanRecordsAFailureAsAnErrorKindNeverRawText(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
-	sender := newEventSender(context.Background(), stream.send)
-	tracer := newEventTracer(sender)
+	sender := newEventStream(context.Background(), stream.send)
+	tracer := newEventTrace(sender)
 
 	secret := "postgres://user:hunter2@10.0.0.1:5432/db AKIAABCDEF1234567890"
 	stage := UnitStage(naming.UnitEnvironment, "Environment")

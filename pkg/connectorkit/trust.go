@@ -117,30 +117,30 @@ func or(named, fallback string) string {
 	return named
 }
 
-type caller struct {
+type claims struct {
 	act    string
 	scopes []string
 }
 
-func (t *trust) caller(ctx context.Context, authorization string) (caller, error) {
+func (t *trust) caller(ctx context.Context, authorization string) (claims, error) {
 	raw, found := strings.CutPrefix(authorization, "Bearer ")
 	if !found || raw == "" {
-		return caller{}, connect.NewError(connect.CodeUnauthenticated, errors.New("no bearer token"))
+		return claims{}, connect.NewError(connect.CodeUnauthenticated, errors.New("no bearer token"))
 	}
 
 	message, err := jws.ParseString(raw)
 	if err != nil {
-		return caller{}, connect.NewError(connect.CodeUnauthenticated, errors.New("the bearer token is not a signed jwt"))
+		return claims{}, connect.NewError(connect.CodeUnauthenticated, errors.New("the bearer token is not a signed jwt"))
 	}
 	signatures := message.Signatures()
 	if len(signatures) != 1 {
-		return caller{}, connect.NewError(connect.CodeUnauthenticated, errors.New("the bearer token carries no single signature"))
+		return claims{}, connect.NewError(connect.CodeUnauthenticated, errors.New("the bearer token carries no single signature"))
 	}
 	kid, _ := signatures[0].ProtectedHeaders().KeyID()
 
 	set, err := t.keys.forKeyID(ctx, kid)
 	if err != nil {
-		return caller{}, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("reach the console keys: %w", err))
+		return claims{}, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("reach the console keys: %w", err))
 	}
 
 	token, err := jwt.ParseString(raw,
@@ -150,26 +150,26 @@ func (t *trust) caller(ctx context.Context, authorization string) (caller, error
 		jwt.WithAcceptableSkew(skew),
 	)
 	if err != nil {
-		return caller{}, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("verify the bearer token: %w", err))
+		return claims{}, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("verify the bearer token: %w", err))
 	}
 
 	subject, _ := token.Subject()
 	if subject != t.subject {
-		return caller{}, connect.NewError(connect.CodePermissionDenied,
+		return claims{}, connect.NewError(connect.CodePermissionDenied,
 			fmt.Errorf("the token speaks for %q, not for this account", subject))
 	}
 
 	var claimed any
 	if err := token.Get("scope", &claimed); err != nil {
-		return caller{}, connect.NewError(connect.CodePermissionDenied, errors.New("the token carries no scope"))
+		return claims{}, connect.NewError(connect.CodePermissionDenied, errors.New("the token carries no scope"))
 	}
 	held, ok := stringsOf(claimed)
 	if !ok {
-		return caller{}, connect.NewError(connect.CodePermissionDenied, errors.New("the token's scope is not a list of names"))
+		return claims{}, connect.NewError(connect.CodePermissionDenied, errors.New("the token's scope is not a list of names"))
 	}
 	var act string
 	_ = token.Get("act", &act)
-	return caller{act: act, scopes: held}, nil
+	return claims{act: act, scopes: held}, nil
 }
 
 func stringsOf(claimed any) ([]string, bool) {

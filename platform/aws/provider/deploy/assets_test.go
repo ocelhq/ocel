@@ -20,7 +20,7 @@ func staticAppTree(t *testing.T) string {
 	})
 }
 
-func sortedPuts(f *fakeUploader) []string {
+func sortedPuts(f *fakeArtifactStore) []string {
 	keys := append([]string(nil), f.puts...)
 	slices.Sort(keys)
 	return keys
@@ -35,11 +35,11 @@ func imageConfigTree(t *testing.T) string {
 	})
 }
 
-func mirrorConfig(root string, store, asset *fakeUploader) Config {
+func mirrorConfig(root string, store, asset *fakeArtifactStore) Config {
 	return Config{
 		ArtifactRoot: root, Env: "prod",
-		AssetBucket: "assets", Uploader: asset,
-		CacheStoreBucket: "isr", CacheStoreUploader: store,
+		AssetBucket: "assets", Objects: asset,
+		CacheStoreBucket: "isr", CacheStoreObjects: store,
 	}
 }
 
@@ -76,11 +76,11 @@ func TestUploadStaticAssets(t *testing.T) {
 
 	t.Run("uploads each app under its own prefix", func(t *testing.T) {
 		t.Parallel()
-		store := &fakeUploader{exists: map[string]bool{}}
+		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{
 			ArtifactRoot: staticAppTree(t), AssetBucket: "assets", Env: "prod",
-			Uploader:         &fakeUploader{exists: map[string]bool{}},
-			CacheStoreBucket: "isr", CacheStoreUploader: store,
+			Objects:          &fakeArtifactStore{exists: map[string]bool{}},
+			CacheStoreBucket: "isr", CacheStoreObjects: store,
 		}
 
 		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
@@ -111,7 +111,7 @@ func TestUploadStaticAssets(t *testing.T) {
 
 	t.Run("stamps content type and cache control per path class", func(t *testing.T) {
 		t.Parallel()
-		store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
+		store, asset := &fakeArtifactStore{exists: map[string]bool{}}, &fakeArtifactStore{exists: map[string]bool{}}
 		root := writeTree(t, map[string]string{
 			"apps/web/routing-manifest.json":                         `{"buildId":"WEB1"}`,
 			"apps/web/static/_next/static/chunk.js":                  "console.log(1)",
@@ -152,7 +152,7 @@ func TestUploadStaticAssets(t *testing.T) {
 			{"LICENSE", "application/octet-stream", revalidateCacheControl},
 		} {
 			key := assetKeyFor("web", testDeploymentID, tc.rel)
-			for name, up := range map[string]*fakeUploader{"cache store": store, "asset bucket": asset} {
+			for name, up := range map[string]*fakeArtifactStore{"cache store": store, "asset bucket": asset} {
 				if got := up.contentTypes[key]; got != tc.contentType {
 					t.Errorf("%s %s content-type = %q, want %q", name, tc.rel, got, tc.contentType)
 				}
@@ -166,8 +166,8 @@ func TestUploadStaticAssets(t *testing.T) {
 	t.Run("a present object is not re-put", func(t *testing.T) {
 		t.Parallel()
 		key := assetKeyFor("web", testDeploymentID, "_next/static/chunk.js")
-		store := &fakeUploader{exists: map[string]bool{key: true}}
-		asset := &fakeUploader{exists: map[string]bool{key: true}}
+		store := &fakeArtifactStore{exists: map[string]bool{key: true}}
+		asset := &fakeArtifactStore{exists: map[string]bool{key: true}}
 		root := writeTree(t, map[string]string{
 			"apps/web/routing-manifest.json":        `{"buildId":"WEB1"}`,
 			"apps/web/static/_next/static/chunk.js": "console.log(1)",
@@ -177,7 +177,7 @@ func TestUploadStaticAssets(t *testing.T) {
 		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadStaticAssets: %v", err)
 		}
-		for name, up := range map[string]*fakeUploader{"cache store": store, "asset bucket": asset} {
+		for name, up := range map[string]*fakeArtifactStore{"cache store": store, "asset bucket": asset} {
 			if got := sortedPuts(up); len(got) != 0 {
 				t.Errorf("%s put %v, want the HEAD hit to skip the upload", name, got)
 			}
@@ -186,8 +186,8 @@ func TestUploadStaticAssets(t *testing.T) {
 
 	t.Run("unadopted store uploads nothing", func(t *testing.T) {
 		t.Parallel()
-		asset := &fakeUploader{exists: map[string]bool{}}
-		cfg := Config{ArtifactRoot: staticAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: asset}
+		asset := &fakeArtifactStore{exists: map[string]bool{}}
+		cfg := Config{ArtifactRoot: staticAppTree(t), AssetBucket: "assets", Env: "prod", Objects: asset}
 
 		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadStaticAssets: %v", err)
@@ -199,14 +199,14 @@ func TestUploadStaticAssets(t *testing.T) {
 
 	t.Run("no static output uploads nothing", func(t *testing.T) {
 		t.Parallel()
-		store := &fakeUploader{exists: map[string]bool{}}
+		store := &fakeArtifactStore{exists: map[string]bool{}}
 		root := writeTree(t, map[string]string{
 			"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
 		})
 		cfg := Config{
 			ArtifactRoot: root, AssetBucket: "assets", Env: "prod",
-			Uploader:         &fakeUploader{exists: map[string]bool{}},
-			CacheStoreBucket: "isr", CacheStoreUploader: store,
+			Objects:          &fakeArtifactStore{exists: map[string]bool{}},
+			CacheStoreBucket: "isr", CacheStoreObjects: store,
 		}
 
 		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
@@ -219,11 +219,11 @@ func TestUploadStaticAssets(t *testing.T) {
 
 	t.Run("a rotation reuses the build's objects", func(t *testing.T) {
 		t.Parallel()
-		store := &fakeUploader{exists: map[string]bool{}}
+		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{
 			ArtifactRoot: staticAppTree(t), AssetBucket: "assets", Env: "prod",
-			Uploader:         &fakeUploader{exists: map[string]bool{}},
-			CacheStoreBucket: "isr", CacheStoreUploader: store,
+			Objects:          &fakeArtifactStore{exists: map[string]bool{}},
+			CacheStoreBucket: "isr", CacheStoreObjects: store,
 		}
 
 		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
@@ -248,7 +248,7 @@ func TestUploadStaticAssets(t *testing.T) {
 
 	t.Run("mirrors identical keys and bytes to both targets", func(t *testing.T) {
 		t.Parallel()
-		store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
+		store, asset := &fakeArtifactStore{exists: map[string]bool{}}, &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := mirrorConfig(imageConfigTree(t), store, asset)
 
 		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
@@ -275,7 +275,7 @@ func TestUploadStaticAssets(t *testing.T) {
 
 	t.Run("publishes the image config outside the public web root", func(t *testing.T) {
 		t.Parallel()
-		store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
+		store, asset := &fakeArtifactStore{exists: map[string]bool{}}, &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := mirrorConfig(imageConfigTree(t), store, asset)
 
 		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
@@ -306,7 +306,7 @@ func TestUploadStaticAssets(t *testing.T) {
 			"apps/web/image-config.json":        `{"formats":["image/webp"]}`,
 			"apps/web/static/image-config.json": `{"mine":true}`,
 		})
-		store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
+		store, asset := &fakeArtifactStore{exists: map[string]bool{}}, &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := mirrorConfig(root, store, asset)
 
 		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
@@ -323,7 +323,7 @@ func TestUploadStaticAssets(t *testing.T) {
 
 	t.Run("app without an image config publishes none", func(t *testing.T) {
 		t.Parallel()
-		store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
+		store, asset := &fakeArtifactStore{exists: map[string]bool{}}, &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := mirrorConfig(staticAppTree(t), store, asset)
 
 		if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
@@ -342,8 +342,8 @@ func TestUploadStaticAssets(t *testing.T) {
 			imageConfigKeyFor("web", testDeploymentID):       true,
 			assetKeyFor("web", testDeploymentID, "logo.png"): true,
 		}
-		store := &fakeUploader{exists: present}
-		asset := &fakeUploader{exists: present}
+		store := &fakeArtifactStore{exists: present}
+		asset := &fakeArtifactStore{exists: present}
 		cfg := mirrorConfig(imageConfigTree(t), store, asset)
 
 		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
@@ -364,11 +364,11 @@ func TestUploadStaticAssets(t *testing.T) {
 		boom := errors.New("bucket is on fire")
 		for _, tc := range []struct {
 			name         string
-			store, asset *fakeUploader
+			store, asset *fakeArtifactStore
 		}{
-			{"cache store put fails", &fakeUploader{exists: map[string]bool{}, putErr: boom}, &fakeUploader{exists: map[string]bool{}}},
-			{"asset bucket put fails", &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}, putErr: boom}},
-			{"asset bucket head fails", &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}, headErr: boom}},
+			{"cache store put fails", &fakeArtifactStore{exists: map[string]bool{}, putErr: boom}, &fakeArtifactStore{exists: map[string]bool{}}},
+			{"asset bucket put fails", &fakeArtifactStore{exists: map[string]bool{}}, &fakeArtifactStore{exists: map[string]bool{}, putErr: boom}},
+			{"asset bucket head fails", &fakeArtifactStore{exists: map[string]bool{}}, &fakeArtifactStore{exists: map[string]bool{}, headErr: boom}},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				cfg := mirrorConfig(imageConfigTree(t), tc.store, tc.asset)
@@ -386,10 +386,10 @@ func TestUploadStaticAssets(t *testing.T) {
 
 	t.Run("missing asset bucket fails the deploy", func(t *testing.T) {
 		t.Parallel()
-		store := &fakeUploader{exists: map[string]bool{}}
+		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{
 			ArtifactRoot: imageConfigTree(t), Env: "prod",
-			CacheStoreBucket: "isr", CacheStoreUploader: store,
+			CacheStoreBucket: "isr", CacheStoreObjects: store,
 		}
 
 		if err := uploadStaticAssets(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err == nil {
@@ -405,7 +405,7 @@ func TestUploadPrerenderAssetsMirroring(t *testing.T) {
 			"apps/web/cache/index.cache.json":    `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
 			"apps/web/fetch-cache/a1.cache.json": `{"lastModified":2,"value":{"kind":"FETCH"}}`,
 		})
-		store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
+		store, asset := &fakeArtifactStore{exists: map[string]bool{}}, &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := adoptISRWriter(t, mirrorConfig(root, store, asset))
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err != nil {

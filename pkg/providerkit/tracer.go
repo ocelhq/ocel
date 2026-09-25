@@ -187,15 +187,15 @@ func ClassifyError(err error) string {
 }
 
 type stageScope struct {
-	sender *eventSender
-	tracer *eventTracer
+	sender *eventStream
+	trace  *eventTrace
 
 	mu       sync.Mutex
 	declared map[StageID]bool
 }
 
-func newStageScope(sender *eventSender) *stageScope {
-	return &stageScope{sender: sender, tracer: newEventTracer(sender), declared: map[StageID]bool{}}
+func newStageScope(sender *eventStream) *stageScope {
+	return &stageScope{sender: sender, trace: newEventTrace(sender), declared: map[StageID]bool{}}
 }
 
 func (s *stageScope) declare(stages ...Stage) {
@@ -211,14 +211,14 @@ func (s *stageScope) declare(stages ...Stage) {
 		}
 	}
 	s.mu.Unlock()
-	s.tracer.DeclareStages(fresh...)
+	s.trace.DeclareStages(fresh...)
 }
 
 func (s *stageScope) unit(stage Stage, do func(*unitRun) error) error {
 	s.declare(stage)
 	start := time.Now()
 	err := do(&unitRun{scope: s, stage: stage})
-	s.tracer.Span(stage.ID, stage.ParentID, stage.Title, start, time.Now(), err)
+	s.trace.Span(stage.ID, stage.ParentID, stage.Title, start, time.Now(), err)
 	return err
 }
 
@@ -232,19 +232,19 @@ func (u *unitRun) phase(phase progressv1.Phase, do func(Progress) error) error {
 	u.scope.declare(working)
 	start := time.Now()
 	err := do(newProgress(u.scope.sender, working))
-	u.scope.tracer.Span(working.ID, working.ParentID, working.Title, start, time.Now(), err)
+	u.scope.trace.Span(working.ID, working.ParentID, working.Title, start, time.Now(), err)
 	return err
 }
 
-type eventTracer struct {
-	sender *eventSender
+type eventTrace struct {
+	sender *eventStream
 }
 
-func newEventTracer(sender *eventSender) *eventTracer {
-	return &eventTracer{sender: sender}
+func newEventTrace(sender *eventStream) *eventTrace {
+	return &eventTrace{sender: sender}
 }
 
-func (t *eventTracer) DeclareStages(stages ...Stage) {
+func (t *eventTrace) DeclareStages(stages ...Stage) {
 	if len(stages) == 0 {
 		return
 	}
@@ -262,7 +262,7 @@ func (t *eventTracer) DeclareStages(stages ...Stage) {
 	})
 }
 
-func (t *eventTracer) Span(id, parentID StageID, name string, start, end time.Time, err error, attrs ...Attr) {
+func (t *eventTrace) Span(id, parentID StageID, name string, start, end time.Time, err error, attrs ...Attr) {
 	status := progressv1.SpanStatus_SPAN_STATUS_OK
 	if err != nil {
 		status = progressv1.SpanStatus_SPAN_STATUS_ERROR

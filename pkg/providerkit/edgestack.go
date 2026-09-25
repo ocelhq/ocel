@@ -50,7 +50,7 @@ type stackSession struct {
 	stack    edge.EdgeStack
 	store    stackStore
 	state    EdgeStackState
-	settle   settler
+	settle   settlement
 }
 
 func (h *handlers) edgeFor(provider Provider, sel *contractv1.EdgeSelection) (edge.Edge, error) {
@@ -110,7 +110,7 @@ func (h *handlers) openStack(ctx context.Context, class Class, slug string, sel 
 }
 
 func (s *stackSession) installSettler(writer edge.DNSRecords, zone string) {
-	s.settle = newSettler(s.front, writer, zone, s.provider.Liveness())
+	s.settle = newSettlement(s.front, writer, zone, s.provider.Liveness())
 }
 
 func (s *stackSession) checkpoint(ctx context.Context) error {

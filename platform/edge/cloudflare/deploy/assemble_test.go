@@ -52,7 +52,7 @@ func writeAppArtifacts(t *testing.T) edge.WorkerSource {
 
 func assembleFor(t *testing.T) func(edge.WorkerSource, edge.Addresses) (edge.Worker, error) {
 	t.Helper()
-	return (&provider{namespace: "ocel"}).assembleApp
+	return (&cloudflare{namespace: "ocel"}).assembleApp
 }
 
 func signing(urls map[string]string) stubAddresses {

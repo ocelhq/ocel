@@ -16,7 +16,7 @@ const (
 	objectStoreBinding = "OCEL_CACHE_STORE"
 )
 
-func (p *provider) assembleApp(src edge.WorkerSource, r edge.Addresses) (edge.Worker, error) {
+func (p *cloudflare) assembleApp(src edge.WorkerSource, r edge.Addresses) (edge.Worker, error) {
 	main, err := os.ReadFile(src.BundlePath)
 	if err != nil {
 		return edge.Worker{}, fmt.Errorf("read edge worker bundle: %w", err)

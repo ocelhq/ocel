@@ -26,21 +26,21 @@ const (
 
 type resolvesEverywhere struct{ resolvesNothing }
 
-func (resolvesEverywhere) LookupHost(context.Context, string) ([]string, error) {
+func (resolvesEverywhere) Host(context.Context, string) ([]string, error) {
 	return []string{"192.0.2.1"}, nil
 }
 
 type resolvesNothing struct{}
 
-func (resolvesNothing) LookupHost(_ context.Context, host string) ([]string, error) {
+func (resolvesNothing) Host(_ context.Context, host string) ([]string, error) {
 	return nil, &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
 }
 
-func (resolvesNothing) LookupNS(_ context.Context, name string) ([]*net.NS, error) {
+func (resolvesNothing) NS(_ context.Context, name string) ([]*net.NS, error) {
 	return nil, &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
 }
 
-func (resolvesNothing) LookupCNAME(_ context.Context, host string) (string, error) {
+func (resolvesNothing) CNAME(_ context.Context, host string) (string, error) {
 	return "", &net.DNSError{Err: "no such host", Name: host, IsNotFound: true}
 }
 

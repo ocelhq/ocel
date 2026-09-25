@@ -40,7 +40,7 @@ func TestTheCoreIsTheSameWhicheverEdgeFrontsIt(t *testing.T) {
 
 func TestReadingABootstrapSeesEveryEdgeThatStands(t *testing.T) {
 	stamp := Stamp{Schema: RequiredSchema}
-	api := stubDescriber{
+	api := stubStacksAPI{
 		coreStackName: outputs(map[string]string{
 			outputInfraClass:  ClassProduction,
 			outputAssetBucket: "assets-1",

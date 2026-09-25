@@ -20,7 +20,7 @@ func pushing(t *testing.T, endpoint string) *Provider {
 		tokens:    handedToken("ya29.stub"),
 		endpoint:  endpoint,
 		namespace: names.namespace,
-		standing:  &clients{Names: names, region: "europe-west1", endpoint: endpoint},
+		resolved:  &clients{Names: names, region: "europe-west1", endpoint: endpoint},
 	}
 }
 
@@ -44,7 +44,7 @@ func TestEachClassPushesToTheRepositoryItsBootstrapStoodUp(t *testing.T) {
 		if target.Server != "europe-west1-docker.pkg.dev" {
 			t.Errorf("ImageRegistry(%s) server = %q, want the region's own Artifact Registry host", class, target.Server)
 		}
-		if want := "acme-prod/" + p.standing.Repository(class); target.Namespace != want {
+		if want := "acme-prod/" + p.resolved.Repository(class); target.Namespace != want {
 			t.Errorf("ImageRegistry(%s) namespace = %q, want %q", class, target.Namespace, want)
 		}
 		if target.Username != "oauth2accesstoken" {
@@ -54,7 +54,7 @@ func TestEachClassPushesToTheRepositoryItsBootstrapStoodUp(t *testing.T) {
 			t.Errorf("ImageRegistry(%s) password = %q, want the access token this deploy holds", class, target.Password)
 		}
 	}
-	if p.standing.Repository(providerkit.ClassProduction) == p.standing.Repository(providerkit.ClassPreview) {
+	if p.resolved.Repository(providerkit.ClassProduction) == p.resolved.Repository(providerkit.ClassPreview) {
 		t.Error("both classes push to one repository, and a class keeps its images apart from the other class's")
 	}
 }
@@ -67,7 +67,7 @@ func TestTheCoordinateAnImageLandsUnderIsTheRepositoryPathTheBootstrapNames(t *t
 		t.Fatal(err)
 	}
 	coordinate := target.ImageRef("web", "sha256-abc")
-	want := p.standing.RepositoryPath("europe-west1", providerkit.ClassProduction) + "/web:sha256-abc"
+	want := p.resolved.RepositoryPath("europe-west1", providerkit.ClassProduction) + "/web:sha256-abc"
 	if coordinate != want {
 		t.Errorf("an image lands at %q, want %q", coordinate, want)
 	}

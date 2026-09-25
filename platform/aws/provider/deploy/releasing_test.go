@@ -10,10 +10,8 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func fixed(cfg Config) Resolver {
-	return ResolverFunc(
-
-		func(context.Context, Scope) (Config, error) { return cfg, nil })
+func fixed(cfg Config) ReleaseConfig {
+	return func(context.Context, Scope) (Config, error) { return cfg, nil }
 }
 
 func releasing(t *testing.T, cfg Config) *release {

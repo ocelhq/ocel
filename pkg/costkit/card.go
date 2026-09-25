@@ -20,7 +20,7 @@ type Rate struct {
 	ID        string            `json:"id"`
 	Region    string            `json:"region,omitempty"`
 	Unit      string            `json:"unit"`
-	Tiers     []Tier            `json:"tiers"`
+	Steps     []PriceStep       `json:"steps"`
 	Allowance Allowance         `json:"allowance,omitempty"`
 	Note      string            `json:"note,omitempty"`
 	Source    string            `json:"source"`
@@ -35,7 +35,7 @@ const (
 	AllowanceResource Allowance = "resource"
 )
 
-type Tier struct {
+type PriceStep struct {
 	Start decimal.Decimal `json:"start"`
 	Price decimal.Decimal `json:"price"`
 }
@@ -72,23 +72,23 @@ func (r Rate) check() error {
 		return fmt.Errorf("rate %s names no unit", r.ID)
 	case r.Source == "" || r.Verified == "":
 		return fmt.Errorf("rate %s carries no source and verified date", r.ID)
-	case len(r.Tiers) == 0:
-		return fmt.Errorf("rate %s has no tiers", r.ID)
+	case len(r.Steps) == 0:
+		return fmt.Errorf("rate %s has no price steps", r.ID)
 	}
-	if !r.Tiers[0].Start.IsZero() {
-		return fmt.Errorf("rate %s: the first tier starts at %s, not 0", r.ID, r.Tiers[0].Start)
+	if !r.Steps[0].Start.IsZero() {
+		return fmt.Errorf("rate %s: the first step starts at %s, not 0", r.ID, r.Steps[0].Start)
 	}
-	if !sort.SliceIsSorted(r.Tiers, func(i, j int) bool { return r.Tiers[i].Start.LessThan(r.Tiers[j].Start) }) {
-		return fmt.Errorf("rate %s: tiers are not in ascending order", r.ID)
+	if !sort.SliceIsSorted(r.Steps, func(i, j int) bool { return r.Steps[i].Start.LessThan(r.Steps[j].Start) }) {
+		return fmt.Errorf("rate %s: its price steps are not in ascending order", r.ID)
 	}
 	switch r.Allowance {
 	case "":
 		if r.allows() {
-			return fmt.Errorf("rate %s folds a free allowance into its first tier and does not say whether the account or each resource gets it", r.ID)
+			return fmt.Errorf("rate %s folds a free allowance into its first step and does not say whether the account or each resource gets it", r.ID)
 		}
 	case AllowanceAccount, AllowanceResource:
 		if !r.allows() {
-			return fmt.Errorf("rate %s scopes an allowance and its first tier is not free", r.ID)
+			return fmt.Errorf("rate %s scopes an allowance and its first step is not free", r.ID)
 		}
 	default:
 		return fmt.Errorf("rate %s: an allowance is %q or %q, not %q", r.ID, AllowanceAccount, AllowanceResource, r.Allowance)
@@ -97,7 +97,7 @@ func (r Rate) check() error {
 }
 
 func (r Rate) allows() bool {
-	return len(r.Tiers) > 1 && r.Tiers[0].Price.IsZero()
+	return len(r.Steps) > 1 && r.Steps[0].Price.IsZero()
 }
 
 func (c *Card) Lookup(id, region string) (rate Rate, found, fellBack bool) {
@@ -116,10 +116,10 @@ func (r Rate) Cost(quantity decimal.Decimal) (cost, marginal decimal.Decimal) {
 
 func (r Rate) Between(from, to decimal.Decimal) (cost, marginal decimal.Decimal) {
 	cost = r.cumulative(to).Sub(r.cumulative(from))
-	marginal = r.Tiers[0].Price
-	for _, tier := range r.Tiers {
-		if tier.Start.LessThan(to) {
-			marginal = tier.Price
+	marginal = r.Steps[0].Price
+	for _, step := range r.Steps {
+		if step.Start.LessThan(to) {
+			marginal = step.Price
 		}
 	}
 	return cost, marginal
@@ -127,15 +127,15 @@ func (r Rate) Between(from, to decimal.Decimal) (cost, marginal decimal.Decimal)
 
 func (r Rate) cumulative(quantity decimal.Decimal) decimal.Decimal {
 	var cost decimal.Decimal
-	for i, tier := range r.Tiers {
-		if quantity.LessThanOrEqual(tier.Start) {
+	for i, step := range r.Steps {
+		if quantity.LessThanOrEqual(step.Start) {
 			break
 		}
 		upper := quantity
-		if i+1 < len(r.Tiers) && r.Tiers[i+1].Start.LessThan(quantity) {
-			upper = r.Tiers[i+1].Start
+		if i+1 < len(r.Steps) && r.Steps[i+1].Start.LessThan(quantity) {
+			upper = r.Steps[i+1].Start
 		}
-		cost = cost.Add(upper.Sub(tier.Start).Mul(tier.Price))
+		cost = cost.Add(upper.Sub(step.Start).Mul(step.Price))
 	}
 	return cost
 }

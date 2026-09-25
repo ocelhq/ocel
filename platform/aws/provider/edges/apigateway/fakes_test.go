@@ -55,16 +55,16 @@ func (w *world) clients() Clients {
 	return Clients{APIGateway: w.gateway, Routing: w.routing, Dynamo: w.dynamo, CFN: w.cfn, Region: fakeRegion}
 }
 
-func (w *world) edge() *provider {
-	return &provider{
+func (w *world) edge() *apiGateway {
+	return &apiGateway{
 		ns:     defaultNamespace,
 		open:   func(context.Context) (Clients, error) { return w.clients(), nil },
-		delete: w.deleter(30),
+		delete: w.deletion(30),
 	}
 }
 
-func (w *world) deleter(attempts int) *Deleter {
-	return &Deleter{
+func (w *world) deletion(attempts int) *Deletion {
+	return &Deletion{
 		Wait: func(_ context.Context, held time.Duration) error {
 			w.gateway.note("hold " + held.String())
 			return nil
@@ -967,7 +967,7 @@ func ownState(t *testing.T, stack edge.EdgeStack) private {
 	t.Helper()
 
 	var own private
-	if err := stack.State().Adapter.Into(&own); err != nil {
+	if err := stack.State().Private.Into(&own); err != nil {
 		t.Fatalf("read the state the edge keeps to itself: %v", err)
 	}
 	return own

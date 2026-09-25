@@ -13,7 +13,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
+func (p *apiGateway) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
 	wildcard := edge.PreviewWildcard(spec.BaseDomain)
 	if wildcard == "" {
 		return "", fmt.Errorf("the %q edge serves previews on a wildcard domain name; this reconcile names no base domain", Kind)
@@ -43,7 +43,7 @@ func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.Previ
 	return front, nil
 }
 
-func (p *provider) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
+func (p *apiGateway) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
 	wildcard := edge.PreviewWildcard(baseDomain)
 	if wildcard == "" {
 		return nil

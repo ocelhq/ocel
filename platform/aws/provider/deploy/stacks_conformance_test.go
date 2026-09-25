@@ -186,10 +186,10 @@ func provisionedOutputs() auto.OutputMap {
 }
 
 func conformingReleaser(engine *mockedEngine) *Stacks {
-	return releaserPlacingInto(engine, &fakeUploader{})
+	return releaserPlacingInto(engine, &fakeArtifactStore{})
 }
 
-func releaserPlacingInto(engine *mockedEngine, uploader *fakeUploader) *Stacks {
+func releaserPlacingInto(engine *mockedEngine, uploader *fakeArtifactStore) *Stacks {
 	cfg := Config{
 		Slug:           "conformance",
 		Region:         "eu-west-1",
@@ -201,7 +201,7 @@ func releaserPlacingInto(engine *mockedEngine, uploader *fakeUploader) *Stacks {
 		StateTableARN:  "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state",
 		AppBoundaryARN: "arn:aws:iam::111122223333:policy/ocel-app-boundary",
 		ArtifactBucket: conformanceArtifactBucket,
-		Uploader:       uploader,
+		Objects:        uploader,
 	}
 	return standingUp(cfg, engine)
 }
@@ -360,7 +360,7 @@ func stringInput(inputs resource.PropertyMap, key string) string {
 func TestProvisioningABucketPlacesTheUploadCompleterItDeclares(t *testing.T) {
 	t.Parallel()
 
-	uploader := &fakeUploader{}
+	uploader := &fakeArtifactStore{}
 	recorder := &lambdaCodeRecorder{}
 	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: recorder}
 	if _, err := releaserPlacingInto(engine, uploader).Provision(context.Background(), providerkit.StackPlan{

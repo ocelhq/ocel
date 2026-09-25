@@ -24,7 +24,7 @@ const warmConcurrency = 4
 
 const warmPassDeadline = 3 * time.Minute
 
-type FunctionInvoker interface {
+type InvokeAPI interface {
 	Invoke(ctx context.Context, in *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error)
 }
 
@@ -51,7 +51,7 @@ func warmTargets(manifest *contractv1.Manifest, bytecode map[string]*bytecodeCon
 }
 
 type warmPass struct {
-	invoker FunctionInvoker
+	invoker InvokeAPI
 	targets []warmTarget
 	budget  time.Duration
 	log     func(string)
@@ -128,7 +128,7 @@ func (p warmPass) warmOne(ctx context.Context, target warmTarget) (string, warmR
 	return outcome, reply, ok
 }
 
-func invokeWarm(ctx context.Context, invoker FunctionInvoker, functionName string) (warmReply, string) {
+func invokeWarm(ctx context.Context, invoker InvokeAPI, functionName string) (warmReply, string) {
 	out, err := invoker.Invoke(ctx, &lambda.InvokeInput{
 		FunctionName:   aws.String(functionName),
 		InvocationType: lambdatypes.InvocationTypeRequestResponse,

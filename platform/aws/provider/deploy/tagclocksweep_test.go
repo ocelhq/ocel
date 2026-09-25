@@ -42,12 +42,12 @@ type sweepingClock struct {
 	err   error
 }
 
-func (s *sweepingClock) SweepTagClock(_ context.Context, project string, stack naming.StackName) error {
+func (s *sweepingClock) Sweep(_ context.Context, project string, stack naming.StackName) error {
 	s.order = append(s.order, "sweep "+project+"/"+stack.String())
 	return s.err
 }
 
-func tearingDown(t *testing.T, clock TagSweeper, engine kitpulumi.Engine) *Stacks {
+func tearingDown(t *testing.T, clock TagClock, engine kitpulumi.Engine) *Stacks {
 	t.Helper()
 	cfg := Config{
 		PulumiProject: "ocel",

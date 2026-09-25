@@ -12,10 +12,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/pkg/transformkit"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type SecretsReader interface {
+type SecretsAPI interface {
 	GetSecretValue(ctx context.Context, in *secretsmanager.GetSecretValueInput, optFns ...func(*secretsmanager.Options)) (*secretsmanager.GetSecretValueOutput, error)
 }
 
@@ -24,11 +25,11 @@ type Config struct {
 	BackendURL    string
 	Passphrase    string
 	PulumiProject string
-	Secrets       SecretsReader
+	Secrets       SecretsAPI
 
-	Tags    TagSweeper
+	Tags    TagClock
 	Records providerkit.RecordStore
-	Rules   RuleDescriber
+	Rules   RulesAPI
 
 	RequiredFeatures []string
 
@@ -45,12 +46,12 @@ type Config struct {
 
 	ArtifactRoot   string
 	ArtifactBucket string
-	Uploader       ArtifactUploader
+	Objects        payloads.ObjectStore
 
-	Invoker FunctionInvoker
+	Invoker InvokeAPI
 
-	Getter      ObjectGetter
-	CodeUpdater FunctionCodeUpdater
+	Getter      ObjectsAPI
+	CodeUpdater FunctionCodeAPI
 
 	AssetBucket string
 
@@ -58,9 +59,9 @@ type Config struct {
 
 	RevalidateQueueURL string
 
-	CacheStoreBucket   string
-	CacheStoreUploader ArtifactUploader
-	Env                string
+	CacheStoreBucket  string
+	CacheStoreObjects payloads.ObjectStore
+	Env               string
 
 	EdgeAccessKeyID string
 	EdgeSecretKey   string
@@ -85,7 +86,7 @@ type Config struct {
 	Edge edge.Edge
 
 	DNS      edge.DNSRecords
-	DNSAwait RecordWaiter
+	DNSAwait Propagation
 
 	Tier                   environmentv1.Tier
 	Lifecycle              environmentv1.Lifecycle
@@ -102,11 +103,11 @@ type Config struct {
 	Transform transformkit.Pass
 }
 
-type RecordWaiter interface {
+type Propagation interface {
 	Await(ctx context.Context, records []edge.Record, say func(string)) error
 }
 
-func collectPostgresBinding(ctx context.Context, secrets SecretsReader, name string, fields map[string]any) (*bindingsv1.Binding, error) {
+func collectPostgresBinding(ctx context.Context, secrets SecretsAPI, name string, fields map[string]any) (*bindingsv1.Binding, error) {
 	host, err := requireStringField(fields, name, outputKeyHost)
 	if err != nil {
 		return nil, err
@@ -154,7 +155,7 @@ func requireStringField(fields map[string]any, name, key string) (string, error)
 	return v, nil
 }
 
-func resolveManagedPassword(ctx context.Context, secrets SecretsReader, secretARN string) (string, error) {
+func resolveManagedPassword(ctx context.Context, secrets SecretsAPI, secretARN string) (string, error) {
 	if secretARN == "" {
 		return "", fmt.Errorf("empty master-user secret ARN")
 	}

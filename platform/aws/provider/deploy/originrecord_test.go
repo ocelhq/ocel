@@ -10,8 +10,8 @@ import (
 
 func TestTheReleasePublishesTheOriginRecordTheRevalidatorResolvesBy(t *testing.T) {
 	t.Parallel()
-	up := &fakeUploader{}
-	cfg := Config{AssetBucket: "assets-xyz", Uploader: up}
+	up := &fakeArtifactStore{}
+	cfg := Config{AssetBucket: "assets-xyz", Objects: up}
 	work := &appWork{
 		cache: &isrConfig{Bucket: "assets-xyz", Prefix: "prod/proj/web/B1/isr"},
 		functions: appStackFunctions{Functions: []appFunction{
@@ -55,8 +55,8 @@ func TestTheReleasePublishesTheOriginRecordTheRevalidatorResolvesBy(t *testing.T
 
 func TestAReleaseWithNoISRCachePublishesNoOriginRecord(t *testing.T) {
 	t.Parallel()
-	up := &fakeUploader{}
-	cfg := Config{AssetBucket: "assets-xyz", Uploader: up}
+	up := &fakeArtifactStore{}
+	cfg := Config{AssetBucket: "assets-xyz", Objects: up}
 
 	if err := writeOriginRecord(context.Background(), cfg, "static", &appWork{}, providerkit.StackResult{}); err != nil {
 		t.Fatalf("writeOriginRecord: %v", err)

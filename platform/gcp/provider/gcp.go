@@ -23,7 +23,7 @@ type Provider struct {
 	namespace providerkit.Namespace
 
 	mu       sync.Mutex
-	standing *clients
+	resolved *clients
 
 	bases  map[string]base
 	pull   func(ctx context.Context, ref string) (v1.Image, error)

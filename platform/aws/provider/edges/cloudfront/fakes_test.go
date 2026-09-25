@@ -103,11 +103,11 @@ func (w *world) invalidationTargets(scope string) []string {
 	return targets
 }
 
-func (w *world) edge() *provider {
-	return &provider{
+func (w *world) edge() *cloudFront {
+	return &cloudFront{
 		ns:   defaultNamespace,
 		open: func(context.Context) (Clients, error) { return w.clients(), nil },
-		settle: Settler{
+		settle: Rollout{
 			Wait:     func(context.Context, time.Duration) error { return nil },
 			Attempts: 5,
 			Every:    time.Second,
@@ -752,7 +752,7 @@ func ownState(t *testing.T, stack edge.EdgeStack) private {
 	t.Helper()
 
 	var own private
-	if err := stack.State().Adapter.Into(&own); err != nil {
+	if err := stack.State().Private.Into(&own); err != nil {
 		t.Fatalf("read the state the edge keeps to itself: %v", err)
 	}
 	return own

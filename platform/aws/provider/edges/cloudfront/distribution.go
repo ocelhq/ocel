@@ -365,7 +365,7 @@ func reshapeDistribution(ctx context.Context, c Clients, plan distributionPlan, 
 	return putConfig(ctx, c, id, etag, completeFrom(plan.keeping(held).config(aliases, certificate), held))
 }
 
-func (p *provider) declareContainerFront(ctx context.Context, c Clients, plan distributionPlan, kind, id string, front awsports.ContainerFront) error {
+func (p *cloudFront) declareContainerFront(ctx context.Context, c Clients, plan distributionPlan, kind, id string, front awsports.ContainerFront) error {
 	if err := plan.ready(); err != nil {
 		return err
 	}
@@ -380,7 +380,7 @@ func (p *provider) declareContainerFront(ctx context.Context, c Clients, plan di
 	if err := putConfig(ctx, c, id, etag, completeFrom(plan.config(aliasesOf(held), certificateOf(held)), held)); err != nil {
 		return fmt.Errorf("declare the container front as an origin of %s %s: %w", kind, id, err)
 	}
-	return p.settler().settled(ctx, kind, id, containerFrontRollingOut, distributionStatus(c, id))
+	return p.rollout().settled(ctx, kind, id, containerFrontRollingOut, distributionStatus(c, id))
 }
 
 func distributionStatus(c Clients, id string) func(context.Context) (string, error) {
@@ -469,7 +469,7 @@ func dropAlias(ctx context.Context, c Clients, plan distributionPlan, id, hostna
 	return putConfig(ctx, c, id, etag, completeFrom(plan.keeping(held).config(aliases, certificate), held))
 }
 
-func (p *provider) deleteDistribution(ctx context.Context, c Clients, kind, id string) error {
+func (p *cloudFront) deleteDistribution(ctx context.Context, c Clients, kind, id string) error {
 	held, etag, err := configOf(ctx, c, id)
 	if err != nil {
 		if isNotFound(err) {
@@ -482,11 +482,11 @@ func (p *provider) deleteDistribution(ctx context.Context, c Clients, kind, id s
 		if err := putConfig(ctx, c, id, etag, held); err != nil {
 			return err
 		}
-		if err := p.settler().hold(ctx); err != nil {
+		if err := p.rollout().hold(ctx); err != nil {
 			return err
 		}
 	}
-	if err := p.settler().settled(ctx, kind, id, disableRollingOut, distributionStatus(c, id)); err != nil {
+	if err := p.rollout().settled(ctx, kind, id, disableRollingOut, distributionStatus(c, id)); err != nil {
 		return err
 	}
 	_, etag, err = configOf(ctx, c, id)

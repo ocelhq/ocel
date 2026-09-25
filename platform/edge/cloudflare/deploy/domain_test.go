@@ -15,7 +15,7 @@ func domainStack(t *testing.T, m *cfMock) *stack {
 	t.Setenv(envAccountID, "acct")
 	return stackOn(m.provider(t), edge.StackState{
 		Slug:    "acme-web",
-		Adapter: edge.Own(private{EntryWorkers: []string{domainEntryScript}}),
+		Private: edge.Own(private{EntryWorkers: []string{domainEntryScript}}),
 	})
 }
 
@@ -166,7 +166,7 @@ func TestBindDomain(t *testing.T) {
 		m := zoneMock()
 		s := stackOn(m.provider(t), edge.StackState{
 			Slug:    "acme-web",
-			Adapter: edge.Own(private{EntryWorkers: []string{previewEntryScript}}),
+			Private: edge.Own(private{EntryWorkers: []string{previewEntryScript}}),
 		})
 
 		err := s.BindDomain(t.Context(), edge.DomainBinding{Hostname: "shop.app.com"})
@@ -224,7 +224,7 @@ func TestAHostnameBoundAfterAPromotionRoutesToTheWorkerServingIt(t *testing.T) {
 	store := fakeStoreServer(t, "s3cr3t")
 	t.Setenv(envAccountID, "acct")
 	state := testState(store.URL, "s3cr3t")
-	state.Adapter = edge.Own(private{EntryWorkers: []string{domainEntryScript}})
+	state.Private = edge.Own(private{EntryWorkers: []string{domainEntryScript}})
 	s := stackOn(m.provider(t), state)
 
 	promotion := edge.Promotion{PromotionID: "promo-1", Ts: 1000, Builds: map[string]string{"web": "b1"}}
@@ -298,7 +298,7 @@ func TestReconcileRecordsItsEntryWorker(t *testing.T) {
 	}
 
 	var own private
-	if err := state.Adapter.Into(&own); err != nil {
+	if err := state.Private.Into(&own); err != nil {
 		t.Fatalf("read the state the edge keeps to itself: %v", err)
 	}
 	if !slices.Equal(own.EntryWorkers, []string{spec.Program.Name}) {
@@ -349,7 +349,7 @@ func TestDestroyOutlivesAnUnbindThatCannotRun(t *testing.T) {
 	putStampSet(t, p, store.URL, "s3cr3t", stampSet{"ocel-preview": "v1"})
 
 	state := testState(store.URL, "s3cr3t")
-	state.Adapter = edge.Own(private{EntryWorkers: []string{"ocel-preview"}})
+	state.Private = edge.Own(private{EntryWorkers: []string{"ocel-preview"}})
 	state.Bind("shop.elsewhere.com")
 
 	err := stackOn(p, state).Destroy(t.Context())
@@ -370,14 +370,14 @@ func TestPruneOnlyRecordsNoEntryWorker(t *testing.T) {
 	spec := pruneOnlySpec(store.URL, "v2")
 
 	prior := testState(store.URL, "s3cr3t")
-	prior.Adapter = edge.Own(private{EntryWorkers: []string{spec.Program.Name}})
+	prior.Private = edge.Own(private{EntryWorkers: []string{spec.Program.Name}})
 
 	state, err := reconcileState(t, previewZoneMock().provider(t), spec, prior)
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
 	var own private
-	if err := state.Adapter.Into(&own); err != nil {
+	if err := state.Private.Into(&own); err != nil {
 		t.Fatalf("read the state the edge keeps to itself: %v", err)
 	}
 	if len(own.EntryWorkers) != 0 {

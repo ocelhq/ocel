@@ -151,7 +151,7 @@ func capturing(t *testing.T, provider *fake.Provider, class providerkit.Class, s
 	return held
 }
 
-func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnReporter(t *testing.T) {
+func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnProgress(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 	const marker = "the flip said this through the reporter it was handed"
@@ -192,7 +192,7 @@ func TestTheDeployFlipSpeaksThroughThePromotionStagesOwnReporter(t *testing.T) {
 	}
 }
 
-func TestTheRollbackFlipIsHandedAReporterThatDiscards(t *testing.T) {
+func TestTheRollbackFlipIsHandedProgressThatDiscards(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 	deployed(t, provider, providerkit.ClassProduction, "shop")

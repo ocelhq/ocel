@@ -116,7 +116,7 @@ type Release struct {
 	PublicKey string
 }
 
-func Read(ctx context.Context, api cfn.Describer, ns bootstrap.Namespace) (Standing, error) {
+func Read(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) (Standing, error) {
 	stack, err := cfn.DescribeStack(ctx, api, StackName(ns))
 	if err != nil || stack == nil {
 		return Standing{}, err
@@ -133,7 +133,7 @@ func Read(ctx context.Context, api cfn.Describer, ns bootstrap.Namespace) (Stand
 	}, nil
 }
 
-func varsKeys(ctx context.Context, api cfn.Describer, ns bootstrap.Namespace) ([]string, error) {
+func varsKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) ([]string, error) {
 	held := make([]string, 0, 2)
 	for _, class := range []string{bootstrap.ClassProduction, bootstrap.ClassPreview} {
 		deployed, err := bootstrap.CheckDeployedFor(ctx, api, ns, class)
@@ -186,7 +186,7 @@ func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Rel
 	if err != nil {
 		return Standing{}, err
 	}
-	if err := cfn.Upsert(ctx, apis.CFN, ns, StackName(ns), template, nil,
+	if err := cfn.Upsert(ctx, apis.CFN, ns.ChangeSetNameFor, StackName(ns), template, nil,
 		[]cfntypes.Capability{cfntypes.CapabilityCapabilityIam}, tagsFor(ns, template, writer),
 		reviewing(ns, progress)); err != nil {
 		return Standing{}, err

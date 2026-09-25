@@ -10,9 +10,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 )
 
-type authenticator struct{ token string }
+type tokenGate struct{ token string }
 
-func (a *authenticator) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
+func (a *tokenGate) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		if err := a.check(req.Header()); err != nil {
 			return nil, err
@@ -21,11 +21,11 @@ func (a *authenticator) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	}
 }
 
-func (a *authenticator) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
+func (a *tokenGate) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return next
 }
 
-func (a *authenticator) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+func (a *tokenGate) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
 	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
 		if err := a.check(conn.RequestHeader()); err != nil {
 			return err
@@ -34,7 +34,7 @@ func (a *authenticator) WrapStreamingHandler(next connect.StreamingHandlerFunc) 
 	}
 }
 
-func (a *authenticator) check(header http.Header) error {
+func (a *tokenGate) check(header http.Header) error {
 	if !channel.VerifyAuthHeader(header.Get("Authorization"), a.token) {
 		return connect.NewError(connect.CodeUnauthenticated, errors.New("missing or invalid session token"))
 	}

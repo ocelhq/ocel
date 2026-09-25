@@ -16,7 +16,7 @@ func StoreCoordinate(ref providerkit.StackRef) providerkit.SealScope { return st
 
 func StoreName(ref providerkit.StackRef) string { return storeName(ref) }
 
-func Whoami(ctx context.Context, live surveyor) (providerkit.Identity, error) {
+func Whoami(ctx context.Context, live hostSurvey) (providerkit.Identity, error) {
 	return whoami(ctx, live)
 }
 

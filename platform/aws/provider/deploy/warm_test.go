@@ -15,7 +15,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-type fakeInvoker struct {
+type fakeInvoke struct {
 	respond func(ctx context.Context, name string) (*lambda.InvokeOutput, error)
 
 	mu       sync.Mutex
@@ -24,7 +24,7 @@ type fakeInvoker struct {
 	peak     int
 }
 
-func (f *fakeInvoker) Invoke(ctx context.Context, in *lambda.InvokeInput, _ ...func(*lambda.Options)) (*lambda.InvokeOutput, error) {
+func (f *fakeInvoke) Invoke(ctx context.Context, in *lambda.InvokeInput, _ ...func(*lambda.Options)) (*lambda.InvokeOutput, error) {
 	name := aws.ToString(in.FunctionName)
 	f.mu.Lock()
 	f.calls = append(f.calls, name)
@@ -41,14 +41,14 @@ func (f *fakeInvoker) Invoke(ctx context.Context, in *lambda.InvokeInput, _ ...f
 	return f.respond(ctx, name)
 }
 
-func (f *fakeInvoker) called() []string {
+func (f *fakeInvoke) called() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]string(nil), f.calls...)
 }
 
-func answering(body string) *fakeInvoker {
-	return &fakeInvoker{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
+func answering(body string) *fakeInvoke {
+	return &fakeInvoke{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
 		return &lambda.InvokeOutput{StatusCode: 200, Payload: []byte(body)}, nil
 	}}
 }
@@ -80,19 +80,19 @@ func warmTestTargets(n int) []warmTarget {
 	return targets
 }
 
-func runWarm(t *testing.T, invoker FunctionInvoker, targets []warmTarget, budget time.Duration) string {
+func runWarm(t *testing.T, invoker InvokeAPI, targets []warmTarget, budget time.Duration) string {
 	t.Helper()
 	log, dump := collectLog()
 	warmPass{invoker: invoker, targets: targets, budget: budget, log: log}.run(context.Background())
 	return dump()
 }
 
-type capturingInvoker struct {
-	inner FunctionInvoker
+type capturingInvoke struct {
+	inner InvokeAPI
 	into  *lambda.InvokeInput
 }
 
-func (c *capturingInvoker) Invoke(ctx context.Context, in *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error) {
+func (c *capturingInvoke) Invoke(ctx context.Context, in *lambda.InvokeInput, optFns ...func(*lambda.Options)) (*lambda.InvokeOutput, error) {
 	*c.into = *in
 	return c.inner.Invoke(ctx, in, optFns...)
 }
@@ -244,33 +244,33 @@ func TestWarmPass(t *testing.T) {
 	t.Run("failures degrade to warnings", func(t *testing.T) {
 		for _, tc := range []struct {
 			name    string
-			invoker *fakeInvoker
+			invoker *fakeInvoke
 			want    string
 		}{
 			{
 				"invoke error",
-				&fakeInvoker{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
+				&fakeInvoke{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
 					return nil, errors.New("dial tcp: no route to host")
 				}},
 				"no route to host",
 			},
 			{
 				"throttled",
-				&fakeInvoker{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
+				&fakeInvoke{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
 					return nil, &lambdatypes.TooManyRequestsException{}
 				}},
 				"throttled",
 			},
 			{
 				"function error",
-				&fakeInvoker{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
+				&fakeInvoke{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
 					return &lambda.InvokeOutput{StatusCode: 200, FunctionError: aws.String("Unhandled")}, nil
 				}},
 				"Unhandled",
 			},
 			{
 				"non-2xx",
-				&fakeInvoker{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
+				&fakeInvoke{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
 					return &lambda.InvokeOutput{StatusCode: 502}, nil
 				}},
 				"502",
@@ -295,7 +295,7 @@ func TestWarmPass(t *testing.T) {
 	})
 
 	t.Run("caps concurrency", func(t *testing.T) {
-		invoker := &fakeInvoker{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
+		invoker := &fakeInvoke{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
 			time.Sleep(5 * time.Millisecond)
 			return &lambda.InvokeOutput{StatusCode: 200, Payload: []byte(`{"state":"published"}`)}, nil
 		}}
@@ -311,7 +311,7 @@ func TestWarmPass(t *testing.T) {
 	})
 
 	t.Run("deadline names what it skipped", func(t *testing.T) {
-		invoker := &fakeInvoker{respond: func(ctx context.Context, _ string) (*lambda.InvokeOutput, error) {
+		invoker := &fakeInvoke{respond: func(ctx context.Context, _ string) (*lambda.InvokeOutput, error) {
 			<-ctx.Done()
 			return nil, ctx.Err()
 		}}
@@ -333,10 +333,10 @@ func TestWarmPass(t *testing.T) {
 
 	t.Run("sends the warm payload", func(t *testing.T) {
 		var got lambda.InvokeInput
-		invoker := &fakeInvoker{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
+		invoker := &fakeInvoke{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
 			return &lambda.InvokeOutput{StatusCode: 200, Payload: []byte(`{"state":"published"}`)}, nil
 		}}
-		capture := &capturingInvoker{inner: invoker, into: &got}
+		capture := &capturingInvoke{inner: invoker, into: &got}
 
 		runWarm(t, capture, warmTestTargets(1), time.Minute)
 

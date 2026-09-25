@@ -15,7 +15,7 @@ import (
 
 const Kind edge.Kind = "alb"
 
-const StandingCost = "about $18 a month plus Premium-tier egress"
+const BaselineCost = "about $18 a month plus Premium-tier egress"
 
 type Deps struct {
 	Records providerkit.RecordStore
@@ -165,7 +165,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	if !front.standing() {
 		return nil, providerkit.Refuse(providerkit.CodeNotReady,
 			"no %s load balancer stands for class %s: the %q edge fronts every project in a class from one that the bootstrap raises, at %s. Run `ocel bootstrap` for this class first",
-			Kind, spec.Class, Kind, StandingCost)
+			Kind, spec.Class, Kind, BaselineCost)
 	}
 	next := prior
 	next.Slug = spec.Slug
@@ -182,7 +182,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 
 func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) {
 	s := &stack{e: e, state: state}
-	if err := s.state.Adapter.Into(&s.held); err != nil {
+	if err := s.state.Private.Into(&s.held); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -250,7 +250,7 @@ func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 			Name:   edge.EdgeGroupName(Kind) + "/front",
 			Action: edge.PlanKeep,
 			Reason: "the load balancer this project was fronted by is one per bootstrap class and every other project in the class is answered by it, " +
-				"so it stands and keeps costing " + StandingCost + "; `ocel bootstrap remove` is what takes it down",
+				"so it stands and keeps costing " + BaselineCost + "; `ocel bootstrap remove` is what takes it down",
 		},
 	}
 }
@@ -275,7 +275,7 @@ func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind) + "/front",
 		Action: edge.PlanKeep,
-		Reason: "previews are answered by the same load balancer production is, one per bootstrap class at " + StandingCost + ", " +
+		Reason: "previews are answered by the same load balancer production is, one per bootstrap class at " + BaselineCost + ", " +
 			"so releasing a wildcard takes its host rule and leaves the front standing",
 	}
 }

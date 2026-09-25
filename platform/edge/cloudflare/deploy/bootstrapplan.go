@@ -35,7 +35,7 @@ const (
 	reasonBucketEmptied = "every cached object in it, emptied one page at a time first"
 )
 
-func (p *provider) planBootstrap(ctx context.Context, class edge.Class) ([]edge.PlanChange, error) {
+func (p *cloudflare) planBootstrap(ctx context.Context, class edge.Class) ([]edge.PlanChange, error) {
 	accountID, err := bootstrapCredentials()
 	if err != nil {
 		return nil, err
@@ -47,7 +47,7 @@ func (p *provider) planBootstrap(ctx context.Context, class edge.Class) ([]edge.
 	return state.changes(), nil
 }
 
-func (p *provider) planRemoveBootstrap(ctx context.Context, class edge.Class) ([]edge.PlanChange, error) {
+func (p *cloudflare) planRemoveBootstrap(ctx context.Context, class edge.Class) ([]edge.PlanChange, error) {
 	accountID, err := bootstrapCredentials()
 	if err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ func (p *provider) planRemoveBootstrap(ctx context.Context, class edge.Class) ([
 	return state.removals(), nil
 }
 
-func (p *provider) adoption(_ context.Context, class edge.Class) (edge.Adoption, error) {
+func (p *cloudflare) adoption(_ context.Context, class edge.Class) (edge.Adoption, error) {
 	name, err := cacheStoreNameFor(p.namespace, class)
 	if err != nil {
 		return edge.Adoption{}, err
@@ -133,7 +133,7 @@ type bootstrapState struct {
 	workers []workerState
 }
 
-func (p *provider) readState(ctx context.Context, accountID string, class edge.Class) (bootstrapState, error) {
+func (p *cloudflare) readState(ctx context.Context, accountID string, class edge.Class) (bootstrapState, error) {
 	store, err := p.cacheStore().read(ctx, accountID, class)
 	if err != nil {
 		return bootstrapState{}, err
@@ -225,7 +225,7 @@ func (w workerState) scriptReason() string {
 	}
 }
 
-func (p *provider) readWorkerState(ctx context.Context, accountID string, b bootstrapWorker) (workerState, error) {
+func (p *cloudflare) readWorkerState(ctx context.Context, accountID string, b bootstrapWorker) (workerState, error) {
 	deployed, present, err := p.deployedScript(ctx, accountID, b.scriptName, b.worker.Main.Name)
 	if err != nil || !present {
 		return workerState{bootstrapWorker: b}, err
@@ -263,7 +263,7 @@ func (p *provider) readWorkerState(ctx context.Context, accountID string, b boot
 	return state, nil
 }
 
-func (p *provider) scriptSettings(ctx context.Context, accountID, scriptName string) (*workers.ScriptScriptAndVersionSettingGetResponse, error) {
+func (p *cloudflare) scriptSettings(ctx context.Context, accountID, scriptName string) (*workers.ScriptScriptAndVersionSettingGetResponse, error) {
 	settings, err := p.client.Workers.Scripts.ScriptAndVersionSettings.Get(ctx, scriptName, workers.ScriptScriptAndVersionSettingGetParams{
 		AccountID: cf.F(accountID),
 	})
@@ -369,7 +369,7 @@ func deployedClasses(settings *workers.ScriptScriptAndVersionSettingGetResponse)
 	return classes
 }
 
-func (p *provider) deployedScript(ctx context.Context, accountID, scriptName, moduleName string) ([]byte, bool, error) {
+func (p *cloudflare) deployedScript(ctx context.Context, accountID, scriptName, moduleName string) ([]byte, bool, error) {
 	res, err := p.client.Workers.Scripts.Content.Get(ctx, scriptName, workers.ScriptContentGetParams{
 		AccountID: cf.F(accountID),
 	})

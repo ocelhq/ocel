@@ -30,7 +30,7 @@ func TestCertificateCovers(t *testing.T) {
 	}
 }
 
-func TestIssuerExisting(t *testing.T) {
+func TestACMExisting(t *testing.T) {
 	t.Parallel()
 
 	t.Run("finds an issued certificate covering every host", func(t *testing.T) {

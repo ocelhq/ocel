@@ -353,9 +353,9 @@ func (s stubStack) stamped(stamp Stamp) stubStack {
 	return s
 }
 
-type stubDescriber map[string]stubStack
+type stubStacksAPI map[string]stubStack
 
-func (s stubDescriber) DescribeStacks(_ context.Context, in *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
+func (s stubStacksAPI) DescribeStacks(_ context.Context, in *cloudformation.DescribeStacksInput, _ ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error) {
 	stack, ok := s[aws.ToString(in.StackName)]
 	if !ok {
 		return nil, validationError{msg: "Stack with id " + aws.ToString(in.StackName) + " does not exist"}
@@ -380,7 +380,7 @@ func TestCheckDeployed(t *testing.T) {
 			outputAssetBucket:    "assets-xyz",
 			outputInfraClass:     ClassProduction,
 		}
-		api := stubDescriber{coreStackName: outputs(core).stamped(Stamp{Schema: 3, Digest: "written-digest", WrittenBy: "1.4.0"})}
+		api := stubStacksAPI{coreStackName: outputs(core).stamped(Stamp{Schema: 3, Digest: "written-digest", WrittenBy: "1.4.0"})}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
 		if err != nil {
@@ -424,7 +424,7 @@ func TestCheckDeployed(t *testing.T) {
 	})
 
 	t.Run("reads preview class marker", func(t *testing.T) {
-		api := stubDescriber{coreStackName: outputs(map[string]string{outputInfraClass: ClassPreview})}
+		api := stubStacksAPI{coreStackName: outputs(map[string]string{outputInfraClass: ClassPreview})}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
 		if err != nil {
@@ -436,7 +436,7 @@ func TestCheckDeployed(t *testing.T) {
 	})
 
 	t.Run("a feature stack is what says the feature is on", func(t *testing.T) {
-		api := stubDescriber{
+		api := stubStacksAPI{
 			coreStackName: outputs(map[string]string{outputInfraClass: ClassProduction}).stamped(Stamp{Schema: RequiredSchema}),
 			coreStackName + "-" + FeatureImageOptimization: outputs(map[string]string{
 				outputImageOptimizerURL: "https://optimizer.lambda-url.test/",
@@ -459,7 +459,7 @@ func TestCheckDeployed(t *testing.T) {
 	})
 
 	t.Run("the oldest stack decides the schema", func(t *testing.T) {
-		api := stubDescriber{
+		api := stubStacksAPI{
 			coreStackName:                    outputs(nil).stamped(Stamp{Schema: RequiredSchema + 1}),
 			coreStackName + "-" + FeatureISR: outputs(nil).stamped(Stamp{Schema: RequiredSchema}),
 		}
@@ -474,7 +474,7 @@ func TestCheckDeployed(t *testing.T) {
 	})
 
 	t.Run("an untagged bootstrap reads as schema zero", func(t *testing.T) {
-		api := stubDescriber{coreStackName: outputs(map[string]string{outputInfraClass: ClassProduction})}
+		api := stubStacksAPI{coreStackName: outputs(map[string]string{outputInfraClass: ClassProduction})}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
 		if err != nil {
@@ -486,7 +486,7 @@ func TestCheckDeployed(t *testing.T) {
 	})
 
 	t.Run("a stack whose digest moved reads as stale", func(t *testing.T) {
-		api := stubDescriber{coreStackName: outputs(map[string]string{outputInfraClass: ClassProduction}).
+		api := stubStacksAPI{coreStackName: outputs(map[string]string{outputInfraClass: ClassProduction}).
 			stamped(Stamp{Schema: RequiredSchema, Digest: "stale"})}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
@@ -499,7 +499,7 @@ func TestCheckDeployed(t *testing.T) {
 	})
 
 	t.Run("a stack written from this build reads as current", func(t *testing.T) {
-		api := stubDescriber{coreStackName: outputs(map[string]string{outputInfraClass: ClassProduction}).
+		api := stubStacksAPI{coreStackName: outputs(map[string]string{outputInfraClass: ClassProduction}).
 			stamped(Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction, ""))})}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)

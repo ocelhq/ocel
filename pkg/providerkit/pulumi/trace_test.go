@@ -36,10 +36,10 @@ func failedEvent(urn, typ string, op apitype.OpType) events.EngineEvent {
 
 const testURN = "urn:pulumi:prod::proj::aws:s3/bucket:Bucket::my-bucket"
 
-func TestEngineTraceBuilderCountsResourceOperations(t *testing.T) {
+func TestOpenTraceCountsResourceOperations(t *testing.T) {
 	t.Parallel()
 
-	b := newTraceBuilder(0)
+	b := newOpenTrace(0)
 	base := time.Unix(1000, 0)
 	b.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
 	b.consume(outputsEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(time.Second))
@@ -58,10 +58,10 @@ func TestEngineTraceBuilderCountsResourceOperations(t *testing.T) {
 	}
 }
 
-func TestEngineTraceBuilderRecordsAFailureAsAStandout(t *testing.T) {
+func TestOpenTraceRecordsAFailureAsAStandout(t *testing.T) {
 	t.Parallel()
 
-	b := newTraceBuilder(0)
+	b := newOpenTrace(0)
 	base := time.Unix(2000, 0)
 	b.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
 	b.consume(failedEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(5*time.Second))
@@ -82,10 +82,10 @@ func TestEngineTraceBuilderRecordsAFailureAsAStandout(t *testing.T) {
 	}
 }
 
-func TestEngineTraceBuilderRecordsALatencyOutlier(t *testing.T) {
+func TestOpenTraceRecordsALatencyOutlier(t *testing.T) {
 	t.Parallel()
 
-	b := newTraceBuilder(2 * time.Second)
+	b := newOpenTrace(2 * time.Second)
 	base := time.Unix(3000, 0)
 	b.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
 	b.consume(outputsEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(10*time.Second))
@@ -99,10 +99,10 @@ func TestEngineTraceBuilderRecordsALatencyOutlier(t *testing.T) {
 	}
 }
 
-func TestEngineTraceBuilderIgnoresFastOperationsUnderThreshold(t *testing.T) {
+func TestOpenTraceIgnoresFastOperationsUnderThreshold(t *testing.T) {
 	t.Parallel()
 
-	b := newTraceBuilder(2 * time.Second)
+	b := newOpenTrace(2 * time.Second)
 	base := time.Unix(4000, 0)
 	b.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
 	b.consume(outputsEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(500*time.Millisecond))
@@ -112,10 +112,10 @@ func TestEngineTraceBuilderIgnoresFastOperationsUnderThreshold(t *testing.T) {
 	}
 }
 
-func TestEngineTraceBuilderNeverRetainsTheURN(t *testing.T) {
+func TestOpenTraceNeverRetainsTheURN(t *testing.T) {
 	t.Parallel()
 
-	b := newTraceBuilder(0)
+	b := newOpenTrace(0)
 	base := time.Unix(5000, 0)
 	b.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
 	b.consume(failedEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(time.Second))
@@ -191,10 +191,10 @@ func TestCapIdentifierBoundsLength(t *testing.T) {
 	}
 }
 
-func TestEngineTraceBuilderCapsLatencyStandoutsKeepingTheSlowest(t *testing.T) {
+func TestOpenTraceCapsLatencyStandoutsKeepingTheSlowest(t *testing.T) {
 	t.Parallel()
 
-	b := newTraceBuilder(time.Second)
+	b := newOpenTrace(time.Second)
 	base := time.Unix(6000, 0)
 	for i := 0; i < maxLatencyStandouts+5; i++ {
 		urn := "urn:pulumi:prod::proj::aws:s3/bucket:Bucket::bucket-" + strings.Repeat("x", i+1)
@@ -217,10 +217,10 @@ func TestEngineTraceBuilderCapsLatencyStandoutsKeepingTheSlowest(t *testing.T) {
 	}
 }
 
-func TestEngineTraceBuilderNeverCapsFailures(t *testing.T) {
+func TestOpenTraceNeverCapsFailures(t *testing.T) {
 	t.Parallel()
 
-	b := newTraceBuilder(time.Hour)
+	b := newOpenTrace(time.Hour)
 	base := time.Unix(7000, 0)
 	for i := 0; i < maxLatencyStandouts+5; i++ {
 		urn := "urn:pulumi:prod::proj::aws:s3/bucket:Bucket::bucket-" + strings.Repeat("x", i+1)

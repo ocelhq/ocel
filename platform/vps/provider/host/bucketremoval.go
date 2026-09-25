@@ -21,7 +21,7 @@ type storeAnswer struct {
 	body []byte
 }
 
-type storeRunner func(what, script string) (string, error)
+type storeShell func(what, script string) (string, error)
 
 func readAnswers(said string) map[string]storeAnswer {
 	answers := map[string]storeAnswer{}
@@ -110,7 +110,7 @@ func storeScript(store string, runs []*http.Request, calls []storeCall) string {
 	return written.String()
 }
 
-func droveStore(spec BucketSpec, calls []storeCall, now time.Time, run storeRunner) (map[string]storeAnswer, error) {
+func droveStore(spec BucketSpec, calls []storeCall, now time.Time, run storeShell) (map[string]storeAnswer, error) {
 	runs := make([]*http.Request, 0, len(calls))
 	what := make([]string, 0, len(calls))
 	for _, call := range calls {
@@ -227,7 +227,7 @@ func heldSignature(keys []string, uploads []storedUpload) string {
 	return held
 }
 
-func removedBucket(spec BucketSpec, clock func() time.Time, run storeRunner) error {
+func removedBucket(spec BucketSpec, clock func() time.Time, run storeShell) error {
 	for held := ""; ; {
 		listed, err := droveStore(spec, listingCalls(), clock(), run)
 		if err != nil {

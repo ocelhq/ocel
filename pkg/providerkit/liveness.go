@@ -22,9 +22,23 @@ const (
 )
 
 type DNSLookup interface {
-	LookupHost(ctx context.Context, host string) ([]string, error)
-	LookupNS(ctx context.Context, name string) ([]*net.NS, error)
-	LookupCNAME(ctx context.Context, host string) (string, error)
+	Host(ctx context.Context, host string) ([]string, error)
+	NS(ctx context.Context, name string) ([]*net.NS, error)
+	CNAME(ctx context.Context, host string) (string, error)
+}
+
+type netDNS struct{ resolver *net.Resolver }
+
+func (d netDNS) Host(ctx context.Context, host string) ([]string, error) {
+	return d.resolver.LookupHost(ctx, host)
+}
+
+func (d netDNS) NS(ctx context.Context, name string) ([]*net.NS, error) {
+	return d.resolver.LookupNS(ctx, name)
+}
+
+func (d netDNS) CNAME(ctx context.Context, host string) (string, error) {
+	return d.resolver.LookupCNAME(ctx, host)
 }
 
 type Unanswered struct{ Cause string }
@@ -156,23 +170,23 @@ func (l *NetLiveness) system() DNSLookup {
 	if l.System != nil {
 		return l.System
 	}
-	return net.DefaultResolver
+	return netDNS{resolver: net.DefaultResolver}
 }
 
 func (l *NetLiveness) authority(nameserver string) DNSLookup {
 	if l.Authority != nil {
 		return l.Authority(nameserver)
 	}
-	return &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
+	return netDNS{resolver: &net.Resolver{PreferGo: true, Dial: func(ctx context.Context, network, _ string) (net.Conn, error) {
 		return l.dial(ctx, network, net.JoinHostPort(nameserver, "53"))
-	}}
+	}}}
 }
 
 func (l *NetLiveness) locate(ctx context.Context, hostname string) (string, []string, error) {
 	if l.Front != nil {
 		return l.Front.Scheme, []string{frontAddress(l.Front)}, nil
 	}
-	resolved, err := l.system().LookupHost(ctx, hostname)
+	resolved, err := l.system().Host(ctx, hostname)
 	if err == nil && len(resolved) > 0 {
 		return "https", onPort(resolved, "443"), nil
 	}
@@ -230,18 +244,18 @@ func (l *NetLiveness) hint(ctx context.Context, hostname string) ([]string, erro
 
 func (l *NetLiveness) answer(ctx context.Context, nameserver, hostname string) ([]string, error) {
 	asked := l.authority(nameserver)
-	canonical, err := asked.LookupCNAME(ctx, hostname+".")
+	canonical, err := asked.CNAME(ctx, hostname+".")
 	if err != nil {
 		return nil, err
 	}
 	if canonical = strings.TrimSuffix(canonical, "."); !strings.EqualFold(canonical, hostname) {
-		addresses, err := l.system().LookupHost(ctx, canonical)
+		addresses, err := l.system().Host(ctx, canonical)
 		if err != nil {
 			return nil, fmt.Errorf("%s is an alias for %s, which resolves to nothing yet: %w", hostname, canonical, err)
 		}
 		return onPort(addresses, "443"), nil
 	}
-	addresses, err := asked.LookupHost(ctx, hostname+".")
+	addresses, err := asked.Host(ctx, hostname+".")
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +269,7 @@ func (l *NetLiveness) zoneOf(ctx context.Context, hostname string) (string, []st
 	labels := strings.Split(strings.TrimSuffix(hostname, "."), ".")
 	for at := range max(len(labels)-1, 1) {
 		candidate := strings.Join(labels[at:], ".")
-		held, err := l.system().LookupNS(ctx, candidate+".")
+		held, err := l.system().NS(ctx, candidate+".")
 		if ctx.Err() != nil {
 			return "", nil, ctx.Err()
 		}

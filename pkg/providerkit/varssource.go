@@ -9,22 +9,22 @@ type Vars struct {
 }
 
 type VarsSource interface {
-	Vars() (Vars, error)
+	Read() (Vars, error)
 }
 
-type VarsHandler struct {
+type VarsService struct {
 	Source VarsSource
 }
 
 type FixedVars Vars
 
-func (s FixedVars) Vars() (Vars, error) { return Vars(s), nil }
+func (s FixedVars) Read() (Vars, error) { return Vars(s), nil }
 
 type sessionVars struct {
 	session *session
 }
 
-func (s sessionVars) Vars() (Vars, error) {
+func (s sessionVars) Read() (Vars, error) {
 	provider, err := s.session.use()
 	if err != nil {
 		return Vars{}, err

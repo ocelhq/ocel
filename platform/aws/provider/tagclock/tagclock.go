@@ -25,12 +25,12 @@ type DynamoAPI interface {
 	Query(context.Context, *dynamodb.QueryInput, ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
 }
 
-type Sweeper struct {
+type Table struct {
 	Dynamo DynamoAPI
 	Table  string
 }
 
-func (s *Sweeper) SweepTagClock(ctx context.Context, project string, stack naming.StackName) error {
+func (s *Table) Sweep(ctx context.Context, project string, stack naming.StackName) error {
 	partitions, err := s.tagPartitions(ctx, naming.ISRTagPrefix(project, stack))
 	if err != nil {
 		return fmt.Errorf("drop the tag clock of stack %s/%s: %w", project, stack, err)
@@ -43,7 +43,7 @@ func (s *Sweeper) SweepTagClock(ctx context.Context, project string, stack namin
 	return nil
 }
 
-func (s *Sweeper) tagPartitions(ctx context.Context, namespace string) ([]string, error) {
+func (s *Table) tagPartitions(ctx context.Context, namespace string) ([]string, error) {
 	var (
 		out   []string
 		start map[string]ddbtypes.AttributeValue
@@ -82,7 +82,7 @@ func (s *Sweeper) tagPartitions(ctx context.Context, namespace string) ([]string
 	}
 }
 
-func (s *Sweeper) delete(ctx context.Context, entry map[string]ddbtypes.AttributeValue) error {
+func (s *Table) delete(ctx context.Context, entry map[string]ddbtypes.AttributeValue) error {
 	_, err := s.Dynamo.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: aws.String(s.Table),
 		Key:       entry,

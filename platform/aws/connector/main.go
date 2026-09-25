@@ -163,7 +163,7 @@ func woken(raw []byte) bool {
 
 type deployments struct {
 	namespace bootstrap.Namespace
-	stacks    cfn.Describer
+	stacks    cfn.StacksAPI
 	now       func() time.Time
 
 	mu   sync.Mutex

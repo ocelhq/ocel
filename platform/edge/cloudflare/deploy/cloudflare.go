@@ -53,7 +53,7 @@ func observability() map[string]any {
 	}
 }
 
-type provider struct {
+type cloudflare struct {
 	client    *cf.Client
 	store     *http.Client
 	namespace string
@@ -67,18 +67,18 @@ type provider struct {
 }
 
 func New(namespace string) edge.Edge {
-	return &provider{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries)), namespace: namespace}
+	return &cloudflare{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries)), namespace: namespace}
 }
 
 func NewAt(namespace, baseURL string) edge.Edge {
-	return &provider{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries), option.WithBaseURL(baseURL)), namespace: namespace}
+	return &cloudflare{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries), option.WithBaseURL(baseURL)), namespace: namespace}
 }
 
 const clientMaxRetries = 5
 
-func (p *provider) Kind() edge.Kind { return Kind }
+func (p *cloudflare) Kind() edge.Kind { return Kind }
 
-func (p *provider) cacheStore() cacheStore {
+func (p *cloudflare) cacheStore() cacheStore {
 	store := newCacheStore(p.client, p.namespace)
 	if p.objects != nil {
 		store.objects = p.objects
@@ -86,7 +86,7 @@ func (p *provider) cacheStore() cacheStore {
 	return store
 }
 
-func (p *provider) Facts() edge.Facts {
+func (p *cloudflare) Facts() edge.Facts {
 	return edge.Facts{
 		Supported:           edge.AllNeeds(),
 		FlipBound:           edge.FlipBound{Typical: recordTTL},
@@ -99,7 +99,7 @@ func (p *provider) Facts() edge.Facts {
 	}
 }
 
-func (p *provider) Hooks() edge.Hooks {
+func (p *cloudflare) Hooks() edge.Hooks {
 	return edge.Hooks{
 		PlanBootstrap:                 p.planBootstrap,
 		PlanRemoveBootstrap:           p.planRemoveBootstrap,
@@ -112,7 +112,7 @@ func (p *provider) Hooks() edge.Hooks {
 
 const recordTTL = 5 * time.Second
 
-func (p *provider) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+func (p *cloudflare) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	changes := []edge.PlanChange{{
 		Kind:   kindWorker,
 		Name:   scope.Slug,
@@ -140,7 +140,7 @@ func (p *provider) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	}}
 }
 
-func (p *provider) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+func (p *cloudflare) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
 	removed := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
@@ -160,7 +160,7 @@ func (p *provider) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edg
 	return removed, kept
 }
 
-func (p *provider) SharedPreviewRemoval() edge.PlanGroup {
+func (p *cloudflare) SharedPreviewRemoval() edge.PlanGroup {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
@@ -169,7 +169,7 @@ func (p *provider) SharedPreviewRemoval() edge.PlanGroup {
 	}
 }
 
-func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {
+func (p *cloudflare) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {
 	accountID, err := bootstrapCredentials()
 	if err != nil {
 		return edge.BootstrapOutput{}, err
@@ -192,7 +192,7 @@ func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.Bootst
 	return out, nil
 }
 
-func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
+func (p *cloudflare) Teardown(ctx context.Context, class edge.Class) error {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return fmt.Errorf("%s is not set; it is required to tear the Cloudflare edge down", envAccountID)
@@ -283,7 +283,7 @@ func bootstrapWorkers(namespace string, class edge.Class) ([]bootstrapWorker, er
 	}, nil
 }
 
-func (p *provider) settleWorker(ctx context.Context, accountID string, state workerState) (edge.Offer, error) {
+func (p *cloudflare) settleWorker(ctx context.Context, accountID string, state workerState) (edge.Offer, error) {
 	b := state.bootstrapWorker
 	up := upload{accountID: accountID, scriptName: b.scriptName, worker: b.worker}
 	var cred string
@@ -327,7 +327,7 @@ func (p *provider) settleWorker(ctx context.Context, accountID string, state wor
 	return edge.Offer{Kind: b.offer, Values: values}, nil
 }
 
-func (p *provider) settleSubdomain(ctx context.Context, up upload, on bool, what string) (string, error) {
+func (p *cloudflare) settleSubdomain(ctx context.Context, up upload, on bool, what string) (string, error) {
 	if !on {
 		endpoint, err := p.setSubdomain(ctx, up, true)
 		if err != nil {
@@ -378,7 +378,7 @@ func readWorkerBundle(path string) (edge.Worker, error) {
 	}}, nil
 }
 
-func (p *provider) findApp(ctx context.Context, name string) (bool, error) {
+func (p *cloudflare) findApp(ctx context.Context, name string) (bool, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return false, fmt.Errorf("%s is not set; it is required to query the Cloudflare edge", envAccountID)
@@ -393,7 +393,7 @@ func (p *provider) findApp(ctx context.Context, name string) (bool, error) {
 	return err == nil, err
 }
 
-func (p *provider) deployApp(ctx context.Context, app edge.AppDeployment) (edge.AppResult, error) {
+func (p *cloudflare) deployApp(ctx context.Context, app edge.AppDeployment) (edge.AppResult, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return edge.AppResult{}, fmt.Errorf("%s is not set; it is required to deploy to the Cloudflare edge", envAccountID)
@@ -428,7 +428,7 @@ type upload struct {
 	worker     edge.Worker
 }
 
-func (p *provider) uploadAssets(ctx context.Context, up upload) (string, error) {
+func (p *cloudflare) uploadAssets(ctx context.Context, up upload) (string, error) {
 	if len(up.worker.Assets) == 0 {
 		return "", nil
 	}
@@ -515,7 +515,7 @@ func buildAssetBatch(bucket []string, assetByHash map[string]edge.StaticAsset) (
 	return buf.Bytes(), w.FormDataContentType(), nil
 }
 
-func (p *provider) putScript(ctx context.Context, up upload, assetsJWT string) error {
+func (p *cloudflare) putScript(ctx context.Context, up upload, assetsJWT string) error {
 	body, contentType, err := buildScriptMultipart(up.worker, assetsJWT)
 	if err != nil {
 		return err
@@ -640,7 +640,7 @@ func writePart(w *multipart.Writer, name, filename, contentType string, content 
 	return err
 }
 
-func (p *provider) setSubdomain(ctx context.Context, up upload, enabled bool) (string, error) {
+func (p *cloudflare) setSubdomain(ctx context.Context, up upload, enabled bool) (string, error) {
 	if _, err := p.client.Workers.Scripts.Subdomain.New(ctx, up.scriptName, workers.ScriptSubdomainNewParams{
 		AccountID:       cf.F(up.accountID),
 		Enabled:         cf.F(enabled),
@@ -654,7 +654,7 @@ func (p *provider) setSubdomain(ctx context.Context, up upload, enabled bool) (s
 	return p.subdomainURL(ctx, up.accountID, up.scriptName)
 }
 
-func (p *provider) subdomainURL(ctx context.Context, accountID, scriptName string) (string, error) {
+func (p *cloudflare) subdomainURL(ctx context.Context, accountID, scriptName string) (string, error) {
 	account, err := p.client.Workers.Subdomains.Get(ctx, workers.SubdomainGetParams{
 		AccountID: cf.F(accountID),
 	})

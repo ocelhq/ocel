@@ -43,7 +43,7 @@ func readEdgeBundle(cfg Config, app string) ([]byte, bool, error) {
 }
 
 func edgeSealedDelivered(cfg Config, bundle appBundle) bool {
-	return cfg.CacheStoreBucket != "" && cfg.CacheStoreUploader != nil && len(bundle.Ciphertext) > 0
+	return cfg.CacheStoreBucket != "" && cfg.CacheStoreObjects != nil && len(bundle.Ciphertext) > 0
 }
 
 type edgeDelivery struct {
@@ -52,7 +52,7 @@ type edgeDelivery struct {
 }
 
 func edgeBundleSet(cfg Config, app string, coord naming.Coordinate, sealed appBundle) (*assetSet, edgeDelivery, error) {
-	if cfg.CacheStoreBucket == "" || cfg.CacheStoreUploader == nil {
+	if cfg.CacheStoreBucket == "" || cfg.CacheStoreObjects == nil {
 		return nil, edgeDelivery{}, nil
 	}
 	bundle, held, err := readEdgeBundle(cfg, app)
@@ -87,13 +87,13 @@ func edgeBundleSet(cfg Config, app string, coord naming.Coordinate, sealed appBu
 
 func putEdgeBundle(ctx context.Context, cfg Config, app string, coord naming.Coordinate, bundle []byte, sealed appBundle, stats *uploadBatchStats, progress providerkit.Progress) error {
 	say(progress, "Uploading "+app+"'s edge bundle")
-	if err := tracedPut(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, appEdgeBundleKey(coord), objectHeaders{contentType: "application/json"}, bundle, stats); err != nil {
+	if err := tracedPut(ctx, cfg.CacheStoreObjects, cfg.CacheStoreBucket, appEdgeBundleKey(coord), objectHeaders{contentType: "application/json"}, bundle, stats); err != nil {
 		return err
 	}
 	if !edgeSealedDelivered(cfg, sealed) {
 		return nil
 	}
-	return tracedPut(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, appEdgeSealedKey(coord), objectHeaders{contentType: "application/octet-stream"}, sealed.Ciphertext, stats)
+	return tracedPut(ctx, cfg.CacheStoreObjects, cfg.CacheStoreBucket, appEdgeSealedKey(coord), objectHeaders{contentType: "application/octet-stream"}, sealed.Ciphertext, stats)
 }
 
 func checkAppEdgeVariables(cfg Config, app string, values providerkit.AppValues, bundle appBundle) error {

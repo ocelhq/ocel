@@ -50,7 +50,7 @@ func Shape(ctx context.Context, pass transformkit.Pass, region string, req provi
 	if err != nil {
 		return err
 	}
-	shape := shaper{tree: tree, region: region, patched: patched}
+	shape := costShape{tree: tree, region: region, patched: patched}
 	for _, resource := range req.Resources {
 		if resource.Binding != "" {
 			continue
@@ -80,13 +80,13 @@ func Shape(ctx context.Context, pass transformkit.Pass, region string, req provi
 	return nil
 }
 
-type shaper struct {
+type costShape struct {
 	tree    *costkit.Tree
 	region  string
 	patched shapedPatches
 }
 
-func (s shaper) add(scope, typ, name string, properties map[string]any, ref resourceRef) {
+func (s costShape) add(scope, typ, name string, properties map[string]any, ref resourceRef) {
 	unknown := s.patched.unknown[ref]
 	for key, value := range s.patched.patches[ref] {
 		field := snake(key)
@@ -99,11 +99,11 @@ func (s shaper) add(scope, typ, name string, properties map[string]any, ref reso
 	s.tree.Add(scope, vendor, typ, name, s.region, properties, unknown...)
 }
 
-func (s shaper) plain(scope, typ, name string, properties map[string]any) {
+func (s costShape) plain(scope, typ, name string, properties map[string]any) {
 	s.tree.Add(scope, vendor, typ, name, s.region, properties)
 }
 
-func (s shaper) functions(scope, project string, app providerkit.AppEntry, specs []providerkit.FunctionSpec) error {
+func (s costShape) functions(scope, project string, app providerkit.AppEntry, specs []providerkit.FunctionSpec) error {
 	runtime := app.Manifest.GetFramework().GetName()
 	if len(specs) == 0 {
 		specs = []providerkit.FunctionSpec{{Name: app.App}}
@@ -133,7 +133,7 @@ func (s shaper) functions(scope, project string, app providerkit.AppEntry, specs
 	return nil
 }
 
-func (s shaper) container(scope string, app providerkit.AppEntry) {
+func (s costShape) container(scope string, app providerkit.AppEntry) {
 	s.plain(scope, tfECSTaskDefinition, app.App, map[string]any{
 		"cpu":                      containerCPU,
 		"memory":                   containerMemory,
@@ -150,13 +150,13 @@ func (s shaper) container(scope string, app providerkit.AppEntry) {
 	s.plain(scope, tfECRRepository, app.App, map[string]any{"image_tag_mutability": "IMMUTABLE"})
 }
 
-func (s shaper) substrate(scope string, class providerkit.Class) {
+func (s costShape) substrate(scope string, class providerkit.Class) {
 	s.plain(scope, tfECSCluster, SubstrateSlug, map[string]any{})
 	s.plain(scope, tfLoadBalancer, SubstrateSlug, map[string]any{"load_balancer_type": "application", "internal": true})
 	s.plain(scope, tfLogGroup, SubstrateSlug, map[string]any{"retention_in_days": substrateLogRetentionDays, "name": "/ocel/containers/" + string(class)})
 }
 
-func (s shaper) postgres(scope, project, env string, resource providerkit.Resource) {
+func (s costShape) postgres(scope, project, env string, resource providerkit.Resource) {
 	args := translatePostgres(resource.Postgres)
 	names := postgresResourceNames(project, env, resource.Name)
 	s.add(scope, tfRDSCluster, resource.Name, map[string]any{
@@ -180,7 +180,7 @@ func (s shaper) postgres(scope, project, env string, resource providerkit.Resour
 	s.plain(scope, tfSecret, resource.Name, map[string]any{"managed_by": "rds"})
 }
 
-func (s shaper) bucket(scope, project, env string, resource providerkit.Resource) {
+func (s costShape) bucket(scope, project, env string, resource providerkit.Resource) {
 	names := bucketResourceNames(project, env, resource.Name)
 	s.add(scope, tfS3Bucket, resource.Name, map[string]any{}, names["bucket"])
 	s.add(scope, tfLambdaFunction, resource.Name+"-"+uploadCompleterLocalName, map[string]any{

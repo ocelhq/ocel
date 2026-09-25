@@ -156,7 +156,7 @@ func Mux(spec Spec) (*http.ServeMux, error) {
 
 	source := providerkit.FixedVars(spec.Vars)
 	path, handler := envvarsv1connect.NewEnvVarsServiceHandler(
-		&providerkit.VarsHandler{Source: source},
+		&providerkit.VarsService{Source: source},
 		connect.WithInterceptors(validate.NewInterceptor(), guard.interceptor()),
 	)
 	mux.Handle(path, handler)

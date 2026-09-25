@@ -18,7 +18,7 @@ func RegionOfARN(arn string) string {
 	return parts[3]
 }
 
-func (i Issuer) Pinned(ctx context.Context, hostname, arn string) (Certificate, error) {
+func (i ACM) Pinned(ctx context.Context, hostname, arn string) (Certificate, error) {
 	if region := RegionOfARN(arn); region != "" && region != i.Region {
 		return Certificate{}, fmt.Errorf(
 			"the certificate pinned for %s lives in %s, but this edge terminates TLS in %s: pin one issued in %s, or drop the pin from `certificates` and ocel requests one there — a pinned certificate is never issued or deleted here",
@@ -49,7 +49,7 @@ const certificatePages = 25
 
 const certificatesPerPage = 100
 
-func (i Issuer) Existing(ctx context.Context, hostnames []string) (Certificate, error) {
+func (i ACM) Existing(ctx context.Context, hostnames []string) (Certificate, error) {
 	var token *string
 	for page := 0; ; page++ {
 		if page == certificatePages {

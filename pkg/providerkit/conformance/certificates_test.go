@@ -12,7 +12,7 @@ import (
 
 const statesNoHostname = "OCEL_CERTIFIER_CHECKS_NAME_NO_HOSTNAME"
 
-func TestACertifierSuiteNamingNoHostnameSkipsItsLoopsRatherThanReportingThemPassed(t *testing.T) {
+func TestACertificateSuiteNamingNoHostnameSkipsItsLoopsRatherThanReportingThemPassed(t *testing.T) {
 	if os.Getenv(statesNoHostname) == "1" {
 		conformance.RunCertificates(t, fake.NewProvider(fake.Options{Region: "nowhere"}).Certificates(),
 			conformance.CertificateChecks{Kind: fake.KindRelay})
@@ -23,7 +23,7 @@ func TestACertifierSuiteNamingNoHostnameSkipsItsLoopsRatherThanReportingThemPass
 	inner.Env = append(os.Environ(), statesNoHostname+"=1")
 	rendered, err := inner.CombinedOutput()
 	if err != nil {
-		t.Fatalf("the certifier tier over a suite naming no hostname = %v\n%s", err, rendered)
+		t.Fatalf("the certificate tier over a suite naming no hostname = %v\n%s", err, rendered)
 	}
 	for _, named := range []string{
 		"a_held_handle_names_what_it_terminates_and_who_renews_it",

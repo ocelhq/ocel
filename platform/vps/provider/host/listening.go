@@ -42,7 +42,7 @@ func (h *Host) Publishing(ctx context.Context, port string) ([]string, error) {
 	return named, nil
 }
 
-func (h *Host) SwitchboardStanding(ctx context.Context, class providerkit.Class) providerkit.HostCheck {
+func (h *Host) CheckSwitchboard(ctx context.Context, class providerkit.Class) providerkit.HostCheck {
 	board := switchboardStanding(nil, h.proxyOption)
 	check := providerkit.HostCheck{Subject: board.name, Verdict: providerkit.HostFail,
 		Fix: "run `" + providerkit.BootstrapCommand(class) + "` to stand it again"}

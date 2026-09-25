@@ -93,15 +93,15 @@ type Request struct {
 	AcceptReplacements bool
 }
 
-func CheckDeployed(ctx context.Context, api cfn.Describer, ns Namespace) (Deployed, error) {
+func CheckDeployed(ctx context.Context, api cfn.StacksAPI, ns Namespace) (Deployed, error) {
 	return CheckDeployedFor(ctx, api, ns, ClassProduction)
 }
 
-func CheckDeployedPreview(ctx context.Context, api cfn.Describer, ns Namespace) (Deployed, error) {
+func CheckDeployedPreview(ctx context.Context, api cfn.StacksAPI, ns Namespace) (Deployed, error) {
 	return CheckDeployedFor(ctx, api, ns, ClassPreview)
 }
 
-func CheckDeployedFor(ctx context.Context, api cfn.Describer, ns Namespace, class string) (Deployed, error) {
+func CheckDeployedFor(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (Deployed, error) {
 	deployed, _, err := readBootstrap(ctx, api, ns, class)
 	return deployed, err
 }
@@ -117,7 +117,7 @@ func (r Reading) Class() string { return r.class }
 
 func (r Reading) Namespace() Namespace { return r.ns }
 
-func Read(ctx context.Context, api cfn.Describer, ns Namespace, class string) (Reading, error) {
+func Read(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (Reading, error) {
 	deployed, refs, err := readBootstrap(ctx, api, ns, class)
 	if err != nil {
 		return Reading{}, err
@@ -125,7 +125,7 @@ func Read(ctx context.Context, api cfn.Describer, ns Namespace, class string) (R
 	return Reading{Deployed: deployed, ns: ns, class: class, refs: refs}, nil
 }
 
-func FeatureOutputs(ctx context.Context, api cfn.Describer, ns Namespace, class, name string) (map[string]string, error) {
+func FeatureOutputs(ctx context.Context, api cfn.StacksAPI, ns Namespace, class, name string) (map[string]string, error) {
 	f, ok := featureNamed(name)
 	if !ok {
 		return nil, fmt.Errorf("bootstrap: no feature named %q", name)
@@ -133,7 +133,7 @@ func FeatureOutputs(ctx context.Context, api cfn.Describer, ns Namespace, class,
 	return cfn.StackOutputs(ctx, api, f.stackName(ns, class))
 }
 
-func readBootstrap(ctx context.Context, api cfn.Describer, ns Namespace, class string) (Deployed, stackRefs, error) {
+func readBootstrap(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (Deployed, stackRefs, error) {
 	coreStack, err := ns.StackNameFor(class)
 	if err != nil {
 		return Deployed{}, stackRefs{}, err
@@ -215,7 +215,7 @@ func readBootstrap(ctx context.Context, api cfn.Describer, ns Namespace, class s
 	return d, refs, nil
 }
 
-func readRuntimeLayers(ctx context.Context, api cfn.Describer, d *Deployed, refs *stackRefs, ns Namespace, class string) error {
+func readRuntimeLayers(ctx context.Context, api cfn.StacksAPI, d *Deployed, refs *stackRefs, ns Namespace, class string) error {
 	intended, err := runtimeLayerTemplateAt(ns, class, d.ArtifactBucket)
 	if err != nil {
 		return err
@@ -244,7 +244,7 @@ func broughtVarsKey(outputs map[string]string) string {
 	return outputs[outputVarsKeyARN]
 }
 
-func standingFeatures(ctx context.Context, api cfn.Describer, ns Namespace, class string) (FeatureSet, error) {
+func standingFeatures(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (FeatureSet, error) {
 	standing := FeatureSet{}
 	for _, f := range featureRegistry {
 		stack, err := cfn.DescribeStack(ctx, api, f.stackName(ns, class))
@@ -415,7 +415,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	review := AdmitReplacements(target.ns, req.AcceptReplacements, logf)
 	coreBody := target.core(coreVarsKey(alongside, req.VarsKey))
 	coreTags := stampTags(target.ns, Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
-	if err := cfn.Upsert(ctx, apis.CFN, target.ns, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
+	if err := cfn.Upsert(ctx, apis.CFN, target.ns.ChangeSetNameFor, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
 		return err
 	}
 	deployed, refs, err := readBootstrap(ctx, apis.CFN, target.ns, target.class)
@@ -469,7 +469,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 					return fmt.Errorf("%s: %w", name, err)
 				}
 				tags := stampTags(target.ns, Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(stack.body), WrittenBy: req.Writer.String()})
-				if err := cfn.Upsert(gctx, apis.CFN, target.ns, stackName, stack.body, stack.params, namedIAM, tags, review); err != nil {
+				if err := cfn.Upsert(gctx, apis.CFN, target.ns.ChangeSetNameFor, stackName, stack.body, stack.params, namedIAM, tags, review); err != nil {
 					return fmt.Errorf("%s: %w", name, err)
 				}
 				if produced[i], err = cfn.StackOutputs(gctx, apis.CFN, stackName); err != nil {

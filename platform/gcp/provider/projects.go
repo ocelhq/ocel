@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
-type ProjectReader interface {
+type Projects interface {
 	Reaches(ctx context.Context, project string) error
 }
 

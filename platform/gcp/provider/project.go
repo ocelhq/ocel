@@ -88,8 +88,8 @@ func gcloudProject(ctx context.Context) (string, error) {
 func (p *Provider) stood(ctx context.Context) (*clients, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.standing != nil {
-		return p.standing, nil
+	if p.resolved != nil {
+		return p.resolved, nil
 	}
 	project := p.options.Project
 	if project == "" {
@@ -103,8 +103,8 @@ func (p *Provider) stood(ctx context.Context) (*clients, error) {
 	if err := names.fit(); err != nil {
 		return nil, err
 	}
-	p.standing = &clients{Names: names, region: p.options.Region, endpoint: p.endpoint}
-	return p.standing, nil
+	p.resolved = &clients{Names: names, region: p.options.Region, endpoint: p.endpoint}
+	return p.resolved, nil
 }
 
 func (p *Provider) Names(ctx context.Context) (Names, error) {

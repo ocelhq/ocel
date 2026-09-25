@@ -71,10 +71,10 @@ const rates = `{
   "version": "2026-01-01",
   "currency": "USD",
   "rates": [
-    {"id": "fake/requests", "unit": "requests", "tiers": [{"start": "0", "price": "0.000001"}], "source": "https://fake.example/pricing", "verified": "2026-01-01"},
-    {"id": "fake/container-hours", "unit": "hours", "tiers": [{"start": "0", "price": "0.01"}], "source": "https://fake.example/pricing", "verified": "2026-01-01"},
-    {"id": "fake/postgres-hours", "unit": "hours", "tiers": [{"start": "0", "price": "0.02"}], "source": "https://fake.example/pricing", "verified": "2026-01-01"},
-    {"id": "fake/storage", "unit": "GB-month", "tiers": [{"start": "0", "price": "0.01"}], "source": "https://fake.example/pricing", "verified": "2026-01-01"}
+    {"id": "fake/requests", "unit": "requests", "steps": [{"start": "0", "price": "0.000001"}], "source": "https://fake.example/pricing", "verified": "2026-01-01"},
+    {"id": "fake/container-hours", "unit": "hours", "steps": [{"start": "0", "price": "0.01"}], "source": "https://fake.example/pricing", "verified": "2026-01-01"},
+    {"id": "fake/postgres-hours", "unit": "hours", "steps": [{"start": "0", "price": "0.02"}], "source": "https://fake.example/pricing", "verified": "2026-01-01"},
+    {"id": "fake/storage", "unit": "GB-month", "steps": [{"start": "0", "price": "0.01"}], "source": "https://fake.example/pricing", "verified": "2026-01-01"}
   ]
 }`
 

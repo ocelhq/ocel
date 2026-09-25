@@ -189,7 +189,7 @@ func TestChangeSetsAreDiscardedWhateverEndsTheRun(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
-		err := cfn.Update(ctx, stacks, defaultNamespace, isrStack(ClassProduction), staleBody, nil, nil, staleTags,
+		err := cfn.Update(ctx, stacks, defaultNamespace.ChangeSetNameFor, isrStack(ClassProduction), staleBody, nil, nil, staleTags,
 			func(string, []cfntypes.ResourceChange) error {
 				cancel()
 				return errors.New("this run stops here")
@@ -207,7 +207,7 @@ func TestChangeSetsAreDiscardedWhateverEndsTheRun(t *testing.T) {
 
 		func() {
 			defer func() { _ = recover() }()
-			_ = cfn.Update(context.Background(), stacks, defaultNamespace, isrStack(ClassProduction), staleBody, nil, nil, staleTags,
+			_ = cfn.Update(context.Background(), stacks, defaultNamespace.ChangeSetNameFor, isrStack(ClassProduction), staleBody, nil, nil, staleTags,
 				func(string, []cfntypes.ResourceChange) error { panic("the run came apart") })
 		}()
 		if left := stacks.leftBehind(); len(left) != 0 {

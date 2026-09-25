@@ -26,7 +26,7 @@ type private struct {
 }
 
 type stack struct {
-	p     *provider
+	p     *apiGateway
 	state edge.StackState
 	own   private
 }
@@ -35,7 +35,7 @@ var _ edge.EdgeStack = (*stack)(nil)
 
 func (s *stack) State() edge.StackState {
 	held := s.state
-	held.Adapter = edge.Own(s.own)
+	held.Private = edge.Own(s.own)
 	return held
 }
 
@@ -294,7 +294,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progre
 			return edge.PruneResult{}, err
 		}
 		if found {
-			if err := s.p.deleter().drain(ctx, c, []string{id}); err != nil {
+			if err := s.p.deletion().drain(ctx, c, []string{id}); err != nil {
 				return edge.PruneResult{}, err
 			}
 		}
@@ -496,7 +496,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 	if s.own.API != "" && !slices.Contains(ids, s.own.API) {
 		ids = append(ids, s.own.API)
 	}
-	drained := s.p.deleter().drain(ctx, c, ids)
+	drained := s.p.deletion().drain(ctx, c, ids)
 	if drained != nil {
 		return errors.Join(append(errs, drained)...)
 	}

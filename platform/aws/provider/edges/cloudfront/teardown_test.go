@@ -39,7 +39,7 @@ func TestTheCommentADistributionCarriesIsTheOwnerAProjectClaims(t *testing.T) {
 
 	ns := bootstrap.Namespace(strings.Repeat("a", providerkit.MaxNamespaceLength))
 	slug := strings.Repeat("s", 120)
-	p := &provider{ns: ns}
+	p := &cloudFront{ns: ns}
 
 	plan := distributionPlan{name: distributionName(ns, slug, edge.ClassProduction)}
 	comment := aws.ToString(plan.config(nil, "").Comment)

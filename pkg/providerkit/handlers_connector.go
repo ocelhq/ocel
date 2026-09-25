@@ -47,9 +47,9 @@ func (h *handlers) InstallConnector(ctx context.Context, req *contractv1.Install
 	if err != nil {
 		return err
 	}
-	return streamResult(ctx, stream, func(sender *eventSender) (*progressv1.OperationEvent, error) {
+	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
 		var at ConnectorAddress
-		err := inUnit(sender, naming.UnitConnector, connectorUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(_ *eventSender, progress Progress) error {
+		err := inUnit(sender, naming.UnitConnector, connectorUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(_ *eventStream, progress Progress) error {
 			at, err = connector.Install(ctx, ConnectorInstall{
 				Binary:  req.GetBinary(),
 				Version: req.GetVersion(),
@@ -70,7 +70,7 @@ func (h *handlers) RemoveConnector(ctx context.Context, _ *contractv1.RemoveConn
 	if err != nil {
 		return err
 	}
-	return streamed(ctx, stream, naming.UnitConnector, connectorUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, progress Progress) error {
+	return streamed(ctx, stream, naming.UnitConnector, connectorUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress Progress) error {
 		return connector.Remove(ctx, progress)
 	})
 }

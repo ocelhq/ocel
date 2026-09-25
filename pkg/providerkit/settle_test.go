@@ -27,10 +27,10 @@ func (a *answering) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, 
 	return "", nil
 }
 
-func waiting(liveness Liveness, attempts int) (settler, *int) {
+func waiting(liveness Liveness, attempts int) (settlement, *int) {
 	slept := 0
 	clock := time.Unix(1700000000, 0)
-	return settler{
+	return settlement{
 		kind:     "relay",
 		liveness: liveness,
 		budget:   time.Duration(attempts) * time.Second,
@@ -136,7 +136,7 @@ func TestTheSettleAsksTheProvidersProbeWhichEdgeAnswers(t *testing.T) {
 	t.Parallel()
 
 	provider := &boxProvider{answers: "box"}
-	settle := newSettler(frontOf{kind: "box"}, nil, "", provider.Liveness())
+	settle := newSettlement(frontOf{kind: "box"}, nil, "", provider.Liveness())
 	if kind, err := settle.attempt(context.Background(), "shop.example.com"); err != nil || kind != "box" {
 		t.Fatalf("attempt() = %q, %v, want the edge the provider's own probe answered", kind, err)
 	}
@@ -182,9 +182,9 @@ func (s slowly) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, erro
 	return "", nil
 }
 
-func onTheClock(resolve func(*time.Time) Liveness, budget time.Duration) settler {
+func onTheClock(resolve func(*time.Time) Liveness, budget time.Duration) settlement {
 	clock := time.Unix(1700000000, 0)
-	return settler{
+	return settlement{
 		kind:     "box",
 		liveness: resolve(&clock),
 		budget:   budget,
@@ -266,7 +266,7 @@ func TestAProbeThatNeverReturnsIsCutOffAtEachAttemptAndTheSettleAtItsDeadline(t 
 	t.Parallel()
 
 	var asked atomic.Int32
-	settle := settler{
+	settle := settlement{
 		kind:     "box",
 		liveness: hanging{asked: &asked},
 		budget:   300 * time.Millisecond,
@@ -318,7 +318,7 @@ func TestAHostnameNothingAnsweredForNamesWhatStoppedTheLastAttempt(t *testing.T)
 	}
 }
 
-func TestAResolverThatDiagnosesNothingStillRefusesInOneSentence(t *testing.T) {
+func TestALivenessThatDiagnosesNothingStillRefusesInOneSentence(t *testing.T) {
 	t.Parallel()
 
 	settle, _ := waiting(&answering{kind: "relay", after: 99}, 2)

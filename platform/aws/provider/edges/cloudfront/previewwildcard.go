@@ -31,7 +31,7 @@ func previewWildcardName(baseDomain string) string {
 	)
 }
 
-func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
+func (p *cloudFront) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
 	wildcard := edge.PreviewWildcard(spec.BaseDomain)
 	if wildcard == "" {
 		return "", fmt.Errorf("the %q edge serves every preview from one wildcard distribution; this reconcile names no base domain", Kind)
@@ -120,7 +120,7 @@ func convergeWildcard(ctx context.Context, c Clients, plan distributionPlan, id,
 	return putConfig(ctx, c, id, etag, plan.keeping(held).config([]string{wildcard}, certificate))
 }
 
-func (p *provider) previewWildcardPlan(ctx context.Context, c Clients, baseDomain string) (distributionPlan, bootstrap.Deployed, error) {
+func (p *cloudFront) previewWildcardPlan(ctx context.Context, c Clients, baseDomain string) (distributionPlan, bootstrap.Deployed, error) {
 	deployed, err := p.bootstrap(ctx, c, edge.ClassPreview)
 	if err != nil {
 		return distributionPlan{}, bootstrap.Deployed{}, err
@@ -143,7 +143,7 @@ func (p *provider) previewWildcardPlan(ctx context.Context, c Clients, baseDomai
 	}, deployed, nil
 }
 
-func (p *provider) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
+func (p *cloudFront) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
 	if edge.PreviewWildcard(baseDomain) == "" {
 		return nil
 	}
@@ -176,7 +176,7 @@ func (p *provider) DestroyPreviewWildcard(ctx context.Context, baseDomain string
 
 var previewResolverSuffix = bootstrap.Namespace("").EdgeResolverName(edge.ClassPreview)
 
-func (p *provider) ownsSharedPreviewEntry(ctx context.Context, c Clients, id, baseDomain string) error {
+func (p *cloudFront) ownsSharedPreviewEntry(ctx context.Context, c Clients, id, baseDomain string) error {
 	config, _, err := configOf(ctx, c, id)
 	if err != nil {
 		return err
@@ -207,7 +207,7 @@ func resolverNamespaceOf(config *cftypes.DistributionConfig) string {
 	return ""
 }
 
-func (p *provider) forgetPreviewWildcardTarget(ctx context.Context, c Clients, distribution string) error {
+func (p *cloudFront) forgetPreviewWildcardTarget(ctx context.Context, c Clients, distribution string) error {
 	deployed, err := p.bootstrap(ctx, c, edge.ClassPreview)
 	if err != nil {
 		return err
@@ -257,7 +257,7 @@ func sweepPreviewRoutes(ctx context.Context, c Clients, ns bootstrap.Namespace, 
 }
 
 func dropRoutes(ctx context.Context, c Clients, arn string, hosts []string) error {
-	writer := routeWriter{clients: c, arn: arn}
+	writer := routeStore{clients: c, arn: arn}
 	for batch := range slices.Chunk(hosts, previewSweepPage) {
 		if err := writer.apply(ctx, nil, batch); err != nil {
 			return err

@@ -12,7 +12,7 @@ import (
 )
 
 type storeSource struct {
-	reader   values.Reader
+	reader   values.View
 	cells    []values.Cell
 	bindings []live.Binding
 }
@@ -65,7 +65,7 @@ func FromManifest(raw []byte) (*live.Values, error) {
 
 func Over(manifest vars.Manifest, records providerkit.RecordStore, sealer providerkit.Cipher) *live.Values {
 	return live.New(&storeSource{
-		reader: values.Reader{
+		reader: values.View{
 			Records:     records,
 			Cipher:      sealer,
 			Scope:       values.Scope{Project: manifest.Slug, Class: providerkit.Class(manifest.Class)},

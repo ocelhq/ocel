@@ -16,5 +16,5 @@ func placeUploadCompleter(ctx context.Context, cfg Config) (payloads.Placement, 
 	if cfg.ArtifactBucket == "" {
 		return payloads.Placement{}, fmt.Errorf("no artifact bucket to place the upload completer into; re-run `%s`", providerkit.BootstrapCommand(cfg.Class))
 	}
-	return payloads.Place(ctx, cfg.Uploader, cfg.ArtifactBucket, uploadCompleterKeyPrefix, "upload completer", payloads.UploadCompleter())
+	return payloads.Place(ctx, cfg.Objects, cfg.ArtifactBucket, uploadCompleterKeyPrefix, "upload completer", payloads.UploadCompleter())
 }

@@ -79,14 +79,14 @@ func run(path, cache string) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", rate.ID, err)
 		}
-		tiers, unit, source, err := held.tiers(rate.Query, rate.Query[queryService], region)
+		steps, unit, source, err := held.steps(rate.Query, rate.Query[queryService], region)
 		if err != nil {
 			return fmt.Errorf("%s: %w", rate.ID, err)
 		}
 		if rate.Unit != unit {
 			fmt.Fprintf(os.Stderr, "%s: the offer bills in %q, the card says %q\n", rate.ID, unit, rate.Unit)
 		}
-		rate.Tiers = tiers
+		rate.Steps = steps
 		rate.Source = source
 		rate.Verified = today
 	}
@@ -139,7 +139,7 @@ func orGlobal(region string) string {
 	return region
 }
 
-func (o *offer) tiers(query map[string]string, service, region string) ([]costkit.Tier, string, string, error) {
+func (o *offer) steps(query map[string]string, service, region string) ([]costkit.PriceStep, string, string, error) {
 	var matched []string
 	for sku, product := range o.Products {
 		if matches(product.Attributes, query, region) {
@@ -151,7 +151,7 @@ func (o *offer) tiers(query map[string]string, service, region string) ([]costki
 		return nil, "", "", fmt.Errorf("query %v matches %d products: %v", query, len(matched), matched)
 	}
 	sku := matched[0]
-	var tiers []costkit.Tier
+	var steps []costkit.PriceStep
 	unit := ""
 	for _, term := range o.Terms.OnDemand[sku] {
 		if term.OfferTermCode != onDemandTerm {
@@ -166,16 +166,16 @@ func (o *offer) tiers(query map[string]string, service, region string) ([]costki
 			if err != nil {
 				return nil, "", "", fmt.Errorf("sku %s: price %q: %w", sku, dimension.PricePerUnit["USD"], err)
 			}
-			tiers = append(tiers, costkit.Tier{Start: start, Price: price})
+			steps = append(steps, costkit.PriceStep{Start: start, Price: price})
 			unit = dimension.Unit
 		}
 	}
-	if len(tiers) == 0 {
+	if len(steps) == 0 {
 		return nil, "", "", fmt.Errorf("sku %s carries no on-demand term", sku)
 	}
-	sort.Slice(tiers, func(i, j int) bool { return tiers[i].Start.LessThan(tiers[j].Start) })
+	sort.Slice(steps, func(i, j int) bool { return steps[i].Start.LessThan(steps[j].Start) })
 	source := host + "/offers/v1.0/aws/" + service + "/" + o.Version + "/" + orGlobal(region) + "/index.json#" + sku
-	return tiers, unit, source, nil
+	return steps, unit, source, nil
 }
 
 func matches(attributes, query map[string]string, region string) bool {

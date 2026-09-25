@@ -32,7 +32,7 @@ func productionAPIName() string {
 	return apiName(defaultNamespace, conformanceSlug, edge.ClassProduction, "")
 }
 
-func bootstrapped(t *testing.T, w *world) *provider {
+func bootstrapped(t *testing.T, w *world) *apiGateway {
 	t.Helper()
 	e := w.edge()
 	if _, err := e.Bootstrap(context.Background(), edge.ClassProduction); err != nil {

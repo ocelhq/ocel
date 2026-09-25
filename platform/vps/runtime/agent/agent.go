@@ -306,7 +306,7 @@ type Store struct {
 }
 
 func (s Store) Resolve(ctx context.Context, manifest vars.Manifest) (map[string]string, error) {
-	reader := values.Reader{
+	reader := values.View{
 		Records:     vars.Records{Root: s.StateRoot},
 		Cipher:      vars.Cipher{Root: s.ClassRoot},
 		Scope:       values.Scope{Project: manifest.Slug, Class: providerkit.Class(manifest.Class)},

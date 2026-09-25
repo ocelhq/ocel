@@ -125,20 +125,20 @@ type storeCredential struct {
 	secret string
 }
 
-type standingStores struct {
-	mu      sync.Mutex
-	stood   map[string]storeCredential
-	dropped map[string]bool
-	sweeps  bool
-	spec    *host.ResourceContainer
-	shaper  string
+type liveStores struct {
+	mu       sync.Mutex
+	stood    map[string]storeCredential
+	dropped  map[string]bool
+	sweeps   bool
+	spec     *host.ResourceContainer
+	shapedBy string
 }
 
 func droppedBucket(stack naming.StackName, binding string) string {
 	return stack.String() + "/" + binding
 }
 
-func (s *standingStores) forgot(stack naming.StackName, binding string) {
+func (s *liveStores) forgot(stack naming.StackName, binding string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.dropped == nil {
@@ -147,47 +147,47 @@ func (s *standingStores) forgot(stack naming.StackName, binding string) {
 	s.dropped[droppedBucket(stack, binding)] = true
 }
 
-func (s *standingStores) forgotten(stack naming.StackName, binding string) bool {
+func (s *liveStores) forgotten(stack naming.StackName, binding string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.dropped[droppedBucket(stack, binding)]
 }
 
-func (s *standingStores) expiring(standing host.BucketStanding) {
+func (s *liveStores) expiring(standing host.BucketState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sweeps = s.sweeps || !standing.ExpiresUploads
 }
 
-func (s *standingStores) sweeping() bool {
+func (s *liveStores) sweeping() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.sweeps
 }
 
-func (s *standingStores) shaped(resource string, spec host.ResourceContainer) (host.ResourceContainer, error) {
+func (s *liveStores) shaped(resource string, spec host.ResourceContainer) (host.ResourceContainer, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.spec == nil {
-		s.spec, s.shaper = &spec, resource
+		s.spec, s.shapedBy = &spec, resource
 		return spec, nil
 	}
 	if !reflect.DeepEqual(*s.spec, spec) {
 		return host.ResourceContainer{}, providerkit.Refuse(providerkit.CodeInvalid,
 			"buckets %s and %s shape the one store container differently\n"+
 				"Gate the `vps.bucket` rule on the environment, or patch both buckets the same way",
-			resource, s.shaper)
+			resource, s.shapedBy)
 	}
 	return *s.spec, nil
 }
 
-func (s *standingStores) shape() *host.ResourceContainer {
+func (s *liveStores) shape() *host.ResourceContainer {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.spec
 }
 
-func (s *standingStores) once(name string, stand func() (storeCredential, error)) (storeCredential, error) {
+func (s *liveStores) once(name string, stand func() (storeCredential, error)) (storeCredential, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if held, stood := s.stood[name]; stood {
@@ -257,7 +257,7 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.Instruction
 		progress.Say("Standing bucket " + in.Resource.Name + " up in " + spec.Name)
 	}
 
-	var sessions host.BucketStanding
+	var sessions host.BucketState
 	stood := false
 	held, err := p.stores.once(spec.Name, func() (storeCredential, error) {
 		held, err := p.storeCredential(ctx, in.Ref, spec.Name)

@@ -64,7 +64,7 @@ func ClassParamNames(ns Namespace, class string) ([]string, error) {
 	return append(params, secret), nil
 }
 
-func PassphraseHeldBySibling(ctx context.Context, api cfn.Describer, ns Namespace, class string) (bool, error) {
+func PassphraseHeldBySibling(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (bool, error) {
 	sibling, err := SiblingClassOf(class)
 	if err != nil {
 		return false, err

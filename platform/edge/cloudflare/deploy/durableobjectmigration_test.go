@@ -32,7 +32,7 @@ const foreignClassSettings = `{"result":{"bindings":[
 	 "type":"durable_object_namespace"}
 ]},"success":true,"errors":[],"messages":[]}`
 
-func settingsProvider(t *testing.T, status int, body string) *provider {
+func settingsProvider(t *testing.T, status int, body string) *cloudflare {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -40,13 +40,13 @@ func settingsProvider(t *testing.T, status int, body string) *provider {
 		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(srv.Close)
-	return &provider{namespace: "ocel", client: cf.NewClient(
+	return &cloudflare{namespace: "ocel", client: cf.NewClient(
 		option.WithBaseURL(srv.URL+"/"),
 		option.WithAPIToken("test"),
 	)}
 }
 
-func readDeployedClasses(t *testing.T, p *provider, script string) ([]string, error) {
+func readDeployedClasses(t *testing.T, p *cloudflare, script string) ([]string, error) {
 	t.Helper()
 	settings, err := p.scriptSettings(t.Context(), "acct", script)
 	if err != nil {

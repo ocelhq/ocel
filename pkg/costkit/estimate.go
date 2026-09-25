@@ -273,7 +273,7 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 	fixed := map[string]decimal.Decimal{}
 	usage := map[string]decimal.Decimal{}
 	var totalFixed, totalUsage decimal.Decimal
-	account := &ledger{card: card, spent: map[rateKey]decimal.Decimal{}}
+	account := &tally{card: card, spent: map[rateKey]decimal.Decimal{}}
 	priced := map[string]bool{}
 	for _, resource := range set.GetResources() {
 		pricing, known := table[resource.GetType()]
@@ -335,7 +335,7 @@ type pricedResource struct {
 	fixed, usage decimal.Decimal
 }
 
-type ledger struct {
+type tally struct {
 	card  *Card
 	spent map[rateKey]decimal.Decimal
 	notes []string
@@ -343,7 +343,7 @@ type ledger struct {
 
 const AllowanceAssumed = "a free allowance the account gets once is assumed unspent: a scan cannot see what the account already used this month, so a deploy beside other use of the same allowance costs more than shown"
 
-func (l *ledger) charge(rate Rate, quantity decimal.Decimal) (cost, marginal decimal.Decimal) {
+func (l *tally) charge(rate Rate, quantity decimal.Decimal) (cost, marginal decimal.Decimal) {
 	if rate.Allowance != AllowanceAccount {
 		return rate.Cost(quantity)
 	}
@@ -354,13 +354,13 @@ func (l *ledger) charge(rate Rate, quantity decimal.Decimal) (cost, marginal dec
 	return rate.Between(from, from.Add(quantity))
 }
 
-func (l *ledger) note(text string) {
+func (l *tally) note(text string) {
 	if text != "" && !slices.Contains(l.notes, text) {
 		l.notes = append(l.notes, text)
 	}
 }
 
-func (l *ledger) price(subject *Subject) pricedResource {
+func (l *tally) price(subject *Subject) pricedResource {
 	out := pricedResource{estimate: &costv1.ResourceEstimate{Resource: subject.Resource.GetId()}}
 	if subject.free || len(subject.built) == 0 {
 		out.estimate.Status = costv1.ResourceEstimate_STATUS_FREE

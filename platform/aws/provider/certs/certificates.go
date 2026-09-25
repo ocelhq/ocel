@@ -4,31 +4,31 @@ import (
 	"strings"
 )
 
-type Certifier struct {
-	Issuer Issuer
-	Pins   map[string]string
+type Certificates struct {
+	ACM  ACM
+	Pins map[string]string
 }
 
-func CertifierFor(region string, deps Deps, pins map[string]string) Certifier {
-	return Certifier{Issuer: IssuerFor(region, deps), Pins: NormalizePins(pins)}
+func CertificatesFor(region string, deps Deps, pins map[string]string) Certificates {
+	return Certificates{ACM: ACMFor(region, deps), Pins: NormalizePins(pins)}
 }
 
-func (c Certifier) Issues() bool { return c.Issuer.API != nil }
+func (c Certificates) Issues() bool { return c.ACM.API != nil }
 
-func (c Certifier) PinFor(hostname string) string { return c.Pins[hostname] }
+func (c Certificates) PinFor(hostname string) string { return c.Pins[hostname] }
 
-func (c Certifier) IgnoresPinFor(hostname string) bool {
+func (c Certificates) IgnoresPinFor(hostname string) bool {
 	return !c.Issues() && c.PinFor(hostname) != ""
 }
 
-func (c Certifier) Wants(recorded Certificate, hostname string) string {
+func (c Certificates) Wants(recorded Certificate, hostname string) string {
 	if pinned := c.PinFor(hostname); pinned != "" {
 		return pinned
 	}
 	return recorded.ARN
 }
 
-func (c Certifier) Unpinned(hostnames []string) []string {
+func (c Certificates) Unpinned(hostnames []string) []string {
 	var wanted []string
 	for _, hostname := range hostnames {
 		if c.PinFor(hostname) == "" {

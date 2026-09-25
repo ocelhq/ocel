@@ -450,9 +450,9 @@ func matchingRecords(records []map[string]any, query url.Values) []map[string]an
 	return matched
 }
 
-func (m *cfMock) provider(t *testing.T) *provider {
+func (m *cfMock) provider(t *testing.T) *cloudflare {
 	srv := m.server(t)
-	return &provider{namespace: "ocel", client: cf.NewClient(
+	return &cloudflare{namespace: "ocel", client: cf.NewClient(
 		option.WithBaseURL(srv.URL+"/"),
 		option.WithAPIToken("test"),
 	)}

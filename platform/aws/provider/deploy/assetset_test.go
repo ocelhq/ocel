@@ -53,10 +53,10 @@ func TestEveryAssetSetIsARowThePlanShowsAndAnUploadTheApplyMakes(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	assets, store := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
+	assets, store := &fakeArtifactStore{exists: map[string]bool{}}, &fakeArtifactStore{exists: map[string]bool{}}
 	cfg := assetShippingConfig(t, "web")
-	cfg.Uploader = assets
-	cfg.CacheStoreUploader = store
+	cfg.Objects = assets
+	cfg.CacheStoreObjects = store
 
 	engine := &mockedEngine{outputs: siblingAppOutputs("web")}
 	releaser := standingUp(cfg, engine)
@@ -109,8 +109,8 @@ func TestNoFunctionStandsUpBeforeTheAssetsItServes(t *testing.T) {
 	t.Parallel()
 
 	cfg := assetShippingConfig(t, "web")
-	cfg.Uploader = &fakeUploader{exists: map[string]bool{}}
-	cfg.CacheStoreUploader = &fakeUploader{exists: map[string]bool{}}
+	cfg.Objects = &fakeArtifactStore{exists: map[string]bool{}}
+	cfg.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
 
 	order := &registrationOrder{}
 	engine := &mockedEngine{outputs: siblingAppOutputs("web"), mocks: order}
@@ -139,8 +139,8 @@ func TestAnAssetSetIsOneRowWhateverTheFileCount(t *testing.T) {
 	}
 	cfg := assetShippingConfig(t, "web")
 	cfg.ArtifactRoot = writeTree(t, files)
-	cfg.Uploader = &fakeUploader{exists: map[string]bool{}}
-	cfg.CacheStoreUploader = &fakeUploader{exists: map[string]bool{}}
+	cfg.Objects = &fakeArtifactStore{exists: map[string]bool{}}
+	cfg.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
 
 	engine := &mockedEngine{outputs: siblingAppOutputs("web")}
 	planned, err := standingUp(cfg, engine).Plan(context.Background(), siblingAppPlan(t, "web"), nil)
@@ -156,8 +156,8 @@ func TestAStaticAssetSetIsPlannedOnceAndPushedOnce(t *testing.T) {
 	t.Parallel()
 
 	cfg := assetShippingConfig(t, "web")
-	cfg.Uploader = &fakeUploader{exists: map[string]bool{}}
-	cfg.CacheStoreUploader = &fakeUploader{exists: map[string]bool{}}
+	cfg.Objects = &fakeArtifactStore{exists: map[string]bool{}}
+	cfg.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
 	coord := storageCoordinate("prod", "shop", "web", fixedRelease(t))
 
 	first, err := staticAssetSet(cfg, "web", runtimeNext, coord)

@@ -10,16 +10,16 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func testPoller(lookup Lookup) (Poller, *int) {
+func testPoller(lookup Lookup) (Propagation, *int) {
 	waits := 0
-	return Poller{
+	return Propagation{
 		Lookup:   lookup,
 		Wait:     func(context.Context, time.Duration) error { waits++; return nil },
 		Attempts: 3,
 	}, &waits
 }
 
-func TestPollerAwait(t *testing.T) {
+func TestPropagationAwait(t *testing.T) {
 	t.Parallel()
 
 	wildcard := edge.Record{Name: "*.preview.app.com", Type: edge.RecordTypeAAAA, Value: edge.ProxyPlaceholder, Proxied: true}
@@ -29,7 +29,7 @@ func TestPollerAwait(t *testing.T) {
 
 		attempts := 0
 		var probed string
-		poller, waits := testPoller(func(_ context.Context, host string) ([]string, error) {
+		propagation, waits := testPoller(func(_ context.Context, host string) ([]string, error) {
 			attempts++
 			probed = host
 			if attempts < 2 {
@@ -39,7 +39,7 @@ func TestPollerAwait(t *testing.T) {
 		})
 
 		var said []string
-		if err := poller.Await(t.Context(), []edge.Record{wildcard}, func(m string) { said = append(said, m) }); err != nil {
+		if err := propagation.Await(t.Context(), []edge.Record{wildcard}, func(m string) { said = append(said, m) }); err != nil {
 			t.Fatalf("Await: %v", err)
 		}
 		if len(said) == 0 || !strings.Contains(said[0], "*.preview.app.com") {
@@ -56,9 +56,9 @@ func TestPollerAwait(t *testing.T) {
 	t.Run("gives up naming the record after the bound", func(t *testing.T) {
 		t.Parallel()
 
-		poller, waits := testPoller(func(context.Context, string) ([]string, error) { return nil, errors.New("no such host") })
+		propagation, waits := testPoller(func(context.Context, string) ([]string, error) { return nil, errors.New("no such host") })
 
-		err := poller.Await(t.Context(), []edge.Record{wildcard}, func(string) {})
+		err := propagation.Await(t.Context(), []edge.Record{wildcard}, func(string) {})
 		if err == nil {
 			t.Fatal("Await err = nil, want the wait to be given up on")
 		}
@@ -76,11 +76,11 @@ func TestPollerAwait(t *testing.T) {
 	t.Run("nothing to await resolves at once", func(t *testing.T) {
 		t.Parallel()
 
-		poller, _ := testPoller(func(context.Context, string) ([]string, error) {
+		propagation, _ := testPoller(func(context.Context, string) ([]string, error) {
 			t.Error("looked a record up with nothing to await")
 			return nil, nil
 		})
-		if err := poller.Await(t.Context(), nil, func(string) {}); err != nil {
+		if err := propagation.Await(t.Context(), nil, func(string) {}); err != nil {
 			t.Fatalf("Await(nil): %v", err)
 		}
 	})

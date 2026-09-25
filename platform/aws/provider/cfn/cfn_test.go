@@ -45,9 +45,7 @@ func (f *failedStack) ExecuteChangeSet(context.Context, *cloudformation.ExecuteC
 	return &cloudformation.ExecuteChangeSetOutput{}, nil
 }
 
-type namer struct{}
-
-func (namer) ChangeSetNameFor(stackName string) string { return stackName + "-changes" }
+func changeSetName(stackName string) string { return stackName + "-changes" }
 
 const updateRollbackCleanup = cfntypes.ResourceStatus("UPDATE_ROLLBACK_COMPLETE_CLEANUP_IN_PROGRESS")
 
@@ -150,7 +148,7 @@ func TestUpdateCarriesTheReasonThisRunFailedOnRatherThanAnOlderOne(t *testing.T)
 		},
 	}
 
-	err := Update(context.Background(), api, namer{}, "ocel-bootstrap", "{}", nil, nil, nil, nil)
+	err := Update(context.Background(), api, changeSetName, "ocel-bootstrap", "{}", nil, nil, nil, nil)
 	if err == nil {
 		t.Fatal("Update over a stack that rolled the update back = nil, want the waiter failure")
 	}

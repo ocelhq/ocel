@@ -43,11 +43,11 @@ func TestAppEdgeBundleKey(t *testing.T) {
 func TestUploadEdgeBundles(t *testing.T) {
 	t.Run("uploads each bundle under its own build prefix", func(t *testing.T) {
 		t.Parallel()
-		store := &fakeUploader{exists: map[string]bool{}}
+		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{
 			ArtifactRoot: edgeAppTree(t), AssetBucket: "assets", Env: "prod",
-			Uploader:         &fakeUploader{exists: map[string]bool{}},
-			CacheStoreBucket: "isr", CacheStoreUploader: store,
+			Objects:          &fakeArtifactStore{exists: map[string]bool{}},
+			CacheStoreBucket: "isr", CacheStoreObjects: store,
 		}
 
 		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
@@ -76,15 +76,15 @@ func TestUploadEdgeBundles(t *testing.T) {
 	t.Run("replaces the object already under the key", func(t *testing.T) {
 		t.Parallel()
 		key := edgeBundleKeyFor("web", testDeploymentID)
-		store := &fakeUploader{exists: map[string]bool{key: true}}
+		store := &fakeArtifactStore{exists: map[string]bool{key: true}}
 		cfg := Config{
 			ArtifactRoot: writeTree(t, map[string]string{
 				"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
 				"apps/web/edge/bundle.json":      `{"version":1,"mainModule":"main.js","shim":"REBUILT"}`,
 			}),
 			AssetBucket: "assets", Env: "prod",
-			Uploader:         &fakeUploader{exists: map[string]bool{}},
-			CacheStoreBucket: "isr", CacheStoreUploader: store,
+			Objects:          &fakeArtifactStore{exists: map[string]bool{}},
+			CacheStoreBucket: "isr", CacheStoreObjects: store,
 		}
 
 		if err := uploadEdgeBundles(context.Background(), cfg, nextManifest(), appBuildsFor(t, cfg, nextManifest())); err != nil {
@@ -101,11 +101,11 @@ func TestUploadEdgeBundles(t *testing.T) {
 
 	t.Run("a rotation targets the same build key", func(t *testing.T) {
 		t.Parallel()
-		store := &fakeUploader{exists: map[string]bool{}}
+		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{
 			ArtifactRoot: edgeAppTree(t), AssetBucket: "assets", Env: "prod",
-			Uploader:         &fakeUploader{exists: map[string]bool{}},
-			CacheStoreBucket: "isr", CacheStoreUploader: store,
+			Objects:          &fakeArtifactStore{exists: map[string]bool{}},
+			CacheStoreBucket: "isr", CacheStoreObjects: store,
 		}
 
 		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
@@ -132,11 +132,11 @@ func TestUploadEdgeBundles(t *testing.T) {
 
 	t.Run("a build with no edge bundle uploads nothing", func(t *testing.T) {
 		t.Parallel()
-		store := &fakeUploader{exists: map[string]bool{}}
+		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{
 			ArtifactRoot: nodeAppTree(t), AssetBucket: "assets", Env: "prod",
-			Uploader:         &fakeUploader{exists: map[string]bool{}},
-			CacheStoreBucket: "isr", CacheStoreUploader: store,
+			Objects:          &fakeArtifactStore{exists: map[string]bool{}},
+			CacheStoreBucket: "isr", CacheStoreObjects: store,
 		}
 
 		if err := uploadEdgeBundles(context.Background(), cfg, nodeManifest(), appBuildsFor(t, cfg, nodeManifest())); err != nil {
@@ -149,8 +149,8 @@ func TestUploadEdgeBundles(t *testing.T) {
 
 	t.Run("unadopted store uploads nothing", func(t *testing.T) {
 		t.Parallel()
-		asset := &fakeUploader{exists: map[string]bool{}}
-		cfg := Config{ArtifactRoot: edgeAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: asset}
+		asset := &fakeArtifactStore{exists: map[string]bool{}}
+		cfg := Config{ArtifactRoot: edgeAppTree(t), AssetBucket: "assets", Env: "prod", Objects: asset}
 
 		if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest(), appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadEdgeBundles: %v", err)
@@ -202,19 +202,19 @@ func edgeSealedKeyFor(app, deploymentID string) string {
 	return storagePrefixFor("prod", "proj", app, deploymentID) + "edge/sealed.bin"
 }
 
-func edgeStoreConfig(t *testing.T, store *fakeUploader) Config {
+func edgeStoreConfig(t *testing.T, store *fakeArtifactStore) Config {
 	t.Helper()
 	return Config{
 		ArtifactRoot: edgeAppTree(t), AssetBucket: "assets", Env: "prod",
-		Uploader:         &fakeUploader{exists: map[string]bool{}},
-		CacheStoreBucket: "isr", CacheStoreUploader: store,
+		Objects:          &fakeArtifactStore{exists: map[string]bool{}},
+		CacheStoreBucket: "isr", CacheStoreObjects: store,
 	}
 }
 
 func TestUploadEdgeSeal(t *testing.T) {
 	t.Run("the sealed overlay rides beside the bundle", func(t *testing.T) {
 		t.Parallel()
-		store := &fakeUploader{exists: map[string]bool{}}
+		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := edgeStoreConfig(t, store)
 		manifest := edgeVarsManifest(
 			variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
@@ -246,13 +246,13 @@ func TestUploadEdgeSeal(t *testing.T) {
 			}
 		}
 		if body := store.putBodies[edgeBundleKeyFor("web", testDeploymentID)]; body != `{"version":1,"mainModule":"main.js"}` {
-			t.Errorf("bundle body = %q, want the adapter's output verbatim", body)
+			t.Errorf("bundle body = %q, want the automation's output verbatim", body)
 		}
 	})
 
 	t.Run("plain declarations alone seal nothing", func(t *testing.T) {
 		t.Parallel()
-		store := &fakeUploader{exists: map[string]bool{}}
+		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := edgeStoreConfig(t, store)
 		manifest := edgeVarsManifest(variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 

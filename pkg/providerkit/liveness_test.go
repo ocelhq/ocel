@@ -58,7 +58,7 @@ func missing(name string) error {
 	return &net.DNSError{Err: "no such host", Name: name, IsNotFound: true}
 }
 
-func (b *dnsBook) LookupHost(_ context.Context, host string) ([]string, error) {
+func (b *dnsBook) Host(_ context.Context, host string) ([]string, error) {
 	host = b.note("A", host)
 	if b.down {
 		return nil, &net.DNSError{Err: "i/o timeout", Name: host, IsTimeout: true}
@@ -69,7 +69,7 @@ func (b *dnsBook) LookupHost(_ context.Context, host string) ([]string, error) {
 	return nil, missing(host)
 }
 
-func (b *dnsBook) LookupCNAME(_ context.Context, host string) (string, error) {
+func (b *dnsBook) CNAME(_ context.Context, host string) (string, error) {
 	host = b.note("CNAME", host)
 	if b.down {
 		return "", &net.DNSError{Err: "i/o timeout", Name: host, IsTimeout: true}
@@ -83,7 +83,7 @@ func (b *dnsBook) LookupCNAME(_ context.Context, host string) (string, error) {
 	return "", missing(host)
 }
 
-func (b *dnsBook) LookupNS(_ context.Context, name string) ([]*net.NS, error) {
+func (b *dnsBook) NS(_ context.Context, name string) ([]*net.NS, error) {
 	name = b.note("NS", name)
 	held, ok := b.zones[name]
 	if !ok {

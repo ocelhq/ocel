@@ -33,7 +33,7 @@ type private struct {
 }
 
 type stack struct {
-	p     *provider
+	p     *cloudFront
 	state edge.StackState
 	own   private
 }
@@ -42,7 +42,7 @@ var _ edge.EdgeStack = (*stack)(nil)
 
 func (s *stack) State() edge.StackState {
 	held := s.state
-	held.Adapter = edge.Own(s.own)
+	held.Private = edge.Own(s.own)
 	return held
 }
 
@@ -97,8 +97,8 @@ func (s *stack) ledger(c Clients) *kitledger.Ledger {
 	return awsports.Ledger(c.Dynamo, awsports.Table(s.own.StateTable), s.class(), s.slug())
 }
 
-func (s *stack) routes(c Clients) routeWriter {
-	return routeWriter{clients: c, arn: s.own.KeyValueStore}
+func (s *stack) routes(c Clients) routeStore {
+	return routeStore{clients: c, arn: s.own.KeyValueStore}
 }
 
 type lazyLedger struct{ s *stack }

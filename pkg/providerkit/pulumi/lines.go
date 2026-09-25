@@ -7,19 +7,19 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-func detailWriter(progress providerkit.Progress) *lineForwarder {
+func detailWriter(progress providerkit.Progress) *lineLog {
 	if progress == nil {
 		return nil
 	}
-	return &lineForwarder{log: progress.Detail}
+	return &lineLog{log: progress.Detail}
 }
 
-type lineForwarder struct {
+type lineLog struct {
 	log func(string)
 	buf []byte
 }
 
-func (w *lineForwarder) Write(p []byte) (int, error) {
+func (w *lineLog) Write(p []byte) (int, error) {
 	w.buf = append(w.buf, p...)
 	for {
 		i := bytes.IndexByte(w.buf, '\n')
@@ -34,7 +34,7 @@ func (w *lineForwarder) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (w *lineForwarder) Flush() {
+func (w *lineLog) Flush() {
 	if w == nil {
 		return
 	}

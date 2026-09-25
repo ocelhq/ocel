@@ -68,15 +68,15 @@ func SynthesizedPlan(ctx context.Context, store ArtifactStore, plan StackPlan, d
 	return stackPlan(plan.Ref, changes), nil
 }
 
-func SynthesizedRemoval(ref StackRef, standing StackResult) Plan {
-	changes := make([]Change, 0, len(standing.Bindings)+len(standing.Functions)+len(standing.Containers))
-	for _, binding := range standing.Bindings {
+func SynthesizedRemoval(ref StackRef, deployed StackResult) Plan {
+	changes := make([]Change, 0, len(deployed.Bindings)+len(deployed.Functions)+len(deployed.Containers))
+	for _, binding := range deployed.Bindings {
 		changes = append(changes, Change{Kind: string(binding.Type), Name: binding.Name, Action: ActionDelete})
 	}
-	for _, function := range standing.Functions {
+	for _, function := range deployed.Functions {
 		changes = append(changes, Change{Kind: functionKind, Name: function.Name, Action: ActionDelete})
 	}
-	for _, container := range standing.Containers {
+	for _, container := range deployed.Containers {
 		changes = append(changes, Change{Kind: containerKind, Name: container.Name, Action: ActionDelete})
 	}
 	return stackPlan(ref, changes)
