@@ -110,8 +110,8 @@ func TestShapeDescribesAProductionDeployServedDirect(t *testing.T) {
 	golden(t, "shape_production_direct", set)
 
 	counts := typeCounts(set)
-	if counts["google_cloud_run_v2_service"] != 2 || counts["google_storage_bucket"] != 2 || counts["google_compute_global_forwarding_rule"] != 0 {
-		t.Errorf("counts = %v, want two services, the artifact and state buckets, and no load balancer", counts)
+	if counts["google_cloud_run_v2_service"] != 3 || counts["google_storage_bucket"] != 2 || counts["google_compute_global_forwarding_rule"] != 0 {
+		t.Errorf("counts = %v, want the two apps' services and the env syncer's, the artifact and state buckets, and no load balancer", counts)
 	}
 	for _, r := range set.GetResources() {
 		if r.GetVendor() != "gcp" || r.GetRegion() != "europe-west1" {

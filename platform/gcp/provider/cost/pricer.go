@@ -32,6 +32,8 @@ const (
 
 	ingressEverywhere = "INGRESS_TRAFFIC_ALL"
 	cpuIdle           = "template.containers.0.resources.cpu_idle"
+	scheduledRequests = "requests_per_hour"
+	billedSecondsEach = "billed_seconds_per_request"
 	mebibytesPerGiB   = 1024
 	secondsPerHour    = 3600
 )
@@ -54,7 +56,6 @@ var (
 
 var table = costkit.Table{
 	"google_cloud_run_v2_service":                      cloudRunService,
-	"google_cloud_run_v2_job":                          cloudRunJob,
 	"google_cloud_scheduler_job":                       schedulerJob,
 	"google_firestore_database":                        firestoreDatabase,
 	"google_storage_bucket":                            storageBucket,
@@ -102,14 +103,21 @@ func cloudRunService(r *costkit.Subject) {
 		return quantityMiB(r.String("template.containers.0.resources.limits.memory")).Div(decimal.NewFromInt(mebibytesPerGiB))
 	}
 	billing := []string{cpuIdle}
-	if !r.Bool(cpuIdle) {
+	switch {
+	case !r.Bool(cpuIdle):
 		seconds := func() decimal.Decimal {
 			warm, _ := r.Number("template.scaling.min_instance_count").Mul(costkit.MonthlyHours).Float64()
 			return r.Usage(usageInstanceHours, costkit.Band{Light: warm, Moderate: warm, Heavy: warm}).Mul(decimal.NewFromInt(secondsPerHour))
 		}
 		r.Add(costkit.Component{Name: "CPU, always allocated", Unit: "vCPU-seconds", Rate: "gcp/run/cpu-always", Quantity: seconds().Mul(cpu()), Needs: billing})
 		r.Add(costkit.Component{Name: "Memory, always allocated", Unit: "GiB-seconds", Rate: "gcp/run/memory-always", Quantity: seconds().Mul(memoryGiB()), Needs: billing})
-	} else {
+	case r.Has(scheduledRequests):
+		requests := r.Number(scheduledRequests).Mul(costkit.MonthlyHours)
+		seconds := requests.Mul(r.Number(billedSecondsEach))
+		r.Add(costkit.Component{Name: "Requests", Unit: "requests", Rate: "gcp/run/requests", Quantity: requests, Needs: billing})
+		r.Add(costkit.Component{Name: "CPU during requests", Unit: "vCPU-seconds", Rate: "gcp/run/cpu-active", Quantity: seconds.Mul(cpu()), Needs: billing})
+		r.Add(costkit.Component{Name: "Memory during requests", Unit: "GiB-seconds", Rate: "gcp/run/memory-active", Quantity: seconds.Mul(memoryGiB()), Needs: billing})
+	default:
 		seconds := func() decimal.Decimal {
 			return r.Usage(usageRequests, requestsBand).Mul(r.Usage(usageRequestDuration, durationBand)).Div(thousand)
 		}
@@ -122,14 +130,6 @@ func cloudRunService(r *costkit.Subject) {
 	if r.String("ingress") == ingressEverywhere {
 		r.Add(costkit.Component{Name: "Data transfer out to internet", Unit: "GiB", Rate: "gcp/network/premium-egress", Quantity: r.Usage(usageDataOut, egressBand), UsageBased: true})
 	}
-}
-
-func cloudRunJob(r *costkit.Subject) {
-	seconds := r.Number("executions_per_hour").Mul(costkit.MonthlyHours).Mul(r.Number("billed_seconds_per_execution"))
-	cpu := r.Number("template.template.containers.0.resources.limits.cpu")
-	memoryGiB := quantityMiB(r.String("template.template.containers.0.resources.limits.memory")).Div(decimal.NewFromInt(mebibytesPerGiB))
-	r.Add(costkit.Component{Name: "CPU, billed a minute or more per execution", Unit: "vCPU-seconds", Rate: "gcp/run/cpu-always", Quantity: seconds.Mul(cpu)})
-	r.Add(costkit.Component{Name: "Memory, billed a minute or more per execution", Unit: "GiB-seconds", Rate: "gcp/run/memory-always", Quantity: seconds.Mul(memoryGiB)})
 }
 
 func schedulerJob(r *costkit.Subject) {

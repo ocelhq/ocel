@@ -56,11 +56,7 @@ func (p *Provider) pushImage(ctx context.Context, class providerkit.Class, app, 
 	if err != nil {
 		return fmt.Errorf("read the digest of the %s image: %w", app, err)
 	}
-	at, err := p.ImageRegistry(ctx, class, nil)
-	if err != nil {
-		return err
-	}
-	store, err := p.Images(ctx, at)
+	store, err := p.imageStoreFor(ctx, class)
 	if err != nil {
 		return err
 	}
@@ -73,4 +69,15 @@ func (p *Provider) pushImage(ctx context.Context, class providerkit.Class, app, 
 		report.Say("Pushing the " + app + " image to " + ref)
 	}
 	return store.Push(ctx, push, report)
+}
+
+func (p *Provider) imageStoreFor(ctx context.Context, class providerkit.Class) (providerkit.ImageStore, error) {
+	if p.emulated() {
+		return p.DirectImages(ctx)
+	}
+	at, err := p.ImageRegistry(ctx, class, nil)
+	if err != nil {
+		return nil, err
+	}
+	return p.Images(ctx, at)
 }

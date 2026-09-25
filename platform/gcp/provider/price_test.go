@@ -143,3 +143,44 @@ func TestPriceOfAServiceOutsideTheNamedRegionsFallsBackToTierOne(t *testing.T) {
 		t.Errorf("notes = %v, want the fallback's note first", est.GetNotes())
 	}
 }
+
+func TestTheEnvSyncerBillsOnlyTheMinuteRequestsItServes(t *testing.T) {
+	client, pricer := costServed(t)
+
+	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
+		Manifest:    shopManifest(),
+		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
+	})
+	if err != nil {
+		t.Fatalf("Shape() = %v", err)
+	}
+	for _, profile := range []costv1.Profile{costv1.Profile_PROFILE_LIGHT, costv1.Profile_PROFILE_HEAVY} {
+		est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: profile}})
+		if err != nil {
+			t.Fatalf("Price() = %v", err)
+		}
+		syncer := "project:shop/shared:production/google_cloud_run_v2_service:ocel-production-envsync"
+		for name, want := range map[string]string{
+			"Requests":               "0.02",
+			"CPU during requests":    "0.17",
+			"Memory during requests": "0.03",
+		} {
+			if got := componentNamed(t, est, syncer, name).GetMonthlyCost(); got != want {
+				t.Errorf("%s: %s = %s, want %s (43,800 calls a month of 2s at 0.08 vCPU and 128Mi, whatever the traffic)", profile, name, got, want)
+			}
+		}
+		for _, r := range est.GetResources() {
+			if r.GetResource() != syncer {
+				continue
+			}
+			if r.GetMonthlyUsage() != "0.00" {
+				t.Errorf("%s: the syncer bills %s with usage, want none: its schedule, not traffic, sets its requests", profile, r.GetMonthlyUsage())
+			}
+			for _, c := range r.GetComponents() {
+				if c.GetName() == "Data transfer out to internet" {
+					t.Errorf("%s: the syncer bills internet egress, and it takes internal traffic alone", profile)
+				}
+			}
+		}
+	}
+}

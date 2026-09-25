@@ -183,8 +183,8 @@ func (b bootstrapper) stands(ctx context.Context, class providerkit.Class, held 
 		return b.repositoryStands(ctx, held.Name)
 	case KindServiceAccount:
 		return b.accountStands(ctx, class, held.Name)
-	case KindJob:
-		return b.jobStands(ctx, class, held.Name)
+	case KindService:
+		return b.serviceStands(ctx, class, held.Name)
 	case KindSchedule:
 		return b.scheduleStands(ctx, class, held.Name)
 	}

@@ -18,7 +18,7 @@ const (
 	KindSecret         Kind = "secretmanager:secret"
 	KindRepository     Kind = "artifactregistry:repository"
 	KindServiceAccount Kind = "iam:serviceaccount"
-	KindJob            Kind = "run:job"
+	KindService        Kind = "run:service"
 	KindSchedule       Kind = "cloudscheduler:job"
 )
 
@@ -46,9 +46,7 @@ type item struct {
 
 func (i item) ID() string { return string(i.Kind) + "/" + i.Name }
 
-func provisioned(kind Kind, emulated bool) bool {
-	return !emulated || (kind != KindRepository && kind != KindJob)
-}
+func provisioned(kind Kind, emulated bool) bool { return !emulated || kind != KindRepository }
 
 func stackItems(names Names, class providerkit.Class, emulated bool) []item {
 	items := []item{
@@ -86,15 +84,15 @@ func stackItems(names Names, class providerkit.Class, emulated bool) []item {
 		},
 		{
 			Kind: KindServiceAccount, Name: names.EnvSyncInvoker(class),
-			Note: "the identity Cloud Scheduler starts the env syncer as, and it may start nothing else",
+			Note: "the identity Cloud Scheduler calls the env syncer as, and it may call nothing else",
 		},
 		{
-			Kind: KindJob, Name: names.EnvSyncJob(class),
-			Note: "the env syncer: one poll of every standing env source this class registers, then it exits",
+			Kind: KindService, Name: names.EnvSync(class),
+			Note: "the env syncer: each call polls every standing env source this class registers once, and it bills only while a poll runs",
 		},
 		{
-			Kind: KindSchedule, Name: names.EnvSyncJob(class),
-			Note: "starts the env syncer once a minute, with no retry because the next minute is the retry",
+			Kind: KindSchedule, Name: names.EnvSync(class),
+			Note: "calls the env syncer once a minute, with no retry because the next minute is the retry",
 		},
 	}
 	return slices.DeleteFunc(items, func(held item) bool { return !provisioned(held.Kind, emulated) })

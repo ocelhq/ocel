@@ -112,7 +112,7 @@ func serviceHash(parts ...string) string {
 const (
 	envSyncAccountStem = "-sync-"
 	envSyncInvokerStem = "-sched-"
-	envSyncJobSuffix   = "-envsync"
+	envSyncSuffix      = "-envsync"
 )
 
 func classAbbreviated(class providerkit.Class) string {
@@ -138,8 +138,8 @@ func (n Names) EnvSyncInvokerEmail(class providerkit.Class) string {
 	return n.EnvSyncInvoker(class) + "@" + n.project + accountDomain
 }
 
-func (n Names) EnvSyncJob(class providerkit.Class) string {
-	return string(n.namespace) + "-" + string(class) + envSyncJobSuffix
+func (n Names) EnvSync(class providerkit.Class) string {
+	return string(n.namespace) + "-" + string(class) + envSyncSuffix
 }
 
 const connectorSuffix = "-connector"

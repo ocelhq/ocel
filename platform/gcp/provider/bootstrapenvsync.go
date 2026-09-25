@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 
@@ -19,29 +20,32 @@ import (
 )
 
 const (
-	envSyncImageName = "ocel-envsync"
-	envSyncImagePath = "/envsync"
-	envSyncCPU       = "1"
-	envSyncMemory    = "512Mi"
-	envSyncTimeout   = "60s"
-	envSyncTagLength = 32
+	envSyncImageName   = "ocel-envsync"
+	envSyncImagePath   = "/envsync"
+	envSyncCPU         = "0.08"
+	envSyncMemory      = "128Mi"
+	envSyncGeneration  = "EXECUTION_ENVIRONMENT_GEN1"
+	envSyncConcurrency = 1
+	envSyncInstances   = 1
+	envSyncTimeout     = "60s"
+	envSyncIngress     = "INGRESS_TRAFFIC_INTERNAL_ONLY"
+	envSyncTagLength   = 32
 
 	envSyncRecordsRole = "roles/datastore.user"
 	envSyncSealingRole = "roles/cloudkms.cryptoKeyEncrypter"
 	envSyncOpeningRole = "roles/cloudkms.cryptoKeyDecrypter"
-	envSyncStartRole   = "roles/run.invoker"
+	envSyncCallRole    = "roles/run.invoker"
 
 	envSyncSchedule          = "* * * * *"
-	envSyncExecutionsPerHour = 60
-	envSyncBilledSeconds     = 60
+	envSyncRequestsPerHour   = 60
+	envSyncBilledSecondsEach = 2
 	envSyncTimeZone          = "Etc/UTC"
-	envSyncStart             = "POST"
-	runAPI                   = "https://run.googleapis.com"
+	envSyncCall              = "POST"
 
 	reasonUnsynced = "it stands, and it may not write this project's records or seal under the class key, so the syncer it runs as would write nothing"
-	reasonStale    = "it runs another syncer than the one this provider carries, or runs it as another account"
-	reasonUnstart  = "it stands, and the account Cloud Scheduler starts it as may not start it"
-	reasonResched  = "it starts the syncer on another schedule, at another address or as another account than this bootstrap names"
+	reasonStale    = "it runs another syncer than the one this provider carries, runs it as another account, or is billed, scaled or reached otherwise than this bootstrap stands it"
+	reasonUncalled = "it stands, and the account Cloud Scheduler calls it as may not call it, or anyone may"
+	reasonResched  = "it calls the syncer on another schedule, at another address or as another account than this bootstrap names"
 )
 
 var envSyncKeyRoles = []string{envSyncSealingRole, envSyncOpeningRole}
@@ -60,15 +64,6 @@ var envSyncTag = sync.OnceValue(func() string {
 
 func envSyncRef(c *clients, class providerkit.Class) string {
 	return c.RepositoryPath(c.region, class) + "/" + envSyncImageName + ":" + envSyncTag()
-}
-
-func jobPath(c *clients, name string) string { return c.location() + "/jobs/" + name }
-
-func (c *clients) runURL() string {
-	if c.emulated() {
-		return c.endpoint
-	}
-	return runAPI
 }
 
 type accountRole struct {
@@ -92,7 +87,7 @@ func (b bootstrapper) roleOf(class providerkit.Class, name string) accountRole {
 	case b.clients.EnvSyncInvoker(class):
 		return accountRole{
 			display:     "ocel " + string(class) + " env syncer schedule",
-			description: "the identity Cloud Scheduler starts the ocel env syncer of the " + string(class) + " class as",
+			description: "the identity Cloud Scheduler calls the ocel env syncer of the " + string(class) + " class as",
 		}
 	default:
 		return accountRole{
@@ -144,77 +139,101 @@ func (b bootstrapper) syncWritesHeld(ctx context.Context, class providerkit.Clas
 	return b.clients.keyRolesHeld(ctx, class, member, envSyncKeyRoles)
 }
 
-func (b bootstrapper) envSyncJob(class providerkit.Class) *run.GoogleCloudRunV2Job {
-	return &run.GoogleCloudRunV2Job{
-		Template: &run.GoogleCloudRunV2ExecutionTemplate{
-			TaskCount:   1,
-			Parallelism: 1,
-			Template: &run.GoogleCloudRunV2TaskTemplate{
-				Containers: []*run.GoogleCloudRunV2Container{{
-					Image: envSyncRef(b.clients, class),
-					Env: environmentOf(map[string]string{
-						providerkit.NamespaceEnvVar: string(b.clients.Namespace()),
-						ports.ProjectEnvVar:         b.clients.project,
-						ports.RegionEnvVar:          b.clients.region,
-						ports.ClassEnvVar:           string(class),
-					}),
-					Resources: &run.GoogleCloudRunV2ResourceRequirements{
-						Limits: map[string]string{"cpu": envSyncCPU, "memory": envSyncMemory},
-					},
-				}},
-				ServiceAccount:  b.clients.EnvSyncAccountEmail(class),
-				MaxRetries:      0,
-				Timeout:         envSyncTimeout,
-				ForceSendFields: []string{"MaxRetries"},
+func (b bootstrapper) envSyncService(class providerkit.Class) *run.GoogleCloudRunV2Service {
+	return &run.GoogleCloudRunV2Service{
+		Ingress:            envSyncIngress,
+		InvokerIamDisabled: false,
+		Template: &run.GoogleCloudRunV2RevisionTemplate{
+			Containers: []*run.GoogleCloudRunV2Container{{
+				Image: envSyncRef(b.clients, class),
+				Ports: []*run.GoogleCloudRunV2ContainerPort{{ContainerPort: providerkit.InjectedPort}},
+				Env: environmentOf(map[string]string{
+					providerkit.NamespaceEnvVar: string(b.clients.Namespace()),
+					ports.ProjectEnvVar:         b.clients.project,
+					ports.RegionEnvVar:          b.clients.region,
+					ports.ClassEnvVar:           string(class),
+				}),
+				Resources: &run.GoogleCloudRunV2ResourceRequirements{
+					CpuIdle:         true,
+					Limits:          map[string]string{"cpu": envSyncCPU, "memory": envSyncMemory},
+					ForceSendFields: []string{"CpuIdle"},
+				},
+			}},
+			Scaling: &run.GoogleCloudRunV2RevisionScaling{
+				MinInstanceCount: 0,
+				MaxInstanceCount: envSyncInstances,
+				ForceSendFields:  []string{"MinInstanceCount"},
 			},
+			MaxInstanceRequestConcurrency: envSyncConcurrency,
+			ExecutionEnvironment:          envSyncGeneration,
+			ServiceAccount:                b.clients.EnvSyncAccountEmail(class),
+			Timeout:                       envSyncTimeout,
 		},
+		ForceSendFields: []string{"InvokerIamDisabled"},
 	}
 }
 
-func sameJob(held, want *run.GoogleCloudRunV2Job) bool {
-	if held.Template == nil || held.Template.Template == nil || len(held.Template.Template.Containers) != 1 {
+func sameService(held, want *run.GoogleCloudRunV2Service) bool {
+	if held.Template == nil || len(held.Template.Containers) != 1 || held.Template.Containers[0].Resources == nil {
 		return false
 	}
-	task, wanted := held.Template.Template, want.Template.Template
+	task, wanted := held.Template, want.Template
 	container, desired := task.Containers[0], wanted.Containers[0]
+	scaling := task.Scaling
+	if scaling == nil {
+		scaling = &run.GoogleCloudRunV2RevisionScaling{}
+	}
 	return container.Image == desired.Image &&
 		task.ServiceAccount == wanted.ServiceAccount &&
-		task.MaxRetries == wanted.MaxRetries &&
+		held.Ingress == want.Ingress &&
+		!held.InvokerIamDisabled &&
+		container.Resources.CpuIdle &&
+		maps.Equal(container.Resources.Limits, desired.Resources.Limits) &&
+		scaling.MinInstanceCount == wanted.Scaling.MinInstanceCount &&
+		scaling.MaxInstanceCount == wanted.Scaling.MaxInstanceCount &&
 		slices.EqualFunc(container.Env, desired.Env, func(a, b *run.GoogleCloudRunV2EnvVar) bool {
 			return a.Name == b.Name && a.Value == b.Value
 		})
 }
 
-func (b bootstrapper) jobStands(ctx context.Context, class providerkit.Class, name string) (standing, error) {
+func (b bootstrapper) readService(ctx context.Context, name string) (*run.GoogleCloudRunV2Service, error) {
 	services, err := b.clients.Run()
 	if err != nil {
-		return standing{}, err
+		return nil, err
 	}
-	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Job, error) {
-		return services.Projects.Locations.Jobs.Get(jobPath(b.clients, name)).Context(ctx).Do(call...)
+	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
+		return services.Projects.Locations.Services.Get(b.clients.servicePath(name)).Context(ctx).Do(call...)
 	})
 	if absent(err) {
-		return standing{}, nil
+		return nil, nil
 	}
 	if err != nil {
-		return standing{}, fmt.Errorf("read the Cloud Run job %s: %w", name, err)
+		return nil, fmt.Errorf("read the Cloud Run service %s: %w", name, err)
 	}
-	if !sameJob(held, b.envSyncJob(class)) {
+	return held, nil
+}
+
+func (b bootstrapper) serviceStands(ctx context.Context, class providerkit.Class, name string) (standing, error) {
+	held, err := b.readService(ctx, name)
+	if err != nil || held == nil {
+		return standing{}, err
+	}
+	if !sameService(held, b.envSyncService(class)) {
 		return standing{held: true, mends: reasonStale}, nil
 	}
-	started, err := b.startHeld(ctx, class, name)
+	called, err := b.callHeld(ctx, class, name)
 	if err != nil {
 		return standing{}, err
 	}
-	if !started {
-		return standing{held: true, mends: reasonUnstart}, nil
+	if !called {
+		return standing{held: true, mends: reasonUncalled}, nil
 	}
 	return standing{held: true}, nil
 }
 
-func (b bootstrapper) makeJob(ctx context.Context, class providerkit.Class, name string) error {
+func (b bootstrapper) makeService(ctx context.Context, class providerkit.Class, name string) error {
 	if b.images == nil {
-		return providerkit.Refuse(providerkit.CodeInvalid, "the %s job runs an image, and this bootstrap was opened with nowhere to push one", name)
+		return providerkit.Refuse(providerkit.CodeInvalid, "the %s service runs an image, and this bootstrap was opened with nowhere to push one", name)
 	}
 	base, err := b.images.based(ctx, staticImage)
 	if err != nil {
@@ -231,80 +250,77 @@ func (b bootstrapper) makeJob(ctx context.Context, class providerkit.Class, name
 	if err != nil {
 		return err
 	}
-	desired := b.envSyncJob(class)
-	path := jobPath(b.clients, name)
-	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Job, error) {
-		return services.Projects.Locations.Jobs.Get(path).Context(ctx).Do(call...)
-	})
+	desired := b.envSyncService(class)
+	path := b.clients.servicePath(name)
+	held, err := b.readService(ctx, name)
 	switch {
-	case absent(err):
-		err = runSettled(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
-			return services.Projects.Locations.Jobs.Create(b.clients.location(), desired).JobId(name).Context(ctx).Do(call...)
-		})
 	case err != nil:
-		return fmt.Errorf("read the Cloud Run job %s: %w", name, err)
+		return err
+	case held == nil:
+		err = runSettled(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
+			return services.Projects.Locations.Services.Create(b.clients.location(), desired).ServiceId(name).Context(ctx).Do(call...)
+		})
 	default:
 		desired.Etag = held.Etag
 		err = runSettled(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
-			return services.Projects.Locations.Jobs.Patch(path, desired).Context(ctx).Do(call...)
+			return services.Projects.Locations.Services.Patch(path, desired).Context(ctx).Do(call...)
 		})
 	}
 	if err != nil {
-		return fmt.Errorf("stand the Cloud Run job %s: %w", name, err)
+		return fmt.Errorf("stand the Cloud Run service %s: %w", name, err)
 	}
-	return b.letStart(ctx, class, name)
+	return b.letCall(ctx, class, name)
 }
 
-func (b bootstrapper) jobPolicy(ctx context.Context, name string) (*run.GoogleIamV1Policy, error) {
+func (b bootstrapper) servicePolicy(ctx context.Context, name string) (*run.GoogleIamV1Policy, error) {
 	services, err := b.clients.Run()
 	if err != nil {
 		return nil, err
 	}
 	policy, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
-		return services.Projects.Locations.Jobs.GetIamPolicy(jobPath(b.clients, name)).Context(ctx).Do(call...)
+		return services.Projects.Locations.Services.GetIamPolicy(b.clients.servicePath(name)).Context(ctx).Do(call...)
 	})
 	if err != nil {
-		return nil, fmt.Errorf("read who may start the Cloud Run job %s: %w", name, err)
+		return nil, fmt.Errorf("read who may call the Cloud Run service %s: %w", name, err)
 	}
 	return policy, nil
 }
 
-func startMember(c *clients, class providerkit.Class) string {
+func callMember(c *clients, class providerkit.Class) string {
 	return "serviceAccount:" + c.EnvSyncInvokerEmail(class)
 }
 
-func (b bootstrapper) startHeld(ctx context.Context, class providerkit.Class, name string) (bool, error) {
-	policy, err := b.jobPolicy(ctx, name)
+func (b bootstrapper) callHeld(ctx context.Context, class providerkit.Class, name string) (bool, error) {
+	policy, err := b.servicePolicy(ctx, name)
 	if err != nil {
 		return false, err
 	}
-	return slices.ContainsFunc(policy.Bindings, func(binding *run.GoogleIamV1Binding) bool {
-		return binding.Role == envSyncStartRole && slices.Contains(binding.Members, startMember(b.clients, class))
-	}), nil
+	_, changed := boundCaller(policy.Bindings, callMember(b.clients, class))
+	return !changed, nil
 }
 
-func (b bootstrapper) letStart(ctx context.Context, class providerkit.Class, name string) error {
+func (b bootstrapper) letCall(ctx context.Context, class providerkit.Class, name string) error {
 	services, err := b.clients.Run()
 	if err != nil {
 		return err
 	}
-	member := startMember(b.clients, class)
+	member := callMember(b.clients, class)
 	var refused error
 	for attempt := range bindAttempts {
 		if attempt > 0 && !waited(ctx, attempt) {
 			return ctx.Err()
 		}
-		policy, err := b.jobPolicy(ctx, name)
+		policy, err := b.servicePolicy(ctx, name)
 		if err != nil {
 			return err
 		}
-		bindings, changed := boundJobMember(policy.Bindings, member)
+		bindings, changed := boundCaller(policy.Bindings, member)
 		if !changed {
 			return nil
 		}
 		policy.Bindings = bindings
 		_, refused = attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleIamV1Policy, error) {
-			return services.Projects.Locations.Jobs.SetIamPolicy(jobPath(b.clients, name),
+			return services.Projects.Locations.Services.SetIamPolicy(b.clients.servicePath(name),
 				&run.GoogleIamV1SetIamPolicyRequest{Policy: policy}).Context(ctx).Do(call...)
 		})
 		if refused == nil {
@@ -314,47 +330,53 @@ func (b bootstrapper) letStart(ctx context.Context, class providerkit.Class, nam
 			break
 		}
 	}
-	return fmt.Errorf("let %s start the Cloud Run job %s: %w", member, name, refused)
+	return fmt.Errorf("let %s call the Cloud Run service %s: %w", member, name, refused)
 }
 
-func boundJobMember(bindings []*run.GoogleIamV1Binding, member string) ([]*run.GoogleIamV1Binding, bool) {
+var publicMembers = []string{"allUsers", "allAuthenticatedUsers"}
+
+func boundCaller(bindings []*run.GoogleIamV1Binding, member string) ([]*run.GoogleIamV1Binding, bool) {
 	for _, binding := range bindings {
-		if binding.Role != envSyncStartRole {
+		if binding.Role != envSyncCallRole {
 			continue
 		}
-		members, changed := boundMembers(binding.Members, member, true)
+		kept := slices.DeleteFunc(slices.Clone(binding.Members), func(held string) bool { return slices.Contains(publicMembers, held) })
+		members, added := boundMembers(kept, member, true)
+		changed := added || len(kept) != len(binding.Members)
 		binding.Members = members
 		return bindings, changed
 	}
-	return append(bindings, &run.GoogleIamV1Binding{Role: envSyncStartRole, Members: []string{member}}), true
+	return append(bindings, &run.GoogleIamV1Binding{Role: envSyncCallRole, Members: []string{member}}), true
 }
 
-func (b bootstrapper) takeJob(ctx context.Context, name string) error {
+func (b bootstrapper) takeService(ctx context.Context, name string) error {
 	services, err := b.clients.Run()
 	if err != nil {
 		return err
 	}
 	err = runSettled(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
-		return services.Projects.Locations.Jobs.Delete(jobPath(b.clients, name)).Context(ctx).Do(call...)
+		return services.Projects.Locations.Services.Delete(b.clients.servicePath(name)).Context(ctx).Do(call...)
 	})
 	if err != nil && !absent(err) {
-		return fmt.Errorf("delete the Cloud Run job %s: %w", name, err)
+		return fmt.Errorf("delete the Cloud Run service %s: %w", name, err)
 	}
 	return nil
 }
 
-func (b bootstrapper) envSyncSchedule(class providerkit.Class, name string) *cloudscheduler.Job {
+func schedulePath(c *clients, name string) string { return c.location() + "/jobs/" + name }
+
+func (b bootstrapper) envSyncSchedule(class providerkit.Class, name, uri string) *cloudscheduler.Job {
 	return &cloudscheduler.Job{
-		Name:        jobPath(b.clients, name),
-		Description: "starts the ocel env syncer of the " + string(class) + " class",
+		Name:        schedulePath(b.clients, name),
+		Description: "calls the ocel env syncer of the " + string(class) + " class",
 		Schedule:    envSyncSchedule,
 		TimeZone:    envSyncTimeZone,
 		HttpTarget: &cloudscheduler.HttpTarget{
-			Uri:        b.clients.runURL() + "/v2/" + jobPath(b.clients, name) + ":run",
-			HttpMethod: envSyncStart,
-			OauthToken: &cloudscheduler.OAuthToken{
+			Uri:        uri + "/",
+			HttpMethod: envSyncCall,
+			OidcToken: &cloudscheduler.OidcToken{
 				ServiceAccountEmail: b.clients.EnvSyncInvokerEmail(class),
-				Scope:               ports.CloudPlatformScope,
+				Audience:            uri,
 			},
 		},
 		RetryConfig: &cloudscheduler.RetryConfig{RetryCount: 0, ForceSendFields: []string{"RetryCount"}},
@@ -366,10 +388,12 @@ func sameSchedule(held, want *cloudscheduler.Job, emulated bool) bool {
 		return false
 	}
 	signed := emulated
-	if token := held.HttpTarget.OauthToken; token != nil {
-		signed = token.ServiceAccountEmail == want.HttpTarget.OauthToken.ServiceAccountEmail
+	if token := held.HttpTarget.OidcToken; token != nil {
+		signed = token.ServiceAccountEmail == want.HttpTarget.OidcToken.ServiceAccountEmail &&
+			token.Audience == want.HttpTarget.OidcToken.Audience
 	}
 	return signed &&
+		held.HttpTarget.OauthToken == nil &&
 		held.Schedule == want.Schedule &&
 		held.TimeZone == want.TimeZone &&
 		held.HttpTarget.Uri == want.HttpTarget.Uri &&
@@ -382,25 +406,37 @@ func (b bootstrapper) scheduleStands(ctx context.Context, class providerkit.Clas
 	if err != nil {
 		return standing{}, err
 	}
-	held, err := attempted(ctx, service.Projects.Locations.Jobs.Get(jobPath(b.clients, name)).Context(ctx).Do)
+	held, err := attempted(ctx, service.Projects.Locations.Jobs.Get(schedulePath(b.clients, name)).Context(ctx).Do)
 	if absent(err) {
 		return standing{}, nil
 	}
 	if err != nil {
 		return standing{}, fmt.Errorf("read the Cloud Scheduler job %s: %w", name, err)
 	}
-	if !sameSchedule(held, b.envSyncSchedule(class, name), b.clients.emulated()) {
+	called, err := b.readService(ctx, name)
+	if err != nil {
+		return standing{}, err
+	}
+	if called == nil || !sameSchedule(held, b.envSyncSchedule(class, name, called.Uri), b.clients.emulated()) {
 		return standing{held: true, mends: reasonResched}, nil
 	}
 	return standing{held: true}, nil
 }
 
 func (b bootstrapper) makeSchedule(ctx context.Context, class providerkit.Class, name string) error {
+	called, err := b.readService(ctx, name)
+	if err != nil {
+		return err
+	}
+	if called == nil || called.Uri == "" {
+		return providerkit.Refuse(providerkit.CodeNotReady,
+			"the Cloud Scheduler job %s calls the Cloud Run service of the same name, and that service publishes no url yet", name)
+	}
 	service, err := b.clients.Scheduler()
 	if err != nil {
 		return err
 	}
-	desired := b.envSyncSchedule(class, name)
+	desired := b.envSyncSchedule(class, name, called.Uri)
 	_, err = attempted(ctx, service.Projects.Locations.Jobs.Create(b.clients.location(), desired).Context(ctx).Do)
 	if taken(err) {
 		path := desired.Name
@@ -419,7 +455,7 @@ func (b bootstrapper) takeSchedule(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := attempted(ctx, service.Projects.Locations.Jobs.Delete(jobPath(b.clients, name)).Context(ctx).Do); err != nil && !absent(err) {
+	if _, err := attempted(ctx, service.Projects.Locations.Jobs.Delete(schedulePath(b.clients, name)).Context(ctx).Do); err != nil && !absent(err) {
 		return fmt.Errorf("delete the Cloud Scheduler job %s: %w", name, err)
 	}
 	return nil

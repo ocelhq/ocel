@@ -129,28 +129,32 @@
       "properties": {}
     },
     {
-      "id": "project:shop/shared:preview/google_cloud_run_v2_job:ocel-preview-envsync",
+      "id": "project:shop/shared:preview/google_cloud_run_v2_service:ocel-preview-envsync",
       "scope": "project:shop/shared:preview",
       "vendor": "gcp",
-      "type": "google_cloud_run_v2_job",
+      "type": "google_cloud_run_v2_service",
       "name": "ocel-preview-envsync",
       "region": "europe-west1",
       "properties": {
-        "billed_seconds_per_execution": 60,
-        "executions_per_hour": 60,
+        "billed_seconds_per_request": 2,
+        "ingress": "INGRESS_TRAFFIC_INTERNAL_ONLY",
         "location": "europe-west1",
+        "requests_per_hour": 60,
         "template": {
-          "template": {
-            "containers": [
-              {
-                "resources": {
-                  "limits": {
-                    "cpu": "1",
-                    "memory": "512Mi"
-                  }
+          "containers": [
+            {
+              "resources": {
+                "cpu_idle": true,
+                "limits": {
+                  "cpu": "0.08",
+                  "memory": "128Mi"
                 }
               }
-            ]
+            }
+          ],
+          "scaling": {
+            "max_instance_count": 1,
+            "min_instance_count": 0
           }
         }
       }

@@ -322,8 +322,8 @@ func (b bootstrapper) make(ctx context.Context, read survey, held item) error {
 		return b.makeRepository(ctx, held.Name)
 	case KindServiceAccount:
 		return b.makeAccount(ctx, read, held.Name)
-	case KindJob:
-		return b.makeJob(ctx, read.Class, held.Name)
+	case KindService:
+		return b.makeService(ctx, read.Class, held.Name)
 	case KindSchedule:
 		return b.makeSchedule(ctx, read.Class, held.Name)
 	default:
@@ -809,7 +809,7 @@ func (b bootstrapper) PlanRemoval(ctx context.Context, class providerkit.Class) 
 }
 
 var removalOrder = []Kind{
-	KindSecret, KindSchedule, KindJob, KindKey, KindKeyRing, KindDatabase, KindServiceAccount, KindRepository, KindBucket,
+	KindSecret, KindSchedule, KindService, KindKey, KindKeyRing, KindDatabase, KindServiceAccount, KindRepository, KindBucket,
 }
 
 func removals(read survey) []removal {
@@ -915,8 +915,8 @@ func (b bootstrapper) take(ctx context.Context, read survey, held item) error {
 		return b.takeRepository(ctx, held.Name)
 	case KindServiceAccount:
 		return b.takeAccount(ctx, read.Class, held.Name)
-	case KindJob:
-		return b.takeJob(ctx, held.Name)
+	case KindService:
+		return b.takeService(ctx, held.Name)
 	case KindSchedule:
 		return b.takeSchedule(ctx, held.Name)
 	default:
