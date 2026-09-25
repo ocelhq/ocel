@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
+	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
@@ -104,7 +105,7 @@ func (vm machine) hangsUpAs(login string) {
 
 func (vm machine) purges(t *testing.T) {
 	t.Helper()
-	vm.ssh(t, "sudo docker rm -f "+caddy.Container+" >/dev/null 2>&1 || true")
+	vm.ssh(t, "sudo docker rm -f "+caddy.Container+" "+host.SwitchboardContainer+" >/dev/null 2>&1 || true")
 	vm.ssh(t, "sudo rm -rf /etc/ocel /var/lib/ocel /usr/local/lib/ocel")
 }
 
