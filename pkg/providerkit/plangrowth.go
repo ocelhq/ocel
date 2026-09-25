@@ -35,7 +35,7 @@ func rowKey(group ChangeGroup, change Change) string {
 }
 
 func appendGrown(grown []string, name string, shown, standing ChangeAction) []string {
-	if standing == ActionKeep || (shown != "" && shown != ActionKeep) {
+	if !standing.Writes() || (shown != "" && shown.Writes()) {
 		return grown
 	}
 	return append(grown, name)

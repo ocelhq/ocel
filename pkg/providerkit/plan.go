@@ -15,6 +15,7 @@ const (
 	ActionDelete            ChangeAction = "delete"
 	ActionDisableThenDelete ChangeAction = "disable-then-delete"
 	ActionKeep              ChangeAction = "keep"
+	ActionAdopt             ChangeAction = "adopt"
 )
 
 const (
@@ -29,12 +30,14 @@ const (
 
 func ValidChangeAction(action ChangeAction) bool {
 	switch action {
-	case ActionCreate, ActionUpdate, ActionReplace, ActionDelete, ActionDisableThenDelete, ActionKeep:
+	case ActionCreate, ActionUpdate, ActionReplace, ActionDelete, ActionDisableThenDelete, ActionKeep, ActionAdopt:
 		return true
 	default:
 		return false
 	}
 }
+
+func (a ChangeAction) Writes() bool { return a != ActionKeep && a != ActionAdopt }
 
 type Plan struct {
 	Groups []ChangeGroup
@@ -67,7 +70,7 @@ func RollUp(changes []Change) (ChangeAction, string) {
 		switch change.Action {
 		case ActionCreate:
 			creates++
-		case ActionKeep:
+		case ActionKeep, ActionAdopt:
 			keeps++
 		case ActionDelete, ActionDisableThenDelete:
 			deletes++
