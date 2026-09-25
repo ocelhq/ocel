@@ -360,6 +360,7 @@ type Reading struct {
 	Seal     Seal
 	Observed map[string]string
 	Front    Front
+	Engine   Engine
 
 	recorded    []Item
 	unelevated  bool
@@ -461,7 +462,7 @@ func (h *Host) surveyed(ctx context.Context, class providerkit.Class, keys []byt
 	if err != nil {
 		return Reading{}, err
 	}
-	return Reading{Class: class, Keys: keys, Arch: arch, Seal: held, Observed: observed, Front: h.proxyOption}, nil
+	return Reading{Class: class, Keys: keys, Arch: arch, Seal: held, Observed: observed, Front: h.proxyOption, Engine: readEngine(rendered)}, nil
 }
 
 func (h *Host) read(ctx context.Context, class providerkit.Class, keys []byte, drawn drawing) (Reading, error) {
@@ -585,6 +586,9 @@ func readSurvey(rendered string) (map[string]string, Seal, error) {
 			continue
 		}
 		columns := strings.Split(strings.TrimRight(line, "\r"), "\t")
+		if columns[0] == kindEngineHeld {
+			continue
+		}
 		if columns[0] == kindLink {
 			return nil, Seal{}, pointedAway(columns)
 		}

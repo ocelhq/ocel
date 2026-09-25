@@ -2,6 +2,7 @@ package host
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -119,8 +120,26 @@ func unitCommand(i Item) string {
 	return "set -e\nsystemctl daemon-reload\nsystemctl enable " + name + "\nsystemctl restart " + name
 }
 
+const kindEngineHeld = "probe:engine"
+
+const (
+	engineStandard = "standard"
+	engineMasked   = "masked"
+	engineSnap     = "snap"
+	engineRootless = "rootless"
+	engineUnserved = unservedFact
+)
+
+type Engine struct {
+	Kind    string
+	Version string
+}
+
 func engineProbe() string {
-	return `if command -v ` + quoted(dockerEngine) + ` >/dev/null 2>&1; then
+	return `held=''
+case "$(systemctl is-enabled ` + quoted(dockerUnit) + ` 2>/dev/null)" in masked*) held=` + engineMasked + ` ;; esac
+version=''
+if command -v ` + quoted(dockerEngine) + ` >/dev/null 2>&1; then
 if systemctl cat ` + quoted(dockerUnit) + ` >/dev/null 2>&1; then engine=present
 elif ` + systemdAnswers + `; then engine=` + quoted(unservedFact) + `
 else engine=''
@@ -129,8 +148,37 @@ fi
 if [ -n "$engine" ]; then
 ` + reports(quoted(KindEngine), quoted(dockerEngine), "0", quoted(rootOwner),
 		`"$(printf 'engine=%s\n' "$engine" | sha256sum | cut -d' ' -f1)"`) + `
+if [ -n "$held" ]; then :
+elif [ "$engine" = present ]; then held=` + engineStandard + `
+elif snap list ` + quoted(dockerEngine) + ` >/dev/null 2>&1; then held=` + engineSnap + `
+elif pgrep -x rootlesskit >/dev/null 2>&1 || command -v dockerd-rootless.sh >/dev/null 2>&1; then held=` + engineRootless + `
+else held=` + engineUnserved + `
 fi
+version=$(timeout 10 docker version --format '{{.Server.Version}}' 2>/dev/null) || version=''
+[ -n "$version" ] || version=$(dockerd --version 2>/dev/null) || version=''
+fi
+fi
+if [ -n "$held" ]; then
+` + reports(quoted(kindEngineHeld), quoted(dockerEngine), "0", `"$held"`, `"$version"`) + `
 fi`
+}
+
+func readEngine(rendered string) Engine {
+	for line := range strings.Lines(rendered) {
+		columns := strings.Split(strings.TrimRight(line, "\r\n"), "\t")
+		if len(columns) == 5 && columns[0] == kindEngineHeld {
+			return Engine{Kind: columns[3], Version: engineVersion(columns[4])}
+		}
+	}
+	return Engine{}
+}
+
+func engineVersion(said string) string {
+	said = strings.TrimSpace(said)
+	if rest, told := strings.CutPrefix(said, "Docker version "); told {
+		said, _, _ = strings.Cut(rest, ",")
+	}
+	return said
 }
 
 const systemdAnswers = "systemctl list-unit-files >/dev/null 2>&1"
