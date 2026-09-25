@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 )
@@ -12,7 +13,7 @@ import (
 func refusingReach(t *testing.T, resources []providerkit.Resource, grants []providerkit.Binding) error {
 	t.Helper()
 	proxied := func(kind providerkit.BindingType) bool {
-		return providerkit.Proxied(kind) || kind == providerkit.BindingType("queue")
+		return naming.Proxied(providerkit.WireBindingType(kind)) || kind == providerkit.BindingType("queue")
 	}
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "box.example", User: "ocel-deploy"}})
 	return providerkit.RefuseUnreachableBindings(p.Vendor(), p.Serves(), proxied, resources, grants)

@@ -5,10 +5,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
 const boxVendor = providerkit.Vendor("vps")
+
+func proxied(kind providerkit.BindingType) bool {
+	return naming.Proxied(providerkit.WireBindingType(kind))
+}
 
 func reachableResources() []providerkit.Resource {
 	return []providerkit.Resource{
@@ -27,7 +32,7 @@ func TestRefuseUnreachableBindings(t *testing.T) {
 	t.Run("a provider serving every proxied type its plan reaches is let past", func(t *testing.T) {
 		t.Parallel()
 
-		if err := providerkit.RefuseUnreachableBindings("aws", servesBoth(), providerkit.Proxied,
+		if err := providerkit.RefuseUnreachableBindings("aws", servesBoth(), proxied,
 			reachableResources(), nil); err != nil {
 			t.Fatalf("RefuseUnreachableBindings = %v, want nil", err)
 		}
@@ -36,7 +41,7 @@ func TestRefuseUnreachableBindings(t *testing.T) {
 	t.Run("a provider serving no primitive at all refuses by resource, type and vendor", func(t *testing.T) {
 		t.Parallel()
 
-		err := providerkit.RefuseUnreachableBindings(boxVendor, nil, providerkit.Proxied,
+		err := providerkit.RefuseUnreachableBindings(boxVendor, nil, proxied,
 			reachableResources(), nil)
 
 		var missing *providerkit.UnreachableBindingError
@@ -56,7 +61,7 @@ func TestRefuseUnreachableBindings(t *testing.T) {
 		grants := []providerkit.Binding{{Name: "uploads", Resource: "bucket--uploads", Type: providerkit.BindingBucket}}
 
 		var missing *providerkit.UnreachableBindingError
-		if err := providerkit.RefuseUnreachableBindings(boxVendor, nil, providerkit.Proxied, nil, grants); !errors.As(err, &missing) {
+		if err := providerkit.RefuseUnreachableBindings(boxVendor, nil, proxied, nil, grants); !errors.As(err, &missing) {
 			t.Fatalf("RefuseUnreachableBindings = %v, want an *UnreachableBindingError", err)
 		}
 		if missing.Resource != "bucket--uploads" {
@@ -67,7 +72,7 @@ func TestRefuseUnreachableBindings(t *testing.T) {
 	t.Run("postgres goes direct, so a provider that serves none is still let past", func(t *testing.T) {
 		t.Parallel()
 
-		if err := providerkit.RefuseUnreachableBindings(boxVendor, nil, providerkit.Proxied,
+		if err := providerkit.RefuseUnreachableBindings(boxVendor, nil, proxied,
 			reachableResources()[:1], nil); err != nil {
 			t.Fatalf("RefuseUnreachableBindings = %v, want postgres to reach its provider directly", err)
 		}

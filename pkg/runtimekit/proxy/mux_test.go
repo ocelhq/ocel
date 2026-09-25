@@ -10,8 +10,10 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/naming"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
 const testToken = "proxy-session-token"
@@ -143,5 +145,28 @@ func TestPresignUploadRequiresABucketAndAFile(t *testing.T) {
 				t.Fatalf("PresignUpload err = %v, want %v", err, connect.CodeInvalidArgument)
 			}
 		})
+	}
+}
+
+func TestTheProxyAnswersForEveryBindingTypeAnAppReachesThroughIt(t *testing.T) {
+	t.Parallel()
+
+	services := map[bindingsv1.BindingType]string{
+		bindingsv1.BindingType_BINDING_TYPE_BUCKET: bucketv1connect.BucketServiceName,
+	}
+	mux := NewMux(testToken, &recordingBuckets{})
+	for wire := range bindingsv1.BindingType_name {
+		kind := bindingsv1.BindingType(wire)
+		if !naming.Proxied(kind) {
+			continue
+		}
+		service, known := services[kind]
+		if !known {
+			t.Errorf("%v is a type an app reaches through the proxy, and nothing here names the service that answers for it", kind)
+			continue
+		}
+		if _, pattern := mux.Handler(httptest.NewRequest(http.MethodPost, "/"+service+"/", nil)); pattern == "" {
+			t.Errorf("%v is a type an app reaches through the proxy, and the proxy mounts no %s: preflight lets the deploy past and the app meets the gap at its first call", kind, service)
+		}
 	}
 }
