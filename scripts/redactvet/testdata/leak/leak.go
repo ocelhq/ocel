@@ -132,8 +132,8 @@ func fields(req *contractv1.DeployRequest) string {
 	return fmt.Sprintf("%s tagged %s", req.GetImageRegistry().GetServer(), req.GetTag())
 }
 
-func clean(runtime *contractv1.Runtime, tier fmt.Stringer, n int) string {
-	return fmt.Sprintf("%v %s %d %s", runtime, tier, n, runtime.String())
+func clean(framework *contractv1.Framework, tier fmt.Stringer, n int) string {
+	return fmt.Sprintf("%v %s %d %s", framework, tier, n, framework.String())
 }
 
 func generic(m proto.Message, r protoreflect.ProtoMessage) string {
