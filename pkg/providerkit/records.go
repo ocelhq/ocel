@@ -33,5 +33,7 @@ const (
 	RootLedger       = ports.RootLedger
 	RootValues       = ports.RootValues
 	RootValueRefs    = ports.RootValueRefs
+	RootEnvSources   = ports.RootEnvSources
+	RootEnvSyncs     = ports.RootEnvSyncs
 	RootConformance  = ports.RootConformance
 )

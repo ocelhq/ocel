@@ -213,6 +213,36 @@ func (s Store) dereference(ctx context.Context, scope Scope, at Coordinate, held
 	return holder, from, holds, nil
 }
 
+type Landing struct {
+	Project string
+	Metadata
+	Plaintext string
+}
+
+func (s Store) Land(ctx context.Context, scope Scope, at Coordinate, reveal bool) (Landing, error) {
+	_, held, err := s.cellAt(ctx, scope, at)
+	if err != nil {
+		return Landing{}, err
+	}
+	if held.live() == 0 {
+		return Landing{}, ErrNotFound
+	}
+	holder, from, holds, err := s.dereference(ctx, scope, at, held)
+	if err != nil {
+		return Landing{}, err
+	}
+	landing := Landing{Project: from.Project, Metadata: metadataOf(holds, holder)}
+	if !reveal {
+		return landing, nil
+	}
+	plaintext, err := s.Sealer.Open(ctx, coordinateOf(from, holds), holder.Sealed)
+	if err != nil {
+		return Landing{}, err
+	}
+	landing.Plaintext = string(plaintext)
+	return landing, nil
+}
+
 func validateHolder(at Coordinate, target *Target, holder cell) error {
 	switch {
 	case holder.live() == 0:

@@ -62,6 +62,8 @@ var classSegment = map[string]int{
 	RootConformance:  1,
 	RootValueRefs:    1,
 	RootValues:       2,
+	RootEnvSources:   1,
+	RootEnvSyncs:     1,
 }
 
 func ClassOf(name RecordName) (Class, bool) {

@@ -36,6 +36,8 @@ const (
 	RootLedger       = "ledger"
 	RootValues       = "values"
 	RootValueRefs    = "valuerefs"
+	RootEnvSources   = "envsources"
+	RootEnvSyncs     = "envsyncs"
 	RootConformance  = "conformance"
 )
 
