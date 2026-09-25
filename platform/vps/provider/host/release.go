@@ -134,9 +134,24 @@ func (h *Host) Release(ctx context.Context, rel Release, report providerkit.Repo
 	tellDrain(report, flipped.Stdout)
 	var admitted error
 	if shaped.admitting {
-		admitted = h.front.Admit(ctx, admission(shaped.is))
+		admitted = h.admittedAfterFlip(ctx, shaped)
 	}
 	return h.settle(ctx, rel, cut, admitted, report, elevation)
+}
+
+func (h *Host) admittedAfterFlip(ctx context.Context, shaped composed) error {
+	refused := h.front.Admit(ctx, admission(shaped.is))
+	if refused == nil {
+		return nil
+	}
+	table, err := WriteRoutingTable(shaped.is)
+	if err == nil {
+		_, err = h.writePair(ctx, shaped.written, routingPair{table: table, config: shaped.prior.config})
+	}
+	if err != nil {
+		return fmt.Errorf("%w\n%s was not put back to what it serves either, so no later deploy reloads it: %w", refused, ProxyConfig, err)
+	}
+	return refused
 }
 
 func (h *Host) settle(ctx context.Context, rel Release, cut cutover, admitted error, report providerkit.Reporter, elevation string) error {
