@@ -266,7 +266,7 @@ func healable(read Reading) ([]Item, []string, error) {
 			work = append(work, item)
 			continue
 		}
-		if daemonHeld(item) || beneath(proxyRoot, item.Name) || rewrittenByDeploys(item) || !read.standing(item.Kind, item.Name) {
+		if daemonHeld(item) || routingHeld(item) || rewrittenByDeploys(item) || !read.standing(item.Kind, item.Name) {
 			left = append(left, item.ID())
 			continue
 		}
@@ -293,10 +293,14 @@ func deployOwned(item Item) bool {
 	if item.Kind != KindDir && item.Kind != KindFile {
 		return false
 	}
-	if beneath(sshDir, item.Name) || beneath(proxyRoot, item.Name) {
+	if beneath(sshDir, item.Name) || routingHeld(item) {
 		return false
 	}
 	return item.Owner == stateOwner && beneath(stateRoot, item.Name)
+}
+
+func routingHeld(item Item) bool {
+	return beneath(proxyRoot, item.Name) || beneath(live.RoutingDir, item.Name)
 }
 
 func beneath(root, name string) bool {

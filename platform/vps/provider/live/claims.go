@@ -12,7 +12,8 @@ import (
 const (
 	ProxyDir     = StateRoot + "/proxy"
 	ProxyConfig  = ProxyDir + "/caddy.json"
-	RoutingTable = StateRoot + "/routing.json"
+	RoutingDir   = StateRoot + "/routing"
+	RoutingTable = RoutingDir + "/table.json"
 )
 
 const (
