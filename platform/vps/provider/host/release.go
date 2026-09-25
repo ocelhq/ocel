@@ -441,44 +441,40 @@ func unelevated(refused, why error) error {
 		"%v\ncould not elevate: %v", why, refused)
 }
 
+type stagedFile struct{ at, staged, fed string }
+
 func stagedWrite(expected tableDigest, rendering bool) string {
-	table, config := quoted(live.RoutingTable), quoted(ProxyConfig)
-	lines := []string{
-		"set -e",
-		`staged=$(mktemp ` + quoted(live.RoutingTable+".XXXXXX") + `)`,
-	}
-	seeded := `[ ! -f ` + table + ` ]`
+	files := []stagedFile{{at: live.RoutingTable, staged: "staged", fed: "written"}}
 	if rendering {
-		lines = append(lines,
-			`rendered=$(mktemp `+quoted(ProxyConfig+".XXXXXX")+`)`,
-			`trap 'rm -f "$staged" "$rendered"' EXIT`)
-		seeded += ` || [ ! -f ` + config + ` ]`
-	} else {
-		lines = append(lines, `trap 'rm -f "$staged"' EXIT`)
+		files = append(files, stagedFile{at: ProxyConfig, staged: "rendered", fed: "rendering"})
 	}
-	lines = append(lines, `IFS= read -r written`, `IFS= read -r rendering`, `printf '%s' "$written" | base64 -d > "$staged"`)
-	if rendering {
-		lines = append(lines, `printf '%s' "$rendering" | base64 -d > "$rendered"`)
+	var staging, taken, decoding, unseeded, owning, moving []string
+	for _, file := range files {
+		at, staged := quoted(file.at), `"$`+file.staged+`"`
+		staging = append(staging, file.staged+`=$(mktemp `+quoted(file.at+".XXXXXX")+`)`)
+		taken = append(taken, staged)
+		decoding = append(decoding, `printf '%s' "$`+file.fed+`" | base64 -d > `+staged)
+		unseeded = append(unseeded, `[ ! -f `+at+` ]`)
+		owning = append(owning, `chmod --reference=`+at+` `+staged, `chown --reference=`+at+` `+staged)
+		moving = append(moving, `mv `+staged+` `+at)
 	}
-	lines = append(lines,
-		strings.TrimSuffix(routingLocked("-x"), "\n"),
-		`if `+seeded+`; then exit `+strconv.Itoa(routingUnseeded)+`; fi`,
-		`held=$(sha256sum `+table+` | cut -d' ' -f1)`,
-		`if [ "$held" != `+quoted(string(expected))+` ]; then printf '%s' "$held" >&2; exit `+strconv.Itoa(routingMoved)+`; fi`,
-		`chmod --reference=`+table+` "$staged"`,
-		`chown --reference=`+table+` "$staged"`)
-	if rendering {
-		lines = append(lines,
-			`chmod --reference=`+config+` "$rendered"`,
-			`chown --reference=`+config+` "$rendered"`)
-	}
-	lines = append(lines,
-		`sha256sum "$staged" | cut -d' ' -f1`,
-		`mv "$staged" `+table)
-	if rendering {
-		lines = append(lines, `mv "$rendered" `+config)
-	}
-	return strings.Join(append(lines, "trap - EXIT"), "\n")
+	table := quoted(live.RoutingTable)
+	return strings.Join(slices.Concat(
+		[]string{"set -e"},
+		staging,
+		[]string{`trap 'rm -f ` + strings.Join(taken, " ") + `' EXIT`, `IFS= read -r written`, `IFS= read -r rendering`},
+		decoding,
+		[]string{
+			strings.TrimSuffix(routingLocked("-x"), "\n"),
+			`if ` + strings.Join(unseeded, " || ") + `; then exit ` + strconv.Itoa(routingUnseeded) + `; fi`,
+			`held=$(sha256sum ` + table + ` | cut -d' ' -f1)`,
+			`if [ "$held" != ` + quoted(string(expected)) + ` ]; then printf '%s' "$held" >&2; exit ` + strconv.Itoa(routingMoved) + `; fi`,
+		},
+		owning,
+		[]string{`sha256sum "$staged" | cut -d' ' -f1`},
+		moving,
+		[]string{"trap - EXIT"},
+	), "\n")
 }
 
 func moved(err error) bool {
