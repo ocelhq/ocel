@@ -107,6 +107,44 @@ func TestAFrontProxyThatRefusesTheNewHostnameSetPutsTheTableAndTheSwitchboardBac
 	}
 }
 
+func TestASwitchboardTheEngineCannotStartIsRefusedWithTheEnginesReason(t *testing.T) {
+	t.Parallel()
+
+	const unstarted = `OCI runtime exec failed: exec failed: unable to start container process: exec: "/ocel/switchboard/ocel-switchboard": stat /ocel/switchboard/ocel-switchboard: no such file or directory`
+	for _, code := range []int{126, 127} {
+		stood := claimingBox(t, routed())
+		proxied := stood.answer
+		stood.answer = func(command string) (session.Result, bool) {
+			if loadsSwitchboard(command) {
+				return session.Result{Code: code, Stdout: unstarted + "\n"}, true
+			}
+			return proxied(command)
+		}
+		err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
+		if err == nil || !strings.Contains(err.Error(), unstarted) {
+			t.Errorf("ClaimHosts() where docker exits %d unable to start the switchboard = %v, want docker's own reason: docker prints it on stdout, and a refusal that says no reason was given leaves the operator nothing to act on", code, err)
+		}
+	}
+}
+
+func TestAProgramThatRanAndFailedNeverHasItsOutputReadAsTheReason(t *testing.T) {
+	t.Parallel()
+
+	const printed = "whatever the program printed before it failed"
+	stood := claimingBox(t, routed())
+	proxied := stood.answer
+	stood.answer = func(command string) (session.Result, bool) {
+		if loadsSwitchboard(command) {
+			return session.Result{Code: 2, Stdout: printed + "\n"}, true
+		}
+		return proxied(command)
+	}
+	err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
+	if err == nil || strings.Contains(err.Error(), printed) {
+		t.Errorf("ClaimHosts() where the switchboard ran and failed = %v, want a refusal that carries none of its stdout: what a program prints is its answer, and a refusal is shown and logged where that answer never is", err)
+	}
+}
+
 func TestAReleaseGatesFlipsAndDrainsInsideTheSwitchboardAndNeverReloadsTheFrontProxy(t *testing.T) {
 	t.Parallel()
 
