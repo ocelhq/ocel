@@ -39,6 +39,8 @@ type Liveness struct {
 	Front     *url.URL
 	Loopback  func(ctx context.Context, hostname string) (edge.Kind, error)
 
+	LoopbackOnly bool
+
 	mu        sync.Mutex
 	unreached map[string]string
 }
@@ -85,7 +87,7 @@ func (l *Liveness) record(hostname, cause string) {
 }
 
 func (l *Liveness) ask(ctx context.Context, hostname string) (edge.Kind, error) {
-	if l.Loopback != nil && edge.Loopback(hostname) {
+	if l.Loopback != nil && (l.LoopbackOnly || edge.Loopback(hostname)) {
 		return l.Loopback(ctx, hostname)
 	}
 	scheme, addresses, err := l.locate(ctx, hostname)
