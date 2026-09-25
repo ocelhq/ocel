@@ -86,9 +86,9 @@ func storeScript(store string, runs []*http.Request, calls []storeCall) string {
 	for i, req := range runs {
 		call := calls[i]
 		held := "\"$tmp/" + strconv.Itoa(i) + "\""
-		argv := []string{"docker", "exec", "--interactive", store,
-			"curl", "--silent", "--output", "-", "--write-out", "%{stderr}%{http_code}",
-			"--request", req.Method}
+		argv := append([]string{"docker", "exec", "--interactive", store}, storeCurl...)
+		argv = append(argv, "--output", "-", "--write-out", "%{stderr}%{http_code}",
+			"--request", req.Method)
 		for _, name := range sortedHeaderNames(req.Header) {
 			argv = append(argv, "--header", name+": "+req.Header.Get(name))
 		}
@@ -130,6 +130,10 @@ func droveStore(spec BucketSpec, calls []storeCall, now time.Time, run storeRunn
 		answer, spoke := answers[call.name]
 		if !spoke {
 			continue
+		}
+		if answer.code == "000" {
+			return nil, providerkit.Refuse(providerkit.CodeNotReady,
+				"the store %s gave no answer asked to %s", spec.Store, call.what)
 		}
 		if !slices.Contains(call.allow, answer.code) {
 			return nil, providerkit.Refuse(providerkit.CodeNotReady,
