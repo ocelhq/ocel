@@ -208,3 +208,12 @@ func TestARootNamesItsRunUntilEverythingElseInItIsGone(t *testing.T) {
 		t.Errorf("%s still stands after the engine took back what this user could not", root)
 	}
 }
+
+func TestARootAnotherRunAlreadySweptIsReclaimedWithoutComplaint(t *testing.T) {
+	t.Parallel()
+
+	gone := filepath.Join(t.TempDir(), rootPrefix+"swept")
+	if err := reclaimed(gone); err != nil {
+		t.Errorf("reclaimed(%s) = %v, want nil: two runs that sweep at once both list a root the first one then removes, and the second is left failing its whole run over a directory nobody holds any more", gone, err)
+	}
+}
