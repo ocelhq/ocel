@@ -3,7 +3,6 @@ package host
 import (
 	"cmp"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -38,27 +37,6 @@ type AppRoute struct {
 }
 
 type HostClaim live.Claimed
-
-type claimKey struct {
-	Owner   string
-	Pointer string
-	App     string
-}
-
-type surfaceKey struct {
-	Owner   string
-	Pointer string
-}
-
-func (c HostClaim) key() claimKey {
-	return claimKey{Owner: c.Owner, Pointer: c.Pointer, App: c.App}
-}
-
-func (r AppRoute) surface() surfaceKey {
-	return surfaceKey{Owner: r.Owner, Pointer: r.Pointer}
-}
-
-func (r AppRoute) app() bool { return r.App != switchboard.StoreLabel }
 
 type Pin struct {
 	Hostname string `json:"hostname"`
@@ -144,53 +122,12 @@ func admission(state RoutingTable) proxy.Admission {
 }
 
 func validTable(state RoutingTable) error {
-	claimed := map[claimKey][]string{}
-	for _, claim := range slices.SortedFunc(slices.Values(state.Claims), byClaimed) {
-		if err := validClaim(claim); err != nil {
-			return err
-		}
-		claimed[claim.key()] = append(claimed[claim.key()], claim.Hostname)
+	written, err := WriteRoutingTable(state)
+	if err != nil {
+		return err
 	}
-	standing := slices.SortedFunc(slices.Values(state.Routes), byKey)
-	running := map[surfaceKey][]string{}
-	for _, route := range standing {
-		if err := validRoute(route); err != nil {
-			return err
-		}
-		if route.app() && !slices.Contains(running[route.surface()], route.App) {
-			running[route.surface()] = append(running[route.surface()], route.App)
-		}
-	}
-	for _, under := range slices.SortedFunc(maps.Keys(running), bySurface) {
-		wide := claimed[claimKey{Owner: under.Owner, Pointer: under.Pointer}]
-		if len(wide) == 0 || len(running[under]) == 1 {
-			continue
-		}
-		return providerkit.Refuse(providerkit.CodeInvalid,
-			"%s claims %s under %s, which runs %s\nDeclare domains.production on the app that serves it, not the project",
-			under.Owner, strings.Join(wide, ", "), under.Pointer, strings.Join(running[under], " and "))
-	}
-	answering := map[string]AppRoute{}
-	for _, route := range standing {
-		hostnames := claimed[claimKey{Owner: route.Owner, Pointer: route.Pointer, App: route.App}]
-		if route.app() && len(running[route.surface()]) == 1 {
-			hostnames = append(slices.Clone(hostnames), claimed[claimKey{Owner: route.Owner, Pointer: route.Pointer}]...)
-		}
-		slices.Sort(hostnames)
-		for _, hostname := range hostnames {
-			named := strings.ToLower(hostname)
-			if held, taken := answering[named]; taken {
-				return providerkit.Refuse(providerkit.CodeInvalid,
-					"%s would be forwarded by both %s and %s",
-					hostname, held.identity(), route.identity())
-			}
-			answering[named] = route
-		}
-	}
-	if state.PreviewBase != "" {
-		if err := PreviewBaseUsable(state.PreviewBase); err != nil {
-			return err
-		}
+	if _, err := switchboard.Read(written); err != nil {
+		return providerkit.Refuse(providerkit.CodeInvalid, "%v", err)
 	}
 	for _, pin := range state.Pins {
 		if err := validPin(pin); err != nil {
@@ -219,47 +156,6 @@ func byPinned(a, b Pin) int {
 
 func byKey(a, b AppRoute) int {
 	return strings.Compare(a.identity(), b.identity())
-}
-
-func bySurface(a, b surfaceKey) int {
-	return strings.Compare(a.Owner+switchboard.ClaimSeparator+a.Pointer, b.Owner+switchboard.ClaimSeparator+b.Pointer)
-}
-
-func validRoute(route AppRoute) error {
-	for _, field := range []struct{ what, named string }{
-		{"surface", route.Owner}, {"pointer", route.Pointer}, {"app", route.App},
-	} {
-		what, named := field.what, field.named
-		if named == "" || strings.Contains(named, switchboard.ClaimSeparator) {
-			return providerkit.Refuse(providerkit.CodeInvalid,
-				"a route on this box has an invalid %s %q",
-				what, named)
-		}
-	}
-	if _, err := switchboard.UpstreamAddress(route.Upstream); err != nil {
-		return providerkit.Refuse(providerkit.CodeInvalid,
-			"the route %s forwards to no upstream it can dial: %v", route.identity(), err)
-	}
-	return nil
-}
-
-func validClaim(claim HostClaim) error {
-	switch {
-	case claim.Hostname == "" || claim.Owner == "" || claim.Pointer == "":
-		return providerkit.Refuse(providerkit.CodeInvalid,
-			"a hostname claim on this box is incomplete: host %q, surface %q, pointer %q",
-			claim.Hostname, claim.Owner, claim.Pointer)
-	case strings.Contains(claim.Hostname, "*"):
-		return providerkit.Refuse(providerkit.CodeInvalid,
-			"a hostname claim on this box names wildcard %q",
-			claim.Hostname)
-	case strings.Contains(claim.Owner, switchboard.ClaimSeparator) || strings.Contains(claim.Hostname, switchboard.ClaimSeparator) ||
-		strings.Contains(claim.Pointer, switchboard.ClaimSeparator) || strings.Contains(claim.App, switchboard.ClaimSeparator):
-		return providerkit.Refuse(providerkit.CodeInvalid,
-			"the claim of %q by %q under pointer %q and app %q contains %q",
-			claim.Hostname, claim.Owner, claim.Pointer, claim.App, switchboard.ClaimSeparator)
-	}
-	return nil
 }
 
 func spelled(window time.Duration) string {

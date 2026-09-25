@@ -133,7 +133,7 @@ func Read(document []byte) (*Table, error) {
 	for _, serving := range slices.SortedFunc(maps.Keys(running), bySurface) {
 		wide := claimed[claimKey{serving.owner, serving.pointer, ""}]
 		if len(wide) > 0 && len(running[serving]) > 1 {
-			return nil, fmt.Errorf("%s claims %s under %s, which runs %s",
+			return nil, fmt.Errorf("%s claims %s under %s, which runs %s\nDeclare domains.production on the app that serves it, not the project",
 				serving.owner, strings.Join(wide, ", "), serving.pointer, strings.Join(running[serving], " and "))
 		}
 	}
