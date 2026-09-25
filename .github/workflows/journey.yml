@@ -83,6 +83,7 @@ jobs:
       aws: ${{ steps.gate.outputs.aws }}
       gcp: ${{ steps.gate.outputs.gcp }}
       vps: ${{ steps.gate.outputs.vps }}
+      front: ${{ steps.gate.outputs.front }}
       next: ${{ steps.gate.outputs.next }}
       preview: ${{ steps.lanes.outputs.preview }}
       variants: ${{ steps.lanes.outputs.variants }}
@@ -96,6 +97,7 @@ jobs:
       aws_key: ${{ steps.gate-aws.outputs.key }}
       gcp_key: ${{ steps.gate-gcp.outputs.key }}
       vps_key: ${{ steps.gate-vps.outputs.key }}
+      front_key: ${{ steps.gate-front.outputs.key }}
       dev_key: ${{ steps.gate-dev.outputs.key }}
       next_key: ${{ steps.gate-next.outputs.key }}
     steps:
@@ -160,16 +162,19 @@ jobs:
             aws=$(named aws "$lanes")
             gcp=$(named gcp "$lanes")
             vps=$(named vps "$lanes")
+            front=$vps
           elif [ "$real" = true ]; then
             dev=false
             aws=$(named aws "$TARGETS")
             gcp=false
             vps=$(named vps "$TARGETS")
+            front=$vps
           elif [ "$LABEL" = dogfood:release ]; then
             dev=false
             aws=false
             gcp=false
             vps=false
+            front=false
             preview=true
           else
             files=$(git diff --name-only "$BASE" "$HEAD")
@@ -184,6 +189,7 @@ jobs:
             aws=$(hit "$shared"'|^platform/(aws|edge)/|^scripts/floci\.sh$')
             gcp=$(hit "$shared"'|^platform/gcp/|^scripts/floci\.sh$')
             vps=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2)\.sh$')
+            front=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2)\.sh$|^tests/fronts/')
             next=$(hit "$shared"'|^platform/(aws|edge)/')
             preview=$(hit '^(www|console/github|cli|packages|frameworks|pkg|sdk|proto|platform|scripts)/|^(ocel\.aws\.json|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json)$|^\.github/(actions/|workflows/journey\.yml$)')
           fi
@@ -211,6 +217,7 @@ jobs:
             echo "aws=$aws"
             echo "gcp=$gcp"
             echo "vps=$vps"
+            echo "front=$front"
             echo "next=$next"
             echo "preview=$preview"
             echo "variants=${VARIANTS:-}"
@@ -266,6 +273,22 @@ jobs:
           suite: journey-vps
           task: "@ocel-tests/journeys#journey:vps"
 
+      - name: Has vps behind each front already passed what it reads
+        id: gate-front
+        if: ${{ steps.lanes.outputs.front == 'true' && steps.lanes.outputs.real != 'true' }}
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: journey-vps-front
+          task: "@ocel-tests/journeys#journey:vps-front"
+        env:
+          OCEL_JOURNEY_CONCERN: deploy lifecycle
+          OCEL_JOURNEY_FIXTURES: deploy/node,lifecycle/next
+          OCEL_JOURNEY_VARIANTS: default
+          OCEL_JOURNEY_COVERAGE: every-cell
+          OCEL_JOURNEY_SKIPS: skip
+          OCEL_JOURNEY_SEED: ""
+          OCEL_JOURNEY_TOUCHED: ""
+
       - name: Has dev already passed what it reads
         id: gate-dev
         if: ${{ steps.lanes.outputs.dev == 'true' && steps.lanes.outputs.real != 'true' }}
@@ -297,11 +320,13 @@ jobs:
           AWS: ${{ steps.lanes.outputs.aws }}
           GCP: ${{ steps.lanes.outputs.gcp }}
           VPS: ${{ steps.lanes.outputs.vps }}
+          FRONT: ${{ steps.lanes.outputs.front }}
           DEV: ${{ steps.lanes.outputs.dev }}
           NEXT: ${{ steps.lanes.outputs.next }}
           AWS_GREEN: ${{ steps.gate-aws.outputs.green }}
           GCP_GREEN: ${{ steps.gate-gcp.outputs.green }}
           VPS_GREEN: ${{ steps.gate-vps.outputs.green }}
+          FRONT_GREEN: ${{ steps.gate-front.outputs.green }}
           DEV_GREEN: ${{ steps.gate-dev.outputs.green }}
           NEXT_GREEN: ${{ steps.gate-next.outputs.green }}
           PREVIEW: ${{ steps.lanes.outputs.preview }}
@@ -311,15 +336,17 @@ jobs:
           aws=$(runs "$AWS" "$AWS_GREEN")
           gcp=$(runs "$GCP" "$GCP_GREEN")
           vps=$(runs "$VPS" "$VPS_GREEN")
+          front=$(runs "$FRONT" "$FRONT_GREEN")
           dev=$(runs "$DEV" "$DEV_GREEN")
           next=$(runs "$NEXT" "$NEXT_GREEN")
           any=false
-          [ "$aws$gcp$vps$dev$next" = falsefalsefalsefalsefalse ] || any=true
+          [ "$aws$gcp$vps$front$dev$next" = falsefalsefalsefalsefalsefalse ] || any=true
           [ "$PREVIEW" != head ] || any=true
           {
             echo "aws=$aws"
             echo "gcp=$gcp"
             echo "vps=$vps"
+            echo "front=$front"
             echo "dev=$dev"
             echo "next=$next"
             echo "any=$any"
@@ -886,6 +913,163 @@ jobs:
           name: journey-evidence-vps
           path: ${{ runner.temp }}/journey-evidence.tgz
           if-no-files-found: warn
+
+  vps-front:
+    name: vps behind ${{ matrix.front }}
+    needs: binary
+    if: ${{ needs.binary.outputs.front == 'true' && needs.binary.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ needs.binary.outputs.real == 'true' && 90 || 45 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        front: [nginx]
+    concurrency:
+      group: ${{ needs.binary.outputs.real == 'true' && format('real-vps-{0}', matrix.front) || format('journey-vps-{0}-{1}', matrix.front, github.event.pull_request.number) }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      OCEL_TARGET: vps
+      OCEL_VPS_FRONT: ${{ matrix.front }}
+      OCEL_JOURNEY_CONCERN: deploy lifecycle
+      OCEL_JOURNEY_FIXTURES: deploy/node,lifecycle/next
+      OCEL_JOURNEY_VARIANTS: default
+      OCEL_JOURNEY_COVERAGE: every-cell
+      OCEL_JOURNEY_SKIPS: skip
+      OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
+      CLOUDFLARE_API_TOKEN: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
+      VM: ocel-journey-${{ matrix.front }}-${{ github.run_id }}-${{ github.run_attempt }}
+      BOX: journey-${{ matrix.front }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup the incus host
+        if: ${{ needs.binary.outputs.real != 'true' }}
+        uses: ./.github/actions/incus-vm
+        with:
+          go: "false"
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - uses: ./.github/actions/node-workspace
+        if: ${{ needs.binary.outputs.real == 'true' }}
+        with:
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+
+      - name: The node bundles the fixtures import
+        run: pnpm turbo run build --filter=ocel --filter=@ocel/transforms
+
+      - name: The Docker the image build on this runner needs
+        if: ${{ needs.binary.outputs.real == 'true' }}
+        uses: ./.github/actions/containerd-docker
+
+      - name: Take the binaries this lane drives
+        uses: ./.github/actions/journey-binaries
+
+      - name: Bring up the box this lane deploys to
+        if: ${{ needs.binary.outputs.real != 'true' }}
+        run: |
+          set -euo pipefail
+          sg incus-admin -c "scripts/incus.sh create $VM"
+          eval "$(sg incus-admin -c "scripts/incus.sh info $VM")"
+          {
+            echo "OCEL_VPS_HOST=$OCEL_INCUS_ADDR"
+            echo "OCEL_VPS_USER=$OCEL_INCUS_USER"
+            echo "OCEL_VPS_IDENTITY_FILE=$OCEL_INCUS_KEY"
+          } >> "$GITHUB_ENV"
+
+      - name: Assume the session that may spend the real account
+        if: ${{ needs.binary.outputs.real == 'true' }}
+        uses: ./.github/actions/real-aws-session
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          pnpm-version: ${{ env.PNPM_VERSION }}
+          bun-version: ${{ env.BUN_VERSION }}
+          aws-region: ${{ vars.E2E_AWS_REGION }}
+          role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
+          role-session-name: ocel-journey-vps-${{ matrix.front }}-${{ github.run_id }}
+          role-duration-seconds: "7200"
+          guard-script: tests/next-compat/guard-accounts.sh
+          expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Name the account this run may touch
+        if: ${{ needs.binary.outputs.real == 'true' }}
+        env:
+          EXPECTED: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          REGION: ${{ vars.E2E_AWS_REGION }}
+        run: |
+          set -euo pipefail
+          {
+            echo "EXPECTED_AWS_ACCOUNT_ID=$EXPECTED"
+            echo "AWS_REGION=$REGION"
+          } >> "$GITHUB_ENV"
+
+      - name: Bring up the box this lane deploys to
+        if: ${{ needs.binary.outputs.real == 'true' }}
+        run: |
+          set -euo pipefail
+          eval "$(scripts/ec2.sh create "$BOX")"
+          {
+            echo "OCEL_VPS_HOST=$OCEL_EC2_ADDR"
+            echo "OCEL_VPS_USER=$OCEL_EC2_USER"
+            echo "OCEL_VPS_IDENTITY_FILE=$OCEL_EC2_KEY"
+          } >> "$GITHUB_ENV"
+
+      - name: Run the journey behind ${{ matrix.front }}
+        run: pnpm --filter @ocel-tests/journeys journey
+
+      - name: No VM left behind
+        if: ${{ always() && needs.binary.outputs.real != 'true' }}
+        run: sg incus-admin -c "scripts/incus.sh destroy $VM" || echo "could not destroy $VM"
+
+      - name: No box left behind
+        if: ${{ always() && needs.binary.outputs.real == 'true' }}
+        run: scripts/ec2.sh destroy "$BOX" || echo "could not destroy $BOX"
+
+      - name: Pack the evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p tests/journeys/output
+          tar -czf "$RUNNER_TEMP/journey-evidence.tgz" \
+            --exclude='*/node_modules' \
+            --exclude='*/node_modules/*' \
+            --exclude='*/trees/*/packages' \
+            -C tests/journeys output
+
+      - name: Upload the evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: journey-evidence-vps-${{ matrix.front }}
+          path: ${{ runner.temp }}/journey-evidence.tgz
+          if-no-files-found: warn
+
+  vps-front-passed:
+    name: vps behind every front
+    needs: [binary, vps-front]
+    if: ${{ needs.binary.outputs.real != 'true' && needs.vps-front.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Record that what vps behind every front reads has passed
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: journey-vps-front
+          key: ${{ needs.binary.outputs.front_key }}
 
   preview:
     name: preview

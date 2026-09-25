@@ -24,6 +24,7 @@ export interface Target {
   detectLane(): Promise<Lane>;
   prepareLane(): Promise<PrepareFailures>;
   prepareProcess(): Promise<void>;
+  finishLane?(): Promise<void>;
   deploy(cell: CellUnderTest): Promise<Deployment>;
   destroy(cell: CellUnderTest): Promise<void>;
 }

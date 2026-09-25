@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -19,6 +19,7 @@ import { fixtureMember, outputRoot } from "../paths";
 import type { PrepareFailures } from "../prepare";
 import type { CellUnderTest } from "../run/cellRun";
 import { migrateCommand } from "../workspace";
+import { coveredNames, type Front, frontNamed, frontStep, stepCommand } from "./front";
 import { type Gateway, openGateway } from "./gateway";
 import type { Deployment, ReleaseCycle, Sweeper, Target } from "./types";
 
@@ -129,6 +130,47 @@ export async function ssh(target: Box, login: string, command: string): Promise<
   }
 }
 
+export function sshFed(
+  target: Box,
+  login: string,
+  command: string,
+  stdin: string,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("ssh", [
+      "-i",
+      target.identityFile,
+      "-o",
+      "IdentitiesOnly=yes",
+      "-o",
+      "BatchMode=yes",
+      "-o",
+      "StrictHostKeyChecking=accept-new",
+      "-o",
+      "ConnectTimeout=10",
+      `${login}@${target.host}`,
+      command,
+    ]);
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", (error) => reject(sshRefusal(target, login, command, error)));
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve(stdout);
+        return;
+      }
+      reject(sshRefusal(target, login, command, { code: code ?? "a signal", stderr }));
+    });
+    child.stdin.end(stdin);
+  });
+}
+
 export class VpsTarget implements Target, ReleaseCycle {
   readonly name = "vps";
   readonly workers = 2;
@@ -138,6 +180,7 @@ export class VpsTarget implements Target, ReleaseCycle {
   private readonly sessions = new Map<string, BoxSession>();
   private resolvedBox: Box | undefined;
   private resolvedZone: string | undefined;
+  private resolvedFront: { front: Front | undefined } | undefined;
 
   readonly sweeper: Sweeper = {
     list: () => this.recordedSlugs(),
@@ -163,6 +206,18 @@ export class VpsTarget implements Target, ReleaseCycle {
   async prepareLane(): Promise<PrepareFailures> {
     await this.detectLane();
     const target = this.box();
+    const front = this.front();
+    if (front) {
+      const said = await sshFed(
+        target,
+        target.user,
+        stepCommand(coveredNames(this.zone())),
+        frontStep(front, "up.sh"),
+      );
+      const log = path.join(outputRoot, "vps", "box", `${front.name}-up.log`);
+      await mkdir(path.dirname(log), { recursive: true });
+      await writeFile(log, redact(said), "utf8");
+    }
     const dir = await this.boxConfig(
       path.join(outputRoot, "vps", "box"),
       `${HARNESS_PREFIX}journey-bootstrap`,
@@ -180,6 +235,15 @@ export class VpsTarget implements Target, ReleaseCycle {
 
   async prepareProcess(): Promise<void> {
     await this.detectLane();
+  }
+
+  async finishLane(): Promise<void> {
+    const front = this.front();
+    if (!front) {
+      return;
+    }
+    const target = this.box();
+    await sshFed(target, target.user, stepCommand([]), frontStep(front, "check.sh"));
   }
 
   async deploy(cell: CellUnderTest): Promise<Deployment> {
@@ -249,6 +313,11 @@ export class VpsTarget implements Target, ReleaseCycle {
     return this.resolvedBox;
   }
 
+  private front(): Front | undefined {
+    this.resolvedFront ??= { front: frontNamed(process.env) };
+    return this.resolvedFront.front;
+  }
+
   private zone(): string {
     this.resolvedZone ??= journeyZone(process.env);
     return this.resolvedZone;
@@ -279,6 +348,7 @@ export class VpsTarget implements Target, ReleaseCycle {
           provider: {
             vps: {
               ssh: { host: target.host, user: login, identityFile: target.identityFile },
+              ...(this.front() ? { proxy: this.front()?.proxy } : {}),
             },
           },
           apps: [],

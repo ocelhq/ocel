@@ -4,7 +4,7 @@ import path from "node:path";
 import { outputRoot, prepareFile } from "../paths";
 import { NO_FILTER } from "../plan";
 import type { Target } from "../targets/types";
-import { runJourney } from "./journey";
+import { finishLane, runJourney } from "./journey";
 
 const RUN_ID = "unit-journey";
 
@@ -64,5 +64,21 @@ describe("a lane that selects no cell", () => {
     expect(exitCode).toBe(0);
     expect(prepared).toEqual([]);
     expect(existsSync(prepareFile(RUN_ID, "dev"))).toBe(false);
+  });
+});
+
+describe("finishing a lane", () => {
+  it("has nothing to say of a lane with no finish of its own", async () => {
+    expect(await finishLane(laneThatPrepares([]))).toBeUndefined();
+  });
+
+  it("carries out what a lane's finish refused", async () => {
+    const lane: Target = {
+      ...laneThatPrepares([]),
+      finishLane: async () => {
+        throw new Error("/etc/nginx changed after up.sh wrote it");
+      },
+    };
+    expect(await finishLane(lane)).toBe("/etc/nginx changed after up.sh wrote it");
   });
 });

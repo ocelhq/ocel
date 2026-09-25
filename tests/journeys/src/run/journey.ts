@@ -84,6 +84,18 @@ function logSkipped(target: Target, planned: Plan) {
   }
 }
 
+export async function finishLane(target: Target): Promise<string | undefined> {
+  if (!target.finishLane) {
+    return undefined;
+  }
+  try {
+    await target.finishLane();
+    return undefined;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+}
+
 export async function runJourney(target: Target, filter: RunFilter): Promise<number> {
   const runId = currentRunIdentity();
   await rm(cellsDir(runId, target.name), { recursive: true, force: true });
@@ -110,10 +122,15 @@ export async function runJourney(target: Target, filter: RunFilter): Promise<num
     ? { exitCode: 0, signal: null }
     : await runSuite(target, files, workers, progressFile(runId, target.name));
   const runEnd = Date.now();
+  const unfinished = idle ? undefined : await finishLane(target);
 
   const verdict = await writeReport({ target, plan: planned, exit, runStart, runEnd, workers });
   if (verdict.exitCode !== 0) {
     process.stderr.write(`\nthe journey account does not reconcile:\n${verdict.report}\n`);
+  }
+  if (unfinished !== undefined) {
+    process.stderr.write(`\nthe lane did not finish clean:\n${unfinished}\n`);
+    return verdict.exitCode || 1;
   }
   return verdict.exitCode;
 }
