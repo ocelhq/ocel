@@ -318,7 +318,7 @@ func TestDeployRecordsEveryStackItStoodUp(t *testing.T) {
 		t.Errorf("the infra stack records bindings %v, want the resource it stood up", infra.Bindings)
 	}
 	if app.App != "web" || app.Identity == "" {
-		t.Errorf("the app stack records %+v, want it named for the app and the build it serves", app.Stack)
+		t.Errorf("the app stack records %+v, want it named for the app and the build it serves", app.RecordedStack)
 	}
 	if len(app.Functions) != 1 {
 		t.Errorf("the app stack records %d functions, want the one it stood up", len(app.Functions))
@@ -430,7 +430,7 @@ type countingCipher struct {
 	opened int
 }
 
-func (c *countingCipher) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+func (c *countingCipher) Open(ctx context.Context, at providerkit.SealScope, sealed []byte) ([]byte, error) {
 	if at.Binding != "" {
 		c.mu.Lock()
 		c.opened++

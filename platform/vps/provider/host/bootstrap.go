@@ -51,7 +51,7 @@ func (b Bootstrap) described(ctx context.Context, read Reading) (providerkit.Boo
 		Class:      read.Class,
 		Present:    read.Present,
 		Unfinished: read.unfinished(),
-		Held:       read,
+		Reading:    read,
 		Stacks: []providerkit.BootstrapStack{{
 			Name:          principal,
 			Present:       read.Present,
@@ -71,7 +71,7 @@ func (b Bootstrap) Plan(ctx context.Context, req providerkit.BootstrapRequest) (
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
-	read = described.Held.(Reading)
+	read = described.Reading.(Reading)
 	groups := providerkit.DeriveGroups(described, b.Catalogue(), req)
 	groups[0].Changes = planned(read)
 	if read.rerendering && groups[0].Action == providerkit.ActionKeep {
@@ -133,7 +133,7 @@ func slowLast(changes []providerkit.Change) []providerkit.Change {
 }
 
 func (b Bootstrap) reading(ctx context.Context, req providerkit.BootstrapRequest) (Reading, error) {
-	if held, carried := req.Held.(Reading); carried && held.Class == req.Class {
+	if held, carried := req.Reading.(Reading); carried && held.Class == req.Class {
 		return held, nil
 	}
 	return b.read(ctx, req.Class)

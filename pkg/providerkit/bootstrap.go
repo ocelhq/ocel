@@ -23,7 +23,7 @@ type BootstrapReading struct {
 
 	Unfinished bool
 
-	Held any
+	Reading any
 }
 
 type BootstrapStack struct {
@@ -63,5 +63,5 @@ type BootstrapRequest struct {
 
 	WrittenBy WrittenBy
 
-	Held any
+	Reading any
 }

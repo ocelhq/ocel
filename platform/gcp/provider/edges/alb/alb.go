@@ -202,7 +202,7 @@ func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error)
 		return edge.PreviewEntryOwner, nil
 	}
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		record, err := providerkit.Held(ctx, e.deps.Records, e.claim(class, hostname))
+		record, err := providerkit.ReadOrEmpty(ctx, e.deps.Records, e.claim(class, hostname))
 		if err != nil {
 			return "", fmt.Errorf("read what serves %s on the %s edge: %w", hostname, Kind, err)
 		}

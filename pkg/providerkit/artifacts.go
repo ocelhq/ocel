@@ -117,7 +117,7 @@ type AppPacking struct {
 type AppPack struct {
 	Overlay map[string][]byte
 
-	Carry any
+	Packed any
 }
 
 func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, progress Progress) (AppPack, error) {

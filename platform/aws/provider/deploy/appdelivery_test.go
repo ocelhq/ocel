@@ -33,7 +33,7 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
-	plan.Options = work
+	plan.Work = work
 
 	outputs := auto.OutputMap{"fn--web--entry": auto.OutputValue{Value: map[string]any{
 		outputKeyFunctionURL:  "https://web.lambda-url.us-east-1.on.aws/",
@@ -68,7 +68,7 @@ func TestAReleaseThatUploadsNoEdgeBundleHandsBackNoKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
-	plan.Options = work
+	plan.Work = work
 
 	result, err := release.decodeApp(plan, auto.OutputMap{
 		"fn--web--entry": auto.OutputValue{Value: map[string]any{outputKeyFunctionURL: "https://web.example/"}},

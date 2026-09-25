@@ -75,7 +75,7 @@ func requestFor(hostname string, held providerkit.Certificate, proved *[]edge.Re
 	return providerkit.CertificateRequest{
 		Kind:     "cloudfront",
 		Hostname: hostname,
-		Held:     held,
+		Current:  held,
 		Progress: silentProgress{},
 		Prove: func(_ context.Context, cert providerkit.Certificate, records []edge.Record) (providerkit.Certificate, error) {
 			*proved = records

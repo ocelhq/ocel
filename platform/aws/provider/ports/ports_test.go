@@ -95,7 +95,7 @@ func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 func TestTheEncryptionContextNamesEveryComponentOfTheCoordinate(t *testing.T) {
 	sealer, crypto := newSealer()
 
-	at := kit.Coordinate{
+	at := kit.SealScope{
 		Project: "shop",
 		Class:   edge.ClassProduction,
 		Env:     "staging",
@@ -124,7 +124,7 @@ func TestTheEncryptionContextNamesEveryComponentOfTheCoordinate(t *testing.T) {
 func TestABindingSealsUnderItsOwnName(t *testing.T) {
 	sealer, crypto := newSealer()
 
-	at := kit.Coordinate{
+	at := kit.SealScope{
 		Project: "shop",
 		Class:   edge.ClassPreview,
 		Env:     "*",
@@ -143,7 +143,7 @@ func TestABindingSealsUnderItsOwnName(t *testing.T) {
 func TestACoordinateMissingAComponentIsRefused(t *testing.T) {
 	sealer, _ := newSealer()
 
-	for name, at := range map[string]kit.Coordinate{
+	for name, at := range map[string]kit.SealScope{
 		"no project":     {Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "K"},
 		"no class":       {Project: "shop", Env: "*", Folder: "/", Name: "K"},
 		"no environment": {Project: "shop", Class: edge.ClassProduction, Folder: "/", Name: "K"},

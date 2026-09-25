@@ -85,7 +85,7 @@ func (i images) Has(ctx context.Context, push providerkit.ImagePush) (bool, erro
 }
 
 func (i images) Push(ctx context.Context, push providerkit.ImagePush, progress providerkit.Progress) error {
-	repository, err := repositoryOf(i.target, push.Target)
+	repository, err := repositoryOf(i.target, push.ImageRef)
 	if err != nil {
 		return err
 	}

@@ -46,7 +46,7 @@ func refused(err error) bool {
 
 func (p certificates) Inspect(ctx context.Context, _ edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {
 	health := providerkit.CertificateHealth{Terminates: true}
-	if !cert.Held() {
+	if !cert.Issued() {
 		return health, nil
 	}
 	health.Renewal = certs.Renewal(cert.ID)

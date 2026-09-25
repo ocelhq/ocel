@@ -13,7 +13,7 @@ const schemaAttempts = 8
 
 func EnsureRecordSchema(ctx context.Context, records RecordStore, class Class) error {
 	for range schemaAttempts {
-		held, err := Held(ctx, records, SchemaRecord(class))
+		held, err := ReadOrEmpty(ctx, records, SchemaRecord(class))
 		if err != nil {
 			return fmt.Errorf("read the record schema: %w", err)
 		}
@@ -46,7 +46,7 @@ func EnsureRecordSchema(ctx context.Context, records RecordStore, class Class) e
 }
 
 func RecordSchema(ctx context.Context, records RecordStore, class Class) (int, error) {
-	held, err := Held(ctx, records, SchemaRecord(class))
+	held, err := ReadOrEmpty(ctx, records, SchemaRecord(class))
 	if err != nil {
 		return 0, fmt.Errorf("read the record schema: %w", err)
 	}

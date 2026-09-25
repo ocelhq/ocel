@@ -68,14 +68,14 @@ func TestTheStandingOfABoxYourProxyFrontsAsksNothingOfPort80(t *testing.T) {
 		reached = append(reached, address)
 		return nil
 	})
-	checks, err := p.CheckHost(context.Background(), providerkit.StandingRequest{Class: providerkit.ClassProduction})
+	checks, err := p.CheckHost(context.Background(), providerkit.HostCheckRequest{Class: providerkit.ClassProduction})
 	if err != nil {
 		t.Fatalf("CheckStanding() = %v", err)
 	}
 	if len(reached) != 0 {
 		t.Errorf("CheckStanding() dialled %v, want nothing: port 80 matters to ocel's own proxy renewing over http-01, and yours renews as it chooses", reached)
 	}
-	if !slices.ContainsFunc(checks, func(check providerkit.StandingCheck) bool { return check.Subject == "tcp 443" }) {
+	if !slices.ContainsFunc(checks, func(check providerkit.HostCheck) bool { return check.Subject == "tcp 443" }) {
 		t.Errorf("CheckStanding() = %+v, want your proxy's hold on 443 checked", checks)
 	}
 }

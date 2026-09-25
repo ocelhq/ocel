@@ -78,13 +78,13 @@ func TestTheStandingReadsWhetherTheAdminApiListensOnAPortInsideTheProxy(t *testi
 	for what, check := range map[string]struct {
 		said    string
 		err     error
-		verdict providerkit.StandingVerdict
+		verdict providerkit.HostVerdict
 	}{
-		"only the serving ports":          {said: listened("0050", "01BB"), verdict: providerkit.StandingPass},
-		"the admin port beside them":      {said: listened("0050", "01BB", "07E3"), verdict: providerkit.StandingFail},
-		"nothing at all":                  {said: tcpHeader, verdict: providerkit.StandingFail},
-		"a proxy that answered nothing":   {err: errors.New("no such container"), verdict: providerkit.StandingFail},
-		"a table that is no socket table": {said: "garbage\n", verdict: providerkit.StandingFail},
+		"only the serving ports":          {said: listened("0050", "01BB"), verdict: providerkit.HostPass},
+		"the admin port beside them":      {said: listened("0050", "01BB", "07E3"), verdict: providerkit.HostFail},
+		"nothing at all":                  {said: tcpHeader, verdict: providerkit.HostFail},
+		"a proxy that answered nothing":   {err: errors.New("no such container"), verdict: providerkit.HostFail},
+		"a table that is no socket table": {said: "garbage\n", verdict: providerkit.HostFail},
 	} {
 		held := &box{answer: func(string) (string, error) { return check.said, check.err }}
 		standing, err := (caddy.Builtin{Box: held}).Inspect(context.Background())

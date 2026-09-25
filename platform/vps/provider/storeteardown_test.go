@@ -100,7 +100,7 @@ func holdingBuckets(t *testing.T, provider *vps.Provider, stack naming.StackName
 		held.Properties = map[string]string{providerkit.PropertyBucket: "prod-web-r0a1b2c3d-" + name}
 		bindings = append(bindings, held)
 	}
-	recorded := providerkit.Stack{Kind: providerkit.StackApp, App: "web", Bindings: bindings}
+	recorded := providerkit.RecordedStack{Kind: providerkit.StackApp, App: "web", Bindings: bindings}
 	if err := providerkit.WriteStack(context.Background(), records,
 		providerkit.ClassProduction, "shop", stack, recorded); err != nil {
 		t.Fatal(err)

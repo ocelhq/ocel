@@ -15,14 +15,14 @@ type Certificate struct {
 	Owed      []edge.Record `json:"owed,omitempty"`
 }
 
-func (c Certificate) Held() bool { return c.ID != "" }
+func (c Certificate) Issued() bool { return c.ID != "" }
 
 type Prover func(ctx context.Context, cert Certificate, records []edge.Record) (Certificate, error)
 
 type CertificateRequest struct {
 	Kind     edge.Kind
 	Hostname string
-	Held     Certificate
+	Current  Certificate
 	Prove    Prover
 	Progress Progress
 }
@@ -54,7 +54,7 @@ func discardCertificate(ctx context.Context, provider Provider, cert Certificate
 }
 
 func retireCertificate(ctx context.Context, provider Provider, settle settler, cert, holding Certificate, progress Progress) error {
-	if !cert.Held() || cert.ID == holding.ID {
+	if !cert.Issued() || cert.ID == holding.ID {
 		return nil
 	}
 	if cert.Requested {
@@ -79,7 +79,7 @@ func (c certification) certify(ctx context.Context, hostname string, progress Pr
 	cert, err := c.provider.Certificates().Issue(ctx, CertificateRequest{
 		Kind:     c.settle.kind,
 		Hostname: hostname,
-		Held:     c.settled.Certificate,
+		Current:  c.settled.Certificate,
 		Progress: progress,
 		Prove: func(ctx context.Context, cert Certificate, records []edge.Record) (Certificate, error) {
 			written, werr := c.settle.write(ctx, records, proveHeadline(hostname), progress.Say,
@@ -88,7 +88,7 @@ func (c certification) certify(ctx context.Context, hostname string, progress Pr
 			return cert, errors.Join(werr, c.hold(ctx, cert))
 		},
 	})
-	if !cert.Held() {
+	if !cert.Issued() {
 		return err
 	}
 	return errors.Join(err, c.hold(ctx, cert))

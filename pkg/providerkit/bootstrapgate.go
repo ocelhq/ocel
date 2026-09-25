@@ -31,7 +31,7 @@ type BootstrapState struct {
 	WrittenBy  WrittenBy
 	AutoHeal   bool
 	Unfinished bool
-	Held       any
+	Reading    any
 }
 
 func (g Gate) State(ctx context.Context, class Class) (BootstrapState, error) {
@@ -40,7 +40,7 @@ func (g Gate) State(ctx context.Context, class Class) (BootstrapState, error) {
 		return BootstrapState{}, err
 	}
 	standing := BootstrapState{Class: class, Present: described.Present, Stacks: described.Stacks,
-		Unfinished: described.Unfinished, Held: described.Held}
+		Unfinished: described.Unfinished, Reading: described.Reading}
 	var carried []string
 	for _, stack := range described.Stacks {
 		if stack.Feature == "" {
@@ -170,7 +170,7 @@ func (i intent) request(class Class, req ApplyRequest, writer WrittenBy) Bootstr
 		Remove:     i.ordered,
 		Unattended: !req.AcceptReplacements,
 		WrittenBy:  writer,
-		Held:       i.standing.Held,
+		Reading:    i.standing.Reading,
 	}
 }
 
@@ -410,7 +410,7 @@ func denied(refusal Refusal) string {
 }
 
 func (g Gate) autoHeal(ctx context.Context, class Class) (bool, error) {
-	held, err := Held(ctx, g.Records, BootstrapRecord(class))
+	held, err := ReadOrEmpty(ctx, g.Records, BootstrapRecord(class))
 	if err != nil {
 		return false, fmt.Errorf("read the %s bootstrap record: %w", class, err)
 	}
@@ -425,7 +425,7 @@ func (g Gate) autoHeal(ctx context.Context, class Class) (bool, error) {
 }
 
 func (g Gate) RecordBootstrap(ctx context.Context, class Class, state BootstrapSettings) error {
-	held, err := Held(ctx, g.Records, BootstrapRecord(class))
+	held, err := ReadOrEmpty(ctx, g.Records, BootstrapRecord(class))
 	if err != nil {
 		return fmt.Errorf("read the %s bootstrap record: %w", class, err)
 	}
@@ -460,7 +460,7 @@ func (g Gate) Occupancy(ctx context.Context, class Class) (Occupancy, error) {
 	slices.Sort(projects)
 	occupancy := Occupancy{Projects: slices.Compact(projects)}
 
-	wildcard, err := Held(ctx, g.Records, WildcardRecord(class))
+	wildcard, err := ReadOrEmpty(ctx, g.Records, WildcardRecord(class))
 	if err != nil {
 		return Occupancy{}, fmt.Errorf("read the %s preview wildcard: %w", class, err)
 	}

@@ -134,7 +134,7 @@ func (s Store) remember(ctx context.Context, scope Scope, at Coordinate, written
 	if err != nil {
 		return fmt.Errorf("encode version %d of %s: %w", written.Version, at, err)
 	}
-	held, err := ports.Held(ctx, s.Records, versionName(scope, at, written.Version))
+	held, err := ports.ReadOrEmpty(ctx, s.Records, versionName(scope, at, written.Version))
 	if err != nil {
 		return err
 	}
@@ -451,7 +451,7 @@ func (s Store) Purge(ctx context.Context, scope Scope) (int, error) {
 }
 
 func (s Store) cellAt(ctx context.Context, scope Scope, at Coordinate) (ports.Record, cell, error) {
-	held, err := ports.Held(ctx, s.Records, cellName(scope, at))
+	held, err := ports.ReadOrEmpty(ctx, s.Records, cellName(scope, at))
 	if err != nil {
 		return ports.Record{}, cell{}, fmt.Errorf("read %s: %w", at, err)
 	}
@@ -475,9 +475,9 @@ func metadataOf(at Coordinate, held cell) Metadata {
 	}
 }
 
-func coordinateOf(scope Scope, at Coordinate) ports.Coordinate {
+func coordinateOf(scope Scope, at Coordinate) ports.SealScope {
 	at = at.canonical()
-	return ports.Coordinate{
+	return ports.SealScope{
 		Project: scope.Project,
 		Class:   scope.Class,
 		Env:     at.Environment,

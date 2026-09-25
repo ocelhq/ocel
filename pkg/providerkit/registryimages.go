@@ -50,7 +50,7 @@ const (
 var registryTimeout = 30 * time.Second
 
 func (r registryImages) Has(ctx context.Context, push ImagePush) (bool, error) {
-	server, repository, tag, err := splitCoordinate(push.Target)
+	server, repository, tag, err := splitCoordinate(push.ImageRef)
 	if err != nil {
 		return false, err
 	}
@@ -95,9 +95,9 @@ func (r registryImages) look(ctx context.Context, client *http.Client, endpoint,
 	case resp.StatusCode == http.StatusNotFound:
 		return false, false, 0, nil
 	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
-		return false, true, retryAfter(resp), fmt.Errorf("%s answered %q asking whether it already holds %s", server, resp.Status, push.Target)
+		return false, true, retryAfter(resp), fmt.Errorf("%s answered %q asking whether it already holds %s", server, resp.Status, push.ImageRef)
 	default:
-		return false, false, 0, fmt.Errorf("%s answered %q asking whether it already holds %s", server, resp.Status, push.Target)
+		return false, false, 0, fmt.Errorf("%s answered %q asking whether it already holds %s", server, resp.Status, push.ImageRef)
 	}
 }
 
@@ -299,7 +299,7 @@ func (r registryImages) Push(ctx context.Context, push ImagePush, progress Progr
 	if push.Built != nil {
 		return r.write(ctx, push)
 	}
-	host, err := OpenDockerHost()
+	host, err := DockerHostFromEnv()
 	if err != nil {
 		return err
 	}
@@ -307,7 +307,7 @@ func (r registryImages) Push(ctx context.Context, push ImagePush, progress Progr
 	defer transport.CloseIdleConnections()
 	client := &http.Client{Transport: transport}
 
-	server, repository, tag, err := splitCoordinate(push.Target)
+	server, repository, tag, err := splitCoordinate(push.ImageRef)
 	if err != nil {
 		return err
 	}
@@ -338,16 +338,16 @@ func (r registryImages) write(ctx context.Context, push ImagePush) error {
 	if registryScheme(r.target.Server) == "http" {
 		options = append(options, name.Insecure)
 	}
-	ref, err := name.NewTag(push.Target, options...)
+	ref, err := name.NewTag(push.ImageRef, options...)
 	if err != nil {
-		return fmt.Errorf("%q names nowhere an image can be pushed: %w", push.Target, err)
+		return fmt.Errorf("%q names nowhere an image can be pushed: %w", push.ImageRef, err)
 	}
 	written := []remote.Option{remote.WithContext(ctx)}
 	if r.target.Username != "" || r.target.Password != "" {
 		written = append(written, remote.WithAuth(&authn.Basic{Username: r.target.Username, Password: r.target.Password}))
 	}
 	if err := remote.Write(ref, push.Built, written...); err != nil {
-		return fmt.Errorf("push %s to %s: %w", push.App, push.Target, err)
+		return fmt.Errorf("push %s to %s: %w", push.App, push.ImageRef, err)
 	}
 	return nil
 }

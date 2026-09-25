@@ -92,8 +92,8 @@ func TestDeployShipsAFunctionAsAnImageWhereTheProviderTakesItThatWay(t *testing.
 	if len(pushed) != 1 {
 		t.Fatalf("the deploy pushed %v, want the one image the app's function runs", pushed)
 	}
-	if !strings.HasPrefix(pushed[0].Target, "ghcr.io/acme/") {
-		t.Errorf("the push wrote %q, want it under the registry the deploy names", pushed[0].Target)
+	if !strings.HasPrefix(pushed[0].ImageRef, "ghcr.io/acme/") {
+		t.Errorf("the push wrote %q, want it under the registry the deploy names", pushed[0].ImageRef)
 	}
 
 	for _, ref := range provider.Artifacts().(*fake.Artifacts).Keys() {
@@ -344,7 +344,7 @@ func TestAWrappedFunctionsCoordinateChangesWithTheRuntimeItIsWrappedIn(t *testin
 		if len(pushed) != 1 {
 			t.Fatalf("the deploy pushed %v, want one image", pushed)
 		}
-		targets[runtime] = pushed[0].Target
+		targets[runtime] = pushed[0].ImageRef
 	}
 	if targets["one runtime"] == targets["another runtime"] {
 		t.Errorf("one function wrapped in two runtimes is pushed under %q both times, so a rebuilt runtime would be read as already pushed and never reach the registry", targets["one runtime"])

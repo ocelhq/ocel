@@ -65,15 +65,15 @@ func (s sshSeal) Seal(ctx context.Context, what string, argv []string, stdin io.
 	return s.host.granted(ctx, what, argv, stdin)
 }
 
-func (s *Cipher) Seal(ctx context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
+func (s *Cipher) Seal(ctx context.Context, at providerkit.SealScope, plaintext []byte) ([]byte, error) {
 	return s.through(ctx, "seal", at, plaintext)
 }
 
-func (s *Cipher) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+func (s *Cipher) Open(ctx context.Context, at providerkit.SealScope, sealed []byte) ([]byte, error) {
 	return s.through(ctx, "open", at, sealed)
 }
 
-func (s *Cipher) through(ctx context.Context, verb string, at providerkit.Coordinate, body []byte) ([]byte, error) {
+func (s *Cipher) through(ctx context.Context, verb string, at providerkit.SealScope, body []byte) ([]byte, error) {
 	argv, err := sealArgv(verb, at)
 	if err != nil {
 		return nil, err
@@ -91,7 +91,7 @@ func (s *Cipher) through(ctx context.Context, verb string, at providerkit.Coordi
 	return written, nil
 }
 
-func sealArgv(verb string, at providerkit.Coordinate) ([]string, error) {
+func sealArgv(verb string, at providerkit.SealScope) ([]string, error) {
 	if at.Class == "" {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"%s names no class", at.Name)

@@ -57,7 +57,7 @@ func (i *Images) Has(_ context.Context, push providerkit.ImagePush) (bool, error
 	if i.failed != nil {
 		return false, i.failed
 	}
-	return i.held[push.Target], nil
+	return i.held[push.ImageRef], nil
 }
 
 func (i *Images) Push(_ context.Context, push providerkit.ImagePush, _ providerkit.Progress) error {
@@ -67,7 +67,7 @@ func (i *Images) Push(_ context.Context, push providerkit.ImagePush, _ providerk
 		return i.failed
 	}
 	i.pushed = append(i.pushed, push)
-	i.held[push.Target] = true
+	i.held[push.ImageRef] = true
 	return nil
 }
 

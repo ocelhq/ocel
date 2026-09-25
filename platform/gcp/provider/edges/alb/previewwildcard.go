@@ -21,7 +21,7 @@ func (e *Edge) previewRecord() providerkit.RecordName {
 }
 
 func (e *Edge) heldPreview(ctx context.Context) (previewEntry, error) {
-	record, err := providerkit.Held(ctx, e.deps.Records, e.previewRecord())
+	record, err := providerkit.ReadOrEmpty(ctx, e.deps.Records, e.previewRecord())
 	if err != nil {
 		return previewEntry{}, fmt.Errorf("read which wildcard the %s edge serves previews on: %w", Kind, err)
 	}
@@ -36,7 +36,7 @@ func (e *Edge) heldPreview(ctx context.Context) (previewEntry, error) {
 }
 
 func (e *Edge) rememberPreview(ctx context.Context, entry previewEntry) error {
-	record, err := providerkit.Held(ctx, e.deps.Records, e.previewRecord())
+	record, err := providerkit.ReadOrEmpty(ctx, e.deps.Records, e.previewRecord())
 	if err != nil {
 		return fmt.Errorf("read which wildcard the %s edge serves previews on: %w", Kind, err)
 	}

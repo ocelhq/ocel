@@ -109,7 +109,7 @@ func TestAProxyWithNothingToSayCertifiesAsItAlwaysDid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Certificate() = %v", err)
 	}
-	if !cert.Held() {
+	if !cert.Issued() {
 		t.Errorf("Certificate() = %+v, want the handle the proxy obtains and renews under", cert)
 	}
 }
@@ -131,7 +131,7 @@ func TestABoxWhoseEngineCannotBeReachedSaysSoInTheEnginesOwnWordsAndStillMintsTh
 	if err != nil {
 		t.Fatalf("Certificate() = %v: the handle names what the proxy renews and asks the box for nothing, and the conformance suite mints it against a box that answers nothing at all", err)
 	}
-	if !cert.Held() {
+	if !cert.Issued() {
 		t.Errorf("Certificate() = %+v, want the handle the proxy obtains and renews under", cert)
 	}
 	said := strings.Join(spoken.said, "\n")

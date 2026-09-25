@@ -15,14 +15,14 @@ type Cipher struct {
 	Clients *Clients
 }
 
-func (s Cipher) key(at providerkit.Coordinate) (string, error) {
+func (s Cipher) key(at providerkit.SealScope) (string, error) {
 	if at.Class == "" {
 		return "", Classless("a value")
 	}
 	return s.Clients.KeyPath(string(at.Class)), nil
 }
 
-func (s Cipher) Seal(ctx context.Context, at providerkit.Coordinate, plaintext []byte) ([]byte, error) {
+func (s Cipher) Seal(ctx context.Context, at providerkit.SealScope, plaintext []byte) ([]byte, error) {
 	key, err := s.key(at)
 	if err != nil {
 		return nil, err
@@ -42,7 +42,7 @@ func (s Cipher) Seal(ctx context.Context, at providerkit.Coordinate, plaintext [
 	return sealed.GetCiphertext(), nil
 }
 
-func (s Cipher) Open(ctx context.Context, at providerkit.Coordinate, sealed []byte) ([]byte, error) {
+func (s Cipher) Open(ctx context.Context, at providerkit.SealScope, sealed []byte) ([]byte, error) {
 	key, err := s.key(at)
 	if err != nil {
 		return nil, err

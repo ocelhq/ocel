@@ -13,7 +13,7 @@ import (
 func TestTheCoordinateIsTheTargetPlusTheAppRepositoryAndTheDigestTag(t *testing.T) {
 	target := providerkit.RegistryTarget{Server: "ghcr.io", Namespace: "acme/ocel"}
 
-	if got, want := target.Coordinate("web", "sha256-abc"), "ghcr.io/acme/ocel/web:sha256-abc"; got != want {
+	if got, want := target.ImageRef("web", "sha256-abc"), "ghcr.io/acme/ocel/web:sha256-abc"; got != want {
 		t.Errorf("Coordinate() = %q, want %q", got, want)
 	}
 }
@@ -37,7 +37,7 @@ func TestATargetNamesARegistryOnlyWhenItNamesAServer(t *testing.T) {
 func TestACoordinateUnderARegistryWithNoNamespaceSitsDirectlyOnTheServer(t *testing.T) {
 	target := providerkit.RegistryTarget{Server: "registry.fly.io"}
 
-	if got, want := target.Coordinate("web", "sha256-abc"), "registry.fly.io/web:sha256-abc"; got != want {
+	if got, want := target.ImageRef("web", "sha256-abc"), "registry.fly.io/web:sha256-abc"; got != want {
 		t.Errorf("Coordinate() = %q, want %q", got, want)
 	}
 }
@@ -67,7 +67,7 @@ func TestAStackPlanCarryingARegistryRendersWithoutItsPassword(t *testing.T) {
 		Kind: providerkit.StackApp,
 		Images: providerkit.ImagePlan{
 			Store:  providerkit.RegistryImages(target),
-			Pushes: []providerkit.ImagePush{{App: "web", Source: "ocel/web@sha256:abc", Target: target.Coordinate("web", "sha256-abc"), Digest: "sha256:abc"}},
+			Pushes: []providerkit.ImagePush{{App: "web", Source: "ocel/web@sha256:abc", ImageRef: target.ImageRef("web", "sha256-abc"), Digest: "sha256:abc"}},
 		},
 	}
 	unrendered := providerkit.StackPlan{

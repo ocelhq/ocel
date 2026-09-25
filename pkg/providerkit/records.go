@@ -18,8 +18,8 @@ var (
 )
 
 var (
-	Held   = ports.Held
-	Forget = ports.Forget
+	ReadOrEmpty = ports.ReadOrEmpty
+	Forget      = ports.Forget
 )
 
 const (

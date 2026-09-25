@@ -183,8 +183,8 @@ func TestSealingAValueThatNamesNoClassIsTheCallersMistake(t *testing.T) {
 	p := standing(t)
 
 	for name, refused := range map[string]error{
-		"Seal": errorOf(p.Cipher().Seal(ctx, providerkit.Coordinate{}, nil)),
-		"Open": errorOf(p.Cipher().Open(ctx, providerkit.Coordinate{}, nil)),
+		"Seal": errorOf(p.Cipher().Seal(ctx, providerkit.SealScope{}, nil)),
+		"Open": errorOf(p.Cipher().Open(ctx, providerkit.SealScope{}, nil)),
 	} {
 		var refusal providerkit.Refusal
 		if !errors.As(refused, &refusal) || refusal.Code != providerkit.CodeInvalid {

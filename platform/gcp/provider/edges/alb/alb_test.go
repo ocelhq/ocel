@@ -549,7 +549,7 @@ func servedOnPreview(t *testing.T, front *Edge, slug, base string) {
 		t.Fatal(err)
 	}
 	name := providerkit.EdgeStackRecord(providerkit.ClassPreview, slug)
-	record, err := providerkit.Held(ctx, front.deps.Records, name)
+	record, err := providerkit.ReadOrEmpty(ctx, front.deps.Records, name)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -783,7 +783,7 @@ func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenMoreThanOneEdgeStands(t *testi
 	ctx := context.Background()
 	client, provider := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	provider.FakeBootstrap().Standing(fake.KindRelay, fake.KindDirect)
+	provider.FakeBootstrap().Stands(fake.KindRelay, fake.KindDirect)
 
 	plan, err := client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil {
@@ -807,7 +807,7 @@ func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenNoEdgeStands(t *testing.T) {
 	ctx := context.Background()
 	client, provider := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	provider.FakeBootstrap().Standing()
+	provider.FakeBootstrap().Stands()
 
 	plan, err := client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil {

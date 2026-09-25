@@ -65,7 +65,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 			return nil, RefusalError(err)
 		}
 		if req.GetStanding() {
-			resp.Standing = h.standingChecks(ctx, provider, class, req.GetStandingDomains())
+			resp.Standing = h.hostChecks(ctx, provider, class, req.GetStandingDomains())
 		}
 		if class == ClassPreview {
 			resp.PreviewWildcard, err = heldPreviewWildcard(ctx, provider)
@@ -207,7 +207,7 @@ func tierOf(class Class) environmentv1.Tier {
 }
 
 func IdentityProto(vendor Vendor, id Identity) *contractv1.Identity {
-	named := id.Provider
+	named := id.Vendor
 	if named == "" {
 		named = vendor
 	}

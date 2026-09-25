@@ -56,8 +56,8 @@ type Manifest struct {
 
 func (m Manifest) Live() bool { return len(m.Keys) > 0 || len(m.Bindings) > 0 }
 
-func (m Manifest) StoreCoordinate() providerkit.Coordinate {
-	return providerkit.Coordinate{
+func (m Manifest) StoreCoordinate() providerkit.SealScope {
+	return providerkit.SealScope{
 		Project: m.Slug,
 		Class:   providerkit.Class(m.Class),
 		Env:     m.Store.Env,

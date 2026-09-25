@@ -26,7 +26,7 @@ type DockerHost struct {
 	Target  string
 }
 
-func OpenDockerHost() (DockerHost, error) {
+func DockerHostFromEnv() (DockerHost, error) {
 	host := os.Getenv(DockerHostEnv)
 	if host == "" {
 		host = platformDockerAddress()

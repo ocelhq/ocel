@@ -52,7 +52,7 @@ func recorded(t *testing.T, p *vps.Provider, slug string, state edge.StackState)
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	held, err := providerkit.Held(ctx, p.Records(), providerkit.EdgeStackRecord(providerkit.ClassProduction, slug))
+	held, err := providerkit.ReadOrEmpty(ctx, p.Records(), providerkit.EdgeStackRecord(providerkit.ClassProduction, slug))
 	if err != nil {
 		t.Fatalf("read the edge stack record standing on this box: %v", err)
 	}

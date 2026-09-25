@@ -349,7 +349,7 @@ func TestABoxHoldsNoCertificateForThePreviewWildcardItself(t *testing.T) {
 	wildcard := edge.PreviewWildcard("preview.example.com")
 
 	cert := certificateFor(t, p, wildcard)
-	if cert.Held() {
+	if cert.Issued() {
 		t.Fatalf("Certificate(%s) = %q: the catch-all terminates nothing and every preview under it holds its own http-01 certificate, so a handle here names a certificate this box will never obtain and `ocel domain status` reports forever on a slot nothing fills",
 			wildcard, cert.ID)
 	}

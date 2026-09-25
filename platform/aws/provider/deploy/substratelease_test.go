@@ -96,7 +96,7 @@ func TestAContainerDeployIsRefusedWhileTheSubstrateIsGoingDown(t *testing.T) {
 	if _, err := releaser.Provision(ctx, shop, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
-	held, err := ports.Held(ctx, shared, leaseRecord(providerkit.ClassProduction))
+	held, err := ports.ReadOrEmpty(ctx, shared, leaseRecord(providerkit.ClassProduction))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -63,7 +63,7 @@ type Record struct {
 	Revision Revision
 }
 
-func Held(ctx context.Context, records RecordStore, name RecordName) (Record, error) {
+func ReadOrEmpty(ctx context.Context, records RecordStore, name RecordName) (Record, error) {
 	held, err := records.Read(ctx, name)
 	if errors.Is(err, ErrNoRecord) {
 		return Record{Name: name}, nil
@@ -101,12 +101,12 @@ func Forget(ctx context.Context, records RecordStore, name RecordName) error {
 const forgetAttempts = 5
 
 type Cipher interface {
-	Seal(ctx context.Context, at Coordinate, plaintext []byte) ([]byte, error)
+	Seal(ctx context.Context, at SealScope, plaintext []byte) ([]byte, error)
 
-	Open(ctx context.Context, at Coordinate, sealed []byte) ([]byte, error)
+	Open(ctx context.Context, at SealScope, sealed []byte) ([]byte, error)
 }
 
-type Coordinate struct {
+type SealScope struct {
 	Project string
 	Class   Class
 	Env     string

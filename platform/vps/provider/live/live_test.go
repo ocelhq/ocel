@@ -66,7 +66,7 @@ func TestAManifestMissingWhatScopesTheStoreIsRefused(t *testing.T) {
 	}
 }
 
-func sealFor(t *testing.T, key []byte, at providerkit.Coordinate, plaintext string) []byte {
+func sealFor(t *testing.T, key []byte, at providerkit.SealScope, plaintext string) []byte {
 	t.Helper()
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -92,7 +92,7 @@ func aKey(t *testing.T) []byte {
 	return key
 }
 
-var bound = providerkit.Coordinate{Project: "shop", Class: providerkit.ClassProduction, Env: "*", Folder: "/", Name: "DATABASE_URL"}
+var bound = providerkit.SealScope{Project: "shop", Class: providerkit.ClassProduction, Env: "*", Folder: "/", Name: "DATABASE_URL"}
 
 func TestAValueOpensAtItsOwnCoordinateAndNowhereElse(t *testing.T) {
 	t.Parallel()

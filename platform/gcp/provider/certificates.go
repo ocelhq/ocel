@@ -49,7 +49,7 @@ func (p certificates) Issue(ctx context.Context, req providerkit.CertificateRequ
 		return providerkit.Certificate{}, err
 	}
 	name := clients.certificatesGlobal() + "/certificates/" + certificateName(req.Hostname)
-	held := providerkit.Certificate{ID: name, Requested: true, Written: req.Held.Written, Owed: req.Held.Owed}
+	held := providerkit.Certificate{ID: name, Requested: true, Written: req.Current.Written, Owed: req.Current.Owed}
 
 	authorization, err := p.authorized(ctx, clients, req)
 	if err != nil {
@@ -212,7 +212,7 @@ func (p certificates) Inspect(
 	hostname string,
 	cert providerkit.Certificate,
 ) (providerkit.CertificateHealth, error) {
-	if !cert.Held() {
+	if !cert.Issued() {
 		return providerkit.CertificateHealth{}, nil
 	}
 	_, certificates, err := p.certificates(ctx)
@@ -288,7 +288,7 @@ func (p *Provider) Entered(ctx context.Context, certificateMap string) ([]string
 }
 
 func (p certificates) Discard(ctx context.Context, cert providerkit.Certificate, progress providerkit.Progress) error {
-	if !cert.Held() {
+	if !cert.Issued() {
 		return nil
 	}
 	_, certificates, err := p.certificates(ctx)

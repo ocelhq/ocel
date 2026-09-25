@@ -28,7 +28,7 @@ func (l loaded) GoString() string { return l.String() }
 func (l loaded) Destination() string { return l.at }
 
 func (l loaded) Has(ctx context.Context, push providerkit.ImagePush) (bool, error) {
-	return l.host.HoldsImage(ctx, push.Target)
+	return l.host.HoldsImage(ctx, push.ImageRef)
 }
 
 func (l loaded) Push(ctx context.Context, push providerkit.ImagePush, progress providerkit.Progress) error {
@@ -40,13 +40,13 @@ func (l loaded) Push(ctx context.Context, push providerkit.ImagePush, progress p
 }
 
 func (l loaded) load(ctx context.Context, push providerkit.ImagePush, progress providerkit.Progress) error {
-	ref, err := name.NewTag(push.Target, name.Insecure)
+	ref, err := name.NewTag(push.ImageRef, name.Insecure)
 	if err != nil {
-		return fmt.Errorf("%q is not a valid image tag: %w", push.Target, err)
+		return fmt.Errorf("%q is not a valid image tag: %w", push.ImageRef, err)
 	}
 	stream, writer := io.Pipe()
 	go func() { writer.CloseWithError(tarball.Write(ref, push.Built, writer)) }()
-	said, err := l.host.LoadImage(ctx, push.Target, stream)
+	said, err := l.host.LoadImage(ctx, push.ImageRef, stream)
 	_ = stream.Close()
 	if err != nil {
 		return err

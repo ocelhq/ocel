@@ -42,7 +42,7 @@ func (p *packingProvider) PackApp(_ context.Context, packing providerkit.AppPack
 	p.packed = append(p.packed, packing)
 	return providerkit.AppPack{
 		Overlay: map[string][]byte{sealedFile: []byte("sealed for " + packing.App)},
-		Carry:   "bundle for " + packing.App,
+		Packed:  "bundle for " + packing.App,
 	}, nil
 }
 

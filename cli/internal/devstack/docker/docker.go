@@ -109,7 +109,7 @@ type daemon struct {
 }
 
 func Open(ctx context.Context) (Engine, error) {
-	host, err := providerkit.OpenDockerHost()
+	host, err := providerkit.DockerHostFromEnv()
 	if err != nil {
 		return nil, &Unreachable{Address: cmp.Or(os.Getenv(providerkit.DockerHostEnv), "its default address"), Err: err}
 	}

@@ -12,7 +12,7 @@ const (
 	reasonUndeclared = "this release no longer declares it"
 )
 
-func SynthesizedPlan(ctx context.Context, store ArtifactStore, plan StackPlan, standing StackResult) (Plan, error) {
+func SynthesizedPlan(ctx context.Context, store ArtifactStore, plan StackPlan, deployed StackResult) (Plan, error) {
 	images, err := plan.Images.Rows(ctx)
 	if err != nil {
 		return Plan{}, err
@@ -21,14 +21,14 @@ func SynthesizedPlan(ctx context.Context, store ArtifactStore, plan StackPlan, s
 	if err != nil {
 		return Plan{}, err
 	}
-	changes := make([]Change, 0, len(plan.Resources)+len(standing.Bindings)+len(uploads)+len(images))
+	changes := make([]Change, 0, len(plan.Resources)+len(deployed.Bindings)+len(uploads)+len(images))
 	changes = append(changes, images...)
 	changes = append(changes, uploads...)
 	for _, resource := range plan.Resources {
 		changes = append(changes, Change{
 			Kind:   string(resource.Type),
 			Name:   resource.Name,
-			Action: standsOrCreates(slices.ContainsFunc(standing.Bindings, provisioning(resource))),
+			Action: standsOrCreates(slices.ContainsFunc(deployed.Bindings, provisioning(resource))),
 		})
 	}
 	declared := DeclaredFunctions(plan)
@@ -36,7 +36,7 @@ func SynthesizedPlan(ctx context.Context, store ArtifactStore, plan StackPlan, s
 		changes = append(changes, Change{
 			Kind:   functionKind,
 			Name:   function,
-			Action: standsOrCreates(slices.ContainsFunc(standing.Functions, calling(function))),
+			Action: standsOrCreates(slices.ContainsFunc(deployed.Functions, calling(function))),
 		})
 	}
 	containers := DeclaredContainers(plan)
@@ -44,22 +44,22 @@ func SynthesizedPlan(ctx context.Context, store ArtifactStore, plan StackPlan, s
 		changes = append(changes, Change{
 			Kind:   containerKind,
 			Name:   container,
-			Action: standsOrCreates(slices.ContainsFunc(standing.Containers, holding(container))),
+			Action: standsOrCreates(slices.ContainsFunc(deployed.Containers, holding(container))),
 		})
 	}
-	for _, binding := range standing.Bindings {
+	for _, binding := range deployed.Bindings {
 		if slices.ContainsFunc(plan.Resources, func(resource Resource) bool { return provisioning(resource)(binding) }) {
 			continue
 		}
 		changes = append(changes, Change{Kind: string(binding.Type), Name: binding.Name, Action: ActionDelete, Reason: reasonUndeclared})
 	}
-	for _, function := range standing.Functions {
+	for _, function := range deployed.Functions {
 		if slices.Contains(declared, function.Name) {
 			continue
 		}
 		changes = append(changes, Change{Kind: functionKind, Name: function.Name, Action: ActionDelete, Reason: reasonUndeclared})
 	}
-	for _, container := range standing.Containers {
+	for _, container := range deployed.Containers {
 		if slices.Contains(containers, container.Name) {
 			continue
 		}

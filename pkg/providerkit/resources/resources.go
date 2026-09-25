@@ -25,7 +25,7 @@ type Hooks struct {
 	RemoveFunctions     func(ctx context.Context, ref providerkit.StackRef, functions []providerkit.Function, progress providerkit.Progress) error
 	ProvisionContainers func(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) ([]providerkit.AppContainer, error)
 	RemoveContainers    func(ctx context.Context, ref providerkit.StackRef, containers []providerkit.AppContainer, progress providerkit.Progress) error
-	ReconcileImages     func(ctx context.Context, ref providerkit.StackRef, app, coordinate string, progress providerkit.Progress) error
+	ReconcileImages     func(ctx context.Context, ref providerkit.StackRef, app, imageRef string, progress providerkit.Progress) error
 	ForgetReleases      func(ctx context.Context, ref providerkit.StackRef, app string, progress providerkit.Progress) error
 }
 
@@ -80,7 +80,7 @@ func (f *fanout) PlanDestroy(ctx context.Context, ref providerkit.StackRef, _ pr
 	return providerkit.SynthesizedRemoval(ref, standing(recorded)), nil
 }
 
-func standing(recorded providerkit.Stack) providerkit.StackResult {
+func standing(recorded providerkit.RecordedStack) providerkit.StackResult {
 	return providerkit.StackResult{Bindings: recorded.Bindings, Functions: recorded.Functions, Containers: recorded.Containers}
 }
 
@@ -241,11 +241,11 @@ func (f *fanout) forget(ctx context.Context, ref providerkit.StackRef, app strin
 	return err
 }
 
-func (f *fanout) reconcile(ctx context.Context, ref providerkit.StackRef, app, coordinate string, progress providerkit.Progress) error {
-	if f.hooks.ReconcileImages == nil || coordinate == "" {
+func (f *fanout) reconcile(ctx context.Context, ref providerkit.StackRef, app, imageRef string, progress providerkit.Progress) error {
+	if f.hooks.ReconcileImages == nil || imageRef == "" {
 		return nil
 	}
-	err := f.hooks.ReconcileImages(ctx, ref, app, coordinate, progress)
+	err := f.hooks.ReconcileImages(ctx, ref, app, imageRef, progress)
 	if err != nil && progress != nil {
 		progress.Detail(fmt.Sprintf("Left %s's unreferenced images where they stand: %v", app, err))
 	}
@@ -283,7 +283,7 @@ func unownable(ref providerkit.StackRef, going int, noun, because, hook string) 
 		ref.Name, going, noun, because, hook)
 }
 
-func (f *fanout) removeOrphans(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, progress providerkit.Progress) error {
+func (f *fanout) removeOrphans(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.RecordedStack, progress providerkit.Progress) error {
 	for _, binding := range recorded.Bindings {
 		if slices.ContainsFunc(plan.Resources, func(resource providerkit.Resource) bool {
 			return resource.Name == binding.Name && resource.Type == binding.Type
@@ -303,7 +303,7 @@ func (f *fanout) removeOrphans(ctx context.Context, plan providerkit.StackPlan, 
 	return f.removeOrphanContainers(ctx, plan, recorded, progress)
 }
 
-func (f *fanout) removeOrphanFunctions(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, progress providerkit.Progress) error {
+func (f *fanout) removeOrphanFunctions(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.RecordedStack, progress providerkit.Progress) error {
 	declared := providerkit.DeclaredFunctions(plan)
 	var orphans []providerkit.Function
 	for _, held := range recorded.Functions {
@@ -316,7 +316,7 @@ func (f *fanout) removeOrphanFunctions(ctx context.Context, plan providerkit.Sta
 	return f.removeFunctions(ctx, plan.Ref, orphans, undeclared, progress)
 }
 
-func (f *fanout) removeOrphanContainers(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, progress providerkit.Progress) error {
+func (f *fanout) removeOrphanContainers(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.RecordedStack, progress providerkit.Progress) error {
 	declared := providerkit.DeclaredContainers(plan)
 	var orphans []providerkit.AppContainer
 	for _, held := range recorded.Containers {
@@ -345,7 +345,7 @@ func (f *fanout) remove(ctx context.Context, ref providerkit.StackRef, binding p
 	return f.hooks.RemoveResource(ctx, ref, binding, progress)
 }
 
-func (f *fanout) recorded(ctx context.Context, ref providerkit.StackRef) (providerkit.Stack, error) {
+func (f *fanout) recorded(ctx context.Context, ref providerkit.StackRef) (providerkit.RecordedStack, error) {
 	recorded, _, err := providerkit.ReadStack(ctx, f.records, ref.Class, ref.Project, ref.Name)
 	return recorded, err
 }

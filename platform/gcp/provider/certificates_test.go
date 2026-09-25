@@ -38,7 +38,7 @@ func TestACertificateIsProvedByTheAuthorizationRecordItsOwnerIsHanded(t *testing
 	server := newCertServer()
 	cert, proved := requested(t, server, "shop.example.com")
 
-	if !cert.Held() {
+	if !cert.Issued() {
 		t.Fatal("Certificate() minted no handle, and a hostname with no certificate is a hostname the front cannot terminate")
 	}
 	if !cert.Requested {

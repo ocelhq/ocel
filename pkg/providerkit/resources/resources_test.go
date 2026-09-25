@@ -182,7 +182,7 @@ func TestReleaserRemovesAResourceThePlanNoLongerDeclares(t *testing.T) {
 	releaser := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
 	ref := infraRef()
 
-	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
+	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
 		Kind: providerkit.StackInfra,
 		Bindings: []providerkit.Binding{
 			{Type: providerkit.BindingBucket, Name: "uploads", Properties: map[string]string{providerkit.PropertyBucket: "shop-uploads"}},
@@ -227,7 +227,7 @@ func TestDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 	own := &buckets{}
 	ref := infraRef()
 
-	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
+	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
 		Kind:     providerkit.StackInfra,
 		Bindings: []providerkit.Binding{{Type: providerkit.BindingBucket, Name: "uploads"}},
 	}); err != nil {
@@ -285,7 +285,7 @@ func TestPlanKeepsWhatStandsAndDeletesWhatThePlanDropped(t *testing.T) {
 	ctx := context.Background()
 	records := fake.NewRecords()
 	ref := infraRef()
-	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
+	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
 		Kind: providerkit.StackInfra,
 		Bindings: []providerkit.Binding{
 			{Type: providerkit.BindingBucket, Name: "uploads"},
@@ -330,7 +330,7 @@ func TestPlanDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 	ctx := context.Background()
 	records := fake.NewRecords()
 	ref := infraRef()
-	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
+	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
 		Kind:     providerkit.StackInfra,
 		Bindings: []providerkit.Binding{{Type: providerkit.BindingBucket, Name: "uploads"}},
 	}); err != nil {
@@ -396,7 +396,7 @@ func function(ref providerkit.StackRef, name string) providerkit.Function {
 func recordFunctions(t *testing.T, records providerkit.RecordStore, ref providerkit.StackRef, names ...string) {
 	t.Helper()
 
-	stack := providerkit.Stack{Kind: providerkit.StackApp}
+	stack := providerkit.RecordedStack{Kind: providerkit.StackApp}
 	for _, name := range names {
 		stack.Functions = append(stack.Functions, function(ref, name))
 	}
@@ -509,7 +509,7 @@ func containerApp(app string) *providerkit.AppPlan {
 func recordContainers(t *testing.T, records providerkit.RecordStore, ref providerkit.StackRef, names ...string) {
 	t.Helper()
 
-	stack := providerkit.Stack{Kind: providerkit.StackApp}
+	stack := providerkit.RecordedStack{Kind: providerkit.StackApp}
 	for _, name := range names {
 		stack.Containers = append(stack.Containers, container(ref, name))
 	}
@@ -822,10 +822,10 @@ func TestAContainerStandingUnderAnyNameButItsAppsIsSweptOnTheNextRelease(t *test
 
 func imagePlan(store providerkit.ImageStore) providerkit.ImagePlan {
 	return providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{{
-		App:    "web",
-		Source: testImage,
-		Target: "ghcr.io/acme/web:sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-		Digest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		App:      "web",
+		Source:   testImage,
+		ImageRef: "ghcr.io/acme/web:sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		Digest:   "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 	}}}
 }
 
@@ -972,7 +972,7 @@ func (r refusingImages) Push(context.Context, providerkit.ImagePush, providerkit
 func refusingPlan(err error) providerkit.ImagePlan {
 	return providerkit.ImagePlan{
 		Store:  refusingImages{err: err},
-		Pushes: []providerkit.ImagePush{{App: "web", Target: testImage}},
+		Pushes: []providerkit.ImagePush{{App: "web", ImageRef: testImage}},
 	}
 }
 
@@ -1079,7 +1079,7 @@ func TestATeardownSweepsTheImageTheContainerItTookDownWasHolding(t *testing.T) {
 	ctx := context.Background()
 	records := fake.NewRecords()
 	ref := appRef()
-	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
+	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
 		Kind:       providerkit.StackApp,
 		Containers: []providerkit.AppContainer{{Name: "web", Physical: "shop-prod-web", Image: testImage}},
 	}); err != nil {
@@ -1114,7 +1114,7 @@ func TestATeardownThatStoppedReconcilingSaysSoWithNoReporterListening(t *testing
 			ctx := context.Background()
 			records := fake.NewRecords()
 			ref := appRef()
-			if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
+			if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
 				Kind:       providerkit.StackApp,
 				Containers: []providerkit.AppContainer{{Name: "web", Physical: "shop-prod-web", Image: testImage}},
 			}); err != nil {

@@ -150,10 +150,10 @@ func answering(t *testing.T, server string) {
 func liveDigest(t *testing.T, target providerkit.RegistryTarget, coordinate string) string {
 	t.Helper()
 	seed := providerkit.ImagePush{
-		App:    pullRepository,
-		Source: transferBase(),
-		Target: coordinate,
-		Digest: transferDigest,
+		App:      pullRepository,
+		Source:   transferBase(),
+		ImageRef: coordinate,
+		Digest:   transferDigest,
 	}
 	if err := providerkit.RegistryImages(target).Push(context.Background(), seed, nil); err != nil {
 		t.Fatalf("push %s into the registry the machine pulls from = %v", coordinate, err)
@@ -188,13 +188,13 @@ func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 	_, _ = imported(t)
 
 	target := vm.registry(t)
-	coordinate := target.Coordinate(pullRepository, transferTag)
+	coordinate := target.ImageRef(pullRepository, transferTag)
 	digest := liveDigest(t, target, coordinate)
 	push := providerkit.ImagePush{
-		App:    pullRepository,
-		Source: transferBase(),
-		Target: coordinate,
-		Digest: digest,
+		App:      pullRepository,
+		Source:   transferBase(),
+		ImageRef: coordinate,
+		Digest:   digest,
 	}
 	t.Cleanup(func() {
 		vm.ssh(t, "sudo docker image rm -f "+coordinate+" "+pinnedAt(coordinate, digest)+" >/dev/null 2>&1 || true")

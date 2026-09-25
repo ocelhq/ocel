@@ -60,7 +60,7 @@ func TestResolveMintsALoginAndCreatesNothing(t *testing.T) {
 	if target.Namespace != Namespace || target.Username != "AWS" || target.Password != "tok3n" {
 		t.Errorf("target = %v, want namespace %q and the login ECR minted", target, Namespace)
 	}
-	if got := target.Coordinate("web", "sha256-abc"); got != "123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/web:sha256-abc" {
+	if got := target.ImageRef("web", "sha256-abc"); got != "123456789012.dkr.ecr.us-east-1.amazonaws.com/ocel/web:sha256-abc" {
 		t.Errorf("Coordinate = %q, want the repository a push creates", got)
 	}
 	if !Owns(target) {

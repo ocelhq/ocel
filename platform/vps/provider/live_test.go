@@ -188,8 +188,8 @@ func TestLiveWhoamiAnswersFromTheMachineItself(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Whoami() = %v, want the identity of a machine that is answering", err)
 	}
-	if identity.Provider != vps.Vendor {
-		t.Errorf("Whoami().Provider = %q, want %q", identity.Provider, vps.Vendor)
+	if identity.Vendor != vps.Vendor {
+		t.Errorf("Whoami().Provider = %q, want %q", identity.Vendor, vps.Vendor)
 	}
 	if identity.Principal != vm.user {
 		t.Errorf("Whoami().Principal = %q, want %q", identity.Principal, vm.user)

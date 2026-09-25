@@ -29,7 +29,7 @@ type Key string
 
 func (k Key) Key(context.Context, kit.Class) (string, error) { return string(k), nil }
 
-func (s Cipher) key(ctx context.Context, at kit.Coordinate) (string, error) {
+func (s Cipher) key(ctx context.Context, at kit.SealScope) (string, error) {
 	if at.Class == "" {
 		return "", kit.Refuse(kit.CodeInvalid,
 			"a value names no class, and this account seals each class's values under the key its own bootstrap made")
@@ -51,7 +51,7 @@ func (s Cipher) key(ctx context.Context, at kit.Coordinate) (string, error) {
 	return key, nil
 }
 
-func (s Cipher) Seal(ctx context.Context, at kit.Coordinate, plaintext []byte) ([]byte, error) {
+func (s Cipher) Seal(ctx context.Context, at kit.SealScope, plaintext []byte) ([]byte, error) {
 	bound, err := encryptionContext(at)
 	if err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func (s Cipher) Seal(ctx context.Context, at kit.Coordinate, plaintext []byte) (
 	return out.CiphertextBlob, nil
 }
 
-func (s Cipher) Open(ctx context.Context, at kit.Coordinate, sealed []byte) ([]byte, error) {
+func (s Cipher) Open(ctx context.Context, at kit.SealScope, sealed []byte) ([]byte, error) {
 	bound, err := encryptionContext(at)
 	if err != nil {
 		return nil, err
@@ -91,7 +91,7 @@ func (s Cipher) Open(ctx context.Context, at kit.Coordinate, sealed []byte) ([]b
 	return out.Plaintext, nil
 }
 
-func encryptionContext(at kit.Coordinate) (map[string]string, error) {
+func encryptionContext(at kit.SealScope) (map[string]string, error) {
 	bound := map[string]string{
 		"project":     at.Project,
 		"class":       string(at.Class),

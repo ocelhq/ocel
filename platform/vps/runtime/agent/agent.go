@@ -228,7 +228,7 @@ type Docker struct {
 }
 
 func NewDocker() (*Docker, error) {
-	host, err := providerkit.OpenDockerHost()
+	host, err := providerkit.DockerHostFromEnv()
 	if err != nil {
 		return nil, err
 	}

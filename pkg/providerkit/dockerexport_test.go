@@ -16,7 +16,7 @@ func TestAnImageIsExportedUnderTheCoordinateItIsNamedBy(t *testing.T) {
 		asked = r.Method + " " + r.URL.Path
 		_, _ = io.WriteString(w, "tar-bytes")
 	})
-	host, err := providerkit.OpenDockerHost()
+	host, err := providerkit.DockerHostFromEnv()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +46,7 @@ func TestAnImageTheDaemonDoesNotHoldIsRefusedWithWhatItSaid(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = io.WriteString(w, `{"message":"No such image: ocel/web:sha256-abc"}`)
 	})
-	host, err := providerkit.OpenDockerHost()
+	host, err := providerkit.DockerHostFromEnv()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestAnImageTheDaemonDoesNotHoldIsRefusedWithWhatItSaid(t *testing.T) {
 func inspectedArchitecture(t *testing.T, handler http.HandlerFunc) (string, error) {
 	t.Helper()
 	daemonServing(t, handler)
-	host, err := providerkit.OpenDockerHost()
+	host, err := providerkit.DockerHostFromEnv()
 	if err != nil {
 		t.Fatal(err)
 	}

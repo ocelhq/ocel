@@ -12,7 +12,7 @@ import (
 type permissionsPort struct{ err error }
 
 func (permissionsPort) Whoami(context.Context) (providerkit.Identity, error) {
-	return providerkit.Identity{Provider: "test"}, nil
+	return providerkit.Identity{Vendor: "test"}, nil
 }
 
 func (s permissionsPort) Permissions(providerkit.CredentialTier) (edge.CredentialDocument, error) {

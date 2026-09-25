@@ -34,7 +34,7 @@ func (p pulled) GoString() string { return p.String() }
 func (p pulled) Destination() string { return p.at }
 
 func (p pulled) Has(ctx context.Context, push providerkit.ImagePush) (bool, error) {
-	return p.host.HoldsImage(ctx, push.Target)
+	return p.host.HoldsImage(ctx, push.ImageRef)
 }
 
 func (p pulled) Push(ctx context.Context, push providerkit.ImagePush, progress providerkit.Progress) error {
@@ -55,7 +55,7 @@ func (p pulled) Push(ctx context.Context, push providerkit.ImagePush, progress p
 		}
 		digest = built.String()
 	}
-	said, err := p.host.PullImage(ctx, p.target, push.Target, digest)
+	said, err := p.host.PullImage(ctx, p.target, push.ImageRef, digest)
 	if err != nil {
 		return err
 	}

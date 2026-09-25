@@ -177,12 +177,12 @@ func (r *Stacks) ensureSubstrate(ctx context.Context, ref providerkit.StackRef, 
 		tags:     substrateTags(class),
 	}
 	plan := providerkit.StackPlan{
-		Ref:     substrateRef(class),
-		Kind:    providerkit.StackInfra,
-		Tags:    substrateTags(class),
-		Options: work,
+		Ref:  substrateRef(class),
+		Kind: providerkit.StackInfra,
+		Tags: substrateTags(class),
+		Work: work,
 	}
-	if err := providerkit.WriteStack(ctx, owner.cfg.Records, class, SubstrateSlug, substrateRef(class).Name, providerkit.Stack{
+	if err := providerkit.WriteStack(ctx, owner.cfg.Records, class, SubstrateSlug, substrateRef(class).Name, providerkit.RecordedStack{
 		Kind:      providerkit.StackInfra,
 		WrittenBy: providerkit.WrittenByVersion(""),
 	}); err != nil {
@@ -212,7 +212,7 @@ func (r *Stacks) claimSubstrate(ctx context.Context, ref providerkit.StackRef) e
 	}
 	records := owner.cfg.Records
 	for range leaseAttempts {
-		held, err := ports.Held(ctx, records, leaseRecord(ref.Class))
+		held, err := ports.ReadOrEmpty(ctx, records, leaseRecord(ref.Class))
 		if err != nil {
 			return err
 		}
@@ -226,7 +226,7 @@ func (r *Stacks) claimSubstrate(ctx context.Context, ref providerkit.StackRef) e
 					"the container substrate for the %s class is being taken down by another deploy whose last container app just left; re-run this deploy once it has gone and it will stand a fresh one up", ref.Class),
 				ports.Forget(ctx, records, consumerRecord(ref)))
 		}
-		record, err := ports.Held(ctx, records, consumerRecord(ref))
+		record, err := ports.ReadOrEmpty(ctx, records, consumerRecord(ref))
 		if err != nil {
 			return err
 		}
@@ -252,14 +252,14 @@ func (r *Stacks) releaseSubstrate(ctx context.Context, records providerkit.Recor
 	}
 	r.substrates.Lock()
 	defer r.substrates.Unlock()
-	held, err := ports.Held(ctx, records, consumerRecord(ref))
+	held, err := ports.ReadOrEmpty(ctx, records, consumerRecord(ref))
 	if err != nil {
 		return err
 	}
 	if len(held.Bytes) == 0 {
 		return nil
 	}
-	leased, err := ports.Held(ctx, records, leaseRecord(ref.Class))
+	leased, err := ports.ReadOrEmpty(ctx, records, leaseRecord(ref.Class))
 	if err != nil {
 		return err
 	}

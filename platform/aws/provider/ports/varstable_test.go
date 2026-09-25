@@ -66,7 +66,7 @@ func (keylessBootstrap) Key(context.Context, kit.Class) (string, error) { return
 
 func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
 	sealer := awsports.Cipher{Keys: keylessBootstrap{}}
-	at := kit.Coordinate{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
+	at := kit.SealScope{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
 
 	_, err := sealer.Seal(context.Background(), at, []byte("sk_live_secret"))
 	if err == nil {
@@ -83,7 +83,7 @@ func TestSealingWithoutAKeyNamesTheFeature(t *testing.T) {
 
 func TestSealingBeforeAnyKeyIsWiredRefusesRatherThanPanics(t *testing.T) {
 	sealer := awsports.Cipher{}
-	at := kit.Coordinate{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
+	at := kit.SealScope{Project: "shop", Class: edge.ClassProduction, Env: "*", Folder: "/", Name: "STRIPE_API_KEY"}
 
 	_, err := sealer.Seal(context.Background(), at, []byte("sk_live_secret"))
 	if err == nil {

@@ -46,7 +46,7 @@ type Pin struct {
 	Path     string
 }
 
-type Standing []providerkit.StandingCheck
+type Standing []providerkit.HostCheck
 
 type Certificate struct {
 	Renewal string

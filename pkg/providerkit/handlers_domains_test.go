@@ -43,7 +43,7 @@ func seedStack(t *testing.T, provider *fake.Provider, class providerkit.Class, s
 		t.Fatal(err)
 	}
 	name := providerkit.EdgeStackRecord(class, slug)
-	held, err := providerkit.Held(context.Background(), provider.Records(), name)
+	held, err := providerkit.ReadOrEmpty(context.Background(), provider.Records(), name)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func seedStack(t *testing.T, provider *fake.Provider, class providerkit.Class, s
 
 func readStack(t *testing.T, provider *fake.Provider, class providerkit.Class, slug string) providerkit.EdgeStackState {
 	t.Helper()
-	held, err := providerkit.Held(context.Background(), provider.Records(), providerkit.EdgeStackRecord(class, slug))
+	held, err := providerkit.ReadOrEmpty(context.Background(), provider.Records(), providerkit.EdgeStackRecord(class, slug))
 	if err != nil {
 		t.Fatal(err)
 	}

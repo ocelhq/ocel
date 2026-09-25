@@ -66,7 +66,7 @@ func TestTheCoordinateAnImageLandsUnderIsTheRepositoryPathTheBootstrapNames(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	coordinate := target.Coordinate("web", "sha256-abc")
+	coordinate := target.ImageRef("web", "sha256-abc")
 	want := p.standing.RepositoryPath("europe-west1", providerkit.ClassProduction) + "/web:sha256-abc"
 	if coordinate != want {
 		t.Errorf("an image lands at %q, want %q", coordinate, want)

@@ -50,8 +50,8 @@ func PortHeld(ctx context.Context, box Box, port string) (Holding, error) {
 	}, nil
 }
 
-func (m Manual) holding(ctx context.Context) providerkit.StandingCheck {
-	check := providerkit.StandingCheck{Subject: "tcp " + proxy.HTTPSPort, Verdict: providerkit.StandingFail}
+func (m Manual) holding(ctx context.Context) providerkit.HostCheck {
+	check := providerkit.HostCheck{Subject: "tcp " + proxy.HTTPSPort, Verdict: providerkit.HostFail}
 	held, err := PortHeld(ctx, m.Box, proxy.HTTPSPort)
 	switch {
 	case err != nil:
@@ -59,13 +59,13 @@ func (m Manual) holding(ctx context.Context) providerkit.StandingCheck {
 	case held.Trouble != "":
 		check.Finding, check.Fix = held.Trouble, held.Fix+", routing to "+ForwardTo(m.Port)
 	default:
-		check.Verdict, check.Finding = providerkit.StandingPass, held.Held
+		check.Verdict, check.Finding = providerkit.HostPass, held.Held
 	}
 	return check
 }
 
-func (m Manual) routing(ctx context.Context, hostname string) (providerkit.StandingCheck, error) {
-	check := providerkit.StandingCheck{Subject: hostname, Verdict: providerkit.StandingFail, Fix: Route(hostname, m.Port)}
+func (m Manual) routing(ctx context.Context, hostname string) (providerkit.HostCheck, error) {
+	check := providerkit.HostCheck{Subject: hostname, Verdict: providerkit.HostFail, Fix: Route(hostname, m.Port)}
 	answered, unreached, err := m.Box.Probe(ctx, hostname)
 	switch {
 	case err != nil:
@@ -75,7 +75,7 @@ func (m Manual) routing(ctx context.Context, hostname string) (providerkit.Stand
 	case answered != switchboard.EdgeName:
 		check.Finding = fmt.Sprintf("%s answers on this box's 443 as %q, not through ocel's switchboard", hostname, answered)
 	default:
-		check.Verdict, check.Fix = providerkit.StandingPass, ""
+		check.Verdict, check.Fix = providerkit.HostPass, ""
 		check.Finding = fmt.Sprintf("your proxy routes %s to ocel's switchboard", hostname)
 	}
 	return check, nil

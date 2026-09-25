@@ -23,7 +23,7 @@ func servingRegistry(t *testing.T) string {
 }
 
 func TestTheDaemonStoreRefusesAnImageItWasNeverHanded(t *testing.T) {
-	push := providerkit.ImagePush{App: "server", Target: "web-server:sha256-abc", Digest: "sha256:abc"}
+	push := providerkit.ImagePush{App: "server", ImageRef: "web-server:sha256-abc", Digest: "sha256:abc"}
 
 	err := providerkit.DaemonImages().Push(context.Background(), push, nil)
 	if err == nil {
@@ -36,7 +36,7 @@ func TestTheDaemonStoreRefusesAnImageItWasNeverHanded(t *testing.T) {
 
 func TestTheDaemonStoreSaysSoWhenItCannotReachTheDaemon(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "tcp://127.0.0.1:1")
-	push := providerkit.ImagePush{App: "server", Target: "web-server:sha256-abc", Digest: "sha256:abc"}
+	push := providerkit.ImagePush{App: "server", ImageRef: "web-server:sha256-abc", Digest: "sha256:abc"}
 
 	held, err := providerkit.DaemonImages().Has(context.Background(), push)
 	if err == nil {
@@ -63,10 +63,10 @@ func TestABuiltImageReachesTheRegistryWithoutADaemon(t *testing.T) {
 	}
 	target := providerkit.RegistryTarget{Server: host, Namespace: "ocel"}
 	push := providerkit.ImagePush{
-		App:    "server",
-		Target: target.Coordinate("web-server", naming.DigestTag(digest.String())),
-		Digest: digest.String(),
-		Built:  image,
+		App:      "server",
+		ImageRef: target.ImageRef("web-server", naming.DigestTag(digest.String())),
+		Digest:   digest.String(),
+		Built:    image,
 	}
 
 	store := providerkit.RegistryImages(target)

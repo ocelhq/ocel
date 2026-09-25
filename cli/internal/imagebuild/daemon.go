@@ -33,7 +33,7 @@ type daemon struct {
 }
 
 func openDaemon() (daemon, error) {
-	host, err := providerkit.OpenDockerHost()
+	host, err := providerkit.DockerHostFromEnv()
 	if err != nil {
 		return daemon{}, err
 	}

@@ -159,10 +159,10 @@ func aTarget(server string) providerkit.RegistryTarget {
 
 func aPull(target providerkit.RegistryTarget) providerkit.ImagePush {
 	return providerkit.ImagePush{
-		App:    "web",
-		Source: "ocel/shop/web@" + pullDigest,
-		Target: target.Coordinate("web", pullTag),
-		Digest: pullDigest,
+		App:      "web",
+		Source:   "ocel/shop/web@" + pullDigest,
+		ImageRef: target.ImageRef("web", pullTag),
+		Digest:   pullDigest,
 	}
 }
 
@@ -178,12 +178,12 @@ func TestARegistryTurnsTheTransferIntoAPullTheMachineMakes(t *testing.T) {
 	}
 
 	commands := strings.Join(machine.commands(), "\n")
-	pinned := pinnedAt(push.Target, pullDigest)
+	pinned := pinnedAt(push.ImageRef, pullDigest)
 	if !strings.Contains(commands, "docker pull "+quotedIn(pinned)) {
 		t.Errorf("the machine ran %q, want it to pull %s", commands, pinned)
 	}
-	if !strings.Contains(commands, "docker tag "+quotedIn(pinned)+" "+quotedIn(push.Target)) {
-		t.Errorf("the machine ran %q, want the digest it pulled named %s", commands, push.Target)
+	if !strings.Contains(commands, "docker tag "+quotedIn(pinned)+" "+quotedIn(push.ImageRef)) {
+		t.Errorf("the machine ran %q, want the digest it pulled named %s", commands, push.ImageRef)
 	}
 	if strings.Contains(commands, "docker load") {
 		t.Errorf("the machine ran %q: a registry is named, so nothing is streamed onto the box", commands)
@@ -202,16 +202,16 @@ func TestAnImageServedUnderTheTagIsNotWhatTheMachineEndsHolding(t *testing.T) {
 	target := aTarget(server)
 	push := aPull(target)
 	machine := &box{serves: map[string]string{
-		push.Target:                       "an image someone else wrote to the tag",
-		pinnedAt(push.Target, pullDigest): "the image this deploy built",
+		push.ImageRef:                       "an image someone else wrote to the tag",
+		pinnedAt(push.ImageRef, pullDigest): "the image this deploy built",
 	}}
 
 	if err := pulling(t, machine, target).Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}
-	if held := machine.under(push.Target); held != "the image this deploy built" {
+	if held := machine.under(push.ImageRef); held != "the image this deploy built" {
 		t.Errorf("the machine holds %q under %s, and the release loop, rollback and retention all pin that coordinate: "+
-			"a tag is rewritten by whoever can write the registry, and only the digest names the image this deploy built", held, push.Target)
+			"a tag is rewritten by whoever can write the registry, and only the digest names the image this deploy built", held, push.ImageRef)
 	}
 }
 
@@ -329,8 +329,8 @@ func TestAPulledImageAnswersToTheCoordinateTheCliOwns(t *testing.T) {
 	if !held {
 		t.Fatal("the machine answers to no coordinate after a pull, so release, rollback and retention have nothing to pin")
 	}
-	if !strings.Contains(strings.Join(machine.commands(), "\n"), quotedIn(push.Target)) {
-		t.Errorf("the machine was never asked about %s, and a loaded image answers to that coordinate verbatim", push.Target)
+	if !strings.Contains(strings.Join(machine.commands(), "\n"), quotedIn(push.ImageRef)) {
+		t.Errorf("the machine was never asked about %s, and a loaded image answers to that coordinate verbatim", push.ImageRef)
 	}
 }
 

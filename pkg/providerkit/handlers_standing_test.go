@@ -15,8 +15,8 @@ import (
 
 type standingProvider struct {
 	*fake.Provider
-	asked   []providerkit.StandingRequest
-	answer  []providerkit.StandingCheck
+	asked   []providerkit.HostCheckRequest
+	answer  []providerkit.HostCheck
 	refusal error
 }
 
@@ -26,12 +26,12 @@ func (s *standingProvider) Hooks() providerkit.Hooks {
 	return hooks
 }
 
-func (s *standingProvider) CheckHost(_ context.Context, req providerkit.StandingRequest) ([]providerkit.StandingCheck, error) {
+func (s *standingProvider) CheckHost(_ context.Context, req providerkit.HostCheckRequest) ([]providerkit.HostCheck, error) {
 	s.asked = append(s.asked, req)
 	return s.answer, s.refusal
 }
 
-func standingServed(t *testing.T, answer []providerkit.StandingCheck, refusal error) (*standingProvider, *contractv1.PreflightResponse) {
+func standingServed(t *testing.T, answer []providerkit.HostCheck, refusal error) (*standingProvider, *contractv1.PreflightResponse) {
 	t.Helper()
 	provider := &standingProvider{
 		Provider: fake.NewProvider(fake.Options{Region: "nowhere"}),
@@ -57,8 +57,8 @@ func standingServed(t *testing.T, answer []providerkit.StandingCheck, refusal er
 func TestTheStandingPortIsAskedAboutTheNamesTheCallerWillRenderRatherThanThisTiers(t *testing.T) {
 	t.Parallel()
 
-	provider, _ := standingServed(t, []providerkit.StandingCheck{
-		{Subject: "shop.example.com", Verdict: providerkit.StandingPass, Finding: "points here"},
+	provider, _ := standingServed(t, []providerkit.HostCheck{
+		{Subject: "shop.example.com", Verdict: providerkit.HostPass, Finding: "points here"},
 	}, nil)
 
 	if len(provider.asked) != 1 {
@@ -75,8 +75,8 @@ func TestAPreflightThatWillRenderNoStandingSectionAsksTheBoxForNone(t *testing.T
 
 	provider := &standingProvider{
 		Provider: fake.NewProvider(fake.Options{Region: "nowhere"}),
-		answer: []providerkit.StandingCheck{
-			{Subject: "shop.example.com", Verdict: providerkit.StandingPass, Finding: "points here"},
+		answer: []providerkit.HostCheck{
+			{Subject: "shop.example.com", Verdict: providerkit.HostPass, Finding: "points here"},
 		},
 	}
 	client := servedProvider(t, "1.2.3", provider)
@@ -105,8 +105,8 @@ func TestAPreflightThatWillRenderNoStandingSectionAsksTheBoxForNone(t *testing.T
 func TestPreflightHandsTheStandingPortEveryHostnameItWasAskedAbout(t *testing.T) {
 	t.Parallel()
 
-	provider, resp := standingServed(t, []providerkit.StandingCheck{
-		{Subject: "shop.example.com", Verdict: providerkit.StandingPass, Finding: "points here"},
+	provider, resp := standingServed(t, []providerkit.HostCheck{
+		{Subject: "shop.example.com", Verdict: providerkit.HostPass, Finding: "points here"},
 	}, nil)
 
 	if len(provider.asked) != 1 {
@@ -127,10 +127,10 @@ func TestPreflightHandsTheStandingPortEveryHostnameItWasAskedAbout(t *testing.T)
 func TestPreflightCarriesEveryStandingVerdictAndRefusesOnNone(t *testing.T) {
 	t.Parallel()
 
-	_, resp := standingServed(t, []providerkit.StandingCheck{
-		{Subject: "shop.example.com", Verdict: providerkit.StandingPass, Finding: "resolves to this box"},
-		{Subject: "www.example.com", Verdict: providerkit.StandingOwed, Finding: "does not resolve yet", Fix: "add the record"},
-		{Subject: "", Verdict: providerkit.StandingFail, Finding: "something listens on 2019", Fix: "rebootstrap"},
+	_, resp := standingServed(t, []providerkit.HostCheck{
+		{Subject: "shop.example.com", Verdict: providerkit.HostPass, Finding: "resolves to this box"},
+		{Subject: "www.example.com", Verdict: providerkit.HostOwed, Finding: "does not resolve yet", Fix: "add the record"},
+		{Subject: "", Verdict: providerkit.HostFail, Finding: "something listens on 2019", Fix: "rebootstrap"},
 	}, nil)
 
 	carried := resp.GetStanding()
@@ -205,8 +205,8 @@ func TestADeployProceedsAgainstABoxWhoseStandingFailed(t *testing.T) {
 
 	provider := &standingProvider{
 		Provider: fake.NewProvider(fake.Options{Region: "nowhere"}),
-		answer: []providerkit.StandingCheck{
-			{Subject: "shop.example.com", Verdict: providerkit.StandingFail, Finding: "points somewhere else", Fix: "move the record"},
+		answer: []providerkit.HostCheck{
+			{Subject: "shop.example.com", Verdict: providerkit.HostFail, Finding: "points somewhere else", Fix: "move the record"},
 		},
 	}
 	client := servedProvider(t, "1.2.3", provider)

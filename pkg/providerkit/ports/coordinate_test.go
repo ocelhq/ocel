@@ -9,8 +9,8 @@ import (
 func TestTwoCoordinatesNeverBindToTheSameBytes(t *testing.T) {
 	t.Parallel()
 
-	held := ports.Coordinate{Project: "shop", Class: ports.ClassProduction, Env: "*", Folder: "/a%2Fb", Binding: "", Name: "KEY"}
-	beside := ports.Coordinate{Project: "shop", Class: ports.ClassProduction, Env: "*", Folder: "/a/b", Binding: "", Name: "KEY"}
+	held := ports.SealScope{Project: "shop", Class: ports.ClassProduction, Env: "*", Folder: "/a%2Fb", Binding: "", Name: "KEY"}
+	beside := ports.SealScope{Project: "shop", Class: ports.ClassProduction, Env: "*", Folder: "/a/b", Binding: "", Name: "KEY"}
 
 	if string(held.AAD()) == string(beside.AAD()) {
 		t.Fatalf("%s and %s bind to the same bytes, so a value sealed at one opens at the other",

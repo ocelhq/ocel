@@ -51,7 +51,7 @@ func seedEnvironment(t *testing.T, provider *fake.Provider, slug string, stacks 
 	t.Helper()
 	for _, stack := range stacks {
 		name := providerkit.StackRecord(providerkit.ClassPreview, slug, stack)
-		held, err := providerkit.Held(context.Background(), provider.Records(), name)
+		held, err := providerkit.ReadOrEmpty(context.Background(), provider.Records(), name)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -258,7 +258,7 @@ type jostle struct {
 func (j *jostle) Write(ctx context.Context, record providerkit.Record) (providerkit.Revision, error) {
 	if record.Name.String() == j.at.String() {
 		j.once.Do(func() {
-			held, err := providerkit.Held(ctx, j.RecordStore, j.at)
+			held, err := providerkit.ReadOrEmpty(ctx, j.RecordStore, j.at)
 			if err != nil {
 				return
 			}
@@ -652,7 +652,7 @@ func seedContainerStack(t *testing.T, provider *fake.Provider, slug, pointer, ap
 
 	release := releaseOf(t, buildIdentity(1))
 	name := naming.AppStack(pointer, app, release)
-	if err := providerkit.WriteStack(context.Background(), provider.Records(), providerkit.ClassPreview, slug, name, providerkit.Stack{
+	if err := providerkit.WriteStack(context.Background(), provider.Records(), providerkit.ClassPreview, slug, name, providerkit.RecordedStack{
 		Kind:       providerkit.StackApp,
 		App:        app,
 		Release:    release.String(),

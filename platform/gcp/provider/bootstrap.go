@@ -153,13 +153,13 @@ func (b bootstrap) described(ctx context.Context, read survey) (providerkit.Boot
 		Class:      read.Class,
 		Present:    read.Present,
 		Unfinished: read.Present && read.Stamp.State != stateComplete,
-		Held:       read,
+		Reading:    read,
 		Stacks:     stacks,
 	}, nil
 }
 
 func (b bootstrap) held(ctx context.Context, req providerkit.BootstrapRequest) (survey, error) {
-	if carried, held := req.Held.(survey); held && carried.Class == req.Class {
+	if carried, held := req.Reading.(survey); held && carried.Class == req.Class {
 		return carried, nil
 	}
 	return b.survey(ctx, req.Class)
