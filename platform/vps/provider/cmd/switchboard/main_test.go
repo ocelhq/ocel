@@ -310,6 +310,7 @@ func TestServeHearsARelayingPeerOnTheSchemeAndNeverOnTheClient(t *testing.T) {
 }
 
 func TestARelayedNetworkIsTheOneTheSwitchboardIsNamedOnNeverTheOneItsDefaultRouteLeavesBy(t *testing.T) {
+	const relayed, app = "ocel", "ocel--shop--production"
 	held := func() ([]net.Addr, error) {
 		return []net.Addr{
 			&net.IPNet{IP: net.ParseIP("127.0.0.1"), Mask: net.CIDRMask(8, 32)},
@@ -319,15 +320,15 @@ func TestARelayedNetworkIsTheOneTheSwitchboardIsNamedOnNeverTheOneItsDefaultRout
 	}
 	resolve := func(_ context.Context, name string) ([]netip.Addr, error) {
 		switch name {
-		case switchboard.Name + ".ocel":
+		case switchboard.Name + "." + relayed:
 			return []netip.Addr{netip.MustParseAddr("172.19.0.2")}, nil
-		case switchboard.Name + ".ocel--shop--production":
+		case switchboard.Name + "." + app:
 			return []netip.Addr{netip.MustParseAddr("172.21.0.2")}, nil
 		default:
 			return nil, fmt.Errorf("no such host %s", name)
 		}
 	}
-	got, err := networkHeld(t.Context(), "ocel", resolve, held)
+	got, err := networkHeld(t.Context(), relayed, resolve, held)
 	if err != nil {
 		t.Fatalf("networkHeld() = %v", err)
 	}
