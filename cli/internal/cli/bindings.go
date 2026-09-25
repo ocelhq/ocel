@@ -172,6 +172,9 @@ func runBindingsSet(ctx context.Context, deps cmddeps.Deps, cwd string, stdin io
 		return err
 	}
 	owner := opts.ownerOrDefault()
+	if owner == naming.InlineRecordOwner {
+		return fmt.Errorf("publisher %q is the one ocel writes an inline binding's record as, at deploy, from the config; publish as your own tool with --owner", owner)
+	}
 	return withBindingProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {
@@ -211,6 +214,9 @@ func decodeBinding(stdin io.Reader) (*bindingsv1.Binding, error) {
 }
 
 func runBindingsRm(ctx context.Context, deps cmddeps.Deps, cwd, name string, opts bindingsOptions, stdout, stderr io.Writer) error {
+	if naming.IsInlineRecord(name) {
+		return fmt.Errorf("%s is the record ocel keeps for a binding written inline in `bindings`, and the next deploy writes it again: remove that binding from the config, and the deploy after removes the record", name)
+	}
 	return withBindingProvider(ctx, deps, cwd, opts, stderr, func(runner *provider.Runner, cfg *projectconfig.Config) error {
 		client, err := runner.Vars()
 		if err != nil {

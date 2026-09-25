@@ -217,6 +217,28 @@ func TestDeployBindsByTheExternalName(t *testing.T) {
 	})
 }
 
+func TestADryRunAdmitsTheRecordAnInlineBindingWritesOnlyAtDeploy(t *testing.T) {
+	t.Run("a dry run plans without it", func(t *testing.T) {
+		builtProject(t)
+		client, _ := deployServed(t)
+		req := externalBindingRequest("orders", naming.InlineRecordName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "orders"), bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
+		req.Dry = true
+
+		result, _ := deploy(t, client, req)
+		if !result.GetSuccess() {
+			t.Fatalf("Deploy(dry) = %q, want the plan made: the record is written by the deploy the plan previews", result.GetError())
+		}
+	})
+
+	t.Run("a deploy still refuses it missing", func(t *testing.T) {
+		req := externalBindingRequest("orders", naming.InlineRecordName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "orders"), bindingsv1.BindingType_BINDING_TYPE_POSTGRES)
+		message := refusedDeploy(t, req, nil)
+		if !strings.Contains(message, "ocel:postgres.orders") {
+			t.Errorf("refusal = %q, want the record named", message)
+		}
+	})
+}
+
 func TestDeployWarnsWhenItProvisionsBesideAPublishedNamesake(t *testing.T) {
 	said := func(t *testing.T, record *bindingsv1.Binding, kind bindingsv1.BindingType) []string {
 		t.Helper()

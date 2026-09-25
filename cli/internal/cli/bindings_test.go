@@ -138,6 +138,33 @@ func TestRunBindingsSet(t *testing.T) {
 		}
 	})
 
+	t.Run("refuses to publish as the owner of inline bindings' records", func(t *testing.T) {
+		root := setUpBindingFixture(t)
+
+		var stdout, stderr bytes.Buffer
+		err := runBindingsSet(context.Background(), newDeps(), root,
+			strings.NewReader(postgresBindingJSON("ocel:postgres.orders", "db.internal")), bindingsOptions{owner: "ocel-config"}, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runBindingsSet --owner ocel-config err = nil, want a refusal")
+		}
+		if !strings.Contains(err.Error(), "ocel-config") {
+			t.Errorf("err = %v, want it to name the publisher it refused", err)
+		}
+	})
+
+	t.Run("rm refuses a record an inline binding keeps, pointing at the config", func(t *testing.T) {
+		root := setUpBindingFixture(t)
+
+		var stdout, stderr bytes.Buffer
+		err := runBindingsRm(context.Background(), newDeps(), root, "ocel:postgres.orders", bindingsOptions{}, &stdout, &stderr)
+		if err == nil {
+			t.Fatal("runBindingsRm ocel:postgres.orders err = nil, want a refusal")
+		}
+		if !strings.Contains(err.Error(), "bindings") {
+			t.Errorf("err = %v, want it to say the binding is removed from the config", err)
+		}
+	})
+
 	t.Run("the same publisher bumps the version", func(t *testing.T) {
 		root := setUpBindingFixture(t)
 		opts := bindingsOptions{owner: "terraform"}

@@ -29,6 +29,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
+	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
@@ -115,6 +116,7 @@ func newDeps() cmddeps.Deps {
 		RequireImageBuilder: appimages.RequireBuilder,
 		BuildAppImages:      appimages.Build,
 		CollectAppFunctions: appbuilder.CollectFunctions,
+		ProbePostgres:       inlinebinding.ProbePostgres,
 		DeploymentID:        appbuilder.DeploymentID,
 		CollectDeclarations: deploycollector.PrepareAndCollect,
 		OpenBrowser:         browser.OpenURL,

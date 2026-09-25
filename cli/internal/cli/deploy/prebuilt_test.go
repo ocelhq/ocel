@@ -121,7 +121,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, out := newBuildManifestSession(t)
 		cfg := prebuiltConfig(root)
-		manifest, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless", nil, nil)
+		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless", nil, nil)
 		if err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
@@ -152,7 +152,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildManifestSession(t)
 		cfg := prebuiltConfig(root)
-		if _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), false, s, "serverless", nil, nil); err != nil {
+		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), false, s, "serverless", nil, nil); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
 		if !*ran {
@@ -166,7 +166,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildManifestSession(t)
 		cfg := prebuiltConfig(t.TempDir())
-		_, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless", nil, nil)
+		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless", nil, nil)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest succeeded with no build output, want error")
 		}
@@ -184,7 +184,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildManifestSession(t)
 		cfg := prebuiltConfig(root)
-		manifest, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless", nil, nil)
+		manifest, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless", nil, nil)
 		if err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
@@ -205,7 +205,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildManifestSession(t)
 		cfg := prebuiltConfig(root)
-		_, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless", nil, nil)
+		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, noGate(cfg), true, s, "serverless", nil, nil)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest succeeded for an app no build stamped, want error")
 		}
@@ -231,7 +231,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildManifestSession(t)
 		cfg := prebuiltConfig(root)
-		if _, err := collectAndBuildManifest(context.Background(), deps, cfg, clientValueGate(t, cfg, "https://example.com"), false, s, "serverless", nil, nil); err != nil {
+		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, clientValueGate(t, cfg, "https://example.com"), false, s, "serverless", nil, nil); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
 
@@ -256,7 +256,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildManifestSession(t)
 		gate := clientValueGate(t, cfg, "https://rotated.example.com")
-		_, err := collectAndBuildManifest(context.Background(), deps, cfg, gate, true, s, "serverless", nil, nil)
+		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, gate, true, s, "serverless", nil, nil)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest = nil for a build predating the client value, want a refusal")
 		}
@@ -279,7 +279,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 		}
 
 		s, _ := newBuildManifestSession(t)
-		_, err := collectAndBuildManifest(context.Background(), deps, cfg, clientValueGate(t, cfg, "https://example.com"), true, s, "serverless", nil, nil)
+		_, _, err := collectAndBuildManifest(context.Background(), deps, cfg, clientValueGate(t, cfg, "https://example.com"), true, s, "serverless", nil, nil)
 		if err == nil {
 			t.Fatal("collectAndBuildManifest = nil for an `ocel build` output, want a refusal")
 		}
@@ -306,7 +306,7 @@ func TestCollectAndBuildManifest(t *testing.T) {
 
 		s, _ := newBuildManifestSession(t)
 		gate := clientValueGate(t, cfg, "https://example.com")
-		if _, err := collectAndBuildManifest(context.Background(), deps, cfg, gate, true, s, "serverless", nil, nil); err != nil {
+		if _, _, err := collectAndBuildManifest(context.Background(), deps, cfg, gate, true, s, "serverless", nil, nil); err != nil {
 			t.Fatalf("collectAndBuildManifest: %v", err)
 		}
 	})

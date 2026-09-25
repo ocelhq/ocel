@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
+	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
@@ -122,7 +123,7 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 			ui:             ui,
 			enabled:        !opts.dry && browser,
 		}
-		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
+		manifest, inline, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {
 			return err
 		}
@@ -155,8 +156,20 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 			return showDeployPlan(ctx, runner, ui, req, "Proposed changes to production")
 		}
 
+		records, err := runner.Vars()
+		if err != nil {
+			return err
+		}
+		inlineAt := inlinebinding.Coordinate{Slug: cfg.Slug, Tier: env.GetTier(), Environment: env.GetIdentity()}
+		if err := inlinebinding.Publish(ctx, records, inlineAt, inline); err != nil {
+			return err
+		}
+
 		var out deployOutcome
 		if err := provider.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy, out.collect(ui)); err != nil {
+			return err
+		}
+		if err := inlinebinding.Prune(ctx, records, inlineAt, inline); err != nil {
 			return err
 		}
 

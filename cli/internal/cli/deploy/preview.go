@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
+	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
@@ -237,7 +238,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 			ui:             ui,
 			enabled:        !opts.dry && browser,
 		}
-		manifest, err := recovery.buildManifest(ctx, opts.prebuilt)
+		manifest, inline, err := recovery.buildManifest(ctx, opts.prebuilt)
 		if err != nil {
 			return err
 		}
@@ -265,8 +266,20 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 			return showDeployPlan(ctx, runner, ui, req, fmt.Sprintf("Proposed changes to preview %s", env.GetIdentity()))
 		}
 
+		records, err := runner.Vars()
+		if err != nil {
+			return err
+		}
+		inlineAt := inlinebinding.Coordinate{Slug: cfg.Slug, Tier: env.GetTier(), Environment: env.GetIdentity()}
+		if err := inlinebinding.Publish(ctx, records, inlineAt, inline); err != nil {
+			return err
+		}
+
 		var out deployOutcome
 		if err := provider.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy, out.collect(ui)); err != nil {
+			return err
+		}
+		if err := inlinebinding.Prune(ctx, records, inlineAt, inline); err != nil {
 			return err
 		}
 

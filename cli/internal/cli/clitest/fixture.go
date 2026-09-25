@@ -47,6 +47,7 @@ func NewDeps() cmddeps.Deps {
 		RequireImageBuilder: appimages.RequireBuilder,
 		BuildAppImages:      appimages.Build,
 		CollectAppFunctions: appbuilder.CollectFunctions,
+		ProbePostgres:       fakeProbePostgres,
 		DeploymentID:        appbuilder.DeploymentID,
 		CollectDeclarations: deploycollector.PrepareAndCollect,
 		ServeVarsUI:         envwire.ServeVarsUI,
