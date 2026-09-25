@@ -54,6 +54,7 @@ const (
 	mountsFact    = "mounts="
 	mountsHeld    = "held"
 	mountsMoved   = "moved"
+	execUnstarted = "126|127"
 )
 
 var proxyCapabilities = []string{"NET_BIND_SERVICE", "DAC_OVERRIDE", "DAC_READ_SEARCH"}
@@ -434,7 +435,9 @@ func (s boxContainer) mountsProbe() string {
 			"! printf '%s\\n' \"$inside\" | grep -Fqx -- " + quoted(dest) + "\" $outside\"; then mounts=" + mountsMoved + "; fi\n"
 	}
 	return "mounts=" + mountsHeld + "\n" +
-		"if inside=$(" + words(asked) + " 2>/dev/null); then\n" + compared + "fi\n" +
+		"if inside=$(" + words(asked) + " 2>/dev/null); then\n" + compared +
+		"else case $? in " + execUnstarted + ") mounts=" + mountsMoved + " ;; esac\n" +
+		"fi\n" +
 		"facts=\"$facts\n" + mountsFact + "$mounts\"\n"
 }
 
