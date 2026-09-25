@@ -3,10 +3,6 @@ package caddy_test
 import (
 	"context"
 	"errors"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -133,92 +129,15 @@ func TestTheTroubleWithACertificateIsWhatTheProxyLogged(t *testing.T) {
 	}
 }
 
-func TestForgettingRefusesANameThatIsAPathRatherThanAHostnameAndRunsNothing(t *testing.T) {
+func TestForgettingLeavesEveryCertificateForTheSwitchboardsRefusalToRetire(t *testing.T) {
 	t.Parallel()
 
-	for _, named := range []string{"../../caddy", "shop.example.com/..", "", "*.preview.example.com", "wildcard_.preview.example.com", "a b.example.com"} {
-		held := &box{}
-		if _, err := (caddy.Builtin{Box: held}).Forget(context.Background(), []string{"fine.example.com", named}); err == nil {
-			t.Errorf("Forget(%q) = nil, and the name reaches rm -rf under the proxy's data", named)
-		}
-		if len(held.ran) != 0 {
-			t.Errorf("Forget(%q) ran %q", named, held.ran)
-		}
-	}
 	held := &box{}
-	if removed, err := (caddy.Builtin{Box: held}).Forget(context.Background(), nil); err != nil || removed != nil || len(held.ran) != 0 {
-		t.Errorf("Forget(nothing) = %v, %v and ran %q, want a no-op", removed, err, held.ran)
+	removed, err := (caddy.Builtin{Box: held}).Forget(context.Background(), []string{"shop--pr-7--web.preview.example.com"})
+	if err != nil || removed != nil || len(held.ran) != 0 {
+		t.Errorf("Forget() = %v, %v and ran %q, want nothing taken: caddy keeps an on-demand certificate in memory after its storage is gone, and renews one it cannot find in storage without asking the switchboard, so a pair taken here is ordered again for a name nothing claims", removed, err, held.ran)
 	}
-}
-
-func stored(t *testing.T, root, issuer, subject string) string {
-	t.Helper()
-	held := filepath.Join(root, issuer, subject)
-	if err := os.MkdirAll(held, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{subject + ".crt", subject + ".key", subject + ".json"} {
-		if err := os.WriteFile(filepath.Join(held, name), []byte(name), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return held
-}
-
-type shell struct {
-	box
-	path string
-}
-
-func (s *shell) Ran(_ context.Context, _ string, argv []string) (string, error) {
-	run := exec.Command(filepath.Join(s.path, argv[0]), argv[1:]...)
-	run.Env = []string{"PATH=" + s.path}
-	said, err := run.Output()
-	return string(said), err
-}
-
-func TestForgettingTakesEveryPairIssuedForTheNamesFromEveryIssuerAndNothingElse(t *testing.T) {
-	root := t.TempDir()
-	defer caddy.StoreCertificatesAt(root)()
-	stub := t.TempDir()
-	if err := os.WriteFile(filepath.Join(stub, "docker"), []byte("#!/bin/sh\nshift 2\nexec \"$@\"\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	for _, tool := range []string{"sh", "rm", "printf", "cat"} {
-		if found, err := exec.LookPath(tool); err == nil {
-			_ = os.Symlink(found, filepath.Join(stub, tool))
-		}
-	}
-	live := "acme-v02.api.letsencrypt.org-directory"
-	staging := "acme-staging-v02.api.letsencrypt.org-directory"
-	going := []string{
-		stored(t, root, live, "shop--pr-7--web.preview.example.com"),
-		stored(t, root, staging, "shop--pr-7--web.preview.example.com"),
-		stored(t, root, live, "shop--pr-7--api.preview.example.com"),
-	}
-	staying := stored(t, root, live, "shop--pr-9--web.preview.example.com")
-	wildcard := stored(t, root, live, "wildcard_.preview.example.com")
-	if err := os.WriteFile(filepath.Join(root, "acme.key"), []byte("account"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	removed, err := (caddy.Builtin{Box: &shell{path: stub}}).Forget(context.Background(), []string{"shop--pr-7--web.preview.example.com", "shop--pr-7--api.preview.example.com", "never.example.com"})
-	if err != nil {
-		t.Fatalf("Forget() = %v", err)
-	}
-	slices.Sort(removed)
-	slices.Sort(going)
-	if !slices.Equal(removed, going) {
-		t.Errorf("Forget() reported %q, want exactly %q", removed, going)
-	}
-	for _, path := range going {
-		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-			t.Errorf("%s still stands after it was forgotten", path)
-		}
-	}
-	for _, path := range []string{staying, wildcard, filepath.Join(root, "acme.key")} {
-		if _, err := os.Stat(path); err != nil {
-			t.Errorf("%s was taken with the names forgotten: %v", path, err)
-		}
+	if (caddy.Builtin{}).Guarantees().ForgetsCertificates {
+		t.Error("the built-in proxy says it forgets certificates, and it leaves them to the permission check and caddy's own storage cleaner")
 	}
 }
