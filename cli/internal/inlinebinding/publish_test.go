@@ -124,7 +124,7 @@ func TestDeploy(t *testing.T) {
 
 	t.Run("a record some other publisher owns is never removed", func(t *testing.T) {
 		store := storeHolding()
-		store.records["warehouse"] = heldRecord{owner: "infra", version: 1}
+		store.records["warehouse"] = heldRecord{owner: "data-team", version: 1}
 		if err := Deploy(context.Background(), store, production, nil, func() error { return nil }); err != nil {
 			t.Fatalf("Deploy: %v", err)
 		}
