@@ -62,10 +62,14 @@ export class SstStack extends AwsStack {
   }
 
   async sweepRun(runId: string): Promise<void> {
-    await this.remove(runId, [`${HARNESS_PREFIX}${runId}`]);
+    const recorded = await recordedStages(cliAt(await this.world.endpoint()));
+    await this.remove(runId, runStages(runId, recorded));
   }
 
   private async remove(runId: string, stages: string[]): Promise<void> {
+    if (stages.length === 0) {
+      return;
+    }
     const dir = await copyTree(
       fixtureDir("iac/with-sst"),
       treeDir(runId, "aws", "stack-sweep-with-sst"),
@@ -96,6 +100,10 @@ export function staleStages(runId: string, recorded: string[], inUse: Set<string
   return [
     ...new Set([`${HARNESS_PREFIX}${runId}`, ...recorded.filter((stage) => !inUse.has(stage))]),
   ];
+}
+
+export function runStages(runId: string, recorded: string[]): string[] {
+  return recorded.filter((stage) => stage === `${HARNESS_PREFIX}${runId}`);
 }
 
 function isStageNotFound(error: unknown): boolean {

@@ -1,6 +1,6 @@
 import { describe, it } from "bun:test";
 import assert from "node:assert/strict";
-import { harnessStagesIn, sstEnv, staleStages } from "./sst";
+import { harnessStagesIn, runStages, sstEnv, staleStages } from "./sst";
 
 describe("harnessStagesIn", () => {
   it("names every harness stage the SST home records, whoever ran it", () => {
@@ -27,6 +27,16 @@ describe("staleStages", () => {
       "j-1874",
       "j-local-ag",
     ]);
+  });
+});
+
+describe("runStages", () => {
+  it("removes the run's own stage when the SST home records it, and no other", () => {
+    assert.deepEqual(runStages("1900", ["j-1874", "j-1900", "j-local-ag"]), ["j-1900"]);
+  });
+
+  it("removes nothing when the run never stood an SST stage up", () => {
+    assert.deepEqual(runStages("1900", ["j-1874", "j-local-ag"]), []);
   });
 });
 
