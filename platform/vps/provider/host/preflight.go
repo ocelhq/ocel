@@ -223,8 +223,8 @@ func (h *Host) ProxyStanding(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	asking := []boxContainer{switchboardStanding(nil, h.fronts)}
-	if !h.fronts.adopted() {
+	asking := []boxContainer{switchboardStanding(nil, h.proxyOption)}
+	if !h.proxyOption.adopted() {
 		asking = append(asking, frontProxy())
 	}
 	for _, asked := range asking {
@@ -297,7 +297,7 @@ func stateField(state, label string) string {
 func (h *Host) ServingPortsHeld(ctx context.Context) error {
 	held := h.portHeld
 	holder := caddy.Container
-	if h.fronts.adopted() {
+	if h.proxyOption.adopted() {
 		held, holder = h.portAdopted, "your proxy"
 	}
 	var found []string

@@ -126,7 +126,7 @@ func (h *Host) FrontAgrees(ctx context.Context) error {
 			"%s records no proxy for %s, so this deploy cannot tell what fronts it\nRun `%s`",
 			FrontRecordPath, h.named(), providerkit.BootstrapCommand(providerkit.ClassProduction))
 	}
-	return h.fronts.agrees(record.front(), record.setter())
+	return h.proxyOption.agrees(record.front(), record.setter())
 }
 
 const unrecordedSetter = "a bootstrap that left no record"
@@ -136,15 +136,15 @@ func (b Bootstrapper) recorded(ctx context.Context, read Reading) (Reading, erro
 	if err != nil {
 		return Reading{}, err
 	}
-	record := frontRecord{Proxy: b.host.fronts.recorded(), Project: b.project, Class: read.Class}
+	record := frontRecord{Proxy: b.host.proxyOption.recorded(), Project: b.project, Class: read.Class}
 	switch {
 	case held != nil:
-		if err := b.host.fronts.agrees(held.front(), held.setter()); err != nil {
+		if err := b.host.proxyOption.agrees(held.front(), held.setter()); err != nil {
 			return Reading{}, err
 		}
 		record = *held
 	case read.standing(KindContainer, caddy.Container):
-		if err := b.host.fronts.agrees(Front{}, unrecordedSetter); err != nil {
+		if err := b.host.proxyOption.agrees(Front{}, unrecordedSetter); err != nil {
 			return Reading{}, err
 		}
 	}

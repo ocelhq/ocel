@@ -23,11 +23,11 @@ type Conn interface {
 type Dial func(ctx context.Context) (Conn, error)
 
 type Host struct {
-	dial   Dial
-	deploy Keys
-	pins   []Pin
-	fronts Front
-	front  proxy.Proxy
+	dial        Dial
+	deploy      Keys
+	pins        []Pin
+	proxyOption Front
+	front       proxy.Proxy
 
 	elevating sync.Mutex
 	settled   bool
@@ -59,7 +59,7 @@ type Host struct {
 }
 
 func New(dial Dial, deploy Keys, pins []Pin, front Front) *Host {
-	h := &Host{dial: dial, deploy: deploy, pins: pins, fronts: front, tiers: map[providerkit.Class]bool{}}
+	h := &Host{dial: dial, deploy: deploy, pins: pins, proxyOption: front, tiers: map[providerkit.Class]bool{}}
 	h.front = openFront(front, frontBox{h})
 	return h
 }
@@ -449,8 +449,8 @@ func (h *Host) observe(ctx context.Context, class providerkit.Class, keys []byte
 }
 
 func (h *Host) surveyed(ctx context.Context, class providerkit.Class, keys []byte, arch string, drawn drawing) (Reading, error) {
-	surveying := Items(class, keys, arch, h.fronts)
-	if h.fronts.adopted() {
+	surveying := Items(class, keys, arch, h.proxyOption)
+	if h.proxyOption.adopted() {
 		surveying = append(surveying, frontProxy().item(""))
 	}
 	rendered, err := drawn.ask(ctx, "survey what "+string(class)+" holds", drawn.survey(surveying, StampPath(class), FrontRecordPath), nil)
@@ -461,7 +461,7 @@ func (h *Host) surveyed(ctx context.Context, class providerkit.Class, keys []byt
 	if err != nil {
 		return Reading{}, err
 	}
-	return Reading{Class: class, Keys: keys, Arch: arch, Seal: held, Observed: observed, Front: h.fronts}, nil
+	return Reading{Class: class, Keys: keys, Arch: arch, Seal: held, Observed: observed, Front: h.proxyOption}, nil
 }
 
 func (h *Host) read(ctx context.Context, class providerkit.Class, keys []byte, drawn drawing) (Reading, error) {

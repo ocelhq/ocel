@@ -16,7 +16,7 @@ import (
 func (m Manual) holding(ctx context.Context) providerkit.StandingCheck {
 	port := strconv.Itoa(httpsPort)
 	check := providerkit.StandingCheck{Subject: "tcp " + port, Verdict: providerkit.StandingFail,
-		Fix: "start your proxy on " + port + ", routing to " + Loopback(m.Port)}
+		Fix: "start your proxy on " + port + ", routing to " + ForwardTo(m.Port)}
 	publishing, err := m.Box.Publishing(ctx, port)
 	if err != nil {
 		check.Finding = fmt.Sprintf("ask which container publishes %s: %v", port, err)

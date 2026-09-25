@@ -103,7 +103,7 @@ func (p *Proxy) front() host.Front {
 	if port == 0 {
 		port = manual.DefaultPort
 	}
-	return host.Front{Manual: &host.Loopback{Port: port}}
+	return host.Front{Manual: &host.ManualFront{Port: port}}
 }
 
 func unsupported(spelled string) error {
