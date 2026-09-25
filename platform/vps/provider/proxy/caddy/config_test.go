@@ -3,7 +3,10 @@ package caddy_test
 import (
 	"bytes"
 	"encoding/json"
+	"maps"
 	"net/http"
+	"net/netip"
+	"net/url"
 	"slices"
 	"strings"
 	"testing"
@@ -18,8 +21,32 @@ const (
 	edgeName    = "box"
 )
 
-func admitting(entries ...proxy.Entry) proxy.Admission {
-	return proxy.Admission{Entries: entries, Upstream: switchboard, Edge: edgeName}
+var permission = proxy.Permission{Dial: "unix//run/ocel-front/admit.sock", Path: "/admit"}
+
+func admitting(pins ...string) proxy.Admission {
+	return proxy.Admission{Pins: pins, Upstream: switchboard, Edge: edgeName, Permission: permission}
+}
+
+type policy struct {
+	Subjects []string         `json:"subjects"`
+	Issuers  []map[string]any `json:"issuers"`
+	OnDemand bool             `json:"on_demand"`
+}
+
+type server struct {
+	Listen    []string          `json:"listen"`
+	Automatic json.RawMessage   `json:"automatic_https"`
+	Policies  []json.RawMessage `json:"tls_connection_policies"`
+	Routes    []struct {
+		Match  []json.RawMessage `json:"match"`
+		Handle []map[string]any  `json:"handle"`
+	} `json:"routes"`
+	Errors *struct {
+		Routes []struct {
+			Match  json.RawMessage  `json:"match"`
+			Handle []map[string]any `json:"handle"`
+		} `json:"routes"`
+	} `json:"errors"`
 }
 
 type rendered struct {
@@ -29,37 +56,29 @@ type rendered struct {
 	Logging json.RawMessage `json:"logging"`
 	Apps    struct {
 		HTTP struct {
-			GracePeriod string `json:"grace_period"`
-			Servers     map[string]struct {
-				Listen    []string `json:"listen"`
-				Automatic *struct {
-					Skip []string `json:"skip_certificates"`
-				} `json:"automatic_https"`
-				Routes []struct {
-					Match []struct {
-						Host []string `json:"host"`
-					} `json:"match"`
-					Handle []map[string]any `json:"handle"`
-				} `json:"routes"`
-				Errors *struct {
-					Routes []struct {
-						Match  json.RawMessage  `json:"match"`
-						Handle []map[string]any `json:"handle"`
-					} `json:"routes"`
-				} `json:"errors"`
-			} `json:"servers"`
+			GracePeriod string            `json:"grace_period"`
+			Servers     map[string]server `json:"servers"`
 		} `json:"http"`
 		TLS *struct {
-			Certificates struct {
+			Certificates *struct {
 				LoadFiles []struct {
 					Certificate string   `json:"certificate"`
 					Key         string   `json:"key"`
 					Tags        []string `json:"tags"`
 				} `json:"load_files"`
 			} `json:"certificates"`
+			Automation struct {
+				Policies []policy `json:"policies"`
+				OnDemand struct {
+					Ask        string            `json:"ask"`
+					Permission map[string]string `json:"permission"`
+				} `json:"on_demand"`
+			} `json:"automation"`
 		} `json:"tls"`
 	} `json:"apps"`
 }
+
+func (r rendered) front() server { return r.Apps.HTTP.Servers["ocel"] }
 
 func render(t *testing.T, admission proxy.Admission) ([]byte, rendered) {
 	t.Helper()
@@ -71,59 +90,107 @@ func render(t *testing.T, admission proxy.Admission) ([]byte, rendered) {
 	if err := json.Unmarshal(written, &read); err != nil {
 		t.Fatal(err)
 	}
-	if len(read.Apps.HTTP.Servers) != 1 {
-		t.Fatalf("the config declares %d servers, want the one front server", len(read.Apps.HTTP.Servers))
+	if _, front := read.Apps.HTTP.Servers["ocel"]; !front || len(read.Apps.HTTP.Servers) != 2 {
+		t.Fatalf("the config declares servers %v, want the front server and the relay to the switchboard's admission", slices.Sorted(maps.Keys(read.Apps.HTTP.Servers)))
+	}
+	if read.Apps.TLS == nil {
+		t.Fatalf("the config declares no tls app, so nothing on :443 is ever issued a certificate:\n%s", written)
 	}
 	return written, read
 }
 
-func front(read rendered) (hosts []string, forwards []map[string]any, catchAll bool) {
-	for _, server := range read.Apps.HTTP.Servers {
-		for _, route := range server.Routes {
-			if len(route.Match) == 0 {
-				catchAll = true
-			}
-			for _, matched := range route.Match {
-				hosts = append(hosts, matched.Host...)
-			}
-			forwards = append(forwards, route.Handle...)
-		}
-	}
-	return hosts, forwards, catchAll
-}
-
-func TestTheFrontProxyHoldsACertificateForEveryHostnameAdmittedAndForwardsEverythingToTheSwitchboard(t *testing.T) {
+func TestTheFrontProxyNamesNoHostnameAndForwardsEverythingToTheSwitchboard(t *testing.T) {
 	t.Parallel()
 
-	_, read := render(t, admitting(proxy.Entry{Hostname: "shop.example.com"}, proxy.Entry{Hostname: "Box.Example.com"}))
-	hosts, forwards, catchAll := front(read)
-	if !slices.Equal(hosts, []string{"box.example.com", "shop.example.com"}) {
-		t.Errorf("the front proxy matches %v, want exactly the admitted hostnames: a host matcher is what caddy orders a certificate for", hosts)
+	written, read := render(t, admitting())
+	if strings.Contains(string(written), `"host"`) {
+		t.Errorf("the config matches on a host, and every hostname it names is a reload the day that hostname is bound or unbound:\n%s", written)
 	}
-	if !catchAll {
-		t.Error("nothing forwards a hostname the box does not claim, so caddy answers it with an empty 200 rather than the switchboard's 404 naming the box")
-	}
-	if len(forwards) != 2 {
-		t.Fatalf("the front proxy runs %d handlers, want one forward per route", len(forwards))
-	}
-	for _, handler := range forwards {
+	for _, server := range []server{read.front()} {
+		if len(server.Routes) != 1 || len(server.Routes[0].Match) != 0 || len(server.Routes[0].Handle) != 1 {
+			t.Fatalf("the front server runs routes %+v, want one catch-all forward", server.Routes)
+		}
+		handler := server.Routes[0].Handle[0]
 		upstreams, _ := json.Marshal(handler["upstreams"])
 		if handler["handler"] != "reverse_proxy" || string(upstreams) != `[{"dial":"`+switchboard+`"}]` {
-			t.Errorf("a route runs %v, want a forward to %s and nothing else: routing belongs to the switchboard", handler, switchboard)
+			t.Errorf("the route runs %v, want a forward to %s and nothing else: routing belongs to the switchboard", handler, switchboard)
 		}
 		for _, header := range []string{"headers", "trusted_proxies"} {
 			if _, set := handler[header]; set {
 				t.Errorf("the forward sets %s, want caddy's own: it passes Host through and states X-Forwarded-Proto from the connection it terminated", header)
 			}
 		}
+		if len(server.Policies) != 1 || string(server.Policies[0]) != "{}" {
+			t.Errorf("the front server declares connection policies %s, want exactly one empty policy: with no host matcher, caddy terminates tls on :443 only for a server that declares one", server.Policies)
+		}
+		if len(server.Automatic) != 0 {
+			t.Errorf("the front server declares automatic_https %s, want none: with no hostname named there is nothing to skip", server.Automatic)
+		}
 	}
+}
+
+func TestTheProxyOrdersOnDemandOnlyWhatTheSwitchboardAdmits(t *testing.T) {
+	t.Parallel()
+
+	_, read := render(t, admitting())
+	onDemand := read.Apps.TLS.Automation.OnDemand
+	if onDemand.Ask != "" || onDemand.Permission["module"] != "http" || onDemand.Permission["endpoint"] != caddy.PermissionEndpoint(permission.Path) || len(onDemand.Permission) != 2 {
+		t.Errorf("on-demand issuance asks %q through %v, want the relay to the switchboard's admission at %s through the http permission module and nothing else", onDemand.Ask, onDemand.Permission, caddy.PermissionEndpoint(permission.Path))
+	}
+	policies := read.Apps.TLS.Automation.Policies
+	if len(policies) != 2 {
+		t.Fatalf("the config declares %d automation policies, want the internal names' and the catch-all", len(policies))
+	}
+	for _, held := range policies {
+		if !held.OnDemand {
+			t.Errorf("the policy for %v orders ahead of any handshake, want every order on demand: a policy that is not on demand holds a hostname list that changes with every bind", held.Subjects)
+		}
+	}
+	internal, public := policies[0], policies[1]
+	if len(public.Subjects) != 0 || len(public.Issuers) != 0 {
+		t.Errorf("the catch-all policy is %+v, want no subjects and caddy's default issuer: an issuer list carrying the internal CA falls through to it for a public name whose order failed, and serves it self-signed for hours", public)
+	}
+	if len(internal.Issuers) != 1 || internal.Issuers[0]["module"] != "internal" || len(internal.Issuers[0]) != 1 {
+		t.Errorf("the policy for names no public CA issues is issued by %v, want caddy's internal CA alone", internal.Issuers)
+	}
+	for _, name := range []string{
+		"localhost",
+		"ocel-vps-e2e.localhost",
+		"ocel-edge-probe.preview.ocel-vps-e2e.localhost",
+		"shop--pr-7--web.preview.ocel-vps-e2e.localhost",
+		"ocel-edge-probe.preview.ocel.home.arpa",
+		"printer.local",
+		"db.corp.internal",
+	} {
+		if !slices.ContainsFunc(internal.Subjects, func(subject string) bool { return labelwise(name, subject) }) {
+			t.Errorf("%s is under no subject of the internal policy, so it reaches the catch-all and an ACME order no CA will take", name)
+		}
+	}
+	for _, name := range []string{"shop.example.com", "localhost.example.com", "local.example.com"} {
+		if slices.ContainsFunc(internal.Subjects, func(subject string) bool { return labelwise(name, subject) }) {
+			t.Errorf("%s is issued by the internal CA, and a browser trusts none of what it serves", name)
+		}
+	}
+}
+
+func labelwise(name, subject string) bool {
+	named, pattern := strings.Split(name, "."), strings.Split(subject, ".")
+	if len(named) != len(pattern) {
+		return false
+	}
+	for at := range pattern {
+		if pattern[at] != "*" && pattern[at] != named[at] {
+			return false
+		}
+	}
+	return true
 }
 
 func TestEveryErrorTheFrontProxyAnswersItselfNamesTheEdge(t *testing.T) {
 	t.Parallel()
 
-	_, read := render(t, admitting(proxy.Entry{Hostname: "shop.example.com"}))
-	for _, server := range read.Apps.HTTP.Servers {
+	_, read := render(t, admitting())
+	for _, server := range []server{read.front()} {
 		if server.Errors == nil || len(server.Errors.Routes) != 1 || server.Errors.Routes[0].Match != nil || len(server.Errors.Routes[0].Handle) != 1 {
 			t.Fatalf("the front server handles its own errors with %+v, want one route answering every error", server.Errors)
 		}
@@ -137,75 +204,54 @@ func TestEveryErrorTheFrontProxyAnswersItselfNamesTheEdge(t *testing.T) {
 func TestAReloadLeavesEveryStreamTheGraceItTakesRatherThanCuttingIt(t *testing.T) {
 	t.Parallel()
 
-	_, read := render(t, admitting(proxy.Entry{Hostname: "shop.example.com"}))
+	_, read := render(t, admitting())
 	if read.Apps.HTTP.GracePeriod != "30s" {
 		t.Errorf("the config declares a grace period of %q, want 30s: caddy's default is eternal", read.Apps.HTTP.GracePeriod)
 	}
-	_, forwards, _ := front(read)
-	for _, handler := range forwards {
-		if handler["stream_close_delay"] != "30s" {
-			t.Errorf("a forward closes its streams after %v, want 30s: caddy closes every websocket a reverse_proxy holds the moment a reload unloads it", handler["stream_close_delay"])
+	for _, server := range []server{read.front()} {
+		for _, route := range server.Routes {
+			for _, handler := range route.Handle {
+				if handler["stream_close_delay"] != "30s" {
+					t.Errorf("a forward closes its streams after %v, want 30s: caddy closes every websocket a reverse_proxy holds the moment a reload unloads it", handler["stream_close_delay"])
+				}
+			}
 		}
 	}
 }
 
-func TestWhatARenderSaysDependsOnWhatIsAdmittedAndNotOnTheOrderItCameIn(t *testing.T) {
+func TestWhatARenderSaysDependsOnWhichPairsArePinnedAndNotOnTheOrderTheyCameIn(t *testing.T) {
 	t.Parallel()
 
-	one, _ := render(t, admitting(proxy.Entry{Hostname: "b.example.com"}, proxy.Entry{Hostname: "a.example.com", Pin: caddy.PinsDir + "/a"}))
-	two, _ := render(t, admitting(proxy.Entry{Hostname: "a.example.com", Pin: caddy.PinsDir + "/a"}, proxy.Entry{Hostname: "b.example.com"}))
+	one, _ := render(t, admitting(caddy.PinsDir+"/b", caddy.PinsDir+"/a", caddy.PinsDir+"/b"))
+	two, _ := render(t, admitting(caddy.PinsDir+"/a", caddy.PinsDir+"/b"))
 	if !bytes.Equal(one, two) {
-		t.Error("two renders of the same hostnames differ by the order they were handed in, and a reshape that changes no hostname would reload caddy")
+		t.Error("two renders of the same pins differ by the order they were handed in, and a reshape that changes no pin would reload caddy")
+	}
+	three, _ := render(t, admitting(caddy.PinsDir+"/a"))
+	if bytes.Equal(one, three) {
+		t.Error("a render carrying one pin fewer says the same, so the running proxy keeps serving a pair the operator took away")
 	}
 }
 
-func TestThePreviewWildcardIsServedWithoutACertificateAndItsProbeWithOne(t *testing.T) {
+func TestEveryPinnedPairIsLoadedOnceOffTheDirectoryTheProxyMounts(t *testing.T) {
 	t.Parallel()
 
-	const base = "preview.example.com"
-	wildcard := edge.PreviewWildcard(base)
-	admission := admitting()
-	admission.PreviewBase = base
-	_, read := render(t, admission)
-	hosts, _, _ := front(read)
-	if !slices.Contains(hosts, wildcard) || !slices.Contains(hosts, edge.ProbeHostname(wildcard)) {
-		t.Errorf("the front proxy matches %v, want %s and %s among them", hosts, wildcard, edge.ProbeHostname(wildcard))
+	_, read := render(t, admitting(caddy.PinsDir+"/wild", caddy.PinsDir+"/shop", caddy.PinsDir+"/wild"))
+	if read.Apps.TLS.Certificates == nil || len(read.Apps.TLS.Certificates.LoadFiles) != 2 {
+		t.Fatalf("the config loads %+v, want each pinned pair once", read.Apps.TLS.Certificates)
 	}
-	for _, server := range read.Apps.HTTP.Servers {
-		if server.Automatic == nil || !slices.Equal(server.Automatic.Skip, []string{wildcard}) {
-			t.Errorf("the config skips certificates for %+v, want exactly [%s]: a wildcard order needs a dns-01 module the box has none of, and the probe beside it must hold a certificate for its https answer to be read", server.Automatic, wildcard)
+	for at, leaf := range []string{"shop", "wild"} {
+		loaded := read.Apps.TLS.Certificates.LoadFiles[at]
+		if loaded.Certificate != caddy.PinCertificate(caddy.PinsMount+"/"+leaf) || loaded.Key != caddy.PinKey(caddy.PinsMount+"/"+leaf) {
+			t.Errorf("the pair pinned at %s is loaded from %s and %s, want the path it stands at inside the proxy", leaf, loaded.Certificate, loaded.Key)
+		}
+		if len(loaded.Tags) != 0 {
+			t.Errorf("the pair pinned at %s is tagged %v, want no tag: a tag naming the hostnames it covers changes the config with every bind", leaf, loaded.Tags)
 		}
 	}
-	_, read = render(t, admitting(proxy.Entry{Hostname: "shop.example.com"}))
-	for _, server := range read.Apps.HTTP.Servers {
-		if server.Automatic != nil {
-			t.Errorf("a box with no preview entry skips %v, want nothing skipped", server.Automatic.Skip)
-		}
-	}
-}
-
-func TestAPinnedPairIsLoadedOnceOffTheDirectoryTheProxyMountsForEveryHostnameItCovers(t *testing.T) {
-	t.Parallel()
-
-	pin := caddy.PinsDir + "/wild"
-	_, read := render(t, admitting(
-		proxy.Entry{Hostname: "shop.example.com", Pin: pin},
-		proxy.Entry{Hostname: "blog.example.com", Pin: pin},
-		proxy.Entry{Hostname: "api.example.com"},
-	))
-	if read.Apps.TLS == nil || len(read.Apps.TLS.Certificates.LoadFiles) != 1 {
-		t.Fatalf("the config loads %+v, want the one pinned pair", read.Apps.TLS)
-	}
-	loaded := read.Apps.TLS.Certificates.LoadFiles[0]
-	if loaded.Certificate != caddy.PinCertificate(caddy.PinsMount+"/wild") || loaded.Key != caddy.PinKey(caddy.PinsMount+"/wild") {
-		t.Errorf("the pair is loaded from %s and %s, want the path the pin stands at inside the proxy", loaded.Certificate, loaded.Key)
-	}
-	if !slices.Equal(loaded.Tags, []string{"blog.example.com", "shop.example.com"}) {
-		t.Errorf("the pair is tagged %v, want each hostname it serves", loaded.Tags)
-	}
-	_, read = render(t, admitting(proxy.Entry{Hostname: "shop.example.com"}))
-	if read.Apps.TLS != nil {
-		t.Errorf("a box pinning nothing loads %+v", read.Apps.TLS)
+	_, read = render(t, admitting())
+	if read.Apps.TLS.Certificates != nil {
+		t.Errorf("a box pinning nothing loads %+v", read.Apps.TLS.Certificates)
 	}
 }
 
@@ -213,16 +259,15 @@ func TestWhatTheProxyCouldNotHoldIsRefusedRatherThanRendered(t *testing.T) {
 	t.Parallel()
 
 	for what, admission := range map[string]proxy.Admission{
-		"no upstream":                    {Entries: []proxy.Entry{{Hostname: "shop.example.com"}}, Edge: edgeName},
-		"no edge to name":                {Entries: []proxy.Entry{{Hostname: "shop.example.com"}}, Upstream: switchboard},
-		"a wildcard hostname":            admitting(proxy.Entry{Hostname: "*.example.com"}),
-		"an empty hostname":              admitting(proxy.Entry{}),
-		"a hostname that is a path":      admitting(proxy.Entry{Hostname: "shop.example.com/.."}),
-		"a hostname naming a store slot": admitting(proxy.Entry{Hostname: "wildcard_.example.com"}),
-		"a pin outside the pin root":     admitting(proxy.Entry{Hostname: "shop.example.com", Pin: "/etc/shadow"}),
-		"a pin beneath the pin root":     admitting(proxy.Entry{Hostname: "shop.example.com", Pin: caddy.PinsDir + "/nested/shop"}),
-		"the pin root itself":            admitting(proxy.Entry{Hostname: "shop.example.com", Pin: caddy.PinsDir}),
-		"a pin climbing out of its root": admitting(proxy.Entry{Hostname: "shop.example.com", Pin: caddy.PinsDir + "/.."}),
+		"no upstream":                     {Edge: edgeName, Permission: permission},
+		"no edge to name":                 {Upstream: switchboard, Permission: permission},
+		"no permission endpoint":          {Upstream: switchboard, Edge: edgeName},
+		"no admission to relay to":        {Upstream: switchboard, Edge: edgeName, Permission: proxy.Permission{Path: permission.Path}},
+		"no path to ask the admission at": {Upstream: switchboard, Edge: edgeName, Permission: proxy.Permission{Dial: permission.Dial}},
+		"a pin outside the pin root":      admitting("/etc/shadow"),
+		"a pin beneath the pin root":      admitting(caddy.PinsDir + "/nested/shop"),
+		"the pin root itself":             admitting(caddy.PinsDir),
+		"a pin climbing out of its root":  admitting(caddy.PinsDir + "/.."),
 	} {
 		if written, err := (caddy.Builtin{}).Render(admission); err == nil {
 			t.Errorf("an admission with %s rendered:\n%s", what, written)
@@ -230,24 +275,111 @@ func TestWhatTheProxyCouldNotHoldIsRefusedRatherThanRendered(t *testing.T) {
 	}
 }
 
-func TestTheAdminApiIsReachedOverItsSocketAloneAndNoConfigCanOrderCertificatesOnDemand(t *testing.T) {
+func TestTheAdminApiIsReachedOverItsSocketAloneAndNoConfigOrdersWithoutTheSwitchboardsWord(t *testing.T) {
 	t.Parallel()
 
-	admission := admitting(proxy.Entry{Hostname: "shop.example.com", Pin: caddy.PinsDir + "/shop"})
-	admission.PreviewBase = "preview.example.com"
+	admission := admitting(caddy.PinsDir + "/shop")
 	written, read := render(t, admission)
 	if read.Admin.Listen != "unix/"+caddy.AdminSocket+"|0600" {
 		t.Errorf("the admin endpoint listens at %q, want the socket only root inside the proxy reaches", read.Admin.Listen)
 	}
-	if strings.Contains(string(written), "on_demand") || (caddy.Builtin{}).Unrendered(written) != "" {
-		t.Errorf("the rendered config can order certificates for names nothing admitted:\n%s", written)
+	if foreign := (caddy.Builtin{}).Unrendered(written, admission); foreign != "" {
+		t.Errorf("the rendered config reads as declaring %s", foreign)
 	}
-	for foreign, document := range map[string]string{
-		"an automation policy": `{"apps":{"tls":{"automation":{"on_demand":{}}}}}`,
-		"a config loader":      `{"admin":{"config":{"load":{"module":"http"}}}}`,
+	if foreign := (caddy.Builtin{}).Unrendered([]byte(`{"apps":{"http":{}}}`), admission); foreign != "" {
+		t.Errorf("a config ordering nothing at all reads as declaring %s: it is stale, not dangerous", foreign)
+	}
+
+	alteredApp := func(app string, change func(held map[string]any)) []byte {
+		var copied map[string]any
+		if err := json.Unmarshal(written, &copied); err != nil {
+			t.Fatal(err)
+		}
+		change(copied["apps"].(map[string]any)[app].(map[string]any))
+		said, err := json.Marshal(copied)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return said
+	}
+	altered := func(change func(automation map[string]any)) []byte {
+		return alteredApp("tls", func(held map[string]any) { change(held["automation"].(map[string]any)) })
+	}
+	relay := func(held map[string]any) map[string]any {
+		return held["servers"].(map[string]any)["admit"].(map[string]any)
+	}
+	onDemand := func(automation map[string]any) map[string]any { return automation["on_demand"].(map[string]any) }
+	for foreign, config := range map[string][]byte{
+		"a permission endpoint that is not the switchboard's": altered(func(a map[string]any) {
+			onDemand(a)["permission"] = map[string]any{"module": "http", "endpoint": "http://attacker.example.com/admit"}
+		}),
+		"no permission module": altered(func(a map[string]any) { delete(onDemand(a), "permission") }),
+		"an ask beside the permission": altered(func(a map[string]any) {
+			onDemand(a)["ask"] = "http://127.0.0.1:9/ask"
+		}),
+		"a policy ordering ahead of any handshake": altered(func(a map[string]any) {
+			a["policies"] = append(a["policies"].([]any), map[string]any{"subjects": []any{"shop.example.com"}})
+		}),
+		"a catch-all issued by the internal CA too": altered(func(a map[string]any) {
+			policies := a["policies"].([]any)
+			policies[len(policies)-1].(map[string]any)["issuers"] = []any{map[string]any{"module": "acme"}, map[string]any{"module": "internal"}}
+		}),
+		"a config loader": []byte(`{"admin":{"config":{"load":{"module":"http"}}}}`),
 	} {
-		if (caddy.Builtin{}).Unrendered([]byte(document)) == "" {
+		if (caddy.Builtin{}).Unrendered(config, admission) == "" {
 			t.Errorf("a config declaring %s reads as one ocel renders", foreign)
+		}
+	}
+
+	endpoint, err := url.Parse(caddy.PermissionEndpoint(permission.Path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for foreign, config := range map[string][]byte{
+		"a relay to an admission that is not the switchboard's": alteredApp("http", func(h map[string]any) {
+			relay(h)["routes"] = []any{map[string]any{"handle": []any{map[string]any{"handler": "static_response", "status_code": 200}}}}
+		}),
+		"no relay to the admission": alteredApp("http", func(h map[string]any) {
+			delete(h["servers"].(map[string]any), "admit")
+		}),
+		"a relay reached beyond the proxy's own loopback": alteredApp("http", func(h map[string]any) {
+			relay(h)["listen"] = []any{":2020"}
+		}),
+	} {
+		said := (caddy.Builtin{}).Unrendered(config, admission)
+		if !strings.Contains(said, endpoint.Host) || strings.Contains(said, "automation") {
+			t.Errorf("a config declaring %s reads as declaring %q, want the refusal to name the relay at %s: its tls automation is the one ocel renders", foreign, said, endpoint.Host)
+		}
+	}
+}
+
+func TestTheProxyAsksTheSwitchboardsAdmissionThroughARelayOnlyItsOwnLoopbackReaches(t *testing.T) {
+	t.Parallel()
+
+	_, read := render(t, admitting())
+	endpoint, err := url.Parse(caddy.PermissionEndpoint(permission.Path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if address, err := netip.ParseAddrPort(endpoint.Host); err != nil || !address.Addr().IsLoopback() || endpoint.Path != permission.Path {
+		t.Fatalf("the proxy asks %s, want a loopback address inside the proxy at the admission's path %s: caddy asks over tcp alone, and the admission answers only over the socket the front proxy holds", endpoint, permission.Path)
+	}
+	for name, held := range read.Apps.HTTP.Servers {
+		if name == "ocel" {
+			continue
+		}
+		if !slices.Equal(held.Listen, []string{endpoint.Host}) {
+			t.Errorf("the relay listens on %v, want %s alone: whoever reaches it is answered as the front proxy", held.Listen, endpoint.Host)
+		}
+		if len(held.Routes) != 1 || len(held.Routes[0].Match) != 0 || len(held.Routes[0].Handle) != 1 {
+			t.Fatalf("the relay runs routes %+v, want one forward", held.Routes)
+		}
+		upstreams, _ := json.Marshal(held.Routes[0].Handle[0]["upstreams"])
+		if held.Routes[0].Handle[0]["handler"] != "reverse_proxy" || string(upstreams) != `[{"dial":"`+permission.Dial+`"}]` {
+			t.Errorf("the relay runs %v, want a forward to %s and nothing else", held.Routes[0].Handle[0], permission.Dial)
+		}
+		if len(held.Policies) != 0 || held.Errors != nil {
+			t.Errorf("the relay declares tls policies %s and errors %+v, want neither: it answers the proxy in plain http what the admission said", held.Policies, held.Errors)
 		}
 	}
 }
@@ -255,7 +387,7 @@ func TestTheAdminApiIsReachedOverItsSocketAloneAndNoConfigCanOrderCertificatesOn
 func TestTheAccessLogKeepsThePathAndRedactsTheQuery(t *testing.T) {
 	t.Parallel()
 
-	_, read := render(t, admitting(proxy.Entry{Hostname: "shop.example.com"}))
+	_, read := render(t, admitting())
 	var logging struct {
 		Logs map[string]struct {
 			Encoder struct {

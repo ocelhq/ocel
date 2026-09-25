@@ -25,56 +25,7 @@ func previewing() RoutingTable {
 	return state
 }
 
-func skipped(t *testing.T, rendered []byte) []string {
-	t.Helper()
-
-	var read struct {
-		Apps struct {
-			HTTP struct {
-				Servers map[string]struct {
-					Automatic *struct {
-						Skip []string `json:"skip_certificates"`
-					} `json:"automatic_https"`
-				} `json:"servers"`
-			} `json:"http"`
-		} `json:"apps"`
-	}
-	if err := json.Unmarshal(rendered, &read); err != nil {
-		t.Fatal(err)
-	}
-	var names []string
-	for _, server := range read.Apps.HTTP.Servers {
-		if server.Automatic != nil {
-			names = append(names, server.Automatic.Skip...)
-		}
-	}
-	return names
-}
-
-func TestThePreviewCatchAllIsTheOneRouteTheBoxKeepsOutOfTheAcmeSubjectCollection(t *testing.T) {
-	t.Parallel()
-
-	wildcard := edge.PreviewWildcard(previewBase)
-	names := skipped(t, mustRender(t, previewing()))
-	if !slices.Equal(names, []string{wildcard}) {
-		t.Fatalf("the config skips certificates for %v, want exactly [%s]: %s enters caddy's automatic-https subject collection like any other host matcher, and a wildcard order needs a dns-01 module this box has none of, so stock caddy retries an order it can never place for as long as the box stands",
-			names, wildcard, wildcard)
-	}
-	if probe := edge.ProbeHostname(wildcard); slices.Contains(names, probe) {
-		t.Errorf("%s is skipped too, and the probe `ocel domain use --preview` waits on reads %s off an https response: a hostname with no certificate has no chain for that client to verify, so skipping it refuses the settle outright",
-			probe, edge.HeaderEdge)
-	}
-}
-
-func TestABoxServingNoPreviewsDeclaresNoSkipAtAll(t *testing.T) {
-	t.Parallel()
-
-	if names := skipped(t, mustRender(t, routed())); len(names) != 0 {
-		t.Errorf("a box with no preview entry skips %v, want nothing: the exclusion is bought by the one route that cannot be issued for, and every hostname beside it is a name this box serves and holds a certificate for", names)
-	}
-}
-
-func TestThePreviewCatchAllRendersItsSuffixRatherThanAnEmptyHostMatcher(t *testing.T) {
+func TestAPreviewBaseTheSwitchboardCouldNotAnswerUnderIsRefused(t *testing.T) {
 	t.Parallel()
 
 	for what, base := range map[string]string{
@@ -91,7 +42,7 @@ func TestThePreviewCatchAllRendersItsSuffixRatherThanAnEmptyHostMatcher(t *testi
 		"a name the probe overflows":    strings.Repeat(strings.Repeat("a", 63)+".", 3) + strings.Repeat("b", 55) + ".com",
 	} {
 		if _, err := RenderProxyConfig(caddy.Builtin{}, RoutingTable{Grace: DrainWindow, PreviewBase: base}); err == nil {
-			t.Errorf("a preview entry on base %q (%s) renders, and the probe route beside the catch-all is deliberately not skipped: an acme subject no CA can ever issue for is exactly the failing-order retry loop the exclusion exists to prevent, on a route the operator cannot see or remove short of releasing the base",
+			t.Errorf("a preview entry on base %q (%s) renders, and the switchboard admits its probe for a certificate: a name no CA can ever issue for is an order that fails on every handshake for as long as the base stands",
 				base, what)
 		}
 	}
@@ -120,20 +71,6 @@ func TestThePreviewEntryReadsBackAsTheBaseThatRenderedIt(t *testing.T) {
 	}
 }
 
-func TestTheRendererHasNoWayToDeclareOnDemandTlsAtAll(t *testing.T) {
-	t.Parallel()
-
-	for what, state := range map[string]RoutingTable{
-		"a box serving previews": previewing(),
-		"a box serving one app":  routed(),
-		"a box serving nothing":  {Grace: DrainWindow},
-	} {
-		if written := string(mustRender(t, state)); strings.Contains(written, "on_demand") {
-			t.Errorf("%s renders a configuration naming on-demand tls:\n%s", what, written)
-		}
-	}
-}
-
 func TestAnUnclaimedHostnameUnderThePreviewBaseIsToldNothingAboutTheBox(t *testing.T) {
 	ask := probingConfig(t, previewing(), issuedByNobody(t, mustRender(t, previewing())))
 
@@ -156,29 +93,21 @@ func TestAnUnclaimedHostnameUnderThePreviewBaseIsToldNothingAboutTheBox(t *testi
 	}
 }
 
-func TestARealProxyOrdersForThePreviewProbeAndNeverForTheWildcardBesideIt(t *testing.T) {
-	rendered := issuedByNobody(t, mustRender(t, previewing()))
-	ask := probingConfig(t, previewing(), rendered)
-	ask("pr-7." + previewBase)
+func TestARealProxyOrdersForThePreviewProbeAndNeverForTheWildcardOrAnUnclaimedPreview(t *testing.T) {
+	stood, _ := probedBox(t, previewing(), issuedByNobody(t, mustRender(t, previewing())))
 
 	wildcard := edge.PreviewWildcard(previewBase)
 	probe := edge.ProbeHostname(wildcard)
-	const managing = "enabling automatic TLS certificate management"
-
-	var logs string
-	for range 100 {
-		if logs = logsOf(probeName(t)); managed(logs, managing, probe) {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	if !managed(logs, managing, probe) {
-		t.Fatalf("the proxy manages certificates for nothing naming %s, so this window carries no subject collection to read an absence out of and every assertion below would hold on a box that never tried:\n%s",
-			probe, logs)
+	unclaimed := "pr-7." + previewBase
+	stood.handshake(unclaimed)
+	stood.handshake(probe)
+	logs := stood.ordered(t, probe)
+	if managed(logs, onDemandOrder, unclaimed) {
+		t.Errorf("the proxy ordered for %s, a preview hostname nothing claims: the wildcard record sends every name under the base here, and each one would be an order against the base's allowance:\n%s", unclaimed, logs)
 	}
 	for _, line := range strings.Split(logs, "\n") {
 		if strings.Contains(line, wildcard) {
-			t.Errorf("the proxy names %s in its own log:\n%s\nthe whole line: %s\nA wildcard subject needs dns-01 at every ca and this box has no dns writer, so an order for it fails, is retried, and keeps failing for as long as the box stands — on the one route every box carrying previews has.",
+			t.Errorf("the proxy names %s in its own log:\n%s\nthe whole line: %s\nA wildcard subject needs dns-01 at every ca and this box has no dns writer, so an order for it fails on every attempt.",
 				wildcard, logs, line)
 		}
 	}
@@ -187,7 +116,7 @@ func TestARealProxyOrdersForThePreviewProbeAndNeverForTheWildcardBesideIt(t *tes
 	}
 }
 
-func TestInstallingThePreviewEntryLoadsItOntoTheRunningProxyAndTakingItDownUnloadsIt(t *testing.T) {
+func TestInstallingThePreviewEntryLoadsItOntoTheSwitchboardAndTakingItDownUnloadsIt(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -202,8 +131,11 @@ func TestInstallingThePreviewEntryLoadsItOntoTheRunningProxyAndTakingItDownUnloa
 	if held.PreviewBase != previewBase {
 		t.Fatalf("%s answers previews on %q after the install, want %q", ProxyConfig, held.PreviewBase, previewBase)
 	}
-	if !slices.ContainsFunc(stood.commands(), loadsSwitchboard) || !slices.ContainsFunc(stood.commands(), reloadsFront) {
-		t.Errorf("the preview entry was written and never loaded, so the running proxy answers no preview hostname at all: %v", stood.commands())
+	if !slices.ContainsFunc(stood.commands(), loadsSwitchboard) {
+		t.Errorf("the preview entry was written and never loaded, so the switchboard admits no probe for a certificate and answers no preview hostname at all: %v", stood.commands())
+	}
+	if slices.ContainsFunc(stood.commands(), reloadsFront) {
+		t.Errorf("the preview entry reloaded %s, and every reload drops requests on every hostname the box serves (#1280): %v", caddy.Container, stood.commands())
 	}
 
 	if err := stood.host().RemovePreviewEntry(ctx, previewBase); err != nil {
@@ -271,23 +203,23 @@ func TestABoxServingOnePreviewBaseRefusesASecondByName(t *testing.T) {
 func TestAPreviewBaseNoPublicCaWillIssueForIsManagedInternallyAndReachesNoCaAtAll(t *testing.T) {
 	state := routed()
 	state.PreviewBase = internalBase
-	ask := probingConfig(t, state, issuedByNobody(t, mustRender(t, state)))
-	ask("pr-7." + internalBase)
+	stood, _ := probedBox(t, state, issuedByNobody(t, mustRender(t, state)))
 
 	probe := edge.ProbeHostname(edge.PreviewWildcard(internalBase))
+	stood.handshake(probe)
 	const obtained = "certificate obtained successfully"
 	var logs string
 	for range 100 {
-		if logs = logsOf(probeName(t)); managed(logs, obtained, probe) {
+		if logs = logsOf(stood.name); managed(logs, obtained, probe) {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
 	if !managed(logs, obtained, probe) {
-		t.Fatalf("the proxy holds no certificate for %s, so nothing here was decided after the issuance decision and every absence below is read off a window that never reached one:\n%s", probe, logs)
+		t.Fatalf("the proxy holds no certificate for %s after a handshake asked for it, so nothing here was decided after the issuance decision and every absence below is read off a window that never reached one:\n%s", probe, logs)
 	}
 	if strings.Contains(logs, unreachableCA) {
-		t.Errorf("a hostname under %s was taken to an acme issuer rather than caddy's internal one: what keeps this package off a public CA is that a base no public CA will issue for is managed internally, and this config points every acme policy at a directory that answers nothing precisely so the wrong answer costs a failed order rather than a real one:\n%s",
+		t.Errorf("a hostname under %s was taken to an acme issuer rather than caddy's internal one: what keeps this package off a public CA is that a name no public CA will issue for is managed internally, and this config points the catch-all at a directory that answers nothing precisely so the wrong answer costs a failed order rather than a real one:\n%s",
 			internalBase, logs)
 	}
 	if strings.Contains(logs, acmeDirectory) {
@@ -295,7 +227,7 @@ func TestAPreviewBaseNoPublicCaWillIssueForIsManagedInternallyAndReachesNoCaAtAl
 			internalBase, logs)
 	}
 	if strings.Contains(logs, edge.PreviewWildcard(internalBase)) {
-		t.Errorf("the proxy names the wildcard in its own log even where the exclusion holds:\n%s", logs)
+		t.Errorf("the proxy names the wildcard in its own log:\n%s", logs)
 	}
 }
 
@@ -351,23 +283,32 @@ func loadingFrom(t *testing.T, state RoutingTable) string {
 	return string(written)
 }
 
-func TestDescribingABoxRefusesOnDemandTlsAndNothingElseItsConfigHolds(t *testing.T) {
+func elsewhere(t *testing.T, state RoutingTable) string {
+	t.Helper()
+	return strings.ReplaceAll(string(mustRender(t, state)), caddy.PermissionEndpoint(SwitchboardPermission.Path), "http://203.0.113.99/admit")
+}
+
+func TestDescribingABoxRefusesOnDemandTlsTheSwitchboardDoesNotGuardAndNothingElseItsConfigHolds(t *testing.T) {
 	t.Parallel()
 
-	for what, config := range map[string]string{
-		"a proxy ocel rendered":                           string(mustRender(t, previewing())),
-		"a proxy an older ocel rendered":                  olderRendering(t, previewing()),
-		"a proxy rendered from another table":             string(mustRender(t, routed())),
-		"a proxy whose config is not json":                "{",
-		"a proxy somebody added on-demand tls to":         onDemandOn(t, previewing()),
-		"a proxy with on-demand tls ocel's shape rejects": strings.Replace(onDemandOn(t, previewing()), `"status_code":404`, `"status_code":"404"`, 1),
-		"a proxy somebody pointed at a config loader":     loadingFrom(t, previewing()),
+	for what, box := range map[string]struct {
+		config  string
+		refused bool
+	}{
+		"a proxy ocel rendered":                                 {config: string(mustRender(t, previewing()))},
+		"a proxy an older ocel rendered":                        {config: olderRendering(t, previewing())},
+		"a proxy rendered from another table":                   {config: string(mustRender(t, routed()))},
+		"a proxy whose config is not json":                      {config: "{"},
+		"a proxy somebody added an unguarded on-demand to":      {config: onDemandOn(t, previewing()), refused: true},
+		"a proxy asking a permission endpoint that is not ours": {config: elsewhere(t, previewing()), refused: true},
+		"a proxy somebody pointed at a config loader":           {config: loadingFrom(t, previewing()), refused: true},
 	} {
 		stood := claimingBox(t, previewing())
+		config := box.config
 		stood.answer = servesPair(stood.bench, &stood.held, &config)
 		_, err := Bootstrap(stood.host(), testVendor, "shop").described(context.Background(), standingHost())
-		if refused := err != nil; refused != (strings.Contains(config, "on_demand") || strings.Contains(config, `"load"`)) {
-			t.Errorf("describing %s = %v: caddy only warns about an on-demand policy carrying no permission module and serves anyway, and a config loader serves whatever it fetches, so `ocel doctor` and the bootstrap refuse either; every other difference is a rendering the next write puts back from %s, and refusing it locks the box out of the write that would", what, err, live.RoutingTable)
+		if refused := err != nil; refused != box.refused {
+			t.Errorf("describing %s = %v: a config that may order a certificate without the switchboard's word spends the box's CA allowance on any name pointed at it, and a config loader serves whatever it fetches, so `ocel doctor` and the bootstrap refuse either; every other difference is a rendering the next write puts back from %s, and refusing it locks the box out of the write that would", what, err, live.RoutingTable)
 		}
 		if err != nil && strings.Contains(err.Error(), "remove "+live.RoutingTable) {
 			t.Errorf("describing %s tells the operator to remove %s, the only record of what every project on the box routes: %v", what, live.RoutingTable, err)
@@ -375,21 +316,25 @@ func TestDescribingABoxRefusesOnDemandTlsAndNothingElseItsConfigHolds(t *testing
 	}
 }
 
-func TestDescribingABoxBeforeItHoldsARoutingTableStillRefusesOnDemandTls(t *testing.T) {
+func TestDescribingABoxBeforeItHoldsARoutingTableStillRefusesUnguardedOnDemandTls(t *testing.T) {
 	t.Parallel()
 
 	read := standingHost()
 	delete(read.Observed, routingTableItem().ID())
-	for what, config := range map[string]string{
-		"a proxy an older ocel wrote":             olderRendering(t, routed()),
-		"a proxy somebody added on-demand tls to": onDemandOn(t, routed()),
+	for what, box := range map[string]struct {
+		config  string
+		refused bool
+	}{
+		"a proxy an older ocel wrote":                      {config: olderRendering(t, routed())},
+		"a proxy somebody added an unguarded on-demand to": {config: onDemandOn(t, routed()), refused: true},
 	} {
 		stood := machine(nil)
 		absent := ""
+		config := box.config
 		stood.answer = servesPair(stood, &absent, &config)
 		_, err := Bootstrap(stood.host(), testVendor, "shop").described(context.Background(), read)
-		if refused := err != nil; refused != strings.Contains(config, "on_demand") {
-			t.Errorf("describing a box bootstrapped before its routing table, holding %s = %v, want it described so the plan can seed the table, unless its proxy declares on-demand tls", what, err)
+		if refused := err != nil; refused != box.refused {
+			t.Errorf("describing a box bootstrapped before its routing table, holding %s = %v, want it described so the plan can seed the table, unless its proxy may order without the switchboard's word", what, err)
 		}
 	}
 }

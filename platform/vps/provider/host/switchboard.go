@@ -2,6 +2,7 @@ package host
 
 import (
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -16,6 +17,8 @@ const (
 	switchboardPort      = "8080"
 	SwitchboardUpstream  = "unix/" + switchboard.FrontSocket
 )
+
+var SwitchboardPermission = proxy.Permission{Dial: "unix/" + switchboard.AdmitSocket, Path: switchboard.AdmitPath}
 
 var switchboardCapabilities = []string{"DAC_OVERRIDE", "DAC_READ_SEARCH"}
 
@@ -32,6 +35,7 @@ func switchboardStanding(binary []byte, front Front) boxContainer {
 		command: append([]string{SwitchboardMounted, "serve",
 			"--listen", ":" + switchboardPort,
 			"--front", switchboard.FrontSocket,
+			"--admit", switchboard.AdmitSocket,
 			"--table", live.RoutingTable,
 		}, relaying...),
 		ports:  front.published(),

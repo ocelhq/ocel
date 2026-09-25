@@ -3,8 +3,9 @@ package switchboard
 import "net/http"
 
 const (
-	AdmitPath  = "/admit"
-	AdmitField = "domain"
+	AdmitSocket = FrontDir + "/admit.sock"
+	AdmitPath   = "/admit"
+	AdmitField  = "domain"
 )
 
 func (b *Board) admit() http.Handler {

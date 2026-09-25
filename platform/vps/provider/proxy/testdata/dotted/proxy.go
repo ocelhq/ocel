@@ -12,7 +12,7 @@ func (Dotted) Guarantees() Guarantees { return Guarantees{} }
 
 func (Dotted) Render(Admission) ([]byte, error) { return nil, nil }
 
-func (Dotted) Unrendered([]byte) string { return "" }
+func (Dotted) Unrendered([]byte, Admission) string { return "" }
 
 func (Dotted) Reload(context.Context) error { return nil }
 

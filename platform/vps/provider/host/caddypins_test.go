@@ -33,6 +33,22 @@ func pinnedBox(t *testing.T, pins []Pin, held map[string][]byte) *Host {
 	return New(stood.dial, Keys{}, pins, Front{})
 }
 
+func pinning(t *testing.T) (*claimBench, *Host) {
+	t.Helper()
+
+	at := caddy.PinsDir + "/wildcard"
+	covering, _ := pinnedBlocks(t, []string{wildcard}, 90*24*time.Hour)
+	stood := claimingBox(t, routed())
+	serves := stood.answer
+	stood.answer = func(command string) (session.Result, bool) {
+		if strings.Contains(command, quoted(caddy.PinCertificate(at))) {
+			return session.Result{Stdout: string(covering)}, true
+		}
+		return serves(command)
+	}
+	return stood, New(stood.dial, Keys{}, []Pin{{Hostname: wildcard, Path: at}}, Front{})
+}
+
 func claiming(t *testing.T, pins []Pin, held map[string][]byte) error {
 	t.Helper()
 	return pinnedBox(t, pins, held).ClaimHosts(context.Background(),
@@ -194,8 +210,8 @@ func TestOneCertificateCoveringTwoHostnamesIsHandedToTheProxyOnce(t *testing.T) 
 		t.Fatalf("the proxy is handed %s %d times, want once: a pair loaded twice is one certificate cached under two tags, and which of them the proxy answers a handshake from is whichever load ran last",
 			at, len(files))
 	}
-	if !slices.Equal(files[0].Tags, []string{"blog.example.com", "shop.example.com"}) {
-		t.Errorf("the one entry is tagged %v, want every hostname the pair was pinned for: a tag dropped here is a hostname nothing on this box can say is pinned", files[0].Tags)
+	if len(files[0].Tags) != 0 {
+		t.Errorf("the one entry is tagged %v, want no tag: a tag naming the hostnames a pair covers changes the proxy's config with every bind under it", files[0].Tags)
 	}
 
 	held, err := ReadRoutingTable(mustWrite(t, state))
@@ -209,8 +225,7 @@ func TestOneCertificateCoveringTwoHostnamesIsHandedToTheProxyOnce(t *testing.T) 
 }
 
 type loadedPair struct {
-	Certificate string   `json:"certificate"`
-	Tags        []string `json:"tags"`
+	Certificate string `json:"certificate"`
 }
 
 func TestAPinnedPreviewWildcardServesTheProbeBeforeAnyPreviewIsClaimed(t *testing.T) {
@@ -230,14 +245,13 @@ func TestAPinnedPreviewWildcardServesTheProbeBeforeAnyPreviewIsClaimed(t *testin
 	if err := json.Unmarshal(mustRender(t, state), &read); err != nil {
 		t.Fatal(err)
 	}
-	probe := edge.ProbeHostname(wildcard)
 	var loaded []loadedPair
 	if read.Apps.TLS != nil {
 		loaded = read.Apps.TLS.Certificates.LoadFiles
 	}
 	if !slices.ContainsFunc(loaded, func(pair loadedPair) bool {
-		return pair.Certificate == caddy.PinCertificate(caddy.PinsMount+"/wildcard") && slices.Contains(pair.Tags, probe)
+		return pair.Certificate == caddy.PinCertificate(caddy.PinsMount+"/wildcard")
 	}) {
-		t.Errorf("a box answering previews under a pinned %s hands the proxy %+v, want that pair tagged %s: the probe is in the proxy's host matchers whether or not a preview is claimed, and with no pair loaded for it the proxy orders one from acme, which a dns-01-only setup never gets", wildcard, loaded, probe)
+		t.Errorf("a box answering previews under a pinned %s hands the proxy %+v, want that pair loaded: the probe %s is answered whether or not a preview is claimed, and with no pair loaded for it the proxy orders one from acme, which a dns-01-only setup never gets", wildcard, loaded, edge.ProbeHostname(wildcard))
 	}
 }

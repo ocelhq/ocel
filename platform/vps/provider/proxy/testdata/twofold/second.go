@@ -14,7 +14,7 @@ func (Second) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
 func (Second) Render(proxy.Admission) ([]byte, error) { return nil, nil }
 
-func (Second) Unrendered([]byte) string { return "" }
+func (Second) Unrendered([]byte, proxy.Admission) string { return "" }
 
 func (Second) Reload(context.Context) error { return nil }
 

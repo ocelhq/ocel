@@ -29,6 +29,12 @@ func probing(t *testing.T, state RoutingTable) func(hostname string) answered {
 
 func probingConfig(t *testing.T, state RoutingTable, rendered []byte, joined ...string) func(hostname string) answered {
 	t.Helper()
+	_, ask := probedBox(t, state, rendered, joined...)
+	return ask
+}
+
+func probedBox(t *testing.T, state RoutingTable, rendered []byte, joined ...string) (standingProxy, func(hostname string) answered) {
+	t.Helper()
 
 	stood := proxyStanding(t)
 	for _, network := range joined {
@@ -41,7 +47,7 @@ func probingConfig(t *testing.T, state RoutingTable, rendered []byte, joined ...
 	stood.reloads(t)
 	at := "http://127.0.0.1:" + caddy.HTTPPort
 
-	return func(hostname string) answered {
+	return stood, func(hostname string) answered {
 		t.Helper()
 		request, err := http.NewRequest(http.MethodGet, at+"/", nil)
 		if err != nil {

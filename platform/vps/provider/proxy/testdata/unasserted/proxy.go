@@ -10,7 +10,7 @@ func (u *Unasserted) Guarantees() proxy.Guarantees { return u.guarantees }
 
 func (u *Unasserted) Render(proxy.Admission) ([]byte, error) { return nil, nil }
 
-func (u *Unasserted) Unrendered([]byte) string { return "" }
+func (u *Unasserted) Unrendered([]byte, proxy.Admission) string { return "" }
 
 func (u *Unasserted) Reload(context.Context) error { return nil }
 

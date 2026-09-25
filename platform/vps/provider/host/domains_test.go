@@ -58,7 +58,7 @@ func TestAClaimedHostnameReadsBackAsTheSurfaceThatClaimedIt(t *testing.T) {
 	}
 }
 
-func TestAClaimedHostnameIsHeldByTheFrontProxyAndAnsweredByTheAppItsSurfaceRuns(t *testing.T) {
+func TestAClaimedHostnameIsAdmittedForACertificateAndAnsweredByTheAppItsSurfaceRuns(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
@@ -66,13 +66,13 @@ func TestAClaimedHostnameIsHeldByTheFrontProxyAndAnsweredByTheAppItsSurfaceRuns(
 	if upstream, ok := routedBy(t, state)(claimed, "/"); !ok || upstream != state.Routes[0].Upstream {
 		t.Errorf("the switchboard answers %s from %q (%v), want the app its surface runs on %s", claimed, upstream, ok, state.Routes[0].Upstream)
 	}
-	if hosts := admission(state).Entries; len(hosts) != 1 || hosts[0].Hostname != claimed {
-		t.Errorf("the front proxy is admitted %v, want %s alone: a hostname it holds no certificate for is one https never reaches", hosts, claimed)
+	if !admittedBy(t, state)(claimed) {
+		t.Errorf("the switchboard refuses the front proxy a certificate for %s: a hostname it holds no certificate for is one https never reaches", claimed)
 	}
 	unrouted := state
 	unrouted.Routes = nil
-	if hosts := admission(unrouted).Entries; len(hosts) != 1 || hosts[0].Hostname != claimed {
-		t.Errorf("a hostname claimed before anything serves it is admitted as %v, want it held all the same: the certificate is ordered at the bind, not at the first deploy", hosts)
+	if !admittedBy(t, unrouted)(claimed) {
+		t.Errorf("a hostname claimed before anything serves it is refused a certificate, want it admitted all the same: the probe at the bind is what orders it, not the first deploy")
 	}
 }
 
@@ -111,8 +111,11 @@ func TestClaimingAHostnameLoadsItOntoTheRunningProxy(t *testing.T) {
 	if !slices.Equal(held.Claims, []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}) {
 		t.Errorf("%s holds claims %v after the claim, want %q claimed by %q", ProxyConfig, held.Claims, claimed, surface)
 	}
-	if !slices.ContainsFunc(stood.commands(), loadsSwitchboard) || !slices.ContainsFunc(stood.commands(), reloadsFront) {
-		t.Errorf("the claim was written and never loaded, so the running proxy answers a hostname nothing on this box says it claims: %v", stood.commands())
+	if !slices.ContainsFunc(stood.commands(), loadsSwitchboard) {
+		t.Errorf("the claim was written and never loaded, so the switchboard answers a hostname nothing on this box says it claims, and refuses the front proxy its certificate: %v", stood.commands())
+	}
+	if slices.ContainsFunc(stood.commands(), reloadsFront) {
+		t.Errorf("the claim reloaded %s, and every reload drops requests on every hostname the box serves (#1280): %v", caddy.Container, stood.commands())
 	}
 }
 
@@ -132,10 +135,10 @@ func TestClaimingAHostnameTwiceWritesTheProxyOnce(t *testing.T) {
 	}
 }
 
-func TestAClaimTheProxyRefusesLeavesTheFileTheProxyWouldRestartOnto(t *testing.T) {
+func TestAPinTheProxyRefusesLeavesTheFileTheProxyWouldRestartOnto(t *testing.T) {
 	t.Parallel()
 
-	stood := claimingBox(t, routed())
+	stood, h := pinning(t)
 	previous := stood.held
 	stood.broke = func(command string) error {
 		if reloadsFront(command) {
@@ -144,8 +147,8 @@ func TestAClaimTheProxyRefusesLeavesTheFileTheProxyWouldRestartOnto(t *testing.T
 		return nil
 	}
 
-	if err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err == nil {
-		t.Fatal("ClaimHosts() succeeded against a proxy that refused the config")
+	if err := h.ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err == nil {
+		t.Fatal("ClaimHosts() succeeded against a proxy that refused the pin it carried in")
 	}
 	if stood.held != previous {
 		t.Errorf("%s was left carrying a config the running proxy refused, and this host restarts its proxy onto this file rather than onto what it last loaded:\n%s", ProxyConfig, stood.held)
@@ -589,11 +592,13 @@ func TestEveryBoxRefusesTheHostnamesNothingOnItClaimsAndForwardsThemToTheSwitchb
 			if err := json.Unmarshal(mustRender(t, box.state), &read); err != nil {
 				t.Fatal(err)
 			}
-			for _, server := range read.Apps.HTTP.Servers {
-				last := server.Routes[len(server.Routes)-1]
-				if len(last.Match) != 0 || len(last.Handle) != 1 || len(last.Handle[0].Upstreams) != 1 || last.Handle[0].Upstreams[0].Dial != SwitchboardUpstream {
-					t.Errorf("%s ends its front routes with %+v, want an unmatched forward to %s: the switchboard answers what nothing claims with the box's own 404, and caddy's own answer is an empty 200", box.what, last, SwitchboardUpstream)
-				}
+			server, front := read.Apps.HTTP.Servers["ocel"]
+			if !front || len(server.Routes) == 0 {
+				t.Fatalf("%s renders no front server with routes", box.what)
+			}
+			last := server.Routes[len(server.Routes)-1]
+			if len(last.Match) != 0 || len(last.Handle) != 1 || len(last.Handle[0].Upstreams) != 1 || last.Handle[0].Upstreams[0].Dial != SwitchboardUpstream {
+				t.Errorf("%s ends its front routes with %+v, want an unmatched forward to %s: the switchboard answers what nothing claims with the box's own 404, and caddy's own answer is an empty 200", box.what, last, SwitchboardUpstream)
 			}
 		})
 	}

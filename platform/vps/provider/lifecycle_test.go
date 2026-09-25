@@ -1112,11 +1112,11 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(loaded), lifecycleHostname) {
-		t.Fatalf("the loaded configuration names no hostname this journey bound, so it is no window a tls policy could be read out of:\n%s", loaded)
+	if strings.Contains(string(loaded), lifecycleHostname) {
+		t.Errorf("the loaded configuration names %s, and a config naming a hostname is reloaded, dropping requests on every hostname the box serves, the day that hostname is bound or unbound:\n%s", lifecycleHostname, loaded)
 	}
-	if strings.Contains(string(loaded), "on_demand") {
-		t.Errorf("the loaded configuration declares an on-demand tls policy:\n%s\nCaddy only warns when one carries no permission module and serves anyway, so a catch-all beside it is an unauthenticated acme trigger a stranger drives with a junk subdomain until this box is locked out of its own tls", loaded)
+	if endpoint := caddy.PermissionEndpoint(host.SwitchboardPermission.Path); !strings.Contains(string(loaded), `"endpoint":"`+endpoint+`"`) || strings.Contains(string(loaded), `"ask"`) {
+		t.Errorf("the loaded configuration orders on demand without asking the switchboard at %s alone:\n%s\nAn on-demand policy nobody guards is an acme trigger a stranger drives with a junk subdomain until this box is locked out of its own tls", endpoint, loaded)
 	}
 
 	retired := run.container(t)
@@ -1217,9 +1217,8 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	if !slices.Contains(routed, wildcard) {
 		t.Fatalf("the loaded configuration routes %v and names no catch-all, so nothing below about what falls to it means anything", routed)
 	}
-	skipped, listed := nestedIn(t, run.vm.loadedProxyConfig(t), "apps", "http", "servers", "ocel", "automatic_https", "skip_certificates").([]any)
-	if !listed || len(skipped) != 1 || skipped[0] != wildcard {
-		t.Errorf("automatic https skips %v, want exactly %s: it is the one route on this box that must never be acme-eligible, and stock Caddy would order a wildcard it cannot obtain forever", skipped, wildcard)
+	if written, err := json.Marshal(run.vm.loadedProxyConfig(t)); err != nil || strings.Contains(string(written), wildcard) {
+		t.Errorf("the loaded configuration names %s (%v): it is the one name on this box that must never be ordered for, and a config naming it is reloaded the day it changes", wildcard, err)
 	}
 	missed := run.over(t, "unclaimed."+lifecyclePreviewBase, "/")
 	if missed.status != http.StatusNotFound || !missed.fromTheBox() || missed.body != "" {

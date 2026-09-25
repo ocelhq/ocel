@@ -12,7 +12,7 @@ var _ proxy.Proxy = (*Late)(nil)
 
 func (l *Late) Render(proxy.Admission) ([]byte, error) { return nil, nil }
 
-func (l *Late) Unrendered([]byte) string { return "" }
+func (l *Late) Unrendered([]byte, proxy.Admission) string { return "" }
 
 func (l *Late) Reload(context.Context) error { return nil }
 

@@ -175,9 +175,9 @@ func (h *Host) proxyInspected(ctx context.Context, class providerkit.Class) (boo
 		return false, err
 	}
 	stale := false
+	table := seededTable
 	if held.table != nil {
-		table, err := ReadRoutingTable(held.table)
-		if err != nil {
+		if table, err = ReadRoutingTable(held.table); err != nil {
 			return false, err
 		}
 		rendered, err := RenderProxyConfig(h.front, table)
@@ -186,7 +186,7 @@ func (h *Host) proxyInspected(ctx context.Context, class providerkit.Class) (boo
 		}
 		stale = held.config != nil && !bytes.Equal(held.config, rendered)
 	}
-	declared := h.front.Unrendered(held.config)
+	declared := h.front.Unrendered(held.config, admission(table))
 	if declared == "" {
 		return stale, nil
 	}

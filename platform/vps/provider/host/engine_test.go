@@ -317,13 +317,14 @@ func TestATableAndAConfigMovedIntoPlaceAreWhatTheRunningBoxServes(t *testing.T) 
 	flipped := routed()
 	stood.standsApp(t, flipped.Routes[0].Upstream, "the app answered")
 	flipped.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	stood.writes(t, routingTableItem().Content, flipped)
+	const moved = `"grace_period":"29s"`
+	stood.stages(t, routingTableItem().Content, flipped, bytes.Replace(mustRender(t, flipped), []byte(`"grace_period":"30s"`), []byte(moved), 1))
 	stood.drives(t, "load", stood.table)
 	stood.reloads(t)
 
-	if held, err := exec.Command(dockerEngine, "exec", stood.name, "cat", caddy.ConfigMount).Output(); err != nil || !strings.Contains(string(held), claimed) {
-		t.Fatalf("the running proxy reads %s as\n%s\n(%v) after a deploy moved a config naming %s into place: the deploy writes it by staging beside it and renaming, and a proxy handed that file through a bind of the file itself keeps reading the inode it was started on",
-			caddy.ConfigMount, held, err, claimed)
+	if held, err := exec.Command(dockerEngine, "exec", stood.name, "cat", caddy.ConfigMount).Output(); err != nil || !strings.Contains(string(held), moved) {
+		t.Fatalf("the running proxy reads %s as\n%s\n(%v) after a deploy moved a config carrying %s into place: the deploy writes it by staging beside it and renaming, and a proxy handed that file through a bind of the file itself keeps reading the inode it was started on",
+			caddy.ConfigMount, held, err, moved)
 	}
 
 	ask := func(hostname string) *http.Response {
