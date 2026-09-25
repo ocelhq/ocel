@@ -6,8 +6,6 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/acm"
-
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (
@@ -27,20 +25,7 @@ func (d Deps) http() *http.Client {
 	return &http.Client{Timeout: acmCallTimeout}
 }
 
-type OriginCertifier interface {
-	CertificateRegion(apiRegion string) string
-}
-
-func RegionFor(front edge.Edge, apiRegion string) string {
-	certifier, ok := front.(OriginCertifier)
-	if !ok {
-		return ""
-	}
-	return certifier.CertificateRegion(apiRegion)
-}
-
-func IssuerFor(front edge.Edge, deps Deps) Issuer {
-	region := RegionFor(front, deps.AWS.Region)
+func IssuerFor(region string, deps Deps) Issuer {
 	if region == "" {
 		return Issuer{}
 	}

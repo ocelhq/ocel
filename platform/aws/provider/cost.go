@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cost"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 )
 
 const tfDataTransfer = "aws_data_transfer"
@@ -49,7 +50,7 @@ func (p *Provider) ShapeCost(ctx context.Context, req providerkit.ShapeRequest) 
 	for _, app := range req.Plan.Apps {
 		site.Apps = append(site.Apps, costkit.EdgeApp{Name: app.App, Hostnames: providerkit.ProductionHostnames(app)})
 	}
-	shape, err := costkit.ShapeEdge(front, site)
+	shape, err := edges.Shape(front.Kind(), p.namespace, site)
 	if err != nil {
 		return nil, err
 	}
@@ -63,9 +64,5 @@ func (p *Provider) ShapeCost(ctx context.Context, req providerkit.ShapeRequest) 
 }
 
 func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
-	edges, err := providerkit.EdgeRates(p.edges())
-	if err != nil {
-		return nil, err
-	}
-	return cost.Price(req, edges...)
+	return cost.Price(req, edges.Rates...)
 }

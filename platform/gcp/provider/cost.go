@@ -6,7 +6,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/costkit"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
+	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
 const (
@@ -61,7 +63,7 @@ func (p *Provider) ShapeCost(_ context.Context, req providerkit.ShapeRequest) (*
 	for _, app := range req.Plan.Apps {
 		site.Apps = append(site.Apps, costkit.EdgeApp{Name: app.App, Hostnames: providerkit.ProductionHostnames(app)})
 	}
-	shape, err := costkit.ShapeEdge(front, site)
+	shape, err := edgeShape(front.Kind(), site)
 	if err != nil {
 		return nil, err
 	}
@@ -126,9 +128,12 @@ func serviceProperties(compute providerkit.Compute, ingress string) map[string]a
 }
 
 func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
-	edges, err := providerkit.EdgeRates(p.Edges())
-	if err != nil {
-		return nil, err
+	return cost.Price(req)
+}
+
+func edgeShape(kind edge.Kind, site costkit.EdgeSite) (costkit.EdgeShape, error) {
+	if kind != alb.Kind {
+		return costkit.EdgeShape{}, nil
 	}
-	return cost.Price(req, edges...)
+	return alb.Shape(site)
 }

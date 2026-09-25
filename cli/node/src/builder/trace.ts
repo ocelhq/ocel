@@ -288,7 +288,7 @@ export async function traceBuild(
   );
 
   await writeServeDescriptor(options.outDir, input.name, {
-    runtime: spec.name,
+    framework: spec.name,
     buildId: await artifactHash(funcDir),
     edgeRouting: false,
     entry: NODE_ENTRY_ROUTE_ID,

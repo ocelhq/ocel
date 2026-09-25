@@ -8,6 +8,8 @@ import (
 	"io"
 	"mime"
 	"mime/multipart"
+	"os"
+	"path/filepath"
 	"testing"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -424,13 +426,6 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 		call      func(context.Context, edge.Edge) error
 	}{
 		{
-			name: "DeployApp without an account id is an error",
-			call: func(ctx context.Context, p edge.Edge) error {
-				_, err := p.(edge.Programmable).DeployApp(ctx, edge.AppDeployment{Name: "ocel-proj-prod"})
-				return err
-			},
-		},
-		{
 			name: "Bootstrap without an account id is an error",
 			call: func(ctx context.Context, p edge.Edge) error {
 				_, err := p.Bootstrap(ctx, edge.ClassProduction)
@@ -441,7 +436,7 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 			name:     "VerifyCredentials without an account id is an error",
 			apiToken: "tok",
 			call: func(ctx context.Context, p edge.Edge) error {
-				_, err := p.(edge.CredentialVerifier).VerifyCredentials(ctx)
+				_, err := p.Hooks().VerifyCredentials(ctx)
 				return err
 			},
 		},
@@ -449,7 +444,7 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 			name:      "VerifyCredentials without an API token is an error",
 			accountID: "acct-123",
 			call: func(ctx context.Context, p edge.Edge) error {
-				_, err := p.(edge.CredentialVerifier).VerifyCredentials(ctx)
+				_, err := p.Hooks().VerifyCredentials(ctx)
 				return err
 			},
 		},
@@ -464,12 +459,22 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 		})
 	}
 
-	t.Run("the provider satisfies the credential verifier contract", func(t *testing.T) {
-		if _, ok := New("ocel").(edge.CredentialVerifier); !ok {
-			t.Fatal("cloudflare provider does not implement edge.CredentialVerifier")
+	t.Run("deploying an app without an account id is an error", func(t *testing.T) {
+		t.Setenv(envAccountID, "")
+		t.Setenv(envAPIToken, "")
+
+		if _, err := (&provider{namespace: "ocel"}).deployApp(t.Context(), edge.AppDeployment{Name: "ocel-proj-prod"}); err == nil {
+			t.Fatal("expected an error when the environment names no credential")
 		}
-		if _, ok := New("ocel").(edge.EntitlementChecker); !ok {
-			t.Fatal("cloudflare provider does not implement edge.EntitlementChecker")
+	})
+
+	t.Run("the edge checks its credentials and its plan", func(t *testing.T) {
+		hooks := New("ocel").Hooks()
+		if hooks.VerifyCredentials == nil {
+			t.Error("the cloudflare edge checks no credentials, so a preflight cannot say whether its token answers")
+		}
+		if hooks.CodeEntitlement == nil {
+			t.Error("the cloudflare edge checks no entitlement, so a free plan is found out only when the worker upload fails")
 		}
 	})
 }
@@ -536,11 +541,11 @@ func TestCompatibility(t *testing.T) {
 	t.Run("reports the compat settings the uploaded script carries", func(t *testing.T) {
 		t.Parallel()
 
-		program, ok := New("ocel").(edge.Programmable)
-		if !ok {
-			t.Fatalf("cloudflare provider does not implement edge.Programmable")
+		compatibility := New("ocel").Hooks().Compatibility
+		if compatibility == nil {
+			t.Fatal("the cloudflare edge names no compatibility, so the code it runs has nothing to load under")
 		}
-		date, flags := program.Compatibility()
+		date, flags := compatibility()
 		if date != compatDate {
 			t.Errorf("Compatibility() date = %q, want %q", date, compatDate)
 		}
@@ -548,4 +553,42 @@ func TestCompatibility(t *testing.T) {
 			t.Errorf("Compatibility() flags = %v, want %v", flags, compatFlags)
 		}
 	})
+}
+
+func TestAnAppIsFoundOnceDeployedAndNotBefore(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	p := previewZoneMock().provider(t)
+	const name = "ocel-conformance-prod-web"
+
+	found, err := p.findApp(t.Context(), name)
+	if err != nil {
+		t.Fatalf("findApp before deploying: %v", err)
+	}
+	if found {
+		t.Fatalf("findApp(%q) = true before anything was deployed under it", name)
+	}
+
+	src := writeAppArtifacts(t)
+	src.Routes = []string{"/"}
+	if err := os.RemoveAll(filepath.Join(src.ArtifactRoot, edge.StaticAssetDir)); err != nil {
+		t.Fatal(err)
+	}
+	worker, err := p.assembleApp(src, signing(map[string]string{"/": "https://fn.lambda-url.aws/"}))
+	if err != nil {
+		t.Fatalf("assembleApp: %v", err)
+	}
+	result, err := p.deployApp(t.Context(), edge.AppDeployment{Name: name, Worker: worker})
+	if err != nil {
+		t.Fatalf("deployApp: %v", err)
+	}
+	if result.URL == "" {
+		t.Error("deployApp returned no URL; an app deployed with no domains is reachable somewhere the edge must name")
+	}
+	found, err = p.findApp(t.Context(), name)
+	if err != nil {
+		t.Fatalf("findApp after deploying: %v", err)
+	}
+	if !found {
+		t.Errorf("findApp(%q) = false after deployApp succeeded", name)
+	}
 }

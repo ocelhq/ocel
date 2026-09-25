@@ -176,12 +176,11 @@ func assertSet(t *testing.T, what string, got, want []string) {
 	}
 }
 
-func TestNativeIsNotProgrammable(t *testing.T) {
+func TestTheCloudFrontEdgeRunsNoCode(t *testing.T) {
 	t.Parallel()
 
-	var e edge.Edge = newWorld().edge()
-	if _, programmable := e.(edge.Programmable); programmable {
-		t.Error("the cloudfront edge is Programmable, but it declares only edge caching and streaming; nothing of the app's code runs at this edge")
+	if newWorld().edge().Hooks().Compatibility != nil {
+		t.Error("the cloudfront edge names a compatibility, but it declares only edge caching and streaming; nothing of the app's code runs at this edge")
 	}
 }
 

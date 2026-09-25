@@ -332,8 +332,8 @@ func (h *handlers) GetCredentialPermissions(_ context.Context, req *contractv1.C
 	}}
 
 	if front, err := provider.Edges().Open(edgeKind(provider, req.GetEdge().GetKind())); err == nil {
-		if documenter, ok := front.(edge.CredentialDocumenter); ok {
-			documented, err := documenter.CredentialPermissions(tier)
+		if document := front.Hooks().CredentialPermissions; document != nil {
+			documented, err := document(tier)
 			if err != nil {
 				return nil, RefusalError(err)
 			}

@@ -92,8 +92,6 @@ type provider struct {
 	clients *Clients
 }
 
-var _ edge.Edge = (*provider)(nil)
-
 func New(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) edge.Edge {
 	return &provider{ns: ns, open: open, delete: NewDeleter()}
 }
@@ -132,6 +130,8 @@ func (p *provider) Facts() edge.Facts {
 	return edge.Facts{SignsOriginForwards: true}
 }
 
+func (p *provider) Hooks() edge.Hooks { return edge.Hooks{} }
+
 var supported = []edge.Need{edge.NeedStreaming}
 
 func (p *provider) Supported() []edge.Need {
@@ -142,7 +142,7 @@ func (p *provider) FlipBound() edge.FlipBound {
 	return edge.FlipBound{Typical: propagationBound}
 }
 
-func (p *provider) CertificateRegion(apiRegion string) string { return apiRegion }
+func CertificateRegion(apiRegion string) string { return apiRegion }
 
 const (
 	typeRestAPI    = "AWS::ApiGateway::RestApi"

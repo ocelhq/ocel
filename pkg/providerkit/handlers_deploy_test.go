@@ -974,7 +974,7 @@ func TestADeployWhoseDNSWriterFailsPromotesNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	writer.(*fake.DNSWriter).Refuse(errors.New("the zone's api answered 500"))
+	writer.(*fake.DNSRecords).Refuse(errors.New("the zone's api answered 500"))
 
 	req := deployRequest()
 	req.Edge = writtenBy("shop.example")

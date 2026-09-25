@@ -238,9 +238,9 @@ describe("node runtime serve path", () => {
     expect(wire.calls).toHaveLength(0);
   });
 
-  it("passes a runtime it has never heard of through to the origin", async () => {
+  it("passes a framework it has never heard of through to the origin", async () => {
     const wire = capturing();
-    const serve = (await resolved(makeRecord({ runtime: "sveltekit" }), {
+    const serve = (await resolved(makeRecord({ framework: "sveltekit" }), {
       originFetch: wire.fetch,
     })) as ServeFetch;
 
@@ -251,7 +251,7 @@ describe("node runtime serve path", () => {
 
   it("routes a next deployment through next's own serve", async () => {
     const record = makeRecord({
-      runtime: "next",
+      framework: "next",
       functionUrls: {},
       routingManifest: {
         buildId: "build-1",

@@ -1692,7 +1692,7 @@ test("states the runtime and next's own build id in serve.json", async () => {
   const serve = JSON.parse(await readFile(join(projectDir, ".ocel/output/serve.json"), "utf8"));
   const manifest = await readManifest(projectDir);
   expect(serve).toEqual({
-    runtime: "next",
+    framework: "next",
     buildId: args.buildId,
     edgeRouting: true,
     entry: manifest.entry,

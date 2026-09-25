@@ -122,3 +122,21 @@ func TestEdgeFor(t *testing.T) {
 		}
 	})
 }
+
+func TestCertificateRegion(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		kind edge.Kind
+		want string
+	}{
+		"an edge that terminates TLS itself is handed no region": {cloudflare.Kind, ""},
+		"an edge that pins a region takes it":                    {cloudfront.Kind, certs.CloudFrontRegion},
+		"an edge that certifies where the API lives":             {apigateway.Kind, "eu-west-2"},
+		"an edge this provider cannot front with certifies none": {"relay", ""},
+	} {
+		if got := CertificateRegion(tc.kind, "eu-west-2"); got != tc.want {
+			t.Errorf("%s: CertificateRegion = %q, want %q", name, got, tc.want)
+		}
+	}
+}

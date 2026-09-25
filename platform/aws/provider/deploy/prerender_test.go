@@ -38,7 +38,7 @@ func nodeAppTree(t *testing.T) string {
 	return writeTree(t, map[string]string{
 		"apps/api/serve.json":  serveDescriptor(t, "express", "a1b2c3d4e5f60718"),
 		"apps/api/index.mjs":   "export default {}",
-		"apps/api/config.json": `{"runtime":{"name":"node"},"handler":"index.mjs","app":"api"}`,
+		"apps/api/config.json": `{"framework":{"name":"node"},"handler":"index.mjs","app":"api"}`,
 	})
 }
 

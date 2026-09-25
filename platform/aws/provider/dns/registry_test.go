@@ -26,28 +26,28 @@ func TestRegistrySupportedKinds(t *testing.T) {
 	}
 }
 
-func TestWriterForNamesNoWriterWhenNoneIsAsked(t *testing.T) {
+func TestRecordsForNamesNoWriterWhenNoneIsAsked(t *testing.T) {
 	t.Parallel()
 
-	writer, err := WriterFor("", "acme.com", Deps{})
+	writer, err := RecordsFor("", "acme.com", Deps{})
 	if err != nil {
-		t.Fatalf("WriterFor(\"\") error = %v", err)
+		t.Fatalf("RecordsFor(\"\") error = %v", err)
 	}
 	if writer != nil {
-		t.Errorf("WriterFor(\"\") = %v, want no writer: a request that names none owes the operator its records", writer)
+		t.Errorf("RecordsFor(\"\") = %v, want no writer: a request that names none owes the operator its records", writer)
 	}
 }
 
-func TestWriterForRefusesAnUnknownKind(t *testing.T) {
+func TestRecordsForRefusesAnUnknownKind(t *testing.T) {
 	t.Parallel()
 
-	writer, err := WriterFor("bogus", "acme.com", Deps{})
+	writer, err := RecordsFor("bogus", "acme.com", Deps{})
 	if err == nil {
-		t.Fatalf("WriterFor(bogus) = %v, want a refusal", writer)
+		t.Fatalf("RecordsFor(bogus) = %v, want a refusal", writer)
 	}
 	var refusal kit.Refusal
 	if !errors.As(err, &refusal) || refusal.Code != kit.CodeInvalid {
-		t.Fatalf("WriterFor(bogus) error = %v, want a %s refusal", err, kit.CodeInvalid)
+		t.Fatalf("RecordsFor(bogus) error = %v, want a %s refusal", err, kit.CodeInvalid)
 	}
 }
 

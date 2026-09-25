@@ -5,7 +5,7 @@ export const FN_URL = "https://abc123.lambda-url.eu-west-2.on.aws/";
 export function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   return {
     app: "api",
-    runtime: "node",
+    framework: "node",
     identity: "deploy-1",
     deploymentId: "deploy-1",
     routingManifest: null,

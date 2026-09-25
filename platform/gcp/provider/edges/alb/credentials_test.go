@@ -12,7 +12,7 @@ func TestTheAlbEdgeDocumentsTheCertificateManagerAndComputeRolesEachTierNeeds(t 
 
 	front, _ := fronting(t)
 	for _, tier := range []edge.CredentialTier{edge.TierBootstrap, edge.TierDeploy} {
-		documented, err := front.CredentialPermissions(tier)
+		documented, err := front.Hooks().CredentialPermissions(tier)
 		if err != nil {
 			t.Fatalf("CredentialPermissions(%s) = %v", tier, err)
 		}
@@ -26,7 +26,7 @@ func TestTheAlbEdgeDocumentsTheCertificateManagerAndComputeRolesEachTierNeeds(t 
 			t.Errorf("the %s tier's heading reads %q, want the project the roles are granted on", tier, documented.Heading)
 		}
 	}
-	if _, err := front.CredentialPermissions(edge.CredentialTier("runtime")); err == nil {
+	if _, err := front.Hooks().CredentialPermissions(edge.CredentialTier("runtime")); err == nil {
 		t.Error("CredentialPermissions(runtime) rendered a document for a tier nothing defines")
 	}
 }

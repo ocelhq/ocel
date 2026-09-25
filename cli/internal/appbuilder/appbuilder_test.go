@@ -744,13 +744,13 @@ func TestBuildID(t *testing.T) {
 		{
 			name:     "reads the serve descriptor every runtime writes",
 			app:      "api",
-			contents: map[string]string{"api/" + edge.ServeDescriptorFile: `{"runtime":"node","buildId":"0123456789abcdef"}`},
+			contents: map[string]string{"api/" + edge.ServeDescriptorFile: `{"framework":"node","buildId":"0123456789abcdef"}`},
 			want:     "0123456789abcdef",
 		},
 		{
 			name:     "next states its own build id there too",
 			app:      "web",
-			contents: map[string]string{"web/" + edge.ServeDescriptorFile: `{"runtime":"next","buildId":"UxK1p2"}`},
+			contents: map[string]string{"web/" + edge.ServeDescriptorFile: `{"framework":"next","buildId":"UxK1p2"}`},
 			want:     "UxK1p2",
 		},
 		{
@@ -794,12 +794,12 @@ func TestEdgeApps(t *testing.T) {
 
 		root := t.TempDir()
 		writeAppFile(t, root, "web/"+edge.ServeDescriptorFile,
-			[]byte(`{"runtime":"next","needs":{"edge-runtime":{"count":1,"routes":["/edgy"]}}}`))
+			[]byte(`{"framework":"next","needs":{"edge-runtime":{"count":1,"routes":["/edgy"]}}}`))
 		writeAppFile(t, root, "admin/"+edge.ServeDescriptorFile,
-			[]byte(`{"runtime":"next","needs":{"edge-middleware":{"count":1,"matchers":[]}}}`))
+			[]byte(`{"framework":"next","needs":{"edge-middleware":{"count":1,"matchers":[]}}}`))
 		writeAppFile(t, root, "docs/"+edge.ServeDescriptorFile,
-			[]byte(`{"runtime":"next","needs":{"edge-cache":{"count":4},"streaming":{"count":2}}}`))
-		writeAppFile(t, root, "api/"+edge.ServeDescriptorFile, []byte(`{"runtime":"node","needs":{}}`))
+			[]byte(`{"framework":"next","needs":{"edge-cache":{"count":4},"streaming":{"count":2}}}`))
+		writeAppFile(t, root, "api/"+edge.ServeDescriptorFile, []byte(`{"framework":"node","needs":{}}`))
 
 		apps := EdgeApps(root)
 		if !slices.Equal(apps, []string{"admin", "web"}) {
@@ -812,7 +812,7 @@ func TestEdgeApps(t *testing.T) {
 
 		root := t.TempDir()
 		writeAppFile(t, root, "web/"+edge.AppBundleFile, []byte(`{"version":2}`))
-		writeAppFile(t, root, "web/"+edge.ServeDescriptorFile, []byte(`{"runtime":"next","needs":{}}`))
+		writeAppFile(t, root, "web/"+edge.ServeDescriptorFile, []byte(`{"framework":"next","needs":{}}`))
 
 		if apps := EdgeApps(root); len(apps) != 0 {
 			t.Errorf("EdgeApps = %v, want the needs to decide, not the bundle", apps)

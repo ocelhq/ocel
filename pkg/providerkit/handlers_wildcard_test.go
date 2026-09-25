@@ -89,7 +89,7 @@ func TestUsePreviewWildcardDiscardsTheCertificateItSupersedes(t *testing.T) {
 	if held := readHeldWildcard(t, provider); len(held.Settled.Superseded) != 0 {
 		t.Errorf("the record still carries %+v, want the discarded certificate forgotten", held.Settled.Superseded)
 	}
-	if records := provider.DNS().(*fake.DNS).Writer("acme.com").Records(); slices.Contains(records, validationRecord) {
+	if records := provider.DNS().(*fake.DNS).Zone("acme.com").Records(); slices.Contains(records, validationRecord) {
 		t.Errorf("the zone still holds %v, want the superseded validation record released", records)
 	}
 }
@@ -268,7 +268,7 @@ func TestRemovePreviewWildcardTearsItDownAndForgetsIt(t *testing.T) {
 	if raised := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Wildcard(); raised != "" {
 		t.Errorf("the %s edge still holds %q", fake.KindRelay, raised)
 	}
-	if written := provider.DNS().(*fake.DNS).Writer("acme.com").Records(); len(written) != 0 {
+	if written := provider.DNS().(*fake.DNS).Zone("acme.com").Records(); len(written) != 0 {
 		t.Errorf("the zone still holds %v, want the records ocel wrote taken back", written)
 	}
 	got, err := client.GetPreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{

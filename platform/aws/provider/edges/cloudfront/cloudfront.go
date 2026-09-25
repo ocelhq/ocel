@@ -80,8 +80,6 @@ type provider struct {
 	clients *Clients
 }
 
-var _ edge.Edge = (*provider)(nil)
-
 func New(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) edge.Edge {
 	return &provider{ns: ns, open: open, settle: NewSettler()}
 }
@@ -116,6 +114,8 @@ func (p *provider) Facts() edge.Facts {
 	return edge.Facts{InvalidatesByCacheTag: true}
 }
 
+func (p *provider) Hooks() edge.Hooks { return edge.Hooks{} }
+
 var supported = []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming}
 
 func (p *provider) Supported() []edge.Need {
@@ -126,7 +126,7 @@ func (p *provider) FlipBound() edge.FlipBound {
 	return edge.FlipBound{Typical: propagationBound}
 }
 
-func (p *provider) CertificateRegion(string) string { return certs.CloudFrontRegion }
+func CertificateRegion(string) string { return certs.CloudFrontRegion }
 
 const distributionDeleteReason = "CloudFront only deletes a disabled distribution once the disable has reached every edge"
 

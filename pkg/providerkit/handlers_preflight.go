@@ -115,11 +115,11 @@ func (h *handlers) edgeIdentity(
 	if err != nil {
 		return RefusalError(err)
 	}
-	verifier, verifies := front.(edge.CredentialVerifier)
-	if !verifies {
+	verify := front.Hooks().VerifyCredentials
+	if verify == nil {
 		return nil
 	}
-	scope, err := verifier.VerifyCredentials(ctx)
+	scope, err := verify(ctx)
 	if err != nil {
 		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(Vendor(kind), err))
 		return nil

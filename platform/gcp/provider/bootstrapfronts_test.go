@@ -33,14 +33,17 @@ type countingFront struct {
 	standing bool
 	bound    []string
 	refusal  error
+	silent   bool
 }
 
-func (f *countingFront) Bound(_ context.Context, _ edge.Class) ([]string, error) {
-	return f.bound, nil
-}
-
-func (f *countingFront) Standing(_ context.Context, _ edge.Class) (bool, error) {
-	return f.standing, nil
+func (f *countingFront) Hooks() edge.Hooks {
+	if f.silent {
+		return edge.Hooks{}
+	}
+	return edge.Hooks{
+		BootstrapStands: func(context.Context, edge.Class) (bool, error) { return f.standing, nil },
+		BoundHostnames:  func(context.Context, edge.Class) ([]string, error) { return f.bound, nil },
+	}
 }
 
 func (f *countingFront) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
@@ -212,5 +215,24 @@ func TestTheFrontsABootstrapRaisesComeFromWhatItsFeaturesDeclareTheyNeed(t *test
 	if !slices.Equal(registry.opened, []edge.Kind{alb.Kind}) {
 		t.Errorf("the bootstrap opened %v, want the edge the feature's Needs name: a second edge with a front of its own must not need a branch here",
 			registry.opened)
+	}
+}
+
+func TestAFrontThatReportsNothingStandsAndHoldsNoHostname(t *testing.T) {
+	t.Parallel()
+
+	b, registry := fronting(t)
+	registry.front.silent = true
+	registry.front.bound = []string{"shop.example.com"}
+
+	stands, err := b.frontStands(context.Background(), providerkit.ClassProduction, albFeature)
+	if err != nil {
+		t.Fatalf("frontStands = %v", err)
+	}
+	if !stands {
+		t.Error("a front that reports nothing about its bootstrap is taken for gone, so the stamp alone can no longer say the feature stands")
+	}
+	if err := b.frontsFree(context.Background(), providerkit.ClassProduction, []string{albFeature}); err != nil {
+		t.Errorf("frontsFree = %v, want nothing held by a front that names no bound hostname", err)
 	}
 }

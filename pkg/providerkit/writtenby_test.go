@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestWriterFor(t *testing.T) {
+func TestWrittenByVersion(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a release version parses", func(t *testing.T) {
@@ -14,7 +14,7 @@ func TestWriterFor(t *testing.T) {
 
 		for _, raw := range []string{"1.2.3", "v1.2.3", "0.0.1", "1.2.3-rc.1", "1.2.3+meta"} {
 			if w := WrittenByVersion(raw); !w.Release() {
-				t.Errorf("WriterFor(%q).Release() = false, want true", raw)
+				t.Errorf("WrittenByVersion(%q).Release() = false, want true", raw)
 			}
 		}
 	})
@@ -61,7 +61,7 @@ func TestWriterFor(t *testing.T) {
 		t.Parallel()
 
 		if got := WrittenByVersion("dev"); !strings.HasPrefix(string(got), "dev") {
-			t.Fatalf("WriterFor(dev) = %q, want it to start with dev", got)
+			t.Fatalf("WrittenByVersion(dev) = %q, want it to start with dev", got)
 		}
 	})
 }

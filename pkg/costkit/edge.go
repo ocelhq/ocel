@@ -34,21 +34,9 @@ type EdgeShape struct {
 	Apps        map[string][]Shaped
 }
 
-type EdgeCost interface {
-	Shape(site EdgeSite) (EdgeShape, error)
-}
-
-type EdgeRates interface {
-	Card() (*Card, error)
-	Table() Table
-}
-
-func ShapeEdge(front edge.Edge, site EdgeSite) (EdgeShape, error) {
-	cost, shapes := front.(EdgeCost)
-	if !shapes {
-		return EdgeShape{}, nil
-	}
-	return cost.Shape(site)
+type EdgeRates struct {
+	Card  func() (*Card, error)
+	Table Table
 }
 
 type EdgeScopes struct {
@@ -73,7 +61,7 @@ func Priced(card *Card, table Table, edges ...EdgeRates) (*Card, Table, error) {
 			return nil, nil, err
 		}
 		cards = append(cards, held)
-		tables = append(tables, rates.Table())
+		tables = append(tables, rates.Table)
 	}
 	return Merge(card, cards...), Tables(tables...), nil
 }

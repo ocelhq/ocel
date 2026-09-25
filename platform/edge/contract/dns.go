@@ -67,26 +67,12 @@ func apexOf(name, zone string) bool {
 	return strings.EqualFold(strings.TrimSuffix(name, "."), strings.TrimSuffix(zone, "."))
 }
 
-type DNSWriter interface {
-	EnsureRecords(ctx context.Context, records []Record, say func(string)) ([]Record, error)
+type DNSRecords interface {
+	Ensure(ctx context.Context, records []Record, say func(string)) ([]Record, error)
 
-	DeleteRecords(ctx context.Context, records []Record) error
-}
+	Delete(ctx context.Context, records []Record) error
 
-type TTLBound interface {
-	RecordTTL() time.Duration
-}
-
-func WriteTTL(writer DNSWriter) time.Duration {
-	bound, ok := writer.(TTLBound)
-	if !ok {
-		return 0
-	}
-	return bound.RecordTTL()
-}
-
-type ZoneFinder interface {
-	ZoneOf(ctx context.Context, hostname string) (Zone, error)
+	TTL() time.Duration
 }
 
 type DNSTarget struct {

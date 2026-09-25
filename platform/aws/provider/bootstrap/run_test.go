@@ -573,6 +573,8 @@ func (f *fakeEdge) Teardown(context.Context, edge.Class) error {
 
 func (f *fakeEdge) Facts() edge.Facts { return edge.Facts{} }
 
+func (f *fakeEdge) Hooks() edge.Hooks { return edge.Hooks{} }
+
 func (f *fakeEdge) Supported() []edge.Need { return slices.Clone(f.needs) }
 
 func (f *fakeEdge) FlipBound() edge.FlipBound { return edge.FlipBound{} }

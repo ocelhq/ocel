@@ -1,10 +1,14 @@
 package cloudflare
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"slices"
 	"strings"
 
+	cf "github.com/cloudflare/cloudflare-go/v4"
+	"github.com/cloudflare/cloudflare-go/v4/accounts"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -36,9 +40,7 @@ func deployPermissions() []string {
 	return slices.Concat(accountPermissions, zonePermissions)
 }
 
-var _ edge.CredentialDocumenter = (*provider)(nil)
-
-func (p *provider) CredentialPermissions(tier edge.CredentialTier) (edge.CredentialDocument, error) {
+func credentialPermissions(tier edge.CredentialTier) (edge.CredentialDocument, error) {
 	var permissions []string
 	switch tier {
 	case edge.TierBootstrap:
@@ -53,4 +55,18 @@ func (p *provider) CredentialPermissions(tier edge.CredentialTier) (edge.Credent
 		Heading:  credentialHeading,
 		Document: strings.Join(permissions, "\n"),
 	}, nil
+}
+
+func (p *provider) verifyCredentials(ctx context.Context) (edge.CredentialIdentity, error) {
+	accountID := os.Getenv(envAccountID)
+	if accountID == "" {
+		return edge.CredentialIdentity{}, fmt.Errorf("%s is not set", envAccountID)
+	}
+	if os.Getenv(envAPIToken) == "" {
+		return edge.CredentialIdentity{}, fmt.Errorf("%s is not set", envAPIToken)
+	}
+	if _, err := p.client.Accounts.Get(ctx, accounts.AccountGetParams{AccountID: cf.F(accountID)}); err != nil {
+		return edge.CredentialIdentity{}, fmt.Errorf("%s was rejected by Cloudflare for account %s: %w", envAPIToken, accountID, err)
+	}
+	return edge.CredentialIdentity{Account: accountID}, nil
 }

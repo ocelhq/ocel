@@ -14,7 +14,7 @@ import (
 
 func shapedSet(t *testing.T, class edge.Class) *costv1.ResourceSet {
 	t.Helper()
-	shape, err := costkit.ShapeEdge(cloudflare.New("ocel"), costkit.EdgeSite{Slug: "shop", Class: class})
+	shape, err := cloudflare.Shape("ocel", costkit.EdgeSite{Slug: "shop", Class: class})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -535,7 +535,7 @@ const adapter = {
     };
 
     const serve: ServeDescriptor = {
-      runtime: "next",
+      framework: "next",
       buildId,
       edgeRouting: true,
       entry,

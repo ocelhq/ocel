@@ -52,7 +52,7 @@ const FN_URL = "https://abc123.lambda-url.eu-west-2.on.aws/";
 
 const originRecord: DeploymentRecord = {
   app: "api",
-  runtime: "node",
+  framework: "node",
   buildId: "0123456789abcdef",
   routingManifest: null,
   functionUrls: { api: FN_URL },

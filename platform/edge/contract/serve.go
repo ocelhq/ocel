@@ -11,7 +11,7 @@ type NeedDetail struct {
 }
 
 type ServeDescriptor struct {
-	Framework   string              `json:"runtime"`
+	Framework   string              `json:"framework"`
 	BuildID     string              `json:"buildId"`
 	EdgeRouting bool                `json:"edgeRouting"`
 	Entry       string              `json:"entry"`

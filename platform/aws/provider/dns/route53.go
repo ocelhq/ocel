@@ -22,7 +22,7 @@ type Route53API interface {
 	ChangeResourceRecordSets(ctx context.Context, in *route53.ChangeResourceRecordSetsInput, optFns ...func(*route53.Options)) (*route53.ChangeResourceRecordSetsOutput, error)
 }
 
-type route53Writer struct {
+type route53Records struct {
 	api   Route53API
 	named string
 
@@ -30,19 +30,15 @@ type route53Writer struct {
 	seen []edge.Zone
 }
 
-var _ edge.DNSWriter = (*route53Writer)(nil)
-
-var _ edge.ZoneFinder = (*route53Writer)(nil)
-
-func NewRoute53(api Route53API, zone string) edge.DNSWriter {
-	return &route53Writer{api: api, named: zone}
+func NewRoute53(api Route53API, zone string) edge.DNSRecords {
+	return &route53Records{api: api, named: zone}
 }
 
-func (w *route53Writer) RecordTTL() time.Duration {
+func (w *route53Records) TTL() time.Duration {
 	return recordTTL * time.Second
 }
 
-func (w *route53Writer) EnsureRecords(ctx context.Context, records []edge.Record, _ func(string)) ([]edge.Record, error) {
+func (w *route53Records) Ensure(ctx context.Context, records []edge.Record, _ func(string)) ([]edge.Record, error) {
 	written := make([]edge.Record, 0, len(records))
 	for _, want := range records {
 		if want.Proxied {
@@ -66,7 +62,7 @@ func (w *route53Writer) EnsureRecords(ctx context.Context, records []edge.Record
 	return written, nil
 }
 
-func (w *route53Writer) DeleteRecords(ctx context.Context, records []edge.Record) error {
+func (w *route53Records) Delete(ctx context.Context, records []edge.Record) error {
 	for _, written := range records {
 		zone, err := w.zoneFor(ctx, written.Name)
 		if err != nil {
@@ -92,7 +88,7 @@ func (w *route53Writer) DeleteRecords(ctx context.Context, records []edge.Record
 	return nil
 }
 
-func (w *route53Writer) liveSet(ctx context.Context, zoneID string, want edge.Record) (*r53types.ResourceRecordSet, error) {
+func (w *route53Records) liveSet(ctx context.Context, zoneID string, want edge.Record) (*r53types.ResourceRecordSet, error) {
 	out, err := w.api.ListResourceRecordSets(ctx, &route53.ListResourceRecordSetsInput{
 		HostedZoneId:    aws.String(zoneID),
 		StartRecordName: aws.String(want.Name),
@@ -119,11 +115,7 @@ func recordSet(want edge.Record) *r53types.ResourceRecordSet {
 	}
 }
 
-func (w *route53Writer) ZoneOf(ctx context.Context, hostname string) (edge.Zone, error) {
-	return w.zoneFor(ctx, hostname)
-}
-
-func (w *route53Writer) zoneFor(ctx context.Context, hostname string) (edge.Zone, error) {
+func (w *route53Records) zoneFor(ctx context.Context, hostname string) (edge.Zone, error) {
 	owned, err := w.hostedZones(ctx, false)
 	if err != nil {
 		return edge.Zone{}, err
@@ -139,7 +131,7 @@ func (w *route53Writer) zoneFor(ctx context.Context, hostname string) (edge.Zone
 	return edge.SelectZone(owned, name, w.named)
 }
 
-func (w *route53Writer) hostedZones(ctx context.Context, again bool) ([]edge.Zone, error) {
+func (w *route53Records) hostedZones(ctx context.Context, again bool) ([]edge.Zone, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.seen != nil && !again {

@@ -16,7 +16,7 @@ function storeStub() {
 function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   return {
     app: "web",
-    runtime: "next",
+    framework: "next",
     identity: "deploy-1",
     deploymentId: "deploy-1",
     buildId: "build-1",

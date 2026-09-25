@@ -139,7 +139,7 @@ const dnsCloudflare = providerkit.DNSKind(cloudflare.Kind)
 
 func (dns) Supported() []providerkit.DNSKind { return []providerkit.DNSKind{dnsCloudflare} }
 
-func (dns) Open(kind providerkit.DNSKind, zone string, _ edge.Kind) (edge.DNSWriter, error) {
+func (dns) Open(kind providerkit.DNSKind, zone string, _ edge.Kind) (edge.DNSRecords, error) {
 	if kind != dnsCloudflare {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"this provider cannot write DNS records with %q; it writes them with %s", kind, dnsCloudflare)

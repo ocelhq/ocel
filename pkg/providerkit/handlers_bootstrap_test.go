@@ -629,8 +629,12 @@ type documentingEdge struct {
 	edge.Edge
 }
 
-func (documentingEdge) CredentialPermissions(tier edge.CredentialTier) (edge.CredentialDocument, error) {
-	return edge.CredentialDocument{Heading: documentedHeading, Document: string(tier)}, nil
+func (e documentingEdge) Hooks() edge.Hooks {
+	hooks := e.Edge.Hooks()
+	hooks.CredentialPermissions = func(tier edge.CredentialTier) (edge.CredentialDocument, error) {
+		return edge.CredentialDocument{Heading: documentedHeading, Document: string(tier)}, nil
+	}
+	return hooks
 }
 
 func TestPlanRemoveBootstrapNamesTheClassAndWhatGoes(t *testing.T) {

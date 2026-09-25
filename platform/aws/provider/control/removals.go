@@ -76,11 +76,11 @@ func (b Bootstrap) standingEdges(ctx context.Context, class providerkit.Class, d
 }
 
 func (b Bootstrap) removedEdgeGroup(ctx context.Context, class providerkit.Class, front edge.Edge) (*providerkit.ChangeGroup, error) {
-	remover, ok := front.(edge.BootstrapRemover)
-	if !ok {
+	plan := front.Hooks().PlanRemoveBootstrap
+	if plan == nil {
 		return nil, nil
 	}
-	planned, err := remover.PlanRemoveBootstrap(ctx, class)
+	planned, err := plan(ctx, class)
 	if err != nil {
 		return nil, fmt.Errorf("plan what removing the %s edge bootstrap takes: %w", front.Kind(), err)
 	}

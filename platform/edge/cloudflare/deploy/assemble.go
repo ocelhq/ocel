@@ -16,7 +16,7 @@ const (
 	objectStoreBinding = "OCEL_CACHE_STORE"
 )
 
-func (p *provider) AssembleApp(src edge.WorkerSource, r edge.Resolver) (edge.Worker, error) {
+func (p *provider) assembleApp(src edge.WorkerSource, r edge.Addresses) (edge.Worker, error) {
 	main, err := os.ReadFile(src.BundlePath)
 	if err != nil {
 		return edge.Worker{}, fmt.Errorf("read edge worker bundle: %w", err)
@@ -91,7 +91,7 @@ func readServeDescriptor(artifactRoot string) (edge.ServeDescriptor, error) {
 	return descriptor, nil
 }
 
-func validateEntry(entry string, routed bool, r edge.Resolver) error {
+func validateEntry(entry string, routed bool, r edge.Addresses) error {
 	if entry == "" {
 		if routed {
 			return nil
@@ -104,7 +104,7 @@ func validateEntry(entry string, routed bool, r edge.Resolver) error {
 	return nil
 }
 
-func validateRoutes(routes []string, r edge.Resolver) error {
+func validateRoutes(routes []string, r edge.Addresses) error {
 	for _, route := range routes {
 		if _, err := r.FunctionURL(route); err != nil {
 			return err
@@ -113,7 +113,7 @@ func validateRoutes(routes []string, r edge.Resolver) error {
 	return nil
 }
 
-func signingBindings(r edge.Resolver) (vars, secrets map[string]string, err error) {
+func signingBindings(r edge.Addresses) (vars, secrets map[string]string, err error) {
 	creds, ok := r.EdgeCredentials()
 	if !ok || creds.AccessKeyID == "" || creds.SecretKey == "" {
 		return nil, nil, errors.New("the Cloudflare edge signs every forward to the origin, and this bootstrap holds no edge credentials to sign with; re-run bootstrap so the origin mints them before deploying")

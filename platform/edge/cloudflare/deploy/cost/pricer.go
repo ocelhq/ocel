@@ -22,6 +22,8 @@ var rates []byte
 
 var Card = sync.OnceValues(func() (*costkit.Card, error) { return costkit.Load(rates) })
 
+var Rates = costkit.EdgeRates{Card: Card, Table: Table}
+
 const (
 	usageRequests     = "monthly_requests"
 	usageCPUTime      = "cpu_time_ms"
