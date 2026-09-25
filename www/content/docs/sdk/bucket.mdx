@@ -346,7 +346,7 @@ binding lives in `bindings`, on any provider:
         "prefix": "uploads/",
         "accessKeyId": { "$env": "R2_ACCESS_KEY_ID" },
         "secretAccessKey": { "$env": "R2_SECRET_ACCESS_KEY" },
-        "publicBaseUrl": "https://cdn.acme.com"
+        "publicBaseUrl": "https://cdn.acme.com/uploads"
       }
     }
   },
@@ -358,6 +358,8 @@ The key pair is written as variables you set with `ocel env set`, per class and 
 the config never holds it and the app never reads it. Add `"pathStyle": true` for a store that
 serves no wildcard DNS. `prefix` keeps every key the app writes under it, so one bucket can hold
 several resources, and `$env` on `bucket` or `prefix` gives each preview environment its own.
+`publicBaseUrl` is used as written, with each key appended, so it names the address the prefix is
+served on.
 Keyed by `production` or `preview`, the binding serves only that tier, and the other provisions
 its own bucket as usual.
 
