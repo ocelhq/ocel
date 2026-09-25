@@ -14,7 +14,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -181,8 +180,6 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	return code
 }
 
-var hostName = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)*$`)
-
 func trustOf(trusting []string) (switchboard.Trust, error) {
 	var trusted switchboard.Trust
 	for _, spelled := range trusting {
@@ -194,7 +191,7 @@ func trustOf(trusting []string) (switchboard.Trust, error) {
 			trusted.Prefixes = append(trusted.Prefixes, prefix.Masked())
 			continue
 		}
-		if strings.Contains(spelled, "/") || !hostName.MatchString(spelled) {
+		if !switchboard.DNSName(spelled) {
 			return switchboard.Trust{}, fmt.Errorf("--trust %q is neither an address, a prefix nor a name", spelled)
 		}
 		trusted.Names = append(trusted.Names, spelled)

@@ -220,14 +220,22 @@ const (
 
 var dnsLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 
-func PreviewBaseUsable(base string) error {
-	named := strings.ToLower(base)
-	labels := strings.Split(named, ".")
-	usable := len(labels) > 1 && len(named)+len(edge.LivenessProbeLabel)+1 <= dnsNameMax
-	for _, label := range labels {
-		usable = usable && len(label) <= dnsLabelMax && dnsLabel.MatchString(label)
+func DNSName(name string) bool {
+	named := strings.ToLower(name)
+	if len(named) > dnsNameMax {
+		return false
 	}
-	if !usable {
+	for _, label := range strings.Split(named, ".") {
+		if len(label) > dnsLabelMax || !dnsLabel.MatchString(label) {
+			return false
+		}
+	}
+	return true
+}
+
+func PreviewBaseUsable(base string) error {
+	dotted := strings.Contains(base, ".") && len(base)+len(edge.LivenessProbeLabel)+1 <= dnsNameMax
+	if !dotted || !DNSName(base) {
 		return fmt.Errorf("%q is not a usable preview base: want dotted dns labels of ≤%d bytes, with %s ≤%d bytes",
 			base, dnsLabelMax, edge.ProbeHostname(edge.PreviewWildcard(base)), dnsNameMax)
 	}
