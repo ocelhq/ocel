@@ -3,6 +3,7 @@ package caddy_test
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"slices"
 	"strings"
 	"testing"
@@ -12,10 +13,13 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
-const switchboard = "ocel-switchboard:8080"
+const (
+	switchboard = "ocel-switchboard:8080"
+	edgeName    = "box"
+)
 
 func admitting(entries ...proxy.Entry) proxy.Admission {
-	return proxy.Admission{Entries: entries, Upstream: switchboard}
+	return proxy.Admission{Entries: entries, Upstream: switchboard, Edge: edgeName}
 }
 
 type rendered struct {
@@ -37,6 +41,12 @@ type rendered struct {
 					} `json:"match"`
 					Handle []map[string]any `json:"handle"`
 				} `json:"routes"`
+				Errors *struct {
+					Routes []struct {
+						Match  json.RawMessage  `json:"match"`
+						Handle []map[string]any `json:"handle"`
+					} `json:"routes"`
+				} `json:"errors"`
 			} `json:"servers"`
 		} `json:"http"`
 		TLS *struct {
@@ -105,6 +115,21 @@ func TestTheFrontProxyHoldsACertificateForEveryHostnameAdmittedAndForwardsEveryt
 			if _, set := handler[header]; set {
 				t.Errorf("the forward sets %s, want caddy's own: it passes Host through and states X-Forwarded-Proto from the connection it terminated", header)
 			}
+		}
+	}
+}
+
+func TestEveryErrorTheFrontProxyAnswersItselfNamesTheEdge(t *testing.T) {
+	t.Parallel()
+
+	_, read := render(t, admitting(proxy.Entry{Hostname: "shop.example.com"}))
+	for _, server := range read.Apps.HTTP.Servers {
+		if server.Errors == nil || len(server.Errors.Routes) != 1 || server.Errors.Routes[0].Match != nil || len(server.Errors.Routes[0].Handle) != 1 {
+			t.Fatalf("the front server handles its own errors with %+v, want one route answering every error", server.Errors)
+		}
+		answered, _ := json.Marshal(server.Errors.Routes[0].Handle[0])
+		if want := `{"handler":"static_response","headers":{"` + http.CanonicalHeaderKey(edge.HeaderEdge) + `":["` + edgeName + `"]},"status_code":"{http.error.status_code}"}`; string(answered) != want {
+			t.Errorf("the front proxy answers its own errors with %s, want %s: caddy answers a 502 of its own while the switchboard is down or being recreated, and the bind's probe reads the edge off every answer the box gives", answered, want)
 		}
 	}
 }
@@ -188,7 +213,8 @@ func TestWhatTheProxyCouldNotHoldIsRefusedRatherThanRendered(t *testing.T) {
 	t.Parallel()
 
 	for what, admission := range map[string]proxy.Admission{
-		"no upstream":                    {Entries: []proxy.Entry{{Hostname: "shop.example.com"}}},
+		"no upstream":                    {Entries: []proxy.Entry{{Hostname: "shop.example.com"}}, Edge: edgeName},
+		"no edge to name":                {Entries: []proxy.Entry{{Hostname: "shop.example.com"}}, Upstream: switchboard},
 		"a wildcard hostname":            admitting(proxy.Entry{Hostname: "*.example.com"}),
 		"an empty hostname":              admitting(proxy.Entry{}),
 		"a pin outside the pin root":     admitting(proxy.Entry{Hostname: "shop.example.com", Pin: "/etc/shadow"}),

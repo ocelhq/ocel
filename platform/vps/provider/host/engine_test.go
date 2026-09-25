@@ -326,6 +326,40 @@ func TestTheSwitchboardTrustsWhatTheFrontProxyForwardsAndNothingAClientSays(t *t
 	}
 }
 
+func TestTheFrontProxyNamesTheEdgeOnItsOwnAnswerWhileTheSwitchboardIsDown(t *testing.T) {
+	stood := proxyStanding(t)
+
+	state := routed()
+	stood.standsApp(t, state.Routes[0].Upstream, "the app answered")
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	stood.moves(t, routingTableItem().Content, state)
+	ask := func() *http.Response {
+		t.Helper()
+		request, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:"+caddy.HTTPPort+"/", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Host = claimed
+		said, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatalf("ask the box for %s: %v", claimed, err)
+		}
+		said.Body.Close()
+		return said
+	}
+
+	if said := ask(); said.StatusCode != http.StatusOK || !slices.Equal(said.Header.Values(edge.HeaderEdge), []string{switchboard.EdgeName}) {
+		t.Errorf("%s was answered %d naming the edge %q, want 200 naming it once as %s", claimed, said.StatusCode, said.Header.Values(edge.HeaderEdge), switchboard.EdgeName)
+	}
+	if out, err := exec.Command(dockerEngine, "stop", "--time", "1", stood.board).CombinedOutput(); err != nil {
+		t.Fatalf("stop the switchboard: %v\n%s", err, out)
+	}
+	if said := ask(); said.StatusCode != http.StatusBadGateway || !slices.Equal(said.Header.Values(edge.HeaderEdge), []string{switchboard.EdgeName}) {
+		t.Errorf("with the switchboard down %s was answered %d naming the edge %q, want caddy's own 502 naming it as %s: a bootstrap recreates the switchboard under a running caddy, and the bind's probe reads the edge off every answer the box gives",
+			claimed, said.StatusCode, said.Header.Values(edge.HeaderEdge), switchboard.EdgeName)
+	}
+}
+
 func (p standingProxy) stages(t *testing.T, held []byte, state RoutingTable, config []byte) []byte {
 	t.Helper()
 

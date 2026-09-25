@@ -28,6 +28,7 @@ type Admission struct {
 	Entries     []Entry
 	PreviewBase string
 	Upstream    string
+	Edge        string
 }
 
 type Entry struct {
