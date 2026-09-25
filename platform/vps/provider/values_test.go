@@ -183,9 +183,6 @@ func TestTheProviderWrapsEveryContainerInTheRuntimeItCarries(t *testing.T) {
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
-	if providerkit.Bakes(p, providerkit.ComputeContainer) {
-		t.Fatal("Bakes(container) = true, so a secret would be resolved on the deploy machine and written to the box in the clear")
-	}
 	for arch, machine := range map[string]elf.Machine{host.ArchAMD64: elf.EM_X86_64, host.ArchARM64: elf.EM_AARCH64} {
 		held, err := p.ContainerRuntime(context.Background(), arch)
 		if err != nil {

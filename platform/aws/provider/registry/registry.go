@@ -78,7 +78,7 @@ func (i images) String() string { return "images pushed to this account's ECR at
 
 func (i images) GoString() string { return i.String() }
 
-func (i images) ImageDestination() string { return i.target.Server }
+func (i images) Destination() string { return i.target.Server }
 
 func (i images) Has(ctx context.Context, push providerkit.ImagePush) (bool, error) {
 	return i.pushed.Has(ctx, push)

@@ -138,35 +138,6 @@ func TestAFunctionsImageIsNeverMistakenForTheAppsOwn(t *testing.T) {
 	}
 }
 
-func TestAFunctionRunAsAnImageIsHandedItsValuesAtDeployTime(t *testing.T) {
-	stagedProject(t, "web", "admin")
-	base := fake.NewProvider(fake.Options{})
-	served := servedBy(t, imaging{Provider: base})
-	standsBootstrapped(t, served)
-
-	req := imagingDeployRequest()
-	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "REGION", "eu-west-1")
-	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, "DATABASE_URL", "")
-	sealValue(t, base, "DATABASE_URL", "postgres://sealed")
-
-	result, _ := deploy(t, served, req)
-	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
-	}
-
-	plans := base.Releaser().Plans()
-	delivered := plans[len(plans)-1].App.Values.Delivered
-	for key, want := range map[string]string{"REGION": "eu-west-1", "DATABASE_URL": "postgres://sealed"} {
-		if delivered[key] != want {
-			t.Errorf("the function is handed %s=%q, want %q: an image reads its values off its own environment", key, delivered[key], want)
-		}
-	}
-	bound := providerkit.ResourceEnvName(providerkit.BindingPostgres, "orders")
-	if delivered[bound] == "" {
-		t.Errorf("the function is handed %v and nothing under %s, so the resource it binds to is unreachable", delivered, bound)
-	}
-}
-
 func refusedImagedDeploy(t *testing.T, name, value, stood string) string {
 	t.Helper()
 	stagedProject(t, "web", "admin")

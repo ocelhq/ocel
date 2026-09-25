@@ -25,14 +25,6 @@ type Bucket interface {
 	Bucket(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error)
 }
 
-type Container interface {
-	Container(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error)
-}
-
-type Custom interface {
-	Custom(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error)
-}
-
 type Remover interface {
 	RemoveResource(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, report providerkit.Reporter) error
 }
@@ -93,20 +85,6 @@ var primitives = []primitive{
 		servedBy: func(impl any) bool { _, ok := impl.(Bucket); return ok },
 		call: func(impl any, ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
 			return impl.(Bucket).Bucket(ctx, in, report)
-		},
-	},
-	{
-		kind:     providerkit.BindingContainer,
-		servedBy: func(impl any) bool { _, ok := impl.(Container); return ok },
-		call: func(impl any, ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
-			return impl.(Container).Container(ctx, in, report)
-		},
-	},
-	{
-		kind:     providerkit.BindingCustom,
-		servedBy: func(impl any) bool { _, ok := impl.(Custom); return ok },
-		call: func(impl any, ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
-			return impl.(Custom).Custom(ctx, in, report)
 		},
 	},
 }

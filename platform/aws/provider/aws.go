@@ -94,14 +94,13 @@ func NewProvider(options Options, transforms []string, cfg aws.Config, ns bootst
 	return p
 }
 
-func (p *Provider) Vendor() providerkit.Vendor { return Vendor }
-
-func (p *Provider) RendersTransforms() {}
-
-func (p *Provider) Serves() []providerkit.BindingType { return deploy.Serves() }
-
-func (p *Provider) Computes() []providerkit.Compute {
-	return []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer}
+func (p *Provider) Facts() providerkit.Facts {
+	return providerkit.Facts{
+		Vendor:            Vendor,
+		Bindings:          deploy.Serves(),
+		Computes:          []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer},
+		RendersTransforms: true,
+	}
 }
 
 func (p *Provider) ImageRegistry(ctx context.Context, _ providerkit.Class, _ []string) (providerkit.RegistryTarget, error) {

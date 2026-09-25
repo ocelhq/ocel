@@ -42,7 +42,7 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 		Edge:       gate.Edge,
 		Features:   features,
 		Resources:  resources,
-		Functions:  shapedFunctions(provider, req.GetManifest()),
+		Functions:  shapedFunctions(req.GetManifest()),
 		Transforms: h.session.transforms(),
 	})
 	if err != nil {
@@ -64,11 +64,7 @@ func unshipped(manifest *contractv1.Manifest) *contractv1.Manifest {
 	return manifest
 }
 
-func shapedFunctions(provider Provider, manifest *contractv1.Manifest) map[string][]FunctionSpec {
-	url := true
-	if addressed, says := provider.(ServesFunctionURLs); says {
-		url = addressed.ServesFunctionURLs()
-	}
+func shapedFunctions(manifest *contractv1.Manifest) map[string][]FunctionSpec {
 	specs := make(map[string][]FunctionSpec, len(manifest.GetApps()))
 	for _, fn := range manifest.GetFunctions() {
 		specs[fn.GetApp()] = append(specs[fn.GetApp()], FunctionSpec{
@@ -76,7 +72,6 @@ func shapedFunctions(provider Provider, manifest *contractv1.Manifest) map[strin
 			Route:   fn.GetRouteId(),
 			Handler: fn.GetHandler(),
 			Runtime: Runtime{Name: fn.GetRuntime().GetName(), Arch: fn.GetRuntime().GetArch()},
-			URL:     url,
 		})
 	}
 	return specs

@@ -17,7 +17,7 @@ func (daemonImages) String() string { return "images written to the local docker
 
 func (d daemonImages) GoString() string { return d.String() }
 
-func (daemonImages) ImageDestination() string { return "the local docker daemon" }
+func (daemonImages) Destination() string { return "the local docker daemon" }
 
 func (daemonImages) Has(ctx context.Context, push ImagePush) (bool, error) {
 	ref, err := name.NewTag(push.Target, name.Insecure)

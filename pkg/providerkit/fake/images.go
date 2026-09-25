@@ -48,6 +48,8 @@ func (i *Images) Opened() []providerkit.RegistryTarget {
 	return append([]providerkit.RegistryTarget(nil), i.opened...)
 }
 
+func (i *Images) Destination() string { return RegistryServer }
+
 func (i *Images) Has(_ context.Context, push providerkit.ImagePush) (bool, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()

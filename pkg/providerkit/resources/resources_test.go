@@ -343,7 +343,11 @@ type embedded struct {
 
 func (e embedded) Releases() providerkit.Releaser { return e.fanout }
 
-func (e embedded) Serves() []providerkit.BindingType { return resources.Serves(neon{&buckets{}}) }
+func (e embedded) Facts() providerkit.Facts {
+	facts := e.Provider.Facts()
+	facts.Bindings = resources.Serves(neon{&buckets{}})
+	return facts
+}
 
 func (embedded) Warm(context.Context, []string, providerkit.Reporter) error { return nil }
 
@@ -356,8 +360,8 @@ func TestAWarmerBehindTheFanOutIsStillFoundOnTheRoot(t *testing.T) {
 	if _, warms := providerkit.Provider(provider).(providerkit.Warmer); !warms {
 		t.Fatal("the provider's Warmer is not found on the root, so wrapping the release port hid a capability")
 	}
-	if !slices.Contains(provider.Serves(), providerkit.BindingPostgres) {
-		t.Errorf("Serves() = %v, want the Postgres the override advertises", provider.Serves())
+	if !slices.Contains(provider.Facts().Bindings, providerkit.BindingPostgres) {
+		t.Errorf("Facts().Bindings = %v, want the Postgres the override advertises", provider.Facts().Bindings)
 	}
 }
 
@@ -940,6 +944,8 @@ func (r *retaining) ForgetReleases(_ context.Context, _ providerkit.StackRef, ap
 type refusingImages struct{ err error }
 
 func (r refusingImages) Has(context.Context, providerkit.ImagePush) (bool, error) { return false, nil }
+
+func (refusingImages) Destination() string { return "the refusing registry" }
 
 func (r refusingImages) Push(context.Context, providerkit.ImagePush, providerkit.Reporter) error {
 	return r.err

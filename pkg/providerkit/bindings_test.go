@@ -152,22 +152,6 @@ func TestDeployRefusesABindingTheRecordCannotSatisfy(t *testing.T) {
 	})
 }
 
-type servingBuckets struct{ *fake.Provider }
-
-func (servingBuckets) Proxied(providerkit.BindingType) bool { return false }
-
-func TestAVendorSaysWhichBindingTypesItsAppsReachThroughTheRuntime(t *testing.T) {
-	builtProject(t)
-	base := fake.NewProvider(fake.Options{})
-	client := servedBy(t, servingBuckets{Provider: base})
-	publishRecord(t, base, providerkit.ClassProduction, "terraform", bucketRecord("uploads", "terraform"))
-
-	result, _ := deploy(t, client, bindingRequest("uploads", bindingsv1.BindingType_BINDING_TYPE_BUCKET))
-	if !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want a foreign bucket bound: this vendor's runtime serves one it did not provision", result.GetError())
-	}
-}
-
 func TestReadableAs(t *testing.T) {
 	t.Run("refuses a custom record bound as a binding", func(t *testing.T) {
 		err := providerkit.ReadableAs(providerkit.Binding{Name: "flags", Type: providerkit.BindingCustom}, "settings", providerkit.BindingPostgres, proxied)

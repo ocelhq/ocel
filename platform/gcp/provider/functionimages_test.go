@@ -194,9 +194,3 @@ func TestOneBaseIsFetchedOnceHoweverManyFunctionsRunOnIt(t *testing.T) {
 		t.Errorf("the base was fetched %d times for 2 functions, want once: an app with many functions pays a registry round trip for each", got)
 	}
 }
-
-func TestEachFunctionIsReachedAtAURLOfItsOwn(t *testing.T) {
-	if !(&Provider{}).ServesFunctionURLs() {
-		t.Error("ServesFunctionURLs() = false, and every function on Cloud Run is a service with a url of its own")
-	}
-}

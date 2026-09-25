@@ -35,8 +35,7 @@ func patched(t *testing.T, pass *patching) (*box, providerkit.Binding, error) {
 func TestABoxRendersTransforms(t *testing.T) {
 	t.Parallel()
 
-	var root providerkit.Provider = over(&box{})
-	if _, renders := root.(providerkit.TransformRenderer); !renders {
+	if !over(&box{}).Facts().RendersTransforms {
 		t.Error("a project listing a transform is refused on a box, and a box now has a stack a transform can reshape")
 	}
 }

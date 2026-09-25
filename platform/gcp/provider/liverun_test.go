@@ -270,7 +270,7 @@ func serverlessPlanOn(app, image string, runtime providerkit.Runtime, values map
 			Compute: providerkit.ComputeServerless,
 			Values:  providerkit.AppValues{Delivered: values},
 			Functions: []providerkit.FunctionSpec{
-				{Name: app, Runtime: runtime, Image: image, URL: true},
+				{Name: app, Runtime: runtime, Image: image},
 			},
 		},
 	}

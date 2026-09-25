@@ -507,8 +507,6 @@ message PreflightResponse {
 
   repeated StandingCheck standing = 10;
 
-  repeated string baked_computes = 11;
-
   map<string, string> container_archs = 12 [(buf.validate.field).map.values.string = {in: ["amd64", "arm64"]}];
 }
 

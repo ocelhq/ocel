@@ -226,6 +226,8 @@ func (s *stubStore) Has(context.Context, providerkit.ImagePush) (bool, error) {
 	return s.held, nil
 }
 
+func (s *stubStore) Destination() string { return "the stub registry" }
+
 func (s *stubStore) Push(_ context.Context, push providerkit.ImagePush, _ providerkit.Reporter) error {
 	s.pushed = append(s.pushed, push)
 	return nil

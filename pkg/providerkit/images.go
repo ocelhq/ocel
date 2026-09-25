@@ -24,6 +24,8 @@ type ImagePush struct {
 }
 
 type ImageStore interface {
+	Destination() string
+
 	Has(ctx context.Context, push ImagePush) (bool, error)
 
 	Push(ctx context.Context, push ImagePush, report Reporter) error
@@ -35,10 +37,6 @@ type ImagePusher interface {
 
 type ImageLoader interface {
 	DirectImages(ctx context.Context) (ImageStore, error)
-}
-
-type ImageDestination interface {
-	ImageDestination() string
 }
 
 type ImagePlan struct {
@@ -80,7 +78,7 @@ func (p ImagePlan) Ship(ctx context.Context, report Reporter) error {
 		if held {
 			continue
 		}
-		where := p.destination(push)
+		where := p.Store.Destination()
 		if report != nil {
 			report.Say("Sending " + push.App + "'s image to " + where)
 		}
@@ -115,13 +113,6 @@ func (p ImagePlan) Coordinate(app string) string {
 	return ""
 }
 
-func (p ImagePlan) destination(push ImagePush) string {
-	if named, says := p.Store.(ImageDestination); says {
-		return named.ImageDestination()
-	}
-	return push.Target
-}
-
 func (p ImagePlan) held(ctx context.Context, push ImagePush) (bool, error) {
 	if p.Store == nil {
 		return false, Refuse(CodeInvalid,
@@ -129,7 +120,7 @@ func (p ImagePlan) held(ctx context.Context, push ImagePush) (bool, error) {
 	}
 	held, err := p.Store.Has(ctx, push)
 	if err != nil {
-		return false, fmt.Errorf("look for %s's image in %s: %w", push.App, p.destination(push), err)
+		return false, fmt.Errorf("look for %s's image in %s: %w", push.App, p.Store.Destination(), err)
 	}
 	return held, nil
 }

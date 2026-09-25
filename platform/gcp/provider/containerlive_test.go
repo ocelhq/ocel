@@ -111,9 +111,6 @@ func TestTheProviderWrapsEveryContainerInTheRuntimeItCarries(t *testing.T) {
 	t.Parallel()
 	p := pushing(t, "")
 
-	if providerkit.Bakes(p, providerkit.ComputeContainer) {
-		t.Fatal("Bakes(container) = true, so a secret would be resolved on the deploy machine and handed to the revision in the clear")
-	}
 	if _, err := p.ContainerArch(context.Background(), "web", providerkit.ArchARM64); err == nil || !strings.Contains(err.Error(), "web") {
 		t.Errorf("ContainerArch(arm64) = %v, want the app refused by name before its image is built: Cloud Run runs x86_64 alone", err)
 	}

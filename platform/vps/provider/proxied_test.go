@@ -16,7 +16,7 @@ func refusingReach(t *testing.T, resources []providerkit.Resource, grants []prov
 		return naming.Proxied(providerkit.WireBindingType(kind)) || kind == providerkit.BindingType("queue")
 	}
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "box.example", User: "ocel-deploy"}})
-	return providerkit.RefuseUnreachableBindings(p.Vendor(), p.Serves(), proxied, resources, grants)
+	return providerkit.RefuseUnreachableBindings(p.Facts().Vendor, p.Facts().Bindings, proxied, resources, grants)
 }
 
 func TestABoxRefusesAProxiedBindingItServesNothingFor(t *testing.T) {

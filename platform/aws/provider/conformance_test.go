@@ -31,12 +31,12 @@ func TestTheRootCarriesTheVendorAndEveryOptionalSet(t *testing.T) {
 
 	p := provider.NewProvider(provider.Options{Region: "us-east-1"}, nil, aws.Config{Region: "us-east-1"}, defaultNamespace)
 
-	if p.Vendor() != provider.Vendor {
-		t.Errorf("Vendor() = %q, want %q", p.Vendor(), provider.Vendor)
+	if p.Facts().Vendor != provider.Vendor {
+		t.Errorf("Facts().Vendor = %q, want %q", p.Facts().Vendor, provider.Vendor)
 	}
 	for _, want := range []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket} {
-		if !slices.Contains(p.Serves(), want) {
-			t.Errorf("Serves() = %v, want it to carry %s", p.Serves(), want)
+		if !slices.Contains(p.Facts().Bindings, want) {
+			t.Errorf("Facts().Bindings = %v, want it to carry %s", p.Facts().Bindings, want)
 		}
 	}
 

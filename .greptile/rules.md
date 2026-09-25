@@ -146,6 +146,40 @@ Fails when:
 - An import crosses from one vendor into another.
 - Code assumes origin and edge come from the same vendor.
 
+## Naming
+
+The Go kits (`pkg/providerkit`, its siblings under `pkg/`, and the vendors under
+`platform/` that implement them) name things with words people already use, and a
+provider declares what it can do where the compiler checks it.
+
+1. **A name is a word people already use for the thing**, in this domain or in English:
+   `Provider`, `Ledger`, `Cipher`, `Certificates`, `Connector`, `Stacks`. A role minted
+   from a verb never is.
+2. **A required port is a noun accessor on `Provider`; an optional step is a verb-named
+   func field on `Hooks`.** Nil means absent.
+3. **A yes/no or constant about a provider is a `Facts` field.**
+4. **One word, one meaning across the kits.**
+5. **A method never repeats its receiver's noun.**
+6. **One vendor file per port or hook, named after it.** The vendor's root file holds the
+   constructor, the `Facts` literal, the `Hooks` literal and the port accessors, and
+   nothing else.
+
+Fails when:
+
+- An exported type is an `-er`/`-or` agent noun (`Prober`, `Certifier`, `Releaser`,
+  `Sealer`, `Reporter`, `Tracer`, `Warmer`, `Pricer`, `Fetcher`) rather than the word for
+  the thing it hands over.
+- Code type-asserts a provider, a port, a program or an `impl any` to discover an optional
+  capability. A typo in a method name then drops the capability without a compile error.
+- A provider answers a yes/no or a constant through a method or a marker interface
+  instead of a `Facts` field.
+- A word already given a meaning in the kits is used for a second thing.
+- A method repeats its receiver's noun (`Certificates.IssueCertificate`,
+  `Runtime.ContainerRuntime`).
+- A vendor's port or hook body lives in its root file or in a file named for something
+  else, or a `var _ providerkit.X = (*Provider)(nil)` assertion stands in for the
+  `Facts` or `Hooks` literal that already type-checks it.
+
 ## Signal
  
 The code carries the explanation; comments carry only what the code cannot. Zero comments

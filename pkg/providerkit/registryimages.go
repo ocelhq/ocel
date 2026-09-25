@@ -32,6 +32,8 @@ func (r registryImages) String() string {
 
 func (r registryImages) GoString() string { return r.String() }
 
+func (r registryImages) Destination() string { return r.target.Server }
+
 var manifestTypes = []string{
 	"application/vnd.oci.image.index.v1+json",
 	"application/vnd.oci.image.manifest.v1+json",

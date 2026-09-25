@@ -87,13 +87,6 @@ func RunDNSRegistry(t *testing.T, dns providerkit.DNSRegistry) {
 		}
 	})
 
-	t.Run("Default is unnamed or one of the supported writers", func(t *testing.T) {
-		fallback := dns.Default()
-		if fallback != "" && !slices.Contains(supported, fallback) {
-			t.Errorf("Default() = %q, which Supported() does not offer: %v", fallback, supported)
-		}
-	})
-
 	t.Run("Open answers every supported writer", func(t *testing.T) {
 		for _, kind := range supported {
 			writer, err := dns.Open(kind, "conformance.invalid", "")

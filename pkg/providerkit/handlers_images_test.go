@@ -279,7 +279,7 @@ func TestTheImageStoreIsOpenedFromTheTargetTheDeployCarries(t *testing.T) {
 
 type refusingStore struct{ where string }
 
-func (s refusingStore) ImageDestination() string { return s.where }
+func (s refusingStore) Destination() string { return s.where }
 
 func (s refusingStore) Has(context.Context, providerkit.ImagePush) (bool, error) {
 	return false, nil
@@ -410,7 +410,7 @@ type addressedImages struct {
 	at string
 }
 
-func (a addressedImages) ImageDestination() string { return a.at }
+func (a addressedImages) Destination() string { return a.at }
 
 type addressingProvider struct {
 	*fake.Provider

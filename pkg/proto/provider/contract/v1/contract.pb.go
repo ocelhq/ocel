@@ -3180,7 +3180,6 @@ type PreflightResponse struct {
 	Bootstrap             *BootstrapStatus       `protobuf:"bytes,8,opt,name=bootstrap,proto3" json:"bootstrap,omitempty"`
 	Computes              []string               `protobuf:"bytes,9,rep,name=computes,proto3" json:"computes,omitempty"`
 	Standing              []*StandingCheck       `protobuf:"bytes,10,rep,name=standing,proto3" json:"standing,omitempty"`
-	BakedComputes         []string               `protobuf:"bytes,11,rep,name=baked_computes,json=bakedComputes,proto3" json:"baked_computes,omitempty"`
 	ContainerArchs        map[string]string      `protobuf:"bytes,12,rep,name=container_archs,json=containerArchs,proto3" json:"container_archs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
@@ -3282,13 +3281,6 @@ func (x *PreflightResponse) GetComputes() []string {
 func (x *PreflightResponse) GetStanding() []*StandingCheck {
 	if x != nil {
 		return x.Standing
-	}
-	return nil
-}
-
-func (x *PreflightResponse) GetBakedComputes() []string {
-	if x != nil {
-		return x.BakedComputes
 	}
 	return nil
 }
@@ -4979,7 +4971,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"containers\"V\n" +
 	"\fContainerApp\x12\x19\n" +
 	"\x03app\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x03app\x12+\n" +
-	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\xe3\x06\n" +
+	"\x04arch\x18\x02 \x01(\tB\x17\xbaH\x14\xd8\x01\x01r\x0fR\x06x86_64R\x05arm64R\x04arch\"\xbc\x06\n" +
 	"\x11PreflightResponse\x12:\n" +
 	"\n" +
 	"infra_tier\x18\x01 \x01(\x0e2\x1b.common.environment.v1.TierR\tinfraTier\x125\n" +
@@ -4993,8 +4985,7 @@ const file_provider_contract_v1_contract_proto_rawDesc = "" +
 	"\tbootstrap\x18\b \x01(\v2%.provider.contract.v1.BootstrapStatusR\tbootstrap\x12\x1a\n" +
 	"\bcomputes\x18\t \x03(\tR\bcomputes\x12?\n" +
 	"\bstanding\x18\n" +
-	" \x03(\v2#.provider.contract.v1.StandingCheckR\bstanding\x12%\n" +
-	"\x0ebaked_computes\x18\v \x03(\tR\rbakedComputes\x12~\n" +
+	" \x03(\v2#.provider.contract.v1.StandingCheckR\bstanding\x12~\n" +
 	"\x0fcontainer_archs\x18\f \x03(\v2;.provider.contract.v1.PreflightResponse.ContainerArchsEntryB\x18\xbaH\x15\x9a\x01\x12*\x10r\x0eR\x05amd64R\x05arm64R\x0econtainerArchs\x1aA\n" +
 	"\x13ContainerArchsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +

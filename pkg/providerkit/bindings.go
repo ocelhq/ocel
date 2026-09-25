@@ -43,7 +43,7 @@ func (r *deployRun) admitBindings(ctx context.Context, report Reporter) error {
 		if resource.Binding == "" || r.writtenByTheDeploy(resource.Binding, published) {
 			continue
 		}
-		if err := ReadableAs(published[resource.Binding], resource.Declared, resource.Type, r.proxied); err != nil {
+		if err := ReadableAs(published[resource.Binding], resource.Declared, resource.Type, proxied); err != nil {
 			return err
 		}
 	}
@@ -55,10 +55,7 @@ func (r *deployRun) writtenByTheDeploy(name string, published map[string]Binding
 	return r.dry && !held && naming.IsInlineRecord(name)
 }
 
-func (r *deployRun) proxied(kind BindingType) bool {
-	if binder, asks := r.provider.(ProxiedBinder); asks {
-		return binder.Proxied(kind)
-	}
+func proxied(kind BindingType) bool {
 	return naming.Proxied(WireBindingType(kind))
 }
 
@@ -134,7 +131,7 @@ func (r *deployRun) warnShadowed(report Reporter, resources []Resource, publishe
 			continue
 		}
 		namesake, held := published[resource.Declared]
-		if !held || ReadableAs(namesake, resource.Declared, resource.Type, r.proxied) != nil {
+		if !held || ReadableAs(namesake, resource.Declared, resource.Type, proxied) != nil {
 			continue
 		}
 		report.Say(fmt.Sprintf(

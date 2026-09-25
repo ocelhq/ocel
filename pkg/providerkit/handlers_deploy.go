@@ -571,14 +571,14 @@ func (r *deployRun) preflight(ctx context.Context, report Reporter) error {
 	if err != nil {
 		return err
 	}
-	if err := RefuseUnreachableBindings(r.provider.Vendor(), r.provider.Serves(), r.proxied, resources, grants); err != nil {
+	if err := RefuseUnreachableBindings(r.provider.Facts().Vendor, r.provider.Facts().Bindings, proxied, resources, grants); err != nil {
 		return Refuse(CodeInvalid, "%s", err)
 	}
 	if err := r.refuseContainerValues(ctx); err != nil {
 		return err
 	}
-	if _, renders := r.provider.(TransformRenderer); !renders {
-		if err := RefuseTransforms(r.provider.Vendor(), r.transforms); err != nil {
+	if facts := r.provider.Facts(); !facts.RendersTransforms {
+		if err := RefuseTransforms(facts.Vendor, r.transforms); err != nil {
 			return err
 		}
 	}
@@ -790,7 +790,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 					PreviewLabel:    r.previewLabel(slot),
 					Guard:           facts.Guard,
 					Packed:          pack.Carry,
-					Proxied:         anyProxied(r.proxied, grants),
+					Proxied:         anyProxied(proxied, grants),
 				},
 			}
 			if r.dry {
@@ -941,11 +941,7 @@ func (r *deployRun) appValues(ctx context.Context, entry AppEntry, grants []Bind
 	if err != nil {
 		return AppValues{}, err
 	}
-	delivered, err := r.deliver(ctx, entry, held)
-	if err != nil {
-		return AppValues{}, err
-	}
-	held.Delivered = delivered
+	held.Delivered = r.deliver(entry, held)
 	return held, nil
 }
 
@@ -977,10 +973,6 @@ func (r *deployRun) manifestValues(entry AppEntry, grants []Binding) (AppValues,
 }
 
 func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
-	url := true
-	if addressed, says := r.provider.(ServesFunctionURLs); says {
-		url = addressed.ServesFunctionURLs()
-	}
 	var specs []FunctionSpec
 	for _, fn := range r.manifest.GetFunctions() {
 		if fn.GetApp() != entry.App {
@@ -994,7 +986,6 @@ func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
 			Runtime:  Runtime{Name: fn.GetRuntime().GetName(), Arch: fn.GetRuntime().GetArch()},
 			Artifact: artifact,
 			Image:    r.functionImage(fn.GetLogicalName()),
-			URL:      url,
 		})
 	}
 	return specs

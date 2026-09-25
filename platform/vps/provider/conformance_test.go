@@ -27,9 +27,6 @@ func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
 	if got := registry.Supported(); !slices.Equal(got, []providerkit.DNSKind{"cloudflare"}) {
 		t.Errorf("Supported() = %v, want cloudflare alone", got)
 	}
-	if got := registry.Default(); got != "" {
-		t.Errorf("Default() = %q, want no default: instructions-only DNS is the absence of a writer", got)
-	}
 	writer, err := registry.Open("cloudflare", "app.com", "")
 	if err != nil || writer == nil {
 		t.Fatalf("Open(cloudflare) = %v, %v, want a writer", writer, err)
@@ -89,10 +86,10 @@ func TestTheRootCarriesTheVendorAndNoOptionalSetYet(t *testing.T) {
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}})
 
-	if p.Vendor() != vps.Vendor {
-		t.Errorf("Vendor() = %q, want %q", p.Vendor(), vps.Vendor)
+	if p.Facts().Vendor != vps.Vendor {
+		t.Errorf("Facts().Vendor = %q, want %q", p.Facts().Vendor, vps.Vendor)
 	}
-	if got := p.Serves(); !slices.Equal(got, []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket}) {
+	if got := p.Facts().Bindings; !slices.Equal(got, []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket}) {
 		t.Errorf("Serves() = %v, want the binding types a box provisions for itself", got)
 	}
 
@@ -102,7 +99,6 @@ func TestTheRootCarriesTheVendorAndNoOptionalSetYet(t *testing.T) {
 		"CodeEmbedder":   held[providerkit.CodeEmbedder](root),
 		"StackInspector": held[providerkit.StackInspector](root),
 		"GrantVerifier":  held[providerkit.GrantVerifier](root),
-		"ProxiedBinder":  held[providerkit.ProxiedBinder](root),
 		"ArtifactPacker": held[providerkit.ArtifactPacker](root),
 	} {
 		if held {

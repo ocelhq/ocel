@@ -46,7 +46,7 @@ func aBucket(t *testing.T, name string, public bool) resources.Instruction {
 func TestAProviderOverABoxServesBuckets(t *testing.T) {
 	t.Parallel()
 
-	if served := over(&box{}).Serves(); !slices.Contains(served, providerkit.BindingBucket) {
+	if served := over(&box{}).Facts().Bindings; !slices.Contains(served, providerkit.BindingBucket) {
 		t.Errorf("Serves() = %v, and a project declaring a bucket is refused at deploy on a box", served)
 	}
 }

@@ -110,9 +110,6 @@ func TestTheProviderBakesNothingIntoAFunctionRevision(t *testing.T) {
 	t.Parallel()
 	p := pushing(t, "")
 
-	if providerkit.Bakes(p, providerkit.ComputeServerless) {
-		t.Fatal("Bakes(serverless) = true, so a secret would be resolved on the deploy machine and handed to the function's revision in the clear")
-	}
 	if _, wraps := any(p).(providerkit.FunctionImager); !wraps {
 		t.Fatal("the provider builds no function image, and only one it builds can be wrapped in its runtime")
 	}

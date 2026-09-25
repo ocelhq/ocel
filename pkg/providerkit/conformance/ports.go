@@ -39,7 +39,7 @@ func RunPorts(t *testing.T, provider providerkit.Provider) {
 	t.Run("Sealer", func(t *testing.T) { RunSealer(t, provider.Sealer()) })
 	t.Run("ArtifactStore", func(t *testing.T) { RunArtifactStore(t, provider.Artifacts()) })
 	t.Run("Releaser", func(t *testing.T) {
-		RunReleaser(t, provider.Releases(), provider.Artifacts(), provider.Records(), provider.Serves())
+		RunReleaser(t, provider.Releases(), provider.Artifacts(), provider.Records(), provider.Facts().Bindings)
 	})
 	t.Run("Bootstrapper", func(t *testing.T) {
 		RunBootstrapper(t, bootstrapperOf(t, provider), provider.Edges().Default())
@@ -758,6 +758,8 @@ type countedImages struct {
 	mu     sync.Mutex
 	pushed int
 }
+
+func (c *countedImages) Destination() string { return "the counted store" }
 
 func (c *countedImages) Has(context.Context, providerkit.ImagePush) (bool, error) { return false, nil }
 

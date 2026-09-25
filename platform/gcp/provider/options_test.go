@@ -17,8 +17,8 @@ func TestTheOptionsAreAProjectAndARegionAndNothingElse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("New() = %v, want a provider", err)
 	}
-	if p.Vendor() != gcp.Vendor {
-		t.Errorf("Vendor() = %q, want %q", p.Vendor(), gcp.Vendor)
+	if p.Facts().Vendor != gcp.Vendor {
+		t.Errorf("Facts().Vendor = %q, want %q", p.Facts().Vendor, gcp.Vendor)
 	}
 }
 

@@ -82,7 +82,7 @@ func TestAnEmulatedDeployLoadsItsImagesIntoTheDaemonTheEmulatorShares(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(direct.(providerkit.ImageDestination).ImageDestination(), "daemon") {
+	if !strings.Contains(direct.Destination(), "daemon") {
 		t.Errorf("DirectImages() = %v, want the local docker daemon the emulator runs containers out of", direct)
 	}
 

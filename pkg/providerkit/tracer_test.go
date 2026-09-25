@@ -22,8 +22,8 @@ func TestEventTracerDeclareStagesSendsAStagePlanEvent(t *testing.T) {
 
 	unit := UnitStage(naming.UnitEnvironment, "Environment")
 	phase := PhaseStage(unit.Name, progressv1.Phase_PHASE_PROVISIONING)
-	DeclareStages(tracer, unit)
-	DeclareStages(tracer, phase)
+	tracer.DeclareStages(unit)
+	tracer.DeclareStages(phase)
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
@@ -61,7 +61,7 @@ func TestDeclaredUnitAndPhaseIDsAreTheSharedNamingDigests(t *testing.T) {
 	tracer := newEventTracer(sender)
 
 	unit := UnitStage(naming.UnitEnvironment, "Environment")
-	DeclareStages(tracer,
+	tracer.DeclareStages(
 		unit,
 		PhaseStage(unit.Name, progressv1.Phase_PHASE_BUILDING),
 		PhaseStage(unit.Name, progressv1.Phase_PHASE_PROVISIONING),
@@ -95,12 +95,6 @@ func TestDetailStagesMintTheirOwnIDUnderTheirPhase(t *testing.T) {
 	if first.ParentID != phase.ID {
 		t.Error("a detail stage hangs off something other than its phase")
 	}
-}
-
-func TestDeclareStagesToleratesNoTracer(t *testing.T) {
-	t.Parallel()
-
-	DeclareStages(nil, UnitStage(naming.UnitEnvironment, "Environment"))
 }
 
 func TestEventTracerSpanUsesTheStageIDAsTheSpanID(t *testing.T) {
