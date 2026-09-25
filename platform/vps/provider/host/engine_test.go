@@ -486,6 +486,25 @@ func TestARealProxyDropsNoRequestWhileAFlipMovesAStandingRouteBetweenUpstreams(t
 	}
 	held := stood.moves(t, routingTableItem().Content, serving(one))
 
+	flips := 0
+	dropped, bodies := underLoad(func() {
+		for _, upstream := range []string{two, one, two, one, two, one, two, one, two, one} {
+			held = stood.moves(t, held, serving(upstream))
+			flips++
+			time.Sleep(200 * time.Millisecond)
+		}
+	})
+
+	if len(dropped) > 0 {
+		t.Errorf("%d of the requests made while %d flips moved %s between two standing upstreams went unanswered, and a release is meant to drop nothing while one release takes over from the other: %v",
+			len(dropped), flips, claimed, dropped[:min(len(dropped), 5)])
+	}
+	if bodies["one"] == 0 || bodies["two"] == 0 {
+		t.Errorf("the requests made across the flips were answered %v, want both upstreams: a flip that never moved the route drops nothing and proves nothing", bodies)
+	}
+}
+
+func underLoad(storm func()) ([]string, map[string]int) {
 	var (
 		mu      sync.Mutex
 		dropped []string
@@ -527,21 +546,53 @@ func TestARealProxyDropsNoRequestWhileAFlipMovesAStandingRouteBetweenUpstreams(t
 	}
 
 	time.Sleep(500 * time.Millisecond)
-	flips := 0
-	for _, upstream := range []string{two, one, two, one, two, one, two, one, two, one} {
-		held = stood.moves(t, held, serving(upstream))
-		flips++
-		time.Sleep(200 * time.Millisecond)
-	}
+	storm()
 	close(done)
 	group.Wait()
+	return dropped, bodies
+}
 
-	if len(dropped) > 0 {
-		t.Errorf("%d of the requests made while %d flips moved %s between two standing upstreams went unanswered, and a release is meant to drop nothing while one release takes over from the other: %v",
-			len(dropped), flips, claimed, dropped[:min(len(dropped), 5)])
+func TestARealProxyDropsNoRequestWhileOtherHostnamesAreBoundAndUnboundBesideIt(t *testing.T) {
+	stood := proxyStanding(t)
+
+	state := routed()
+	stood.standsApp(t, state.Routes[0].Upstream, "one")
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	held := stood.moves(t, routingTableItem().Content, state)
+	standing := mustRender(t, state)
+
+	binds, rendered := 0, 0
+	dropped, bodies := underLoad(func() {
+		for round := range 20 {
+			next := state
+			if round%2 == 0 {
+				next.Claims = append(slices.Clone(state.Claims),
+					HostClaim{Hostname: fmt.Sprintf("bound-%d.example.com", round), Owner: otherSurface, Pointer: pointed},
+					previewClaim(fmt.Sprintf("pr-%d", round), "", fmt.Sprintf("shop--pr-%d.%s", round, previewBase)))
+				next.PreviewBase = previewBase
+				next.Connector = "box.example.com"
+			}
+			config := mustRender(t, next)
+			if !bytes.Equal(config, standing) {
+				rendered++
+			}
+			held = stood.stages(t, held, next, config)
+			stood.drives(t, "load", stood.table)
+			stood.reloads(t)
+			binds++
+			time.Sleep(100 * time.Millisecond)
+		}
+	})
+
+	if rendered > 0 {
+		t.Errorf("%d of %d binds and unbinds rendered the front proxy's config anew, and each is a reload that restarts every server it runs", rendered, binds)
 	}
-	if bodies["one"] == 0 || bodies["two"] == 0 {
-		t.Errorf("the requests made across the flips were answered %v, want both upstreams: a flip that never moved the route drops nothing and proves nothing", bodies)
+	if len(dropped) > 0 {
+		t.Errorf("%d of the requests made to %s while %d binds and unbinds of other hostnames ran beside it went unanswered, and binding a domain for one project must drop nothing on another (#1280): %v",
+			len(dropped), claimed, binds, dropped[:min(len(dropped), 5)])
+	}
+	if bodies["one"] == 0 {
+		t.Errorf("the requests made across the binds were answered %v, want the app on %s: a storm nothing was served through proves nothing", bodies, claimed)
 	}
 }
 
