@@ -380,7 +380,7 @@ type composed struct {
 	written   tableDigest
 	changed   bool
 	reloading bool
-	was, is   RoutingTable
+	is        RoutingTable
 }
 
 func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (RoutingTable, error)) (composed, error) {
@@ -418,27 +418,15 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 		if err != nil {
 			return shaped, err
 		}
-		shaped.was, shaped.is = standing, next
+		shaped.is = next
 		shaped.reloading = !bytes.Equal(held.config, admitted)
-		shaped.written, err = h.writeRouting(ctx, held.digest(), next)
+		shaped.written, err = h.writePair(ctx, held.digest(), routingPair{table: after, config: admitted})
 		shaped.changed = true
 		rewrites++
 		if err == nil || !moved(err) || rewrites >= routingRewrites {
 			return shaped, err
 		}
 	}
-}
-
-func (h *Host) writeRouting(ctx context.Context, expected tableDigest, table RoutingTable) (tableDigest, error) {
-	written, err := WriteRoutingTable(table)
-	if err != nil {
-		return "", err
-	}
-	rendered, err := RenderProxyConfig(h.front, table)
-	if err != nil {
-		return "", err
-	}
-	return h.writePair(ctx, expected, routingPair{table: written, config: rendered})
 }
 
 func pairFed(pair routingPair) string {
