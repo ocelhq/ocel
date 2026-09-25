@@ -22,6 +22,10 @@
       "types": "./dist/dns.d.ts",
       "import": "./dist/dns.js"
     },
+    "./env-source": {
+      "types": "./dist/env-source.d.ts",
+      "import": "./dist/env-source.js"
+    },
     "./providers/aws": {
       "types": "./dist/providers/aws/index.d.ts",
       "import": "./dist/providers/aws/index.js"

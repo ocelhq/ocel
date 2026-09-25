@@ -1,6 +1,7 @@
 import { defineConfig, type Need } from "ocel/config";
 import { cloudflareDns } from "ocel/dns";
 import { cloudflare } from "ocel/edge";
+import { exec, infisical } from "ocel/env-source";
 import awsProvider from "ocel/providers/aws";
 import { route53 } from "ocel/providers/aws/dns";
 import { apiGateway, cloudfront } from "ocel/providers/aws/edge";
@@ -111,3 +112,56 @@ export const bindingWithoutItsSigil = defineConfig({
   // @ts-expect-error a published record is written "@name"
   bindings: { postgres: { analytics: "warehouse" } },
 });
+
+export const everyTierFromItsSource = defineConfig({
+  slug: "test-app",
+  envSource: {
+    production: infisical({
+      project: "p-1",
+      environment: "prod",
+      auth: {
+        universal: {
+          clientId: { var: "INFISICAL_CLIENT_ID" },
+          clientSecret: { var: "INFISICAL_CLIENT_SECRET" },
+        },
+      },
+    }),
+    preview: exec({ command: ["./scripts/preview-env.sh", "{folder}"], format: "json" }),
+    dev: infisical({ project: "p-1", environment: "dev" }),
+  },
+});
+
+export const tierDefaultsNamed = defineConfig({
+  slug: "test-app",
+  envSource: { production: "builtin", preview: "builtin", dev: "dotenv" },
+});
+
+export const dotenvDeployed = defineConfig({
+  slug: "test-app",
+  // @ts-expect-error a deployed tier has no .env file to read
+  envSource: { production: "dotenv" },
+});
+
+export const builtinInDev = defineConfig({
+  slug: "test-app",
+  // @ts-expect-error ocel dev reads nothing from your account
+  envSource: { dev: "builtin" },
+});
+
+export const infisicalWithoutAnEnvironment = infisical({
+  project: "p-1",
+  // @ts-expect-error an Infisical source names the environment it reads
+  environmnt: "prod",
+});
+
+export const universalAuthAsPlainText = infisical({
+  project: "p-1",
+  environment: "prod",
+  // @ts-expect-error a credential is a value ocel holds, never plain text in the config
+  auth: { universal: { clientId: "id", clientSecret: "secret" } },
+});
+
+export const execWithoutAFormat = exec(
+  // @ts-expect-error exec names what its command prints
+  { command: ["./scripts/dev-env.sh"] },
+);
