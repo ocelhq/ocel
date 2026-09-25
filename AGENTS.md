@@ -100,7 +100,10 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
   generated JSON Schema under `public/schema/`.
 - **`tests/`** — the suites that drive the real binary — the journeys, the dev-server
   suite and the Next compatibility harness — and under `tests/fixtures/<concern>/` the
-  apps they drive. A fixture directory exercises one concern and nothing else.
+  apps they drive. A fixture directory exercises one concern and nothing else. Under
+  `tests/fronts/<name>/`, a proxy a vps box runs in front of ocel: the steps that stand
+  it up before bootstrap, check it after, and take it down, and the `proxy` option its
+  projects carry. Both the live suite and a journey lane drive them.
 - **`docs/agents/`** — configuration the agent skills read. Not product documentation;
   nothing that explains the code belongs here.
 - **`.github/`** — CI. **`.changes/`** — the release mechanism; the workflow runs the
