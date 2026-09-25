@@ -100,8 +100,13 @@ func TestARouterWithNoOwnBackendRefusesABucketNoBindingNames(t *testing.T) {
 	router := route(nil, boundBackend(t, "b0", "acme/uploads"))
 
 	_, err := router.Head(context.Background(), &bucketv1.HeadRequest{Bucket: "elsewhere", Key: "a.png"})
-	if connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("Head(elsewhere) = %v, want permission denied", err)
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Fatalf("Head(elsewhere) = %v, want failed precondition", err)
+	}
+	for _, want := range []string{`"elsewhere"`, "endpoint"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Head(elsewhere) = %v, want it to name %s: this runtime has no store of its own, so a grant is not what is missing", err, want)
+		}
 	}
 	_, err = router.CompleteUpload(context.Background(), &bucketv1.CompleteUploadRequest{SessionId: "sess_0a1b2c"})
 	if connect.CodeOf(err) != connect.CodeNotFound {
