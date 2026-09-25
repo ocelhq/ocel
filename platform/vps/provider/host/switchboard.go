@@ -1,8 +1,6 @@
 package host
 
 import (
-	"strings"
-
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -24,9 +22,7 @@ var switchboardCapabilities = []string{"DAC_OVERRIDE", "DAC_READ_SEARCH"}
 
 func switchboardBinary(arch string) []byte { return embedded(switchboard.Name, arch) }
 
-func switchboardStanding(binary []byte) boxContainer { return switchboardOver(contentSum(binary)) }
-
-func switchboardOver(sum string) boxContainer {
+func switchboardStanding(binary []byte) boxContainer {
 	return boxContainer{
 		name:  SwitchboardContainer,
 		image: SwitchboardImage,
@@ -35,7 +31,7 @@ func switchboardOver(sum string) boxContainer {
 			"--table", live.RoutingTable,
 			"--trust", caddy.Container,
 		},
-		config: sum,
+		config: contentSum(binary),
 		binds: []string{
 			SwitchboardDir + ":" + switchboardMount + ":ro",
 			live.RoutingDir + ":" + live.RoutingDir + ":ro",
@@ -53,13 +49,4 @@ func switchboardOver(sum string) boxContainer {
 
 func switchboardCommand(argv ...string) []string {
 	return append([]string{"docker", "exec", SwitchboardContainer, SwitchboardMounted}, argv...)
-}
-
-func factOf(facts []byte, name string) string {
-	for line := range strings.Lines(string(facts)) {
-		if value, held := strings.CutPrefix(strings.TrimSpace(line), name+"="); held {
-			return value
-		}
-	}
-	return ""
 }
