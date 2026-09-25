@@ -35,34 +35,34 @@ func (s albStacks) Up(
 	program alb.Program,
 	progress edge.Progress,
 ) (map[string]string, error) {
-	adapter, plan, err := s.opened(ctx, target, program)
+	automation, plan, err := s.opened(ctx, target, program)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := adapter.Run(ctx, plan, progress); err != nil {
+	if _, err := automation.Run(ctx, plan, progress); err != nil {
 		return nil, err
 	}
-	return outputsOf(ctx, adapter, plan.Ref)
+	return outputsOf(ctx, automation, plan.Ref)
 }
 
 func (s albStacks) Destroy(ctx context.Context, target alb.Target, progress edge.Progress) error {
-	adapter, plan, err := s.opened(ctx, target, nil)
+	automation, plan, err := s.opened(ctx, target, nil)
 	if err != nil {
 		return err
 	}
-	return adapter.Destroy(ctx, plan.Ref, progress)
+	return automation.Destroy(ctx, plan.Ref, progress)
 }
 
 func (s albStacks) Outputs(ctx context.Context, target alb.Target) (map[string]string, error) {
-	adapter, plan, err := s.opened(ctx, target, nil)
+	automation, plan, err := s.opened(ctx, target, nil)
 	if err != nil {
 		return nil, err
 	}
-	return outputsOf(ctx, adapter, plan.Ref)
+	return outputsOf(ctx, automation, plan.Ref)
 }
 
-func outputsOf(ctx context.Context, adapter *kitpulumi.Adapter, ref providerkit.StackRef) (map[string]string, error) {
-	outputs, err := adapter.Outputs(ctx, ref, edge.DiscardProgress())
+func outputsOf(ctx context.Context, automation *kitpulumi.Automation, ref providerkit.StackRef) (map[string]string, error) {
+	outputs, err := automation.Outputs(ctx, ref, edge.DiscardProgress())
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func (s albStacks) opened(
 	ctx context.Context,
 	target alb.Target,
 	program alb.Program,
-) (*kitpulumi.Adapter, providerkit.StackPlan, error) {
+) (*kitpulumi.Automation, providerkit.StackPlan, error) {
 	clients, err := s.p.stood(ctx)
 	if err != nil {
 		return nil, providerkit.StackPlan{}, err

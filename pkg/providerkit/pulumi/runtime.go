@@ -18,20 +18,20 @@ const PinnedVersion = "3.146.0"
 
 const cacheDirName = ".ocel"
 
-var pinned installer
+var pinned installation
 
 func Install(ctx context.Context, progress providerkit.Progress) error {
 	_, err := pinned.install(ctx, progress)
 	return err
 }
 
-type installer struct {
+type installation struct {
 	once    sync.Once
 	command auto.PulumiCommand
 	err     error
 }
 
-func (i *installer) install(ctx context.Context, progress providerkit.Progress) (auto.PulumiCommand, error) {
+func (i *installation) install(ctx context.Context, progress providerkit.Progress) (auto.PulumiCommand, error) {
 	i.once.Do(func() { i.command, i.err = install(ctx, progress) })
 	return i.command, i.err
 }

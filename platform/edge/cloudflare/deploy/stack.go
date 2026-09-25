@@ -111,28 +111,28 @@ func (own private) wrapsEnvelopes() bool {
 }
 
 type stack struct {
-	p     *provider
+	p     *cloudflare
 	state edge.StackState
 	own   private
 }
 
 func (s *stack) State() edge.StackState {
 	held := s.state
-	held.Adapter = edge.Own(s.own)
+	held.Private = edge.Own(s.own)
 	return held
 }
 
 func (s *stack) Ledger() edge.Ledger { return s }
 
-func (p *provider) Open(state edge.StackState) (edge.EdgeStack, error) {
+func (p *cloudflare) Open(state edge.StackState) (edge.EdgeStack, error) {
 	s := &stack{p: p, state: state}
-	if err := state.Adapter.Into(&s.own); err != nil {
+	if err := state.Private.Into(&s.own); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
-func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
+func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return nil, fmt.Errorf("%s is not set; it is required to reconcile the Cloudflare stack", envAccountID)
@@ -146,7 +146,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	endpoint := program.StoreEndpoint
 
 	var held private
-	if err := prior.Adapter.Into(&held); err != nil {
+	if err := prior.Private.Into(&held); err != nil {
 		return nil, err
 	}
 	envelopeKey := held.EnvelopeKey
@@ -234,7 +234,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	return opened(next)
 }
 
-func (p *provider) recordEntryWorker(slug, name string) []string {
+func (p *cloudflare) recordEntryWorker(slug, name string) []string {
 	p.entryMu.Lock()
 	defer p.entryMu.Unlock()
 	if p.entryWorkers == nil {
@@ -247,7 +247,7 @@ func (p *provider) recordEntryWorker(slug, name string) []string {
 	return slices.Clone(p.entryWorkers[slug])
 }
 
-func (p *provider) putWorkerScript(ctx context.Context, up upload, what string) error {
+func (p *cloudflare) putWorkerScript(ctx context.Context, up upload, what string) error {
 	assetsJWT, err := p.uploadAssets(ctx, up)
 	if err != nil {
 		return fmt.Errorf("upload %s assets: %w", what, err)
@@ -263,7 +263,7 @@ type storeIdentity struct {
 	ownerToken string
 }
 
-func (p *provider) ensureInstance(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (storeIdentity, stampSet, error) {
+func (p *cloudflare) ensureInstance(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (storeIdentity, stampSet, error) {
 	if secret := prior.Secret; secret != "" && prior.Slug == spec.Slug {
 		current, res, err := p.getVersionStamp(ctx, spec.Program.StoreEndpoint, spec.Slug, secret)
 		switch {
@@ -317,7 +317,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-func (p *provider) stackWorkers(ctx context.Context, state edge.StackState) ([]string, error) {
+func (p *cloudflare) stackWorkers(ctx context.Context, state edge.StackState) ([]string, error) {
 	named := map[string]bool{}
 	var apps []string
 	if secret := state.Secret; secret != "" {
@@ -348,7 +348,7 @@ func (p *provider) stackWorkers(ctx context.Context, state edge.StackState) ([]s
 	return slices.Sorted(maps.Keys(named)), nil
 }
 
-func (p *provider) deployedApps(ctx context.Context, state edge.StackState) ([]string, error) {
+func (p *cloudflare) deployedApps(ctx context.Context, state edge.StackState) ([]string, error) {
 	history, err := (&stack{p: p, state: state}).History(ctx, "")
 	if err != nil {
 		return nil, fmt.Errorf("read the project's promotion history, which names the workers it deployed: %w", err)
@@ -362,7 +362,7 @@ func (p *provider) deployedApps(ctx context.Context, state edge.StackState) ([]s
 	return slices.Sorted(maps.Keys(apps)), nil
 }
 
-func (p *provider) destroyWorkers(ctx context.Context, names []string) error {
+func (p *cloudflare) destroyWorkers(ctx context.Context, names []string) error {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return fmt.Errorf("%s is not set; it is required to destroy the Cloudflare stack", envAccountID)
@@ -386,7 +386,7 @@ func (p *provider) destroyWorkers(ctx context.Context, names []string) error {
 	return errors.Join(errs...)
 }
 
-func (p *provider) putDurableObjectScript(ctx context.Context, up upload, do durableObjectWorker, deployedClasses, inherited []string) error {
+func (p *cloudflare) putDurableObjectScript(ctx context.Context, up upload, do durableObjectWorker, deployedClasses, inherited []string) error {
 	body, contentType, err := buildDurableObjectScriptMultipart(up.worker, do, deployedClasses, inherited)
 	if err != nil {
 		return err
@@ -397,7 +397,7 @@ func (p *provider) putDurableObjectScript(ctx context.Context, up upload, do dur
 	return err
 }
 
-func (p *provider) putBootstrapSecret(ctx context.Context, accountID, scriptName, value string) error {
+func (p *cloudflare) putBootstrapSecret(ctx context.Context, accountID, scriptName, value string) error {
 	_, err := p.client.Workers.Scripts.Secrets.Update(ctx, scriptName, workers.ScriptSecretUpdateParams{
 		AccountID: cf.F(accountID),
 		Body: workers.ScriptSecretUpdateParamsBodyWorkersBindingKindSecretText{

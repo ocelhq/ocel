@@ -64,7 +64,7 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 	ctx := context.Background()
 	counter := &pushCounter{}
 	backend := "file://" + t.TempDir()
-	adapter := pulumi.New(pulumi.Config{
+	automation := pulumi.New(pulumi.Config{
 		Access: pulumi.Access{
 			BackendURL: backend,
 			Passphrase: "a-passphrase",
@@ -81,7 +81,7 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 	}
 	plan := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackInfra}
 
-	planned, err := adapter.Preview(ctx, plan, nil)
+	planned, err := automation.Preview(ctx, plan, nil)
 	if err != nil {
 		t.Fatalf("Preview() over an attached plugin = %v", err)
 	}
@@ -92,14 +92,14 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 		t.Fatalf("Preview() pushed %d times, want none: a plan writes nothing", pushed)
 	}
 
-	if _, err := adapter.Run(ctx, plan, nil); err != nil {
+	if _, err := automation.Run(ctx, plan, nil); err != nil {
 		t.Fatalf("Run() over an attached plugin = %v", err)
 	}
 	if pushed := counter.created.Load(); pushed != 1 {
 		t.Fatalf("Run() pushed %d times, want the one the plan showed", pushed)
 	}
 
-	if err := adapter.Destroy(ctx, ref, nil); err != nil {
+	if err := automation.Destroy(ctx, ref, nil); err != nil {
 		t.Fatalf("Destroy() of the stack the plugin wrote into = %v", err)
 	}
 }

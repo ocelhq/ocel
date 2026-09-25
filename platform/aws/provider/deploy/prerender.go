@@ -22,6 +22,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 func storageCoordinate(env, slug, app string, release naming.Release) naming.Coordinate {
@@ -56,7 +57,7 @@ func prerenderAssetSet(cfg Config, app string, cache *isrConfig) (*assetSet, err
 		to  uploadTarget
 	}{
 		{"cache", entryTarget(cfg)},
-		{"fetch-cache", uploadTarget{up: cfg.Uploader, bucket: cfg.AssetBucket, class: cfg.Class}},
+		{"fetch-cache", uploadTarget{up: cfg.Objects, bucket: cfg.AssetBucket, class: cfg.Class}},
 	}
 
 	var uploads []prerenderUpload
@@ -126,7 +127,7 @@ func pushPrerenderAssets(ctx context.Context, cfg Config, app string, cache *isr
 }
 
 type uploadTarget struct {
-	up     ArtifactUploader
+	up     payloads.ObjectStore
 	bucket string
 	class  providerkit.Class
 }
@@ -192,7 +193,7 @@ func seedTagSnapshot(ctx context.Context, cfg Config, cache *isrConfig, at time.
 
 func snapshotTargets(cfg Config) []uploadTarget {
 	var targets []uploadTarget
-	for _, t := range []uploadTarget{{up: cfg.Uploader, bucket: cfg.AssetBucket}, entryTarget(cfg)} {
+	for _, t := range []uploadTarget{{up: cfg.Objects, bucket: cfg.AssetBucket}, entryTarget(cfg)} {
 		if t.validate() != nil {
 			continue
 		}
@@ -215,13 +216,13 @@ func isPreconditionFailed(err error) bool {
 
 func entryTarget(cfg Config) uploadTarget {
 	if isrEntriesAdopted(cfg.objectStores()) {
-		return uploadTarget{up: cfg.CacheStoreUploader, bucket: cfg.CacheStoreBucket, class: cfg.Class}
+		return uploadTarget{up: cfg.CacheStoreObjects, bucket: cfg.CacheStoreBucket, class: cfg.Class}
 	}
-	return uploadTarget{up: cfg.Uploader, bucket: cfg.AssetBucket, class: cfg.Class}
+	return uploadTarget{up: cfg.Objects, bucket: cfg.AssetBucket, class: cfg.Class}
 }
 
 func isrEntriesAdopted(stores ObjectStores) bool {
-	return stores.CacheStoreBucket != "" && stores.CacheStoreUploader != nil
+	return stores.CacheStoreBucket != "" && stores.CacheStoreObjects != nil
 }
 
 type collectedFile struct {

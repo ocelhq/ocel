@@ -75,12 +75,12 @@ func CertificateRegion(kind edge.Kind, apiRegion string) string {
 	return region(apiRegion)
 }
 
-func (r Registry) Certifier(front edge.Edge, deps certs.Deps) certs.Certifier {
-	return certs.CertifierFor(CertificateRegion(front.Kind(), deps.AWS.Region), deps, r.Deps.Certificates)
+func (r Registry) Certificates(front edge.Edge, deps certs.Deps) certs.Certificates {
+	return certs.CertificatesFor(CertificateRegion(front.Kind(), deps.AWS.Region), deps, r.Deps.Certificates)
 }
 
-func IgnoredPinNote(front edge.Edge, certifier certs.Certifier, hostname string) string {
-	if !certifier.IgnoresPinFor(hostname) {
+func IgnoredPinNote(front edge.Edge, certificates certs.Certificates, hostname string) string {
+	if !certificates.IgnoresPinFor(hostname) {
 		return ""
 	}
 	return fmt.Sprintf(

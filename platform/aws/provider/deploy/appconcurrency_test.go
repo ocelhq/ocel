@@ -108,9 +108,9 @@ func TestOneReleaserStandsUpSiblingAppStacksAtOnce(t *testing.T) {
 	cfg.PulumiProject = "ocel-shop"
 	cfg.Region = "us-east-1"
 	cfg.ImageOptimizerURL = ""
-	cfg.Uploader = &fakeUploader{exists: map[string]bool{}}
+	cfg.Objects = &fakeArtifactStore{exists: map[string]bool{}}
 	cfg.CacheStoreBucket = "isr"
-	cfg.CacheStoreUploader = &fakeUploader{exists: map[string]bool{}}
+	cfg.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
 
 	engine := &mockedEngine{outputs: siblingAppOutputs(apps...)}
 	releaser := standingUp(cfg, engine)

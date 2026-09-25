@@ -15,7 +15,7 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 
 	cfg, plan := plannedAppStack(t)
 	cfg.CacheStoreBucket = "isr"
-	cfg.CacheStoreUploader = &fakeUploader{}
+	cfg.CacheStoreObjects = &fakeArtifactStore{}
 	cfg.ISRWriterEndpoint = "https://writer.example"
 	cfg.ISRWriterSeed = "a-seed"
 

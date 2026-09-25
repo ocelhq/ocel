@@ -16,8 +16,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 )
 
-func (h *VarsHandler) values(tier environmentv1.Tier) (values.Store, Class, error) {
-	vars, err := h.Source.Vars()
+func (h *VarsService) values(tier environmentv1.Tier) (values.Store, Class, error) {
+	vars, err := h.Source.Read()
 	if err != nil {
 		return values.Store{}, "", err
 	}
@@ -28,11 +28,11 @@ func (h *VarsHandler) values(tier environmentv1.Tier) (values.Store, Class, erro
 	return values.Store{Records: vars.Records, Cipher: vars.Cipher}, class, nil
 }
 
-func (h *VarsHandler) verifyGrants(ctx context.Context, binding *bindingsv1.Binding) error {
+func (h *VarsService) verifyGrants(ctx context.Context, binding *bindingsv1.Binding) error {
 	if len(binding.GetGrants()) == 0 {
 		return nil
 	}
-	vars, err := h.Source.Vars()
+	vars, err := h.Source.Read()
 	if err != nil {
 		return err
 	}
@@ -42,7 +42,7 @@ func (h *VarsHandler) verifyGrants(ctx context.Context, binding *bindingsv1.Bind
 	return vars.VerifyGrants(ctx, bindingOf(binding))
 }
 
-func (h *VarsHandler) scoped(tier environmentv1.Tier, slug string) (values.Store, values.Scope, error) {
+func (h *VarsService) scoped(tier environmentv1.Tier, slug string) (values.Store, values.Scope, error) {
 	store, class, err := h.values(tier)
 	if err != nil {
 		return values.Store{}, values.Scope{}, err
@@ -53,7 +53,7 @@ func (h *VarsHandler) scoped(tier environmentv1.Tier, slug string) (values.Store
 	return store, values.Scope{Project: slug, Class: class}, nil
 }
 
-func (h *VarsHandler) addressable(ctx context.Context, tier environmentv1.Tier, at *envvarsv1.Coordinate) error {
+func (h *VarsService) addressable(ctx context.Context, tier environmentv1.Tier, at *envvarsv1.Coordinate) error {
 	environment := at.GetEnvironment()
 	if environment == "" {
 		return nil
@@ -78,8 +78,8 @@ func (h *VarsHandler) addressable(ctx context.Context, tier environmentv1.Tier, 
 		environment, strings.Join(named, ", ")))
 }
 
-func (h *VarsHandler) namedEnvironments(ctx context.Context, slug string) ([]string, error) {
-	vars, err := h.Source.Vars()
+func (h *VarsService) namedEnvironments(ctx context.Context, slug string) ([]string, error) {
+	vars, err := h.Source.Read()
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +98,7 @@ func (h *VarsHandler) namedEnvironments(ctx context.Context, slug string) ([]str
 	return named, nil
 }
 
-func (h *VarsHandler) SetValue(ctx context.Context, req *envvarsv1.SetValueRequest) (*envvarsv1.SetValueResponse, error) {
+func (h *VarsService) SetValue(ctx context.Context, req *envvarsv1.SetValueRequest) (*envvarsv1.SetValueResponse, error) {
 	if err := h.addressable(ctx, req.GetTier(), req.GetCoordinate()); err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func (h *VarsHandler) SetValue(ctx context.Context, req *envvarsv1.SetValueReque
 	return &envvarsv1.SetValueResponse{Metadata: metadataProto(scope, metadata)}, nil
 }
 
-func (h *VarsHandler) ListValues(ctx context.Context, req *envvarsv1.ListValuesRequest) (*envvarsv1.ListValuesResponse, error) {
+func (h *VarsService) ListValues(ctx context.Context, req *envvarsv1.ListValuesRequest) (*envvarsv1.ListValuesResponse, error) {
 	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
@@ -129,7 +129,7 @@ func (h *VarsHandler) ListValues(ctx context.Context, req *envvarsv1.ListValuesR
 	return resp, nil
 }
 
-func (h *VarsHandler) GetValue(ctx context.Context, req *envvarsv1.GetValueRequest) (*envvarsv1.GetValueResponse, error) {
+func (h *VarsService) GetValue(ctx context.Context, req *envvarsv1.GetValueRequest) (*envvarsv1.GetValueResponse, error) {
 	store, scope, err := h.scoped(req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
 		return nil, err
@@ -148,7 +148,7 @@ func (h *VarsHandler) GetValue(ctx context.Context, req *envvarsv1.GetValueReque
 	}, nil
 }
 
-func (h *VarsHandler) RevealValues(ctx context.Context, req *envvarsv1.RevealValuesRequest) (*envvarsv1.RevealValuesResponse, error) {
+func (h *VarsService) RevealValues(ctx context.Context, req *envvarsv1.RevealValuesRequest) (*envvarsv1.RevealValuesResponse, error) {
 	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
 	if err != nil {
 		return nil, err
@@ -171,7 +171,7 @@ func (h *VarsHandler) RevealValues(ctx context.Context, req *envvarsv1.RevealVal
 	return resp, nil
 }
 
-func (h *VarsHandler) DeleteValue(ctx context.Context, req *envvarsv1.DeleteValueRequest) (*envvarsv1.DeleteValueResponse, error) {
+func (h *VarsService) DeleteValue(ctx context.Context, req *envvarsv1.DeleteValueRequest) (*envvarsv1.DeleteValueResponse, error) {
 	store, scope, err := h.scoped(req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
 		return nil, err
@@ -183,7 +183,7 @@ func (h *VarsHandler) DeleteValue(ctx context.Context, req *envvarsv1.DeleteValu
 	return &envvarsv1.DeleteValueResponse{Deleted: deleted}, nil
 }
 
-func (h *VarsHandler) SetReference(ctx context.Context, req *envvarsv1.SetReferenceRequest) (*envvarsv1.SetReferenceResponse, error) {
+func (h *VarsService) SetReference(ctx context.Context, req *envvarsv1.SetReferenceRequest) (*envvarsv1.SetReferenceResponse, error) {
 	if err := h.addressable(ctx, req.GetTier(), req.GetCoordinate()); err != nil {
 		return nil, err
 	}
@@ -207,7 +207,7 @@ func (h *VarsHandler) SetReference(ctx context.Context, req *envvarsv1.SetRefere
 	return &envvarsv1.SetReferenceResponse{Metadata: metadataProto(scope, metadata)}, nil
 }
 
-func (h *VarsHandler) ListReferences(ctx context.Context, req *envvarsv1.ListReferencesRequest) (*envvarsv1.ListReferencesResponse, error) {
+func (h *VarsService) ListReferences(ctx context.Context, req *envvarsv1.ListReferencesRequest) (*envvarsv1.ListReferencesResponse, error) {
 	store, scope, err := h.scoped(req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
 		return nil, err
@@ -223,7 +223,7 @@ func (h *VarsHandler) ListReferences(ctx context.Context, req *envvarsv1.ListRef
 	return resp, nil
 }
 
-func (h *VarsHandler) ListVersions(ctx context.Context, req *envvarsv1.ListVersionsRequest) (*envvarsv1.ListVersionsResponse, error) {
+func (h *VarsService) ListVersions(ctx context.Context, req *envvarsv1.ListVersionsRequest) (*envvarsv1.ListVersionsResponse, error) {
 	store, scope, err := h.scoped(req.GetTier(), req.GetCoordinate().GetSlug())
 	if err != nil {
 		return nil, err
@@ -243,7 +243,7 @@ func (h *VarsHandler) ListVersions(ctx context.Context, req *envvarsv1.ListVersi
 	return resp, nil
 }
 
-func (h *VarsHandler) SetBinding(ctx context.Context, req *envvarsv1.SetBindingRequest) (*envvarsv1.SetBindingResponse, error) {
+func (h *VarsService) SetBinding(ctx context.Context, req *envvarsv1.SetBindingRequest) (*envvarsv1.SetBindingResponse, error) {
 	if err := bindingTarget(req.GetTier(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
@@ -282,7 +282,7 @@ func (h *VarsHandler) SetBinding(ctx context.Context, req *envvarsv1.SetBindingR
 	return &envvarsv1.SetBindingResponse{Version: uint64(version)}, nil
 }
 
-func (h *VarsHandler) RemoveBinding(ctx context.Context, req *envvarsv1.RemoveBindingRequest) (*envvarsv1.RemoveBindingResponse, error) {
+func (h *VarsService) RemoveBinding(ctx context.Context, req *envvarsv1.RemoveBindingRequest) (*envvarsv1.RemoveBindingResponse, error) {
 	if err := bindingTarget(req.GetTier(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
@@ -300,7 +300,7 @@ func (h *VarsHandler) RemoveBinding(ctx context.Context, req *envvarsv1.RemoveBi
 	return &envvarsv1.RemoveBindingResponse{Removed: removed}, nil
 }
 
-func (h *VarsHandler) ListBindings(ctx context.Context, req *envvarsv1.ListBindingsRequest) (*envvarsv1.ListBindingsResponse, error) {
+func (h *VarsService) ListBindings(ctx context.Context, req *envvarsv1.ListBindingsRequest) (*envvarsv1.ListBindingsResponse, error) {
 	if err := bindingTarget(req.GetTier(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}

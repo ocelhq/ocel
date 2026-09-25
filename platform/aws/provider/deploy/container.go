@@ -54,7 +54,7 @@ const (
 	maxRulePriority = 50000
 )
 
-type RuleDescriber interface {
+type RulesAPI interface {
 	DescribeRules(ctx context.Context, in *elbv2.DescribeRulesInput, opts ...func(*elbv2.Options)) (*elbv2.DescribeRulesOutput, error)
 }
 
@@ -203,7 +203,7 @@ func rulePriority(physical string, taken map[int]bool) int {
 	return 0
 }
 
-func takenPriorities(ctx context.Context, rules RuleDescriber, listener, physical string) (map[int]bool, error) {
+func takenPriorities(ctx context.Context, rules RulesAPI, listener, physical string) (map[int]bool, error) {
 	taken := map[int]bool{}
 	if rules == nil {
 		return taken, nil
@@ -543,7 +543,7 @@ func (r *release) runContainer(ctx context.Context, plan providerkit.StackPlan, 
 		}
 		plan.Work = work
 		var result providerkit.StackResult
-		if result, err = r.adapter.Run(ctx, plan, progress); err == nil {
+		if result, err = r.automation.Run(ctx, plan, progress); err == nil {
 			return result, nil
 		}
 		if !priorityTaken(err) {
@@ -557,7 +557,7 @@ func (r *release) runContainer(ctx context.Context, plan providerkit.StackPlan, 
 }
 
 func (r *release) abandonContainer(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
-	if err := r.adapter.Destroy(ctx, ref, progress); err != nil {
+	if err := r.automation.Destroy(ctx, ref, progress); err != nil {
 		return err
 	}
 	return r.releaseSubstrate(ctx, r.cfg.Records, ref, progress)
@@ -597,7 +597,7 @@ func (r *release) planContainer(ctx context.Context, plan providerkit.StackPlan,
 		return providerkit.Plan{}, err
 	}
 	plan.Work = work
-	previewed, err := r.adapter.Preview(ctx, plan, progress)
+	previewed, err := r.automation.Preview(ctx, plan, progress)
 	if err != nil {
 		return providerkit.Plan{}, err
 	}

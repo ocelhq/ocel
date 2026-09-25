@@ -175,7 +175,7 @@ func TestWorkspaceRefusesAnAccessThatWouldWriteStateUnsealed(t *testing.T) {
 	}
 }
 
-func TestWorkspaceRefusesAnAdapterCarryingNoProgram(t *testing.T) {
+func TestWorkspaceRefusesAnAutomationCarryingNoProgram(t *testing.T) {
 	t.Parallel()
 
 	if _, err := pulumi.New(pulumi.Config{Access: access()}).Workspace(plan()); err == nil {
@@ -229,7 +229,7 @@ func TestRunHandsTheEngineTheWorkspaceAndDecodesWhatItAnswers(t *testing.T) {
 		t.Errorf("the engine was asked to stand up %q, want %q", engine.up.Stack, plan().Ref.Name)
 	}
 	if engine.up.Parallel != pulumi.DefaultParallel {
-		t.Errorf("the engine ran at parallelism %d, want the adapter's %d", engine.up.Parallel, pulumi.DefaultParallel)
+		t.Errorf("the engine ran at parallelism %d, want the automation's %d", engine.up.Parallel, pulumi.DefaultParallel)
 	}
 	if len(result.Bindings) != 1 || result.Bindings[0].Properties["bucket"] != "shop-uploads" {
 		t.Errorf("Run() = %+v, want the binding the program decoded from the stack's outputs", result)
@@ -257,13 +257,13 @@ func TestRunRefreshesOnlyTheStacksTheProviderSaysToRefresh(t *testing.T) {
 	t.Parallel()
 
 	engine := &recordingEngine{}
-	adapter := pulumi.New(pulumi.Config{
+	automation := pulumi.New(pulumi.Config{
 		Access:  access(),
 		Program: program{}.Run,
 		Engine:  engine,
 		Refresh: func(ref providerkit.StackRef, _ pulumi.Op) bool { return ref.Name.Env == "prod" },
 	})
-	if _, err := adapter.Run(context.Background(), plan(), nil); err != nil {
+	if _, err := automation.Run(context.Background(), plan(), nil); err != nil {
 		t.Fatalf("Run() = %v", err)
 	}
 	if !engine.up.Refresh {
@@ -272,7 +272,7 @@ func TestRunRefreshesOnlyTheStacksTheProviderSaysToRefresh(t *testing.T) {
 
 	staging := plan()
 	staging.Ref.Name = naming.InfraStack("staging")
-	if _, err := adapter.Run(context.Background(), staging, nil); err != nil {
+	if _, err := automation.Run(context.Background(), staging, nil); err != nil {
 		t.Fatalf("Run() = %v", err)
 	}
 	if engine.up.Refresh {

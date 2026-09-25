@@ -1100,7 +1100,7 @@ func TestATeardownSweepsTheImageTheContainerItTookDownWasHolding(t *testing.T) {
 	}
 }
 
-func TestATeardownThatStoppedReconcilingSaysSoWithNoReporterListening(t *testing.T) {
+func TestATeardownThatStoppedReconcilingSaysSoWithNoProgressListening(t *testing.T) {
 	t.Parallel()
 
 	refused := errors.New("the helper is not on this box")

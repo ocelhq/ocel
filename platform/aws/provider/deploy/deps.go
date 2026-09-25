@@ -1,11 +1,13 @@
 package deploy
 
+import "github.com/ocelhq/ocel/platform/aws/provider/payloads"
+
 type ObjectStores struct {
-	Uploader           ArtifactUploader
-	ArtifactBucket     string
-	AssetBucket        string
-	CacheStoreBucket   string
-	CacheStoreUploader ArtifactUploader
+	Objects           payloads.ObjectStore
+	ArtifactBucket    string
+	AssetBucket       string
+	CacheStoreBucket  string
+	CacheStoreObjects payloads.ObjectStore
 }
 
 type ISRWriterAccess struct {
@@ -16,11 +18,11 @@ type ISRWriterAccess struct {
 
 func (cfg Config) objectStores() ObjectStores {
 	return ObjectStores{
-		Uploader:           cfg.Uploader,
-		ArtifactBucket:     cfg.ArtifactBucket,
-		AssetBucket:        cfg.AssetBucket,
-		CacheStoreBucket:   cfg.CacheStoreBucket,
-		CacheStoreUploader: cfg.CacheStoreUploader,
+		Objects:           cfg.Objects,
+		ArtifactBucket:    cfg.ArtifactBucket,
+		AssetBucket:       cfg.AssetBucket,
+		CacheStoreBucket:  cfg.CacheStoreBucket,
+		CacheStoreObjects: cfg.CacheStoreObjects,
 	}
 }
 

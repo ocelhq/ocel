@@ -12,7 +12,7 @@ import (
 
 type Lookup func(ctx context.Context, hostname string) ([]string, error)
 
-type Poller struct {
+type Propagation struct {
 	Lookup   Lookup
 	Wait     func(context.Context, time.Duration) error
 	Attempts int
@@ -24,8 +24,8 @@ const (
 	pollEvery    = 5 * time.Second
 )
 
-func NewPoller() Poller {
-	return Poller{
+func NewPropagation() Propagation {
+	return Propagation{
 		Lookup: func(ctx context.Context, hostname string) ([]string, error) {
 			return net.DefaultResolver.LookupHost(ctx, hostname)
 		},
@@ -46,7 +46,7 @@ func waitFor(ctx context.Context, d time.Duration) error {
 	}
 }
 
-func (p Poller) Await(ctx context.Context, records []edge.Record, say func(string)) error {
+func (p Propagation) Await(ctx context.Context, records []edge.Record, say func(string)) error {
 	if len(records) == 0 {
 		return nil
 	}
@@ -92,7 +92,7 @@ func names(records []edge.Record) string {
 	return strings.Join(wanted, ", ")
 }
 
-func (p Poller) window() time.Duration {
+func (p Propagation) window() time.Duration {
 	return time.Duration(max(p.Attempts, 1)-1) * p.Every
 }
 

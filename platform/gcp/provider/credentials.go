@@ -60,7 +60,7 @@ type Credentials struct {
 
 	Endpoint string
 
-	Projects ProjectReader
+	Projects Projects
 }
 
 const emulatorPrincipal = "emulator"

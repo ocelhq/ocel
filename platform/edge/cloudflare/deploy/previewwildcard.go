@@ -15,7 +15,7 @@ import (
 
 const previewEntryScript = "ocel-preview-entry"
 
-func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
+func (p *cloudflare) ReconcilePreviewWildcard(ctx context.Context, spec edge.PreviewWildcardSpec) (string, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return "", fmt.Errorf("%s is not set; it is required to reconcile the shared preview entry worker", envAccountID)
@@ -45,7 +45,7 @@ func (p *provider) ReconcilePreviewWildcard(ctx context.Context, spec edge.Previ
 	return "", nil
 }
 
-func (p *provider) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
+func (p *cloudflare) DestroyPreviewWildcard(ctx context.Context, baseDomain string) error {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return fmt.Errorf("%s is not set; it is required to destroy the shared preview entry worker", envAccountID)
@@ -72,7 +72,7 @@ func (p *provider) DestroyPreviewWildcard(ctx context.Context, baseDomain string
 	return errors.Join(errs...)
 }
 
-func (p *provider) previewEntryStillRouted(ctx context.Context, accountID string, snap *routeSnapshot) (bool, error) {
+func (p *cloudflare) previewEntryStillRouted(ctx context.Context, accountID string, snap *routeSnapshot) (bool, error) {
 	owned, err := p.accountZones(ctx, accountID)
 	if err != nil {
 		return false, err
@@ -89,7 +89,7 @@ func (p *provider) previewEntryStillRouted(ctx context.Context, accountID string
 	return false, nil
 }
 
-func (p *provider) stripPreviewWildcardRoute(ctx context.Context, accountID string, snap *routeSnapshot, baseDomain string) error {
+func (p *cloudflare) stripPreviewWildcardRoute(ctx context.Context, accountID string, snap *routeSnapshot, baseDomain string) error {
 	wildcard := edge.PreviewWildcard(baseDomain)
 	if wildcard == "" {
 		return nil

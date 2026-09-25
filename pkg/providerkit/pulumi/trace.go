@@ -44,18 +44,18 @@ type inflightOp struct {
 	start time.Time
 }
 
-type traceBuilder struct {
+type openTrace struct {
 	threshold time.Duration
 	inflight  map[string]inflightOp
 	trace     engineTrace
 	slowest   []standout
 }
 
-func newTraceBuilder(threshold time.Duration) *traceBuilder {
-	return &traceBuilder{threshold: threshold, inflight: map[string]inflightOp{}}
+func newOpenTrace(threshold time.Duration) *openTrace {
+	return &openTrace{threshold: threshold, inflight: map[string]inflightOp{}}
 }
 
-func (b *traceBuilder) consume(ev events.EngineEvent, now time.Time) {
+func (b *openTrace) consume(ev events.EngineEvent, now time.Time) {
 	if b.trace.Start.IsZero() {
 		b.trace.Start = now
 	}
@@ -73,7 +73,7 @@ func (b *traceBuilder) consume(ev events.EngineEvent, now time.Time) {
 	}
 }
 
-func (b *traceBuilder) finish(m apitype.StepEventMetadata, now time.Time, failed bool) {
+func (b *openTrace) finish(m apitype.StepEventMetadata, now time.Time, failed bool) {
 	b.trace.ResourceCount++
 
 	op, ok := b.inflight[m.URN]
@@ -100,7 +100,7 @@ func (b *traceBuilder) finish(m apitype.StepEventMetadata, now time.Time, failed
 	}
 }
 
-func (b *traceBuilder) keepSlowest(s standout) {
+func (b *openTrace) keepSlowest(s standout) {
 	if len(b.slowest) < maxLatencyStandouts {
 		b.slowest = append(b.slowest, s)
 		return
@@ -117,7 +117,7 @@ func (b *traceBuilder) keepSlowest(s standout) {
 	}
 }
 
-func (b *traceBuilder) result() engineTrace {
+func (b *openTrace) result() engineTrace {
 	b.trace.Standouts = append(b.trace.Standouts, b.slowest...)
 	return b.trace
 }
@@ -148,7 +148,7 @@ func resourceNameFromURN(raw string) string {
 func drainTrace(engineEvents <-chan events.EngineEvent, threshold time.Duration) <-chan engineTrace {
 	result := make(chan engineTrace, 1)
 	go func() {
-		b := newTraceBuilder(threshold)
+		b := newOpenTrace(threshold)
 		for ev := range engineEvents {
 			b.consume(ev, time.Now())
 		}

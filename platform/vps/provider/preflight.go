@@ -11,15 +11,15 @@ import (
 )
 
 func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPreflight) error {
-	if err := p.host.EngineStanding(ctx); err != nil {
+	if err := p.host.CheckEngine(ctx); err != nil {
 		return err
 	}
 	if err := p.host.FrontAgrees(ctx); err != nil {
 		return err
 	}
 	return refusing([]error{
-		p.host.DiskStanding(ctx, repositories(pre.Plan)),
-		p.host.ProxyStanding(ctx),
+		p.host.CheckDisk(ctx, repositories(pre.Plan)),
+		p.host.CheckProxy(ctx),
 		p.host.ServingPortsHeld(ctx),
 	})
 }

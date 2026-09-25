@@ -144,7 +144,7 @@ func applyRuntimeLayers(ctx context.Context, apis APIs, target spec, req Request
 	stackName := target.ns.runtimeStackName(target.class)
 	body := runtimeLayerTemplate(target.ns, target.class, code)
 	tags := stampTags(target.ns, Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(body), WrittenBy: req.Writer.String()})
-	if err := cfn.Upsert(ctx, apis.CFN, target.ns, stackName, body, nil, nil, tags, nil); err != nil {
+	if err := cfn.Upsert(ctx, apis.CFN, target.ns.ChangeSetNameFor, stackName, body, nil, nil, tags, nil); err != nil {
 		return err
 	}
 	logf(fmt.Sprintf("applied %s", stackName))
@@ -198,7 +198,7 @@ func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class str
 	return standing, nil
 }
 
-func publishedRuntimeLayers(ctx context.Context, api cfn.Describer, ns Namespace, class string) (map[string]string, error) {
+func publishedRuntimeLayers(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (map[string]string, error) {
 	out, err := cfn.StackOutputs(ctx, api, ns.runtimeStackName(class))
 	if err != nil {
 		return nil, err

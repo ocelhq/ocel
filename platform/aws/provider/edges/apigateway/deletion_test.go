@@ -128,7 +128,7 @@ func TestDestroyStopsAtItsBudgetNamingTheRestAPIsStillStanding(t *testing.T) {
 		promotePreview(t, stack, pointer)
 	}
 	ids := previewAPIs(t, w, pointers...)
-	e.delete = w.deleter(2)
+	e.delete = w.deletion(2)
 	w.gateway.calls = nil
 
 	err := stack.Destroy(ctx)
@@ -158,7 +158,7 @@ func TestDestroyStopsAtItsBudgetNamingTheRestAPIsStillStanding(t *testing.T) {
 		t.Error("the deployments ledger was erased while REST APIs it names are still standing; a re-run would never find them")
 	}
 
-	e.delete = w.deleter(30)
+	e.delete = w.deletion(30)
 	w.gateway.calls = nil
 	if err := stack.Destroy(ctx); err != nil {
 		t.Fatalf("re-run: %v", err)
@@ -189,7 +189,7 @@ func TestDeleter(t *testing.T) {
 		w.gateway.deleteErr = &agtypes.TooManyRequestsException{Message: aws.String("Too Many Requests")}
 		w.gateway.deleteRefused = 2
 
-		if err := e.deleter().drain(context.Background(), w.clients(), []string{id}); err != nil {
+		if err := e.deletion().drain(context.Background(), w.clients(), []string{id}); err != nil {
 			t.Fatalf("drain: %v", err)
 		}
 		if w.gateway.apis[id] != nil {
@@ -201,7 +201,7 @@ func TestDeleter(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
-		d := &Deleter{
+		d := &Deletion{
 			Wait:     func(context.Context, time.Duration) error { return context.Canceled },
 			Attempts: 5,
 			Every:    time.Second,
@@ -237,7 +237,7 @@ func TestDeleter(t *testing.T) {
 		w.gateway.deleteErr = errors.New("the account holds a mapping onto it")
 		w.gateway.deleteRefused = 1
 
-		err = e.deleter().drain(context.Background(), w.clients(), []string{id})
+		err = e.deletion().drain(context.Background(), w.clients(), []string{id})
 		if err == nil {
 			t.Fatal("drain error = nil, want the refusal reported")
 		}
@@ -256,7 +256,7 @@ func TestDeleter(t *testing.T) {
 	t.Run("the jitter never shortens the wait below the quota", func(t *testing.T) {
 		t.Parallel()
 
-		d := &Deleter{Every: 30 * time.Second}
+		d := &Deletion{Every: 30 * time.Second}
 		for _, jitter := range []float64{0, 0.5, 0.9999} {
 			d.Jitter = func() float64 { return jitter }
 			held := d.interval()

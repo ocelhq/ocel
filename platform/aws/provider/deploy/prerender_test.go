@@ -214,8 +214,8 @@ func TestUploadPrerenderAssets(t *testing.T) {
 
 	t.Run("uploads each app under its own prefix", func(t *testing.T) {
 		t.Parallel()
-		f := &fakeUploader{exists: map[string]bool{}}
-		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: f}
+		f := &fakeArtifactStore{exists: map[string]bool{}}
+		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Objects: f}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
@@ -240,11 +240,11 @@ func TestUploadPrerenderAssets(t *testing.T) {
 
 	t.Run("seeds the adopted cache store", func(t *testing.T) {
 		t.Parallel()
-		asset := &fakeUploader{exists: map[string]bool{}}
-		store := &fakeUploader{exists: map[string]bool{}}
+		asset := &fakeArtifactStore{exists: map[string]bool{}}
+		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{
-			ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: asset,
-			CacheStoreBucket: "isr", CacheStoreUploader: store,
+			ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Objects: asset,
+			CacheStoreBucket: "isr", CacheStoreObjects: store,
 		}
 		cfg = adoptISRWriter(t, cfg)
 
@@ -281,8 +281,8 @@ func TestUploadPrerenderAssets(t *testing.T) {
 
 	t.Run("unadopted store stays on the asset bucket", func(t *testing.T) {
 		t.Parallel()
-		f := &fakeUploader{exists: map[string]bool{}}
-		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: f}
+		f := &fakeArtifactStore{exists: map[string]bool{}}
+		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Objects: f}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
@@ -299,10 +299,10 @@ func TestUploadPrerenderAssets(t *testing.T) {
 	})
 
 	t.Run("seeds the genesis tag snapshot", func(t *testing.T) {
-		store := &fakeUploader{exists: map[string]bool{}}
+		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{
 			ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod",
-			Uploader: &fakeUploader{exists: map[string]bool{}}, CacheStoreBucket: "isr", CacheStoreUploader: store,
+			Objects: &fakeArtifactStore{exists: map[string]bool{}}, CacheStoreBucket: "isr", CacheStoreObjects: store,
 		}
 		cfg = adoptISRWriter(t, cfg)
 
@@ -338,11 +338,11 @@ func TestUploadPrerenderAssets(t *testing.T) {
 
 	t.Run("seeds the genesis into both stores", func(t *testing.T) {
 		t.Parallel()
-		own := &fakeUploader{exists: map[string]bool{}}
-		store := &fakeUploader{exists: map[string]bool{}}
+		own := &fakeArtifactStore{exists: map[string]bool{}}
+		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{
 			ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod",
-			Uploader: own, CacheStoreBucket: "isr", CacheStoreUploader: store,
+			Objects: own, CacheStoreBucket: "isr", CacheStoreObjects: store,
 		}
 		cfg = adoptISRWriter(t, cfg)
 
@@ -363,10 +363,10 @@ func TestUploadPrerenderAssets(t *testing.T) {
 
 	t.Run("keeps an existing snapshot", func(t *testing.T) {
 		t.Parallel()
-		store := &fakeUploader{exists: map[string]bool{isrKeyFor("web", testDeploymentID, "tag-clock.json"): true}}
+		store := &fakeArtifactStore{exists: map[string]bool{isrKeyFor("web", testDeploymentID, "tag-clock.json"): true}}
 		cfg := Config{
 			ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod",
-			Uploader: &fakeUploader{exists: map[string]bool{}}, CacheStoreBucket: "isr", CacheStoreUploader: store,
+			Objects: &fakeArtifactStore{exists: map[string]bool{}}, CacheStoreBucket: "isr", CacheStoreObjects: store,
 		}
 		cfg = adoptISRWriter(t, cfg)
 
@@ -384,8 +384,8 @@ func TestUploadPrerenderAssets(t *testing.T) {
 
 	t.Run("unadopted store seeds one copy", func(t *testing.T) {
 		t.Parallel()
-		f := &fakeUploader{exists: map[string]bool{}}
-		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: f}
+		f := &fakeArtifactStore{exists: map[string]bool{}}
+		cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Objects: f}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, twoAppManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
@@ -403,8 +403,8 @@ func TestUploadPrerenderAssets(t *testing.T) {
 
 	t.Run("no Next app", func(t *testing.T) {
 		t.Parallel()
-		f := &fakeUploader{exists: map[string]bool{}}
-		cfg := Config{ArtifactRoot: t.TempDir(), AssetBucket: "assets", Env: "prod", Uploader: f}
+		f := &fakeArtifactStore{exists: map[string]bool{}}
+		cfg := Config{ArtifactRoot: t.TempDir(), AssetBucket: "assets", Env: "prod", Objects: f}
 		manifest := &contractv1.Manifest{Slug: "proj"}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, manifest)); err != nil {
@@ -421,8 +421,8 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			"apps/web/routing-manifest.json":            `{"buildId":"BID","appName":"web"}`,
 			"apps/web/functions/index.func/config.json": `{"id":"/"}`,
 		})
-		f := &fakeUploader{exists: map[string]bool{}}
-		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Uploader: f}
+		f := &fakeArtifactStore{exists: map[string]bool{}}
+		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Objects: f}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
@@ -438,8 +438,8 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			"apps/web/routing-manifest.json":  `{"buildId":"BID","appName":"web"}`,
 			"apps/web/cache/index.cache.json": `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
 		})
-		f := &fakeUploader{exists: map[string]bool{}}
-		cfg := Config{ArtifactRoot: root, Env: "prod", Uploader: f}
+		f := &fakeArtifactStore{exists: map[string]bool{}}
+		cfg := Config{ArtifactRoot: root, Env: "prod", Objects: f}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err == nil {
 			t.Fatal("uploadPrerenderAssets = nil, want an error for a missing asset bucket")
@@ -454,8 +454,8 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			"apps/web/cache/blog/post.cache.json": `{"lastModified":2,"value":{"kind":"APP_PAGE"}}`,
 		})
 
-		f := &fakeUploader{exists: map[string]bool{}}
-		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Uploader: f}
+		f := &fakeArtifactStore{exists: map[string]bool{}}
+		cfg := Config{ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Objects: f}
 
 		if err := uploadPrerenderAssets(context.Background(), cfg, appBuildsFor(t, cfg, nextManifest())); err != nil {
 			t.Fatalf("uploadPrerenderAssets: %v", err)
@@ -486,11 +486,11 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			"apps/web/fetch-cache/" + hash + ".cache.json": `{"lastModified":2,"value":{"kind":"FETCH"}}`,
 		})
 
-		asset := &fakeUploader{exists: map[string]bool{}}
-		store := &fakeUploader{exists: map[string]bool{}}
+		asset := &fakeArtifactStore{exists: map[string]bool{}}
+		store := &fakeArtifactStore{exists: map[string]bool{}}
 		cfg := Config{
-			ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Uploader: asset,
-			CacheStoreBucket: "isr", CacheStoreUploader: store,
+			ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Objects: asset,
+			CacheStoreBucket: "isr", CacheStoreObjects: store,
 		}
 		cfg = adoptISRWriter(t, cfg)
 

@@ -8,7 +8,7 @@ import (
 )
 
 func (r *Stacks) Preflight(ctx context.Context, pre providerkit.DeployPreflight) error {
-	cfg, err := r.resolve.Release(ctx, Scope{Class: pre.Plan.Class, Slug: pre.Plan.Slug, Env: pre.Plan.Env, Edge: pre.Edge})
+	cfg, err := r.resolve(ctx, Scope{Class: pre.Plan.Class, Slug: pre.Plan.Slug, Env: pre.Plan.Env, Edge: pre.Edge})
 	if err != nil {
 		return err
 	}

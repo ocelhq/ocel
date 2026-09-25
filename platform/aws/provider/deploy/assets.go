@@ -99,8 +99,8 @@ func appAssetPrefix(c naming.Coordinate) string {
 
 func assetPlaneTargets(cfg Config) []uploadTarget {
 	return []uploadTarget{
-		{up: cfg.CacheStoreUploader, bucket: cfg.CacheStoreBucket, class: cfg.Class},
-		{up: cfg.Uploader, bucket: cfg.AssetBucket, class: cfg.Class},
+		{up: cfg.CacheStoreObjects, bucket: cfg.CacheStoreBucket, class: cfg.Class},
+		{up: cfg.Objects, bucket: cfg.AssetBucket, class: cfg.Class},
 	}
 }
 
@@ -115,11 +115,11 @@ func staticAssetSet(cfg Config, app, runtime string, coord naming.Coordinate) (*
 	if runtime != runtimeNext {
 		return nil, nil
 	}
-	if cfg.CacheStoreBucket == "" || cfg.CacheStoreUploader == nil {
+	if cfg.CacheStoreBucket == "" || cfg.CacheStoreObjects == nil {
 		return nil, nil
 	}
 
-	assetBucket := uploadTarget{up: cfg.Uploader, bucket: cfg.AssetBucket, class: cfg.Class}
+	assetBucket := uploadTarget{up: cfg.Objects, bucket: cfg.AssetBucket, class: cfg.Class}
 	plane := assetPlaneTargets(cfg)
 	var uploads []assetUpload
 	manifest := newSetManifest()

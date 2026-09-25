@@ -86,7 +86,7 @@ func (s *stack) soleEntryWorker(verb string) (accountID, scriptName string, err 
 	return accountID, scriptNames[0], nil
 }
 
-func (p *provider) detachRoute(ctx context.Context, zoneID, pattern string, scriptNames []string) error {
+func (p *cloudflare) detachRoute(ctx context.Context, zoneID, pattern string, scriptNames []string) error {
 	snap := p.routeSnapshot()
 	inZone, err := snap.inZone(ctx, zoneID)
 	if err != nil {
@@ -104,7 +104,7 @@ func (p *provider) detachRoute(ctx context.Context, zoneID, pattern string, scri
 	return nil
 }
 
-func (p *provider) refuseGreyCloud(ctx context.Context, zoneID, hostname string) error {
+func (p *cloudflare) refuseGreyCloud(ctx context.Context, zoneID, hostname string) error {
 	haveAddress, haveProxied, err := p.addressRecordsAt(ctx, zoneID, hostname)
 	if err != nil {
 		return err
@@ -115,7 +115,7 @@ func (p *provider) refuseGreyCloud(ctx context.Context, zoneID, hostname string)
 	return nil
 }
 
-func (p *provider) requireTLSCover(ctx context.Context, zoneID, zoneName, hostname string) error {
+func (p *cloudflare) requireTLSCover(ctx context.Context, zoneID, zoneName, hostname string) error {
 	if coveredByUniversalSSL(hostname, zoneName) {
 		return nil
 	}
@@ -129,7 +129,7 @@ func (p *provider) requireTLSCover(ctx context.Context, zoneID, zoneName, hostna
 	return fmt.Errorf("%s is more than one label below %s, which the zone's Universal SSL certificate does not cover, and no active certificate pack covers it either — add a Cloudflare Advanced Certificate for %s and bind it again", hostname, zoneName, hostname)
 }
 
-func (p *provider) certificatePackCovers(ctx context.Context, zoneID, hostname string) (bool, error) {
+func (p *cloudflare) certificatePackCovers(ctx context.Context, zoneID, hostname string) (bool, error) {
 	packs := p.client.SSL.CertificatePacks.ListAutoPaging(ctx, ssl.CertificatePackListParams{ZoneID: cf.F(zoneID)})
 	for packs.Next() {
 		hosts, err := activeCertificatePackHosts(packs.Current())

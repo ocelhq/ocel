@@ -11,7 +11,7 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
-type blockingUploader struct {
+type blockingArtifactStore struct {
 	mu     sync.Mutex
 	live   int
 	peak   int
@@ -19,11 +19,11 @@ type blockingUploader struct {
 	hold   chan struct{}
 }
 
-func (b *blockingUploader) HeadObject(context.Context, *s3.HeadObjectInput, ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+func (b *blockingArtifactStore) HeadObject(context.Context, *s3.HeadObjectInput, ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
 	return nil, &s3types.NotFound{}
 }
 
-func (b *blockingUploader) PutObject(context.Context, *s3.PutObjectInput, ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+func (b *blockingArtifactStore) PutObject(context.Context, *s3.PutObjectInput, ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
 	b.mu.Lock()
 	b.live++
 	if b.live > b.peak {
@@ -53,18 +53,18 @@ func staticAssetApps(t *testing.T, apps []string, assets int) string {
 
 func TestPublishingAssetsSharesOneBudgetAcrossTheAppsUploadingAtOnce(t *testing.T) {
 	apps := []string{"web", "admin"}
-	uploader := &blockingUploader{
+	uploader := &blockingArtifactStore{
 		arrive: make(chan struct{}, len(apps)*uploadConcurrency*4),
 		hold:   make(chan struct{}),
 	}
 	cfg := Config{
-		ArtifactRoot:       staticAssetApps(t, apps, uploadConcurrency),
-		Env:                "prod",
-		Slug:               "shop",
-		AssetBucket:        "assets",
-		Uploader:           uploader,
-		CacheStoreBucket:   "isr",
-		CacheStoreUploader: uploader,
+		ArtifactRoot:      staticAssetApps(t, apps, uploadConcurrency),
+		Env:               "prod",
+		Slug:              "shop",
+		AssetBucket:       "assets",
+		Objects:           uploader,
+		CacheStoreBucket:  "isr",
+		CacheStoreObjects: uploader,
 	}
 
 	var group sync.WaitGroup

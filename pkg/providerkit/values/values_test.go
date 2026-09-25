@@ -127,13 +127,13 @@ func TestAnEnvironmentValueShadowsTheClassWideOne(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reader := values.Reader{Records: store.Records, Cipher: store.Cipher, Scope: scope, Environment: "pr-7"}
+	reader := values.View{Records: store.Records, Cipher: store.Cipher, Scope: scope, Environment: "pr-7"}
 	seen, err := reader.Values(ctx, []values.Cell{{Key: "KEY"}})
 	if err != nil || seen["KEY"] != "pr-7 only" {
 		t.Fatalf("the environment's reader saw %q, %v, want the environment's own value", seen["KEY"], err)
 	}
 
-	classWide := values.Reader{Records: store.Records, Cipher: store.Cipher, Scope: scope}
+	classWide := values.View{Records: store.Records, Cipher: store.Cipher, Scope: scope}
 	seen, err = classWide.Values(ctx, []values.Cell{{Key: "KEY"}})
 	if err != nil || seen["KEY"] != "class-wide" {
 		t.Fatalf("the class-wide reader saw %q, %v", seen["KEY"], err)
@@ -278,7 +278,7 @@ func TestARevealOverABrokenReferenceFailsRatherThanOmittingIt(t *testing.T) {
 		t.Fatalf("the failure does not name the broken reference: %v", err)
 	}
 
-	reader := values.Reader{Records: store.Records, Cipher: store.Cipher, Scope: scope}
+	reader := values.View{Records: store.Records, Cipher: store.Cipher, Scope: scope}
 	if _, err := reader.Values(ctx, []values.Cell{{Key: "DATABASE_URL"}}); !errors.Is(err, values.ErrDangling) {
 		t.Fatalf("a reader over a broken reference = %v, want it to refuse to boot the app", err)
 	}
@@ -446,14 +446,14 @@ func TestABindingPublishedToAnEnvironmentShadowsTheClassWidePair(t *testing.T) {
 	}
 }
 
-func TestAReaderResolvesTheBindingsADeploymentWasBuiltToRead(t *testing.T) {
+func TestAViewResolvesTheBindingsADeploymentWasBuiltToRead(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
 	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", values.Pair{Record: []byte("{}"), Value: []byte("the sealed record")}); err != nil {
 		t.Fatal(err)
 	}
-	reader := values.Reader{Records: store.Records, Cipher: store.Cipher, Scope: scope}
+	reader := values.View{Records: store.Records, Cipher: store.Cipher, Scope: scope}
 
 	found, err := reader.Bindings(ctx, []string{"db"})
 	if err != nil || len(found) != 1 || string(found[0].Value) != "the sealed record" {

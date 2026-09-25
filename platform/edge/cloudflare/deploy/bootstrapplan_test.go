@@ -407,7 +407,7 @@ func TestDeployedScriptWithoutTheModuleItExpected(t *testing.T) {
 		_, _ = w.Write(body)
 	}))
 	t.Cleanup(srv.Close)
-	p := &provider{client: cf.NewClient(option.WithBaseURL(srv.URL+"/"), option.WithAPIToken("test"))}
+	p := &cloudflare{client: cf.NewClient(option.WithBaseURL(srv.URL+"/"), option.WithAPIToken("test"))}
 
 	content, present, err := p.deployedScript(t.Context(), "acct", sharedStoreScriptName, "index.js")
 	if err == nil {

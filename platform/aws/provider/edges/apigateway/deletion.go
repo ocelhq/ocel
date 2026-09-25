@@ -19,7 +19,7 @@ const (
 	kindRestAPI = "REST API"
 )
 
-type Deleter struct {
+type Deletion struct {
 	Wait     func(context.Context, time.Duration) error
 	Attempts int
 	Every    time.Duration
@@ -30,39 +30,39 @@ type Deleter struct {
 	begun bool
 }
 
-func NewDeleter() *Deleter {
-	return &Deleter{Wait: waitFor, Attempts: deleteAttempts, Every: deleteEvery, Jitter: rand.Float64}
+func NewDeletion() *Deletion {
+	return &Deletion{Wait: waitFor, Attempts: deleteAttempts, Every: deleteEvery, Jitter: rand.Float64}
 }
 
-func (d *Deleter) attempts() int { return max(d.Attempts, 1) }
+func (d *Deletion) attempts() int { return max(d.Attempts, 1) }
 
-func (d *Deleter) every() time.Duration {
+func (d *Deletion) every() time.Duration {
 	if d.Every <= 0 {
 		return deleteEvery
 	}
 	return d.Every
 }
 
-func (d *Deleter) jitter() float64 {
+func (d *Deletion) jitter() float64 {
 	if d.Jitter == nil {
 		return rand.Float64()
 	}
 	return d.Jitter()
 }
 
-func (d *Deleter) interval() time.Duration {
+func (d *Deletion) interval() time.Duration {
 	every := d.every()
 	return every + time.Duration(float64(every)*deleteJitter*d.jitter())
 }
 
-func (d *Deleter) hold(ctx context.Context) error {
+func (d *Deletion) hold(ctx context.Context) error {
 	if d.Wait != nil {
 		return d.Wait(ctx, d.interval())
 	}
 	return waitFor(ctx, d.interval())
 }
 
-func (d *Deleter) drain(ctx context.Context, c Clients, ids []string) error {
+func (d *Deletion) drain(ctx context.Context, c Clients, ids []string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -92,7 +92,7 @@ func (d *Deleter) drain(ctx context.Context, c Clients, ids []string) error {
 	return errors.Join(errs...)
 }
 
-func (d *Deleter) outstanding(standing []string) error {
+func (d *Deletion) outstanding(standing []string) error {
 	return &edge.OutstandingError{
 		Because: "API Gateway deletes at most one REST API every " + d.every().String() + " per account, and this run stopped with the queue unfinished",
 		Waited:  time.Duration(max(d.spent-1, 0)) * d.every(),

@@ -42,7 +42,7 @@ func previewHostname() string {
 	return edge.SharedPreview(conformanceSlug, previewBase).Host(previewPoint, "")
 }
 
-func previewing(t *testing.T, w *world) (*provider, edge.EdgeStack) {
+func previewing(t *testing.T, w *world) (*apiGateway, edge.EdgeStack) {
 	t.Helper()
 	ctx := context.Background()
 	e := w.edge()

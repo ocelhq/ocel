@@ -349,7 +349,7 @@ func TestRunVars(t *testing.T) {
 
 func TestCheckDeployedVars(t *testing.T) {
 	t.Run("parses vars outputs", func(t *testing.T) {
-		api := stubDescriber{coreStackName: outputs(map[string]string{
+		api := stubStacksAPI{coreStackName: outputs(map[string]string{
 			outputVarsTable:  "vars-abc",
 			outputVarsKeyARN: "arn:aws:kms:eu-west-1:123456789012:key/abcd",
 		})}

@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
 )
@@ -58,7 +59,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		PulumiProject: naming.PulumiProject(scope.Slug),
 		Secrets:       secretsmanager.NewFromConfig(p.aws),
 
-		Tags:    &tagclock.Sweeper{Dynamo: dynamodb.NewFromConfig(p.aws), Table: held.StateTable},
+		Tags:    &tagclock.Table{Dynamo: dynamodb.NewFromConfig(p.aws), Table: held.StateTable},
 		Records: p.Records(),
 		Rules:   elasticloadbalancingv2.NewFromConfig(p.aws),
 
@@ -81,10 +82,10 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 		ImageOptimizerURL:  held.ImageOptimizerURL,
 		RevalidateQueueURL: held.RevalidateQueueURL,
 
-		CacheStoreBucket:   params.CacheStore.Bucket,
-		CacheStoreUploader: cacheStoreUploader(params.CacheStore),
+		CacheStoreBucket:  params.CacheStore.Bucket,
+		CacheStoreObjects: cacheStoreObjects(params.CacheStore),
 
-		Uploader:    s3.NewFromConfig(p.aws),
+		Objects:     s3.NewFromConfig(p.aws),
 		Getter:      s3.NewFromConfig(p.aws),
 		Invoker:     lambda.NewFromConfig(p.aws),
 		CodeUpdater: lambda.NewFromConfig(p.aws),
@@ -144,7 +145,7 @@ func tableARN(region, account, table string) string {
 	return fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", region, account, table)
 }
 
-func cacheStoreUploader(store bootstrap.CacheStore) deploy.ArtifactUploader {
+func cacheStoreObjects(store bootstrap.CacheStore) payloads.ObjectStore {
 	if store.Bucket == "" {
 		return nil
 	}

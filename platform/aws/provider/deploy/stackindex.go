@@ -7,8 +7,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
-type TagSweeper interface {
-	SweepTagClock(ctx context.Context, project string, stack naming.StackName) error
+type TagClock interface {
+	Sweep(ctx context.Context, project string, stack naming.StackName) error
 }
 
 type Realized struct {

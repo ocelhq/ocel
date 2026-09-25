@@ -18,17 +18,17 @@ const card = `{
   "version": "2026-09-01",
   "currency": "USD",
   "rates": [
-    {"id": "widget/hours", "region": "", "unit": "hour", "tiers": [{"price": "0.10"}],
+    {"id": "widget/hours", "region": "", "unit": "hour", "steps": [{"price": "0.10"}],
      "source": "https://example.test/pricing", "verified": "2026-09-01"},
     {"id": "widget/requests", "region": "", "unit": "1M requests", "allowance": "resource",
-     "tiers": [{"price": "0"}, {"start": "1", "price": "0.20"}],
+     "steps": [{"price": "0"}, {"start": "1", "price": "0.20"}],
      "source": "https://example.test/pricing", "verified": "2026-09-01"},
-    {"id": "widget/storage", "region": "eu-west-1", "unit": "GB-month", "tiers": [{"price": "0.05"}],
+    {"id": "widget/storage", "region": "eu-west-1", "unit": "GB-month", "steps": [{"price": "0.05"}],
      "source": "https://example.test/pricing", "verified": "2026-09-01"},
     {"id": "widget/reads", "region": "", "unit": "reads", "allowance": "account",
-     "tiers": [{"price": "0"}, {"start": "100", "price": "0.01"}],
+     "steps": [{"price": "0"}, {"start": "100", "price": "0.01"}],
      "source": "https://example.test/pricing", "verified": "2026-09-01"},
-    {"id": "gadget/hours", "region": "", "unit": "hour", "tiers": [{"price": "1"}],
+    {"id": "gadget/hours", "region": "", "unit": "hour", "steps": [{"price": "1"}],
      "note": "gadgets outside eu-west-1 are priced at the eu-west-1 rate",
      "source": "https://example.test/pricing", "verified": "2026-09-01"}
   ]
@@ -247,7 +247,7 @@ func TestAnUnknownPropertyNeverPricesToZero(t *testing.T) {
 }
 
 func TestACardRefusesARateWithoutProvenance(t *testing.T) {
-	_, err := costkit.Load([]byte(`{"version":"v","currency":"USD","rates":[{"id":"a","unit":"h","tiers":[{"price":"1"}]}]}`))
+	_, err := costkit.Load([]byte(`{"version":"v","currency":"USD","rates":[{"id":"a","unit":"h","steps":[{"price":"1"}]}]}`))
 	if err == nil || !strings.Contains(err.Error(), "a") {
 		t.Fatalf("Load() error = %v, want one naming rate a", err)
 	}
@@ -256,8 +256,8 @@ func TestACardRefusesARateWithoutProvenance(t *testing.T) {
 func TestMergedCardsAndTablesPriceEachVendorsOwn(t *testing.T) {
 	primary, _ := costkit.Load([]byte(card))
 	other, _ := costkit.Load([]byte(`{"version":"v2","currency":"USD","rates":[
-		{"id":"gizmo/each","unit":"each","tiers":[{"price":"2"}],"source":"https://example.test","verified":"2026-09-01"},
-		{"id":"widget/hours","unit":"hour","tiers":[{"price":"99"}],"source":"https://example.test","verified":"2026-09-01"}]}`))
+		{"id":"gizmo/each","unit":"each","steps":[{"price":"2"}],"source":"https://example.test","verified":"2026-09-01"},
+		{"id":"widget/hours","unit":"hour","steps":[{"price":"99"}],"source":"https://example.test","verified":"2026-09-01"}]}`))
 	table := costkit.Tables(widgets, costkit.Table{
 		"test_gizmo": func(r *costkit.Subject) {
 			r.Add(costkit.Component{Name: "Each", Unit: "each", Rate: "gizmo/each", Quantity: decimal.NewFromInt(3)})
@@ -352,11 +352,11 @@ func TestAnUnknownTaintsOnlyTheComponentsThatReadIt(t *testing.T) {
 }
 
 func TestACardRefusesAFreeFirstTierWithoutAnAllowanceScope(t *testing.T) {
-	_, err := costkit.Load([]byte(`{"version":"v","currency":"USD","rates":[{"id":"a","unit":"h","tiers":[{"price":"0"},{"start":"5","price":"1"}],"source":"s","verified":"v"}]}`))
+	_, err := costkit.Load([]byte(`{"version":"v","currency":"USD","rates":[{"id":"a","unit":"h","steps":[{"price":"0"},{"start":"5","price":"1"}],"source":"s","verified":"v"}]}`))
 	if err == nil || !strings.Contains(err.Error(), "allowance") {
 		t.Fatalf("Load() error = %v, want a refusal asking whose allowance it is", err)
 	}
-	_, err = costkit.Load([]byte(`{"version":"v","currency":"USD","rates":[{"id":"a","unit":"h","allowance":"account","tiers":[{"price":"1"}],"source":"s","verified":"v"}]}`))
+	_, err = costkit.Load([]byte(`{"version":"v","currency":"USD","rates":[{"id":"a","unit":"h","allowance":"account","steps":[{"price":"1"}],"source":"s","verified":"v"}]}`))
 	if err == nil {
 		t.Fatal("Load() accepted an allowance on a rate whose first tier is not free")
 	}

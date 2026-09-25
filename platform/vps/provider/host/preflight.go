@@ -18,7 +18,7 @@ const KeepWindow = 3
 
 const FirstDeployFloor = 2 << 30
 
-func (h *Host) EngineStanding(ctx context.Context) error {
+func (h *Host) CheckEngine(ctx context.Context) error {
 	result, err := h.stream(ctx, dockerReach+" >/dev/null", nil, "")
 	if err != nil {
 		return err
@@ -150,7 +150,7 @@ func (h *Host) Headroom(ctx context.Context, repositories []string) (Headroom, e
 	return readHeadroom(rendered)
 }
 
-func (h *Host) DiskStanding(ctx context.Context, repositories []string) error {
+func (h *Host) CheckDisk(ctx context.Context, repositories []string) error {
 	if len(repositories) == 0 {
 		return nil
 	}
@@ -219,7 +219,7 @@ func sized(count int64) string {
 	return fmt.Sprintf("%.1f %s", value, scale)
 }
 
-func (h *Host) ProxyStanding(ctx context.Context) error {
+func (h *Host) CheckProxy(ctx context.Context) error {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return err

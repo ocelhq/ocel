@@ -89,7 +89,7 @@ func TestDeploymentRecord(t *testing.T) {
 	})
 }
 
-type sampleAdapterState struct {
+type samplePrivateState struct {
 	Distribution string `json:"distribution,omitempty"`
 	Region       string `json:"region,omitempty"`
 }
@@ -106,7 +106,7 @@ func TestStackState(t *testing.T) {
 			OwnerToken:    "owner",
 			Front:         "d123.cloudfront.net",
 			GlobalPreview: "preview.acme.com",
-			Adapter:       Own(sampleAdapterState{Distribution: "E123", Region: "eu-west-1"}),
+			Private:       Own(samplePrivateState{Distribution: "E123", Region: "eu-west-1"}),
 		}
 		state.Bind("shop.app.com")
 		state.PublishFront("shop.app.com", "d-shop.example.net")
@@ -121,9 +121,9 @@ func TestStackState(t *testing.T) {
 			t.Error("a zero state reports itself non-empty; the origin reads it as a project that has deployed")
 		}
 		for name, state := range map[string]StackState{
-			"a slug":     {Slug: "shop"},
-			"a front":    {Front: "d123.cloudfront.net"},
-			"an adapter": {Adapter: Own(sampleAdapterState{Distribution: "E123"})},
+			"a slug":          {Slug: "shop"},
+			"a front":         {Front: "d123.cloudfront.net"},
+			"a private state": {Private: Own(samplePrivateState{Distribution: "E123"})},
 		} {
 			if state.Empty() {
 				t.Errorf("a state carrying %s reports itself empty", name)
@@ -146,11 +146,11 @@ func TestStackState(t *testing.T) {
 			t.Errorf("state read back = %+v, want %+v", read, settled())
 		}
 
-		var own sampleAdapterState
-		if err := read.Adapter.Into(&own); err != nil {
+		var own samplePrivateState
+		if err := read.Private.Into(&own); err != nil {
 			t.Fatalf("Into: %v", err)
 		}
-		if own != (sampleAdapterState{Distribution: "E123", Region: "eu-west-1"}) {
+		if own != (samplePrivateState{Distribution: "E123", Region: "eu-west-1"}) {
 			t.Errorf("adapter state = %+v, want the one the edge kept", own)
 		}
 	})
@@ -158,11 +158,11 @@ func TestStackState(t *testing.T) {
 	t.Run("the contract never reads what the edge keeps to itself", func(t *testing.T) {
 		t.Parallel()
 
-		payload, err := json.Marshal(StackState{Slug: "shop", Adapter: Own(sampleAdapterState{Distribution: "E123"})})
+		payload, err := json.Marshal(StackState{Slug: "shop", Private: Own(samplePrivateState{Distribution: "E123"})})
 		if err != nil {
 			t.Fatalf("Marshal: %v", err)
 		}
-		if !strings.Contains(string(payload), `"adapter":{"distribution":"E123"}`) {
+		if !strings.Contains(string(payload), `"private":{"distribution":"E123"}`) {
 			t.Errorf("payload = %s, want the edge's own state under one slot of its own", payload)
 		}
 	})
@@ -183,7 +183,7 @@ func TestStackState(t *testing.T) {
 			"a written record": func(s *StackState) { s.RecordWrites(nil) },
 			"a global preview": func(s *StackState) { s.GlobalPreview = "" },
 			"the edge's own state": func(s *StackState) {
-				s.Adapter = Own(sampleAdapterState{Distribution: "E456", Region: "eu-west-1"})
+				s.Private = Own(samplePrivateState{Distribution: "E456", Region: "eu-west-1"})
 			},
 		} {
 			changed := settled()
@@ -197,11 +197,11 @@ func TestStackState(t *testing.T) {
 	t.Run("an unread state and one read back from nothing carry nothing", func(t *testing.T) {
 		t.Parallel()
 
-		var own sampleAdapterState
-		if err := (StackState{}).Adapter.Into(&own); err != nil {
+		var own samplePrivateState
+		if err := (StackState{}).Private.Into(&own); err != nil {
 			t.Fatalf("Into on a state no edge wrote: %v", err)
 		}
-		if own != (sampleAdapterState{}) {
+		if own != (samplePrivateState{}) {
 			t.Errorf("adapter state = %+v, want nothing", own)
 		}
 	})

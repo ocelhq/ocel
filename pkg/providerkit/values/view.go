@@ -6,14 +6,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/ports"
 )
 
-type Reader struct {
+type View struct {
 	Records     ports.RecordStore
 	Cipher      ports.Cipher
 	Scope       Scope
 	Environment string
 }
 
-func (r Reader) Values(ctx context.Context, cells []Cell) (map[string]string, error) {
+func (r View) Values(ctx context.Context, cells []Cell) (map[string]string, error) {
 	store := Store{Records: r.Records, Cipher: r.Cipher}
 	wanted := make([]Coordinate, 0, len(cells)*2)
 	for _, at := range cells {
@@ -44,7 +44,7 @@ func (r Reader) Values(ctx context.Context, cells []Cell) (map[string]string, er
 	return out, nil
 }
 
-func (r Reader) Bindings(ctx context.Context, names []string) ([]Published, error) {
+func (r View) Bindings(ctx context.Context, names []string) ([]Published, error) {
 	store := Store{Records: r.Records, Cipher: r.Cipher}
 	return store.ResolveBindings(ctx, r.Scope, r.Environment, names)
 }

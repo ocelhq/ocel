@@ -31,7 +31,7 @@ func writeTree(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-type fakeUploader struct {
+type fakeArtifactStore struct {
 	exists  map[string]bool
 	headErr error
 	putErr  error
@@ -44,7 +44,7 @@ type fakeUploader struct {
 	cacheControls map[string]string
 }
 
-func (f *fakeUploader) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
+func (f *fakeArtifactStore) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
 	if f.headErr != nil {
 		return nil, f.headErr
 	}
@@ -54,7 +54,7 @@ func (f *fakeUploader) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ .
 	return nil, &s3types.NotFound{}
 }
 
-func (f *fakeUploader) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+func (f *fakeArtifactStore) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
 	if f.putErr != nil {
 		return nil, f.putErr
 	}
@@ -102,7 +102,7 @@ func bodyFn(called *bool) func() ([]byte, error) {
 func TestUploadArtifact(t *testing.T) {
 	t.Run("skips when present", func(t *testing.T) {
 		t.Parallel()
-		f := &fakeUploader{exists: map[string]bool{"k.zip": true}}
+		f := &fakeArtifactStore{exists: map[string]bool{"k.zip": true}}
 		var zipped bool
 		transferred, err := uploadArtifact(context.Background(), f, "bucket", "k.zip", objectHeaders{}, bodyFn(&zipped))
 		if err != nil {
@@ -121,7 +121,7 @@ func TestUploadArtifact(t *testing.T) {
 
 	t.Run("uploads when missing", func(t *testing.T) {
 		t.Parallel()
-		f := &fakeUploader{exists: map[string]bool{}}
+		f := &fakeArtifactStore{exists: map[string]bool{}}
 		var zipped bool
 		transferred, err := uploadArtifact(context.Background(), f, "bucket", "k.zip", objectHeaders{}, bodyFn(&zipped))
 		if err != nil {
@@ -143,7 +143,7 @@ func TestUploadArtifact(t *testing.T) {
 
 	t.Run("sets content type when given", func(t *testing.T) {
 		t.Parallel()
-		f := &fakeUploader{exists: map[string]bool{}}
+		f := &fakeArtifactStore{exists: map[string]bool{}}
 		var invoked bool
 		if _, err := uploadArtifact(context.Background(), f, "bucket", "app.js", objectHeaders{contentType: "text/javascript; charset=utf-8"}, bodyFn(&invoked)); err != nil {
 			t.Fatalf("uploadArtifact: %v", err)
@@ -155,7 +155,7 @@ func TestUploadArtifact(t *testing.T) {
 
 	t.Run("head error surfaces", func(t *testing.T) {
 		t.Parallel()
-		f := &fakeUploader{headErr: errors.New("access denied")}
+		f := &fakeArtifactStore{headErr: errors.New("access denied")}
 		var zipped bool
 		transferred, err := uploadArtifact(context.Background(), f, "bucket", "k.zip", objectHeaders{}, bodyFn(&zipped))
 		if err == nil {
@@ -173,11 +173,11 @@ func TestUploadArtifact(t *testing.T) {
 		t.Parallel()
 		denied := errors.New("AccessDenied")
 		for _, bucket := range []string{"r2-cache-store", "s3-asset-bucket"} {
-			_, head := uploadArtifact(context.Background(), &fakeUploader{headErr: denied}, bucket, "assets/proj/web/B1/logo.png", objectHeaders{}, bodyFn(new(bool)))
+			_, head := uploadArtifact(context.Background(), &fakeArtifactStore{headErr: denied}, bucket, "assets/proj/web/B1/logo.png", objectHeaders{}, bodyFn(new(bool)))
 			if head == nil || !strings.Contains(head.Error(), bucket) {
 				t.Errorf("head failure = %v, want it to name %q", head, bucket)
 			}
-			put := putArtifact(context.Background(), &fakeUploader{putErr: denied}, bucket, "assets/proj/web/B1/logo.png", objectHeaders{}, []byte("PNG"))
+			put := putArtifact(context.Background(), &fakeArtifactStore{putErr: denied}, bucket, "assets/proj/web/B1/logo.png", objectHeaders{}, []byte("PNG"))
 			if put == nil || !strings.Contains(put.Error(), bucket) {
 				t.Errorf("put failure = %v, want it to name %q", put, bucket)
 			}

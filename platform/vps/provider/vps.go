@@ -27,7 +27,7 @@ type Provider struct {
 	resolve   Lookup
 	reaches   Reach
 
-	stores standingStores
+	stores liveStores
 
 	dial sync.Mutex
 	live *session.Session

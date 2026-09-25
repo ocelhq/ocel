@@ -36,14 +36,14 @@ type route struct {
 	Secret      string `json:"secret"`
 }
 
-type routeWriter struct {
+type routeStore struct {
 	clients Clients
 	arn     string
 	wait    func(context.Context, time.Duration) error
 	jitter  func() float64
 }
 
-func (w routeWriter) hold(ctx context.Context, attempt int) error {
+func (w routeStore) hold(ctx context.Context, attempt int) error {
 	delay := time.Duration(float64(routeRetryBase) * math.Pow(2, float64(attempt)))
 	if delay > routeRetryCeiling {
 		delay = routeRetryCeiling
@@ -56,14 +56,14 @@ func (w routeWriter) hold(ctx context.Context, attempt int) error {
 	return waitFor(ctx, delay)
 }
 
-func (w routeWriter) chance() float64 {
+func (w routeStore) chance() float64 {
 	if w.jitter == nil {
 		return rand.Float64()
 	}
 	return w.jitter()
 }
 
-func (w routeWriter) apply(ctx context.Context, puts map[string]route, deletes []string) error {
+func (w routeStore) apply(ctx context.Context, puts map[string]route, deletes []string) error {
 	if w.arn == "" {
 		return fmt.Errorf("the %q edge names no key value store to publish routes into; bootstrap the account first", Kind)
 	}
@@ -155,7 +155,7 @@ func routeOwner(ctx context.Context, c Clients, ns bootstrap.Namespace, class ed
 	return held.Stack, true, nil
 }
 
-func (w routeWriter) etag(ctx context.Context) (string, error) {
+func (w routeStore) etag(ctx context.Context) (string, error) {
 	out, err := w.clients.KeyValueStore.DescribeKeyValueStore(ctx, &cloudfrontkeyvaluestore.DescribeKeyValueStoreInput{
 		KvsARN: aws.String(w.arn),
 	})

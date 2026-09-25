@@ -172,12 +172,12 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 	return srv
 }
 
-func stackOn(p *provider, state edge.StackState) *stack {
+func stackOn(p *cloudflare, state edge.StackState) *stack {
 	if p.store == nil {
 		p.store = &http.Client{Transport: &http.Transport{DisableKeepAlives: true}}
 	}
 	s := &stack{p: p, state: state}
-	if err := state.Adapter.Into(&s.own); err != nil {
+	if err := state.Private.Into(&s.own); err != nil {
 		panic(err)
 	}
 	return s
@@ -204,7 +204,7 @@ func TestPutStaged(t *testing.T) {
 			App: "web", Identity: "b1", FunctionURLs: map[string]string{"/": "https://fn"},
 			AssetPrefix: "b1", IsrPrefix: "prod/proj/web/b1", CreatedAt: 100,
 		}
-		if err := stackOn(&provider{}, testState(srv.URL, "s3cr3t")).PutStaged(t.Context(), record); err != nil {
+		if err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).PutStaged(t.Context(), record); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 	})
@@ -213,7 +213,7 @@ func TestPutStaged(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
-		err := stackOn(&provider{}, testState(srv.URL, "wrong")).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1"})
+		err := stackOn(&cloudflare{}, testState(srv.URL, "wrong")).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1"})
 		if err == nil {
 			t.Fatal("expected an error for the wrong write secret")
 		}
@@ -227,7 +227,7 @@ func TestPromotionHistory(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
-		p := &provider{}
+		p := &cloudflare{}
 		state := testState(srv.URL, "s3cr3t")
 		promotion := edge.Promotion{PromotionID: "promo-1", Ts: 1000, Builds: map[string]string{"web": "b1"}}
 
@@ -250,7 +250,7 @@ func TestPromotionHistory(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
-		p := &provider{}
+		p := &cloudflare{}
 		state := testState(srv.URL, "s3cr3t")
 
 		for _, id := range []string{"p1", "p2", "p3"} {
@@ -301,7 +301,7 @@ func TestStorePointer(t *testing.T) {
 		srv := httptest.NewServer(mux)
 		t.Cleanup(srv.Close)
 
-		p := &provider{}
+		p := &cloudflare{}
 		state := testState(srv.URL, "s3cr3t")
 		ctx := t.Context()
 
@@ -356,7 +356,7 @@ func TestStorePointer(t *testing.T) {
 		srv := httptest.NewServer(mux)
 		t.Cleanup(srv.Close)
 
-		result, err := stackOn(&provider{}, testState(srv.URL, "s3cr3t")).RemovePointer(t.Context(), "pr-42", edge.DiscardProgress())
+		result, err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).RemovePointer(t.Context(), "pr-42", edge.DiscardProgress())
 		if err != nil {
 			t.Fatalf("RemovePointer: %v", err)
 		}
@@ -375,7 +375,7 @@ func TestStoreRequest(t *testing.T) {
 	t.Run("a state carrying no endpoint is an error", func(t *testing.T) {
 		t.Parallel()
 
-		err := stackOn(&provider{}, edge.StackState{}).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1"})
+		err := stackOn(&cloudflare{}, edge.StackState{}).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1"})
 		if err == nil {
 			t.Fatal("expected an error when the root-stack state carries no endpoint")
 		}
@@ -398,7 +398,7 @@ func TestStoreRequest(t *testing.T) {
 		srv := httptest.NewServer(mux)
 		t.Cleanup(srv.Close)
 
-		if err := stackOn(&provider{}, testState(srv.URL, "s3cr3t")).PutStaged(t.Context(), edge.DeploymentRecord{App: "web"}); err != nil {
+		if err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).PutStaged(t.Context(), edge.DeploymentRecord{App: "web"}); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 		if attempts != 3 {
@@ -416,7 +416,7 @@ func TestStoreRequest(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 
-		if err := stackOn(&provider{}, testState(srv.URL, "wrong")).PutStaged(t.Context(), edge.DeploymentRecord{App: "web"}); err == nil {
+		if err := stackOn(&cloudflare{}, testState(srv.URL, "wrong")).PutStaged(t.Context(), edge.DeploymentRecord{App: "web"}); err == nil {
 			t.Fatal("PutStaged err = nil, want the rejection surfaced")
 		}
 		if attempts != 1 {
@@ -436,7 +436,7 @@ func TestStoreRequest(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 
-		if err := stackOn(&provider{}, testState(srv.URL, "s3cr3t")).PutStaged(ctx, edge.DeploymentRecord{App: "web"}); err == nil {
+		if err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).PutStaged(ctx, edge.DeploymentRecord{App: "web"}); err == nil {
 			t.Fatal("PutStaged err = nil, want the failure surfaced")
 		}
 		if attempts != 1 {
@@ -452,7 +452,7 @@ func TestVersionStamp(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
-		v, _, err := (&provider{}).getVersionStamp(t.Context(), srv.URL, "acme-web", "s3cr3t")
+		v, _, err := (&cloudflare{}).getVersionStamp(t.Context(), srv.URL, "acme-web", "s3cr3t")
 		if err != nil {
 			t.Fatalf("getVersionStamp: %v", err)
 		}
@@ -465,7 +465,7 @@ func TestVersionStamp(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
-		p := &provider{}
+		p := &cloudflare{}
 		if err := p.putVersionStamp(t.Context(), srv.URL, "acme-web", "s3cr3t", "v2"); err != nil {
 			t.Fatalf("putVersionStamp: %v", err)
 		}
@@ -485,7 +485,7 @@ func TestDestroyInstance(t *testing.T) {
 	t.Run("a state carrying no secret is a no-op", func(t *testing.T) {
 		t.Parallel()
 
-		if err := (&provider{}).destroyInstance(t.Context(), edge.StackState{}); err != nil {
+		if err := (&cloudflare{}).destroyInstance(t.Context(), edge.StackState{}); err != nil {
 			t.Fatalf("destroyInstance(empty) err = %v, want nil", err)
 		}
 	})
@@ -494,7 +494,7 @@ func TestDestroyInstance(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
-		p := &provider{}
+		p := &cloudflare{}
 		state := testState(srv.URL, "s3cr3t")
 		if err := stackOn(p, state).Promote(t.Context(), edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, "", edge.DiscardProgress()); err != nil {
 			t.Fatalf("Promote: %v", err)
@@ -511,7 +511,7 @@ func TestDestroyInstance(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
-		p := &provider{}
+		p := &cloudflare{}
 		state := testState(srv.URL, "s3cr3t")
 		if err := p.destroyInstance(t.Context(), state); err != nil {
 			t.Fatalf("destroyInstance: %v", err)
@@ -551,7 +551,7 @@ func TestStoreSchemaVersionUnreadableWhenTheStorePredatesTheCheck(t *testing.T) 
 	}))
 	defer server.Close()
 
-	p := &provider{}
+	p := &cloudflare{}
 	if _, err := stackOn(p, testState(server.URL, "")).SchemaVersion(context.Background()); !errors.Is(err, edge.ErrStoreSchemaUnreadable) {
 		t.Errorf("SchemaVersion err = %v, want %v", err, edge.ErrStoreSchemaUnreadable)
 	}

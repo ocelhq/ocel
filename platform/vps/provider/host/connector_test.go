@@ -198,18 +198,18 @@ func TestTakingTheConnectorOffLeavesNoUnitBinaryOrKey(t *testing.T) {
 func TestWhatTheConnectorSaysAboutItselfIsReadBack(t *testing.T) {
 	t.Parallel()
 
-	held, err := readConnectorStanding("version=0.4.1\nkey=ZmFrZQ==\n")
+	held, err := readConnectorState("version=0.4.1\nkey=ZmFrZQ==\n")
 	if err != nil {
 		t.Fatalf("readConnectorStanding: %v", err)
 	}
 	if !held.Installed || held.Version != "0.4.1" || held.PublicKey != "ZmFrZQ==" {
 		t.Errorf("standing = %+v, want the version and key the box printed", held)
 	}
-	absent, err := readConnectorStanding("\n")
+	absent, err := readConnectorState("\n")
 	if err != nil || absent.Installed {
 		t.Errorf("standing = %+v, %v, want nothing installed", absent, err)
 	}
-	if _, err := readConnectorStanding("version=0.4.1\nkey=\n"); err == nil {
+	if _, err := readConnectorState("version=0.4.1\nkey=\n"); err == nil {
 		t.Error("a connector holding no key was reported as paired, and the console can verify no heartbeat against it")
 	}
 }

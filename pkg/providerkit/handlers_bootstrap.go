@@ -59,7 +59,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 	}
 	intent := applyRequestOf(req)
 
-	return streamResult(ctx, stream, func(sender *eventSender) (*progressv1.OperationEvent, error) {
+	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
 		plan, err := PlanOf(req.GetConsented())
 		if err != nil {
 			return nil, err
@@ -78,7 +78,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 			return okResult(), nil
 		}
 		err = inUnit(sender, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_PROVISIONING,
-			func(_ *eventSender, progress Progress) error {
+			func(_ *eventStream, progress Progress) error {
 				return gate.Apply(ctx, plan, class, intent, progress)
 			})
 		if err != nil {
@@ -297,7 +297,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 		return err
 	}
 
-	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, progress Progress) error {
+	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress Progress) error {
 		shown, err := PlanOf(req.GetConsented())
 		if err != nil {
 			return err

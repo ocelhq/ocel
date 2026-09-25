@@ -124,8 +124,8 @@ func (f *fakeACM) ListCertificates(_ context.Context, in *acm.ListCertificatesIn
 	return out, nil
 }
 
-func testIssuer(api ACMAPI, attempts int) Issuer {
-	return Issuer{
+func testIssuer(api ACMAPI, attempts int) ACM {
+	return ACM{
 		API:      api,
 		Region:   CloudFrontRegion,
 		Wait:     func(context.Context, time.Duration) error { return nil },
@@ -386,7 +386,7 @@ func TestIssuerDiscard(t *testing.T) {
 	t.Run("an edge that needs no certificate has nothing to delete", func(t *testing.T) {
 		t.Parallel()
 
-		if err := (Issuer{}).Discard(t.Context(), Certificate{ARN: testARN}, func(string) {
+		if err := (ACM{}).Discard(t.Context(), Certificate{ARN: testARN}, func(string) {
 			t.Error("said something with no ACM client in hand")
 		}); err != nil {
 			t.Fatalf("Discard: %v", err)

@@ -71,7 +71,7 @@ func (p *Provider) CheckHost(ctx context.Context, req providerkit.HostCheckReque
 		return nil, err
 	}
 	checks = append(checks, front...)
-	return append(checks, p.host.SwitchboardStanding(ctx, req.Class)), nil
+	return append(checks, p.host.CheckSwitchboard(ctx, req.Class)), nil
 }
 
 func dnsVerdicts(ctx context.Context, look Lookup, hostnames []string, address string) []providerkit.HostCheck {

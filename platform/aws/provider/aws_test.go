@@ -43,27 +43,27 @@ func TestStateBackendURLCarriesTheEndpointTheAccountIsReachedOn(t *testing.T) {
 	}
 }
 
-type stubBootstrapper struct{ err error }
+type stubBootstrap struct{ err error }
 
-func (stubBootstrapper) Catalogue() []providerkit.Feature { return nil }
+func (stubBootstrap) Catalogue() []providerkit.Feature { return nil }
 
-func (stubBootstrapper) Describe(context.Context, providerkit.Class) (providerkit.BootstrapReading, error) {
+func (stubBootstrap) Describe(context.Context, providerkit.Class) (providerkit.BootstrapReading, error) {
 	return providerkit.BootstrapReading{}, nil
 }
 
-func (s stubBootstrapper) Plan(context.Context, providerkit.BootstrapRequest) (providerkit.Plan, error) {
+func (s stubBootstrap) Plan(context.Context, providerkit.BootstrapRequest) (providerkit.Plan, error) {
 	return providerkit.Plan{}, s.err
 }
 
-func (s stubBootstrapper) Apply(context.Context, providerkit.BootstrapRequest, providerkit.Progress) error {
+func (s stubBootstrap) Apply(context.Context, providerkit.BootstrapRequest, providerkit.Progress) error {
 	return s.err
 }
 
-func (stubBootstrapper) PlanRemove(context.Context, providerkit.Class) (providerkit.Plan, error) {
+func (stubBootstrap) PlanRemove(context.Context, providerkit.Class) (providerkit.Plan, error) {
 	return providerkit.Plan{}, nil
 }
 
-func (s stubBootstrapper) Remove(context.Context, providerkit.Class, providerkit.Progress) error {
+func (s stubBootstrap) Remove(context.Context, providerkit.Class, providerkit.Progress) error {
 	return s.err
 }
 
@@ -115,7 +115,7 @@ func TestBootstrapApplyForgetsWhatItStoodUp(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	primed(t, p, "before")
 
-	if err := (settling{Bootstrap: stubBootstrapper{}, settled: settledBy(t, p)}).
+	if err := (settling{Bootstrap: stubBootstrap{}, settled: settledBy(t, p)}).
 		Apply(context.Background(), providerkit.BootstrapRequest{Class: providerkit.ClassProduction}, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestBootstrapRemoveForgetsWhatItTookDown(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	primed(t, p, "before")
 
-	if err := (settling{Bootstrap: stubBootstrapper{}, settled: settledBy(t, p)}).
+	if err := (settling{Bootstrap: stubBootstrap{}, settled: settledBy(t, p)}).
 		Remove(context.Background(), providerkit.ClassProduction, nil); err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestBootstrapKeepsWhatAFailedApplyNeverChanged(t *testing.T) {
 	primed(t, p, "before")
 
 	refused := errors.New("refused")
-	if err := (settling{Bootstrap: stubBootstrapper{err: refused}, settled: settledBy(t, p)}).
+	if err := (settling{Bootstrap: stubBootstrap{err: refused}, settled: settledBy(t, p)}).
 		Apply(context.Background(), providerkit.BootstrapRequest{Class: providerkit.ClassProduction}, nil); !errors.Is(err, refused) {
 		t.Fatalf("Apply() = %v, want the refusal it was given", err)
 	}

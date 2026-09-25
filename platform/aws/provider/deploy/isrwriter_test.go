@@ -55,7 +55,7 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 
 		storeOnly := base
 		storeOnly.CacheStoreBucket = "isr"
-		storeOnly.CacheStoreUploader = &fakeUploader{exists: map[string]bool{}}
+		storeOnly.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
 		if err := checkISRWriterAgrees(providerkit.ClassProduction, storeOnly.objectStores(), storeOnly.isrWriter()); err == nil {
 			t.Error("a cache store with no writer to write into it must fail the deploy")
 		}
@@ -78,7 +78,7 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 			StateTable:             "state",
 			Env:                    "prod",
 			CacheStoreBucket:       "isr",
-			CacheStoreUploader:     &fakeUploader{exists: map[string]bool{}},
+			CacheStoreObjects:      &fakeArtifactStore{exists: map[string]bool{}},
 			ISRWriterEndpoint:      "https://writer.example",
 			ISRWriterBootstrapCred: "cred-1",
 			ISRWriterSeed:          "seed-1",

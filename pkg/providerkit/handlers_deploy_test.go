@@ -372,17 +372,17 @@ type refusingStacks struct {
 
 func (r refusingStacks) Stacks() providerkit.Stacks { return r.releaser }
 
-type halfBindingReleaser struct{}
+type halfBindingStacks struct{}
 
-func (halfBindingReleaser) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Progress) (providerkit.Plan, error) {
+func (halfBindingStacks) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Progress) (providerkit.Plan, error) {
 	return providerkit.SynthesizedPlan(ctx, fake.NewArtifacts(), plan, providerkit.StackResult{})
 }
 
-func (halfBindingReleaser) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Progress) (providerkit.Plan, error) {
+func (halfBindingStacks) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ providerkit.Progress) (providerkit.Plan, error) {
 	return providerkit.SynthesizedRemoval(ref, providerkit.StackResult{}), nil
 }
 
-func (halfBindingReleaser) Provision(_ context.Context, plan providerkit.StackPlan, _ providerkit.Progress) (providerkit.StackResult, error) {
+func (halfBindingStacks) Provision(_ context.Context, plan providerkit.StackPlan, _ providerkit.Progress) (providerkit.StackResult, error) {
 	var result providerkit.StackResult
 	for _, resource := range plan.Resources {
 		result.Bindings = append(result.Bindings, providerkit.Binding{
@@ -394,14 +394,14 @@ func (halfBindingReleaser) Provision(_ context.Context, plan providerkit.StackPl
 	return result, nil
 }
 
-func (halfBindingReleaser) Destroy(context.Context, providerkit.StackRef, providerkit.Progress) error {
+func (halfBindingStacks) Destroy(context.Context, providerkit.StackRef, providerkit.Progress) error {
 	return nil
 }
 
 func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{})
-	client := servedBy(t, refusingStacks{Provider: base, releaser: halfBindingReleaser{}})
+	client := servedBy(t, refusingStacks{Provider: base, releaser: halfBindingStacks{}})
 
 	stream, err := client.Deploy(context.Background(), deployRequest())
 	if err != nil {
@@ -468,7 +468,7 @@ func TestDeployResolvesThePublishedBindingsOnce(t *testing.T) {
 	}
 }
 
-type resolvingReleaser struct {
+type resolvingStacks struct {
 	inner providerkit.Stacks
 
 	mu       sync.Mutex
@@ -476,27 +476,27 @@ type resolvingReleaser struct {
 	resolved []providerkit.Binding
 }
 
-func (r *resolvingReleaser) publishes(host string) {
+func (r *resolvingStacks) publishes(host string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.host = host
 }
 
-func (r *resolvingReleaser) Resolved() []providerkit.Binding {
+func (r *resolvingStacks) Resolved() []providerkit.Binding {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.resolved)
 }
 
-func (r *resolvingReleaser) Plan(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
+func (r *resolvingStacks) Plan(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.Plan, error) {
 	return r.inner.Plan(ctx, plan, progress)
 }
 
-func (r *resolvingReleaser) PlanDestroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (providerkit.Plan, error) {
+func (r *resolvingStacks) PlanDestroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) (providerkit.Plan, error) {
 	return r.inner.PlanDestroy(ctx, ref, progress)
 }
 
-func (r *resolvingReleaser) Provision(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
+func (r *resolvingStacks) Provision(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
 	result, err := r.inner.Provision(ctx, plan, progress)
 	if err != nil {
 		return result, err
@@ -519,14 +519,14 @@ func (r *resolvingReleaser) Provision(ctx context.Context, plan providerkit.Stac
 	return result, nil
 }
 
-func (r *resolvingReleaser) Destroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
+func (r *resolvingStacks) Destroy(ctx context.Context, ref providerkit.StackRef, progress providerkit.Progress) error {
 	return r.inner.Destroy(ctx, ref, progress)
 }
 
 func TestDeployProvisionsInfraBeforeEveryAppSoATransformReadsThisDeploysBinding(t *testing.T) {
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{})
-	releaser := &resolvingReleaser{inner: base.Stacks(), host: "db-one.invalid"}
+	releaser := &resolvingStacks{inner: base.Stacks(), host: "db-one.invalid"}
 	client := servedBy(t, refusingStacks{Provider: base, releaser: releaser})
 
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {

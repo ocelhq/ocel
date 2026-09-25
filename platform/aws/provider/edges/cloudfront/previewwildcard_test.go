@@ -55,7 +55,7 @@ func previewHostname() string {
 	return edge.SharedPreview(conformanceSlug, previewBase).Host(previewPointer, "")
 }
 
-func previewBootstrapped(t *testing.T, w *world) *provider {
+func previewBootstrapped(t *testing.T, w *world) *cloudFront {
 	t.Helper()
 	e := w.edge()
 	if _, err := e.Bootstrap(context.Background(), edge.ClassPreview); err != nil {
@@ -64,7 +64,7 @@ func previewBootstrapped(t *testing.T, w *world) *provider {
 	return e
 }
 
-func previewing(t *testing.T, w *world) (*provider, edge.EdgeStack) {
+func previewing(t *testing.T, w *world) (*cloudFront, edge.EdgeStack) {
 	t.Helper()
 	ctx := context.Background()
 	e := previewBootstrapped(t, w)

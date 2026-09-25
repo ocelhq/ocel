@@ -17,13 +17,11 @@ type Certificate struct {
 
 func (c Certificate) Issued() bool { return c.ID != "" }
 
-type Prover func(ctx context.Context, cert Certificate, records []edge.Record) (Certificate, error)
-
 type CertificateRequest struct {
 	Kind     edge.Kind
 	Hostname string
 	Current  Certificate
-	Prove    Prover
+	Prove    func(ctx context.Context, cert Certificate, records []edge.Record) (Certificate, error)
 	Progress Progress
 }
 
@@ -53,7 +51,7 @@ func discardCertificate(ctx context.Context, provider Provider, cert Certificate
 	return provider.Certificates().Discard(ctx, cert, progress)
 }
 
-func retireCertificate(ctx context.Context, provider Provider, settle settler, cert, holding Certificate, progress Progress) error {
+func retireCertificate(ctx context.Context, provider Provider, settle settlement, cert, holding Certificate, progress Progress) error {
 	if !cert.Issued() || cert.ID == holding.ID {
 		return nil
 	}
@@ -68,7 +66,7 @@ func retireCertificate(ctx context.Context, provider Provider, settle settler, c
 
 type certification struct {
 	provider Provider
-	settle   settler
+	settle   settlement
 	settled  *Settled
 	persist  func(context.Context) error
 	uses     func(string) bool

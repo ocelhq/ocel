@@ -139,7 +139,7 @@ func (r *Stacks) readSubstrate(ctx context.Context, class providerkit.Class) (su
 	if err != nil || !present {
 		return substrate{}, false, err
 	}
-	outputs, err := held.adapter.Outputs(ctx, substrateRef(class), nil)
+	outputs, err := held.automation.Outputs(ctx, substrateRef(class), nil)
 	if err != nil {
 		return substrate{}, false, err
 	}
@@ -188,7 +188,7 @@ func (r *Stacks) ensureSubstrate(ctx context.Context, ref providerkit.StackRef, 
 	}); err != nil {
 		return substrate{}, err
 	}
-	if _, err := owner.adapter.Run(ctx, plan, progress); err != nil {
+	if _, err := owner.automation.Run(ctx, plan, progress); err != nil {
 		return substrate{}, fmt.Errorf("stand up the container substrate for the %s class: %w", class, err)
 	}
 	decoded, err := decodeSubstrate(work.outputs)
@@ -292,7 +292,7 @@ func (r *Stacks) releaseSubstrate(ctx context.Context, records providerkit.Recor
 		progress.Say("Taking down the shared container substrate for the " + string(ref.Class) + " class: the last container app in it is gone")
 	}
 	substrate := substrateRef(ref.Class)
-	if err := owner.adapter.Destroy(ctx, substrate, progress); err != nil {
+	if err := owner.automation.Destroy(ctx, substrate, progress); err != nil {
 		return fmt.Errorf("take down the container substrate for the %s class: %w", ref.Class, err)
 	}
 	if err := providerkit.ForgetStack(ctx, records, ref.Class, SubstrateSlug, substrate.Name); err != nil {

@@ -79,21 +79,21 @@ type Clients struct {
 	APIGateway APIGatewayAPI
 	Routing    RoutingAPI
 	Dynamo     awsports.DynamoAPI
-	CFN        cfn.Describer
+	CFN        cfn.StacksAPI
 	Region     string
 }
 
-type provider struct {
+type apiGateway struct {
 	ns   bootstrap.Namespace
 	open func(context.Context) (Clients, error)
 
 	mu      sync.Mutex
-	delete  *Deleter
+	delete  *Deletion
 	clients *Clients
 }
 
 func New(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) edge.Edge {
-	return &provider{ns: ns, open: open, delete: NewDeleter()}
+	return &apiGateway{ns: ns, open: open, delete: NewDeletion()}
 }
 
 func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Context) (Clients, error) {
@@ -115,18 +115,18 @@ func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Con
 	}
 }
 
-func (p *provider) deleter() *Deleter {
+func (p *apiGateway) deletion() *Deletion {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.delete == nil {
-		p.delete = NewDeleter()
+		p.delete = NewDeletion()
 	}
 	return p.delete
 }
 
-func (p *provider) Kind() edge.Kind { return Kind }
+func (p *apiGateway) Kind() edge.Kind { return Kind }
 
-func (p *provider) Facts() edge.Facts {
+func (p *apiGateway) Facts() edge.Facts {
 	return edge.Facts{
 		Supported:           []edge.Need{edge.NeedStreaming},
 		FlipBound:           edge.FlipBound{Typical: propagationBound},
@@ -134,7 +134,7 @@ func (p *provider) Facts() edge.Facts {
 	}
 }
 
-func (p *provider) Hooks() edge.Hooks { return edge.Hooks{} }
+func (p *apiGateway) Hooks() edge.Hooks { return edge.Hooks{} }
 
 func CertificateRegion(apiRegion string) string { return apiRegion }
 
@@ -143,7 +143,7 @@ const (
 	typeDomainName = "AWS::ApiGateway::DomainName"
 )
 
-func (p *provider) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+func (p *apiGateway) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	changes := []edge.PlanChange{{
 		Kind:   typeRestAPI,
 		Name:   scope.Slug,
@@ -174,7 +174,7 @@ func restAPIsReason(class edge.Class) string {
 	return "the production API and every preview API this project is served through, and the host rules routing to them" + paced
 }
 
-func (p *provider) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+func (p *apiGateway) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
 	removed := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
@@ -189,7 +189,7 @@ func (p *provider) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edg
 	return removed, p.SharedPreviewRemoval()
 }
 
-func (p *provider) SharedPreviewRemoval() edge.PlanGroup {
+func (p *apiGateway) SharedPreviewRemoval() edge.PlanGroup {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
@@ -198,7 +198,7 @@ func (p *provider) SharedPreviewRemoval() edge.PlanGroup {
 	}
 }
 
-func (p *provider) clientsFor(ctx context.Context) (Clients, error) {
+func (p *apiGateway) clientsFor(ctx context.Context) (Clients, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.clients != nil {
@@ -222,7 +222,7 @@ func knownClass(class edge.Class) error {
 	return nil
 }
 
-func (p *provider) bootstrap(ctx context.Context, c Clients, class edge.Class) (bootstrap.Deployed, error) {
+func (p *apiGateway) bootstrap(ctx context.Context, c Clients, class edge.Class) (bootstrap.Deployed, error) {
 	if err := knownClass(class); err != nil {
 		return bootstrap.Deployed{}, err
 	}
@@ -232,14 +232,14 @@ func (p *provider) bootstrap(ctx context.Context, c Clients, class edge.Class) (
 	return bootstrap.CheckDeployed(ctx, c.CFN, p.ns)
 }
 
-func (p *provider) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
+func (p *apiGateway) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
 	if err := knownClass(class); err != nil {
 		return edge.BootstrapOutput{}, err
 	}
 	return edge.BootstrapOutput{Trust: edge.TrustInternal}, nil
 }
 
-func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
+func (p *apiGateway) Teardown(ctx context.Context, class edge.Class) error {
 	if err := knownClass(class); err != nil {
 		return err
 	}
@@ -260,7 +260,7 @@ func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
 		Kind, len(standing), class, strings.Join(standing, ", "), "ocel destroy "+string(class))
 }
 
-func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
+func (p *apiGateway) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	c, err := p.clientsFor(ctx)
 	if err != nil {
 		return nil, err
@@ -281,7 +281,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	}
 
 	var own private
-	if err := prior.Adapter.Into(&own); err != nil {
+	if err := prior.Private.Into(&own); err != nil {
 		return nil, err
 	}
 	next := prior
@@ -310,19 +310,19 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	return s, nil
 }
 
-func (p *provider) Open(state edge.StackState) (edge.EdgeStack, error) {
+func (p *apiGateway) Open(state edge.StackState) (edge.EdgeStack, error) {
 	s := &stack{p: p, state: state}
-	if err := state.Adapter.Into(&s.own); err != nil {
+	if err := state.Private.Into(&s.own); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
-func (p *provider) ProjectOwner(slug string, class edge.Class) string {
+func (p *apiGateway) ProjectOwner(slug string, class edge.Class) string {
 	return apiName(p.ns, slug, class, "")
 }
 
-func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, error) {
+func (p *apiGateway) DomainOwner(ctx context.Context, hostname string) (string, error) {
 	c, err := p.clientsFor(ctx)
 	if err != nil {
 		return "", err

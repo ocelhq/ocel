@@ -40,16 +40,10 @@ func edgeKindOf(plan providerkit.StackPlan) edge.Kind {
 	return plan.Edge.Kind()
 }
 
-type Resolver interface {
-	Release(ctx context.Context, scope Scope) (Config, error)
-}
-
-type ResolverFunc func(ctx context.Context, scope Scope) (Config, error)
-
-func (f ResolverFunc) Release(ctx context.Context, scope Scope) (Config, error) { return f(ctx, scope) }
+type ReleaseConfig func(ctx context.Context, scope Scope) (Config, error)
 
 type Stacks struct {
-	resolve  Resolver
+	resolve  ReleaseConfig
 	realized *Realized
 	engine   kitpulumi.Engine
 
@@ -68,15 +62,15 @@ type Stacks struct {
 
 type release struct {
 	*Stacks
-	cfg     Config
-	adapter *kitpulumi.Adapter
+	cfg        Config
+	automation *kitpulumi.Automation
 }
 
-func NewStacks(resolve Resolver, realized *Realized) *Stacks {
+func NewStacks(resolve ReleaseConfig, realized *Realized) *Stacks {
 	return newStacks(resolve, realized, nil)
 }
 
-func newStacks(resolve Resolver, realized *Realized, engine kitpulumi.Engine) *Stacks {
+func newStacks(resolve ReleaseConfig, realized *Realized, engine kitpulumi.Engine) *Stacks {
 	return &Stacks{
 		resolve:  resolve,
 		realized: realized,
@@ -99,7 +93,7 @@ func (r *Stacks) at(ctx context.Context, ref providerkit.StackRef, kind edge.Kin
 	if held, opened := r.opened[scope]; opened {
 		return held, nil
 	}
-	cfg, err := r.resolve.Release(ctx, scope)
+	cfg, err := r.resolve(ctx, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +102,7 @@ func (r *Stacks) at(ctx context.Context, ref providerkit.StackRef, kind edge.Kin
 		return nil, err
 	}
 	held := &release{Stacks: r, cfg: cfg}
-	held.adapter = kitpulumi.New(kitpulumi.Config{
+	held.automation = kitpulumi.New(kitpulumi.Config{
 		Access: kitpulumi.Access{
 			BackendURL: cfg.BackendURL,
 			Passphrase: cfg.Passphrase,
@@ -333,7 +327,7 @@ func (r *release) refuseHandover(ctx context.Context, plan providerkit.StackPlan
 	if len(bound) == 0 {
 		return nil
 	}
-	outputs, err := r.adapter.Outputs(ctx, plan.Ref, nil)
+	outputs, err := r.automation.Outputs(ctx, plan.Ref, nil)
 	if err != nil {
 		return err
 	}
@@ -374,7 +368,7 @@ func (r *Stacks) PlanDestroy(ctx context.Context, ref providerkit.StackRef, prog
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
-	return held.adapter.PreviewDestroy(ctx, ref, progress)
+	return held.automation.PreviewDestroy(ctx, ref, progress)
 }
 
 func (r *Stacks) Provision(ctx context.Context, plan providerkit.StackPlan, progress providerkit.Progress) (providerkit.StackResult, error) {
@@ -398,7 +392,7 @@ func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, pro
 		r.pending.hold(work.stack, work.sets, progress)
 		defer r.pending.drop(work.stack, work.sets)
 	}
-	result, err := r.adapter.Run(ctx, prepared, progress)
+	result, err := r.automation.Run(ctx, prepared, progress)
 	if err != nil {
 		return providerkit.StackResult{}, err
 	}
@@ -419,7 +413,7 @@ func (r *release) plan(ctx context.Context, plan providerkit.StackPlan, progress
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
-	previewed, err := r.adapter.Preview(ctx, prepared, progress)
+	previewed, err := r.automation.Preview(ctx, prepared, progress)
 	if err != nil {
 		return providerkit.Plan{}, err
 	}
@@ -477,11 +471,11 @@ func (r *Stacks) Destroy(ctx context.Context, ref providerkit.StackRef, progress
 	if err != nil {
 		return err
 	}
-	if err := held.adapter.Destroy(ctx, ref, progress); err != nil {
+	if err := held.automation.Destroy(ctx, ref, progress); err != nil {
 		return err
 	}
 	if held.cfg.Tags != nil {
-		if err := held.cfg.Tags.SweepTagClock(ctx, naming.Sanitize(ref.Project), ref.Name); err != nil {
+		if err := held.cfg.Tags.Sweep(ctx, naming.Sanitize(ref.Project), ref.Name); err != nil {
 			return err
 		}
 	}
@@ -501,7 +495,7 @@ func (r *Stacks) Outputs(ctx context.Context, ref providerkit.StackRef, progress
 	if err != nil {
 		return nil, err
 	}
-	return held.adapter.Outputs(ctx, ref, progress)
+	return held.automation.Outputs(ctx, ref, progress)
 }
 
 var _ providerkit.Stacks = (*Stacks)(nil)

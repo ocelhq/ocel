@@ -37,7 +37,7 @@ func writeOriginRecord(ctx context.Context, cfg Config, app string, work *appWor
 	if work == nil || work.cache == nil {
 		return nil
 	}
-	target := uploadTarget{up: cfg.Uploader, bucket: work.cache.Bucket, class: cfg.Class}
+	target := uploadTarget{up: cfg.Objects, bucket: work.cache.Bucket, class: cfg.Class}
 	if err := target.validate(); err != nil {
 		return fmt.Errorf("publish the origin record for %s: %w", app, err)
 	}

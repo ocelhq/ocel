@@ -67,21 +67,21 @@ type Clients struct {
 	KeyValueStore KeyValueStoreAPI
 	Dynamo        awsports.DynamoAPI
 	SSM           SSMAPI
-	CFN           cfn.Describer
+	CFN           cfn.StacksAPI
 	Region        string
 }
 
-type provider struct {
+type cloudFront struct {
 	ns     bootstrap.Namespace
 	open   func(context.Context) (Clients, error)
-	settle Settler
+	settle Rollout
 
 	mu      sync.Mutex
 	clients *Clients
 }
 
 func New(ns bootstrap.Namespace, open func(context.Context) (Clients, error)) edge.Edge {
-	return &provider{ns: ns, open: open, settle: NewSettler()}
+	return &cloudFront{ns: ns, open: open, settle: NewRollout()}
 }
 
 func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Context) (Clients, error) {
@@ -108,9 +108,9 @@ func FromConfig(load func(context.Context) (aws.Config, error)) func(context.Con
 	}
 }
 
-func (p *provider) Kind() edge.Kind { return Kind }
+func (p *cloudFront) Kind() edge.Kind { return Kind }
 
-func (p *provider) Facts() edge.Facts {
+func (p *cloudFront) Facts() edge.Facts {
 	return edge.Facts{
 		Supported:             []edge.Need{edge.NeedEdgeCache, edge.NeedStreaming},
 		FlipBound:             edge.FlipBound{Typical: propagationBound},
@@ -118,7 +118,7 @@ func (p *provider) Facts() edge.Facts {
 	}
 }
 
-func (p *provider) Hooks() edge.Hooks { return edge.Hooks{} }
+func (p *cloudFront) Hooks() edge.Hooks { return edge.Hooks{} }
 
 func CertificateRegion(string) string { return certs.CloudFrontRegion }
 
@@ -129,7 +129,7 @@ const (
 	typeKeyValueStore = "AWS::CloudFront::KeyValueStore"
 )
 
-func (p *provider) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
+func (p *cloudFront) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	var changes []edge.PlanChange
 	if scope.Front != "" {
 		changes = append(changes, edge.PlanChange{
@@ -158,7 +158,7 @@ func (p *provider) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 	}}
 }
 
-func (p *provider) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
+func (p *cloudFront) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edge.PlanGroup) {
 	removed := edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
@@ -174,7 +174,7 @@ func (p *provider) PreviewWildcardRemovals(wildcard string) (edge.PlanGroup, edg
 	return removed, p.SharedPreviewRemoval()
 }
 
-func (p *provider) SharedPreviewRemoval() edge.PlanGroup {
+func (p *cloudFront) SharedPreviewRemoval() edge.PlanGroup {
 	return edge.PlanGroup{
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
@@ -183,7 +183,7 @@ func (p *provider) SharedPreviewRemoval() edge.PlanGroup {
 	}
 }
 
-func (p *provider) clientsFor(ctx context.Context) (Clients, error) {
+func (p *cloudFront) clientsFor(ctx context.Context) (Clients, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.clients != nil {
@@ -200,9 +200,9 @@ func (p *provider) clientsFor(ctx context.Context) (Clients, error) {
 	return c, nil
 }
 
-func (p *provider) settler() Settler {
+func (p *cloudFront) rollout() Rollout {
 	if p.settle.Attempts == 0 {
-		return NewSettler()
+		return NewRollout()
 	}
 	return p.settle
 }
@@ -214,7 +214,7 @@ func knownClass(class edge.Class) error {
 	return nil
 }
 
-func (p *provider) bootstrap(ctx context.Context, c Clients, class edge.Class) (bootstrap.Deployed, error) {
+func (p *cloudFront) bootstrap(ctx context.Context, c Clients, class edge.Class) (bootstrap.Deployed, error) {
 	if err := knownClass(class); err != nil {
 		return bootstrap.Deployed{}, err
 	}
@@ -224,14 +224,14 @@ func (p *provider) bootstrap(ctx context.Context, c Clients, class edge.Class) (
 	return bootstrap.CheckDeployed(ctx, c.CFN, p.ns)
 }
 
-func (p *provider) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
+func (p *cloudFront) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
 	if err := knownClass(class); err != nil {
 		return edge.BootstrapOutput{}, err
 	}
 	return edge.BootstrapOutput{Trust: edge.TrustInternal}, nil
 }
 
-func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
+func (p *cloudFront) Teardown(ctx context.Context, class edge.Class) error {
 	if err := knownClass(class); err != nil {
 		return err
 	}
@@ -257,7 +257,7 @@ func (p *provider) Teardown(ctx context.Context, class edge.Class) error {
 		Kind, len(standing), class, strings.Join(standing, ", "), "ocel destroy "+string(class))
 }
 
-func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
+func (p *cloudFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	c, err := p.clientsFor(ctx)
 	if err != nil {
 		return nil, err
@@ -273,7 +273,7 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 		return nil, fmt.Errorf("the %s bootstrap is not standing, so the %q edge has no state table to keep %s's deployments in. Run `%s` against this account, then deploy again", spec.Class, Kind, spec.Slug, providerkit.BootstrapCommand(spec.Class))
 	}
 	var own private
-	if err := prior.Adapter.Into(&own); err != nil {
+	if err := prior.Private.Into(&own); err != nil {
 		return nil, err
 	}
 	set, err := edgeSetOf(deployed, spec.Class)
@@ -310,19 +310,19 @@ func (p *provider) Reconcile(ctx context.Context, spec edge.StackSpec, prior edg
 	return s, nil
 }
 
-func (p *provider) Open(state edge.StackState) (edge.EdgeStack, error) {
+func (p *cloudFront) Open(state edge.StackState) (edge.EdgeStack, error) {
 	s := &stack{p: p, state: state}
-	if err := state.Adapter.Into(&s.own); err != nil {
+	if err := state.Private.Into(&s.own); err != nil {
 		return nil, err
 	}
 	return s, nil
 }
 
-func (p *provider) ProjectOwner(slug string, class edge.Class) string {
+func (p *cloudFront) ProjectOwner(slug string, class edge.Class) string {
 	return distributionName(p.ns, slug, class)
 }
 
-func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, error) {
+func (p *cloudFront) DomainOwner(ctx context.Context, hostname string) (string, error) {
 	c, err := p.clientsFor(ctx)
 	if err != nil {
 		return "", err

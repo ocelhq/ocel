@@ -12,7 +12,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func entitlementProvider(t *testing.T, subscriptions string, status int) *provider {
+func entitlementProvider(t *testing.T, subscriptions string, status int) *cloudflare {
 	t.Helper()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -30,7 +30,7 @@ func entitlementProvider(t *testing.T, subscriptions string, status int) *provid
 	}))
 	t.Cleanup(srv.Close)
 
-	return &provider{namespace: "ocel", client: cf.NewClient(
+	return &cloudflare{namespace: "ocel", client: cf.NewClient(
 		option.WithBaseURL(srv.URL+"/"),
 		option.WithAPIToken("test"),
 	)}

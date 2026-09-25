@@ -19,51 +19,51 @@ const (
 	containerFrontRollingOut = "CloudFront was still rolling the container origin out to its edges, so a route selecting it would fail there"
 )
 
-type Settler struct {
+type Rollout struct {
 	Wait     func(context.Context, time.Duration) error
 	Attempts int
 	Every    time.Duration
 	Jitter   func() float64
 }
 
-func NewSettler() Settler {
-	return Settler{Wait: waitFor, Attempts: settleAttempts, Every: settleEvery, Jitter: rand.Float64}
+func NewRollout() Rollout {
+	return Rollout{Wait: waitFor, Attempts: settleAttempts, Every: settleEvery, Jitter: rand.Float64}
 }
 
-func (s Settler) attempts() int { return max(s.Attempts, 1) }
+func (s Rollout) attempts() int { return max(s.Attempts, 1) }
 
-func (s Settler) every() time.Duration {
+func (s Rollout) every() time.Duration {
 	if s.Every <= 0 {
 		return settleEvery
 	}
 	return s.Every
 }
 
-func (s Settler) jitter() float64 {
+func (s Rollout) jitter() float64 {
 	if s.Jitter == nil {
 		return rand.Float64()
 	}
 	return s.Jitter()
 }
 
-func (s Settler) interval() time.Duration {
+func (s Rollout) interval() time.Duration {
 	every := s.every()
 	spread := settleJitter * (2*s.jitter() - 1)
 	return every + time.Duration(float64(every)*spread)
 }
 
-func (s Settler) window() time.Duration {
+func (s Rollout) window() time.Duration {
 	return time.Duration(s.attempts()-1) * s.every()
 }
 
-func (s Settler) hold(ctx context.Context) error {
+func (s Rollout) hold(ctx context.Context) error {
 	if s.Wait != nil {
 		return s.Wait(ctx, s.interval())
 	}
 	return waitFor(ctx, s.interval())
 }
 
-func (s Settler) settled(ctx context.Context, kind, id, because string, status func(context.Context) (string, error)) error {
+func (s Rollout) settled(ctx context.Context, kind, id, because string, status func(context.Context) (string, error)) error {
 	for attempt := 0; attempt < s.attempts(); attempt++ {
 		if attempt > 0 {
 			if err := s.hold(ctx); err != nil {

@@ -22,7 +22,7 @@ type wildcards struct {
 	records  RecordStore
 	held     Wildcard
 	sel      *contractv1.EdgeSelection
-	audience *eventSender
+	audience *eventStream
 }
 
 func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) (*wildcards, error) {
@@ -38,12 +38,12 @@ func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) 
 	return &wildcards{provider: provider, records: records, held: held, sel: sel}, nil
 }
 
-func (w *wildcards) settler(front edge.Edge) (settler, error) {
+func (w *wildcards) settlement(front edge.Edge) (settlement, error) {
 	writer, err := dnsFor(w.provider, front, w.sel)
 	if err != nil {
-		return settler{}, err
+		return settlement{}, err
 	}
-	s := newSettler(front, writer, w.sel.GetDns().GetZone(), w.provider.Liveness())
+	s := newSettlement(front, writer, w.sel.GetDns().GetZone(), w.provider.Liveness())
 	if w.audience != nil {
 		s.attend(w.audience)
 	}
@@ -82,7 +82,7 @@ func (w *wildcards) save(ctx context.Context) error {
 }
 
 func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(sender *eventSender, progress Progress) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(sender *eventStream, progress Progress) error {
 		base, err := previewBaseDomain(req.GetBaseDomain())
 		if err != nil {
 			return err
@@ -104,7 +104,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	if err := w.claimable(front, base); err != nil {
 		return err
 	}
-	settle, err := w.settler(front)
+	settle, err := w.settlement(front)
 	if err != nil {
 		return err
 	}
@@ -179,7 +179,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	return nil
 }
 
-func (w *wildcards) certification(settle settler, notes ...string) certification {
+func (w *wildcards) certification(settle settlement, notes ...string) certification {
 	return certification{
 		provider: w.provider,
 		settle:   settle,
@@ -419,7 +419,7 @@ func edgeGroupProto(group edge.PlanGroup) (*planv1.ChangeGroup, error) {
 }
 
 func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, progress Progress) error {
+	return streamed(ctx, stream, naming.UnitEdge, edgeUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress Progress) error {
 		w, err := h.wildcard(ctx, req.GetEdge())
 		if err != nil {
 			return err
@@ -440,7 +440,7 @@ func (w *wildcards) release(ctx context.Context, progress Progress) error {
 	if err := w.releasable(ctx); err != nil {
 		return err
 	}
-	settle, err := w.settler(front)
+	settle, err := w.settlement(front)
 	if err != nil {
 		return err
 	}

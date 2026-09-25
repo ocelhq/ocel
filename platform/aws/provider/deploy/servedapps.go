@@ -112,10 +112,10 @@ func (r *Stacks) EmbedCode(ctx context.Context, physical string, artifact provid
 		return nil
 	}
 	embedPass{
-		objects:  from.cfg.Getter,
-		uploader: from.cfg.Uploader,
-		code:     from.cfg.CodeUpdater,
-		invoker:  from.cfg.Invoker,
+		objects: from.cfg.Getter,
+		store:   from.cfg.Objects,
+		code:    from.cfg.CodeUpdater,
+		invoke:  from.cfg.Invoker,
 		targets: []embedTarget{{
 			App:          held.App,
 			LogicalName:  held.Logical,

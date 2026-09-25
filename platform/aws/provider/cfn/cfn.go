@@ -59,9 +59,7 @@ const (
 	discardGrace        = 20 * time.Second
 )
 
-type ChangeSetNamer interface {
-	ChangeSetNameFor(stackName string) string
-}
+type ChangeSetName func(stackName string) string
 
 type ChangeReview func(stackName string, changes []cfntypes.ResourceChange) error
 
@@ -93,12 +91,12 @@ func IsValidationErrorContaining(err error, substr string) bool {
 	return apiErr.ErrorCode() == "ValidationError" && strings.Contains(apiErr.ErrorMessage(), substr)
 }
 
-type Describer interface {
+type StacksAPI interface {
 	DescribeStacks(ctx context.Context, in *cloudformation.DescribeStacksInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error)
 }
 
 type API interface {
-	Describer
+	StacksAPI
 	CreateStack(ctx context.Context, in *cloudformation.CreateStackInput, optFns ...func(*cloudformation.Options)) (*cloudformation.CreateStackOutput, error)
 	UpdateStack(ctx context.Context, in *cloudformation.UpdateStackInput, optFns ...func(*cloudformation.Options)) (*cloudformation.UpdateStackOutput, error)
 	DeleteStack(ctx context.Context, in *cloudformation.DeleteStackInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DeleteStackOutput, error)
@@ -111,7 +109,7 @@ type API interface {
 }
 
 type TeardownAPI interface {
-	Describer
+	StacksAPI
 	DeleteStack(ctx context.Context, in *cloudformation.DeleteStackInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DeleteStackOutput, error)
 }
 
@@ -120,7 +118,7 @@ type BucketEmptierAPI interface {
 	DeleteObjects(ctx context.Context, in *s3.DeleteObjectsInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectsOutput, error)
 }
 
-func DescribeStack(ctx context.Context, api Describer, stackName string) (*cfntypes.Stack, error) {
+func DescribeStack(ctx context.Context, api StacksAPI, stackName string) (*cfntypes.Stack, error) {
 	out, err := api.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)})
 	if err != nil {
 		if isStackNotFound(err) {
@@ -142,7 +140,7 @@ func OutputsOf(stack *cfntypes.Stack) map[string]string {
 	return values
 }
 
-func StackOutputs(ctx context.Context, api Describer, stackName string) (map[string]string, error) {
+func StackOutputs(ctx context.Context, api StacksAPI, stackName string) (map[string]string, error) {
 	stack, err := DescribeStack(ctx, api, stackName)
 	if err != nil || stack == nil {
 		return nil, err
@@ -159,7 +157,7 @@ func Unusable(status cfntypes.StackStatus) bool {
 	}
 }
 
-func Upsert(ctx context.Context, cfn API, namer ChangeSetNamer, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag, review ChangeReview) error {
+func Upsert(ctx context.Context, cfn API, changeSet ChangeSetName, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag, review ChangeReview) error {
 	stack, err := DescribeStack(ctx, cfn, stackName)
 	if err != nil {
 		return err
@@ -173,11 +171,11 @@ func Upsert(ctx context.Context, cfn API, namer ChangeSetNamer, stackName, templ
 	if stack == nil {
 		return Create(ctx, cfn, stackName, template, params, capabilities, tags)
 	}
-	return Update(ctx, cfn, namer, stackName, template, params, capabilities, tags, review)
+	return Update(ctx, cfn, changeSet, stackName, template, params, capabilities, tags, review)
 }
 
-func Update(ctx context.Context, cfn API, namer ChangeSetNamer, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag, review ChangeReview) error {
-	id, changes, err := Plan(ctx, cfn, namer, stackName, template, params, capabilities, tags)
+func Update(ctx context.Context, cfn API, changeSet ChangeSetName, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag, review ChangeReview) error {
+	id, changes, err := Plan(ctx, cfn, changeSet, stackName, template, params, capabilities, tags)
 	if err != nil {
 		return err
 	}
@@ -253,10 +251,10 @@ func SameTags(have, want []cfntypes.Tag) bool {
 	return true
 }
 
-func Plan(ctx context.Context, cfn API, namer ChangeSetNamer, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag) (string, []cfntypes.ResourceChange, error) {
+func Plan(ctx context.Context, cfn API, changeSet ChangeSetName, stackName, template string, params []cfntypes.Parameter, capabilities []cfntypes.Capability, tags []cfntypes.Tag) (string, []cfntypes.ResourceChange, error) {
 	out, err := cfn.CreateChangeSet(ctx, &cloudformation.CreateChangeSetInput{
 		StackName:     aws.String(stackName),
-		ChangeSetName: aws.String(namer.ChangeSetNameFor(stackName)),
+		ChangeSetName: aws.String(changeSet(stackName)),
 		ChangeSetType: cfntypes.ChangeSetTypeUpdate,
 		TemplateBody:  aws.String(template),
 		Parameters:    params,

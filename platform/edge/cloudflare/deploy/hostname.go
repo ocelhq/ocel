@@ -43,7 +43,7 @@ func projectOwnsScript(namespace, slug string) func(script string) bool {
 	}
 }
 
-func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, plan routePlan, warn func(string)) error {
+func (p *cloudflare) reconcileWorkerRoutes(ctx context.Context, up upload, plan routePlan, warn func(string)) error {
 	warn = nilSafeWarn(warn)
 	routes := p.routeSnapshot()
 
@@ -81,7 +81,7 @@ func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, plan ro
 	return p.pruneStaleRoutes(ctx, routes, up, plan.pruneStem, wanted)
 }
 
-func (p *provider) pruneStaleRoutes(ctx context.Context, snap *routeSnapshot, up upload, stem string, wanted map[string]bool) error {
+func (p *cloudflare) pruneStaleRoutes(ctx context.Context, snap *routeSnapshot, up upload, stem string, wanted map[string]bool) error {
 	owned, err := p.accountZones(ctx, up.accountID)
 	if err != nil {
 		return err
@@ -152,9 +152,9 @@ func routePattern(hostname string) string {
 	return hostname + "/*"
 }
 
-func (p *provider) ProjectOwner(string, edge.Class) string { return "" }
+func (p *cloudflare) ProjectOwner(string, edge.Class) string { return "" }
 
-func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, error) {
+func (p *cloudflare) DomainOwner(ctx context.Context, hostname string) (string, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return "", fmt.Errorf("%s is not set; it is required to read Cloudflare worker routes", envAccountID)
@@ -180,7 +180,7 @@ func (p *provider) DomainOwner(ctx context.Context, hostname string) (string, er
 	return "", nil
 }
 
-func (p *provider) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneID, pattern, scriptName string, plan routePlan) error {
+func (p *cloudflare) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneID, pattern, scriptName string, plan routePlan) error {
 	inZone, err := snap.inZone(ctx, zoneID)
 	if err != nil {
 		return err
@@ -218,7 +218,7 @@ func (p *provider) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneID,
 	return nil
 }
 
-func (p *provider) verifyProxiedRecord(ctx context.Context, accountID, name string) error {
+func (p *cloudflare) verifyProxiedRecord(ctx context.Context, accountID, name string) error {
 	zoneID, _, err := p.resolveZone(ctx, accountID, routeBaseDomain(name))
 	if err != nil {
 		return err
@@ -236,7 +236,7 @@ func (p *provider) verifyProxiedRecord(ctx context.Context, accountID, name stri
 	return nil
 }
 
-func (p *provider) addressRecordsAt(ctx context.Context, zoneID, hostname string) (haveAddress, haveProxied bool, err error) {
+func (p *cloudflare) addressRecordsAt(ctx context.Context, zoneID, hostname string) (haveAddress, haveProxied bool, err error) {
 	existing := p.client.DNS.Records.ListAutoPaging(ctx, dns.RecordListParams{
 		ZoneID: cf.F(zoneID),
 		Name:   cf.F(dns.RecordListParamsName{Exact: cf.F(hostname)}),
@@ -266,7 +266,7 @@ func isAddressRecord(t dns.RecordResponseType) bool {
 	}
 }
 
-func (p *provider) detachCustomDomains(ctx context.Context, accountID, scriptName string) error {
+func (p *cloudflare) detachCustomDomains(ctx context.Context, accountID, scriptName string) error {
 	attached := p.client.Workers.Domains.ListAutoPaging(ctx, workers.DomainListParams{
 		AccountID: cf.F(accountID),
 		Service:   cf.F(scriptName),
@@ -290,7 +290,7 @@ type zoneRef struct {
 	name string
 }
 
-func (p *provider) accountZones(ctx context.Context, accountID string) ([]zoneRef, error) {
+func (p *cloudflare) accountZones(ctx context.Context, accountID string) ([]zoneRef, error) {
 	p.zoneMu.Lock()
 	defer p.zoneMu.Unlock()
 	if cached, ok := p.zonesSeen[accountID]; ok {
@@ -316,11 +316,11 @@ func (p *provider) accountZones(ctx context.Context, accountID string) ([]zoneRe
 }
 
 type routeSnapshot struct {
-	p      *provider
+	p      *cloudflare
 	byZone map[string][]workers.RouteListResponse
 }
 
-func (p *provider) routeSnapshot() *routeSnapshot {
+func (p *cloudflare) routeSnapshot() *routeSnapshot {
 	return &routeSnapshot{p: p, byZone: map[string][]workers.RouteListResponse{}}
 }
 
@@ -358,7 +358,7 @@ func (s *routeSnapshot) detached(zoneID, routeID string) {
 	})
 }
 
-func (p *provider) resolveZone(ctx context.Context, accountID, hostname string) (id, name string, err error) {
+func (p *cloudflare) resolveZone(ctx context.Context, accountID, hostname string) (id, name string, err error) {
 	owned, err := p.accountZones(ctx, accountID)
 	if err != nil {
 		return "", "", err

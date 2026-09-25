@@ -13,7 +13,7 @@ func NewMux(token string, svc bucketv1connect.BucketServiceHandler) *http.ServeM
 	mux := http.NewServeMux()
 	path, handler := bucketv1connect.NewBucketServiceHandler(
 		svc,
-		connect.WithInterceptors(&authenticator{token: token}, validate.NewInterceptor()),
+		connect.WithInterceptors(&tokenGate{token: token}, validate.NewInterceptor()),
 	)
 	mux.Handle(path, handler)
 	return mux

@@ -22,7 +22,7 @@ type projectRemoval struct {
 	stack    edge.EdgeStack
 	store    stackStore
 	state    EdgeStackState
-	settle   settler
+	settle   settlement
 
 	slug    string
 	class   Class
@@ -64,7 +64,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	removal := &projectRemoval{
 		provider: provider,
 		front:    front,
-		settle:   newSettler(front, writer, req.GetEdge().GetDns().GetZone(), provider.Liveness()),
+		settle:   newSettlement(front, writer, req.GetEdge().GetDns().GetZone(), provider.Liveness()),
 		store:    store,
 		state:    state,
 		slug:     req.GetSlug(),
@@ -189,7 +189,7 @@ func certificateGroup(cert Certificate) *planv1.ChangeGroup {
 }
 
 func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventSender, progress Progress) error {
+	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress Progress) error {
 		removal, err := h.openRemoval(ctx, req)
 		if err != nil {
 			return err

@@ -12,7 +12,7 @@ import (
 
 type credentials struct{ provider *Provider }
 
-type surveyor interface {
+type hostSurvey interface {
 	Facts(ctx context.Context) (session.Facts, error)
 	HostKey() providerkit.HostKey
 	Destination() session.Destination
@@ -26,7 +26,7 @@ func (c credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
 	return whoami(ctx, live)
 }
 
-func whoami(ctx context.Context, live surveyor) (providerkit.Identity, error) {
+func whoami(ctx context.Context, live hostSurvey) (providerkit.Identity, error) {
 	facts, err := live.Facts(ctx)
 	if err != nil {
 		return providerkit.Identity{}, err

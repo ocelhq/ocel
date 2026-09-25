@@ -281,7 +281,7 @@ func (f *fakePutter) uploaded() map[string][]byte {
 	return f.put
 }
 
-type fakeCodeUpdater struct {
+type fakeFunctionCode struct {
 	status lambdatypes.LastUpdateStatus
 	err    error
 
@@ -289,7 +289,7 @@ type fakeCodeUpdater struct {
 	updated map[string]string
 }
 
-func (f *fakeCodeUpdater) UpdateFunctionCode(_ context.Context, in *lambda.UpdateFunctionCodeInput, _ ...func(*lambda.Options)) (*lambda.UpdateFunctionCodeOutput, error) {
+func (f *fakeFunctionCode) UpdateFunctionCode(_ context.Context, in *lambda.UpdateFunctionCodeInput, _ ...func(*lambda.Options)) (*lambda.UpdateFunctionCodeOutput, error) {
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -302,7 +302,7 @@ func (f *fakeCodeUpdater) UpdateFunctionCode(_ context.Context, in *lambda.Updat
 	return &lambda.UpdateFunctionCodeOutput{}, nil
 }
 
-func (f *fakeCodeUpdater) GetFunctionConfiguration(context.Context, *lambda.GetFunctionConfigurationInput, ...func(*lambda.Options)) (*lambda.GetFunctionConfigurationOutput, error) {
+func (f *fakeFunctionCode) GetFunctionConfiguration(context.Context, *lambda.GetFunctionConfigurationInput, ...func(*lambda.Options)) (*lambda.GetFunctionConfigurationOutput, error) {
 	status := f.status
 	if status == "" {
 		status = lambdatypes.LastUpdateStatusSuccessful
@@ -315,7 +315,7 @@ func (f *fakeCodeUpdater) GetFunctionConfiguration(context.Context, *lambda.GetF
 
 const embedTestCacheKey = "prod/p/web/B1/bytecode/fn/node24.3.1-arm64.tar.gz"
 
-func embedTestPass(t *testing.T, putter *fakePutter, code *fakeCodeUpdater, invoker *fakeInvoker) (embedPass, func() string) {
+func embedTestPass(t *testing.T, putter *fakePutter, code *fakeFunctionCode, invoker *fakeInvoke) (embedPass, func() string) {
 	t.Helper()
 	dir := t.TempDir()
 	original := filepath.Join(dir, "artifact.zip")
@@ -339,9 +339,9 @@ func embedTestPass(t *testing.T, putter *fakePutter, code *fakeCodeUpdater, invo
 			"assets/" + embedTestCacheKey: gzipped.Bytes(),
 			"artifacts/p/web/abc123.zip":  zipped,
 		}},
-		uploader: putter,
-		code:     code,
-		invoker:  invoker,
+		store:  putter,
+		code:   code,
+		invoke: invoker,
 		targets: []embedTarget{{
 			App:          "web",
 			LogicalName:  "web_bundle",
@@ -357,13 +357,13 @@ func embedTestPass(t *testing.T, putter *fakePutter, code *fakeCodeUpdater, invo
 	}, out
 }
 
-func embeddedReply() *fakeInvoker {
+func embeddedReply() *fakeInvoke {
 	return answering(`{"state":"already-cached","source":"embedded","entries":51,"loaded":51}`)
 }
 
 func TestEmbedPass(t *testing.T) {
 	t.Run("repackages and verifies", func(t *testing.T) {
-		putter, code := &fakePutter{}, &fakeCodeUpdater{}
+		putter, code := &fakePutter{}, &fakeFunctionCode{}
 		pass, out := embedTestPass(t, putter, code, embeddedReply())
 		pass.run(context.Background())
 
@@ -407,43 +407,43 @@ func TestEmbedPass(t *testing.T) {
 		for _, tc := range []struct {
 			name    string
 			putter  *fakePutter
-			code    *fakeCodeUpdater
-			invoker *fakeInvoker
+			code    *fakeFunctionCode
+			invoker *fakeInvoke
 			want    string
 		}{
 			{
 				name:    "the upload is refused",
 				putter:  &fakePutter{err: errors.New("access denied")},
-				code:    &fakeCodeUpdater{},
+				code:    &fakeFunctionCode{},
 				invoker: embeddedReply(),
 				want:    "could not upload",
 			},
 			{
 				name:    "the code update is refused for size",
 				putter:  &fakePutter{},
-				code:    &fakeCodeUpdater{err: errors.New("InvalidParameterValueException: Unzipped size must be smaller than 262144000 bytes")},
+				code:    &fakeFunctionCode{err: errors.New("InvalidParameterValueException: Unzipped size must be smaller than 262144000 bytes")},
 				invoker: embeddedReply(),
 				want:    "left on its original package",
 			},
 			{
 				name:    "the code update settles as failed",
 				putter:  &fakePutter{},
-				code:    &fakeCodeUpdater{status: lambdatypes.LastUpdateStatusFailed},
+				code:    &fakeFunctionCode{status: lambdatypes.LastUpdateStatusFailed},
 				invoker: embeddedReply(),
 				want:    "left on its original package",
 			},
 			{
 				name:    "the function still answers from S3",
 				putter:  &fakePutter{},
-				code:    &fakeCodeUpdater{},
+				code:    &fakeFunctionCode{},
 				invoker: answering(`{"state":"already-cached","source":"s3"}`),
 				want:    `still answered from "s3"`,
 			},
 			{
 				name:   "the verify invoke fails",
 				putter: &fakePutter{},
-				code:   &fakeCodeUpdater{},
-				invoker: &fakeInvoker{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
+				code:   &fakeFunctionCode{},
+				invoker: &fakeInvoke{respond: func(context.Context, string) (*lambda.InvokeOutput, error) {
 					return nil, errors.New("boom")
 				}},
 				want: "could not verify",
@@ -465,7 +465,7 @@ func TestEmbedPass(t *testing.T) {
 	})
 
 	t.Run("missing cache is a warning", func(t *testing.T) {
-		pass, out := embedTestPass(t, &fakePutter{}, &fakeCodeUpdater{}, embeddedReply())
+		pass, out := embedTestPass(t, &fakePutter{}, &fakeFunctionCode{}, embeddedReply())
 		pass.objects = &fakeObjects{}
 		pass.run(context.Background())
 
@@ -476,7 +476,7 @@ func TestEmbedPass(t *testing.T) {
 
 	t.Run("oversized package is never uploaded", func(t *testing.T) {
 		putter := &fakePutter{}
-		pass, out := embedTestPass(t, putter, &fakeCodeUpdater{}, embeddedReply())
+		pass, out := embedTestPass(t, putter, &fakeFunctionCode{}, embeddedReply())
 		pass.targets[0].TreeBytes = embedUnzippedCeiling
 		pass.run(context.Background())
 
@@ -489,7 +489,7 @@ func TestEmbedPass(t *testing.T) {
 	})
 
 	t.Run("declines an update it cannot wait out", func(t *testing.T) {
-		putter, code := &fakePutter{}, &fakeCodeUpdater{}
+		putter, code := &fakePutter{}, &fakeFunctionCode{}
 		pass, out := embedTestPass(t, putter, code, embeddedReply())
 		pass.budget = 250 * time.Millisecond
 		pass.settle = time.Minute
@@ -508,7 +508,7 @@ func TestEmbedPass(t *testing.T) {
 
 	t.Run("unsettled update is never reported as untouched", func(t *testing.T) {
 		putter := &fakePutter{}
-		code := &fakeCodeUpdater{status: lambdatypes.LastUpdateStatusInProgress}
+		code := &fakeFunctionCode{status: lambdatypes.LastUpdateStatusInProgress}
 		invoker := embeddedReply()
 		pass, out := embedTestPass(t, putter, code, invoker)
 		pass.settle = 10 * time.Millisecond

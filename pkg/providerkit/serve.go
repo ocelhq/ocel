@@ -76,7 +76,7 @@ func newMux(spec Spec) *http.ServeMux {
 	)
 
 	held := &session{spec: spec, writer: WrittenByVersion(spec.Version)}
-	kit := &handlers{session: held, VarsHandler: &VarsHandler{Source: sessionVars{session: held}}}
+	kit := &handlers{session: held, VarsService: &VarsService{Source: sessionVars{session: held}}}
 
 	path, handler := contractv1connect.NewProviderServiceHandler(kit, interceptors)
 	mux.Handle(path, handler)
@@ -91,7 +91,7 @@ func newMux(spec Spec) *http.ServeMux {
 }
 
 type handlers struct {
-	*VarsHandler
+	*VarsService
 
 	session *session
 }

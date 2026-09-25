@@ -88,7 +88,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progre
 }
 
 func (s *stack) adopt(front Front) error {
-	if err := s.state.Adapter.Into(&s.held); err != nil {
+	if err := s.state.Private.Into(&s.held); err != nil {
 		return err
 	}
 	s.held.Front = front
@@ -96,7 +96,7 @@ func (s *stack) adopt(front Front) error {
 	return nil
 }
 
-func (s *stack) keep() { s.state.Adapter = edge.Own(s.held) }
+func (s *stack) keep() { s.state.Private = edge.Own(s.held) }
 
 func (s *stack) reach(ctx context.Context, host Host, hostname string) error {
 	if host.Service == "" {

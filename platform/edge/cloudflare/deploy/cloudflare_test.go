@@ -410,7 +410,7 @@ func TestHashAsset(t *testing.T) {
 func TestFlipBoundIsTheRecordCacheWindow(t *testing.T) {
 	t.Parallel()
 
-	p := &provider{}
+	p := &cloudflare{}
 	if !p.Facts().CachesRecords {
 		t.Fatal("Facts().CachesRecords = false, but the entry worker serves a promotion from a cached record for RECORD_TTL_MS")
 	}
@@ -464,7 +464,7 @@ func TestProviderRequiresItsCredentials(t *testing.T) {
 		t.Setenv(envAccountID, "")
 		t.Setenv(envAPIToken, "")
 
-		if _, err := (&provider{namespace: "ocel"}).deployApp(t.Context(), edge.AppDeployment{Name: "ocel-proj-prod"}); err == nil {
+		if _, err := (&cloudflare{namespace: "ocel"}).deployApp(t.Context(), edge.AppDeployment{Name: "ocel-proj-prod"}); err == nil {
 			t.Fatal("expected an error when the environment names no credential")
 		}
 	})

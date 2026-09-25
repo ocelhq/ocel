@@ -76,7 +76,7 @@ func unbindable(what string) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
 		"the %q edge answers on the url Cloud Run gives each service and claims no hostname of its own, so %s cannot be bound to it: "+
 			"name the %q edge, which stands one load balancer up per bootstrap class at %s",
-		Kind, what, alb.Kind, alb.StandingCost)
+		Kind, what, alb.Kind, alb.BaselineCost)
 }
 
 func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {

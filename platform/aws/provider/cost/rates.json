@@ -6,7 +6,7 @@
       "id": "aws/lambda/requests",
       "region": "us-east-1",
       "unit": "Requests",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.0000002"
@@ -24,7 +24,7 @@
       "id": "aws/lambda/requests-arm",
       "region": "us-east-1",
       "unit": "Requests",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.0000002"
@@ -42,7 +42,7 @@
       "id": "aws/lambda/duration",
       "region": "us-east-1",
       "unit": "GB-Seconds",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.0000166667"
@@ -68,7 +68,7 @@
       "id": "aws/lambda/duration-arm",
       "region": "us-east-1",
       "unit": "GB-Seconds",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.0000133334"
@@ -94,7 +94,7 @@
       "id": "aws/logs/ingest",
       "region": "us-east-1",
       "unit": "GB",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.5"
@@ -111,7 +111,7 @@
       "id": "aws/logs/storage",
       "region": "us-east-1",
       "unit": "GB-Mo",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.03"
@@ -128,7 +128,7 @@
       "id": "aws/s3/storage",
       "region": "us-east-1",
       "unit": "GB-Mo",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.023"
@@ -154,7 +154,7 @@
       "id": "aws/s3/requests-tier1",
       "region": "us-east-1",
       "unit": "Requests",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.000005"
@@ -172,7 +172,7 @@
       "id": "aws/s3/requests-tier2",
       "region": "us-east-1",
       "unit": "Requests",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.0000004"
@@ -190,7 +190,7 @@
       "id": "aws/rds/aurora-serverless-v2",
       "region": "us-east-1",
       "unit": "ACU-Hr",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.12"
@@ -208,7 +208,7 @@
       "id": "aws/rds/aurora-storage",
       "region": "us-east-1",
       "unit": "GB-Mo",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.1"
@@ -226,7 +226,7 @@
       "id": "aws/rds/aurora-io",
       "region": "us-east-1",
       "unit": "IOs",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.0000002"
@@ -244,7 +244,7 @@
       "id": "aws/secretsmanager/secret",
       "region": "us-east-1",
       "unit": "Secrets",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.4"
@@ -261,7 +261,7 @@
       "id": "aws/secretsmanager/requests",
       "region": "us-east-1",
       "unit": "API Requests",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.000005"
@@ -278,7 +278,7 @@
       "id": "aws/kms/key",
       "region": "us-east-1",
       "unit": "Keys",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "1"
@@ -295,7 +295,7 @@
       "id": "aws/kms/requests",
       "region": "us-east-1",
       "unit": "Requests",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.000003"
@@ -312,7 +312,7 @@
       "id": "aws/fargate/vcpu",
       "region": "us-east-1",
       "unit": "hours",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.04048"
@@ -329,7 +329,7 @@
       "id": "aws/fargate/memory",
       "region": "us-east-1",
       "unit": "hours",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.004445"
@@ -346,7 +346,7 @@
       "id": "aws/fargate/vcpu-arm",
       "region": "us-east-1",
       "unit": "hours",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.03238"
@@ -363,7 +363,7 @@
       "id": "aws/fargate/memory-arm",
       "region": "us-east-1",
       "unit": "hours",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.00356"
@@ -380,7 +380,7 @@
       "id": "aws/alb/hours",
       "region": "us-east-1",
       "unit": "Hrs",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.0225"
@@ -398,7 +398,7 @@
       "id": "aws/alb/lcu",
       "region": "us-east-1",
       "unit": "LCU-Hrs",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.008"
@@ -416,7 +416,7 @@
       "id": "aws/dynamodb/write",
       "region": "us-east-1",
       "unit": "WriteRequestUnits",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.000000625"
@@ -434,7 +434,7 @@
       "id": "aws/dynamodb/read",
       "region": "us-east-1",
       "unit": "ReadRequestUnits",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.000000125"
@@ -453,7 +453,7 @@
       "region": "us-east-1",
       "unit": "GB-Mo",
       "allowance": "account",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0"
@@ -475,7 +475,7 @@
       "id": "aws/sqs/requests",
       "region": "us-east-1",
       "unit": "Requests",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.0000004"
@@ -500,7 +500,7 @@
       "id": "aws/sqs/requests-fifo",
       "region": "us-east-1",
       "unit": "Requests",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.0000005"
@@ -525,7 +525,7 @@
       "id": "aws/apigateway/rest-requests",
       "region": "us-east-1",
       "unit": "Requests",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.0000035"
@@ -554,7 +554,7 @@
     {
       "id": "aws/cloudfront/requests-https",
       "unit": "Requests",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.000001"
@@ -571,7 +571,7 @@
     {
       "id": "aws/cloudfront/data-out",
       "unit": "GB",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.085"
@@ -613,7 +613,7 @@
       "id": "aws/cloudfront/functions",
       "unit": "Invocations",
       "allowance": "account",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0"
@@ -635,7 +635,7 @@
       "id": "aws/datatransfer/out",
       "region": "us-east-1",
       "unit": "GB",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.09"
@@ -666,7 +666,7 @@
       "id": "aws/ecr/storage",
       "region": "us-east-1",
       "unit": "GB-Mo",
-      "tiers": [
+      "steps": [
         {
           "start": "0",
           "price": "0.1"

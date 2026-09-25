@@ -234,7 +234,7 @@ func specStampFor(t *testing.T, spec edge.StackSpec, state edge.StackState) stri
 func ownOf(t *testing.T, state edge.StackState) private {
 	t.Helper()
 	var own private
-	if err := state.Adapter.Into(&own); err != nil {
+	if err := state.Private.Into(&own); err != nil {
 		t.Fatalf("read the state the edge keeps to itself: %v", err)
 	}
 	return own
@@ -244,11 +244,11 @@ const testEnvelopeKey = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8="
 
 func keyedState(endpoint, secret string) edge.StackState {
 	state := testState(endpoint, secret)
-	state.Adapter = edge.Own(private{EnvelopeKey: testEnvelopeKey})
+	state.Private = edge.Own(private{EnvelopeKey: testEnvelopeKey})
 	return state
 }
 
-func putStampSet(t *testing.T, p *provider, endpoint, secret string, set stampSet) {
+func putStampSet(t *testing.T, p *cloudflare, endpoint, secret string, set stampSet) {
 	t.Helper()
 	encoded, err := set.encode()
 	if err != nil {
@@ -259,7 +259,7 @@ func putStampSet(t *testing.T, p *provider, endpoint, secret string, set stampSe
 	}
 }
 
-func readStampSet(t *testing.T, p *provider, endpoint, secret string) stampSet {
+func readStampSet(t *testing.T, p *cloudflare, endpoint, secret string) stampSet {
 	t.Helper()
 	raw, _, err := p.getVersionStamp(t.Context(), endpoint, "acme-web", secret)
 	if err != nil {
@@ -298,7 +298,7 @@ func TestReconcile(t *testing.T) {
 			t.Errorf("prior = %+v, want the caller's own state left untouched", prior)
 		}
 		want := testState(store.URL, "s3cr3t")
-		want.Adapter = edge.Own(private{EntryWorkers: []string{spec.Program.Name}, EnvelopeKey: testEnvelopeKey})
+		want.Private = edge.Own(private{EntryWorkers: []string{spec.Program.Name}, EnvelopeKey: testEnvelopeKey})
 		if !state.Equal(want) {
 			t.Errorf("state = %+v, want prior plus the worker a domain binds to (%+v)", state, want)
 		}
@@ -645,9 +645,9 @@ func TestPutStagedWrapsTheEnvelope(t *testing.T) {
 
 		srv, got := capture(t)
 		state := keyedState(srv.URL, "s3cr3t")
-		state.Adapter = edge.Own(private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey})
+		state.Private = edge.Own(private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey})
 
-		if err := stackOn(&provider{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1", Envelope: dataKey}); err != nil {
+		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1", Envelope: dataKey}); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 
@@ -672,7 +672,7 @@ func TestPutStagedWrapsTheEnvelope(t *testing.T) {
 		srv, got := capture(t)
 		state := keyedState(srv.URL, "s3cr3t")
 
-		if err := stackOn(&provider{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1", Envelope: dataKey}); err != nil {
+		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1", Envelope: dataKey}); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 		if got.Envelope != dataKey {
@@ -685,9 +685,9 @@ func TestPutStagedWrapsTheEnvelope(t *testing.T) {
 
 		srv, got := capture(t)
 		state := keyedState(srv.URL, "s3cr3t")
-		state.Adapter = edge.Own(private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey})
+		state.Private = edge.Own(private{EntryWorkers: []string{"ocel-acme-web-prod"}, EnvelopeKey: testEnvelopeKey})
 
-		if err := stackOn(&provider{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1"}); err != nil {
+		if err := stackOn(&cloudflare{}, state).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1"}); err != nil {
 			t.Fatalf("PutStaged: %v", err)
 		}
 		if got.Envelope != "" {
@@ -781,13 +781,13 @@ func TestDestroy(t *testing.T) {
 	t.Run("an unset account id is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "")
 
-		if err := (&provider{}).destroyWorkers(t.Context(), nil); err == nil {
+		if err := (&cloudflare{}).destroyWorkers(t.Context(), nil); err == nil {
 			t.Fatal("destroyWorkers without an account id err = nil, want an error")
 		}
 	})
 }
 
-func promote(t *testing.T, p *provider, state edge.StackState, app, build string) {
+func promote(t *testing.T, p *cloudflare, state edge.StackState, app, build string) {
 	t.Helper()
 	s := stackOn(p, state)
 	if err := s.PutStaged(t.Context(), edge.DeploymentRecord{App: app, Identity: build}); err != nil {
@@ -798,7 +798,7 @@ func promote(t *testing.T, p *provider, state edge.StackState, app, build string
 	}
 }
 
-func reconcileState(t *testing.T, p *provider, spec edge.StackSpec, prior edge.StackState) (edge.StackState, error) {
+func reconcileState(t *testing.T, p *cloudflare, spec edge.StackSpec, prior edge.StackState) (edge.StackState, error) {
 	t.Helper()
 	stack, err := p.Reconcile(t.Context(), spec, prior)
 	if err != nil {
@@ -814,7 +814,7 @@ func TestEnsureInstance(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
-		p := &provider{}
+		p := &cloudflare{}
 		state := testState(srv.URL, "s3cr3t")
 
 		if err := p.destroyInstance(t.Context(), state); err != nil {
@@ -840,7 +840,7 @@ func TestEnsureInstance(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
-		p := &provider{}
+		p := &cloudflare{}
 
 		_, _, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), edge.StackState{})
 		if !errors.Is(err, errStoreIdentityHeld) {
@@ -855,7 +855,7 @@ func TestEnsureInstance(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
-		p := &provider{}
+		p := &cloudflare{}
 		putStampSet(t, p, srv.URL, "s3cr3t", stampSet{"": "stamp-v2"})
 		id, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t"))
 		if err != nil {
@@ -873,7 +873,7 @@ func TestEnsureInstance(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "")
-		p := &provider{}
+		p := &cloudflare{}
 
 		id, stamps, err := p.ensureInstance(t.Context(), testSpec(srv.URL, "v1"), edge.StackState{})
 		if err != nil {
@@ -903,7 +903,7 @@ func TestEnsureInstance(t *testing.T) {
 		}))
 		t.Cleanup(srv.Close)
 
-		if _, _, err := (&provider{}).ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t")); err == nil {
+		if _, _, err := (&cloudflare{}).ensureInstance(t.Context(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t")); err == nil {
 			t.Fatal("ensureInstance err = nil, want the store failure surfaced")
 		}
 		if initialized != 0 {

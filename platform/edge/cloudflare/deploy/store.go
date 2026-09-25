@@ -21,7 +21,7 @@ func unauthorized(res *http.Response) bool {
 	return res != nil && res.StatusCode == http.StatusUnauthorized
 }
 
-func (p *provider) destroyInstance(ctx context.Context, state edge.StackState) error {
+func (p *cloudflare) destroyInstance(ctx context.Context, state edge.StackState) error {
 	if state.Secret == "" {
 		return nil
 	}
@@ -32,7 +32,7 @@ func (p *provider) destroyInstance(ctx context.Context, state edge.StackState) e
 	return err
 }
 
-func (p *provider) deleteScript(ctx context.Context, accountID, scriptName string) error {
+func (p *cloudflare) deleteScript(ctx context.Context, accountID, scriptName string) error {
 	_, err := p.client.Workers.Scripts.Delete(ctx, scriptName, workers.ScriptDeleteParams{
 		AccountID: cf.F(accountID),
 		Force:     cf.F(true),
@@ -99,7 +99,7 @@ func (s *stack) Prune(ctx context.Context, keepN int, pointer string) (edge.Prun
 
 var errStoreIdentityHeld = errors.New("the deployments store already holds an identity for this project that this deploy's state does not carry, and the store never hands one out: another deploy of this project initialized it first (re-run once that deploy has written its state), or the state was lost, in which case re-bootstrap this class's edge to reset the store")
 
-func (p *provider) initializeInstance(ctx context.Context, endpoint, slug, bootstrapCred string, present storeIdentity) (storeIdentity, error) {
+func (p *cloudflare) initializeInstance(ctx context.Context, endpoint, slug, bootstrapCred string, present storeIdentity) (storeIdentity, error) {
 	body := map[string]any{"ownerToken": present.ownerToken, "secret": present.secret, "force": false}
 	res, err := p.storeRequestTo(ctx, endpoint, slug, bootstrapCred, http.MethodPost, "/initialize", body, nil)
 	if res != nil && res.StatusCode == http.StatusConflict {
@@ -125,7 +125,7 @@ func (s *stack) SchemaVersion(ctx context.Context) (int, error) {
 	return out.SchemaVersion, nil
 }
 
-func (p *provider) getVersionStamp(ctx context.Context, endpoint, slug, secret string) (string, *http.Response, error) {
+func (p *cloudflare) getVersionStamp(ctx context.Context, endpoint, slug, secret string) (string, *http.Response, error) {
 	var out struct {
 		Version *string `json:"version"`
 	}
@@ -139,16 +139,16 @@ func (p *provider) getVersionStamp(ctx context.Context, endpoint, slug, secret s
 	return *out.Version, res, nil
 }
 
-func (p *provider) putVersionStamp(ctx context.Context, endpoint, slug, secret, version string) error {
+func (p *cloudflare) putVersionStamp(ctx context.Context, endpoint, slug, secret, version string) error {
 	_, err := p.storeRequestTo(ctx, endpoint, slug, secret, http.MethodPut, "/version-stamp", map[string]string{"version": version}, nil)
 	return err
 }
 
-func (p *provider) storeRequest(ctx context.Context, state edge.StackState, method, subpath string, body, out any) (*http.Response, error) {
+func (p *cloudflare) storeRequest(ctx context.Context, state edge.StackState, method, subpath string, body, out any) (*http.Response, error) {
 	return p.storeRequestTo(ctx, state.Endpoint, state.Slug, state.Secret, method, subpath, body, out)
 }
 
-func (p *provider) storeRequestTo(ctx context.Context, endpoint, slug, secret, method, subpath string, body, out any) (*http.Response, error) {
+func (p *cloudflare) storeRequestTo(ctx context.Context, endpoint, slug, secret, method, subpath string, body, out any) (*http.Response, error) {
 	if endpoint == "" {
 		return nil, fmt.Errorf("%w: it has no endpoint; bootstrap the edge first", edge.ErrStoreAbsent)
 	}
@@ -178,7 +178,7 @@ func (p *provider) storeRequestTo(ctx context.Context, endpoint, slug, secret, m
 	}
 }
 
-func (p *provider) storeAttempt(ctx context.Context, endpoint, slug, secret, method, subpath string, encoded []byte, out any) (*http.Response, error) {
+func (p *cloudflare) storeAttempt(ctx context.Context, endpoint, slug, secret, method, subpath string, encoded []byte, out any) (*http.Response, error) {
 	var reader io.Reader
 	if encoded != nil {
 		reader = bytes.NewReader(encoded)
@@ -210,7 +210,7 @@ func (p *provider) storeAttempt(ctx context.Context, endpoint, slug, secret, met
 	return res, nil
 }
 
-func (p *provider) storeClient() *http.Client {
+func (p *cloudflare) storeClient() *http.Client {
 	if p.store != nil {
 		return p.store
 	}

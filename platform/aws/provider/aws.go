@@ -55,7 +55,7 @@ func New(ctx context.Context, settings providerkit.Settings) (providerkit.Provid
 func NewProvider(options Options, transforms []string, cfg aws.Config, ns bootstrap.Namespace) *Provider {
 	p := &Provider{options: options, transforms: transforms, aws: cfg, namespace: ns}
 	p.Front = emulatedFront(cfg)
-	p.releases = deploy.NewStacks(deploy.ResolverFunc(p.release), &deploy.Realized{})
+	p.releases = deploy.NewStacks(p.release, &deploy.Realized{})
 	return p
 }
 

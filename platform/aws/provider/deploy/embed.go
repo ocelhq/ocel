@@ -23,6 +23,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
 const embedCacheCeiling = 32 << 20
@@ -37,11 +38,11 @@ const embedUpdatePoll = 500 * time.Millisecond
 
 const embedUpdateSettle = 45 * time.Second
 
-type ObjectGetter interface {
+type ObjectsAPI interface {
 	GetObject(ctx context.Context, in *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
 }
 
-type FunctionCodeUpdater interface {
+type FunctionCodeAPI interface {
 	UpdateFunctionCode(ctx context.Context, in *lambda.UpdateFunctionCodeInput, optFns ...func(*lambda.Options)) (*lambda.UpdateFunctionCodeOutput, error)
 	GetFunctionConfiguration(ctx context.Context, in *lambda.GetFunctionConfigurationInput, optFns ...func(*lambda.Options)) (*lambda.GetFunctionConfigurationOutput, error)
 }
@@ -65,7 +66,7 @@ func missingEmbedClients(cfg Config) string {
 	}{
 		{"object getter", cfg.Getter != nil},
 		{"code updater", cfg.CodeUpdater != nil},
-		{"artifact uploader", cfg.Uploader != nil},
+		{"artifact object store", cfg.Objects != nil},
 		{"function invoker", cfg.Invoker != nil},
 	} {
 		if !c.present {
@@ -76,14 +77,14 @@ func missingEmbedClients(cfg Config) string {
 }
 
 type embedPass struct {
-	objects  ObjectGetter
-	uploader ArtifactUploader
-	code     FunctionCodeUpdater
-	invoker  FunctionInvoker
-	targets  []embedTarget
-	budget   time.Duration
-	settle   time.Duration
-	log      func(string)
+	objects ObjectsAPI
+	store   payloads.ObjectStore
+	code    FunctionCodeAPI
+	invoke  InvokeAPI
+	targets []embedTarget
+	budget  time.Duration
+	settle  time.Duration
+	log     func(string)
 }
 
 func (p embedPass) run(ctx context.Context) {
@@ -173,7 +174,7 @@ func (p embedPass) embedOne(ctx context.Context, target embedTarget) (string, bo
 		return fmt.Sprintf("%v; left on its original package", err), false
 	}
 
-	reply, failure := invokeWarm(ctx, p.invoker, target.FunctionName)
+	reply, failure := invokeWarm(ctx, p.invoke, target.FunctionName)
 	switch {
 	case failure != "":
 		return fmt.Sprintf("embedded %s, but could not verify it: %s", entry, failure), false
@@ -317,7 +318,7 @@ func (p embedPass) putFile(ctx context.Context, bucket, key, src string) error {
 	if err != nil {
 		return err
 	}
-	_, err = p.uploader.PutObject(ctx, &s3.PutObjectInput{
+	_, err = p.store.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:        aws.String(bucket),
 		Key:           aws.String(key),
 		Body:          f,

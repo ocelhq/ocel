@@ -93,14 +93,14 @@ func run(path, key string) error {
 			}
 			return fmt.Errorf("%s: query %v matches %d skus: %v", rate.ID, rate.Query, len(matched), names)
 		}
-		tiers, unit, err := tiersOf(matched[0])
+		steps, unit, err := stepsOf(matched[0])
 		if err != nil {
 			return fmt.Errorf("%s: %w", rate.ID, err)
 		}
 		if rate.Unit != unit {
 			fmt.Fprintf(os.Stderr, "%s: the catalog bills in %q, the card says %q\n", rate.ID, unit, rate.Unit)
 		}
-		rate.Tiers = tiers
+		rate.Steps = steps
 		rate.Source = "https://cloud.google.com/skus?filter=" + url.QueryEscape(matched[0].SKUID)
 		rate.Verified = today
 	}
@@ -162,23 +162,23 @@ func match(skus []sku, query map[string]string) []sku {
 	return matched
 }
 
-func tiersOf(s sku) ([]costkit.Tier, string, error) {
+func stepsOf(s sku) ([]costkit.PriceStep, string, error) {
 	if len(s.PricingInfo) == 0 {
 		return nil, "", fmt.Errorf("sku %s carries no pricing", s.SKUID)
 	}
 	expression := s.PricingInfo[0].PricingExpression
-	var tiers []costkit.Tier
+	var steps []costkit.PriceStep
 	for _, tier := range expression.TieredRates {
 		units, err := decimal.NewFromString(tier.UnitPrice.Units)
 		if err != nil {
 			return nil, "", fmt.Errorf("sku %s: units %q: %w", s.SKUID, tier.UnitPrice.Units, err)
 		}
 		price := units.Add(decimal.NewFromInt(tier.UnitPrice.Nanos).Div(decimal.NewFromInt(nanosPerUnit)))
-		tiers = append(tiers, costkit.Tier{Start: decimal.NewFromFloat(tier.StartUsageAmount), Price: price})
+		steps = append(steps, costkit.PriceStep{Start: decimal.NewFromFloat(tier.StartUsageAmount), Price: price})
 	}
-	if len(tiers) == 0 {
+	if len(steps) == 0 {
 		return nil, "", fmt.Errorf("sku %s carries no tiered rates", s.SKUID)
 	}
-	sort.Slice(tiers, func(i, j int) bool { return tiers[i].Start.LessThan(tiers[j].Start) })
-	return tiers, expression.UsageUnit, nil
+	sort.Slice(steps, func(i, j int) bool { return steps[i].Start.LessThan(steps[j].Start) })
+	return steps, expression.UsageUnit, nil
 }

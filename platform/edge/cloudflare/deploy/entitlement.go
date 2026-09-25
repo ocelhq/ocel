@@ -13,7 +13,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (p *provider) codeEntitlement(ctx context.Context) (edge.CodeEntitlement, error) {
+func (p *cloudflare) codeEntitlement(ctx context.Context) (edge.CodeEntitlement, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return edge.CodeEntitlement{}, fmt.Errorf("%s is not set", envAccountID)
@@ -26,7 +26,7 @@ const workersPaidPlan = "Workers Paid"
 
 const workersFreePlan = "Workers Free"
 
-func (p *provider) workersPlan(ctx context.Context, accountID string) (string, edge.Entitlement) {
+func (p *cloudflare) workersPlan(ctx context.Context, accountID string) (string, edge.Entitlement) {
 	page, err := p.client.Accounts.Subscriptions.Get(ctx, accounts.SubscriptionGetParams{AccountID: cf.F(accountID)})
 	if err != nil {
 		fmt.Fprintf(os.Stderr,

@@ -38,7 +38,7 @@ func TestIgnoredPinNote(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open(cloudflare): %v", err)
 		}
-		note := IgnoredPinNote(front, registry.Certifier(front, certs.Deps{}), host)
+		note := IgnoredPinNote(front, registry.Certificates(front, certs.Deps{}), host)
 		if !strings.Contains(note, "ignored") || !strings.Contains(note, host) || !strings.Contains(note, string(cloudflare.Kind)) {
 			t.Errorf("note = %q, want the ignored pin said out loud, naming the host and the edge", note)
 		}
@@ -51,14 +51,14 @@ func TestIgnoredPinNote(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Open(cloudfront): %v", err)
 		}
-		certifier := registry.Certifier(front, certs.Deps{AWS: aws.Config{Region: "eu-west-1"}})
-		if !certifier.Issues() {
-			t.Fatal("Issues() = false, want the certifier of an edge ocel requests certificates for")
+		certificates := registry.Certificates(front, certs.Deps{AWS: aws.Config{Region: "eu-west-1"}})
+		if !certificates.Issues() {
+			t.Fatal("Issues() = false, want the certificates of an edge ocel requests certificates for")
 		}
-		if certifier.PinFor(host) != arn {
-			t.Errorf("PinFor(%s) = %q, want the operator's pin read from this provider's options", host, certifier.PinFor(host))
+		if certificates.PinFor(host) != arn {
+			t.Errorf("PinFor(%s) = %q, want the operator's pin read from this provider's options", host, certificates.PinFor(host))
 		}
-		if note := IgnoredPinNote(front, certifier, host); note != "" {
+		if note := IgnoredPinNote(front, certificates, host); note != "" {
 			t.Errorf("note = %q, want nothing said about a pin this edge uses", note)
 		}
 	})

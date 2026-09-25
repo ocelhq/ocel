@@ -56,7 +56,7 @@ func resolving(t *testing.T, p *vps.Provider) liveValues {
 		t.Fatalf("publishing a binding onto the box = %v", err)
 	}
 
-	reader := values.Reader{Records: p.Records(), Cipher: p.Cipher(), Scope: liveScope()}
+	reader := values.View{Records: p.Records(), Cipher: p.Cipher(), Scope: liveScope()}
 	records, err := reader.Bindings(ctx, []string{"main"})
 	if err != nil {
 		t.Fatalf("resolving a binding back through the helper = %v", err)

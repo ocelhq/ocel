@@ -33,12 +33,12 @@ func (r *recordingStream) recorded() []*progressv1.OperationEvent {
 	return r.events
 }
 
-func TestEventSenderPropagatesSendError(t *testing.T) {
+func TestEventStreamPropagatesSendError(t *testing.T) {
 	t.Parallel()
 
 	wantErr := errors.New("boom")
 	var calls int
-	sender := newEventSender(context.Background(), func(*progressv1.OperationEvent) error {
+	sender := newEventStream(context.Background(), func(*progressv1.OperationEvent) error {
 		calls++
 		if calls == 2 {
 			return wantErr
@@ -59,11 +59,11 @@ func TestEventSenderPropagatesSendError(t *testing.T) {
 	}
 }
 
-func TestEventSenderAppliesBackpressureWithoutDroppingEvents(t *testing.T) {
+func TestEventStreamAppliesBackpressureWithoutDroppingEvents(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
-	sender := newEventSender(context.Background(), stream.send)
+	sender := newEventStream(context.Background(), stream.send)
 
 	const total = eventSenderBuffer + 50
 	var wg sync.WaitGroup
@@ -84,11 +84,11 @@ func TestEventSenderAppliesBackpressureWithoutDroppingEvents(t *testing.T) {
 	}
 }
 
-func TestEventSenderSendRacingCloseNeverPanics(t *testing.T) {
+func TestEventStreamSendRacingCloseNeverPanics(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
-	sender := newEventSender(context.Background(), stream.send)
+	sender := newEventStream(context.Background(), stream.send)
 
 	const concurrent = 50
 	var wg sync.WaitGroup
@@ -114,13 +114,13 @@ func TestEventSenderSendRacingCloseNeverPanics(t *testing.T) {
 	}
 }
 
-func TestEventSenderSendUnblocksOnContextCancellation(t *testing.T) {
+func TestEventStreamSendUnblocksOnContextCancellation(t *testing.T) {
 	t.Parallel()
 
 	blockDrain := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 
-	sender := newEventSender(ctx, func(*progressv1.OperationEvent) error {
+	sender := newEventStream(ctx, func(*progressv1.OperationEvent) error {
 		<-blockDrain
 		return nil
 	})
@@ -153,11 +153,11 @@ func TestEventSenderSendUnblocksOnContextCancellation(t *testing.T) {
 	sender.close()
 }
 
-func TestEventSenderFailPassesARefusalBackToTheCaller(t *testing.T) {
+func TestEventStreamFailPassesARefusalBackToTheCaller(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
-	sender := newEventSender(context.Background(), stream.send)
+	sender := newEventStream(context.Background(), stream.send)
 
 	refusal := connect.NewError(connect.CodeInvalidArgument, errors.New("no"))
 	if err := sender.fail(refusal); !errors.Is(err, refusal) {
@@ -184,11 +184,11 @@ func TestEventSenderFailPassesARefusalBackToTheCaller(t *testing.T) {
 
 var testStage = PhaseStage(naming.UnitEnvironment, progressv1.Phase_PHASE_PROVISIONING)
 
-func TestReporterTagsEverythingWithItsStage(t *testing.T) {
+func TestStageProgressTagsEverythingWithItsStage(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
-	sender := newEventSender(context.Background(), stream.send)
+	sender := newEventStream(context.Background(), stream.send)
 	stage := PhaseStage(naming.UnitEnvironment, progressv1.Phase_PHASE_PROVISIONING)
 	progress := newProgress(sender, stage)
 
@@ -219,11 +219,11 @@ func TestReporterTagsEverythingWithItsStage(t *testing.T) {
 	}
 }
 
-func TestReporterStripsControlCharacters(t *testing.T) {
+func TestStageProgressStripsControlCharacters(t *testing.T) {
 	t.Parallel()
 
 	stream := &recordingStream{}
-	sender := newEventSender(context.Background(), stream.send)
+	sender := newEventStream(context.Background(), stream.send)
 	progress := newProgress(sender, testStage)
 
 	progress.Say("clearing the screen\x1b[2J now")

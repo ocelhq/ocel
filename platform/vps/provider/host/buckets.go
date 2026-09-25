@@ -246,29 +246,29 @@ func sortedHeaderNames(header http.Header) []string {
 	return names
 }
 
-type BucketStanding struct {
+type BucketState struct {
 	ExpiresUploads bool
 }
 
-func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) (BucketStanding, error) {
+func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) (BucketState, error) {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
-		return BucketStanding{}, err
+		return BucketState{}, err
 	}
 	calls, err := spec.calls()
 	if err != nil {
-		return BucketStanding{}, providerkit.Refuse(providerkit.CodeInvalid,
+		return BucketState{}, providerkit.Refuse(providerkit.CodeInvalid,
 			"cannot encode bucket %s: %v", spec.Bucket, err)
 	}
 	now := time.Now().UTC()
-	var standing BucketStanding
+	var standing BucketState
 	for _, call := range calls {
 		if call.name == lifecycleCall {
 			taken, err := droveStore(spec, []storeCall{call}, now, func(what, script string) (string, error) {
 				return h.ran(ctx, what, script, nil, elevation)
 			})
 			if err != nil {
-				return BucketStanding{}, providerkit.Refuse(providerkit.CodeNotReady,
+				return BucketState{}, providerkit.Refuse(providerkit.CodeNotReady,
 					"could not %s on %s: %v", call.what, h.named(), err)
 			}
 			standing.ExpiresUploads = slices.Contains(storeTook, taken[call.name].code)
@@ -276,10 +276,10 @@ func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) (BucketStan
 		}
 		req, err := spec.signed(call, now)
 		if err != nil {
-			return BucketStanding{}, fmt.Errorf("sign %s: %w", call.what, err)
+			return BucketState{}, fmt.Errorf("sign %s: %w", call.what, err)
 		}
 		if _, err := h.ran(ctx, call.what, curlCommand(spec.Store, req, call), fedBody(call.body), elevation); err != nil {
-			return BucketStanding{}, providerkit.Refuse(providerkit.CodeNotReady,
+			return BucketState{}, providerkit.Refuse(providerkit.CodeNotReady,
 				"could not %s on %s: %v", call.what, h.named(), err)
 		}
 	}

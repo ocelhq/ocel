@@ -66,18 +66,18 @@ type Connector struct{ host *Host }
 
 func NewConnector(host *Host) *Connector { return &Connector{host: host} }
 
-type ConnectorStanding struct {
+type ConnectorState struct {
 	Installed bool
 	Version   string
 	PublicKey string
 }
 
-func (c *Connector) Describe(ctx context.Context) (ConnectorStanding, error) {
+func (c *Connector) Describe(ctx context.Context) (ConnectorState, error) {
 	rendered, err := c.host.run(ctx, "ask this host what connector it carries", connectorSurvey(), nil)
 	if err != nil {
-		return ConnectorStanding{}, err
+		return ConnectorState{}, err
 	}
-	return readConnectorStanding(rendered)
+	return readConnectorState(rendered)
 }
 
 func connectorSurvey() string {
@@ -88,8 +88,8 @@ func connectorSurvey() string {
 		"fi"
 }
 
-func readConnectorStanding(rendered string) (ConnectorStanding, error) {
-	standing := ConnectorStanding{}
+func readConnectorState(rendered string) (ConnectorState, error) {
+	standing := ConnectorState{}
 	for line := range strings.SplitSeq(strings.TrimSpace(rendered), "\n") {
 		key, value, named := strings.Cut(strings.TrimSpace(line), "=")
 		if !named {
@@ -103,7 +103,7 @@ func readConnectorStanding(rendered string) (ConnectorStanding, error) {
 		}
 	}
 	if standing.Installed && standing.PublicKey == "" {
-		return ConnectorStanding{}, providerkit.Refuse(providerkit.CodeNotReady,
+		return ConnectorState{}, providerkit.Refuse(providerkit.CodeNotReady,
 			"%s answered no public key\nRemove the connector and add it again",
 			ConnectorBinary)
 	}
@@ -124,19 +124,19 @@ func keyPathed(config []byte) ([]byte, error) {
 	return append(written, '\n'), nil
 }
 
-func (c *Connector) Install(ctx context.Context, hostname string, binary, config []byte, progress providerkit.Progress) (ConnectorStanding, error) {
+func (c *Connector) Install(ctx context.Context, hostname string, binary, config []byte, progress providerkit.Progress) (ConnectorState, error) {
 	written, err := keyPathed(config)
 	if err != nil {
-		return ConnectorStanding{}, err
+		return ConnectorState{}, err
 	}
 	items := ConnectorItems(binary, written)
 	rendered, err := c.host.run(ctx, "survey the connector this host carries", survey(items), nil)
 	if err != nil {
-		return ConnectorStanding{}, err
+		return ConnectorState{}, err
 	}
 	observed, _, err := readSurvey(rendered)
 	if err != nil {
-		return ConnectorStanding{}, err
+		return ConnectorState{}, err
 	}
 	for _, item := range items {
 		if observed[item.ID()] == item.Digest() {
@@ -144,12 +144,12 @@ func (c *Connector) Install(ctx context.Context, hostname string, binary, config
 			continue
 		}
 		if err := c.host.Install(ctx, item); err != nil {
-			return ConnectorStanding{}, err
+			return ConnectorState{}, err
 		}
 		say(progress, "wrote "+item.ID())
 	}
 	if err := c.Route(ctx, hostname); err != nil {
-		return ConnectorStanding{}, err
+		return ConnectorState{}, err
 	}
 	say(progress, "routed "+hostname+switchboard.ConnectorPath)
 	if route := c.host.RouteBy(hostname); route != "" {

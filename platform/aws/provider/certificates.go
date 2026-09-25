@@ -15,26 +15,26 @@ import (
 type certificates struct{ *Provider }
 
 func (p certificates) Issue(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
-	certifier, err := p.certifier(req.Kind, req.Hostname, req.Progress)
-	if err != nil || !certifier.Issues() {
+	certificates, err := p.certificatesFor(req.Kind, req.Hostname, req.Progress)
+	if err != nil || !certificates.Issues() {
 		return providerkit.Certificate{}, err
 	}
-	pinned := certifier.PinFor(req.Hostname)
+	pinned := certificates.PinFor(req.Hostname)
 	if pinned == "" {
-		return issue(ctx, certifier.Issuer, req)
+		return issue(ctx, certificates.ACM, req)
 	}
-	held, err := certifier.Issuer.Pinned(ctx, req.Hostname, pinned)
+	held, err := certificates.ACM.Pinned(ctx, req.Hostname, pinned)
 	if err != nil {
 		return providerkit.Certificate{}, providerkit.Refuse(providerkit.CodeInvalid, "%s", err)
 	}
 	return providerkit.Certificate{ID: held.ARN}, nil
 }
 
-func issue(ctx context.Context, issuer certs.Issuer, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
+func issue(ctx context.Context, acm certs.ACM, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
 	cover := []string{req.Hostname}
 	say := req.Progress.Say
 
-	cert, err := recalled(ctx, issuer, req.Current, cover, say)
+	cert, err := recalled(ctx, acm, req.Current, cover, say)
 	if err != nil {
 		return req.Current, err
 	}
@@ -42,7 +42,7 @@ func issue(ctx context.Context, issuer certs.Issuer, req providerkit.Certificate
 		return req.Current, nil
 	}
 	if cert.ARN == "" {
-		if cert, err = adoptOrRequest(ctx, issuer, cover, say); err != nil {
+		if cert, err = adoptOrRequest(ctx, acm, cover, say); err != nil {
 			return providerkit.Certificate{}, err
 		}
 		if cert.Adopted {
@@ -52,26 +52,26 @@ func issue(ctx context.Context, issuer certs.Issuer, req providerkit.Certificate
 
 	settled := providerkit.Certificate{ID: cert.ARN, Requested: true}
 	if len(cert.Validation) == 0 {
-		if cert, err = issuer.AwaitValidation(ctx, cert, say); err != nil {
+		if cert, err = acm.AwaitValidation(ctx, cert, say); err != nil {
 			return settled, waiting(err)
 		}
 	}
 	if settled, err = req.Prove(ctx, settled, cert.Validation); err != nil {
 		return settled, err
 	}
-	if _, err := issuer.AwaitIssued(ctx, cert, say); err != nil {
+	if _, err := acm.AwaitIssued(ctx, cert, say); err != nil {
 		return settled, waiting(err)
 	}
 	return settled, nil
 }
 
-func recalled(ctx context.Context, issuer certs.Issuer, recorded providerkit.Certificate, cover []string, say func(string)) (certs.Certificate, error) {
+func recalled(ctx context.Context, acm certs.ACM, recorded providerkit.Certificate, cover []string, say func(string)) (certs.Certificate, error) {
 	region := certs.RegionOfARN(recorded.ID)
-	if recorded.ID == "" || (region != "" && region != issuer.Region) {
+	if recorded.ID == "" || (region != "" && region != acm.Region) {
 		return certs.Certificate{}, nil
 	}
 	adopted := !recorded.Requested
-	live, err := issuer.Describe(ctx, certs.Certificate{ARN: recorded.ID, Region: issuer.Region, Adopted: adopted})
+	live, err := acm.Describe(ctx, certs.Certificate{ARN: recorded.ID, Region: acm.Region, Adopted: adopted})
 	if err != nil && !certs.Gone(err) {
 		return certs.Certificate{}, err
 	}
@@ -80,21 +80,21 @@ func recalled(ctx context.Context, issuer certs.Issuer, recorded providerkit.Cer
 		return live, nil
 	}
 	say(fmt.Sprintf("Certificate %s no longer answers for %s in %s; settling one that does",
-		recorded.ID, strings.Join(cover, ", "), issuer.Region))
+		recorded.ID, strings.Join(cover, ", "), acm.Region))
 	return certs.Certificate{}, nil
 }
 
-func adoptOrRequest(ctx context.Context, issuer certs.Issuer, cover []string, say func(string)) (certs.Certificate, error) {
-	found, err := issuer.Existing(ctx, cover)
+func adoptOrRequest(ctx context.Context, acm certs.ACM, cover []string, say func(string)) (certs.Certificate, error) {
+	found, err := acm.Existing(ctx, cover)
 	if err != nil {
 		return certs.Certificate{}, err
 	}
 	if found.ARN != "" {
-		say(fmt.Sprintf("Reusing certificate %s in %s: it already covers %s", found.ARN, issuer.Region, strings.Join(cover, ", ")))
+		say(fmt.Sprintf("Reusing certificate %s in %s: it already covers %s", found.ARN, acm.Region, strings.Join(cover, ", ")))
 		return found, nil
 	}
-	say(fmt.Sprintf("Requesting a certificate for %s in %s", strings.Join(cover, ", "), issuer.Region))
-	return issuer.Request(ctx, cover)
+	say(fmt.Sprintf("Requesting a certificate for %s in %s", strings.Join(cover, ", "), acm.Region))
+	return acm.Request(ctx, cover)
 }
 
 func waiting(err error) error {
@@ -110,16 +110,16 @@ func (p certificates) Inspect(ctx context.Context, kind edge.Kind, hostname stri
 	if err != nil {
 		return providerkit.CertificateHealth{}, err
 	}
-	certifier := registry.Certifier(front, certs.Deps{AWS: p.aws})
-	if !certifier.Issues() {
+	certificates := registry.Certificates(front, certs.Deps{AWS: p.aws})
+	if !certificates.Issues() {
 		return providerkit.CertificateHealth{}, nil
 	}
 	health := providerkit.CertificateHealth{Terminates: true}
-	arn := certifier.Wants(certs.Certificate{ARN: cert.ID}, hostname)
+	arn := certificates.Wants(certs.Certificate{ARN: cert.ID}, hostname)
 	if arn == "" {
 		return health, nil
 	}
-	described, err := certifier.Issuer.Describe(ctx, certs.Certificate{ARN: arn, Region: certifier.Issuer.Region})
+	described, err := certificates.ACM.Describe(ctx, certs.Certificate{ARN: arn, Region: certificates.ACM.Region})
 	if err != nil {
 		if certs.Gone(err) {
 			return health, nil
@@ -143,18 +143,18 @@ func (p certificates) Discard(ctx context.Context, cert providerkit.Certificate,
 		return nil
 	}
 	held := certs.Certificate{ARN: cert.ID, Region: certs.RegionOfARN(cert.ID)}
-	return certs.DiscardIssuerFor(held, certs.Deps{AWS: p.aws}).Discard(ctx, held, progress.Say)
+	return certs.DiscardACMFor(held, certs.Deps{AWS: p.aws}).Discard(ctx, held, progress.Say)
 }
 
-func (p *Provider) certifier(kind edge.Kind, hostname string, progress providerkit.Progress) (certs.Certifier, error) {
+func (p *Provider) certificatesFor(kind edge.Kind, hostname string, progress providerkit.Progress) (certs.Certificates, error) {
 	registry := p.edges()
 	front, err := registry.Open(kind)
 	if err != nil {
-		return certs.Certifier{}, err
+		return certs.Certificates{}, err
 	}
-	certifier := registry.Certifier(front, certs.Deps{AWS: p.aws})
-	if note := edges.IgnoredPinNote(front, certifier, hostname); note != "" {
+	certificates := registry.Certificates(front, certs.Deps{AWS: p.aws})
+	if note := edges.IgnoredPinNote(front, certificates, hostname); note != "" {
 		progress.Detail(note)
 	}
-	return certifier, nil
+	return certificates, nil
 }

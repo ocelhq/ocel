@@ -18,7 +18,7 @@ const (
 	settleWait     = 5 * time.Second
 )
 
-type settler struct {
+type settlement struct {
 	kind     edge.Kind
 	unbound  bool
 	writer   edge.DNSRecords
@@ -37,25 +37,25 @@ type owedPolicy struct {
 	unattended bool
 }
 
-func attended(sender *eventSender) owedPolicy {
+func attended(sender *eventStream) owedPolicy {
 	return owedPolicy{ask: func(headline string, records []edge.Record, notes ...string) {
 		sender.send(dnsOwedEvent(headline, records, notes...))
 	}}
 }
 
-func (s *settler) attend(sender *eventSender) {
+func (s *settlement) attend(sender *eventStream) {
 	s.owed = attended(sender)
 	s.budget = attendedBudget
 }
 
-func unattended(sender *eventSender) owedPolicy {
+func unattended(sender *eventStream) owedPolicy {
 	policy := attended(sender)
 	policy.unattended = true
 	return policy
 }
 
-func newSettler(front edge.Edge, writer edge.DNSRecords, zone string, liveness Liveness) settler {
-	return settler{
+func newSettlement(front edge.Edge, writer edge.DNSRecords, zone string, liveness Liveness) settlement {
+	return settlement{
 		kind:     front.Kind(),
 		unbound:  front.Facts().ServesUnbound,
 		writer:   writer,
@@ -80,7 +80,7 @@ func sleep(ctx context.Context, d time.Duration) error {
 	}
 }
 
-func (s settler) recordsFor(state edge.StackState, hostname string) ([]edge.Record, error) {
+func (s settlement) recordsFor(state edge.StackState, hostname string) ([]edge.Record, error) {
 	target := edge.TargetOf(s.kind, s.unbound, state)
 	if !edge.Pointable(target, state.Bound, hostname) {
 		return nil, nil
@@ -95,7 +95,7 @@ type recordSet struct {
 
 const instructionsOnly = "This project has no DNS writer configured, so ocel wrote none of them and changed nothing at your DNS provider."
 
-func (s settler) write(ctx context.Context, records []edge.Record, headline string, say func(string), notes ...string) (recordSet, error) {
+func (s settlement) write(ctx context.Context, records []edge.Record, headline string, say func(string), notes ...string) (recordSet, error) {
 	var settled recordSet
 	if len(records) == 0 {
 		return settled, nil
@@ -136,14 +136,14 @@ func (o owedRecords) Error() string {
 		o.headline, strings.Join(recordLines(o.records), ", "))
 }
 
-func (s settler) waiting(headline string, owed []edge.Record) error {
+func (s settlement) waiting(headline string, owed []edge.Record) error {
 	if !s.owed.unattended || len(owed) == 0 {
 		return nil
 	}
 	return Pending(owedRecords{headline: headline, records: owed})
 }
 
-func (s settler) release(ctx context.Context, written []edge.Record, say func(string)) error {
+func (s settlement) release(ctx context.Context, written []edge.Record, say func(string)) error {
 	if s.writer == nil || len(written) == 0 {
 		return nil
 	}
@@ -153,7 +153,7 @@ func (s settler) release(ctx context.Context, written []edge.Record, say func(st
 	return s.writer.Delete(ctx, written)
 }
 
-func (s settler) await(ctx context.Context, hostname string, say func(string)) (Probe, error) {
+func (s settlement) await(ctx context.Context, hostname string, say func(string)) (Probe, error) {
 	began := s.now()
 	deadline := began.Add(s.budget)
 	bounded, stop := context.WithTimeout(ctx, s.budget)
@@ -192,13 +192,13 @@ func (s settler) await(ctx context.Context, hostname string, say func(string)) (
 	return Probe{At: s.now().Unix(), Edge: serving}, s.unresolved(hostname, serving, began, outlasted)
 }
 
-func (s settler) attempt(ctx context.Context, hostname string) (edge.Kind, error) {
+func (s settlement) attempt(ctx context.Context, hostname string) (edge.Kind, error) {
 	asking, stop := context.WithTimeout(ctx, s.window)
 	defer stop()
 	return s.liveness.ServingEdge(asking, s.kind, hostname)
 }
 
-func (s settler) unresolved(hostname string, serving edge.Kind, began time.Time, outlasted string) error {
+func (s settlement) unresolved(hostname string, serving edge.Kind, began time.Time, outlasted string) error {
 	waited := s.now().Sub(began).Round(time.Second)
 	if serving == "" {
 		cause := s.unreached(hostname)
@@ -214,7 +214,7 @@ func (s settler) unresolved(hostname string, serving edge.Kind, began time.Time,
 		hostname, serving, s.kind, waited))
 }
 
-func (s settler) unreached(hostname string) string {
+func (s settlement) unreached(hostname string) string {
 	cause := s.liveness.Unreached(hostname)
 	if cause == "" {
 		return ""

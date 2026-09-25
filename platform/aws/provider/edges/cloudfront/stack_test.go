@@ -163,10 +163,10 @@ func TestDestroyHoldsBeforeItFirstAsksHowTheRolloutIsGoing(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
-	e := &provider{
+	e := &cloudFront{
 		ns:   defaultNamespace,
 		open: func(context.Context) (Clients, error) { return w.clients(), nil },
-		settle: Settler{
+		settle: Rollout{
 			Wait: func(context.Context, time.Duration) error {
 				w.trail.record("hold")
 				return nil
@@ -255,7 +255,7 @@ func TestBindDomainRecordsTheFrontOfADistributionFoundByName(t *testing.T) {
 
 	forgotten := settled.State()
 	forgotten.Front = ""
-	forgotten.Adapter = edge.Own(private{})
+	forgotten.Private = edge.Own(private{})
 	opened, err := e.Open(forgotten)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
@@ -482,10 +482,10 @@ func assertViewerCertificate(t *testing.T, what string, config *cftypes.Distribu
 	}
 }
 
-func storeless(t *testing.T, e *provider, stack edge.EdgeStack) edge.EdgeStack {
+func storeless(t *testing.T, e *cloudFront, stack edge.EdgeStack) edge.EdgeStack {
 	t.Helper()
 	held := stack.State()
-	held.Adapter = edge.Private{}
+	held.Private = edge.Private{}
 	reopened, err := e.Open(held)
 	if err != nil {
 		t.Fatalf("Open a state that names no store: %v", err)

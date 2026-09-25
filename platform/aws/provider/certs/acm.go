@@ -86,7 +86,7 @@ func cutSuffixFold(s, suffix string) (string, bool) {
 	return s[:len(s)-len(suffix)], true
 }
 
-type Issuer struct {
+type ACM struct {
 	API      ACMAPI
 	Region   string
 	Wait     func(context.Context, time.Duration) error
@@ -103,26 +103,26 @@ const (
 	releaseLongest = 20 * time.Second
 )
 
-func (i Issuer) attempts() int {
+func (i ACM) attempts() int {
 	return max(i.Attempts, 1)
 }
 
-func (i Issuer) every() time.Duration {
+func (i ACM) every() time.Duration {
 	if i.Every <= 0 {
 		return issueEvery
 	}
 	return i.Every
 }
 
-func (i Issuer) window() time.Duration {
+func (i ACM) window() time.Duration {
 	return time.Duration(i.attempts()-1) * i.every()
 }
 
-func (i Issuer) hold(ctx context.Context) error {
+func (i ACM) hold(ctx context.Context) error {
 	return i.pause(ctx, i.every())
 }
 
-func (i Issuer) pause(ctx context.Context, d time.Duration) error {
+func (i ACM) pause(ctx context.Context, d time.Duration) error {
 	if i.Wait != nil {
 		return i.Wait(ctx, d)
 	}
@@ -140,7 +140,7 @@ func waitFor(ctx context.Context, d time.Duration) error {
 	}
 }
 
-func (i Issuer) Request(ctx context.Context, hostnames []string) (Certificate, error) {
+func (i ACM) Request(ctx context.Context, hostnames []string) (Certificate, error) {
 	if len(hostnames) == 0 {
 		return Certificate{}, errors.New("request a certificate: no hostname to request one for")
 	}
@@ -170,7 +170,7 @@ func idempotencyToken(hostname string) string {
 	return "ocel" + hex.EncodeToString(sum[:12])
 }
 
-func (i Issuer) AwaitValidation(ctx context.Context, cert Certificate, say func(string)) (Certificate, error) {
+func (i ACM) AwaitValidation(ctx context.Context, cert Certificate, say func(string)) (Certificate, error) {
 	for attempt := range i.attempts() {
 		if attempt > 0 {
 			if attempt == 1 {
@@ -195,7 +195,7 @@ func (i Issuer) AwaitValidation(ctx context.Context, cert Certificate, say func(
 	)}
 }
 
-func (i Issuer) AwaitIssued(ctx context.Context, cert Certificate, say func(string)) (Certificate, error) {
+func (i ACM) AwaitIssued(ctx context.Context, cert Certificate, say func(string)) (Certificate, error) {
 	for attempt := range i.attempts() {
 		if attempt > 0 {
 			if attempt == 1 {
@@ -224,11 +224,11 @@ func (i Issuer) AwaitIssued(ctx context.Context, cert Certificate, say func(stri
 	)}
 }
 
-func (i Issuer) Describe(ctx context.Context, cert Certificate) (Certificate, error) {
+func (i ACM) Describe(ctx context.Context, cert Certificate) (Certificate, error) {
 	return i.describe(ctx, cert)
 }
 
-func (i Issuer) describe(ctx context.Context, cert Certificate) (Certificate, error) {
+func (i ACM) describe(ctx context.Context, cert Certificate) (Certificate, error) {
 	out, err := i.API.DescribeCertificate(ctx, &acm.DescribeCertificateInput{
 		CertificateArn: aws.String(cert.ARN),
 	})
@@ -291,7 +291,7 @@ func outstanding(records []edge.Record) string {
 	return strings.Join(wanted, "; ")
 }
 
-func (i Issuer) Discard(ctx context.Context, cert Certificate, say func(string)) error {
+func (i ACM) Discard(ctx context.Context, cert Certificate, say func(string)) error {
 	if i.API == nil || cert.ARN == "" {
 		return nil
 	}
@@ -314,7 +314,7 @@ func (i Issuer) Discard(ctx context.Context, cert Certificate, say func(string))
 	return fmt.Errorf("delete certificate %s: %w", cert.ARN, err)
 }
 
-func (i Issuer) awaitRelease(ctx context.Context, cert Certificate) error {
+func (i ACM) awaitRelease(ctx context.Context, cert Certificate) error {
 	var err error
 	backoff := releaseFirst
 	for waited := time.Duration(0); waited < releaseBudget; {
@@ -331,7 +331,7 @@ func (i Issuer) awaitRelease(ctx context.Context, cert Certificate) error {
 	return err
 }
 
-func (i Issuer) delete(ctx context.Context, cert Certificate) error {
+func (i ACM) delete(ctx context.Context, cert Certificate) error {
 	_, err := i.API.DeleteCertificate(ctx, &acm.DeleteCertificateInput{
 		CertificateArn: aws.String(cert.ARN),
 	})

@@ -108,7 +108,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 			}
 		}
 
-		if stamp, _, err := (&provider{}).getVersionStamp(t.Context(), store.URL, "acme-web", "s3cr3t"); err != nil || stamp != "" {
+		if stamp, _, err := (&cloudflare{}).getVersionStamp(t.Context(), store.URL, "acme-web", "s3cr3t"); err != nil || stamp != "" {
 			t.Errorf("store version stamp = %q (err %v), want it untouched by a shared-entry reconcile", stamp, err)
 		}
 	})
@@ -150,7 +150,7 @@ func TestReconcilePreviewWildcard(t *testing.T) {
 	t.Run("an unset account id is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "")
 
-		if _, err := (&provider{}).ReconcilePreviewWildcard(t.Context(), previewWildcardSpec()); err == nil {
+		if _, err := (&cloudflare{}).ReconcilePreviewWildcard(t.Context(), previewWildcardSpec()); err == nil {
 			t.Fatal("ReconcilePreviewWildcard without an account id err = nil, want an error")
 		}
 	})
@@ -227,7 +227,7 @@ func TestDestroyPreviewWildcard(t *testing.T) {
 	t.Run("an unset account id is an error", func(t *testing.T) {
 		t.Setenv(envAccountID, "")
 
-		if err := (&provider{}).DestroyPreviewWildcard(t.Context(), "preview.app.com"); err == nil {
+		if err := (&cloudflare{}).DestroyPreviewWildcard(t.Context(), "preview.app.com"); err == nil {
 			t.Fatal("DestroyPreviewWildcard without an account id err = nil, want an error")
 		}
 	})

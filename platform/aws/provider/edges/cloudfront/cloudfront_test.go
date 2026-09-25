@@ -43,7 +43,7 @@ func productionDistributionName() string {
 	return distributionName(defaultNamespace, conformanceSlug, edge.ClassProduction)
 }
 
-func bootstrapped(t *testing.T, w *world) *provider {
+func bootstrapped(t *testing.T, w *world) *cloudFront {
 	t.Helper()
 	e := w.edge()
 	if _, err := e.Bootstrap(context.Background(), edge.ClassProduction); err != nil {

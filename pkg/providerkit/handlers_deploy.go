@@ -33,7 +33,7 @@ import (
 const stackVersion = "1"
 
 func (h *handlers) Deploy(ctx context.Context, req *contractv1.DeployRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
-	return streamResult(ctx, stream, func(sender *eventSender) (*progressv1.OperationEvent, error) {
+	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
 		run, err := h.openDeploy(ctx, req, sender)
 		if err != nil {
 			return nil, err
@@ -83,7 +83,7 @@ type deployRun struct {
 	gate       Gate
 	features   []string
 	transforms []string
-	sender     *eventSender
+	sender     *eventStream
 	tracked    *stageScope
 	manifest   *contractv1.Manifest
 	plan       DeployPlan
@@ -135,7 +135,7 @@ func (r *deployRun) recordFunctions(app string, functions []Function) {
 	r.functions[app] = functions
 }
 
-func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest, sender *eventSender) (*deployRun, error) {
+func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest, sender *eventStream) (*deployRun, error) {
 	provider, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err

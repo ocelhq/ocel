@@ -26,8 +26,6 @@ func takeUploadSlot() func() {
 	return func() { <-uploadSlots }
 }
 
-type ArtifactUploader = payloads.ObjectStore
-
 func writeLenPrefixed(h io.Writer, b []byte) {
 	var size [8]byte
 	binary.BigEndian.PutUint64(size[:], uint64(len(b)))
@@ -50,7 +48,7 @@ type objectHeaders struct {
 	cacheControl string
 }
 
-func uploadArtifact(ctx context.Context, up ArtifactUploader, bucket, key string, headers objectHeaders, body func() ([]byte, error)) (transferred bool, err error) {
+func uploadArtifact(ctx context.Context, up payloads.ObjectStore, bucket, key string, headers objectHeaders, body func() ([]byte, error)) (transferred bool, err error) {
 	_, err = up.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
@@ -68,7 +66,7 @@ func uploadArtifact(ctx context.Context, up ArtifactUploader, bucket, key string
 	return true, putArtifact(ctx, up, bucket, key, headers, data)
 }
 
-func putArtifact(ctx context.Context, up ArtifactUploader, bucket, key string, headers objectHeaders, data []byte) error {
+func putArtifact(ctx context.Context, up payloads.ObjectStore, bucket, key string, headers objectHeaders, data []byte) error {
 	in := &s3.PutObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
@@ -86,7 +84,7 @@ func putArtifact(ctx context.Context, up ArtifactUploader, bucket, key string, h
 	return nil
 }
 
-func tracedUpload(ctx context.Context, up ArtifactUploader, bucket, key string, headers objectHeaders, body func() ([]byte, error), stats *uploadBatchStats) error {
+func tracedUpload(ctx context.Context, up payloads.ObjectStore, bucket, key string, headers objectHeaders, body func() ([]byte, error), stats *uploadBatchStats) error {
 	start := time.Now()
 	var size int64
 	transferred, err := uploadArtifact(ctx, up, bucket, key, headers, func() ([]byte, error) {
@@ -102,7 +100,7 @@ func tracedUpload(ctx context.Context, up ArtifactUploader, bucket, key string, 
 	return err
 }
 
-func tracedPut(ctx context.Context, up ArtifactUploader, bucket, key string, headers objectHeaders, data []byte, stats *uploadBatchStats) error {
+func tracedPut(ctx context.Context, up payloads.ObjectStore, bucket, key string, headers objectHeaders, data []byte, stats *uploadBatchStats) error {
 	start := time.Now()
 	err := putArtifact(ctx, up, bucket, key, headers, data)
 	if stats != nil {
