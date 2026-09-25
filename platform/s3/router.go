@@ -4,26 +4,64 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"sync"
 
 	connect "connectrpc.com/connect"
 
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
 	"github.com/ocelhq/ocel/pkg/proto/app/bucket/v1/bucketv1connect"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 )
 
 type router struct {
 	own   bucketv1connect.BucketServiceHandler
-	bound []*Service
+	bound func() ([]*Service, error)
 }
 
 var _ bucketv1connect.BucketServiceHandler = (*router)(nil)
 
 func Route(own bucketv1connect.BucketServiceHandler, bound ...*Service) bucketv1connect.BucketServiceHandler {
-	return &router{own: own, bound: bound}
+	return &router{own: own, bound: func() ([]*Service, error) { return bound, nil }}
+}
+
+func RouteRecords(own bucketv1connect.BucketServiceHandler, records Records, callbacks Poster) bucketv1connect.BucketServiceHandler {
+	var mu sync.Mutex
+	var read string
+	var built []*Service
+	return &router{own: own, bound: func() ([]*Service, error) {
+		held := bucketRecords(records)
+		mu.Lock()
+		defer mu.Unlock()
+		if held == read && built != nil {
+			return built, nil
+		}
+		backends, _, err := Backends(records, callbacks)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+		}
+		read, built = held, backends
+		return built, nil
+	}}
+}
+
+func bucketRecords(records Records) string {
+	var held strings.Builder
+	for _, l := range records.Bindings() {
+		if l.Type == bindingsv1.BindingType_BINDING_TYPE_BUCKET {
+			held.WriteString(records.Value(l.Key))
+			held.WriteByte(0)
+		}
+	}
+	return held.String()
 }
 
 func (r *router) forBucket(name string) (bucketv1connect.BucketServiceHandler, error) {
-	for _, backend := range r.bound {
+	bound, err := r.bound()
+	if err != nil {
+		return nil, err
+	}
+	for _, backend := range bound {
 		if backend.holds(name) {
 			return backend, nil
 		}
@@ -35,7 +73,11 @@ func (r *router) forBucket(name string) (bucketv1connect.BucketServiceHandler, e
 }
 
 func (r *router) forSession(id string) (bucketv1connect.BucketServiceHandler, error) {
-	for _, backend := range r.bound {
+	bound, err := r.bound()
+	if err != nil {
+		return nil, err
+	}
+	for _, backend := range bound {
 		if backend.opened(id) {
 			return backend, nil
 		}

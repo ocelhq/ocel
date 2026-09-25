@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtimekit/proxy"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bucket"
+	s3store "github.com/ocelhq/ocel/platform/s3"
 )
 
 const (
@@ -33,10 +34,7 @@ func proxyWanted(bindings []live.Binding) bool {
 	return false
 }
 
-type bindingValues interface {
-	Value(key string) string
-	Bindings() []live.Binding
-}
+type bindingValues = s3store.Records
 
 func grantedBuckets(values bindingValues) func() []string {
 	return func() []string {
@@ -47,6 +45,9 @@ func grantedBuckets(values bindingValues) func() []string {
 			}
 			record := &bindingsv1.Binding{}
 			if err := protojson.Unmarshal([]byte(values.Value(l.Key)), record); err != nil {
+				continue
+			}
+			if s3store.Endpointed(record.GetBucket()) {
 				continue
 			}
 			if name := record.GetBucket().GetBucket(); name != "" && !slices.Contains(held, name) {
@@ -83,7 +84,7 @@ func serveProxy(ctx context.Context, values bindingValues, table, sessionPrefix 
 		Granted:          grantedBuckets(values),
 	})
 
-	served, err := proxy.Serve(svc)
+	served, err := proxy.Serve(s3store.RouteRecords(svc, values, s3store.HTTPPoster{}))
 	if err != nil {
 		return nil, nil, err
 	}
