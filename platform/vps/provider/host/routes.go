@@ -132,7 +132,7 @@ func admission(state RoutingTable) proxy.Admission {
 	if state.Connector != "" {
 		entries = append(entries, proxy.Entry{Hostname: state.Connector, Pin: Covering(state.Pins, state.Connector)})
 	}
-	return proxy.Admission{Entries: entries, PreviewBase: state.PreviewBase, Upstream: SwitchboardAddress}
+	return proxy.Admission{Entries: entries, PreviewBase: state.PreviewBase, Upstream: SwitchboardAddress, Edge: switchboard.EdgeName}
 }
 
 func validTable(state RoutingTable) error {

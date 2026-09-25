@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strings"
 	"time"
@@ -19,6 +20,8 @@ var baseline []byte
 const (
 	serverName     = "ocel"
 	forwardHandler = "reverse_proxy"
+	answerHandler  = "static_response"
+	errorStatus    = "{http.error.status_code}"
 	socketMode     = "0600"
 )
 
@@ -62,6 +65,7 @@ type server struct {
 	Logs      json.RawMessage `json:"logs,omitempty"`
 	Automatic *automatic      `json:"automatic_https,omitempty"`
 	Routes    []route         `json:"routes"`
+	Errors    *failing        `json:"errors,omitempty"`
 }
 
 type automatic struct {
@@ -87,6 +91,20 @@ type dial struct {
 	Dial string `json:"dial"`
 }
 
+type failing struct {
+	Routes []failure `json:"routes"`
+}
+
+type failure struct {
+	Handle []answer `json:"handle"`
+}
+
+type answer struct {
+	Handler string              `json:"handler"`
+	Status  string              `json:"status_code"`
+	Headers map[string][]string `json:"headers"`
+}
+
 func Listen() string { return "unix/" + AdminSocket + "|" + socketMode }
 
 func Render(admission proxy.Admission) ([]byte, error) {
@@ -101,6 +119,9 @@ func Render(admission proxy.Admission) ([]byte, error) {
 	if strings.TrimSpace(admission.Upstream) == "" {
 		return nil, errors.New("an admission names no upstream to forward to")
 	}
+	if strings.TrimSpace(admission.Edge) == "" {
+		return nil, errors.New("an admission names no edge for the proxy's answers to carry")
+	}
 	hostnames, err := served(admission)
 	if err != nil {
 		return nil, err
@@ -114,6 +135,11 @@ func Render(admission proxy.Admission) ([]byte, error) {
 		Upstreams:   []dial{{Dial: admission.Upstream}},
 		StreamDelay: spelled(Grace),
 	}}
+	front.Errors = &failing{Routes: []failure{{Handle: []answer{{
+		Handler: answerHandler,
+		Status:  errorStatus,
+		Headers: map[string][]string{http.CanonicalHeaderKey(edge.HeaderEdge): {admission.Edge}},
+	}}}}}
 	front.Routes = nil
 	if len(hostnames) > 0 {
 		front.Routes = append(front.Routes, route{Match: []match{{Host: hostnames}}, Handle: forwarding})
