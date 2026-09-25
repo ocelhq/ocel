@@ -51,9 +51,9 @@ func TestABoundBucketIsCheckedAndServedOnARealStore(t *testing.T) {
 	}
 
 	poster := &recordingPoster{}
-	svc := Bound("b0", record, poster)
+	svc := Bound("b0", "OCEL_RESOURCE_BUCKET_bound", record, poster)
 	opened, err := svc.PresignUpload(ctx, &bucketv1.PresignUploadRequest{
-		Bucket:          "bound",
+		Bucket:          "OCEL_RESOURCE_BUCKET_bound",
 		CallbackBaseUrl: "http://127.0.0.1:1/api/upload",
 		Files:           []*bucketv1.PresignFile{{Key: "notes/a.txt", Name: "a.txt", Size: 5, MimeType: "text/plain"}},
 	})

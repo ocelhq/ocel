@@ -31,7 +31,7 @@ func Backends(records Records, callbacks Poster) ([]*Service, bool, error) {
 			own = true
 			continue
 		}
-		backends = append(backends, Bound("b"+strconv.Itoa(len(backends)), bucket, callbacks))
+		backends = append(backends, Bound("b"+strconv.Itoa(len(backends)), l.Key, bucket, callbacks))
 	}
 	return backends, own, nil
 }

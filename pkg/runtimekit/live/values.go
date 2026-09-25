@@ -47,6 +47,7 @@ type Values struct {
 	projection  *projection
 	generation  uint32
 	values      map[string]string
+	shown       map[string]string
 	fetchedAt   time.Time
 	undelivered bool
 	refreshing  bool
@@ -177,7 +178,7 @@ func (l *Values) Project(root string) error {
 	defer l.mu.Unlock()
 	l.projection = held
 	if l.generation > 0 {
-		return held.write(l.generation, l.values)
+		return held.write(l.generation, l.shown)
 	}
 	return nil
 }
@@ -260,11 +261,12 @@ func (l *Values) apply(values map[string]string, started time.Time) {
 	defer l.mu.Unlock()
 	l.generation++
 	l.values = values
+	l.shown = shown(l.bindings, values)
 	l.fetchedAt = started
 	l.undelivered = true
 	l.deliver()
 	if l.projection != nil {
-		if err := l.projection.write(l.generation, l.values); err != nil {
+		if err := l.projection.write(l.generation, l.shown); err != nil {
 			fmt.Fprintf(os.Stderr, "ocel: could not project live values to %s: %v\n", l.projection.root, err)
 		}
 	}
@@ -274,7 +276,7 @@ func (l *Values) deliver() {
 	if l.sink == nil {
 		return
 	}
-	line, err := json.Marshal(valuesMsg{Type: valuesMsgType, Generation: l.generation, Values: l.values})
+	line, err := json.Marshal(valuesMsg{Type: valuesMsgType, Generation: l.generation, Values: l.shown})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: could not encode live values: %v\n", err)
 		return
