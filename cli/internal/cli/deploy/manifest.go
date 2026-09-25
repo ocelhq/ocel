@@ -50,6 +50,9 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 	for _, warning := range warnings {
 		ui.Warning(warning)
 	}
+	for _, drift := range envgate.Drift(gate.Definitions(), gate.Source()) {
+		ui.Warning(drift)
+	}
 	if err := gate.Check(); err != nil {
 		return nil, err
 	}

@@ -63,6 +63,7 @@ type Scope struct {
 	Preview     bool
 	Environment string
 	Browser     bool
+	Source      Source
 }
 
 func (s Scope) OcelWrites(key string, folders []string) bool {

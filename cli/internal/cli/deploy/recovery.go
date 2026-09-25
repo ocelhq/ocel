@@ -3,18 +3,22 @@ package deploy
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 )
 
 type gateRecovery struct {
@@ -23,7 +27,7 @@ type gateRecovery struct {
 	runner  *provider.Runner
 	preview bool
 
-	newGate func() *envgate.Gate
+	newGate func(envgate.Source) *envgate.Gate
 
 	command        string
 	compute        string
@@ -36,17 +40,61 @@ type gateRecovery struct {
 }
 
 func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*contractv1.Manifest, error) {
-	gate := r.newGate()
+	gate, err := r.gate(ctx)
+	if err != nil {
+		return nil, err
+	}
 	manifest, err := r.attempt(ctx, gate, prebuilt, 0)
 
 	var refusal *envgate.Refusal
-	if !r.enabled || !errors.As(err, &refusal) {
+	if !errors.As(err, &refusal) {
+		return manifest, err
+	}
+	if !r.enabled {
+		r.offerToSource(ctx, gate, refusal)
 		return manifest, err
 	}
 	if err := r.fill(ctx, gate, refusal); err != nil {
 		return nil, err
 	}
-	return r.attempt(ctx, r.newGate(), prebuilt, 1)
+	if gate, err = r.gate(ctx); err != nil {
+		return nil, err
+	}
+	return r.attempt(ctx, gate, prebuilt, 1)
+}
+
+func (r gateRecovery) gate(ctx context.Context) (*envgate.Gate, error) {
+	synced, err := envwire.SyncEnvSource(ctx, r.runner, r.cfg, r.preview)
+	if err != nil {
+		return nil, err
+	}
+	return r.newGate(envwire.SourceOf(synced)), nil
+}
+
+func (r gateRecovery) offerToSource(ctx context.Context, gate *envgate.Gate, refusal *envgate.Refusal) {
+	source := gate.Source()
+	if !source.Owns() || !source.Writable {
+		return
+	}
+	vars, err := r.runner.Vars()
+	if err != nil {
+		return
+	}
+	for _, problem := range refusal.Problems {
+		if problem.GetKind() != resourcesv1.VariableProblem_KIND_MISSING {
+			continue
+		}
+		_, err := vars.PutEnvSourceValue(ctx, &envvarsv1.PutEnvSourceValueRequest{
+			Tier:        envwire.Tier(r.preview),
+			Coordinate:  &envvarsv1.Coordinate{Slug: r.cfg.Slug, Folder: problem.GetFolder(), Key: problem.GetKey()},
+			Description: refusal.Description(problem.GetKey()),
+		})
+		if err != nil {
+			r.ui.Warning(fmt.Sprintf("%s holds no %s, and creating it there failed: %v", source.ID, problem.GetKey(), err))
+			continue
+		}
+		r.ui.Warning(fmt.Sprintf("created %s empty in %s, for you to fill in there", problem.GetKey(), source.ID))
+	}
 }
 
 func (r gateRecovery) attempt(ctx context.Context, gate *envgate.Gate, prebuilt bool, retry int) (*contractv1.Manifest, error) {

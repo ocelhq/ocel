@@ -64,6 +64,9 @@ func (r *Refusal) remedy() string {
 	if r.Scope.Browser {
 		return withPreview("ocel env ui", r.Scope)
 	}
+	if r.Scope.Source.Owns() {
+		return r.Scope.Source.remedy(r.Problems)
+	}
 	key, folder := "<KEY>", "<FOLDER>"
 	inFolder := false
 	for _, problem := range r.Problems {

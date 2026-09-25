@@ -223,7 +223,9 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 			cfg:     cfg,
 			runner:  runner,
 			preview: true,
-			newGate: func() *envgate.Gate {
+			newGate: func(source envgate.Source) *envgate.Gate {
+				scope := scope
+				scope.Source = source
 				return envgate.New(envwire.Values{
 					Runner: runner,
 					Slug:   cfg.Slug,
