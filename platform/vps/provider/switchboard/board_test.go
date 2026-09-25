@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -55,13 +56,13 @@ func standing(t *testing.T, document []byte) (*switchboard.Board, string) {
 	return board, at
 }
 
-func fronted(t *testing.T, document []byte) (*switchboard.Board, string, *http.Client) {
+func fronted(t *testing.T, document []byte, relayed ...netip.Prefix) (*switchboard.Board, string, *http.Client) {
 	t.Helper()
 	table, err := switchboard.Read(document)
 	if err != nil {
 		t.Fatal(err)
 	}
-	board := switchboard.New(table)
+	board := switchboard.New(table, relayed...)
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -211,6 +212,50 @@ func TestForwardedHeadersAClientSpoofsAreOverwrittenAndOnlyTheFrontProxysAreKept
 	} {
 		if got := said.header.Get("Seen-" + header); got != want {
 			t.Errorf("the front proxy's %s reached the upstream as %q, want %q: it terminated tls and knows the client, and it is trusted on its first request whatever address it was recreated at", header, got, want)
+		}
+	}
+}
+
+func TestARelayingPeerIsHeardOnTheSchemeAndHostButNeverOnTheClient(t *testing.T) {
+	t.Parallel()
+
+	web := backend(t, "web")
+	spoofed := []string{"X-Forwarded-For", "6.6.6.6", "X-Forwarded-Proto", "https", "X-Forwarded-Host", "shop.example.com"}
+	_, at, _ := fronted(t, routing(t, map[string]string{"shop.example.com": web}), netip.MustParsePrefix("127.0.0.0/8"))
+	said := ask(t, http.DefaultClient, at, "shop.example.com", "/", spoofed...)
+	for header, want := range map[string]string{
+		"X-Forwarded-For":   "127.0.0.1",
+		"X-Forwarded-Proto": "https",
+		"X-Forwarded-Host":  "shop.example.com",
+	} {
+		if got := said.header.Get("Seen-" + header); got != want {
+			t.Errorf("a relaying peer's %s reached the upstream as %q, want %q: every process on the box reaches the port your proxy relays through, so it is heard on the scheme it terminated and never on who the client is", header, got, want)
+		}
+	}
+}
+
+func TestTheLivenessProbeIsToldTheSchemeAndHostAnAppWouldHear(t *testing.T) {
+	t.Parallel()
+
+	web := backend(t, "web")
+	table := routing(t, map[string]string{"shop.example.com": web})
+	_, relaying, _ := fronted(t, table, netip.MustParsePrefix("127.0.0.0/8"))
+	_, untrusting, front := fronted(t, table)
+	for name, tc := range map[string]struct {
+		client          *http.Client
+		at, host, heard string
+	}{
+		"a routed hostname from a relaying peer":     {http.DefaultClient, relaying, "shop.example.com", "https shop.example.com"},
+		"an unclaimed hostname from a relaying peer": {http.DefaultClient, relaying, "unclaimed.example.com", "https unclaimed.example.com"},
+		"a routed hostname from the front proxy":     {front, "front", "shop.example.com", "https shop.example.com"},
+		"a routed hostname from an untrusted peer":   {http.DefaultClient, untrusting, "shop.example.com", "http shop.example.com"},
+	} {
+		said := ask(t, tc.client, tc.at, tc.host, edge.LivenessProbePath, "X-Forwarded-Proto", "https")
+		if got := said.header.Get(switchboard.HeardHeader); got != tc.heard {
+			t.Errorf("%s: the probe was told %q, want %q", name, got, tc.heard)
+		}
+		if other := ask(t, tc.client, tc.at, tc.host, "/", "X-Forwarded-Proto", "https"); other.header.Get(switchboard.HeardHeader) != "" {
+			t.Errorf("%s: a request off the probe path was told %q, want nothing said beyond the probe", name, other.header.Get(switchboard.HeardHeader))
 		}
 	}
 }

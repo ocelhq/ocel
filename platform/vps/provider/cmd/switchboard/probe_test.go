@@ -18,6 +18,7 @@ import (
 	"time"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func issued(t *testing.T, hostname string, from, until time.Time) tls.Certificate {
@@ -109,6 +110,36 @@ func TestTheProbeReadsTheEdgeTheBoxNamesForAHostnameItServesACertificateFor(t *t
 	}
 	if asked != "web.localhost" || path != edge.LivenessProbePath {
 		t.Errorf("the box was asked for %s%s, want %s%s: it routes on the name and not on the address it listens at", asked, path, "web.localhost", edge.LivenessProbePath)
+	}
+}
+
+func TestTheProbeRefusesABoxWhoseAppsWouldHearAnotherSchemeOrHost(t *testing.T) {
+	for heard, wanted := range map[string]string{
+		"http web.localhost":      "X-Forwarded-Proto",
+		"https 127.0.0.1:8480":    "Host",
+		"https shop.example.test": "Host",
+	} {
+		at := answering(t, current(t, "web.localhost"), func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set(edge.HeaderEdge, "box")
+			w.Header().Set(switchboard.HeardHeader, heard)
+		})
+		code, out, errs := ran(t, "probe", "--at", at, "web.localhost")
+		if code != exitNotServingYet {
+			t.Errorf("probe of a box whose apps hear %q = %d %q, want %d: the node runtime builds its urls from both", heard, code, out, exitNotServingYet)
+		}
+		if !strings.Contains(errs, wanted) {
+			t.Errorf("probe of a box whose apps hear %q said %q, want %s named as what to fix", heard, errs, wanted)
+		}
+	}
+}
+
+func TestTheProbePassesABoxWhoseAppsHearHttpsForTheHostnameAsked(t *testing.T) {
+	at := answering(t, current(t, "web.localhost"), func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set(edge.HeaderEdge, "box")
+		w.Header().Set(switchboard.HeardHeader, "https web.localhost")
+	})
+	if code, out, errs := ran(t, "probe", "--at", at, "web.localhost"); code != 0 || strings.TrimSpace(out) != "box" {
+		t.Errorf("probe = %d %q %q, want box", code, out, errs)
 	}
 }
 
