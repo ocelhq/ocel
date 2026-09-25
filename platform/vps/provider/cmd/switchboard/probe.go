@@ -119,23 +119,32 @@ func probe(argv []string, out, errs io.Writer) int {
 	}
 	defer answer.Body.Close()
 	_, _ = io.Copy(io.Discard, io.LimitReader(answer.Body, edgeAnswerCap))
-	if heard := answer.Header.Get(switchboard.HeardHeader); heard != "" {
-		if err := hearing(heard, hostname); err != nil {
-			fmt.Fprintf(errs, "%s reaches %s, and %v\n", hostname, switchboard.Name, err)
-			return exitNotServingYet
-		}
+	answered := strings.TrimSpace(answer.Header.Get(edge.HeaderEdge))
+	heard := answer.Header.Get(switchboard.HeardHeader)
+	if heard == "" {
+		fmt.Fprintf(errs, "%s answered at %s as %q, and %s never did: route it to %s\n", hostname, at, answered, switchboard.Name, switchboard.Name)
+		return exitNotServingYet
 	}
-	fmt.Fprintln(out, strings.TrimSpace(answer.Header.Get(edge.HeaderEdge)))
+	if err := hearing(heard, hostname); err != nil {
+		fmt.Fprintf(errs, "%s reaches %s, and %v\n", hostname, switchboard.Name, err)
+		return exitNotServingYet
+	}
+	fmt.Fprintln(out, answered)
 	return 0
 }
 
 func hearing(heard, hostname string) error {
-	proto, host, _ := strings.Cut(heard, " ")
+	said := strings.Fields(heard)
+	said = append(said, make([]string, max(0, 3-len(said)))...)
+	proto, host, forwarded := said[0], said[1], said[2]
 	if proto != "https" {
 		return fmt.Errorf("its apps would hear it over %s: set X-Forwarded-Proto to https where your proxy forwards it", proto)
 	}
 	if !strings.EqualFold(host, hostname) {
-		return fmt.Errorf("its apps would hear it as %s: keep the Host header where your proxy forwards it", host)
+		return fmt.Errorf("its apps would hear it as %q: keep the Host header where your proxy forwards it", host)
+	}
+	if !strings.EqualFold(forwarded, hostname) {
+		return fmt.Errorf("its apps would hear it forwarded for %q: set X-Forwarded-Host to the Host asked, or leave it unset, where your proxy forwards it", forwarded)
 	}
 	return nil
 }

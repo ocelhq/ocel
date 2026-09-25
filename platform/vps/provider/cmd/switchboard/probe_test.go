@@ -94,11 +94,16 @@ func silent(t *testing.T) string {
 	return listening(t, func(taken net.Conn) { taken.Close() })
 }
 
+func switchboardAnswers(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set(edge.HeaderEdge, "box")
+	w.Header().Set(switchboard.HeardHeader, "https "+r.Host+" "+r.Host)
+}
+
 func TestTheProbeReadsTheEdgeTheBoxNamesForAHostnameItServesACertificateFor(t *testing.T) {
 	var asked, path string
 	at := answering(t, current(t, "web.localhost"), func(w http.ResponseWriter, r *http.Request) {
 		asked, path = r.Host, r.URL.Path
-		w.Header().Set(edge.HeaderEdge, "box")
+		switchboardAnswers(w, r)
 	})
 
 	code, out, errs := ran(t, "probe", "--at", at, "web.localhost")
@@ -115,9 +120,12 @@ func TestTheProbeReadsTheEdgeTheBoxNamesForAHostnameItServesACertificateFor(t *t
 
 func TestTheProbeRefusesABoxWhoseAppsWouldHearAnotherSchemeOrHost(t *testing.T) {
 	for heard, wanted := range map[string]string{
-		"http web.localhost":      "X-Forwarded-Proto",
-		"https 127.0.0.1:8480":    "Host",
-		"https shop.example.test": "Host",
+		"http web.localhost web.localhost":          "X-Forwarded-Proto",
+		"https 127.0.0.1:8480 web.localhost":        "keep the Host header",
+		"https shop.example.test shop.example.test": "keep the Host header",
+		"https web.localhost shop.example.test":     "X-Forwarded-Host",
+		"https web.localhost":                       "X-Forwarded-Host",
+		"https":                                     "keep the Host header",
 	} {
 		at := answering(t, current(t, "web.localhost"), func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set(edge.HeaderEdge, "box")
@@ -136,17 +144,28 @@ func TestTheProbeRefusesABoxWhoseAppsWouldHearAnotherSchemeOrHost(t *testing.T) 
 func TestTheProbePassesABoxWhoseAppsHearHttpsForTheHostnameAsked(t *testing.T) {
 	at := answering(t, current(t, "web.localhost"), func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set(edge.HeaderEdge, "box")
-		w.Header().Set(switchboard.HeardHeader, "https web.localhost")
+		w.Header().Set(switchboard.HeardHeader, "https web.localhost WEB.localhost")
 	})
 	if code, out, errs := ran(t, "probe", "--at", at, "web.localhost"); code != 0 || strings.TrimSpace(out) != "box" {
 		t.Errorf("probe = %d %q %q, want box", code, out, errs)
 	}
 }
 
-func TestTheProbeTrustsNoAuthorityOfAnyOneFrontProxy(t *testing.T) {
+func TestTheProbeRefusesAnAnswerThatSaysNothingOfWhatItsAppsWouldHear(t *testing.T) {
 	at := answering(t, current(t, "web.localhost"), func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set(edge.HeaderEdge, "box")
 	})
+	code, out, errs := ran(t, "probe", "--at", at, "web.localhost")
+	if code != exitNotServingYet {
+		t.Errorf("probe of an answer naming the box but not what its apps hear = %d %q, want %d: only the switchboard says what its apps would hear, so anything else answered", code, out, exitNotServingYet)
+	}
+	if !strings.Contains(errs, switchboard.Name) {
+		t.Errorf("probe said %q, want it to name %s as what never answered", errs, switchboard.Name)
+	}
+}
+
+func TestTheProbeTrustsNoAuthorityOfAnyOneFrontProxy(t *testing.T) {
+	at := answering(t, current(t, "web.localhost"), switchboardAnswers)
 
 	if code, out, errs := ran(t, "probe", "--at", at, "web.localhost"); code != 0 || strings.TrimSpace(out) != "box" {
 		t.Errorf("probe over a certificate no public root vouches for = %d, %q, %q, want the edge read: a .localhost name is served under whatever authority the front proxy keeps, and the probe must not know which proxy that is", code, out, errs)
@@ -179,18 +198,15 @@ func TestTheProbeRefusesACertificateThatDoesNotServeTheName(t *testing.T) {
 func TestTheProbeReadsTheEdgeOffTheHostnameAndNotOffWhereARedirectLands(t *testing.T) {
 	at := answering(t, current(t, "web.localhost"), func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/elsewhere" {
-			w.Header().Set(edge.HeaderEdge, "box")
+			switchboardAnswers(w, r)
 			return
 		}
 		http.Redirect(w, r, "/elsewhere", http.StatusFound)
 	})
 
 	code, out, errs := ran(t, "probe", "--at", at, "web.localhost")
-	if code != 0 {
-		t.Fatalf("probe = %d: %q", code, errs)
-	}
-	if strings.TrimSpace(out) != "" {
-		t.Errorf("probe printed %q, want nothing: it followed a redirect and read the edge off wherever the chain landed", out)
+	if code != exitNotServingYet || strings.TrimSpace(out) != "" {
+		t.Errorf("probe = %d %q %q, want %d and nothing printed: it followed a redirect and read the edge off wherever the chain landed", code, out, errs, exitNotServingYet)
 	}
 }
 

@@ -234,7 +234,7 @@ func TestARelayingPeerIsHeardOnTheSchemeAndHostButNeverOnTheClient(t *testing.T)
 	}
 }
 
-func TestTheLivenessProbeIsToldTheSchemeAndHostAnAppWouldHear(t *testing.T) {
+func TestTheLivenessProbeIsToldTheSchemeAndHostsAnAppWouldHear(t *testing.T) {
 	t.Parallel()
 
 	web := backend(t, "web")
@@ -242,19 +242,27 @@ func TestTheLivenessProbeIsToldTheSchemeAndHostAnAppWouldHear(t *testing.T) {
 	_, relaying, _ := fronted(t, table, netip.MustParsePrefix("127.0.0.0/8"))
 	_, untrusting, front := fronted(t, table)
 	for name, tc := range map[string]struct {
-		client          *http.Client
-		at, host, heard string
+		client    *http.Client
+		at, host  string
+		forwarded []string
+		heard     string
 	}{
-		"a routed hostname from a relaying peer":     {http.DefaultClient, relaying, "shop.example.com", "https shop.example.com"},
-		"an unclaimed hostname from a relaying peer": {http.DefaultClient, relaying, "unclaimed.example.com", "https unclaimed.example.com"},
-		"a routed hostname from the front proxy":     {front, "front", "shop.example.com", "https shop.example.com"},
-		"a routed hostname from an untrusted peer":   {http.DefaultClient, untrusting, "shop.example.com", "http shop.example.com"},
+		"a routed hostname from a relaying peer": {
+			http.DefaultClient, relaying, "shop.example.com", []string{"X-Forwarded-Proto", "https"}, "https shop.example.com shop.example.com"},
+		"an unclaimed hostname from a relaying peer": {
+			http.DefaultClient, relaying, "unclaimed.example.com", []string{"X-Forwarded-Proto", "https"}, "https unclaimed.example.com unclaimed.example.com"},
+		"a relaying peer forwarding another host": {
+			http.DefaultClient, relaying, "shop.example.com", []string{"X-Forwarded-Proto", "https", "X-Forwarded-Host", "bank.example.com"}, "https shop.example.com bank.example.com"},
+		"a routed hostname from the front proxy": {
+			front, "front", "shop.example.com", []string{"X-Forwarded-Proto", "https"}, "https shop.example.com shop.example.com"},
+		"a routed hostname from an untrusted peer": {
+			http.DefaultClient, untrusting, "shop.example.com", []string{"X-Forwarded-Proto", "https", "X-Forwarded-Host", "bank.example.com"}, "http shop.example.com shop.example.com"},
 	} {
-		said := ask(t, tc.client, tc.at, tc.host, edge.LivenessProbePath, "X-Forwarded-Proto", "https")
+		said := ask(t, tc.client, tc.at, tc.host, edge.LivenessProbePath, tc.forwarded...)
 		if got := said.header.Get(switchboard.HeardHeader); got != tc.heard {
-			t.Errorf("%s: the probe was told %q, want %q", name, got, tc.heard)
+			t.Errorf("%s: the probe was told %q, want %q: the scheme, Host and X-Forwarded-Host the upstream would be sent", name, got, tc.heard)
 		}
-		if other := ask(t, tc.client, tc.at, tc.host, "/", "X-Forwarded-Proto", "https"); other.header.Get(switchboard.HeardHeader) != "" {
+		if other := ask(t, tc.client, tc.at, tc.host, "/", tc.forwarded...); other.header.Get(switchboard.HeardHeader) != "" {
 			t.Errorf("%s: a request off the probe path was told %q, want nothing said beyond the probe", name, other.header.Get(switchboard.HeardHeader))
 		}
 	}

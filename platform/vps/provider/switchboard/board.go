@@ -228,11 +228,16 @@ func (b *Board) hears(r *http.Request) hearing {
 }
 
 func (b *Board) heard(r *http.Request) string {
-	proto := "http"
-	if said := r.Header.Get("X-Forwarded-Proto"); said != "" && b.hears(r) != hearsNothing {
-		proto = said
+	proto, host := "http", r.Host
+	if b.hears(r) != hearsNothing {
+		if said := r.Header.Get("X-Forwarded-Proto"); said != "" {
+			proto = said
+		}
+		if said := r.Header.Get("X-Forwarded-Host"); said != "" {
+			host = said
+		}
 	}
-	return proto + " " + r.Host
+	return proto + " " + r.Host + " " + host
 }
 
 func (b *Board) forwarded(out *httputil.ProxyRequest) {
