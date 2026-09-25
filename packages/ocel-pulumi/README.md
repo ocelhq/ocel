@@ -46,7 +46,7 @@ Name it in `ocel.json`:
   "$schema": "https://ocel.dev/schema/0.0.0/ocel.schema.json",
   "slug": "shop",
   "provider": "aws",
-  "bindings": ["orders"],
+  "bindings": { "postgres": { "orders": "@orders" } },
   "apps": [{ "name": "api", "path": "." }]
 }
 ```
