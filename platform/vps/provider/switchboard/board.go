@@ -1,7 +1,6 @@
 package switchboard
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -111,14 +110,13 @@ func (b *Board) Load(path string) error {
 }
 
 func (b *Board) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	forward, ok := b.forwarding(r)
+	forward, ctx, hangUp, ok := b.forwarding(r)
 	if !ok {
 		w.Header().Set(edgeHeader, EdgeName)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	held := &line{ResponseWriter: w, ledger: &b.ledger, address: forward.Upstream}
-	defer held.hangUp()
+	defer hangUp()
 	transport, host := b.tcp, forward.Upstream
 	if forward.Upstream == connectorDial {
 		transport, host = b.socket, connectorHost
@@ -148,21 +146,29 @@ func (b *Board) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusBadGateway)
 		},
 	}
-	proxy.ServeHTTP(held, r)
+	proxy.ServeHTTP(w, r.WithContext(ctx))
 }
 
-func (b *Board) forwarding(r *http.Request) (Forward, bool) {
+func (b *Board) forwarding(r *http.Request) (Forward, context.Context, func(), bool) {
 	for {
 		table := b.table.Load()
 		forward, ok := table.Forward(r.Host, r.URL.Path)
 		if !ok {
-			return Forward{}, false
+			return Forward{}, nil, nil, false
 		}
-		b.ledger.take(forward.Upstream)
+		ctx, hangUp := b.ledger.take(forward.Upstream, r.Context())
 		if b.table.Load() == table {
-			return forward, true
+			return forward, ctx, hangUp, true
 		}
-		b.ledger.drop(forward.Upstream)
+		hangUp()
+	}
+}
+
+func (b *Board) cutUnrouted(address string) {
+	b.loading.Lock()
+	defer b.loading.Unlock()
+	if !b.table.Load().routed[address] {
+		b.ledger.cut(address)
 	}
 }
 
@@ -193,32 +199,4 @@ func stripped(requested, prefix string) string {
 		rest = "/" + rest
 	}
 	return rest
-}
-
-type line struct {
-	http.ResponseWriter
-	ledger  *ledger
-	address string
-	conn    net.Conn
-}
-
-func (l *line) FlushError() error { return http.NewResponseController(l.ResponseWriter).Flush() }
-
-func (l *line) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-	conn, buffered, err := http.NewResponseController(l.ResponseWriter).Hijack()
-	if err != nil {
-		return nil, nil, err
-	}
-	l.conn = conn
-	l.ledger.hijack(l.address, conn)
-	return conn, buffered, nil
-}
-
-func (l *line) Unwrap() http.ResponseWriter { return l.ResponseWriter }
-
-func (l *line) hangUp() {
-	if l.conn != nil {
-		l.ledger.release(l.address, l.conn)
-	}
-	l.ledger.drop(l.address)
 }

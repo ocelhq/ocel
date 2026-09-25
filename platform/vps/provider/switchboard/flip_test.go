@@ -1,6 +1,7 @@
 package switchboard_test
 
 import (
+	"bufio"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -227,5 +228,81 @@ func TestAFlipThatCannotReadItsTableRetiresNothingAndSwitchesNothing(t *testing.
 	}
 	if idle, err := board.Idle([]string{"blue"}); err == nil {
 		t.Errorf("Idle(blue) = %v, want it refused: an address with no port keys no route and no drain, so it would read as idle whatever holds it", idle)
+	}
+}
+
+func TestADrainCeilingCutsEveryRequestAndStreamStillOpenOnARetireeNoLongerRouted(t *testing.T) {
+	t.Parallel()
+
+	arrived, release := make(chan struct{}, 2), make(chan struct{})
+	retiree := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/events" {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = io.WriteString(w, "data: first\n\n")
+			_ = http.NewResponseController(w).Flush()
+		}
+		arrived <- struct{}{}
+		<-release
+		_, _ = io.WriteString(w, "blue")
+	}))
+	t.Cleanup(retiree.Close)
+	t.Cleanup(func() { close(release) })
+	blue, green := strings.TrimPrefix(retiree.URL, "http://"), backend(t, "green")
+	board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue}))
+
+	held := make(chan answered, 1)
+	go func() {
+		request, _ := http.NewRequest(http.MethodGet, "http://"+at+"/held", nil)
+		request.Host = "shop.example.com"
+		said, err := http.DefaultClient.Do(request)
+		if err != nil {
+			held <- answered{}
+			return
+		}
+		defer said.Body.Close()
+		body, _ := io.ReadAll(said.Body)
+		held <- answered{status: said.StatusCode, body: string(body)}
+	}()
+	request, err := http.NewRequest(http.MethodGet, "http://"+at+"/events", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = "shop.example.com"
+	stream, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stream.Body.Close()
+	events := bufio.NewReader(stream.Body)
+	if first, err := events.ReadString('\n'); err != nil || first != "data: first\n" {
+		t.Fatalf("the stream opened with %q, %v, want its first event", first, err)
+	}
+	<-arrived
+	<-arrived
+
+	var told drains
+	if err := board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue}, 200*time.Millisecond, told.tell); err != nil {
+		t.Fatal(err)
+	}
+	if lines := told.lines(); !slices.Equal(lines, []string{caddyadmin.DrainExpired + " " + blue + " 2"}) {
+		t.Errorf("the flip told %v, want %s %s 2", lines, caddyadmin.DrainExpired, blue)
+	}
+	select {
+	case said := <-held:
+		if said.status == http.StatusOK && said.body == "blue" {
+			t.Errorf("the request held across the ceiling answered the retiree's own 200, want it cut")
+		}
+	case <-time.After(5 * time.Second):
+		t.Error("the request held across the ceiling is still open, want it cut once the drain expired")
+	}
+	rest := make(chan error, 1)
+	go func() {
+		_, err := io.ReadAll(events)
+		rest <- err
+	}()
+	select {
+	case <-rest:
+	case <-time.After(5 * time.Second):
+		t.Error("the stream held across the ceiling is still open, want it cut once the drain expired")
 	}
 }
