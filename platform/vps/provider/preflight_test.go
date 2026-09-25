@@ -55,7 +55,7 @@ func standingBox() []scriptedAnswer {
 		{"docker inspect", answer{stdout: "Status=running ExitCode=0 OOMKilled=false Error= StartedAt=x FinishedAt= RestartCount=0"}},
 		{"'upstreams'", answer{stdout: "[]\n"}},
 		{"/proc/net/tcp &&", answer{stdout: socketTable(80, 443)}},
-		{"publish=" + host.RenewalPort, answer{stdout: caddy.Container + "\n"}},
+		{"publish=" + caddy.HTTPPort, answer{stdout: caddy.Container + "\n"}},
 		{"publish=443", answer{stdout: caddy.Container + "\n"}},
 		{"cat /proc/net/tcp /proc/net/tcp6", answer{stdout: ""}},
 		{"'test' '-S'", answer{}},
@@ -161,7 +161,7 @@ func TestABoxThatIsReadyRefusesNothingBeforeADeploy(t *testing.T) {
 		"what the docker data root has left": "docker info",
 		"the switchboard's upstreams":        "'upstreams'",
 		"the front proxy's admin socket":     "'test' '-S'",
-		"which container publishes port 80":  "publish=" + host.RenewalPort,
+		"which container publishes port 80":  "publish=" + caddy.HTTPPort,
 		"which container publishes port 443": "publish=443",
 	} {
 		if !strings.Contains(joined, fragment) {
@@ -279,7 +279,7 @@ func TestAForeignListenerOnAServingPortIsRefusedByName(t *testing.T) {
 	t.Parallel()
 
 	err := preflighting(boxSaying(map[string]answer{
-		"publish=" + host.RenewalPort: {stdout: "not-ocels\n"},
+		"publish=" + caddy.HTTPPort: {stdout: "not-ocels\n"},
 	}))
 	if err == nil {
 		t.Fatal("PreflightDeploy() let a deploy onto a box where something else publishes port 80")
@@ -293,12 +293,12 @@ func TestAServingPortNothingHoldsIsRefusedBecauseItMustBeTaken(t *testing.T) {
 	t.Parallel()
 
 	err := preflighting(boxSaying(map[string]answer{
-		"publish=" + host.RenewalPort: {stdout: "\n"},
+		"publish=" + caddy.HTTPPort: {stdout: "\n"},
 	}))
 	if err == nil {
 		t.Fatal("PreflightDeploy() read a free port 80 as fine, and on a bootstrapped box these ports are taken by the proxy rather than free")
 	}
-	if !strings.Contains(err.Error(), "nothing holds port "+host.RenewalPort) {
+	if !strings.Contains(err.Error(), "nothing holds port "+caddy.HTTPPort) {
 		t.Errorf("PreflightDeploy() = %q, want the port named as one nothing holds", err)
 	}
 }

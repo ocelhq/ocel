@@ -318,7 +318,7 @@ func TestAProxyThatNamedNoSocketAtAllIsNotReadAsACleanNamespace(t *testing.T) {
 	check := adminCheck(t, standingOver(boxSaying(map[string]answer{"/proc/net/tcp &&": {stdout: socketTable()}})))
 	if check.Verdict != providerkit.StandingFail {
 		t.Fatalf("verdict = %v (%q), want a failure: a running proxy always holds %s and %s, so a namespace naming nothing is one this box never read rather than one with a clean admin port",
-			check.Verdict, check.Finding, host.RenewalPort, "443")
+			check.Verdict, check.Finding, caddy.HTTPPort, "443")
 	}
 	if !strings.Contains(check.Finding, "no listening sockets") {
 		t.Errorf("finding = %q, want it to say the proxy named nothing rather than to report the admin port clean", check.Finding)

@@ -160,7 +160,7 @@ func TestTheLogsARefusalQuotesAreBounded(t *testing.T) {
 func expiring() map[string]string {
 	return map[string]string{
 		"what doctor reads a served leaf with": words([]string{SwitchboardBinary, "leaf", "shop.example.com"}),
-		"what a pinned pair is read off":       "cat " + quoted(caddy.PinCertificate(ProxyPins+"/wildcard")),
+		"what a pinned pair is read off":       "cat " + quoted(caddy.PinCertificate(caddy.PinsDir+"/wildcard")),
 	}
 }
 
@@ -169,8 +169,8 @@ func TestNothingThisPackageReadsAnExpiryOffReachesTheProxysDataDirectory(t *test
 
 	named := 0
 	for what, command := range expiring() {
-		if !strings.Contains(command, "shop.example.com") && !strings.Contains(command, ProxyPins) {
-			t.Fatalf("%s runs %q, which names neither the hostname nor %s, so this guard is reading a command that does nothing", what, command, ProxyPins)
+		if !strings.Contains(command, "shop.example.com") && !strings.Contains(command, caddy.PinsDir) {
+			t.Fatalf("%s runs %q, which names neither the hostname nor %s, so this guard is reading a command that does nothing", what, command, caddy.PinsDir)
 		}
 		named++
 		if strings.Contains(command, ProxyData) {

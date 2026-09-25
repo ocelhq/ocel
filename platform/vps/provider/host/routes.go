@@ -219,7 +219,7 @@ func pinLeaf(under string) bool {
 }
 
 func pinnedUnderProxyPins(path string) bool {
-	under, beneath := strings.CutPrefix(path, ProxyPins+"/")
+	under, beneath := strings.CutPrefix(path, caddy.PinsDir+"/")
 	return beneath && pinLeaf(under)
 }
 
@@ -227,7 +227,7 @@ func validPin(pin Pin) error {
 	if pin.Hostname == "" || !pinnedUnderProxyPins(pin.Path) {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"pinned certificate for %q is at %q, not under %s/",
-			pin.Hostname, pin.Path, ProxyPins)
+			pin.Hostname, pin.Path, caddy.PinsDir)
 	}
 	return nil
 }

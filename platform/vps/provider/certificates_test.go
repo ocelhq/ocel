@@ -24,7 +24,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
-var wildcardPin = host.ProxyPins + "/wildcard"
+var wildcardPin = caddy.PinsDir + "/wildcard"
 
 func selfSigned(t *testing.T, names []string, until time.Duration) []byte {
 	t.Helper()
@@ -326,8 +326,8 @@ func TestAPinHandleNamingAPathOutsideTheProxysOwnDirectoryIsRefusedBeforeItIsRea
 	_, err := p.InspectCertificate(context.Background(), boxedge.Kind, "pr-7.preview.example.com",
 		providerkit.Certificate{ID: certs.PinHandle(elsewhere)})
 	var refusal providerkit.Refusal
-	if !asRefusal(err, &refusal) || !strings.Contains(refusal.Message, host.ProxyPins) {
-		t.Fatalf("InspectCertificate() over a pin outside %s = %v, want a refusal naming the one directory the proxy is handed", host.ProxyPins, err)
+	if !asRefusal(err, &refusal) || !strings.Contains(refusal.Message, caddy.PinsDir) {
+		t.Fatalf("InspectCertificate() over a pin outside %s = %v, want a refusal naming the one directory the proxy is handed", caddy.PinsDir, err)
 	}
 	for _, command := range machine.commands() {
 		if strings.Contains(command, elsewhere) {

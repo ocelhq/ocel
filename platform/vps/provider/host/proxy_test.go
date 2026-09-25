@@ -820,7 +820,7 @@ func TestTheDestroyReportsThePinRootItKeptRatherThanTheOneItNeverTook(t *testing
 		class := providerkit.ClassProduction
 		stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
 		stood.answer = func(command string) (session.Result, bool) {
-			if !strings.HasPrefix(command, "rmdir "+quoted(ProxyPins)+" ") {
+			if !strings.HasPrefix(command, "rmdir "+quoted(caddy.PinsDir)+" ") {
 				return session.Result{}, false
 			}
 			if held {
@@ -834,9 +834,9 @@ func TestTheDestroyReportsThePinRootItKeptRatherThanTheOneItNeverTook(t *testing
 			t.Fatalf("destroying over %s = %v", what, err)
 		}
 
-		want := "removed " + KindDir + " " + ProxyPins
+		want := "removed " + KindDir + " " + caddy.PinsDir
 		if held {
-			want = "kept " + KindDir + " " + ProxyPins
+			want = "kept " + KindDir + " " + caddy.PinsDir
 		}
 		if !slices.ContainsFunc(said, func(line string) bool { return strings.HasPrefix(line, want) }) {
 			t.Errorf("destroying over %s reported %v, want a line opening %q: the report names the private key an operator still holds as one ocel deleted",
@@ -848,7 +848,7 @@ func TestTheDestroyReportsThePinRootItKeptRatherThanTheOneItNeverTook(t *testing
 func TestThePinRootIsPlannedAsReclaimedOnlyIfEmptyRatherThanAsABareDelete(t *testing.T) {
 	t.Parallel()
 
-	pins := removalOf(proxyRemovals(), ProxyPins)
+	pins := removalOf(proxyRemovals(), caddy.PinsDir)
 	if pins.action != providerkit.ActionDelete {
 		t.Fatalf("the pin root is planned as %q, and this test states nothing about the row a destroy prints for it", pins.action)
 	}
@@ -1286,16 +1286,16 @@ func TestThePinRootIsNoWiderThanTheRootThatReadsIt(t *testing.T) {
 
 	var pins Item
 	for _, item := range ProxyItems(ArchAMD64) {
-		if item.Kind == KindDir && item.Name == ProxyPins {
+		if item.Kind == KindDir && item.Name == caddy.PinsDir {
 			pins = item
 		}
 	}
-	if pins.Name != ProxyPins {
-		t.Fatalf("the proxy writes no %s at all, and this test states nothing about what it opens", ProxyPins)
+	if pins.Name != caddy.PinsDir {
+		t.Fatalf("the proxy writes no %s at all, and this test states nothing about what it opens", caddy.PinsDir)
 	}
 	if pins.Mode&0o077 != 0 {
 		t.Errorf("%s is written %o, and every apply reopens a root an operator closed around their private keys to every login on the box",
-			ProxyPins, pins.Mode)
+			caddy.PinsDir, pins.Mode)
 	}
 }
 

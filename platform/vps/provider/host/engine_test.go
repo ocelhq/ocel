@@ -97,7 +97,7 @@ func proxyStanding(t *testing.T) standingProxy {
 		SwitchboardControl, filepath.Join(dir, "control"),
 		SwitchboardDir, switching,
 		ConnectorRun, filepath.Join(dir, "connector"),
-		ProxyPins, stood.pins,
+		caddy.PinsDir, stood.pins,
 		proxyRoot, proxied,
 		live.RoutingDir, routing,
 		routingLock, dir,

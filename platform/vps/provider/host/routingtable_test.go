@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 func everything() RoutingTable {
@@ -19,7 +20,7 @@ func everything() RoutingTable {
 		{RouteKey: keyed("web"), Upstream: "shop-web-1:" + providerkit.InjectedPortText},
 	}
 	table.Grace = 12 * time.Second
-	table.Pins = []Pin{{Hostname: "shop.example.com", Path: ProxyPins + "/shop"}}
+	table.Pins = []Pin{{Hostname: "shop.example.com", Path: caddy.PinsDir + "/shop"}}
 	table.PreviewBase = previewBase
 	table.Connector = "box.example.com"
 	return table
@@ -72,7 +73,7 @@ func TestATableWrittenFromRowsInAnyOrderIsTheSameBytes(t *testing.T) {
 	t.Parallel()
 
 	table := everything()
-	table.Pins = append(table.Pins, Pin{Hostname: "blog.example.com", Path: ProxyPins + "/blog"})
+	table.Pins = append(table.Pins, Pin{Hostname: "blog.example.com", Path: caddy.PinsDir + "/blog"})
 	scrambled := table
 	scrambled.Claims = []HostClaim{table.Claims[1], table.Claims[0]}
 	scrambled.Routes = []AppRoute{table.Routes[1], table.Routes[0]}

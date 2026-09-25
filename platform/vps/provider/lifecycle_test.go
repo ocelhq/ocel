@@ -970,7 +970,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	}
 	for _, verdict := range []string{
 		lifecycleHostname + " resolves to " + run.vm.addr + ", which is this box",
-		"port " + host.RenewalPort + " answers from this machine",
+		"port " + caddy.HTTPPort + " answers from this machine",
 		"nothing listens on tcp " + adminPort + " inside " + caddy.Container,
 	} {
 		if !strings.Contains(standing, verdict) {
@@ -1290,7 +1290,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 
 	if reached := run.vm.peers(t, "curl -sS -m 5 -o /dev/null -w '%{http_code}' http://"+caddy.Container+"/"); !strings.Contains(reached, "404") {
 		t.Fatalf("a container on the shared network could not reach the proxy on port %s at all (%q), so nothing it fails to reach on %s means anything",
-			host.RenewalPort, strings.TrimSpace(reached), adminPort)
+			caddy.HTTPPort, strings.TrimSpace(reached), adminPort)
 	}
 	if reached := run.vm.peers(t, "curl -sS -m 5 -o /dev/null -w '%{http_code}' http://"+caddy.Container+":"+adminPort+"/config/"); strings.Contains(reached, "200") {
 		t.Errorf("a container on the shared network reached the admin endpoint on %s and got %q: every app this box runs would hold arbitrary config replacement of its own edge",
