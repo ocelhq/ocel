@@ -160,7 +160,11 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	}
 	controller := &http.Server{Handler: board.Control(), ReadHeaderTimeout: readHeaderTimeout}
 	failed := make(chan error, 2)
-	go func() { failed <- board.Serve(data) }()
+	go func() {
+		if err := board.Serve(data); err != nil {
+			failed <- err
+		}
+	}()
 	go func() {
 		if err := controller.Serve(controlling); !errors.Is(err, http.ErrServerClosed) {
 			failed <- err
