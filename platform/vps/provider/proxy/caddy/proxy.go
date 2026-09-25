@@ -18,7 +18,7 @@ func (Builtin) Guarantees() proxy.Guarantees {
 	return proxy.Guarantees{
 		OwnsPorts:              true,
 		IssuesCertificates:     true,
-		ForgetsCertificates:    true,
+		ForgetsCertificates:    false,
 		HonoursPins:            true,
 		ReportsRateLimits:      true,
 		ServesPreviewWildcards: true,
@@ -80,24 +80,4 @@ func (b Builtin) Certificate(ctx context.Context, hostname string) (proxy.Certif
 	return held, nil
 }
 
-func (b Builtin) Forget(ctx context.Context, hostnames []string) ([]string, error) {
-	if len(hostnames) == 0 {
-		return nil, nil
-	}
-	for _, hostname := range hostnames {
-		if !certifiable(hostname) {
-			return nil, providerkit.Refuse(providerkit.CodeInvalid, "%q is not a hostname the proxy holds a certificate for", hostname)
-		}
-	}
-	said, err := b.Box.Ran(ctx, "forget what "+Container+" holds for "+strings.Join(hostnames, ", "), forgetting(hostnames))
-	if err != nil {
-		return nil, err
-	}
-	var removed []string
-	for line := range strings.Lines(said) {
-		if taken := strings.TrimSpace(line); taken != "" {
-			removed = append(removed, taken)
-		}
-	}
-	return removed, nil
-}
+func (Builtin) Forget(context.Context, []string) ([]string, error) { return nil, nil }
