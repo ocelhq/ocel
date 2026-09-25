@@ -26,4 +26,3 @@ func (*Grouped) Certificate(context.Context, string) (proxy.Certificate, error) 
 	return proxy.Certificate{}, nil
 }
 
-func (*Grouped) Forget(context.Context, []string) ([]string, error) { return nil, nil }

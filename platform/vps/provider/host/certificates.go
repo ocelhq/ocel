@@ -98,17 +98,6 @@ func (h *Host) PinnedCertificate(ctx context.Context, path string) ([]byte, erro
 
 func (h *Host) FrontProxy() proxy.Proxy { return h.front }
 
-func (h *Host) ForgetCertificates(ctx context.Context, hostnames []string, report providerkit.Reporter) error {
-	removed, err := h.front.Forget(ctx, hostnames)
-	if err != nil || report == nil {
-		return err
-	}
-	for _, taken := range removed {
-		report.Detail("Removed " + taken + ": certificate for a hostname no longer served")
-	}
-	return nil
-}
-
 func (h *Host) ServedCertificate(ctx context.Context, hostname string) ([]byte, error) {
 	result, err := h.stream(ctx, words([]string{SwitchboardBinary, "leaf", hostname}), nil, "")
 	if err != nil {

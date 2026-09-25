@@ -22,4 +22,3 @@ func (Constrained) Certificate(context.Context, string) (proxy.Certificate, erro
 	return proxy.Certificate{}, nil
 }
 
-func (Constrained) Forget(context.Context, []string) ([]string, error) { return nil, nil }

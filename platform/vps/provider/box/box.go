@@ -25,7 +25,6 @@ type Machine interface {
 	StandUp(ctx context.Context, spec host.Container) error
 	ForgetNetwork(ctx context.Context, class providerkit.Class, project string) error
 	Promote(ctx context.Context, class providerkit.Class, project, app, coordinate string) error
-	ForgetCertificates(ctx context.Context, hostnames []string, report providerkit.Reporter) error
 	Serving(ctx context.Context, key host.RouteKey) (string, error)
 	Release(ctx context.Context, rel host.Release, report providerkit.Reporter) error
 	UnroutePointer(ctx context.Context, owner, pointer string) error

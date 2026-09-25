@@ -223,14 +223,6 @@ func (s *stack) previewClaims(ctx context.Context, pointer string, apps []string
 }
 
 func (s *stack) RemovePointer(ctx context.Context, pointer string, report edge.Reporter) (edge.PruneResult, error) {
-	served, err := s.served(ctx, pointer)
-	if err != nil {
-		return edge.PruneResult{}, err
-	}
-	terminating, err := s.terminating(ctx, named(pointer), served)
-	if err != nil {
-		return edge.PruneResult{}, err
-	}
 	if err := s.e.machine.DisclaimPointer(ctx, s.surface(), named(pointer)); err != nil {
 		return edge.PruneResult{}, err
 	}
@@ -240,55 +232,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, report edge.R
 	if err := s.e.machine.UnroutePointer(ctx, s.surface(), named(pointer)); err != nil {
 		return edge.PruneResult{}, err
 	}
-	if err := s.e.machine.ForgetCertificates(ctx, terminating, report); err != nil {
-		return edge.PruneResult{}, err
-	}
 	return s.ledger().RemovePointer(ctx, pointer)
-}
-
-func (s *stack) terminating(ctx context.Context, pointer string, served map[string]string) ([]string, error) {
-	if s.state.Class != edge.ClassPreview || pointer == edge.DefaultPointer {
-		return nil, nil
-	}
-	claims, err := s.e.machine.Claims(ctx)
-	if err != nil {
-		return nil, err
-	}
-	held := make([]string, 0, len(claims))
-	for _, claim := range claims {
-		if claim.Owner == s.surface() && claim.Pointer == pointer {
-			held = append(held, claim.Hostname)
-		}
-	}
-	if site := s.previewSite(); site.Serves() && len(served) > 0 {
-		held = append(held, site.Hosts(pointer, slices.Sorted(maps.Keys(served)))...)
-	}
-	slices.Sort(held)
-	return slices.Compact(held), nil
-}
-
-func (s *stack) served(ctx context.Context, pointer string) (map[string]string, error) {
-	history, err := s.ledger().History(ctx, pointer)
-	if err != nil {
-		return nil, err
-	}
-	served := map[string]string{}
-	for _, entry := range history {
-		for app, identity := range entry.Builds {
-			if _, held := served[app]; held {
-				continue
-			}
-			record, found, err := s.ledger().Record(ctx, app, identity)
-			if err != nil {
-				return nil, err
-			}
-			if !found || record.Image == "" {
-				continue
-			}
-			served[app] = record.Image
-		}
-	}
-	return served, nil
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {

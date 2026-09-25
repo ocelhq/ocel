@@ -22,6 +22,3 @@ func (o *Overt) Certificate(context.Context, string) (proxy.Certificate, error) 
 	return proxy.Certificate{}, nil
 }
 
-func (o *Overt) Forget(_ context.Context, hostnames []string) ([]string, error) {
-	return hostnames, nil
-}

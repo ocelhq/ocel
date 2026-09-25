@@ -128,16 +128,3 @@ func TestTheTroubleWithACertificateIsWhatTheProxyLogged(t *testing.T) {
 		t.Errorf("Certificate() over an engine it could not reach = %v, want that carried out rather than read as a proxy with nothing to say", err)
 	}
 }
-
-func TestForgettingLeavesEveryCertificateForTheSwitchboardsRefusalToRetire(t *testing.T) {
-	t.Parallel()
-
-	held := &box{}
-	removed, err := (caddy.Builtin{Box: held}).Forget(context.Background(), []string{"shop--pr-7--web.preview.example.com"})
-	if err != nil || removed != nil || len(held.ran) != 0 {
-		t.Errorf("Forget() = %v, %v and ran %q, want nothing taken: caddy keeps an on-demand certificate in memory after its storage is gone, and renews one it cannot find in storage without asking the switchboard, so a pair taken here is ordered again for a name nothing claims", removed, err, held.ran)
-	}
-	if (caddy.Builtin{}).Guarantees().ForgetsCertificates {
-		t.Error("the built-in proxy says it forgets certificates, and it leaves them to the permission check and caddy's own storage cleaner")
-	}
-}

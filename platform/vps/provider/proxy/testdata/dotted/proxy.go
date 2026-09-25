@@ -22,4 +22,3 @@ func (Dotted) Certificate(context.Context, string) (Certificate, error) {
 	return Certificate{}, nil
 }
 
-func (Dotted) Forget(context.Context, []string) ([]string, error) { return nil, nil }

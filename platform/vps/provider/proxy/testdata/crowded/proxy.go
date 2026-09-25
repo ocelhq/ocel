@@ -22,9 +22,6 @@ func (c *Crowded) Certificate(context.Context, string) (proxy.Certificate, error
 	return proxy.Certificate{}, nil
 }
 
-func (c *Crowded) Forget(_ context.Context, hostnames []string) ([]string, error) {
-	return hostnames, nil
-}
 
 const upstream = "localhost:8080"
 

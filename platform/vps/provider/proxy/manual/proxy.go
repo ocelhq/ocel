@@ -36,5 +36,3 @@ func (m Manual) Inspect(ctx context.Context) (proxy.Standing, error) {
 func (Manual) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{Renewal: certs.AdoptedRenewal}, nil
 }
-
-func (Manual) Forget(context.Context, []string) ([]string, error) { return nil, nil }

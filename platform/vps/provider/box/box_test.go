@@ -37,7 +37,6 @@ type machine struct {
 	stood       []host.Container
 	headed      []string
 	previewBase string
-	forgotten   []string
 	refusals    map[string]error
 	visited     []string
 	releasing   func(host.Release) error
@@ -53,8 +52,6 @@ func aMachine() *machine {
 }
 
 func (m *machine) refuseOn(call string, err error) { m.refusals[call] = err }
-
-func (m *machine) allowOn(call string) { delete(m.refusals, call) }
 
 func (m *machine) refuse(call string) error {
 	m.visited = append(m.visited, call)
@@ -100,17 +97,6 @@ func (m *machine) Promote(_ context.Context, _ providerkit.Class, project, app, 
 	m.calls = append(m.calls, "head "+project+"/"+app+" at "+coordinate)
 	m.headed = append(m.headed, coordinate)
 	return m.refuse("Promote")
-}
-
-func (m *machine) ForgetCertificates(_ context.Context, hostnames []string, _ providerkit.Reporter) error {
-	if err := m.refuse("ForgetCertificates"); err != nil {
-		return err
-	}
-	for _, hostname := range hostnames {
-		m.calls = append(m.calls, "forget "+hostname)
-		m.forgotten = append(m.forgotten, hostname)
-	}
-	return nil
 }
 
 func (m *machine) Serving(_ context.Context, key host.RouteKey) (string, error) {
@@ -1164,12 +1150,12 @@ func TestABindNamingAnAppClaimsTheHostnameForThatAppAndTheSurfaceStillOwnsIt(t *
 	}
 }
 
-func TestRemovingTheProductionPointerForgetsNoCertificateTheRemovalPlanSaysItKeeps(t *testing.T) {
+func TestTheRemovalPlanKeepsABoundHostnamesCertificateUnderTheProxysOwnHandle(t *testing.T) {
 	t.Parallel()
 
 	const bound = "shop.example.com"
 
-	stood, front, stack := standing(t)
+	_, front, stack := standing(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
 		t.Fatalf("Promote: %v", err)
@@ -1182,12 +1168,7 @@ func TestRemovingTheProductionPointerForgetsNoCertificateTheRemovalPlanSaysItKee
 		t.Fatalf("RemovePointer: %v", err)
 	}
 
-	kept := front.ProjectRemovals(edge.ProjectScope{Slug: slug, Class: edge.ClassProduction, Hostnames: []string{bound}})
-	if len(stood.forgotten) != 0 {
-		t.Fatalf("removing the production pointer forgot %v, and %v renders that certificate as kept with a reason: a bound hostname is bound again inside the certificate's life and served off it rather than ordered again",
-			stood.forgotten, kept)
-	}
-	held := keptCertificate(t, kept)
+	held := keptCertificate(t, front.ProjectRemovals(edge.ProjectScope{Slug: slug, Class: edge.ClassProduction, Hostnames: []string{bound}}))
 	if held.Name != certs.ProxyHandle(bound) {
 		t.Errorf("the plan keeps %q, want the proxy's own handle for %s: the row a teardown shows is the store entry it is declining to touch", held.Name, bound)
 	}
@@ -1214,52 +1195,6 @@ func keptCertificate(t *testing.T, groups []edge.PlanGroup) edge.PlanChange {
 		t.Fatalf("the plan renders %+v, want it kept: ocel placed no key in the proxy's store, so it removes none", certificates[0])
 	}
 	return certificates[0]
-}
-
-func TestRemovingAProductionPointerNamedByABranchForgetsNoPreviewCertificate(t *testing.T) {
-	t.Parallel()
-
-	stood := aMachine()
-	front := edgeOver(stood, fake.NewRecords())
-	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
-		Version: "test", Class: edge.ClassProduction, Slug: slug,
-	}, edge.StackState{GlobalPreview: previewBase})
-	if err != nil {
-		t.Fatalf("Reconcile: %v", err)
-	}
-	staged(t, stack, "web", "b1", "shop-web-1111")
-	if err := stack.Promote(context.Background(), edge.Promotion{
-		PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"},
-	}, "pr-7", edge.DiscardReporter()); err != nil {
-		t.Fatalf("Promote under a pointer: %v", err)
-	}
-
-	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardReporter()); err != nil {
-		t.Fatalf("RemovePointer: %v", err)
-	}
-	if len(stood.forgotten) != 0 {
-		t.Errorf("a production pointer's teardown forgot %v: the class is the whole of what decides whether a pointer carries preview hostnames, and a production promotion under a branch name claims none to forget",
-			stood.forgotten)
-	}
-}
-
-func TestRemovingAPreviewsDefaultPointerForgetsNoCertificate(t *testing.T) {
-	t.Parallel()
-
-	stood := aMachine()
-	stack := previewStack(t, stood)
-	staged(t, stack, "web", "b1", "shop-web-1111")
-	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
-		t.Fatalf("Promote: %v", err)
-	}
-
-	if _, err := stack.RemovePointer(context.Background(), edge.DefaultPointer, edge.DiscardReporter()); err != nil {
-		t.Fatalf("RemovePointer: %v", err)
-	}
-	if len(stood.forgotten) != 0 {
-		t.Errorf("tearing the preview class's default pointer down forgot %v: a preview hostname is named for the branch that claimed it, and %s names no branch",
-			stood.forgotten, edge.DefaultPointer)
-	}
 }
 
 func TestAPromotionCarriesTheNamesItsDeployResolvedSoTheBoxCanRefuseToServeNone(t *testing.T) {

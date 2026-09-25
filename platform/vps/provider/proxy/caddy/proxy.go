@@ -18,7 +18,6 @@ func (Builtin) Guarantees() proxy.Guarantees {
 	return proxy.Guarantees{
 		OwnsPorts:              true,
 		IssuesCertificates:     true,
-		ForgetsCertificates:    false,
 		HonoursPins:            true,
 		ReportsRateLimits:      true,
 		ServesPreviewWildcards: true,
@@ -79,5 +78,3 @@ func (b Builtin) Certificate(ctx context.Context, hostname string) (proxy.Certif
 	}
 	return held, nil
 }
-
-func (Builtin) Forget(context.Context, []string) ([]string, error) { return nil, nil }
