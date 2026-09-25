@@ -34,3 +34,16 @@ func ResourceTypeNamed(name string) (resourcesv1.ResourceType, bool) {
 func ResourceTypeName(t resourcesv1.ResourceType) string {
 	return strings.ToLower(strings.TrimPrefix(t.String(), resourceTypePrefix))
 }
+
+const (
+	InlineRecordPrefix = "ocel:"
+	InlineRecordOwner  = "ocel-config"
+)
+
+func InlineRecordName(t resourcesv1.ResourceType, declared string) string {
+	return InlineRecordPrefix + ResourceTypeName(t) + "." + declared
+}
+
+func IsInlineRecord(name string) bool {
+	return strings.HasPrefix(name, InlineRecordPrefix)
+}

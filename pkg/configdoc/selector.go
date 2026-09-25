@@ -133,7 +133,7 @@ func checkSelector(path string, value any, noun string, of selection, options re
 	case string:
 		return checkNamedAlone(path, noun, held, of)
 	case map[string]any:
-		keys := slices.Sorted(mapKeys(held))
+		keys := keysOf(held)
 		switch len(keys) {
 		case 0:
 			return fmt.Errorf("%s is keyed by nothing — key it by one of %s", PathName(path), listed)

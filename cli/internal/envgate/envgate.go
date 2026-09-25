@@ -247,6 +247,10 @@ func (g *Gate) claim(req *resourcesv1.DeclareEnvRequest) (heldCells, error) {
 	return held, nil
 }
 
+func (g *Gate) Scope() Scope {
+	return g.scope
+}
+
 func (g *Gate) Groups() []*resourcesv1.GroupDefinition {
 	g.mu.Lock()
 	defer g.mu.Unlock()

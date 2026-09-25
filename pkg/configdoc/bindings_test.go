@@ -73,6 +73,9 @@ func TestBindingsSchemaMapsADeclaredNameToAnExternalName(t *testing.T) {
 			t.Errorf("bindings.%s type = %v, want an object of declared name to external name", key, entry["type"])
 		}
 		values, ok := entry["additionalProperties"].(map[string]any)
+		if forms, inline := values["oneOf"].([]any); inline {
+			values, ok = forms[0].(map[string]any)
+		}
 		if !ok || values["type"] != "string" {
 			t.Errorf("bindings.%s values = %v, want a string external name", key, entry["additionalProperties"])
 		}

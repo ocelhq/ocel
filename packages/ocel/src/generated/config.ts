@@ -14,12 +14,22 @@ export interface OcelConfig {
   )[];
   /** The apps this project deploys. Left off, ocel detects one at the project root. */
   apps?: AppConfig[];
-  /** Resources this project declares that ocel binds to a record your own infrastructure published, instead of provisioning them itself. Keyed by resource type, then by the name the app declares; the value is "@" followed by the name the record is published under, such as "@warehouse" — the @ keeps it apart from the name the app declares. A name nothing has published refuses the deploy. */
+  /** Resources this project declares that ocel binds instead of provisioning them itself. Keyed by resource type, then by the name the app declares. The value is "@" followed by the name a record your own infrastructure published, such as "@warehouse", and a name nothing has published refuses the deploy; or the record written inline, checked at deploy rather than provisioned, optionally keyed by the tier it serves. */
   bindings?: {
     /** Each key is a bucket resource this project declares; its value is "@" followed by the name the record is published under, such as "@warehouse". */
     bucket?: Record<string, `@${string}`>;
-    /** Each key is a postgres resource this project declares; its value is "@" followed by the name the record is published under, such as "@warehouse". */
-    postgres?: Record<string, `@${string}`>;
+    /** Each key is a postgres resource this project declares. Its value is "@" followed by the name a record is published under, such as "@warehouse"; or the record itself, whose secrets are ocel variables written { "$env": "NAME" }; or that record keyed by the tier it serves, leaving the other tier to provision its own. */
+    postgres?: Record<
+      string,
+      | `@${string}`
+      | PostgresBinding
+      | {
+          /** The record previews bind. Left off, previews provision their own. */
+          preview?: PostgresBinding;
+          /** The record production binds. Left off, production provisions its own. */
+          production?: PostgresBinding;
+        }
+    >;
   };
   /** Where the resources an app declares are found. */
   discovery?: DiscoveryConfig;
@@ -82,6 +92,42 @@ export interface AppDomainConfig {
 export interface HealthConfig {
   /** The path the check requests, off the app's own root. Any 2xx answer means up. Left off, the check requests /. */
   path?: string;
+}
+
+export type PostgresBinding = PostgresUrlBinding | PostgresHostBinding;
+
+export interface PostgresUrlBinding {
+  /** The whole connection string, kept verbatim so its sslmode, options and pooler parameters reach the client. */
+  url: VariableRef;
+}
+
+/** The whole connection string, kept verbatim so its sslmode, options and pooler parameters reach the client. */
+export interface VariableRef {
+  /** The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own. */
+  $env: string;
+}
+
+export interface PostgresHostBinding {
+  /** The database the app connects to. */
+  database: string | VariableRef;
+  /** The server's hostname. */
+  host: string | VariableRef;
+  /** The role's password. */
+  password: VariableRef;
+  /** The server's port. Left off, 5432. */
+  port?: number;
+  /** How the connection is encrypted. Left off, it is not. */
+  tls?: PostgresTLS;
+  /** The role the app connects as. */
+  username: string | VariableRef;
+}
+
+/** How the connection is encrypted. Left off, it is not. */
+export interface PostgresTLS {
+  /** The certificate authority the server's certificate chains to, as PEM, when it is not one the system trusts. */
+  ca?: VariableRef;
+  /** require encrypts the connection; verify-full also checks the server's certificate and hostname. */
+  mode: "require" | "verify-full";
 }
 
 /** Where the resources an app declares are found. */
