@@ -23,7 +23,7 @@ const EdgeName = "box"
 var edgeHeader = http.CanonicalHeaderKey(edge.HeaderEdge)
 
 const (
-	readHeaderTimeout = 10 * time.Second
+	ReadHeaderTimeout = 10 * time.Second
 	idleTimeout       = 5 * time.Minute
 	dialTimeout       = 10 * time.Second
 	dialKeepAlive     = 30 * time.Second
@@ -51,25 +51,25 @@ func New(table *Table, trusted []netip.Prefix) *Board {
 	board := &Board{trusted: slices.Clone(trusted), connector: ConnectorSocket, draining: map[string]int{}}
 	board.table.Store(table)
 	dialer := &net.Dialer{Timeout: dialTimeout, KeepAlive: dialKeepAlive}
-	board.tcp = upstreams(func(ctx context.Context, network, address string) (net.Conn, error) {
+	board.tcp = upstreamTransport(func(ctx context.Context, network, address string) (net.Conn, error) {
 		conn, err := dialer.DialContext(ctx, network, address)
 		if err != nil {
 			return nil, err
 		}
 		return board.ledger.wired(ctx, conn)
 	})
-	board.socket = upstreams(func(ctx context.Context, _, _ string) (net.Conn, error) {
+	board.socket = upstreamTransport(func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return dialer.DialContext(ctx, "unix", board.connector)
 	})
 	board.server = &http.Server{
 		Handler:           board,
-		ReadHeaderTimeout: readHeaderTimeout,
+		ReadHeaderTimeout: ReadHeaderTimeout,
 		IdleTimeout:       idleTimeout,
 	}
 	return board
 }
 
-func upstreams(dial func(ctx context.Context, network, address string) (net.Conn, error)) *http.Transport {
+func upstreamTransport(dial func(ctx context.Context, network, address string) (net.Conn, error)) *http.Transport {
 	return &http.Transport{
 		DialContext:         dial,
 		DisableCompression:  true,

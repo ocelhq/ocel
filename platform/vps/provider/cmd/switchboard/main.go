@@ -38,12 +38,11 @@ const (
 )
 
 const (
-	controlTimeout    = 30 * time.Second
-	readHeaderTimeout = 10 * time.Second
-	socketMask        = 0o177
-	controlDirMode    = 0o700
-	lockMode          = 0o600
-	lockSuffix        = ".lock"
+	controlTimeout = 30 * time.Second
+	socketMask     = 0o177
+	controlDirMode = 0o700
+	lockMode       = 0o600
+	lockSuffix     = ".lock"
 )
 
 const (
@@ -67,6 +66,7 @@ func run(ctx context.Context, proc string, argv []string, out, errs io.Writer) i
 		return usage(errs)
 	}
 	rest := argv[1:]
+	speaking := controlClient{socket: control, out: out, errs: errs}
 	switch argv[0] {
 	case "serve":
 		return serve(ctx, control, rest, errs)
@@ -74,22 +74,21 @@ func run(ctx context.Context, proc string, argv []string, out, errs io.Writer) i
 		if len(rest) != 1 {
 			return usage(errs)
 		}
-		return load(ctx, control, rest[0], out, errs)
+		return speaking.load(ctx, rest[0])
 	case "flip":
-		return flip(ctx, control, rest, out, errs)
+		return speaking.flip(ctx, rest)
 	case "gate":
 		return gate(rest, out, errs)
 	case "idle":
 		if len(rest) == 0 {
 			return usage(errs)
 		}
-		return speak(ctx, control, http.MethodPost, switchboard.IdlePath,
-			url.Values{switchboard.TargetField: rest}, out, errs)
+		return speaking.speak(ctx, http.MethodPost, switchboard.IdlePath, url.Values{switchboard.TargetField: rest})
 	case "upstreams":
 		if len(rest) != 0 {
 			return usage(errs)
 		}
-		return speak(ctx, control, http.MethodGet, switchboard.UpstreamsPath, nil, out, errs)
+		return speaking.speak(ctx, http.MethodGet, switchboard.UpstreamsPath, nil)
 	case "listeners":
 		if len(rest) != 0 {
 			return usage(errs)
@@ -158,7 +157,7 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 		_ = controlling.Close()
 		return refuse(errs, err)
 	}
-	controller := &http.Server{Handler: board.Control(), ReadHeaderTimeout: readHeaderTimeout}
+	controller := &http.Server{Handler: board.Control(), ReadHeaderTimeout: switchboard.ReadHeaderTimeout}
 	failed := make(chan error, 2)
 	go func() {
 		if err := board.Serve(data); err != nil {
@@ -230,36 +229,40 @@ func controlListener(path string) (net.Listener, io.Closer, error) {
 	return listener, lock, nil
 }
 
-func load(ctx context.Context, control, path string, out, errs io.Writer) int {
-	table, err := filepath.Abs(path)
-	if err != nil {
-		return refuse(errs, err)
-	}
-	return speak(ctx, control, http.MethodPost, switchboard.LoadPath,
-		url.Values{switchboard.TableField: {table}}, out, errs)
+type controlClient struct {
+	socket    string
+	out, errs io.Writer
 }
 
-func flip(ctx context.Context, control string, argv []string, out, errs io.Writer) int {
+func (c controlClient) load(ctx context.Context, path string) int {
+	table, err := filepath.Abs(path)
+	if err != nil {
+		return refuse(c.errs, err)
+	}
+	return c.speak(ctx, http.MethodPost, switchboard.LoadPath, url.Values{switchboard.TableField: {table}})
+}
+
+func (c controlClient) flip(ctx context.Context, argv []string) int {
 	flags := flag.NewFlagSet("flip", flag.ContinueOnError)
-	flags.SetOutput(errs)
+	flags.SetOutput(c.errs)
 	var retiring repeated
 	flags.Var(&retiring, "retire", "")
 	drainTimeout := flags.Int("drain-timeout", 0, "")
 	if err := flags.Parse(argv); err != nil || flags.NArg() != 1 || (len(retiring) > 0 && *drainTimeout <= 0) {
-		return usage(errs)
+		return usage(c.errs)
 	}
 	table, err := filepath.Abs(flags.Arg(0))
 	if err != nil {
-		return refuse(errs, err)
+		return refuse(c.errs, err)
 	}
 	form := url.Values{switchboard.TableField: {table}, switchboard.RetireField: retiring}
 	if len(retiring) > 0 {
 		form.Set(switchboard.WindowField, (time.Duration(*drainTimeout) * time.Second).String())
 	}
-	return speak(ctx, control, http.MethodPost, switchboard.FlipPath, form, out, errs)
+	return c.speak(ctx, http.MethodPost, switchboard.FlipPath, form)
 }
 
-func speak(ctx context.Context, control, method, path string, form url.Values, out, errs io.Writer) int {
+func (c controlClient) speak(ctx context.Context, method, path string, form url.Values) int {
 	if path != switchboard.FlipPath {
 		var stop context.CancelFunc
 		ctx, stop = context.WithTimeout(ctx, controlTimeout)
@@ -271,27 +274,27 @@ func speak(ctx context.Context, control, method, path string, form url.Values, o
 	}
 	request, err := http.NewRequestWithContext(ctx, method, "http://switchboard"+path, body)
 	if err != nil {
-		return refuse(errs, err)
+		return refuse(c.errs, err)
 	}
 	if form != nil {
 		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}
 	client := &http.Client{Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return (&net.Dialer{}).DialContext(ctx, "unix", control)
+			return (&net.Dialer{}).DialContext(ctx, "unix", c.socket)
 		},
 	}}
 	answer, err := client.Do(request)
 	if err != nil {
-		return refuse(errs, fmt.Errorf("the switchboard answered nothing over %s: %w", control, err))
+		return refuse(c.errs, fmt.Errorf("the switchboard answered nothing over %s: %w", c.socket, err))
 	}
 	defer answer.Body.Close()
 	if answer.StatusCode/100 != 2 {
 		said, _ := io.ReadAll(answer.Body)
-		return refuse(errs, fmt.Errorf("the switchboard refused %s: %s", path, strings.TrimSpace(string(said))))
+		return refuse(c.errs, fmt.Errorf("the switchboard refused %s: %s", path, strings.TrimSpace(string(said))))
 	}
-	if _, err := io.Copy(out, answer.Body); err != nil {
-		return refuse(errs, fmt.Errorf("the switchboard cut its answer to %s short: %w", path, err))
+	if _, err := io.Copy(c.out, answer.Body); err != nil {
+		return refuse(c.errs, fmt.Errorf("the switchboard cut its answer to %s short: %w", path, err))
 	}
 	return 0
 }
