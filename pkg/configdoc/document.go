@@ -18,6 +18,7 @@ type Document struct {
 	Apps          []AppConfig          `json:"apps,omitempty" doc:"The apps this project deploys. Left off, ocel detects one at the project root."`
 	Domains       *ProjectDomainConfig `json:"domains,omitempty" doc:"The hostnames this project is served on."`
 	Registry      *RegistryConfig      `json:"registry,omitempty" doc:"Where this project's container images are pushed."`
+	EnvSource     *EnvSourceConfig     `json:"envSource,omitempty" doc:"Where each tier's values are read from. Every tier left off reads its default: ocel's own store for production and preview, the project's .env file for dev."`
 }
 
 type DiscoveryConfig struct {

@@ -29,6 +29,8 @@ export interface OcelConfig {
   domains?: ProjectDomainConfig;
   /** The edge in front of the origin, keyed by its identifier and holding its options, or named alone. Omit it and the provider fronts the deployment with its own default edge. */
   edge?: EdgeDescriptor;
+  /** Where each tier's values are read from. Every tier left off reads its default: ocel's own store for production and preview, the project's .env file for dev. */
+  envSource?: EnvSourceConfig;
   /** The provider ocel deploy provisions into, keyed by its identifier and holding its options. A provider that needs no options may be named alone. */
   provider?: ProviderDescriptor;
   /** Where this project's container images are pushed. */
@@ -174,6 +176,97 @@ export type EdgeDescriptor =
     };
 
 export type EdgeOptions = Record<string, never>;
+
+/** Where each tier's values are read from. Every tier left off reads its default: ocel's own store for production and preview, the project's .env file for dev. */
+export interface EnvSourceConfig {
+  /** Where ocel dev and ocel run read values from on your machine. Left off, the project's .env file ("dotenv"). .env.local overrides whatever this reads. */
+  dev?: DevEnvSourceDescriptor;
+  /** Where every preview's class-wide values are read from. Left off, ocel's own store in your account ("builtin"). A value set for one named preview stays ocel's to hold. */
+  preview?: EnvSourceDescriptor;
+  /** Where production's values are read from. Left off, ocel's own store in your account ("builtin"). */
+  production?: EnvSourceDescriptor;
+}
+
+/** Where ocel dev and ocel run read values from on your machine. Left off, the project's .env file ("dotenv"). .env.local overrides whatever this reads. */
+export type DevEnvSourceDescriptor =
+  | "dotenv"
+  | {
+      exec: ExecOptions;
+      infisical?: never;
+    }
+  | {
+      exec?: never;
+      infisical: InfisicalOptions;
+    };
+
+export interface ExecOptions {
+  /** The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read. */
+  command: string[];
+  /** What the command prints: a JSON object of names to values, or KEY=VALUE lines. */
+  format: "json" | "dotenv";
+}
+
+export interface InfisicalOptions {
+  /** The machine identity a deployed tier reads as. Keyed by one login method. ocel dev never reads it: it signs in as you, from INFISICAL_TOKEN or the infisical CLI. */
+  auth?:
+    | {
+        aws: IdentityAuth;
+        gcp?: never;
+        universal?: never;
+      }
+    | {
+        aws?: never;
+        gcp: IdentityAuth;
+        universal?: never;
+      }
+    | {
+        aws?: never;
+        gcp?: never;
+        universal: UniversalAuth;
+      };
+  /** The slug of the Infisical environment this tier reads, such as prod. */
+  environment: string;
+  /** The base URL of a self-hosted Infisical. Left off, https://app.infisical.com. */
+  host?: string;
+  /** The Infisical folder the project's values sit under. A variables folder such as /web reads from that folder beneath it. Left off, the environment's root, /. */
+  path?: string;
+  /** The id of the Infisical project the values live in. */
+  project: string;
+  /** Whether ocel may write into Infisical. "missing" creates a key a declaration names and Infisical lacks, and never overwrites or deletes one. Left off, "never". */
+  write?: "missing" | "never";
+}
+
+/** AWS IAM Auth: the target's own AWS role signs in, so no secret is stored. */
+export interface IdentityAuth {
+  /** The id of the Infisical machine identity to sign in as. */
+  identityId: string;
+}
+
+/** Universal Auth: a client id and client secret, each held as a value in ocel's own store. */
+export interface UniversalAuth {
+  /** The value holding the Universal Auth client id. */
+  clientId: VarRef;
+  /** The value holding the Universal Auth client secret. */
+  clientSecret: VarRef;
+}
+
+/** The value holding the Universal Auth client id. */
+export interface VarRef {
+  /** The name of a value ocel holds in its own store for this tier, set with ocel env set. It may reference another project's value. */
+  var: string;
+}
+
+/** Where every preview's class-wide values are read from. Left off, ocel's own store in your account ("builtin"). A value set for one named preview stays ocel's to hold. */
+export type EnvSourceDescriptor =
+  | "builtin"
+  | {
+      exec: ExecOptions;
+      infisical?: never;
+    }
+  | {
+      exec?: never;
+      infisical: InfisicalOptions;
+    };
 
 /** The provider ocel deploy provisions into, keyed by its identifier and holding its options. A provider that needs no options may be named alone. */
 export type ProviderDescriptor =

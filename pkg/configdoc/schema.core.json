@@ -241,6 +241,503 @@
       ],
       "title": "EdgeDescriptor"
     },
+    "envSource": {
+      "additionalProperties": false,
+      "description": "Where each tier's values are read from. Every tier left off reads its default: ocel's own store for production and preview, the project's .env file for dev.",
+      "properties": {
+        "dev": {
+          "description": "Where ocel dev and ocel run read values from on your machine. Left off, the project's .env file (\"dotenv\"). .env.local overrides whatever this reads.",
+          "oneOf": [
+            {
+              "enum": [
+                "dotenv"
+              ],
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "maxProperties": 1,
+              "minProperties": 1,
+              "properties": {
+                "exec": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "command": {
+                      "description": "The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "format": {
+                      "description": "What the command prints: a JSON object of names to values, or KEY=VALUE lines.",
+                      "enum": [
+                        "json",
+                        "dotenv"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "command",
+                    "format"
+                  ],
+                  "title": "ExecOptions",
+                  "type": "object"
+                },
+                "infisical": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "auth": {
+                      "additionalProperties": false,
+                      "description": "The machine identity a deployed tier reads as. Keyed by one login method. ocel dev never reads it: it signs in as you, from INFISICAL_TOKEN or the infisical CLI.",
+                      "maxProperties": 1,
+                      "minProperties": 1,
+                      "properties": {
+                        "aws": {
+                          "additionalProperties": false,
+                          "description": "AWS IAM Auth: the target's own AWS role signs in, so no secret is stored.",
+                          "properties": {
+                            "identityId": {
+                              "description": "The id of the Infisical machine identity to sign in as.",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "identityId"
+                          ],
+                          "title": "IdentityAuth",
+                          "type": "object"
+                        },
+                        "gcp": {
+                          "additionalProperties": false,
+                          "description": "GCP Auth: the target's own service account signs in, so no secret is stored.",
+                          "properties": {
+                            "identityId": {
+                              "description": "The id of the Infisical machine identity to sign in as.",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "identityId"
+                          ],
+                          "title": "IdentityAuth",
+                          "type": "object"
+                        },
+                        "universal": {
+                          "additionalProperties": false,
+                          "description": "Universal Auth: a client id and client secret, each held as a value in ocel's own store.",
+                          "properties": {
+                            "clientId": {
+                              "additionalProperties": false,
+                              "description": "The value holding the Universal Auth client id.",
+                              "properties": {
+                                "var": {
+                                  "description": "The name of a value ocel holds in its own store for this tier, set with ocel env set. It may reference another project's value.",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "var"
+                              ],
+                              "title": "VarRef",
+                              "type": "object"
+                            },
+                            "clientSecret": {
+                              "additionalProperties": false,
+                              "description": "The value holding the Universal Auth client secret.",
+                              "properties": {
+                                "var": {
+                                  "description": "The name of a value ocel holds in its own store for this tier, set with ocel env set. It may reference another project's value.",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "var"
+                              ],
+                              "title": "VarRef",
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "clientId",
+                            "clientSecret"
+                          ],
+                          "title": "UniversalAuth",
+                          "type": "object"
+                        }
+                      },
+                      "title": "InfisicalAuth",
+                      "type": "object"
+                    },
+                    "environment": {
+                      "description": "The slug of the Infisical environment this tier reads, such as prod.",
+                      "type": "string"
+                    },
+                    "host": {
+                      "description": "The base URL of a self-hosted Infisical. Left off, https://app.infisical.com.",
+                      "type": "string"
+                    },
+                    "path": {
+                      "description": "The Infisical folder the project's values sit under. A variables folder such as /web reads from that folder beneath it. Left off, the environment's root, /.",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "The id of the Infisical project the values live in.",
+                      "type": "string"
+                    },
+                    "write": {
+                      "description": "Whether ocel may write into Infisical. \"missing\" creates a key a declaration names and Infisical lacks, and never overwrites or deletes one. Left off, \"never\".",
+                      "enum": [
+                        "missing",
+                        "never"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "environment"
+                  ],
+                  "title": "InfisicalOptions",
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            }
+          ],
+          "title": "DevEnvSourceDescriptor"
+        },
+        "preview": {
+          "description": "Where every preview's class-wide values are read from. Left off, ocel's own store in your account (\"builtin\"). A value set for one named preview stays ocel's to hold.",
+          "oneOf": [
+            {
+              "enum": [
+                "builtin"
+              ],
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "maxProperties": 1,
+              "minProperties": 1,
+              "properties": {
+                "exec": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "command": {
+                      "description": "The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "format": {
+                      "description": "What the command prints: a JSON object of names to values, or KEY=VALUE lines.",
+                      "enum": [
+                        "json",
+                        "dotenv"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "command",
+                    "format"
+                  ],
+                  "title": "ExecOptions",
+                  "type": "object"
+                },
+                "infisical": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "auth": {
+                      "additionalProperties": false,
+                      "description": "The machine identity a deployed tier reads as. Keyed by one login method. ocel dev never reads it: it signs in as you, from INFISICAL_TOKEN or the infisical CLI.",
+                      "maxProperties": 1,
+                      "minProperties": 1,
+                      "properties": {
+                        "aws": {
+                          "additionalProperties": false,
+                          "description": "AWS IAM Auth: the target's own AWS role signs in, so no secret is stored.",
+                          "properties": {
+                            "identityId": {
+                              "description": "The id of the Infisical machine identity to sign in as.",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "identityId"
+                          ],
+                          "title": "IdentityAuth",
+                          "type": "object"
+                        },
+                        "gcp": {
+                          "additionalProperties": false,
+                          "description": "GCP Auth: the target's own service account signs in, so no secret is stored.",
+                          "properties": {
+                            "identityId": {
+                              "description": "The id of the Infisical machine identity to sign in as.",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "identityId"
+                          ],
+                          "title": "IdentityAuth",
+                          "type": "object"
+                        },
+                        "universal": {
+                          "additionalProperties": false,
+                          "description": "Universal Auth: a client id and client secret, each held as a value in ocel's own store.",
+                          "properties": {
+                            "clientId": {
+                              "additionalProperties": false,
+                              "description": "The value holding the Universal Auth client id.",
+                              "properties": {
+                                "var": {
+                                  "description": "The name of a value ocel holds in its own store for this tier, set with ocel env set. It may reference another project's value.",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "var"
+                              ],
+                              "title": "VarRef",
+                              "type": "object"
+                            },
+                            "clientSecret": {
+                              "additionalProperties": false,
+                              "description": "The value holding the Universal Auth client secret.",
+                              "properties": {
+                                "var": {
+                                  "description": "The name of a value ocel holds in its own store for this tier, set with ocel env set. It may reference another project's value.",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "var"
+                              ],
+                              "title": "VarRef",
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "clientId",
+                            "clientSecret"
+                          ],
+                          "title": "UniversalAuth",
+                          "type": "object"
+                        }
+                      },
+                      "title": "InfisicalAuth",
+                      "type": "object"
+                    },
+                    "environment": {
+                      "description": "The slug of the Infisical environment this tier reads, such as prod.",
+                      "type": "string"
+                    },
+                    "host": {
+                      "description": "The base URL of a self-hosted Infisical. Left off, https://app.infisical.com.",
+                      "type": "string"
+                    },
+                    "path": {
+                      "description": "The Infisical folder the project's values sit under. A variables folder such as /web reads from that folder beneath it. Left off, the environment's root, /.",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "The id of the Infisical project the values live in.",
+                      "type": "string"
+                    },
+                    "write": {
+                      "description": "Whether ocel may write into Infisical. \"missing\" creates a key a declaration names and Infisical lacks, and never overwrites or deletes one. Left off, \"never\".",
+                      "enum": [
+                        "missing",
+                        "never"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "environment"
+                  ],
+                  "title": "InfisicalOptions",
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            }
+          ],
+          "title": "EnvSourceDescriptor"
+        },
+        "production": {
+          "description": "Where production's values are read from. Left off, ocel's own store in your account (\"builtin\").",
+          "oneOf": [
+            {
+              "enum": [
+                "builtin"
+              ],
+              "type": "string"
+            },
+            {
+              "additionalProperties": false,
+              "maxProperties": 1,
+              "minProperties": 1,
+              "properties": {
+                "exec": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "command": {
+                      "description": "The command to run and its arguments. {folder} in an argument is replaced with the variables folder being read.",
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "format": {
+                      "description": "What the command prints: a JSON object of names to values, or KEY=VALUE lines.",
+                      "enum": [
+                        "json",
+                        "dotenv"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "command",
+                    "format"
+                  ],
+                  "title": "ExecOptions",
+                  "type": "object"
+                },
+                "infisical": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "auth": {
+                      "additionalProperties": false,
+                      "description": "The machine identity a deployed tier reads as. Keyed by one login method. ocel dev never reads it: it signs in as you, from INFISICAL_TOKEN or the infisical CLI.",
+                      "maxProperties": 1,
+                      "minProperties": 1,
+                      "properties": {
+                        "aws": {
+                          "additionalProperties": false,
+                          "description": "AWS IAM Auth: the target's own AWS role signs in, so no secret is stored.",
+                          "properties": {
+                            "identityId": {
+                              "description": "The id of the Infisical machine identity to sign in as.",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "identityId"
+                          ],
+                          "title": "IdentityAuth",
+                          "type": "object"
+                        },
+                        "gcp": {
+                          "additionalProperties": false,
+                          "description": "GCP Auth: the target's own service account signs in, so no secret is stored.",
+                          "properties": {
+                            "identityId": {
+                              "description": "The id of the Infisical machine identity to sign in as.",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "identityId"
+                          ],
+                          "title": "IdentityAuth",
+                          "type": "object"
+                        },
+                        "universal": {
+                          "additionalProperties": false,
+                          "description": "Universal Auth: a client id and client secret, each held as a value in ocel's own store.",
+                          "properties": {
+                            "clientId": {
+                              "additionalProperties": false,
+                              "description": "The value holding the Universal Auth client id.",
+                              "properties": {
+                                "var": {
+                                  "description": "The name of a value ocel holds in its own store for this tier, set with ocel env set. It may reference another project's value.",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "var"
+                              ],
+                              "title": "VarRef",
+                              "type": "object"
+                            },
+                            "clientSecret": {
+                              "additionalProperties": false,
+                              "description": "The value holding the Universal Auth client secret.",
+                              "properties": {
+                                "var": {
+                                  "description": "The name of a value ocel holds in its own store for this tier, set with ocel env set. It may reference another project's value.",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "var"
+                              ],
+                              "title": "VarRef",
+                              "type": "object"
+                            }
+                          },
+                          "required": [
+                            "clientId",
+                            "clientSecret"
+                          ],
+                          "title": "UniversalAuth",
+                          "type": "object"
+                        }
+                      },
+                      "title": "InfisicalAuth",
+                      "type": "object"
+                    },
+                    "environment": {
+                      "description": "The slug of the Infisical environment this tier reads, such as prod.",
+                      "type": "string"
+                    },
+                    "host": {
+                      "description": "The base URL of a self-hosted Infisical. Left off, https://app.infisical.com.",
+                      "type": "string"
+                    },
+                    "path": {
+                      "description": "The Infisical folder the project's values sit under. A variables folder such as /web reads from that folder beneath it. Left off, the environment's root, /.",
+                      "type": "string"
+                    },
+                    "project": {
+                      "description": "The id of the Infisical project the values live in.",
+                      "type": "string"
+                    },
+                    "write": {
+                      "description": "Whether ocel may write into Infisical. \"missing\" creates a key a declaration names and Infisical lacks, and never overwrites or deletes one. Left off, \"never\".",
+                      "enum": [
+                        "missing",
+                        "never"
+                      ],
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "project",
+                    "environment"
+                  ],
+                  "title": "InfisicalOptions",
+                  "type": "object"
+                }
+              },
+              "type": "object"
+            }
+          ],
+          "title": "EnvSourceDescriptor"
+        }
+      },
+      "title": "EnvSourceConfig",
+      "type": "object"
+    },
     "provider": {
       "description": "The provider ocel deploy provisions into, keyed by its identifier and holding its options. A provider that needs no options may be named alone.",
       "oneOf": [
