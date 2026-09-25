@@ -343,6 +343,9 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 	if err != nil {
 		return err
 	}
+	if err := h.joining(ctx, spec.Resource, spec.Class, spec.Project, networkStanding(spec.Class, spec.Project), elevation); err != nil {
+		return err
+	}
 	said := h.said(ctx, servingCommand(spec.Name), elevation)
 	if stillServing(said, spec.Image, digest) {
 		return nil
@@ -367,9 +370,6 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 		}
 	}
 	if err := h.sweep(ctx, elevation); err != nil {
-		return err
-	}
-	if err := h.joining(ctx, spec.Resource, spec.Class, spec.Project, networkStanding(spec.Class, spec.Project), elevation); err != nil {
 		return err
 	}
 	if _, err := h.ran(ctx, "keep a volume for "+spec.Resource, volumeCreating(spec), nil, elevation); err != nil {

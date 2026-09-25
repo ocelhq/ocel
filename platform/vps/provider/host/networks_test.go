@@ -251,3 +251,48 @@ func TestStandingAResourceUpPutsTheProxyOnItsNetworkBeforeTheRun(t *testing.T) {
 			AppNetwork(spec.Class, spec.Project), joined, spec.Name, ran, stand.commands())
 	}
 }
+
+func TestAResourceAlreadyStandingStillPutsTheSwitchboardBackOnItsNetwork(t *testing.T) {
+	t.Parallel()
+
+	spec := resourced()
+	digest, err := spec.digest()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stand := machine(nil)
+	imaging(stand, "running "+spec.Image+" "+digest)
+	if err := stand.host().StandResource(context.Background(), spec, "secret"); err != nil {
+		t.Fatalf("StandResource() = %v", err)
+	}
+	if stand.at(quoted("run")+" "+quoted("--detach")) >= 0 {
+		t.Fatalf("a resource already serving its image was stood up again: %v", stand.commands())
+	}
+	if stand.at("docker network connect "+quoted(AppNetwork(spec.Class, spec.Project))+" "+quoted(SwitchboardContainer)) < 0 {
+		t.Errorf("a deploy over a resource already standing never put %s on %s: a project holding only resources is one no app deploy rejoins, so a switchboard left off it routes that project's store to nothing for good: %v",
+			SwitchboardContainer, AppNetwork(spec.Class, spec.Project), stand.commands())
+	}
+}
+
+func TestAnAppAlreadyServingStillPutsTheSwitchboardBackOnItsNetwork(t *testing.T) {
+	t.Parallel()
+
+	serving := "running " + appImage + " " + handedTo(aContainer()).digest
+	for what, spec := range map[string]Container{
+		"a deploy":    aContainer(),
+		"a promotion": {Name: physical, Project: "shop", App: "web", Image: appImage},
+	} {
+		stand := machine(nil)
+		imaging(stand, serving)
+		if err := stand.host().StandUp(context.Background(), spec); err != nil {
+			t.Fatalf("%s: StandUp() = %v", what, err)
+		}
+		if stand.at(quoted("run")+" "+quoted("--detach")) >= 0 {
+			t.Fatalf("%s of an app already serving stood it up again: %v", what, stand.commands())
+		}
+		if stand.at("docker network connect "+quoted(AppNetwork(spec.Class, spec.Project))+" "+quoted(SwitchboardContainer)) < 0 {
+			t.Errorf("%s of an app already serving never put %s on %s, so a switchboard left off it is never repaired: %v",
+				what, SwitchboardContainer, AppNetwork(spec.Class, spec.Project), stand.commands())
+		}
+	}
+}

@@ -253,6 +253,9 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 	if err != nil {
 		return err
 	}
+	if err := h.join(ctx, spec, elevation); err != nil {
+		return err
+	}
 	said := h.said(ctx, servingCommand(spec.Name), elevation)
 	if spec.Resolved {
 		held, err := handing(spec)
@@ -301,9 +304,6 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 		return err
 	}
 	if err := h.sweep(ctx, elevation); err != nil {
-		return err
-	}
-	if err := h.join(ctx, spec, elevation); err != nil {
 		return err
 	}
 	defer func() { err = errors.Join(err, h.forget(ctx, held)) }()
