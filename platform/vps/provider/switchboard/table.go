@@ -191,14 +191,14 @@ func (r route) valid() (string, error) {
 	if r.Health != "" && !strings.HasPrefix(r.Health, "/") {
 		return "", fmt.Errorf("the route %s has health path %q, which does not start with /", r.identity(), r.Health)
 	}
-	keyed, err := address(r.Upstream)
+	keyed, err := UpstreamAddress(r.Upstream)
 	if err != nil {
 		return "", fmt.Errorf("the route %s forwards to no upstream it can dial: %w", r.identity(), err)
 	}
 	return keyed, nil
 }
 
-func address(dial string) (string, error) {
+func UpstreamAddress(dial string) (string, error) {
 	written := dial
 	if network, rest, named := strings.Cut(dial, "/"); named {
 		if !strings.EqualFold(strings.TrimSpace(network), "tcp") {
