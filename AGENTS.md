@@ -73,6 +73,9 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
   an edge and an origin agree on; both sides depend on it, neither owns it. Siblings are
   edges bought _independently of an origin cloud_ — a vendor's native edge belongs under
   that vendor instead.
+- **`platform/s3/`** — the S3 protocol as a store any origin can reach with a static
+  credential: the plain-S3 bucket backend and its in-bucket upload sessions. The one
+  `platform/` path every vendor may import, and it imports none of them.
 - **`frameworks/<name>/`** — framework support, holding only what is **not** a branch of
   some host: shared protocol, the build-time adapter, and the host-neutral serving
   runtime a host drives through ports. Host-specific glue lives with the host.
