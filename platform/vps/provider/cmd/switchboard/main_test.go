@@ -215,14 +215,23 @@ func TestServeTrustsWhatArrivesOverTheFrontSocketAndNothingElse(t *testing.T) {
 func TestServeAnswersTheFrontProxysAdmissionOnASocketOfItsOwn(t *testing.T) {
 	web := backend(t, "web")
 	stood := served(t, tableFile(t, map[string]string{"shop.example.com": web}))
-	asking := func(client *http.Client, at string) int {
+	asking := func(client *http.Client, at string) (int, string) {
 		t.Helper()
-		said, err := client.Get(at + switchboard.AdmitPath + "?" + switchboard.AdmitField + "=shop.example.com")
+		request, err := http.NewRequest(http.MethodGet, at+switchboard.AdmitPath+"?"+switchboard.AdmitField+"=shop.example.com", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Host = "shop.example.com"
+		said, err := client.Do(request)
 		if err != nil {
 			t.Fatalf("ask %s: %v", at, err)
 		}
-		_ = said.Body.Close()
-		return said.StatusCode
+		defer said.Body.Close()
+		body, err := io.ReadAll(said.Body)
+		if err != nil {
+			t.Fatalf("read what %s answered: %v", at, err)
+		}
+		return said.StatusCode, string(body)
 	}
 	over := func(socket string) *http.Client {
 		return &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
@@ -230,16 +239,16 @@ func TestServeAnswersTheFrontProxysAdmissionOnASocketOfItsOwn(t *testing.T) {
 		}}}
 	}
 
-	if status := asking(over(stood.admit), "http://switchboard"); status != http.StatusOK {
+	if status, _ := asking(over(stood.admit), "http://switchboard"); status != http.StatusOK {
 		t.Errorf("the admit socket answered the front proxy %d for a claimed hostname, want 200", status)
 	}
-	if status := asking(http.DefaultClient, "http://"+stood.data); status != http.StatusNotFound {
-		t.Errorf("the data listener answered %d for the admit path, want the 404 of a hostname it does not claim: a forwarded request must never reach the admission", status)
+	if status, body := asking(http.DefaultClient, "http://"+stood.data); status != http.StatusOK || body != "web" {
+		t.Errorf("the data listener answered %d %q for the admit path on a claimed hostname, want it forwarded to web like any other path: a forwarded request must never reach the admission", status, body)
 	}
-	if status := asking(over(stood.front), "http://switchboard"); status != http.StatusNotFound {
-		t.Errorf("the front socket answered %d for the admit path, want the 404 of a hostname it does not claim: a forwarded request must never reach the admission", status)
+	if status, body := asking(over(stood.front), "http://switchboard"); status != http.StatusOK || body != "web" {
+		t.Errorf("the front socket answered %d %q for the admit path on a claimed hostname, want it forwarded to web like any other path: a forwarded request must never reach the admission", status, body)
 	}
-	if status := asking(over(stood.control), "http://switchboard"); status/100 == 2 {
+	if status, _ := asking(over(stood.control), "http://switchboard"); status/100 == 2 {
 		t.Errorf("the control socket answered %d for the admit path, want it to serve control alone", status)
 	}
 	held, err := os.Stat(stood.admit)
