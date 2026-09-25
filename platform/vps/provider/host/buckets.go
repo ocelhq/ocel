@@ -211,9 +211,9 @@ func fedBody(body []byte) io.Reader {
 }
 
 func curlCommand(store string, req *http.Request, call storeCall) string {
-	argv := []string{"docker", "exec", "--interactive", store,
-		"curl", "--silent", "--show-error", "--output", "/dev/null",
-		"--write-out", "%{http_code}", "--request", req.Method}
+	argv := append([]string{"docker", "exec", "--interactive", store}, storeCurl...)
+	argv = append(argv, "--show-error", "--output", "/dev/null",
+		"--write-out", "%{http_code}", "--request", req.Method)
 	for _, name := range sortedHeaderNames(req.Header) {
 		argv = append(argv, "--header", name+": "+req.Header.Get(name))
 	}
@@ -224,12 +224,14 @@ func curlCommand(store string, req *http.Request, call storeCall) string {
 		accepted = append(accepted, "\""+code+"\"")
 	}
 	return "set -eu\n" +
-		"answered=$(base64 -d | " + words(argv) + ")\n" +
+		"answered=$(base64 -d | " + words(argv) + ") || { printf '%s\\n' " + quoted("the store "+store+" gave no answer") + " >&2; exit 1; }\n" +
 		"case \"$answered\" in\n" +
 		strings.Join(accepted, "|") + ") ;;\n" +
 		"*) printf '%s\\n' " + quoted("the store answered ") + "\"$answered\" >&2; exit 1 ;;\n" +
 		"esac"
 }
+
+var storeCurl = []string{"curl", "--silent", "--connect-timeout", "10", "--max-time", "60"}
 
 func sortedHeaderNames(header http.Header) []string {
 	names := make([]string, 0, len(header))
