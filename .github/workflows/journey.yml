@@ -385,7 +385,7 @@ jobs:
           turbo-team: ${{ vars.TURBO_TEAM }}
 
       - name: The node bundles the fixtures and the external stacks import
-        run: pnpm turbo run build --filter=ocel --filter=@ocel/sst --filter=@ocel/pulumi
+        run: pnpm turbo run build --filter=ocel --filter=@ocel/transforms --filter=@ocel/sst --filter=@ocel/pulumi
 
       - name: The musl targets a rust fixture compiles for
         run: rustup target add x86_64-unknown-linux-musl aarch64-unknown-linux-musl
@@ -763,9 +763,8 @@ jobs:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
           turbo-team: ${{ vars.TURBO_TEAM }}
 
-      - name: The node bundle the fixtures import
-        if: ${{ needs.binary.outputs.real == 'true' }}
-        run: pnpm turbo run build --filter=ocel
+      - name: The node bundles the fixtures import
+        run: pnpm turbo run build --filter=ocel --filter=@ocel/transforms
 
       - name: The Docker the image build on this runner needs
         if: ${{ needs.binary.outputs.real == 'true' }}
