@@ -108,22 +108,26 @@ function readBox(): Box {
   return { host, user, identityFile };
 }
 
+function sshArgv(target: Box, login: string, command: string): string[] {
+  return [
+    "-i",
+    target.identityFile,
+    "-o",
+    "IdentitiesOnly=yes",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "StrictHostKeyChecking=accept-new",
+    "-o",
+    "ConnectTimeout=10",
+    `${login}@${target.host}`,
+    command,
+  ];
+}
+
 export async function ssh(target: Box, login: string, command: string): Promise<string> {
   try {
-    const { stdout } = await ran("ssh", [
-      "-i",
-      target.identityFile,
-      "-o",
-      "IdentitiesOnly=yes",
-      "-o",
-      "BatchMode=yes",
-      "-o",
-      "StrictHostKeyChecking=accept-new",
-      "-o",
-      "ConnectTimeout=10",
-      `${login}@${target.host}`,
-      command,
-    ]);
+    const { stdout } = await ran("ssh", sshArgv(target, login, command));
     return stdout;
   } catch (error) {
     throw sshRefusal(target, login, command, error);
@@ -137,20 +141,7 @@ export function sshFed(
   stdin: string,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn("ssh", [
-      "-i",
-      target.identityFile,
-      "-o",
-      "IdentitiesOnly=yes",
-      "-o",
-      "BatchMode=yes",
-      "-o",
-      "StrictHostKeyChecking=accept-new",
-      "-o",
-      "ConnectTimeout=10",
-      `${login}@${target.host}`,
-      command,
-    ]);
+    const child = spawn("ssh", sshArgv(target, login, command));
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk) => {
@@ -339,6 +330,7 @@ export class VpsTarget implements Target, ReleaseCycle {
 
   private async boxConfig(dir: string, slug: string, login: string): Promise<string> {
     const target = this.box();
+    const front = this.front();
     await mkdir(dir, { recursive: true });
     await writeFile(
       path.join(dir, "ocel.json"),
@@ -348,7 +340,7 @@ export class VpsTarget implements Target, ReleaseCycle {
           provider: {
             vps: {
               ssh: { host: target.host, user: login, identityFile: target.identityFile },
-              ...(this.front() ? { proxy: this.front()?.proxy } : {}),
+              ...(front ? { proxy: front.proxy } : {}),
             },
           },
           apps: [],
