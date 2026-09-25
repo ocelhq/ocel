@@ -22,6 +22,36 @@ fn a_connection_string_carries_credentials_percent_encoded() {
 }
 
 #[test]
+fn a_records_url_is_the_connection_string_verbatim() {
+    let _env = env();
+    std::env::set_var(
+        "OCEL_RESOURCE_POSTGRES_byurl",
+        r#"{"name":"byurl","postgres":{"url":"postgres://app:s3cret@ep-cool.neon.tech/orders?sslmode=require&options=endpoint%3Dep-cool"}}"#,
+    );
+    assert_eq!(
+        Postgres::new("byurl")
+            .connection_string()
+            .expect("a connection string"),
+        "postgres://app:s3cret@ep-cool.neon.tech/orders?sslmode=require&options=endpoint%3Dep-cool"
+    );
+}
+
+#[test]
+fn a_records_tls_mode_is_the_connection_strings_sslmode() {
+    let _env = env();
+    std::env::set_var(
+        "OCEL_RESOURCE_POSTGRES_tls",
+        r#"{"name":"tls","postgres":{"host":"h","port":5432,"database":"d","username":"u","password":"p","tlsMode":"verify-full"}}"#,
+    );
+    assert_eq!(
+        Postgres::new("tls")
+            .connection_string()
+            .expect("a connection string"),
+        "postgres://u:p@h:5432/d?sslmode=verify-full"
+    );
+}
+
+#[test]
 fn a_binding_is_read_from_the_directory_the_runtime_projected_it_into() {
     let _env = env();
     let directory = std::env::temp_dir().join("ocel-projected-binding");
