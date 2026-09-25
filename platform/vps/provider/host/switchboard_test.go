@@ -128,7 +128,7 @@ func TestAReleaseGatesFlipsAndDrainsInsideTheSwitchboardAndNeverReloadsTheFrontP
 	}
 }
 
-func TestAReleaseOverAConfigAnOlderOcelRenderedReloadsTheFrontProxyOntoTheOneItWrites(t *testing.T) {
+func TestAReleaseOverAConfigTheFrontProxyWasNeverReloadedOntoReloadsItOntoTheOneItWrites(t *testing.T) {
 	t.Parallel()
 
 	stood := benched(t, session.Result{}, session.Result{})
@@ -145,10 +145,46 @@ func TestAReleaseOverAConfigAnOlderOcelRenderedReloadsTheFrontProxyOntoTheOneItW
 		t.Fatalf("Release() = %v", err)
 	}
 	if reloads := stood.count(reloadsFront); reloads != 1 {
-		t.Errorf("a release that rewrote a config an older ocel rendered reloaded %s %d times, want once: otherwise it keeps terminating what the file no longer says", caddy.Container, reloads)
+		t.Errorf("a release that rewrote a config the front proxy does not serve reloaded %s %d times, want once: otherwise it keeps terminating what the file no longer says", caddy.Container, reloads)
 	}
 	if flip, reload := stood.cutover(), stood.after(-1, reloadsFront); flip < 0 || reload < flip {
 		t.Errorf("the flip ran at %d and the front proxy reloaded at %d: the release moves the route first and the front proxy follows", flip, reload)
+	}
+}
+
+func TestAReleaseWhoseFrontProxyRefusedTheReloadLeavesItsConfigAsTheProxyServesIt(t *testing.T) {
+	t.Parallel()
+
+	stood := benched(t, session.Result{}, session.Result{})
+	stale := `{"apps":{"http":{"servers":{}}}}`
+	config := stale
+	proxied := servesPair(stood.bench, &stood.held, &config)
+	answer := stood.answer
+	stood.answer = func(command string) (session.Result, bool) {
+		if reloadsFront(command) {
+			return session.Result{Code: 1, Stderr: "the connection dropped before the reload answered"}, true
+		}
+		if result, mine := proxied(command); mine {
+			return result, true
+		}
+		return answer(command)
+	}
+	err := stood.host().Release(context.Background(), aRelease(), nil)
+	if err == nil || !strings.Contains(err.Error(), "not reloaded") {
+		t.Fatalf("Release() under a front proxy that refused the reload = %v, want the refusal carried out", err)
+	}
+	if config != stale {
+		t.Errorf("a release whose reload failed left the front proxy's config as\n%s\nwant it put back to\n%s\nas the proxy still serves it: every later write compares the table's render with the file, finds them equal, and never reloads the proxy again", config, stale)
+	}
+	if got := upstreamsOf(stood.state(t)); got["web"] != flipTo {
+		t.Errorf("the table records %v after the flip, want the release it flipped onto: only the front proxy's config is put back", got)
+	}
+	again := stood.count(reloadsFront)
+	if err := stood.host().rerender(context.Background()); err == nil {
+		t.Fatal("rerender() under a front proxy still refusing = nil, want its refusal")
+	}
+	if stood.count(reloadsFront) == again {
+		t.Error("the next write after a reload that failed never asked the front proxy to reload, so it serves the old config for good")
 	}
 }
 
