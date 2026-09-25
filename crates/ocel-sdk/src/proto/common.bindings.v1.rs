@@ -695,6 +695,29 @@ pub struct PostgresProperties {
         skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
     )]
     pub password: ::buffa::alloc::string::String,
+    /// Field 6: `url`
+    #[serde(
+        rename = "url",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub url: ::buffa::alloc::string::String,
+    /// Field 7: `tls_mode`
+    #[serde(
+        rename = "tlsMode",
+        alias = "tls_mode",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub tls_mode: ::buffa::alloc::string::String,
+    /// Field 8: `tls_ca`
+    #[serde(
+        rename = "tlsCa",
+        alias = "tls_ca",
+        with = "::buffa::json_helpers::proto_string",
+        skip_serializing_if = "::buffa::json_helpers::skip_if::is_empty_str"
+    )]
+    pub tls_ca: ::buffa::alloc::string::String,
     #[serde(skip)]
     #[doc(hidden)]
     pub __buffa_unknown_fields: ::buffa::UnknownFields,
@@ -707,6 +730,9 @@ impl ::core::fmt::Debug for PostgresProperties {
             .field("database", &self.database)
             .field("username", &self.username)
             .field("password", &::core::format_args!("[REDACTED]"))
+            .field("url", &::core::format_args!("[REDACTED]"))
+            .field("tls_mode", &self.tls_mode)
+            .field("tls_ca", &self.tls_ca)
             .finish()
     }
 }
@@ -752,6 +778,15 @@ impl ::buffa::Message for PostgresProperties {
         if !self.password.is_empty() {
             size += 1u64 + ::buffa::types::string_encoded_len(&self.password) as u64;
         }
+        if !self.url.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.url) as u64;
+        }
+        if !self.tls_mode.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.tls_mode) as u64;
+        }
+        if !self.tls_ca.is_empty() {
+            size += 1u64 + ::buffa::types::string_encoded_len(&self.tls_ca) as u64;
+        }
         size += self.__buffa_unknown_fields.encoded_len() as u64;
         ::buffa::saturate_size(size)
     }
@@ -776,6 +811,15 @@ impl ::buffa::Message for PostgresProperties {
         }
         if !self.password.is_empty() {
             ::buffa::types::put_string_field(5u32, &self.password, buf);
+        }
+        if !self.url.is_empty() {
+            ::buffa::types::put_string_field(6u32, &self.url, buf);
+        }
+        if !self.tls_mode.is_empty() {
+            ::buffa::types::put_string_field(7u32, &self.tls_mode, buf);
+        }
+        if !self.tls_ca.is_empty() {
+            ::buffa::types::put_string_field(8u32, &self.tls_ca, buf);
         }
         self.__buffa_unknown_fields.write_to(buf);
     }
@@ -825,6 +869,27 @@ impl ::buffa::Message for PostgresProperties {
                 )?;
                 ::buffa::types::merge_string(&mut self.password, buf)?;
             }
+            6u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.url, buf)?;
+            }
+            7u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.tls_mode, buf)?;
+            }
+            8u32 => {
+                ::buffa::encoding::check_wire_type(
+                    tag,
+                    ::buffa::encoding::WireType::LengthDelimited,
+                )?;
+                ::buffa::types::merge_string(&mut self.tls_ca, buf)?;
+            }
             _ => {
                 self.__buffa_unknown_fields
                     .push(::buffa::encoding::decode_unknown_field(tag, buf, ctx)?);
@@ -838,6 +903,9 @@ impl ::buffa::Message for PostgresProperties {
         self.database.clear();
         self.username.clear();
         self.password.clear();
+        self.url.clear();
+        self.tls_mode.clear();
+        self.tls_ca.clear();
         self.__buffa_unknown_fields.clear();
     }
 }
@@ -2028,6 +2096,12 @@ pub mod __buffa {
             pub username: &'a str,
             /// Field 5: `password`
             pub password: &'a str,
+            /// Field 6: `url`
+            pub url: &'a str,
+            /// Field 7: `tls_mode`
+            pub tls_mode: &'a str,
+            /// Field 8: `tls_ca`
+            pub tls_ca: &'a str,
             pub __buffa_unknown_fields: ::buffa::UnknownFieldsView<'a>,
         }
         impl<'a> ::core::fmt::Debug for PostgresPropertiesView<'a> {
@@ -2038,6 +2112,9 @@ pub mod __buffa {
                     .field("database", &self.database)
                     .field("username", &self.username)
                     .field("password", &::core::format_args!("[REDACTED]"))
+                    .field("url", &::core::format_args!("[REDACTED]"))
+                    .field("tls_mode", &self.tls_mode)
+                    .field("tls_ca", &self.tls_ca)
                     .finish()
             }
         }
@@ -2112,6 +2189,27 @@ pub mod __buffa {
                         )?;
                         view.password = ::buffa::types::borrow_str(&mut cur)?;
                     }
+                    6u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.url = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    7u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.tls_mode = ::buffa::types::borrow_str(&mut cur)?;
+                    }
+                    8u32 => {
+                        ::buffa::encoding::check_wire_type(
+                            tag,
+                            ::buffa::encoding::WireType::LengthDelimited,
+                        )?;
+                        view.tls_ca = ::buffa::types::borrow_str(&mut cur)?;
+                    }
                     _ => {
                         ::buffa::encoding::skip_field_depth(tag, &mut cur, ctx.depth())?;
                         let span_len = before_tag.len() - cur.len();
@@ -2146,6 +2244,9 @@ pub mod __buffa {
                     database: self.database.to_string(),
                     username: self.username.to_string(),
                     password: self.password.to_string(),
+                    url: self.url.to_string(),
+                    tls_mode: self.tls_mode.to_string(),
+                    tls_ca: self.tls_ca.to_string(),
                     __buffa_unknown_fields: self
                         .__buffa_unknown_fields
                         .to_owned()?
@@ -2181,6 +2282,19 @@ pub mod __buffa {
                         += 1u64
                             + ::buffa::types::string_encoded_len(&self.password) as u64;
                 }
+                if !self.url.is_empty() {
+                    size += 1u64 + ::buffa::types::string_encoded_len(&self.url) as u64;
+                }
+                if !self.tls_mode.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.tls_mode) as u64;
+                }
+                if !self.tls_ca.is_empty() {
+                    size
+                        += 1u64
+                            + ::buffa::types::string_encoded_len(&self.tls_ca) as u64;
+                }
                 size += self.__buffa_unknown_fields.encoded_len() as u64;
                 ::buffa::saturate_size(size)
             }
@@ -2206,6 +2320,15 @@ pub mod __buffa {
                 }
                 if !self.password.is_empty() {
                     ::buffa::types::put_string_field(5u32, &self.password, buf);
+                }
+                if !self.url.is_empty() {
+                    ::buffa::types::put_string_field(6u32, &self.url, buf);
+                }
+                if !self.tls_mode.is_empty() {
+                    ::buffa::types::put_string_field(7u32, &self.tls_mode, buf);
+                }
+                if !self.tls_ca.is_empty() {
+                    ::buffa::types::put_string_field(8u32, &self.tls_ca, buf);
                 }
                 self.__buffa_unknown_fields.write_to(buf);
             }
@@ -2246,6 +2369,15 @@ pub mod __buffa {
                 }
                 if !::buffa::json_helpers::skip_if::is_empty_str(self.password) {
                     __map.serialize_entry("password", self.password)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.url) {
+                    __map.serialize_entry("url", self.url)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.tls_mode) {
+                    __map.serialize_entry("tlsMode", self.tls_mode)?;
+                }
+                if !::buffa::json_helpers::skip_if::is_empty_str(self.tls_ca) {
+                    __map.serialize_entry("tlsCa", self.tls_ca)?;
                 }
                 __map.end()
             }
@@ -2366,6 +2498,21 @@ pub mod __buffa {
             #[must_use]
             pub fn password(&self) -> &'_ str {
                 self.0.reborrow().password
+            }
+            /// Field 6: `url`
+            #[must_use]
+            pub fn url(&self) -> &'_ str {
+                self.0.reborrow().url
+            }
+            /// Field 7: `tls_mode`
+            #[must_use]
+            pub fn tls_mode(&self) -> &'_ str {
+                self.0.reborrow().tls_mode
+            }
+            /// Field 8: `tls_ca`
+            #[must_use]
+            pub fn tls_ca(&self) -> &'_ str {
+                self.0.reborrow().tls_ca
             }
         }
         impl ::core::convert::From<::buffa::OwnedView<PostgresPropertiesView<'static>>>

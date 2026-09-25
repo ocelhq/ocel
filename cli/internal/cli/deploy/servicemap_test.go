@@ -77,7 +77,7 @@ func TestServiceMap(t *testing.T) {
 		want := []servicemap.Binding{{
 			Name:    "db--main",
 			Type:    bindingsv1.BindingType_BINDING_TYPE_POSTGRES.String(),
-			VarKeys: []string{"database", "host", "password", "port", "username"},
+			VarKeys: []string{"database", "host", "password", "port", "tlsCa", "tlsMode", "url", "username"},
 			Grants:  []servicemap.Grant{{Verb: "connect", Actions: []string{"fake:connect"}}},
 		}}
 		if !reflect.DeepEqual(got.Bindings, want) {

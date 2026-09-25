@@ -105,7 +105,7 @@ func TestBindingTypeOf(t *testing.T) {
 
 func TestBindingProperties(t *testing.T) {
 	binding := &bindingsv1.Binding{Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "h", Port: 5433}}}
-	if got := BindingPropertyNames(binding); !slices.Equal(got, []string{"database", "host", "password", "port", "username"}) {
+	if got := BindingPropertyNames(binding); !slices.Equal(got, []string{"database", "host", "password", "port", "tlsCa", "tlsMode", "url", "username"}) {
 		t.Errorf("BindingPropertyNames = %v", got)
 	}
 	if got, ok := BindingProperty(binding, "port"); !ok || got != float64(5433) {

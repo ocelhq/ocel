@@ -203,6 +203,9 @@ type PostgresProperties struct {
 	Database      string                 `protobuf:"bytes,3,opt,name=database,proto3" json:"database,omitempty"`
 	Username      string                 `protobuf:"bytes,4,opt,name=username,proto3" json:"username,omitempty"`
 	Password      string                 `protobuf:"bytes,5,opt,name=password,proto3" json:"password,omitempty"`
+	Url           string                 `protobuf:"bytes,6,opt,name=url,proto3" json:"url,omitempty"`
+	TlsMode       string                 `protobuf:"bytes,7,opt,name=tls_mode,json=tlsMode,proto3" json:"tls_mode,omitempty"`
+	TlsCa         string                 `protobuf:"bytes,8,opt,name=tls_ca,json=tlsCa,proto3" json:"tls_ca,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -268,6 +271,27 @@ func (x *PostgresProperties) GetUsername() string {
 func (x *PostgresProperties) GetPassword() string {
 	if x != nil {
 		return x.Password
+	}
+	return ""
+}
+
+func (x *PostgresProperties) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *PostgresProperties) GetTlsMode() string {
+	if x != nil {
+		return x.TlsMode
+	}
+	return ""
+}
+
+func (x *PostgresProperties) GetTlsCa() string {
+	if x != nil {
+		return x.TlsCa
 	}
 	return ""
 }
@@ -473,13 +497,16 @@ const file_common_bindings_v1_bindings_proto_rawDesc = "" +
 	"\x06grants\x18\x04 \x03(\v2\x19.common.bindings.v1.GrantR\x06grants\x12\x16\n" +
 	"\x06source\x18\x05 \x01(\tR\x06sourceB\f\n" +
 	"\n" +
-	"properties\"\x95\x01\n" +
+	"properties\"\xde\x01\n" +
 	"\x12PostgresProperties\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n" +
 	"\bdatabase\x18\x03 \x01(\tR\bdatabase\x12\x1a\n" +
 	"\busername\x18\x04 \x01(\tR\busername\x12\x1f\n" +
-	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword\"j\n" +
+	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword\x12\x15\n" +
+	"\x03url\x18\x06 \x01(\tB\x03\x80\x01\x01R\x03url\x12\x19\n" +
+	"\btls_mode\x18\a \x01(\tR\atlsMode\x12\x15\n" +
+	"\x06tls_ca\x18\b \x01(\tR\x05tlsCa\"j\n" +
 	"\x10BucketProperties\x12\x16\n" +
 	"\x06bucket\x18\x01 \x01(\tR\x06bucket\x12&\n" +
 	"\x0fpublic_base_url\x18\x02 \x01(\tR\rpublicBaseUrl\x12\x16\n" +
