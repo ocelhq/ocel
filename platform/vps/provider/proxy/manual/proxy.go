@@ -11,9 +11,9 @@ var _ proxy.Proxy = Manual{}
 
 func (Manual) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
-func (Manual) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+func (Manual) Render(proxy.Spec) ([]byte, error) { return nil, nil }
 
-func (Manual) Unrendered([]byte, proxy.Admission) string { return "" }
+func (Manual) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (Manual) Reload(context.Context) error { return nil }
 

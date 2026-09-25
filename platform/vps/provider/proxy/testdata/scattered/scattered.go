@@ -8,10 +8,10 @@ import (
 
 type Scattered struct {
 	guarantees proxy.Guarantees
-	admitted   proxy.Admission
+	admitted   proxy.Spec
 }
 
-func (s *Scattered) admit(_ context.Context, admission proxy.Admission) error {
-	s.admitted = admission
+func (s *Scattered) admit(_ context.Context, spec proxy.Spec) error {
+	s.admitted = spec
 	return nil
 }

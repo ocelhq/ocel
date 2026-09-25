@@ -8,10 +8,10 @@ import (
 
 type Conforming struct {
 	guarantees proxy.Guarantees
-	admitted   proxy.Admission
+	admitted   proxy.Spec
 }
 
-func (c *Conforming) admit(_ context.Context, admission proxy.Admission) error {
-	c.admitted = admission
+func (c *Conforming) admit(_ context.Context, spec proxy.Spec) error {
+	c.admitted = spec
 	return nil
 }

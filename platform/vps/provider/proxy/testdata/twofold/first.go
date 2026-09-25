@@ -8,10 +8,10 @@ import (
 
 type First struct {
 	guarantees proxy.Guarantees
-	admitted   proxy.Admission
+	admitted   proxy.Spec
 }
 
-func (f *First) admit(_ context.Context, admission proxy.Admission) error {
-	f.admitted = admission
+func (f *First) admit(_ context.Context, spec proxy.Spec) error {
+	f.admitted = spec
 	return nil
 }

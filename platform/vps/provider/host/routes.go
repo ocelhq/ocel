@@ -95,19 +95,19 @@ func RenderProxyConfig(front proxy.Proxy, state RoutingTable) ([]byte, error) {
 	if err := validTable(state); err != nil {
 		return nil, err
 	}
-	rendered, err := front.Render(admission(state))
+	rendered, err := front.Render(proxySpec(state))
 	if err != nil {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid, "%v", err)
 	}
 	return rendered, nil
 }
 
-func admission(state RoutingTable) proxy.Admission {
+func proxySpec(state RoutingTable) proxy.Spec {
 	pins := make([]string, 0, len(state.Pins))
 	for _, pin := range state.Pins {
 		pins = append(pins, pin.Path)
 	}
-	return proxy.Admission{Pins: pins, Upstream: SwitchboardUpstream, Edge: switchboard.EdgeName, Permission: SwitchboardPermission}
+	return proxy.Spec{Pins: pins, Upstream: SwitchboardUpstream, Edge: switchboard.EdgeName, Permission: SwitchboardPermission}
 }
 
 func validTable(state RoutingTable) error {

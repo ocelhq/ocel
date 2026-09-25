@@ -10,9 +10,9 @@ var _ proxy.Proxy = (*Crowded)(nil)
 
 func (c *Crowded) Guarantees() proxy.Guarantees { return c.guarantees }
 
-func (c *Crowded) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+func (c *Crowded) Render(proxy.Spec) ([]byte, error) { return nil, nil }
 
-func (c *Crowded) Unrendered([]byte, proxy.Admission) string { return "" }
+func (c *Crowded) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (c *Crowded) Reload(context.Context) error { return nil }
 
@@ -28,10 +28,10 @@ func (c *Crowded) Forget(_ context.Context, hostnames []string) ([]string, error
 
 const upstream = "localhost:8080"
 
-func (c *Crowded) admit(_ context.Context, admission proxy.Admission) error {
-	if admission.Upstream == "" {
-		admission.Upstream = upstream
+func (c *Crowded) admit(_ context.Context, spec proxy.Spec) error {
+	if spec.Upstream == "" {
+		spec.Upstream = upstream
 	}
-	c.admitted = admission
+	c.admitted = spec
 	return nil
 }

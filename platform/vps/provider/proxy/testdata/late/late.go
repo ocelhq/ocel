@@ -8,10 +8,10 @@ import (
 
 type Late struct {
 	guarantees proxy.Guarantees
-	admitted   proxy.Admission
+	admitted   proxy.Spec
 }
 
-func (l *Late) admit(_ context.Context, admission proxy.Admission) error {
-	l.admitted = admission
+func (l *Late) admit(_ context.Context, spec proxy.Spec) error {
+	l.admitted = spec
 	return nil
 }

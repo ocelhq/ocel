@@ -10,9 +10,9 @@ var _ proxy.Proxy = &Addressed{}
 
 func (*Addressed) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
-func (*Addressed) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+func (*Addressed) Render(proxy.Spec) ([]byte, error) { return nil, nil }
 
-func (*Addressed) Unrendered([]byte, proxy.Admission) string { return "" }
+func (*Addressed) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (*Addressed) Reload(context.Context) error { return nil }
 
