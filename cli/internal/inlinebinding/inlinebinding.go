@@ -137,7 +137,7 @@ func verifyPostgres(ctx context.Context, r Record, props *bindingsv1.PostgresPro
 		return nil
 	}
 	if major := majorOf(served); major != declaredMajor(declared) {
-		return fmt.Errorf("%s declares postgres %s, and `%s` serves postgres %d: an app written against one major version is not promised the other. Bind a postgres %s server, or declare version %d",
+		return fmt.Errorf("%s declares postgres %s, and `%s` serves postgres %s: an app written against one major version is not promised the other. Bind a postgres %s server, or declare version %s",
 			r.Declared, declared, r.Site, major, declared, major)
 	}
 	return nil
@@ -193,20 +193,27 @@ func bucketProperties(b *projectconfig.BucketInline, read func(string) (string, 
 	return props, nil
 }
 
-func majorOf(serverVersionNum int) int {
+func majorOf(serverVersionNum int) string {
 	if serverVersionNum >= 100000 {
-		return serverVersionNum / 10000
+		return strconv.Itoa(serverVersionNum / 10000)
 	}
-	return serverVersionNum / 100
+	return strconv.Itoa(serverVersionNum/10000) + "." + strconv.Itoa(serverVersionNum/100%100)
 }
 
-func declaredMajor(declared string) int {
-	head, _, _ := strings.Cut(strings.TrimSpace(declared), ".")
-	major, err := strconv.Atoi(head)
+func declaredMajor(declared string) string {
+	parts := strings.Split(strings.TrimSpace(declared), ".")
+	major, err := strconv.Atoi(parts[0])
 	if err != nil {
-		return -1
+		return ""
 	}
-	return major
+	if major >= 10 || len(parts) < 2 {
+		return strconv.Itoa(major)
+	}
+	minor, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return ""
+	}
+	return strconv.Itoa(major) + "." + strconv.Itoa(minor)
 }
 
 func scrub(message string, props *bindingsv1.PostgresProperties) string {

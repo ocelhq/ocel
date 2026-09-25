@@ -113,6 +113,21 @@ func TestVerify(t *testing.T) {
 		}
 	})
 
+	t.Run("a server numbered before postgres 10 is read as the two-part major it is", func(t *testing.T) {
+		probe := func(context.Context, *bindingsv1.PostgresProperties) (int, error) { return 90624, nil }
+		if _, err := Verify(context.Background(), []Record{record(props)}, versions("9.6"), Probes{Postgres: probe}); err != nil {
+			t.Fatalf("Verify(9.6 against 9.6.24) = %v", err)
+		}
+		_, err := Verify(context.Background(), []Record{record(props)}, versions("9.5"), Probes{Postgres: probe})
+		if err == nil || !strings.Contains(err.Error(), "serves postgres 9.6") {
+			t.Fatalf("Verify(9.5 against 9.6.24) = %v, want it refused naming 9.6", err)
+		}
+		_, err = Verify(context.Background(), []Record{record(props)}, versions("17"), Probes{Postgres: probe})
+		if err == nil || !strings.Contains(err.Error(), "serves postgres 9.6") {
+			t.Fatalf("Verify(17 against 9.6.24) = %v, want it refused naming 9.6", err)
+		}
+	})
+
 	t.Run("a server that cannot be reached is refused without repeating the password", func(t *testing.T) {
 		probe := func(context.Context, *bindingsv1.PostgresProperties) (int, error) {
 			return 0, errors.New("failed to connect to user=app database=orders password=hunter2: connection refused")
