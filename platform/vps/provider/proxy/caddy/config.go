@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"slices"
 	"strings"
-	"time"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
@@ -133,7 +132,7 @@ func render(admission proxy.Admission) ([]byte, error) {
 	forwarding := []forward{{
 		Handler:     forwardHandler,
 		Upstreams:   []dial{{Dial: admission.Upstream}},
-		StreamDelay: spelled(Grace),
+		StreamDelay: Grace.String(),
 	}}
 	front.Errors = &failing{Routes: []failure{{Handle: []answer{{
 		Handler: answerHandler,
@@ -152,7 +151,7 @@ func render(admission proxy.Admission) ([]byte, error) {
 		Admin:   admin{Listen: Listen()},
 		Logging: seeded.Logging,
 		Apps: apps{
-			HTTP: httpApp{GracePeriod: spelled(Grace), Servers: map[string]server{serverName: front}},
+			HTTP: httpApp{GracePeriod: Grace.String(), Servers: map[string]server{serverName: front}},
 			TLS:  pinned,
 			PKI:  seeded.Apps.PKI,
 		},
@@ -203,18 +202,14 @@ func loaded(entries []proxy.Entry) (*tlsApp, error) {
 }
 
 func pinMount(path string) (string, error) {
-	leaf, beneath := strings.CutPrefix(path, PinsDir+"/")
-	if !beneath || leaf == "" || strings.Contains(leaf, "/") || leaf == "." || leaf == ".." {
+	leaf, pinned := Pinned(path)
+	if !pinned {
 		return "", fmt.Errorf("the certificate pinned at %q is not directly under %s", path, PinsDir)
 	}
 	return PinsMount + "/" + leaf, nil
 }
 
 func byHostname(a, b proxy.Entry) int { return strings.Compare(a.Hostname, b.Hostname) }
-
-func spelled(window time.Duration) string {
-	return fmt.Sprintf("%ds", int(window.Round(time.Second).Seconds()))
-}
 
 func unrendered(rendered []byte) string {
 	var read struct {

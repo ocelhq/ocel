@@ -82,7 +82,7 @@ func (h *Host) paired(ctx context.Context, pin Pin) error {
 }
 
 func (h *Host) PinnedCertificate(ctx context.Context, path string) ([]byte, error) {
-	if !pinnedUnderProxyPins(path) {
+	if _, pinned := caddy.Pinned(path); !pinned {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
 			"pinned certificate %q is outside %s",
 			path, caddy.PinsDir)
