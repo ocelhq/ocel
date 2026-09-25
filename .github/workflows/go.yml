@@ -61,7 +61,7 @@ jobs:
           - name: gcp
             dirs: platform/gcp/provider platform/gcp/runtime platform/gcp/connector
           - name: providerkit
-            dirs: platform/vps/provider platform/vps/runtime platform/vps/connector pkg/providerkit pkg/providerkit/pulumi pkg/costkit pkg/transformkit pkg/runtimekit pkg/connectorkit platform/edge/cloudflare/deploy platform/edge/contract
+            dirs: platform/vps/provider platform/vps/runtime platform/vps/connector platform/s3 pkg/providerkit pkg/providerkit/pulumi pkg/costkit pkg/transformkit pkg/runtimekit pkg/connectorkit platform/edge/cloudflare/deploy platform/edge/contract
     env:
       DIRS: ${{ matrix.group.dirs }}
     steps:

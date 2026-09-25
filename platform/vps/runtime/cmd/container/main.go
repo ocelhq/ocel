@@ -23,8 +23,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/runtimekit/front"
 	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/pkg/runtimekit/proxy"
+	bucket "github.com/ocelhq/ocel/platform/s3"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/runtime/bucket"
 	"github.com/ocelhq/ocel/platform/vps/runtime/live"
 )
 
