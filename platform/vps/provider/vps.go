@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	"github.com/ocelhq/ocel/pkg/transformkit"
@@ -81,7 +82,7 @@ func (p *Proxy) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf(`option "proxy": %w`, err)
 	}
 	if len(keyed) != 1 {
-		return errors.New(`option "proxy" holds exactly one of the keys traefik, caddy, manual`)
+		return fmt.Errorf(`option "proxy" holds exactly one of the keys %s`, strings.Join(configdoc.KeysOf(Proxy{}), ", "))
 	}
 	type wire Proxy
 	var decoded wire
