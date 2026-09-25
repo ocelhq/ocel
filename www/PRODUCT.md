@@ -46,8 +46,8 @@ own account, and find the reference they need without having to search for it.
   sync. Proto-backed and language-neutral.
 - **Declared resources in dev.** `ocel dev` starts the postgres and buckets the app
   declares in containers on the developer's machine. Docker is the only prerequisite and
-  no account is needed. The console only adds values a team shares, set with
-  `ocel env set --dev`.
+  no account is needed. Values a team shares come from the dev tier's `envSource`, such
+  as Infisical, with `.env.local` on top.
 - **Not an IaC replacement.** Ocel does not try to replace Terraform, Pulumi, or SST and
   can interoperate with them (`tests/fixtures/iac/with-pulumi`,
   `tests/fixtures/iac/with-sst`). Never frame it as "a plain alternative" to them.
