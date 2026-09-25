@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/ports"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 )
 
@@ -60,7 +61,7 @@ func landCredential(ctx context.Context, store values.Store, scope values.Scope,
 	landing, err := store.Land(ctx, scope, values.Coordinate{Cell: values.Cell{Key: name}}, true)
 	switch {
 	case errors.Is(err, values.ErrNotFound), errors.Is(err, values.ErrDangling):
-		return values.Landing{}, &CredentialError{Var: name, Reason: fmt.Sprintf("holds no value in %s: set it with `ocel env set %s <value>`", scope.Class, name)}
+		return values.Landing{}, &CredentialError{Var: name, Reason: fmt.Sprintf("holds no value in %s: set it with `ocel env set %s=<VALUE>%s`", scope.Class, name, previewFlag(scope))}
 	case err != nil:
 		return values.Landing{}, fmt.Errorf("read %s: %w", name, err)
 	}
@@ -78,6 +79,13 @@ func landCredential(ctx context.Context, store values.Store, scope values.Scope,
 		return values.Landing{}, &CredentialError{Var: name, Reason: fmt.Sprintf("references %s in %s, which reads that value from its own env source: reference a value %s holds in ocel's own store", landing.Coordinate.Key, landing.Project, landing.Project)}
 	}
 	return landing, nil
+}
+
+func previewFlag(scope values.Scope) string {
+	if scope.Class == ports.ClassPreview {
+		return " --preview"
+	}
+	return ""
 }
 
 func Identity(ctx context.Context, store values.Store, scope values.Scope, descriptor Descriptor) string {

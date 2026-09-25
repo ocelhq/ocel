@@ -108,7 +108,7 @@ func (h *VarsHandler) PutEnvSourceValue(ctx context.Context, req *envvarsv1.PutE
 	at := req.GetCoordinate()
 	if at.GetEnvironment() != "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"a value for preview environment %q is ocel's own to hold, never the env source's: set it with `ocel env set %s --env %s`", at.GetEnvironment(), at.GetKey(), at.GetEnvironment()))
+			"a value for preview environment %q is ocel's own to hold, never the env source's: set it with `ocel env set %s=<VALUE> --preview --environment %s`", at.GetEnvironment(), at.GetKey(), at.GetEnvironment()))
 	}
 	store, scope, err := h.scoped(req.GetTier(), at.GetSlug())
 	if err != nil {
@@ -207,7 +207,7 @@ func (h *VarsHandler) refuseSourceOwned(ctx context.Context, store values.Store,
 	status, _ := envsource.StatusOf(ctx, store, scope.Class, registration)
 	elsewhere := ""
 	if scope.Class == ClassPreview {
-		elsewhere = " A value for one preview environment stays yours: pass --env <name>."
+		elsewhere = " A value for one preview environment stays yours to set with --environment <name>."
 	}
 	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
 		"%s is read from %s, which owns every value %s sets for all of %s: change it there%s, and ocel picks it up on its next sync.%s",
