@@ -8,11 +8,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -92,6 +94,68 @@ func TestAnUpgradedConnectionIsPassedThroughBothWays(t *testing.T) {
 		if said, err := held.exchange(word); err != nil || said != "web "+word {
 			t.Fatalf("the upgraded connection answered %q, %v to %q, want the upstream echoing it", said, err, word)
 		}
+	}
+}
+
+func TestAnUpgradedConnectionOpenedBeforeAFlipDrainsWithItsRetireeAndIsCutAtTheCeiling(t *testing.T) {
+	t.Parallel()
+
+	blue, green := echoing(t, "blue"), echoing(t, "green")
+	board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue}))
+	opened := upgrading(t, at, "shop.example.com")
+
+	var told drains
+	flipped := make(chan error, 1)
+	go func() {
+		flipped <- board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": green})), []string{blue}, 2*time.Second, told.tell)
+	}()
+	time.Sleep(200 * time.Millisecond)
+
+	if said, err := opened.exchange("still"); err != nil || said != "blue still" {
+		t.Errorf("the socket opened before the flip answered %q, %v, want its retiree still answering it through the drain", said, err)
+	}
+	if fresh, err := upgrading(t, at, "shop.example.com").exchange("new"); err != nil || fresh != "green new" {
+		t.Errorf("a socket opened after the flip answered %q, %v, want the new upstream", fresh, err)
+	}
+	counted := map[string]int{}
+	for _, upstream := range board.Upstreams() {
+		counted[upstream.Address] = upstream.NumRequests
+	}
+	if counted[blue] != 1 {
+		t.Errorf("the switchboard counts %d in flight on the retiree %s, want the open socket: %v", counted[blue], blue, board.Upstreams())
+	}
+	if idle, err := board.Idle([]string{blue, green}); err != nil || len(idle) != 0 {
+		t.Errorf("Idle(%s, %s) = %v, %v mid-drain, want neither: one is being drained and one is routed", blue, green, idle, err)
+	}
+
+	if err := <-flipped; err != nil {
+		t.Fatal(err)
+	}
+	if lines := told.lines(); !slices.Equal(lines, []string{caddyadmin.DrainExpired + " " + blue + " 1"}) {
+		t.Errorf("the flip told %v, want the socket still open when the ceiling passed", lines)
+	}
+	_ = opened.conn.SetDeadline(time.Now().Add(5 * time.Second))
+	if said, err := opened.exchange("after"); err == nil {
+		t.Errorf("the socket opened before the flip still answered %q after its drain expired, want the switchboard to have closed it", said)
+	}
+	if idle, err := board.Idle([]string{blue, green}); err != nil || !slices.Equal(idle, []string{blue}) {
+		t.Errorf("Idle(%s, %s) = %v, %v once the flip returned, want only the retiree", blue, green, idle, err)
+	}
+}
+
+func TestAnExpiredDrainLeavesOpenTheSocketsOfAnUpstreamTheLiveTableStillRoutes(t *testing.T) {
+	t.Parallel()
+
+	blue := echoing(t, "blue")
+	board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue}))
+	opened := upgrading(t, at, "shop.example.com")
+
+	var told drains
+	if err := board.Flip(t.Context(), tableAt(t, routing(t, map[string]string{"shop.example.com": blue})), []string{blue}, 500*time.Millisecond, told.tell); err != nil {
+		t.Fatal(err)
+	}
+	if said, err := opened.exchange("still"); err != nil || said != "blue still" {
+		t.Errorf("a socket on an upstream the table still routes answered %q, %v after a drain of it expired, want it left open", said, err)
 	}
 }
 

@@ -62,6 +62,38 @@ func (l *ledger) release(address string, conn net.Conn) {
 	}
 }
 
+func (l *ledger) quiet(address string) <-chan struct{} {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	quiet := make(chan struct{})
+	held, ok := l.flights[address]
+	if !ok {
+		close(quiet)
+		return quiet
+	}
+	held.quiet = append(held.quiet, quiet)
+	return quiet
+}
+
+func (l *ledger) inFlight(address string) int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if held, ok := l.flights[address]; ok {
+		return held.requests
+	}
+	return 0
+}
+
+func (l *ledger) counts() map[string]int {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	counted := make(map[string]int, len(l.flights))
+	for address, held := range l.flights {
+		counted[address] = held.requests
+	}
+	return counted
+}
+
 func (l *ledger) cut(address string) {
 	l.mu.Lock()
 	var conns []net.Conn
