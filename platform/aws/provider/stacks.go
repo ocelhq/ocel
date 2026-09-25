@@ -28,10 +28,6 @@ import (
 
 const artifactRootDirName = constants.ProjectStateDirName + "/output"
 
-func (p *Provider) InspectStack(ctx context.Context, ref providerkit.StackRef) (providerkit.StackState, error) {
-	return p.releases.Inspect(ctx, ref)
-}
-
 func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Config, error) {
 	held, err := p.bootstrapped(ctx, scope.Class)
 	if err != nil {

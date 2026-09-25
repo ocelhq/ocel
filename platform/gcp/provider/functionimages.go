@@ -11,8 +11,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/google"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
-
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 
 const (
@@ -109,4 +109,11 @@ func runsX8664(arch, what string) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
 		"%s is built for %s, and Cloud Run runs %s alone: build it for %s, or run it somewhere that offers %s",
 		what, providerkit.Architecture(arch), providerkit.ArchX8664, providerkit.ArchX8664, providerkit.Architecture(arch))
+}
+
+func (p *Provider) ReadFunctionRuntime(_ context.Context, framework providerkit.Framework) ([]byte, error) {
+	if !providerkit.BootsThroughRuntime(framework) {
+		return nil, nil
+	}
+	return payloads.NodeRuntime(), nil
 }

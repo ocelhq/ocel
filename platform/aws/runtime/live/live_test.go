@@ -329,7 +329,7 @@ func TestEnv(t *testing.T) {
 		if got := l.Env(); !slices.Equal(got, []string{"OCEL_LIVE_KEYS=DB_PASSWORD"}) {
 			t.Errorf("Env = %q, want the declaration alone", got)
 		}
-		if got := (*Values)(nil).Env(); got != nil {
+		if got := (*live.Values)(nil).Env(); got != nil {
 			t.Errorf("Env for a function with no live values = %q, want nothing", got)
 		}
 	})

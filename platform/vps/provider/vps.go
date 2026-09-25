@@ -59,20 +59,11 @@ func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider
 
 func NewProvider(options Options) *Provider {
 	p := &Provider{options: options}
-	return p.standing(p.conn)
+	return p.wire(p.conn)
 }
 
 func newProvider(options Options, dial host.Dial) *Provider {
-	return (&Provider{options: options}).standing(dial)
-}
-
-func (p *Provider) standing(dial host.Dial) *Provider {
-	p.host = host.New(dial, host.Keys{Path: p.options.DeployKey}, pins(p.options.Certificates), p.options.Proxy.front())
-	p.records = host.NewRecords(p.host)
-	p.sealer = host.NewCipher(p.host)
-	p.Loopback = p.servedOnTheBox
-	p.LoopbackOnly = !p.host.FrontProxy().Guarantees().OwnsPorts
-	return p
+	return (&Provider{options: options}).wire(dial)
 }
 
 func (p *Provider) Facts() providerkit.Facts {
