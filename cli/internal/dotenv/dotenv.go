@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -16,6 +17,8 @@ import (
 )
 
 const FileName = ".env"
+
+const LocalFileName = ".env.local"
 
 var keyPattern = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 
@@ -29,17 +32,28 @@ type File struct {
 }
 
 func Load(dir string) (File, error) {
-	file, err := os.Open(filepath.Join(dir, FileName))
+	return LoadNamed(dir, FileName)
+}
+
+func LoadNamed(dir, name string) (File, error) {
+	file, err := os.Open(filepath.Join(dir, name))
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return File{Values: map[string]string{}}, nil
 		}
-		return File{}, fmt.Errorf("read %s: %w", FileName, err)
+		return File{}, fmt.Errorf("read %s: %w", name, err)
 	}
 	defer file.Close()
+	parsed, err := Parse(file)
+	if err != nil {
+		return File{}, fmt.Errorf("read %s: %w", name, err)
+	}
+	return parsed, nil
+}
 
+func Parse(r io.Reader) (File, error) {
 	parsed := File{Values: map[string]string{}}
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(r)
 	scanner.Split(splitLines)
 	for line := 1; scanner.Scan(); line++ {
 		key, value, readable := parseLine(scanner.Text())
@@ -51,7 +65,7 @@ func Load(dir string) (File, error) {
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return File{}, fmt.Errorf("read %s: %w", FileName, err)
+		return File{}, err
 	}
 	return parsed, nil
 }
