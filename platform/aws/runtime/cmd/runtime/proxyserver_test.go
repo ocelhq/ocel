@@ -121,7 +121,7 @@ func TestABucketBoundToAStoreIsSignedForThatStore(t *testing.T) {
 	}
 	client := bucketv1connect.NewBucketServiceClient(&http.Client{Transport: bearerToken(proxyEnvValue(t, env, channel.SessionTokenEnvVar))}, proxyEnvValue(t, env, constants.RuntimeAddressEnvName))
 	signed, err := client.Sign(context.Background(), &bucketv1.SignRequest{
-		Bucket: "acme", Key: "a.png",
+		Bucket: "OCEL_RESOURCE_BUCKET_uploads", Key: "a.png",
 		Operation: bucketv1.SignedOperation_SIGNED_OPERATION_GET,
 		Audience:  bucketv1.SignedAudience_SIGNED_AUDIENCE_INTERNAL,
 	})
