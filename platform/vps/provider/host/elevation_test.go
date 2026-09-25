@@ -12,8 +12,9 @@ import (
 )
 
 type sudoless struct {
-	asked   []string
-	stamped string
+	asked    []string
+	stamped  string
+	recorded string
 }
 
 func (c *sudoless) Preflight(context.Context) (session.Facts, error) {
@@ -33,6 +34,8 @@ func (c *sudoless) Stream(_ context.Context, command string, _ io.Reader) (sessi
 		return session.Result{Stdout: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIB deploy@ocel\n"}, nil
 	case command == "uname -m":
 		return session.Result{Stdout: "x86_64\n"}, nil
+	case command == frontReading():
+		return session.Result{Stdout: c.recorded}, nil
 	case c.stamped != "" && command == "cat "+quoted(StampPath(providerkit.ClassProduction)):
 		return session.Result{Stdout: c.stamped}, nil
 	case c.stamped != "" && strings.Contains(command, "for p in"):
@@ -96,7 +99,12 @@ func stampedBy(t *testing.T, conn *sudoless, change func(map[string]string)) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	written := digests(Items(providerkit.ClassProduction, keys, ArchAMD64, Front{}))
+	record, err := frontRecordItem(Front{}, "shop", providerkit.ClassProduction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn.recorded = string(record.Content)
+	written := digests(append(Items(providerkit.ClassProduction, keys, ArchAMD64, Front{}), record))
 	change(written)
 	stamp, err := json.Marshal(Stamp{
 		Schema:  providerkit.BootstrapSchema,

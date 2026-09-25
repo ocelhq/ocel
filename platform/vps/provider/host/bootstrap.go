@@ -39,12 +39,14 @@ func (b Bootstrapper) described(ctx context.Context, read Reading) (providerkit.
 	if err != nil {
 		return providerkit.Bootstrap{}, err
 	}
+	if read, err = b.recorded(ctx, read); err != nil {
+		return providerkit.Bootstrap{}, err
+	}
 	if read.standing(KindRoutingTable, live.RoutingTable) || read.standing(KindProxyConfig, ProxyConfig) {
 		if read.rerendering, err = b.host.proxyInspected(ctx, read.Class); err != nil {
 			return providerkit.Bootstrap{}, err
 		}
 	}
-	recorded := read.standing(KindFile, FrontRecordPath)
 	return providerkit.Bootstrap{
 		Class:      read.Class,
 		Present:    read.Present,
@@ -54,7 +56,7 @@ func (b Bootstrapper) described(ctx context.Context, read Reading) (providerkit.
 			Name:          principal,
 			Present:       read.Present,
 			Schema:        uint32(read.Stamp.Schema),
-			DigestCurrent: read.settled() && recorded,
+			DigestCurrent: read.settled(),
 			Writer:        read.Stamp.Writer,
 		}},
 	}, nil
@@ -70,13 +72,9 @@ func (b Bootstrapper) Plan(ctx context.Context, req providerkit.BootstrapRequest
 		return providerkit.Plan{}, err
 	}
 	read = described.Held.(Reading)
-	recorded, err := b.fronted(ctx, req.Class)
-	if err != nil {
-		return providerkit.Plan{}, err
-	}
 	groups := providerkit.DeriveGroups(described, b.Catalogue(), req)
-	groups[0].Changes = append(planned(read), recorded.change())
-	if (read.rerendering || !recorded.present) && groups[0].Action == providerkit.ActionKeep {
+	groups[0].Changes = planned(read)
+	if read.rerendering && groups[0].Action == providerkit.ActionKeep {
 		groups[0].Action, groups[0].Reason = providerkit.ActionUpdate, ""
 	}
 	if groups[0].Reason == "" {
@@ -138,7 +136,15 @@ func (b Bootstrapper) reading(ctx context.Context, req providerkit.BootstrapRequ
 	if held, carried := req.Held.(Reading); carried && held.Class == req.Class {
 		return held, nil
 	}
-	return b.host.Read(ctx, req.Class)
+	return b.read(ctx, req.Class)
+}
+
+func (b Bootstrapper) read(ctx context.Context, class providerkit.Class) (Reading, error) {
+	read, err := b.host.Read(ctx, class)
+	if err != nil {
+		return Reading{}, err
+	}
+	return b.recorded(ctx, read)
 }
 
 func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapRequest, report providerkit.Reporter) error {
@@ -149,7 +155,7 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err != nil {
 		return err
 	}
-	standing, err := b.host.Read(ctx, req.Class)
+	standing, err := b.read(ctx, req.Class)
 	if err != nil {
 		return err
 	}
@@ -206,11 +212,7 @@ func (b Bootstrapper) Apply(ctx context.Context, req providerkit.BootstrapReques
 	if err := b.write(ctx, served, LiveItems(standing.Arch), report); err != nil {
 		return err
 	}
-	recorded, err := b.fronted(ctx, req.Class)
-	if err != nil {
-		return err
-	}
-	if err := recorded.write(ctx, b.host, report); err != nil {
+	if err := b.write(ctx, served, standing.recorded, report); err != nil {
 		return err
 	}
 	if err := b.write(ctx, served, ProxyItems(standing.Arch, standing.Front), report); err != nil {

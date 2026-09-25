@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
 )
 
@@ -40,8 +41,8 @@ func (r frontRecord) setter() string {
 	return r.Project + "/" + string(r.Class)
 }
 
-func frontRecordItem(front Front, project string, class providerkit.Class) (Item, error) {
-	written, err := json.Marshal(frontRecord{Proxy: front.recorded(), Project: project, Class: class})
+func (r frontRecord) item() (Item, error) {
+	written, err := json.Marshal(r)
 	if err != nil {
 		return Item{}, err
 	}
@@ -80,8 +81,7 @@ func (f Front) same(other Front) bool {
 	return !f.adopted() || f.Manual.Port == other.Manual.Port
 }
 
-func (f Front) agrees(record frontRecord) error {
-	held := record.front()
+func (f Front) agrees(held Front, setter string) error {
 	if f.same(held) {
 		return nil
 	}
@@ -91,7 +91,7 @@ func (f Front) agrees(record frontRecord) error {
 	}
 	return providerkit.Refuse(providerkit.CodeInvalid,
 		"this box routes through %s (set by %s); %s\nOne proxy fronts a box, and moving a box to another is not supported yet",
-		held.named(), record.setter(), remedy)
+		held.named(), setter, remedy)
 }
 
 func frontReading() string {
@@ -126,42 +126,32 @@ func (h *Host) FrontAgrees(ctx context.Context) error {
 			"%s records no proxy for %s, so this deploy cannot tell what fronts it\nRun `%s`",
 			FrontRecordPath, h.named(), providerkit.BootstrapCommand(providerkit.ClassProduction))
 	}
-	return h.fronts.agrees(*record)
+	return h.fronts.agrees(record.front(), record.setter())
 }
 
-type fronting struct {
-	item    Item
-	present bool
-}
+const unrecordedSetter = "a bootstrap that left no record"
 
-func (b Bootstrapper) fronted(ctx context.Context, class providerkit.Class) (fronting, error) {
-	item, err := frontRecordItem(b.host.fronts, b.project, class)
+func (b Bootstrapper) recorded(ctx context.Context, read Reading) (Reading, error) {
+	held, err := b.host.frontRecorded(ctx, b.host.reach)
 	if err != nil {
-		return fronting{}, err
+		return Reading{}, err
 	}
-	record, err := b.host.frontRecorded(ctx, b.host.reach)
-	if err != nil || record == nil {
-		return fronting{item: item}, err
+	record := frontRecord{Proxy: b.host.fronts.recorded(), Project: b.project, Class: read.Class}
+	switch {
+	case held != nil:
+		if err := b.host.fronts.agrees(held.front(), held.setter()); err != nil {
+			return Reading{}, err
+		}
+		record = *held
+	case read.standing(KindContainer, caddy.Container):
+		if err := b.host.fronts.agrees(Front{}, unrecordedSetter); err != nil {
+			return Reading{}, err
+		}
 	}
-	return fronting{item: item, present: true}, b.host.fronts.agrees(*record)
-}
-
-func (f fronting) change() providerkit.Change {
-	change := providerkit.Change{Kind: f.item.Kind, Name: f.item.Name, Action: providerkit.ActionCreate, Reason: f.item.Note}
-	if f.present {
-		change.Action, change.Reason = providerkit.ActionKeep, "set already, and this project agrees"
+	item, err := record.item()
+	if err != nil {
+		return Reading{}, err
 	}
-	return change
-}
-
-func (f fronting) write(ctx context.Context, h *Host, report providerkit.Reporter) error {
-	if f.present {
-		say(report, f.item.ID()+": "+reasonStanding)
-		return nil
-	}
-	if err := h.Install(ctx, f.item); err != nil {
-		return err
-	}
-	say(report, "wrote "+f.item.ID())
-	return nil
+	read.recorded = []Item{item}
+	return read, nil
 }
