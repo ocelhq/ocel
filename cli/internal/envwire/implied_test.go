@@ -27,6 +27,12 @@ func TestScopeImpliesTheVariablesATiersInlineBindingsRead(t *testing.T) {
 	if got := Scope(cfg, true, "pr-12").Implied; len(got) != 0 {
 		t.Errorf("preview Implied = %+v, want none: orders binds production alone", got)
 	}
+	if got := Scope(cfg, true, "pr-12").OtherTiers; !reflect.DeepEqual(got, want) {
+		t.Errorf("preview OtherTiers = %+v, want %+v: the app may not declare what production's binding reads", got, want)
+	}
+	if got := Scope(cfg, false, "").OtherTiers; len(got) != 0 {
+		t.Errorf("production OtherTiers = %+v, want none: production takes every binding it reads", got)
+	}
 	if got := DevScope(cfg).Implied; len(got) != 0 {
 		t.Errorf("dev Implied = %+v, want none: ocel dev stands up its own resources", got)
 	}
