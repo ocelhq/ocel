@@ -255,7 +255,7 @@ func TestTheProxyIsRestartedUnlessSomebodyStopsItAndSitsOnTheOneSharedNetwork(t 
 func TestOnlyTheFrontProxyPublishesAPortAndOnlyThePortsRequestsArriveOn(t *testing.T) {
 	t.Parallel()
 
-	command := containerCommand()
+	command := words(proxyRun())
 	if strings.Count(command, "--publish") != len(proxyServing()) {
 		t.Errorf("the proxy is run with something other than the ports requests arrive on:\n%s", command)
 	}

@@ -47,6 +47,14 @@ const (
 	containerPulls  = 5
 )
 
+const (
+	migrateSysctl = "net.ipv4.tcp_migrate_req"
+	migrateKnob   = "/proc/sys/net/ipv4/tcp_migrate_req"
+	migrateFact   = "migrate="
+	migrateHeld   = "held"
+	migrateUnset  = "unset"
+)
+
 var proxyCapabilities = []string{"NET_BIND_SERVICE", "DAC_OVERRIDE", "DAC_READ_SEARCH"}
 
 const (
@@ -214,6 +222,7 @@ type boxContainer struct {
 	answering string
 	answer    string
 	joins     bool
+	migrates  bool
 }
 
 func frontProxy() boxContainer {
@@ -233,6 +242,7 @@ func frontProxy() boxContainer {
 		files:     []string{ProxyConfig},
 		answering: "test -S " + quoted(caddy.AdminSocket),
 		answer:    "did not answer over its admin socket",
+		migrates:  true,
 	}
 }
 
@@ -258,6 +268,9 @@ func (s boxContainer) factsOver(binds []string) []byte {
 		"ports=" + marshalled(published(s.ports)),
 		"config=" + s.config,
 		"state=running",
+	}
+	if s.migrates {
+		stated = append(stated, migrateFact+migrateHeld)
 	}
 	for _, bind := range binds {
 		stated = append(stated, "bind="+bind)
@@ -289,7 +302,7 @@ func networkCommand() string {
 		"docker network create " + quoted(ProxyNetwork) + " >/dev/null"
 }
 
-func (s boxContainer) run() []string {
+func (s boxContainer) run(sysctls ...string) []string {
 	argv := []string{"docker", "run", "--detach",
 		"--name", s.name,
 		"--restart", containerRestart,
@@ -310,6 +323,9 @@ func (s boxContainer) run() []string {
 	for _, bind := range s.binds {
 		argv = append(argv, "--volume", bind)
 	}
+	for _, sysctl := range sysctls {
+		argv = append(argv, "--sysctl", sysctl)
+	}
 	return append(append(argv, s.image), s.command...)
 }
 
@@ -320,11 +336,21 @@ func (s boxContainer) writing(attempts int) string {
 		bindsStanding(s.files) +
 		imageHeld(s.image, containerPulls) +
 		"docker rm --force " + quoted(s.name) + " >/dev/null 2>&1 || true\n" +
-		words(s.run()) + " >/dev/null\n"
+		s.started()
 	if s.joins {
 		written += rejoining(s.name)
 	}
 	return written + s.rising(attempts)
+}
+
+func (s boxContainer) started() string {
+	run := words(s.run()) + " >/dev/null\n"
+	if !s.migrates {
+		return run
+	}
+	return "if [ -e " + quoted(migrateKnob) + " ]; then\n" +
+		words(s.run(migrateSysctl+"=1")) + " >/dev/null\n" +
+		"else\n" + run + "fi\n"
 }
 
 func proxyWriting(attempts int) string { return frontProxy().writing(attempts) }
@@ -378,8 +404,14 @@ func networkProbe() string {
 }
 
 func (s boxContainer) probe() string {
+	template, normalized := ContainerFactTemplate, ""
+	if s.migrates {
+		template += "\n" + migrateFact + `{{if eq (index .HostConfig.Sysctls "` + migrateSysctl + `") "1"}}` + migrateHeld + `{{else}}` + migrateUnset + `{{end}}`
+		normalized = "if [ ! -e " + quoted(migrateKnob) + " ]; then facts=\"${facts%" + migrateFact + migrateUnset + "}" + migrateFact + migrateHeld + "\"; fi\n"
+	}
 	return "if command -v " + quoted(dockerEngine) + " >/dev/null 2>&1 && " +
-		"facts=$(docker inspect --type container --format " + quoted(ContainerFactTemplate) + " " + quoted(s.name) + " 2>/dev/null); then\n" +
+		"facts=$(docker inspect --type container --format " + quoted(template) + " " + quoted(s.name) + " 2>/dev/null); then\n" +
+		normalized +
 		reports(quoted(KindContainer), quoted(s.name), "0", quoted(rootOwner),
 			`"$(printf '%s\n' "$facts" | LC_ALL=C sort | sha256sum | cut -d' ' -f1)"`) + "\nfi"
 }
