@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 func releasing() RoutingTable {
@@ -68,9 +69,9 @@ func keyed(app string) RouteKey { return RouteKey{Owner: surface, Pointer: point
 
 func mustRender(t *testing.T, state RoutingTable) []byte {
 	t.Helper()
-	rendered, err := RenderProxyConfig(state)
+	rendered, err := RenderProxyConfig(caddy.Builtin{}, state)
 	if err != nil {
-		t.Fatalf("RenderProxyConfig() = %v", err)
+		t.Fatalf("RenderProxyConfig(caddy.Builtin{}, ) = %v", err)
 	}
 	return rendered
 }

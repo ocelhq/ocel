@@ -10,7 +10,11 @@ type Covert struct{}
 
 func (Covert) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
-func (Covert) Admit(context.Context, proxy.Admission) error { return nil }
+func (Covert) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+
+func (Covert) Unrendered([]byte) string { return "" }
+
+func (Covert) Reload(context.Context) error { return nil }
 
 func (Covert) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
 

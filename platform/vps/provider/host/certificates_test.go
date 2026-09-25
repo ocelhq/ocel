@@ -18,11 +18,11 @@ func TestAnEngineThatCannotBeReachedIsReportedRatherThanReadAsNoTrouble(t *testi
 		}
 		return session.Result{}, false
 	}
-	err := stand.host().CertificateTrouble(context.Background(), "shop.example.com")
+	_, err := stand.host().FrontProxy().Certificate(context.Background(), "shop.example.com")
 	if err == nil {
-		t.Fatal("CertificateTrouble() read an engine it could not reach as a proxy with nothing to say")
+		t.Fatal("Certificate() read an engine it could not reach as a proxy with nothing to say")
 	}
 	if !strings.Contains(err.Error(), "Cannot connect to the Docker daemon") {
-		t.Errorf("CertificateTrouble() = %v, want the engine's own refusal carried out", err)
+		t.Errorf("Certificate() = %v, want the engine's own refusal carried out", err)
 	}
 }

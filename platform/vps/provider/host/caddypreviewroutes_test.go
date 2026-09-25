@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -40,9 +41,9 @@ func twoBranchesOfOneApp() RoutingTable {
 func TestTwoLivePreviewsOfOneAppAnswerOnTheirOwnHostnameEach(t *testing.T) {
 	t.Parallel()
 
-	rendered, err := RenderProxyConfig(twoBranchesOfOneApp())
+	rendered, err := RenderProxyConfig(caddy.Builtin{}, twoBranchesOfOneApp())
 	if err != nil {
-		t.Fatalf("RenderProxyConfig() = %v: two branches of one app are the ordinary preview case, and a claim keyed on the surface and the app alone hands both hostnames to both routes", err)
+		t.Fatalf("RenderProxyConfig(caddy.Builtin{}, ) = %v: two branches of one app are the ordinary preview case, and a claim keyed on the surface and the app alone hands both hostnames to both routes", err)
 	}
 	read, err := ReadRoutingTable(mustWrite(t, twoBranchesOfOneApp()))
 	if err != nil {
@@ -72,7 +73,7 @@ func TestAClaimNamingNoPointerIsRefusedRatherThanAnsweredForEveryBranch(t *testi
 
 	state := twoBranchesOfOneApp()
 	state.Claims[0].Pointer = ""
-	if _, err := RenderProxyConfig(state); err == nil {
+	if _, err := RenderProxyConfig(caddy.Builtin{}, state); err == nil {
 		t.Error("a claim naming no pointer rendered, and a box runs many branches of one app at once: the pointer is half of what says which route answers a hostname")
 	}
 	if err := validClaim(previewClaim("pr"+switchboard.ClaimSeparator+"7", "", "shop--pr-7."+previewBase)); err == nil {

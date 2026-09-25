@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
@@ -11,9 +12,9 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 )
 
-var _ proxy.Proxy = (*Builtin)(nil)
+var _ proxy.Proxy = Builtin{}
 
-func (b *Builtin) Guarantees() proxy.Guarantees {
+func (Builtin) Guarantees() proxy.Guarantees {
 	return proxy.Guarantees{
 		OwnsPorts:              true,
 		IssuesCertificates:     true,
@@ -24,17 +25,18 @@ func (b *Builtin) Guarantees() proxy.Guarantees {
 	}
 }
 
-func (b *Builtin) Admit(ctx context.Context, admission proxy.Admission) error {
-	if _, err := Render(admission); err != nil {
-		return err
-	}
-	_, err := b.box.Ran(ctx, "reload "+Container+" onto "+ConfigMount, reloading())
+func (Builtin) Render(admission proxy.Admission) ([]byte, error) { return render(admission) }
+
+func (Builtin) Unrendered(config []byte) string { return unrendered(config) }
+
+func (b Builtin) Reload(ctx context.Context) error {
+	_, err := b.Box.Ran(ctx, "reload "+Container+" onto "+ConfigMount, reloading())
 	return err
 }
 
-func (b *Builtin) Inspect(ctx context.Context) (proxy.Standing, error) {
+func (b Builtin) Inspect(ctx context.Context) (proxy.Standing, error) {
 	check := providerkit.StandingCheck{Subject: fmt.Sprintf("%s tcp %d", Container, AdminPort)}
-	said, err := b.box.Ran(ctx, "read what listens inside "+Container, listening())
+	said, err := b.Box.Ran(ctx, "read what listens inside "+Container, listening())
 	if err != nil {
 		check.Verdict = providerkit.StandingFail
 		check.Finding = fmt.Sprintf("read listeners inside %s: %v", Container, err)
@@ -64,26 +66,19 @@ func (b *Builtin) Inspect(ctx context.Context) (proxy.Standing, error) {
 	return proxy.Standing{check}, nil
 }
 
-func (b *Builtin) Certificate(ctx context.Context, hostname string) (proxy.Certificate, error) {
+func (b Builtin) Certificate(ctx context.Context, hostname string) (proxy.Certificate, error) {
 	held := proxy.Certificate{Renewal: certs.ProxyRenewal}
-	trouble, err := b.Trouble(ctx, hostname)
+	logged, err := b.Box.Said(ctx, logging())
 	if err != nil {
 		return held, err
 	}
-	held.Trouble = trouble
-	block, err := b.box.Loopback(ctx, hostname)
-	if err != nil || len(block) == 0 {
-		return held, err
+	if limit, said := certs.RateLimited(logged); said && limit.Covers(hostname) && !limit.Spent(time.Now()) {
+		held.Trouble = limit.Refusal(hostname)
 	}
-	leaf, err := certs.Parse("the certificate the proxy serves for "+hostname, block)
-	if err != nil {
-		return held, err
-	}
-	held.Served = &leaf
 	return held, nil
 }
 
-func (b *Builtin) Forget(ctx context.Context, hostnames []string) ([]string, error) {
+func (b Builtin) Forget(ctx context.Context, hostnames []string) ([]string, error) {
 	if len(hostnames) == 0 {
 		return nil, nil
 	}
@@ -92,7 +87,7 @@ func (b *Builtin) Forget(ctx context.Context, hostnames []string) ([]string, err
 			return nil, providerkit.Refuse(providerkit.CodeInvalid, "%q is not a hostname the proxy holds a certificate for", hostname)
 		}
 	}
-	said, err := b.box.Ran(ctx, "forget what "+Container+" holds for "+strings.Join(hostnames, ", "), forgetting(hostnames))
+	said, err := b.Box.Ran(ctx, "forget what "+Container+" holds for "+strings.Join(hostnames, ", "), forgetting(hostnames))
 	if err != nil {
 		return nil, err
 	}

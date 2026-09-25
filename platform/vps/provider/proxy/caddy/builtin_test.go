@@ -2,14 +2,7 @@ package caddy_test
 
 import (
 	"context"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/pem"
 	"errors"
-	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,7 +12,6 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
@@ -27,8 +19,6 @@ type box struct {
 	ran       []string
 	answer    func(command string) (string, error)
 	logs      string
-	served    []byte
-	unserved  error
 	unreached error
 }
 
@@ -45,47 +35,33 @@ func (b *box) Said(_ context.Context, command string) (string, error) {
 	return b.logs, b.unreached
 }
 
-func (b *box) Loopback(context.Context, string) ([]byte, error) { return b.served, b.unserved }
-
-func TestAdmittingReloadsTheRunningProxyOntoItsConfigOverTheAdminSocket(t *testing.T) {
+func TestAReloadTakesUpTheConfigOnDiskOverTheAdminSocket(t *testing.T) {
 	t.Parallel()
 
 	held := &box{}
-	if err := caddy.New(held).Admit(context.Background(), admitting(proxy.Entry{Hostname: "shop.example.com"})); err != nil {
-		t.Fatalf("Admit() = %v", err)
+	if err := (caddy.Builtin{Box: held}).Reload(context.Background()); err != nil {
+		t.Fatalf("Reload() = %v", err)
 	}
 	if len(held.ran) != 1 {
-		t.Fatalf("Admit() ran %q, want the one reload", held.ran)
+		t.Fatalf("Reload() ran %q, want the one reload", held.ran)
 	}
 	for _, wanted := range []string{"'docker' 'exec' '" + caddy.Container + "' 'caddy' 'reload'", "'--config' '" + caddy.ConfigMount + "'", "'--address' 'unix/" + caddy.AdminSocket + "'"} {
 		if !strings.Contains(held.ran[0], wanted) {
-			t.Errorf("Admit() ran %q, which carries no %s", held.ran[0], wanted)
+			t.Errorf("Reload() ran %q, which carries no %s", held.ran[0], wanted)
 		}
 	}
 	if strings.Contains(held.ran[0], "--force") {
-		t.Errorf("Admit() ran %q: a forced reload restarts every server caddy runs even when nothing changed", held.ran[0])
+		t.Errorf("Reload() ran %q: a forced reload restarts every server caddy runs even when nothing changed", held.ran[0])
 	}
 }
 
-func TestAnAdmissionTheProxyCouldNotServeReloadsNothing(t *testing.T) {
-	t.Parallel()
-
-	held := &box{}
-	if err := caddy.New(held).Admit(context.Background(), proxy.Admission{Entries: []proxy.Entry{{Hostname: "*.example.com"}}}); err == nil {
-		t.Error("Admit() of a wildcard with no upstream = nil")
-	}
-	if len(held.ran) != 0 {
-		t.Errorf("Admit() of an admission it refuses ran %q", held.ran)
-	}
-}
-
-func TestAReloadTheProxyRefusesIsTheAdmissionsFailure(t *testing.T) {
+func TestAReloadTheProxyRefusesIsTheReloadsFailure(t *testing.T) {
 	t.Parallel()
 
 	refused := errors.New("adapting config using json: loading tls app: boom")
 	held := &box{answer: func(string) (string, error) { return "", refused }}
-	if err := caddy.New(held).Admit(context.Background(), admitting(proxy.Entry{Hostname: "shop.example.com"})); !errors.Is(err, refused) {
-		t.Errorf("Admit() = %v, want the refused reload carried out", err)
+	if err := (caddy.Builtin{Box: held}).Reload(context.Background()); !errors.Is(err, refused) {
+		t.Errorf("Reload() = %v, want the refused reload carried out", err)
 	}
 }
 
@@ -114,7 +90,7 @@ func TestTheStandingReadsWhetherTheAdminApiListensOnAPortInsideTheProxy(t *testi
 		"a table that is no socket table": {said: "garbage\n", verdict: providerkit.StandingFail},
 	} {
 		held := &box{answer: func(string) (string, error) { return check.said, check.err }}
-		standing, err := caddy.New(held).Inspect(context.Background())
+		standing, err := (caddy.Builtin{Box: held}).Inspect(context.Background())
 		if err != nil {
 			t.Fatalf("Inspect() over %s = %v", what, err)
 		}
@@ -127,37 +103,14 @@ func TestTheStandingReadsWhetherTheAdminApiListensOnAPortInsideTheProxy(t *testi
 	}
 }
 
-func leafFor(t *testing.T, hostname string) []byte {
-	t.Helper()
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	template := &x509.Certificate{
-		SerialNumber: big.NewInt(1),
-		Subject:      pkix.Name{CommonName: hostname},
-		DNSNames:     []string{hostname},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(time.Hour),
-	}
-	raw, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: raw})
-}
-
-func TestTheCertificateIsWhatTheBoxServesAndTheTroubleIsWhatTheProxyLogged(t *testing.T) {
+func TestTheTroubleWithACertificateIsWhatTheProxyLogged(t *testing.T) {
 	t.Parallel()
 
 	limited := `2026-09-25T10:00:00.000000000Z {"level":"error","logger":"tls.obtain","msg":"could not get certificate from issuer","identifier":"shop.example.com","issuer":"acme-v02.api.letsencrypt.org-directory","error":"HTTP 429 urn:ietf:params:acme:error:rateLimited - too many certificates (50) already issued for \"example.com\" in the last 168h0m0s, retry after ` + time.Now().Add(24*time.Hour).UTC().Format("2006-01-02 15:04:05 MST") + `"}`
-	held := &box{logs: limited, served: leafFor(t, "shop.example.com")}
-	certificate, err := caddy.New(held).Certificate(context.Background(), "shop.example.com")
+	held := &box{logs: limited}
+	certificate, err := (caddy.Builtin{Box: held}).Certificate(context.Background(), "shop.example.com")
 	if err != nil {
 		t.Fatalf("Certificate() = %v", err)
-	}
-	if certificate.Served == nil || !certificate.Served.Covers("shop.example.com") {
-		t.Errorf("Certificate() served %+v, want the leaf the box presents for the name", certificate.Served)
 	}
 	if certificate.Trouble == nil {
 		t.Error("Certificate() found no trouble in a log that says the CA refused the name for its rate limit")
@@ -165,17 +118,16 @@ func TestTheCertificateIsWhatTheBoxServesAndTheTroubleIsWhatTheProxyLogged(t *te
 	if certificate.Renewal == "" {
 		t.Error("Certificate() says nothing about who renews what the proxy orders")
 	}
-
-	pending, err := caddy.New(&box{}).Certificate(context.Background(), "shop.example.com")
-	if err != nil || pending.Served != nil || pending.Trouble != nil {
-		t.Errorf("Certificate() over a box serving nothing yet = %+v, %v, want nothing served and no trouble", pending, err)
+	if len(held.ran) != 1 {
+		t.Errorf("Certificate() ran %q, want the one read of what the proxy logged", held.ran)
 	}
-	unreached := errors.New("the loopback read failed")
-	if _, err := caddy.New(&box{unserved: unreached}).Certificate(context.Background(), "shop.example.com"); !errors.Is(err, unreached) {
-		t.Errorf("Certificate() over a loopback that failed = %v, want the failure carried out", err)
+
+	quiet, err := (caddy.Builtin{Box: &box{}}).Certificate(context.Background(), "shop.example.com")
+	if err != nil || quiet.Trouble != nil {
+		t.Errorf("Certificate() over a proxy that logged nothing = %+v, %v, want no trouble", quiet, err)
 	}
 	engineless := errors.New("Cannot connect to the Docker daemon")
-	if _, err := caddy.New(&box{unreached: engineless}).Certificate(context.Background(), "shop.example.com"); !errors.Is(err, engineless) {
+	if _, err := (caddy.Builtin{Box: &box{unreached: engineless}}).Certificate(context.Background(), "shop.example.com"); !errors.Is(err, engineless) {
 		t.Errorf("Certificate() over an engine it could not reach = %v, want that carried out rather than read as a proxy with nothing to say", err)
 	}
 }
@@ -185,7 +137,7 @@ func TestForgettingRefusesANameThatIsAPathRatherThanAHostnameAndRunsNothing(t *t
 
 	for _, named := range []string{"../../caddy", "shop.example.com/..", "", "*.preview.example.com", "wildcard_.preview.example.com", "a b.example.com"} {
 		held := &box{}
-		if _, err := caddy.New(held).Forget(context.Background(), []string{"fine.example.com", named}); err == nil {
+		if _, err := (caddy.Builtin{Box: held}).Forget(context.Background(), []string{"fine.example.com", named}); err == nil {
 			t.Errorf("Forget(%q) = nil, and the name reaches rm -rf under the proxy's data", named)
 		}
 		if len(held.ran) != 0 {
@@ -193,7 +145,7 @@ func TestForgettingRefusesANameThatIsAPathRatherThanAHostnameAndRunsNothing(t *t
 		}
 	}
 	held := &box{}
-	if removed, err := caddy.New(held).Forget(context.Background(), nil); err != nil || removed != nil || len(held.ran) != 0 {
+	if removed, err := (caddy.Builtin{Box: held}).Forget(context.Background(), nil); err != nil || removed != nil || len(held.ran) != 0 {
 		t.Errorf("Forget(nothing) = %v, %v and ran %q, want a no-op", removed, err, held.ran)
 	}
 }
@@ -249,7 +201,7 @@ func TestForgettingTakesEveryPairIssuedForTheNamesFromEveryIssuerAndNothingElse(
 		t.Fatal(err)
 	}
 
-	removed, err := caddy.New(&shell{path: stub}).Forget(context.Background(), []string{"shop--pr-7--web.preview.example.com", "shop--pr-7--api.preview.example.com", "never.example.com"})
+	removed, err := (caddy.Builtin{Box: &shell{path: stub}}).Forget(context.Background(), []string{"shop--pr-7--web.preview.example.com", "shop--pr-7--api.preview.example.com", "never.example.com"})
 	if err != nil {
 		t.Fatalf("Forget() = %v", err)
 	}

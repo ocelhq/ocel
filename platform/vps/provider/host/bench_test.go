@@ -15,6 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -381,7 +382,7 @@ func renderedFrom(document string) string {
 	if err != nil {
 		return err.Error()
 	}
-	rendered, err := RenderProxyConfig(table)
+	rendered, err := RenderProxyConfig(caddy.Builtin{}, table)
 	if err != nil {
 		return err.Error()
 	}

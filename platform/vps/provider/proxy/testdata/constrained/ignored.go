@@ -14,7 +14,11 @@ type Ignored struct{}
 
 func (Ignored) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
-func (Ignored) Admit(context.Context, proxy.Admission) error { return nil }
+func (Ignored) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+
+func (Ignored) Unrendered([]byte) string { return "" }
+
+func (Ignored) Reload(context.Context) error { return nil }
 
 func (Ignored) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
 

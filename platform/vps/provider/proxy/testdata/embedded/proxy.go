@@ -7,5 +7,5 @@ import (
 
 type Proxy interface {
 	io.Closer
-	Admit(ctx context.Context) error
+	Reload(ctx context.Context) error
 }

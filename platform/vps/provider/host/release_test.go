@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -630,7 +631,7 @@ func TestTheFlipConfigMovesOnlyTheRouteAndTheHelperIsToldToDrainTheRetiredUpstre
 	if err := stood.host().Release(context.Background(), aRelease(), nil); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
-	want, err := RenderProxyConfig(RoutingTable{
+	want, err := RenderProxyConfig(caddy.Builtin{}, RoutingTable{
 		Grace:  30 * time.Second,
 		Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: flipTo}},
 	})

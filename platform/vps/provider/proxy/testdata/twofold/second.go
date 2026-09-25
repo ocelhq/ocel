@@ -12,7 +12,11 @@ type Second struct{}
 
 func (Second) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
-func (Second) Admit(context.Context, proxy.Admission) error { return nil }
+func (Second) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+
+func (Second) Unrendered([]byte) string { return "" }
+
+func (Second) Reload(context.Context) error { return nil }
 
 func (Second) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
 

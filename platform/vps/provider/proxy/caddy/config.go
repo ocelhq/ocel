@@ -107,7 +107,7 @@ type answer struct {
 
 func Listen() string { return "unix/" + AdminSocket + "|" + socketMode }
 
-func Render(admission proxy.Admission) ([]byte, error) {
+func render(admission proxy.Admission) ([]byte, error) {
 	var seeded config
 	if err := json.Unmarshal(baseline, &seeded); err != nil {
 		return nil, fmt.Errorf("the baseline caddy config is not json: %w", err)
@@ -216,7 +216,7 @@ func spelled(window time.Duration) string {
 	return fmt.Sprintf("%ds", int(window.Round(time.Second).Seconds()))
 }
 
-func Foreign(rendered []byte) string {
+func unrendered(rendered []byte) string {
 	var read struct {
 		Admin struct {
 			Config struct {

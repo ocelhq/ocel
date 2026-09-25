@@ -63,7 +63,7 @@ type rendered struct {
 
 func render(t *testing.T, admission proxy.Admission) ([]byte, rendered) {
 	t.Helper()
-	written, err := caddy.Render(admission)
+	written, err := (caddy.Builtin{}).Render(admission)
 	if err != nil {
 		t.Fatalf("Render() = %v", err)
 	}
@@ -222,7 +222,7 @@ func TestWhatTheProxyCouldNotHoldIsRefusedRatherThanRendered(t *testing.T) {
 		"the pin root itself":            admitting(proxy.Entry{Hostname: "shop.example.com", Pin: caddy.PinsDir}),
 		"a pin climbing out of its root": admitting(proxy.Entry{Hostname: "shop.example.com", Pin: caddy.PinsDir + "/.."}),
 	} {
-		if written, err := caddy.Render(admission); err == nil {
+		if written, err := (caddy.Builtin{}).Render(admission); err == nil {
 			t.Errorf("an admission with %s rendered:\n%s", what, written)
 		}
 	}
@@ -237,14 +237,14 @@ func TestTheAdminApiIsReachedOverItsSocketAloneAndNoConfigCanOrderCertificatesOn
 	if read.Admin.Listen != "unix/"+caddy.AdminSocket+"|0600" {
 		t.Errorf("the admin endpoint listens at %q, want the socket only root inside the proxy reaches", read.Admin.Listen)
 	}
-	if strings.Contains(string(written), "on_demand") || caddy.Foreign(written) != "" {
+	if strings.Contains(string(written), "on_demand") || (caddy.Builtin{}).Unrendered(written) != "" {
 		t.Errorf("the rendered config can order certificates for names nothing admitted:\n%s", written)
 	}
 	for foreign, document := range map[string]string{
 		"an automation policy": `{"apps":{"tls":{"automation":{"on_demand":{}}}}}`,
 		"a config loader":      `{"admin":{"config":{"load":{"module":"http"}}}}`,
 	} {
-		if caddy.Foreign([]byte(document)) == "" {
+		if (caddy.Builtin{}).Unrendered([]byte(document)) == "" {
 			t.Errorf("a config declaring %s reads as one ocel renders", foreign)
 		}
 	}

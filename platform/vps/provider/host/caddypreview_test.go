@@ -11,6 +11,7 @@ import (
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
@@ -89,7 +90,7 @@ func TestThePreviewCatchAllRendersItsSuffixRatherThanAnEmptyHostMatcher(t *testi
 		"a label over 63 bytes":         strings.Repeat("a", 64) + ".example.com",
 		"a name the probe overflows":    strings.Repeat(strings.Repeat("a", 63)+".", 3) + strings.Repeat("b", 55) + ".com",
 	} {
-		if _, err := RenderProxyConfig(RoutingTable{Grace: DrainWindow, PreviewBase: base}); err == nil {
+		if _, err := RenderProxyConfig(caddy.Builtin{}, RoutingTable{Grace: DrainWindow, PreviewBase: base}); err == nil {
 			t.Errorf("a preview entry on base %q (%s) renders, and the probe route beside the catch-all is deliberately not skipped: an acme subject no CA can ever issue for is exactly the failing-order retry loop the exclusion exists to prevent, on a route the operator cannot see or remove short of releasing the base",
 				base, what)
 		}

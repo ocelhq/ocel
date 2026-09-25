@@ -58,7 +58,7 @@ func ReadRoutingTable(document []byte) (RoutingTable, error) {
 		PreviewBase: rows.PreviewBase,
 		Connector:   rows.Connector,
 	}
-	if _, err := RenderProxyConfig(table); err != nil {
+	if err := validTable(table); err != nil {
 		return RoutingTable{}, unrenderable(err)
 	}
 	return table, nil

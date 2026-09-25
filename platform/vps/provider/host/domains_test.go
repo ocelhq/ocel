@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -80,7 +81,7 @@ func TestASurfaceNamedWithTheSeparatorIsRefusedRatherThanRenderedAmbiguously(t *
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: "ocel" + switchboard.ClaimSeparator + "shop", Pointer: pointed}}
-	if _, err := RenderProxyConfig(state); err == nil {
+	if _, err := RenderProxyConfig(caddy.Builtin{}, state); err == nil {
 		t.Errorf("a surface named with %q renders a claim that reads back naming a different surface", switchboard.ClaimSeparator)
 	}
 }
@@ -90,7 +91,7 @@ func TestAHostnameNamedWithTheSeparatorIsRefusedTheWayASurfaceIs(t *testing.T) {
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: "shop.example.com" + switchboard.ClaimSeparator + surface, Owner: surface, Pointer: pointed}}
-	if _, err := RenderProxyConfig(state); err == nil {
+	if _, err := RenderProxyConfig(caddy.Builtin{}, state); err == nil {
 		t.Errorf("a hostname carrying %q renders a claim whose identity reads back as a different surface and host; the surface half of the same identity is already refused for it", switchboard.ClaimSeparator)
 	}
 }
@@ -459,7 +460,7 @@ func TestOneSurfacesHostnameIsNotHandedToEveryAppThatSurfaceRuns(t *testing.T) {
 	state := twoApps()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 
-	_, err := RenderProxyConfig(state)
+	_, err := RenderProxyConfig(caddy.Builtin{}, state)
 	if err == nil {
 		t.Fatal("a project running two apps rendered both of them matching every hostname it claims; reverse_proxy is terminal and the routes are written in name order, so api answers shop.example.com and web is configuration nothing on this box ever reaches")
 	}
@@ -527,7 +528,7 @@ func TestAnUnattributedHostnameOnAMultiAppSurfaceIsRefusedAndNamesTheFormThatFix
 	state := twoApps()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
 
-	_, err := RenderProxyConfig(state)
+	_, err := RenderProxyConfig(caddy.Builtin{}, state)
 	if err == nil {
 		t.Fatal("a project running two apps and claiming a hostname project-wide rendered both routes matching it")
 	}

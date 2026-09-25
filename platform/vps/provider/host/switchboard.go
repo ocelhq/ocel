@@ -42,11 +42,11 @@ func switchboardOver(sum string) boxContainer {
 			ConnectorRun + ":" + ConnectorRun + ":ro",
 			switchboard.ControlDir + ":" + switchboard.ControlDir,
 		},
-		caps:      switchboardCapabilities,
-		files:     []string{live.RoutingTable, SwitchboardBinary},
-		answering: quoted(SwitchboardMounted) + " upstreams",
-		answer:    "did not answer over its control socket",
-		joins:     true,
+		caps:    switchboardCapabilities,
+		files:   []string{live.RoutingTable, SwitchboardBinary},
+		ready:   []string{SwitchboardMounted, "upstreams"},
+		unready: "answered nothing over its control socket in " + switchboard.ControlDir,
+		joins:   true,
 	}
 }
 

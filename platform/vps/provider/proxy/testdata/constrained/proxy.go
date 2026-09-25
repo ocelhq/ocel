@@ -10,7 +10,11 @@ var _ proxy.Proxy = Constrained{}
 
 func (Constrained) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
-func (Constrained) Admit(context.Context, proxy.Admission) error { return nil }
+func (Constrained) Render(proxy.Admission) ([]byte, error) { return nil, nil }
+
+func (Constrained) Unrendered([]byte) string { return "" }
+
+func (Constrained) Reload(context.Context) error { return nil }
 
 func (Constrained) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
 

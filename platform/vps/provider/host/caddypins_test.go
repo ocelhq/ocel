@@ -45,9 +45,9 @@ func TestAPinIsWrittenAtThePathTheProxyOpensAndReadBackAtThePathThisHostSpells(t
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: "shop.preview.example.com", Owner: surface, Pointer: pointed}}
 	state.Pins = []Pin{{Hostname: wildcard, Path: at}}
-	rendered, err := RenderProxyConfig(state)
+	rendered, err := RenderProxyConfig(caddy.Builtin{}, state)
 	if err != nil {
-		t.Fatalf("RenderProxyConfig() = %v", err)
+		t.Fatalf("RenderProxyConfig(caddy.Builtin{}, ) = %v", err)
 	}
 	if !strings.Contains(string(rendered), caddy.PinCertificate(caddy.PinsMount+"/wildcard")) {
 		t.Errorf("the config hands the proxy %q, and the proxy opens a pair at %s: a path this host spells is a path the container has no such file at, and the whole config is refused with it:\n%s",
@@ -79,8 +79,8 @@ func TestAPinTheProxyCouldNotOpenIsRefusedRatherThanRendered(t *testing.T) {
 		state := routed()
 		state.Pins = []Pin{pin}
 		var refusal providerkit.Refusal
-		if _, err := RenderProxyConfig(state); !errors.As(err, &refusal) {
-			t.Errorf("RenderProxyConfig() over %s at %q = %v, want a refusal naming %s: anything the proxy cannot open takes every reshape on this box with it",
+		if _, err := RenderProxyConfig(caddy.Builtin{}, state); !errors.As(err, &refusal) {
+			t.Errorf("RenderProxyConfig(caddy.Builtin{}, ) over %s at %q = %v, want a refusal naming %s: anything the proxy cannot open takes every reshape on this box with it",
 				what, pin.Path, err, caddy.PinsDir)
 		}
 	}
@@ -166,9 +166,9 @@ func TestOneCertificateCoveringTwoHostnamesIsHandedToTheProxyOnce(t *testing.T) 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: "shop.example.com", Owner: surface, Pointer: pointed}, {Hostname: "blog.example.com", Owner: surface, Pointer: pointed}}
 	state.Pins = []Pin{{Hostname: "shop.example.com", Path: at}, {Hostname: "blog.example.com", Path: at}}
-	rendered, err := RenderProxyConfig(state)
+	rendered, err := RenderProxyConfig(caddy.Builtin{}, state)
 	if err != nil {
-		t.Fatalf("RenderProxyConfig() = %v", err)
+		t.Fatalf("RenderProxyConfig(caddy.Builtin{}, ) = %v", err)
 	}
 
 	var read struct {

@@ -9,7 +9,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
 func (h *Host) Claims(ctx context.Context) ([]HostClaim, error) {
@@ -183,13 +182,13 @@ func (h *Host) proxyInspected(ctx context.Context, class providerkit.Class) (boo
 		if err != nil {
 			return false, err
 		}
-		rendered, err := RenderProxyConfig(table)
+		rendered, err := RenderProxyConfig(h.front, table)
 		if err != nil {
 			return false, err
 		}
 		stale = held.config != nil && !bytes.Equal(held.config, rendered)
 	}
-	declared := caddy.Foreign(held.config)
+	declared := h.front.Unrendered(held.config)
 	if declared == "" {
 		return stale, nil
 	}
@@ -225,21 +224,21 @@ func (h *Host) recomposed(ctx context.Context, compose func(RoutingTable) (Routi
 	if err != nil || !shaped.changed {
 		return err
 	}
-	if err := h.served(ctx, shaped.is, shaped.admitting, elevation); err != nil {
+	if err := h.takenUp(ctx, shaped.reloading, elevation); err != nil {
 		return h.reverted(ctx, shaped, err, elevation)
 	}
 	return nil
 }
 
-func (h *Host) served(ctx context.Context, table RoutingTable, admitting bool, elevation string) error {
+func (h *Host) takenUp(ctx context.Context, reloading bool, elevation string) error {
 	if _, err := h.ran(ctx, "load the switchboard onto "+live.RoutingTable,
 		words(switchboardCommand("load", live.RoutingTable)), nil, elevation); err != nil {
 		return err
 	}
-	if !admitting {
+	if !reloading {
 		return nil
 	}
-	return h.front.Admit(ctx, admission(table))
+	return h.front.Reload(ctx)
 }
 
 func (h *Host) reverted(ctx context.Context, shaped composed, why error, elevation string) error {
@@ -248,7 +247,7 @@ func (h *Host) reverted(ctx context.Context, shaped composed, why error, elevati
 			"serving %s failed: %v\nrestoring %s and %s also failed: %v",
 			live.RoutingTable, why, live.RoutingTable, ProxyConfig, err)
 	}
-	if err := h.served(ctx, shaped.was, shaped.admitting, elevation); err != nil {
+	if err := h.takenUp(ctx, shaped.reloading, elevation); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"serving %s failed: %v\n%s and %s were restored, but serving them again failed too, so the box may still serve what they no longer record: %v\nRun the deploy again",
 			live.RoutingTable, why, live.RoutingTable, ProxyConfig, err)
