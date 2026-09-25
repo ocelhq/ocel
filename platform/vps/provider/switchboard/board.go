@@ -47,6 +47,7 @@ type Board struct {
 	tcp       *http.Transport
 	socket    *http.Transport
 	server    *http.Server
+	admitter  *http.Server
 }
 
 func New(table *Table, relayed ...netip.Prefix) *Board {
@@ -67,14 +68,17 @@ func New(table *Table, relayed ...netip.Prefix) *Board {
 		Handler:           board,
 		ReadHeaderTimeout: ReadHeaderTimeout,
 		IdleTimeout:       idleTimeout,
-		ConnContext: func(ctx context.Context, conn net.Conn) context.Context {
-			if _, front := conn.(frontConn); front {
-				return context.WithValue(ctx, frontKey{}, true)
-			}
-			return ctx
-		},
+		ConnContext:       fronted,
 	}
+	board.admitter = &http.Server{Handler: board.admit(), ReadHeaderTimeout: ReadHeaderTimeout, ConnContext: fronted}
 	return board
+}
+
+func fronted(ctx context.Context, conn net.Conn) context.Context {
+	if _, front := conn.(frontConn); front {
+		return context.WithValue(ctx, frontKey{}, true)
+	}
+	return ctx
 }
 
 type frontKey struct{}
@@ -110,14 +114,22 @@ func (b *Board) Serve(listener net.Listener) error {
 
 func (b *Board) ServeFront(listener net.Listener) error { return b.Serve(frontListener{listener}) }
 
+func (b *Board) ServeAdmit(listener net.Listener) error {
+	err := b.admitter.Serve(frontListener{listener})
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
+}
+
 func (b *Board) Shutdown(ctx context.Context) error {
-	err := b.server.Shutdown(ctx)
+	err := errors.Join(b.admitter.Shutdown(ctx), b.server.Shutdown(ctx))
 	b.ledger.cutAll()
 	return err
 }
 
 func (b *Board) Close() error {
-	err := b.server.Close()
+	err := errors.Join(b.admitter.Close(), b.server.Close())
 	b.ledger.cutAll()
 	return err
 }

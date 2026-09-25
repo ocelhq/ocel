@@ -39,6 +39,15 @@ func controlAt(t *testing.T) string {
 	return control
 }
 
+func admitAt(t *testing.T) string {
+	t.Helper()
+	admit := filepath.Join(t.TempDir(), "admit.sock")
+	if len(admit) > 100 {
+		t.Skipf("a unix socket path this host accepts does not fit under %s", admit)
+	}
+	return admit
+}
+
 func frontAt(t *testing.T) string {
 	t.Helper()
 	front := filepath.Join(t.TempDir(), "front.sock")
@@ -109,6 +118,7 @@ func backend(t *testing.T, name string) string {
 type serving struct {
 	data    string
 	front   string
+	admit   string
 	control string
 	stop    context.CancelFunc
 	done    chan int
@@ -117,10 +127,10 @@ type serving struct {
 
 func served(t *testing.T, table string, flags ...string) serving {
 	t.Helper()
-	stood := serving{data: freeAddress(t), front: frontAt(t), control: controlAt(t), done: make(chan int, 1), errs: &strings.Builder{}}
+	stood := serving{data: freeAddress(t), front: frontAt(t), admit: admitAt(t), control: controlAt(t), done: make(chan int, 1), errs: &strings.Builder{}}
 	ctx, stop := context.WithCancel(t.Context())
 	stood.stop = stop
-	argv := append([]string{"serve", "--listen", stood.data, "--front", stood.front, "--table", table}, flags...)
+	argv := append([]string{"serve", "--listen", stood.data, "--front", stood.front, "--admit", stood.admit, "--table", table}, flags...)
 	go func() { stood.done <- run(ctx, argv, io.Discard, stood.errs) }()
 	t.Cleanup(func() {
 		stop()
@@ -202,6 +212,55 @@ func TestServeTrustsWhatArrivesOverTheFrontSocketAndNothingElse(t *testing.T) {
 	}
 }
 
+func TestServeAnswersTheFrontProxysAdmissionOnASocketOfItsOwn(t *testing.T) {
+	web := backend(t, "web")
+	stood := served(t, tableFile(t, map[string]string{"shop.example.com": web}))
+	asking := func(client *http.Client, at string) int {
+		t.Helper()
+		said, err := client.Get(at + switchboard.AdmitPath + "?" + switchboard.AdmitField + "=shop.example.com")
+		if err != nil {
+			t.Fatalf("ask %s: %v", at, err)
+		}
+		_ = said.Body.Close()
+		return said.StatusCode
+	}
+	over := func(socket string) *http.Client {
+		return &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+		}}}
+	}
+
+	if status := asking(over(stood.admit), "http://switchboard"); status != http.StatusOK {
+		t.Errorf("the admit socket answered the front proxy %d for a claimed hostname, want 200", status)
+	}
+	if status := asking(http.DefaultClient, "http://"+stood.data); status != http.StatusNotFound {
+		t.Errorf("the data listener answered %d for the admit path, want the 404 of a hostname it does not claim: a forwarded request must never reach the admission", status)
+	}
+	if status := asking(over(stood.front), "http://switchboard"); status != http.StatusNotFound {
+		t.Errorf("the front socket answered %d for the admit path, want the 404 of a hostname it does not claim: a forwarded request must never reach the admission", status)
+	}
+	if status := asking(over(stood.control), "http://switchboard"); status/100 == 2 {
+		t.Errorf("the control socket answered %d for the admit path, want it to serve control alone", status)
+	}
+	held, err := os.Stat(stood.admit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode := held.Mode().Perm(); mode != 0o600 {
+		t.Errorf("the admit socket is mode %v, want 0600: whoever can connect to it is answered as the front proxy", mode)
+	}
+}
+
+func TestServeRefusesAnAdmitSocketItCannotTake(t *testing.T) {
+	controlAt(t)
+
+	var errs strings.Builder
+	unreachable := filepath.Join(t.TempDir(), "absent", "admit.sock")
+	if code := run(t.Context(), []string{"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", tableFile(t, nil), "--admit", unreachable}, io.Discard, &errs); code != exitRefused {
+		t.Errorf("serve over an admit socket it cannot create = %d, %q, want %d", code, errs.String(), exitRefused)
+	}
+}
+
 func TestTheControlAndFrontSocketsAreTheServingUsersAlone(t *testing.T) {
 	stood := served(t, tableFile(t, nil))
 
@@ -223,7 +282,7 @@ func TestServeRefusesToTakeTheControlSocketFromASwitchboardStillAnsweringOnIt(t 
 	stood := served(t, tableFile(t, nil))
 
 	var errs strings.Builder
-	code := run(t.Context(), []string{"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", tableFile(t, nil)}, io.Discard, &errs)
+	code := run(t.Context(), []string{"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil)}, io.Discard, &errs)
 	if code != exitRefused {
 		t.Errorf("a second serve on %s = %d, want %d: it would unlink the socket the first answers on and leave it unreachable", stood.control, code, exitRefused)
 	}
@@ -240,7 +299,7 @@ func TestOfServesStartedTogetherOnOneControlSocketExactlyOneTakesIt(t *testing.T
 	exited := make(chan int, racing)
 	var errs [racing]strings.Builder
 	for at := range racing {
-		argv := []string{"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", table}
+		argv := []string{"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", table}
 		go func() { exited <- run(ctx, argv, io.Discard, &errs[at]) }()
 	}
 	refused := 0
@@ -358,14 +417,15 @@ func TestARelayedNetworkTheSwitchboardHoldsNoAddressOnIsRefused(t *testing.T) {
 func TestServeRefusesATableAFrontSocketOrARelayItCannotTake(t *testing.T) {
 	controlAt(t)
 	for what, argv := range map[string][]string{
-		"a table that is not there":     {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", filepath.Join(t.TempDir(), "routing.json")},
-		"a table it cannot render":      {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", documentAt(t, []byte(`{"grace":"soon"}`))},
-		"a front socket it cannot open": {"serve", "--listen", freeAddress(t), "--front", filepath.Join(t.TempDir(), "absent", "front.sock"), "--table", tableFile(t, nil)},
-		"no front socket":               {"serve", "--listen", freeAddress(t), "--table", tableFile(t, nil)},
-		"a relay that is no prefix":     {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", tableFile(t, nil), "--relay", "ocel-proxy"},
-		"a relayed network unnamed":     {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", tableFile(t, nil), "--relay-network", ""},
-		"no listen address":             {"serve", "--front", frontAt(t), "--table", tableFile(t, nil)},
-		"no table":                      {"serve", "--listen", freeAddress(t), "--front", frontAt(t)},
+		"a table that is not there":     {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", filepath.Join(t.TempDir(), "routing.json")},
+		"a table it cannot render":      {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", documentAt(t, []byte(`{"grace":"soon"}`))},
+		"a front socket it cannot open": {"serve", "--listen", freeAddress(t), "--front", filepath.Join(t.TempDir(), "absent", "front.sock"), "--admit", admitAt(t), "--table", tableFile(t, nil)},
+		"no front socket":               {"serve", "--listen", freeAddress(t), "--admit", admitAt(t), "--table", tableFile(t, nil)},
+		"no admit socket":               {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", tableFile(t, nil)},
+		"a relay that is no prefix":     {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--relay", "ocel-proxy"},
+		"a relayed network unnamed":     {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--relay-network", ""},
+		"no listen address":             {"serve", "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil)},
+		"no table":                      {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t)},
 	} {
 		if code, _, errs := ran(t, argv...); code != exitRefused {
 			t.Errorf("serve with %s = %d, %q, want %d", what, code, errs, exitRefused)
