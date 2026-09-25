@@ -67,13 +67,7 @@ func liveServiceUnit() []byte {
 	}, "\n"))
 }
 
-func liveAgent(arch string) []byte {
-	read, err := helpers.ReadFile("dist/" + liveBinaryName + "-" + arch)
-	if err != nil {
-		panic(err)
-	}
-	return read
-}
+func liveAgent(arch string) []byte { return embedded(liveBinaryName, arch) }
 
 func ContainerArch(app, declared, runs string) (string, error) {
 	if declared == "" {
@@ -92,11 +86,7 @@ func ContainerRuntime(arch string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	read, err := helpers.ReadFile("dist/" + runtimeName + "-" + named)
-	if err != nil {
-		panic(err)
-	}
-	return read, nil
+	return embedded(runtimeName, named), nil
 }
 
 func LiveItems(arch string) []Item {
