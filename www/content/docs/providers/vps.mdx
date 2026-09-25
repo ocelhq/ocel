@@ -76,6 +76,11 @@ that runs. If any step fails, the old version is started again on the data it ha
 
 **Removing it.** `ocel destroy` takes the container, its volume, its password and its dumps.
 
+## Buckets
+
+A bucket runs in a store the box keeps for the project. Bind it to a store you already run and
+the box keeps none for it. See [Bucket](/docs/sdk/bucket#on-a-vps).
+
 ## Options
 
 | Option | What it does |
@@ -83,4 +88,3 @@ that runs. If any step fails, the old version is started again on the data it ha
 | `ssh` | The machine to deploy onto: a `Host` alias, or an object of `host`, `user`, `port` and `identityFile`. |
 | `deployKey` | The public key the `ocel-deploy` login is to answer to, as a path. Omit it and bootstrap mirrors the keys the login it bootstraps with already answers to. |
 | `certificates` | Paths on the machine to the certificate to serve a hostname with, keyed by hostname. |
-| `bucket` | An S3-compatible store to keep this project's objects in, instead of the store the box runs for itself. See [Bucket](/docs/sdk/bucket#on-a-vps). |
