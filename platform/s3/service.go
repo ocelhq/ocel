@@ -56,6 +56,7 @@ type Poster interface {
 type FreeSpace func() (free uint64, total uint64, err error)
 
 type Config struct {
+	Tag          string
 	Objects      ObjectAPI
 	Internal     PresignAPI
 	External     func(context.Context) (PresignAPI, string)
@@ -93,10 +94,26 @@ func New(cfg Config) *Service {
 		sessions:  scopeOf(cfg.Sessions),
 		granted:   granted,
 		now:       time.Now,
-		newID:     func() string { return "sess_" + randomHex(16) },
+		newID:     func() string { return sessionIDPrefix(cfg.Tag) + randomHex(16) },
 		newSecret: func() string { return randomHex(32) },
 		sweeping:  func(run func()) { go run() },
 	}
+}
+
+func sessionIDPrefix(tag string) string {
+	if tag == "" {
+		return "sess_"
+	}
+	return "sess_" + tag + "_"
+}
+
+func (s *Service) holds(name string) bool {
+	_, ok := s.granted[name]
+	return ok
+}
+
+func (s *Service) opened(sessionID string) bool {
+	return s.cfg.Tag != "" && strings.HasPrefix(sessionID, sessionIDPrefix(s.cfg.Tag))
 }
 
 func randomHex(n int) string {
