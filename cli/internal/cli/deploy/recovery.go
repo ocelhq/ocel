@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
@@ -35,29 +36,29 @@ type gateRecovery struct {
 	enabled bool
 }
 
-func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*contractv1.Manifest, error) {
+func (r gateRecovery) buildManifest(ctx context.Context, prebuilt bool) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	gate := r.newGate()
-	manifest, err := r.attempt(ctx, gate, prebuilt, 0)
+	manifest, inline, err := r.attempt(ctx, gate, prebuilt, 0)
 
 	var refusal *envgate.Refusal
 	if !r.enabled || !errors.As(err, &refusal) {
-		return manifest, err
+		return manifest, inline, err
 	}
 	if err := r.fill(ctx, gate, refusal); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	return r.attempt(ctx, r.newGate(), prebuilt, 1)
 }
 
-func (r gateRecovery) attempt(ctx context.Context, gate *envgate.Gate, prebuilt bool, retry int) (*contractv1.Manifest, error) {
+func (r gateRecovery) attempt(ctx context.Context, gate *envgate.Gate, prebuilt bool, retry int) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	attemptCtx := ctx
 	var span trace.Span
 	if run := runtrace.FromContext(ctx); run != nil {
 		attemptCtx, span = run.StartSpan(ctx, "build", runtrace.AttrRetryCount.Int(retry))
 	}
-	manifest, err := collectAndBuildManifest(attemptCtx, r.deps, r.cfg, gate, prebuilt, r.ui, r.compute, r.containerArchs, r.urls)
+	manifest, inline, err := collectAndBuildManifest(attemptCtx, r.deps, r.cfg, gate, prebuilt, r.ui, r.compute, r.containerArchs, r.urls)
 	endAttemptSpan(span, err)
-	return manifest, err
+	return manifest, inline, err
 }
 
 func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *envgate.Refusal) error {

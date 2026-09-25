@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
+	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/manifestwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -34,74 +35,78 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
 
-func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *runui.Session, compute string, containerArchs map[string]string, urls map[string]string) (*contractv1.Manifest, error) {
+func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *runui.Session, compute string, containerArchs map[string]string, urls map[string]string) (*contractv1.Manifest, []inlinebinding.Record, error) {
 	buildOut := ui.BuildWriter()
 
 	captured := &boundedCapture{}
 	tee := io.MultiWriter(buildOut, captured)
 	resources, err := deps.CollectDeclarations(ctx, cfg, gate, tee, tee)
 	if err != nil {
-		return nil, captured.annotate(err)
+		return nil, nil, captured.annotate(err)
 	}
 	warnings, err := envgate.Lint(gate.Definitions(), envwire.Apps(cfg), cfg.Path)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, warning := range warnings {
 		ui.Warning(warning)
 	}
 	if err := gate.Check(); err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	inline, err := inlineRecords(ctx, deps, cfg, gate, resources)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	variables, err := resolveVariables(ctx, gate, cfg)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	appurl.Prepend(cfg, variables, urls)
 
 	configName := filepath.Base(cfg.Path)
 	if err := checkAppPaths(cfg, configName); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	plans := appPlans(cfg, variables)
 	clients := clientApps(plans)
 	if prebuilt {
 		if err := clientenv.CheckFresh(cfg.Dir, clients); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		ui.Diagnostic("using prebuilt output in " + constants.ProjectStateDirName + "/output")
 	} else {
 		if err := clientenv.Generate(cfg.Dir, clients); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if !ui.Dry() {
 			if err := clientenv.PointImports(cfg.Dir, clients); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 		}
 		if err := deps.BuildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if err := clientenv.Record(cfg.Dir, clients); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
 	images, err := deps.BuildAppImages(ctx, cfg, containerArchs, buildOut)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	functions, err := deps.CollectAppFunctions(cfg.Dir)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	functions = servedByFunctions(functions, cfg)
 
 	edgeWarnings, err := envgate.LintEdge(gate.Definitions(), envwire.Apps(cfg), edgeApps(cfg))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, warning := range edgeWarnings {
 		ui.Warning(warning)
@@ -109,32 +114,50 @@ func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projec
 
 	if len(functions) == 0 && len(images) == 0 {
 		if len(resources) == 0 {
-			return nil, nil
+			return nil, nil, nil
 		}
 		ui.Diagnostic("no functions to deploy; deploying infrastructure only")
 	}
 
 	attributionApps, err := toAttributionApps(cfg, functions, compute, configName)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	usages, err := attribution.Compute(ctx, cfg.Dir, attributionApps, toAttributionDeclarations(resources))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Dir, cfg.Apps, usages, compute, images, functions), compute, manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.BindingsFor(projectconfig.Tier(gate.Scope().Preview))), functions, variablesByApp(variables, functions))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for _, app := range manifest.GetApps() {
 		id, err := deps.DeploymentID(cfg.Dir, app.GetName())
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		app.DeploymentId = id
 	}
-	return manifest, nil
+	return manifest, inline, nil
+}
+
+func inlineRecords(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, resources []declare.Resource) ([]inlinebinding.Record, error) {
+	values, err := gate.ResolveImplied(ctx)
+	if err != nil {
+		return nil, err
+	}
+	records, err := inlinebinding.Build(cfg.BindingsFor(projectconfig.Tier(gate.Scope().Preview)), values, filepath.Base(cfg.Path))
+	if err != nil || len(records) == 0 {
+		return records, err
+	}
+	versions := map[string]string{}
+	for _, resource := range resources {
+		if resource.Postgres != nil {
+			versions[resource.Name] = resource.Postgres.GetVersion()
+		}
+	}
+	return records, inlinebinding.Verify(ctx, records, versions, deps.ProbePostgres)
 }
 
 const maxCapturedDiscoveryOutput = 4096

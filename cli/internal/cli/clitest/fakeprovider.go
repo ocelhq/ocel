@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/channel"
@@ -69,6 +70,20 @@ const FakeBakedComputesEnvVar = "OCEL_TEST_FAKE_BAKED_COMPUTES"
 const FakeContainerArchEnvVar = "OCEL_TEST_FAKE_CONTAINER_ARCH"
 
 const FakePublishedBindingsEnvVar = "OCEL_TEST_FAKE_PUBLISHED_BINDINGS"
+
+const FakeDeployJournalEnvVar = "OCEL_TEST_FAKE_DEPLOY_JOURNAL"
+
+func journalDeployRequest(req *contractv1.DeployRequest) error {
+	path := os.Getenv(FakeDeployJournalEnvVar)
+	if path == "" {
+		return nil
+	}
+	encoded, err := protojson.Marshal(req)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, encoded, 0o600)
+}
 
 const FakePreflightJournalEnvVar = "OCEL_TEST_FAKE_PREFLIGHT_JOURNAL"
 
@@ -221,6 +236,9 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 	if err := declareFakeStages(stream); err != nil {
 		return err
 	}
+	if err := journalDeployRequest(req); err != nil {
+		return err
+	}
 	journalEdge(req.GetEdge().GetKind(), req.GetEdge().GetDns(), req.GetEdge().GetAllowDegraded())
 	if err := refuseEdge(); err != nil {
 		return err
@@ -283,12 +301,12 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *contractv1.D
 		}
 	}
 
-	for _, message := range consumeFakeBindings(req.GetManifest()) {
+	for _, message := range consumeFakeBindings(req.GetManifest(), req.GetEnvironment()) {
 		if err := stream.Send(fakeProgress(message)); err != nil {
 			return err
 		}
 	}
-	if refusal := refuseUnpublishedFakeBindings(req.GetManifest()); refusal != "" {
+	if refusal := refuseUnpublishedFakeBindings(req.GetManifest(), req.GetEnvironment(), req.GetDry()); refusal != "" {
 		return stream.Send(&progressv1.OperationEvent{
 			Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{Success: false, Error: refusal}},
 		})
@@ -414,13 +432,17 @@ func fakePublishedBindings() []string {
 	return out
 }
 
-func consumeFakeBindings(m *contractv1.Manifest) []string {
+func consumeFakeBindings(m *contractv1.Manifest, env *environmentv1.Environment) []string {
 	published := fakePublishedBindings()
 	var out []string
 	for _, r := range m.GetResources() {
 		id := r.GetResource().GetName()
 		if r.GetBinding() != "" {
-			out = append(out, "BINDING bound="+r.GetLogicalName()+" name="+id)
+			line := "BINDING bound=" + r.GetLogicalName() + " name=" + id
+			if held := storedFakeBinding(env, r.GetBinding()); held != nil {
+				line += " record=" + held.Name + " owner=" + held.Owner
+			}
+			out = append(out, line)
 			continue
 		}
 		if slices.Contains(published, id) {
@@ -430,11 +452,27 @@ func consumeFakeBindings(m *contractv1.Manifest) []string {
 	return out
 }
 
-func refuseUnpublishedFakeBindings(m *contractv1.Manifest) string {
+func storedFakeBinding(env *environmentv1.Environment, name string) *fakeBinding {
+	store, err := loadFakeBindingStore()
+	if err != nil {
+		return nil
+	}
+	for _, held := range store {
+		if held.Tier == env.GetTier() && held.Name == name && (held.Environment == "" || held.Environment == env.GetIdentity()) {
+			return held
+		}
+	}
+	return nil
+}
+
+func refuseUnpublishedFakeBindings(m *contractv1.Manifest, env *environmentv1.Environment, dry bool) string {
 	published := fakePublishedBindings()
 	var missing []string
 	for _, r := range m.GetResources() {
-		if r.GetBinding() != "" && !slices.Contains(published, r.GetResource().GetName()) {
+		if dry && naming.IsInlineRecord(r.GetBinding()) {
+			continue
+		}
+		if r.GetBinding() != "" && !slices.Contains(published, r.GetResource().GetName()) && storedFakeBinding(env, r.GetBinding()) == nil {
 			missing = append(missing, r.GetResource().GetName())
 		}
 	}

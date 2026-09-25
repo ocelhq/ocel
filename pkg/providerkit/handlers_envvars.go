@@ -254,6 +254,9 @@ func (h *VarsHandler) SetBinding(ctx context.Context, req *envvarsv1.SetBindingR
 	if err := ValidatePublisher(req.GetOwner()); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	if err := ValidateInlineClaim(req.GetOwner(), binding.GetName()); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	if err := RefuseUnsourced(req.GetOwner(), binding); err != nil {
 		return nil, bindingsError(err)
 	}

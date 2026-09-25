@@ -104,6 +104,17 @@ func ValidatePublisher(publisher string) error {
 	return nil
 }
 
+func ValidateInlineClaim(publisher, name string) error {
+	reserved := naming.IsInlineRecord(name)
+	switch {
+	case reserved && publisher != naming.InlineRecordOwner:
+		return fmt.Errorf("binding name %q starts %q, which names the record ocel keeps for a binding written inline in the config; publish yours under another name", name, naming.InlineRecordPrefix)
+	case !reserved && publisher == naming.InlineRecordOwner:
+		return fmt.Errorf("publisher name %q writes only the records inline bindings keep, named %q<type>.<name>", publisher, naming.InlineRecordPrefix)
+	}
+	return nil
+}
+
 func VerifyBinding(binding *bindingsv1.Binding) error {
 	if binding.GetName() == "" {
 		return fmt.Errorf("a binding carries no name; the name is what a consuming app binds to: %w", ErrUnreadableRecord)

@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit/values"
 )
 
@@ -28,7 +29,7 @@ func (r *deployRun) admitBindings(ctx context.Context, report Reporter) error {
 
 	var missing []string
 	for _, resource := range resources {
-		if resource.Binding == "" {
+		if resource.Binding == "" || r.writtenByTheDeploy(resource.Binding, published) {
 			continue
 		}
 		if _, bound := published[resource.Binding]; !bound {
@@ -39,7 +40,7 @@ func (r *deployRun) admitBindings(ctx context.Context, report Reporter) error {
 		return r.refuseUnpublished(ctx, missing, names)
 	}
 	for _, resource := range resources {
-		if resource.Binding == "" {
+		if resource.Binding == "" || r.writtenByTheDeploy(resource.Binding, published) {
 			continue
 		}
 		if err := ReadableAs(published[resource.Binding], resource.Declared, resource.Type, r.proxied); err != nil {
@@ -47,6 +48,11 @@ func (r *deployRun) admitBindings(ctx context.Context, report Reporter) error {
 		}
 	}
 	return nil
+}
+
+func (r *deployRun) writtenByTheDeploy(name string, published map[string]Binding) bool {
+	_, held := published[name]
+	return r.dry && !held && naming.IsInlineRecord(name)
 }
 
 func (r *deployRun) proxied(kind BindingType) bool {

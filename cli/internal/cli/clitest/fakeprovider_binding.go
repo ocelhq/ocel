@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"slices"
+	"strconv"
 
 	connect "connectrpc.com/connect"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
@@ -17,6 +20,20 @@ import (
 )
 
 const FakeBindingsStoreEnvVar = "OCEL_TEST_FAKE_BINDINGS_STORE"
+
+const FakePostgresVersionEnvVar = "OCEL_TEST_FAKE_POSTGRES_VERSION"
+
+const FakePostgresUnreachableEnvVar = "OCEL_TEST_FAKE_POSTGRES_UNREACHABLE"
+
+func fakeProbePostgres(_ context.Context, props *bindingsv1.PostgresProperties) (int, error) {
+	if reason := os.Getenv(FakePostgresUnreachableEnvVar); reason != "" {
+		return 0, fmt.Errorf("dial %s as %s with password %s: %s", props.GetHost(), props.GetUsername(), props.GetPassword(), reason)
+	}
+	if version := os.Getenv(FakePostgresVersionEnvVar); version != "" {
+		return strconv.Atoi(version)
+	}
+	return 170000, nil
+}
 
 const fakeBindingOwnerOcel = "OCEL"
 
@@ -30,6 +47,7 @@ type fakeBinding struct {
 	Owner       string                 `json:"owner"`
 	Version     uint64                 `json:"version"`
 	Properties  []naming.PropertyShape `json:"properties"`
+	Wire        json.RawMessage        `json:"wire,omitempty"`
 }
 
 type fakeBindingStore map[string]*fakeBinding
@@ -94,6 +112,10 @@ func (s *deployFakeProviderServer) SetBinding(ctx context.Context, req *envvarsv
 	if held != nil {
 		version = held.Version + 1
 	}
+	wire, err := protojson.Marshal(binding)
+	if err != nil {
+		return nil, err
+	}
 	store[id] = &fakeBinding{
 		Tier:        req.GetTier(),
 		Slug:        req.GetSlug(),
@@ -104,6 +126,7 @@ func (s *deployFakeProviderServer) SetBinding(ctx context.Context, req *envvarsv
 		Owner:       req.GetOwner(),
 		Version:     version,
 		Properties:  naming.BindingPropertyShapes(binding),
+		Wire:        wire,
 	}
 	if err := saveFakeBindingStore(store); err != nil {
 		return nil, err
@@ -158,4 +181,25 @@ func (s *deployFakeProviderServer) ListBindings(ctx context.Context, req *envvar
 		})
 	}
 	return resp, nil
+}
+
+type FakeBindingRecord struct {
+	Tier        environmentv1.Tier
+	Environment string
+	Name        string
+	Owner       string
+	Wire        string
+}
+
+func FakeBindingRecords() ([]FakeBindingRecord, error) {
+	store, err := loadFakeBindingStore()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]FakeBindingRecord, 0, len(store))
+	for _, id := range slices.Sorted(maps.Keys(store)) {
+		held := store[id]
+		out = append(out, FakeBindingRecord{Tier: held.Tier, Environment: held.Environment, Name: held.Name, Owner: held.Owner, Wire: string(held.Wire)})
+	}
+	return out, nil
 }

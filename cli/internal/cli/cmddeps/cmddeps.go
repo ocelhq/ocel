@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
@@ -29,6 +30,7 @@ type Deps struct {
 	DeploymentID        func(projectDir, app string) (string, error)
 	CollectDeclarations func(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) ([]declare.Resource, error)
 	OpenBrowser         func(url string) error
+	ProbePostgres       inlinebinding.Probe
 	ServeVarsUI         func(ctx context.Context, cfg *projectconfig.Config, runner *provider.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error)
 	CurrentGitBranch    func(dir string) (string, error)
 	DiscoverPRNumber    func() string
