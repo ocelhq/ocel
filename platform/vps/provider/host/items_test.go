@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
 const aKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample bootstrap@laptop"
@@ -36,6 +37,26 @@ func TestTheClassTierIsRootsAndTheStateTierIsTheDeployPrincipalsAlone(t *testing
 	} {
 		if owners[name] != want {
 			t.Errorf("%s is written to %q, want %q: a path with two owners is a path with none", name, owners[name], want)
+		}
+	}
+}
+
+func TestTheRoutingTableIsAloneInADirectoryOfItsOwnThatIsWrittenBeforeIt(t *testing.T) {
+	t.Parallel()
+
+	held := filepath.Dir(live.RoutingTable)
+	if held == stateRoot || held == proxyRoot {
+		t.Fatalf("the routing table sits directly in %s, and a container that reads it through a bind of its directory would read everything else there too", held)
+	}
+	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64)
+	made := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindDir && item.Name == held })
+	table := slices.IndexFunc(items, func(item Item) bool { return item.Name == live.RoutingTable })
+	if made < 0 || table < 0 || made > table {
+		t.Fatalf("%s is made at %d and the table in it written at %d: the table is written by renaming a file staged beside it, so its directory stands first", held, made, table)
+	}
+	for _, item := range items {
+		if item.Name != held && item.Name != live.RoutingTable && beneath(held, item.Name) {
+			t.Errorf("%s is written beside the routing table, and whatever reads the table's directory reads it too", item.ID())
 		}
 	}
 }

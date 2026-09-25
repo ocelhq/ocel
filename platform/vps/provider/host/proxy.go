@@ -120,6 +120,7 @@ func ProxyItems(arch string) []Item {
 		dir(proxyRoot, 0o750, stateOwner, ""),
 		dir(ProxyPins, 0o700, rootOwner, "your pinned certificates"),
 		proxyConfigItem(),
+		dir(live.RoutingDir, 0o750, stateOwner, ""),
 		routingTableItem(),
 		dir(ProxyData, 0o700, rootOwner, "certificates and acme key"),
 		networkItem(),
@@ -383,6 +384,7 @@ func proxyRemovals() []removal {
 		taking(KindNetwork, ProxyNetwork, "kept while anything is attached"),
 		taking(KindProxyConfig, ProxyConfig, ""),
 		taking(KindRoutingTable, live.RoutingTable, "every app's routes"),
+		taking(KindDir, live.RoutingDir, ""),
 		taking(KindDir, proxyRoot, ""),
 		sharing(ProxyPins, "only if empty"),
 	}
