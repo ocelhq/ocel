@@ -461,3 +461,61 @@ func TestDeriveGroupsNamesTheStacksTheVendorDescribed(t *testing.T) {
 		t.Errorf("the images group = %+v, want the dropped feature deleted", groups[2])
 	}
 }
+
+func TestAnAdoptedRowCrossesTheWireAsItself(t *testing.T) {
+	t.Parallel()
+
+	if !providerkit.ValidChangeAction(providerkit.ActionAdopt) {
+		t.Fatal("ValidChangeAction(adopt) = false, and a plan that adopts what it finds fails every conformance check")
+	}
+	shown := providerkit.Plan{Groups: []providerkit.ChangeGroup{{
+		Kind:   providerkit.StackGroupKind,
+		Name:   "core",
+		Action: providerkit.ActionKeep,
+		Changes: []providerkit.Change{
+			{Kind: "docker:engine", Name: "docker", Action: providerkit.ActionAdopt, Reason: "docker 28.3.1, not managed by ocel: upgrading it is yours"},
+		},
+	}}}
+	read, err := providerkit.PlanOf(providerkit.ChangePlanProto(shown, "production", ""))
+	if err != nil {
+		t.Fatalf("PlanOf() over a plan that adopts = %v, want it read back", err)
+	}
+	if got := read.Groups[0].Changes[0].Action; got != providerkit.ActionAdopt {
+		t.Errorf("an adopted row reads back as %q, want %q", got, providerkit.ActionAdopt)
+	}
+}
+
+func TestAGroupThatAdoptsAndKeepsRollsUpAsKept(t *testing.T) {
+	t.Parallel()
+
+	action, reason := providerkit.RollUp([]providerkit.Change{
+		{Kind: "dir", Name: "/etc/ocel", Action: providerkit.ActionKeep},
+		{Kind: "docker:engine", Name: "docker", Action: providerkit.ActionAdopt},
+	})
+	if action != providerkit.ActionKeep || reason == "" {
+		t.Errorf("RollUp() over a keep and an adopt = %q %q, want it kept: adopting writes nothing", action, reason)
+	}
+}
+
+func TestAnAdoptionWritesNothingAndSoNeverGrowsThePlan(t *testing.T) {
+	t.Parallel()
+
+	plan := func(action providerkit.ChangeAction) providerkit.Plan {
+		return providerkit.Plan{Groups: []providerkit.ChangeGroup{{
+			Kind:    providerkit.StackGroupKind,
+			Name:    "core",
+			Changes: []providerkit.Change{{Kind: "docker:engine", Name: "docker", Action: action}},
+		}}}
+	}
+	for shown, standing := range map[providerkit.ChangeAction]providerkit.ChangeAction{
+		providerkit.ActionAdopt: providerkit.ActionAdopt,
+		providerkit.ActionKeep:  providerkit.ActionAdopt,
+	} {
+		if err := providerkit.RefuseGrowth(plan(shown), plan(standing)); err != nil {
+			t.Errorf("RefuseGrowth() from %s to %s = %v, want the apply to run", shown, standing, err)
+		}
+	}
+	if err := providerkit.RefuseGrowth(plan(providerkit.ActionAdopt), plan(providerkit.ActionCreate)); err == nil {
+		t.Error("RefuseGrowth() let an install through where the plan showed the engine adopted, and nobody consented to one")
+	}
+}

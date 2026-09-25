@@ -60,8 +60,9 @@ func planHeadline(plan *planv1.ChangePlan) string {
 }
 
 type planCounts struct {
-	acted map[planv1.Change_Action]int
-	kept  int
+	acted   map[planv1.Change_Action]int
+	adopted int
+	kept    int
 }
 
 func readPlan(plan *planv1.ChangePlan) ([]*planv1.ChangeGroup, planCounts) {
@@ -116,19 +117,24 @@ func acted(group *planv1.ChangeGroup, acting []*planv1.Change) *planv1.ChangeGro
 }
 
 func actingAction(acting []*planv1.Change) planv1.Change_Action {
-	creates, deletes := 0, 0
+	creates, deletes, adopts := 0, 0, 0
 	for _, change := range acting {
 		switch change.GetAction() {
 		case planv1.Change_ACTION_CREATE:
 			creates++
 		case planv1.Change_ACTION_DELETE, planv1.Change_ACTION_DISABLE_THEN_DELETE:
 			deletes++
+		case planv1.Change_ACTION_ADOPT:
+			adopts++
 		}
 	}
+	writing := len(acting) - adopts
 	switch {
-	case creates == len(acting) && creates > 0:
+	case writing == 0:
+		return planv1.Change_ACTION_KEEP
+	case creates == writing:
 		return planv1.Change_ACTION_CREATE
-	case deletes == len(acting) && deletes > 0:
+	case deletes == writing:
 		return planv1.Change_ACTION_DELETE
 	default:
 		return planv1.Change_ACTION_UPDATE
@@ -147,6 +153,9 @@ func (c planCounts) tally() string {
 			parts = append(parts, fmt.Sprintf("%d to %s", n, faceOf(action).verb))
 		}
 	}
+	if c.adopted > 0 {
+		parts = append(parts, fmt.Sprintf("%d adopted", c.adopted))
+	}
 	if c.kept > 0 {
 		parts = append(parts, fmt.Sprintf("%d unchanged", c.kept))
 	}
@@ -157,6 +166,9 @@ func (c planCounts) tally() string {
 }
 
 func (c *planCounts) count(action planv1.Change_Action) {
+	if action == planv1.Change_ACTION_ADOPT {
+		c.adopted++
+	}
 	if tallied := faceOf(action).tallyAs; tallied != planv1.Change_ACTION_UNSPECIFIED {
 		c.acted[tallied]++
 	}
@@ -303,6 +315,7 @@ var actionFaces = map[planv1.Change_Action]actionFace{
 	planv1.Change_ACTION_DELETE:              {sigil: "–", verb: "delete", tallyAs: planv1.Change_ACTION_DELETE},
 	planv1.Change_ACTION_DISABLE_THEN_DELETE: {sigil: "–", verb: "delete", words: "disable, then delete", tallyAs: planv1.Change_ACTION_DELETE},
 	planv1.Change_ACTION_KEEP:                {sigil: " "},
+	planv1.Change_ACTION_ADOPT:               {sigil: "=", words: "adopt"},
 }
 
 func faceOf(action planv1.Change_Action) actionFace {

@@ -31,6 +31,7 @@ const (
 	Change_ACTION_DELETE              Change_Action = 4
 	Change_ACTION_DISABLE_THEN_DELETE Change_Action = 5
 	Change_ACTION_KEEP                Change_Action = 6
+	Change_ACTION_ADOPT               Change_Action = 7
 )
 
 // Enum value maps for Change_Action.
@@ -43,6 +44,7 @@ var (
 		4: "ACTION_DELETE",
 		5: "ACTION_DISABLE_THEN_DELETE",
 		6: "ACTION_KEEP",
+		7: "ACTION_ADOPT",
 	}
 	Change_Action_value = map[string]int32{
 		"ACTION_UNSPECIFIED":         0,
@@ -52,6 +54,7 @@ var (
 		"ACTION_DELETE":              4,
 		"ACTION_DISABLE_THEN_DELETE": 5,
 		"ACTION_KEEP":                6,
+		"ACTION_ADOPT":               7,
 	}
 )
 
@@ -347,13 +350,13 @@ const file_common_plan_v1_plan_proto_rawDesc = "" +
 	"\x06action\x18\x04 \x01(\x0e2\x1d.common.plan.v1.Change.ActionR\x06action\x12\x16\n" +
 	"\x06reason\x18\x05 \x01(\tR\x06reason\x12\x12\n" +
 	"\x04slow\x18\x06 \x01(\bR\x04slow\x120\n" +
-	"\achanges\x18\a \x03(\v2\x16.common.plan.v1.ChangeR\achanges\"\xb4\x02\n" +
+	"\achanges\x18\a \x03(\v2\x16.common.plan.v1.ChangeR\achanges\"\xc6\x02\n" +
 	"\x06Change\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x125\n" +
 	"\x06action\x18\x03 \x01(\x0e2\x1d.common.plan.v1.Change.ActionR\x06action\x12\x16\n" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\x12\x12\n" +
-	"\x04slow\x18\x05 \x01(\bR\x04slow\"\x9e\x01\n" +
+	"\x04slow\x18\x05 \x01(\bR\x04slow\"\xb0\x01\n" +
 	"\x06Action\x12\x16\n" +
 	"\x12ACTION_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rACTION_CREATE\x10\x01\x12\x11\n" +
@@ -361,7 +364,8 @@ const file_common_plan_v1_plan_proto_rawDesc = "" +
 	"\x0eACTION_REPLACE\x10\x03\x12\x11\n" +
 	"\rACTION_DELETE\x10\x04\x12\x1e\n" +
 	"\x1aACTION_DISABLE_THEN_DELETE\x10\x05\x12\x0f\n" +
-	"\vACTION_KEEP\x10\x06B8Z6github.com/ocelhq/ocel/pkg/proto/common/plan/v1;planv1b\x06proto3"
+	"\vACTION_KEEP\x10\x06\x12\x10\n" +
+	"\fACTION_ADOPT\x10\aB8Z6github.com/ocelhq/ocel/pkg/proto/common/plan/v1;planv1b\x06proto3"
 
 var (
 	file_common_plan_v1_plan_proto_rawDescOnce sync.Once

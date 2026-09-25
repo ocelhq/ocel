@@ -278,3 +278,49 @@ Proposed changes to the preview bootstrap:
 		t.Errorf("projection =\n%s\nwant\n%s", got, want)
 	}
 }
+
+func TestAnAdoptedRowIsShownWithWhyAndCountedApartFromWork(t *testing.T) {
+	t.Parallel()
+
+	adopting := func(core planv1.Change_Action, rows ...*planv1.Change) *planv1.ChangePlan {
+		return &planv1.ChangePlan{
+			Headline: "Proposed changes to the production bootstrap",
+			Groups:   []*planv1.ChangeGroup{{Kind: "stack", Name: "vps/ada@box", Action: core, Changes: rows}},
+		}
+	}
+	engine := &planv1.Change{Kind: "docker:engine", Name: "docker", Action: planv1.Change_ACTION_ADOPT, Reason: "docker 28.3.1, not managed by ocel: upgrading it is yours"}
+	dir := &planv1.Change{Kind: "fs:dir", Name: "/etc/ocel", Action: planv1.Change_ACTION_CREATE}
+	kept := &planv1.Change{Kind: "fs:dir", Name: "/var/lib/ocel", Action: planv1.Change_ACTION_KEEP}
+
+	fresh := `
+Proposed changes to the production bootstrap:
+
++ vps/ada@box  [core]
+    + /etc/ocel     fs:dir
+    = adopt docker  docker:engine   — docker 28.3.1, not managed by ocel: upgrading it is yours
+
+1 to create, 1 adopted.
+`
+	if got := projectPlan(t, adopting(planv1.Change_ACTION_CREATE, dir, engine)); got != fresh {
+		t.Errorf("projection =\n%s\nwant\n%s", got, fresh)
+	}
+
+	settled := adopting(planv1.Change_ACTION_KEEP, kept, engine)
+	want := `
+Proposed changes to the production bootstrap:
+
+  vps/ada@box  [core]
+    = adopt docker  docker:engine   — docker 28.3.1, not managed by ocel: upgrading it is yours
+
+1 adopted, 1 unchanged.
+`
+	if got := projectPlan(t, settled); got != want {
+		t.Errorf("projection =\n%s\nwant\n%s", got, want)
+	}
+	if Mutates(settled) {
+		t.Error("Mutates() = true for a plan that only adopts what stands, and every re-run would ask consent for nothing")
+	}
+	if got := ConfirmVerb(adopting(planv1.Change_ACTION_CREATE, dir, engine)); got != "Create these" {
+		t.Errorf("ConfirmVerb() = %q, want a plan that creates and adopts to read as one that creates", got)
+	}
+}

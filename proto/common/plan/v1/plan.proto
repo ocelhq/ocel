@@ -42,6 +42,7 @@ message Change {
     ACTION_DELETE = 4;
     ACTION_DISABLE_THEN_DELETE = 5;
     ACTION_KEEP = 6;
+    ACTION_ADOPT = 7;
   }
 
   string kind = 1;

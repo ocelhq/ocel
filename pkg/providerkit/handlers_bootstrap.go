@@ -203,6 +203,7 @@ var planActions = map[ChangeAction]planv1.Change_Action{
 	ActionDelete:            planv1.Change_ACTION_DELETE,
 	ActionDisableThenDelete: planv1.Change_ACTION_DISABLE_THEN_DELETE,
 	ActionKeep:              planv1.Change_ACTION_KEEP,
+	ActionAdopt:             planv1.Change_ACTION_ADOPT,
 }
 
 var changeActions = invertActions(planActions)
