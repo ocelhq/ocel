@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/caddyadmin"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -417,12 +418,13 @@ func RenderProxyConfig(state RoutingTable) ([]byte, error) {
 		}
 		slices.Sort(hostnames)
 		for _, hostname := range hostnames {
-			if held, taken := answering[hostname]; taken {
+			named := strings.ToLower(hostname)
+			if held, taken := answering[named]; taken {
 				return nil, providerkit.Refuse(providerkit.CodeInvalid,
 					"%s would be forwarded by both %s and %s",
 					hostname, held.identity(), route.identity())
 			}
-			answering[hostname] = route
+			answering[named] = route
 		}
 		if !route.app() && len(hostnames) > 0 {
 			routes = append(routes, refusingStoreAdmin(route, hostnames))
@@ -539,9 +541,9 @@ func validRoute(route AppRoute) error {
 				what, named)
 		}
 	}
-	if route.Upstream == "" {
+	if _, err := switchboard.UpstreamAddress(route.Upstream); err != nil {
 		return providerkit.Refuse(providerkit.CodeInvalid,
-			"the route %s names no upstream to forward to", route.identity())
+			"the route %s forwards to no upstream it can dial: %v", route.identity(), err)
 	}
 	if route.Health != "" && !strings.HasPrefix(route.Health, "/") {
 		return providerkit.Refuse(providerkit.CodeInvalid,

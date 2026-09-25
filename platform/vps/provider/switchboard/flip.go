@@ -125,7 +125,7 @@ func (b *Board) Upstreams() []Upstream {
 func addresses(dials []string) ([]string, error) {
 	keyed := make([]string, 0, len(dials))
 	for _, dial := range dials {
-		address, err := address(dial)
+		address, err := UpstreamAddress(dial)
 		if err != nil {
 			return nil, err
 		}
