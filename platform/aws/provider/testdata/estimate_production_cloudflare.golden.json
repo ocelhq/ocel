@@ -540,6 +540,62 @@
       "monthlyUsage": "0.03"
     },
     {
+      "resource": "project:shop/shared:production/aws_lambda_function:EnvSync",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Requests",
+          "unit": "requests",
+          "monthlyQuantity": "1000000",
+          "unitPrice": "0.0000002",
+          "monthlyCost": "0.20",
+          "usageBased": true,
+          "assumption": "moderate profile: 1000000 requests",
+          "rateRef": "aws/lambda/requests-arm"
+        },
+        {
+          "name": "Duration",
+          "unit": "GB-seconds",
+          "monthlyQuantity": "25000",
+          "unitPrice": "0.0000133334",
+          "monthlyCost": "0.33",
+          "usageBased": true,
+          "assumption": "moderate profile: 25000 GB-seconds",
+          "rateRef": "aws/lambda/duration-arm"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.53"
+    },
+    {
+      "resource": "project:shop/shared:production/aws_cloudwatch_log_group:EnvSyncLogGroup",
+      "status": "STATUS_PRICED",
+      "components": [
+        {
+          "name": "Ingested",
+          "unit": "GB",
+          "monthlyQuantity": "1",
+          "unitPrice": "0.5",
+          "monthlyCost": "0.50",
+          "usageBased": true,
+          "assumption": "moderate profile: 1 GB",
+          "rateRef": "aws/logs/ingest"
+        },
+        {
+          "name": "Stored",
+          "unit": "GB-month",
+          "monthlyQuantity": "0.5",
+          "unitPrice": "0.03",
+          "monthlyCost": "0.02",
+          "usageBased": true,
+          "assumption": "moderate profile: 0.5 GB-month",
+          "rateRef": "aws/logs/storage"
+        }
+      ],
+      "monthlyFixed": "0.00",
+      "monthlyUsage": "0.52"
+    },
+    {
       "resource": "project:shop/environment:prod/aws_rds_cluster:main",
       "status": "STATUS_PRICED",
       "components": [
@@ -1026,12 +1082,12 @@
     {
       "scope": "project:shop",
       "monthlyFixed": "6.40",
-      "monthlyUsage": "111.07"
+      "monthlyUsage": "112.12"
     },
     {
       "scope": "project:shop/shared:production",
       "monthlyFixed": "6.00",
-      "monthlyUsage": "12.63"
+      "monthlyUsage": "13.68"
     },
     {
       "scope": "project:shop/environment:prod",
@@ -1045,7 +1101,7 @@
     }
   ],
   "coverage": {
-    "supported": 32,
+    "supported": 34,
     "free": 7,
     "supportedTypes": [
       "aws_cloudwatch_log_group",
@@ -1073,5 +1129,5 @@
     "CloudFront is priced at its United States rates whichever price class the distribution carries"
   ],
   "monthlyFixed": "6.40",
-  "monthlyUsage": "111.07"
+  "monthlyUsage": "112.12"
 }

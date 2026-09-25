@@ -134,8 +134,8 @@ func TestPriceBehindCloudflareCarriesTheEdgesOwnBill(t *testing.T) {
 	if vendors["cloudflare"] != 5 || vendors["aws"] == 0 {
 		t.Errorf("vendors = %v, want the plan, cache, store, writer and entry beside the AWS origin", vendors)
 	}
-	if typeCounts(set)["aws_lambda_function"] != 1+1+4 {
-		t.Errorf("lambdas = %d, want the app's, the upload completer's, and the four that isr, image optimization and the cloudflare edge stand up", typeCounts(set)["aws_lambda_function"])
+	if typeCounts(set)["aws_lambda_function"] != 1+1+4+1 {
+		t.Errorf("lambdas = %d, want the app's, the upload completer's, the four that isr, image optimization and the cloudflare edge stand up, and the vars key's env syncer", typeCounts(set)["aws_lambda_function"])
 	}
 	if cov := est.GetCoverage(); cov.GetUnsupported() != 0 {
 		t.Errorf("coverage = %v, want every cloudflare resource priced by the edge's own card", cov)

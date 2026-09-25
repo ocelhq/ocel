@@ -18,6 +18,7 @@ func fixturePayloads() stackPayloads {
 		publisher:   fixturePublisherCode(),
 		revalidator: fixtureRevalidatorCode(),
 		invalidator: fixtureInvalidatorCode(),
+		envSync:     fixtureEnvSyncCode(),
 	}
 }
 

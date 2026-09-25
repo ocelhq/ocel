@@ -10,6 +10,7 @@ const (
 	VarsTableIndexName = tagclock.IndexName
 
 	outputVarsTable      = "VarsTableName"
+	outputVarsTableARN   = "VarsTableArn"
 	outputVarsKeyARN     = "VarsKeyArn"
 	outputVarsKeyBrought = "VarsKeyBrought"
 
@@ -88,5 +89,8 @@ func varsOutputs() string {
 	return fmt.Sprintf(`  %s:
     Description: "DynamoDB table holding every variable set for this class, with its history. Kept apart from the state table so a variable read never touches deploy state."
     Value: !Ref VarsTable
-`, outputVarsTable)
+  %s:
+    Description: "ARN of that table, handed to the vars-key stack so its env syncer's role reaches this table and no other."
+    Value: !GetAtt VarsTable.Arn
+`, outputVarsTable, outputVarsTableARN)
 }

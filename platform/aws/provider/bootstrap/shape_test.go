@@ -57,7 +57,7 @@ func TestFeaturesShapeTheirFunctionsAsTheTemplateSizesThem(t *testing.T) {
 			t.Errorf("%s architectures = %v, want arm64", fn.Name, fn.Properties["architectures"])
 		}
 	}
-	want := map[string]float64{"ImageOptimizer": 1769, "Revalidator": 512, "TagInvalidator": 512, "TagPublisher": 512}
+	want := map[string]float64{"EnvSync": 128, "ImageOptimizer": 1769, "Revalidator": 512, "TagInvalidator": 512, "TagPublisher": 512}
 	for name, mb := range want {
 		if memory[name] != mb {
 			t.Errorf("%s memory = %v, want %v", name, memory[name], mb)

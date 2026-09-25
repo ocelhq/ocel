@@ -255,6 +255,33 @@
       "properties": {}
     },
     {
+      "id": "project:shop/shared:production/aws_lambda_function:EnvSync",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_lambda_function",
+      "name": "EnvSync",
+      "region": "us-east-1",
+      "properties": {
+        "architectures": [
+          "arm64"
+        ],
+        "memory_size": 128,
+        "runtime": "provided.al2023",
+        "timeout": 60
+      }
+    },
+    {
+      "id": "project:shop/shared:production/aws_cloudwatch_log_group:EnvSyncLogGroup",
+      "scope": "project:shop/shared:production",
+      "vendor": "aws",
+      "type": "aws_cloudwatch_log_group",
+      "name": "EnvSyncLogGroup",
+      "region": "us-east-1",
+      "properties": {
+        "retention_in_days": 14
+      }
+    },
+    {
       "id": "project:shop/environment:prod/aws_rds_cluster:main",
       "scope": "project:shop/environment:prod",
       "vendor": "aws",

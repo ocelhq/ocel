@@ -79,6 +79,7 @@ type ScopedARNs struct {
 	bootstrapFunction   string
 	bootstrapLogGroup   string
 	bootstrapQueue      string
+	bootstrapSchedule   string
 	edgeUser            string
 	appBoundary         string
 	varsAlias           string
@@ -104,6 +105,7 @@ func (n Namespace) ScopedARNs() ScopedARNs {
 		bootstrapFunction:  "arn:aws:lambda:*:*:function:" + core + "*",
 		bootstrapLogGroup:  "arn:aws:logs:*:*:log-group:/aws/lambda/" + core + "*",
 		bootstrapQueue:     "arn:aws:sqs:*:*:" + string(n) + "-*",
+		bootstrapSchedule:  "arn:aws:scheduler:*:*:schedule/" + envSyncScheduleGroup + "/" + core + "*",
 		edgeUser:           "arn:aws:iam::*:user/" + string(n) + "-edge*",
 		appBoundary:        "arn:aws:iam::*:policy/" + n.AppBoundaryNameFor(ClassProduction) + "*",
 		varsAlias:          "arn:aws:kms:*:*:alias/" + string(n) + "-vars-*",
@@ -785,6 +787,20 @@ func bootstrapProvisioning(ns Namespace, r ScopedARNs) []GrantStatement {
 			Actions:   []string{"iam:PassRole"},
 			Resources: []string{r.bootstrapRole},
 			Condition: passedToLambda(false),
+		},
+		{
+			Actions:   []string{"iam:PassRole"},
+			Resources: []string{r.bootstrapRole},
+			Condition: passedTo(schedulerServicePrincipal, false),
+		},
+		{
+			Actions: []string{
+				"scheduler:CreateSchedule",
+				"scheduler:DeleteSchedule",
+				"scheduler:GetSchedule",
+				"scheduler:UpdateSchedule",
+			},
+			Resources: []string{r.bootstrapSchedule},
 		},
 		{
 			Actions: []string{

@@ -130,6 +130,10 @@ func (n Namespace) revalidateQueueNames(class string) (queue, dlq string) {
 	return base + ".fifo", base + "-dlq.fifo"
 }
 
+func (n Namespace) envSyncScheduleName(class string) string {
+	return suffixed(class, n.CoreStackName()+"-envsync")
+}
+
 func (n Namespace) PolicyName(what string) string { return string(n) + "-" + what }
 
 func (n Namespace) ChangeSetNameFor(stackName string) string {
