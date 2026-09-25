@@ -17,6 +17,12 @@ import (
 
 type unprogrammed struct{ providerkit.Provider }
 
+func (u unprogrammed) Hooks() providerkit.Hooks {
+	hooks := u.Provider.Hooks()
+	hooks.ProgramEdge = nil
+	return hooks
+}
+
 func edged(kind edge.Kind, zone string) *contractv1.EdgeSelection {
 	return &contractv1.EdgeSelection{
 		Kind: string(kind),

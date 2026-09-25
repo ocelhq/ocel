@@ -115,10 +115,12 @@ func (r *Releaser) at(ctx context.Context, ref providerkit.StackRef, kind edge.K
 			Project:    cfg.PulumiProject,
 			Env:        map[string]string{"AWS_REGION": cfg.Region},
 		},
-		Program: held,
-		Refresh: refreshPolicy(r.realized),
-		Engine:  r.engine,
-		Plugins: []kitpulumi.Plugin{plugin},
+		Program:   held.Run,
+		Configure: held.Configure,
+		Decode:    held.Decode,
+		Refresh:   refreshPolicy(r.realized),
+		Engine:    r.engine,
+		Plugins:   []kitpulumi.Plugin{plugin},
 	})
 	r.opened[scope] = held
 	return held, nil

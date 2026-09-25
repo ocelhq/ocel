@@ -182,53 +182,11 @@ func TestNewRefusesOptionsTheReferenceProviderDoesNotAccept(t *testing.T) {
 	}
 }
 
-func TestOptionalSetsAreSwitchable(t *testing.T) {
-	t.Parallel()
-
-	base := fake.NewProvider(fake.Options{})
-	for _, tc := range []struct {
-		name     string
-		provider providerkit.Provider
-		want     []string
-	}{
-		{"none", base, nil},
-		{"Warmer", fake.Warmer{Provider: base}, []string{"Warmer"}},
-		{"CodeEmbedder", fake.CodeEmbedder{Provider: base}, []string{"CodeEmbedder"}},
-		{"StackInspector", fake.StackInspector{Provider: base}, []string{"StackInspector"}},
-		{"GrantVerifier", fake.GrantVerifier{Provider: base}, []string{"GrantVerifier"}},
-		{"Full", fake.Full{Provider: base}, []string{"Warmer", "CodeEmbedder", "StackInspector", "GrantVerifier"}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			if got := setsOn(tc.provider); !slices.Equal(got, tc.want) {
-				t.Errorf("optional sets on %s = %v, want %v", tc.name, got, tc.want)
-			}
-		})
-	}
-}
-
-func setsOn(p providerkit.Provider) []string {
-	var found []string
-	if _, ok := p.(providerkit.Warmer); ok {
-		found = append(found, "Warmer")
-	}
-	if _, ok := p.(providerkit.CodeEmbedder); ok {
-		found = append(found, "CodeEmbedder")
-	}
-	if _, ok := p.(providerkit.StackInspector); ok {
-		found = append(found, "StackInspector")
-	}
-	if _, ok := p.(providerkit.GrantVerifier); ok {
-		found = append(found, "GrantVerifier")
-	}
-	return found
-}
-
 func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *testing.T) {
 	t.Parallel()
 
-	provider := fake.Full{Provider: fake.NewProvider(fake.Options{})}
-	releaser := resources.Releaser(provider.Records(), provider.Artifacts(), provider)
+	provider := fake.NewProvider(fake.Options{})
+	releaser := resources.Releaser(provider.Records(), provider.Artifacts(), provider.ResourceHooks())
 	ref := providerkit.StackRef{
 		Project: "shop",
 		Class:   providerkit.ClassProduction,
@@ -286,7 +244,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 	}, nil); err != nil {
 		t.Fatalf("Provision() of an app moving back to serverless = %v", err)
 	}
-	if taken := provider.Releases().(*fake.Releaser).TakenDown(); !slices.Contains(taken, "web") {
+	if taken := provider.Releaser().TakenDown(); !slices.Contains(taken, "web") {
 		t.Errorf("the reference provider took down %v, want the container the app left behind: an app changing compute leaves the other primitive's work standing otherwise", taken)
 	}
 }

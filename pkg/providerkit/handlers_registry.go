@@ -14,8 +14,8 @@ func (h *handlers) ResolveImageRegistry(ctx context.Context, req *contractv1.Res
 	if err != nil {
 		return nil, err
 	}
-	hosting, hosts := provider.(ImageRegistry)
-	if !hosts {
+	ensure := provider.Hooks().EnsureImageRegistry
+	if ensure == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented,
 			errors.New("this provider hosts no image registry of its own, so images are pushed only where the project names a registry"))
 	}
@@ -23,7 +23,7 @@ func (h *handlers) ResolveImageRegistry(ctx context.Context, req *contractv1.Res
 	if err != nil {
 		return nil, RefusalError(err)
 	}
-	target, err := hosting.ImageRegistry(ctx, class, req.GetRepositories())
+	target, err := ensure(ctx, class, req.GetRepositories())
 	if err != nil {
 		return nil, RefusalError(err)
 	}

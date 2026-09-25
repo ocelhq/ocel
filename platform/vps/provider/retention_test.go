@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -106,7 +105,7 @@ func TestAReleaseThatNeverReachedItsRecordSweepsItsOwnImageAnyway(t *testing.T) 
 	}}
 	p := over(machine)
 
-	if _, err := resources.Releaser(p.Records(), p.Artifacts(), p).Provision(context.Background(), aStack(t, anApp()), nil); err == nil {
+	if _, err := p.Releases().Provision(context.Background(), aStack(t, anApp()), nil); err == nil {
 		t.Fatal("Provision() succeeded over a box whose record tier refused, and this test needs the failure path")
 	}
 	called := helperCalls(machine, "reconcile")

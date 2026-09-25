@@ -36,10 +36,10 @@ func (h *VarsHandler) verifyGrants(ctx context.Context, binding *bindingsv1.Bind
 	if err != nil {
 		return err
 	}
-	if vars.Grants == nil {
+	if vars.VerifyGrants == nil {
 		return nil
 	}
-	return vars.Grants.VerifyGrants(ctx, bindingOf(binding))
+	return vars.VerifyGrants(ctx, bindingOf(binding))
 }
 
 func (h *VarsHandler) scoped(tier environmentv1.Tier, slug string) (values.Store, values.Scope, error) {

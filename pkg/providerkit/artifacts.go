@@ -107,10 +107,6 @@ func ship(ctx context.Context, store ArtifactStore, upload Upload, report Report
 	return nil
 }
 
-type ArtifactPacker interface {
-	PackApp(ctx context.Context, packing AppPacking, report Reporter) (AppPack, error)
-}
-
 type AppPacking struct {
 	Ref    StackRef
 	Edge   edge.Kind
@@ -125,11 +121,11 @@ type AppPack struct {
 }
 
 func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, report Reporter) (AppPack, error) {
-	packer, packs := r.provider.(ArtifactPacker)
-	if !packs {
+	packApp := r.provider.Hooks().PackApp
+	if packApp == nil {
 		return AppPack{}, nil
 	}
-	pack, err := packer.PackApp(ctx, AppPacking{
+	pack, err := packApp(ctx, AppPacking{
 		Ref:    r.ref(entry.Stack),
 		Edge:   r.front.Kind(),
 		App:    entry.App,
@@ -147,8 +143,8 @@ func (r *deployRun) stageFunctions(
 	pack AppPack,
 	routing *RoutingPlan,
 ) ([]Upload, []ImagePush, error) {
-	if imager, images := r.provider.(FunctionImager); images {
-		pushes, err := r.imageFunctions(ctx, imager, entry, pack, routing)
+	if hooks := r.provider.Hooks(); hooks.FunctionBaseImage != nil {
+		pushes, err := r.imageFunctions(ctx, hooks, entry, pack, routing)
 		return nil, pushes, err
 	}
 	staged, err := r.stageApp(entry, pack, routing)

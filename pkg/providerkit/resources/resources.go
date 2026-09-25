@@ -17,82 +17,48 @@ type Instruction struct {
 	Resource providerkit.Resource
 }
 
-type Postgres interface {
-	Postgres(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error)
+type Hooks struct {
+	ProvisionPostgres   func(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error)
+	ProvisionBucket     func(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error)
+	RemoveResource      func(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, report providerkit.Reporter) error
+	ProvisionFunctions  func(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) ([]providerkit.Function, error)
+	RemoveFunctions     func(ctx context.Context, ref providerkit.StackRef, functions []providerkit.Function, report providerkit.Reporter) error
+	ProvisionContainers func(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) ([]providerkit.AppContainer, error)
+	RemoveContainers    func(ctx context.Context, ref providerkit.StackRef, containers []providerkit.AppContainer, report providerkit.Reporter) error
+	ReconcileImages     func(ctx context.Context, ref providerkit.StackRef, app, coordinate string, report providerkit.Reporter) error
+	ForgetReleases      func(ctx context.Context, ref providerkit.StackRef, app string, report providerkit.Reporter) error
 }
 
-type Bucket interface {
-	Bucket(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error)
-}
-
-type Remover interface {
-	RemoveResource(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, report providerkit.Reporter) error
-}
-
-const (
-	FunctionsPrimitive     = "Functions"
-	AppContainersPrimitive = "AppContainers"
-)
-
-type Functions interface {
-	ProvisionFunctions(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) ([]providerkit.Function, error)
-
-	RemoveFunctions(ctx context.Context, ref providerkit.StackRef, functions []providerkit.Function, report providerkit.Reporter) error
-}
-
-type AppContainers interface {
-	ProvisionContainers(ctx context.Context, plan providerkit.StackPlan, report providerkit.Reporter) ([]providerkit.AppContainer, error)
-
-	RemoveContainers(ctx context.Context, ref providerkit.StackRef, containers []providerkit.AppContainer, report providerkit.Reporter) error
-}
-
-type ImageRetention interface {
-	ReconcileImages(ctx context.Context, ref providerkit.StackRef, app, coordinate string, report providerkit.Reporter) error
-
-	ForgetReleases(ctx context.Context, ref providerkit.StackRef, app string, report providerkit.Reporter) error
-}
-
-func Serves(impl any) []providerkit.BindingType {
+func Serves(hooks Hooks) []providerkit.BindingType {
 	var served []providerkit.BindingType
 	for _, primitive := range primitives {
-		if primitive.servedBy(impl) {
+		if primitive.of(hooks) != nil {
 			served = append(served, primitive.kind)
 		}
 	}
 	return served
 }
 
-func Releaser(records providerkit.RecordStore, artifacts providerkit.ArtifactStore, impl any) providerkit.Releaser {
-	return &fanout{records: records, artifacts: artifacts, impl: impl}
+func Releaser(records providerkit.RecordStore, artifacts providerkit.ArtifactStore, hooks Hooks) providerkit.Releaser {
+	return &fanout{records: records, artifacts: artifacts, hooks: hooks}
 }
 
+type provisioning func(ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error)
+
 type primitive struct {
-	kind     providerkit.BindingType
-	servedBy func(any) bool
-	call     func(any, context.Context, Instruction, providerkit.Reporter) (providerkit.Binding, error)
+	kind providerkit.BindingType
+	of   func(Hooks) provisioning
 }
 
 var primitives = []primitive{
-	{
-		kind:     providerkit.BindingPostgres,
-		servedBy: func(impl any) bool { _, ok := impl.(Postgres); return ok },
-		call: func(impl any, ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
-			return impl.(Postgres).Postgres(ctx, in, report)
-		},
-	},
-	{
-		kind:     providerkit.BindingBucket,
-		servedBy: func(impl any) bool { _, ok := impl.(Bucket); return ok },
-		call: func(impl any, ctx context.Context, in Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
-			return impl.(Bucket).Bucket(ctx, in, report)
-		},
-	},
+	{kind: providerkit.BindingPostgres, of: func(h Hooks) provisioning { return h.ProvisionPostgres }},
+	{kind: providerkit.BindingBucket, of: func(h Hooks) provisioning { return h.ProvisionBucket }},
 }
 
 type fanout struct {
 	records   providerkit.RecordStore
 	artifacts providerkit.ArtifactStore
-	impl      any
+	hooks     Hooks
 }
 
 func (f *fanout) Plan(ctx context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) (providerkit.Plan, error) {
@@ -173,21 +139,19 @@ func (f *fanout) standingUp(plan providerkit.StackPlan) (standingUp, error) {
 	}
 	switch plan.App.Compute {
 	case providerkit.ComputeServerless:
-		functions, serves := f.impl.(Functions)
-		if !serves {
-			return nil, lacking(plan.App, FunctionsPrimitive)
+		if f.hooks.ProvisionFunctions == nil {
+			return nil, lacking(plan.App, "ProvisionFunctions")
 		}
 		return func(ctx context.Context, report providerkit.Reporter) (providerkit.StackResult, error) {
-			standing, err := functions.ProvisionFunctions(ctx, plan, report)
+			standing, err := f.hooks.ProvisionFunctions(ctx, plan, report)
 			return providerkit.StackResult{Functions: standing}, err
 		}, nil
 	case providerkit.ComputeContainer:
-		containers, serves := f.impl.(AppContainers)
-		if !serves {
-			return nil, lacking(plan.App, AppContainersPrimitive)
+		if f.hooks.ProvisionContainers == nil {
+			return nil, lacking(plan.App, "ProvisionContainers")
 		}
 		return func(ctx context.Context, report providerkit.Reporter) (providerkit.StackResult, error) {
-			standing, err := containers.ProvisionContainers(ctx, plan, report)
+			standing, err := f.hooks.ProvisionContainers(ctx, plan, report)
 			return providerkit.StackResult{Containers: standing}, err
 		}, nil
 	default:
@@ -197,19 +161,19 @@ func (f *fanout) standingUp(plan providerkit.StackPlan) (standingUp, error) {
 	}
 }
 
-func lacking(app *providerkit.AppPlan, primitive string) error {
+func lacking(app *providerkit.AppPlan, hook string) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
-		"app %s runs on %s compute and this provider implements no %s, so nothing here can stand it up",
-		app.App, app.Compute, primitive)
+		"app %s runs on %s compute and this provider sets no %s hook, so nothing here can stand it up",
+		app.App, app.Compute, hook)
 }
 
 func (f *fanout) provision(ctx context.Context, plan providerkit.StackPlan, resource providerkit.Resource, report providerkit.Reporter) (providerkit.Binding, error) {
-	serving, err := f.serving(resource)
+	provision, err := f.serving(resource)
 	if err != nil {
 		return providerkit.Binding{}, err
 	}
 	in := Instruction{Ref: plan.Ref, Tags: plan.Tags, Bindings: plan.Bindings, Resource: resource}
-	return serving.call(f.impl, ctx, in, report)
+	return provision(ctx, in, report)
 }
 
 func (f *fanout) serves(plan providerkit.StackPlan) error {
@@ -221,19 +185,19 @@ func (f *fanout) serves(plan providerkit.StackPlan) error {
 	return nil
 }
 
-func (f *fanout) serving(resource providerkit.Resource) (primitive, error) {
+func (f *fanout) serving(resource providerkit.Resource) (provisioning, error) {
 	for _, serving := range primitives {
 		if serving.kind != resource.Type {
 			continue
 		}
-		if !serving.servedBy(f.impl) {
-			break
+		if provision := serving.of(f.hooks); provision != nil {
+			return provision, nil
 		}
-		return serving, nil
+		break
 	}
-	return primitive{}, providerkit.Refuse(providerkit.CodeInvalid,
+	return nil, providerkit.Refuse(providerkit.CodeInvalid,
 		"resource %s is a %s, and this provider serves %s",
-		resource.Name, resource.Type, served(Serves(f.impl)))
+		resource.Name, resource.Type, served(Serves(f.hooks)))
 }
 
 func (f *fanout) Destroy(ctx context.Context, ref providerkit.StackRef, report providerkit.Reporter) error {
@@ -267,11 +231,10 @@ func (f *fanout) Destroy(ctx context.Context, ref providerkit.StackRef, report p
 }
 
 func (f *fanout) forget(ctx context.Context, ref providerkit.StackRef, app string, report providerkit.Reporter) error {
-	retention, sweeps := f.impl.(ImageRetention)
-	if !sweeps {
+	if f.hooks.ForgetReleases == nil {
 		return nil
 	}
-	err := retention.ForgetReleases(ctx, ref, app, report)
+	err := f.hooks.ForgetReleases(ctx, ref, app, report)
 	if err != nil && report != nil {
 		report.Detail(fmt.Sprintf("Left %s's release window standing: %v", app, err))
 	}
@@ -279,11 +242,10 @@ func (f *fanout) forget(ctx context.Context, ref providerkit.StackRef, app strin
 }
 
 func (f *fanout) reconcile(ctx context.Context, ref providerkit.StackRef, app, coordinate string, report providerkit.Reporter) error {
-	retention, sweeps := f.impl.(ImageRetention)
-	if !sweeps || coordinate == "" {
+	if f.hooks.ReconcileImages == nil || coordinate == "" {
 		return nil
 	}
-	err := retention.ReconcileImages(ctx, ref, app, coordinate, report)
+	err := f.hooks.ReconcileImages(ctx, ref, app, coordinate, report)
 	if err != nil && report != nil {
 		report.Detail(fmt.Sprintf("Left %s's unreferenced images where they stand: %v", app, err))
 	}
@@ -299,28 +261,26 @@ func (f *fanout) removeFunctions(ctx context.Context, ref providerkit.StackRef, 
 	if len(going) == 0 {
 		return nil
 	}
-	functions, serves := f.impl.(Functions)
-	if !serves {
-		return unownable(ref, len(going), "function", because, FunctionsPrimitive)
+	if f.hooks.RemoveFunctions == nil {
+		return unownable(ref, len(going), "function", because, "RemoveFunctions")
 	}
-	return functions.RemoveFunctions(ctx, ref, going, report)
+	return f.hooks.RemoveFunctions(ctx, ref, going, report)
 }
 
 func (f *fanout) removeContainers(ctx context.Context, ref providerkit.StackRef, going []providerkit.AppContainer, because string, report providerkit.Reporter) error {
 	if len(going) == 0 {
 		return nil
 	}
-	containers, serves := f.impl.(AppContainers)
-	if !serves {
-		return unownable(ref, len(going), "container", because, AppContainersPrimitive)
+	if f.hooks.RemoveContainers == nil {
+		return unownable(ref, len(going), "container", because, "RemoveContainers")
 	}
-	return containers.RemoveContainers(ctx, ref, going, report)
+	return f.hooks.RemoveContainers(ctx, ref, going, report)
 }
 
-func unownable(ref providerkit.StackRef, going int, noun, because, primitive string) error {
+func unownable(ref providerkit.StackRef, going int, noun, because, hook string) error {
 	return providerkit.Refuse(providerkit.CodeInvalid,
-		"%s holds %d %s(s) %s, and this provider implements no %s, so they would be left standing and unowned",
-		ref.Name, going, noun, because, primitive)
+		"%s holds %d %s(s) %s, and this provider sets no %s hook, so they would be left standing and unowned",
+		ref.Name, going, noun, because, hook)
 }
 
 func (f *fanout) removeOrphans(ctx context.Context, plan providerkit.StackPlan, recorded providerkit.Stack, report providerkit.Reporter) error {
@@ -377,13 +337,12 @@ func reportUndeclared(report providerkit.Reporter, name string) {
 }
 
 func (f *fanout) remove(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, report providerkit.Reporter) error {
-	remover, removes := f.impl.(Remover)
-	if !removes {
+	if f.hooks.RemoveResource == nil {
 		return providerkit.Refuse(providerkit.CodeInvalid,
 			"binding %s is no longer declared and this provider removes no resource, so it would be left standing and unowned",
 			binding.Name)
 	}
-	return remover.RemoveResource(ctx, ref, binding, report)
+	return f.hooks.RemoveResource(ctx, ref, binding, report)
 }
 
 func (f *fanout) recorded(ctx context.Context, ref providerkit.StackRef) (providerkit.Stack, error) {

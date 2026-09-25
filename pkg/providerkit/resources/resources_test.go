@@ -17,7 +17,7 @@ type buckets struct {
 	removed []providerkit.Binding
 }
 
-func (b *buckets) Bucket(_ context.Context, in resources.Instruction, _ providerkit.Reporter) (providerkit.Binding, error) {
+func (b *buckets) ProvisionBucket(_ context.Context, in resources.Instruction, _ providerkit.Reporter) (providerkit.Binding, error) {
 	return providerkit.Binding{
 		Type:       providerkit.BindingBucket,
 		Name:       in.Resource.Name,
@@ -30,9 +30,19 @@ func (b *buckets) RemoveResource(_ context.Context, _ providerkit.StackRef, bind
 	return nil
 }
 
+func (b *buckets) hooks() resources.Hooks {
+	return resources.Hooks{ProvisionBucket: b.ProvisionBucket, RemoveResource: b.RemoveResource}
+}
+
 type neon struct{ *buckets }
 
-func (neon) Postgres(_ context.Context, in resources.Instruction, _ providerkit.Reporter) (providerkit.Binding, error) {
+func (n neon) hooks() resources.Hooks {
+	hooks := n.buckets.hooks()
+	hooks.ProvisionPostgres = n.ProvisionPostgres
+	return hooks
+}
+
+func (neon) ProvisionPostgres(_ context.Context, in resources.Instruction, _ providerkit.Reporter) (providerkit.Binding, error) {
 	return providerkit.Binding{
 		Type: providerkit.BindingPostgres,
 		Name: in.Resource.Name,
@@ -48,7 +58,11 @@ func (neon) Postgres(_ context.Context, in resources.Instruction, _ providerkit.
 
 type halfBinding struct{}
 
-func (halfBinding) Postgres(_ context.Context, in resources.Instruction, _ providerkit.Reporter) (providerkit.Binding, error) {
+func (h halfBinding) hooks() resources.Hooks {
+	return resources.Hooks{ProvisionPostgres: h.ProvisionPostgres}
+}
+
+func (halfBinding) ProvisionPostgres(_ context.Context, in resources.Instruction, _ providerkit.Reporter) (providerkit.Binding, error) {
 	return providerkit.Binding{
 		Type:       providerkit.BindingPostgres,
 		Name:       in.Resource.Name,
@@ -64,15 +78,22 @@ func infraRef() providerkit.StackRef {
 	}
 }
 
-func TestServesNamesEveryPrimitiveTheProviderImplements(t *testing.T) {
+func TestServesNamesEveryResourceTheHooksProvision(t *testing.T) {
 	t.Parallel()
 
-	if served := resources.Serves(&buckets{}); !slices.Equal(served, []providerkit.BindingType{providerkit.BindingBucket}) {
-		t.Fatalf("Serves() = %v, want only the bucket it implements", served)
+	if served := resources.Serves(resources.Hooks{}); len(served) != 0 {
+		t.Fatalf("Serves() = %v for hooks that provision nothing, want nothing", served)
 	}
-	served := resources.Serves(neon{&buckets{}})
-	if !slices.Contains(served, providerkit.BindingPostgres) || !slices.Contains(served, providerkit.BindingBucket) {
-		t.Fatalf("Serves() = %v, want the embedded bucket and the Postgres the override adds", served)
+	if served := resources.Serves((&buckets{}).hooks()); !slices.Equal(served, []providerkit.BindingType{providerkit.BindingBucket}) {
+		t.Fatalf("Serves() = %v, want only the bucket the hooks provision", served)
+	}
+	served := resources.Serves(neon{&buckets{}}.hooks())
+	if !slices.Equal(served, []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket}) {
+		t.Fatalf("Serves() = %v, want the Postgres and the bucket the hooks provision", served)
+	}
+	removing := resources.Hooks{RemoveResource: (&buckets{}).RemoveResource}
+	if served := resources.Serves(removing); len(served) != 0 {
+		t.Fatalf("Serves() = %v for hooks that only remove, want nothing: a resource nothing can stand up is not served", served)
 	}
 }
 
@@ -80,7 +101,7 @@ func TestReleaserFansEachResourceOutToItsPrimitive(t *testing.T) {
 	t.Parallel()
 
 	records := fake.NewRecords()
-	releaser := resources.Releaser(records, fake.NewArtifacts(), neon{&buckets{}})
+	releaser := resources.Releaser(records, fake.NewArtifacts(), neon{&buckets{}}.hooks())
 
 	result, err := releaser.Provision(context.Background(), providerkit.StackPlan{
 		Ref:  infraRef(),
@@ -104,7 +125,7 @@ func TestReleaserFansEachResourceOutToItsPrimitive(t *testing.T) {
 func TestReleaserRefusesAPrimitiveNothingServes(t *testing.T) {
 	t.Parallel()
 
-	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), &buckets{})
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), (&buckets{}).hooks())
 
 	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
 		Ref:       infraRef(),
@@ -123,7 +144,7 @@ func TestReleaserRefusesAPrimitiveNothingServes(t *testing.T) {
 func TestPlanRefusesAPrimitiveNothingServes(t *testing.T) {
 	t.Parallel()
 
-	_, err := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), &buckets{}).Plan(context.Background(), providerkit.StackPlan{
+	_, err := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), (&buckets{}).hooks()).Plan(context.Background(), providerkit.StackPlan{
 		Ref:       infraRef(),
 		Kind:      providerkit.StackInfra,
 		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.BindingPostgres}},
@@ -137,7 +158,7 @@ func TestPlanRefusesAPrimitiveNothingServes(t *testing.T) {
 func TestReleaserRefusesABindingMissingAPropertyItsTypePromises(t *testing.T) {
 	t.Parallel()
 
-	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), halfBinding{})
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), halfBinding{}.hooks())
 
 	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
 		Ref:       infraRef(),
@@ -158,7 +179,7 @@ func TestReleaserRemovesAResourceThePlanNoLongerDeclares(t *testing.T) {
 	ctx := context.Background()
 	records := fake.NewRecords()
 	own := &buckets{}
-	releaser := resources.Releaser(records, fake.NewArtifacts(), own)
+	releaser := resources.Releaser(records, fake.NewArtifacts(), own.hooks())
 	ref := infraRef()
 
 	if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, providerkit.Stack{
@@ -188,7 +209,7 @@ func TestDestroyOfAStackNothingRecordedIsANoOp(t *testing.T) {
 	t.Parallel()
 
 	own := &buckets{}
-	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own)
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 
 	if err := releaser.Destroy(context.Background(), infraRef(), nil); err != nil {
 		t.Fatalf("Destroy() of a stack nothing recorded = %v, want nil", err)
@@ -212,7 +233,7 @@ func TestDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := resources.Releaser(records, fake.NewArtifacts(), own).Destroy(ctx, ref, nil); err != nil {
+	if err := resources.Releaser(records, fake.NewArtifacts(), own.hooks()).Destroy(ctx, ref, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(own.removed) != 1 {
@@ -233,7 +254,7 @@ func rowsOf(plan providerkit.Plan) map[string]providerkit.ChangeAction {
 func TestPlanOverAStackNothingRecordedCreatesEveryResourceItDeclares(t *testing.T) {
 	t.Parallel()
 
-	plan, err := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), neon{&buckets{}}).Plan(context.Background(), providerkit.StackPlan{
+	plan, err := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), neon{&buckets{}}.hooks()).Plan(context.Background(), providerkit.StackPlan{
 		Ref:  infraRef(),
 		Kind: providerkit.StackInfra,
 		Resources: []providerkit.Resource{
@@ -274,7 +295,7 @@ func TestPlanKeepsWhatStandsAndDeletesWhatThePlanDropped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	plan, err := resources.Releaser(records, fake.NewArtifacts(), &buckets{}).Plan(ctx, providerkit.StackPlan{
+	plan, err := resources.Releaser(records, fake.NewArtifacts(), (&buckets{}).hooks()).Plan(ctx, providerkit.StackPlan{
 		Ref:  ref,
 		Kind: providerkit.StackInfra,
 		Resources: []providerkit.Resource{
@@ -316,7 +337,7 @@ func TestPlanDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	releaser := resources.Releaser(records, fake.NewArtifacts(), &buckets{})
+	releaser := resources.Releaser(records, fake.NewArtifacts(), (&buckets{}).hooks())
 	plan, err := releaser.PlanDestroy(ctx, ref, nil)
 	if err != nil {
 		t.Fatalf("PlanDestroy() = %v", err)
@@ -336,38 +357,15 @@ func TestPlanDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 	}
 }
 
-type embedded struct {
-	*fake.Provider
-	fanout providerkit.Releaser
-}
-
-func (e embedded) Releases() providerkit.Releaser { return e.fanout }
-
-func (e embedded) Facts() providerkit.Facts {
-	facts := e.Provider.Facts()
-	facts.Bindings = resources.Serves(neon{&buckets{}})
-	return facts
-}
-
-func (embedded) Warm(context.Context, []string, providerkit.Reporter) error { return nil }
-
-func TestAWarmerBehindTheFanOutIsStillFoundOnTheRoot(t *testing.T) {
-	t.Parallel()
-
-	base := fake.NewProvider(fake.Options{})
-	provider := embedded{Provider: base, fanout: resources.Releaser(base.Records(), fake.NewArtifacts(), neon{&buckets{}})}
-
-	if _, warms := providerkit.Provider(provider).(providerkit.Warmer); !warms {
-		t.Fatal("the provider's Warmer is not found on the root, so wrapping the release port hid a capability")
-	}
-	if !slices.Contains(provider.Facts().Bindings, providerkit.BindingPostgres) {
-		t.Errorf("Facts().Bindings = %v, want the Postgres the override advertises", provider.Facts().Bindings)
-	}
-}
-
 type withFunctions struct {
 	*buckets
 	removed []providerkit.Function
+}
+
+func (w *withFunctions) hooks() resources.Hooks {
+	hooks := w.buckets.hooks()
+	hooks.ProvisionFunctions, hooks.RemoveFunctions = w.ProvisionFunctions, w.RemoveFunctions
+	return hooks
 }
 
 func (w *withFunctions) ProvisionFunctions(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.Function, error) {
@@ -416,7 +414,7 @@ func TestTheFanOutTakesDownTheFunctionItsPlanShowsGoing(t *testing.T) {
 	recordFunctions(t, records, ref, "api", "legacy")
 
 	own := &withFunctions{buckets: &buckets{}}
-	releaser := resources.Releaser(records, fake.NewArtifacts(), own)
+	releaser := resources.Releaser(records, fake.NewArtifacts(), own.hooks())
 	plan := providerkit.StackPlan{
 		Ref:  ref,
 		Kind: providerkit.StackApp,
@@ -452,7 +450,7 @@ func TestAReleaseDeclaringNoAppTakesDownTheFunctionsItsPlanShowsGoing(t *testing
 	recordFunctions(t, records, ref, "api")
 
 	own := &withFunctions{buckets: &buckets{}}
-	releaser := resources.Releaser(records, fake.NewArtifacts(), own)
+	releaser := resources.Releaser(records, fake.NewArtifacts(), own.hooks())
 	plan := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackInfra}
 
 	shown, err := releaser.Plan(ctx, plan, nil)
@@ -475,6 +473,12 @@ type withContainers struct {
 	*buckets
 	stood   []providerkit.StackPlan
 	removed []providerkit.AppContainer
+}
+
+func (w *withContainers) hooks() resources.Hooks {
+	hooks := w.buckets.hooks()
+	hooks.ProvisionContainers, hooks.RemoveContainers = w.ProvisionContainers, w.RemoveContainers
+	return hooks
 }
 
 func (w *withContainers) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.AppContainer, error) {
@@ -519,7 +523,7 @@ func TestAContainerAppReachesTheContainerPrimitiveCarryingItsImageAndProbe(t *te
 
 	ref := appRef()
 	own := &withContainers{buckets: &buckets{}}
-	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own)
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 
 	result, err := releaser.Provision(context.Background(), providerkit.StackPlan{
 		Ref:  ref,
@@ -548,7 +552,7 @@ func TestAServerlessAppStillReachesFunctions(t *testing.T) {
 	t.Parallel()
 
 	own := &withFunctions{buckets: &buckets{}}
-	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own)
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 
 	result, err := releaser.Provision(context.Background(), providerkit.StackPlan{
 		Ref:  appRef(),
@@ -573,7 +577,7 @@ func TestAServerlessAppStillReachesFunctions(t *testing.T) {
 func TestAProviderStandingUpNoContainersRefusesAContainerAppByName(t *testing.T) {
 	t.Parallel()
 
-	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), &withFunctions{buckets: &buckets{}})
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks())
 
 	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
 		Ref:  appRef(),
@@ -584,15 +588,15 @@ func TestAProviderStandingUpNoContainersRefusesAContainerAppByName(t *testing.T)
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 		t.Fatalf("Provision() of a container app on a provider that stands up none = %v, want an invalid refusal", err)
 	}
-	if !strings.Contains(refusal.Message, resources.AppContainersPrimitive) {
-		t.Errorf("the refusal reads %q, want it to name %s, the primitive this provider lacks", refusal.Message, resources.AppContainersPrimitive)
+	if !strings.Contains(refusal.Message, "ProvisionContainers") {
+		t.Errorf("the refusal reads %q, want it to name %s, the primitive this provider lacks", refusal.Message, "ProvisionContainers")
 	}
 }
 
 func TestAProviderStandingUpNoFunctionsRefusesAServerlessAppByName(t *testing.T) {
 	t.Parallel()
 
-	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), &withContainers{buckets: &buckets{}})
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), (&withContainers{buckets: &buckets{}}).hooks())
 
 	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
 		Ref:  appRef(),
@@ -603,15 +607,15 @@ func TestAProviderStandingUpNoFunctionsRefusesAServerlessAppByName(t *testing.T)
 	if !errors.As(err, &refusal) || refusal.Code != providerkit.CodeInvalid {
 		t.Fatalf("Provision() of a serverless app on a provider that stands up none = %v, want an invalid refusal", err)
 	}
-	if !strings.Contains(refusal.Message, resources.FunctionsPrimitive) {
-		t.Errorf("the refusal reads %q, want it to name %s, the primitive this provider lacks", refusal.Message, resources.FunctionsPrimitive)
+	if !strings.Contains(refusal.Message, "ProvisionFunctions") {
+		t.Errorf("the refusal reads %q, want it to name %s, the primitive this provider lacks", refusal.Message, "ProvisionFunctions")
 	}
 }
 
 func TestAnAppNamingNoComputeIsRefusedRatherThanAssumedServerless(t *testing.T) {
 	t.Parallel()
 
-	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), &withFunctions{buckets: &buckets{}})
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks())
 
 	_, err := releaser.Provision(context.Background(), providerkit.StackPlan{
 		Ref:  appRef(),
@@ -633,7 +637,7 @@ func TestTheFanOutTakesDownTheContainerItsPlanShowsGoing(t *testing.T) {
 	recordContainers(t, records, ref, "web", "legacy")
 
 	own := &withContainers{buckets: &buckets{}}
-	releaser := resources.Releaser(records, fake.NewArtifacts(), own)
+	releaser := resources.Releaser(records, fake.NewArtifacts(), own.hooks())
 	plan := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackApp, App: containerApp("web")}
 
 	shown, err := releaser.Plan(ctx, plan, nil)
@@ -664,7 +668,7 @@ func TestAProviderStandingUpNoContainersRefusesToOrphanTheOnesItRecorded(t *test
 	ref := appRef()
 	recordContainers(t, records, ref, "legacy")
 
-	releaser := resources.Releaser(records, fake.NewArtifacts(), &withFunctions{buckets: &buckets{}})
+	releaser := resources.Releaser(records, fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks())
 
 	_, err := releaser.Provision(ctx, providerkit.StackPlan{
 		Ref:  ref,
@@ -676,8 +680,8 @@ func TestAProviderStandingUpNoContainersRefusesToOrphanTheOnesItRecorded(t *test
 		},
 	}, nil)
 	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, resources.AppContainersPrimitive) {
-		t.Fatalf("Provision() over a recorded container nothing can take down = %v, want a refusal naming %s", err, resources.AppContainersPrimitive)
+	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "RemoveContainers") {
+		t.Fatalf("Provision() over a recorded container nothing can take down = %v, want a refusal naming %s", err, "RemoveContainers")
 	}
 }
 
@@ -690,7 +694,7 @@ func TestDestroyTakesDownEveryContainerTheStackRecorded(t *testing.T) {
 	recordContainers(t, records, ref, "web")
 
 	own := &withContainers{buckets: &buckets{}}
-	releaser := resources.Releaser(records, fake.NewArtifacts(), own)
+	releaser := resources.Releaser(records, fake.NewArtifacts(), own.hooks())
 
 	shown, err := releaser.PlanDestroy(ctx, ref, nil)
 	if err != nil {
@@ -715,10 +719,10 @@ func TestDestroyRefusesByNameWhenNothingCanTakeTheRecordedContainerDown(t *testi
 	ref := appRef()
 	recordContainers(t, records, ref, "web")
 
-	err := resources.Releaser(records, fake.NewArtifacts(), &withFunctions{buckets: &buckets{}}).Destroy(ctx, ref, nil)
+	err := resources.Releaser(records, fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks()).Destroy(ctx, ref, nil)
 	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, resources.AppContainersPrimitive) {
-		t.Fatalf("Destroy() of a recorded container nothing stands up = %v, want a refusal naming %s", err, resources.AppContainersPrimitive)
+	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "RemoveContainers") {
+		t.Fatalf("Destroy() of a recorded container nothing stands up = %v, want a refusal naming %s", err, "RemoveContainers")
 	}
 	if strings.Contains(refusal.Message, "nothing here declares") {
 		t.Errorf("the refusal reads %q, and a destroy declares nothing at all: the sentence an orphan sweep gives is false here", refusal.Message)
@@ -738,14 +742,14 @@ func TestAnAppMovingToAComputeThisProviderLacksIsRefusedBeforeItsFunctionsAreTak
 
 	own := &withFunctions{buckets: &buckets{}}
 
-	_, err := resources.Releaser(records, fake.NewArtifacts(), own).Provision(ctx, providerkit.StackPlan{
+	_, err := resources.Releaser(records, fake.NewArtifacts(), own.hooks()).Provision(ctx, providerkit.StackPlan{
 		Ref:  ref,
 		Kind: providerkit.StackApp,
 		App:  containerApp("web"),
 	}, nil)
 	var refusal providerkit.Refusal
-	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, resources.AppContainersPrimitive) {
-		t.Fatalf("Provision() of a container app on a provider that stands up none = %v, want a refusal naming %s", err, resources.AppContainersPrimitive)
+	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "ProvisionContainers") {
+		t.Fatalf("Provision() of a container app on a provider that stands up none = %v, want a refusal naming %s", err, "ProvisionContainers")
 	}
 	if len(own.removed) != 0 {
 		t.Fatalf("the fan-out took down %v on a release it then refused, leaving the app down with nothing standing in its place", own.removed)
@@ -762,7 +766,7 @@ func TestAnAppNamingNoComputeIsRefusedBeforeItsContainerIsTakenDown(t *testing.T
 
 	own := &withContainers{buckets: &buckets{}}
 
-	_, err := resources.Releaser(records, fake.NewArtifacts(), own).Provision(ctx, providerkit.StackPlan{
+	_, err := resources.Releaser(records, fake.NewArtifacts(), own.hooks()).Provision(ctx, providerkit.StackPlan{
 		Ref:  ref,
 		Kind: providerkit.StackApp,
 		App:  &providerkit.AppPlan{App: "web"},
@@ -778,6 +782,12 @@ func TestAnAppNamingNoComputeIsRefusedBeforeItsContainerIsTakenDown(t *testing.T
 
 type misnaming struct{ *withContainers }
 
+func (m misnaming) hooks() resources.Hooks {
+	hooks := m.withContainers.hooks()
+	hooks.ProvisionContainers = m.ProvisionContainers
+	return hooks
+}
+
 func (m misnaming) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.AppContainer, error) {
 	m.stood = append(m.stood, plan)
 	return []providerkit.AppContainer{container(plan.Ref, plan.App.App+"-svc")}, nil
@@ -790,7 +800,7 @@ func TestAContainerStandingUnderAnyNameButItsAppsIsSweptOnTheNextRelease(t *test
 	records := fake.NewRecords()
 	ref := appRef()
 	own := &withContainers{buckets: &buckets{}}
-	releaser := resources.Releaser(records, fake.NewArtifacts(), misnaming{own})
+	releaser := resources.Releaser(records, fake.NewArtifacts(), misnaming{own}.hooks())
 	plan := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackApp, App: containerApp("web")}
 
 	stood, err := releaser.Provision(ctx, plan, nil)
@@ -824,7 +834,7 @@ func TestTheImageIsPushedBeforeTheContainerItIsStoodUpFrom(t *testing.T) {
 
 	own := &withContainers{buckets: &buckets{}}
 	registry := fake.NewImages()
-	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own)
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 	plan := providerkit.StackPlan{
 		Ref:    appRef(),
 		Kind:   providerkit.StackApp,
@@ -849,7 +859,7 @@ func TestAReleaseWhoseImageCannotBePushedStandsNothingUp(t *testing.T) {
 	own := &withContainers{buckets: &buckets{}}
 	registry := fake.NewImages()
 	registry.Refusing(errors.New("the registry refused the token"))
-	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own)
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 	plan := providerkit.StackPlan{
 		Ref:    appRef(),
 		Kind:   providerkit.StackApp,
@@ -888,6 +898,14 @@ func (r *retaining) promote(app, coordinate string) {
 	r.holding[coordinate] = true
 }
 
+func (r *retaining) hooks() resources.Hooks {
+	hooks := r.buckets.hooks()
+	hooks.ProvisionBucket = r.ProvisionBucket
+	hooks.ProvisionContainers, hooks.RemoveContainers = r.ProvisionContainers, r.RemoveContainers
+	hooks.ReconcileImages, hooks.ForgetReleases = r.ReconcileImages, r.ForgetReleases
+	return hooks
+}
+
 func (r *retaining) holds(coordinate string) bool { return r.holding[coordinate] }
 
 func (r *retaining) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ providerkit.Reporter) ([]providerkit.AppContainer, error) {
@@ -907,13 +925,13 @@ func (r *retaining) RemoveContainers(_ context.Context, _ providerkit.StackRef, 
 	return nil
 }
 
-func (r *retaining) Bucket(ctx context.Context, in resources.Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
+func (r *retaining) ProvisionBucket(ctx context.Context, in resources.Instruction, report providerkit.Reporter) (providerkit.Binding, error) {
 	if r.served != nil {
 		if err := r.served(in); err != nil {
 			return providerkit.Binding{}, err
 		}
 	}
-	return r.buckets.Bucket(ctx, in, report)
+	return r.buckets.ProvisionBucket(ctx, in, report)
 }
 
 func (r *retaining) ReconcileImages(_ context.Context, _ providerkit.StackRef, app, coordinate string, _ providerkit.Reporter) error {
@@ -985,7 +1003,7 @@ func TestAContainerReleaseReconcilesItsImagesOnEveryPathOutOfProvision(t *testin
 		t.Run(name, func(t *testing.T) {
 			own := &retaining{buckets: &buckets{}}
 			plan := breaking(own)
-			releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own)
+			releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 
 			_, err := releaser.Provision(context.Background(), plan, nil)
 			if name != "the release succeeds" && err == nil {
@@ -1027,7 +1045,7 @@ func TestAContainerReleaseReconcilesEvenWhenItNeverReachedTheWork(t *testing.T) 
 
 			own := &retaining{buckets: &buckets{}}
 			records, plan := breaking()
-			releaser := resources.Releaser(records, fake.NewArtifacts(), own)
+			releaser := resources.Releaser(records, fake.NewArtifacts(), own.hooks())
 
 			if _, err := releaser.Provision(context.Background(), plan, nil); err == nil {
 				t.Fatal("Provision() succeeded, and this case is the failure path")
@@ -1043,7 +1061,7 @@ func TestAServerlessReleaseReconcilesNoImages(t *testing.T) {
 	t.Parallel()
 
 	own := &retaining{buckets: &buckets{}}
-	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own)
+	releaser := resources.Releaser(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 
 	plan := containerPlan()
 	plan.App = nil
@@ -1070,7 +1088,7 @@ func TestATeardownSweepsTheImageTheContainerItTookDownWasHolding(t *testing.T) {
 
 	own := &retaining{buckets: &buckets{}}
 	own.promote("web", testImage)
-	releaser := resources.Releaser(records, fake.NewArtifacts(), own)
+	releaser := resources.Releaser(records, fake.NewArtifacts(), own.hooks())
 	if err := releaser.Destroy(ctx, ref, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
@@ -1105,7 +1123,7 @@ func TestATeardownThatStoppedReconcilingSaysSoWithNoReporterListening(t *testing
 
 			own := &retaining{buckets: &buckets{}}
 			breaking(own)
-			releaser := resources.Releaser(records, fake.NewArtifacts(), own)
+			releaser := resources.Releaser(records, fake.NewArtifacts(), own.hooks())
 
 			err := releaser.Destroy(ctx, ref, nil)
 			if !errors.Is(err, refused) {

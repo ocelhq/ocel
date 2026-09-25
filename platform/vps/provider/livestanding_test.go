@@ -14,7 +14,7 @@ const adminDecoy = "ocel-live-admin-decoy"
 
 func standingOn(t *testing.T, p *vps.Provider, hostnames []string) []providerkit.StandingCheck {
 	t.Helper()
-	checks, err := p.CheckStanding(context.Background(), providerkit.StandingRequest{
+	checks, err := p.CheckHost(context.Background(), providerkit.StandingRequest{
 		Class:     providerkit.ClassProduction,
 		Hostnames: hostnames,
 	})

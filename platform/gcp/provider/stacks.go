@@ -9,7 +9,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	"github.com/ocelhq/ocel/pkg/runtimekit/front"
 	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
@@ -239,8 +238,3 @@ func carried(what string, delivered, own map[string]string) (map[string]string, 
 	}
 	return values, nil
 }
-
-var (
-	_ resources.Functions     = (*Provider)(nil)
-	_ resources.AppContainers = (*Provider)(nil)
-)

@@ -17,7 +17,7 @@ const (
 	ProgramPreviewAppsVar = "OCEL_PREVIEW_APPS"
 )
 
-func (p *Provider) EdgeProgram(_ context.Context, req providerkit.EdgeProgramRequest) (providerkit.EdgeProgram, error) {
+func (p *Provider) ProgramEdge(_ context.Context, req providerkit.EdgeProgramRequest) (providerkit.EdgeProgram, error) {
 	vars := map[string]string{ProgramEdgeVar: string(req.Kind)}
 	if req.PreviewBaseDomain != "" {
 		vars[ProgramPreviewVar] = req.PreviewBaseDomain

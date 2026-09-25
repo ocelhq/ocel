@@ -20,7 +20,13 @@ type standingProvider struct {
 	refusal error
 }
 
-func (s *standingProvider) CheckStanding(_ context.Context, req providerkit.StandingRequest) ([]providerkit.StandingCheck, error) {
+func (s *standingProvider) Hooks() providerkit.Hooks {
+	hooks := s.Provider.Hooks()
+	hooks.CheckHost = s.CheckHost
+	return hooks
+}
+
+func (s *standingProvider) CheckHost(_ context.Context, req providerkit.StandingRequest) ([]providerkit.StandingCheck, error) {
 	s.asked = append(s.asked, req)
 	return s.answer, s.refusal
 }

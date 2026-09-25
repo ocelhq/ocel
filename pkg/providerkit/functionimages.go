@@ -12,11 +12,6 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-type FunctionImager interface {
-	FunctionBase(ctx context.Context, runtime Runtime) (v1.Image, error)
-	FunctionRuntimePayload(ctx context.Context, runtime Runtime) ([]byte, error)
-}
-
 func (r *deployRun) recordFunctionImage(logical, ref string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -31,7 +26,7 @@ func (r *deployRun) functionImage(logical string) string {
 
 func (r *deployRun) imageFunctions(
 	ctx context.Context,
-	imager FunctionImager,
+	hooks Hooks,
 	entry AppEntry,
 	pack AppPack,
 	routing *RoutingPlan,
@@ -46,7 +41,7 @@ func (r *deployRun) imageFunctions(
 		if fn.GetApp() != entry.App {
 			continue
 		}
-		push, err := r.imageFunction(ctx, imager, root, entry, fn, overlayFor(pack.Overlay, fn, routing))
+		push, err := r.imageFunction(ctx, hooks, root, entry, fn, overlayFor(pack.Overlay, fn, routing))
 		if err != nil {
 			return nil, err
 		}
@@ -58,7 +53,7 @@ func (r *deployRun) imageFunctions(
 
 func (r *deployRun) imageFunction(
 	ctx context.Context,
-	imager FunctionImager,
+	hooks Hooks,
 	root string,
 	entry AppEntry,
 	fn *contractv1.ManifestFunction,
@@ -70,11 +65,11 @@ func (r *deployRun) imageFunction(
 		return ImagePush{}, err
 	}
 	runtime := Runtime{Name: fn.GetRuntime().GetName(), Arch: fn.GetRuntime().GetArch()}
-	base, err := imager.FunctionBase(ctx, runtime)
+	base, err := hooks.FunctionBaseImage(ctx, runtime)
 	if err != nil {
 		return ImagePush{}, fmt.Errorf("read the base image %s's %s function is built on: %w", name, runtime.Name, err)
 	}
-	carried, err := runtimeOverlay(ctx, imager, runtime, name, overlay)
+	carried, err := runtimeOverlay(ctx, hooks, runtime, name, overlay)
 	if err != nil {
 		return ImagePush{}, err
 	}
@@ -130,7 +125,7 @@ func (r *deployRun) wrapFunction(ctx context.Context, name string, runtime Runti
 
 func runtimeOverlay(
 	ctx context.Context,
-	imager FunctionImager,
+	hooks Hooks,
 	runtime Runtime,
 	name string,
 	overlay map[string][]byte,
@@ -138,7 +133,7 @@ func runtimeOverlay(
 	if !BootsThroughRuntime(runtime) {
 		return overlay, nil
 	}
-	body, err := imager.FunctionRuntimePayload(ctx, runtime)
+	body, err := hooks.FunctionRuntime(ctx, runtime)
 	if err != nil {
 		return nil, fmt.Errorf("read the runtime %s boots through: %w", name, err)
 	}

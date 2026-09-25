@@ -414,7 +414,7 @@ func TestAWrappedImagePulledOntoTheMachineIsPinnedToTheDigestOfWhatWasPushed(t *
 	served := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
 	t.Cleanup(served.Close)
 	server := strings.TrimPrefix(served.URL, "http://")
-	store, err := p.Images(context.Background(), providerkit.RegistryTarget{Server: server})
+	store, err := p.RegistryImages(context.Background(), providerkit.RegistryTarget{Server: server})
 	if err != nil {
 		t.Fatal(err)
 	}

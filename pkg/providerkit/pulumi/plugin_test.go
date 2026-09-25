@@ -70,7 +70,7 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 			Passphrase: "a-passphrase",
 			Project:    "ocel-plugin-probe",
 		},
-		Program: pushing{},
+		Program: pushing{}.Run,
 		Plugins: []pulumi.Plugin{probePlugin(t, counter)},
 	})
 

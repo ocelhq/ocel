@@ -16,7 +16,7 @@ import (
 )
 
 type connectorHost struct {
-	fake.Full
+	*fake.Provider
 
 	install providerkit.ConnectorInstall
 	removed bool
@@ -91,7 +91,7 @@ func finalResult(t *testing.T, stream *connect.ServerStreamForClient[progressv1.
 }
 
 func TestAProviderThatPutsNoConnectorOnItsTargetsSaysSo(t *testing.T) {
-	client := connectorServing(t, fake.Full{Provider: fake.NewProvider(fake.Options{})})
+	client := connectorServing(t, fake.NewProvider(fake.Options{}))
 	ctx := context.Background()
 
 	if _, err := client.DescribeConnectorTarget(ctx, &contractv1.DescribeConnectorTargetRequest{}); connect.CodeOf(err) != connect.CodeUnimplemented {
@@ -108,7 +108,7 @@ func TestAProviderThatPutsNoConnectorOnItsTargetsSaysSo(t *testing.T) {
 }
 
 func TestDescribingAConnectorTargetCarriesWhatTheConsoleKeysItBy(t *testing.T) {
-	held := &connectorHost{Full: fake.Full{Provider: fake.NewProvider(fake.Options{})}}
+	held := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
 	client := connectorServing(t, held)
 
 	described, err := client.DescribeConnectorTarget(context.Background(), &contractv1.DescribeConnectorTargetRequest{})
@@ -127,7 +127,7 @@ func TestDescribingAConnectorTargetCarriesWhatTheConsoleKeysItBy(t *testing.T) {
 }
 
 func TestInstallingAConnectorEndsWithTheAddressAndTheKey(t *testing.T) {
-	held := &connectorHost{Full: fake.Full{Provider: fake.NewProvider(fake.Options{})}}
+	held := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
 	client := connectorServing(t, held)
 
 	stream, err := client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{
@@ -162,7 +162,7 @@ func closed(stream *connect.ServerStreamForClient[progressv1.OperationEvent], er
 }
 
 func TestAnEmptyInstallIsRefusedBeforeTheProviderSeesIt(t *testing.T) {
-	held := &connectorHost{Full: fake.Full{Provider: fake.NewProvider(fake.Options{})}}
+	held := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
 	client := connectorServing(t, held)
 
 	err := closed(client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{}))
@@ -175,7 +175,7 @@ func TestAnEmptyInstallIsRefusedBeforeTheProviderSeesIt(t *testing.T) {
 }
 
 func TestRemovingAConnectorReachesTheProvider(t *testing.T) {
-	held := &connectorHost{Full: fake.Full{Provider: fake.NewProvider(fake.Options{})}}
+	held := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
 	client := connectorServing(t, held)
 
 	stream, err := client.RemoveConnector(context.Background(), &contractv1.RemoveConnectorRequest{})
@@ -188,7 +188,7 @@ func TestRemovingAConnectorReachesTheProvider(t *testing.T) {
 }
 
 func TestTheComputeTheCallerAsksForReachesTheProviderAndItsChoiceComesBack(t *testing.T) {
-	held := &connectorHost{Full: fake.Full{Provider: fake.NewProvider(fake.Options{})}}
+	held := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
 	client := connectorServing(t, held)
 
 	stream, err := client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{
@@ -205,7 +205,7 @@ func TestTheComputeTheCallerAsksForReachesTheProviderAndItsChoiceComesBack(t *te
 }
 
 func TestAnUnsetComputeLeavesTheChoiceToTheProvider(t *testing.T) {
-	held := &connectorHost{Full: fake.Full{Provider: fake.NewProvider(fake.Options{})}}
+	held := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
 	client := connectorServing(t, held)
 
 	stream, err := client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{
@@ -221,7 +221,7 @@ func TestAnUnsetComputeLeavesTheChoiceToTheProvider(t *testing.T) {
 }
 
 func TestAComputeOutsideTheVocabularyIsRefusedBeforeTheProviderSeesIt(t *testing.T) {
-	held := &connectorHost{Full: fake.Full{Provider: fake.NewProvider(fake.Options{})}}
+	held := &connectorHost{Provider: fake.NewProvider(fake.Options{})}
 	client := connectorServing(t, held)
 
 	err := closed(client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{

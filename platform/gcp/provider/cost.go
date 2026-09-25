@@ -33,7 +33,7 @@ var itemTypes = map[Kind]string{
 	KindSecret:         tfSecretManagerSecret,
 }
 
-func (p *Provider) Shape(_ context.Context, req providerkit.ShapeRequest) (*costv1.ResourceSet, error) {
+func (p *Provider) ShapeCost(_ context.Context, req providerkit.ShapeRequest) (*costv1.ResourceSet, error) {
 	names, err := p.named()
 	if err != nil {
 		return nil, err
@@ -125,7 +125,7 @@ func serviceProperties(compute providerkit.Compute, ingress string) map[string]a
 	}
 }
 
-func (p *Provider) Price(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
+func (p *Provider) EstimateCost(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {
 	edges, err := providerkit.EdgePricers(p.Edges())
 	if err != nil {
 		return nil, err

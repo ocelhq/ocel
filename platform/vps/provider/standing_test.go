@@ -206,7 +206,7 @@ func standingOver(machine *scripted) []providerkit.StandingCheck {
 	)
 	p.Resolving(stubResolver(map[string][]string{"box.invalid": {boxAddress}}))
 	p.Reaching(func(context.Context, string) error { return nil })
-	checks, err := p.CheckStanding(context.Background(), providerkit.StandingRequest{
+	checks, err := p.CheckHost(context.Background(), providerkit.StandingRequest{
 		Class: providerkit.ClassProduction,
 	})
 	if err != nil {
@@ -348,7 +348,7 @@ func TestABoxWhoseOwnAddressCouldNotBeReadReportsAndNeverRefuses(t *testing.T) {
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
 		func(context.Context) (host.Conn, error) { return addressless{boxSaying(nil)}, nil },
 	)
-	checks, err := p.CheckStanding(context.Background(), providerkit.StandingRequest{
+	checks, err := p.CheckHost(context.Background(), providerkit.StandingRequest{
 		Class:     providerkit.ClassProduction,
 		Hostnames: []string{"shop.example.com"},
 	})

@@ -10,7 +10,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
-	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 
 const Vendor providerkit.Vendor = "gcp"
@@ -77,60 +76,31 @@ func NewProvider(options Options) (*Provider, error) {
 	}, nil
 }
 
-func (p *Provider) stood(ctx context.Context) (*clients, error) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.standing != nil {
-		return p.standing, nil
-	}
-	project := p.options.Project
-	if project == "" {
-		ambient, err := ambientProject(ctx)
-		if err != nil {
-			return nil, err
-		}
-		project = ambient
-	}
-	names := Names{namespace: p.namespace, project: project}
-	if err := names.fit(); err != nil {
-		return nil, err
-	}
-	p.standing = &clients{Names: names, region: p.options.Region, endpoint: p.endpoint}
-	return p.standing, nil
-}
-
-func (p *Provider) Names(ctx context.Context) (Names, error) {
-	held, err := p.stood(ctx)
-	if err != nil {
-		return Names{}, err
-	}
-	return held.Names, nil
-}
-
-func (p *Provider) Project(ctx context.Context) (string, error) {
-	names, err := p.Names(ctx)
-	if err != nil {
-		return "", err
-	}
-	return names.project, nil
-}
-
-func (p *Provider) named() (Names, error) {
-	if p.options.Project == "" {
-		return Names{}, unnamedProject()
-	}
-	return Names{namespace: p.namespace, project: p.options.Project}, nil
-}
-
-func (p *Provider) emulated() bool { return p.endpoint != "" }
-
-func (p *Provider) Region() string { return p.options.Region }
-
 func (p *Provider) Facts() providerkit.Facts {
 	return providerkit.Facts{
 		Vendor:   Vendor,
-		Bindings: resources.Serves(p),
+		Bindings: resources.Serves(p.resourceHooks()),
 		Computes: []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer},
+	}
+}
+
+func (p *Provider) Hooks() providerkit.Hooks {
+	return providerkit.Hooks{
+		EnsureImageRegistry: p.EnsureImageRegistry,
+		DirectImages:        p.DirectImages,
+		ShapeCost:           p.ShapeCost,
+		EstimateCost:        p.EstimateCost,
+		FunctionBaseImage:   p.FunctionBaseImage,
+		FunctionRuntime:     p.FunctionRuntime,
+	}
+}
+
+func (p *Provider) resourceHooks() resources.Hooks {
+	return resources.Hooks{
+		ProvisionFunctions:  p.ProvisionFunctions,
+		RemoveFunctions:     p.RemoveFunctions,
+		ProvisionContainers: p.ProvisionContainers,
+		RemoveContainers:    p.RemoveContainers,
 	}
 }
 
@@ -142,23 +112,10 @@ func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrapper, error) {
 }
 
 func (p *Provider) Releases() providerkit.Releaser {
-	return resources.Releaser(p.Records(), p.Artifacts(), p)
+	return resources.Releaser(p.Records(), p.Artifacts(), p.resourceHooks())
 }
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore { return artifacts{p: p} }
-
-func (p *Provider) ContainerArch(_ context.Context, app, declared string) (string, error) {
-	if runs, _ := providerkit.GoArch(declared); runs != payloads.ContainerArch {
-		return "", providerkit.Refuse(providerkit.CodeInvalid,
-			"app %s declares arch %q, and Cloud Run runs %s alone: drop the arch, or deploy %s to a provider that runs %s",
-			app, declared, providerkit.ArchX8664, app, declared)
-	}
-	return payloads.ContainerArch, nil
-}
-
-func (p *Provider) ContainerRuntime(_ context.Context, arch string) ([]byte, error) {
-	return payloads.ContainerRuntime(arch)
-}
 
 func (p *Provider) Records() providerkit.RecordStore { return records{p: p} }
 
@@ -190,7 +147,6 @@ func (p *Provider) Edges() providerkit.EdgeRegistry {
 func (p *Provider) DNS() providerkit.DNSRegistry { return dns{} }
 
 var (
-	_ providerkit.Provider          = (*Provider)(nil)
 	_ providerkit.Diagnoser         = (*Provider)(nil)
 	_ providerkit.ContainerRuntimer = (*Provider)(nil)
 )

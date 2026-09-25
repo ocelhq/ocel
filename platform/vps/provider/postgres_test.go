@@ -10,7 +10,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
-	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -49,7 +48,7 @@ func TestADeclaredPostgresStandsUpAsOneContainerOnlyItsProjectReaches(t *testing
 	t.Parallel()
 
 	machine := &box{}
-	binding, err := over(machine).Postgres(context.Background(), aPostgres(t, "17"), nil)
+	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
@@ -97,7 +96,7 @@ func TestAPostgresPasswordNeverRidesACommandLine(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	binding, err := over(machine).Postgres(context.Background(), aPostgres(t, "17"), nil)
+	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
@@ -119,7 +118,7 @@ func TestWhatABoxKeepsOfAPostgresPasswordIsSealedToThatResource(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	binding, err := over(machine).Postgres(context.Background(), aPostgres(t, "17"), nil)
+	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
@@ -154,7 +153,7 @@ func TestAPostgresVersionNoImageIsPinnedForIsRefusedBeforeAnythingStands(t *test
 	t.Parallel()
 
 	machine := &box{}
-	_, err := over(machine).Postgres(context.Background(), aPostgres(t, "9"), nil)
+	_, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "9"), nil)
 	if err == nil {
 		t.Fatal("a postgres 9 stood up, and nothing pins an image for it")
 	}
@@ -173,7 +172,7 @@ func TestASecondDeployBindsToThePasswordTheStandingPostgresWasHanded(t *testing.
 
 	machine := &box{}
 	holdingAPostgres(machine)
-	binding, err := over(machine).Postgres(context.Background(), aPostgres(t, "17"), nil)
+	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
@@ -193,7 +192,7 @@ func TestADeployThatLosesTheNameToAnotherSharesTheWinnersPostgres(t *testing.T) 
 		}
 		return session.Result{}, false
 	}
-	binding, err := over(machine).Postgres(context.Background(), aPostgres(t, "17"), nil)
+	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
 	if err != nil {
 		t.Fatalf("Postgres() = %v, and two deploys standing one postgres up at once end up sharing it", err)
 	}
@@ -211,7 +210,7 @@ func TestARemovedPostgresTakesItsVolumeWithIt(t *testing.T) {
 	machine := &box{}
 	provider := over(machine)
 	in := aPostgres(t, "17")
-	binding, err := provider.Postgres(context.Background(), in, nil)
+	binding, err := provider.ProvisionPostgres(context.Background(), in, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,11 +236,6 @@ func TestARemovedPostgresTakesItsVolumeWithIt(t *testing.T) {
 		t.Errorf("a teardown ran %q and left the sealed password behind", joined)
 	}
 }
-
-var (
-	_ resources.Postgres = (*vps.Provider)(nil)
-	_ resources.Remover  = (*vps.Provider)(nil)
-)
 
 func TestARemovalReachesOnlyTheServerItsOwnStackStoodUp(t *testing.T) {
 	t.Parallel()
@@ -286,7 +280,7 @@ func TestAPostgresDeclaredUnderANewerMajorIsDumpedThenSwappedWithAWayBack(t *tes
 
 	machine := &box{}
 	heldByAnotherMajor(machine, "running")
-	binding, err := over(machine).Postgres(context.Background(), aPostgres(t, "17"), nil)
+	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
@@ -327,7 +321,7 @@ func TestAStoppedPostgresUnderAnotherMajorIsRefusedBecauseNothingCanBeDumpedFrom
 
 	machine := &box{}
 	heldByAnotherMajor(machine, "exited")
-	_, err := over(machine).Postgres(context.Background(), aPostgres(t, "17"), nil)
+	_, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
 	if err == nil {
 		t.Fatal("a server that is not running was upgraded, and there was nothing to dump its data from")
 	}
@@ -346,7 +340,7 @@ func TestAVolumeIsLabelledWithTheMajorThatInitialisedIt(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	if _, err := over(machine).Postgres(context.Background(), aPostgres(t, "17"), nil); err != nil {
+	if _, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil); err != nil {
 		t.Fatal(err)
 	}
 	kept := machine.commands()[machine.at("'docker' 'volume' 'create'")]
@@ -361,7 +355,7 @@ func TestAPostgresDeclaringNoVersionRunsTheOneEverySdkDeclaresByDefault(t *testi
 	machine := &box{}
 	in := aPostgres(t, "")
 	in.Resource.Postgres = nil
-	if _, err := over(machine).Postgres(context.Background(), in, nil); err != nil {
+	if _, err := over(machine).ProvisionPostgres(context.Background(), in, nil); err != nil {
 		t.Fatalf("Postgres() of a resource naming no version = %v, and a version is a preference, not something a deploy is refused for leaving out", err)
 	}
 	stood := machine.commands()[machine.at("'docker' 'run'")]
@@ -381,7 +375,7 @@ func TestALoginThatDoesNotOwnTheStateDirectoryKeepsThePasswordThroughSudo(t *tes
 		}
 		return session.Result{}, false
 	}
-	binding, err := over(machine).Postgres(context.Background(), aPostgres(t, "17"), nil)
+	binding, err := over(machine).ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
 	if err != nil {
 		t.Fatalf("Postgres() as a login with sudo that does not own the state directory = %v, and a bootstrap login deploys as readily as the deploy login does", err)
 	}

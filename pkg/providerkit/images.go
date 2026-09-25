@@ -31,14 +31,6 @@ type ImageStore interface {
 	Push(ctx context.Context, push ImagePush, report Reporter) error
 }
 
-type ImagePusher interface {
-	Images(ctx context.Context, target RegistryTarget) (ImageStore, error)
-}
-
-type ImageLoader interface {
-	DirectImages(ctx context.Context) (ImageStore, error)
-}
-
 type ImagePlan struct {
 	Store  ImageStore
 	Pushes []ImagePush
@@ -147,15 +139,15 @@ func coordinate(repository, tag string, target RegistryTarget) string {
 }
 
 func imageStoreFor(ctx context.Context, provider Provider, target RegistryTarget) (ImageStore, error) {
+	hooks := provider.Hooks()
 	if !target.Named() {
-		loading, takes := provider.(ImageLoader)
-		if !takes {
+		if hooks.DirectImages == nil {
 			return nil, nil
 		}
-		return loading.DirectImages(ctx)
+		return hooks.DirectImages(ctx)
 	}
-	if pushing, own := provider.(ImagePusher); own {
-		return pushing.Images(ctx, target)
+	if hooks.RegistryImages != nil {
+		return hooks.RegistryImages(ctx, target)
 	}
 	return RegistryImages(target), nil
 }

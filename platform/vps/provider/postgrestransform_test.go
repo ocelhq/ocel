@@ -28,7 +28,7 @@ func patched(t *testing.T, pass *patching) (*box, providerkit.Binding, error) {
 	machine := &box{}
 	provider := over(machine)
 	provider.Transforming(pass)
-	binding, err := provider.Postgres(context.Background(), aPostgres(t, "17"), nil)
+	binding, err := provider.ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
 	return machine, binding, err
 }
 
@@ -153,7 +153,7 @@ func TestEveryFieldTheVpsBranchTypesIsOneABoxRenders(t *testing.T) {
 	machine := &box{}
 	provider := over(machine)
 	provider.Transforming(transformkit.NodePass{Root: root, Modules: []string{"./stack.transform.ts"}})
-	if _, err := provider.Postgres(context.Background(), aPostgres(t, "17"), nil); err != nil {
+	if _, err := provider.ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil); err != nil {
 		t.Fatalf("a module patching every field the vps branch types was refused: %v", err)
 	}
 	stood := machine.commands()[machine.at("'docker' 'run'")]
@@ -184,10 +184,10 @@ func TestTwoBucketsPatchingTheOneStoreDifferentlyAreRefused(t *testing.T) {
 		"avatars": {"container": {"memory": "4g"}},
 	}})
 
-	if _, err := provider.Bucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
+	if _, err := provider.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
 		t.Fatalf("Bucket(uploads) = %v", err)
 	}
-	_, err := provider.Bucket(context.Background(), aBucket(t, "avatars", false), nil)
+	_, err := provider.ProvisionBucket(context.Background(), aBucket(t, "avatars", false), nil)
 	if err == nil {
 		t.Fatal("the second bucket reshaped the one store the first is already running in, and nothing said so")
 	}
@@ -204,10 +204,10 @@ func TestTwoBucketsPatchingTheOneStoreTheSameWayStandUpTogether(t *testing.T) {
 	provider := over(&box{kept: sealedRootKey()})
 	provider.Transforming(&patching{patches: transformkit.Patches{"container": {"memory": "2g"}}})
 
-	if _, err := provider.Bucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
+	if _, err := provider.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
 		t.Fatalf("Bucket(uploads) = %v", err)
 	}
-	if _, err := provider.Bucket(context.Background(), aBucket(t, "avatars", false), nil); err != nil {
+	if _, err := provider.ProvisionBucket(context.Background(), aBucket(t, "avatars", false), nil); err != nil {
 		t.Fatalf("Bucket(avatars) = %v, want two buckets shaping the store alike to stand up", err)
 	}
 }

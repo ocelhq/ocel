@@ -9,9 +9,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"golang.org/x/oauth2/google"
-
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"golang.org/x/oauth2/google"
 )
 
 const (
@@ -85,3 +84,52 @@ func gcloudProject(ctx context.Context) (string, error) {
 	}
 	return project, nil
 }
+
+func (p *Provider) stood(ctx context.Context) (*clients, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.standing != nil {
+		return p.standing, nil
+	}
+	project := p.options.Project
+	if project == "" {
+		ambient, err := ambientProject(ctx)
+		if err != nil {
+			return nil, err
+		}
+		project = ambient
+	}
+	names := Names{namespace: p.namespace, project: project}
+	if err := names.fit(); err != nil {
+		return nil, err
+	}
+	p.standing = &clients{Names: names, region: p.options.Region, endpoint: p.endpoint}
+	return p.standing, nil
+}
+
+func (p *Provider) Names(ctx context.Context) (Names, error) {
+	held, err := p.stood(ctx)
+	if err != nil {
+		return Names{}, err
+	}
+	return held.Names, nil
+}
+
+func (p *Provider) Project(ctx context.Context) (string, error) {
+	names, err := p.Names(ctx)
+	if err != nil {
+		return "", err
+	}
+	return names.project, nil
+}
+
+func (p *Provider) named() (Names, error) {
+	if p.options.Project == "" {
+		return Names{}, unnamedProject()
+	}
+	return Names{namespace: p.namespace, project: p.options.Project}, nil
+}
+
+func (p *Provider) emulated() bool { return p.endpoint != "" }
+
+func (p *Provider) Region() string { return p.options.Region }

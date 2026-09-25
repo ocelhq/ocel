@@ -258,7 +258,7 @@ func servesBehind(t *testing.T, front string) machine {
 
 	servesAPreviewBehind(t, vm, d, opened, front)
 
-	checks, err := d.CheckStanding(ctx, providerkit.StandingRequest{Class: providerkit.ClassProduction})
+	checks, err := d.CheckHost(ctx, providerkit.StandingRequest{Class: providerkit.ClassProduction})
 	if err != nil {
 		t.Fatalf("CheckStanding() = %v", err)
 	}

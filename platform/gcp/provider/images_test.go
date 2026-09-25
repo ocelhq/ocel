@@ -2,7 +2,6 @@ package gcp
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -38,7 +37,7 @@ func TestEachClassPushesToTheRepositoryItsBootstrapStoodUp(t *testing.T) {
 	p := pushing(t, "")
 
 	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
-		target, err := p.ImageRegistry(context.Background(), class, []string{"web"})
+		target, err := p.EnsureImageRegistry(context.Background(), class, []string{"web"})
 		if err != nil {
 			t.Fatalf("ImageRegistry(%s) = %v", class, err)
 		}
@@ -63,7 +62,7 @@ func TestEachClassPushesToTheRepositoryItsBootstrapStoodUp(t *testing.T) {
 func TestTheCoordinateAnImageLandsUnderIsTheRepositoryPathTheBootstrapNames(t *testing.T) {
 	p := pushing(t, "")
 
-	target, err := p.ImageRegistry(context.Background(), providerkit.ClassProduction, []string{"web"})
+	target, err := p.EnsureImageRegistry(context.Background(), providerkit.ClassProduction, []string{"web"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -86,7 +85,7 @@ func TestAnEmulatedDeployLoadsItsImagesIntoTheDaemonTheEmulatorShares(t *testing
 		t.Errorf("DirectImages() = %v, want the local docker daemon the emulator runs containers out of", direct)
 	}
 
-	target, err := emulated.ImageRegistry(ctx, providerkit.ClassProduction, []string{"web"})
+	target, err := emulated.EnsureImageRegistry(ctx, providerkit.ClassProduction, []string{"web"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,15 +99,14 @@ func TestARealDeployPushesToTheRegistryItResolved(t *testing.T) {
 	ctx := context.Background()
 	p := pushing(t, "")
 
-	target, err := p.ImageRegistry(ctx, providerkit.ClassProduction, []string{"web"})
+	target, err := p.EnsureImageRegistry(ctx, providerkit.ClassProduction, []string{"web"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := p.Images(ctx, target)
-	if err != nil {
-		t.Fatal(err)
+	if target.Server == "" {
+		t.Fatalf("ImageRegistry() = %v, want a registry a real deploy pushes to", target)
 	}
-	if !strings.Contains(store.(fmt.Stringer).String(), target.Server) {
-		t.Errorf("Images() = %v, want the images pushed to %s", store, target.Server)
+	if p.Hooks().RegistryImages != nil {
+		t.Error("the provider sets a RegistryImages hook, and Artifact Registry takes its push from the kit's own registry store")
 	}
 }

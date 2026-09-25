@@ -110,7 +110,7 @@ func TestTheProviderBakesNothingIntoAFunctionRevision(t *testing.T) {
 	t.Parallel()
 	p := pushing(t, "")
 
-	if _, wraps := any(p).(providerkit.FunctionImager); !wraps {
+	if p.Hooks().FunctionBaseImage == nil {
 		t.Fatal("the provider builds no function image, and only one it builds can be wrapped in its runtime")
 	}
 }

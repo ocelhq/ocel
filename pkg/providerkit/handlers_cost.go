@@ -17,8 +17,8 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	if err != nil {
 		return nil, err
 	}
-	shaper, shapes := provider.(Shaper)
-	if !shapes {
+	shape := provider.Hooks().ShapeCost
+	if shape == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("this provider does not describe the resources a deploy would create"))
 	}
 	plan, err := buildDeployPlan(&contractv1.DeployRequest{
@@ -37,7 +37,7 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	if err != nil {
 		return nil, RefusalError(err)
 	}
-	set, err := shaper.Shape(ctx, ShapeRequest{
+	set, err := shape(ctx, ShapeRequest{
 		Plan:       plan,
 		Edge:       gate.Edge,
 		Features:   features,
@@ -82,11 +82,11 @@ func (h *handlers) Price(ctx context.Context, req *costv1.PriceRequest) (*costv1
 	if err != nil {
 		return nil, err
 	}
-	pricer, prices := provider.(Pricer)
-	if !prices {
+	estimate := provider.Hooks().EstimateCost
+	if estimate == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("this provider carries no rate card"))
 	}
-	estimate, err := pricer.Price(ctx, req)
+	estimated, err := estimate(ctx, req)
 	var usage *costkit.UsageError
 	if errors.As(err, &usage) {
 		return nil, RefusalError(Refuse(CodeInvalid, "%s", err))
@@ -94,5 +94,5 @@ func (h *handlers) Price(ctx context.Context, req *costv1.PriceRequest) (*costv1
 	if err != nil {
 		return nil, RefusalError(err)
 	}
-	return estimate, nil
+	return estimated, nil
 }

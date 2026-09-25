@@ -314,6 +314,12 @@ type loadingProvider struct {
 	direct *fake.Images
 }
 
+func (p loadingProvider) Hooks() providerkit.Hooks {
+	hooks := p.Provider.Hooks()
+	hooks.DirectImages = p.DirectImages
+	return hooks
+}
+
 func (p loadingProvider) DirectImages(context.Context) (providerkit.ImageStore, error) {
 	return p.direct, nil
 }
@@ -415,6 +421,12 @@ func (a addressedImages) Destination() string { return a.at }
 type addressingProvider struct {
 	*fake.Provider
 	direct addressedImages
+}
+
+func (p addressingProvider) Hooks() providerkit.Hooks {
+	hooks := p.Provider.Hooks()
+	hooks.DirectImages = p.DirectImages
+	return hooks
 }
 
 func (p addressingProvider) DirectImages(context.Context) (providerkit.ImageStore, error) {

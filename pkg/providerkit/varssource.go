@@ -1,9 +1,11 @@
 package providerkit
 
+import "context"
+
 type Vars struct {
-	Records RecordStore
-	Sealer  Sealer
-	Grants  GrantVerifier
+	Records      RecordStore
+	Sealer       Sealer
+	VerifyGrants func(ctx context.Context, binding Binding) error
 }
 
 type VarsSource interface {
@@ -27,9 +29,5 @@ func (s sessionVars) Vars() (Vars, error) {
 	if err != nil {
 		return Vars{}, err
 	}
-	out := Vars{Records: provider.Records(), Sealer: provider.Sealer()}
-	if verifier, vets := provider.(GrantVerifier); vets {
-		out.Grants = verifier
-	}
-	return out, nil
+	return Vars{Records: provider.Records(), Sealer: provider.Sealer(), VerifyGrants: provider.Hooks().VerifyGrants}, nil
 }

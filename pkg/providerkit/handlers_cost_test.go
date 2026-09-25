@@ -21,6 +21,12 @@ import (
 
 type uncosted struct{ providerkit.Provider }
 
+func (u uncosted) Hooks() providerkit.Hooks {
+	hooks := u.Provider.Hooks()
+	hooks.ShapeCost, hooks.EstimateCost = nil, nil
+	return hooks
+}
+
 func costServed(t *testing.T, provider providerkit.Provider) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
 	t.Helper()
 	spec := providerkit.Spec{

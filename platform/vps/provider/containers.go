@@ -7,7 +7,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	"github.com/ocelhq/ocel/pkg/runtimekit/front"
 	rt "github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -119,5 +118,3 @@ func liveBindings(held providerkit.AppValues) []rt.Binding {
 	}
 	return bindings
 }
-
-var _ resources.AppContainers = (*Provider)(nil)

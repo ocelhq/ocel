@@ -582,15 +582,15 @@ func (r *deployRun) preflight(ctx context.Context, report Reporter) error {
 			return err
 		}
 	}
-	preflighter, ok := r.provider.(DeployPreflighter)
-	if !ok {
+	preflightDeploy := r.provider.Hooks().PreflightDeploy
+	if preflightDeploy == nil {
 		return nil
 	}
 	apps, err := r.usage(resources, grants)
 	if err != nil {
 		return err
 	}
-	return preflighter.PreflightDeploy(ctx, DeployPreflight{
+	return preflightDeploy(ctx, DeployPreflight{
 		Plan:      r.plan,
 		Edge:      r.front.Kind(),
 		Resources: resources,
@@ -829,15 +829,15 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 }
 
 func (r *deployRun) refuseToAdopt(ctx context.Context, stack naming.StackName) error {
-	inspector, inspects := r.provider.(StackInspector)
-	if !inspects {
+	inspectStack := r.provider.Hooks().InspectStack
+	if inspectStack == nil {
 		return nil
 	}
 	_, recorded, err := ReadStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, stack)
 	if err != nil || recorded {
 		return err
 	}
-	state, err := inspector.Inspect(ctx, r.ref(stack))
+	state, err := inspectStack(ctx, r.ref(stack))
 	if err != nil {
 		return err
 	}
@@ -926,9 +926,9 @@ func (r *deployRun) grants(ctx context.Context, entry AppEntry) ([]Binding, erro
 		}
 		return 0
 	})
-	if verifier, ok := r.provider.(GrantVerifier); ok {
+	if verifyGrants := r.provider.Hooks().VerifyGrants; verifyGrants != nil {
 		for _, binding := range grants {
-			if err := verifier.VerifyGrants(ctx, binding); err != nil {
+			if err := verifyGrants(ctx, binding); err != nil {
 				return nil, err
 			}
 		}
@@ -1015,8 +1015,8 @@ func entryLogicalName(manifest *contractv1.Manifest, app, entry string) string {
 }
 
 func (r *deployRun) embed(ctx context.Context, entry AppEntry, functions []Function, report Reporter) error {
-	embedder, embeds := r.provider.(CodeEmbedder)
-	if !embeds {
+	embedCode := r.provider.Hooks().EmbedCode
+	if embedCode == nil {
 		return nil
 	}
 	for _, fn := range functions {
@@ -1024,7 +1024,7 @@ func (r *deployRun) embed(ctx context.Context, entry AppEntry, functions []Funct
 		if !held {
 			continue
 		}
-		if err := embedder.EmbedCode(ctx, fn.Physical, ref, report); err != nil {
+		if err := embedCode(ctx, fn.Physical, ref, report); err != nil {
 			return fmt.Errorf("embed %s's bytecode cache for %s: %w", fn.Name, entry.App, err)
 		}
 	}
@@ -1032,8 +1032,8 @@ func (r *deployRun) embed(ctx context.Context, entry AppEntry, functions []Funct
 }
 
 func (r *deployRun) warm(ctx context.Context, functions []Function, report Reporter) error {
-	warmer, warms := r.provider.(Warmer)
-	if !warms || len(functions) == 0 {
+	warmFunctions := r.provider.Hooks().WarmFunctions
+	if warmFunctions == nil || len(functions) == 0 {
 		return nil
 	}
 	targets := make([]string, 0, len(functions))
@@ -1042,7 +1042,7 @@ func (r *deployRun) warm(ctx context.Context, functions []Function, report Repor
 			targets = append(targets, fn.Physical)
 		}
 	}
-	return warmer.Warm(ctx, targets, report)
+	return warmFunctions(ctx, targets, report)
 }
 
 func declaredVariables(clientBundle bool, held AppValues) []edge.VariableRecord {
