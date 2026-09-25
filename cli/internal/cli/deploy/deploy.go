@@ -13,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
-	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
@@ -21,7 +20,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 const prebuiltFlagUsage = "Deploy the existing " + constants.ProjectStateDirName + "/output instead of building first (produce it with ocel build)"
@@ -156,20 +154,8 @@ func runDeploy(ctx context.Context, deps cmddeps.Deps, cwd string, opts deployOp
 			return showDeployPlan(ctx, runner, ui, req, "Proposed changes to production")
 		}
 
-		records, err := runner.Vars()
+		out, err := streamDeploy(ctx, runner, ui, cfg.Slug, req, inline)
 		if err != nil {
-			return err
-		}
-		inlineAt := inlinebinding.Coordinate{Slug: cfg.Slug, Tier: env.GetTier(), Environment: env.GetIdentity()}
-		if err := inlinebinding.Publish(ctx, records, inlineAt, inline); err != nil {
-			return err
-		}
-
-		var out deployOutcome
-		if err := provider.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy, out.collect(ui)); err != nil {
-			return err
-		}
-		if err := inlinebinding.Prune(ctx, records, inlineAt, inline); err != nil {
 			return err
 		}
 
