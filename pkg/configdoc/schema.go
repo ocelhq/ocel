@@ -65,7 +65,9 @@ func schemaOf(target reflect.Type) object {
 	if provider, ok := value.(schemaProvider); ok {
 		return provider.jsonSchema()
 	}
-	switch value.(type) {
+	switch value := value.(type) {
+	case Keyed:
+		return keyedSchema(target, value.Shorthands())
 	case StringList:
 		return object{"oneOf": []any{
 			object{"type": "string"},
