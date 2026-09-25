@@ -9,6 +9,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"errors"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
@@ -86,6 +87,14 @@ func declining(t *testing.T) string {
 		})
 		_ = spoken.Handshake()
 		spoken.Close()
+	})
+}
+
+func ordering(t *testing.T) string {
+	t.Helper()
+	return listening(t, func(taken net.Conn) {
+		_, _ = io.Copy(io.Discard, taken)
+		taken.Close()
 	})
 }
 
@@ -252,6 +261,16 @@ func TestAHandshakeThatFailedForAnyReasonButAMissingCertificateIsNotReportedAsPe
 		if code, _, errs := ran(t, "leaf", "--at", at.address, "shop.example.com"); code != at.want {
 			t.Errorf("leaf over %s = %d, want %d: %q", what, code, at.want, errs)
 		}
+	}
+}
+
+func TestALeafTheFrontProxyHoldsWhileItOrdersOnDemandIsReportedAsPending(t *testing.T) {
+	code, out, errs := ran(t, "leaf", "--at", ordering(t), "shop.example.com")
+	if code != exitNotServingYet {
+		t.Errorf("leaf over a front proxy that holds the handshake while it orders on demand = %d, want %d: %q", code, exitNotServingYet, errs)
+	}
+	if strings.TrimSpace(out) != "" {
+		t.Errorf("leaf printed %q off a handshake that never completed", out)
 	}
 }
 
