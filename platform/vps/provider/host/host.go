@@ -287,12 +287,17 @@ func (h *Host) spoke(ctx context.Context, what, command string, stdin io.Reader,
 
 const saidLines = 4
 
+func unstarted(code int) bool { return code == 126 || code == 127 }
+
 func (h *Host) refuse(what string, result session.Result) error {
 	return providerkit.Refuse(providerkit.CodeDenied, "%s on %s: %s", what, h.named(), spoken(result))
 }
 
 func spoken(result session.Result) string {
 	said := strings.TrimSpace(result.Stderr)
+	if said == "" && unstarted(result.Code) {
+		said = strings.TrimSpace(result.Stdout)
+	}
 	if said == "" {
 		return "no reason given"
 	}
