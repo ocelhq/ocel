@@ -10,8 +10,6 @@ import (
 
 const DefaultPort = 8480
 
-const httpsPort = 443
-
 type Box interface {
 	Listening(ctx context.Context) ([]listeners.Listener, error)
 	Publishing(ctx context.Context, port string) ([]string, error)

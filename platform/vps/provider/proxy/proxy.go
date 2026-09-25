@@ -16,6 +16,12 @@ type Proxy interface {
 	Forget(ctx context.Context, hostnames []string) ([]string, error)
 }
 
+const (
+	BuiltinContainer = "ocel-proxy"
+	HTTPPort         = "80"
+	HTTPSPort        = "443"
+)
+
 type Guarantees struct {
 	OwnsPorts              bool
 	IssuesCertificates     bool

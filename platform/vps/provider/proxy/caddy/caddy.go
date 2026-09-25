@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 )
 
 const Image = "public.ecr.aws/docker/library/caddy@sha256:df7f1c2fb114453b951de51a98efc010db1655a92c2e86be6706714e2417a78d"
 
 const (
-	Container   = "ocel-proxy"
+	Container   = proxy.BuiltinContainer
 	AdminSocket = "/run/caddy-admin.sock"
 	AdminPort   = 2019
 	ConfigName  = "caddy.json"
@@ -20,8 +21,8 @@ const (
 	DataMount   = "/data"
 	PinsMount   = "/etc/caddy/pins"
 	PinsDir     = live.ClassRoot + "/certs"
-	HTTPPort    = "80"
-	HTTPSPort   = "443"
+	HTTPPort    = proxy.HTTPPort
+	HTTPSPort   = proxy.HTTPSPort
 )
 
 const Grace = 30 * time.Second
