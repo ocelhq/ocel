@@ -43,6 +43,13 @@ message BucketProperties {
   string public_base_url = 2;
 
   bool public = 3;
+
+  string endpoint = 4;
+  string region = 5;
+  bool path_style = 6;
+  string prefix = 7;
+  string access_key_id = 8;
+  string secret_access_key = 9 [debug_redact = true];
 }
 
 message Grant {
