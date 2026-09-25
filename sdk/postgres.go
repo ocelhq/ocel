@@ -2,6 +2,8 @@ package ocel
 
 import (
 	"context"
+	"crypto/x509"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -63,39 +65,79 @@ func Postgres(name string, opts ...PostgresOption) *PostgresDB {
 // Name is the name the database was declared under.
 func (p *PostgresDB) Name() string { return p.name }
 
-// ConnectionString is the postgres URL of the delivered binding, with the
-// credentials percent-encoded. It fails when no binding was delivered for the
-// name, and during discovery.
+// ConnectionString is the postgres URL of the delivered binding: the record's url
+// verbatim when it carries one, and otherwise one built from its host, port,
+// database and credentials, percent-encoded, with its tls mode as sslmode. It
+// fails when no binding was delivered for the name, and during discovery.
 func (p *PostgresDB) ConnectionString() (string, error) {
 	properties, err := p.properties("ConnectionString")
 	if err != nil {
 		return "", err
 	}
-	dsn := url.URL{
-		Scheme: "postgres",
-		User:   url.UserPassword(properties.GetUsername(), properties.GetPassword()),
-		Host:   net.JoinHostPort(properties.GetHost(), strconv.Itoa(int(properties.GetPort()))),
-		Path:   "/" + properties.GetDatabase(),
-	}
-	return dsn.String(), nil
+	return connectionString(properties), nil
 }
 
-// Pool is the connection pool over the delivered binding. It is opened on the first
-// call and the same pool is returned on every one after. It fails when no binding
-// was delivered for the name, and during discovery.
+func connectionString(properties *bindingsv1.PostgresProperties) string {
+	if properties.GetUrl() != "" {
+		return properties.GetUrl()
+	}
+	query := url.Values{}
+	if properties.GetTlsMode() != "" {
+		query.Set("sslmode", properties.GetTlsMode())
+	}
+	dsn := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(properties.GetUsername(), properties.GetPassword()),
+		Host:     net.JoinHostPort(properties.GetHost(), strconv.Itoa(int(properties.GetPort()))),
+		Path:     "/" + properties.GetDatabase(),
+		RawQuery: query.Encode(),
+	}
+	return dsn.String()
+}
+
+// Pool is the connection pool over the delivered binding. A record under
+// verify-full that names a CA trusts that CA for the server's certificate. The pool
+// is opened on the first call and the same pool is returned on every one after. It
+// fails when no binding was delivered for the name, and during discovery.
 func (p *PostgresDB) Pool(ctx context.Context) (*pgxpool.Pool, error) {
 	if discovering() {
 		return nil, &UnprovisionedError{Resource: p.resource(), Access: "Pool"}
 	}
 	p.once.Do(func() {
-		dsn, err := p.ConnectionString()
+		properties, err := p.properties("Pool")
 		if err != nil {
 			p.err = err
 			return
 		}
-		p.pool, p.err = pgxpool.New(ctx, dsn)
+		config, err := pgxpool.ParseConfig(connectionString(properties))
+		if err != nil {
+			p.err = err
+			return
+		}
+		if err := trustCA(config, properties.GetTlsCa()); err != nil {
+			p.err = err
+			return
+		}
+		p.pool, p.err = pgxpool.NewWithConfig(ctx, config)
 	})
 	return p.pool, p.err
+}
+
+func trustCA(config *pgxpool.Config, ca string) error {
+	if ca == "" || config.ConnConfig.TLSConfig == nil {
+		return nil
+	}
+	roots := x509.NewCertPool()
+	if !roots.AppendCertsFromPEM([]byte(ca)) {
+		return errors.New("ocel: the postgres binding's CA holds no PEM certificate")
+	}
+	config.ConnConfig.TLSConfig.RootCAs = roots
+	for _, fallback := range config.ConnConfig.Fallbacks {
+		if fallback.TLSConfig != nil {
+			fallback.TLSConfig.RootCAs = roots
+		}
+	}
+	return nil
 }
 
 func (p *PostgresDB) properties(access string) (*bindingsv1.PostgresProperties, error) {
