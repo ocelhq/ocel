@@ -35,10 +35,10 @@ func TestBuild(t *testing.T) {
 			}},
 		}
 		if len(records) != 1 || !proto.Equal(records[0].Binding, want) {
-			t.Fatalf("Build = %v, want %v", records, want)
+			t.Fatalf("Build = %d records, want one binding %s by its url", len(records), want.GetName())
 		}
 		if records[0].Declared != "orders" || records[0].Site != "bindings.postgres.orders" {
-			t.Errorf("record = %+v, want it to name the declared resource and the config site", records[0])
+			t.Errorf("record declares %q at %q, want it to name the declared resource and the config site", records[0].Declared, records[0].Site)
 		}
 	})
 
@@ -58,14 +58,16 @@ func TestBuild(t *testing.T) {
 			TlsMode: bindingsv1.PostgresTlsMode_POSTGRES_TLS_MODE_VERIFY_FULL, TlsCa: "-----BEGIN CERTIFICATE-----",
 		}
 		if got := records[0].Binding.GetPostgres(); !proto.Equal(got, want) {
-			t.Errorf("properties = %v, want %v", got, want)
+			t.Errorf("properties = %s:%d/%s as %s, tls %v, want %s:%d/%s as %s, tls %v",
+				got.GetHost(), got.GetPort(), got.GetDatabase(), got.GetUsername(), got.GetTlsMode(),
+				want.GetHost(), want.GetPort(), want.GetDatabase(), want.GetUsername(), want.GetTlsMode())
 		}
 	})
 
 	t.Run("a published binding is no record ocel writes", func(t *testing.T) {
 		records, err := Build([]projectconfig.Binding{{Type: postgres, Name: "analytics", External: "warehouse"}}, nil, "ocel.json")
 		if err != nil || len(records) != 0 {
-			t.Fatalf("Build = %v, %v, want nothing", records, err)
+			t.Fatalf("Build = %d records, %v, want nothing", len(records), err)
 		}
 	})
 
@@ -191,7 +193,8 @@ func TestBuildABucket(t *testing.T) {
 		AccessKeyId: "AKID", SecretAccessKey: "s3cr3t", PublicBaseUrl: "https://cdn.acme.com/uploads",
 	}
 	if got := records[0].Binding.GetBucket(); !proto.Equal(got, want) {
-		t.Errorf("bucket = %v, want %v: the public base url is the one the binding names, as written", got, want)
+		t.Errorf("bucket = %s at %s under %q, public base url %q, want %s at %s under %q, public base url %q: the public base url is the one the binding names, as written",
+			got.GetBucket(), got.GetEndpoint(), got.GetPrefix(), got.GetPublicBaseUrl(), want.GetBucket(), want.GetEndpoint(), want.GetPrefix(), want.GetPublicBaseUrl())
 	}
 }
 

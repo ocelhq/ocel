@@ -896,7 +896,7 @@ func TestABucketBoundToAStoreIsShownToTheAppWithoutItsCredential(t *testing.T) {
 		}
 		shown := decodeBinding(t, raw).GetBucket()
 		if shown.GetBucket() != binding.Key || shown.GetPublicBaseUrl() != "https://cdn.acme.com" || !shown.GetPublic() {
-			t.Errorf("%s bucket = %+v, want the binding's key, public base url and public flag the app addresses it by", channel, shown)
+			t.Errorf("%s bucket = %q, %q, %v, want the binding's key, public base url and public flag the app addresses it by", channel, shown.GetBucket(), shown.GetPublicBaseUrl(), shown.GetPublic())
 		}
 	}
 	if l.Value(binding.Key) != stored {
