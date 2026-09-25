@@ -59,7 +59,7 @@ func (r *deployRun) proxied(kind BindingType) bool {
 	if binder, asks := r.provider.(ProxiedBinder); asks {
 		return binder.Proxied(kind)
 	}
-	return Proxied(kind)
+	return naming.Proxied(WireBindingType(kind))
 }
 
 func ReadableAs(binding Binding, declaredName string, declared BindingType, proxied func(BindingType) bool) error {

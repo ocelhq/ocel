@@ -172,15 +172,6 @@ func guardFor(q ServingQuery, desc edge.ServeDescriptor, present bool) *OriginGu
 	return &OriginGuard{Entry: desc.Entry}
 }
 
-func Proxied(kind BindingType) bool {
-	for wire, held := range bindingTypes {
-		if held == kind {
-			return naming.Proxied(wire)
-		}
-	}
-	return false
-}
-
 func anyProxied(proxied func(BindingType) bool, grants []Binding) bool {
 	return slices.ContainsFunc(grants, func(binding Binding) bool { return proxied(binding.Type) })
 }
