@@ -8,8 +8,10 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envsource"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/gcp/provider/envidentity"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 
@@ -189,8 +191,13 @@ func (p *Provider) Edges() providerkit.EdgeRegistry {
 
 func (p *Provider) DNS() providerkit.DNSRegistry { return dns{} }
 
+func (p *Provider) EnvSourceTarget() envsource.Target {
+	return envsource.Target{Issuer: envidentity.Issuer{}}
+}
+
 var (
 	_ providerkit.Provider          = (*Provider)(nil)
 	_ providerkit.Diagnoser         = (*Provider)(nil)
 	_ providerkit.ContainerRuntimer = (*Provider)(nil)
+	_ providerkit.EnvSourceIdentity = (*Provider)(nil)
 )
