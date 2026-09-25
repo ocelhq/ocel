@@ -175,10 +175,10 @@ func TestBuild(t *testing.T) {
 			t.Errorf("app[0].entrypoint = %q, want %q", got, want)
 		}
 		if got := gotReq.Apps[0].Framework; got == nil || got.Name != "node" || got.Arch != "" {
-			t.Errorf("app[0].runtime = %+v, want the node runtime with no arch", got)
+			t.Errorf("app[0].framework = %+v, want the node framework with no arch", got)
 		}
 		if gotReq.Apps[1].Framework != nil {
-			t.Errorf("app[1].runtime = %+v, want the key left out when the app declares none", gotReq.Apps[1].Framework)
+			t.Errorf("app[1].framework = %+v, want the key left out when the app declares none", gotReq.Apps[1].Framework)
 		}
 		if gotReq.Apps[1].Entrypoint != "" {
 			t.Errorf("app[1].entrypoint = %q, want empty", gotReq.Apps[1].Entrypoint)
@@ -646,7 +646,7 @@ func TestBuild(t *testing.T) {
 			t.Fatalf("CollectFunctions returned %d functions, want 1: %+v", len(fns), fns)
 		}
 		if fns[0].Route != "index" || fns[0].Framework.Name != "node" {
-			t.Errorf("detected function = %+v, want route index runtime node", fns[0])
+			t.Errorf("detected function = %+v, want route index framework node", fns[0])
 		}
 		if fns[0].App != "express-app" {
 			t.Errorf("detected function app = %q, want %q", fns[0].App, "express-app")
@@ -742,7 +742,7 @@ func TestBuildID(t *testing.T) {
 		want     string
 	}{
 		{
-			name:     "reads the serve descriptor every runtime writes",
+			name:     "reads the serve descriptor every framework writes",
 			app:      "api",
 			contents: map[string]string{"api/" + edge.ServeDescriptorFile: `{"framework":"node","buildId":"0123456789abcdef"}`},
 			want:     "0123456789abcdef",
@@ -1011,12 +1011,12 @@ func TestCollectFunctions(t *testing.T) {
 			wantMsg:   "want it to name the offending .func and config.json",
 		},
 		{
-			name: "a config missing its runtime errors",
+			name: "a config missing its framework errors",
 			setup: func(t *testing.T, outDir string) {
 				writeFuncConfig(t, outDir, "web", "api.func", providerkit.FunctionConfig{Handler: "index.handler", App: "web"})
 			},
-			succeeded: "collectFunctions succeeded on config missing its runtime, want error",
-			wants:     []string{"requires runtime, handler, and app"},
+			succeeded: "collectFunctions succeeded on config missing its framework, want error",
+			wants:     []string{"requires framework, handler, and app"},
 			wantMsg:   "want it to explain the required fields",
 		},
 		{
@@ -1026,7 +1026,7 @@ func TestCollectFunctions(t *testing.T) {
 					providerkit.FunctionConfig{Framework: providerkit.Framework{Name: "node"}, Handler: "index.handler"})
 			},
 			succeeded: "collectFunctions succeeded on config missing app, want error",
-			wants:     []string{"requires runtime, handler, and app"},
+			wants:     []string{"requires framework, handler, and app"},
 			wantMsg:   "want it to explain the required fields",
 		},
 		{

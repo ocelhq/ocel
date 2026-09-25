@@ -52,11 +52,11 @@ func RunPorts(t *testing.T, provider providerkit.Provider) {
 
 func bootstrapOf(t *testing.T, provider providerkit.Provider) providerkit.Bootstrap {
 	t.Helper()
-	bootstrapper, err := provider.Bootstrap(provider.Facts().DefaultEdge)
+	bootstrap, err := provider.Bootstrap(provider.Facts().DefaultEdge)
 	if err != nil {
-		t.Fatalf("Bootstrap(%q) error = %v, want the bootstrapper for this provider's default edge", provider.Facts().DefaultEdge, err)
+		t.Fatalf("Bootstrap(%q) error = %v, want the bootstrap for this provider's default edge", provider.Facts().DefaultEdge, err)
 	}
-	return bootstrapper
+	return bootstrap
 }
 
 func under(t *testing.T, rest ...string) providerkit.RecordName {
@@ -249,7 +249,7 @@ func RunRecordStore(t *testing.T, records providerkit.RecordStore) {
 	})
 }
 
-func RunCipher(t *testing.T, sealer providerkit.Cipher) {
+func RunCipher(t *testing.T, cipher providerkit.Cipher) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -263,7 +263,7 @@ func RunCipher(t *testing.T, sealer providerkit.Cipher) {
 	}
 	plaintext := []byte("postgres://example")
 
-	sealed, err := sealer.Seal(ctx, at, plaintext)
+	sealed, err := cipher.Seal(ctx, at, plaintext)
 	if err != nil {
 		t.Fatalf("Seal() = %v", err)
 	}
@@ -271,7 +271,7 @@ func RunCipher(t *testing.T, sealer providerkit.Cipher) {
 		t.Fatal("Seal() returned the plaintext inside its output")
 	}
 
-	opened, err := sealer.Open(ctx, at, sealed)
+	opened, err := cipher.Open(ctx, at, sealed)
 	if err != nil {
 		t.Fatalf("Open() at the coordinate sealed = %v", err)
 	}
@@ -287,18 +287,18 @@ func RunCipher(t *testing.T, sealer providerkit.Cipher) {
 		"another key":         {Project: at.Project, Class: at.Class, Env: at.Env, Folder: at.Folder, Name: "API_KEY"},
 	} {
 		t.Run("a value sealed here does not open at "+name, func(t *testing.T) {
-			if _, err := sealer.Open(ctx, moved, sealed); err == nil {
+			if _, err := cipher.Open(ctx, moved, sealed); err == nil {
 				t.Fatal("Open() at a coordinate the value was not sealed at succeeded, so the coordinate is not authenticated")
 			}
 		})
 	}
 }
 
-func RunBootstrap(t *testing.T, bootstrapper providerkit.Bootstrap, kind edge.Kind) {
+func RunBootstrap(t *testing.T, bootstrap providerkit.Bootstrap, kind edge.Kind) {
 	t.Helper()
 
 	ctx := context.Background()
-	catalogue := bootstrapper.Catalogue()
+	catalogue := bootstrap.Catalogue()
 	wanted, err := applicable(catalogue, kind)
 	if err != nil {
 		t.Fatalf("the features the %q edge stands up = %v", kind, err)
@@ -331,7 +331,7 @@ func RunBootstrap(t *testing.T, bootstrapper providerkit.Bootstrap, kind edge.Ki
 
 	t.Run("Describe answers for the class it was asked about", func(t *testing.T) {
 		for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
-			described, err := bootstrapper.Describe(ctx, class)
+			described, err := bootstrap.Describe(ctx, class)
 			if err != nil {
 				t.Fatalf("Describe(%s) = %v", class, err)
 			}
@@ -348,11 +348,11 @@ func RunBootstrap(t *testing.T, bootstrapper providerkit.Bootstrap, kind edge.Ki
 
 	t.Run("Plan answers for the request Apply would be given", func(t *testing.T) {
 		class := providerkit.ClassProduction
-		described, err := bootstrapper.Describe(ctx, class)
+		described, err := bootstrap.Describe(ctx, class)
 		if err != nil {
 			t.Fatalf("Describe(%s) = %v", class, err)
 		}
-		plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class})
+		plan, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class})
 		if err != nil {
 			t.Fatalf("Plan(%s) = %v", class, err)
 		}
@@ -390,7 +390,7 @@ func RunBootstrap(t *testing.T, bootstrapper providerkit.Bootstrap, kind edge.Ki
 		}
 		class := providerkit.ClassProduction
 		drop := wanted
-		plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, Remove: drop})
+		plan, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class, Remove: drop})
 		if err != nil {
 			t.Fatalf("Plan(%s, drop %v) = %v", class, drop, err)
 		}
@@ -418,11 +418,11 @@ func RunBootstrap(t *testing.T, bootstrapper providerkit.Bootstrap, kind edge.Ki
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Features: raising}, nil); err != nil {
+		if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, Features: raising}, nil); err != nil {
 			t.Fatalf("Apply() of what the %q edge stands up (%v) = %v", kind, raising, err)
 		}
 
-		described, err := bootstrapper.Describe(ctx, class)
+		described, err := bootstrap.Describe(ctx, class)
 		if err != nil {
 			t.Fatalf("Describe() after Apply() = %v", err)
 		}
@@ -432,31 +432,31 @@ func RunBootstrap(t *testing.T, bootstrapper providerkit.Bootstrap, kind edge.Ki
 			}
 		}
 
-		removal, err := bootstrapper.PlanRemove(ctx, class)
+		removal, err := bootstrap.PlanRemove(ctx, class)
 		if err != nil {
-			t.Fatalf("PlanRemoval() = %v", err)
+			t.Fatalf("PlanRemove() = %v", err)
 		}
 		for _, group := range removal.Groups {
 			if group.Kind == "" || group.Name == "" {
-				t.Errorf("PlanRemoval() returned %+v, and a removal plan cannot render a nameless group", group)
+				t.Errorf("PlanRemove() returned %+v, and a removal plan cannot render a nameless group", group)
 			}
 			if !providerkit.ValidChangeAction(group.Action) {
-				t.Errorf("PlanRemoval() returned action %q, which is none the plan knows", group.Action)
+				t.Errorf("PlanRemove() returned action %q, which is none the plan knows", group.Action)
 			}
 			for _, change := range group.Changes {
 				if change.Kind == "" || change.Name == "" {
-					t.Errorf("PlanRemoval() returned row %+v, and a removal plan cannot render a nameless row", change)
+					t.Errorf("PlanRemove() returned row %+v, and a removal plan cannot render a nameless row", change)
 				}
 				if !providerkit.ValidChangeAction(change.Action) {
-					t.Errorf("PlanRemoval() returned row action %q, which is none the plan knows", change.Action)
+					t.Errorf("PlanRemove() returned row action %q, which is none the plan knows", change.Action)
 				}
 			}
 		}
 
-		if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, class, nil); err != nil {
 			t.Fatalf("Remove() = %v", err)
 		}
-		gone, err := bootstrapper.Describe(ctx, class)
+		gone, err := bootstrap.Describe(ctx, class)
 		if err != nil {
 			t.Fatalf("Describe() after Remove() = %v", err)
 		}
@@ -475,10 +475,10 @@ func RunBootstrap(t *testing.T, bootstrapper providerkit.Bootstrap, kind edge.Ki
 		for i := len(levels) - 1; i >= 0; i-- {
 			dropping = append(dropping, levels[i]...)
 		}
-		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, Remove: dropping}, nil); err != nil {
+		if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, Remove: dropping}, nil); err != nil {
 			t.Fatalf("Apply() dropping what the %q edge stands up (%v) = %v", kind, dropping, err)
 		}
-		if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, class, nil); err != nil {
 			t.Fatalf("Remove() = %v", err)
 		}
 	})
@@ -793,7 +793,7 @@ func writtenArtifact(t *testing.T) string {
 	return path
 }
 
-func RunStacks(t *testing.T, facts providerkit.Facts, releaser providerkit.Stacks, artifacts providerkit.ArtifactStore, records providerkit.RecordStore) {
+func RunStacks(t *testing.T, facts providerkit.Facts, stacks providerkit.Stacks, artifacts providerkit.ArtifactStore, records providerkit.RecordStore) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -806,7 +806,7 @@ func RunStacks(t *testing.T, facts providerkit.Facts, releaser providerkit.Stack
 	t.Run("Destroy of a stack that was never provisioned is a no-op", func(t *testing.T) {
 		absent := ref
 		absent.Name = naming.InfraStack("never-provisioned")
-		if err := releaser.Destroy(ctx, absent, nil); err != nil {
+		if err := stacks.Destroy(ctx, absent, nil); err != nil {
 			t.Fatalf("Destroy() of an absent stack = %v, want nil so a rerun of a teardown is safe", err)
 		}
 	})
@@ -816,7 +816,7 @@ func RunStacks(t *testing.T, facts providerkit.Facts, releaser providerkit.Stack
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a release asks for nothing")
 		}
-		planned, err := releaser.Plan(ctx, providerkit.StackPlan{
+		planned, err := stacks.Plan(ctx, providerkit.StackPlan{
 			Ref:       ref,
 			Kind:      providerkit.StackInfra,
 			Resources: resources,
@@ -835,7 +835,7 @@ func RunStacks(t *testing.T, facts providerkit.Facts, releaser providerkit.Stack
 			t.Skip("this provider serves no resource primitive, so a release asks for nothing")
 		}
 		bare := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackInfra, Resources: resources}
-		without, err := releaser.Plan(ctx, bare, nil)
+		without, err := stacks.Plan(ctx, bare, nil)
 		if err != nil {
 			t.Fatalf("Plan() of a release shipping no artifact = %v", err)
 		}
@@ -848,7 +848,7 @@ func RunStacks(t *testing.T, facts providerkit.Facts, releaser providerkit.Stack
 			Path:   path,
 			Digest: conformanceArtifactDigest,
 		}}
-		with, err := releaser.Plan(ctx, shipping, nil)
+		with, err := stacks.Plan(ctx, shipping, nil)
 		if err != nil {
 			t.Fatalf("Plan() of a release shipping one artifact = %v", err)
 		}
@@ -859,13 +859,13 @@ func RunStacks(t *testing.T, facts providerkit.Facts, releaser providerkit.Stack
 		}
 
 		if !facts.StoresArtifacts {
-			if _, err := releaser.Provision(ctx, shipping, nil); err == nil {
+			if _, err := stacks.Provision(ctx, shipping, nil); err == nil {
 				t.Fatal("Provision() shipped an artifact through a provider that keeps no artifact store, " +
 					"so the release reported a write that landed nowhere")
 			}
 			return
 		}
-		if _, err := releaser.Provision(ctx, shipping, nil); err != nil {
+		if _, err := stacks.Provision(ctx, shipping, nil); err != nil {
 			t.Fatalf("Provision() of the release whose plan showed the artifact = %v", err)
 		}
 		shipped := shipping.Uploads[0].Ref
@@ -901,7 +901,7 @@ func RunStacks(t *testing.T, facts providerkit.Facts, releaser providerkit.Stack
 			t.Skip("this provider serves no resource primitive, so a release asks for nothing")
 		}
 		bare := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackInfra, Resources: resources}
-		without, err := releaser.Plan(ctx, bare, nil)
+		without, err := stacks.Plan(ctx, bare, nil)
 		if err != nil {
 			t.Fatalf("Plan() of a release pushing no image = %v", err)
 		}
@@ -914,10 +914,10 @@ func RunStacks(t *testing.T, facts providerkit.Facts, releaser providerkit.Stack
 			ImageRef: "registry.invalid/conformance:sha256-" + conformanceImageDigest,
 			Digest:   "sha256:" + conformanceImageDigest,
 		}}}
-		with, err := releaser.Plan(ctx, pushing, nil)
+		with, err := stacks.Plan(ctx, pushing, nil)
 		if err != nil {
 			requireInvalid(t, err, "Plan")
-			if _, err := releaser.Provision(ctx, pushing, nil); err == nil {
+			if _, err := stacks.Provision(ctx, pushing, nil); err == nil {
 				t.Error("Plan() refused a declared image push and Provision() took it, so the apply pushed nothing and said so to nobody")
 			}
 			return
@@ -930,7 +930,7 @@ func RunStacks(t *testing.T, facts providerkit.Facts, releaser providerkit.Stack
 			t.Errorf("Plan() pushed %d images, and a plan is the diff a human consents to before anything moves", pushed)
 		}
 
-		if _, err := releaser.Provision(ctx, pushing, nil); err != nil {
+		if _, err := stacks.Provision(ctx, pushing, nil); err != nil {
 			t.Fatalf("Provision() of the release whose plan showed the image = %v", err)
 		}
 		if pushed := store.Pushed(); pushed != 1 {
@@ -943,7 +943,7 @@ func RunStacks(t *testing.T, facts providerkit.Facts, releaser providerkit.Stack
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a plan can ask for nothing")
 		}
-		result, err := releaser.Provision(ctx, providerkit.StackPlan{
+		result, err := stacks.Provision(ctx, providerkit.StackPlan{
 			Ref:       ref,
 			Kind:      providerkit.StackInfra,
 			Resources: resources,
@@ -972,7 +972,7 @@ func RunStacks(t *testing.T, facts providerkit.Facts, releaser providerkit.Stack
 			}()
 		}
 
-		removal, err := releaser.PlanDestroy(ctx, ref, nil)
+		removal, err := stacks.PlanDestroy(ctx, ref, nil)
 		if err != nil {
 			t.Fatalf("PlanDestroy() of the stack just provisioned = %v", err)
 		}
@@ -987,7 +987,7 @@ func RunStacks(t *testing.T, facts providerkit.Facts, releaser providerkit.Stack
 			}
 		}
 
-		if err := releaser.Destroy(ctx, ref, nil); err != nil {
+		if err := stacks.Destroy(ctx, ref, nil); err != nil {
 			t.Fatalf("Destroy() of the stack just provisioned = %v", err)
 		}
 	})
@@ -998,12 +998,12 @@ func RunStacks(t *testing.T, facts providerkit.Facts, releaser providerkit.Stack
 			Kind:      providerkit.StackInfra,
 			Resources: []providerkit.Resource{{Name: "unserved", Type: "no-such-primitive"}},
 		}
-		result, err := releaser.Provision(ctx, unserved, nil)
+		result, err := stacks.Provision(ctx, unserved, nil)
 		if err == nil {
 			if len(result.Bindings) == 0 {
 				t.Fatal("Provision() of a primitive this provider does not serve stood nothing up and refused nothing, so a release reads as done where nothing happened")
 			}
-			if derr := releaser.Destroy(ctx, ref, nil); derr != nil {
+			if derr := stacks.Destroy(ctx, ref, nil); derr != nil {
 				t.Fatal(derr)
 			}
 			t.Skip("this provider stands up a resource of any type, so there is no unserved primitive to refuse")
@@ -1018,7 +1018,7 @@ func RunStacks(t *testing.T, facts providerkit.Facts, releaser providerkit.Stack
 		) {
 			t.Errorf("Provision() refused with code %q, which is none the kit maps", refusal.Code)
 		}
-		if planned, err := releaser.Plan(ctx, unserved, nil); err == nil {
+		if planned, err := stacks.Plan(ctx, unserved, nil); err == nil {
 			t.Errorf("Plan() showed %+v for a release its own provision refuses, and the plan is the diff the apply runs", planned.Groups)
 		}
 	})

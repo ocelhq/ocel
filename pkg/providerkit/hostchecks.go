@@ -27,13 +27,13 @@ type HostCheckRequest struct {
 	Hostnames []string
 }
 
-func HostChecksProto(checks []HostCheck) []*contractv1.StandingCheck {
+func HostChecksProto(checks []HostCheck) []*contractv1.HostCheck {
 	if len(checks) == 0 {
 		return nil
 	}
-	wired := make([]*contractv1.StandingCheck, 0, len(checks))
+	wired := make([]*contractv1.HostCheck, 0, len(checks))
 	for _, check := range checks {
-		wired = append(wired, &contractv1.StandingCheck{
+		wired = append(wired, &contractv1.HostCheck{
 			Subject: check.Subject,
 			Verdict: verdictProto(check.Verdict),
 			Finding: check.Finding,
@@ -43,18 +43,18 @@ func HostChecksProto(checks []HostCheck) []*contractv1.StandingCheck {
 	return wired
 }
 
-func verdictProto(verdict HostVerdict) contractv1.StandingCheck_Verdict {
+func verdictProto(verdict HostVerdict) contractv1.HostCheck_Verdict {
 	switch verdict {
 	case HostOwed:
-		return contractv1.StandingCheck_VERDICT_OWED
+		return contractv1.HostCheck_VERDICT_OWED
 	case HostFail:
-		return contractv1.StandingCheck_VERDICT_FAIL
+		return contractv1.HostCheck_VERDICT_FAIL
 	default:
-		return contractv1.StandingCheck_VERDICT_PASS
+		return contractv1.HostCheck_VERDICT_PASS
 	}
 }
 
-func (h *handlers) hostChecks(ctx context.Context, provider Provider, class Class, hostnames []string) []*contractv1.StandingCheck {
+func (h *handlers) hostChecks(ctx context.Context, provider Provider, class Class, hostnames []string) []*contractv1.HostCheck {
 	checkHost := provider.Hooks().CheckHost
 	if checkHost == nil {
 		return nil

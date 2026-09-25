@@ -30,19 +30,19 @@ func bootstrapped(t *testing.T, vm machine, class providerkit.Class) *vps.Provid
 	p := vm.provider(t)
 	t.Cleanup(func() { closing(t, p) })
 
-	bootstrapper, err := p.Bootstrap("")
+	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	standing, err := bootstrapper.Describe(ctx, class)
+	standing, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatalf("Describe(%s) = %v", class, err)
 	}
 	if standing.Present && !standing.Unfinished && standing.Stacks[0].DigestCurrent {
 		return p
 	}
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v", class, err)
 	}
 	return p
@@ -83,10 +83,10 @@ func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *tes
 	bootstrapped(t, vm, class)
 
 	ctx := context.Background()
-	sealer := vm.deploying(t).Cipher()
+	cipher := vm.deploying(t).Cipher()
 	at := sealedAt(class, "DATABASE_URL")
 
-	written, err := sealer.Seal(ctx, at, []byte(sealed))
+	written, err := cipher.Seal(ctx, at, []byte(sealed))
 	if err != nil {
 		t.Fatalf("%s sealed nothing through the helper it is whitelisted on: %v", deployLogin, err)
 	}
@@ -94,7 +94,7 @@ func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *tes
 		t.Fatal("Seal() answered a value carrying the plaintext it was handed")
 	}
 
-	opened, err := sealer.Open(ctx, at, written)
+	opened, err := cipher.Open(ctx, at, written)
 	if err != nil {
 		t.Fatalf("%s could not open what it sealed: %v", deployLogin, err)
 	}
@@ -102,7 +102,7 @@ func TestLiveTheDeployLoginSealsAndOpensThroughTheHelperItIsWhitelistedOn(t *tes
 		t.Errorf("the round trip answered %q, want %q", opened, sealed)
 	}
 
-	if moved, err := sealer.Open(ctx, sealedAt(class, "API_KEY"), written); err == nil {
+	if moved, err := cipher.Open(ctx, sealedAt(class, "API_KEY"), written); err == nil {
 		t.Errorf("a value sealed at DATABASE_URL opened at API_KEY as %q, so the coordinate authenticates nothing", moved)
 	}
 }
@@ -114,11 +114,11 @@ func TestLiveASealKeyThatWasReplacedIsDriftInStatus(t *testing.T) {
 	dirties(t, vm)
 
 	ctx := context.Background()
-	bootstrapper, err := p.Bootstrap("")
+	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	standing, err := bootstrapper.Describe(ctx, class)
+	standing, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestLiveASealKeyThatWasReplacedIsDriftInStatus(t *testing.T) {
 	vm.ssh(t, "sudo rm -f "+key)
 	vm.ssh(t, "sudo "+host.SealHelper+" "+string(class)+" init")
 
-	replaced, err := bootstrapper.Describe(ctx, class)
+	replaced, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatalf("Describe() over a replaced key = %v", err)
 	}
@@ -145,7 +145,7 @@ func TestLiveASealKeyThatWasReplacedIsDriftInStatus(t *testing.T) {
 		t.Errorf("the stamp says nothing about how a value is sealed, and %q is what the record claims", host.SealAlgorithm)
 	}
 
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err == nil {
+	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err == nil {
 		t.Error("an apply over a replaced key finished, and the stamp now records a key that opens nothing this class ever sealed")
 	}
 }

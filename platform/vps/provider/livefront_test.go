@@ -186,12 +186,12 @@ func servesBehind(t *testing.T, front string) machine {
 	ctx := context.Background()
 	p := vm.provider(t, routingByHand)
 	defer closing(t, p)
-	bootstrapper, err := p.Bootstrap("")
+	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
-		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+		if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 			t.Fatalf("Apply(%s) behind %s = %v", class, front, err)
 		}
 	}
@@ -260,7 +260,7 @@ func servesBehind(t *testing.T, front string) machine {
 
 	checks, err := d.CheckHost(ctx, providerkit.HostCheckRequest{Class: providerkit.ClassProduction})
 	if err != nil {
-		t.Fatalf("CheckStanding() = %v", err)
+		t.Fatalf("CheckHost() = %v", err)
 	}
 	for _, check := range checks {
 		if check.Verdict == providerkit.HostFail {
@@ -273,7 +273,7 @@ func servesBehind(t *testing.T, front string) machine {
 	}
 	vm.ssh(t, "sudo docker ps -aq --filter label="+host.LabelApp+" | xargs -r sudo docker rm -f >/dev/null 2>&1 || true")
 	for _, class := range []providerkit.Class{providerkit.ClassPreview, providerkit.ClassProduction} {
-		if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, class, nil); err != nil {
 			t.Fatalf("Remove(%s) behind %s = %v", class, front, err)
 		}
 	}

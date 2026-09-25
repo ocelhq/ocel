@@ -185,7 +185,7 @@ func provisionedOutputs() auto.OutputMap {
 	}
 }
 
-func conformingReleaser(engine *mockedEngine) *Stacks {
+func conformingStacks(engine *mockedEngine) *Stacks {
 	return releaserPlacingInto(engine, &fakeArtifactStore{})
 }
 
@@ -297,14 +297,14 @@ func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ providerkit.Class, 
 func TestReleaserRunsTheKitsPortTier(t *testing.T) {
 	store := newShippedArtifacts()
 	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: store}
-	conformance.RunStacks(t, providerkit.Facts{Bindings: Serves(), StoresArtifacts: true}, conformingReleaser(engine), store, nil)
+	conformance.RunStacks(t, providerkit.Facts{Bindings: Serves(), StoresArtifacts: true}, conformingStacks(engine), store, nil)
 }
 
 func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *testing.T) {
 	t.Parallel()
 
 	engine := &mockedEngine{outputs: provisionedOutputs()}
-	result, err := conformingReleaser(engine).Provision(context.Background(), providerkit.StackPlan{
+	result, err := conformingStacks(engine).Provision(context.Background(), providerkit.StackPlan{
 		Ref:  providerkit.StackRef{Project: "conformance", Class: providerkit.ClassProduction, Name: naming.InfraStack("conformance")},
 		Kind: providerkit.StackInfra,
 		Resources: []providerkit.Resource{

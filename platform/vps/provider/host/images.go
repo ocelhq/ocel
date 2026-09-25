@@ -42,20 +42,20 @@ func deniedSocket(stderr string) bool {
 	return strings.Contains(strings.ToLower(stderr), "permission denied")
 }
 
-func (h *Host) HoldsImage(ctx context.Context, coordinate string) (bool, error) {
+func (h *Host) HoldsImage(ctx context.Context, imageRef string) (bool, error) {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return false, err
 	}
-	named, err := h.ran(ctx, "ask whether "+coordinate+" stands", "docker image ls -q "+quoted(coordinate), nil, elevation)
+	named, err := h.ran(ctx, "ask whether "+imageRef+" stands", "docker image ls -q "+quoted(imageRef), nil, elevation)
 	if err != nil {
 		return false, err
 	}
 	return strings.TrimSpace(named) != "", nil
 }
 
-func (h *Host) PullImage(ctx context.Context, target providerkit.RegistryTarget, coordinate, digest string) (string, error) {
-	command, err := pull(target, coordinate, digest)
+func (h *Host) PullImage(ctx context.Context, target providerkit.RegistryTarget, imageRef, digest string) (string, error) {
+	command, err := pull(target, imageRef, digest)
 	if err != nil {
 		return "", err
 	}
@@ -66,18 +66,18 @@ func (h *Host) PullImage(ctx context.Context, target providerkit.RegistryTarget,
 	if err := h.sweep(ctx, elevation); err != nil {
 		return "", err
 	}
-	said, err := h.pulling(ctx, target, coordinate, command, elevation)
+	said, err := h.pulling(ctx, target, imageRef, command, elevation)
 	if err != nil {
 		return "", err
 	}
-	held, err := h.HoldsImage(ctx, coordinate)
+	held, err := h.HoldsImage(ctx, imageRef)
 	if err != nil {
 		return "", err
 	}
 	if !held {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
 			"%s pulled from %s but holds no %s: %s",
-			h.named(), target.Server, coordinate, strings.TrimSpace(said))
+			h.named(), target.Server, imageRef, strings.TrimSpace(said))
 	}
 	return strings.TrimSpace(said), nil
 }
@@ -88,8 +88,8 @@ const (
 	pullCeiling  = 8 * time.Second
 )
 
-func (h *Host) pulling(ctx context.Context, target providerkit.RegistryTarget, coordinate, command, elevation string) (string, error) {
-	what := "pull " + coordinate + " from " + target.Server
+func (h *Host) pulling(ctx context.Context, target providerkit.RegistryTarget, imageRef, command, elevation string) (string, error) {
+	what := "pull " + imageRef + " from " + target.Server
 	var said, stderr string
 	var err error
 	for attempt := range pullAttempts {
@@ -132,8 +132,8 @@ func LoginStands(target providerkit.RegistryTarget) error {
 		"%s has a password but no username\nSet `username` beside `password` in the project's `registry`", target.Server)
 }
 
-func pull(target providerkit.RegistryTarget, coordinate, digest string) (string, error) {
-	pinned, err := pinnedTo(coordinate, digest)
+func pull(target providerkit.RegistryTarget, imageRef, digest string) (string, error) {
+	pinned, err := pinnedTo(imageRef, digest)
 	if err != nil {
 		return "", err
 	}
@@ -151,42 +151,42 @@ func pull(target providerkit.RegistryTarget, coordinate, digest string) (string,
 	}
 	steps = append(steps,
 		"docker pull "+quoted(pinned),
-		"docker tag "+quoted(pinned)+" "+quoted(coordinate),
+		"docker tag "+quoted(pinned)+" "+quoted(imageRef),
 	)
 	return strings.Join(steps, "\n"), nil
 }
 
-func pinnedTo(coordinate, digest string) (string, error) {
+func pinnedTo(imageRef, digest string) (string, error) {
 	if digest == "" {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
 			"%s pins no digest",
-			coordinate)
+			imageRef)
 	}
-	repository := coordinate
-	slash := strings.LastIndex(coordinate, "/")
-	if colon := strings.LastIndex(coordinate[slash+1:], ":"); colon >= 0 {
-		repository = coordinate[:slash+1+colon]
+	repository := imageRef
+	slash := strings.LastIndex(imageRef, "/")
+	if colon := strings.LastIndex(imageRef[slash+1:], ":"); colon >= 0 {
+		repository = imageRef[:slash+1+colon]
 	}
 	return repository + "@" + digest, nil
 }
 
-func (h *Host) LoadImage(ctx context.Context, coordinate string, tar io.Reader) (string, error) {
+func (h *Host) LoadImage(ctx context.Context, imageRef string, tar io.Reader) (string, error) {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return "", err
 	}
-	said, err := h.ran(ctx, "load "+coordinate, "flock -x "+quoted(imagesLock)+" docker load", tar, elevation)
+	said, err := h.ran(ctx, "load "+imageRef, "flock -x "+quoted(imagesLock)+" docker load", tar, elevation)
 	if err != nil {
 		return "", err
 	}
-	held, err := h.HoldsImage(ctx, coordinate)
+	held, err := h.HoldsImage(ctx, imageRef)
 	if err != nil {
 		return "", err
 	}
 	if !held {
 		return "", providerkit.Refuse(providerkit.CodeInvalid,
 			"%s loaded the image but holds no %s: %s\nengine state:\n%s",
-			h.named(), coordinate, strings.TrimSpace(said), h.said(ctx, loadEvidenceCommand(), elevation))
+			h.named(), imageRef, strings.TrimSpace(said), h.said(ctx, loadEvidenceCommand(), elevation))
 	}
 	return strings.TrimSpace(said), nil
 }

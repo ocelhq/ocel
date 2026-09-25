@@ -42,13 +42,13 @@ func stagedFunc(t *testing.T, files map[string]string) string {
 
 func functionConfig(t *testing.T, command []string) string {
 	t.Helper()
-	return runtimeConfig(t, providerkit.FrameworkNode, command)
+	return frameworkConfig(t, providerkit.FrameworkNode, command)
 }
 
-func runtimeConfig(t *testing.T, runtime string, command []string) string {
+func frameworkConfig(t *testing.T, framework string, command []string) string {
 	t.Helper()
 	raw, err := json.Marshal(map[string]any{
-		"framework": map[string]string{"name": runtime, "arch": "x86_64"},
+		"framework": map[string]string{"name": framework, "arch": "x86_64"},
 		"handler":   "index.mjs",
 		"command":   command,
 		"id":        "server",
@@ -132,7 +132,7 @@ func TestFunctionImageBootsANodeFunctionThroughTheRuntime(t *testing.T) {
 func TestFunctionImageRefusesAFunctionThatNamesNoCommandAndBootsThroughNoRuntime(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
 		"server":      "a built binary",
-		"config.json": runtimeConfig(t, providerkit.FrameworkGo, nil),
+		"config.json": frameworkConfig(t, providerkit.FrameworkGo, nil),
 	})
 
 	_, err := providerkit.FunctionImage(empty.Image, goRuntime, dir, nil)
@@ -147,7 +147,7 @@ func TestFunctionImageRefusesAFunctionThatNamesNoCommandAndBootsThroughNoRuntime
 func TestFunctionImageRunsWhatTheRuntimeItIsBuiltAgainstNames(t *testing.T) {
 	dir := stagedFunc(t, map[string]string{
 		"server":      "a built binary",
-		"config.json": runtimeConfig(t, providerkit.FrameworkNode, nil),
+		"config.json": frameworkConfig(t, providerkit.FrameworkNode, nil),
 	})
 
 	_, err := providerkit.FunctionImage(empty.Image, goRuntime, dir, nil)

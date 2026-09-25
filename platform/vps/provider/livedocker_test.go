@@ -80,17 +80,17 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 
 	ctx := context.Background()
 	class := providerkit.ClassProduction
-	bootstrapper, err := p.Bootstrap("")
+	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	absent, err := bootstrapper.Describe(ctx, class)
+	absent, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatal(err)
 	}
 	req := providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: absent.Reading}
-	plan, err := bootstrapper.Plan(ctx, req)
+	plan, err := bootstrap.Plan(ctx, req)
 	if err != nil {
 		t.Fatalf("Plan() over a machine with no engine = %v", err)
 	}
@@ -121,11 +121,11 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		}
 	}
 
-	if err := bootstrapper.Apply(ctx, req, nil); err != nil {
+	if err := bootstrap.Apply(ctx, req, nil); err != nil {
 		t.Fatalf("Apply() over a machine with no engine = %v", err)
 	}
 	defer func() {
-		if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, class, nil); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -140,15 +140,15 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Errorf("%s cannot reach the daemon this bootstrap installed: %v", deployLogin, err)
 	}
 
-	standing, err := bootstrapper.Describe(ctx, class)
+	standing, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !standing.Stacks[0].DigestCurrent {
 		t.Errorf("Describe() calls a machine that has just been bootstrapped, engine and all, drifted, %s\n%s",
-			stillMoving(t, bootstrapper, class, standing.Reading), vm.proxySaid(t))
+			stillMoving(t, bootstrap, class, standing.Reading), vm.proxySaid(t))
 	}
-	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: standing.Reading})
+	again, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: standing.Reading})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,12 +169,12 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	}
 	vm.ssh(t, "sudo systemctl disable --now "+socketName+" "+unitName)
 
-	idle, err := bootstrapper.Describe(ctx, class)
+	idle, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatal(err)
 	}
 	stopped := providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: idle.Reading}
-	restarting, err := bootstrapper.Plan(ctx, stopped)
+	restarting, err := bootstrap.Plan(ctx, stopped)
 	if err != nil {
 		t.Fatalf("Plan() over an installed engine whose daemon is idle = %v", err)
 	}
@@ -194,7 +194,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		}
 	}
 
-	if err := bootstrapper.Apply(ctx, stopped, nil); err != nil {
+	if err := bootstrap.Apply(ctx, stopped, nil); err != nil {
 		t.Fatalf("Apply() over an idle daemon = %v", err)
 	}
 	if active := strings.TrimSpace(vm.ssh(t, "systemctl is-active "+unitName)); active != "active" {
@@ -221,11 +221,11 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 			unitName, strings.Join(moved, ", "), surviving)
 	}
 
-	shimmed, err := bootstrapper.Describe(ctx, class)
+	shimmed, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatal(err)
 	}
-	reinstalling, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: shimmed.Reading})
+	reinstalling, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: shimmed.Reading})
 	if err != nil {
 		t.Fatalf("Plan() over a docker binary with no unit behind it = %v", err)
 	}
@@ -236,7 +236,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	if unit := planFor(shimming, unitName); unit.Action != providerkit.ActionCreate {
 		t.Errorf("a binary with no %s plans %q for the unit, want the install that brings one", unitName, unit.Action)
 	}
-	refusal := refused(t, bootstrapper.Apply(ctx,
+	refusal := refused(t, bootstrap.Apply(ctx,
 		providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: shimmed.Reading, Unattended: true}, nil),
 		providerkit.CodeNotReady)
 	if !strings.Contains(refusal.Message, engineName) {

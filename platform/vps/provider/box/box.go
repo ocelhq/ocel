@@ -21,10 +21,10 @@ const (
 
 type Machine interface {
 	Address(ctx context.Context) (string, error)
-	HoldsImage(ctx context.Context, coordinate string) (bool, error)
+	HoldsImage(ctx context.Context, imageRef string) (bool, error)
 	StandUp(ctx context.Context, spec host.Container) error
 	ForgetNetwork(ctx context.Context, class providerkit.Class, project string) error
-	Promote(ctx context.Context, class providerkit.Class, project, app, coordinate string) error
+	Promote(ctx context.Context, class providerkit.Class, project, app, imageRef string) error
 	Serving(ctx context.Context, key host.RouteKey) (string, error)
 	Release(ctx context.Context, rel host.Release, progress providerkit.Progress) error
 	UnroutePointer(ctx context.Context, owner, pointer string) error

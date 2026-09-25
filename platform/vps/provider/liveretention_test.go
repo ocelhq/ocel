@@ -152,8 +152,8 @@ func TestLiveAFailedReleaseSweepsItsOwnImage(t *testing.T) {
 
 	plan := sweepPlan(t, "leak")
 	plan.App.HealthCheckPath = ""
-	releaser := p.Stacks()
-	_, err := releaser.Provision(context.Background(), plan, nil)
+	stacks := p.Stacks()
+	_, err := stacks.Provision(context.Background(), plan, nil)
 	if err == nil {
 		t.Fatal("Provision() of an app carrying no health path succeeded, and this test needs the failure path")
 	}

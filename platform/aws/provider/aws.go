@@ -31,7 +31,7 @@ type Provider struct {
 	params   memo[classEdge, bootstrap.ClassParams]
 	account  memo[struct{}, string]
 
-	releases *deploy.Stacks
+	stacks *deploy.Stacks
 
 	providerkit.NetLiveness
 }
@@ -55,7 +55,7 @@ func New(ctx context.Context, settings providerkit.Settings) (providerkit.Provid
 func NewProvider(options Options, transforms []string, cfg aws.Config, ns bootstrap.Namespace) *Provider {
 	p := &Provider{options: options, transforms: transforms, aws: cfg, namespace: ns}
 	p.Front = emulatedFront(cfg)
-	p.releases = deploy.NewStacks(p.release, &deploy.Realized{})
+	p.stacks = deploy.NewStacks(p.release, &deploy.Realized{})
 	return p
 }
 
@@ -95,7 +95,7 @@ func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrap, error) {
 	return settling{Bootstrap: control.BootstrapFor(p.aws, front, p.edges(), edges.SupportedEdges(), p.options.VarsKey, p.namespace), settled: p.forget}, nil
 }
 
-func (p *Provider) Stacks() providerkit.Stacks { return p.releases }
+func (p *Provider) Stacks() providerkit.Stacks { return p.stacks }
 
 func (p *Provider) Artifacts() providerkit.ArtifactStore {
 	return awsports.Artifacts{S3: s3.NewFromConfig(p.aws), Stores: p}

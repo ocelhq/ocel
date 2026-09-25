@@ -69,13 +69,13 @@ func (s stubBootstrap) Remove(context.Context, providerkit.Class, providerkit.Pr
 
 func settledBy(t *testing.T, p *Provider) func() {
 	t.Helper()
-	bootstrapper, err := p.Bootstrap(edges.DefaultKind)
+	boot, err := p.Bootstrap(edges.DefaultKind)
 	if err != nil {
 		t.Fatal(err)
 	}
-	held, ok := bootstrapper.(settling)
+	held, ok := boot.(settling)
 	if !ok {
-		t.Fatalf("Bootstrap() = %T, want one that settles the provider's memo", bootstrapper)
+		t.Fatalf("Bootstrap() = %T, want one that settles the provider's memo", boot)
 	}
 	return held.settled
 }
@@ -160,13 +160,13 @@ func TestBootstrapKeepsWhatAFailedApplyNeverChanged(t *testing.T) {
 func TestBootstrapFrontsTheEdgeItWasAsked(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	for _, kind := range edges.SupportedEdges() {
-		bootstrapper, err := p.Bootstrap(kind)
+		boot, err := p.Bootstrap(kind)
 		if err != nil {
 			t.Fatalf("Bootstrap(%q) error = %v", kind, err)
 		}
-		held, ok := bootstrapper.(settling).Bootstrap.(control.Bootstrap)
+		held, ok := boot.(settling).Bootstrap.(control.Bootstrap)
 		if !ok {
-			t.Fatalf("Bootstrap(%q) = %T, want the AWS bootstrapper", kind, bootstrapper)
+			t.Fatalf("Bootstrap(%q) = %T, want the AWS boot", kind, boot)
 		}
 		if held.Edge.Kind() != kind {
 			t.Errorf("Bootstrap(%q) fronts the %q edge, want the one it was asked for", kind, held.Edge.Kind())

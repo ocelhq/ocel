@@ -498,7 +498,7 @@ func readFunction(outputDir, functionsDir, funcDir string) (manifestbuilder.Func
 		return manifestbuilder.Function{}, fmt.Errorf("%s: invalid %s: %w", configPath, configFileName, err)
 	}
 	if fc.Framework.Name == "" || fc.Handler == "" || fc.App == "" {
-		return manifestbuilder.Function{}, fmt.Errorf("%s: %s requires runtime, handler, and app", configPath, configFileName)
+		return manifestbuilder.Function{}, fmt.Errorf("%s: %s requires framework, handler, and app", configPath, configFileName)
 	}
 
 	return manifestbuilder.Function{

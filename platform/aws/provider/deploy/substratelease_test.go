@@ -27,7 +27,7 @@ func (r *interceptedRecords) List(ctx context.Context, under providerkit.RecordN
 	return held, err
 }
 
-func containerReleaser(t *testing.T, records providerkit.RecordStore) (*Stacks, *mockedEngine, providerkit.StackPlan) {
+func containerStacks(t *testing.T, records providerkit.RecordStore) (*Stacks, *mockedEngine, providerkit.StackPlan) {
 	t.Helper()
 	cfg, plan := plannedContainerStack(t)
 	cfg.Records = records
@@ -49,12 +49,12 @@ func TestTheLastContainerLeavingKeepsTheSubstrateWhenAnotherDeployClaimsItMeanwh
 	ctx := context.Background()
 	shared := fake.NewRecords()
 	records := &interceptedRecords{RecordStore: shared}
-	releaser, engine, shop := containerReleaser(t, records)
-	if _, err := releaser.Provision(ctx, shop, edge.DiscardProgress()); err != nil {
+	stacks, engine, shop := containerStacks(t, records)
+	if _, err := stacks.Provision(ctx, shop, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 
-	other, _, blog := containerReleaser(t, shared)
+	other, _, blog := containerStacks(t, shared)
 	blog.Ref = providerkit.StackRef{Project: "blog", Class: providerkit.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
 	claimed := false
 	records.afterList = func(under providerkit.RecordName) {
@@ -67,7 +67,7 @@ func TestTheLastContainerLeavingKeepsTheSubstrateWhenAnotherDeployClaimsItMeanwh
 		}
 	}
 
-	if err := releaser.Destroy(ctx, shop.Ref, edge.DiscardProgress()); err != nil {
+	if err := stacks.Destroy(ctx, shop.Ref, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Destroy(shop) = %v", err)
 	}
 	if !claimed {
@@ -92,8 +92,8 @@ func TestAContainerDeployIsRefusedWhileTheSubstrateIsGoingDown(t *testing.T) {
 
 	ctx := context.Background()
 	shared := fake.NewRecords()
-	releaser, engine, shop := containerReleaser(t, shared)
-	if _, err := releaser.Provision(ctx, shop, edge.DiscardProgress()); err != nil {
+	stacks, engine, shop := containerStacks(t, shared)
+	if _, err := stacks.Provision(ctx, shop, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
 	held, err := ports.ReadOrEmpty(ctx, shared, leaseRecord(providerkit.ClassProduction))
@@ -104,7 +104,7 @@ func TestAContainerDeployIsRefusedWhileTheSubstrateIsGoingDown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	other, _, blog := containerReleaser(t, shared)
+	other, _, blog := containerStacks(t, shared)
 	blog.Ref = providerkit.StackRef{Project: "blog", Class: providerkit.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
 	_, err = other.Provision(ctx, blog, edge.DiscardProgress())
 	var refusal providerkit.Refusal

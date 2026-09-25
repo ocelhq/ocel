@@ -28,7 +28,7 @@ const (
 func (c Compilation) vendorPython(ctx context.Context) error {
 	entry, err := os.Stat(filepath.Join(c.Source, pythonEntryFile))
 	if err != nil || !entry.Mode().IsRegular() {
-		return fmt.Errorf("app %q runs on the python runtime and %s holds no %s: an app is served by the module rooted in its own directory", c.App, c.Source, pythonEntryFile)
+		return fmt.Errorf("app %q is built with python and %s holds no %s: an app is served by the module rooted in its own directory", c.App, c.Source, pythonEntryFile)
 	}
 	platform, runs := providerkit.PythonPlatformTag(c.Framework.Arch)
 	if !runs {

@@ -339,11 +339,11 @@ func toApps(projectDir string, apps []projectconfig.App, usages []attribution.Us
 	}
 	for _, name := range slices.Sorted(maps.Keys(byApp)) {
 		if !named[name] {
-			runtime := unnamedRuntime(name, functions)
+			framework := unnamedFramework(name, functions)
 			out = append(out, manifestbuilder.App{
 				Name:         name,
-				Framework:    runtime,
-				ClientBundle: providerkit.FrameworkBundlesClient(runtime.Name),
+				Framework:    framework,
+				ClientBundle: providerkit.FrameworkBundlesClient(framework.Name),
 				Compute:      compute,
 				Usages:       byApp[name],
 			})
@@ -352,7 +352,7 @@ func toApps(projectDir string, apps []projectconfig.App, usages []attribution.Us
 	return out
 }
 
-func unnamedRuntime(app string, functions []manifestbuilder.Function) manifestbuilder.Framework {
+func unnamedFramework(app string, functions []manifestbuilder.Function) manifestbuilder.Framework {
 	for _, f := range functions {
 		if f.App == app && f.Framework.Name != "" {
 			return f.Framework

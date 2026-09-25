@@ -51,10 +51,10 @@ func TestEveryNameThisProviderDerivesCarriesTheNamespace(t *testing.T) {
 				t.Errorf("RepositoryPath() = %q, want %q: the deploy pushes images to that host", got, want)
 			}
 			if got, want := names.WorkloadAccount(providerkit.ClassProduction), tc.stem+"-production"; got != want {
-				t.Errorf("RuntimeAccount() = %q, want %q", got, want)
+				t.Errorf("WorkloadAccount() = %q, want %q", got, want)
 			}
 			if got, want := names.WorkloadAccountEmail(providerkit.ClassProduction), tc.stem+"-production@acme-prod.iam.gserviceaccount.com"; got != want {
-				t.Errorf("RuntimeAccountEmail() = %q, want %q: a service runs as the account that address names", got, want)
+				t.Errorf("WorkloadAccountEmail() = %q, want %q: a service runs as the account that address names", got, want)
 			}
 			if names.Database() != tc.stem || names.KeyRing() != tc.stem {
 				t.Errorf("Database() = %q and KeyRing() = %q, want both %q", names.Database(), names.KeyRing(), tc.stem)

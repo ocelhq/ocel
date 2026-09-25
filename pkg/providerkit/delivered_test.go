@@ -51,7 +51,7 @@ func deliveredBy(t *testing.T, req *contractv1.DeployRequest, publish func(*fake
 			return plans[i].App.Values.Delivered
 		}
 	}
-	t.Fatal("no plan the releaser saw stands up an app")
+	t.Fatal("no plan the stacks port saw stands up an app")
 	return nil
 }
 
@@ -115,7 +115,7 @@ func deliveredByWrapping(t *testing.T, req *contractv1.DeployRequest, publish fu
 			return plans[i].App.Values.Delivered
 		}
 	}
-	t.Fatal("no plan the releaser saw stands up an app")
+	t.Fatal("no plan the stacks port saw stands up an app")
 	return nil
 }
 

@@ -116,15 +116,15 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 
 	ctx := context.Background()
 	class := providerkit.ClassProduction
-	bootstrapper, err := p.Bootstrap("")
+	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, class, nil); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -219,15 +219,15 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 		t.Errorf("the switchboard publishes %s, and nothing but the front proxy is reached from off the box", published)
 	}
 
-	standing, err := bootstrapper.Describe(ctx, class)
+	standing, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !standing.Stacks[0].DigestCurrent {
 		t.Errorf("Describe() calls a box whose proxy has just been installed drifted, %s\n%s",
-			stillMoving(t, bootstrapper, class, standing.Reading), vm.proxySaid(t))
+			stillMoving(t, bootstrap, class, standing.Reading), vm.proxySaid(t))
 	}
-	again, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: standing.Reading})
+	again, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: standing.Reading})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 	if vm.running(t, caddy.Container) {
 		t.Fatal("the proxy survived being removed, so healing it cannot be proven here")
 	}
-	torn, err := bootstrapper.Describe(ctx, class)
+	torn, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 		t.Error("Describe() calls a box whose proxy is gone current, and a proxy nothing notices is one nothing repairs")
 	}
 	healing := providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: torn.Reading}
-	writing, err := bootstrapper.Plan(ctx, healing)
+	writing, err := bootstrap.Plan(ctx, healing)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 			t.Errorf("removing the proxy re-planned %s as %q, and nothing but the container moved", change.Name, change.Action)
 		}
 	}
-	if err := bootstrapper.Apply(ctx, healing, nil); err != nil {
+	if err := bootstrap.Apply(ctx, healing, nil); err != nil {
 		t.Fatalf("Apply() over a box whose proxy was removed = %v", err)
 	}
 	if !vm.running(t, caddy.Container) {
@@ -283,15 +283,15 @@ func TestLiveTheFileOnTheBoxIsTheConfigTheProxyServes(t *testing.T) {
 
 	ctx := context.Background()
 	class := providerkit.ClassProduction
-	bootstrapper, err := p.Bootstrap("")
+	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, class, nil); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -332,15 +332,15 @@ func TestLiveTheProxysConfigIsStatedAndItsLogCarriesNoQueryString(t *testing.T) 
 
 	ctx := context.Background()
 	class := providerkit.ClassProduction
-	bootstrapper, err := p.Bootstrap("")
+	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, class, nil); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -378,32 +378,32 @@ func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.
 
 	ctx := context.Background()
 	class := providerkit.ClassProduction
-	bootstrapper, err := p.Bootstrap("")
+	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	vm.runs(t, workload)
 	defer vm.ssh(t, "sudo docker rm -f "+workload+" >/dev/null 2>&1 || true")
 
-	removal, err := bootstrapper.PlanRemove(ctx, class)
+	removal, err := bootstrap.PlanRemove(ctx, class)
 	if err != nil {
-		t.Fatalf("PlanRemoval() = %v", err)
+		t.Fatalf("PlanRemove() = %v", err)
 	}
 	leaving := onlyGroup(t, removal)
 	for _, taken := range []string{caddy.Container, host.SwitchboardContainer, host.ProxyData, host.ProxyNetwork} {
 		planned := planFor(leaving, taken)
 		if planned.Action != providerkit.ActionDelete {
-			t.Errorf("PlanRemoval() plans %s as %q, want it taken: what ocel wrote is what ocel takes back", taken, planned.Action)
+			t.Errorf("PlanRemove() plans %s as %q, want it taken: what ocel wrote is what ocel takes back", taken, planned.Action)
 		}
 		if planned.Reason == "" {
-			t.Errorf("PlanRemoval() takes %s with no reason, and the typed confirmation must name what goes before a user types", taken)
+			t.Errorf("PlanRemove() takes %s with no reason, and the typed confirmation must name what goes before a user types", taken)
 		}
 	}
 
-	if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+	if err := bootstrap.Remove(ctx, class, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	for _, named := range []string{caddy.Container, host.SwitchboardContainer} {

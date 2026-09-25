@@ -30,8 +30,8 @@ func TestWhatTheSealHelperSealsTheBoxOpensNativelyAtTheSameCoordinate(t *testing
 		t.Fatalf("the agent reads the key at %s, and the helper minted it at %s", got, filepath.Join(root, sealClass, "seal.key"))
 	}
 
-	sealer := live.Cipher{Root: root}
-	opened, err := sealer.Open(context.Background(), bound, raw)
+	vault := live.Cipher{Root: root}
+	opened, err := vault.Open(context.Background(), bound, raw)
 	if err != nil {
 		t.Fatalf("Open() of what the helper sealed = %v", err)
 	}
@@ -40,7 +40,7 @@ func TestWhatTheSealHelperSealsTheBoxOpensNativelyAtTheSameCoordinate(t *testing
 	}
 	moved := bound
 	moved.Env = "staging"
-	if _, err := sealer.Open(context.Background(), moved, raw); err == nil {
+	if _, err := vault.Open(context.Background(), moved, raw); err == nil {
 		t.Error("a value the helper sealed for one environment opened natively for another")
 	}
 }

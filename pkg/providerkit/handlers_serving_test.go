@@ -53,7 +53,7 @@ func TestTheAppPlanCarriesEveryFactTheStoodUpAppServesFrom(t *testing.T) {
 	plans := provider.FakeStacks().Plans()
 	app := plans[len(plans)-1].App
 	if app == nil {
-		t.Fatal("the last plan the releaser saw stands up no app")
+		t.Fatal("the last plan the stacks port saw stands up no app")
 	}
 	if app.AssetPrefix == "" {
 		t.Error("the app plan names no asset prefix, so the stood-up app serves its static files from nowhere")

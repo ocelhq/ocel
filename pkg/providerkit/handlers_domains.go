@@ -170,7 +170,7 @@ func (d *hostnames) retire(ctx context.Context, host string, serving edge.Kind, 
 		return err
 	}
 	progress.Say(fmt.Sprintf("%s answers on both edges until resolvers drop the record they hold: %s",
-		host, flipWindow(d.settle.writer)))
+		host, flipWindow(d.settle.dns)))
 	return nil
 }
 

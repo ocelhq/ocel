@@ -68,7 +68,7 @@ func siblingAppPlan(t *testing.T, app string) providerkit.StackPlan {
 		Edge: fakeEdgeOf(cloudfront.Kind),
 		App: &providerkit.AppPlan{
 			App:        app,
-			Framework:  runtimeNext,
+			Framework:  providerkit.FrameworkNext,
 			Entry:      "fn--" + app + "--entry",
 			Deployment: "d1",
 			Functions: []providerkit.FunctionSpec{
@@ -113,7 +113,7 @@ func TestOneReleaserStandsUpSiblingAppStacksAtOnce(t *testing.T) {
 	cfg.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
 
 	engine := &mockedEngine{outputs: siblingAppOutputs(apps...)}
-	releaser := standingUp(cfg, engine)
+	stacks := standingUp(cfg, engine)
 
 	var wg sync.WaitGroup
 	failures := make([]error, len(apps))
@@ -124,7 +124,7 @@ func TestOneReleaserStandsUpSiblingAppStacksAtOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results[slot], failures[slot] = releaser.Provision(context.Background(), siblingAppPlan(t, app), reports[slot])
+			results[slot], failures[slot] = stacks.Provision(context.Background(), siblingAppPlan(t, app), reports[slot])
 		}()
 	}
 	wg.Wait()

@@ -117,7 +117,7 @@ export default {
 		}
 
 		out := stdout.String()
-		if !strings.Contains(out, "FUNCTION logical_name=fn--api--api runtime=node handler=src/server.js artifact_path=output/api app=api") {
+		if !strings.Contains(out, "FUNCTION logical_name=fn--api--api framework=node handler=src/server.js artifact_path=output/api app=api") {
 			t.Errorf("stdout = %q, want the function to have reached the manifest", out)
 		}
 		if strings.Contains(stderr.String(), "deploying infrastructure only") {
@@ -488,13 +488,13 @@ export default {
 		if got := strings.Count(out, "APP "); got != 1 {
 			t.Fatalf("stdout echoed %d apps, want exactly 1:\n%s", got, out)
 		}
-		if !strings.Contains(out, "APP name=api runtime=node production_domain=api.acme.com") {
+		if !strings.Contains(out, "APP name=api framework=node production_domain=api.acme.com") {
 			t.Errorf("stdout = %q, want the app with its per-app production domain", out)
 		}
 		if !strings.Contains(out, "deployment="+clitest.FixtureDeploymentID("api")) {
 			t.Errorf("stdout = %q, want the app deployed under the id its build recorded", out)
 		}
-		if !strings.Contains(out, "runtime=node handler=src/server.js artifact_path=output/api app=api") {
+		if !strings.Contains(out, "framework=node handler=src/server.js artifact_path=output/api app=api") {
 			t.Errorf("stdout = %q, want the function attributed to the api app", out)
 		}
 
@@ -530,10 +530,10 @@ export default {
 		if got := strings.Count(out, "APP "); got != 2 {
 			t.Fatalf("stdout echoed %d apps, want exactly 2:\n%s", got, out)
 		}
-		if !strings.Contains(out, "APP name=admin runtime=node production_domain=") {
+		if !strings.Contains(out, "APP name=admin framework=node production_domain=") {
 			t.Errorf("stdout = %q, want the admin app with no domain of its own", out)
 		}
-		if !strings.Contains(out, "APP name=web runtime=node production_domain=acme.com") {
+		if !strings.Contains(out, "APP name=web framework=node production_domain=acme.com") {
 			t.Errorf("stdout = %q, want the web app with its own production domain", out)
 		}
 		if !strings.Contains(out, "logical_name=fn--web--web") || !strings.Contains(out, "artifact_path=output/web app=web") {
@@ -543,7 +543,7 @@ export default {
 			t.Errorf("stdout = %q, want the admin function attributed to the admin app", out)
 		}
 		for _, app := range []string{"web", "admin"} {
-			if !strings.Contains(out, "name="+app+" runtime=node production_domain=") {
+			if !strings.Contains(out, "name="+app+" framework=node production_domain=") {
 				t.Errorf("stdout = %q, want %s echoed", out, app)
 			}
 			if !strings.Contains(out, "deployment="+clitest.FixtureDeploymentID(app)) {
@@ -574,7 +574,7 @@ export default {
 		if got := strings.Count(out, "APP "); got != 1 {
 			t.Fatalf("stdout echoed %d apps, want exactly 1:\n%s", got, out)
 		}
-		if !strings.Contains(out, "APP name=express-app runtime=next production_domain=") {
+		if !strings.Contains(out, "APP name=express-app framework=next production_domain=") {
 			t.Errorf("stdout = %q, want the detected app named in the manifest", out)
 		}
 

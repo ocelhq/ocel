@@ -437,7 +437,7 @@ export default {
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
 				if got, want := cfg.Apps[0].Framework, (Framework{Name: "next"}); got != want {
-					t.Fatalf("Apps[0].Runtime = %+v, want %+v", got, want)
+					t.Fatalf("Apps[0].Framework = %+v, want %+v", got, want)
 				}
 			},
 		},
@@ -451,7 +451,7 @@ export default {
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
 				if got, want := cfg.Apps[0].Framework, (Framework{Name: "go"}); got != want {
-					t.Fatalf("Apps[0].Runtime = %+v, want %+v", got, want)
+					t.Fatalf("Apps[0].Framework = %+v, want %+v", got, want)
 				}
 			},
 		},
@@ -465,7 +465,7 @@ export default {
 `,
 			check: func(t *testing.T, root string, cfg *Config) {
 				if got, want := cfg.Apps[0].Framework, (Framework{Name: "node", Arch: "arm64"}); got != want {
-					t.Fatalf("Apps[0].Runtime = %+v, want %+v", got, want)
+					t.Fatalf("Apps[0].Framework = %+v, want %+v", got, want)
 				}
 			},
 		},
@@ -496,7 +496,7 @@ export default {
 					t.Fatalf("Apps[0].Build = %+v, want nil where the app configures no build", cfg.Apps[0].Build)
 				}
 				if cfg.Apps[0].Framework != (Framework{}) {
-					t.Fatalf("Apps[0].Runtime = %+v, want a container app to load with none", cfg.Apps[0].Framework)
+					t.Fatalf("Apps[0].Framework = %+v, want a container app to load with none", cfg.Apps[0].Framework)
 				}
 			},
 		},

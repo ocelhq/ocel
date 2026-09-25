@@ -99,7 +99,7 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 
 	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
-		t.Fatalf("PlanRemoval: %v", err)
+		t.Fatalf("PlanRemove: %v", err)
 	}
 
 	isr := groupNamed(plan, "aws/"+defaultNamespace.FeatureStackName(bootstrap.FeatureISR, bootstrap.ClassProduction))
@@ -174,7 +174,7 @@ func TestPlanRemovalKeepsThePassphraseABootstrappedSiblingHolds(t *testing.T) {
 
 	plan, err := b.PlanRemove(context.Background(), providerkit.ClassPreview)
 	if err != nil {
-		t.Fatalf("PlanRemoval: %v", err)
+		t.Fatalf("PlanRemove: %v", err)
 	}
 	params := groupNamed(plan, "aws/"+bootstrap.ParamGroupName)
 	kept := changeNamed(params, passphraseParam)
@@ -197,7 +197,7 @@ func TestPlanRemovalOfAnAbsentBootstrapStillPlansWhatItLeftBehind(t *testing.T) 
 
 	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
-		t.Fatalf("PlanRemoval: %v", err)
+		t.Fatalf("PlanRemove: %v", err)
 	}
 	if groupNamed(plan, "aws/"+coreStackName) != nil {
 		t.Errorf("plan groups = %s, want no stack planned where none stands", groupNames(plan))
@@ -216,7 +216,7 @@ func TestPlanRemovalLeavesOutAnEdgeThatSaysNothingAboutItsOwnRemoval(t *testing.
 
 	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
-		t.Fatalf("PlanRemoval: %v", err)
+		t.Fatalf("PlanRemove: %v", err)
 	}
 	for _, group := range plan.Groups {
 		if group.Kind == providerkit.EdgeGroupKind {
@@ -249,7 +249,7 @@ func TestPlanRemovalNamesEveryStandingEdgeByItsOwnKind(t *testing.T) {
 
 	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
-		t.Fatalf("PlanRemoval: %v", err)
+		t.Fatalf("PlanRemove: %v", err)
 	}
 
 	front := groupNamed(plan, string(cloudfrontKind)+"/edge")
@@ -289,7 +289,7 @@ func TestPlanRemovalLeavesOutAnEdgeThisAccountHoldsNothingFor(t *testing.T) {
 
 	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
-		t.Fatalf("PlanRemoval: %v", err)
+		t.Fatalf("PlanRemove: %v", err)
 	}
 	if group := groupNamed(plan, "relay/edge"); group != nil {
 		t.Errorf("plan carries %+v for an edge this account holds no parameters for", group)
@@ -304,7 +304,7 @@ func TestPlanRemovalStillSeesAnEdgeWhoseParametersAreAlreadyGone(t *testing.T) {
 
 	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
-		t.Fatalf("PlanRemoval: %v", err)
+		t.Fatalf("PlanRemove: %v", err)
 	}
 	if groupNamed(plan, string(cloudflareKind)+"/edge") == nil {
 		t.Errorf("plan groups = %s, want the edge whose feature stack still stands: its externals are live and nothing else would take them", groupNames(plan))
@@ -380,7 +380,7 @@ func TestPlanRemovalSaysWhatDroppingTheVarsKeyStrands(t *testing.T) {
 
 	plan, err := b.PlanRemove(context.Background(), providerkit.ClassProduction)
 	if err != nil {
-		t.Fatalf("PlanRemoval: %v", err)
+		t.Fatalf("PlanRemove: %v", err)
 	}
 
 	group := groupNamed(plan, "aws/"+defaultNamespace.FeatureStackName(bootstrap.FeatureVarsKey, bootstrap.ClassProduction))

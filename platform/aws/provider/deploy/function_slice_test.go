@@ -68,7 +68,7 @@ func TestTranslateFunctionSpec(t *testing.T) {
 
 	t.Run("Next gets the bundle memory default", func(t *testing.T) {
 		t.Parallel()
-		got, err := translateFunctionSpec(runtimeNext, providerkit.FunctionSpec{})
+		got, err := translateFunctionSpec(providerkit.FrameworkNext, providerkit.FunctionSpec{})
 		if err != nil {
 			t.Fatalf("translateFunctionSpec: %v", err)
 		}
@@ -90,7 +90,7 @@ func TestTranslateFunctionSpec(t *testing.T) {
 
 	t.Run("what the spec asks for wins over both defaults", func(t *testing.T) {
 		t.Parallel()
-		got, err := translateFunctionSpec(runtimeNext, providerkit.FunctionSpec{Memory: 3008, Timeout: 45 * time.Second})
+		got, err := translateFunctionSpec(providerkit.FrameworkNext, providerkit.FunctionSpec{Memory: 3008, Timeout: 45 * time.Second})
 		if err != nil {
 			t.Fatalf("translateFunctionSpec: %v", err)
 		}

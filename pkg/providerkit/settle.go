@@ -21,7 +21,7 @@ const (
 type settlement struct {
 	kind     edge.Kind
 	unbound  bool
-	writer   edge.DNSRecords
+	dns      edge.DNSRecords
 	zone     string
 	liveness Liveness
 	budget   time.Duration
@@ -54,11 +54,11 @@ func unattended(sender *eventStream) owedPolicy {
 	return policy
 }
 
-func newSettlement(front edge.Edge, writer edge.DNSRecords, zone string, liveness Liveness) settlement {
+func newSettlement(front edge.Edge, dns edge.DNSRecords, zone string, liveness Liveness) settlement {
 	return settlement{
 		kind:     front.Kind(),
 		unbound:  front.Facts().ServesUnbound,
-		writer:   writer,
+		dns:      dns,
 		zone:     zone,
 		liveness: liveness,
 		budget:   settleBudget,
@@ -105,7 +105,7 @@ func (s settlement) write(ctx context.Context, records []edge.Record, headline s
 			say(note)
 		}
 	}
-	if s.writer == nil {
+	if s.dns == nil {
 		settled.Owed = records
 		if s.owed.ask != nil {
 			s.owed.ask(headline, records, append(slices.Clone(notes), instructionsOnly)...)
@@ -115,7 +115,7 @@ func (s settlement) write(ctx context.Context, records []edge.Record, headline s
 	for _, rec := range records {
 		say("Writing " + rec.String())
 	}
-	written, err := s.writer.Ensure(ctx, records, say)
+	written, err := s.dns.Ensure(ctx, records, say)
 	settled.Written, settled.Owed = written, edge.Unwritten(records, written)
 	if err != nil || len(settled.Owed) == 0 {
 		return settled, err
@@ -144,13 +144,13 @@ func (s settlement) waiting(headline string, owed []edge.Record) error {
 }
 
 func (s settlement) release(ctx context.Context, written []edge.Record, say func(string)) error {
-	if s.writer == nil || len(written) == 0 {
+	if s.dns == nil || len(written) == 0 {
 		return nil
 	}
 	for _, rec := range written {
 		say("Removing " + rec.String())
 	}
-	return s.writer.Delete(ctx, written)
+	return s.dns.Delete(ctx, written)
 }
 
 func (s settlement) await(ctx context.Context, hostname string, say func(string)) (Probe, error) {

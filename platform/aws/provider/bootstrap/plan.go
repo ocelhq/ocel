@@ -80,7 +80,7 @@ func PlanChanges(ctx context.Context, stacks cfn.API, read Reading, req Request,
 	return append(planned, planRuntimeLayers(ctx, stacks, read, req)), nil
 }
 
-func PlanRemoval(ctx context.Context, stacks cfn.API, read Reading) ([]providerkit.ChangeGroup, error) {
+func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]providerkit.ChangeGroup, error) {
 	if !read.Deployed.Present {
 		return nil, nil
 	}

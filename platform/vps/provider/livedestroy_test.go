@@ -79,32 +79,32 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 
 	ctx := context.Background()
 	class := providerkit.ClassProduction
-	bootstrapper, err := p.Bootstrap("")
+	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	vm.runs(t, workload)
 	defer vm.ssh(t, "sudo docker rm -f "+workload+" >/dev/null 2>&1 || true")
 	decoy := vm.holds(t, decoyImage)
 
-	removal, err := bootstrapper.PlanRemove(ctx, class)
+	removal, err := bootstrap.PlanRemove(ctx, class)
 	if err != nil {
-		t.Fatalf("PlanRemoval() = %v", err)
+		t.Fatalf("PlanRemove() = %v", err)
 	}
 	leaving := onlyGroup(t, removal)
 	if want := "vps/" + vm.user + "@" + vm.addr; leaving.Name != want {
-		t.Errorf("PlanRemoval() named the group %q, want %q", leaving.Name, want)
+		t.Errorf("PlanRemove() named the group %q, want %q", leaving.Name, want)
 	}
 	for _, bearing := range []string{host.StateDir(class), host.SealKeyPath(class)} {
 		if reason := planFor(leaving, bearing).Reason; reason == "" {
-			t.Errorf("PlanRemoval() takes %s with no reason, and the typed confirmation must name what is unrecoverable before a user types", bearing)
+			t.Errorf("PlanRemove() takes %s with no reason, and the typed confirmation must name what is unrecoverable before a user types", bearing)
 		}
 	}
 	if kept := planFor(leaving, "docker"); kept.Action != providerkit.ActionKeep {
-		t.Errorf("PlanRemoval() plans the engine as %q, want it kept: removing ocel is not removing what the host runs", kept.Action)
+		t.Errorf("PlanRemove() plans the engine as %q, want it kept: removing ocel is not removing what the host runs", kept.Action)
 	}
 
 	before, err := os.ReadFile(vm.known)
@@ -113,7 +113,7 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 	}
 
 	progress := &said{}
-	if err := bootstrapper.Remove(ctx, class, progress); err != nil {
+	if err := bootstrap.Remove(ctx, class, progress); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 
@@ -167,12 +167,12 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 
 	ctx := context.Background()
 	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
-	bootstrapper, err := p.Bootstrap("")
+	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, class := range []providerkit.Class{production, preview} {
-		if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+		if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 			t.Fatalf("Apply(%s) = %v", class, err)
 		}
 	}
@@ -183,9 +183,9 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 		host.SwitchboardBinary, host.ProxyConfig, vars.RoutingTable, "/etc/ocel"}
 	sealGrant := func(class providerkit.Class) string { return "/etc/sudoers.d/ocel-seal-" + string(class) }
 
-	first, err := bootstrapper.PlanRemove(ctx, production)
+	first, err := bootstrap.PlanRemove(ctx, production)
 	if err != nil {
-		t.Fatalf("PlanRemoval(%s) = %v", production, err)
+		t.Fatalf("PlanRemove(%s) = %v", production, err)
 	}
 	beside := onlyGroup(t, first)
 	for _, singleton := range append(slices.Clone(singletons), deployLogin, sealGrant(preview)) {
@@ -197,7 +197,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 		t.Errorf("destroying %s plans %s as %q, and the grant that opens this class's values is this class's to revoke", production, sealGrant(production), planned.Action)
 	}
 
-	if err := bootstrapper.Remove(ctx, production, nil); err != nil {
+	if err := bootstrap.Remove(ctx, production, nil); err != nil {
 		t.Fatalf("Remove(%s) = %v", production, err)
 	}
 	for _, singleton := range append(slices.Clone(singletons), sealGrant(preview)) {
@@ -216,7 +216,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 			t.Errorf("%s stands after the class that owns it was destroyed", gone)
 		}
 	}
-	standing, err := bootstrapper.Describe(ctx, preview)
+	standing, err := bootstrap.Describe(ctx, preview)
 	if err != nil {
 		t.Fatalf("Describe(%s) after destroying its sibling = %v", preview, err)
 	}
@@ -233,9 +233,9 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 		t.Errorf("%s went with the %s class, and the %s sibling is still served through it", caddy.Container, production, preview)
 	}
 
-	last, err := bootstrapper.PlanRemove(ctx, preview)
+	last, err := bootstrap.PlanRemove(ctx, preview)
 	if err != nil {
-		t.Fatalf("PlanRemoval(%s) = %v", preview, err)
+		t.Fatalf("PlanRemove(%s) = %v", preview, err)
 	}
 	alone := onlyGroup(t, last)
 	for _, singleton := range append(slices.Clone(singletons), deployLogin, sealGrant(preview)) {
@@ -243,7 +243,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 			t.Errorf("destroying the last class plans %s as %q, and a singleton nothing uses is one nobody revokes", singleton, planned.Action)
 		}
 	}
-	if err := bootstrapper.Remove(ctx, preview, nil); err != nil {
+	if err := bootstrap.Remove(ctx, preview, nil); err != nil {
 		t.Fatalf("Remove(%s) = %v", preview, err)
 	}
 	for _, singleton := range append(slices.Clone(singletons), sealGrant(preview)) {
@@ -261,7 +261,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 	if !vm.running(t, workload) {
 		t.Errorf("%s is gone after the last destroy, and removing ocel from a host removed the workloads on it", workload)
 	}
-	if err := bootstrapper.Remove(ctx, preview, nil); err != nil {
+	if err := bootstrap.Remove(ctx, preview, nil); err != nil {
 		t.Errorf("a second Remove(%s) = %v, want an already-forgotten target to succeed", preview, err)
 	}
 }

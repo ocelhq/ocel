@@ -45,33 +45,33 @@ func live(t *testing.T) account {
 	return account{endpoint: endpoint, aws: cfg}
 }
 
-func (a account) bootstrapper(t *testing.T) providerkit.Bootstrap {
+func (a account) boot(t *testing.T) providerkit.Bootstrap {
 	t.Helper()
 	p, err := provider.New(context.Background(), providerkit.Settings{Options: providerkit.Options{"region": liveRegion}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
-	bootstrapper, err := p.Bootstrap(edges.DefaultKind)
+	boot, err := p.Bootstrap(edges.DefaultKind)
 	if err != nil {
 		t.Fatalf("Bootstrap() = %v", err)
 	}
-	return bootstrapper
+	return boot
 }
 
 func (a account) emptied(t *testing.T, classes ...providerkit.Class) providerkit.Bootstrap {
 	t.Helper()
-	bootstrapper := a.bootstrapper(t)
+	boot := a.boot(t)
 	ctx := context.Background()
 	forget := func() {
 		for _, class := range classes {
-			if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+			if err := boot.Remove(ctx, class, nil); err != nil {
 				t.Errorf("Remove(%s) = %v, want the emulator handed back as every other test finds it", class, err)
 			}
 		}
 	}
 	forget()
 	t.Cleanup(forget)
-	return bootstrapper
+	return boot
 }
 
 func (a account) stackStatus(t *testing.T, name string) string {

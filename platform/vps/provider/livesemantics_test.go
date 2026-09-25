@@ -94,19 +94,19 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	defer closing(t, p)
 	ctx := context.Background()
 	class := providerkit.ClassProduction
-	bootstrapper, err := p.Bootstrap("")
+	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() {
-		if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, class, nil); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
 
 	dying, kill := context.WithCancel(ctx)
 	defer kill()
-	err = bootstrapper.Apply(dying, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"},
+	err = bootstrap.Apply(dying, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"},
 		&killer{at: "wrote " + host.KindFile + " " + host.SealHelper, kill: kill})
 	if err == nil {
 		t.Fatal("the apply ran to completion, and a half-applied host is what this proves recovery from")
@@ -115,7 +115,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	if stamp := stampOn(t, vm); stamp.State != host.StateApplying {
 		t.Fatalf("the stamp reads state %q after an apply that died, want %q", stamp.State, host.StateApplying)
 	}
-	described, err := bootstrapper.Describe(ctx, class)
+	described, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatalf("Describe() over a half-applied host = %v", err)
 	}
@@ -129,13 +129,13 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 		t.Error("Describe() says nothing about the apply that never finished, so status has nothing to banner and reads the host as ordinarily stale")
 	}
 
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true}, nil); err == nil {
+	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true}, nil); err == nil {
 		t.Error("heal finished an apply it did not start")
 	} else if refusal := refused(t, err, providerkit.CodeDenied); !strings.Contains(refusal.Message, host.StampPath(class)) {
 		t.Errorf("heal over a half-applied host says %q, want it to name the stamp that says so", refusal.Message)
 	}
 
-	plan, err := bootstrapper.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: described.Reading})
+	plan, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: described.Reading})
 	if err != nil {
 		t.Fatalf("Plan() over a half-applied host = %v", err)
 	}
@@ -155,7 +155,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	}
 
 	var said sayings
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: described.Reading}, &said); err != nil {
+	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: described.Reading}, &said); err != nil {
 		t.Fatalf("the same command over a half-applied host = %v, want recovery to be the first run's command", err)
 	}
 	standing := host.KindFile + " " + host.SealHelper + ": already current"
@@ -165,13 +165,13 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 	if stamp := stampOn(t, vm); stamp.State != host.StateComplete {
 		t.Errorf("the stamp reads state %q after the run that finished it, want %q", stamp.State, host.StateComplete)
 	}
-	finished, err := bootstrapper.Describe(ctx, class)
+	finished, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !finished.Stacks[0].DigestCurrent {
 		t.Errorf("Describe() still reads the host as drifted after the apply that finished it, %s",
-			stillMoving(t, bootstrapper, class, finished.Reading))
+			stillMoving(t, bootstrap, class, finished.Reading))
 	}
 	if finished.Unfinished {
 		t.Error("Describe() still banners the host as half-applied after the apply that finished it")
@@ -184,15 +184,15 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 	defer closing(t, p)
 	ctx := context.Background()
 	class := providerkit.ClassProduction
-	bootstrapper, err := p.Bootstrap("")
+	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
-		if err := bootstrapper.Remove(ctx, class, nil); err != nil {
+		if err := bootstrap.Remove(ctx, class, nil); err != nil {
 			t.Errorf("Remove() = %v", err)
 		}
 	}()
@@ -201,17 +201,17 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 	vm.ssh(t, "sudo rm -f /etc/sudoers.d/ocel-seal-*")
 	vm.forgetsTheDeployLogin(t)
 	unattended := providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Unattended: true}
-	if err := bootstrapper.Apply(ctx, unattended, nil); err != nil {
+	if err := bootstrap.Apply(ctx, unattended, nil); err != nil {
 		t.Fatalf("an unattended apply over a machine carrying none of ocel's own state = %v, want absent-to-present to proceed", err)
 	}
 
 	vm.ssh(t, "sudo chmod 700 "+helperDir)
-	converging, err := bootstrapper.Describe(ctx, class)
+	converging, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatal(err)
 	}
 	unattended.Reading = converging.Reading
-	if err := bootstrapper.Apply(ctx, unattended, nil); err != nil {
+	if err := bootstrap.Apply(ctx, unattended, nil); err != nil {
 		t.Fatalf("an unattended apply over a host whose %s has moved mode = %v, want a converge that destroys nothing to proceed", helperDir, err)
 	}
 	if held := mode(t, vm, helperDir); held != "755" {
@@ -219,12 +219,12 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 	}
 
 	vm.ssh(t, "sudo chmod 700 "+recordsHelper)
-	moved, err := bootstrapper.Describe(ctx, class)
+	moved, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatal(err)
 	}
 	unattended.Reading = moved.Reading
-	refusal := refused(t, bootstrapper.Apply(ctx, unattended, nil), providerkit.CodeNotReady)
+	refusal := refused(t, bootstrap.Apply(ctx, unattended, nil), providerkit.CodeNotReady)
 	if !strings.Contains(refusal.Message, recordsHelper) {
 		t.Errorf("the refusal says %q, want it to name %s as what it would write over", refusal.Message, recordsHelper)
 	}
@@ -232,7 +232,7 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 		t.Errorf("%s stands at %q after the apply that refused it, want the refusal to have written nothing", recordsHelper, held)
 	}
 
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: moved.Reading}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: moved.Reading}, nil); err != nil {
 		t.Fatalf("the same apply with somebody there to accept it = %v", err)
 	}
 	if held := mode(t, vm, recordsHelper); held != "755" {
@@ -245,14 +245,14 @@ func TestLiveHealReassertsTheStateTierAndRefusesEverythingBesideWhole(t *testing
 	class := providerkit.ClassProduction
 	p := bootstrapped(t, vm, class)
 	ctx := context.Background()
-	bootstrapper, err := p.Bootstrap("")
+	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
 	healing := providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, Unattended: true}
 
 	vm.ssh(t, "sudo chmod 700 "+recordsDir)
-	if err := bootstrapper.Apply(ctx, healing, nil); err != nil {
+	if err := bootstrap.Apply(ctx, healing, nil); err != nil {
 		t.Fatalf("heal over a drifted record tier = %v, want the state the deploy login owns reasserted", err)
 	}
 	if held := mode(t, vm, recordsDir); held != "750" {
@@ -261,7 +261,7 @@ func TestLiveHealReassertsTheStateTierAndRefusesEverythingBesideWhole(t *testing
 
 	vm.ssh(t, "sudo chmod 700 "+recordsDir)
 	vm.ssh(t, "sudo chmod 700 "+helperDir)
-	refusal := refused(t, bootstrapper.Apply(ctx, healing, nil), providerkit.CodeDenied)
+	refusal := refused(t, bootstrap.Apply(ctx, healing, nil), providerkit.CodeDenied)
 	if !strings.Contains(refusal.Message, helperDir) {
 		t.Errorf("heal over a mixed set says %q, want it to name %s as what heal may not write", refusal.Message, helperDir)
 	}
@@ -269,7 +269,7 @@ func TestLiveHealReassertsTheStateTierAndRefusesEverythingBesideWhole(t *testing
 		t.Errorf("%s stands at %q after a heal that refused, want a mixed set refused whole rather than half-done", recordsDir, held)
 	}
 
-	if err := bootstrapper.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("the apply that may write both = %v", err)
 	}
 	for path, want := range map[string]string{recordsDir: "750", helperDir: "755"} {
@@ -284,7 +284,7 @@ func TestLiveASymlinkWhereTheDeployLoginOwnsAPathIsRefusedRatherThanChowned(t *t
 	class := providerkit.ClassProduction
 	p := bootstrapped(t, vm, class)
 	ctx := context.Background()
-	bootstrapper, err := p.Bootstrap("")
+	bootstrap, err := p.Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -292,7 +292,7 @@ func TestLiveASymlinkWhereTheDeployLoginOwnsAPathIsRefusedRatherThanChowned(t *t
 	vm.sshAs(t, deployLogin, "rmdir "+recordsDir+" && ln -s /etc "+recordsDir)
 	defer vm.ssh(t, "sudo rm -f "+recordsDir+" && sudo install -d -m 750 -o "+deployLogin+" -g "+deployLogin+" "+recordsDir)
 
-	refusal := refused(t, bootstrapper.Apply(ctx,
+	refusal := refused(t, bootstrap.Apply(ctx,
 		providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, Unattended: true}, nil),
 		providerkit.CodeDenied)
 	if !strings.Contains(refusal.Message, recordsDir) || !strings.Contains(refusal.Message, "/etc") {
@@ -308,7 +308,7 @@ func TestLiveHealAsTheDeployLoginReassertsItsOwnTierAndNothingBeside(t *testing.
 	class := providerkit.ClassProduction
 	bootstrapped(t, vm, class)
 
-	bootstrapper, err := vm.deploying(t).Bootstrap("")
+	bootstrap, err := vm.deploying(t).Bootstrap("")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,7 +316,7 @@ func TestLiveHealAsTheDeployLoginReassertsItsOwnTierAndNothingBeside(t *testing.
 	healing := providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, Unattended: true}
 
 	vm.sshAs(t, deployLogin, "chmod 700 "+recordsDir)
-	if err := bootstrapper.Apply(ctx, healing, nil); err != nil {
+	if err := bootstrap.Apply(ctx, healing, nil); err != nil {
 		t.Fatalf("heal as %s over its own drifted record tier = %v, want what that login owns reasserted without asking for root", deployLogin, err)
 	}
 	if held := mode(t, vm, recordsDir); held != "750" {
@@ -326,7 +326,7 @@ func TestLiveHealAsTheDeployLoginReassertsItsOwnTierAndNothingBeside(t *testing.
 	vm.sshAs(t, deployLogin, "chmod 700 "+recordsDir)
 	vm.ssh(t, "sudo chmod 700 "+helperDir)
 	defer vm.ssh(t, "sudo chmod 755 "+helperDir)
-	refusal := refused(t, bootstrapper.Apply(ctx, healing, nil), providerkit.CodeDenied)
+	refusal := refused(t, bootstrap.Apply(ctx, healing, nil), providerkit.CodeDenied)
 	if !strings.Contains(refusal.Message, helperDir) {
 		t.Errorf("heal as %s over a mixed set says %q, want %s named as what that login may not write", deployLogin, refusal.Message, helperDir)
 	}

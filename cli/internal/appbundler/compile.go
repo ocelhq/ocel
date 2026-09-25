@@ -45,20 +45,20 @@ func Compile(ctx context.Context, c Compilation) error {
 	case providerkit.FrameworkRust:
 		return c.compileRust(ctx)
 	}
-	return fmt.Errorf("app %q runs on runtime %q, which is not built from its own source tree", c.App, c.Framework.Name)
+	return fmt.Errorf("app %q is built with %q, which is not built from its own source tree", c.App, c.Framework.Name)
 }
 
 func (c Compilation) compileGo(ctx context.Context) error {
 	module, err := os.Stat(filepath.Join(c.Source, goModuleFile))
 	if err != nil || !module.Mode().IsRegular() {
-		return fmt.Errorf("app %q runs on the go runtime and %s holds no %s: an app is compiled from the module rooted in its own directory", c.App, c.Source, goModuleFile)
+		return fmt.Errorf("app %q is built with go and %s holds no %s: an app is compiled from the module rooted in its own directory", c.App, c.Source, goModuleFile)
 	}
 	arch, runs := providerkit.GoArch(c.Framework.Arch)
 	if !runs {
 		return fmt.Errorf("app %q asks to be compiled for %q, which names no architecture go builds for", c.App, c.Framework.Arch)
 	}
 	if _, err := exec.LookPath("go"); err != nil {
-		return fmt.Errorf("app %q runs on the go runtime and no go toolchain is on PATH: %w", c.App, err)
+		return fmt.Errorf("app %q is built with go and no go toolchain is on PATH: %w", c.App, err)
 	}
 	if err := os.MkdirAll(c.FuncDir, 0o755); err != nil {
 		return err
@@ -104,10 +104,10 @@ func (c Compilation) validate() error {
 		return fmt.Errorf("cannot compile: %s not stated", strings.Join(missing, ", "))
 	}
 	if c.Framework.Name == providerkit.FrameworkPython && c.Entrypoint != "" {
-		return fmt.Errorf("app %q runs on the python runtime and names entrypoint %q: a python app is served by the %s in its own directory, and both the artifact and the image are built from that, so an entrypoint here would name a file nothing boots", c.App, c.Entrypoint, pythonEntryFile)
+		return fmt.Errorf("app %q is built with python and names entrypoint %q: a python app is served by the %s in its own directory, and both the artifact and the image are built from that, so an entrypoint here would name a file nothing boots", c.App, c.Entrypoint, pythonEntryFile)
 	}
 	if c.Framework.Name == providerkit.FrameworkRust && c.Entrypoint != "" {
-		return fmt.Errorf("app %q runs on the rust runtime and names entrypoint %q: a rust app is compiled from the one binary the %s in its own directory builds, so an entrypoint here would name nothing that is built", c.App, c.Entrypoint, cargoManifestFile)
+		return fmt.Errorf("app %q is built with rust and names entrypoint %q: a rust app is compiled from the one binary the %s in its own directory builds, so an entrypoint here would name nothing that is built", c.App, c.Entrypoint, cargoManifestFile)
 	}
 	pkg := c.pkg()
 	info, err := os.Stat(pkg)

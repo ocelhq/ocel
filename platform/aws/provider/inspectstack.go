@@ -7,5 +7,5 @@ import (
 )
 
 func (p *Provider) InspectStack(ctx context.Context, ref providerkit.StackRef) (providerkit.StackState, error) {
-	return p.releases.Inspect(ctx, ref)
+	return p.stacks.Inspect(ctx, ref)
 }

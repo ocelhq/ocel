@@ -618,10 +618,10 @@ func (s *sweeper) RemoveContainers(context.Context, providerkit.StackRef, []prov
 	return nil
 }
 
-func (s *sweeper) ReconcileImages(_ context.Context, _ providerkit.StackRef, app, coordinate string, _ providerkit.Progress) error {
+func (s *sweeper) ReconcileImages(_ context.Context, _ providerkit.StackRef, app, imageRef string, _ providerkit.Progress) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.reconciled = append(s.reconciled, app+" "+coordinate)
+	s.reconciled = append(s.reconciled, app+" "+imageRef)
 	return nil
 }
 
@@ -683,7 +683,7 @@ func TestRemovingAPreviewSweepsTheImagesOfAStackItsLedgerNoLongerNames(t *testin
 	t.Parallel()
 
 	swept := &sweeper{}
-	provider := fake.NewProvider(fake.Options{Region: "nowhere"}).Releasing(swept.hooks())
+	provider := fake.NewProvider(fake.Options{Region: "nowhere"}).ResourceStacks(swept.hooks())
 	client := servedProvider(t, "1.0.0", provider)
 	deployed(t, provider, providerkit.ClassPreview, "shop")
 	stack := seedContainerStack(t, provider, "shop", "pr-7", "web", "ghcr.io/acme/web:pr-7")

@@ -127,17 +127,17 @@ func TestTheSealerReadsTheClassKeyWhereBootstrapMintsIt(t *testing.T) {
 	if err := os.WriteFile(KeyPath(root, bound.Class), key, 0o400); err != nil {
 		t.Fatal(err)
 	}
-	sealer := Cipher{Root: root}
-	opened, err := sealer.Open(context.Background(), bound, sealFor(t, key, bound, "hunter2"))
+	vault := Cipher{Root: root}
+	opened, err := vault.Open(context.Background(), bound, sealFor(t, key, bound, "hunter2"))
 	if err != nil || string(opened) != "hunter2" {
 		t.Fatalf("Open() = %q, %v", opened, err)
 	}
 	preview := bound
 	preview.Class = providerkit.ClassPreview
-	if _, err := sealer.Open(context.Background(), preview, sealFor(t, key, preview, "hunter2")); err == nil {
+	if _, err := vault.Open(context.Background(), preview, sealFor(t, key, preview, "hunter2")); err == nil {
 		t.Error("a preview value opened under the production key, and each class is sealed to its own")
 	}
-	if _, err := sealer.Seal(context.Background(), bound, []byte("x")); err == nil {
+	if _, err := vault.Seal(context.Background(), bound, []byte("x")); err == nil {
 		t.Error("the box-side sealer sealed something, and sealing is the helper's under sudo alone")
 	}
 }

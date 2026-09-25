@@ -196,7 +196,7 @@ func TestStackTakesTheConfigTheProgramAsksFor(t *testing.T) {
 		t.Fatalf("Stack() = %v", err)
 	}
 	if config["aws:region"].Value != "nowhere" {
-		t.Errorf("the stack's config is %v, want what the program's Configurer asked for", config)
+		t.Errorf("the stack's config is %v, want what the config's Configure asked for", config)
 	}
 }
 
@@ -294,7 +294,7 @@ func TestRunCarriesTheProgramsConfigToTheEngine(t *testing.T) {
 		t.Fatalf("Run() = %v", err)
 	}
 	if engine.up.Config["aws:defaultTags"].Value != wanted["aws:defaultTags"].Value {
-		t.Errorf("the engine was configured with %v, want what the program's Configurer asked for", engine.up.Config)
+		t.Errorf("the engine was configured with %v, want what the config's Configure asked for", engine.up.Config)
 	}
 }
 

@@ -121,7 +121,7 @@ func (p *Provider) heldSecret(ctx context.Context, in resources.Instruction, nam
 		if err != nil {
 			return "", err
 		}
-		candidate, err := p.sealer.Seal(ctx, at, []byte(minted))
+		candidate, err := p.cipher.Seal(ctx, at, []byte(minted))
 		if err != nil {
 			return "", err
 		}
@@ -129,7 +129,7 @@ func (p *Provider) heldSecret(ctx context.Context, in resources.Instruction, nam
 			return "", err
 		}
 	}
-	opened, err := p.sealer.Open(ctx, at, sealed)
+	opened, err := p.cipher.Open(ctx, at, sealed)
 	if err != nil {
 		return "", err
 	}

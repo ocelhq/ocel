@@ -91,7 +91,7 @@ func transformStackPlan(ctx context.Context, pass transformkit.Pass, plan provid
 	return indexPatches(candidates, results)
 }
 
-func translateFunctionSpec(runtime string, spec providerkit.FunctionSpec) (functionArgs, error) {
+func translateFunctionSpec(appFramework string, spec providerkit.FunctionSpec) (functionArgs, error) {
 	execution, err := executionFor(spec.Framework)
 	if err != nil {
 		return functionArgs{}, err
@@ -101,7 +101,7 @@ func translateFunctionSpec(runtime string, spec providerkit.FunctionSpec) (funct
 		handler = spec.Handler
 	}
 	memoryMB := defaultFunctionMemoryMB
-	if runtime == runtimeNext {
+	if appFramework == providerkit.FrameworkNext {
 		memoryMB = nextBundleFunctionMemoryMB
 	}
 	if spec.Memory > 0 {
@@ -128,7 +128,7 @@ type execution struct {
 
 func executionFor(framework providerkit.Framework) (execution, error) {
 	if framework.Name != "" && !providerkit.KnownFramework(framework.Name) {
-		return execution{}, providerkit.Refuse(providerkit.CodeInvalid, "this provider has no runtime named %q", framework.Name)
+		return execution{}, providerkit.Refuse(providerkit.CodeInvalid, "this provider has no framework named %q", framework.Name)
 	}
 	arch := providerkit.Architecture(framework.Arch)
 	if arch != providerkit.ArchX8664 && arch != providerkit.ArchARM64 {

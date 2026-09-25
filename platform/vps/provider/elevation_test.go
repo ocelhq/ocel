@@ -76,7 +76,7 @@ func TestAskingWhatABootstrapWouldDoIsNotAskingToRunIt(t *testing.T) {
 			err)
 	}
 	if _, err := gated.PlanRemove(ctx, providerkit.ClassProduction); err != nil {
-		t.Fatalf("PlanRemoval() = %v, want the removal plan drawn for a login that may not run it", err)
+		t.Fatalf("PlanRemove() = %v, want the removal plan drawn for a login that may not run it", err)
 	}
 	if inner.planned != 2 {
 		t.Errorf("the host was planned against %+v, want both questions carried through", *inner)

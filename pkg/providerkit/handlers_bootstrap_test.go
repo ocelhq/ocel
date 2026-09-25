@@ -506,7 +506,7 @@ func TestBootstrapShowsThePlanItIsAboutToApply(t *testing.T) {
 		}
 	}
 	if len(provider.FakeBootstrap().Applied()) != 1 {
-		t.Errorf("the bootstrapper was applied %d times, want the one this stream carried out",
+		t.Errorf("the bootstrap was applied %d times, want the one this stream carried out",
 			len(provider.FakeBootstrap().Applied()))
 	}
 }

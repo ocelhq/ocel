@@ -31,7 +31,7 @@ func anApp() providerkit.AppPlan {
 		App:             "web",
 		Compute:         providerkit.ComputeContainer,
 		Deployment:      deployment,
-		Image:           loadedCoordinate,
+		Image:           loadedImageRef,
 		HealthCheckPath: "/healthz",
 	}
 }

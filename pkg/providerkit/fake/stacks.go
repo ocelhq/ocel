@@ -208,7 +208,7 @@ func (*Provider) ProvisionFunctions(_ context.Context, plan providerkit.StackPla
 
 func (p *Provider) RemoveFunctions(_ context.Context, _ providerkit.StackRef, functions []providerkit.Function, _ providerkit.Progress) error {
 	for _, function := range functions {
-		p.releases.tookDown(function.Name)
+		p.stacks.tookDown(function.Name)
 	}
 	return nil
 }
@@ -219,7 +219,7 @@ func (*Provider) ProvisionContainers(_ context.Context, plan providerkit.StackPl
 
 func (p *Provider) RemoveContainers(_ context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, _ providerkit.Progress) error {
 	for _, container := range containers {
-		p.releases.tookDown(container.Name)
+		p.stacks.tookDown(container.Name)
 	}
 	return nil
 }

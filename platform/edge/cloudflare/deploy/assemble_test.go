@@ -263,10 +263,10 @@ func TestAssembleApp(t *testing.T) {
 	})
 }
 
-func writeDescribedApp(t *testing.T, runtime string, edgeRouting bool) edge.WorkerSource {
+func writeDescribedApp(t *testing.T, framework string, edgeRouting bool) edge.WorkerSource {
 	t.Helper()
 	root := t.TempDir()
-	descriptor := fmt.Sprintf(`{"runtime":%q,"buildId":"b1","edgeRouting":%t,"entry":"/"}`, runtime, edgeRouting)
+	descriptor := fmt.Sprintf(`{"framework":%q,"buildId":"b1","edgeRouting":%t,"entry":"/"}`, framework, edgeRouting)
 	if err := os.WriteFile(filepath.Join(root, edge.ServeDescriptorFile), []byte(descriptor), 0o644); err != nil {
 		t.Fatal(err)
 	}

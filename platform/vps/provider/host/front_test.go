@@ -249,7 +249,7 @@ func TestTheLastClassToGoTakesTheRecordWithIt(t *testing.T) {
 	recordOn(t, stood, class, Front{}, "shop")
 	plan, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), class)
 	if err != nil {
-		t.Fatalf("PlanRemoval() = %v", err)
+		t.Fatalf("PlanRemove() = %v", err)
 	}
 	if !slices.ContainsFunc(plan.Groups[0].Changes, func(change providerkit.Change) bool {
 		return change.Name == FrontRecordPath && change.Action == providerkit.ActionDelete

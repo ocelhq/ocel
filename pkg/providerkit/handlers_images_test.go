@@ -93,11 +93,11 @@ func (muteStacks) Destroy(context.Context, providerkit.StackRef, providerkit.Pro
 	return nil
 }
 
-func TestTheImageRowIsTheReleasersOwnAndNothingElseInventsIt(t *testing.T) {
+func TestTheImageRowIsTheStacksOwnAndNothingElseInventsIt(t *testing.T) {
 	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	base := fake.NewProvider(fake.Options{Region: "nowhere"})
-	client := servedBy(t, refusingStacks{Provider: base, releaser: muteStacks{}})
+	client := servedBy(t, refusingStacks{Provider: base, stacks: muteStacks{}})
 	standsBootstrapped(t, client)
 
 	req := registryDeployRequest()
@@ -108,7 +108,7 @@ func TestTheImageRowIsTheReleasersOwnAndNothingElseInventsIt(t *testing.T) {
 	}
 
 	if rows := imageRows(lastPlan(events)); len(rows) != 0 {
-		t.Fatalf("the plan shows %d image rows over a releaser that declared none: a row nothing in the release program emitted cannot be verified by --dry or replayed", len(rows))
+		t.Fatalf("the plan shows %d image rows over stacks that declared none: a row nothing in the release program emitted cannot be verified by --dry or replayed", len(rows))
 	}
 }
 
@@ -510,7 +510,7 @@ func TestAnAppPlanNamesTheCoordinateTheProviderWillHoldRatherThanTheOneTheBuildL
 	plans := provider.FakeStacks().Plans()
 	app := plans[len(plans)-1].App
 	if app == nil {
-		t.Fatal("the last plan the releaser saw stands up no app")
+		t.Fatal("the last plan the stacks port saw stands up no app")
 	}
 	if app.Image != pushedCoordinate {
 		t.Errorf("Image = %q, want %q: what stands the app up is the coordinate the push wrote, and the local digest ref names nothing the runtime can reach", app.Image, pushedCoordinate)
@@ -530,7 +530,7 @@ func TestAnAppPlanNamesTheTaggedCoordinateADirectTransferLanded(t *testing.T) {
 	plans := provider.FakeStacks().Plans()
 	app := plans[len(plans)-1].App
 	if app == nil {
-		t.Fatal("the last plan the releaser saw stands up no app")
+		t.Fatal("the last plan the stacks port saw stands up no app")
 	}
 	if app.Image != loadedCoordinate {
 		t.Errorf("Image = %q, want %q: a box takes the image under the tag the transfer landed, and the digest ref the build left names nothing the box can list, run or hold in a window", app.Image, loadedCoordinate)

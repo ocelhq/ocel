@@ -32,8 +32,6 @@ func manifestApps(manifest *contractv1.Manifest) []*contractv1.ManifestApp {
 	return apps
 }
 
-const runtimeNext = providerkit.FrameworkNext
-
 const appsDirName = "apps"
 
 func appArtifactRoot(artifactRoot, app string) string {

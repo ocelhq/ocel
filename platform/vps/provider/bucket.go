@@ -222,7 +222,7 @@ func (p *Provider) storeCredential(ctx context.Context, ref providerkit.StackRef
 		if err != nil {
 			return storeCredential{}, err
 		}
-		candidate, err := p.sealer.Seal(ctx, at, []byte(minted))
+		candidate, err := p.cipher.Seal(ctx, at, []byte(minted))
 		if err != nil {
 			return storeCredential{}, err
 		}
@@ -230,7 +230,7 @@ func (p *Provider) storeCredential(ctx context.Context, ref providerkit.StackRef
 			return storeCredential{}, err
 		}
 	}
-	opened, err := p.sealer.Open(ctx, at, sealed)
+	opened, err := p.cipher.Open(ctx, at, sealed)
 	if err != nil {
 		return storeCredential{}, err
 	}
@@ -655,7 +655,7 @@ func (p *Provider) storeRoot(ctx context.Context, ref providerkit.StackRef, stor
 	if len(sealed) == 0 {
 		return storeCredential{}, nil
 	}
-	opened, err := p.sealer.Open(ctx, storeCoordinate(ref), sealed)
+	opened, err := p.cipher.Open(ctx, storeCoordinate(ref), sealed)
 	if err != nil {
 		return storeCredential{}, err
 	}

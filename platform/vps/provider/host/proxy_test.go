@@ -969,7 +969,7 @@ func TestABoxOcelBuildsNoHelperForIsStillABoxOcelCanDestroy(t *testing.T) {
 	stood.facts.Arch = "riscv64"
 
 	if _, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), class); err != nil {
-		t.Fatalf("PlanRemoval() over a host ocel builds no flip helper for = %v, want what ocel wrote still taken back: the paths it wrote are the same whatever the box runs", err)
+		t.Fatalf("PlanRemove() over a host ocel builds no flip helper for = %v, want what ocel wrote still taken back: the paths it wrote are the same whatever the box runs", err)
 	}
 	if _, err := stood.host().Read(context.Background(), class); err == nil {
 		t.Error("a host reporting an architecture ocel builds no helper for is bootstrapped anyway, and the file the release loop execs would be for another machine")

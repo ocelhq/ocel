@@ -111,7 +111,7 @@ func bakedBuilds(t *testing.T, cfg Config, manifest *contractv1.Manifest, baked 
 		}
 		coord := storageCoordinate(cfg.Env, manifest.GetSlug(), name, releaseOf(id))
 		builds.coords[name] = coord
-		if app.GetFramework().GetName() != runtimeNext {
+		if app.GetFramework().GetName() != providerkit.FrameworkNext {
 			continue
 		}
 		prefix := isrPrefixOf(coord)

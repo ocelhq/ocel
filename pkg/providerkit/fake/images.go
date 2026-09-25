@@ -18,10 +18,10 @@ type Images struct {
 
 func NewImages() *Images { return &Images{held: map[string]bool{}} }
 
-func (i *Images) Holds(coordinate string) {
+func (i *Images) Holds(imageRef string) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	i.held[coordinate] = true
+	i.held[imageRef] = true
 }
 
 func (i *Images) Refusing(err error) {

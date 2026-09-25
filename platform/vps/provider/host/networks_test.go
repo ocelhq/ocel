@@ -198,7 +198,7 @@ func TestAClassRunningNothingPlansNoContainerOrNetworkRemoval(t *testing.T) {
 	stood := machine(map[providerkit.Class][]Item{class: bootstrapped(t, class)})
 	plan, err := NewBootstrap(stood.host(), testVendor, "shop").PlanRemove(context.Background(), class)
 	if err != nil {
-		t.Fatalf("PlanRemoval() = %v", err)
+		t.Fatalf("PlanRemove() = %v", err)
 	}
 	for _, group := range plan.Groups {
 		for _, change := range group.Changes {

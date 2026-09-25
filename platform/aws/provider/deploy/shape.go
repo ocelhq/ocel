@@ -104,18 +104,18 @@ func (s costShape) plain(scope, typ, name string, properties map[string]any) {
 }
 
 func (s costShape) functions(scope, project string, app providerkit.AppEntry, specs []providerkit.FunctionSpec) error {
-	runtime := app.Manifest.GetFramework().GetName()
+	framework := app.Manifest.GetFramework().GetName()
 	if len(specs) == 0 {
 		specs = []providerkit.FunctionSpec{{Name: app.App}}
 	}
 	for _, spec := range specs {
 		if spec.Framework.Name == "" {
-			spec.Framework.Name = runtime
+			spec.Framework.Name = framework
 		}
 		if spec.Framework.Arch == "" {
 			spec.Framework.Arch = providerkit.Architecture(app.Manifest.GetFramework().GetArch())
 		}
-		args, err := translateFunctionSpec(runtime, spec)
+		args, err := translateFunctionSpec(framework, spec)
 		if err != nil {
 			return err
 		}

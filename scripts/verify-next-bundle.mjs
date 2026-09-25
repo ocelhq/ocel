@@ -125,8 +125,8 @@ function verifyBundle({
     `${name}: config.json.id is ${JSON.stringify(config.id)}, expected ${JSON.stringify(name)}`,
   );
   check(
-    config.runtime?.name === "next",
-    `${name}: config.json.runtime is ${JSON.stringify(config.runtime)}`,
+    config.framework?.name === "next",
+    `${name}: config.json.framework is ${JSON.stringify(config.framework)}`,
   );
 
   const appRelDir = dirname(launcherRel);

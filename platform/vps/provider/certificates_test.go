@@ -88,10 +88,10 @@ func TestInspectingAPinnedCertificateNeverOpensTheKeyBesideIt(t *testing.T) {
 
 	cert := certificateFor(t, p, "pr-7.preview.example.com")
 	if cert.ID != certs.PinHandle(wildcardPin) {
-		t.Fatalf("Certificate() = %q, want %q", cert.ID, certs.PinHandle(wildcardPin))
+		t.Fatalf("Issue() = %q, want %q", cert.ID, certs.PinHandle(wildcardPin))
 	}
 	if _, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, "pr-7.preview.example.com", cert); err != nil {
-		t.Fatalf("InspectCertificate() = %v", err)
+		t.Fatalf("Inspect() = %v", err)
 	}
 
 	key := caddy.PinKey(wildcardPin)
@@ -115,17 +115,17 @@ func TestAPinnedCertificateReportsItsOwnExpiryAndNamesTheOperatorAsTheRenewer(t 
 
 	health, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, "pr-7.preview.example.com", cert)
 	if err != nil {
-		t.Fatalf("InspectCertificate() = %v", err)
+		t.Fatalf("Inspect() = %v", err)
 	}
 	if !health.Terminates || !health.Issued || !health.Covers {
-		t.Errorf("InspectCertificate() = %+v, want a certificate that terminates, is issued and covers the hostname", health)
+		t.Errorf("Inspect() = %+v, want a certificate that terminates, is issued and covers the hostname", health)
 	}
 	if health.ExpiresAt == 0 || !health.ExpiringSoon {
-		t.Errorf("InspectCertificate() reports expiry %d and expiring-soon %v, want the parsed NotAfter and a warning: nothing on this box renews a pinned pair",
+		t.Errorf("Inspect() reports expiry %d and expiring-soon %v, want the parsed NotAfter and a warning: nothing on this box renews a pinned pair",
 			health.ExpiresAt, health.ExpiringSoon)
 	}
 	if health.Renewal != certs.PinRenewal {
-		t.Errorf("InspectCertificate().Renewal = %q, want %q", health.Renewal, certs.PinRenewal)
+		t.Errorf("Inspect().Renewal = %q, want %q", health.Renewal, certs.PinRenewal)
 	}
 }
 
@@ -148,7 +148,7 @@ func TestAPinThatDoesNotCoverTheHostnameIsRefusedAtBindWithAReasonThatNamesBoth(
 	})
 	var refusal providerkit.Refusal
 	if !asRefusal(err, &refusal) {
-		t.Fatalf("Certificate() over a pin that covers something else = %v, want a refusal", err)
+		t.Fatalf("Issue() over a pin that covers something else = %v, want a refusal", err)
 	}
 	if !strings.Contains(refusal.Message, "*.staging.example.com") || !strings.Contains(refusal.Message, "pr-7.preview.example.com") {
 		t.Errorf("the refusal reads %q, want it to name what the pinned certificate covers and the hostname it does not", refusal.Message)
@@ -174,7 +174,7 @@ func TestAnExpiredPinIsRefusedRatherThanServedUnderAHandleThatReadsHealthy(t *te
 	})
 	var refusal providerkit.Refusal
 	if !asRefusal(err, &refusal) || !strings.Contains(refusal.Message, "expired") {
-		t.Fatalf("Certificate() over an expired pin = %v, want a refusal saying so: you placed it and you replace it", err)
+		t.Fatalf("Issue() over an expired pin = %v, want a refusal saying so: you placed it and you replace it", err)
 	}
 }
 
@@ -189,13 +189,13 @@ func TestAnUnpinnedHostnameGetsTheProxysOwnHandleAndAsksNothingOfTheBox(t *testi
 
 	cert := certificateFor(t, p, "shop.example.com")
 	if cert.ID != certs.ProxyHandle("shop.example.com") {
-		t.Errorf("Certificate() = %q, want %q", cert.ID, certs.ProxyHandle("shop.example.com"))
+		t.Errorf("Issue() = %q, want %q", cert.ID, certs.ProxyHandle("shop.example.com"))
 	}
 	if cert.Requested {
-		t.Error("Certificate().Requested = true: Requested is a claim of delete authority, and ocel places no key material on a box so it holds authority to remove none")
+		t.Error("Issue().Requested = true: Requested is a claim of delete authority, and ocel places no key material on a box so it holds authority to remove none")
 	}
 	if len(cert.Written) != 0 || len(cert.Owed) != 0 {
-		t.Errorf("Certificate() owes records %v/%v, and an http-01 hostname owes no validation record", cert.Written, cert.Owed)
+		t.Errorf("Issue() owes records %v/%v, and an http-01 hostname owes no validation record", cert.Written, cert.Owed)
 	}
 	for _, command := range machine.commands() {
 		if strings.Contains(command, "'docker' 'logs'") || strings.Contains(command, "docker version") {
@@ -209,7 +209,7 @@ func TestAnUnpinnedHostnameGetsTheProxysOwnHandleAndAsksNothingOfTheBox(t *testi
 		t.Errorf("minting a handle asked the proxy nothing (%v), so a box the CA has already refused for this registered domain names a slot it knows will stay empty and the user is told when the browser tells them", machine.commands())
 	}
 	if err := p.Certificates().Discard(context.Background(), cert, edge.DiscardProgress()); err != nil {
-		t.Errorf("DiscardCertificate() = %v, want nil", err)
+		t.Errorf("Discard() = %v, want nil", err)
 	}
 }
 
@@ -226,17 +226,17 @@ func TestTheProxyHandleIsReadOffTheHandshakeAndNeverOffCaddysDataDirectory(t *te
 	cert := certificateFor(t, p, "shop.example.com")
 	health, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, "shop.example.com", cert)
 	if err != nil {
-		t.Fatalf("InspectCertificate() = %v", err)
+		t.Fatalf("Inspect() = %v", err)
 	}
 	if !health.Terminates || !health.Issued || !health.Covers {
-		t.Errorf("InspectCertificate() = %+v, want the leaf the proxy served read as issued and covering", health)
+		t.Errorf("Inspect() = %+v, want the leaf the proxy served read as issued and covering", health)
 	}
 	if health.ExpiresAt != 0 || health.ExpiringSoon {
-		t.Errorf("InspectCertificate() reports expiry %d, and the number is decorative for a certificate the proxy renews: expiring-soon is false whenever something renewed it",
+		t.Errorf("Inspect() reports expiry %d, and the number is decorative for a certificate the proxy renews: expiring-soon is false whenever something renewed it",
 			health.ExpiresAt)
 	}
 	if health.Renewal != certs.ProxyRenewal {
-		t.Errorf("InspectCertificate().Renewal = %q, want %q", health.Renewal, certs.ProxyRenewal)
+		t.Errorf("Inspect().Renewal = %q, want %q", health.Renewal, certs.ProxyRenewal)
 	}
 
 	var asked []string
@@ -268,22 +268,22 @@ func TestAProxyServedLeafPastItsNotAfterReportsExpiredRatherThanServing(t *testi
 		cert := certificateFor(t, p, "shop.example.com")
 		health, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, "shop.example.com", cert)
 		if err != nil {
-			t.Fatalf("InspectCertificate() over %s = %v", what, err)
+			t.Fatalf("Inspect() over %s = %v", what, err)
 		}
 		live := until > 0
 		if health.Issued != live {
-			t.Errorf("InspectCertificate() over %s reports issued %v, want %v", what, health.Issued, live)
+			t.Errorf("Inspect() over %s reports issued %v, want %v", what, health.Issued, live)
 		}
 		want := "EXPIRED"
 		if live {
 			want = "SERVING"
 		}
 		if health.Status != want {
-			t.Errorf("InspectCertificate() over %s = %q, want %q: the proxy renews this pair and the expiry is decorative while that renewal is healthy, but a leaf served past its own NotAfter is renewal that stopped and every browser reaching the box is already refusing it",
+			t.Errorf("Inspect() over %s = %q, want %q: the proxy renews this pair and the expiry is decorative while that renewal is healthy, but a leaf served past its own NotAfter is renewal that stopped and every browser reaching the box is already refusing it",
 				what, health.Status, want)
 		}
 		if health.ExpiresAt != 0 || health.ExpiringSoon {
-			t.Errorf("InspectCertificate() over %s reports expiry %d and expiring-soon %v, want neither: nothing asks the operator to act on a date for a certificate something else renews",
+			t.Errorf("Inspect() over %s reports expiry %d and expiring-soon %v, want neither: nothing asks the operator to act on a date for a certificate something else renews",
 				what, health.ExpiresAt, health.ExpiringSoon)
 		}
 	}
@@ -301,13 +301,13 @@ func TestAProxyHandleWithNothingServedYetIsPendingRatherThanIssued(t *testing.T)
 	cert := certificateFor(t, p, "shop.example.com")
 	health, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, "shop.example.com", cert)
 	if err != nil {
-		t.Fatalf("InspectCertificate() over a host the proxy serves nothing for = %v, want it reported rather than refused", err)
+		t.Fatalf("Inspect() over a host the proxy serves nothing for = %v, want it reported rather than refused", err)
 	}
 	if health.Issued {
-		t.Error("InspectCertificate() reports a certificate issued for a host the proxy completed no handshake for; caddy obtains in the background and a 200 from a config load is not evidence one exists")
+		t.Error("Inspect() reports a certificate issued for a host the proxy completed no handshake for; caddy obtains in the background and a 200 from a config load is not evidence one exists")
 	}
 	if !health.Terminates || health.Renewal == "" {
-		t.Errorf("InspectCertificate() = %+v, want it to terminate and to name the renewer even before a certificate exists", health)
+		t.Errorf("Inspect() = %+v, want it to terminate and to name the renewer even before a certificate exists", health)
 	}
 }
 
@@ -327,7 +327,7 @@ func TestAPinHandleNamingAPathOutsideTheProxysOwnDirectoryIsRefusedBeforeItIsRea
 		providerkit.Certificate{ID: certs.PinHandle(elsewhere)})
 	var refusal providerkit.Refusal
 	if !asRefusal(err, &refusal) || !strings.Contains(refusal.Message, caddy.PinsDir) {
-		t.Fatalf("InspectCertificate() over a pin outside %s = %v, want a refusal naming the one directory the proxy is handed", caddy.PinsDir, err)
+		t.Fatalf("Inspect() over a pin outside %s = %v, want a refusal naming the one directory the proxy is handed", caddy.PinsDir, err)
 	}
 	for _, command := range machine.commands() {
 		if strings.Contains(command, elsewhere) {
@@ -355,9 +355,9 @@ func TestABoxHoldsNoCertificateForThePreviewWildcardItself(t *testing.T) {
 	}
 	health, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, wildcard, cert)
 	if err != nil {
-		t.Fatalf("InspectCertificate() = %v", err)
+		t.Fatalf("Inspect() = %v", err)
 	}
 	if health.Issued || health.Status != "" {
-		t.Errorf("InspectCertificate() = %+v over a wildcard bearing no certificate, want nothing to report", health)
+		t.Errorf("Inspect() = %+v over a wildcard bearing no certificate, want nothing to report", health)
 	}
 }
