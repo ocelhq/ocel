@@ -244,9 +244,11 @@ export default defineConfig({
       renderConfig({
         base: TS_BASE,
         slug: "s",
-        registry: { server: "ghcr.io/acme/j", username: "octocat", password: "TOKEN" },
+        registry: { server: "ghcr.io/acme/j", username: "octocat", password: "${TOKEN}" },
       }),
-    ).toContain(`  registry: {"server":"ghcr.io/acme/j","username":"octocat","password":"TOKEN"},`);
+    ).toContain(
+      `  registry: {"server":"ghcr.io/acme/j","username":"octocat","password":"\${TOKEN}"},`,
+    );
   });
 
   it("imports each edge from where the product ships it", () => {
@@ -361,10 +363,10 @@ describe("renderJsonConfig", () => {
         renderJsonConfig(COMMENTED_JSON_BASE, {
           base: "./ocel.json",
           slug: "j-1-go",
-          registry: { server: "ghcr.io/acme/j", username: "octocat", password: "TOKEN" },
+          registry: { server: "ghcr.io/acme/j", username: "octocat", password: "${TOKEN}" },
         }),
       ).registry,
-    ).toEqual({ server: "ghcr.io/acme/j", username: "octocat", password: "TOKEN" });
+    ).toEqual({ server: "ghcr.io/acme/j", username: "octocat", password: "${TOKEN}" });
   });
 
   it("keeps the options the fixture's own provider carries", () => {
