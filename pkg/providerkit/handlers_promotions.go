@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -63,6 +64,9 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		if err := ReclaimPreview(ctx, session.provider, req.GetSlug(), pointer, removed, report); err != nil {
 			return err
 		}
+		if err := forgetKeptRecords(ctx, session.provider, req.GetSlug(), pointer); err != nil {
+			return err
+		}
 		if err := Forget(ctx, session.provider.Records(), EnvironmentRecord(ClassPreview, req.GetSlug(), pointer)); err != nil {
 			return err
 		}
@@ -71,6 +75,31 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		}
 		return nil
 	})
+}
+
+func forgetKeptRecords(ctx context.Context, provider Provider, slug, environment string) error {
+	store := values.Store{Records: provider.Records(), Sealer: provider.Sealer()}
+	scope := values.Scope{Project: slug, Class: ClassPreview}
+	held, err := store.ListBindings(ctx, scope, environment)
+	if err != nil {
+		return fmt.Errorf("read the records kept for preview %s: %w", environment, err)
+	}
+	var kept []string
+	for _, record := range held {
+		if record.Environment != environment {
+			continue
+		}
+		if record.Owner == values.OwnerOcel || record.Owner == naming.InlineRecordOwner {
+			kept = append(kept, record.Name)
+		}
+	}
+	if len(kept) == 0 {
+		return nil
+	}
+	if _, err := store.RemoveBindings(ctx, scope, environment, kept); err != nil {
+		return fmt.Errorf("remove the records kept for preview %s: %w", environment, err)
+	}
+	return nil
 }
 
 func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromotionsRequest) (*contractv1.ListPromotionsResponse, error) {
