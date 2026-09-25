@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -78,9 +79,9 @@ func TestASurfaceNamedWithTheSeparatorIsRefusedRatherThanRenderedAmbiguously(t *
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: claimed, Owner: "ocel" + claimSeparator + "shop", Pointer: pointed}}
+	state.Claims = []HostClaim{{Hostname: claimed, Owner: "ocel" + switchboard.ClaimSeparator + "shop", Pointer: pointed}}
 	if _, err := RenderProxyConfig(state); err == nil {
-		t.Errorf("a surface named with %q renders a claim that reads back naming a different surface", claimSeparator)
+		t.Errorf("a surface named with %q renders a claim that reads back naming a different surface", switchboard.ClaimSeparator)
 	}
 }
 
@@ -88,9 +89,9 @@ func TestAHostnameNamedWithTheSeparatorIsRefusedTheWayASurfaceIs(t *testing.T) {
 	t.Parallel()
 
 	state := routed()
-	state.Claims = []HostClaim{{Hostname: "shop.example.com" + claimSeparator + surface, Owner: surface, Pointer: pointed}}
+	state.Claims = []HostClaim{{Hostname: "shop.example.com" + switchboard.ClaimSeparator + surface, Owner: surface, Pointer: pointed}}
 	if _, err := RenderProxyConfig(state); err == nil {
-		t.Errorf("a hostname carrying %q renders a claim whose identity reads back as a different surface and host; the surface half of the same identity is already refused for it", claimSeparator)
+		t.Errorf("a hostname carrying %q renders a claim whose identity reads back as a different surface and host; the surface half of the same identity is already refused for it", switchboard.ClaimSeparator)
 	}
 }
 

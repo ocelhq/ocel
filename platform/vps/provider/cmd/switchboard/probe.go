@@ -15,6 +15,7 @@ import (
 	"time"
 
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -58,7 +59,7 @@ func leaf(argv []string, out, errs io.Writer) int {
 	}
 	held, err := net.DialTimeout("tcp", at, servingTimeout)
 	if err != nil {
-		fmt.Fprintf(errs, "%s: nothing answered %s: %v\n", helperName, at, err)
+		fmt.Fprintf(errs, "%s: nothing answered %s: %v\n", switchboard.Name, at, err)
 		return exitRefused
 	}
 	spoken := tls.Client(held, &tls.Config{ServerName: hostname, InsecureSkipVerify: true})
@@ -68,15 +69,15 @@ func leaf(argv []string, out, errs io.Writer) int {
 	}
 	if err := spoken.Handshake(); err != nil {
 		if !declined(err) {
-			fmt.Fprintf(errs, "%s: tls handshake for %s failed: %v\n", helperName, hostname, err)
+			fmt.Fprintf(errs, "%s: tls handshake for %s failed: %v\n", switchboard.Name, hostname, err)
 			return exitUnservable
 		}
-		fmt.Fprintf(errs, "%s: %s served no certificate for %s: %v\n", helperName, at, hostname, err)
+		fmt.Fprintf(errs, "%s: %s served no certificate for %s: %v\n", switchboard.Name, at, hostname, err)
 		return exitNotServingYet
 	}
 	chain := spoken.ConnectionState().PeerCertificates
 	if len(chain) == 0 {
-		fmt.Fprintf(errs, "%s: %s completed a handshake for %s and presented no certificate\n", helperName, at, hostname)
+		fmt.Fprintf(errs, "%s: %s completed a handshake for %s and presented no certificate\n", switchboard.Name, at, hostname)
 		return exitUnservable
 	}
 	if err := pem.Encode(out, &pem.Block{Type: "CERTIFICATE", Bytes: chain[0].Raw}); err != nil {

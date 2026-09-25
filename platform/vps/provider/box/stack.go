@@ -12,6 +12,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 type stack struct {
@@ -199,7 +200,7 @@ func (s *stack) previewClaims(ctx context.Context, pointer string, apps []string
 	}
 	hostnames := site.Hosts(pointer, apps)
 	if stores {
-		hostnames = append(hostnames, site.Host(pointer, live.StoreLabel))
+		hostnames = append(hostnames, site.Host(pointer, switchboard.StoreLabel))
 	}
 	if err := site.LabelProblem(hostnames); err != nil {
 		return nil, providerkit.Refuse(providerkit.CodeInvalid,
@@ -211,8 +212,8 @@ func (s *stack) previewClaims(ctx context.Context, pointer string, apps []string
 		if at := slices.IndexFunc(apps, func(app string) bool { return site.Host(pointer, app) == hostname }); at >= 0 {
 			app = apps[at]
 		}
-		if hostname == site.Host(pointer, live.StoreLabel) {
-			app = live.StoreLabel
+		if hostname == site.Host(pointer, switchboard.StoreLabel) {
+			app = switchboard.StoreLabel
 		}
 		claims = append(claims, host.HostClaim{
 			Hostname: hostname, Owner: s.surface(), Pointer: pointer, App: app,
@@ -308,7 +309,7 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if stores {
 		claims = append(claims, host.HostClaim{
 			Hostname: live.StoreHostname(binding.Hostname), Owner: s.surface(),
-			Pointer: edge.DefaultPointer, App: live.StoreLabel,
+			Pointer: edge.DefaultPointer, App: switchboard.StoreLabel,
 		})
 	}
 	if err := s.claim(ctx, claims); err != nil {
@@ -334,7 +335,7 @@ func (s *stack) holdOrigins(ctx context.Context) error {
 }
 
 func (s *stack) stores(ctx context.Context, pointer string) (bool, error) {
-	upstream, err := s.e.machine.Serving(ctx, s.routeKey(pointer, live.StoreLabel))
+	upstream, err := s.e.machine.Serving(ctx, s.routeKey(pointer, switchboard.StoreLabel))
 	return upstream != "", err
 }
 

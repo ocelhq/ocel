@@ -15,6 +15,7 @@ import (
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const standingRootKey = "9a3b48264c5d6e7f8091a2b3c4d5e6f7"
@@ -424,7 +425,7 @@ func TestAStandingStoreIsRoutedOnTheBoxsProxyUnderALabelOfItsOwn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
-	at := slices.IndexFunc(state.Routes, func(route host.AppRoute) bool { return route.App == vars.StoreLabel })
+	at := slices.IndexFunc(state.Routes, func(route host.AppRoute) bool { return route.App == switchboard.StoreLabel })
 	if at < 0 {
 		t.Fatalf("standing a store left the proxy routing %v, and nothing off the box reaches it", state.Routes)
 	}

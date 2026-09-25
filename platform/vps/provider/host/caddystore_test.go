@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/platform/vps/provider/live"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 func storing() RoutingTable {
@@ -12,11 +12,11 @@ func storing() RoutingTable {
 		Grace: DrainWindow,
 		Routes: []AppRoute{
 			{RouteKey: keyed("web"), Upstream: "shop-web-1:" + providerkit.InjectedPortText},
-			{RouteKey: keyed(live.StoreLabel), Upstream: "shop-prod-store-s3:9000"},
+			{RouteKey: keyed(switchboard.StoreLabel), Upstream: "shop-prod-store-s3:9000"},
 		},
 		Claims: []HostClaim{
 			{Hostname: "shop.example.com", Owner: surface, Pointer: pointed},
-			{Hostname: "storage.shop.example.com", Owner: surface, Pointer: pointed, App: live.StoreLabel},
+			{Hostname: "storage.shop.example.com", Owner: surface, Pointer: pointed, App: switchboard.StoreLabel},
 		},
 	}
 }

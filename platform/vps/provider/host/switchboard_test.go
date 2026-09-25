@@ -36,7 +36,7 @@ func TestARouteChangeLoadsTheSwitchboardAndLeavesTheFrontProxyRunningAsItWas(t *
 	t.Parallel()
 
 	stood := claimingBox(t, routed())
-	store := AppRoute{RouteKey: RouteKey{Owner: surface, Pointer: pointed, App: live.StoreLabel}, Upstream: "shop-storage:9000"}
+	store := AppRoute{RouteKey: RouteKey{Owner: surface, Pointer: pointed, App: switchboard.StoreLabel}, Upstream: "shop-storage:9000"}
 	if err := stood.host().RouteResource(context.Background(), store); err != nil {
 		t.Fatalf("RouteResource() = %v", err)
 	}
@@ -164,7 +164,7 @@ func TestTheSwitchboardRunsOnTheBoxNetworkBehindTheFrontProxyAndPublishesNothing
 		"its binary's directory read-only": "--volume " + SwitchboardDir + ":" + switchboardMount + ":ro",
 		"the routing table's directory":    "--volume " + live.RoutingDir + ":" + live.RoutingDir + ":ro",
 		"the connector's socket directory": "--volume " + ConnectorRun + ":" + ConnectorRun + ":ro",
-		"its control socket's directory":   "--volume " + SwitchboardControl + ":" + SwitchboardControl,
+		"its control socket's directory":   "--volume " + switchboard.ControlDir + ":" + switchboard.ControlDir,
 		"no capability it was not handed":  "--cap-drop ALL",
 		"no new privileges":                "--security-opt " + noNewPrivileges,
 		"trust in the front proxy by name": "--trust " + caddy.Container,

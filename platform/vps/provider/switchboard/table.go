@@ -19,9 +19,9 @@ import (
 )
 
 const (
-	storeLabel     = "storage"
-	claimSeparator = "/"
-	routeIdentity  = "ocel-app-"
+	StoreLabel     = "storage"
+	ClaimSeparator = "/"
+	RouteIdentity  = "ocel-app-"
 )
 
 const (
@@ -64,10 +64,10 @@ type route struct {
 }
 
 func (r route) identity() string {
-	return routeIdentity + strings.Join([]string{r.Owner, r.Pointer, r.App}, claimSeparator)
+	return RouteIdentity + strings.Join([]string{r.Owner, r.Pointer, r.App}, ClaimSeparator)
 }
 
-func (r route) app() bool { return r.App != storeLabel }
+func (r route) app() bool { return r.App != StoreLabel }
 
 func (r route) surface() surfaceKey { return surfaceKey{r.Owner, r.Pointer} }
 
@@ -106,7 +106,7 @@ func Read(document []byte) (*Table, error) {
 		return nil, fmt.Errorf("the routing table's grace %q is not a duration: %w", read.Grace, err)
 	}
 	if read.PreviewBase != "" {
-		if err := previewBaseUsable(read.PreviewBase); err != nil {
+		if err := PreviewBaseUsable(read.PreviewBase); err != nil {
 			return nil, err
 		}
 	}
@@ -171,10 +171,10 @@ func (c claim) valid() error {
 			c.Hostname, c.Owner, c.Pointer)
 	case strings.Contains(c.Hostname, "*"):
 		return fmt.Errorf("a hostname claim names wildcard %q", c.Hostname)
-	case strings.Contains(c.Owner, claimSeparator) || strings.Contains(c.Hostname, claimSeparator) ||
-		strings.Contains(c.Pointer, claimSeparator) || strings.Contains(c.App, claimSeparator):
+	case strings.Contains(c.Owner, ClaimSeparator) || strings.Contains(c.Hostname, ClaimSeparator) ||
+		strings.Contains(c.Pointer, ClaimSeparator) || strings.Contains(c.App, ClaimSeparator):
 		return fmt.Errorf("the claim of %q by %q under pointer %q and app %q contains %q",
-			c.Hostname, c.Owner, c.Pointer, c.App, claimSeparator)
+			c.Hostname, c.Owner, c.Pointer, c.App, ClaimSeparator)
 	}
 	return nil
 }
@@ -183,7 +183,7 @@ func (r route) valid() (string, error) {
 	for _, field := range []struct{ what, named string }{
 		{"surface", r.Owner}, {"pointer", r.Pointer}, {"app", r.App},
 	} {
-		if field.named == "" || strings.Contains(field.named, claimSeparator) {
+		if field.named == "" || strings.Contains(field.named, ClaimSeparator) {
 			return "", fmt.Errorf("a route has an invalid %s %q", field.what, field.named)
 		}
 	}
@@ -220,7 +220,7 @@ const (
 
 var dnsLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 
-func previewBaseUsable(base string) error {
+func PreviewBaseUsable(base string) error {
 	named := strings.ToLower(base)
 	labels := strings.Split(named, ".")
 	usable := len(labels) > 1 && len(named)+len(edge.LivenessProbeLabel)+1 <= dnsNameMax

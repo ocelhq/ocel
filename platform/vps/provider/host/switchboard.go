@@ -5,25 +5,24 @@ import (
 
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const SwitchboardImage = "gcr.io/distroless/static-debian12@sha256:d75cdd72874d4790092fcb1b058493ecf6bb5bf2b2b897045b00ff01d91843f2"
 
 const (
-	SwitchboardContainer = "ocel-switchboard"
-	switchboardName      = "ocel-switchboard"
+	SwitchboardContainer = switchboard.Name
 	SwitchboardDir       = helperRoot + "/switchboard"
-	SwitchboardBinary    = SwitchboardDir + "/" + switchboardName
+	SwitchboardBinary    = SwitchboardDir + "/" + switchboard.Name
 	switchboardMount     = "/ocel/switchboard"
-	SwitchboardMounted   = switchboardMount + "/" + switchboardName
-	SwitchboardControl   = "/run/ocel-switchboard"
+	SwitchboardMounted   = switchboardMount + "/" + switchboard.Name
 	switchboardPort      = "8080"
 	SwitchboardAddress   = SwitchboardContainer + ":" + switchboardPort
 )
 
 var switchboardCapabilities = []string{"DAC_OVERRIDE", "DAC_READ_SEARCH"}
 
-func switchboardBinary(arch string) []byte { return embedded(switchboardName, arch) }
+func switchboardBinary(arch string) []byte { return embedded(switchboard.Name, arch) }
 
 func switchboardStanding(binary []byte) boxContainer { return switchboardOver(contentSum(binary)) }
 
@@ -41,7 +40,7 @@ func switchboardOver(sum string) boxContainer {
 			SwitchboardDir + ":" + switchboardMount + ":ro",
 			live.RoutingDir + ":" + live.RoutingDir + ":ro",
 			ConnectorRun + ":" + ConnectorRun + ":ro",
-			SwitchboardControl + ":" + SwitchboardControl,
+			switchboard.ControlDir + ":" + switchboard.ControlDir,
 		},
 		caps:      switchboardCapabilities,
 		files:     []string{live.RoutingTable, SwitchboardBinary},

@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 type engineHolding struct {
@@ -742,7 +743,7 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 	keys := []byte(aKey + "\n")
 	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64))}
 	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64))}
-	proxied := []string{caddy.Container, SwitchboardContainer, ProxyData, ProxyNetwork, proxyRoot, SwitchboardBinary, SwitchboardDir, SwitchboardControl, ProxyConfig, live.RoutingTable, live.RoutingDir}
+	proxied := []string{caddy.Container, SwitchboardContainer, ProxyData, ProxyNetwork, proxyRoot, SwitchboardBinary, SwitchboardDir, switchboard.ControlDir, ProxyConfig, live.RoutingTable, live.RoutingDir}
 
 	for _, taken := range removing(standing, beside, appsStanding{}) {
 		if slices.Contains(proxied, taken.path) && taken.action == providerkit.ActionDelete {
@@ -765,7 +766,7 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 	}
 	for container, held := range map[string][]string{
 		caddy.Container:      {ProxyData, ProxyNetwork, proxyRoot},
-		SwitchboardContainer: {SwitchboardControl, SwitchboardDir, live.RoutingDir, ProxyNetwork},
+		SwitchboardContainer: {switchboard.ControlDir, SwitchboardDir, live.RoutingDir, ProxyNetwork},
 	} {
 		running := slices.IndexFunc(last, func(r removal) bool { return r.path == container })
 		for _, after := range held {
@@ -933,8 +934,8 @@ func TestTheHelperIsAStaticBinaryOcelBuildsForEveryArchitectureABoxMayRun(t *tes
 		if bytes.Contains(built, []byte("libc.so")) || bytes.Contains(built, []byte("ld-linux")) {
 			t.Errorf("the %s switchboard names a dynamic loader, and the image it runs in owes it none", arch)
 		}
-		if !bytes.Contains(built, []byte(SwitchboardControl)) {
-			t.Errorf("the %s switchboard names no control socket under %s, the directory its container is handed for it", arch, SwitchboardControl)
+		if !bytes.Contains(built, []byte(switchboard.ControlDir)) {
+			t.Errorf("the %s switchboard names no control socket under %s, the directory its container is handed for it", arch, switchboard.ControlDir)
 		}
 	}
 	if bytes.Equal(shipped[ArchAMD64], shipped[ArchARM64]) {

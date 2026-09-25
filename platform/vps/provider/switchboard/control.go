@@ -8,6 +8,12 @@ import (
 )
 
 const (
+	Name          = "ocel-switchboard"
+	ControlDir    = "/run/" + Name
+	ControlSocket = ControlDir + "/control.sock"
+)
+
+const (
 	LoadPath      = "/load"
 	FlipPath      = "/flip"
 	IdlePath      = "/idle"

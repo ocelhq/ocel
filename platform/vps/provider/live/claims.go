@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 const (
@@ -16,19 +17,14 @@ const (
 	RoutingTable = RoutingDir + "/table.json"
 )
 
-const (
-	ClaimPrefix    = "ocel-host-"
-	ClaimSeparator = "/"
-)
-
-const StoreLabel = "storage"
+const ClaimPrefix = "ocel-host-"
 
 func Surface(slug, class string) string {
 	return naming.Join(naming.FieldSeparator, "ocel", naming.Sanitize(slug), class)
 }
 
 func StoreHostname(hostname string) string {
-	return StoreLabel + "." + hostname
+	return switchboard.StoreLabel + "." + hostname
 }
 
 type Claimed struct {
@@ -43,7 +39,7 @@ func ClaimIdentity(c Claimed) string {
 	if c.App != "" {
 		fields = append(fields, c.App)
 	}
-	return ClaimPrefix + strings.Join(fields, ClaimSeparator)
+	return ClaimPrefix + strings.Join(fields, switchboard.ClaimSeparator)
 }
 
 func ClaimedIn(table []byte) ([]Claimed, error) {
@@ -59,7 +55,7 @@ func ClaimedIn(table []byte) ([]Claimed, error) {
 func StoreBase(claims []Claimed, owner, pointer string) string {
 	hostnames := make([]string, 0, len(claims))
 	for _, claim := range claims {
-		if claim.Owner == owner && claim.Pointer == pointer && claim.App == StoreLabel {
+		if claim.Owner == owner && claim.Pointer == pointer && claim.App == switchboard.StoreLabel {
 			hostnames = append(hostnames, claim.Hostname)
 		}
 	}
