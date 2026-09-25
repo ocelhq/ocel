@@ -44,6 +44,79 @@ describe("postgres()", () => {
     );
   });
 
+  it("connects through a record's url verbatim when it carries one", () => {
+    const url =
+      "postgres://app:s3cret@ep-cool.neon.tech/orders?sslmode=require&options=endpoint%3Dep-cool";
+    vi.stubEnv(
+      "OCEL_RESOURCE_POSTGRES_orders",
+      JSON.stringify({ name: "orders", postgres: { url } }),
+    );
+
+    const pool = postgres("orders");
+
+    expect(pool.options).toMatchObject({ connectionString: url });
+    expect(pool.options).not.toHaveProperty("host");
+    expect(pool.connectionString).toBe(url);
+  });
+
+  it("encrypts the connection without checking the certificate when the record requires tls", () => {
+    vi.stubEnv(
+      "OCEL_RESOURCE_POSTGRES_orders",
+      JSON.stringify({
+        name: "orders",
+        postgres: {
+          host: "db",
+          port: 5432,
+          database: "d",
+          username: "u",
+          password: "p",
+          tlsMode: "require",
+        },
+      }),
+    );
+
+    const pool = postgres("orders");
+
+    expect(pool.options).toMatchObject({ ssl: { rejectUnauthorized: false } });
+    expect(new URL(pool.connectionString).searchParams.get("sslmode")).toBe("require");
+  });
+
+  it("verifies the server against the record's CA under verify-full", () => {
+    const ca = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n";
+    vi.stubEnv(
+      "OCEL_RESOURCE_POSTGRES_orders",
+      JSON.stringify({
+        name: "orders",
+        postgres: {
+          host: "db",
+          port: 5432,
+          database: "d",
+          username: "u",
+          password: "p",
+          tlsMode: "verify-full",
+          tlsCa: ca,
+        },
+      }),
+    );
+
+    const pool = postgres("orders");
+
+    expect(pool.options).toMatchObject({ ssl: { rejectUnauthorized: true, ca } });
+    expect(new URL(pool.connectionString).searchParams.get("sslmode")).toBe("verify-full");
+  });
+
+  it("leaves tls to the driver when the record names no mode", () => {
+    vi.stubEnv(
+      "OCEL_RESOURCE_POSTGRES_orders",
+      JSON.stringify({
+        name: "orders",
+        postgres: { host: "db", port: 5432, database: "d", username: "u", password: "p" },
+      }),
+    );
+
+    expect(postgres("orders").options).not.toHaveProperty("ssl");
+  });
+
   it("fails cold start naming both types when the record is of another type", () => {
     vi.stubEnv(
       "OCEL_RESOURCE_POSTGRES_orders",
