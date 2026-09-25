@@ -110,8 +110,8 @@ func TestTheLastDestroyTakesTheAgentAndItsUnitsAndASiblingClassKeepsThem(t *test
 
 	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
 	keys := []byte(aKey + "\n")
-	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64))}
-	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64))}
+	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
+	beside := Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))}
 	for _, name := range []string{LiveService, LiveSocketUnit, LiveBinary, liveUnitFile, liveSocketFile} {
 		if kept := removalOf(removing(standing, beside, appsStanding{}), name); kept.action == providerkit.ActionDelete {
 			t.Errorf("destroying one class takes %s, and the sibling class's containers still read their values through it", name)
@@ -122,7 +122,7 @@ func TestTheLastDestroyTakesTheAgentAndItsUnitsAndASiblingClassKeepsThem(t *test
 	}
 
 	stood := machine(map[providerkit.Class][]Item{production: bootstrapped(t, production)})
-	if err := Bootstrap(stood.host(), testVendor).Remove(context.Background(), production, nil); err != nil {
+	if err := Bootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), production, nil); err != nil {
 		t.Fatalf("Remove() = %v", err)
 	}
 	taken := strings.Join(stood.commands(), "\n")

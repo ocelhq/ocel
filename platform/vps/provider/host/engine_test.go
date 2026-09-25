@@ -112,7 +112,7 @@ func proxyStanding(t *testing.T) standingProxy {
 	taken(t, board)
 	taken(t, name)
 	for what, script := range map[string]string{
-		"the switchboard": switchboardStanding(switchboardBinary(arch)).writing(containerRising),
+		"the switchboard": switchboardStanding(switchboardBinary(arch), Front{}).writing(containerRising),
 		"the proxy":       frontProxy().writing(containerRising),
 	} {
 		if out, err := exec.Command("/bin/sh", "-c", stood.here(script)).CombinedOutput(); err != nil {
@@ -156,7 +156,7 @@ func TestTheProbeReadsARealEngineExactlyAsTheItemStatesIt(t *testing.T) {
 			filepath.Join(stood.dir, "front") + ":" + filepath.Join(stood.dir, "front") + ":ro",
 			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
 		}},
-		{stood.board, switchboardStanding(switchboardBinary(arch)), []string{
+		{stood.board, switchboardStanding(switchboardBinary(arch), Front{}), []string{
 			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
 			filepath.Join(stood.dir, "routing") + ":" + filepath.Join(stood.dir, "routing") + ":ro",
 			filepath.Join(stood.dir, "connector") + ":" + filepath.Join(stood.dir, "connector") + ":ro",
@@ -201,14 +201,14 @@ func TestAProbeWithNoRootReadsABindWhoseSourceTheHostReplacedAsMoved(t *testing.
 			filepath.Join(stood.dir, "front") + ":" + filepath.Join(stood.dir, "front") + ":ro",
 			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
 		}},
-		{stood.board, switchboardStanding(switchboardBinary(arch)), filepath.Join(stood.dir, "connector"), false, []string{
+		{stood.board, switchboardStanding(switchboardBinary(arch), Front{}), filepath.Join(stood.dir, "connector"), false, []string{
 			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
 			filepath.Join(stood.dir, "routing") + ":" + filepath.Join(stood.dir, "routing") + ":ro",
 			filepath.Join(stood.dir, "connector") + ":" + filepath.Join(stood.dir, "connector") + ":ro",
 			filepath.Join(stood.dir, "control") + ":" + filepath.Join(stood.dir, "control"),
 			filepath.Join(stood.dir, "front") + ":" + filepath.Join(stood.dir, "front"),
 		}},
-		{stood.board, switchboardStanding(switchboardBinary(arch)), filepath.Dir(stood.binary), true, []string{
+		{stood.board, switchboardStanding(switchboardBinary(arch), Front{}), filepath.Dir(stood.binary), true, []string{
 			filepath.Join(stood.dir, "switchboard") + ":" + switchboardMount + ":ro",
 			filepath.Join(stood.dir, "routing") + ":" + filepath.Join(stood.dir, "routing") + ":ro",
 			filepath.Join(stood.dir, "connector") + ":" + filepath.Join(stood.dir, "connector") + ":ro",
@@ -432,7 +432,7 @@ func (p standingProxy) stages(t *testing.T, held []byte, state RoutingTable, con
 	t.Helper()
 
 	written := mustWrite(t, state)
-	write := exec.Command("/bin/sh", "-c", p.here(stagedWrite(tableDigest(contentSum(held)))))
+	write := exec.Command("/bin/sh", "-c", p.here(stagedWrite(tableDigest(contentSum(held)), true)))
 	write.Stdin = strings.NewReader(pairFed(routingPair{table: written, config: []byte(p.here(string(config)))}))
 	if out, err := write.CombinedOutput(); err != nil {
 		t.Fatalf("the staged write a deploy makes = %v\n%s", err, out)

@@ -37,6 +37,7 @@ func (c *sudoless) Stream(_ context.Context, command string, _ io.Reader) (sessi
 		return session.Result{Stdout: c.stamped}, nil
 	case c.stamped != "" && strings.Contains(command, "for p in"):
 		return session.Result{Stdout: KindFile + "\t" + StampPath(providerkit.ClassProduction) + "\t644\troot\tabc\n" +
+			KindFile + "\t" + FrontRecordPath + "\t644\troot\tdef\n" +
 			KindSealKey + "\t" + SealKeyPath(providerkit.ClassProduction) + "\t400\troot\t\t2026-09-23T23:27:00Z\n"}, nil
 	default:
 		return session.Result{}, nil
@@ -58,14 +59,14 @@ func (c *sudoless) elevated() []string {
 }
 
 func hostFor(conn *sudoless) *Host {
-	return New(func(context.Context) (Conn, error) { return conn, nil }, Keys{}, nil)
+	return New(func(context.Context) (Conn, error) { return conn, nil }, Keys{}, nil, Front{})
 }
 
 func TestDescribingAHostNeedsNoPowerToWriteToIt(t *testing.T) {
 	conn := &sudoless{}
 	ctx := context.Background()
 
-	described, err := Bootstrap(hostFor(conn), testVendor).Describe(ctx, providerkit.ClassProduction)
+	described, err := Bootstrap(hostFor(conn), testVendor, "shop").Describe(ctx, providerkit.ClassProduction)
 	if err != nil {
 		t.Fatalf("Describe() = %v, want what this login can see of the host: the preflight reports bootstrap standing through Describe, and a Describe that demands root turns every deploy under %s into a refusal that carries no claims, no standing and no known slugs",
 			err, "ocel-deploy")
@@ -95,7 +96,7 @@ func stampedBy(t *testing.T, conn *sudoless, change func(map[string]string)) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	written := digests(Items(providerkit.ClassProduction, keys, ArchAMD64))
+	written := digests(Items(providerkit.ClassProduction, keys, ArchAMD64, Front{}))
 	change(written)
 	stamp, err := json.Marshal(Stamp{
 		Schema:  providerkit.BootstrapSchema,
@@ -113,7 +114,7 @@ func TestALoginThatCannotElevateSeesTheBootstrapThisBuildWroteAsCurrent(t *testi
 	conn := &sudoless{}
 	stampedBy(t, conn, func(map[string]string) {})
 
-	described, err := Bootstrap(hostFor(conn), testVendor).Describe(context.Background(), providerkit.ClassProduction)
+	described, err := Bootstrap(hostFor(conn), testVendor, "shop").Describe(context.Background(), providerkit.ClassProduction)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +136,7 @@ func TestALoginThatCannotElevateStillSeesABootstrapAnotherBuildWrote(t *testing.
 		}
 	})
 
-	described, err := Bootstrap(hostFor(conn), testVendor).Describe(context.Background(), providerkit.ClassProduction)
+	described, err := Bootstrap(hostFor(conn), testVendor, "shop").Describe(context.Background(), providerkit.ClassProduction)
 	if err != nil {
 		t.Fatal(err)
 	}

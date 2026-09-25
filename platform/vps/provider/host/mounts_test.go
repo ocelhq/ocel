@@ -101,7 +101,7 @@ func mountedAs(container boxContainer, moved int) (inside, stats map[string]stri
 func TestAContainerHoldingAMountTheHostNoLongerHasIsDrift(t *testing.T) {
 	t.Parallel()
 
-	for _, container := range []boxContainer{frontProxy(), switchboardStanding(nil)} {
+	for _, container := range []boxContainer{frontProxy(), switchboardStanding(nil, Front{})} {
 		stated := container.item("").Digest()
 		facts := engineSays(container, migrateHeld)
 		current, _ := mountedAs(container, -1)
@@ -132,7 +132,7 @@ func TestAContainerHoldingAMountTheHostNoLongerHasIsPlannedBack(t *testing.T) {
 
 	class := providerkit.ClassProduction
 	keys := []byte(aKey + "\n")
-	items := Items(class, keys, ArchAMD64)
+	items := Items(class, keys, ArchAMD64, Front{})
 	minted := []byte("the key this box minted for itself")
 	for _, stood := range []Item{frontItem(), boardItem()} {
 		moved := bytes.Replace(stood.Content, []byte(mountsFact+mountsHeld), []byte(mountsFact+mountsMoved), 1)

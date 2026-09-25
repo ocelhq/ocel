@@ -223,7 +223,11 @@ func (h *Host) ProxyStanding(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, asked := range []boxContainer{switchboardStanding(nil), frontProxy()} {
+	asking := []boxContainer{switchboardStanding(nil, h.fronts)}
+	if !h.fronts.adopted() {
+		asking = append(asking, frontProxy())
+	}
+	for _, asked := range asking {
 		if err := h.answers(ctx, asked, elevation); err != nil {
 			return err
 		}
@@ -291,9 +295,14 @@ func stateField(state, label string) string {
 }
 
 func (h *Host) ServingPortsHeld(ctx context.Context) error {
+	held := h.portHeld
+	holder := caddy.Container
+	if h.fronts.adopted() {
+		held, holder = h.portAdopted, "your proxy"
+	}
 	var found []string
 	for _, port := range proxyServing() {
-		refusal, err := h.portHeld(ctx, port)
+		refusal, err := held(ctx, port)
 		if err != nil {
 			return err
 		}
@@ -306,7 +315,7 @@ func (h *Host) ServingPortsHeld(ctx context.Context) error {
 	}
 	return providerkit.Refuse(providerkit.CodeNotReady,
 		"%s must hold ports %s: %s",
-		caddy.Container, strings.Join(proxyServing(), " and "), strings.Join(found, "; "))
+		holder, strings.Join(proxyServing(), " and "), strings.Join(found, "; "))
 }
 
 func (h *Host) portHeld(ctx context.Context, port string) (string, error) {
@@ -332,6 +341,28 @@ func (h *Host) portHeld(ctx context.Context, port string) (string, error) {
 	}
 	return fmt.Sprintf("nothing holds port %s; run `ocel bootstrap %s`",
 		port, providerkit.ClassProduction), nil
+}
+
+func (h *Host) portAdopted(ctx context.Context, port string) (string, error) {
+	named, err := h.Publishing(ctx, port)
+	if err != nil {
+		return "", err
+	}
+	if slices.Contains(named, caddy.Container) {
+		return fmt.Sprintf("port %s is published by %s, ocel's own proxy; run `docker rm -f %s` and start your proxy on %s",
+			port, caddy.Container, caddy.Container, port), nil
+	}
+	if len(named) > 0 {
+		return "", nil
+	}
+	held, err := h.Listening(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(listeners.On(held, portNumber(port))) > 0 {
+		return "", nil
+	}
+	return fmt.Sprintf("nothing holds port %s; start your proxy on it", port), nil
 }
 
 func portNumber(port string) int {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
+	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
@@ -151,6 +152,27 @@ func (b frontBox) Ran(ctx context.Context, what string, argv []string) (string, 
 		return "", err
 	}
 	return b.h.ran(ctx, what, words(argv), nil, elevation)
+}
+
+func (b frontBox) Listening(ctx context.Context) ([]listeners.Listener, error) {
+	return b.h.Listening(ctx)
+}
+
+func (b frontBox) Publishing(ctx context.Context, port string) ([]string, error) {
+	return b.h.Publishing(ctx, port)
+}
+
+func (b frontBox) Claimed(ctx context.Context) ([]string, error) {
+	state, err := b.h.routingTable(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return state.hostnames(), nil
+}
+
+func (b frontBox) Probe(ctx context.Context, hostname string) (string, string, error) {
+	said, err := b.h.ServedEdge(ctx, hostname)
+	return said.Edge, said.Unreached, err
 }
 
 func (b frontBox) Said(ctx context.Context, argv []string) (string, error) {

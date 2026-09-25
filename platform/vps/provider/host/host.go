@@ -10,7 +10,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
-	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -27,6 +26,7 @@ type Host struct {
 	dial   Dial
 	deploy Keys
 	pins   []Pin
+	fronts Front
 	front  proxy.Proxy
 
 	elevating sync.Mutex
@@ -58,9 +58,9 @@ type Host struct {
 	tiers     map[providerkit.Class]bool
 }
 
-func New(dial Dial, deploy Keys, pins []Pin) *Host {
-	h := &Host{dial: dial, deploy: deploy, pins: pins, tiers: map[providerkit.Class]bool{}}
-	h.front = caddy.Builtin{Box: frontBox{h}}
+func New(dial Dial, deploy Keys, pins []Pin, front Front) *Host {
+	h := &Host{dial: dial, deploy: deploy, pins: pins, fronts: front, tiers: map[providerkit.Class]bool{}}
+	h.front = openFront(front, frontBox{h})
 	return h
 }
 
@@ -359,6 +359,7 @@ type Reading struct {
 	Stamp    Stamp
 	Seal     Seal
 	Observed map[string]string
+	Front    Front
 
 	unelevated  bool
 	rerendering bool
@@ -373,7 +374,7 @@ func (r Reading) standing(kind, path string) bool {
 
 func (r Reading) unfinished() bool { return r.Present && r.Stamp.State != StateComplete }
 
-func (r Reading) Items() []Item { return Items(r.Class, r.Keys, r.Arch) }
+func (r Reading) Items() []Item { return Items(r.Class, r.Keys, r.Arch, r.Front) }
 
 func (r Reading) settled() bool {
 	items := r.Items()
@@ -445,7 +446,7 @@ func (h *Host) observe(ctx context.Context, class providerkit.Class, keys []byte
 }
 
 func (h *Host) surveyed(ctx context.Context, class providerkit.Class, keys []byte, arch string, drawn drawing) (Reading, error) {
-	rendered, err := drawn.ask(ctx, "survey what "+string(class)+" holds", drawn.survey(Items(class, keys, arch), StampPath(class)), nil)
+	rendered, err := drawn.ask(ctx, "survey what "+string(class)+" holds", drawn.survey(Items(class, keys, arch, h.fronts), StampPath(class), FrontRecordPath), nil)
 	if err != nil {
 		return Reading{}, err
 	}
@@ -453,7 +454,7 @@ func (h *Host) surveyed(ctx context.Context, class providerkit.Class, keys []byt
 	if err != nil {
 		return Reading{}, err
 	}
-	return Reading{Class: class, Keys: keys, Arch: arch, Seal: held, Observed: observed}, nil
+	return Reading{Class: class, Keys: keys, Arch: arch, Seal: held, Observed: observed, Front: h.fronts}, nil
 }
 
 func (h *Host) read(ctx context.Context, class providerkit.Class, keys []byte, drawn drawing) (Reading, error) {

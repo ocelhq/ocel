@@ -16,8 +16,9 @@ const (
 )
 
 const (
-	ProxyRenewal = "the proxy renews it over http-01"
-	PinRenewal   = "pinned by you; you renew it"
+	ProxyRenewal   = "the proxy renews it over http-01"
+	PinRenewal     = "pinned by you; you renew it"
+	AdoptedRenewal = "your proxy renews it"
 )
 
 const RenewalWindow = 30 * 24 * time.Hour

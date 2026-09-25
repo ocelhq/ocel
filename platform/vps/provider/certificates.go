@@ -48,6 +48,9 @@ func (p *Provider) InspectCertificate(ctx context.Context, _ edge.Kind, hostname
 		return health, nil
 	}
 	health.Renewal = certs.Renewal(cert.ID)
+	if !p.host.FrontProxy().Guarantees().IssuesCertificates {
+		health.Renewal = certs.AdoptedRenewal
+	}
 	if path, pinned := certs.Pinned(cert.ID); pinned {
 		return p.pinnedHealth(ctx, path, hostname, health)
 	}

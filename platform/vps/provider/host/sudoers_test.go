@@ -11,7 +11,7 @@ func TestEachClassIsWhitelistedOnItsOwnSudoersLineNamingItsClassAlone(t *testing
 	t.Parallel()
 
 	for _, class := range []providerkit.Class{providerkit.ClassProduction, providerkit.ClassPreview} {
-		fragment := written(Items(class, []byte(aKey+"\n"), ArchAMD64), KindFile, sudoersSeal(class))
+		fragment := written(Items(class, []byte(aKey+"\n"), ArchAMD64, Front{}), KindFile, sudoersSeal(class))
 		if fragment.Name == "" {
 			t.Fatalf("bootstrapping %s writes no sudoers line of its own", class)
 		}

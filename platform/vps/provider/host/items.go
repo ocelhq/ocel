@@ -68,6 +68,8 @@ type Item struct {
 	Slow    bool
 	Note    string
 	box     *boxContainer
+
+	rendered *Item
 }
 
 func ClassItems(class providerkit.Class) []Item {
@@ -95,8 +97,8 @@ func StorageItems(class providerkit.Class, keys []byte) []Item {
 	}
 }
 
-func Items(class providerkit.Class, keys []byte, arch string) []Item {
-	return slices.Concat(ClassItems(class), StorageItems(class, keys), EngineItems(), LiveItems(arch), ProxyItems(arch), BackupItems())
+func Items(class providerkit.Class, keys []byte, arch string, front Front) []Item {
+	return slices.Concat(ClassItems(class), StorageItems(class, keys), EngineItems(), LiveItems(arch), ProxyItems(arch, front), BackupItems())
 }
 
 func dir(name string, mode fs.FileMode, owner string, note string) Item {
@@ -137,8 +139,10 @@ func (i Item) command() string {
 		return networkCommand()
 	case KindContainer:
 		return i.box.writing(containerRising)
-	case KindProxyConfig, KindRoutingTable:
-		return seedingRouting(routingTableItem(), proxyConfigItem())
+	case KindProxyConfig:
+		return seedingRouting(routingTableItem())
+	case KindRoutingTable:
+		return seedingRouting(i)
 	case KindDir:
 		return fmt.Sprintf("install -d -m %04o -o %s -g %s %s", i.Mode, i.Owner, i.Owner, quoted(i.Name))
 	default:

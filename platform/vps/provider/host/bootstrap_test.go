@@ -22,15 +22,15 @@ func standingHost() Reading {
 		Class:    class,
 		Present:  true,
 		Keys:     keys,
-		Stamp:    Stamp{Schema: providerkit.BootstrapSchema, State: StateComplete, Digests: digests(Items(class, keys, ArchAMD64))},
-		Observed: digests(Items(class, keys, ArchAMD64)),
+		Stamp:    Stamp{Schema: providerkit.BootstrapSchema, State: StateComplete, Digests: digests(Items(class, keys, ArchAMD64, Front{}))},
+		Observed: digests(Items(class, keys, ArchAMD64, Front{})),
 	}
 }
 
 func drifted(t *testing.T, read Reading, name string) Reading {
 	t.Helper()
 
-	for _, item := range Items(read.Class, read.Keys, ArchAMD64) {
+	for _, item := range Items(read.Class, read.Keys, ArchAMD64, Front{}) {
 		if item.Name != name {
 			continue
 		}
@@ -116,7 +116,7 @@ func TestHealLeavesWhatADaemonHoldsRatherThanRefusingOverIt(t *testing.T) {
 		}
 	}
 
-	for _, item := range Items(class, []byte(aKey+"\n"), ArchAMD64) {
+	for _, item := range Items(class, []byte(aKey+"\n"), ArchAMD64, Front{}) {
 		if daemonHeld(item) && deployOwned(item) {
 			t.Errorf("%s is both a daemon's to report and heal's to write, and the two dispositions cannot both hold", item.ID())
 		}
@@ -165,7 +165,7 @@ func TestHealIsNotWedgedByWhatItsOwnLoginCannotSee(t *testing.T) {
 	class := providerkit.ClassProduction
 	read := drifted(t, standingHost(), RecordsDir(class))
 	var unread []string
-	for _, item := range Items(class, read.Keys, ArchAMD64) {
+	for _, item := range Items(class, read.Keys, ArchAMD64, Front{}) {
 		hidden := item.Kind == KindFile && item.Owner == rootOwner && item.Mode&0o004 == 0
 		if !hidden && item.Kind != KindUser {
 			continue
@@ -209,7 +209,7 @@ func TestHealAsALoginThatIsNeitherRootNorSudoAsksForNeither(t *testing.T) {
 		return session.Result{Stdout: aKey + "\n"}, true
 	}
 
-	err := Bootstrap(stood.host(), testVendor).Apply(context.Background(),
+	err := Bootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
 		providerkit.BootstrapRequest{Class: class, Writer: "the-suite", Heal: true, Unattended: true}, nil)
 	if err != nil {
 		t.Fatalf("heal driven by the deploy login = %v, want what that login owns reasserted without asking for root", err)
@@ -261,7 +261,7 @@ func TestAnUnattendedApplyInstallsWhatIsAbsent(t *testing.T) {
 
 	class := providerkit.ClassProduction
 	fresh := Reading{Arch: ArchAMD64, Class: class, Observed: map[string]string{}}
-	if err := refuseReplacements(fresh, Items(class, nil, ArchAMD64)); err != nil {
+	if err := refuseReplacements(fresh, Items(class, nil, ArchAMD64, Front{})); err != nil {
 		t.Errorf("an unattended apply over a machine nothing has bootstrapped = %v, want the installs to proceed", err)
 	}
 }
@@ -272,7 +272,7 @@ func TestAnUnattendedApplyWillNotWriteOverWhatAlreadyStands(t *testing.T) {
 	class := providerkit.ClassProduction
 	for _, name := range []string{recordsHelper, SealKeyPath(class), deployUser, dockerEngine} {
 		read := drifted(t, standingHost(), name)
-		refused := refusal(t, refuseReplacements(read, Items(read.Class, read.Keys, ArchAMD64)), providerkit.CodeNotReady)
+		refused := refusal(t, refuseReplacements(read, Items(read.Class, read.Keys, ArchAMD64, Front{})), providerkit.CodeNotReady)
 		if !strings.Contains(refused.Message, name) {
 			t.Errorf("the refusal says %q, want it to name %s as the thing it would write over", refused.Message, name)
 		}
@@ -288,7 +288,7 @@ func TestAnUnattendedApplyConvergesAHostRatherThanRefusingEveryChange(t *testing
 	class := providerkit.ClassProduction
 	for _, name := range []string{dockerUnit, RecordsDir(class), stateRoot, helperRoot} {
 		read := drifted(t, standingHost(), name)
-		if err := refuseReplacements(read, Items(read.Class, read.Keys, ArchAMD64)); err != nil {
+		if err := refuseReplacements(read, Items(read.Class, read.Keys, ArchAMD64, Front{})); err != nil {
 			t.Errorf("an unattended apply over a host whose %s has moved = %v, want a converge that destroys nothing to proceed", name, err)
 		}
 	}
@@ -298,7 +298,7 @@ func TestNothingHealMayWriteIsAReplacementClassChange(t *testing.T) {
 	t.Parallel()
 
 	class := providerkit.ClassProduction
-	for _, item := range Items(class, []byte(aKey+"\n"), ArchAMD64) {
+	for _, item := range Items(class, []byte(aKey+"\n"), ArchAMD64, Front{}) {
 		if deployOwned(item) && replacing(item) {
 			t.Errorf("heal may write %s and writing it replaces rather than converges, so the one unattended path with nobody watching would rebuild it", item.ID())
 		}

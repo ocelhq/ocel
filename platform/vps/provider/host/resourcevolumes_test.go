@@ -59,7 +59,7 @@ func TestAClassDestroyRemovesTheVolumesItPlannedToAfterTheContainersThatMountThe
 		return session.Result{}, false
 	}
 	report := &said{}
-	if err := Bootstrap(stood.host(), testVendor).Remove(context.Background(), class, report); err != nil {
+	if err := Bootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, report); err != nil {
 		t.Fatalf("Remove() = %v, and a class that kept a volume can never be destroyed", err)
 	}
 	if taken := "removed " + KindResourceVolumes + " " + classSelector(class); !slices.Contains(report.lines, taken) {

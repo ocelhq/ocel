@@ -152,6 +152,9 @@ func (c *Connector) Install(ctx context.Context, hostname string, binary, config
 		return ConnectorStanding{}, err
 	}
 	say(report, "routed "+hostname+switchboard.ConnectorPath)
+	if route := c.host.RouteBy(hostname); route != "" {
+		say(report, route)
+	}
 	return c.Describe(ctx)
 }
 

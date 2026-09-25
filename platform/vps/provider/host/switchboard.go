@@ -21,15 +21,20 @@ var switchboardCapabilities = []string{"DAC_OVERRIDE", "DAC_READ_SEARCH"}
 
 func switchboardBinary(arch string) []byte { return embedded(switchboard.Name, arch) }
 
-func switchboardStanding(binary []byte) boxContainer {
+func switchboardStanding(binary []byte, front Front) boxContainer {
+	var relaying []string
+	if front.adopted() {
+		relaying = []string{"--relay", switchboard.OwnNetwork}
+	}
 	return boxContainer{
 		name:  SwitchboardContainer,
 		image: SwitchboardImage,
-		command: []string{SwitchboardMounted, "serve",
+		command: append([]string{SwitchboardMounted, "serve",
 			"--listen", ":" + switchboardPort,
 			"--front", switchboard.FrontSocket,
 			"--table", live.RoutingTable,
-		},
+		}, relaying...),
+		ports:  front.published(),
 		config: contentSum(binary),
 		binds: []string{
 			SwitchboardDir + ":" + switchboardMount + ":ro",

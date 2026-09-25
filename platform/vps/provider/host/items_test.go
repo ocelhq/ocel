@@ -17,7 +17,7 @@ const aKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExample bootstrap@laptop"
 func TestTheClassTierIsRootsAndTheStateTierIsTheDeployPrincipalsAlone(t *testing.T) {
 	t.Parallel()
 
-	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64)
+	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
 	owners := map[string]string{}
 	for _, item := range items {
 		owners[item.Name] = item.Owner
@@ -48,7 +48,7 @@ func TestTheRoutingTableIsAloneInADirectoryOfItsOwnThatIsWrittenBeforeIt(t *test
 	if held == stateRoot || held == proxyRoot {
 		t.Fatalf("the routing table sits directly in %s, and a container that reads it through a bind of its directory would read everything else there too", held)
 	}
-	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64)
+	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
 	made := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindDir && item.Name == held })
 	table := slices.IndexFunc(items, func(item Item) bool { return strings.Contains(item.command(), live.RoutingTable) })
 	if made < 0 || table < 0 || made > table {
@@ -64,7 +64,7 @@ func TestTheRoutingTableIsAloneInADirectoryOfItsOwnThatIsWrittenBeforeIt(t *test
 func TestThePrincipalIsWrittenBeforeAnythingItOwns(t *testing.T) {
 	t.Parallel()
 
-	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64)
+	items := Items(providerkit.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
 	account := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindUser })
 	if account < 0 {
 		t.Fatal("nothing in the item set creates the deploy principal")
@@ -81,7 +81,7 @@ func TestTheDeployKeysAreTheOnesTheItemCarries(t *testing.T) {
 
 	keys := []byte(aKey + "\n")
 	var written Item
-	for _, item := range Items(providerkit.ClassProduction, keys, ArchAMD64) {
+	for _, item := range Items(providerkit.ClassProduction, keys, ArchAMD64, Front{}) {
 		if item.Name == authorizedKeys {
 			written = item
 		}
@@ -137,7 +137,7 @@ func TestAPrincipalNothingHasCreatedIsPlannedAndOneThatStandsIsKept(t *testing.T
 		t.Errorf("a host with no %s plans %q, want it created", deployUser, fresh.Action)
 	}
 
-	standing := Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: digests(Items(class, keys, ArchAMD64))}
+	standing := Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: digests(Items(class, keys, ArchAMD64, Front{}))}
 	if kept := planFor(planned(standing), principal().ID()); kept.Action != providerkit.ActionKeep {
 		t.Errorf("a host whose principal stands as ocel writes it plans %q, want it kept", kept.Action)
 	}
@@ -152,7 +152,7 @@ func TestKeysThatChangedRePlanTheAuthorizedKeysAndNothingBeside(t *testing.T) {
 	t.Parallel()
 
 	class := providerkit.ClassProduction
-	stood := Items(class, []byte(aKey+"\n"), ArchAMD64)
+	stood := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
 	moved := Reading{Arch: ArchAMD64, Class: class, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: digests(stood)}
 	for _, change := range planned(moved) {
 		want := providerkit.ActionKeep
@@ -170,7 +170,7 @@ func TestThePrincipalGoesWithTheLastClassAndStandsWhileASiblingDoes(t *testing.T
 
 	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
 	keys := []byte(aKey + "\n")
-	held := digests(Items(production, keys, ArchAMD64))
+	held := digests(Items(production, keys, ArchAMD64, Front{}))
 
 	alone := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsStanding{})
 	taken := slices.IndexFunc(alone, func(r removal) bool { return r.kind == KindUser && r.path == deployUser })
@@ -181,7 +181,7 @@ func TestThePrincipalGoesWithTheLastClassAndStandsWhileASiblingDoes(t *testing.T
 		t.Error("the principal is removed before its home, and userdel over a home ocel still holds is a home nothing owns")
 	}
 
-	beside := digests(Items(preview, keys, ArchAMD64))
+	beside := digests(Items(preview, keys, ArchAMD64, Front{}))
 	shared := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: beside}, appsStanding{})
 	for _, r := range shared {
 		if r.kind == KindUser {
@@ -195,11 +195,11 @@ func TestNothingIsEverTakenAfterTheStampButTheRootAboveIt(t *testing.T) {
 
 	production, preview := providerkit.ClassProduction, providerkit.ClassPreview
 	keys := []byte(aKey + "\n")
-	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64))}
+	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
 
 	for name, sibling := range map[string]Reading{
 		"the last class on the host": {Class: preview, Observed: map[string]string{}},
-		"a class beside its sibling": {Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64))},
+		"a class beside its sibling": {Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))},
 	} {
 		taken := removing(standing, sibling, appsStanding{})
 		stamp := index(taken, ClassDir(production))

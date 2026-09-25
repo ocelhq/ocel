@@ -38,7 +38,7 @@ func running() map[string]string {
 	return map[string]string{
 		appContainer:      words(containerRun(valued(), handedTo(valued()))),
 		proxyContainer:    words(frontProxy().run()),
-		boardContainer:    words(switchboardStanding(nil).run()),
+		boardContainer:    words(switchboardStanding(nil, Front{}).run()),
 		resourceContainer: words(resourceRun(resourced(), "0123456789ab", EnvFile(resourced().Class, resourced().Name))),
 	}
 }
