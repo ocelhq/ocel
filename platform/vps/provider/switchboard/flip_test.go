@@ -2,10 +2,12 @@ package switchboard_test
 
 import (
 	"bufio"
+	"context"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"strings"
 	"sync"
@@ -305,6 +307,40 @@ func TestADrainCeilingCutsEveryRequestAndStreamStillOpenOnARetireeNoLongerRouted
 	case <-rest:
 	case <-time.After(5 * time.Second):
 		t.Error("the stream held across the ceiling is still open, want it cut once the drain expired")
+	}
+}
+
+func TestAFlipCutShortAfterItsFirstDrainLineEndsItsAnswerIncomplete(t *testing.T) {
+	t.Parallel()
+
+	blue, green := holdingBackend(t, "blue"), backend(t, "green")
+	board, at := standing(t, routing(t, map[string]string{"shop.example.com": blue.address}))
+	go asking(at, "shop.example.com", "/held")
+	<-blue.arrived
+
+	stopping, stop := context.WithCancel(t.Context())
+	control := httptest.NewUnstartedServer(board.Control())
+	control.Config.BaseContext = func(net.Listener) context.Context { return stopping }
+	control.Start()
+	t.Cleanup(control.Close)
+	idle := "127.0.0.1:1"
+	form := url.Values{
+		switchboard.TableField:  {tableAt(t, routing(t, map[string]string{"shop.example.com": green}))},
+		switchboard.RetireField: {idle, blue.address},
+		switchboard.WindowField: {"30s"},
+	}
+	answer, err := http.PostForm(control.URL+switchboard.FlipPath, form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer answer.Body.Close()
+	lines := bufio.NewReader(answer.Body)
+	if first, err := lines.ReadString('\n'); err != nil || first != caddyadmin.Drained+" "+idle+"\n" {
+		t.Fatalf("the flip first answered %q, %v, want the idle retiree drained", first, err)
+	}
+	stop()
+	if rest, err := io.ReadAll(lines); err == nil {
+		t.Errorf("a flip stopped while %s still drained ended its answer cleanly after %q, want it cut short so no caller reads a partial drain report as a whole one", blue.address, rest)
 	}
 }
 

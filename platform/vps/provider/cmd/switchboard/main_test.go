@@ -300,6 +300,30 @@ func TestAFlipWhoseCeilingPassesPrintsWhatTheRetireeStillHeldAndSucceeds(t *test
 	}
 }
 
+func TestAFlipWhoseAnswerIsCutShortAfterADrainLineExitsRefused(t *testing.T) {
+	control := controlAt(t)
+	listener, err := net.Listen("unix", control)
+	if err != nil {
+		t.Fatal(err)
+	}
+	partial := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, caddyadmin.Drained+" 127.0.0.1:1\n")
+		_ = http.NewResponseController(w).Flush()
+		panic(http.ErrAbortHandler)
+	}))
+	partial.Listener = listener
+	partial.Start()
+	t.Cleanup(partial.Close)
+
+	code, out, errs := ran(t, "flip", "--drain-timeout", "5", "--retire", "127.0.0.1:1", "--retire", "127.0.0.1:2", tableFile(t, nil))
+	if code != exitRefused {
+		t.Errorf("a flip whose answer stopped after one of two retirees = %d, %q %q, want %d: a partial drain report is not a finished flip", code, out, errs, exitRefused)
+	}
+	if !strings.Contains(errs, "short") {
+		t.Errorf("the refusal read %q, want it to say the switchboard cut its answer short", errs)
+	}
+}
+
 func TestAFlipTheSwitchboardRefusesSwitchesNothing(t *testing.T) {
 	blue := backend(t, "blue")
 	stood := served(t, tableFile(t, map[string]string{"shop.example.com": blue}))

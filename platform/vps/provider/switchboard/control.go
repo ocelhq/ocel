@@ -62,7 +62,11 @@ func (b *Board) flipped(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, drain)
 		_ = flusher.Flush()
 	})
-	if err != nil && !told {
+	switch {
+	case err == nil:
+	case told:
+		panic(http.ErrAbortHandler)
+	default:
 		refused(w, err)
 	}
 }
