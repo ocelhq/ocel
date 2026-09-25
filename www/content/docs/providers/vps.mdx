@@ -79,19 +79,35 @@ location / {
 }
 ```
 
-A proxy running in a container can't reach the host's loopback. Connect it to the `ocel`
-network (`docker network connect ocel <container>`) and forward to
-`http://ocel-switchboard:8080`.
+A proxy running in a container can't reach the host's loopback. Put it on the `ocel` network
+and forward to `http://ocel-switchboard:8080`. `docker network connect ocel <container>` does
+that until the container is recreated: `docker compose up` recreates it whenever its
+definition changes, and the new container is back on its own networks only. Declare the
+network in the compose file instead, so every container compose creates joins it:
+
+```yaml title="compose.yaml"
+services:
+  proxy:
+    networks: [default, ocel]
+
+networks:
+  ocel:
+    external: true
+```
+
+Bootstrap creates the `ocel` network, or uses the one already there. To start your proxy
+before bootstrapping, create it yourself with `docker network create ocel`.
 
 After printing the route, `ocel domain add` waits until the box proves it: a request to
 `127.0.0.1:443` for the hostname must come back from ocel, with a certificate that covers the
-name, `X-Forwarded-Proto: https` and the hostname in `Host`. A preview base asks for
-`*.<base>` and is proved on `ocel-edge-probe.<base>`.
+name, `X-Forwarded-Proto: https`, and the hostname in `Host` and in `X-Forwarded-Host` if your
+proxy sets it. A preview base asks for `*.<base>` and is proved on `ocel-edge-probe.<base>`.
 
 The switchboard keeps `X-Forwarded-Proto` and `X-Forwarded-Host` from your proxy, because apps
-build their URLs from them. It never takes `X-Forwarded-For` from it: every process on the
-machine reaches the same port, so any of them could claim to be any client. Apps see your
-proxy's address as the client.
+build their URLs from them. It hears them only from the `ocel` network, which the loopback
+port arrives on, and never from your apps' own networks. It never takes `X-Forwarded-For` from
+your proxy: every process on the machine reaches the same port, so any of them could claim to
+be any client. Apps see your proxy's address as the client.
 
 Your proxy holds the certificates, so `certificates` and `proxy` can't be set together. One
 proxy fronts a box. Every project on it must name the same `proxy`, and a deploy that
