@@ -352,7 +352,7 @@ func (p *Provider) externalBucket(in resources.Instruction, report providerkit.R
 
 func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan) (*live.Store, error) {
 	if !slices.ContainsFunc(plan.App.Values.Bindings, func(binding providerkit.Binding) bool {
-		return binding.Type == providerkit.BindingBucket
+		return binding.Type == providerkit.BindingBucket && !binding.Endpointed()
 	}) {
 		return nil, nil
 	}
@@ -456,7 +456,7 @@ func grantedBuckets(app *providerkit.AppPlan) []string {
 	}
 	var held []string
 	for _, binding := range append(slices.Clone(app.Values.Bindings), app.Grants...) {
-		if binding.Type != providerkit.BindingBucket {
+		if binding.Type != providerkit.BindingBucket || binding.Endpointed() {
 			continue
 		}
 		if spec := binding.Properties[providerkit.PropertyBucket]; spec != "" && !slices.Contains(held, spec) {

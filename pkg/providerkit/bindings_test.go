@@ -182,6 +182,22 @@ func TestReadableAs(t *testing.T) {
 		}
 	})
 
+	t.Run("refuses a published bucket the runtime has no store to reach it in", func(t *testing.T) {
+		published := providerkit.Binding{Name: "uploads", Type: providerkit.BindingBucket, Source: "terraform", Properties: map[string]string{providerkit.PropertyBucket: "acme"}}
+		if err := providerkit.ReadableAs(published, "uploads", providerkit.BindingBucket, providerkit.Proxied); err == nil {
+			t.Error("ReadableAs = nil, want a bucket ocel's backend cannot reach refused")
+		}
+	})
+
+	t.Run("admits a bucket record that names the store it lives in", func(t *testing.T) {
+		bound := providerkit.Binding{Name: "ocel:bucket.uploads", Type: providerkit.BindingBucket, Source: "ocel.json", Properties: map[string]string{
+			providerkit.PropertyBucket: "acme", providerkit.PropertyEndpoint: "https://abc.r2.cloudflarestorage.com",
+		}}
+		if err := providerkit.ReadableAs(bound, "uploads", providerkit.BindingBucket, providerkit.Proxied); err != nil {
+			t.Errorf("ReadableAs = %v, want a bucket the runtime serves from its record admitted", err)
+		}
+	})
+
 	t.Run("a shape mismatch names the declared name and the external name apart", func(t *testing.T) {
 		err := providerkit.ReadableAs(providerkit.Binding{Name: "sst-pg-orders", Type: providerkit.BindingBucket}, "orders", providerkit.BindingPostgres, providerkit.Proxied)
 		if err == nil {
