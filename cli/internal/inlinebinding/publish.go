@@ -29,7 +29,38 @@ func (c Coordinate) environment() string {
 	return c.Environment
 }
 
-func Publish(ctx context.Context, store Store, at Coordinate, records []Record) error {
+func Deploy(ctx context.Context, store Store, at Coordinate, records []Record, deploy func() error) error {
+	before, err := held(ctx, store, at)
+	if err != nil {
+		return err
+	}
+	if err := publish(ctx, store, at, records); err != nil {
+		return err
+	}
+	if err := deploy(); err != nil {
+		return err
+	}
+	after, err := held(ctx, store, at)
+	if err != nil {
+		return err
+	}
+	for name, version := range after {
+		if before[name] != version || slices.ContainsFunc(records, func(r Record) bool { return r.Binding.GetName() == name }) {
+			continue
+		}
+		if _, err := store.RemoveBinding(ctx, &envvarsv1.RemoveBindingRequest{
+			Slug:        at.Slug,
+			Tier:        at.Tier,
+			Environment: at.environment(),
+			Name:        name,
+		}); err != nil {
+			return fmt.Errorf("remove %s, which no inline binding keeps any more: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func publish(ctx context.Context, store Store, at Coordinate, records []Record) error {
 	for _, r := range records {
 		if _, err := store.SetBinding(ctx, &envvarsv1.SetBindingRequest{
 			Slug:        at.Slug,
@@ -44,30 +75,20 @@ func Publish(ctx context.Context, store Store, at Coordinate, records []Record) 
 	return nil
 }
 
-func Prune(ctx context.Context, store Store, at Coordinate, kept []Record) error {
-	held, err := store.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
+func held(ctx context.Context, store Store, at Coordinate) (map[string]uint64, error) {
+	listed, err := store.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
 		Slug:        at.Slug,
 		Tier:        at.Tier,
 		Environment: at.environment(),
 	})
 	if err != nil {
-		return fmt.Errorf("read the records inline bindings keep: %w", err)
+		return nil, fmt.Errorf("read the records inline bindings keep: %w", err)
 	}
-	for _, record := range held.GetBindings() {
-		if record.GetOwner() != naming.InlineRecordOwner || !naming.IsInlineRecord(record.GetName()) {
-			continue
-		}
-		if slices.ContainsFunc(kept, func(r Record) bool { return r.Binding.GetName() == record.GetName() }) {
-			continue
-		}
-		if _, err := store.RemoveBinding(ctx, &envvarsv1.RemoveBindingRequest{
-			Slug:        at.Slug,
-			Tier:        at.Tier,
-			Environment: at.environment(),
-			Name:        record.GetName(),
-		}); err != nil {
-			return fmt.Errorf("remove %s, which no inline binding keeps any more: %w", record.GetName(), err)
+	versions := map[string]uint64{}
+	for _, record := range listed.GetBindings() {
+		if record.GetOwner() == naming.InlineRecordOwner && naming.IsInlineRecord(record.GetName()) {
+			versions[record.GetName()] = record.GetVersion()
 		}
 	}
-	return nil
+	return versions, nil
 }

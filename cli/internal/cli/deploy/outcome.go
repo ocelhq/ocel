@@ -1,9 +1,15 @@
 package deploy
 
 import (
+	"context"
+
+	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
+	"github.com/ocelhq/ocel/cli/internal/provider"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 )
 
 type deployOutcome struct {
@@ -29,4 +35,18 @@ func (o *deployOutcome) collect(ui *runui.Session) func(*progressv1.OperationEve
 		o.promotionID = res.GetPromotionId()
 		o.flip = runui.FlipFor(res.GetFlipBound())
 	}
+}
+
+func streamDeploy(ctx context.Context, runner *provider.Runner, ui *runui.Session, slug string, req *contractv1.DeployRequest, inline []inlinebinding.Record) (deployOutcome, error) {
+	var out deployOutcome
+	records, err := runner.Vars()
+	if err != nil {
+		return out, err
+	}
+	env := req.GetEnvironment()
+	at := inlinebinding.Coordinate{Slug: slug, Tier: env.GetTier(), Environment: env.GetIdentity()}
+	err = inlinebinding.Deploy(ctx, records, at, inline, func() error {
+		return provider.Stream(ctx, runner, "Deploy", req, contractv1connect.ProviderServiceClient.Deploy, out.collect(ui))
+	})
+	return out, err
 }
