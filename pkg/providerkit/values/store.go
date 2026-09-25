@@ -44,6 +44,12 @@ type Metadata struct {
 	UpdatedAt  int64
 	Size       int64
 	Target     *Target
+	Provenance Provenance
+}
+
+type Provenance struct {
+	EnvSource string `json:"envSource,omitempty"`
+	Version   string `json:"sourceVersion,omitempty"`
 }
 
 type Target struct {
@@ -69,6 +75,7 @@ type cell struct {
 	Sealed    []byte  `json:"sealed,omitempty"`
 	Deleted   bool    `json:"deleted,omitempty"`
 	Target    *Target `json:"target,omitempty"`
+	Provenance
 }
 
 func (c cell) live() int64 {
@@ -86,6 +93,14 @@ func (s Store) now() int64 {
 }
 
 func (s Store) Set(ctx context.Context, scope Scope, at Coordinate, plaintext string, expected *int64) (Metadata, error) {
+	return s.write(ctx, scope, at, plaintext, Provenance{}, expected)
+}
+
+func (s Store) Mirror(ctx context.Context, scope Scope, at Coordinate, plaintext string, from Provenance, expected int64) (Metadata, error) {
+	return s.write(ctx, scope, at, plaintext, from, &expected)
+}
+
+func (s Store) write(ctx context.Context, scope Scope, at Coordinate, plaintext string, from Provenance, expected *int64) (Metadata, error) {
 	if len(plaintext) > MaxValueBytes {
 		return Metadata{}, fmt.Errorf("value for %s is too large: %d bytes, limit %d: %w", at.Key, len(plaintext), MaxValueBytes, ErrTooLarge)
 	}
@@ -101,7 +116,7 @@ func (s Store) Set(ctx context.Context, scope Scope, at Coordinate, plaintext st
 	if err != nil {
 		return Metadata{}, err
 	}
-	return s.commit(ctx, scope, at, held, current, expected, cell{Sealed: sealed, Size: int64(len(plaintext))})
+	return s.commit(ctx, scope, at, held, current, expected, cell{Sealed: sealed, Size: int64(len(plaintext)), Provenance: from})
 }
 
 func (s Store) commit(ctx context.Context, scope Scope, at Coordinate, held ports.Record, current cell, expected *int64, next cell) (Metadata, error) {
@@ -472,6 +487,7 @@ func metadataOf(at Coordinate, held cell) Metadata {
 		UpdatedAt:  held.UpdatedAt,
 		Size:       held.Size,
 		Target:     held.Target,
+		Provenance: held.Provenance,
 	}
 }
 
