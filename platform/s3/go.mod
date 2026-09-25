@@ -35,6 +35,7 @@ require (
 	github.com/ocelhq/ocel/pkg/constants v0.0.0
 	github.com/ocelhq/ocel/pkg/proto v0.0.0
 	github.com/ocelhq/ocel/pkg/providerkit v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/pkg/runtimekit v0.0.0-00010101000000-000000000000
 	google.golang.org/protobuf v1.36.12
 )
 
@@ -48,4 +49,5 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.24 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.31 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.32 // indirect
+	github.com/ocelhq/ocel/pkg/naming v0.0.0 // indirect
 )
