@@ -64,7 +64,7 @@ func tableFile(t *testing.T, upstreams map[string]string) string {
 		Grace  string  `json:"grace"`
 		Claims []claim `json:"claims"`
 		Routes []route `json:"routes"`
-	}{Grace: "1s"}
+	}{Grace: "30s"}
 	for at, hostname := range slices.Sorted(maps.Keys(upstreams)) {
 		owner := fmt.Sprintf("ocel--site-%d--production", at)
 		table.Claims = append(table.Claims, claim{Owner: owner, Hostname: hostname, Pointer: "@production"})
