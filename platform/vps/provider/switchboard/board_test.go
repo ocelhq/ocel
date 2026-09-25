@@ -96,12 +96,13 @@ func ask(t *testing.T, client *http.Client, at, host, path string, headers ...st
 	}
 	response, err := client.Do(request)
 	if err != nil {
-		t.Fatalf("GET %s%s: %v", host, path, err)
+		t.Errorf("GET %s%s: %v", host, path, err)
+		return answered{}
 	}
 	defer response.Body.Close()
 	body, err := io.ReadAll(response.Body)
 	if err != nil {
-		t.Fatal(err)
+		t.Errorf("GET %s%s: %v", host, path, err)
 	}
 	return answered{status: response.StatusCode, body: string(body), header: response.Header}
 }
