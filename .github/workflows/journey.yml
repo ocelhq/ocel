@@ -15,6 +15,7 @@ on:
       - "proto/**"
       - "platform/**"
       - "tests/fixtures/**"
+      - "tests/fronts/**"
       - "tests/journeys/**"
       - "tests/shared/**"
       - "scripts/**"
