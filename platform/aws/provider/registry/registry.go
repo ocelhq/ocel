@@ -7,13 +7,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 

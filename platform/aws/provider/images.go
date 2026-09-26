@@ -3,11 +3,10 @@ package aws
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/registry"
 )
 

@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 

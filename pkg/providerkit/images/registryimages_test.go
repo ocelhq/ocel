@@ -12,9 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func registryServing(t *testing.T, handler http.HandlerFunc) (provider.ImageStore, provider.ImagePush) {

@@ -7,9 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
