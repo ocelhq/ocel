@@ -9,16 +9,21 @@ const script = fileURLToPath(new URL("./contract-paths.mjs", import.meta.url));
 const fork = { repository: "ocelhq/ocel", headRepository: "someone/ocel" };
 const branch = { repository: "ocelhq/ocel", headRepository: "ocelhq/ocel" };
 
-function runCheck(pullRequest, paths) {
+function runCheck(pullRequest, files, changedFiles = files.length) {
   return spawnSync(process.execPath, [script], {
-    input: paths.join("\n"),
+    input: files.map((file) => JSON.stringify(file)).join("\n"),
     env: {
       PATH: process.env.PATH,
       REPOSITORY: pullRequest.repository,
       HEAD_REPOSITORY: pullRequest.headRepository,
       ASSOCIATION: pullRequest.association,
+      CHANGED_FILES: String(changedFiles),
     },
   });
+}
+
+function changed(...paths) {
+  return paths.map((filename) => ({ filename, status: "modified" }));
 }
 
 describe("isContractPath", () => {
@@ -49,6 +54,12 @@ describe("isContractPath", () => {
 
   it("is true for the rules an agent or a reviewer reads", () => {
     for (const path of [".greptile/rules.md", "AGENTS.md", "CLAUDE.md", "CONTRIBUTING.md"]) {
+      assert.equal(isContractPath(path), true, path);
+    }
+  });
+
+  it("is true for the check itself and the workflow that runs it", () => {
+    for (const path of ["scripts/contract-paths.mjs", ".github/workflows/contract-paths.yml"]) {
       assert.equal(isContractPath(path), true, path);
     }
   });
@@ -99,26 +110,40 @@ describe("canChangeContract", () => {
 
 describe("contract-paths.mjs", () => {
   it("exits 1 and names the path when a fork from a non-maintainer changes a contract path", () => {
-    const run = runCheck({ ...fork, association: "NONE" }, [
-      "cli/main.go",
-      "proto/provider/contract/v1/contract.proto",
-    ]);
+    const run = runCheck(
+      { ...fork, association: "NONE" },
+      changed("cli/main.go", "proto/provider/contract/v1/contract.proto"),
+    );
     assert.equal(run.status, 1);
     assert.match(run.stderr.toString(), /proto\/provider\/contract\/v1\/contract\.proto/);
   });
 
   it("exits 0 when a maintainer's fork changes a contract path", () => {
-    const run = runCheck({ ...fork, association: "MEMBER" }, ["proto/a.proto"]);
+    const run = runCheck({ ...fork, association: "MEMBER" }, changed("proto/a.proto"));
     assert.equal(run.status, 0);
   });
 
   it("exits 0 when a branch of this repository changes a contract path", () => {
-    const run = runCheck({ ...branch, association: "NONE" }, ["proto/a.proto"]);
+    const run = runCheck({ ...branch, association: "NONE" }, changed("proto/a.proto"));
     assert.equal(run.status, 0);
   });
 
   it("exits 0 when a fork from a non-maintainer changes no contract path", () => {
-    const run = runCheck({ ...fork, association: "NONE" }, ["cli/main.go"]);
+    const run = runCheck({ ...fork, association: "NONE" }, changed("cli/main.go"));
     assert.equal(run.status, 0);
+  });
+
+  it("exits 1 when a fork from a non-maintainer renames a file out of a contract path", () => {
+    const run = runCheck({ ...fork, association: "NONE" }, [
+      { filename: "cli/contract.proto", previous_filename: "proto/a.proto", status: "renamed" },
+    ]);
+    assert.equal(run.status, 1);
+    assert.match(run.stderr.toString(), /proto\/a\.proto/);
+  });
+
+  it("exits 1 when GitHub lists fewer files than the pull request changes", () => {
+    const run = runCheck({ ...branch, association: "OWNER" }, changed("cli/main.go"), 3001);
+    assert.equal(run.status, 1);
+    assert.match(run.stderr.toString(), /1 of 3001/);
   });
 });
