@@ -3,15 +3,15 @@ set -euo pipefail
 
 IMAGE="${OCEL_ACT_IMAGE:-ghcr.io/catthehacker/ubuntu:act-latest}"
 DOCKER_SOCK="${OCEL_ACT_DOCKER_SOCK:-/var/run/docker.sock}"
-ALL_WORKFLOWS=(build go journey provider-aws provider-vps)
+ALL_WORKFLOWS=(go journey provider-vps)
 
 usage() {
     cat <<'EOF'
 usage: scripts/act.sh [workflow ...]
 
-Runs the PR gates locally before anything is pushed. build, go and provider-aws
-replay through nektos/act as workflow_dispatch, so every step runs regardless
-of what changed — a superset of the PR run. journey replays its dev and aws
+Runs the PR gates locally before anything is pushed. go replays through
+nektos/act as workflow_dispatch, so every step runs regardless of what
+changed — a superset of the PR run. journey replays its dev and aws
 lanes the same way, with the changes job's lane filter forced to dev and aws;
 its vps lane runs natively instead, alongside provider-vps, since incus wants
 systemd and KVM an act container cannot host (the CI runner executes both
@@ -19,9 +19,9 @@ un-containered too). The remote Go build cache is wired in from your local
 credentials, so a green run both proves the change and leaves the cache warm
 for CI.
 
-  workflows: build go journey provider-aws provider-vps    (default: all five)
+  workflows: go journey provider-vps    (default: all three)
 
-journey and provider-aws drive the host docker daemon; the journey dev lane
+go and journey drive the host docker daemon; the journey dev lane
 runs its postgres and bucket there, on ports docker picks.
 EOF
     exit 2
