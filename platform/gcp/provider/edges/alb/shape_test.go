@@ -26,10 +26,10 @@ func declaredCounts(t *testing.T, program Program) map[string]int {
 		t.Fatal(err)
 	}
 	counts := map[string]int{}
-	for name, held := range seen {
-		tf, known := pulumiTokens[held.Token]
+	for name, resource := range seen {
+		tf, known := pulumiTokens[resource.Token]
 		if !known {
-			t.Fatalf("%s is a %s the shape has no name for", name, held.Token)
+			t.Fatalf("%s is a %s the shape has no name for", name, resource.Token)
 		}
 		counts[tf]++
 	}

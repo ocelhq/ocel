@@ -15,14 +15,14 @@ import (
 
 type urlMapServer struct {
 	mu        sync.Mutex
-	held      *compute.UrlMap
+	urlMap    *compute.UrlMap
 	conflicts int
 	tries     int
 }
 
-func routing(t *testing.T, held *compute.UrlMap) (*Provider, *urlMapServer) {
+func routing(t *testing.T, initial *compute.UrlMap) (*Provider, *urlMapServer) {
 	t.Helper()
-	server := &urlMapServer{held: held}
+	server := &urlMapServer{urlMap: initial}
 	served := httptest.NewServer(server.serve(t))
 	t.Cleanup(served.Close)
 	return pushing(t, served.URL), server
@@ -38,7 +38,7 @@ func (s *urlMapServer) serve(t *testing.T) http.HandlerFunc {
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/global/operations/"):
 			writeBody(w, &compute.Operation{Name: "op", Status: operationDone})
 		case r.Method == http.MethodGet:
-			writeBody(w, s.held)
+			writeBody(w, s.urlMap)
 		case r.Method == http.MethodPatch:
 			s.patch(w, r)
 		default:
@@ -67,28 +67,28 @@ func (s *urlMapServer) patch(w http.ResponseWriter, r *http.Request) {
 	s.tries++
 	if s.conflicts > 0 {
 		s.conflicts--
-		s.held.Fingerprint = strconv.Itoa(s.tries)
+		s.urlMap.Fingerprint = strconv.Itoa(s.tries)
 		conflicted(w, "the url map changed under this write")
 		return
 	}
-	if desired.Fingerprint != s.held.Fingerprint {
+	if desired.Fingerprint != s.urlMap.Fingerprint {
 		conflicted(w, "the url map fingerprint is stale")
 		return
 	}
-	if _, carried := said["hostRules"]; carried {
-		s.held.HostRules = desired.HostRules
+	if _, sent := said["hostRules"]; sent {
+		s.urlMap.HostRules = desired.HostRules
 	}
-	if _, carried := said["pathMatchers"]; carried {
-		s.held.PathMatchers = desired.PathMatchers
+	if _, sent := said["pathMatchers"]; sent {
+		s.urlMap.PathMatchers = desired.PathMatchers
 	}
-	s.held.Fingerprint = strconv.Itoa(s.tries)
+	s.urlMap.Fingerprint = strconv.Itoa(s.tries)
 	writeBody(w, &compute.Operation{Name: "op", Status: operationDone})
 }
 
-func (s *urlMapServer) standing() *compute.UrlMap {
+func (s *urlMapServer) current() *compute.UrlMap {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.held
+	return s.urlMap
 }
 
 func (s *urlMapServer) writes() int {

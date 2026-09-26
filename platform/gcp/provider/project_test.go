@@ -67,7 +67,7 @@ func TestAProjectNamedInTheOptionsIsTheProjectTheRunTargets(t *testing.T) {
 	}
 }
 
-func TestAProjectNobodyNamedIsTakenFromTheEnvironmentTheRunCarries(t *testing.T) {
+func TestAProjectNobodyNamedIsTakenFromTheEnvironmentTheRunInherits(t *testing.T) {
 	withoutAnAmbientProject(t)
 	t.Setenv("GOOGLE_CLOUD_PROJECT", "ambient-prod")
 
@@ -161,17 +161,17 @@ func withApplicationDefaultCredentials(t *testing.T, project string) {
 	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", path)
 }
 
-func TestAProjectNamedInTheEnvironmentBeatsTheOneTheCredentialsCarry(t *testing.T) {
+func TestAProjectNamedInTheEnvironmentBeatsTheOneTheCredentialsName(t *testing.T) {
 	withoutAnAmbientProject(t)
 	withApplicationDefaultCredentials(t, "credential-project")
 	t.Setenv("GOOGLE_CLOUD_PROJECT", "ambient-prod")
 
 	if got := targeted(t, provider.Options{"region": "europe-west1"}); got != "ambient-prod" {
-		t.Errorf("the run targets %q, want the project the environment names: on GCE the credentials always carry the metadata project, and naming one is how an operator overrides it", got)
+		t.Errorf("the run targets %q, want the project the environment names: on GCE the credentials always name the metadata project, and naming one is how an operator overrides it", got)
 	}
 }
 
-func TestTheCloudSDKProjectBeatsTheOneTheCredentialsCarry(t *testing.T) {
+func TestTheCloudSDKProjectBeatsTheOneTheCredentialsName(t *testing.T) {
 	withoutAnAmbientProject(t)
 	withApplicationDefaultCredentials(t, "credential-project")
 	t.Setenv("CLOUDSDK_CORE_PROJECT", "sdk-prod")
@@ -186,7 +186,7 @@ func TestTheCredentialsAreReadWhenNothingAroundTheRunNamesAProject(t *testing.T)
 	withApplicationDefaultCredentials(t, "credential-project")
 
 	if got := targeted(t, provider.Options{"region": "europe-west1"}); got != "credential-project" {
-		t.Errorf("the run targets %q, want the project the credentials carry", got)
+		t.Errorf("the run targets %q, want the project the credentials name", got)
 	}
 }
 

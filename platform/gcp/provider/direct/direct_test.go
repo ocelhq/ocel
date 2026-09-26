@@ -97,7 +97,7 @@ func TestARollbackPinsCloudRunBackToTheRevisionThePromotionRecorded(t *testing.T
 	}
 	for _, entry := range history {
 		if entry.Active && entry.PromotionID != "p3" {
-			t.Errorf("the ledger holds %s active, want p3", entry.PromotionID)
+			t.Errorf("the ledger records %s as active, want p3", entry.PromotionID)
 		}
 	}
 }
@@ -144,7 +144,7 @@ func TestAPromotionThatCannotPinLeavesTheLedgerPointingWhereItDid(t *testing.T) 
 	}
 	for _, entry := range history {
 		if entry.Active && entry.PromotionID != "p1" {
-			t.Errorf("the ledger holds %s active after a pin that failed, want p1", entry.PromotionID)
+			t.Errorf("the ledger records %s as active after a pin that failed, want p1", entry.PromotionID)
 		}
 	}
 }
@@ -224,7 +224,7 @@ func TestAPromotionInterruptedAtItsPinStillPutsThePointerBack(t *testing.T) {
 	}
 	for _, entry := range history {
 		if entry.Active && entry.PromotionID != "p1" {
-			t.Errorf("the ledger holds %s active after a pin that was interrupted, want p1: the interrupt is the context the take-back ran under", entry.PromotionID)
+			t.Errorf("the ledger records %s as active after a pin that was interrupted, want p1: the interrupt is the context the take-back ran under", entry.PromotionID)
 		}
 	}
 }

@@ -37,7 +37,7 @@ func main() {
 
 func run(ctx context.Context, command []string, environ []string) int {
 	if len(command) == 0 {
-		return fatal("the image names no command for the runtime to run: it must carry an ENTRYPOINT or CMD")
+		return fatal("the image names no command for the runtime to run: it must set an ENTRYPOINT or CMD")
 	}
 	exposed := appbuild.InjectedPortText
 	env := make([]string, 0, len(environ))

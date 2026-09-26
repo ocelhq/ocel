@@ -26,8 +26,8 @@ func (r resourceManager) Reaches(ctx context.Context, project string) error {
 		return unauthenticated()
 	}
 	_, _, err = asked(ctx, func() (*cloudresourcemanager.Project, int, error) {
-		held, err := service.Projects.Get(project).Context(ctx).Do()
-		return held, answeredCode(err), err
+		found, err := service.Projects.Get(project).Context(ctx).Do()
+		return found, answeredCode(err), err
 	})
 	if err != nil {
 		return unreachableProject(project, err)

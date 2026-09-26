@@ -25,15 +25,15 @@ func TestRoutingAHostnameWritesTheHostRuleAndThePathMatcherThatServesIt(t *testi
 		t.Fatalf("Route = %v", err)
 	}
 
-	held := server.standing()
-	if len(held.HostRules) != 1 || held.HostRules[0].Hosts[0] != "shop.example.com" {
-		t.Fatalf("the url map holds host rules %+v, want one for shop.example.com", held.HostRules)
+	urlMap := server.current()
+	if len(urlMap.HostRules) != 1 || urlMap.HostRules[0].Hosts[0] != "shop.example.com" {
+		t.Fatalf("the url map has host rules %+v, want one for shop.example.com", urlMap.HostRules)
 	}
-	if len(held.PathMatchers) != 1 || held.HostRules[0].PathMatcher != held.PathMatchers[0].Name {
-		t.Fatalf("the url map holds path matchers %+v, want the one the host rule names", held.PathMatchers)
+	if len(urlMap.PathMatchers) != 1 || urlMap.HostRules[0].PathMatcher != urlMap.PathMatchers[0].Name {
+		t.Fatalf("the url map has path matchers %+v, want the one the host rule names", urlMap.PathMatchers)
 	}
 	want := "projects/acme-prod/global/backendServices/ocel-alb-shop-production-shop"
-	if got := held.PathMatchers[0].DefaultService; got != want {
+	if got := urlMap.PathMatchers[0].DefaultService; got != want {
 		t.Errorf("the path matcher serves %q, want %q: a backend is named by its full path in a url map", got, want)
 	}
 }
@@ -50,10 +50,10 @@ func TestUnroutingTheLastHostnameClearsTheRuleRatherThanLeavingItPointingAtADele
 		t.Fatalf("Unroute = %v", err)
 	}
 
-	held := server.standing()
-	if len(held.HostRules) != 0 || len(held.PathMatchers) != 0 {
-		t.Errorf("the url map still holds %+v and %+v after the only hostname was released, and the binding stack deletes the backend they name",
-			held.HostRules, held.PathMatchers)
+	urlMap := server.current()
+	if len(urlMap.HostRules) != 0 || len(urlMap.PathMatchers) != 0 {
+		t.Errorf("the url map still has %+v and %+v after the only hostname was released, and the binding stack deletes the backend they name",
+			urlMap.HostRules, urlMap.PathMatchers)
 	}
 }
 
@@ -69,27 +69,27 @@ func TestRoutingRetriesTheWriteTheUrlMapChangedUnder(t *testing.T) {
 	if got := server.writes(); got != 2 {
 		t.Errorf("the route wrote %d times, want 2: the url map is shared by every project in the class, so a stale fingerprint is re-read and written again", got)
 	}
-	if len(server.standing().HostRules) != 1 {
-		t.Errorf("the url map holds %+v after the retry, want the host rule the route asked for", server.standing().HostRules)
+	if len(server.current().HostRules) != 1 {
+		t.Errorf("the url map has %+v after the retry, want the host rule the route asked for", server.current().HostRules)
 	}
 }
 
-func TestAHeldHostnameIsAnsweredWithA404RatherThanTheEmptyBackendsGatewayError(t *testing.T) {
+func TestAHostnameServedNotFoundIsAnsweredWithA404RatherThanTheEmptyBackendsGatewayError(t *testing.T) {
 	t.Parallel()
 
 	p, server := routing(t, emptyMap())
-	if err := p.Hold(context.Background(), classRoutes, "shop.example.com"); err != nil {
-		t.Fatalf("Hold = %v", err)
+	if err := p.ServeNotFound(context.Background(), classRoutes, "shop.example.com"); err != nil {
+		t.Fatalf("ServeNotFound = %v", err)
 	}
 
-	held := server.standing()
-	if len(held.PathMatchers) != 1 {
-		t.Fatalf("the url map holds path matchers %+v, want the one that answers a hostname whose app has released nothing", held.PathMatchers)
+	urlMap := server.current()
+	if len(urlMap.PathMatchers) != 1 {
+		t.Fatalf("the url map has path matchers %+v, want the one that answers a hostname whose app has released nothing", urlMap.PathMatchers)
 	}
-	matcher := held.PathMatchers[0]
-	if matcher.DefaultService != held.DefaultService {
+	matcher := urlMap.PathMatchers[0]
+	if matcher.DefaultService != urlMap.DefaultService {
 		t.Errorf("the path matcher serves %q, want the map's own default %q: a path matcher with no service at all is refused",
-			matcher.DefaultService, held.DefaultService)
+			matcher.DefaultService, urlMap.DefaultService)
 	}
 	abort := notFoundAbort(matcher.DefaultRouteAction)
 	if abort == nil || abort.HttpStatus != http.StatusNotFound || abort.Percentage != 100 {
@@ -98,24 +98,24 @@ func TestAHeldHostnameIsAnsweredWithA404RatherThanTheEmptyBackendsGatewayError(t
 	}
 }
 
-func TestAHeldHostnameFollowsTheMapsDefaultWhenTheFrontIsRaisedAgain(t *testing.T) {
+func TestANotFoundHostnameFollowsTheMapsDefaultWhenTheFrontIsRaisedAgain(t *testing.T) {
 	t.Parallel()
 
 	stale := &compute.UrlMap{
 		Name: classRoutes, Fingerprint: "0", DefaultService: "notfound-v2",
-		HostRules:    []*compute.HostRule{{Hosts: []string{"held.example.com"}, PathMatcher: matcherFor("held.example.com")}},
-		PathMatchers: []*compute.PathMatcher{{Name: matcherFor("held.example.com"), DefaultService: "notfound-v1", DefaultRouteAction: refusing()}},
+		HostRules:    []*compute.HostRule{{Hosts: []string{"unreleased.example.com"}, PathMatcher: matcherFor("unreleased.example.com")}},
+		PathMatchers: []*compute.PathMatcher{{Name: matcherFor("unreleased.example.com"), DefaultService: "notfound-v1", DefaultRouteAction: refusing()}},
 	}
 	p, server := routing(t, stale)
 	if err := p.Route(context.Background(), classRoutes, "shop.example.com", "ocel-alb-shop-production-shop"); err != nil {
 		t.Fatalf("Route = %v", err)
 	}
 
-	held := server.standing()
-	for _, matcher := range held.PathMatchers {
-		if notFoundAbort(matcher.DefaultRouteAction) != nil && matcher.DefaultService != held.DefaultService {
-			t.Errorf("the held matcher still serves %q while the map defaults to %q: a backend the front no longer stands up makes the whole url map invalid",
-				matcher.DefaultService, held.DefaultService)
+	urlMap := server.current()
+	for _, matcher := range urlMap.PathMatchers {
+		if notFoundAbort(matcher.DefaultRouteAction) != nil && matcher.DefaultService != urlMap.DefaultService {
+			t.Errorf("the 404 matcher still serves %q while the map defaults to %q: a backend the front no longer provisions makes the whole url map invalid",
+				matcher.DefaultService, urlMap.DefaultService)
 		}
 	}
 }

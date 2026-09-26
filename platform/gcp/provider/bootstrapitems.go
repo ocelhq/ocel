@@ -50,7 +50,7 @@ func stackItems(names Names, class edge.Class, emulated bool) []item {
 	items := []item{
 		{
 			Kind: KindDatabase, Name: names.Database(), Shared: true, Slow: true,
-			Note: "every record this project holds, and both classes keep theirs in it",
+			Note: "every record this project stores, and both classes keep theirs in it",
 		},
 		{
 			Kind: KindBucket, Name: names.Bucket(class),
@@ -66,7 +66,7 @@ func stackItems(names Names, class edge.Class, emulated bool) []item {
 		},
 		{
 			Kind: KindKey, Name: string(class),
-			Note: "the key every value this class holds is sealed under",
+			Note: "the key every value this class stores is sealed under",
 		},
 		{
 			Kind: KindServiceAccount, Name: names.WorkloadAccount(class),
@@ -77,7 +77,7 @@ func stackItems(names Names, class edge.Class, emulated bool) []item {
 			Note: "the images this class runs, and an untagged image lives at least a week",
 		},
 	}
-	return slices.DeleteFunc(items, func(held item) bool { return !provisioned(held.Kind, emulated) })
+	return slices.DeleteFunc(items, func(each item) bool { return !provisioned(each.Kind, emulated) })
 }
 
 func parameterItems(names Names, class edge.Class) []item {

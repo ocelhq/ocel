@@ -41,12 +41,12 @@ func (e edges) Open(kind edge.Kind) (edge.Edge, error) {
 	case cloudflare.Kind:
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"this provider cannot front deployments with the %q edge yet: that edge answers every request from a worker it runs, "+
-				"and nothing here builds the program that worker would run, so a bootstrap of it would stand resources no deploy could use.\n"+
-				"Front them with %s, which answers on the url Cloud Run gives each service, or with %s, which stands one load balancer up per bootstrap class at %s",
+				"and nothing here builds the program that worker would run, so a bootstrap of it would provision resources no deploy could use.\n"+
+				"Front them with %s, which answers on the url Cloud Run gives each service, or with %s, which provisions one load balancer per bootstrap class at %s",
 			kind, direct.Kind, alb.Kind, alb.BaselineCost)
 	}
 	return nil, refusal.Refuse(refusal.CodeInvalid,
 		"this provider cannot front deployments with the %q edge; it fronts them with %s, which answers on the url Cloud Run gives each service, "+
-			"and with %s, which stands one load balancer up per bootstrap class at %s",
+			"and with %s, which provisions one load balancer per bootstrap class at %s",
 		kind, direct.Kind, alb.Kind, alb.BaselineCost)
 }

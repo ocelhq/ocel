@@ -41,7 +41,7 @@ type Stacks interface {
 type Routes interface {
 	Route(ctx context.Context, urlMap, hostname, backend string) error
 
-	Hold(ctx context.Context, urlMap, hostname string) error
+	ServeNotFound(ctx context.Context, urlMap, hostname string) error
 
 	Unroute(ctx context.Context, urlMap, hostname string) error
 }
@@ -57,7 +57,7 @@ type Front struct {
 	NotFound       string `json:"notFound,omitempty"`
 }
 
-func (f Front) standing() bool {
+func (f Front) provisioned() bool {
 	return f.Address != "" && f.CertificateMap != "" && f.URLMap != "" && f.NotFound != ""
 }
 

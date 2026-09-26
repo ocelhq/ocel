@@ -22,11 +22,11 @@ func TestTheRuntimePortsReachNoControlPlane(t *testing.T) {
 
 	for _, pkg := range strings.Fields(string(out)) {
 		if strings.Contains(pkg, "pulumi") {
-			t.Errorf("the runtime ports reach %s: a connector that reads records must not carry a provisioning engine", pkg)
+			t.Errorf("the runtime ports reach %s: a connector that reads records must not link a provisioning engine", pkg)
 		}
 		for _, linked := range controlPlane {
 			if pkg == linked {
-				t.Errorf("the runtime ports reach %s: the connector binds these ports, and it must not carry the control plane", pkg)
+				t.Errorf("the runtime ports reach %s: the connector binds these ports, and it must not link the control plane", pkg)
 			}
 		}
 	}

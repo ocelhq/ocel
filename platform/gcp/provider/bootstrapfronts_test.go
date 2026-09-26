@@ -25,12 +25,12 @@ func (r *frontRegistry) Open(kind edge.Kind) (edge.Edge, error) {
 
 type countingFront struct {
 	*alb.Edge
-	raised   []edge.Class
-	torn     []edge.Class
-	standing bool
-	bound    []string
-	refusal  error
-	silent   bool
+	raised    []edge.Class
+	torn      []edge.Class
+	installed bool
+	bound     []string
+	refusal   error
+	silent    bool
 }
 
 func (f *countingFront) Hooks() edge.Hooks {
@@ -38,7 +38,7 @@ func (f *countingFront) Hooks() edge.Hooks {
 		return edge.Hooks{}
 	}
 	return edge.Hooks{
-		CheckBootstrapInstalled: func(context.Context, edge.Class) (bool, error) { return f.standing, nil },
+		CheckBootstrapInstalled: func(context.Context, edge.Class) (bool, error) { return f.installed, nil },
 		ListBoundHostnames:      func(context.Context, edge.Class) ([]string, error) { return f.bound, nil },
 	}
 }
@@ -85,34 +85,34 @@ func TestAFeatureWhoseFrontNeverCameUpIsReportedAbsentSoTheGateRaisesItAgain(t *
 	t.Parallel()
 
 	b, registry := fronting(t)
-	registry.front.standing = false
+	registry.front.installed = false
 
 	described, err := b.described(context.Background(), surveyed(albFeature))
 	if err != nil {
 		t.Fatalf("described = %v", err)
 	}
-	held, reported := featureStack(described, albFeature)
+	stack, reported := featureStack(described, albFeature)
 	if !reported {
 		t.Fatalf("Describe reports %+v, want a stack for the %q the stamp records", described.Stacks, albFeature)
 	}
-	if held.Present {
-		t.Error("a feature the stamp records is reported standing whatever the front says, so a raise that failed after the stamp was written " +
+	if stack.Present {
+		t.Error("a feature the stamp records is reported installed whatever the front says, so a raise that failed after the stamp was written " +
 			"reads as healthy and is never tried again")
 	}
 }
 
-func TestAFeatureWhoseFrontStandsIsReportedStanding(t *testing.T) {
+func TestAFeatureWhoseFrontIsInstalledIsReportedPresent(t *testing.T) {
 	t.Parallel()
 
 	b, registry := fronting(t)
-	registry.front.standing = true
+	registry.front.installed = true
 
 	described, err := b.described(context.Background(), surveyed(albFeature))
 	if err != nil {
 		t.Fatalf("described = %v", err)
 	}
-	if held, _ := featureStack(described, albFeature); !held.Present {
-		t.Error("a feature whose front reported its address and its maps is not reported standing, so every bootstrap raises it again")
+	if stack, _ := featureStack(described, albFeature); !stack.Present {
+		t.Error("a feature whose front reported its address and its maps is not reported installed, so every bootstrap raises it again")
 	}
 }
 
@@ -124,12 +124,12 @@ func TestABootstrapThatNamedNoEdgeFeatureTakesNoFrontDown(t *testing.T) {
 		t.Fatalf("tearFronts = %v", err)
 	}
 	if len(registry.opened) != 0 {
-		t.Errorf("the removal opened %v, and a class that never stood a load balancer up has no state sealed under a passphrase to read, "+
+		t.Errorf("the removal opened %v, and a class that never provisioned a load balancer has no state sealed under a passphrase to read, "+
 			"let alone a stack to destroy", registry.opened)
 	}
 }
 
-func TestABootstrapThatStoodTheLoadBalancerUpTakesItDownAgain(t *testing.T) {
+func TestABootstrapThatProvisionedTheLoadBalancerTakesItDownAgain(t *testing.T) {
 	t.Parallel()
 
 	b, registry := fronting(t)
@@ -137,7 +137,7 @@ func TestABootstrapThatStoodTheLoadBalancerUpTakesItDownAgain(t *testing.T) {
 		t.Fatalf("tearFronts = %v", err)
 	}
 	if !slices.Contains(registry.front.torn, edge.ClassProduction) {
-		t.Errorf("the removal tore down %v, want the production front: a forwarding rule left standing keeps billing", registry.front.torn)
+		t.Errorf("the removal tore down %v, want the production front: a forwarding rule left in place keeps billing", registry.front.torn)
 	}
 }
 
@@ -150,7 +150,7 @@ func TestRemovingTheFeatureTakesTheLoadBalancerDownRatherThanJustForgettingIt(t 
 		t.Fatalf("dropFronts = %v", err)
 	}
 	if !slices.Contains(registry.front.torn, edge.ClassProduction) {
-		t.Errorf("removing %q tore down %v, and un-stamping a feature whose address, forwarding rule and maps are still standing bills "+
+		t.Errorf("removing %q tore down %v, and un-stamping a feature whose address, forwarding rule and maps are still provisioned bills "+
 			"for a front nothing will ever take down again", albFeature, registry.front.torn)
 	}
 }
@@ -163,10 +163,10 @@ func TestAFeatureWhoseFrontRefusedToComeDownStaysStamped(t *testing.T) {
 	req := provider.BootstrapRequest{Class: edge.ClassProduction, Remove: []string{albFeature}}
 
 	if err := b.dropFronts(context.Background(), surveyed(albFeature), req, nil); err == nil {
-		t.Fatal("dropFronts = nil though the front refused, and the apply would go on to un-stamp a feature that is still standing")
+		t.Fatal("dropFronts = nil though the front refused, and the apply would go on to un-stamp a feature that is still installed")
 	}
-	if held := standingFeatures(b.Catalogue(), []string{albFeature}, req); slices.Contains(held, albFeature) {
-		t.Errorf("the stamp would still carry %v after a removal, which is only correct because the apply stops on the refusal above", held)
+	if installed := installedFeatures(b.Catalogue(), []string{albFeature}, req); slices.Contains(installed, albFeature) {
+		t.Errorf("the stamp would still name %v after a removal, which is only correct because the apply stops on the refusal above", installed)
 	}
 }
 
@@ -188,7 +188,7 @@ func TestRemovingTheFeatureIsRefusedWhileAHostnameIsStillBoundToItsFront(t *test
 	}
 }
 
-func TestAFeatureNothingStoodUpIsNotTornDownOnRemoval(t *testing.T) {
+func TestAFeatureNothingInstalledIsNotTornDownOnRemoval(t *testing.T) {
 	t.Parallel()
 
 	b, registry := fronting(t)
@@ -215,21 +215,21 @@ func TestTheFrontsABootstrapRaisesComeFromWhatItsFeaturesDeclareTheyNeed(t *test
 	}
 }
 
-func TestAFrontThatReportsNothingStandsAndHoldsNoHostname(t *testing.T) {
+func TestAFrontThatReportsNothingIsInstalledAndOwnsNoHostname(t *testing.T) {
 	t.Parallel()
 
 	b, registry := fronting(t)
 	registry.front.silent = true
 	registry.front.bound = []string{"shop.example.com"}
 
-	stands, err := b.frontStands(context.Background(), edge.ClassProduction, albFeature)
+	installed, err := b.frontInstalled(context.Background(), edge.ClassProduction, albFeature)
 	if err != nil {
-		t.Fatalf("frontStands = %v", err)
+		t.Fatalf("frontInstalled = %v", err)
 	}
-	if !stands {
-		t.Error("a front that reports nothing about its bootstrap is taken for gone, so the stamp alone can no longer say the feature stands")
+	if !installed {
+		t.Error("a front that reports nothing about its bootstrap is taken for gone, so the stamp alone can no longer say the feature is installed")
 	}
 	if err := b.frontsFree(context.Background(), edge.ClassProduction, []string{albFeature}); err != nil {
-		t.Errorf("frontsFree = %v, want nothing held by a front that names no bound hostname", err)
+		t.Errorf("frontsFree = %v, want nothing owned by a front that names no bound hostname", err)
 	}
 }

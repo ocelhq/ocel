@@ -17,7 +17,7 @@ const trafficByLatest = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
 
 type runServer struct {
 	mu       sync.Mutex
-	held     *run.GoogleCloudRunV2Service
+	service  *run.GoogleCloudRunV2Service
 	revision int
 	writes   int
 
@@ -70,14 +70,14 @@ func (s *runServer) create(w http.ResponseWriter, r *http.Request) {
 	}
 	s.created = append(s.created, desired)
 	name := r.URL.Query().Get("serviceId")
-	s.held = &run.GoogleCloudRunV2Service{
+	s.service = &run.GoogleCloudRunV2Service{
 		Name:     strings.TrimPrefix(r.URL.Path, "/v2/") + "/" + name,
 		Template: desired.Template,
 		Traffic:  allocated(desired.Traffic),
 		Uri:      "https://" + name + ".run.app",
 	}
 	s.revised()
-	writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/stand", Done: true})
+	writeBody(w, &run.GoogleLongrunningOperation{Name: "operations/create", Done: true})
 }
 
 func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
@@ -92,11 +92,11 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.patched = append(s.patched, desired)
-	replaced := !sameTemplate(s.held.Template, desired.Template)
-	s.held.Template = desired.Template
-	s.held.Traffic = allocated(desired.Traffic)
+	replaced := !sameTemplate(s.service.Template, desired.Template)
+	s.service.Template = desired.Template
+	s.service.Traffic = allocated(desired.Traffic)
 	s.writes++
-	s.held.Etag = "etag-" + strconv.Itoa(s.writes)
+	s.service.Etag = "etag-" + strconv.Itoa(s.writes)
 	if replaced {
 		s.revised()
 	}
@@ -106,8 +106,8 @@ func (s *runServer) patch(w http.ResponseWriter, r *http.Request) {
 func (s *runServer) revised() {
 	s.revision++
 	s.writes++
-	s.held.LatestReadyRevision = s.held.Name + "/revisions/" + revisionName(s.held.Name) + "-0000" + strconv.Itoa(s.revision)
-	s.held.Etag = "etag-" + strconv.Itoa(s.writes)
+	s.service.LatestReadyRevision = s.service.Name + "/revisions/" + revisionName(s.service.Name) + "-0000" + strconv.Itoa(s.revision)
+	s.service.Etag = "etag-" + strconv.Itoa(s.writes)
 }
 
 func allocated(traffic []*run.GoogleCloudRunV2TrafficTarget) []*run.GoogleCloudRunV2TrafficTarget {
@@ -117,19 +117,19 @@ func allocated(traffic []*run.GoogleCloudRunV2TrafficTarget) []*run.GoogleCloudR
 	return []*run.GoogleCloudRunV2TrafficTarget{{Type: trafficByLatest, Percent: 100}}
 }
 
-func sameTemplate(held, desired *run.GoogleCloudRunV2RevisionTemplate) bool {
-	was, _ := json.Marshal(held)
+func sameTemplate(current, desired *run.GoogleCloudRunV2RevisionTemplate) bool {
+	was, _ := json.Marshal(current)
 	is, _ := json.Marshal(desired)
 	return string(was) == string(is)
 }
 
 func (s *runServer) get(w http.ResponseWriter) {
-	if s.held == nil {
+	if s.service == nil {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte(`{"error":{"code":404,"message":"service not found"}}`))
 		return
 	}
-	writeBody(w, s.held)
+	writeBody(w, s.service)
 }
 
 func (s *runServer) setPolicy(w http.ResponseWriter, r *http.Request) {
@@ -167,7 +167,7 @@ func (s *runServer) bound() []*run.GoogleIamV1Policy {
 	return slices.Clone(s.policies)
 }
 
-func (s *runServer) standing() *run.GoogleCloudRunV2Service {
+func (s *runServer) current() *run.GoogleCloudRunV2Service {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(s.created) == 0 {
@@ -179,7 +179,7 @@ func (s *runServer) standing() *run.GoogleCloudRunV2Service {
 func (s *runServer) serving() *run.GoogleCloudRunV2Service {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.held
+	return s.service
 }
 
 func (s *runServer) releases() []*run.GoogleCloudRunV2Service {

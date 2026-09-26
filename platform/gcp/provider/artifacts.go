@@ -27,7 +27,7 @@ func (a artifacts) bucket(ctx context.Context, class edge.Class) (*storage.Bucke
 	if class == "" {
 		return nil, ports.Classless("an artifact")
 	}
-	clients, err := a.p.stood(ctx)
+	clients, err := a.p.openClients(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -131,9 +131,9 @@ func (a artifacts) RemovePrefix(ctx context.Context, class edge.Class, prefix st
 }
 
 func sweep(ctx context.Context, bucket *storage.BucketHandle, prefix string) error {
-	held := bucket.Objects(ctx, &storage.Query{Prefix: prefix})
+	objects := bucket.Objects(ctx, &storage.Query{Prefix: prefix})
 	for {
-		attrs, err := held.Next()
+		attrs, err := objects.Next()
 		if errors.Is(err, iterator.Done) {
 			return nil
 		}

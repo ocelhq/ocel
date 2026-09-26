@@ -73,8 +73,8 @@ func TestBindingAHostnameRaisesTheProjectsStackAndRoutesItThroughTheClassUrlMap(
 		t.Errorf("the bind raised %v, want %q among them: a hostname's certificate, neg and backend are one stack per project and class", got, want)
 	}
 	routed := w.hosts("ocel-alb-production-routes")
-	if backend, held := routed["shop.example.com"]; !held || backend == "" {
-		t.Errorf("the class url map routes %v, want shop.example.com onto the backend the bind stood up", routed)
+	if backend, found := routed["shop.example.com"]; !found || backend == "" {
+		t.Errorf("the class url map routes %v, want shop.example.com onto the backend the bind provisioned", routed)
 	}
 	if front := stack.State().Fronts["shop.example.com"]; front != frontAddress {
 		t.Errorf("the bind published %q as the front, want the load balancer's address %q for DNS to point at", front, frontAddress)
@@ -126,7 +126,7 @@ func TestTwoProjectsClaimingOneHostnameAtOnceLeaveItWithExactlyOne(t *testing.T)
 		}
 	}
 	if _, routed := w.hosts("ocel-alb-production-routes")["shop.example.com"]; !routed {
-		t.Error("the url map holds no rule for shop.example.com after the winning bind")
+		t.Error("the url map has no rule for shop.example.com after the winning bind")
 	}
 }
 
@@ -165,7 +165,7 @@ func TestAHostnameAnotherProjectServesIsRefusedRatherThanTakenOver(t *testing.T)
 	}
 }
 
-func TestUnbindingTheLastHostnameTakesTheProjectsStackDownRatherThanLeavingItStanding(t *testing.T) {
+func TestUnbindingTheLastHostnameTakesTheProjectsStackDownRatherThanLeavingItInPlace(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -223,10 +223,10 @@ func TestAProjectReconciledBeforeItsClassHasALoadBalancerIsToldToBootstrapIt(t *
 	_, err := front.Reconcile(context.Background(),
 		edge.StackSpec{Slug: "shop", Class: edge.ClassProduction}, edge.StackState{})
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("Reconcile with no front standing = %v, want a %s refusal", err, refusal.CodeNotReady)
+		t.Fatalf("Reconcile with no front provisioned = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
 	if !strings.Contains(refused.Message, "$18") {
-		t.Errorf("the refusal reads %q, and the consent for a standing cost is the price said out loud", refused.Message)
+		t.Errorf("the refusal reads %q, and the consent for a recurring cost is the price said out loud", refused.Message)
 	}
 }
 
@@ -256,26 +256,26 @@ func TestOneHostRuleAndOneMaskedNegAnswerEveryPreviewHostname(t *testing.T) {
 		t.Fatalf("the class url map routes %v, want one host rule for %s: every preview resolves through it and none writes its own",
 			routed, edge.PreviewWildcard(previewBase))
 	}
-	stood := w.declarations(FrontStack(edge.ClassPreview))
-	neg, declared := stood[previewNEGName(previewBase)]
+	resources := w.declarations(FrontStack(edge.ClassPreview))
+	neg, declared := resources[previewNEGName(previewBase)]
 	if !declared {
-		t.Fatalf("the preview front stands up %v, want a serverless network endpoint group the host rule's backend reaches Cloud Run through", keys(stood))
+		t.Fatalf("the preview front declares %v, want a serverless network endpoint group the host rule's backend reaches Cloud Run through", keys(resources))
 	}
 	if mask := cloudRunMask(neg); mask != "<service>."+previewBase {
-		t.Errorf("the neg carries the url mask %q, want %q: the mask is what turns a hostname's label into the Cloud Run service that answers it",
+		t.Errorf("the neg has the url mask %q, want %q: the mask is what turns a hostname's label into the Cloud Run service that answers it",
 			mask, "<service>."+previewBase)
 	}
-	if _, standing := stood[backend]; !standing {
-		t.Errorf("the host rule points at the backend %q, which the front stands up as %v", backend, keys(stood))
+	if _, present := resources[backend]; !present {
+		t.Errorf("the host rule points at the backend %q, and the front declares only %v", backend, keys(resources))
 	}
-	if !cachesByHost(stood[backend]) {
+	if !cachesByHost(resources[backend]) {
 		t.Errorf("the preview backend declares the cache key policy %v, want the host in it: one backend answers every preview "+
 			"hostname on the wildcard, so a key that leaves the host out serves one preview's bytes to another",
-			cacheKeyPolicy(stood[backend]))
+			cacheKeyPolicy(resources[backend]))
 	}
-	if _, entered := stood[previewEntryName(previewBase)]; !entered {
-		t.Errorf("the preview front stands up %v, want a certificate map entry: nothing terminates TLS for %s without one",
-			keys(stood), edge.PreviewWildcard(previewBase))
+	if _, entered := resources[previewEntryName(previewBase)]; !entered {
+		t.Errorf("the preview front declares %v, want a certificate map entry: nothing terminates TLS for %s without one",
+			keys(resources), edge.PreviewWildcard(previewBase))
 	}
 }
 
@@ -324,14 +324,14 @@ func TestRaisingTheClassFrontAgainLeavesTheWildcardRouting(t *testing.T) {
 		t.Fatalf("Bootstrap = %v", err)
 	}
 
-	stood := w.declarations(FrontStack(edge.ClassPreview))
-	if _, declared := stood[previewNEGName(previewBase)]; !declared {
-		t.Errorf("the front raised again stands up %v, and the wildcard's neg is gone from it: a bootstrap that reruns would "+
-			"take every preview in the class down", keys(stood))
+	resources := w.declarations(FrontStack(edge.ClassPreview))
+	if _, declared := resources[previewNEGName(previewBase)]; !declared {
+		t.Errorf("the front raised again declares %v, and the wildcard's neg is gone from it: a bootstrap that reruns would "+
+			"take every preview in the class down", keys(resources))
 	}
 }
 
-func TestDestroyingThePreviewWildcardTakesItsRouteAndLeavesTheFrontStanding(t *testing.T) {
+func TestDestroyingThePreviewWildcardTakesItsRouteAndLeavesTheFrontInPlace(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -346,9 +346,9 @@ func TestDestroyingThePreviewWildcardTakesItsRouteAndLeavesTheFrontStanding(t *t
 	if routed := w.hosts("ocel-alb-production-routes"); routed[edge.PreviewWildcard(previewBase)] != "" {
 		t.Errorf("the class url map still routes %v after the wildcard was released", routed)
 	}
-	stood := w.declarations(FrontStack(edge.ClassPreview))
-	if _, declared := stood[previewNEGName(previewBase)]; declared {
-		t.Errorf("the front still stands up %v after the wildcard was released: bytes a release leaves behind must be zero", keys(stood))
+	resources := w.declarations(FrontStack(edge.ClassPreview))
+	if _, declared := resources[previewNEGName(previewBase)]; declared {
+		t.Errorf("the front still declares %v after the wildcard was released: bytes a release leaves behind must be zero", keys(resources))
 	}
 	if slices.Contains(w.torn(), FrontStack(edge.ClassPreview)) {
 		t.Error("releasing the wildcard destroyed the class front, which every project in the class is answered by")
@@ -396,13 +396,13 @@ func TestAWildcardWhoseTeardownFailsIsStillOwnedSoTheRetryStillTearsItDown(t *te
 
 	owner, err := front.DomainOwner(ctx, edge.PreviewWildcard(previewBase))
 	if err != nil || owner != edge.PreviewEntryOwner {
-		t.Errorf("DomainOwner(%s) = %q, %v, want %q: the neg and the certificate map entry are still standing, "+
+		t.Errorf("DomainOwner(%s) = %q, %v, want %q: the neg and the certificate map entry are still provisioned, "+
 			"and a retry that read the wildcard as gone would leave them there forever",
 			edge.PreviewWildcard(previewBase), owner, err, edge.PreviewEntryOwner)
 	}
 }
 
-func TestThePreviewWildcardIsHeldWhileAProjectIsStillServedOnIt(t *testing.T) {
+func TestThePreviewWildcardIsKeptWhileAProjectIsStillServedOnIt(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -418,7 +418,7 @@ func TestThePreviewWildcardIsHeldWhileAProjectIsStillServedOnIt(t *testing.T) {
 		t.Fatalf("DestroyPreviewWildcard with a project still served = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
 	if !strings.Contains(refused.Message, "shop") {
-		t.Errorf("the refusal reads %q, want the projects that hold it named: they are what the operator has to release", refused.Message)
+		t.Errorf("the refusal reads %q, want the projects served on it named: they are what the operator has to release", refused.Message)
 	}
 }
 
@@ -437,7 +437,7 @@ func TestAPromotionOfAPreviewOnTheGlobalWildcardWritesNoHostRule(t *testing.T) {
 		t.Fatalf("Reconcile = %v", err)
 	}
 	if !stack.State().ServedOnGlobalPreview(previewBase) {
-		t.Fatalf("state = %+v, want the stack to carry the wildcard it is served on", stack.State())
+		t.Fatalf("state = %+v, want the stack to record the wildcard it is served on", stack.State())
 	}
 	before := w.hosts("ocel-alb-production-routes")
 
@@ -474,7 +474,7 @@ func TestAProjectsOwnPreviewWildcardIsRefusedOnTheLoadBalancer(t *testing.T) {
 	}
 }
 
-func TestTheWildcardRemovalPlanNamesWhatComesDownAndWhatStands(t *testing.T) {
+func TestTheWildcardRemovalPlanNamesWhatComesDownAndWhatStays(t *testing.T) {
 	t.Parallel()
 
 	front, _ := fronting(t)
@@ -490,7 +490,7 @@ func TestTheWildcardRemovalPlanNamesWhatComesDownAndWhatStands(t *testing.T) {
 		"certificatemanager.CertificateMapEntry",
 	} {
 		if !named[kind] {
-			t.Errorf("the removal plan names %v, want a %s row: a plan that hides a resource leaves it standing and billing", removed.Changes, kind)
+			t.Errorf("the removal plan names %v, want a %s row: a plan that hides a resource leaves it provisioned and billing", removed.Changes, kind)
 		}
 	}
 	if kept.Action != edge.PlanKeep || kept.Reason == "" {
@@ -503,8 +503,8 @@ func keys(declarations map[string]declaration) []string {
 }
 
 func cloudRunMask(neg declaration) string {
-	run, held := neg.Args["cloudRun"].(map[string]any)
-	if !held {
+	run, ok := neg.Args["cloudRun"].(map[string]any)
+	if !ok {
 		return ""
 	}
 	mask, _ := run["urlMask"].(string)
@@ -512,8 +512,8 @@ func cloudRunMask(neg declaration) string {
 }
 
 func cacheKeyPolicy(backend declaration) map[string]any {
-	policy, held := backend.Args["cdnPolicy"].(map[string]any)
-	if !held {
+	policy, ok := backend.Args["cdnPolicy"].(map[string]any)
+	if !ok {
 		return nil
 	}
 	key, _ := policy["cacheKeyPolicy"].(map[string]any)
@@ -561,7 +561,7 @@ func servedOnPreview(t *testing.T, front *Edge, slug, base string) {
 	}
 }
 
-func TestARemovalPlanNamesTheStandingCostItLeavesBehind(t *testing.T) {
+func TestARemovalPlanNamesTheRecurringCostItLeavesBehind(t *testing.T) {
 	t.Parallel()
 
 	front, _ := fronting(t)
@@ -575,10 +575,10 @@ func TestARemovalPlanNamesTheStandingCostItLeavesBehind(t *testing.T) {
 		}
 	}
 	if kept.Reason == "" {
-		t.Fatalf("ProjectRemovals = %+v, want a kept group saying what stands and keeps costing", groups)
+		t.Fatalf("ProjectRemovals = %+v, want a kept group saying what stays provisioned and keeps costing", groups)
 	}
 	if !strings.Contains(kept.Reason, "$18") {
-		t.Errorf("the kept group reads %q, want the standing cost named: the load balancer outlives the project it fronted", kept.Reason)
+		t.Errorf("the kept group reads %q, want the recurring cost named: the load balancer outlives the project it fronted", kept.Reason)
 	}
 }
 
@@ -594,7 +594,7 @@ func TestTheFrontIsNotTakenDownWhileAHostnameIsStillEnteredInItsCertificateMap(t
 		t.Fatalf("Teardown with a hostname still bound = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
 	if !strings.Contains(refused.Message, "shop.example.com") {
-		t.Errorf("the refusal reads %q, want the hostnames that hold the map named: they are what the operator has to release", refused.Message)
+		t.Errorf("the refusal reads %q, want the hostnames still entered in the map named: they are what the operator has to release", refused.Message)
 	}
 	if got := w.torn(); len(got) != 0 {
 		t.Errorf("the refused teardown destroyed %v: a certificate map with entries cannot be deleted, so the destroy fails partway "+
@@ -635,7 +635,7 @@ func TestTheFirstReleaseAfterABindTakesTheHostnameLive(t *testing.T) {
 
 	want := backendName("shop", edge.ClassProduction, "shop.example.com")
 	if got := w.hosts("ocel-alb-production-routes")["shop.example.com"]; got != want {
-		t.Errorf("the class url map routes shop.example.com onto %q, want the project's own backend %q: the bind held the hostname at a 404 "+
+		t.Errorf("the class url map routes shop.example.com onto %q, want the project's own backend %q: the bind served the hostname a 404 "+
 			"because the app had released nothing, and the release that gives it a service is what takes it live", got, want)
 	}
 }
@@ -666,7 +666,7 @@ func TestAHostnameBoundAfterAReleaseIsRoutedToThePromotedService(t *testing.T) {
 	}
 }
 
-func TestAPromotionOfAnotherAppLeavesAHeldHostnameHeld(t *testing.T) {
+func TestAPromotionOfAnotherAppLeavesAHostnameServingNotFound(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -686,7 +686,7 @@ func TestAPromotionOfAnotherAppLeavesAHeldHostnameHeld(t *testing.T) {
 	}
 
 	if got := w.hosts("ocel-alb-production-routes")["shop.example.com"]; got != notFoundBackend {
-		t.Errorf("the class url map routes shop.example.com onto %q, want it still held at the front's 404: the app it was bound to has "+
+		t.Errorf("the class url map routes shop.example.com onto %q, want it still on the front's 404: the app it was bound to has "+
 			"still released nothing", got)
 	}
 }

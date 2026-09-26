@@ -39,7 +39,7 @@ func previewSpec(label string) provider.StackSpec {
 	}
 }
 
-func TestAPreviewOnTheSharedWildcardStandsUpTheServiceItsHostnameNames(t *testing.T) {
+func TestAPreviewOnTheSharedWildcardDeploysTheServiceItsHostnameNames(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
 	label := edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", "")
@@ -49,7 +49,7 @@ func TestAPreviewOnTheSharedWildcardStandsUpTheServiceItsHostnameNames(t *testin
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	if len(containers) != 1 || containers[0].Physical != label {
-		t.Fatalf("ProvisionContainers() stood up %+v, want the service named %q: the load balancer resolves the hostname's label "+
+		t.Fatalf("ProvisionContainers() deployed %+v, want the service named %q: the load balancer resolves the hostname's label "+
 			"to a Cloud Run service of that name and nothing routes it anywhere else", containers, label)
 	}
 }
@@ -64,7 +64,7 @@ func TestAPreviewFunctionIsNamedApartFromThePreviewItShipsIn(t *testing.T) {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 	if len(functions) != 1 {
-		t.Fatalf("ProvisionFunctions() = %+v, want the one function the spec carries", functions)
+		t.Fatalf("ProvisionFunctions() = %+v, want the one function the spec names", functions)
 	}
 	if functions[0].Physical == label {
 		t.Errorf("the function is served by %q, which is the service the preview's own hostname resolves to", label)
@@ -121,7 +121,7 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 	}
 }
 
-func TestAProductionReleaseIsNamedNoDifferentlyForCarryingNoPreviewLabel(t *testing.T) {
+func TestAProductionReleaseIsNamedNoDifferentlyForHavingNoPreviewLabel(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
 	spec := previewSpec("")
@@ -137,33 +137,33 @@ func TestAProductionReleaseIsNamedNoDifferentlyForCarryingNoPreviewLabel(t *test
 		t.Fatal(err)
 	}
 	if len(containers) != 1 || containers[0].Physical != want {
-		t.Errorf("ProvisionContainers() stood up %+v, want %q: production is named for the namespace, project, environment and app as it always was",
+		t.Errorf("ProvisionContainers() deployed %+v, want %q: production is named for the namespace, project, environment and app as it always was",
 			containers, want)
 	}
 }
 
-func TestAFunctionCarriesWhatTheDeployDeliveredAndWhatItsSpecNames(t *testing.T) {
-	values, err := carried("fn", map[string]string{"DATABASE_URL": "postgres://"}, map[string]string{"STAGE": "one"})
+func TestAFunctionGetsWhatTheDeployDeliveredAndWhatItsSpecNames(t *testing.T) {
+	values, err := mergedValues("fn", map[string]string{"DATABASE_URL": "postgres://"}, map[string]string{"STAGE": "one"})
 	if err != nil {
-		t.Fatalf("carried() = %v", err)
+		t.Fatalf("mergedValues() = %v", err)
 	}
 	if values["DATABASE_URL"] != "postgres://" || values["STAGE"] != "one" {
-		t.Errorf("carried() = %v, want both what the deploy resolved and what the spec named", values)
+		t.Errorf("mergedValues() = %v, want both what the deploy resolved and what the spec named", values)
 	}
 }
 
 func TestASpecThatNamesWhatTheDeployDeliveredIsRefused(t *testing.T) {
-	_, err := carried("fn", map[string]string{"DATABASE_URL": "postgres://"}, map[string]string{"DATABASE_URL": "sqlite://"})
+	_, err := mergedValues("fn", map[string]string{"DATABASE_URL": "postgres://"}, map[string]string{"DATABASE_URL": "sqlite://"})
 	if err == nil {
-		t.Fatal("carried() let the spec take the delivered value's place, and the app would read a value nothing in it declared")
+		t.Fatal("mergedValues() let the spec take the delivered value's place, and the app would read a value nothing in it declared")
 	}
 	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
-		t.Errorf("carried() code = %v, want %v", code, refusal.CodeInvalid)
+		t.Errorf("mergedValues() code = %v, want %v", code, refusal.CodeInvalid)
 	}
 	if !strings.Contains(err.Error(), "DATABASE_URL") {
-		t.Errorf("carried() = %v, want the name that would be displaced said", err)
+		t.Errorf("mergedValues() = %v, want the name that would be displaced said", err)
 	}
 	if !strings.Contains(err.Error(), "fn") {
-		t.Errorf("carried() = %v, want what carries it said", err)
+		t.Errorf("mergedValues() = %v, want what sets it said", err)
 	}
 }

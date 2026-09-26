@@ -31,7 +31,7 @@ type memo[T any] struct {
 	err   error
 }
 
-func (m *memo[T]) held(open func() (T, error)) (T, error) {
+func (m *memo[T]) get(open func() (T, error)) (T, error) {
 	m.once.Do(func() { m.value, m.err = open() })
 	return m.value, m.err
 }
@@ -55,8 +55,8 @@ type clients struct {
 	projects  memo[*cloudresourcemanager.Service]
 }
 
-func opened[T any](c *clients, held *memo[T], doing string, open func() (T, error)) (T, error) {
-	client, err := held.held(func() (T, error) {
+func opened[T any](c *clients, cache *memo[T], doing string, open func() (T, error)) (T, error) {
+	client, err := cache.get(func() (T, error) {
 		if !c.emulated() {
 			if _, err := google.FindDefaultCredentials(context.Background(), ports.CloudPlatformScope); err != nil {
 				var nothing T
@@ -131,7 +131,7 @@ func (c *clients) Accounts() (*iam.Service, error) {
 }
 
 func (c *clients) Principal(ctx context.Context) (string, error) {
-	return c.principal.held(func() (string, error) {
+	return c.principal.get(func() (string, error) {
 		if c.emulated() {
 			return emulatorPrincipal, nil
 		}
@@ -171,7 +171,7 @@ func (c *clients) backendLink(backend string) string {
 }
 
 func (c *clients) Workload() *ports.Clients {
-	held, _ := c.workload.held(func() (*ports.Clients, error) {
+	workload, _ := c.workload.get(func() (*ports.Clients, error) {
 		return &ports.Clients{
 			Namespace: c.namespace,
 			Project:   c.project,
@@ -179,7 +179,7 @@ func (c *clients) Workload() *ports.Clients {
 			Endpoint:  c.endpoint,
 		}, nil
 	})
-	return held
+	return workload
 }
 
 func (c *clients) Firestore() (*firestore.Client, error) { return c.Workload().Firestore() }

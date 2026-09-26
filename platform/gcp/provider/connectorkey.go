@@ -33,7 +33,7 @@ func keyPathed(config []byte, path string) ([]byte, error) {
 	var named map[string]any
 	if err := json.Unmarshal(config, &named); err != nil {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"the connector config this install carries is not an object: %s", err)
+			"the connector config this install includes is not an object: %s", err)
 	}
 	named["keyPath"] = path
 	written, err := json.Marshal(named)
@@ -53,20 +53,20 @@ func publicKeyOf(payload []byte) (string, error) {
 		return "", fmt.Errorf("the connector key is not base64: %w", err)
 	}
 	if len(seed) != ed25519.SeedSize {
-		return "", fmt.Errorf("the connector key holds %d bytes, not %d", len(seed), ed25519.SeedSize)
+		return "", fmt.Errorf("the connector key is %d bytes, not %d", len(seed), ed25519.SeedSize)
 	}
 	public := ed25519.NewKeyFromSeed(seed).Public().(ed25519.PublicKey)
 	return base64.StdEncoding.EncodeToString(public), nil
 }
 
-func connectorPublicKeyOf(held *run.GoogleCloudRunV2Service) string {
-	if held.Template == nil {
+func connectorPublicKeyOf(service *run.GoogleCloudRunV2Service) string {
+	if service.Template == nil {
 		return ""
 	}
-	for _, container := range held.Template.Containers {
-		for _, carried := range container.Env {
-			if carried.Name == connectorPublicKeyEnv {
-				return carried.Value
+	for _, container := range service.Template.Containers {
+		for _, entry := range container.Env {
+			if entry.Name == connectorPublicKeyEnv {
+				return entry.Value
 			}
 		}
 	}
@@ -74,7 +74,7 @@ func connectorPublicKeyOf(held *run.GoogleCloudRunV2Service) string {
 }
 
 func (p *Provider) connectorKey(ctx context.Context, progress edge.Progress) (string, error) {
-	clients, err := p.stood(ctx)
+	clients, err := p.openClients(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -91,21 +91,21 @@ func (p *Provider) connectorKey(ctx context.Context, progress edge.Progress) (st
 		return "", fmt.Errorf("create the %s secret the connector's key is kept in: %w", name, err)
 	}
 
-	held, err := attempted(ctx, service.Projects.Secrets.Versions.Access(path+"/versions/latest").Context(ctx).Do)
+	latest, err := attempted(ctx, service.Projects.Secrets.Versions.Access(path+"/versions/latest").Context(ctx).Do)
 	switch {
-	case err == nil && held.Payload != nil:
-		payload, err := base64.StdEncoding.DecodeString(held.Payload.Data)
+	case err == nil && latest.Payload != nil:
+		payload, err := base64.StdEncoding.DecodeString(latest.Payload.Data)
 		if err != nil {
-			return "", fmt.Errorf("read the connector key %s holds: %w", name, err)
+			return "", fmt.Errorf("read the connector key %s stores: %w", name, err)
 		}
 		public, err := publicKeyOf(payload)
 		if err != nil {
-			return "", fmt.Errorf("read the connector key %s holds: %w", name, err)
+			return "", fmt.Errorf("read the connector key %s stores: %w", name, err)
 		}
-		say(progress, "The connector keeps the key "+name+" already holds")
+		say(progress, "The connector keeps the key "+name+" already stores")
 		return public, nil
 	case err != nil && !absent(err):
-		return "", fmt.Errorf("read whether %s holds a connector key: %w", name, err)
+		return "", fmt.Errorf("read whether %s stores a connector key: %w", name, err)
 	}
 
 	seed := make([]byte, ed25519.SeedSize)
@@ -123,7 +123,7 @@ func (p *Provider) connectorKey(ctx context.Context, progress edge.Progress) (st
 }
 
 func (p *Provider) bindConnectorKeySecret(ctx context.Context, granting bool) error {
-	clients, err := p.stood(ctx)
+	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err
 	}
@@ -168,7 +168,7 @@ func boundSecretMember(bindings []*secretmanager.Binding, role, member string, g
 }
 
 func (p *Provider) takeConnectorKey(ctx context.Context, progress edge.Progress) error {
-	clients, err := p.stood(ctx)
+	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err
 	}

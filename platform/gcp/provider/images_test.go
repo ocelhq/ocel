@@ -27,14 +27,14 @@ func pushing(t *testing.T, endpoint string) *Provider {
 
 func names(t *testing.T, p *Provider) Names {
 	t.Helper()
-	held, err := p.Names(context.Background())
+	named, err := p.Names(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return held
+	return named
 }
 
-func TestEachClassPushesToTheRepositoryItsBootstrapStoodUp(t *testing.T) {
+func TestEachClassPushesToTheRepositoryItsBootstrapProvisioned(t *testing.T) {
 	p := pushing(t, "")
 
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
@@ -52,7 +52,7 @@ func TestEachClassPushesToTheRepositoryItsBootstrapStoodUp(t *testing.T) {
 			t.Errorf("ImageRegistry(%s) username = %q, want the name Artifact Registry takes a bearer token under", class, target.Username)
 		}
 		if target.Password != "ya29.stub" {
-			t.Errorf("ImageRegistry(%s) password = %q, want the access token this deploy holds", class, target.Password)
+			t.Errorf("ImageRegistry(%s) password = %q, want the access token this deploy has", class, target.Password)
 		}
 	}
 	if p.resolved.Repository(edge.ClassProduction) == p.resolved.Repository(edge.ClassPreview) {

@@ -120,11 +120,11 @@ func (b bootstrap) servicesOn(ctx context.Context, features []string) error {
 	var off []string
 	for _, api := range apisFor(features) {
 		name := "projects/" + b.clients.project + "/services/" + api
-		held, err := attempted(ctx, service.Services.Get(name).Context(ctx).Do)
+		apiService, err := attempted(ctx, service.Services.Get(name).Context(ctx).Do)
 		if err != nil {
 			return fmt.Errorf("read whether %s is on in project %s: %w", api, b.clients.project, err)
 		}
-		if held.State != enabledService {
+		if apiService.State != enabledService {
 			off = append(off, api)
 		}
 	}
@@ -132,7 +132,7 @@ func (b bootstrap) servicesOn(ctx context.Context, features []string) error {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
-		"project %s has %s switched off, and ocel stands up resources rather than switching on the services that hold them.\n"+
+		"project %s has %s switched off, and ocel provisions resources rather than switching on the services that host them.\n"+
 			"Run `gcloud services enable %s --project %s`, then try again",
 		b.clients.project, strings.Join(off, ", "), strings.Join(off, " "), b.clients.project)
 }
@@ -171,12 +171,12 @@ func (b bootstrap) regionServed(ctx context.Context, read survey) error {
 	if err != nil {
 		return err
 	}
-	held, err := attempted(ctx, service.Projects.Locations.List("projects/"+b.clients.project).Context(ctx).Do)
+	listed, err := attempted(ctx, service.Projects.Locations.List("projects/"+b.clients.project).Context(ctx).Do)
 	if err != nil {
 		return fmt.Errorf("ask which locations Firestore serves project %s from: %w", b.clients.project, err)
 	}
-	served := make([]string, 0, len(held.Locations))
-	for _, location := range held.Locations {
+	served := make([]string, 0, len(listed.Locations))
+	for _, location := range listed.Locations {
 		served = append(served, locationID(location))
 	}
 	if slices.Contains(served, read.Region) {
@@ -184,7 +184,7 @@ func (b bootstrap) regionServed(ctx context.Context, read survey) error {
 	}
 	slices.Sort(served)
 	return refusal.Refuse(refusal.CodeInvalid,
-		"option %q names %s, and the one region a bootstrap is given holds this project's database as well as its buckets and keys: "+
+		"option %q names %s, and the one region a bootstrap is given hosts this project's database as well as its buckets and keys: "+
 			"Firestore does not serve %s.\nName one Firestore serves: %s",
 		"region", read.Region, read.Region, strings.Join(served, ", "))
 }

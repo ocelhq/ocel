@@ -11,7 +11,7 @@ import (
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
 
-func TestEveryNameThisProviderDerivesCarriesTheNamespace(t *testing.T) {
+func TestEveryNameThisProviderDerivesContainsTheNamespace(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		namespace string

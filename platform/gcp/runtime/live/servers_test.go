@@ -31,8 +31,8 @@ func (s *firestoreServer) BatchGetDocuments(req *firestorepb.BatchGetDocumentsRe
 	defer s.mu.Unlock()
 	for _, name := range req.GetDocuments() {
 		var answer *firestorepb.BatchGetDocumentsResponse
-		if held, found := s.docs[name]; found {
-			answer = &firestorepb.BatchGetDocumentsResponse{Result: &firestorepb.BatchGetDocumentsResponse_Found{Found: held}}
+		if doc, found := s.docs[name]; found {
+			answer = &firestorepb.BatchGetDocumentsResponse{Result: &firestorepb.BatchGetDocumentsResponse_Found{Found: doc}}
 		} else {
 			answer = &firestorepb.BatchGetDocumentsResponse{Result: &firestorepb.BatchGetDocumentsResponse_Missing{Missing: name}}
 		}
@@ -83,9 +83,9 @@ func (s *firestoreServer) Commit(_ context.Context, req *firestorepb.CommitReque
 	for _, write := range req.GetWrites() {
 		switch op := write.GetOperation().(type) {
 		case *firestorepb.Write_Update:
-			held := op.Update
-			held.CreateTime, held.UpdateTime = now, now
-			s.docs[held.GetName()] = held
+			doc := op.Update
+			doc.CreateTime, doc.UpdateTime = now, now
+			s.docs[doc.GetName()] = doc
 		case *firestorepb.Write_Delete:
 			delete(s.docs, op.Delete)
 		default:
@@ -123,11 +123,11 @@ func (s *kmsServer) Encrypt(_ context.Context, req *kmspb.EncryptRequest) (*kmsp
 func (s *kmsServer) Decrypt(_ context.Context, req *kmspb.DecryptRequest) (*kmspb.DecryptResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	held, found := s.sealed[string(req.GetCiphertext())]
-	if !found || held.key != req.GetName() || !bytes.Equal(held.aad, req.GetAdditionalAuthenticatedData()) {
+	sealed, found := s.sealed[string(req.GetCiphertext())]
+	if !found || sealed.key != req.GetName() || !bytes.Equal(sealed.aad, req.GetAdditionalAuthenticatedData()) {
 		return nil, status.Error(codes.InvalidArgument, "Decryption failed: the ciphertext is invalid")
 	}
-	return &kmspb.DecryptResponse{Plaintext: held.plaintext}, nil
+	return &kmspb.DecryptResponse{Plaintext: sealed.plaintext}, nil
 }
 
 func servingFirestoreAndKMS(t *testing.T) string {

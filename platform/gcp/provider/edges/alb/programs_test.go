@@ -16,7 +16,7 @@ func binding(hosts map[string]Host) Program {
 	})
 }
 
-func TestTheFrontendStandsOneLoadBalancerUpForTheWholeClass(t *testing.T) {
+func TestTheFrontendProvisionsOneLoadBalancerForTheWholeClass(t *testing.T) {
 	t.Parallel()
 
 	seen, err := declared(frontProgram(frontSpec{Names: frontNames(edge.ClassProduction)}))
@@ -32,13 +32,13 @@ func TestTheFrontendStandsOneLoadBalancerUpForTheWholeClass(t *testing.T) {
 		"ocel-alb-production-https":    "gcp:compute/targetHttpsProxy:TargetHttpsProxy",
 		"ocel-alb-production-forward":  "gcp:compute/globalForwardingRule:GlobalForwardingRule",
 	} {
-		held, declared := seen[name]
+		resource, declared := seen[name]
 		if !declared {
 			t.Errorf("the frontend declares no %s; without it a hostname on this class reaches nothing", name)
 			continue
 		}
-		if held.Token != token {
-			t.Errorf("%s is a %s, want a %s", name, held.Token, token)
+		if resource.Token != token {
+			t.Errorf("%s is a %s, want a %s", name, resource.Token, token)
 		}
 	}
 	if len(seen) != 6 {
@@ -50,7 +50,7 @@ func TestTheFrontendStandsOneLoadBalancerUpForTheWholeClass(t *testing.T) {
 		t.Error("the url map names no default service, and a hostname no project claimed would reach whichever backend answered first")
 	}
 	if got := abortedBy(routes.Args["defaultRouteAction"]); got != float64(notFoundStatus) {
-		t.Errorf("the url map answers an unclaimed hostname with %v, want %d: the not-found backend it defaults to holds no backends, "+
+		t.Errorf("the url map answers an unclaimed hostname with %v, want %d: the not-found backend it defaults to has no backends, "+
 			"so anything that reaches it is answered 502 rather than refused", got, notFoundStatus)
 	}
 	if got := routes.Args["hostRules"]; got != nil {
@@ -70,16 +70,16 @@ func TestTheFrontendStandsOneLoadBalancerUpForTheWholeClass(t *testing.T) {
 }
 
 func abortedBy(action any) any {
-	held, carried := action.(map[string]any)
-	if !carried {
+	routeAction, ok := action.(map[string]any)
+	if !ok {
 		return nil
 	}
-	policy, carried := held["faultInjectionPolicy"].(map[string]any)
-	if !carried {
+	policy, ok := routeAction["faultInjectionPolicy"].(map[string]any)
+	if !ok {
 		return nil
 	}
-	abort, carried := policy["abort"].(map[string]any)
-	if !carried {
+	abort, ok := policy["abort"].(map[string]any)
+	if !ok {
 		return nil
 	}
 	return abort["httpStatus"]
@@ -114,13 +114,13 @@ func TestABindingDeclaresACachedBackendOnThePointersCloudRunService(t *testing.T
 
 	neg, declaredNEG := seen["ocel-alb-shop-production-shop-example-com-neg"]
 	if !declaredNEG {
-		t.Fatalf("the binding declares no serverless neg; nothing would carry a request from the load balancer to Cloud Run")
+		t.Fatalf("the binding declares no serverless neg; nothing would route a request from the load balancer to Cloud Run")
 	}
 	if got := neg.Args["networkEndpointType"]; got != "SERVERLESS" {
 		t.Errorf("the neg is a %v, want SERVERLESS: its endpoint is a Cloud Run service, not an instance", got)
 	}
-	run, held := neg.Args["cloudRun"].(map[string]any)
-	if !held || run["service"] != "ocel-shop-prod-web" {
+	run, ok := neg.Args["cloudRun"].(map[string]any)
+	if !ok || run["service"] != "ocel-shop-prod-web" {
 		t.Errorf("the neg points at %v, want the Cloud Run service the pointer's active record named", neg.Args["cloudRun"])
 	}
 

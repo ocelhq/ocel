@@ -59,10 +59,10 @@ func (p *Provider) ResolveFunctionBase(ctx context.Context, framework appbuild.F
 	if err := runsX8664(framework.Arch, "the "+framework.Name+" function"); err != nil {
 		return nil, err
 	}
-	on, carried := p.bases[framework.Name]
-	if !carried {
+	on, shipped := p.bases[framework.Name]
+	if !shipped {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"a function on Cloud Run is a container, and this provider carries no base image a %s function could run in: it carries one for %s",
+			"a function on Cloud Run is a container, and this provider ships no base image a %s function could run in: it ships one for %s",
 			framework.Name, strings.Join(slices.Sorted(maps.Keys(p.bases)), ", "))
 	}
 	image, err := p.based(ctx, on.ref)
@@ -73,8 +73,8 @@ func (p *Provider) ResolveFunctionBase(ctx context.Context, framework appbuild.F
 }
 
 func (p *Provider) based(ctx context.Context, ref string) (v1.Image, error) {
-	held, _ := p.pulled.LoadOrStore(ref, &memo[v1.Image]{})
-	return held.(*memo[v1.Image]).held(func() (v1.Image, error) { return p.pull(ctx, ref) })
+	cached, _ := p.pulled.LoadOrStore(ref, &memo[v1.Image]{})
+	return cached.(*memo[v1.Image]).get(func() (v1.Image, error) { return p.pull(ctx, ref) })
 }
 
 func commandable(image v1.Image, bins []string) (v1.Image, error) {
@@ -93,16 +93,16 @@ func onPath(env []string, bins []string) []string {
 		return env
 	}
 	kept := make([]string, 0, len(env)+1)
-	held := strings.Join(bins, ":")
+	searchPath := strings.Join(bins, ":")
 	for _, entry := range env {
 		named, value, _ := strings.Cut(entry, "=")
 		if named != pathVariable {
 			kept = append(kept, entry)
 			continue
 		}
-		held = strings.Join(append(slices.Clone(bins), value), ":")
+		searchPath = strings.Join(append(slices.Clone(bins), value), ":")
 	}
-	return append(kept, pathVariable+"="+held)
+	return append(kept, pathVariable+"="+searchPath)
 }
 
 func runsX8664(architecture, what string) error {

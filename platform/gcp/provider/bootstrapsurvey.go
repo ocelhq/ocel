@@ -50,19 +50,19 @@ type survey struct {
 	Generation int64
 	Emulated   bool
 
-	standing map[string]bool
-	mending  map[string]string
-	sibling  bool
-	stateOf  string
+	present map[string]bool
+	mending map[string]string
+	sibling bool
+	stateOf string
 }
 
-func (s survey) holds(held item) bool { return s.standing[held.ID()] }
+func (s survey) has(target item) bool { return s.present[target.ID()] }
 
-func (s survey) mends(held item) string { return s.mending[held.ID()] }
+func (s survey) mends(target item) string { return s.mending[target.ID()] }
 
 func (s survey) current(items []item) bool {
 	for _, item := range items {
-		if !s.holds(item) || s.mends(item) != "" {
+		if !s.has(item) || s.mends(item) != "" {
 			return false
 		}
 	}
@@ -76,17 +76,17 @@ func (b bootstrap) survey(ctx context.Context, class edge.Class) (survey, error)
 		Project:  b.clients.project,
 		Region:   b.clients.region,
 		Emulated: b.clients.emulated(),
-		standing: map[string]bool{},
+		present:  map[string]bool{},
 		mending:  map[string]string{},
 	}
 	for _, item := range bootstrapItems(read.Names, class, read.Emulated) {
-		stands, err := b.stands(ctx, class, item)
+		found, err := b.presenceOf(ctx, class, item)
 		if err != nil {
 			return survey{}, err
 		}
-		read.standing[item.ID()] = stands.held
-		if stands.mends != "" {
-			read.mending[item.ID()] = stands.mends
+		read.present[item.ID()] = found.present
+		if found.mends != "" {
+			read.mending[item.ID()] = found.mends
 		}
 	}
 
@@ -94,22 +94,22 @@ func (b bootstrap) survey(ctx context.Context, class edge.Class) (survey, error)
 	if err != nil {
 		return survey{}, err
 	}
-	read.sibling = sibling.held
+	read.sibling = sibling.present
 
 	own, err := b.stamped(ctx, read.Names.Bucket(class))
 	if err != nil {
 		return survey{}, err
 	}
-	read.Present, read.Stamp, read.Generation = own.held, own.stamp, own.generation
+	read.Present, read.Stamp, read.Generation = own.present, own.stamp, own.generation
 
-	if read.stateOf, err = b.stateHeldIn(ctx, read.Names.StateBucket(class)); err != nil {
+	if read.stateOf, err = b.stateIn(ctx, read.Names.StateBucket(class)); err != nil {
 		return survey{}, err
 	}
 	return read, nil
 }
 
 type stamped struct {
-	held       bool
+	present    bool
 	stamp      stamp
 	generation int64
 }
@@ -135,12 +135,12 @@ func (b bootstrap) stamped(ctx context.Context, bucket string) (stamped, error) 
 	if err := json.Unmarshal(written, &read); err != nil {
 		return stamped{}, fmt.Errorf("read %s in %s: %w", StampObject, bucket, err)
 	}
-	return stamped{held: true, stamp: read, generation: reader.Attrs.Generation}, nil
+	return stamped{present: true, stamp: read, generation: reader.Attrs.Generation}, nil
 }
 
 const stateRoot = ".pulumi/stacks/"
 
-func (b bootstrap) stateHeldIn(ctx context.Context, bucket string) (string, error) {
+func (b bootstrap) stateIn(ctx context.Context, bucket string) (string, error) {
 	client, err := b.clients.Storage()
 	if err != nil {
 		return "", err
@@ -150,7 +150,7 @@ func (b bootstrap) stateHeldIn(ctx context.Context, bucket string) (string, erro
 		return "", nil
 	}
 	if err != nil {
-		return "", fmt.Errorf("list what %s holds: %w", bucket, err)
+		return "", fmt.Errorf("list what %s contains: %w", bucket, err)
 	}
 	return stackNamed(attrs.Name), nil
 }
@@ -164,81 +164,81 @@ func stackNamed(object string) string {
 	return name
 }
 
-type standing struct {
-	held  bool
-	mends string
+type presence struct {
+	present bool
+	mends   string
 }
 
-func (b bootstrap) stands(ctx context.Context, class edge.Class, held item) (standing, error) {
-	switch held.Kind {
+func (b bootstrap) presenceOf(ctx context.Context, class edge.Class, repository item) (presence, error) {
+	switch repository.Kind {
 	case KindDatabase:
-		return b.databaseStands(ctx)
+		return b.databasePresence(ctx)
 	case KindBucket:
-		return b.bucketStands(ctx, held.Name)
+		return b.bucketPresence(ctx, repository.Name)
 	case KindKeyRing:
-		return stood(b.keyRingStands(ctx))
+		return presenceFrom(b.keyRingExists(ctx))
 	case KindKey:
-		return stood(b.keyStands(ctx, held.Name))
+		return presenceFrom(b.keyUsable(ctx, repository.Name))
 	case KindSecret:
-		return stood(b.secretStands(ctx, held.Name))
+		return presenceFrom(b.secretExists(ctx, repository.Name))
 	case KindRepository:
-		return b.repositoryStands(ctx, held.Name)
+		return b.repositoryPresence(ctx, repository.Name)
 	case KindServiceAccount:
-		return b.accountStands(ctx, class, held.Name)
+		return b.accountPresence(ctx, class, repository.Name)
 	}
-	return standing{}, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing surveys a %s", held.Kind)
+	return presence{}, refusal.Refuse(refusal.CodeInvalid, "gcp: nothing surveys a %s", repository.Kind)
 }
 
-func stood(held bool, err error) (standing, error) { return standing{held: held}, err }
+func presenceFrom(present bool, err error) (presence, error) { return presence{present: present}, err }
 
-func (b bootstrap) databaseStands(ctx context.Context) (standing, error) {
+func (b bootstrap) databasePresence(ctx context.Context) (presence, error) {
 	if b.clients.emulated() {
-		return standing{held: true}, nil
+		return presence{present: true}, nil
 	}
 	service, err := b.clients.Databases()
 	if err != nil {
-		return standing{}, err
+		return presence{}, err
 	}
-	held, err := attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients)).Context(ctx).Do)
+	database, err := attempted(ctx, service.Projects.Databases.Get(databasePath(b.clients)).Context(ctx).Do)
 	if absent(err) {
-		return standing{}, nil
+		return presence{}, nil
 	}
 	if err != nil {
-		return standing{}, fmt.Errorf("read the %q Firestore database: %w", b.clients.Database(), err)
+		return presence{}, fmt.Errorf("read the %q Firestore database: %w", b.clients.Database(), err)
 	}
-	if held.DeleteProtectionState != protectionOn {
-		return standing{held: true, mends: reasonUnprotected}, nil
+	if database.DeleteProtectionState != protectionOn {
+		return presence{present: true, mends: reasonUnprotected}, nil
 	}
-	return standing{held: true}, nil
+	return presence{present: true}, nil
 }
 
 func databasePath(c *clients) string {
 	return "projects/" + c.project + "/databases/" + c.Database()
 }
 
-func (b bootstrap) bucketStands(ctx context.Context, name string) (standing, error) {
+func (b bootstrap) bucketPresence(ctx context.Context, name string) (presence, error) {
 	client, err := b.clients.Storage()
 	if err != nil {
-		return standing{}, err
+		return presence{}, err
 	}
 	attrs, err := client.Bucket(name).Attrs(ctx)
 	if err != nil {
 		if errors.Is(err, storage.ErrBucketNotExist) || absent(err) {
-			return standing{}, nil
+			return presence{}, nil
 		}
-		return standing{}, fmt.Errorf("read the %s bucket: %w", name, err)
+		return presence{}, fmt.Errorf("read the %s bucket: %w", name, err)
 	}
-	return bucketStanding(attrs, b.clients.emulated()), nil
+	return bucketPresenceOf(attrs, b.clients.emulated()), nil
 }
 
-func bucketStanding(attrs *storage.BucketAttrs, emulated bool) standing {
+func bucketPresenceOf(attrs *storage.BucketAttrs, emulated bool) presence {
 	if !emulated && !locked(attrs) {
-		return standing{held: true, mends: reasonUnlocked}
+		return presence{present: true, mends: reasonUnlocked}
 	}
-	return standing{held: true}
+	return presence{present: true}
 }
 
-func (b bootstrap) keyRingStands(ctx context.Context) (bool, error) {
+func (b bootstrap) keyRingExists(ctx context.Context) (bool, error) {
 	client, err := b.clients.KMS()
 	if err != nil {
 		return false, err
@@ -254,15 +254,15 @@ func (b bootstrap) keyRingStands(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-func (b bootstrap) keyStands(ctx context.Context, name string) (bool, error) {
-	key, err := b.keyHeld(ctx, name)
+func (b bootstrap) keyUsable(ctx context.Context, name string) (bool, error) {
+	key, err := b.readKey(ctx, name)
 	if err != nil {
 		return false, err
 	}
 	return usable(key.GetPrimary()), nil
 }
 
-func (b bootstrap) keyHeld(ctx context.Context, name string) (*kmspb.CryptoKey, error) {
+func (b bootstrap) readKey(ctx context.Context, name string) (*kmspb.CryptoKey, error) {
 	client, err := b.clients.KMS()
 	if err != nil {
 		return nil, err
@@ -288,7 +288,7 @@ func usable(version *kmspb.CryptoKeyVersion) bool {
 	}
 }
 
-func (b bootstrap) secretStands(ctx context.Context, name string) (bool, error) {
+func (b bootstrap) secretExists(ctx context.Context, name string) (bool, error) {
 	service, err := b.clients.Secrets()
 	if err != nil {
 		return false, err
@@ -300,52 +300,52 @@ func (b bootstrap) secretStands(ctx context.Context, name string) (bool, error) 
 	if err != nil {
 		return false, fmt.Errorf("read the %s secret: %w", name, err)
 	}
-	return b.passphraseHeld(ctx, name)
+	return b.passphraseExists(ctx, name)
 }
 
-func (b bootstrap) passphraseHeld(ctx context.Context, name string) (bool, error) {
+func (b bootstrap) passphraseExists(ctx context.Context, name string) (bool, error) {
 	service, err := b.clients.Secrets()
 	if err != nil {
 		return false, err
 	}
-	held, err := attempted(ctx, service.Projects.Secrets.Versions.Get(
+	version, err := attempted(ctx, service.Projects.Secrets.Versions.Get(
 		secretPath(b.clients.project, name)+"/versions/latest").Context(ctx).Do)
 	if absent(err) {
 		return false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("read whether the %s secret holds a passphrase: %w", name, err)
+		return false, fmt.Errorf("read whether the %s secret has a passphrase: %w", name, err)
 	}
-	return held.State == enabledVersion, nil
+	return version.State == enabledVersion, nil
 }
 
-func (b bootstrap) repositoryStands(ctx context.Context, name string) (standing, error) {
+func (b bootstrap) repositoryPresence(ctx context.Context, name string) (presence, error) {
 	service, err := b.clients.Repositories()
 	if err != nil {
-		return standing{}, err
+		return presence{}, err
 	}
-	held, err := attempted(ctx, service.Projects.Locations.Repositories.Get(repositoryPath(b.clients, name)).Context(ctx).Do)
+	repository, err := attempted(ctx, service.Projects.Locations.Repositories.Get(repositoryPath(b.clients, name)).Context(ctx).Do)
 	if absent(err) {
-		return standing{}, nil
+		return presence{}, nil
 	}
 	if err != nil {
-		return standing{}, fmt.Errorf("read the %s image repository: %w", name, err)
+		return presence{}, fmt.Errorf("read the %s image repository: %w", name, err)
 	}
-	return repositoryStanding(name, held)
+	return repositoryPresenceOf(name, repository)
 }
 
-func repositoryStanding(name string, held *artifactregistry.Repository) (standing, error) {
-	if held.Format != dockerImages {
-		return standing{}, refusal.Refuse(refusal.CodeInvalid,
-			"the %s repository already stands and holds %s packages, and Artifact Registry never changes the format of one: "+
-				"Cloud Run runs %s images and nothing this bootstrap does would make it hold them.\n"+
+func repositoryPresenceOf(name string, repository *artifactregistry.Repository) (presence, error) {
+	if repository.Format != dockerImages {
+		return presence{}, refusal.Refuse(refusal.CodeInvalid,
+			"the %s repository already exists and stores %s packages, and Artifact Registry never changes the format of one: "+
+				"Cloud Run runs %s images and nothing this bootstrap does would make it store them.\n"+
 				"Delete that repository, or bootstrap under a namespace naming another in %s",
-			name, held.Format, dockerImages, provider.NamespaceEnvVar)
+			name, repository.Format, dockerImages, provider.NamespaceEnvVar)
 	}
-	if !pruned(held.CleanupPolicies) {
-		return standing{held: true, mends: reasonUnpruned}, nil
+	if !pruned(repository.CleanupPolicies) {
+		return presence{present: true, mends: reasonUnpruned}, nil
 	}
-	return standing{held: true}, nil
+	return presence{present: true}, nil
 }
 
 func pruned(policies map[string]artifactregistry.CleanupPolicy) bool {
@@ -357,37 +357,37 @@ func pruned(policies map[string]artifactregistry.CleanupPolicy) bool {
 		policy.Condition.TagState == untaggedImages && policy.Condition.OlderThan == untaggedLifetime
 }
 
-func (b bootstrap) accountStands(ctx context.Context, class edge.Class, name string) (standing, error) {
+func (b bootstrap) accountPresence(ctx context.Context, class edge.Class, name string) (presence, error) {
 	service, err := b.clients.Accounts()
 	if err != nil {
-		return standing{}, err
+		return presence{}, err
 	}
 	_, err = attempted(ctx, service.Projects.ServiceAccounts.Get(accountPath(b.clients, name)).Context(ctx).Do)
 	if absent(err) {
-		return standing{}, nil
+		return presence{}, nil
 	}
 	if err != nil {
-		return standing{}, fmt.Errorf("read the %s service account: %w", name, err)
+		return presence{}, fmt.Errorf("read the %s service account: %w", name, err)
 	}
 	policy, err := b.accountPolicy(ctx, name)
 	if err != nil {
-		return standing{}, err
+		return presence{}, err
 	}
 	member, err := b.clients.Principal(ctx)
 	if err != nil {
-		return standing{}, err
+		return presence{}, err
 	}
 	if !granted(policy, memberOf(member)) {
-		return standing{held: true, mends: reasonUngranted}, nil
+		return presence{present: true, mends: reasonUngranted}, nil
 	}
-	reads, err := b.readsHeld(ctx, class)
+	reads, err := b.readsGranted(ctx, class)
 	if err != nil {
-		return standing{}, err
+		return presence{}, err
 	}
 	if !reads {
-		return standing{held: true, mends: reasonUnread}, nil
+		return presence{present: true, mends: reasonUnread}, nil
 	}
-	return standing{held: true}, nil
+	return presence{present: true}, nil
 }
 
 func (b bootstrap) accountPolicy(ctx context.Context, name string) (*iam.Policy, error) {

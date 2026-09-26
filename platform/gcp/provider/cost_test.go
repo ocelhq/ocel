@@ -148,7 +148,7 @@ func TestShapeBehindTheLoadBalancerFrontsEveryHostname(t *testing.T) {
 	}
 }
 
-func TestShapeOfAPreviewBehindTheLoadBalancerCarriesTheWildcard(t *testing.T) {
+func TestShapeOfAPreviewBehindTheLoadBalancerIncludesTheWildcard(t *testing.T) {
 	client, _ := costServed(t)
 
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{

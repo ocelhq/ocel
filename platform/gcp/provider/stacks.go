@@ -52,27 +52,27 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 	if err != nil {
 		return nil, err
 	}
-	standing := make([]provider.Function, 0, len(app.Functions))
+	deployed := make([]provider.Function, 0, len(app.Functions))
 	for _, fn := range app.Functions {
 		if err := runsX8664(fn.Framework.Arch, "function "+fn.Name); err != nil {
 			return nil, err
 		}
 		if strings.TrimSpace(fn.Image) == "" {
 			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"function %s carries no image, and a function on Cloud Run is the container a registry coordinate names", fn.Name)
+				"function %s names no image, and a function on Cloud Run is the container a registry coordinate names", fn.Name)
 		}
 		service, err := serviceFor(names, spec, app, fn.Name)
 		if err != nil {
 			return nil, err
 		}
-		values, err := carried(fn.Name, app.Values.ContainerEnv, fn.Env)
+		values, err := mergedValues(fn.Name, app.Values.ContainerEnv, fn.Env)
 		if err != nil {
 			return nil, err
 		}
-		if values, err = carried(fn.Name, values, own); err != nil {
+		if values, err = mergedValues(fn.Name, values, own); err != nil {
 			return nil, err
 		}
-		ran, err := p.stand(ctx, serving{
+		ran, err := p.deployService(ctx, serving{
 			service: service,
 			image:   fn.Image,
 			env:     values,
@@ -87,11 +87,11 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 			return nil, err
 		}
 		warnPreviewOpen(spec, service, progress)
-		standing = append(standing, provider.Function{
+		deployed = append(deployed, provider.Function{
 			Name: fn.Name, Physical: service, URL: ran.url, Revision: ran.revision,
 		})
 	}
-	return standing, nil
+	return deployed, nil
 }
 
 func (p *Provider) RemoveFunctions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress edge.Progress) error {
@@ -117,7 +117,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}
 	if strings.TrimSpace(app.HealthCheckPath) == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"app %s carries no health check path, and up means a 2xx on the path the wire named rather than on one this provider chose", app.App)
+			"app %s names no health check path, and up means a 2xx on the path the wire named rather than on one this provider chose", app.App)
 	}
 	names, err := p.Names(ctx)
 	if err != nil {
@@ -131,11 +131,11 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err != nil {
 		return nil, err
 	}
-	values, err := carried(app.App, app.Values.ContainerEnv, own)
+	values, err := mergedValues(app.App, app.Values.ContainerEnv, own)
 	if err != nil {
 		return nil, err
 	}
-	ran, err := p.stand(ctx, serving{
+	ran, err := p.deployService(ctx, serving{
 		service: service,
 		image:   app.Image,
 		env:     values,
@@ -199,17 +199,17 @@ func liveEnvironment(ref provider.StackRef) string {
 	return ref.Name.Env
 }
 
-func liveKeys(held provider.AppValues) []live.Key {
-	keys := make([]live.Key, 0, len(held.Secrets))
-	for _, secret := range held.Secrets {
+func liveKeys(values provider.AppValues) []live.Key {
+	keys := make([]live.Key, 0, len(values.Secrets))
+	for _, secret := range values.Secrets {
 		keys = append(keys, live.Key{Key: secret.Key, Folder: secret.Folder})
 	}
 	return keys
 }
 
-func liveBindings(held provider.AppValues) []live.Binding {
-	bindings := make([]live.Binding, 0, len(held.Bindings))
-	for _, binding := range held.Bindings {
+func liveBindings(values provider.AppValues) []live.Binding {
+	bindings := make([]live.Binding, 0, len(values.Bindings))
+	for _, binding := range values.Bindings {
 		kind := provider.WireBindingType(binding.Type)
 		resource := binding.Resource
 		if resource == "" {
@@ -225,14 +225,14 @@ func liveBindings(held provider.AppValues) []live.Binding {
 	return bindings
 }
 
-func carried(what string, delivered, own map[string]string) (map[string]string, error) {
+func mergedValues(what string, delivered, own map[string]string) (map[string]string, error) {
 	values := make(map[string]string, len(delivered)+len(own))
 	maps.Copy(values, delivered)
 	for _, name := range slices.Sorted(maps.Keys(own)) {
 		if _, taken := values[name]; taken {
 			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"%s carries %s in the environment its own spec names, and the deploy already resolved a value for %s: "+
-					"a revision holds one entry per name, so the spec's would silently take the place of what the deploy delivered "+
+				"%s sets %s in the environment its own spec names, and the deploy already resolved a value for %s: "+
+					"a revision has one entry per name, so the spec's would silently take the place of what the deploy delivered "+
 					"and the app would read a value nothing in it declared. Rename one of them",
 				what, name, name)
 		}

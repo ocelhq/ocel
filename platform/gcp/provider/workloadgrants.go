@@ -12,7 +12,7 @@ const (
 	workloadRecordsRole = "roles/datastore.viewer"
 	workloadOpeningRole = "roles/cloudkms.cryptoKeyDecrypter"
 
-	reasonUnread = "it stands, and it may not read this project's records or open one under the class key, so a container's runtime would boot with none of its secrets"
+	reasonUnread = "it exists, and it may not read this project's records or open one under the class key, so a container's runtime would boot with none of its secrets"
 )
 
 var workloadKeyRoles = []string{workloadOpeningRole}
@@ -45,11 +45,11 @@ func (b bootstrap) forgetReads(ctx context.Context, class edge.Class) error {
 	)
 }
 
-func (b bootstrap) readsHeld(ctx context.Context, class edge.Class) (bool, error) {
+func (b bootstrap) readsGranted(ctx context.Context, class edge.Class) (bool, error) {
 	member := workloadMember(b.clients, class)
-	records, err := b.clients.projectRoleHeld(ctx, member, workloadRecordsRole, databaseCondition(b.clients.project, b.clients.Namespace()))
+	records, err := b.clients.projectRoleGranted(ctx, member, workloadRecordsRole, databaseCondition(b.clients.project, b.clients.Namespace()))
 	if err != nil || !records {
 		return false, err
 	}
-	return b.clients.keyRolesHeld(ctx, class, member, workloadKeyRoles)
+	return b.clients.keyRolesGranted(ctx, class, member, workloadKeyRoles)
 }

@@ -146,11 +146,11 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 }
 
 func environmentOf(values map[string]string) []*run.GoogleCloudRunV2EnvVar {
-	carried := make([]*run.GoogleCloudRunV2EnvVar, 0, len(values))
+	entries := make([]*run.GoogleCloudRunV2EnvVar, 0, len(values))
 	for _, name := range slices.Sorted(maps.Keys(values)) {
-		carried = append(carried, &run.GoogleCloudRunV2EnvVar{Name: name, Value: values[name]})
+		entries = append(entries, &run.GoogleCloudRunV2EnvVar{Name: name, Value: values[name]})
 	}
-	return carried
+	return entries
 }
 
 func trafficTo(revision string) []*run.GoogleCloudRunV2TrafficTarget {
@@ -159,7 +159,7 @@ func trafficTo(revision string) []*run.GoogleCloudRunV2TrafficTarget {
 	}
 }
 
-func (p *Provider) heldAs(image string) string {
+func (p *Provider) storedAs(image string) string {
 	repository, digest, pinned := strings.Cut(image, "@")
 	if !pinned || !p.emulated() {
 		return image
@@ -172,8 +172,8 @@ type release struct {
 	revision string
 }
 
-func (p *Provider) stand(ctx context.Context, s serving, progress edge.Progress) (release, error) {
-	clients, err := p.stood(ctx)
+func (p *Provider) deployService(ctx context.Context, s serving, progress edge.Progress) (release, error) {
+	clients, err := p.openClients(ctx)
 	if err != nil {
 		return release{}, err
 	}
@@ -182,7 +182,7 @@ func (p *Provider) stand(ctx context.Context, s serving, progress edge.Progress)
 		return release{}, err
 	}
 	path := clients.servicePath(s.service)
-	s.image = p.heldAs(s.image)
+	s.image = p.storedAs(s.image)
 	desired, err := serviceOf(s)
 	if err != nil {
 		return release{}, err
@@ -194,7 +194,7 @@ func (p *Provider) stand(ctx context.Context, s serving, progress edge.Progress)
 	switch {
 	case absent(err):
 		if progress != nil {
-			progress.Say("Standing " + s.service + " up on Cloud Run")
+			progress.Say("Deploying " + s.service + " to Cloud Run")
 		}
 		err = p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 			return services.Projects.Locations.Services.
@@ -206,13 +206,13 @@ func (p *Provider) stand(ctx context.Context, s serving, progress edge.Progress)
 		if progress != nil {
 			progress.Say("Releasing " + s.service + " onto Cloud Run")
 		}
-		err = p.settled(ctx, "release "+s.service+" onto Cloud Run", func() error {
-			held, err := p.read(ctx, services, path, s.service)
+		err = p.retryWrite(ctx, "release "+s.service+" onto Cloud Run", func() error {
+			current, err := p.read(ctx, services, path, s.service)
 			if err != nil {
 				return err
 			}
-			desired.Etag = held.Etag
-			desired.Traffic = held.Traffic
+			desired.Etag = current.Etag
+			desired.Traffic = current.Traffic
 			return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
 				return services.Projects.Locations.Services.Patch(path, desired).Context(ctx).Do(call...)
 			})
@@ -221,12 +221,12 @@ func (p *Provider) stand(ctx context.Context, s serving, progress edge.Progress)
 	if err != nil {
 		return release{}, err
 	}
-	held, revision, err := p.route(ctx, services, path, s.service,
-		"pin the traffic of "+s.service+" to the revision this release stood up", latestReady(s.service))
+	deployed, revision, err := p.route(ctx, services, path, s.service,
+		"pin the traffic of "+s.service+" to the revision this release created", latestReady(s.service))
 	if err != nil {
 		return release{}, err
 	}
-	return release{url: held.Uri, revision: revision}, nil
+	return release{url: deployed.Uri, revision: revision}, nil
 }
 
 func (p *Provider) Pin(ctx context.Context, service, revision string) error {
@@ -234,7 +234,7 @@ func (p *Provider) Pin(ctx context.Context, service, revision string) error {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s is asked to serve a revision nothing named, and traffic is pinned to one revision by name", service)
 	}
-	clients, err := p.stood(ctx)
+	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err
 	}
@@ -248,11 +248,11 @@ func (p *Provider) Pin(ctx context.Context, service, revision string) error {
 }
 
 func latestReady(service string) func(*run.GoogleCloudRunV2Service) (string, error) {
-	return func(held *run.GoogleCloudRunV2Service) (string, error) {
-		revision := revisionName(held.LatestReadyRevision)
+	return func(current *run.GoogleCloudRunV2Service) (string, error) {
+		revision := revisionName(current.LatestReadyRevision)
 		if revision == "" {
 			return "", refusal.Refuse(refusal.CodeNotReady,
-				"%s stood up no revision that came ready, and a release routes traffic to the revision it made rather than to whatever ran last",
+				"%s created no revision that came ready, and a release routes traffic to the revision it made rather than to whatever ran last",
 				service)
 		}
 		return revision, nil
@@ -270,25 +270,25 @@ func (p *Provider) route(
 	choose func(*run.GoogleCloudRunV2Service) (string, error),
 ) (*run.GoogleCloudRunV2Service, string, error) {
 	var (
-		standing *run.GoogleCloudRunV2Service
+		latest   *run.GoogleCloudRunV2Service
 		revision string
 	)
-	err := p.settled(ctx, doing, func() error {
-		held, err := p.read(ctx, services, path, service)
+	err := p.retryWrite(ctx, doing, func() error {
+		current, err := p.read(ctx, services, path, service)
 		if err != nil {
 			return err
 		}
-		standing = held
-		revision, err = choose(held)
+		latest = current
+		revision, err = choose(current)
 		if err != nil {
 			return err
 		}
-		if servedBy(held.Traffic, revision) {
+		if servedBy(current.Traffic, revision) {
 			return nil
 		}
 		routed := &run.GoogleCloudRunV2Service{
-			Etag:     held.Etag,
-			Template: held.Template,
+			Etag:     current.Etag,
+			Template: current.Template,
 			Traffic:  trafficTo(revision),
 		}
 		return p.await(ctx, services, func(call ...googleapi.CallOption) (*run.GoogleLongrunningOperation, error) {
@@ -298,20 +298,20 @@ func (p *Provider) route(
 	if err != nil {
 		return nil, "", err
 	}
-	return standing, revision, nil
+	return latest, revision, nil
 }
 
 func (p *Provider) read(ctx context.Context, services *run.Service, path, service string) (*run.GoogleCloudRunV2Service, error) {
-	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
+	found, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
 		return services.Projects.Locations.Services.Get(path).Context(ctx).Do(call...)
 	})
 	if err != nil {
 		return nil, fmt.Errorf("read the Cloud Run service %s: %w", service, err)
 	}
-	return held, nil
+	return found, nil
 }
 
-func (p *Provider) settled(ctx context.Context, doing string, write func() error) error {
+func (p *Provider) retryWrite(ctx context.Context, doing string, write func() error) error {
 	var refused error
 	for attempt := range releaseAttempts {
 		if attempt > 0 && !waited(ctx, attempt) {
@@ -353,7 +353,7 @@ func (p *Provider) await(ctx context.Context, services *run.Service, call func(.
 	if err != nil {
 		return fmt.Errorf("ask Cloud Run to release: %w", err)
 	}
-	settled, err := until(ctx, "Cloud Run to finish "+revisionName(started.Name), func() (*run.GoogleLongrunningOperation, error) {
+	finished, err := until(ctx, "Cloud Run to finish "+revisionName(started.Name), func() (*run.GoogleLongrunningOperation, error) {
 		if started.Done {
 			return started, nil
 		}
@@ -364,15 +364,15 @@ func (p *Provider) await(ctx context.Context, services *run.Service, call func(.
 	if err != nil {
 		return err
 	}
-	if settled.Error != nil {
+	if finished.Error != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
-			"Cloud Run refused the release: %s", settled.Error.Message)
+			"Cloud Run refused the release: %s", finished.Error.Message)
 	}
 	return nil
 }
 
 func (p *Provider) tearDown(ctx context.Context, service string, progress edge.Progress) error {
-	clients, err := p.stood(ctx)
+	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err
 	}

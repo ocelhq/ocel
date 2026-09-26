@@ -40,7 +40,7 @@ func revisionEnv(t *testing.T, server *runServer, spec provider.StackSpec) (*Pro
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	env := map[string]string{}
-	for _, entry := range server.standing().Template.Containers[0].Env {
+	for _, entry := range server.current().Template.Containers[0].Env {
 		env[entry.Name] = entry.Value
 	}
 	return p, env
@@ -55,14 +55,14 @@ func TestAContainerDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *te
 
 	for name, value := range env {
 		if name == "DATABASE_URL" || name == "SESSION_SECRET" || strings.Contains(value, "postgres://") {
-			t.Errorf("the revision carries %s=%q: a secret's plaintext is readable by anyone who may describe the service, so the runtime reads it live instead", name, value)
+			t.Errorf("the revision sets %s=%q: a secret's plaintext is readable by anyone who may describe the service, so the runtime reads it live instead", name, value)
 		}
 	}
 	if env["REGION"] != "eu" {
-		t.Errorf("the revision carries REGION=%q, want the plain value the deploy delivered", env["REGION"])
+		t.Errorf("the revision sets REGION=%q, want the plain value the deploy delivered", env["REGION"])
 	}
 	if env[originguard.HealthPathVar] != "/healthz" {
-		t.Errorf("the revision carries %s=%q, want the probe path so the runtime lets Cloud Run's probe through", originguard.HealthPathVar, env[originguard.HealthPathVar])
+		t.Errorf("the revision sets %s=%q, want the probe path so the runtime lets Cloud Run's probe through", originguard.HealthPathVar, env[originguard.HealthPathVar])
 	}
 	manifest, err := live.Parse([]byte(env[live.EnvVar]))
 	if err != nil {
@@ -101,15 +101,15 @@ func TestAContainerWithNothingLiveBootsWithNoManifest(t *testing.T) {
 		ContainerEnv: map[string]string{"REGION": "eu"},
 	}))
 
-	if held, carried := env[live.EnvVar]; carried {
-		t.Errorf("the revision carries %s=%q, and a container with no secret opens no store", live.EnvVar, held)
+	if manifest, set := env[live.EnvVar]; set {
+		t.Errorf("the revision sets %s=%q, and a container with no secret opens no store", live.EnvVar, manifest)
 	}
 	if env[originguard.HealthPathVar] != "/healthz" {
-		t.Errorf("the revision carries %s=%q, want the probe path whether or not anything is live", originguard.HealthPathVar, env[originguard.HealthPathVar])
+		t.Errorf("the revision sets %s=%q, want the probe path whether or not anything is live", originguard.HealthPathVar, env[originguard.HealthPathVar])
 	}
 }
 
-func TestTheProviderWrapsEveryContainerInTheRuntimeItCarries(t *testing.T) {
+func TestTheProviderWrapsEveryContainerInTheRuntimeItShips(t *testing.T) {
 	t.Parallel()
 	p := pushing(t, "")
 
@@ -120,11 +120,11 @@ func TestTheProviderWrapsEveryContainerInTheRuntimeItCarries(t *testing.T) {
 	if err != nil || runs != payloads.ContainerArch {
 		t.Fatalf("ContainerArch() = %q, %v, want the %s Cloud Run runs: the image is built for whatever this names", runs, err, payloads.ContainerArch)
 	}
-	held, err := p.Runtime().Binary(context.Background(), runs)
+	binary, err := p.Runtime().Binary(context.Background(), runs)
 	if err != nil {
 		t.Fatalf("ContainerRuntime(%s) = %v", runs, err)
 	}
-	if want, _ := payloads.ContainerRuntime(payloads.ContainerArch); !bytes.Equal(held, want) {
+	if want, _ := payloads.ContainerRuntime(payloads.ContainerArch); !bytes.Equal(binary, want) {
 		t.Error("ContainerRuntime() hands back something other than the embedded payload")
 	}
 	if _, err := p.Runtime().Binary(context.Background(), "arm64"); err == nil {

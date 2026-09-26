@@ -42,7 +42,7 @@ func TestTheRepositoryIsCreatedUnderAModeAnOrgPolicyCanAllow(t *testing.T) {
 	t.Parallel()
 
 	if got := imageRepository().Mode; got != standardImages {
-		t.Errorf("the repository is created in %q mode, want %q: unset reads as MODE_UNSPECIFIED, and an org holding disallowUnspecifiedMode refuses the create outright",
+		t.Errorf("the repository is created in %q mode, want %q: unset reads as MODE_UNSPECIFIED, and an org enforcing disallowUnspecifiedMode refuses the create outright",
 			got, standardImages)
 	}
 }
@@ -52,16 +52,16 @@ func TestARepositoryThatDriftedFromWhatTheBootstrapNamesIsMended(t *testing.T) {
 
 	desired := imageRepository()
 	for name, tc := range map[string]struct {
-		held  *artifactregistry.Repository
-		mends bool
+		existing *artifactregistry.Repository
+		mends    bool
 	}{
-		"the repository this bootstrap made": {held: desired},
+		"the repository this bootstrap made": {existing: desired},
 		"one whose policies were edited away": {
-			held:  &artifactregistry.Repository{Format: dockerImages, Mode: standardImages},
-			mends: true,
+			existing: &artifactregistry.Repository{Format: dockerImages, Mode: standardImages},
+			mends:    true,
 		},
-		"one holding a policy nothing here named": {
-			held: &artifactregistry.Repository{
+		"one with a policy nothing here named": {
+			existing: &artifactregistry.Repository{
 				Format: dockerImages, Mode: standardImages,
 				CleanupPolicies: map[string]artifactregistry.CleanupPolicy{
 					dropUntaggedPolicy: desired.CleanupPolicies[dropUntaggedPolicy],
@@ -71,7 +71,7 @@ func TestARepositoryThatDriftedFromWhatTheBootstrapNamesIsMended(t *testing.T) {
 			mends: true,
 		},
 		"one pruning untagged images the moment they are pushed": {
-			held: &artifactregistry.Repository{
+			existing: &artifactregistry.Repository{
 				Format: dockerImages, Mode: standardImages,
 				CleanupPolicies: map[string]artifactregistry.CleanupPolicy{
 					dropUntaggedPolicy: {
@@ -86,15 +86,15 @@ func TestARepositoryThatDriftedFromWhatTheBootstrapNamesIsMended(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			stands, err := repositoryStanding("ocel-acme-prod-production", tc.held)
+			found, err := repositoryPresenceOf("ocel-acme-prod-production", tc.existing)
 			if err != nil {
-				t.Fatalf("repositoryStanding() = %v, want a verdict on a DOCKER repository", err)
+				t.Fatalf("repositoryPresenceOf() = %v, want a verdict on a DOCKER repository", err)
 			}
-			if !stands.held {
-				t.Error("a repository that stands reads as absent, and the bootstrap would try to create it again")
+			if !found.present {
+				t.Error("a repository that exists reads as absent, and the bootstrap would try to create it again")
 			}
-			if mends := stands.mends != ""; mends != tc.mends {
-				t.Errorf("repositoryStanding() mends %q, want mending=%t: what the survey does not report, the apply does not do", stands.mends, tc.mends)
+			if mends := found.mends != ""; mends != tc.mends {
+				t.Errorf("repositoryPresenceOf() mends %q, want mending=%t: what the survey does not report, the apply does not do", found.mends, tc.mends)
 			}
 		})
 	}
@@ -104,13 +104,13 @@ func TestARepositoryOfAnotherFormatIsRefusedRatherThanMended(t *testing.T) {
 	t.Parallel()
 
 	var refused refusal.Refusal
-	_, err := repositoryStanding("ocel-acme-prod-production", &artifactregistry.Repository{Format: "MAVEN"})
+	_, err := repositoryPresenceOf("ocel-acme-prod-production", &artifactregistry.Repository{Format: "MAVEN"})
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Fatalf("repositoryStanding() over a MAVEN repository = %v, want an %s refusal: Artifact Registry never changes a format, so no patch mends this", err, refusal.CodeInvalid)
+		t.Fatalf("repositoryPresenceOf() over a MAVEN repository = %v, want an %s refusal: Artifact Registry never changes a format, so no patch mends this", err, refusal.CodeInvalid)
 	}
 }
 
-func TestRemovingAKeyDestroysEveryVersionItStillHolds(t *testing.T) {
+func TestRemovingAKeyDestroysEveryVersionItStillHas(t *testing.T) {
 	t.Parallel()
 
 	key := "projects/acme-prod/locations/europe-west1/keyRings/ocel/cryptoKeys/production/cryptoKeyVersions/"
@@ -148,16 +148,16 @@ func TestABucketThatDriftedOpenIsMended(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
-		held  *storage.BucketAttrs
-		mends bool
+		existing *storage.BucketAttrs
+		mends    bool
 	}{
-		"the bucket this bootstrap made": {held: bucketAttrs("europe-west1", item{Kind: KindBucket})},
+		"the bucket this bootstrap made": {existing: bucketAttrs("europe-west1", item{Kind: KindBucket})},
 		"one whose access went back to ACLs": {
-			held:  &storage.BucketAttrs{PublicAccessPrevention: storage.PublicAccessPreventionEnforced},
-			mends: true,
+			existing: &storage.BucketAttrs{PublicAccessPrevention: storage.PublicAccessPreventionEnforced},
+			mends:    true,
 		},
 		"one that may be granted to allUsers": {
-			held: &storage.BucketAttrs{
+			existing: &storage.BucketAttrs{
 				UniformBucketLevelAccess: storage.UniformBucketLevelAccess{Enabled: true},
 				PublicAccessPrevention:   storage.PublicAccessPreventionInherited,
 			},
@@ -167,15 +167,15 @@ func TestABucketThatDriftedOpenIsMended(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			stands := bucketStanding(tc.held, false)
-			if !stands.held {
-				t.Error("a bucket that stands reads as absent, and the bootstrap would try to create it again")
+			found := bucketPresenceOf(tc.existing, false)
+			if !found.present {
+				t.Error("a bucket that exists reads as absent, and the bootstrap would try to create it again")
 			}
-			if mends := stands.mends != ""; mends != tc.mends {
-				t.Errorf("bucketStanding() mends %q, want mending=%t: what the survey does not report, the apply does not do", stands.mends, tc.mends)
+			if mends := found.mends != ""; mends != tc.mends {
+				t.Errorf("bucketPresenceOf() mends %q, want mending=%t: what the survey does not report, the apply does not do", found.mends, tc.mends)
 			}
-			if emulated := bucketStanding(tc.held, true); emulated.mends != "" {
-				t.Errorf("bucketStanding() under the emulator mends %q, and the emulator keeps no access configuration to mend", emulated.mends)
+			if emulated := bucketPresenceOf(tc.existing, true); emulated.mends != "" {
+				t.Errorf("bucketPresenceOf() under the emulator mends %q, and the emulator keeps no access configuration to mend", emulated.mends)
 			}
 		})
 	}

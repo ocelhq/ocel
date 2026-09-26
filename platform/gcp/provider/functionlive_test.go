@@ -43,7 +43,7 @@ func functionRevisionEnv(t *testing.T, server *runServer, spec provider.StackSpe
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 	env := map[string]string{}
-	for _, entry := range server.standing().Template.Containers[0].Env {
+	for _, entry := range server.current().Template.Containers[0].Env {
 		env[entry.Name] = entry.Value
 	}
 	return p, env
@@ -58,14 +58,14 @@ func TestAFunctionDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *tes
 
 	for name, value := range env {
 		if name == "DATABASE_URL" || name == "SESSION_SECRET" || strings.Contains(value, "postgres://") {
-			t.Errorf("the revision carries %s=%q: a secret's plaintext is readable by anyone who may describe the service, so the runtime reads it live instead", name, value)
+			t.Errorf("the revision sets %s=%q: a secret's plaintext is readable by anyone who may describe the service, so the runtime reads it live instead", name, value)
 		}
 	}
 	if env["REGION"] != "eu" || env["OCEL_ROUTE"] != "index" {
-		t.Errorf("the revision carries REGION=%q and OCEL_ROUTE=%q, want the plain value the deploy delivered and what the function's own spec names", env["REGION"], env["OCEL_ROUTE"])
+		t.Errorf("the revision sets REGION=%q and OCEL_ROUTE=%q, want the plain value the deploy delivered and what the function's own spec names", env["REGION"], env["OCEL_ROUTE"])
 	}
-	if held, carried := env[originguard.HealthPathVar]; carried {
-		t.Errorf("the revision carries %s=%q, and a function has no probe path for the runtime to let through", originguard.HealthPathVar, held)
+	if path, set := env[originguard.HealthPathVar]; set {
+		t.Errorf("the revision sets %s=%q, and a function has no probe path for the runtime to let through", originguard.HealthPathVar, path)
 	}
 	manifest, err := live.Parse([]byte(env[live.EnvVar]))
 	if err != nil {
@@ -104,8 +104,8 @@ func TestAFunctionWithNothingLiveBootsWithNoManifest(t *testing.T) {
 		ContainerEnv: map[string]string{"REGION": "eu"},
 	}))
 
-	if held, carried := env[live.EnvVar]; carried {
-		t.Errorf("the revision carries %s=%q, and a function with no secret opens no store", live.EnvVar, held)
+	if manifest, set := env[live.EnvVar]; set {
+		t.Errorf("the revision sets %s=%q, and a function with no secret opens no store", live.EnvVar, manifest)
 	}
 }
 

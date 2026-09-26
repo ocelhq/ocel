@@ -145,14 +145,14 @@ func (r Records) Remove(ctx context.Context, name records.Name, expected records
 	}
 	err = client.RunTransaction(ctx, func(ctx context.Context, tx *firestore.Transaction) error {
 		reference := collection.Doc(documentID(name))
-		held, standing, err := revisionHeld(tx, reference)
+		current, exists, err := currentRevision(tx, reference)
 		if err != nil {
 			return err
 		}
-		if !standing {
+		if !exists {
 			return records.ErrNotFound
 		}
-		if held != expected {
+		if current != expected {
 			return records.ErrStale
 		}
 		return tx.Delete(reference)
@@ -172,7 +172,7 @@ func (r Records) List(ctx context.Context, under records.Name) ([]records.Record
 	beneath := at + segmentSeparator
 	ceiling := at + segmentCeiling
 
-	var held []records.Record
+	var found []records.Record
 	documents := collection.
 		OrderBy(firestore.DocumentID, firestore.Asc).
 		StartAt(at).
@@ -182,7 +182,7 @@ func (r Records) List(ctx context.Context, under records.Name) ([]records.Record
 	for {
 		snapshot, err := documents.Next()
 		if errors.Is(err, iterator.Done) {
-			return held, nil
+			return found, nil
 		}
 		if err != nil {
 			if status.Code(err) == codes.NotFound {
@@ -191,7 +191,7 @@ func (r Records) List(ctx context.Context, under records.Name) ([]records.Record
 			return nil, fmt.Errorf("read everything under %s: %w", under, err)
 		}
 		if id := snapshot.Ref.ID; id == at || strings.HasPrefix(id, beneath) {
-			held = append(held, recordOf(nameOf(id), snapshot))
+			found = append(found, recordOf(nameOf(id), snapshot))
 		}
 	}
 }
@@ -204,17 +204,17 @@ func writeInto(tx *firestore.Transaction, collection *firestore.CollectionRef, r
 }
 
 func readInto(tx *firestore.Transaction, collection *firestore.CollectionRef, record records.Record) error {
-	held, standing, err := revisionHeld(tx, collection.Doc(documentID(record.Name)))
+	current, exists, err := currentRevision(tx, collection.Doc(documentID(record.Name)))
 	if err != nil {
 		return err
 	}
 	if record.Revision == "" {
-		if standing {
+		if exists {
 			return records.ErrStale
 		}
 		return nil
 	}
-	if !standing || held != record.Revision {
+	if !exists || current != record.Revision {
 		return records.ErrStale
 	}
 	return nil
@@ -227,7 +227,7 @@ func setInto(tx *firestore.Transaction, collection *firestore.CollectionRef, rec
 	})
 }
 
-func revisionHeld(tx *firestore.Transaction, reference *firestore.DocumentRef) (records.Revision, bool, error) {
+func currentRevision(tx *firestore.Transaction, reference *firestore.DocumentRef) (records.Revision, bool, error) {
 	snapshot, err := tx.Get(reference)
 	if status.Code(err) == codes.NotFound {
 		return "", false, nil
@@ -253,13 +253,13 @@ func (r Records) writeFailed(name records.Name, class edge.Class, err error) err
 
 func (r Records) unbootstrapped(class edge.Class) error {
 	return refusal.Refuse(refusal.CodeNotReady,
-		"this project keeps no %q Firestore database, so there is nowhere to hold a record.\nRun `%s` to create it, then try again",
+		"this project keeps no %q Firestore database, so there is nowhere to store a record.\nRun `%s` to create it, then try again",
 		r.Clients.Database(), provider.BootstrapCommand(class))
 }
 
 func recordOf(name records.Name, snapshot *firestore.DocumentSnapshot) records.Record {
 	record := records.Record{Name: name, Revision: revisionOf(snapshot)}
-	if body, held := snapshot.Data()[bodyField].([]byte); held {
+	if body, present := snapshot.Data()[bodyField].([]byte); present {
 		record.Bytes = body
 	}
 	return record

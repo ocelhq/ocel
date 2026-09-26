@@ -37,7 +37,7 @@ type memo[T any] struct {
 	err   error
 }
 
-func (m *memo[T]) held(open func() (T, error)) (T, error) {
+func (m *memo[T]) get(open func() (T, error)) (T, error) {
 	m.once.Do(func() { m.value, m.err = open() })
 	return m.value, m.err
 }
@@ -66,8 +66,8 @@ func (c *Clients) KeyPath(name string) string {
 	return c.KeyRingPath() + "/cryptoKeys/" + name
 }
 
-func Opened[T any](c *Clients, held *memo[T], doing string, open func() (T, error)) (T, error) {
-	client, err := held.held(func() (T, error) {
+func Opened[T any](c *Clients, cache *memo[T], doing string, open func() (T, error)) (T, error) {
+	client, err := cache.get(func() (T, error) {
 		if !c.Emulated() {
 			if _, err := google.FindDefaultCredentials(context.Background(), CloudPlatformScope); err != nil {
 				var nothing T

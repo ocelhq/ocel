@@ -62,17 +62,17 @@ func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error)
 	}
 	described := provider.ConnectorTarget{Fingerprint: fingerprint, Arch: ConnectorArch}
 
-	standing, err := p.connectorService(ctx)
+	deployed, err := p.connectorService(ctx)
 	if err != nil {
 		return provider.ConnectorTarget{}, err
 	}
-	if standing == nil {
+	if deployed == nil {
 		return described, nil
 	}
-	described.Hostname = hostOf(standing.Uri)
+	described.Hostname = hostOf(deployed.Uri)
 	described.Installed = &provider.ConnectorRelease{
-		Version:   connectorVersionOf(standing),
-		PublicKey: connectorPublicKeyOf(standing),
+		Version:   connectorVersionOf(deployed),
+		PublicKey: connectorPublicKeyOf(deployed),
 		Compute:   connectorCompute,
 	}
 	return described, nil
@@ -93,11 +93,11 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	}
 	if len(install.Config) == 0 {
 		return provider.ConnectorAddress{}, refusal.Refuse(refusal.CodeInvalid,
-			"this install carries no connector config, so nothing would name the console the service trusts")
+			"this install includes no connector config, so nothing would name the console the service trusts")
 	}
 	if p.emulated() {
 		return provider.ConnectorAddress{}, refusal.Refuse(refusal.CodeNotReady,
-			"this run talks to an emulator, which stands up no Cloud Run service and hands out no url a console could dial: add the connector against the project itself")
+			"this run talks to an emulator, which deploys no Cloud Run service and hands out no url a console could dial: add the connector against the project itself")
 	}
 
 	trust, err := connectorkit.ParseConfig(install.Config, "this install")
@@ -109,7 +109,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	if err != nil {
 		return provider.ConnectorAddress{}, err
 	}
-	if err := p.standConnectorAccount(ctx, trust.Grants, progress); err != nil {
+	if err := p.ensureConnectorAccount(ctx, trust.Grants, progress); err != nil {
 		return provider.ConnectorAddress{}, err
 	}
 	publicKey, err := p.connectorKey(ctx, progress)
@@ -124,7 +124,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 		return provider.ConnectorAddress{}, err
 	}
 
-	released, err := p.stand(ctx, serving{
+	released, err := p.deployService(ctx, serving{
 		service: names.Connector(),
 		image:   image,
 		account: names.ConnectorAccountEmail(),
@@ -149,7 +149,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	}
 	if released.url == "" {
 		return provider.ConnectorAddress{}, refusal.Refuse(refusal.CodeNotReady,
-			"%s stands and published no url, so the console has nothing to dial", names.Connector())
+			"%s is deployed and published no url, so the console has nothing to dial", names.Connector())
 	}
 	return provider.ConnectorAddress{URL: released.url, PublicKey: publicKey, Compute: compute}, nil
 }
@@ -177,7 +177,7 @@ func everyStep(steps ...func() error) error {
 }
 
 func (p *Provider) connectorService(ctx context.Context) (*run.GoogleCloudRunV2Service, error) {
-	clients, err := p.stood(ctx)
+	clients, err := p.openClients(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +186,7 @@ func (p *Provider) connectorService(ctx context.Context) (*run.GoogleCloudRunV2S
 		return nil, err
 	}
 	path := clients.servicePath(clients.Connector())
-	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
+	found, err := attempted(ctx, func(call ...googleapi.CallOption) (*run.GoogleCloudRunV2Service, error) {
 		return services.Projects.Locations.Services.Get(path).Context(ctx).Do(call...)
 	})
 	if absent(err) {
@@ -195,17 +195,17 @@ func (p *Provider) connectorService(ctx context.Context) (*run.GoogleCloudRunV2S
 	if err != nil {
 		return nil, fmt.Errorf("read the Cloud Run service %s: %w", clients.Connector(), err)
 	}
-	return held, nil
+	return found, nil
 }
 
-func connectorVersionOf(held *run.GoogleCloudRunV2Service) string {
-	if held.Template == nil {
+func connectorVersionOf(service *run.GoogleCloudRunV2Service) string {
+	if service.Template == nil {
 		return ""
 	}
-	for _, container := range held.Template.Containers {
-		for _, carried := range container.Env {
-			if carried.Name == connectorVersionEnv {
-				return carried.Value
+	for _, container := range service.Template.Containers {
+		for _, entry := range container.Env {
+			if entry.Name == connectorVersionEnv {
+				return entry.Value
 			}
 		}
 	}
@@ -215,7 +215,7 @@ func connectorVersionOf(held *run.GoogleCloudRunV2Service) string {
 func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress edge.Progress) (string, error) {
 	if len(binary) == 0 {
 		return "", refusal.Refuse(refusal.CodeInvalid,
-			"this install carries no connector binary to put in an image")
+			"this install includes no connector binary to put in an image")
 	}
 	base, err := p.based(ctx, staticImage)
 	if err != nil {
@@ -243,11 +243,11 @@ func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress 
 		"/" + connectorImageName + ":" + naming.DigestTag(digest.String())
 	push := images.Push{App: connectorImageName, ImageRef: ref, Digest: digest.String(), Built: built}
 
-	held, err := store.Has(ctx, push)
+	present, err := store.Has(ctx, push)
 	if err != nil {
 		return "", err
 	}
-	if held {
+	if present {
 		return ref, nil
 	}
 	if progress != nil {
@@ -296,8 +296,8 @@ func connectorImage(base v1.Image, binary []byte) (v1.Image, error) {
 	return mutate.Config(appended, config)
 }
 
-func (p *Provider) standConnectorAccount(ctx context.Context, grants []string, progress edge.Progress) error {
-	names, err := p.stood(ctx)
+func (p *Provider) ensureConnectorAccount(ctx context.Context, grants []string, progress edge.Progress) error {
+	names, err := p.openClients(ctx)
 	if err != nil {
 		return err
 	}
@@ -344,7 +344,7 @@ func (p *Provider) forgetConnectorGrants(ctx context.Context, progress edge.Prog
 }
 
 func (p *Provider) bindConnectorProject(ctx context.Context, granting bool) error {
-	clients, err := p.stood(ctx)
+	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err
 	}
@@ -356,7 +356,7 @@ func (p *Provider) bindConnectorProject(ctx context.Context, granting bool) erro
 }
 
 func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, progress edge.Progress) error {
-	clients, err := p.stood(ctx)
+	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err
 	}
@@ -368,7 +368,7 @@ func (p *Provider) bindConnectorKeys(ctx context.Context, wanted []string, progr
 			return err
 		}
 		if changed && progress != nil && len(wanted) > 0 {
-			progress.Say("The connector holds " + strings.Join(wanted, " and ") + " on the " + string(class) + " key")
+			progress.Say("The connector is granted " + strings.Join(wanted, " and ") + " on the " + string(class) + " key")
 		}
 		errs = append(errs, err)
 	}
@@ -392,7 +392,7 @@ func boundMembers(members []string, member string, granting bool) ([]string, boo
 }
 
 func (p *Provider) takeConnectorAccount(ctx context.Context, progress edge.Progress) error {
-	clients, err := p.stood(ctx)
+	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err
 	}
@@ -412,7 +412,7 @@ func (p *Provider) takeConnectorAccount(ctx context.Context, progress edge.Progr
 }
 
 func (p *Provider) takeConnectorImages(ctx context.Context, progress edge.Progress) error {
-	clients, err := p.stood(ctx)
+	clients, err := p.openClients(ctx)
 	if err != nil {
 		return err
 	}
@@ -420,11 +420,11 @@ func (p *Provider) takeConnectorImages(ctx context.Context, progress edge.Progre
 	if err != nil {
 		return err
 	}
-	held := repositoryPath(clients, clients.Repository(edge.ClassProduction)) +
+	packagePath := repositoryPath(clients, clients.Repository(edge.ClassProduction)) +
 		"/packages/" + connectorImageName
 	if _, err := attempted(ctx, service.Projects.Locations.Repositories.Packages.Delete(
-		held).Context(ctx).Do); err != nil && !absent(err) {
-		return fmt.Errorf("delete the connector images at %s: %w", held, err)
+		packagePath).Context(ctx).Do); err != nil && !absent(err) {
+		return fmt.Errorf("delete the connector images at %s: %w", packagePath, err)
 	}
 	if progress != nil {
 		progress.Say("Took away the connector images")
@@ -432,11 +432,11 @@ func (p *Provider) takeConnectorImages(ctx context.Context, progress edge.Progre
 	return nil
 }
 
-func hostOf(held string) string {
-	if held == "" {
+func hostOf(uri string) string {
+	if uri == "" {
 		return ""
 	}
-	parsed, err := url.Parse(held)
+	parsed, err := url.Parse(uri)
 	if err != nil {
 		return ""
 	}

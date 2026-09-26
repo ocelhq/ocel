@@ -47,7 +47,7 @@ func (e *Edge) Facts() edge.Facts {
 
 func (e *Edge) Hooks() edge.Hooks {
 	return edge.Hooks{
-		CheckBootstrapInstalled:       e.bootstrapStands,
+		CheckBootstrapInstalled:       e.bootstrapInstalled,
 		ListBoundHostnames:            e.boundHostnames,
 		DescribeCredentialPermissions: e.credentialPermissions,
 	}
@@ -56,7 +56,7 @@ func (e *Edge) Hooks() edge.Hooks {
 func (e *Edge) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {
 	if class == "" {
 		return edge.BootstrapOutput{}, refusal.Refuse(refusal.CodeInvalid,
-			"the %q edge stands one load balancer up per class, and this bootstrap names none", Kind)
+			"the %q edge provisions one load balancer per class, and this bootstrap names none", Kind)
 	}
 	front, err := e.raise(ctx, class, edge.DiscardProgress())
 	if err != nil {
@@ -71,42 +71,42 @@ func (e *Edge) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapO
 }
 
 func (e *Edge) raise(ctx context.Context, class edge.Class, progress edge.Progress) (Front, error) {
-	var held previewEntry
+	var preview previewEntry
 	if class == edge.ClassPreview {
-		heldPreview, err := e.heldPreview(ctx)
+		recorded, err := e.recordedPreview(ctx)
 		if err != nil {
 			return Front{}, err
 		}
-		held = heldPreview
+		preview = recorded
 	}
-	return e.raiseServing(ctx, class, held, progress)
+	return e.raiseServing(ctx, class, preview, progress)
 }
 
-func (e *Edge) raiseServing(ctx context.Context, class edge.Class, held previewEntry, progress edge.Progress) (Front, error) {
+func (e *Edge) raiseServing(ctx context.Context, class edge.Class, preview previewEntry, progress edge.Progress) (Front, error) {
 	names := frontNames(class)
 	outputs, err := e.deps.Stacks.Up(ctx, Target{Class: class}, frontProgram(frontSpec{
 		Region:  e.deps.Region,
 		Names:   names,
-		Preview: held,
+		Preview: preview,
 	}), progress)
 	if err != nil {
 		return Front{}, err
 	}
 	front := frontOf(outputs)
-	if !front.standing() {
+	if !front.provisioned() {
 		return Front{}, fmt.Errorf(
-			"stand the %s load balancer for class %s up: it reported %+v, and a hostname is bound by writing into its certificate map and its url map",
+			"provision the %s load balancer for class %s: it reported %+v, and a hostname is bound by writing into its certificate map and its url map",
 			Kind, class, front)
 	}
 	return front, nil
 }
 
-func (e *Edge) bootstrapStands(ctx context.Context, class edge.Class) (bool, error) {
+func (e *Edge) bootstrapInstalled(ctx context.Context, class edge.Class) (bool, error) {
 	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Class: class})
 	if err != nil {
 		return false, err
 	}
-	return frontOf(outputs).standing(), nil
+	return frontOf(outputs).provisioned(), nil
 }
 
 func (e *Edge) boundHostnames(ctx context.Context, class edge.Class) ([]string, error) {
@@ -131,14 +131,14 @@ func (e *Edge) Teardown(ctx context.Context, class edge.Class) error {
 	}
 	if len(bound) > 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"the %s front of class %s still serves %s, and Google will not delete a certificate map that holds entries: "+
+			"the %s front of class %s still serves %s, and Google will not delete a certificate map that has entries: "+
 				"release those hostnames with `ocel domain remove` in the projects that bound them, then take this bootstrap down",
 			Kind, class, strings.Join(bound, ", "))
 	}
 	return e.deps.Stacks.Destroy(ctx, Target{Class: class}, edge.DiscardProgress())
 }
 
-type held struct {
+type edgeRecord struct {
 	Front Front           `json:"front,omitzero"`
 	Hosts map[string]Host `json:"hosts,omitempty"`
 }
@@ -157,16 +157,16 @@ func Surface(slug string, class edge.Class) string {
 func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	if spec.Slug == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"the %q edge serves a project by slug, and this stack carries none", Kind)
+			"the %q edge serves a project by slug, and this stack names none", Kind)
 	}
 	outputs, err := e.deps.Stacks.Outputs(ctx, Target{Class: spec.Class})
 	if err != nil {
 		return nil, err
 	}
 	front := frontOf(outputs)
-	if !front.standing() {
+	if !front.provisioned() {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"no %s load balancer stands for class %s: the %q edge fronts every project in a class from one that the bootstrap raises, at %s. Run `ocel bootstrap` for this class first",
+			"no %s load balancer is provisioned for class %s: the %q edge fronts every project in a class from one that the bootstrap raises, at %s. Run `ocel bootstrap` for this class first",
 			Kind, spec.Class, Kind, BaselineCost)
 	}
 	next := prior
@@ -184,7 +184,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 
 func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) {
 	s := &stack{e: e, state: state}
-	if err := s.state.Private.Into(&s.held); err != nil {
+	if err := s.state.Private.Into(&s.recorded); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -199,8 +199,8 @@ func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error)
 		return "", nil
 	}
 	if base, wild := strings.CutPrefix(hostname, "*."); wild {
-		held, err := e.heldPreview(ctx)
-		if err != nil || held.BaseDomain != base {
+		preview, err := e.recordedPreview(ctx)
+		if err != nil || preview.BaseDomain != base {
 			return "", err
 		}
 		return edge.PreviewEntryOwner, nil
@@ -252,7 +252,7 @@ func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 			Name:   edge.EdgeGroupName(Kind) + "/front",
 			Action: edge.PlanKeep,
 			Reason: "the load balancer this project was fronted by is one per bootstrap class and every other project in the class is answered by it, " +
-				"so it stands and keeps costing " + BaselineCost + "; `ocel bootstrap remove` is what takes it down",
+				"so it stays provisioned and keeps costing " + BaselineCost + "; `ocel bootstrap remove` is what takes it down",
 		},
 	}
 }
@@ -278,7 +278,7 @@ func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
 		Name:   edge.EdgeGroupName(Kind) + "/front",
 		Action: edge.PlanKeep,
 		Reason: "previews are answered by the same load balancer production is, one per bootstrap class at " + BaselineCost + ", " +
-			"so releasing a wildcard takes its host rule and leaves the front standing",
+			"so releasing a wildcard takes its host rule and leaves the front in place",
 	}
 }
 

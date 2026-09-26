@@ -55,18 +55,18 @@ func TestACertificateIsProvedByTheAuthorizationRecordItsOwnerIsHanded(t *testing
 		t.Errorf("the owner was asked to write %q, want a record under the hostname being proved", proved[0].Name)
 	}
 	if got := server.authorized(); len(got) != 1 {
-		t.Errorf("the request left %v standing, want one dns authorization: the certificate is renewed through it", got)
+		t.Errorf("the request left %v in place, want one dns authorization: the certificate is renewed through it", got)
 	}
-	held := server.certified()[cert.ID]
-	if held == nil {
-		t.Fatalf("Certificate() reported %q and the project holds %v", cert.ID, server.certified())
+	certificate := server.certified()[cert.ID]
+	if certificate == nil {
+		t.Fatalf("Certificate() reported %q and the project has %v", cert.ID, server.certified())
 	}
-	if !slices.Equal(held.Managed.Domains, []string{"shop.example.com"}) {
-		t.Errorf("the certificate covers %v, want only the hostname that was asked for", held.Managed.Domains)
+	if !slices.Equal(certificate.Managed.Domains, []string{"shop.example.com"}) {
+		t.Errorf("the certificate covers %v, want only the hostname that was asked for", certificate.Managed.Domains)
 	}
-	if len(held.Managed.DnsAuthorizations) != 1 {
+	if len(certificate.Managed.DnsAuthorizations) != 1 {
 		t.Errorf("the certificate names %v as its authorizations, want the one that was created for it: without it Certificate Manager never issues",
-			held.Managed.DnsAuthorizations)
+			certificate.Managed.DnsAuthorizations)
 	}
 }
 
@@ -77,15 +77,15 @@ func TestAWildcardIsAuthorizedOnTheDomainUnderneathIt(t *testing.T) {
 	cert, proved := requested(t, server, "*.preview.example.com")
 
 	if strings.Contains(proved[0].Name, "*") {
-		t.Errorf("the owner was asked to write %q, and no resolver holds a record under a literal asterisk: a wildcard is proved on the domain beneath it",
+		t.Errorf("the owner was asked to write %q, and no resolver serves a record under a literal asterisk: a wildcard is proved on the domain beneath it",
 			proved[0].Name)
 	}
-	held := server.certified()[cert.ID]
-	if held == nil {
-		t.Fatalf("Certificate() reported %q and the project holds %v", cert.ID, server.certified())
+	certificate := server.certified()[cert.ID]
+	if certificate == nil {
+		t.Fatalf("Certificate() reported %q and the project has %v", cert.ID, server.certified())
 	}
-	if !slices.Contains(held.Managed.Domains, "*.preview.example.com") {
-		t.Errorf("the certificate covers %v, want the wildcard that was asked for", held.Managed.Domains)
+	if !slices.Contains(certificate.Managed.Domains, "*.preview.example.com") {
+		t.Errorf("the certificate covers %v, want the wildcard that was asked for", certificate.Managed.Domains)
 	}
 }
 
@@ -99,15 +99,15 @@ func TestAWildcardAndTheDomainUnderneathItAreTwoCertificates(t *testing.T) {
 	if under.ID == wildcard.ID {
 		t.Fatalf("both hostnames were certified as %q, and the second bind would serve the first's certificate", under.ID)
 	}
-	held := server.certified()
-	if len(held) != 2 {
-		t.Fatalf("the project holds %v, want a certificate each: one covering the domain and one covering everything under it", held)
+	certified := server.certified()
+	if len(certified) != 2 {
+		t.Fatalf("the project has %v, want a certificate each: one covering the domain and one covering everything under it", certified)
 	}
-	if !slices.Equal(held[wildcard.ID].Managed.Domains, []string{"*.preview.example.com"}) {
-		t.Errorf("the wildcard's certificate covers %v, want the wildcard alone", held[wildcard.ID].Managed.Domains)
+	if !slices.Equal(certified[wildcard.ID].Managed.Domains, []string{"*.preview.example.com"}) {
+		t.Errorf("the wildcard's certificate covers %v, want the wildcard alone", certified[wildcard.ID].Managed.Domains)
 	}
 	if got := server.authorized(); len(got) != 2 {
-		t.Errorf("the requests left %v standing, want a dns authorization each: they are renewed apart", got)
+		t.Errorf("the requests left %v in place, want a dns authorization each: they are renewed apart", got)
 	}
 }
 
@@ -135,9 +135,9 @@ func TestACertificateManagerRefusedToIssueIsReportedRatherThanWaitedOutForever(t
 }
 
 func TestACertificateStillProvisioningWhenThePatienceRunsOutIsLeftPending(t *testing.T) {
-	held := issuance
+	previous := issuance
 	issuance = patience{attempts: 2, ceiling: time.Millisecond}
-	t.Cleanup(func() { issuance = held })
+	t.Cleanup(func() { issuance = previous })
 
 	server := newCertServer()
 	server.provisioning = 5
@@ -185,7 +185,7 @@ func TestAnInspectedCertificateSaysWhatItCoversAndWhenItLapses(t *testing.T) {
 		t.Errorf("InspectCertificate(%s).Issued = false on an ACTIVE certificate", cert.ID)
 	}
 	if !health.Covers {
-		t.Errorf("InspectCertificate(%s).Covers = false for the hostname it was minted for, and the kit would settle a second one", cert.ID)
+		t.Errorf("InspectCertificate(%s).Covers = false for the hostname it was minted for, and the kit would request a second one", cert.ID)
 	}
 	if health.ExpiresAt == 0 {
 		t.Errorf("InspectCertificate(%s) names no expiry, and nothing can then warn that a renewal has not happened", cert.ID)
@@ -215,7 +215,7 @@ func TestDiscardingACertificateTakesTheAuthorizationItWasProvedThroughWithIt(t *
 		t.Errorf("the discard deleted %q second, want the dns authorization", dropped[1])
 	}
 	if got := server.certified(); len(got) != 0 {
-		t.Errorf("the project still holds %v after the discard", got)
+		t.Errorf("the project still has %v after the discard", got)
 	}
 }
 

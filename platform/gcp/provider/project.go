@@ -21,8 +21,8 @@ const (
 const unsetProject = "(unset)"
 
 func namedProject(named string) string {
-	for _, held := range []string{named, os.Getenv(projectVariable), os.Getenv(cloudSDKVariable)} {
-		if project := strings.TrimSpace(held); project != "" {
+	for _, candidate := range []string{named, os.Getenv(projectVariable), os.Getenv(cloudSDKVariable)} {
+		if project := strings.TrimSpace(candidate); project != "" {
 			return project
 		}
 	}
@@ -40,7 +40,7 @@ func ambientProject(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"option %q names no Google Cloud project and nothing around this run names one either: "+
-				"not the application default credentials, not %s, not %s, and gcloud could not say what its config holds: %s.\n"+
+				"not the application default credentials, not %s, not %s, and gcloud could not say which project its config sets: %s.\n"+
 				"Name it in the options, or run `gcloud config set project <id>`",
 			"project", projectVariable, cloudSDKVariable, err)
 	}
@@ -85,7 +85,7 @@ func gcloudProject(ctx context.Context) (string, error) {
 	return project, nil
 }
 
-func (p *Provider) stood(ctx context.Context) (*clients, error) {
+func (p *Provider) openClients(ctx context.Context) (*clients, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.resolved != nil {
@@ -108,11 +108,11 @@ func (p *Provider) stood(ctx context.Context) (*clients, error) {
 }
 
 func (p *Provider) Names(ctx context.Context) (Names, error) {
-	held, err := p.stood(ctx)
+	resolved, err := p.openClients(ctx)
 	if err != nil {
 		return Names{}, err
 	}
-	return held.Names, nil
+	return resolved.Names, nil
 }
 
 func (p *Provider) Project(ctx context.Context) (string, error) {

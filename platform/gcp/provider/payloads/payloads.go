@@ -21,7 +21,7 @@ func NodeRuntime() []byte { return nodeRuntime }
 
 func ContainerRuntime(arch string) ([]byte, error) {
 	if arch != ContainerArch {
-		return nil, fmt.Errorf("this provider carries no container runtime built for %q: Cloud Run runs %s alone", arch, ContainerArch)
+		return nil, fmt.Errorf("this provider ships no container runtime built for %q: Cloud Run runs %s alone", arch, ContainerArch)
 	}
 	return containerRuntime, nil
 }

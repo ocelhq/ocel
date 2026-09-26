@@ -19,20 +19,20 @@ func (bootstrap) Catalogue() []provider.Feature {
 	return []provider.Feature{{
 		Name: albFeature,
 		Summary: "a global external Application Load Balancer as the front: one address, one certificate map, one URL map — " +
-			"the one bootstrap item with a standing cost, about $18 a month plus egress",
+			"the one bootstrap item with a recurring cost, about $18 a month plus egress",
 		Needs: []string{provider.NeedsEdgePrefix + string(alb.Kind)},
 	}}
 }
 
-func standingFeatures(catalogue []provider.Feature, held []string, req provider.BootstrapRequest) []string {
-	var standing []string
+func installedFeatures(catalogue []provider.Feature, recorded []string, req provider.BootstrapRequest) []string {
+	var installed []string
 	for _, feature := range catalogue {
-		named := slices.Contains(held, feature.Name) || slices.Contains(req.Features, feature.Name)
+		named := slices.Contains(recorded, feature.Name) || slices.Contains(req.Features, feature.Name)
 		if named && !slices.Contains(req.Remove, feature.Name) {
-			standing = append(standing, feature.Name)
+			installed = append(installed, feature.Name)
 		}
 	}
-	return standing
+	return installed
 }
 
 func (b bootstrap) fronted(features []string) []provider.Feature {
@@ -62,7 +62,7 @@ func (b bootstrap) eachFront(features []string, visit func(provider.Feature, edg
 	}
 	if b.fronts == nil {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"%s stands an edge's front up, and this bootstrap was opened with no edge registry to open it through", wanted[0].Name)
+			"%s installs an edge's front, and this bootstrap was opened with no edge registry to open it through", wanted[0].Name)
 	}
 	for _, feature := range wanted {
 		for _, kind := range edgesNeededBy(feature) {
@@ -80,16 +80,16 @@ func (b bootstrap) eachFront(features []string, visit func(provider.Feature, edg
 
 func (b bootstrap) raiseFronts(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
 	return b.eachFront(req.Features, func(feature provider.Feature, front edge.Edge) error {
-		say(progress, "standing the front of the "+string(front.Kind())+" edge up for "+string(req.Class)+": "+feature.Summary)
+		say(progress, "installing the front of the "+string(front.Kind())+" edge for "+string(req.Class)+": "+feature.Summary)
 		_, err := front.Bootstrap(ctx, req.Class)
 		return err
 	})
 }
 
-func droppedFeatures(held []string, req provider.BootstrapRequest) []string {
+func droppedFeatures(recorded []string, req provider.BootstrapRequest) []string {
 	var dropping []string
 	for _, name := range req.Remove {
-		if slices.Contains(held, name) && !slices.Contains(req.Features, name) {
+		if slices.Contains(recorded, name) && !slices.Contains(req.Features, name) {
 			dropping = append(dropping, name)
 		}
 	}
@@ -118,21 +118,21 @@ func (b bootstrap) tearFronts(ctx context.Context, class edge.Class, features []
 	})
 }
 
-func (b bootstrap) frontStands(ctx context.Context, class edge.Class, feature string) (bool, error) {
-	standing := true
+func (b bootstrap) frontInstalled(ctx context.Context, class edge.Class, feature string) (bool, error) {
+	installed := true
 	err := b.eachFront([]string{feature}, func(_ provider.Feature, front edge.Edge) error {
-		stands := front.Hooks().CheckBootstrapInstalled
-		if stands == nil {
+		checkInstalled := front.Hooks().CheckBootstrapInstalled
+		if checkInstalled == nil {
 			return nil
 		}
-		up, err := stands(ctx, class)
+		up, err := checkInstalled(ctx, class)
 		if err != nil {
 			return err
 		}
-		standing = standing && up
+		installed = installed && up
 		return nil
 	})
-	return standing, err
+	return installed, err
 }
 
 func (b bootstrap) frontsFree(ctx context.Context, class edge.Class, features []string) error {
@@ -147,7 +147,7 @@ func (b bootstrap) frontsFree(ctx context.Context, class edge.Class, features []
 		}
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s is still served by the %s front of class %s, and the front owns the certificate map those hostnames are entries in, "+
-				"which Google will not delete while it holds any.\nRelease them with `ocel domain remove` in the projects that bound them, then remove this bootstrap",
+				"which Google will not delete while it contains any.\nRelease them with `ocel domain remove` in the projects that bound them, then remove this bootstrap",
 			strings.Join(bound, ", "), front.Kind(), class)
 	})
 }

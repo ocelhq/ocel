@@ -27,18 +27,18 @@ func Promote(
 	var pinning []edge.DeploymentRecord
 	for _, app := range slices.Sorted(maps.Keys(promotion.Builds)) {
 		identity := promotion.Builds[app]
-		record, held, err := ledger.Record(ctx, app, identity)
+		record, staged, err := ledger.Record(ctx, app, identity)
 		if err != nil {
 			return err
 		}
-		if !held {
+		if !staged {
 			return refusal.Refuse(refusal.CodeInvalid,
-				"promotion %s names build %s of %s, and this project's ledger staged no record for it, so nothing says which revision that build stood up",
+				"promotion %s names build %s of %s, and this project's ledger staged no record for it, so nothing says which revision that build deployed",
 				promotion.PromotionID, identity, app)
 		}
 		if len(record.Revisions) == 0 {
 			return refusal.Refuse(refusal.CodeInvalid,
-				"build %s of %s recorded no revision, and a promotion on Cloud Run is a traffic pin onto the revision the build stood up: "+
+				"build %s of %s recorded no revision, and a promotion on Cloud Run is a traffic pin onto the revision the build deployed: "+
 					"re-deploy %s so its release records one, then promote that",
 				identity, app, app)
 		}

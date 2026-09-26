@@ -29,7 +29,7 @@ type world struct {
 	pinned   []string
 	backends map[string]map[string]bool
 	entries  map[string]map[string]bool
-	stood    map[string]map[string]declaration
+	declared map[string]map[string]declaration
 	breaks   map[string]error
 }
 
@@ -42,7 +42,7 @@ func newWorld() *world {
 		routed:   map[string]map[string]string{},
 		backends: map[string]map[string]bool{"": {notFoundBackend: true}},
 		entries:  map[string]map[string]bool{},
-		stood:    map[string]map[string]declaration{},
+		declared: map[string]map[string]declaration{},
 		breaks:   map[string]error{},
 	}
 }
@@ -71,16 +71,16 @@ func (w *world) Up(_ context.Context, target Target, program Program, _ edge.Pro
 		return nil, broken
 	}
 	w.ups = append(w.ups, stack)
-	w.stood[stack] = seen
-	standing := map[string]bool{}
+	w.declared[stack] = seen
+	backends := map[string]bool{}
 	for name, declaration := range seen {
 		if declaration.Token == backendToken {
-			standing[name] = true
+			backends[name] = true
 		}
 	}
-	w.backends[stack] = standing
-	if held, up := w.outputs[stack]; up {
-		return maps.Clone(held), nil
+	w.backends[stack] = backends
+	if outputs, up := w.outputs[stack]; up {
+		return maps.Clone(outputs), nil
 	}
 	w.outputs[stack] = map[string]string{}
 	return map[string]string{}, nil
@@ -91,7 +91,7 @@ func (w *world) Destroy(_ context.Context, target Target, _ edge.Progress) error
 	defer w.mu.Unlock()
 	w.destroys = append(w.destroys, target.Name())
 	delete(w.backends, target.Name())
-	delete(w.stood, target.Name())
+	delete(w.declared, target.Name())
 	return nil
 }
 
@@ -104,7 +104,7 @@ func (w *world) Outputs(_ context.Context, target Target) (map[string]string, er
 func (w *world) Route(_ context.Context, urlMap, hostname, backend string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if !w.stands(backend) {
+	if !w.hasBackend(backend) {
 		return fmt.Errorf("route %s onto the backend service %q, which no stack declared: Compute rejects a url map naming a backend that is not there",
 			hostname, backend)
 	}
@@ -117,7 +117,7 @@ func (w *world) Route(_ context.Context, urlMap, hostname, backend string) error
 	return nil
 }
 
-func (w *world) Hold(_ context.Context, urlMap, hostname string) error {
+func (w *world) ServeNotFound(_ context.Context, urlMap, hostname string) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	hosts := w.routed[urlMap]
@@ -158,9 +158,9 @@ func (w *world) Pin(_ context.Context, service, revision string) error {
 	return nil
 }
 
-func (w *world) stands(backend string) bool {
-	for _, standing := range w.backends {
-		if standing[backend] {
+func (w *world) hasBackend(backend string) bool {
+	for _, stackBackends := range w.backends {
+		if stackBackends[backend] {
 			return true
 		}
 	}
@@ -194,7 +194,7 @@ func (w *world) breakUp(stack string, err error) {
 func (w *world) declarations(stack string) map[string]declaration {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return maps.Clone(w.stood[stack])
+	return maps.Clone(w.declared[stack])
 }
 
 func (w *world) pins() []string {

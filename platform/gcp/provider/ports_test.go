@@ -18,7 +18,7 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
-func standing(t *testing.T) *gcp.Provider {
+func testProvider(t *testing.T) *gcp.Provider {
 	t.Helper()
 	return newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
 }
@@ -34,17 +34,17 @@ func newProvider(t *testing.T, options gcp.Options) *gcp.Provider {
 
 func names(t *testing.T, p *gcp.Provider) gcp.Names {
 	t.Helper()
-	held, err := p.Names(context.Background())
+	derived, err := p.Names(context.Background())
 	if err != nil {
 		t.Fatalf("Names() = %v", err)
 	}
-	return held
+	return derived
 }
 
 func TestTheAlbEdgeIsRegisteredAndOpensWithTheProvidersOwnPorts(t *testing.T) {
 	t.Parallel()
 
-	p := standing(t)
+	p := testProvider(t)
 	registry := p.Edges()
 	if got := p.Facts().Edges; !slices.Contains(got, alb.Kind) {
 		t.Fatalf("Facts().Edges = %v, want the %q edge among them: a config that names it would be refused", got, alb.Kind)
@@ -77,7 +77,7 @@ func TestAnEdgeThisProviderCannotFrontWithIsRefusedWithThePriceOfTheOneThatCan(t
 	t.Parallel()
 
 	var refused refusal.Refusal
-	_, err := standing(t).Edges().Open(edge.Kind("firebase"))
+	_, err := testProvider(t).Edges().Open(edge.Kind("firebase"))
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Open(firebase) = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
@@ -91,14 +91,14 @@ func TestAnEdgeThisProviderCannotFrontWithIsRefusedWithThePriceOfTheOneThatCan(t
 func TestNamingTheCloudflareEdgeIsRefusedWhenTheBootstrapIsOpenedAndSaysWhy(t *testing.T) {
 	t.Parallel()
 
-	p := standing(t)
+	p := testProvider(t)
 	if slices.Contains(p.Facts().Edges, cloudflare.Kind) {
 		t.Errorf("Facts().Edges = %v, and an edge this provider builds no program for is one every deploy through it is refused on", p.Facts().Edges)
 	}
 	var refused refusal.Refusal
 	_, err := p.Bootstrap(cloudflare.Kind)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Fatalf("Bootstrap(%q) = %v, want an %s refusal before a token is spent standing anything up", cloudflare.Kind, err, refusal.CodeInvalid)
+		t.Fatalf("Bootstrap(%q) = %v, want an %s refusal before a token is spent provisioning anything", cloudflare.Kind, err, refusal.CodeInvalid)
 	}
 	for _, said := range []string{"program", string(direct.Kind), string(alb.Kind)} {
 		if !strings.Contains(refused.Message, said) {
@@ -113,11 +113,11 @@ func TestNamingTheCloudflareEdgeIsRefusedWhenTheBootstrapIsOpenedAndSaysWhy(t *t
 func TestAFrontedServiceStopsAnsweringOnItsOwnCloudRunUrl(t *testing.T) {
 	t.Parallel()
 
-	front, err := standing(t).Edges().Open(alb.Kind)
+	front, err := testProvider(t).Edges().Open(alb.Kind)
 	if err != nil {
 		t.Fatalf("Open(%q) = %v", alb.Kind, err)
 	}
-	direct, err := standing(t).Edges().Open(direct.Kind)
+	direct, err := testProvider(t).Edges().Open(direct.Kind)
 	if err != nil {
 		t.Fatalf("Open(direct) = %v", err)
 	}
@@ -140,7 +140,7 @@ func TestAFrontedServiceStopsAnsweringOnItsOwnCloudRunUrl(t *testing.T) {
 func TestNoPortIsNilForTheKitToCallThrough(t *testing.T) {
 	t.Parallel()
 
-	p := standing(t)
+	p := testProvider(t)
 	for name, port := range map[string]any{
 		"Stacks":      p.Stacks(),
 		"Artifacts":   p.Artifacts(),
@@ -160,7 +160,7 @@ func TestAnArtifactThatNamesNoClassOrNoStoreIsTheCallersMistake(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	p := standing(t)
+	p := testProvider(t)
 	classless := provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "bundle.zip"}
 	storeless := provider.ArtifactRef{Class: edge.ClassProduction, Bucket: "somewhere-else", Key: "bundle.zip"}
 
@@ -183,7 +183,7 @@ func TestSealingAValueThatNamesNoClassIsTheCallersMistake(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	p := standing(t)
+	p := testProvider(t)
 
 	for name, refused := range map[string]error{
 		"Seal": errorOf(p.Cipher().Seal(ctx, records.SealScope{}, nil)),
@@ -200,7 +200,7 @@ func TestSealingAValueThatNamesNoClassIsTheCallersMistake(t *testing.T) {
 func TestServesNothingUntilAResourcePrimitiveExists(t *testing.T) {
 	t.Parallel()
 
-	p := standing(t)
+	p := testProvider(t)
 	if got := p.Facts().Bindings; len(got) != 0 {
 		t.Errorf("Serves() = %v, want nothing until this provider provisions bindings of its own", got)
 	}
@@ -216,7 +216,7 @@ func errorOf[T any](_ T, err error) error { return err }
 func TestTheCredentialsPortNamesTheRolesEachTierIsGranted(t *testing.T) {
 	t.Parallel()
 
-	credentials := standing(t).Credentials()
+	credentials := testProvider(t).Credentials()
 	for tier, named := range map[edge.CredentialTier][]string{
 		edge.TierDeploy: {
 			"roles/run.admin",
@@ -251,12 +251,12 @@ func TestTheCredentialsPortNamesTheRolesEachTierIsGranted(t *testing.T) {
 func TestTheRolesRenderedForADeployAreTheOnesADeployUses(t *testing.T) {
 	t.Parallel()
 
-	document, err := standing(t).Credentials().Permissions(edge.TierDeploy)
+	document, err := testProvider(t).Credentials().Permissions(edge.TierDeploy)
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
 	for role, why := range map[string]string{
-		"roles/run.developer": "roles/run.admin covers every permission it holds, so granting it says something the grant beside it did not",
+		"roles/run.developer": "roles/run.admin covers every permission it grants, so granting it says something the grant beside it did not",
 		"roles/storage.admin": "a deploy reads and writes objects in buckets the bootstrap already made, and never makes or deletes one",
 	} {
 		if strings.Contains(document.Document, role) {
@@ -269,7 +269,7 @@ func TestACredentialTierNobodyDefinedIsRefusedRatherThanRendered(t *testing.T) {
 	t.Parallel()
 
 	var refused refusal.Refusal
-	_, err := standing(t).Credentials().Permissions(edge.CredentialTier("root"))
+	_, err := testProvider(t).Credentials().Permissions(edge.CredentialTier("root"))
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Permissions(root) = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}

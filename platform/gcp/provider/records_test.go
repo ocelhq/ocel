@@ -46,26 +46,26 @@ func firestoreAnswering(t *testing.T, queries error) string {
 }
 
 func TestReadingWhereTheDatabaseIsAbsentSaysWhatToRunRatherThanThatTheRecordIsMissing(t *testing.T) {
-	name := records.Name{records.RootConformance, string(edge.ClassProduction), "held"}
+	name := records.Name{records.RootConformance, string(edge.ClassProduction), "absent"}
 
 	t.Run("a database that is not there", func(t *testing.T) {
 		t.Setenv("OCEL_FLOCI_GCP_ENDPOINT",
 			firestoreAnswering(t, status.Error(codes.NotFound, "The database (projects/acme-prod/databases/ocel) does not exist for project acme-prod")))
 
 		var refused refusal.Refusal
-		_, err := standing(t).Records().Read(context.Background(), name)
+		_, err := testProvider(t).Records().Read(context.Background(), name)
 		if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-			t.Fatalf("Read() where no database stands = %v, want a %s refusal: a caller that reads ErrNotFound writes on, and the write has nowhere to land", err, refusal.CodeNotReady)
+			t.Fatalf("Read() where no database exists = %v, want a %s refusal: a caller that reads ErrNotFound writes on, and the write has nowhere to land", err, refusal.CodeNotReady)
 		}
 		if !strings.Contains(refused.Message, "ocel bootstrap") {
 			t.Errorf("Read() refused with %q, want it to name the command that creates the database", refused.Message)
 		}
 	})
 
-	t.Run("a database that is there and holds no such document", func(t *testing.T) {
+	t.Run("a database that is there and has no such document", func(t *testing.T) {
 		t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", firestoreAnswering(t, nil))
 
-		if _, err := standing(t).Records().Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
+		if _, err := testProvider(t).Records().Read(context.Background(), name); !errors.Is(err, records.ErrNotFound) {
 			t.Fatalf("Read() of a name nothing was written at = %v, want ErrNotFound", err)
 		}
 	})

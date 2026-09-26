@@ -22,11 +22,11 @@ func TestTheItemDigestTellsTwoNamespacesApart(t *testing.T) {
 }
 
 func kindsOf(items []item) map[Kind]string {
-	held := map[Kind]string{}
+	named := map[Kind]string{}
 	for _, item := range items {
-		held[item.Kind] = item.Name
+		named[item.Kind] = item.Name
 	}
-	return held
+	return named
 }
 
 func TestTheEmulatorLeavesOutTheRepositoryItDoesNotServe(t *testing.T) {
@@ -35,9 +35,9 @@ func TestTheEmulatorLeavesOutTheRepositoryItDoesNotServe(t *testing.T) {
 	class := edge.ClassProduction
 	names := Names{namespace: "ocel", project: "acme-prod"}
 
-	standing := kindsOf(bootstrapItems(names, class, false))
-	if standing[KindRepository] != names.Repository(class) {
-		t.Errorf("a bootstrap against Google names %q as its repository, want %q", standing[KindRepository], names.Repository(class))
+	onGoogle := kindsOf(bootstrapItems(names, class, false))
+	if onGoogle[KindRepository] != names.Repository(class) {
+		t.Errorf("a bootstrap against Google names %q as its repository, want %q", onGoogle[KindRepository], names.Repository(class))
 	}
 	if emulated := kindsOf(bootstrapItems(names, class, true)); emulated[KindRepository] != "" {
 		t.Errorf("a bootstrap against the emulator names the repository %q, and no emulator serves Artifact Registry: the apply would stop on it",
@@ -45,7 +45,7 @@ func TestTheEmulatorLeavesOutTheRepositoryItDoesNotServe(t *testing.T) {
 	}
 }
 
-func TestTheRuntimeAccountStandsWhereverTheBootstrapDoes(t *testing.T) {
+func TestTheRuntimeAccountIsProvisionedWhereverTheBootstrapIs(t *testing.T) {
 	t.Parallel()
 
 	class := edge.ClassPreview

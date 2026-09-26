@@ -47,7 +47,7 @@ func Surface(slug string, class edge.Class) string {
 func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
 	if spec.Slug == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
-			"the %q edge serves a project by slug, and this stack carries none", Kind)
+			"the %q edge serves a project by slug, and this stack names none", Kind)
 	}
 	next := prior
 	next.Slug = spec.Slug
@@ -76,7 +76,7 @@ func (e *Edge) DestroyPreviewWildcard(context.Context, string) error { return ni
 func unbindable(what string) error {
 	return refusal.Refuse(refusal.CodeInvalid,
 		"the %q edge answers on the url Cloud Run gives each service and claims no hostname of its own, so %s cannot be bound to it: "+
-			"name the %q edge, which stands one load balancer up per bootstrap class at %s",
+			"name the %q edge, which provisions one load balancer per bootstrap class at %s",
 		Kind, what, alb.Kind, alb.BaselineCost)
 }
 
@@ -85,7 +85,7 @@ func (e *Edge) ProjectRemovals(scope edge.ProjectScope) []edge.PlanGroup {
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
 		Action: edge.PlanKeep,
-		Reason: "this project is answered on each service's own url, so the release surface's rows are the whole of what stands in front of it",
+		Reason: "this project is answered on each service's own url, so the release surface's rows are the whole of what serves it",
 	}}
 }
 
@@ -98,7 +98,7 @@ func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
 		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(Kind),
 		Action: edge.PlanKeep,
-		Reason: "nothing claims a preview hostname here: a preview is reached at the url Cloud Run gave the services it stood up",
+		Reason: "nothing claims a preview hostname here: a preview is reached at the url Cloud Run gave the services it deployed",
 	}
 }
 

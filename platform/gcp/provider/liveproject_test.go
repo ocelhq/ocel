@@ -20,7 +20,7 @@ func againstAProject(t *testing.T) *gcp.Provider {
 	return newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
 }
 
-func repositoryHeld(t *testing.T, p *gcp.Provider, class edge.Class) *artifactregistry.Repository {
+func readRepository(t *testing.T, p *gcp.Provider, class edge.Class) *artifactregistry.Repository {
 	t.Helper()
 
 	ctx := context.Background()
@@ -29,31 +29,31 @@ func repositoryHeld(t *testing.T, p *gcp.Provider, class edge.Class) *artifactre
 		t.Fatalf("reach Artifact Registry: %v", err)
 	}
 	name := "projects/" + liveProject() + "/locations/" + liveRegion() + "/repositories/" + names(t, p).Repository(class)
-	held, err := service.Projects.Locations.Repositories.Get(name).Context(ctx).Do()
+	repository, err := service.Projects.Locations.Repositories.Get(name).Context(ctx).Do()
 	if err != nil {
 		t.Fatalf("Get(%s) after a bootstrap = %v, want the repository the deploy pushes images to", name, err)
 	}
-	return held
+	return repository
 }
 
-func TestProjectTheImageRepositoryStandsWhereTheDeployPushesTo(t *testing.T) {
+func TestProjectTheImageRepositoryExistsWhereTheDeployPushesTo(t *testing.T) {
 	p := againstAProject(t)
 	class := edge.ClassProduction
 	bootstrapped(t, p, class)
 
-	held := repositoryHeld(t, p, class)
-	if held.Format != "DOCKER" {
-		t.Errorf("the repository holds %s packages, want DOCKER: Cloud Run runs container images", held.Format)
+	repository := readRepository(t, p, class)
+	if repository.Format != "DOCKER" {
+		t.Errorf("the repository stores %s packages, want DOCKER: Cloud Run runs container images", repository.Format)
 	}
-	if held.Mode != "STANDARD_REPOSITORY" {
-		t.Errorf("the repository stands in %q mode, want STANDARD_REPOSITORY: an org holding disallowUnspecifiedMode refuses to create one under no mode at all", held.Mode)
+	if repository.Mode != "STANDARD_REPOSITORY" {
+		t.Errorf("the repository is in %q mode, want STANDARD_REPOSITORY: an org enforcing disallowUnspecifiedMode refuses to create one under no mode at all", repository.Mode)
 	}
-	if len(held.CleanupPolicies) != 1 {
-		t.Fatalf("the repository stands under %d cleanup policies, want the one that prunes untagged versions: %+v", len(held.CleanupPolicies), held.CleanupPolicies)
+	if len(repository.CleanupPolicies) != 1 {
+		t.Fatalf("the repository has %d cleanup policies, want the one that prunes untagged versions: %+v", len(repository.CleanupPolicies), repository.CleanupPolicies)
 	}
-	policy, named := held.CleanupPolicies["drop-untagged"]
+	policy, named := repository.CleanupPolicies["drop-untagged"]
 	if !named {
-		t.Fatalf("the repository stands under %+v, want a drop-untagged policy: a repository nothing prunes grows without end", held.CleanupPolicies)
+		t.Fatalf("the repository has %+v, want a drop-untagged policy: a repository nothing prunes grows without end", repository.CleanupPolicies)
 	}
 	if policy.Action != "DELETE" || policy.Condition == nil ||
 		policy.Condition.TagState != "UNTAGGED" || policy.Condition.OlderThan != "604800s" {
@@ -96,7 +96,7 @@ func TestProjectARepositoryWhoseCleanupPolicyWasEditedAwayIsMendedByTheNextBoots
 	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v", class, err)
 	}
-	if _, named := repositoryHeld(t, p, class).CleanupPolicies["drop-untagged"]; !named {
-		t.Error("the repository stands under no drop-untagged policy after a second bootstrap, and drift nothing mends is drift that stays")
+	if _, named := readRepository(t, p, class).CleanupPolicies["drop-untagged"]; !named {
+		t.Error("the repository has no drop-untagged policy after a second bootstrap, and drift nothing mends is drift that stays")
 	}
 }

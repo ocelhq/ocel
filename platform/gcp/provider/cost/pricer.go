@@ -72,11 +72,11 @@ var table = costkit.Table{
 }
 
 func Price(req *costv1.PriceRequest) (*costv1.Estimate, error) {
-	held, err := card()
+	rateCard, err := card()
 	if err != nil {
 		return nil, err
 	}
-	merged, pricing, err := costkit.Priced(held, table)
+	merged, pricing, err := costkit.Priced(rateCard, table)
 	if err != nil {
 		return nil, err
 	}

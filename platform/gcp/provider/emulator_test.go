@@ -29,7 +29,7 @@ func TestWhoamiNamesTheProviderTheIdentityCameFrom(t *testing.T) {
 	principal, err := gcp.Credentials{
 		Project:      gcp.Named("acme-prod"),
 		Region:       "europe-west1",
-		Tokens:       heldToken{token: heldAccessToken},
+		Tokens:       fixedToken{token: mintedAccessToken},
 		TokenInfoURL: server.URL,
 		Projects:     &reachedProject{},
 	}.Whoami(context.Background())
@@ -53,7 +53,7 @@ func TestWhoamiAsksWhetherTheCredentialReachesTheProjectItWillDeployInto(t *test
 		if _, err := (gcp.Credentials{
 			Project:      gcp.Named("acme-prod"),
 			Region:       "europe-west1",
-			Tokens:       heldToken{token: heldAccessToken},
+			Tokens:       fixedToken{token: mintedAccessToken},
 			TokenInfoURL: server.URL,
 			Projects:     reader,
 		}).Whoami(context.Background()); err != nil {
@@ -72,7 +72,7 @@ func TestWhoamiAsksWhetherTheCredentialReachesTheProjectItWillDeployInto(t *test
 		_, err := gcp.Credentials{
 			Project:      gcp.Named("acme-prod"),
 			Region:       "europe-west1",
-			Tokens:       heldToken{token: heldAccessToken},
+			Tokens:       fixedToken{token: mintedAccessToken},
 			TokenInfoURL: server.URL,
 			Projects:     &reachedProject{err: denied},
 		}.Whoami(context.Background())
@@ -90,7 +90,7 @@ func TestAgainstTheEmulatorWhoamiSkipsGooglesTokenEndpointAndSaysWhereItIs(t *te
 	principal, err := gcp.Credentials{
 		Project:  gcp.Named("floci-local"),
 		Region:   "europe-west1",
-		Tokens:   heldToken{err: errors.New("google: could not find default credentials")},
+		Tokens:   fixedToken{err: errors.New("google: could not find default credentials")},
 		Endpoint: endpoint,
 		Projects: reader,
 	}.Whoami(context.Background())
@@ -119,8 +119,8 @@ func TestTheEmulatorEndpointIsReadOnceWhenTheProviderIsMade(t *testing.T) {
 	p := newProvider(t, gcp.Options{Project: "floci-local", Region: "europe-west1"})
 	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", "http://127.0.0.1:9999")
 
-	credentials, held := p.Credentials().(gcp.Credentials)
-	if !held {
+	credentials, own := p.Credentials().(gcp.Credentials)
+	if !own {
 		t.Fatalf("Credentials() = %T, want this provider's own", p.Credentials())
 	}
 	if credentials.Endpoint != endpoint {
@@ -131,8 +131,8 @@ func TestTheEmulatorEndpointIsReadOnceWhenTheProviderIsMade(t *testing.T) {
 func TestWithoutTheEmulatorEveryClientAddressesGoogle(t *testing.T) {
 	t.Setenv("OCEL_FLOCI_GCP_ENDPOINT", "")
 
-	credentials, held := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Credentials().(gcp.Credentials)
-	if !held {
+	credentials, own := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}).Credentials().(gcp.Credentials)
+	if !own {
 		t.Fatal("Credentials() is not this provider's own")
 	}
 	if credentials.Endpoint != "" {
@@ -164,8 +164,8 @@ func TestAnEmulatorEndpointOnLoopbackIsAddressed(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewProvider() against %q = %v, want the emulator addressed", endpoint, err)
 			}
-			credentials, held := p.Credentials().(gcp.Credentials)
-			if !held || credentials.Endpoint != endpoint {
+			credentials, own := p.Credentials().(gcp.Credentials)
+			if !own || credentials.Endpoint != endpoint {
 				t.Errorf("the provider reaches %q, want %q", credentials.Endpoint, endpoint)
 			}
 		})
