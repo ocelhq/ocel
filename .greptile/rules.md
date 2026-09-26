@@ -148,9 +148,26 @@ Fails when:
 
 ## Naming
 
-The Go kits (the packages under `pkg/`, and the vendors under `platform/` that
-implement the provider contract at `pkg/provider`) name things with words people already
-use, and a provider declares what it can do where the compiler checks it.
+A name says what the thing does or contains, so a reader who has never seen the code
+predicts its behaviour; opening the code shows how, never what. Every name follows this
+table:
+
+| Kind | Rule | Fails |
+| --- | --- | --- |
+| Function | verb + object, and the verb is honest: `Read`/`Get`/`List`/`Find` never write, `Ensure` creates only if missing, `Refuse…` returns an error, `Is`/`Has`/`Can` return a bool, `New` constructs, `Must` panics | `Admit` that heals, `Check` that mutates |
+| Type | the noun for the thing; a role or container word only as the framework's or domain's own term (`http.Handler`, a DynamoDB item) | `Manager`, `Handler`, `Helper`, `Util`, `Data`, `Info`, `Item`, `Base`, `Impl`, bare `State` |
+| Package | a noun for what it contains | `util`, `common`, `shared`, `misc`, `helpers`, `kit` |
+| Boolean | positive | `NotReady`, `DisableX` |
+| Number | carries its unit or a unit type | `timeout int` |
+| Error | names the condition | `ErrBad` |
+| Word | the literal word, never a metaphor or a coined one | the words rule 9 bans |
+| Abbreviation | only `ctx`, `err`, `id`, `ID`, `URL`, `DNS`, `HTTP`, `TLS`, `API`, `CLI`, `SDK`, `JSON`; a PR to this file extends the list | `cfg`, `mgr`, `svc` |
+| File | named after its main type or concept; its test file mirrors the name | `release.go` holding `Stacks` |
+| Test | a behaviour sentence | `TestFoo2` |
+
+In `pkg/`, and in the vendors under `platform/` that implement the provider contract at
+`pkg/provider`, names also follow rules 1–9, and a provider declares what it can do where
+the compiler checks it.
 
 1. **A name is a word people already use for the thing**, in this domain or in English:
    `Provider`, `Ledger`, `Cipher`, `Certificates`, `Connector`, `Stacks`. A role minted
@@ -161,7 +178,7 @@ use, and a provider declares what it can do where the compiler checks it.
    func field on `Hooks`.** Nil means absent. Steps that only make sense together are one
    nested group, a pointer that is nil as a whole, so the compiler keeps them paired.
 3. **A yes/no or constant about a provider is a `Facts` field.**
-4. **One word, one meaning across the kits.**
+4. **One word, one meaning across `pkg/` and those vendors.**
 5. **A method never repeats its receiver's noun.**
 6. **One vendor file per port, per hook, or per hook group, named after it.** The
    vendor's root file contains the constructor, the `Facts` literal, the `Hooks` literal
@@ -175,6 +192,7 @@ use, and a provider declares what it can do where the compiler checks it.
 
 Fails when:
 
+- A name breaks a row of the table.
 - A type is an `-er`/`-or` role minted from a verb (`Prober`, `Certifier`, `Releaser`,
   `Sealer`, `Reporter`, `Tracer`, `Warmer`, `Pricer`, `Fetcher`) rather than the word for
   the thing it hands over.
@@ -183,7 +201,8 @@ Fails when:
   capability. A typo in a method name then drops the capability without a compile error.
 - A provider answers a yes/no or a constant through a method or a marker interface
   instead of a `Facts` field.
-- A word already given a meaning in the kits is used for a second thing.
+- A word already given a meaning in `pkg/` or one of those vendors is used for a second
+  thing.
 - A method repeats its receiver's noun (`Certificates.IssueCertificate`,
   `Runtime.ContainerRuntime`).
 - A vendor's port, hook or hook group body lives in its root file or in a file named for
