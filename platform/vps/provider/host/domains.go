@@ -219,39 +219,46 @@ func (h *Host) recomposed(ctx context.Context, compose func(RoutingTable) (Routi
 		return err
 	}
 	shaped, err := h.composeRouting(ctx, compose)
-	if err != nil || !shaped.changed {
+	if err != nil || !shaped.changed && !shaped.reloading {
 		return err
 	}
 	return h.takenUp(ctx, shaped, true, elevation)
 }
 
 func (h *Host) takenUp(ctx context.Context, shaped composed, loading bool, elevation string) error {
-	if err := h.serving(ctx, loading, shaped.reloading, elevation); err != nil {
+	if err := h.serving(ctx, shaped, loading, elevation); err != nil {
 		return h.reverted(ctx, shaped, loading, err, elevation)
 	}
 	return nil
 }
 
-func (h *Host) serving(ctx context.Context, loading, reloading bool, elevation string) error {
+func (h *Host) serving(ctx context.Context, shaped composed, loading bool, elevation string) error {
+	if placed := placedFile(h.front); placed != "" && shaped.reloading {
+		if err := h.place(ctx, placed, shaped, elevation); err != nil {
+			return err
+		}
+	}
 	if loading {
 		if _, err := h.ran(ctx, "load the switchboard onto "+live.RoutingTable,
 			words(switchboardCommand("load", live.RoutingTable)), nil, elevation); err != nil {
 			return err
 		}
 	}
-	if !reloading {
+	if !shaped.reloading {
 		return nil
 	}
 	return h.front.Reload(ctx)
 }
 
 func (h *Host) reverted(ctx context.Context, shaped composed, loading bool, why error, elevation string) error {
-	if _, err := h.writePair(ctx, shaped.written, shaped.prior); err != nil {
+	restored, err := h.writePair(ctx, shaped.written, shaped.prior)
+	if err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"serving %s failed: %v\nrestoring %s and %s also failed: %v",
 			live.RoutingTable, why, live.RoutingTable, ProxyConfig, err)
 	}
-	if err := h.serving(ctx, loading, shaped.reloading, elevation); err != nil {
+	back := composed{written: restored, config: shaped.prior.config, reloading: shaped.reloading}
+	if err := h.serving(ctx, back, loading, elevation); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"serving %s failed: %v\n%s and %s were restored, but serving them again failed too, so the box may still serve what they no longer record: %v\nRun the deploy again",
 			live.RoutingTable, why, live.RoutingTable, ProxyConfig, err)

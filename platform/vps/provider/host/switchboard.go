@@ -31,11 +31,11 @@ var switchboardCapabilities = []string{"DAC_OVERRIDE", "DAC_READ_SEARCH"}
 func switchboardBinary(arch string) []byte { return embedded(switchboard.Name, arch) }
 
 func switchboardStanding(binary []byte, front Front) boxContainer {
-	return placing(boardStanding(binary, front), openFront(front, frontBox{}).File())
+	return placing(boardStanding(binary, front), placedFile(openFront(front, frontBox{})))
 }
 
 func placing(board boxContainer, file string) boxContainer {
-	if file == "" || file == ProxyConfig {
+	if file == "" {
 		return board
 	}
 	dir := filepath.Dir(file)
@@ -78,6 +78,10 @@ func boardStanding(binary []byte, front Front) boxContainer {
 
 func switchboardCommand(argv ...string) []string {
 	return append([]string{"docker", "exec", SwitchboardContainer, SwitchboardMounted}, argv...)
+}
+
+func switchboardFed(argv ...string) []string {
+	return append([]string{"docker", "exec", "-i", SwitchboardContainer, SwitchboardMounted}, argv...)
 }
 
 const (
