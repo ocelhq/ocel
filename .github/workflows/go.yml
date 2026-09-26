@@ -79,6 +79,13 @@ jobs:
             <(sed -n 's/^ *dirs: //p' .github/workflows/go.yml | tr ' ' '\n' | sort) \
             <(go list -m -f '{{.Dir}}' | sed "s|^$PWD/||" | sort)
 
+      - name: Every go.mod is tidy
+        run: |
+          set -euo pipefail
+          for dir in $DIRS; do
+            (cd "$dir" && go mod tidy -diff)
+          done
+
       - uses: ./.github/actions/node-workspace
         with:
           turbo-token: ${{ secrets.TURBO_TOKEN }}
