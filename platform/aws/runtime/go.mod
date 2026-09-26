@@ -13,7 +13,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.106.0
 	github.com/aws/smithy-go v1.28.1
 	github.com/ocelhq/ocel/pkg v0.0.0
-	github.com/ocelhq/ocel/platform/aws/provider v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/platform/aws/provider v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/ocelhq/ocel/platform/s3 v0.0.0
 	google.golang.org/protobuf v1.36.12
@@ -62,3 +62,5 @@ replace github.com/ocelhq/ocel/platform/aws/provider => ../provider
 replace github.com/ocelhq/ocel/platform/s3 => ../../s3
 
 replace github.com/ocelhq/ocel/pkg => ../../../pkg
+
+replace github.com/ocelhq/ocel/pkg/providerkit/pulumi => ../../../pkg/providerkit/pulumi
