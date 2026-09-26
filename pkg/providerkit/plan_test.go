@@ -495,6 +495,12 @@ func TestAGroupThatAdoptsAndKeepsRollsUpAsKept(t *testing.T) {
 	if action != providerkit.ActionKeep || reason == "" {
 		t.Errorf("RollUp() over a keep and an adopt = %q %q, want it kept: adopting writes nothing", action, reason)
 	}
+	if action, _ := providerkit.RollUp([]providerkit.Change{
+		{Kind: "dir", Name: "/etc/ocel", Action: providerkit.ActionCreate},
+		{Kind: "docker:engine", Name: "docker", Action: providerkit.ActionAdopt},
+	}); action != providerkit.ActionUpdate {
+		t.Errorf("RollUp() over a create and an adopt = %q, want %q: what is adopted already stands, as what is kept does", action, providerkit.ActionUpdate)
+	}
 }
 
 func TestAnAdoptionWritesNothingAndSoNeverGrowsThePlan(t *testing.T) {
