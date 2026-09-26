@@ -129,11 +129,11 @@ func unmarshalSelector(data []byte) (string, json.RawMessage, error) {
 
 func checkSelector(path string, value any, noun string, of selection, options reflect.Type) error {
 	listed := strings.Join(of.IDs, ", ")
-	switch held := value.(type) {
+	switch typed := value.(type) {
 	case string:
-		return checkNamedAlone(path, noun, held, of)
+		return checkNamedAlone(path, noun, typed, of)
 	case map[string]any:
-		keys := keysOf(held)
+		keys := keysOf(typed)
 		switch len(keys) {
 		case 0:
 			return fmt.Errorf("%s is keyed by nothing — key it by one of %s", PathName(path), listed)
@@ -145,10 +145,10 @@ func checkSelector(path string, value any, noun string, of selection, options re
 		if !slices.Contains(of.IDs, id) {
 			return unknownSelection(path, noun, id, of)
 		}
-		if _, ok := held[id].(map[string]any); !ok {
+		if _, ok := typed[id].(map[string]any); !ok {
 			return typeError(JoinPath(path, id), "an object of options")
 		}
-		return checkValue(JoinPath(path, id), options, held[id])
+		return checkValue(JoinPath(path, id), options, typed[id])
 	default:
 		if len(of.Shorthand) == 0 {
 			return fmt.Errorf("%s must be an object keyed by one of %s", PathName(path), listed)

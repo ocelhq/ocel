@@ -31,7 +31,7 @@ func TestDecodeProviderKeyedByItsIdentifier(t *testing.T) {
 		t.Fatalf("provider = %+v, want aws", doc.Provider)
 	}
 	if string(doc.Provider.Options) != `{"region":"eu-west-2"}` {
-		t.Fatalf("options = %s, want what the aws key holds", doc.Provider.Options)
+		t.Fatalf("options = %s, want what the aws key contains", doc.Provider.Options)
 	}
 }
 
@@ -57,7 +57,7 @@ func TestDecodeEdgeInEitherForm(t *testing.T) {
 	}
 }
 
-func TestDecodeDNSCarriesItsZoneUnderItsIdentifier(t *testing.T) {
+func TestDecodeDNSKeepsItsZoneUnderItsIdentifier(t *testing.T) {
 	doc, err := Decode([]byte(`{"slug":"acme","dns":{"route53":{"zone":"example.com"}}}`), env(nil))
 	if err != nil {
 		t.Fatalf("decode: %v", err)
@@ -86,9 +86,9 @@ func TestDecodeRefusesASelectorThatIsNotOneKnownIdentifier(t *testing.T) {
 		{"a provider nobody ships", `"provider":{"azure":{}}`, []string{`"azure"`, "aws, gcp, vps"}},
 		{"a provider nobody ships, as a string", `"provider":"azure"`, []string{`"azure"`, "aws, gcp, vps"}},
 		{"a provider whose options are required, as a string", `"provider":"gcp"`, []string{`"gcp"`, `{ "gcp": {`, "aws"}},
-		{"a provider whose options are required, held null", `"provider":{"vps":null}`, []string{`"provider.vps" must be an object of options`}},
-		{"a provider that may be named alone, held null", `"provider":{"aws":null}`, []string{`"provider.aws" must be an object of options`}},
-		{"an edge held null", `"edge":{"cloudfront":null}`, []string{`"edge.cloudfront" must be an object of options`}},
+		{"a provider whose options are required, set to null", `"provider":{"vps":null}`, []string{`"provider.vps" must be an object of options`}},
+		{"a provider that may be named alone, set to null", `"provider":{"aws":null}`, []string{`"provider.aws" must be an object of options`}},
+		{"an edge set to null", `"edge":{"cloudfront":null}`, []string{`"edge.cloudfront" must be an object of options`}},
 		{"a provider that is neither", `"provider":7`, []string{`"provider"`, "aws, gcp, vps"}},
 		{"an edge keyed twice", `"edge":{"cloudfront":{},"cloudflare":{}}`, []string{`"edge"`, "cloudflare", "cloudfront"}},
 		{"an edge nobody fronts with", `"edge":"fastly"`, []string{`"fastly"`, "alb, api-gateway, box, cloudflare, cloudfront, direct"}},

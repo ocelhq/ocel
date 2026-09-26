@@ -86,14 +86,14 @@ type minted struct {
 	scope    []string
 }
 
-func (c *console) token(t *testing.T, held minted) string {
+func (c *console) token(t *testing.T, m minted) string {
 	t.Helper()
 
-	audience := held.audience
+	audience := m.audience
 	if audience == "" {
 		audience = connectorID
 	}
-	subject := held.subject
+	subject := m.subject
 	if subject == "" {
 		subject = "org:" + organizationID
 	}
@@ -106,7 +106,7 @@ func (c *console) token(t *testing.T, held minted) string {
 		IssuedAt(time.Now()).
 		Expiration(time.Now().Add(60*time.Second)).
 		Claim("act", "user-1").
-		Claim("scope", held.scope).
+		Claim("scope", m.scope).
 		Build()
 	if err != nil {
 		t.Fatalf("Build() error = %v", err)
@@ -119,7 +119,7 @@ func (c *console) token(t *testing.T, held minted) string {
 	return string(signed)
 }
 
-func connectorStanding(t *testing.T, at *console, grants []string) *httptest.Server {
+func servedConnector(t *testing.T, at *console, grants []string) *httptest.Server {
 	t.Helper()
 
 	mux, err := connectorkit.Mux(connectorkit.Spec{
@@ -148,7 +148,7 @@ func connectorStanding(t *testing.T, at *console, grants []string) *httptest.Ser
 func connectorServing(t *testing.T, at *console, grants []string, options ...connect.ClientOption) envvarsv1connect.EnvVarsServiceClient {
 	t.Helper()
 
-	server := connectorStanding(t, at, grants)
+	server := servedConnector(t, at, grants)
 	return envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL, options...)
 }
 
@@ -172,7 +172,7 @@ func probed(t *testing.T, server *httptest.Server, token string) *http.Response 
 
 func TestAnUnauthenticatedCapabilitiesProbeIsRefused(t *testing.T) {
 	at := consoleServing(t)
-	server := connectorStanding(t, at, everything())
+	server := servedConnector(t, at, everything())
 
 	if response := probed(t, server, ""); response.StatusCode != http.StatusUnauthorized {
 		t.Errorf("an unauthenticated capabilities probe answered %s, want 401", response.Status)
@@ -181,7 +181,7 @@ func TestAnUnauthenticatedCapabilitiesProbeIsRefused(t *testing.T) {
 
 func TestACapabilitiesProbeUnderAnotherAccountsTokenIsRefused(t *testing.T) {
 	at := consoleServing(t)
-	server := connectorStanding(t, at, everything())
+	server := servedConnector(t, at, everything())
 	token := at.token(t, minted{subject: "org:someone-else", scope: []string{connectorkit.CapabilityEnvVarsRead}})
 
 	if response := probed(t, server, token); response.StatusCode != http.StatusForbidden {
@@ -191,7 +191,7 @@ func TestACapabilitiesProbeUnderAnotherAccountsTokenIsRefused(t *testing.T) {
 
 func TestACapabilitiesProbeUnderAConsoleTokenAnswers(t *testing.T) {
 	at := consoleServing(t)
-	server := connectorStanding(t, at, everything())
+	server := servedConnector(t, at, everything())
 	token := at.token(t, minted{scope: []string{connectorkit.CapabilityEnvVarsRead}})
 
 	response := probed(t, server, token)
@@ -206,7 +206,7 @@ func TestACapabilitiesProbeUnderAConsoleTokenAnswers(t *testing.T) {
 		t.Fatal(err)
 	}
 	if read.Target != "fake/shop" || len(read.Capabilities) != 3 {
-		t.Errorf("the probe answered %+v, want the target and every grant this connector holds", read)
+		t.Errorf("the probe answered %+v, want the target and every grant this connector has", read)
 	}
 }
 
@@ -359,9 +359,9 @@ func saying(t *testing.T, run func()) string {
 	if err != nil {
 		t.Fatalf("Pipe() error = %v", err)
 	}
-	held := os.Stdout
+	stdout := os.Stdout
 	os.Stdout = write
-	defer func() { os.Stdout = held }()
+	defer func() { os.Stdout = stdout }()
 
 	run()
 
@@ -389,7 +389,7 @@ func TestEveryRequestSaysWhoAskedAndHowItWent(t *testing.T) {
 		_, _ = vars.SetValue(context.Background(), &envvarsv1.SetValueRequest{
 			Tier:       environmentv1.Tier_TIER_PRODUCTION,
 			Coordinate: &envvarsv1.Coordinate{Slug: "shop", Key: "TOKEN"},
-			Value:      "held",
+			Value:      "denied",
 		})
 	})
 
@@ -399,7 +399,7 @@ func TestEveryRequestSaysWhoAskedAndHowItWent(t *testing.T) {
 	}
 	for _, line := range want {
 		if !strings.Contains(said, line) {
-			t.Fatalf("the connector said %q, which carries no %q", said, line)
+			t.Fatalf("the connector said %q, which does not contain %q", said, line)
 		}
 	}
 }

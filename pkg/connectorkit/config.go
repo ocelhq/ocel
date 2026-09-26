@@ -21,8 +21,8 @@ type Config struct {
 var grantable = []string{CapabilityEnvVarsRead, CapabilityEnvVarsWrite, CapabilityEnvVarsReveal}
 
 func ReadConfig(path string) (Config, error) {
-	if carried := os.Getenv(provider.ConnectorConfigEnvVar); carried != "" {
-		return ParseConfig([]byte(carried), provider.ConnectorConfigEnvVar)
+	if raw := os.Getenv(provider.ConnectorConfigEnvVar); raw != "" {
+		return ParseConfig([]byte(raw), provider.ConnectorConfigEnvVar)
 	}
 	if path == "" {
 		return Config{}, fmt.Errorf("connectorkit: nothing names the console this connector trusts: neither %s nor a config file", provider.ConnectorConfigEnvVar)
@@ -57,7 +57,7 @@ func (c Config) check() error {
 	}
 	for _, grant := range c.Grants {
 		if !slices.Contains(grantable, grant) {
-			return fmt.Errorf("grants holds %q, which names no capability", grant)
+			return fmt.Errorf("grants contains %q, which names no capability", grant)
 		}
 	}
 	return nil

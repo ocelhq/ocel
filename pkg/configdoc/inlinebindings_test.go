@@ -75,7 +75,7 @@ func TestCheckRefusesAnInlineBindingOutOfShape(t *testing.T) {
 			want:    []string{`"bindings.postgres.orders.tls.mode"`, "require", "verify-full"},
 		},
 		{
-			name:    "a variable reference carrying a second key",
+			name:    "a variable reference with a second key",
 			binding: map[string]any{"url": map[string]any{"$env": "URL", "default": "x"}},
 			want:    []string{`"bindings.postgres.orders.url.default"`},
 		},

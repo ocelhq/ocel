@@ -152,7 +152,7 @@
                     "description": "The public half of the key pair the runtime reaches the store with.",
                     "properties": {
                       "$env": {
-                        "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                        "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                         "pattern": "^[A-Z_][A-Z0-9_]*$",
                         "type": "string"
                       }
@@ -173,7 +173,7 @@
                         "additionalProperties": false,
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -196,7 +196,7 @@
                         "additionalProperties": false,
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -214,7 +214,7 @@
                     "type": "boolean"
                   },
                   "prefix": {
-                    "description": "The prefix every key the app writes is kept under, so one bucket can hold several resources or environments.",
+                    "description": "The prefix every key the app writes is kept under, so one bucket can store several resources or environments.",
                     "oneOf": [
                       {
                         "type": "string"
@@ -223,7 +223,7 @@
                         "additionalProperties": false,
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -246,7 +246,7 @@
                         "additionalProperties": false,
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -269,7 +269,7 @@
                         "additionalProperties": false,
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -287,7 +287,7 @@
                     "description": "The secret half of that key pair.",
                     "properties": {
                       "$env": {
-                        "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                        "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                         "pattern": "^[A-Z_][A-Z0-9_]*$",
                         "type": "string"
                       }
@@ -322,7 +322,7 @@
                         "description": "The public half of the key pair the runtime reaches the store with.",
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -343,7 +343,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -366,7 +366,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -384,7 +384,7 @@
                         "type": "boolean"
                       },
                       "prefix": {
-                        "description": "The prefix every key the app writes is kept under, so one bucket can hold several resources or environments.",
+                        "description": "The prefix every key the app writes is kept under, so one bucket can store several resources or environments.",
                         "oneOf": [
                           {
                             "type": "string"
@@ -393,7 +393,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -416,7 +416,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -439,7 +439,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -457,7 +457,7 @@
                         "description": "The secret half of that key pair.",
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -488,7 +488,7 @@
                         "description": "The public half of the key pair the runtime reaches the store with.",
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -509,7 +509,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -532,7 +532,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -550,7 +550,7 @@
                         "type": "boolean"
                       },
                       "prefix": {
-                        "description": "The prefix every key the app writes is kept under, so one bucket can hold several resources or environments.",
+                        "description": "The prefix every key the app writes is kept under, so one bucket can store several resources or environments.",
                         "oneOf": [
                           {
                             "type": "string"
@@ -559,7 +559,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -582,7 +582,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -605,7 +605,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -623,7 +623,7 @@
                         "description": "The secret half of that key pair.",
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -670,7 +670,7 @@
                         "description": "The whole connection string, kept verbatim so its sslmode, options and pooler parameters reach the client.",
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -701,7 +701,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -724,7 +724,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -742,7 +742,7 @@
                         "description": "The role's password.",
                         "properties": {
                           "$env": {
-                            "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                            "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                             "pattern": "^[A-Z_][A-Z0-9_]*$",
                             "type": "string"
                           }
@@ -766,7 +766,7 @@
                             "description": "The certificate authority the server's certificate chains to, as PEM, when it is not one the system trusts.",
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -802,7 +802,7 @@
                             "additionalProperties": false,
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -843,7 +843,7 @@
                             "description": "The whole connection string, kept verbatim so its sslmode, options and pooler parameters reach the client.",
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -874,7 +874,7 @@
                                 "additionalProperties": false,
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -897,7 +897,7 @@
                                 "additionalProperties": false,
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -915,7 +915,7 @@
                             "description": "The role's password.",
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -939,7 +939,7 @@
                                 "description": "The certificate authority the server's certificate chains to, as PEM, when it is not one the system trusts.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -975,7 +975,7 @@
                                 "additionalProperties": false,
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -1012,7 +1012,7 @@
                             "description": "The whole connection string, kept verbatim so its sslmode, options and pooler parameters reach the client.",
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -1043,7 +1043,7 @@
                                 "additionalProperties": false,
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -1066,7 +1066,7 @@
                                 "additionalProperties": false,
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -1084,7 +1084,7 @@
                             "description": "The role's password.",
                             "properties": {
                               "$env": {
-                                "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                 "pattern": "^[A-Z_][A-Z0-9_]*$",
                                 "type": "string"
                               }
@@ -1108,7 +1108,7 @@
                                 "description": "The certificate authority the server's certificate chains to, as PEM, when it is not one the system trusts.",
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -1144,7 +1144,7 @@
                                 "additionalProperties": false,
                                 "properties": {
                                   "$env": {
-                                    "description": "The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
+                                    "description": "The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own.",
                                     "pattern": "^[A-Z_][A-Z0-9_]*$",
                                     "type": "string"
                                   }
@@ -1186,7 +1186,7 @@
       "description": "Where the resources an app declares are found.",
       "properties": {
         "paths": {
-          "description": "The directories holding infrastructure declarations, relative to the config. Left off, ocel reads the default discovery directory.",
+          "description": "The directories containing infrastructure declarations, relative to the config. Left off, ocel reads the default discovery directory.",
           "items": {
             "type": "string"
           },
@@ -1197,7 +1197,7 @@
       "type": "object"
     },
     "dns": {
-      "description": "Where the project's hostname records are written, keyed by the DNS service's identifier and holding its options, or named alone.",
+      "description": "Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone.",
       "oneOf": [
         {
           "type": "string",
@@ -1266,7 +1266,7 @@
       "type": "object"
     },
     "edge": {
-      "description": "The edge in front of the origin, keyed by its identifier and holding its options, or named alone. Omit it and the provider fronts the deployment with its own default edge.",
+      "description": "The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it and the provider fronts the deployment with its own default edge.",
       "oneOf": [
         {
           "type": "string",
@@ -1327,7 +1327,7 @@
       "title": "EdgeDescriptor"
     },
     "provider": {
-      "description": "The provider ocel deploy provisions into, keyed by its identifier and holding its options. A provider that needs no options may be named alone.",
+      "description": "The provider ocel deploy provisions into, keyed by its identifier with its options as the value. A provider that needs no options may be named alone.",
       "oneOf": [
         {
           "type": "string",
@@ -1688,7 +1688,7 @@
       "description": "Where this project's container images are pushed.",
       "properties": {
         "password": {
-          "description": "The environment variable holding the password or token, written as \"${REGISTRY_TOKEN}\" and read where the push authenticates — never the secret itself.",
+          "description": "The environment variable containing the password or token, written as \"${REGISTRY_TOKEN}\" and read where the push authenticates — never the secret itself.",
           "pattern": "^\\$\\{([A-Za-z_][A-Za-z0-9_]*)\\}$",
           "type": "string"
         },

@@ -141,11 +141,11 @@ func checkSecret(path, example, value string) error {
 	trimmed := strings.TrimSpace(value)
 	switch {
 	case variableName.MatchString(trimmed):
-		return fmt.Errorf("%s is a secret, so the config holds where it comes from rather than the name alone: write it as %q", PathName(path), "${"+trimmed+"}")
+		return fmt.Errorf("%s is a secret, so the config records where it comes from rather than the name alone: write it as %q", PathName(path), "${"+trimmed+"}")
 	case strings.Contains(value, "${"):
 		return fmt.Errorf("%s is a secret, and a secret is one placeholder as its whole value, such as %q, with nothing around it", PathName(path), "${"+example+"}")
 	default:
-		return fmt.Errorf("%s is a secret, and the config never holds one: write %q and export the secret under that name. In ocel.config.ts a value read with buildEnv lands here as the secret itself, so write the placeholder string there too", PathName(path), "${"+example+"}")
+		return fmt.Errorf("%s is a secret, and the config never contains one: write %q and export the secret under that name. In ocel.config.ts a value read with buildEnv lands here as the secret itself, so write the placeholder string there too", PathName(path), "${"+example+"}")
 	}
 }
 func expand(value string, lookup Lookup) (string, error) {

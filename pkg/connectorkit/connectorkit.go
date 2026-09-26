@@ -49,12 +49,12 @@ func Serve(spec Spec) error {
 		return errors.New("connectorkit: Spec.EnvVars.Cipher is required")
 	}
 
-	if spec.KeyPath != "" && !spec.Identity.Held() {
-		held, err := LoadOrCreateIdentity(spec.KeyPath)
+	if spec.KeyPath != "" && !spec.Identity.HasKey() {
+		identity, err := LoadOrCreateIdentity(spec.KeyPath)
 		if err != nil {
 			return err
 		}
-		spec.Identity = held
+		spec.Identity = identity
 	}
 
 	mux, err := Mux(spec)
@@ -77,7 +77,7 @@ func Serve(spec Spec) error {
 	go func() { served <- srv.Serve(ln) }()
 
 	retired := make(chan struct{})
-	if spec.Identity.Held() {
+	if spec.Identity.HasKey() {
 		beating, err := beatFor(spec)
 		if err != nil {
 			return err
@@ -135,11 +135,11 @@ func PublicKey(configPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	held, err := LoadOrCreateIdentity(cfg.KeyPath)
+	identity, err := LoadOrCreateIdentity(cfg.KeyPath)
 	if err != nil {
 		return "", err
 	}
-	return held.PublicKey(), nil
+	return identity.PublicKey(), nil
 }
 
 func Mux(spec Spec) (*http.ServeMux, error) {

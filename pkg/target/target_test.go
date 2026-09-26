@@ -13,14 +13,14 @@ func TestFingerprintFormats(t *testing.T) {
 		{"vps", func() (string, error) { return Fingerprint("vps", "sha256:abc", "main") }, "vps/sha256:abc/main"},
 		{"one part", func() (string, error) { return Fingerprint("fly", "iad") }, "fly/iad"},
 	}
-	for _, held := range cases {
-		t.Run(held.name, func(t *testing.T) {
-			got, err := held.made()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := tc.made()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if got != held.want {
-				t.Errorf("got %q, want %q", got, held.want)
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -41,9 +41,9 @@ func TestFingerprintRefusals(t *testing.T) {
 		{"an upper-case part", func() (string, error) { return Fingerprint("vps", "SHA256:abc", "main") }},
 		{"base64 padding inside a part", func() (string, error) { return Fingerprint("vps", "sha256:ab+c/d=", "main") }},
 	}
-	for _, held := range cases {
-		t.Run(held.name, func(t *testing.T) {
-			if got, err := held.made(); err == nil {
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got, err := tc.made(); err == nil {
 				t.Fatalf("got %q, want a refusal", got)
 			}
 		})

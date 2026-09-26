@@ -14,9 +14,9 @@ const (
 )
 
 type projection struct {
-	root string
-	keys []string
-	held string
+	root    string
+	keys    []string
+	current string
 }
 
 func newProjection(root string, keys []string) (*projection, error) {
@@ -42,8 +42,8 @@ func (p *projection) write(generation uint32, values map[string]string) error {
 		return err
 	}
 	for _, key := range p.keys {
-		value, held := values[key]
-		if !held {
+		value, ok := values[key]
+		if !ok {
 			continue
 		}
 		if err := os.WriteFile(filepath.Join(dir, key), []byte(value), 0o600); err != nil {
@@ -53,10 +53,10 @@ func (p *projection) write(generation uint32, values map[string]string) error {
 	if err := link(filepath.Base(dir), filepath.Join(p.root, dataLink)); err != nil {
 		return err
 	}
-	if p.held != "" && p.held != dir {
-		_ = os.RemoveAll(p.held)
+	if p.current != "" && p.current != dir {
+		_ = os.RemoveAll(p.current)
 	}
-	p.held = dir
+	p.current = dir
 	return nil
 }
 

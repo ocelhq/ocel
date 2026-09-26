@@ -136,7 +136,7 @@ func SecureListener(ln net.Listener) (net.Listener, *Identity, error) {
 	}
 	clientCert, err := ParseCertificatePEM(encoded)
 	if err != nil {
-		return nil, nil, fmt.Errorf("channel: %s does not carry a certificate: %w", ClientCertEnvVar, err)
+		return nil, nil, fmt.Errorf("channel: %s does not contain a certificate: %w", ClientCertEnvVar, err)
 	}
 
 	identity, err := NewIdentity()

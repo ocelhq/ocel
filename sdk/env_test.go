@@ -27,7 +27,7 @@ func variablesServer(t *testing.T, cells []cell, seen *[]map[string]any) *httpte
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+collectorToken {
-			http.Error(w, "this request carries no valid session token", http.StatusForbidden)
+			http.Error(w, "this request has no valid session token", http.StatusForbidden)
 			return
 		}
 		raw, err := io.ReadAll(r.Body)
@@ -320,7 +320,7 @@ func TestEnvRejectsAnUntaggedField(t *testing.T) {
 		Name string
 	}
 	err := definitionError(t, func() { ocel.Env[env]() })
-	if !strings.Contains(err.Error(), "field Name carries no `ocel` tag") {
+	if !strings.Contains(err.Error(), "field Name has no `ocel` tag") {
 		t.Errorf("error = %q", err)
 	}
 }
@@ -622,7 +622,7 @@ func TestASecretResolvesOnEveryRead(t *testing.T) {
 	}
 }
 
-func TestEnvReadsAValueFromTheLiveDirectoryWhenNoVariableCarriesIt(t *testing.T) {
+func TestEnvReadsAValueFromTheLiveDirectoryWhenNoVariableSetsIt(t *testing.T) {
 	t.Setenv("OCEL_LIVE_DIR", liveDir(t, map[string]string{"FILE_ONLY": "from the file\n"}))
 
 	got := ocel.Env[struct {
@@ -648,7 +648,7 @@ func TestEnvPrefersADeliveredVariableOverTheLiveDirectoryFileOfTheSameKey(t *tes
 	}
 }
 
-func TestEnvTakesAKeyTheLiveDirectoryHoldsNoFileForAsUnset(t *testing.T) {
+func TestEnvTakesAKeyTheLiveDirectoryHasNoFileForAsUnset(t *testing.T) {
 	t.Setenv("OCEL_LIVE_DIR", liveDir(t, nil))
 
 	err := valueError(t, func() {
@@ -702,7 +702,7 @@ func TestASecretWhoseValueVanishedFailsTheReadRatherThanReadEmpty(t *testing.T) 
 
 	t.Setenv("SIGNING_KEY", "")
 	if v := got.Key.Value(); v != "" {
-		t.Errorf("Value() of a set-but-empty variable = %q, want the empty value it holds", v)
+		t.Errorf("Value() of a set-but-empty variable = %q, want the empty value it is set to", v)
 	}
 	if err := os.Unsetenv("SIGNING_KEY"); err != nil {
 		t.Fatal(err)
@@ -838,7 +838,7 @@ func TestEnvResolvesAFullyDeliveredOptionalGroup(t *testing.T) {
 	}
 }
 
-func TestEnvOwesEveryMemberOfARequiredGroupTheStoreHasNoCellFor(t *testing.T) {
+func TestEnvReportsEveryMemberOfARequiredGroupTheStoreHasNoCellForAsMissing(t *testing.T) {
 	type smtp struct {
 		Host string `ocel:"SMTP_HOST"`
 		Port int    `ocel:"SMTP_PORT"`
@@ -1028,7 +1028,7 @@ type inheritedGroup struct {
 	Web   string `ocel:"INHERITED_WEB,folders=/web"`
 }
 
-func TestEnvOwesAScopedMemberOfAGroupARootValueTurnedOn(t *testing.T) {
+func TestEnvReportsAScopedMemberOfAGroupARootValueTurnedOnAsMissing(t *testing.T) {
 	seen := discover(t, []cell{{Key: "INHERITED_TOKEN", Value: "t"}})
 
 	ocel.Env[struct {

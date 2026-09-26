@@ -60,8 +60,8 @@ func bindingProperties(l *bindingsv1.Binding) protoreflect.Message {
 
 func BindingProperty(l *bindingsv1.Binding, name string) (any, bool) {
 	if custom := l.GetCustom(); custom != nil {
-		value, carries := custom.GetFields()[name]
-		if !carries {
+		value, ok := custom.GetFields()[name]
+		if !ok {
 			return nil, false
 		}
 		return value.AsInterface(), true

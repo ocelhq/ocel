@@ -80,7 +80,7 @@ func TestHandler(t *testing.T) {
 		}
 	})
 
-	t.Run("a guarded front turns away a request that carries no secret", func(t *testing.T) {
+	t.Run("a guarded front turns away a request with no secret", func(t *testing.T) {
 		up := serveUpstream(t)
 		front := serveFront(t, up, NewGuard("s3cr3t"), nil)
 
@@ -146,7 +146,7 @@ func TestHandler(t *testing.T) {
 			}
 		}
 		if up.seen != 2 {
-			t.Errorf("the app answered %d requests, want the two that presented a secret it holds", up.seen)
+			t.Errorf("the app answered %d requests, want the two that presented a secret it accepts", up.seen)
 		}
 	})
 
@@ -167,7 +167,7 @@ func TestHandler(t *testing.T) {
 		front := serveFront(t, up, NewGuard("s3cr3t"), nil)
 
 		if resp := ask(t, front, http.MethodGet, healthPath, ""); resp.StatusCode != http.StatusOK {
-			t.Errorf("status = %d, want %d: the probe carries no secret and its failure takes the deployment down", resp.StatusCode, http.StatusOK)
+			t.Errorf("status = %d, want %d: the probe sends no secret and its failure takes the deployment down", resp.StatusCode, http.StatusOK)
 		}
 		if resp := ask(t, front, http.MethodHead, healthPath, ""); resp.StatusCode != http.StatusOK {
 			t.Errorf("HEAD status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -209,7 +209,7 @@ func TestHandler(t *testing.T) {
 		ask(t, front, http.MethodGet, "/", "s3cr3t")
 
 		if up.secret != "" {
-			t.Errorf("the app was handed %s=%q; the secret is the front's business and nothing the app logs should carry it", OriginSecretHeader, up.secret)
+			t.Errorf("the app was handed %s=%q; the secret is the front's business and nothing the app logs should contain it", OriginSecretHeader, up.secret)
 		}
 		if want := strings.TrimPrefix(front.URL, "http://"); up.host != want {
 			t.Errorf("host = %q, want %q: the app builds absolute URLs from what the caller asked for", up.host, want)
@@ -276,7 +276,7 @@ func TestGuardFromEnv(t *testing.T) {
 		})
 
 		if slices.ContainsFunc(kept, func(e string) bool { return strings.HasPrefix(e, OriginSecretVar+"=") }) {
-			t.Errorf("the app's environment = %q, which still carries the origin secret", kept)
+			t.Errorf("the app's environment = %q, which still contains the origin secret", kept)
 		}
 		if !slices.Equal(kept, []string{"PORT=8080", "NODE_ENV=production"}) {
 			t.Errorf("the app's environment = %q, want everything else left as it was", kept)
@@ -291,7 +291,7 @@ func TestGuardFromEnv(t *testing.T) {
 			t.Error("the guard turns away the secret it was built from")
 		}
 		if guard.Admits(httptest.NewRequest(http.MethodGet, "/", nil)) {
-			t.Error("the guard admits a request carrying nothing")
+			t.Error("the guard admits a request with no secret")
 		}
 	})
 
@@ -346,7 +346,7 @@ func TestGuardFromEnv(t *testing.T) {
 			t.Fatal("an origin secret that was set to nothing left the app open to anyone who finds it")
 		}
 		if guard.Admits(httptest.NewRequest(http.MethodGet, "/", nil)) {
-			t.Error("the guard admits a request carrying nothing")
+			t.Error("the guard admits a request with no secret")
 		}
 	})
 }

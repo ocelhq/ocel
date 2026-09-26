@@ -43,13 +43,13 @@ export interface OcelConfig {
   };
   /** Where the resources an app declares are found. */
   discovery?: DiscoveryConfig;
-  /** Where the project's hostname records are written, keyed by the DNS service's identifier and holding its options, or named alone. */
+  /** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
   dns?: DnsDescriptor;
   /** The hostnames this project is served on. */
   domains?: ProjectDomainConfig;
-  /** The edge in front of the origin, keyed by its identifier and holding its options, or named alone. Omit it and the provider fronts the deployment with its own default edge. */
+  /** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it and the provider fronts the deployment with its own default edge. */
   edge?: EdgeDescriptor;
-  /** The provider ocel deploy provisions into, keyed by its identifier and holding its options. A provider that needs no options may be named alone. */
+  /** The provider ocel deploy provisions into, keyed by its identifier with its options as the value. A provider that needs no options may be named alone. */
   provider?: ProviderDescriptor;
   /** Where this project's container images are pushed. */
   registry?: RegistryConfig;
@@ -113,7 +113,7 @@ export interface BucketBinding {
   endpoint: string | VariableRef;
   /** Address the bucket as a path on the endpoint rather than as a subdomain of it, for stores that serve no virtual hosts. */
   pathStyle?: boolean;
-  /** The prefix every key the app writes is kept under, so one bucket can hold several resources or environments. */
+  /** The prefix every key the app writes is kept under, so one bucket can store several resources or environments. */
   prefix?: string | VariableRef;
   /** The address the bucket's objects are served from publicly, when the code declares it public. */
   publicBaseUrl?: string | VariableRef;
@@ -125,7 +125,7 @@ export interface BucketBinding {
 
 /** The public half of the key pair the runtime reaches the store with. */
 export interface VariableRef {
-  /** The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own. */
+  /** The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own. */
   $env: string;
 }
 
@@ -161,11 +161,11 @@ export interface PostgresTLS {
 
 /** Where the resources an app declares are found. */
 export interface DiscoveryConfig {
-  /** The directories holding infrastructure declarations, relative to the config. Left off, ocel reads the default discovery directory. */
+  /** The directories containing infrastructure declarations, relative to the config. Left off, ocel reads the default discovery directory. */
   paths?: string[];
 }
 
-/** Where the project's hostname records are written, keyed by the DNS service's identifier and holding its options, or named alone. */
+/** Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone. */
 export type DnsDescriptor =
   | "cloudflare"
   | "route53"
@@ -191,7 +191,7 @@ export interface ProjectDomainConfig {
   production?: string | string[];
 }
 
-/** The edge in front of the origin, keyed by its identifier and holding its options, or named alone. Omit it and the provider fronts the deployment with its own default edge. */
+/** The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it and the provider fronts the deployment with its own default edge. */
 export type EdgeDescriptor =
   | "alb"
   | "api-gateway"
@@ -250,7 +250,7 @@ export type EdgeDescriptor =
 
 export type EdgeOptions = Record<string, never>;
 
-/** The provider ocel deploy provisions into, keyed by its identifier and holding its options. A provider that needs no options may be named alone. */
+/** The provider ocel deploy provisions into, keyed by its identifier with its options as the value. A provider that needs no options may be named alone. */
 export type ProviderDescriptor =
   | "aws"
   | {
@@ -411,7 +411,7 @@ export interface VpsTarget {
 
 /** Where this project's container images are pushed. */
 export interface RegistryConfig {
-  /** The environment variable holding the password or token, written as "${REGISTRY_TOKEN}" and read where the push authenticates — never the secret itself. */
+  /** The environment variable containing the password or token, written as "${REGISTRY_TOKEN}" and read where the push authenticates — never the secret itself. */
   password: `\${${string}`;
   /** The registry host and the namespace images sit under, such as ghcr.io/acme. No scheme, and no credentials. */
   server: string;

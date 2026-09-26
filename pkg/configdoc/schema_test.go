@@ -39,7 +39,7 @@ func TestCoreSchemaDescribesTheDocument(t *testing.T) {
 	}
 }
 
-func TestProviderSchemaCarriesTheOptionsAndWhatTheProviderFrontsAndWritesWith(t *testing.T) {
+func TestProviderSchemaIncludesTheOptionsAndWhatTheProviderFrontsAndWritesWith(t *testing.T) {
 	type options struct {
 		Region string `json:"region,omitempty" doc:"The region to deploy into."`
 	}
@@ -103,7 +103,7 @@ func TestAPatternReachesTheGeneratedSchema(t *testing.T) {
 		t.Fatalf("options schema: %v", err)
 	}
 	if !strings.Contains(string(generated), `"pattern": "^arn:aws:kms:"`) {
-		t.Errorf("schema = %s, want the pattern carried into it", generated)
+		t.Errorf("schema = %s, want the pattern copied into it", generated)
 	}
 	tolerated, err := json.Marshal(interpolationPattern)
 	if err != nil {
@@ -115,8 +115,8 @@ func TestAPatternReachesTheGeneratedSchema(t *testing.T) {
 }
 
 func TestAValueIsCheckedAgainstItsPattern(t *testing.T) {
-	held := map[string]any{"key": "arn:aws:kms:eu-west-1:111122223333:key/abcd"}
-	if err := Check("provider.aws", patterned{}, held); err != nil {
+	options := map[string]any{"key": "arn:aws:kms:eu-west-1:111122223333:key/abcd"}
+	if err := Check("provider.aws", patterned{}, options); err != nil {
 		t.Fatalf("a key that matches its pattern was refused: %v", err)
 	}
 	err := Check("provider.aws", patterned{}, map[string]any{"key": "abcd"})

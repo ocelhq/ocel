@@ -87,9 +87,9 @@ func TestEveryKeyedCallRefusesAKeyThatIsNotTheAppsToName(t *testing.T) {
 			t.Parallel()
 			client, _ := serveBuckets(t)
 			for name, reach := range keyed(client, key) {
-				var held *connect.Error
+				var connectErr *connect.Error
 				err := reach()
-				if !errors.As(err, &held) || held.Code() != connect.CodeInvalidArgument {
+				if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeInvalidArgument {
 					t.Errorf("%s of %q = %v, want it refused before the service ever reads the key", name, key, err)
 				}
 			}

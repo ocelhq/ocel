@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestSanitizeHoldsTheAlphabet(t *testing.T) {
+func TestSanitizeKeepsTheAlphabet(t *testing.T) {
 	for _, tc := range []struct{ in, want string }{
 		{"Web/API/Users", "web-api-users"},
 		{"web_api_users", "web-api-users"},
@@ -106,7 +106,7 @@ func TestStackNamesRoundTrip(t *testing.T) {
 
 func TestStackNamesHaveFixedArity(t *testing.T) {
 	if got := AppStack("prod", "web", NewRelease("b", "")).String(); strings.Count(got, FieldSeparator) != 2 {
-		t.Errorf("app stack %q must always carry env, app and release", got)
+		t.Errorf("app stack %q must always include env, app and release", got)
 	}
 	for _, bad := range []string{"prod", "prod--web", "prod--web--nothex", "prod--infra--r00000000", "prod--web--r1--extra"} {
 		if _, err := ParseStackName(bad); err == nil {

@@ -72,7 +72,7 @@ func (l Binding) conform(raw string) error {
 	}
 	published := naming.BindingTypeOf(binding)
 	if published == bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED {
-		return fmt.Errorf("%w: binding %s published a record under %s that carries no properties, and this deployment was built to read a %s", ErrDrift, l.Name, l.Key, l.Type)
+		return fmt.Errorf("%w: binding %s published a record under %s that has no properties, and this deployment was built to read a %s", ErrDrift, l.Name, l.Key, l.Type)
 	}
 	if published != l.Type {
 		return fmt.Errorf("%w: binding %s publishes a %s record under %s, and this deployment was built to read a %s", ErrDrift, l.Name, published, l.Key, l.Type)
@@ -92,13 +92,13 @@ func Keys(keys []Key, bindings []Binding) []string {
 }
 
 func shown(bindings []Binding, values map[string]string) map[string]string {
-	held := maps.Clone(values)
+	shownValues := maps.Clone(values)
 	for _, l := range bindings {
 		if raw, ok := values[l.Key]; ok {
-			held[l.Key] = l.shown(raw)
+			shownValues[l.Key] = l.shown(raw)
 		}
 	}
-	return held
+	return shownValues
 }
 
 func (l Binding) shown(raw string) string {

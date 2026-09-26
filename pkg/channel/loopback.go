@@ -23,7 +23,7 @@ func LoopbackGuard(address, token string, next http.Handler) http.Handler {
 			return
 		}
 		if !VerifyAuthHeader(r.Header.Get("Authorization"), token) {
-			http.Error(w, "this request carries no valid session token", http.StatusForbidden)
+			http.Error(w, "this request has no valid session token", http.StatusForbidden)
 			return
 		}
 		next.ServeHTTP(w, r)

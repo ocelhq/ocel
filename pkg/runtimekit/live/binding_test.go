@@ -35,7 +35,7 @@ func TestConform(t *testing.T) {
 		}
 		for _, b := range []byte(secret) {
 			if strings.ContainsRune(err.Error(), rune(b)) {
-				t.Errorf("error = %v, which carries %q from a value this deployment must treat as a credential", err, string(b))
+				t.Errorf("error = %v, which contains %q from a value this deployment must treat as a credential", err, string(b))
 			}
 		}
 		for _, want := range []string{binding.Name, binding.Key, binding.Type.String()} {
@@ -45,13 +45,13 @@ func TestConform(t *testing.T) {
 		}
 	})
 
-	t.Run("names a record that carries no properties", func(t *testing.T) {
+	t.Run("names a record that has no properties", func(t *testing.T) {
 		t.Parallel()
 
 		binding := postgresBinding()
 		err := Conform([]Binding{binding}, map[string]string{binding.Key: `{"name":"db--main"}`})
 		if err == nil {
-			t.Fatal("Conform = nil, want a record carrying no properties refused")
+			t.Fatal("Conform = nil, want a record with no properties refused")
 		}
 		if !errors.Is(err, ErrDrift) {
 			t.Errorf("error = %v, want it named as drift", err)

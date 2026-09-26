@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 )
 
-func TestNamespaceFieldLeavesAShortNamespaceAsItStands(t *testing.T) {
+func TestNamespaceFieldLeavesAShortNamespaceUnchanged(t *testing.T) {
 	for _, given := range []string{"ocel", "shop", "a", strings.Repeat("a", naming.MaxNamespaceField)} {
 		if got := naming.NamespaceField(given); got != given {
 			t.Errorf("NamespaceField(%q) = %q, want the namespace itself", given, got)
@@ -20,10 +20,10 @@ func TestNamespaceFieldFitsALongNamespaceWithoutLosingTwoApart(t *testing.T) {
 	two := naming.NamespaceField("j-1874-deploy-next-cloudfront")
 	for _, got := range []string{one, two} {
 		if len(got) > naming.MaxNamespaceField {
-			t.Errorf("NamespaceField = %q, which is %d characters and the field holds %d", got, len(got), naming.MaxNamespaceField)
+			t.Errorf("NamespaceField = %q, which is %d characters and the field fits %d", got, len(got), naming.MaxNamespaceField)
 		}
 		if strings.Contains(got, naming.FieldSeparator) {
-			t.Errorf("NamespaceField = %q, which carries the separator that divides fields", got)
+			t.Errorf("NamespaceField = %q, which contains the separator that divides fields", got)
 		}
 	}
 	if one == two {

@@ -33,7 +33,7 @@ func envValue(t *testing.T, env []string, key string) string {
 			return value
 		}
 	}
-	t.Fatalf("env %q carries no %s", env, key)
+	t.Fatalf("env %q has no %s", env, key)
 	return ""
 }
 
@@ -84,7 +84,7 @@ func TestServe(t *testing.T) {
 		t.Fatalf("PresignUpload with the minted token = %v, want it answered", err)
 	}
 	if svc.seen != 1 {
-		t.Fatalf("the service saw %d calls, want the one the token carried", svc.seen)
+		t.Fatalf("the service saw %d calls, want the one the token authorized", svc.seen)
 	}
 }
 

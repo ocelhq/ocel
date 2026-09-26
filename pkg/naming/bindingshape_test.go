@@ -40,7 +40,7 @@ func TestBindingPropertyShapes(t *testing.T) {
 		}
 	})
 
-	t.Run("a custom record is described by the shape it carries", func(t *testing.T) {
+	t.Run("a custom record is described by the shape it has", func(t *testing.T) {
 		custom, err := structpb.NewStruct(map[string]any{
 			"subnetIds":        []any{"subnet-0a1", "subnet-0b2"},
 			"securityGroupIds": []any{"sg-1"},

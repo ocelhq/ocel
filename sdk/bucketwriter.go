@@ -13,8 +13,8 @@ import (
 )
 
 // A Writer streams one object's bytes into a bucket. Small bodies go up in a
-// single request; a body that outgrows what one request carries is uploaded in
-// parts, which [Writer.Close] settles and [Writer.Abort] throws away. Nothing
+// single request; a body that outgrows what one request can send is uploaded in
+// parts, which [Writer.Close] completes and [Writer.Abort] throws away. Nothing
 // is stored until Close returns without an error.
 type Writer struct {
 	ctx     context.Context
@@ -76,7 +76,7 @@ func (w *Writer) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-// Close settles the write and reports whether the object reached the bucket. A
+// Close completes the write and reports whether the object reached the bucket. A
 // write conditioned with [IfNotExists] or [IfMatch] that the object did not
 // meet reports [ErrPreconditionFailed] here.
 func (w *Writer) Close() error {
@@ -98,7 +98,7 @@ func (w *Writer) Close() error {
 		w.fail(err)
 		return w.err
 	}
-	if err := w.settle(); err != nil {
+	if err := w.completeMultipart(); err != nil {
 		w.fail(err)
 		return w.err
 	}
@@ -260,7 +260,7 @@ func (w *Writer) send(target *bucketv1.SignedPart, data []byte) (string, error) 
 	return res.Header.Get("ETag"), nil
 }
 
-func (w *Writer) settle() error {
+func (w *Writer) completeMultipart() error {
 	slices.SortFunc(w.completed, func(a, b *bucketv1.CompletedPart) int {
 		return int(a.GetPartNumber() - b.GetPartNumber())
 	})

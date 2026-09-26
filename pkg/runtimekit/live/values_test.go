@@ -134,7 +134,7 @@ func TestLiveValues(t *testing.T) {
 		l.Attach(out)
 
 		done := l.Prefetch(context.Background())
-		consistently(t, "a generation was pushed while the fetch was still held", func() bool { return len(out.messages(t)) == 0 })
+		consistently(t, "a generation was pushed while the fetch was still blocked", func() bool { return len(out.messages(t)) == 0 })
 
 		close(source.release)
 		if err := l.Join(done); err != nil {
@@ -145,7 +145,7 @@ func TestLiveValues(t *testing.T) {
 		}
 	})
 
-	t.Run("a generation holding nothing is pushed as an empty map", func(t *testing.T) {
+	t.Run("a generation with no values is pushed as an empty map", func(t *testing.T) {
 		out := &sink{}
 		l := New(resolves(nil), []string{"DB_PASSWORD"}, nil, nil)
 		l.Attach(out)
@@ -205,7 +205,7 @@ func TestLiveValues(t *testing.T) {
 			t.Fatalf("pushed %d messages on connect, want the resolved generation", len(msgs))
 		}
 		if msgs[0].Generation != 1 || msgs[0].Values["DB_PASSWORD"] != "hunter2" {
-			t.Errorf("message = %+v, want generation 1 carrying the resolved value", msgs[0])
+			t.Errorf("message = %+v, want generation 1 with the resolved value", msgs[0])
 		}
 	})
 
@@ -300,7 +300,7 @@ func TestLiveValues(t *testing.T) {
 			t.Fatal("join = nil, want the unreachable store reported so init fails")
 		}
 		if !strings.Contains(err.Error(), "connection refused") {
-			t.Errorf("error = %v, want it to carry what the store said", err)
+			t.Errorf("error = %v, want it to include what the store said", err)
 		}
 		if msgs := out.messages(t); len(msgs) != 0 {
 			t.Errorf("pushed %+v, want nothing at all", msgs)
@@ -391,21 +391,21 @@ func TestAValueResolvedUnderNoDeclaredKeyIsTheRuntimesAloneAndReachesNoChild(t *
 	if err := values.Project(root); err != nil {
 		t.Fatalf("Project() = %v", err)
 	}
-	if held := values.Value("ocel.store.secretAccessKey"); held != "s3cr3t" {
-		t.Errorf("Value() = %q, want the credential the runtime holds for itself", held)
+	if got := values.Value("ocel.store.secretAccessKey"); got != "s3cr3t" {
+		t.Errorf("Value() = %q, want the credential the runtime keeps for itself", got)
 	}
 	if _, err := os.Stat(filepath.Join(root, "ocel.store.secretAccessKey")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("the undeclared value was projected into %s, where the app it fronts would read it", root)
 	}
 	for _, entry := range values.Env() {
 		if strings.Contains(entry, "s3cr3t") {
-			t.Errorf("Env() carries %q, and the app must never be handed the store's credential", entry)
+			t.Errorf("Env() contains %q, and the app must never be handed the store's credential", entry)
 		}
 	}
 }
 
 func TestMissing(t *testing.T) {
-	t.Run("names the keys the store held nothing for", func(t *testing.T) {
+	t.Run("names the keys the store had no value for", func(t *testing.T) {
 		l := New(resolves(map[string]string{"DB_PASSWORD": "hunter2"}), []string{"DB_PASSWORD", "SESSION_SECRET", "API_KEY"}, nil, nil)
 
 		if err := l.Join(l.Prefetch(context.Background())); err != nil {
@@ -430,7 +430,7 @@ func TestMissing(t *testing.T) {
 }
 
 func TestProject(t *testing.T) {
-	t.Run("a key is read back through the directory as the bytes the store held", func(t *testing.T) {
+	t.Run("a key is read back through the directory as the bytes the store has", func(t *testing.T) {
 		const value = "hunter2\n\x00 not a line"
 		root := filepath.Join(t.TempDir(), "live")
 		l := New(resolves(map[string]string{"DB_PASSWORD": value}), []string{"DB_PASSWORD"}, nil, nil)
@@ -535,7 +535,7 @@ func TestProject(t *testing.T) {
 			t.Fatalf("Project: %v", err)
 		}
 		if got := l.Env(); !slices.Contains(got, "OCEL_LIVE_DIR="+root) {
-			t.Errorf("Env() = %q, want it to carry OCEL_LIVE_DIR=%s", got, root)
+			t.Errorf("Env() = %q, want it to include OCEL_LIVE_DIR=%s", got, root)
 		}
 	})
 
@@ -573,7 +573,7 @@ func TestProject(t *testing.T) {
 }
 
 func TestReread(t *testing.T) {
-	t.Run("reaches the store inside the staleness bound and hands back what it now holds", func(t *testing.T) {
+	t.Run("reaches the store inside the staleness bound and hands back what it now has", func(t *testing.T) {
 		clock := time.Unix(1_700_000_000, 0)
 		source := resolves(
 			map[string]string{"STORE_BASE": ""},
@@ -588,7 +588,7 @@ func TestReread(t *testing.T) {
 		l.Reread(context.Background())
 
 		if got := l.Value("STORE_BASE"); got != "https://storage.shop.example.com" {
-			t.Errorf("Value() = %q after a reread, want what the store holds now", got)
+			t.Errorf("Value() = %q after a reread, want what the store has now", got)
 		}
 	})
 
@@ -646,7 +646,7 @@ func (f *slowSource) Fetch(ctx context.Context) (map[string]string, error) {
 	return f.inner.Fetch(ctx)
 }
 
-func TestKeepHoldsTheBoundWhenAFetchTakesTime(t *testing.T) {
+func TestKeepRespectsTheBoundWhenAFetchTakesTime(t *testing.T) {
 	t.Run("every tick of the bound reads the store again", func(t *testing.T) {
 		clock := &slowClock{now: time.Unix(1_700_000_000, 0)}
 		inner := resolves(map[string]string{"DB_PASSWORD": "hunter2"})
@@ -666,7 +666,7 @@ func TestKeepHoldsTheBoundWhenAFetchTakesTime(t *testing.T) {
 			eventually(t, "a tick one bound after the last read to read the store again", func() bool {
 				return inner.count() == want
 			})
-			eventually(t, "the refresh to settle", func() bool {
+			eventually(t, "the refresh to finish", func() bool {
 				l.mu.Lock()
 				defer l.mu.Unlock()
 				return !l.refreshing
@@ -798,7 +798,7 @@ func TestBindingColdStart(t *testing.T) {
 				values: map[string]string{binding.Key: bucketRecord(t, "shop-uploads")},
 				names:  []string{"db--main", "BINDING_TYPE_BUCKET", "BINDING_TYPE_POSTGRES", binding.Key},
 			},
-			"a record carrying no properties at all": {
+			"a record with no properties at all": {
 				values: map[string]string{binding.Key: record(t, &bindingsv1.Binding{Name: "db--main"})},
 				names:  []string{"db--main", "BINDING_TYPE_POSTGRES", binding.Key},
 			},
@@ -889,9 +889,9 @@ func TestABucketBoundToAStoreIsShownToTheAppWithoutItsCredential(t *testing.T) {
 		t.Fatalf("pushed %d messages, want the cold start's generation", len(msgs))
 	}
 	for channel, raw := range map[string]string{"projected": string(projected), "pushed": msgs[0].Values[binding.Key]} {
-		for _, held := range []string{"AKIDVALUE", "SECRETVALUE", "abc.r2.cloudflarestorage.com", `"acme"`, "uploads/", "auto"} {
-			if strings.Contains(raw, held) {
-				t.Errorf("%s record %s holds %s, want the store and its credential kept with the proxy", channel, raw, held)
+		for _, secret := range []string{"AKIDVALUE", "SECRETVALUE", "abc.r2.cloudflarestorage.com", `"acme"`, "uploads/", "auto"} {
+			if strings.Contains(raw, secret) {
+				t.Errorf("%s record %s contains %s, want the store and its credential kept with the proxy", channel, raw, secret)
 			}
 		}
 		shown := decodeBinding(t, raw).GetBucket()

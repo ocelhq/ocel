@@ -22,7 +22,7 @@ func collector(t *testing.T, seen *[]map[string]any) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+collectorToken {
-			http.Error(w, "this request carries no valid session token", http.StatusForbidden)
+			http.Error(w, "this request has no valid session token", http.StatusForbidden)
 			return
 		}
 		raw, err := io.ReadAll(r.Body)
@@ -45,7 +45,7 @@ func collector(t *testing.T, seen *[]map[string]any) *httptest.Server {
 	return srv
 }
 
-func TestADeclarationCarriesTheDevServerToken(t *testing.T) {
+func TestADeclarationSendsTheDevServerToken(t *testing.T) {
 	var seen []map[string]any
 	srv := collector(t, &seen)
 	t.Setenv("OCEL_PHASE", "discovery")

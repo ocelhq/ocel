@@ -101,7 +101,7 @@ type Secret struct {
 func (s Secret) Key() string { return s.key }
 
 // Value is the secret's current value. It panics with an [*EnvValueError]
-// when no value stands for the key any more, the way the read of a missing
+// when the key no longer has a value, the way the read of a missing
 // variable fails, rather than hand back an empty secret.
 func (s Secret) Value() string {
 	value, ok := readDelivered(s.key)
@@ -184,7 +184,7 @@ func className(class resourcesv1.VariableClass) string {
 // resolved before the requirements are declared; at runtime each field is read
 // from the environment the deploy delivered.
 //
-// Every field carries an `ocel` tag naming the variable, then any of:
+// Every field has an `ocel` tag naming the variable, then any of:
 //
 //	ocel:"DATABASE_URL"                      plain, required
 //	ocel:"API_KEY,sensitive"                 encrypted at rest, delivered baked
@@ -199,12 +199,12 @@ func className(class resourcesv1.VariableClass) string {
 // A nested struct field is a group: its tag names the group rather than a
 // variable, every field inside it is a member declared under that name, and
 // groups nest one level only. A pointer to a struct is an optional group,
-// absent until a member is delivered and then owed whole; a struct value is a
+// absent until a member is delivered and then required whole; a struct value is a
 // required group. A group's tag takes description=<TEXT>, saying what turning
 // the group on does.
 //
 // A pointer field is optional and stays nil when nothing is set. Any other
-// field is required unless it carries a default. A field may be a string, a
+// field is required unless it has a default. A field may be a string, a
 // bool, any integer or float type, a [time.Duration], or a type implementing
 // [encoding.TextUnmarshaler]; the delivered text is parsed into it, and a
 // value the type rejects fails the read. A class other than plain keeps the
@@ -303,7 +303,7 @@ func groupType(t reflect.Type) reflect.Type {
 func groupDefinition(field reflect.StructField) (group, error) {
 	tag, ok := field.Tag.Lookup(envTag)
 	if !ok {
-		return group{}, &EnvDefinitionError{Detail: fmt.Sprintf("field %s carries no `%s` tag. Every Env group names the group it declares.", field.Name, envTag)}
+		return group{}, &EnvDefinitionError{Detail: fmt.Sprintf("field %s has no `%s` tag. Every Env group names the group it declares.", field.Name, envTag)}
 	}
 	if !field.IsExported() {
 		return group{}, &EnvDefinitionError{Detail: fmt.Sprintf("field %s is unexported, so nothing outside the package could read it. Export it.", field.Name)}
@@ -375,7 +375,7 @@ func satisfiable(key string, members []variable) error {
 func definition(field reflect.StructField, index []int) (variable, error) {
 	tag, ok := field.Tag.Lookup(envTag)
 	if !ok {
-		return variable{}, &EnvDefinitionError{Detail: fmt.Sprintf("field %s carries no `%s` tag. Every field of an Env struct names the variable it reads.", field.Name, envTag)}
+		return variable{}, &EnvDefinitionError{Detail: fmt.Sprintf("field %s has no `%s` tag. Every field of an Env struct names the variable it reads.", field.Name, envTag)}
 	}
 	if !field.IsExported() {
 		return variable{}, &EnvDefinitionError{Detail: fmt.Sprintf("field %s is unexported, so nothing outside the package could read it. Export it.", field.Name)}

@@ -56,11 +56,11 @@ func Priced(card *Card, table Table, edges ...EdgeRates) (*Card, Table, error) {
 	cards := []*Card{}
 	tables := []Table{table}
 	for _, rates := range edges {
-		held, err := rates.Card()
+		card, err := rates.Card()
 		if err != nil {
 			return nil, nil, err
 		}
-		cards = append(cards, held)
+		cards = append(cards, card)
 		tables = append(tables, rates.Table)
 	}
 	return Merge(card, cards...), Tables(tables...), nil

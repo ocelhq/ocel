@@ -128,7 +128,7 @@ func TestCertificatePEM(t *testing.T) {
 	})
 }
 
-func TestReadinessLineCarriesTheServerCertificate(t *testing.T) {
+func TestReadinessLineIncludesTheServerCertificate(t *testing.T) {
 	t.Parallel()
 
 	identity, err := NewIdentity()
@@ -163,7 +163,7 @@ func TestReadinessLineCarriesTheServerCertificate(t *testing.T) {
 		}
 	})
 
-	t.Run("refuses a line that carries no certificate", func(t *testing.T) {
+	t.Run("refuses a line with no certificate", func(t *testing.T) {
 		t.Parallel()
 		b64 := base64.StdEncoding.EncodeToString(identity.CertificateDER())
 		for _, tc := range []struct {
@@ -174,7 +174,7 @@ func TestReadinessLineCarriesTheServerCertificate(t *testing.T) {
 			{"an unrelated log line", "listening on socket...\n"},
 			{"a sentinel with a typo", "OCEL_READY_TYPO 1.0.0 unix:/tmp/x.sock " + b64},
 			{"the sentinel named midway through a line", "some log line mentioning OCEL_READY midway " + b64},
-			{"a line carrying no version", "OCEL_READY unix:/tmp/x.sock " + b64},
+			{"a line with no version", "OCEL_READY unix:/tmp/x.sock " + b64},
 			{"an empty version field", "OCEL_READY  unix:/tmp/x.sock " + b64},
 			{"an address with no certificate", "OCEL_READY 1.0.0 unix:/tmp/x.sock"},
 			{"a certificate with no address", "OCEL_READY 1.0.0 " + b64},
@@ -245,11 +245,11 @@ func TestPinnedHandshake(t *testing.T) {
 	t.Run("trusts nothing beyond the one certificate it was handed", func(t *testing.T) {
 		t.Parallel()
 		if pool := clientConfig(t, client, server).RootCAs; !pool.Equal(only(server.Leaf())) {
-			t.Error("the client roots hold more than the server certificate")
+			t.Error("the client roots contain more than the server certificate")
 		}
 		config := serverConfig(t, server, client)
 		if !config.ClientCAs.Equal(only(client.Leaf())) {
-			t.Error("the server client anchors hold more than the client certificate")
+			t.Error("the server client anchors contain more than the client certificate")
 		}
 		if config.ClientAuth != tls.RequireAndVerifyClientCert {
 			t.Errorf("the server ClientAuth = %v, want RequireAndVerifyClientCert", config.ClientAuth)

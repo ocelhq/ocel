@@ -62,7 +62,7 @@ func ParseStackKey(key string) (string, StackName, error) {
 func ProjectOf(key string) (string, error) {
 	fields := strings.Split(key, KeySeparator)
 	if len(fields) < 2 || fields[0] != tokenProject || fields[1] == "" {
-		return "", fmt.Errorf("key %q carries no project scope", key)
+		return "", fmt.Errorf("key %q has no project scope", key)
 	}
 	return fields[1], nil
 }

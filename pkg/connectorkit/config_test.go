@@ -11,28 +11,28 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
-const carried = `{"console":"https://console.example.com","connectorId":"con_1","organizationId":"org_1","grants":["envvars.read"]}`
+const configJSON = `{"console":"https://console.example.com","connectorId":"con_1","organizationId":"org_1","grants":["envvars.read"]}`
 
 func TestAFormWithNoFilesystemReadsItsConfigOffTheEnvironment(t *testing.T) {
-	t.Setenv(provider.ConnectorConfigEnvVar, carried)
+	t.Setenv(provider.ConnectorConfigEnvVar, configJSON)
 
-	held, err := ReadConfig("")
+	config, err := ReadConfig("")
 	if err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}
-	if held.Console != "https://console.example.com" || held.ConnectorID != "con_1" || held.OrganizationID != "org_1" {
-		t.Errorf("config = %+v, want what the environment carried", held)
+	if config.Console != "https://console.example.com" || config.ConnectorID != "con_1" || config.OrganizationID != "org_1" {
+		t.Errorf("config = %+v, want what the environment set", config)
 	}
-	if held.KeyPath != "" {
-		t.Errorf("config names a key at %q, and a form with no filesystem holds no standing identity", held.KeyPath)
+	if config.KeyPath != "" {
+		t.Errorf("config names a key at %q, and a form with no filesystem has no identity on disk", config.KeyPath)
 	}
 }
 
 func TestTheEnvironmentIsReadAheadOfAPathThatNamesNothing(t *testing.T) {
-	t.Setenv(provider.ConnectorConfigEnvVar, carried)
+	t.Setenv(provider.ConnectorConfigEnvVar, configJSON)
 
 	if _, err := ReadConfig(filepath.Join(t.TempDir(), "absent.json")); err != nil {
-		t.Errorf("ReadConfig with the environment set = %v, want the carried config read", err)
+		t.Errorf("ReadConfig with the environment set = %v, want the config from the environment read", err)
 	}
 }
 
@@ -41,7 +41,7 @@ func TestWithNeitherAPathNorTheEnvironmentNothingNamesTheConsole(t *testing.T) {
 
 	_, err := ReadConfig("")
 	if err == nil {
-		t.Fatal("ReadConfig = nil, want a refusal naming what would have carried the config")
+		t.Fatal("ReadConfig = nil, want a refusal naming where the config would have come from")
 	}
 	if !strings.Contains(err.Error(), provider.ConnectorConfigEnvVar) {
 		t.Errorf("err = %v, want it to name %s", err, provider.ConnectorConfigEnvVar)
@@ -54,7 +54,7 @@ func TestAPathThatNamesNoFileIsRefused(t *testing.T) {
 	absent := filepath.Join(t.TempDir(), "absent.json")
 	_, err := ReadConfig(absent)
 	if err == nil {
-		t.Fatal("ReadConfig = nil, want a refusal: the path names no file and nothing else carries the config")
+		t.Fatal("ReadConfig = nil, want a refusal: the path names no file and nothing else supplies the config")
 	}
 	if !strings.Contains(err.Error(), "absent.json") {
 		t.Errorf("err = %v, want it to name the path it could not read", err)
@@ -65,22 +65,22 @@ func TestAConfigOnDiskIsStillRead(t *testing.T) {
 	t.Setenv(provider.ConnectorConfigEnvVar, "")
 
 	path := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(path, []byte(carried), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(configJSON), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	held, err := ReadConfig(path)
+	config, err := ReadConfig(path)
 	if err != nil {
 		t.Fatalf("ReadConfig: %v", err)
 	}
-	if held.ConnectorID != "con_1" {
-		t.Errorf("config = %+v, want what the file held", held)
+	if config.ConnectorID != "con_1" {
+		t.Errorf("config = %+v, want what the file contains", config)
 	}
 }
 
-func TestAConnectorThatHoldsNoKeyStillServes(t *testing.T) {
+func TestAConnectorWithNoKeyStillServes(t *testing.T) {
 	t.Parallel()
 
-	cfg, err := ParseConfig([]byte(carried), "test")
+	cfg, err := ParseConfig([]byte(configJSON), "test")
 	if err != nil {
 		t.Fatal(err)
 	}

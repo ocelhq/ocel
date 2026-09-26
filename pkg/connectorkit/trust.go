@@ -92,7 +92,7 @@ func (t *trust) interceptor() connect.Interceptor {
 			if !slices.Contains(t.grants, want) {
 				t.say(caller.act, procedure, "denied")
 				return nil, connect.NewError(connect.CodePermissionDenied,
-					fmt.Errorf("this connector holds no %s grant", want))
+					fmt.Errorf("this connector has no %s grant", want))
 			}
 			if !slices.Contains(caller.scopes, want) {
 				t.say(caller.act, procedure, "denied")
@@ -134,7 +134,7 @@ func (t *trust) caller(ctx context.Context, authorization string) (claims, error
 	}
 	signatures := message.Signatures()
 	if len(signatures) != 1 {
-		return claims{}, connect.NewError(connect.CodeUnauthenticated, errors.New("the bearer token carries no single signature"))
+		return claims{}, connect.NewError(connect.CodeUnauthenticated, errors.New("the bearer token does not have exactly one signature"))
 	}
 	kid, _ := signatures[0].ProtectedHeaders().KeyID()
 
@@ -161,15 +161,15 @@ func (t *trust) caller(ctx context.Context, authorization string) (claims, error
 
 	var claimed any
 	if err := token.Get("scope", &claimed); err != nil {
-		return claims{}, connect.NewError(connect.CodePermissionDenied, errors.New("the token carries no scope"))
+		return claims{}, connect.NewError(connect.CodePermissionDenied, errors.New("the token has no scope"))
 	}
-	held, ok := stringsOf(claimed)
+	scopes, ok := stringsOf(claimed)
 	if !ok {
 		return claims{}, connect.NewError(connect.CodePermissionDenied, errors.New("the token's scope is not a list of names"))
 	}
 	var act string
 	_ = token.Get("act", &act)
-	return claims{act: act, scopes: held}, nil
+	return claims{act: act, scopes: scopes}, nil
 }
 
 func stringsOf(claimed any) ([]string, bool) {

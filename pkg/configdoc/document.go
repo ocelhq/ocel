@@ -11,9 +11,9 @@ type Document struct {
 	Bindings      Bindings             `json:"bindings,omitempty" doc:"Resources this project declares that ocel binds instead of provisioning them itself. Keyed by resource type, then by the name the app declares. The value is \"@\" followed by the name a record your own infrastructure published, such as \"@warehouse\", and a name nothing has published refuses the deploy; or the record written inline, checked at deploy rather than provisioned, optionally keyed by the tier it serves."`
 	Transforms    StringList           `json:"transforms,omitempty" doc:"Transform modules applied while provisioning, in order — later modules win where their patches collide. Each is a path to a module whose default export is a defineTransform(...) result, keyed by the provider it patches."`
 	Discovery     *DiscoveryConfig     `json:"discovery,omitempty" doc:"Where the resources an app declares are found."`
-	Provider      *ProviderDescriptor  `json:"provider,omitempty" doc:"The provider ocel deploy provisions into, keyed by its identifier and holding its options. A provider that needs no options may be named alone."`
-	Edge          *EdgeDescriptor      `json:"edge,omitempty" doc:"The edge in front of the origin, keyed by its identifier and holding its options, or named alone. Omit it and the provider fronts the deployment with its own default edge."`
-	DNS           *DnsDescriptor       `json:"dns,omitempty" doc:"Where the project's hostname records are written, keyed by the DNS service's identifier and holding its options, or named alone."`
+	Provider      *ProviderDescriptor  `json:"provider,omitempty" doc:"The provider ocel deploy provisions into, keyed by its identifier with its options as the value. A provider that needs no options may be named alone."`
+	Edge          *EdgeDescriptor      `json:"edge,omitempty" doc:"The edge in front of the origin, keyed by its identifier with its options as the value, or named alone. Omit it and the provider fronts the deployment with its own default edge."`
+	DNS           *DnsDescriptor       `json:"dns,omitempty" doc:"Where the project's hostname records are written, keyed by the DNS service's identifier with its options as the value, or named alone."`
 	AllowDegraded []string             `json:"allowDegraded,omitempty" doc:"The needs this project waives rather than have a deploy refused over." enum:"edge-middleware,edge-runtime,ppr-resume,edge-cache,streaming"`
 	Apps          []AppConfig          `json:"apps,omitempty" doc:"The apps this project deploys. Left off, ocel detects one at the project root."`
 	Domains       *ProjectDomainConfig `json:"domains,omitempty" doc:"The hostnames this project is served on."`
@@ -21,7 +21,7 @@ type Document struct {
 }
 
 type DiscoveryConfig struct {
-	Paths []string `json:"paths,omitempty" doc:"The directories holding infrastructure declarations, relative to the config. Left off, ocel reads the default discovery directory."`
+	Paths []string `json:"paths,omitempty" doc:"The directories containing infrastructure declarations, relative to the config. Left off, ocel reads the default discovery directory."`
 }
 
 type AppConfig struct {
@@ -59,7 +59,7 @@ type ProjectDomainConfig struct {
 type RegistryConfig struct {
 	Server   string `json:"server" doc:"The registry host and the namespace images sit under, such as ghcr.io/acme. No scheme, and no credentials."`
 	Username string `json:"username,omitempty" doc:"The username the push authenticates as, where the registry wants one."`
-	Password string `json:"password" secret:"REGISTRY_TOKEN" doc:"The environment variable holding the password or token, written as \"${REGISTRY_TOKEN}\" and read where the push authenticates — never the secret itself."`
+	Password string `json:"password" secret:"REGISTRY_TOKEN" doc:"The environment variable containing the password or token, written as \"${REGISTRY_TOKEN}\" and read where the push authenticates — never the secret itself."`
 }
 
 type StringList []string
