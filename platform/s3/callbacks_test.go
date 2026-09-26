@@ -23,11 +23,11 @@ func (p *flakyPoster) Post(ctx context.Context, url string, body []byte) error {
 		p.refused++
 		return errors.New("the app answered 502 Bad Gateway")
 	}
-	held := &recordingPoster{}
-	if err := held.Post(ctx, url, body); err != nil {
+	recorder := &recordingPoster{}
+	if err := recorder.Post(ctx, url, body); err != nil {
 		return err
 	}
-	p.posts = append(p.posts, held.posts...)
+	p.posts = append(p.posts, recorder.posts...)
 	return nil
 }
 
@@ -41,7 +41,7 @@ func TestACallbackTheAppRefusedIsDeliveredOnTheNextComplete(t *testing.T) {
 
 	ctx := context.Background()
 	if _, err := h.svc.CompleteUpload(ctx, &bucketv1.CompleteUploadRequest{SessionId: "sess_fixed"}); err == nil {
-		t.Fatal("a callback the app refused settled the session anyway, so the app never hears about the upload")
+		t.Fatal("a callback the app refused finished the session anyway, so the app never hears about the upload")
 	}
 
 	resp, err := h.svc.CompleteUpload(ctx, &bucketv1.CompleteUploadRequest{SessionId: "sess_fixed"})

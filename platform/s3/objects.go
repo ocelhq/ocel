@@ -86,12 +86,12 @@ func headInfo(key string, out *s3.HeadObjectOutput) *bucketv1.ObjectInfo {
 }
 
 func (s *Service) Head(ctx context.Context, req *bucketv1.HeadRequest) (*bucketv1.HeadResponse, error) {
-	held, key, err := s.reach(req.GetBucket(), req.GetKey())
+	granted, key, err := s.reach(req.GetBucket(), req.GetKey())
 	if err != nil {
 		return nil, err
 	}
 	out, err := s.cfg.Objects.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(held.bucket),
+		Bucket: aws.String(granted.bucket),
 		Key:    aws.String(key),
 	})
 	if missing(err) {
@@ -104,7 +104,7 @@ func (s *Service) Head(ctx context.Context, req *bucketv1.HeadRequest) (*bucketv
 }
 
 func (s *Service) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv1.ListResponse, error) {
-	held, prefix, err := s.reach(req.GetBucket(), req.GetPrefix())
+	granted, prefix, err := s.reach(req.GetBucket(), req.GetPrefix())
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func (s *Service) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv
 		limit = listPageSize
 	}
 	in := &s3.ListObjectsV2Input{
-		Bucket:  aws.String(held.bucket),
+		Bucket:  aws.String(granted.bucket),
 		Prefix:  aws.String(prefix),
 		MaxKeys: aws.Int32(limit),
 	}
@@ -127,7 +127,7 @@ func (s *Service) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv
 
 	resp := &bucketv1.ListResponse{NextCursor: aws.ToString(out.NextContinuationToken)}
 	for _, obj := range out.Contents {
-		key := held.strip(aws.ToString(obj.Key))
+		key := granted.strip(aws.ToString(obj.Key))
 		if strings.HasPrefix(key, constants.ReservedKeyPrefix) {
 			continue
 		}
@@ -145,7 +145,7 @@ func (s *Service) List(ctx context.Context, req *bucketv1.ListRequest) (*bucketv
 }
 
 func (s *Service) Delete(ctx context.Context, req *bucketv1.DeleteRequest) (*bucketv1.DeleteResponse, error) {
-	held, err := s.held(req.GetBucket())
+	granted, err := s.scopeOf(req.GetBucket())
 	if err != nil {
 		return nil, err
 	}
@@ -154,22 +154,22 @@ func (s *Service) Delete(ctx context.Context, req *bucketv1.DeleteRequest) (*buc
 			return nil, err
 		}
 	}
-	if err := s.remove(ctx, held, req.GetKeys()); err != nil {
+	if err := s.remove(ctx, granted, req.GetKeys()); err != nil {
 		return nil, err
 	}
 	return &bucketv1.DeleteResponse{}, nil
 }
 
-func (s *Service) remove(ctx context.Context, held scope, keys []string) error {
+func (s *Service) remove(ctx context.Context, granted scope, keys []string) error {
 	if len(keys) == 0 {
 		return nil
 	}
 	ids := make([]s3types.ObjectIdentifier, 0, len(keys))
 	for _, key := range keys {
-		ids = append(ids, s3types.ObjectIdentifier{Key: aws.String(held.key(key))})
+		ids = append(ids, s3types.ObjectIdentifier{Key: aws.String(granted.key(key))})
 	}
 	_, err := s.cfg.Objects.DeleteObjects(ctx, &s3.DeleteObjectsInput{
-		Bucket: aws.String(held.bucket),
+		Bucket: aws.String(granted.bucket),
 		Delete: &s3types.Delete{Objects: ids, Quiet: aws.Bool(true)},
 	})
 	if err != nil {
@@ -179,24 +179,24 @@ func (s *Service) remove(ctx context.Context, held scope, keys []string) error {
 }
 
 func (s *Service) Copy(ctx context.Context, req *bucketv1.CopyRequest) (*bucketv1.CopyResponse, error) {
-	held, source, err := s.reach(req.GetBucket(), req.GetSourceKey())
+	granted, source, err := s.reach(req.GetBucket(), req.GetSourceKey())
 	if err != nil {
 		return nil, err
 	}
 	if err := reserved(req.GetDestinationKey()); err != nil {
 		return nil, err
 	}
-	destination := held.key(req.GetDestinationKey())
+	destination := granted.key(req.GetDestinationKey())
 	_, err = s.cfg.Objects.CopyObject(ctx, &s3.CopyObjectInput{
-		Bucket:     aws.String(held.bucket),
+		Bucket:     aws.String(granted.bucket),
 		Key:        aws.String(destination),
-		CopySource: aws.String(copySource(held.bucket, source)),
+		CopySource: aws.String(copySource(granted.bucket, source)),
 	})
 	if err != nil {
 		return nil, storeError("copy "+req.GetSourceKey(), err)
 	}
 	out, err := s.cfg.Objects.HeadObject(ctx, &s3.HeadObjectInput{
-		Bucket: aws.String(held.bucket),
+		Bucket: aws.String(granted.bucket),
 		Key:    aws.String(destination),
 	})
 	if err != nil {

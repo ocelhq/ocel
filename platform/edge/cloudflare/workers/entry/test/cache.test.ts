@@ -459,7 +459,7 @@ describe("serveCached", () => {
     expect(joiner!.headers.get("x-ocel-cache")).toBe("HIT");
   });
 
-  it("answers a joiner whose leader's store never settles", async () => {
+  it("answers a joiner whose leader's store never finishes", async () => {
     const clock = { ms: 0 };
     const stalled = {
       match: async () => undefined,
@@ -676,12 +676,12 @@ describe("serveCached", () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
     const origin = countingOrigin("s-maxage=60");
-    const held: number[] = [];
+    const refreshed: number[] = [];
     const blocking = (async (refreshing: number) => {
-      held.push(refreshing);
+      refreshed.push(refreshing);
       return origin();
     }) as unknown as CountingOrigin;
-    const t = target("held-generation", { revalidate: 1, expiration: 100 });
+    const t = target("refreshed-generation", { revalidate: 1, expiration: 100 });
 
     await serveCached(req(), t, deps, origin, blocking);
     await deps.flush();
@@ -690,7 +690,7 @@ describe("serveCached", () => {
     await serveCached(req(), t, deps, origin, blocking);
     await deps.flush();
 
-    expect(held).toEqual([0]);
+    expect(refreshed).toEqual([0]);
   });
 
   it("hands the refresh the entry's remaining stale window, so the wait cannot outlive it", async () => {
@@ -1198,9 +1198,9 @@ describe("serveCached", () => {
 
     expect(leader.status).toBe("rejected");
     expect(origin.calls).toBe(3);
-    for (const settled of followers) {
-      expect(settled.status).toBe("fulfilled");
-      const res = (settled as PromiseFulfilledResult<Response>).value;
+    for (const follower of followers) {
+      expect(follower.status).toBe("fulfilled");
+      const res = (follower as PromiseFulfilledResult<Response>).value;
       expect(res.status).toBe(200);
       expect(res.headers.get("x-ocel-cache")).toBe("MISS");
       expect(await res.text()).toBe("rendered");
@@ -1278,12 +1278,12 @@ describe("serveCached", () => {
     expect(refresh.calls).toBe(1);
   });
 
-  it("keeps suppressing the route once the admitted refresh has settled", async () => {
+  it("keeps suppressing the route once the admitted refresh has finished", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
-    const t = target("settled-refresh", {
+    const t = target("finished-refresh", {
       revalidate: 1,
-      refreshKey: "build:/settled",
+      refreshKey: "build:/finished",
     });
     const origin = countingOrigin("s-maxage=1");
     const refresh = countingOrigin("s-maxage=1");
@@ -1376,7 +1376,7 @@ describe("admitRefresh", () => {
     expect(run.calls).toBe(2);
   });
 
-  it("admits a different route while one route's sentinel stands", async () => {
+  it("admits a different route while one route's sentinel is in place", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock, ttlCache(clock));
     const run = countingRun();
@@ -1404,7 +1404,7 @@ describe("admitRefresh", () => {
     expect(succeeding.calls).toBe(1);
   });
 
-  it("holds the claim for the backoff when the origin refused the refresh", async () => {
+  it("keeps the claim for the backoff when the origin refused the refresh", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock, ttlCache(clock));
     const refused = countingRun("refused");
@@ -1473,7 +1473,7 @@ describe("admitRefresh", () => {
     expect(next.calls).toBe(1);
   });
 
-  it("skips the render when the tier below already holds a fresher entry", async () => {
+  it("skips the render when the tier below already has a fresher entry", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock, ttlCache(clock), async () => true);
     const run = countingRun();
@@ -1484,18 +1484,18 @@ describe("admitRefresh", () => {
     expect(run.calls).toBe(0);
   });
 
-  it("holds the claim for a full TTL when the tier below answered for it", async () => {
+  it("keeps the claim for a full TTL when the tier below answered for it", async () => {
     const clock = { ms: 0 };
     let below = true;
     const deps = testDeps(clock, ttlCache(clock), async () => below);
     const run = countingRun();
 
-    admitRefresh(deps, "build:/held", 0, run);
+    admitRefresh(deps, "build:/answered-below", 0, run);
     await deps.flush();
 
     below = false;
     clock.ms = refreshSentinelTtlSeconds * 1_000 - 1;
-    admitRefresh(deps, "build:/held", 0, run);
+    admitRefresh(deps, "build:/answered-below", 0, run);
     await deps.flush();
 
     expect(run.calls).toBe(0);
@@ -1643,8 +1643,8 @@ describe("admitRefresh", () => {
     const cache = ttlCache(clock);
     const run = countingRun();
     let release!: () => void;
-    const held = new Promise<void>((resolve) => (release = resolve));
-    const waiting = { ...testDeps(clock, cache), admissionDelay: () => held };
+    const delay = new Promise<void>((resolve) => (release = resolve));
+    const waiting = { ...testDeps(clock, cache), admissionDelay: () => delay };
     const other = { ...testDeps(clock, cache), admissionDelay: () => Promise.resolve() };
 
     admitRefresh(waiting, "build:/shared", 0, run);

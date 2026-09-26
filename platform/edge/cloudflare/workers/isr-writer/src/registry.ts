@@ -19,12 +19,12 @@ function initialized(store: SqlStore): boolean {
   );
 }
 
-export type Initialization = "adopted" | "held";
+export type Initialization = "adopted" | "refused";
 
 export function initialize(store: SqlStore, secretHash: string, force: boolean): Initialization {
   ensureSchema(store);
-  const standing = secretHash_(store);
-  if (standing !== undefined && standing !== secretHash && !force) return "held";
+  const recorded = secretHash_(store);
+  if (recorded !== undefined && recorded !== secretHash && !force) return "refused";
   store.sql.exec(
     `INSERT INTO registry (id, secret_hash) VALUES (1, ?)
        ON CONFLICT (id) DO UPDATE SET secret_hash = excluded.secret_hash`,

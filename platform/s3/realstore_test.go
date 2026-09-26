@@ -129,7 +129,7 @@ func TestMetadataBeyondTheCapIsRefusedBeforeItIsSigned(t *testing.T) {
 		},
 	})
 	if err == nil {
-		t.Fatal("Sign took metadata past the 2 KB a store will hold")
+		t.Fatal("Sign took metadata past the 2 KB a store will accept")
 	}
 
 	_, err = h.svc.CreateMultipart(context.Background(), &bucketv1.CreateMultipartRequest{
@@ -138,6 +138,6 @@ func TestMetadataBeyondTheCapIsRefusedBeforeItIsSigned(t *testing.T) {
 		Metadata: map[string]string{"blob": string(big)},
 	})
 	if err == nil {
-		t.Fatal("CreateMultipart took metadata past the 2 KB a store will hold")
+		t.Fatal("CreateMultipart took metadata past the 2 KB a store will accept")
 	}
 }

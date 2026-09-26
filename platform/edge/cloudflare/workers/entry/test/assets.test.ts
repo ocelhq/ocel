@@ -78,7 +78,7 @@ describe("serveStaticAsset", () => {
     expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
   });
 
-  it("ignores any content-type the stored object carries", async () => {
+  it("ignores any content-type the stored object has", async () => {
     const url = new URL("https://serve-ct-1.example/favicon.ico");
     const deps = countingDeps(
       bucketServing({
@@ -385,7 +385,7 @@ describe("serveStaticAsset", () => {
     expect(keys).toEqual(["assets/p/app/b1/some.html"]);
   });
 
-  it("answers 304 when the client already holds the object's etag", async () => {
+  it("answers 304 when the client already has the object's etag", async () => {
     const url = new URL("https://serve-304-1.example/_next/static/service-worker/sw.js");
     const deps = countingDeps(
       bucketServing({
@@ -421,7 +421,7 @@ describe("serveStaticAsset", () => {
     }
   });
 
-  it("serves the body when the client holds a different etag", async () => {
+  it("serves the body when the client has a different etag", async () => {
     const url = new URL("https://serve-304-3.example/robots.txt");
     const deps = countingDeps(
       bucketServing({ "assets/p/app/b1/robots.txt": { body: "ok", etag: '"v2"' } }),

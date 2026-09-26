@@ -161,7 +161,7 @@ func TestDNSRecordsEnsureRecords(t *testing.T) {
 		}
 	})
 
-	t.Run("writes an A record at the address the front carries", func(t *testing.T) {
+	t.Run("writes an A record at the front's address", func(t *testing.T) {
 		t.Parallel()
 
 		records := &fakeRecords{}
@@ -176,7 +176,7 @@ func TestDNSRecordsEnsureRecords(t *testing.T) {
 		}
 	})
 
-	t.Run("writes an AAAA record at the address the front carries", func(t *testing.T) {
+	t.Run("writes an AAAA record at the front's address", func(t *testing.T) {
 		t.Parallel()
 
 		records := &fakeRecords{}
@@ -222,7 +222,7 @@ func TestDNSRecordsEnsureRecords(t *testing.T) {
 		}
 	})
 
-	t.Run("a record already carrying the value is left alone", func(t *testing.T) {
+	t.Run("a record already set to the value is left alone", func(t *testing.T) {
 		t.Parallel()
 
 		records := &fakeRecords{existing: map[string][]dns.RecordResponse{
@@ -256,14 +256,14 @@ func TestDNSRecordsEnsureRecords(t *testing.T) {
 			t.Errorf("updated = %v, want only the record ocel wrote", records.updated)
 		}
 		if len(records.created) != 0 {
-			t.Errorf("created = %v, want a user's own record left standing", records.created)
+			t.Errorf("created = %v, want a user's own record left in place", records.created)
 		}
 		if len(written) != 1 || written[0].Name != "ours.app.com" {
 			t.Errorf("written = %v, want only the record ocel owns", written)
 		}
 	})
 
-	t.Run("a foreign record is left standing, said out loud and never recorded", func(t *testing.T) {
+	t.Run("a foreign record is left in place, said out loud and never recorded", func(t *testing.T) {
 		t.Parallel()
 
 		records := &fakeRecords{existing: map[string][]dns.RecordResponse{

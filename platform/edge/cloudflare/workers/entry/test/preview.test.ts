@@ -128,7 +128,7 @@ describe("globalPreviewTarget", () => {
     });
   });
 
-  it("leaves the app unset when the label carries only slug and pointer", () => {
+  it("leaves the app unset when the label contains only slug and pointer", () => {
     expect(globalPreviewTarget(`acme--pr-42.${BASE}`, BASE)).toEqual({
       slug: "acme",
       pointer: "pr-42",

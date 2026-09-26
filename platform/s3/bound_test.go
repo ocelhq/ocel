@@ -25,8 +25,8 @@ func TestABoundBucketIsServedUnderItsBindingsKeyAndThePrefixItNames(t *testing.T
 	store := newFakeStore()
 	svc := bound("b0", "OCEL_RESOURCE_BUCKET_uploads", boundRecord(), &recordingPoster{}, store)
 
-	if !svc.holds("OCEL_RESOURCE_BUCKET_uploads") {
-		t.Fatal("the backend holds nothing under the binding's key, the name the app reads off the record")
+	if !svc.hasBucket("OCEL_RESOURCE_BUCKET_uploads") {
+		t.Fatal("the backend stores nothing under the binding's key, the name the app reads off the record")
 	}
 	store.put("acme", "uploads/a.png", []byte("abc"), "image/png")
 	store.put("acme", "elsewhere/b.png", []byte("abc"), "image/png")

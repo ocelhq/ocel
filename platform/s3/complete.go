@@ -72,33 +72,33 @@ func (s *Service) CompleteUpload(ctx context.Context, req *bucketv1.CompleteUplo
 		return nil, err
 	}
 
-	held, err := s.held(sess.Bucket)
+	granted, err := s.scopeOf(sess.Bucket)
 	if err != nil {
 		return nil, err
 	}
 	switch aggregate(sess.Files) {
 	case stateSucceeded:
-		return s.settle(ctx, sess)
+		return s.finish(ctx, sess)
 	case stateExpired:
 		return &bucketv1.CompleteUploadResponse{State: bucketv1.UploadState_UPLOAD_STATE_EXPIRED, Error: sess.Error}, nil
 	}
 
 	if s.now().Unix() >= sess.ExpiresAt {
-		return s.expire(ctx, sess, held)
+		return s.expire(ctx, sess, granted)
 	}
 
-	settled := make([]sessionFile, len(sess.Files))
-	copy(settled, sess.Files)
+	files := make([]sessionFile, len(sess.Files))
+	copy(files, sess.Files)
 	var rejected []string
 	failure := ""
 
-	for i, file := range settled {
+	for i, file := range files {
 		if file.State == stateSucceeded {
 			continue
 		}
 		out, err := s.cfg.Objects.HeadObject(ctx, &s3.HeadObjectInput{
-			Bucket: aws.String(held.bucket),
-			Key:    aws.String(held.key(file.Key)),
+			Bucket: aws.String(granted.bucket),
+			Key:    aws.String(granted.key(file.Key)),
 		})
 		if missing(err) {
 			continue
@@ -111,14 +111,14 @@ func (s *Service) CompleteUpload(ctx context.Context, req *bucketv1.CompleteUplo
 			failure = fmt.Sprintf("the object uploaded for %q does not match what was signed", file.Key)
 			continue
 		}
-		settled[i].State = stateSucceeded
+		files[i].State = stateSucceeded
 	}
 
 	if len(rejected) > 0 {
-		if err := s.remove(ctx, held, rejected); err != nil {
+		if err := s.remove(ctx, granted, rejected); err != nil {
 			return nil, err
 		}
-		sess.Files = settled
+		sess.Files = files
 		sess.Error = failure
 		for i := range sess.Files {
 			sess.Files[i].State = stateExpired
@@ -129,14 +129,14 @@ func (s *Service) CompleteUpload(ctx context.Context, req *bucketv1.CompleteUplo
 		return &bucketv1.CompleteUploadResponse{State: bucketv1.UploadState_UPLOAD_STATE_EXPIRED, Error: failure}, nil
 	}
 
-	sess.Files = settled
-	if aggregate(settled) != stateSucceeded {
+	sess.Files = files
+	if aggregate(files) != stateSucceeded {
 		return &bucketv1.CompleteUploadResponse{State: bucketv1.UploadState_UPLOAD_STATE_PENDING}, nil
 	}
-	return s.settle(ctx, sess)
+	return s.finish(ctx, sess)
 }
 
-func (s *Service) settle(ctx context.Context, sess session) (*bucketv1.CompleteUploadResponse, error) {
+func (s *Service) finish(ctx context.Context, sess session) (*bucketv1.CompleteUploadResponse, error) {
 	succeeded := &bucketv1.CompleteUploadResponse{State: bucketv1.UploadState_UPLOAD_STATE_SUCCEEDED}
 
 	claimed := make([]sessionFile, 0, len(sess.Files))
@@ -179,14 +179,14 @@ func (s *Service) disown(ctx context.Context, sess session, lost []sessionFile) 
 	return nil
 }
 
-func (s *Service) expire(ctx context.Context, sess session, held scope) (*bucketv1.CompleteUploadResponse, error) {
+func (s *Service) expire(ctx context.Context, sess session, granted scope) (*bucketv1.CompleteUploadResponse, error) {
 	var unconfirmed []string
 	for _, file := range sess.Files {
 		if file.State != stateSucceeded {
 			unconfirmed = append(unconfirmed, file.Key)
 		}
 	}
-	if err := s.remove(ctx, held, unconfirmed); err != nil {
+	if err := s.remove(ctx, granted, unconfirmed); err != nil {
 		return nil, err
 	}
 	for i := range sess.Files {

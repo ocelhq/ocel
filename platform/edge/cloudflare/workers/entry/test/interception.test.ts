@@ -381,7 +381,7 @@ describe("intercept, tag state from the snapshot", () => {
     expect(store.gets.filter((k) => k === snapshotKey).length).toBe(2);
   });
 
-  it("keeps serving from a snapshot the PoP cache still holds", async () => {
+  it("keeps serving from a snapshot the PoP cache still has", async () => {
     const store = stored({
       [entryKey("/blog")]: appPage({ tags: "products", lastModified: 1_000 }),
       [snapshotKey]: snapshot(),
@@ -569,7 +569,7 @@ describe("intercept, PPR entries", () => {
 
   const concreteTarget = () => pprTarget({ routePath: "/posts/7", fallbackPath: "/posts/[id]" });
 
-  it("answers a segment prefetch from the fallback when the concrete entry carries no segmentData", async () => {
+  it("answers a segment prefetch from the fallback when the concrete entry has no segmentData", async () => {
     const outcome = await readSegment(
       concreteTarget(),
       {
@@ -604,7 +604,7 @@ describe("intercept, PPR entries", () => {
     expect(outcome).toMatchObject({ lastModified: 1_000, stale: true });
   });
 
-  it("still prefers the concrete entry when it carries the requested segment", async () => {
+  it("still prefers the concrete entry when it has the requested segment", async () => {
     const outcome = await readSegment(
       concreteTarget(),
       {
@@ -622,7 +622,7 @@ describe("intercept, PPR entries", () => {
     expect(await res.text()).toBe("CONCRETE-TREE");
   });
 
-  it("serves nothing when neither the concrete entry nor the fallback holds the segment", async () => {
+  it("serves nothing when neither the concrete entry nor the fallback has the segment", async () => {
     const outcome = await readSegment(
       concreteTarget(),
       {

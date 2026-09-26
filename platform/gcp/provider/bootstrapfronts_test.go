@@ -38,8 +38,8 @@ func (f *countingFront) Hooks() edge.Hooks {
 		return edge.Hooks{}
 	}
 	return edge.Hooks{
-		CheckBootstrapStands: func(context.Context, edge.Class) (bool, error) { return f.standing, nil },
-		ListBoundHostnames:   func(context.Context, edge.Class) ([]string, error) { return f.bound, nil },
+		CheckBootstrapInstalled: func(context.Context, edge.Class) (bool, error) { return f.standing, nil },
+		ListBoundHostnames:      func(context.Context, edge.Class) ([]string, error) { return f.bound, nil },
 	}
 }
 

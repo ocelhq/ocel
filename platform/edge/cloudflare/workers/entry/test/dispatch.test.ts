@@ -651,7 +651,7 @@ describe("dispatchResult", () => {
       headers: { RSC: "1", "next-router-prefetch": "1" },
     });
 
-  it("does not render when R2 already holds a fresher entry by the time the refresh is admitted", async () => {
+  it("does not render when R2 already has a fresher entry by the time the refresh is admitted", async () => {
     const { deps, pending, lambdaCalls } = refreshOverStore(
       staleBelow(),
       pageValue("<html>fresher</html>"),
@@ -845,7 +845,7 @@ describe("dispatchResult", () => {
     expect(revalidations).toBe(0);
   });
 
-  function coloHoldingSentinel(refreshKey: string): Cache {
+  function coloWithSentinel(refreshKey: string): Cache {
     const url = sentinelUrl(refreshKey);
     return {
       match: async (request: Request) => (request.url === url ? new Response(null) : undefined),
@@ -854,7 +854,7 @@ describe("dispatchResult", () => {
     } as unknown as Cache;
   }
 
-  it("leaves the stale R2 refresh to whichever isolate holds the colo's sentinel", async () => {
+  it("leaves the stale R2 refresh to whichever isolate claimed the colo's sentinel", async () => {
     let lambda = 0;
     const pending: Promise<unknown>[] = [];
     const deps = baseDeps({
@@ -881,7 +881,7 @@ describe("dispatchResult", () => {
         });
       }) as unknown as typeof fetch,
       cache: coloDeps({
-        cache: coloHoldingSentinel("app.example/p1/web/d1:/blog"),
+        cache: coloWithSentinel("app.example/p1/web/d1:/blog"),
         waitUntil: (p: Promise<unknown>) => {
           pending.push(p);
         },
@@ -908,7 +908,7 @@ describe("dispatchResult", () => {
     expect(lambda).toBe(0);
   });
 
-  it("leaves a stale PPR shell's refresh to whichever isolate holds the colo's sentinel", async () => {
+  it("leaves a stale PPR shell's refresh to whichever isolate claimed the colo's sentinel", async () => {
     const origins: Request[] = [];
     const pending: Promise<unknown>[] = [];
     const pprDispatch = {
@@ -934,7 +934,7 @@ describe("dispatchResult", () => {
         return new Response("[dynamic]", { status: 200 });
       }) as unknown as typeof fetch,
       cache: coloDeps({
-        cache: coloHoldingSentinel("app.example/p1/web/d1:/ppr"),
+        cache: coloWithSentinel("app.example/p1/web/d1:/ppr"),
         waitUntil: (p: Promise<unknown>) => {
           pending.push(p);
         },
@@ -1405,7 +1405,7 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
 
     const colo = new Map<string, Response>();
     const pending: Promise<unknown>[] = [];
-    const settle = async () => {
+    const drain = async () => {
       while (pending.length) await pending.shift();
       await new Promise((resolve) => setTimeout(resolve, 0));
     };
@@ -1487,7 +1487,7 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
     return {
       get,
       runAction,
-      settle,
+      drain,
       lambdaCalls: () => lambdaCalls,
       advanceTo: (at: number) => {
         now = at;
@@ -1513,21 +1513,21 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
     const s = scenario();
 
     await s.get();
-    await s.settle();
+    await s.drain();
     expect(s.lambdaCalls()).toBe(1);
 
     s.invalidate(20_000);
     s.advanceTo(15_000);
     const action = await s.runAction();
     expect(action.headers.get("x-action-revalidated")).toBe("1");
-    await s.settle();
+    await s.drain();
     expect(s.lambdaCalls()).toBe(2);
 
     s.advanceTo(30_000);
     const after = await s.get();
 
     expect(after.headers.get("x-ocel-cache")).toBe("MISS");
-    await s.settle();
+    await s.drain();
     expect(s.lambdaCalls()).toBe(3);
   });
 
@@ -1535,13 +1535,13 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
     const s = scenario("x-ocel-revalidated");
 
     await s.get();
-    await s.settle();
+    await s.drain();
 
     s.invalidate(20_000);
     s.advanceTo(15_000);
     const announced = await s.runAction();
     expect(announced.headers.has("x-ocel-revalidated")).toBe(false);
-    await s.settle();
+    await s.drain();
 
     s.advanceTo(30_000);
     const after = await s.get();
@@ -1555,14 +1555,14 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
 
     const first = await s.get();
     expect(first.headers.has("x-ocel-revalidated")).toBe(false);
-    await s.settle();
+    await s.drain();
 
     s.advanceTo(15_000);
     s.invalidate(12_000);
     const hit = await s.get();
     expect(hit.headers.get("x-ocel-cache")).toBe("HIT");
     expect(hit.headers.has("x-ocel-revalidated")).toBe(false);
-    await s.settle();
+    await s.drain();
 
     s.advanceTo(30_000);
     const again = await s.get();
@@ -1574,13 +1574,13 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
     s.actionRevalidatesNothing();
 
     await s.get();
-    await s.settle();
+    await s.drain();
 
     s.invalidate(20_000);
     s.advanceTo(15_000);
     const action = await s.runAction();
     expect(action.headers.has("x-action-revalidated")).toBe(false);
-    await s.settle();
+    await s.drain();
 
     s.advanceTo(30_000);
     const after = await s.get();
@@ -1984,7 +1984,7 @@ describe("an origin that cannot answer a segment prefetch", () => {
     let lambdaCalls = 0;
     const colo = new Map<string, Response>();
     const pending: Promise<unknown>[] = [];
-    const settle = async () => {
+    const drain = async () => {
       while (pending.length) await pending.shift();
       await new Promise((resolve) => setTimeout(resolve, 0));
     };
@@ -2045,28 +2045,28 @@ describe("an origin that cannot answer a segment prefetch", () => {
         deps,
       );
 
-    return { prefetch, settle, colo, lambda: () => lambdaCalls };
+    return { prefetch, drain, colo, lambda: () => lambdaCalls };
   }
 
   it("answers a 204 miss instead of handing the client a postponed shell", async () => {
-    const { prefetch, settle } = scenario({ "x-nextjs-postponed": "1" });
+    const { prefetch, drain } = scenario({ "x-nextjs-postponed": "1" });
 
     const res = await prefetch();
-    await settle();
+    await drain();
 
     expect(res.status).toBe(204);
     expect(await res.text()).toBe("");
   });
 
   it("stores nothing under the segment key, so the next prefetch is not latched to the shell", async () => {
-    const { prefetch, settle, colo, lambda } = scenario({
+    const { prefetch, drain, colo, lambda } = scenario({
       "x-nextjs-postponed": "1",
     });
 
     await (await prefetch()).text();
-    await settle();
+    await drain();
     const second = await prefetch();
-    await settle();
+    await drain();
 
     expect([...colo.keys()]).toEqual([]);
     expect(second.status).toBe(204);
@@ -2074,13 +2074,13 @@ describe("an origin that cannot answer a segment prefetch", () => {
   });
 
   it("still caches and serves a real segment payload", async () => {
-    const { prefetch, settle, colo, lambda } = scenario({
+    const { prefetch, drain, colo, lambda } = scenario({
       "x-nextjs-postponed": "2",
     });
 
     const first = await prefetch();
     expect(await first.text()).toBe("SHELL-OR-SEGMENT");
-    await settle();
+    await drain();
 
     const second = await prefetch();
 

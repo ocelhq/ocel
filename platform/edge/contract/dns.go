@@ -94,7 +94,7 @@ func (s *StackState) PublishFront(hostname, front string) {
 		return
 	}
 	if front == "" {
-		if _, held := s.Fronts[hostname]; !held {
+		if _, published := s.Fronts[hostname]; !published {
 			return
 		}
 		fronts := maps.Clone(s.Fronts)

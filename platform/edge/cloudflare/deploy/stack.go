@@ -36,7 +36,7 @@ func isrWriterScriptNameFor(namespace string, class edge.Class) (string, error) 
 
 func accountNameFor(what, namespace string, class edge.Class, stem string) (string, error) {
 	if namespace == "" {
-		return "", fmt.Errorf("%s: the cloudflare edge was opened without a bootstrap namespace, so it cannot name what this class stands on", what)
+		return "", fmt.Errorf("%s: the cloudflare edge was opened without a bootstrap namespace, so it cannot name the account-wide workers and buckets this class depends on", what)
 	}
 	var name string
 	switch class {
@@ -48,7 +48,7 @@ func accountNameFor(what, namespace string, class edge.Class, stem string) (stri
 		return "", fmt.Errorf("%s: unknown class %q", what, class)
 	}
 	if len(name) > longestAccountName {
-		return "", fmt.Errorf("%s: %q is %d characters, and a Cloudflare worker or bucket name holds %d; shorten the bootstrap namespace %q", what, name, len(name), longestAccountName, namespace)
+		return "", fmt.Errorf("%s: %q is %d characters, and a Cloudflare worker or bucket name allows at most %d; shorten the bootstrap namespace %q", what, name, len(name), longestAccountName, namespace)
 	}
 	return name, nil
 }
@@ -117,9 +117,9 @@ type stack struct {
 }
 
 func (s *stack) State() edge.StackState {
-	held := s.state
-	held.Private = edge.Own(s.own)
-	return held
+	current := s.state
+	current.Private = edge.Own(s.own)
+	return current
 }
 
 func (s *stack) Ledger() edge.Ledger { return s }
@@ -139,17 +139,17 @@ func (p *cloudflare) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	}
 	program := spec.Program
 	if program == nil {
-		return nil, fmt.Errorf("the Cloudflare edge runs the entry worker; stack %q carries no program", spec.Slug)
+		return nil, fmt.Errorf("the Cloudflare edge runs the entry worker; stack %q has no program", spec.Slug)
 	}
 
 	slug := spec.Slug
 	endpoint := program.StoreEndpoint
 
-	var held private
-	if err := prior.Private.Into(&held); err != nil {
+	var recorded private
+	if err := prior.Private.Into(&recorded); err != nil {
 		return nil, err
 	}
-	envelopeKey := held.EnvelopeKey
+	envelopeKey := recorded.EnvelopeKey
 	if !spec.PruneOnly && envelopeKey == "" {
 		minted, err := mintEnvelopeKey()
 		if err != nil {
@@ -462,7 +462,7 @@ func buildDurableObjectScriptMultipart(worker edge.Worker, do durableObjectWorke
 func pendingMigrations(log []migrationStep, deployedClasses []string) (map[string]any, error) {
 	for _, class := range deployedClasses {
 		if !slices.ContainsFunc(log, func(step migrationStep) bool { return slices.Contains(step.sqliteClasses, class) }) {
-			return nil, fmt.Errorf("deployed script carries Durable Object class %q, which this build's migration log does not create", class)
+			return nil, fmt.Errorf("deployed script declares Durable Object class %q, which this build's migration log does not create", class)
 		}
 	}
 

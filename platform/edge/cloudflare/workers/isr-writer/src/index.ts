@@ -110,9 +110,9 @@ export default class extends WorkerEntrypoint<Env> {
         body.secretHash,
         body.force === true,
       );
-      if (outcome === "held") {
+      if (outcome === "refused") {
         return new Response(
-          `deploy ${isrPrefix} already holds a different write secret; initialize with force to replace it`,
+          `deploy ${isrPrefix} already has a different write secret; initialize with force to replace it`,
           { status: 409 },
         );
       }

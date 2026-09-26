@@ -55,7 +55,7 @@ func check(ctx context.Context, api inspectAPI, record *bindingsv1.BucketPropert
 }
 
 func checkOrigins(ctx context.Context, api inspectAPI, record *bindingsv1.BucketProperties, origins []string) ([]string, error) {
-	held, err := api.GetBucketCors(ctx, &s3.GetBucketCorsInput{Bucket: aws.String(record.GetBucket())})
+	cors, err := api.GetBucketCors(ctx, &s3.GetBucketCorsInput{Bucket: aws.String(record.GetBucket())})
 	missing := slices.Clone(origins)
 	switch {
 	case code(err) == "NoSuchCORSConfiguration":
@@ -64,13 +64,13 @@ func checkOrigins(ctx context.Context, api inspectAPI, record *bindingsv1.Bucket
 			record.GetBucket(), scrubbed(err, record), strings.Join(origins, ", "))}, nil
 	default:
 		missing = slices.DeleteFunc(missing, func(origin string) bool {
-			return slices.ContainsFunc(held.CORSRules, func(rule s3types.CORSRule) bool { return allows(rule.AllowedOrigins, origin) })
+			return slices.ContainsFunc(cors.CORSRules, func(rule s3types.CORSRule) bool { return allows(rule.AllowedOrigins, origin) })
 		})
 	}
 	if len(missing) == 0 {
 		return nil, nil
 	}
-	return nil, fmt.Errorf("the code allows uploads to bucket %s from %s, and its CORS rules allow no request from %s. Ocel holds no credential to change them: add %s to the bucket's CORS rules",
+	return nil, fmt.Errorf("the code allows uploads to bucket %s from %s, and its CORS rules allow no request from %s. Ocel has no credential to change them: add %s to the bucket's CORS rules",
 		record.GetBucket(), strings.Join(origins, ", "), strings.Join(missing, ", "), strings.Join(missing, ", "))
 }
 
@@ -87,8 +87,8 @@ func allows(allowed []string, origin string) bool {
 }
 
 func checkPublic(ctx context.Context, api inspectAPI, record *bindingsv1.BucketProperties) ([]string, error) {
-	held, err := api.GetBucketPolicy(ctx, &s3.GetBucketPolicyInput{Bucket: aws.String(record.GetBucket())})
-	refusal := fmt.Errorf("the code declares bucket %s public, and its policy lets nobody read %s anonymously. Ocel holds no credential to change it: grant s3:GetObject to Principal \"*\" on arn:aws:s3:::%s/%s*, or make it public the way the store offers",
+	policy, err := api.GetBucketPolicy(ctx, &s3.GetBucketPolicyInput{Bucket: aws.String(record.GetBucket())})
+	refusal := fmt.Errorf("the code declares bucket %s public, and its policy lets nobody read %s anonymously. Ocel has no credential to change it: grant s3:GetObject to Principal \"*\" on arn:aws:s3:::%s/%s*, or make it public the way the store offers",
 		record.GetBucket(), objectsOf(record), record.GetBucket(), prefixOf(record))
 	switch {
 	case code(err) == "NoSuchBucketPolicy":
@@ -97,7 +97,7 @@ func checkPublic(ctx context.Context, api inspectAPI, record *bindingsv1.BucketP
 		return []string{fmt.Sprintf("could not read bucket %s's policy (%s), so ocel cannot check that anyone may read its objects: make sure they can",
 			record.GetBucket(), scrubbed(err, record))}, nil
 	}
-	if !publicRead(aws.ToString(held.Policy), record) {
+	if !publicRead(aws.ToString(policy.Policy), record) {
 		return nil, refusal
 	}
 	return nil, nil

@@ -29,7 +29,7 @@ describe("resumeRequest", () => {
     );
   });
 
-  it("carries the client's personalization headers through unfiltered", () => {
+  it("passes the client's personalization headers through unfiltered", () => {
     const req = resumeRequest(
       url,
       new Request("https://app.example/blog", {
@@ -127,7 +127,7 @@ describe("composePpr", () => {
     });
   });
 
-  it("carries the shell's status", () => {
+  it("keeps the shell's status", () => {
     const res = composePpr(
       hit({ shell: new Response("s", { status: 404 }) }),
       Promise.resolve(new Response("d")),

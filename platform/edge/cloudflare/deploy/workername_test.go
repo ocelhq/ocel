@@ -46,8 +46,8 @@ func TestConventionWorkerNames(t *testing.T) {
 			t.Fatalf("conventionWorkerNames: %v", err)
 		}
 		for _, name := range theirs {
-			for _, held := range mine {
-				if name == held {
+			for _, ours := range mine {
+				if name == ours {
 					t.Errorf("a sweep of this namespace names %q, which is the worker another namespace deploys for the same slug", name)
 				}
 			}

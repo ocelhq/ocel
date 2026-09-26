@@ -38,13 +38,13 @@ func RouteRecords(own bucketv1connect.BucketServiceHandler, records Records, cal
 		if ready && generation == seen {
 			return built, nil
 		}
-		held := bucketRecords(records)
-		if !ready || held != read {
+		current := bucketRecords(records)
+		if !ready || current != read {
 			fresh, err := backends(records, callbacks)
 			if err != nil {
 				return nil, connect.NewError(connect.CodeFailedPrecondition, err)
 			}
-			read, built = held, fresh
+			read, built = current, fresh
 		}
 		ready, seen = true, generation
 		return built, nil
@@ -52,14 +52,14 @@ func RouteRecords(own bucketv1connect.BucketServiceHandler, records Records, cal
 }
 
 func bucketRecords(records Records) string {
-	var held strings.Builder
+	var values strings.Builder
 	for _, l := range records.Bindings() {
 		if l.Type == bindingsv1.BindingType_BINDING_TYPE_BUCKET {
-			held.WriteString(records.Value(l.Key))
-			held.WriteByte(0)
+			values.WriteString(records.Value(l.Key))
+			values.WriteByte(0)
 		}
 	}
-	return held.String()
+	return values.String()
 }
 
 func (r *router) forBucket(name string) (bucketv1connect.BucketServiceHandler, error) {
@@ -68,7 +68,7 @@ func (r *router) forBucket(name string) (bucketv1connect.BucketServiceHandler, e
 		return nil, err
 	}
 	for _, backend := range bound {
-		if backend.holds(name) {
+		if backend.hasBucket(name) {
 			return backend, nil
 		}
 	}

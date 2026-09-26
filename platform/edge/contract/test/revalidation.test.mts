@@ -22,7 +22,7 @@ it("accepts a well-formed message", () => {
   });
 });
 
-it("names no host, and keeps no field that could carry one", () => {
+it("names no host, and keeps no field that could name one", () => {
   const parsed = parseMessage(
     body({ url: "https://attacker.lambda-url.us-east-1.on.aws/x", host: "attacker" }),
   );
@@ -63,7 +63,7 @@ it("rejects a message naming no route id", () => {
   expect(parseMessage(body({ routeId: undefined }))).toEqual({ ok: false, reason: "malformed" });
 });
 
-it("rejects a header map holding a non-string value", () => {
+it("rejects a header map containing a non-string value", () => {
   expect(parseMessage(body({ headers: { "x-ocel-entry": 7 } }))).toEqual({
     ok: false,
     reason: "malformed",
@@ -88,7 +88,7 @@ it.each([
   ["a trailing separator", "prod/proj/web/BID/"],
   ["an empty prefix", ""],
   ["a prefix that is not a key at all", "https://attacker.example.com/x"],
-])("rejects an isrPrefix carrying %s", (_name, isrPrefix) => {
+])("rejects an isrPrefix containing %s", (_name, isrPrefix) => {
   expect(parseMessage(body({ isrPrefix }))).toEqual({ ok: false, reason: "malformed" });
 });
 
@@ -97,7 +97,7 @@ it("accepts the isrPrefix shape the deploy actually builds", () => {
   expect(parsed.ok && parsed.message.isrPrefix).toBe("preview.1/my-proj_2/web-app/BID-x_9.2");
 });
 
-it("rejects a header map holding a name that is not a token", () => {
+it("rejects a header map containing a name that is not a token", () => {
   expect(parseMessage(body({ headers: { "bad header": "x" } }))).toEqual({
     ok: false,
     reason: "malformed",

@@ -85,7 +85,7 @@ func Run(t *testing.T, suite Suite) {
 			Front:     "front.example.net",
 		})
 		if len(groups) == 0 {
-			t.Fatal("ProjectRemovals = none, want what a project with a bound hostname stands on")
+			t.Fatal("ProjectRemovals = none, want what a project with a bound hostname depends on")
 		}
 		for _, group := range groups {
 			checkRemoval(t, "ProjectRemovals", group)
@@ -95,10 +95,10 @@ func Run(t *testing.T, suite Suite) {
 		checkRemoval(t, "PreviewWildcardRemovals removed", removed)
 		checkRemoval(t, "PreviewWildcardRemovals kept", kept)
 		if removed.Action == edge.PlanKeep {
-			t.Error("PreviewWildcardRemovals' removed group is kept; releasing the wildcard must take down what holds it")
+			t.Error("PreviewWildcardRemovals' removed group is kept; releasing the wildcard must take down what serves it")
 		}
 		if len(removed.Changes) == 0 {
-			t.Error("PreviewWildcardRemovals' removed group carries no rows; a removal plan names what goes")
+			t.Error("PreviewWildcardRemovals' removed group has no rows; a removal plan names what goes")
 		}
 		if kept.Action != edge.PlanKeep {
 			t.Errorf("PreviewWildcardRemovals' kept group has action %q, want %q", kept.Action, edge.PlanKeep)
@@ -216,7 +216,7 @@ func Run(t *testing.T, suite Suite) {
 		ctx := context.Background()
 		stack := reconciled(t, suite)
 		const pointer = "conformance-pointer"
-		promote(t, stack, edge.Promotion{PromotionID: "held", Ts: 1, Builds: map[string]string{"web": "b1"}}, "")
+		promote(t, stack, edge.Promotion{PromotionID: "unpointed", Ts: 1, Builds: map[string]string{"web": "b1"}}, "")
 		promote(t, stack, edge.Promotion{PromotionID: "pointed", Ts: 2, Builds: map[string]string{"web": "b2"}}, pointer)
 
 		result, err := stack.RemovePointer(ctx, pointer, edge.DiscardProgress())
@@ -226,7 +226,7 @@ func Run(t *testing.T, suite Suite) {
 		if !slices.Contains(result.RemovedPromotionIDs, "pointed") {
 			t.Errorf("RemovedPromotionIDs = %v, want the pointer's promotion", result.RemovedPromotionIDs)
 		}
-		if slices.Contains(result.RemovedPromotionIDs, "held") {
+		if slices.Contains(result.RemovedPromotionIDs, "unpointed") {
 			t.Errorf("RemovedPromotionIDs = %v, want nothing outside the pointer", result.RemovedPromotionIDs)
 		}
 		for _, key := range result.RemovedRecordKeys {
@@ -242,12 +242,12 @@ func Run(t *testing.T, suite Suite) {
 		if len(left) != 0 {
 			t.Errorf("history under %q = %v, want nothing after the pointer was removed", pointer, left)
 		}
-		held, err := stack.Ledger().History(ctx, "")
+		production, err := stack.Ledger().History(ctx, "")
 		if err != nil {
 			t.Fatalf("History(production): %v", err)
 		}
-		if !slices.ContainsFunc(held, func(h edge.HistoryEntry) bool { return h.PromotionID == "held" }) {
-			t.Errorf("history outside the pointer = %v, want the promotion the pointer never held", held)
+		if !slices.ContainsFunc(production, func(h edge.HistoryEntry) bool { return h.PromotionID == "unpointed" }) {
+			t.Errorf("history outside the pointer = %v, want the promotion the pointer never pointed at", production)
 		}
 	})
 
@@ -315,7 +315,7 @@ func Run(t *testing.T, suite Suite) {
 		e, reconciled := reconciledOn(t, suite)
 		stack, err := e.Open(withoutFronts(reconciled.State()))
 		if err != nil {
-			t.Fatalf("Open a state carrying no front: %v", err)
+			t.Fatalf("Open a state with no front: %v", err)
 		}
 		binds(t, stack, suite.Hostname)
 
@@ -339,10 +339,10 @@ func Run(t *testing.T, suite Suite) {
 		promotion := edge.Promotion{PromotionID: "conformance-persisted", Ts: 1, Builds: map[string]string{"web": "b1"}}
 		promote(t, stack, promotion, "")
 
-		held := stack.State()
-		persisted := roundTrip(t, held)
-		if !persisted.Equal(held) {
-			t.Errorf("state read back = %+v, want the %+v it was written from; everything a stack keeps travels through this one encoding, including what the edge keeps to itself", persisted, held)
+		written := stack.State()
+		persisted := roundTrip(t, written)
+		if !persisted.Equal(written) {
+			t.Errorf("state read back = %+v, want the %+v it was written from; everything a stack keeps travels through this one encoding, including what the edge keeps to itself", persisted, written)
 		}
 
 		reopened, err := e.Open(persisted)
@@ -406,7 +406,7 @@ func Run(t *testing.T, suite Suite) {
 			t.Fatalf("DomainOwner: %v", err)
 		}
 		if owner == "" {
-			t.Errorf("DomainOwner(%q) = %q after the surface that held it released it and another bound it; a name the first project gives up has to come back into circulation, or moving a domain between projects needs an edge no one can reach", suite.Hostname, owner)
+			t.Errorf("DomainOwner(%q) = %q after the surface that owned it released it and another bound it; a name the first project gives up has to come back into circulation, or moving a domain between projects needs an edge no one can reach", suite.Hostname, owner)
 		}
 	})
 
@@ -452,7 +452,7 @@ func checkRemoval(t *testing.T, what string, group edge.PlanGroup) {
 	}
 	for _, change := range group.Changes {
 		if change.Kind == "" || change.Name == "" {
-			t.Errorf("%s: row %+v must carry a resource type and a name", what, change)
+			t.Errorf("%s: row %+v must have a resource type and a name", what, change)
 		}
 		if !edge.ValidPlanAction(change.Action) {
 			t.Errorf("%s: row %+v names no valid action", what, change)
@@ -474,7 +474,7 @@ func frontedRecords(t *testing.T, e edge.Edge, state edge.StackState, hostname s
 			t.Errorf("the front for %q is %q, but a %s edge answers on the zone itself and publishes none", hostname, front, e.Kind())
 		}
 	} else if front == "" {
-		t.Fatalf("state = %v, want a front for %q on it: a %s edge answers on a hostname of its own, and DNS has nothing to point at until the state carries it", state, hostname, e.Kind())
+		t.Fatalf("state = %v, want a front for %q on it: a %s edge answers on a hostname of its own, and DNS has nothing to point at until the state contains it", state, hostname, e.Kind())
 	}
 
 	records, err := edge.RecordsFor(target, bound)
@@ -505,7 +505,7 @@ func frontedRecords(t *testing.T, e edge.Edge, state edge.StackState, hostname s
 	}
 	if target.ServesUnbound {
 		if rec.Value != edge.ProxyPlaceholder {
-			t.Errorf("record %v points at %q, want the %q placeholder a proxied record carries", rec, rec.Value, edge.ProxyPlaceholder)
+			t.Errorf("record %v points at %q, want the %q placeholder a proxied record points at", rec, rec.Value, edge.ProxyPlaceholder)
 		}
 		return records
 	}
@@ -592,7 +592,7 @@ func checkOffers(t *testing.T, what string, out edge.BootstrapOutput) {
 			t.Errorf("%s: offer %d names no kind", what, i)
 		}
 		if len(offer.Values) == 0 {
-			t.Errorf("%s: offer %q carries no values; the origin has nothing to adopt", what, offer.Kind)
+			t.Errorf("%s: offer %q has no values; the origin has nothing to adopt", what, offer.Kind)
 		}
 		if slices.ContainsFunc(out.Offers[:i], func(prior edge.Offer) bool { return prior.Kind == offer.Kind }) {
 			t.Errorf("%s: offer %q is made twice", what, offer.Kind)
@@ -620,7 +620,7 @@ func runBootstrap(t *testing.T, suite Suite) {
 		}
 		checkOffers(t, "second Bootstrap", second)
 		if !slices.Equal(offerKinds(second.Offers), offerKinds(first.Offers)) {
-			t.Errorf("second Bootstrap offered %v, want the %v the first did: a re-run converges on what stands", offerKinds(second.Offers), offerKinds(first.Offers))
+			t.Errorf("second Bootstrap offered %v, want the %v the first did: a re-run converges on what is already installed", offerKinds(second.Offers), offerKinds(first.Offers))
 		}
 		if !maps.Equal(second.Values, first.Values) {
 			t.Errorf("second Bootstrap values = %v, want the %v the first published", second.Values, first.Values)
@@ -632,7 +632,7 @@ func runBootstrap(t *testing.T, suite Suite) {
 				t.Fatalf("PlanAdoption: %v", err)
 			}
 			if !maps.Equal(adoption.Values, first.Values) {
-				t.Errorf("Adoption values = %v, want the %v Bootstrap published; an origin adopting a standing edge must land on the same coordinates", adoption.Values, first.Values)
+				t.Errorf("Adoption values = %v, want the %v Bootstrap published; an origin adopting an installed edge must land on the same coordinates", adoption.Values, first.Values)
 			}
 			offered := slices.Clone(adoption.Offers)
 			slices.Sort(offered)
@@ -693,7 +693,7 @@ func runPreviews(t *testing.T, suite Suite) {
 				t.Fatalf("Reconcile: %v", err)
 			}
 			if !stack.State().ServedOnGlobalPreview(wildcard.BaseDomain) {
-				t.Fatalf("state = %v, want the stack to carry the wildcard it is served on", stack.State())
+				t.Fatalf("state = %v, want the stack to record the wildcard it is served on", stack.State())
 			}
 
 			const pointer = "conformance-preview"

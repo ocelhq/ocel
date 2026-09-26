@@ -10,7 +10,7 @@ func TestPreviewSiteLabelIsTheFirstLabelOfTheHostname(t *testing.T) {
 
 	shared := SharedPreview("shop", "preview.acme.com")
 	if got := shared.Label("pr-12", "web"); got != "shop--pr-12--web" {
-		t.Errorf("got %q, want the label the hostname carries in front of the base domain", got)
+		t.Errorf("got %q, want the label the hostname has in front of the base domain", got)
 	}
 	if label, host := shared.Label("pr-12", ""), shared.Host("pr-12", ""); host != label+".preview.acme.com" {
 		t.Errorf("label %q and host %q disagree: what routes on the label is what DNS answers", label, host)

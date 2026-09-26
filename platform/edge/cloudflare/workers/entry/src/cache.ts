@@ -456,8 +456,8 @@ async function colo(
 
   const filling = inFlightFill(deps, target.key);
   if (filling) {
-    const settled = await settledWithin(filling, deps.joinFillTimeoutMs ?? joinFillTimeoutMs);
-    if (settled) {
+    const finished = await settledWithin(filling, deps.joinFillTimeoutMs ?? joinFillTimeoutMs);
+    if (finished) {
       const joined = await serveOrRefresh();
       if (joined) return joined;
     }

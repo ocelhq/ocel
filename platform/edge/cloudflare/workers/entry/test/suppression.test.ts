@@ -157,7 +157,7 @@ describe("self-revalidation suppression", () => {
     expect(origin.purposes()).toEqual([null]);
   });
 
-  it("tells the blocking revalidation forward which generation the colo holds", async () => {
+  it("tells the blocking revalidation forward which generation the colo has cached", async () => {
     const pending: Promise<unknown>[] = [];
     const origin = recorder();
 
@@ -173,7 +173,7 @@ describe("self-revalidation suppression", () => {
     expect(origin.requests[0].headers.get(refreshHeader)).toBe("1000");
   });
 
-  it("never declares a held generation on the serve-path forward", async () => {
+  it("never declares a cached generation on the serve-path forward", async () => {
     const origin = recorder();
 
     await dispatchBlog(blogDeps(origin));
@@ -231,7 +231,7 @@ describe("self-revalidation suppression", () => {
     expect(origin.purposes()).toEqual([null]);
   });
 
-  it("never stamps a forward carrying a middleware set-cookie", async () => {
+  it("never stamps a forward with a middleware set-cookie", async () => {
     const origin = recorder();
 
     const res = await dispatchResult(

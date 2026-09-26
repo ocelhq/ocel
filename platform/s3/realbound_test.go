@@ -35,7 +35,7 @@ func TestABoundBucketIsCheckedAndServedOnARealStore(t *testing.T) {
 	absent := proto.CloneOf(record)
 	absent.Bucket = "never-made"
 	if _, err := Check(ctx, absent, Want{}); err == nil {
-		t.Error("Check = nil, want a bucket the store does not hold refused")
+		t.Error("Check = nil, want a bucket the store does not have refused")
 	}
 
 	if _, err := store.Client().PutBucketCors(ctx, &s3.PutBucketCorsInput{
@@ -86,6 +86,6 @@ func TestABoundBucketIsCheckedAndServedOnARealStore(t *testing.T) {
 		t.Fatalf("CompleteUpload: %v", err)
 	}
 	if done.GetState() != bucketv1.UploadState_UPLOAD_STATE_SUCCEEDED {
-		t.Errorf("CompleteUpload = %v, want the upload the store holds confirmed", done.GetState())
+		t.Errorf("CompleteUpload = %v, want the upload that reached the store confirmed", done.GetState())
 	}
 }

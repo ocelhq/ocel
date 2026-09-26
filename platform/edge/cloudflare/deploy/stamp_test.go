@@ -77,7 +77,7 @@ func TestSpecStampShape(t *testing.T) {
 }
 
 func TestSpecStampCoversDeployedMetadata(t *testing.T) {
-	t.Run("the deployed metadata carries nothing the stamp cannot reach", func(t *testing.T) {
+	t.Run("the deployed metadata contains nothing the stamp cannot reach", func(t *testing.T) {
 		t.Parallel()
 
 		got := slices.Sorted(maps.Keys(metadataFromMultipart(t, edge.Worker{Main: mainModule()}, "")))

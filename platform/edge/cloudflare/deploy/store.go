@@ -97,13 +97,13 @@ func (s *stack) Prune(ctx context.Context, keepN int, pointer string) (edge.Prun
 	return result, nil
 }
 
-var errStoreIdentityHeld = errors.New("the deployments store already holds an identity for this project that this deploy's state does not carry, and the store never hands one out: another deploy of this project initialized it first (re-run once that deploy has written its state), or the state was lost, in which case re-bootstrap this class's edge to reset the store")
+var errStoreIdentityTaken = errors.New("the deployments store already has an identity for this project that this deploy's state does not record, and the store never hands one out: another deploy of this project initialized it first (re-run once that deploy has written its state), or the state was lost, in which case re-bootstrap this class's edge to reset the store")
 
 func (p *cloudflare) initializeInstance(ctx context.Context, endpoint, slug, bootstrapCred string, present storeIdentity) (storeIdentity, error) {
 	body := map[string]any{"ownerToken": present.ownerToken, "secret": present.secret, "force": false}
 	res, err := p.storeRequestTo(ctx, endpoint, slug, bootstrapCred, http.MethodPost, "/initialize", body, nil)
 	if res != nil && res.StatusCode == http.StatusConflict {
-		return storeIdentity{}, fmt.Errorf("%w: %w", errStoreIdentityHeld, err)
+		return storeIdentity{}, fmt.Errorf("%w: %w", errStoreIdentityTaken, err)
 	}
 	if err != nil {
 		return storeIdentity{}, err

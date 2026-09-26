@@ -229,7 +229,7 @@ describe("pointerRecord", () => {
     });
   });
 
-  it("returns ambiguous-app when the promotion carries more than one app", async () => {
+  it("returns ambiguous-app when the promotion names more than one app", async () => {
     const store = storeStub();
     await store.putStaged(makeRecord());
     await store.putStaged(makeRecord({ app: "admin", identity: "deploy-9" }));
@@ -286,7 +286,7 @@ describe("history", () => {
     ]);
   });
 
-  it("carries a promotion's tag through history", async () => {
+  it("keeps a promotion's tag through history", async () => {
     const store = storeStub();
     await store.putStaged(makeRecord());
     await store.promote(makePromotion({ tag: "v1.2.3" }));
@@ -304,7 +304,7 @@ describe("history", () => {
 });
 
 describe("tags", () => {
-  it("rejects a tag already held by a different promotion", async () => {
+  it("rejects a tag already taken by a different promotion", async () => {
     const store = storeStub();
     await store.promote(makePromotion({ promotionId: "promo-1", tag: "v1.2.3" }));
 
@@ -396,7 +396,7 @@ describe("prune", () => {
     expect(await store.record("web", "deploy-3")).toEqual(makeRecord({ identity: "deploy-3" }));
   });
 
-  it("reports the record keys the store still holds", async () => {
+  it("reports the record keys the store still contains", async () => {
     const store = storeStub();
     await store.putStaged(makeRecord({ identity: "deploy-1" }));
     await store.promote(makePromotion({ promotionId: "promo-1", builds: { web: "deploy-1" } }));
@@ -604,21 +604,21 @@ describe("initialize / authorized", () => {
     expect(await store.authorized("wrong")).toBe(false);
   });
 
-  it("holds the standing identity instead of re-seeding, and hands nothing back", async () => {
+  it("keeps the existing identity instead of re-seeding, and hands nothing back", async () => {
     const store = storeStub();
     await store.initialize("owner-1", "s3cret", false);
 
-    expect(await store.initialize("owner-2", "other", false)).toBe("held");
+    expect(await store.initialize("owner-2", "other", false)).toBe("refused");
 
     expect(await store.authorized("s3cret")).toBe(true);
     expect(await store.authorized("other")).toBe(false);
   });
 
-  it("holds against a matching owner token too", async () => {
+  it("refuses a matching owner token too", async () => {
     const store = storeStub();
     await store.initialize("owner-1", "old", false);
 
-    expect(await store.initialize("owner-1", "new", false)).toBe("held");
+    expect(await store.initialize("owner-1", "new", false)).toBe("refused");
 
     expect(await store.authorized("old")).toBe(true);
     expect(await store.authorized("new")).toBe(false);

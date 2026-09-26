@@ -121,7 +121,7 @@ func (b bootstrap) tearFronts(ctx context.Context, class edge.Class, features []
 func (b bootstrap) frontStands(ctx context.Context, class edge.Class, feature string) (bool, error) {
 	standing := true
 	err := b.eachFront([]string{feature}, func(_ provider.Feature, front edge.Edge) error {
-		stands := front.Hooks().CheckBootstrapStands
+		stands := front.Hooks().CheckBootstrapInstalled
 		if stands == nil {
 			return nil
 		}

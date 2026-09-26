@@ -53,7 +53,7 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
 }
 
 describe("schema version", () => {
-  it("reports the schema the store speaks to the project that holds the instance", async () => {
+  it("reports the schema the store speaks to the project that owns the instance", async () => {
     await initialize();
     const res = await SELF.fetch(authedReq("/schema-version"));
     expect(res.status).toBe(200);
@@ -89,7 +89,7 @@ describe("initialize", () => {
     expect(staged.status).toBe(204);
   });
 
-  it("refuses to re-seed an initialized instance and never discloses what it holds", async () => {
+  it("refuses to re-seed an initialized instance and never discloses what it stores", async () => {
     await initialize();
     const res = await SELF.fetch(
       bearerReq(`/${SLUG}/initialize`, BOOTSTRAP, {
@@ -425,7 +425,7 @@ describe("service-binding read path", () => {
     });
   });
 
-  it("reports an ambiguous app when the promotion carries several", async () => {
+  it("reports an ambiguous app when the promotion names several", async () => {
     const store = env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(SLUG));
     await store.putStaged(makeRecord());
     await store.putStaged(makeRecord({ app: "admin", identity: "deploy-9" }));

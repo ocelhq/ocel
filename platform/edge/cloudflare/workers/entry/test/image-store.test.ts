@@ -472,7 +472,7 @@ describe("the durable image tier", () => {
     }
   });
 
-  it("round-trips exactly the headers the served image carries", async () => {
+  it("round-trips exactly the headers the served image has", async () => {
     const h = harness("r2-headers", {
       origin: optimizer(OPTIMIZED, {
         headers: {

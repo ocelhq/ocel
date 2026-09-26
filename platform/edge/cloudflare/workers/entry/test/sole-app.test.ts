@@ -52,7 +52,7 @@ describe("production resolution of the slug's sole app", () => {
     expect(wire.calls[0].url).toBe(`${FN_URL}users`);
   });
 
-  it("answers the baked-in 404 when the slug carries more than one app", async () => {
+  it("answers the baked-in 404 when the slug has more than one app", async () => {
     const binding = answering({ kind: "ambiguous-app" });
     const wire = capturing();
 
@@ -84,7 +84,7 @@ describe("production resolution of the slug's sole app", () => {
 });
 
 describe("preview host routing", () => {
-  it("names the app the preview host carries", async () => {
+  it("names the app the preview host names", async () => {
     const binding = recording(makeRecord());
     const wire = capturing();
 

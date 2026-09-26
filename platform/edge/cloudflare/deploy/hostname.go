@@ -26,11 +26,11 @@ type routePlan struct {
 	owns           func(script string) bool
 }
 
-func (plan routePlan) ownsRoute(scriptName, held string) bool {
-	if held == scriptName || edge.NameUnderStem(plan.pruneStem, held) {
+func (plan routePlan) ownsRoute(scriptName, owner string) bool {
+	if owner == scriptName || edge.NameUnderStem(plan.pruneStem, owner) {
 		return true
 	}
-	return plan.owns != nil && plan.owns(held)
+	return plan.owns != nil && plan.owns(owner)
 }
 
 func projectOwnsScript(namespace, slug string) func(script string) bool {
@@ -193,7 +193,7 @@ func (p *cloudflare) ensureRoute(ctx context.Context, snap *routeSnapshot, zoneI
 			return nil
 		}
 		if !plan.ownsRoute(scriptName, route.Script) {
-			return fmt.Errorf("worker route %q is held by %q, which this project does not own, so it is left where it stands; release it from the project that holds it first", pattern, route.Script)
+			return fmt.Errorf("worker route %q is owned by %q, which this project does not own, so it is left in place; release it from the project that owns it first", pattern, route.Script)
 		}
 		if _, err := p.client.Workers.Routes.Update(ctx, route.ID, workers.RouteUpdateParams{
 			ZoneID:  cf.F(zoneID),

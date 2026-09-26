@@ -53,14 +53,14 @@ func sessionKey(id string) string {
 }
 
 func (s *Service) createSession(ctx context.Context, sess session) error {
-	held := s.sessions
+	sessions := s.sessions
 	body, err := json.Marshal(sess)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("encode the upload session: %w", err))
 	}
 	_, err = s.cfg.Objects.PutObject(ctx, &s3.PutObjectInput{
-		Bucket:      aws.String(held.bucket),
-		Key:         aws.String(held.key(sessionKey(sess.SessionID))),
+		Bucket:      aws.String(sessions.bucket),
+		Key:         aws.String(sessions.key(sessionKey(sess.SessionID))),
 		Body:        bytes.NewReader(body),
 		ContentType: aws.String("application/json"),
 		IfNoneMatch: aws.String("*"),
@@ -71,10 +71,10 @@ func (s *Service) createSession(ctx context.Context, sess session) error {
 	return nil
 }
 
-func (s *Service) readSession(ctx context.Context, held scope, id string) (session, error) {
+func (s *Service) readSession(ctx context.Context, sessions scope, id string) (session, error) {
 	out, err := s.cfg.Objects.GetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(held.bucket),
-		Key:    aws.String(held.key(sessionKey(id))),
+		Bucket: aws.String(sessions.bucket),
+		Key:    aws.String(sessions.key(sessionKey(id))),
 	})
 	if missing(err) {
 		return session{}, errSessionNotFound
@@ -92,7 +92,7 @@ func (s *Service) readSession(ctx context.Context, held scope, id string) (sessi
 		return session{}, connect.NewError(connect.CodeInternal, fmt.Errorf("decode the upload session: %w", err))
 	}
 	sess.etag = aws.ToString(out.ETag)
-	sess.scope = held
+	sess.scope = sessions
 	return sess, nil
 }
 
@@ -116,13 +116,13 @@ func (s *Service) writeSession(ctx context.Context, sess *session) error {
 		return errSessionMoved
 	}
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("settle the upload session: %w", err))
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("close the upload session: %w", err))
 	}
 	sess.etag = aws.ToString(out.ETag)
 	return nil
 }
 
-var errSessionMoved = errors.New("another replica settled this session first")
+var errSessionMoved = errors.New("another replica wrote this session first")
 
 func aggregate(files []sessionFile) fileState {
 	if len(files) == 0 {

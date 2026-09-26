@@ -482,7 +482,7 @@ describe("middleware responses", () => {
     expect(res.headers.get("x-keep")).toBe("1");
   });
 
-  it.each([204, 304])("returns a middleware's %i, which carries no body at all", async (status) => {
+  it.each([204, 304])("returns a middleware's %i, which has no body at all", async (status) => {
     const edge = middlewareInvoker(`async () => new Response(null, { status: ${status} })`);
 
     const res = await serve(
@@ -907,7 +907,7 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(bytes);
   });
 
-  it("serves an entry from a bundle carrying an asset that is not valid UTF-8", async () => {
+  it("serves an entry from a bundle containing an asset that is not valid UTF-8", async () => {
     const edge = invokerFor(
       {
         "middleware_app/other": `async () => new Response("other-entry")`,
@@ -1743,7 +1743,7 @@ describe("the variables a deployment declares", () => {
     );
   });
 
-  it("refuses a bare envelope once it holds a key, rather than trusting the record", async () => {
+  it("refuses a bare envelope once it has a key, rather than trusting the record", async () => {
     const { edge } = varsInvoker({
       variables: { envelope: GO_ENVELOPE, envelopeKey: WRAPPING_KEY },
       sealed: bytesOf(GO_SEALED),

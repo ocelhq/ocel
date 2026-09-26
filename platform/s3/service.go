@@ -107,7 +107,7 @@ func sessionIDPrefix(tag string) string {
 	return "sess_" + tag + "_"
 }
 
-func (s *Service) holds(name string) bool {
+func (s *Service) hasBucket(name string) bool {
 	_, ok := s.granted[name]
 	return ok
 }
@@ -145,7 +145,7 @@ func scopeOf(spec string) scope {
 	return scope{bucket: bucket, prefix: strings.TrimSuffix(prefix, "/") + "/"}
 }
 
-func (s *Service) held(name string) (scope, error) {
+func (s *Service) scopeOf(name string) (scope, error) {
 	if granted, ok := s.granted[name]; ok {
 		return granted, nil
 	}
@@ -153,7 +153,7 @@ func (s *Service) held(name string) (scope, error) {
 }
 
 func (s *Service) reach(name, key string) (scope, string, error) {
-	granted, err := s.held(name)
+	granted, err := s.scopeOf(name)
 	if err != nil {
 		return scope{}, "", err
 	}
@@ -215,7 +215,7 @@ func (s *Service) PresignUpload(ctx context.Context, req *bucketv1.PresignUpload
 		return nil, err
 	}
 
-	held, err := s.held(req.GetBucket())
+	granted, err := s.scopeOf(req.GetBucket())
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func (s *Service) PresignUpload(ctx context.Context, req *bucketv1.PresignUpload
 		if err := reserved(f.GetKey()); err != nil {
 			return nil, err
 		}
-		target, err := s.signUpload(ctx, signer, held, f, req.GetContentDisposition())
+		target, err := s.signUpload(ctx, signer, granted, f, req.GetContentDisposition())
 		if err != nil {
 			return nil, err
 		}
@@ -259,10 +259,10 @@ func (s *Service) PresignUpload(ctx context.Context, req *bucketv1.PresignUpload
 	return &bucketv1.PresignUploadResponse{SessionId: sessionID, Files: targets}, nil
 }
 
-func (s *Service) signUpload(ctx context.Context, signer PresignAPI, held scope, f *bucketv1.PresignFile, disposition string) (*bucketv1.PresignedTarget, error) {
+func (s *Service) signUpload(ctx context.Context, signer PresignAPI, granted scope, f *bucketv1.PresignFile, disposition string) (*bucketv1.PresignedTarget, error) {
 	in := &s3.PutObjectInput{
-		Bucket:      aws.String(held.bucket),
-		Key:         aws.String(held.key(f.GetKey())),
+		Bucket:      aws.String(granted.bucket),
+		Key:         aws.String(granted.key(f.GetKey())),
 		ContentType: aws.String(f.GetMimeType()),
 	}
 	if disposition != "" {
@@ -343,11 +343,11 @@ func (s *Service) GetUploadStatus(ctx context.Context, req *bucketv1.GetUploadSt
 	if err != nil {
 		return nil, err
 	}
-	state, reason := s.settled(sess)
+	state, reason := s.stateOf(sess)
 	return &bucketv1.GetUploadStatusResponse{State: toProtoState(state), Error: reason}, nil
 }
 
-func (s *Service) settled(sess session) (fileState, string) {
+func (s *Service) stateOf(sess session) (fileState, string) {
 	if s.now().Unix() >= sess.ExpiresAt && aggregate(sess.Files) != stateSucceeded {
 		return stateExpired, "upload expired"
 	}
@@ -382,12 +382,12 @@ func vendorHeaders(signed map[string][]string) map[string]string {
 const metadataCap = 2048
 
 func withinMetadataCap(metadata map[string]string) error {
-	held := 0
+	size := 0
 	for name, value := range metadata {
-		held += len(name) + len(value)
+		size += len(name) + len(value)
 	}
-	if held <= metadataCap {
+	if size <= metadataCap {
 		return nil
 	}
-	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("object metadata is %d bytes, over the %d-byte limit", held, metadataCap))
+	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("object metadata is %d bytes, over the %d-byte limit", size, metadataCap))
 }

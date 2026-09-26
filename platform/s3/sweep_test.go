@@ -48,11 +48,11 @@ func uploadsOpen(t *testing.T, store Store, bucket string) []string {
 		Bucket: aws.String(bucket),
 	})
 	if err != nil {
-		t.Fatalf("read the uploads the store holds open: %v", err)
+		t.Fatalf("read the uploads the store has open: %v", err)
 	}
 	keys := make([]string, 0, len(out.Uploads))
-	for _, held := range out.Uploads {
-		keys = append(keys, aws.ToString(held.Key))
+	for _, upload := range out.Uploads {
+		keys = append(keys, aws.ToString(upload.Key))
 	}
 	return keys
 }
@@ -72,7 +72,7 @@ func sweeping(t *testing.T, store Store, bucket string, now func() time.Time) *S
 
 func TestAnUploadLeftOpenForADayIsSweptUpAndOneStartedNowIsLeftAlone(t *testing.T) {
 	if testing.Short() {
-		t.Skip("stands a real store up")
+		t.Skip("runs a real store")
 	}
 	store := aRunningStore(t, "swept-bucket")
 	openUpload(t, store, "swept-bucket", "app/stale.bin")
@@ -92,15 +92,15 @@ func TestAnUploadLeftOpenForADayIsSweptUpAndOneStartedNowIsLeftAlone(t *testing.
 		t.Fatal("the store opened no upload")
 	}
 
-	held := uploadsOpen(t, store, "swept-bucket")
-	if len(held) != 1 || held[0] != "app/fresh.bin" {
-		t.Errorf("the store holds %v open, want only the upload this request opened: an upload abandoned a day ago holds its parts on the volume forever", held)
+	pending := uploadsOpen(t, store, "swept-bucket")
+	if len(pending) != 1 || pending[0] != "app/fresh.bin" {
+		t.Errorf("the store has %v open, want only the upload this request opened: an upload abandoned a day ago keeps its parts on the volume forever", pending)
 	}
 }
 
 func TestASweepReachesNoFurtherThanTheAppsOwnPrefix(t *testing.T) {
 	if testing.Short() {
-		t.Skip("stands a real store up")
+		t.Skip("runs a real store")
 	}
 	store := aRunningStore(t, "shared-bucket")
 	openUpload(t, store, "shared-bucket", "app/mine.bin")
@@ -110,9 +110,9 @@ func TestASweepReachesNoFurtherThanTheAppsOwnPrefix(t *testing.T) {
 	service := sweeping(t, store, "shared-bucket", func() time.Time { return clock })
 	service.sweepUploads(context.Background(), scopeOf("shared-bucket/app"))
 
-	held := uploadsOpen(t, store, "shared-bucket")
-	if len(held) != 1 || held[0] != "other/theirs.bin" {
-		t.Errorf("the store holds %v open: a sweep reaches the keys its app was granted and no others", held)
+	pending := uploadsOpen(t, store, "shared-bucket")
+	if len(pending) != 1 || pending[0] != "other/theirs.bin" {
+		t.Errorf("the store has %v open: a sweep reaches the keys its app was granted and no others", pending)
 	}
 }
 
@@ -121,8 +121,8 @@ func TestABucketIsSweptAtMostOnceAnHourHoweverOftenItIsWrittenTo(t *testing.T) {
 
 	counted := &countingStore{fakeStore: newFakeStore()}
 	service := New(Config{Objects: counted, SweepUploads: true, Granted: []string{"counted/app"}})
-	held := time.Now().UTC()
-	service.now = func() time.Time { return held }
+	clock := time.Now().UTC()
+	service.now = func() time.Time { return clock }
 	service.sweeping = func(run func()) { run() }
 
 	for range 3 {
@@ -136,7 +136,7 @@ func TestABucketIsSweptAtMostOnceAnHourHoweverOftenItIsWrittenTo(t *testing.T) {
 		t.Errorf("three uploads swept the bucket %d times, and a sweep on every request is a listing charged to every write", counted.listed)
 	}
 
-	held = held.Add(61 * time.Minute)
+	clock = clock.Add(61 * time.Minute)
 	if _, err := service.CreateMultipart(context.Background(), &bucketv1.CreateMultipartRequest{
 		Bucket: "counted/app", Key: "two.bin",
 	}); err != nil {
@@ -164,7 +164,7 @@ func TestAStoreThatExpiresItsOwnUploadsIsNeverSwept(t *testing.T) {
 	}
 }
 
-func TestASweepTheStoreRefusesLeavesTheUploadItWasOpeningStanding(t *testing.T) {
+func TestASweepTheStoreRefusesLeavesTheUploadItWasOpeningInPlace(t *testing.T) {
 	t.Parallel()
 
 	counted := &countingStore{fakeStore: newFakeStore(), refuses: true}
