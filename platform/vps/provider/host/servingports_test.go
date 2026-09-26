@@ -191,3 +191,63 @@ func TestTheHoldersReadNamesTheProcessBehindASocketOnThisMachine(t *testing.T) {
 		t.Errorf("the socket this test holds on :%d is named %v, want %v", port, got, want)
 	}
 }
+
+func heldByAProcessNamed(t *testing.T, name string) int {
+	t.Helper()
+	listening, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { listening.Close() })
+	socket, err := listening.(*net.TCPListener).File()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer socket.Close()
+	child := exec.Command("/bin/sh", "-c", `printf '%s' "$1" >/proc/$$/comm && echo named && read held`, "sh", name)
+	child.ExtraFiles = []*os.File{socket}
+	held, err := child.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	said, err := child.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := child.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		held.Close()
+		child.Wait()
+	})
+	if _, err := fmt.Fscanln(said, new(string)); err != nil {
+		t.Skipf("this machine will not let a process name itself: %v", err)
+	}
+	return listening.Addr().(*net.TCPAddr).Port
+}
+
+func TestTheHoldersReadNamesAProcessNamedLikeItsOwnLinesAsThatProcessAlone(t *testing.T) {
+	t.Parallel()
+
+	comm, err := os.ReadFile("/proc/self/comm")
+	if err != nil {
+		t.Skipf("this machine has no /proc to name a process from: %v", err)
+	}
+	for _, name := range []string{"x\n" + listeners.SocketsMark, "\n/proc/1/comm:X"} {
+		port := heldByAProcessNamed(t, name)
+		said, err := exec.Command("/bin/sh", "-c", holdersCommand).Output()
+		if err != nil {
+			t.Fatalf("the holders read on this machine = %v", err)
+		}
+		held, err := listeners.Parse(strings.NewReader(string(said)))
+		if err != nil {
+			t.Fatalf("the holders read parses as %v over a process named %q", err, name)
+		}
+		want := []string{strings.TrimSpace(string(comm)), strings.ReplaceAll(name, "\n", `\n`)}
+		slices.Sort(want)
+		if got := listeners.Holders(listeners.On(held, port)); !slices.Equal(got, want) {
+			t.Errorf("the socket on :%d held by this test and a process named %q is named %q, want %q", port, name, got, want)
+		}
+	}
+}

@@ -161,3 +161,48 @@ func TestALineNoReadingEverWroteNamesNoHolderAndStopsNothing(t *testing.T) {
 		}
 	}
 }
+
+func grepped(pid, comm string) string {
+	var said strings.Builder
+	for line := range strings.Lines(comm + "\n") {
+		said.WriteString("/proc/" + pid + "/comm:" + line)
+	}
+	return said.String()
+}
+
+func TestAProcessThatNamesItselfWithANewlineIsNamedAsTheKernelHoldsItAndNamesNoOtherProcess(t *testing.T) {
+	t.Parallel()
+
+	for payload, want := range map[string][]string{
+		"x\n" + listeners.SocketsMark: {"nginx", `x\n` + listeners.SocketsMark},
+		"\n/proc/812/comm:X":          {`\n/proc/812/comm:X`, "nginx"},
+		"x\n" + listeners.NamesMark:   {"nginx", `x\n` + listeners.NamesMark},
+	} {
+		said := listeners.SocketsMark + "\n/proc/812/fd socket:[12345]\n/proc/9/fd socket:[12345]\n" +
+			listeners.NamesMark + "\n" + grepped("812", "nginx") + grepped("9", payload) + grepped("10", "sshd")
+		held, err := listeners.Parse(strings.NewReader(tcpTable + said))
+		if err != nil {
+			t.Errorf("Parse() over a process named %q = %v", payload, err)
+			continue
+		}
+		if got := listeners.Holders(listeners.On(held, 80)); !slices.Equal(got, want) {
+			t.Errorf("Parse() over a process named %q names %q as holding :80, want %q: any local user can name a process, and the refusal then tells the user to stop whatever that name says", payload, got, want)
+		}
+	}
+}
+
+func TestAMarkInsideALaterSectionNeverReopensAnEarlierOne(t *testing.T) {
+	t.Parallel()
+
+	said := listeners.SocketsMark + "\n/proc/812/fd socket:[12345]\n" +
+		listeners.NamesMark + "\n/proc/812/comm:nginx\n" +
+		listeners.SocketsMark + "\n/proc/9/fd socket:[12345]\n" +
+		listeners.NamesMark + "\n/proc/9/comm:evil\n"
+	held, err := listeners.Parse(strings.NewReader(tcpTable + said))
+	if err != nil {
+		t.Fatalf("Parse() = %v", err)
+	}
+	if got := listeners.Holders(listeners.On(held, 80)); !slices.Equal(got, []string{"nginx"}) {
+		t.Errorf("Holders(On(80)) = %v, want only nginx: a mark past the names reopened the sockets", got)
+	}
+}
