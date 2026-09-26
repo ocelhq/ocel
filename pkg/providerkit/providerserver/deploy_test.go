@@ -323,7 +323,7 @@ func TestDeployRecordsEveryStackItStoodUp(t *testing.T) {
 	if len(infra.Bindings) != 1 || infra.Bindings[0].Name != "orders" {
 		t.Errorf("the infra stack records bindings %v, want the resource it stood up", infra.Bindings)
 	}
-	if app.App != "web" || app.Identity == "" {
+	if app.App != "web" || app.Build == "" {
 		t.Errorf("the app stack records %+v, want it named for the app and the build it serves", app.Stack)
 	}
 	if len(app.Functions) != 1 {

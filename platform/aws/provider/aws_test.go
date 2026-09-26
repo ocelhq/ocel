@@ -299,11 +299,11 @@ func (callerIdentity) GetCallerIdentity(context.Context, *sts.GetCallerIdentityI
 func TestTheIdentityNamesTheVendorTheProviderNamesItself(t *testing.T) {
 	t.Parallel()
 
-	identity, err := control.Credentials{STS: callerIdentity{}, Region: "us-east-1"}.Whoami(context.Background())
+	principal, err := control.Credentials{STS: callerIdentity{}, Region: "us-east-1"}.Whoami(context.Background())
 	if err != nil {
 		t.Fatalf("Whoami() = %v", err)
 	}
-	named := providerserver.IdentityProto(Vendor, identity).GetProvider()
+	named := providerserver.PrincipalProto(Vendor, principal).GetProvider()
 	if named != string(Vendor) {
 		t.Errorf("the identity names %q and the provider names itself %q; the CLI matches a credential problem to its section by that string, so a mismatch loses the problem", named, Vendor)
 	}

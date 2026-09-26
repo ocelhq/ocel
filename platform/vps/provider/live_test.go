@@ -185,29 +185,29 @@ func TestLiveWhoamiAnswersFromTheMachineItself(t *testing.T) {
 	p := vm.provider(t)
 	defer closing(t, p)
 
-	identity, err := p.Credentials().Whoami(context.Background())
+	principal, err := p.Credentials().Whoami(context.Background())
 	if err != nil {
 		t.Fatalf("Whoami() = %v, want the identity of a machine that is answering", err)
 	}
-	if identity.Vendor != vps.Vendor {
-		t.Errorf("Whoami().Provider = %q, want %q", identity.Vendor, vps.Vendor)
+	if principal.Vendor != vps.Vendor {
+		t.Errorf("Whoami().Provider = %q, want %q", principal.Vendor, vps.Vendor)
 	}
-	if identity.Principal != vm.user {
-		t.Errorf("Whoami().Principal = %q, want %q", identity.Principal, vm.user)
+	if principal.Name != vm.user {
+		t.Errorf("Whoami().Principal = %q, want %q", principal.Name, vm.user)
 	}
-	if identity.Account != vm.addr {
-		t.Errorf("Whoami().Account = %q, want the host as it was written", identity.Account)
+	if principal.Account != vm.addr {
+		t.Errorf("Whoami().Account = %q, want the host as it was written", principal.Account)
 	}
-	if key := detail(identity, "host key"); !strings.Contains(key, "SHA256:") {
+	if key := detail(principal, "host key"); !strings.Contains(key, "SHA256:") {
 		t.Errorf("Whoami() host key = %q, want the verified host key's type and SHA256 fingerprint", key)
 	}
-	labels := named(identity.Details)
+	labels := named(principal.Details)
 	if !labels["os"] || !labels["arch"] {
-		t.Errorf("Whoami().Details = %+v, want the machine's own account of its os and arch", identity.Details)
+		t.Errorf("Whoami().Details = %+v, want the machine's own account of its os and arch", principal.Details)
 	}
 }
 
-func named(details []provider.Detail) map[string]bool {
+func named(details []provider.PrincipalDetail) map[string]bool {
 	labels := map[string]bool{}
 	for _, detail := range details {
 		labels[detail.Label] = detail.Value != ""

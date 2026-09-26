@@ -193,7 +193,7 @@ func TestAPromotionUnderTheLoadBalancerPinsCloudRunBecauseTheUrlMapNeverMoves(t 
 	_, w, stack := reconciled(t)
 	for _, build := range []struct{ identity, revision string }{{"b1", "web-00001-abc"}, {"b2", "web-00002-def"}} {
 		if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
-			App: "web", Identity: build.identity, Physical: "ocel-shop-prod-web",
+			App: "web", Build: build.identity, Physical: "ocel-shop-prod-web",
 			Revisions: map[string]string{"ocel-shop-prod-web": build.revision},
 		}); err != nil {
 			t.Fatalf("PutStaged(%s) = %v", build.identity, err)
@@ -442,7 +442,7 @@ func TestAPromotionOfAPreviewOnTheGlobalWildcardWritesNoHostRule(t *testing.T) {
 	before := w.hosts("ocel-alb-production-routes")
 
 	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
-		App: "web", Identity: "b1", Physical: "shop--pr-7",
+		App: "web", Build: "b1", Physical: "shop--pr-7",
 		Revisions: map[string]string{"shop--pr-7": "shop--pr-7-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
@@ -623,7 +623,7 @@ func TestTheFirstReleaseAfterABindTakesTheHostnameLive(t *testing.T) {
 		t.Fatalf("BindDomain = %v", err)
 	}
 	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
-		App: "web", Identity: "b1", Physical: "ocel-shop-prod-web",
+		App: "web", Build: "b1", Physical: "ocel-shop-prod-web",
 		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
@@ -646,7 +646,7 @@ func TestAHostnameBoundAfterAReleaseIsRoutedToThePromotedService(t *testing.T) {
 	ctx := context.Background()
 	_, w, stack := reconciled(t)
 	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
-		App: "web", Identity: "b1", Physical: "ocel-shop-prod-web",
+		App: "web", Build: "b1", Physical: "ocel-shop-prod-web",
 		Revisions: map[string]string{"ocel-shop-prod-web": "ocel-shop-prod-web-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)
@@ -675,7 +675,7 @@ func TestAPromotionOfAnotherAppLeavesAHeldHostnameHeld(t *testing.T) {
 		t.Fatalf("BindDomain = %v", err)
 	}
 	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
-		App: "admin", Identity: "b1", Physical: "ocel-shop-prod-admin",
+		App: "admin", Build: "b1", Physical: "ocel-shop-prod-admin",
 		Revisions: map[string]string{"ocel-shop-prod-admin": "ocel-shop-prod-admin-00001"},
 	}); err != nil {
 		t.Fatalf("PutStaged = %v", err)

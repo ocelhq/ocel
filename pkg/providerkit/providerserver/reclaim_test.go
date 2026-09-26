@@ -49,7 +49,7 @@ func TestReclaimTargetsRefuseARecordKeyNothingWrote(t *testing.T) {
 	t.Parallel()
 
 	if _, err := ReclaimTargets("shop", stackrecords.ProductionEnv, []string{"record:web"}, nil, nil); err == nil {
-		t.Fatal("ReclaimTargets() accepted a key carrying no identity, want a refusal")
+		t.Fatal("ReclaimTargets() accepted a key carrying no build, want a refusal")
 	}
 }
 

@@ -40,7 +40,7 @@ func TestDeploymentRecord(t *testing.T) {
 	t.Run("audit fields are omitted when absent", func(t *testing.T) {
 		t.Parallel()
 
-		raw, err := json.Marshal(DeploymentRecord{App: "web", Identity: "b1"})
+		raw, err := json.Marshal(DeploymentRecord{App: "web", Build: "b1"})
 		if err != nil {
 			t.Fatalf("Marshal: %v", err)
 		}
@@ -56,7 +56,7 @@ func TestDeploymentRecord(t *testing.T) {
 
 		raw, err := json.Marshal(DeploymentRecord{
 			App:              "web",
-			Identity:         "b1~fp",
+			Build:            "b1~fp",
 			ValueFingerprint: "fp",
 			Variables: []VariableRecord{
 				{Key: "PLAIN_KEY", Version: 2},

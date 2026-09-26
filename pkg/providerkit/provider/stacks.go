@@ -225,7 +225,7 @@ type AppContainer struct {
 	Revision string `json:"revision,omitempty"`
 }
 
-type StackState struct {
+type InspectedStack struct {
 	Present bool
 	Result  StackResult
 }

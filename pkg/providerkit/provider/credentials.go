@@ -7,7 +7,7 @@ import (
 )
 
 type Credentials interface {
-	Whoami(ctx context.Context) (Identity, error)
+	Whoami(ctx context.Context) (Principal, error)
 
 	Permissions(tier CredentialTier) (edge.CredentialDocument, error)
 }
@@ -19,16 +19,16 @@ const (
 	TierDeploy    = edge.TierDeploy
 )
 
-type Identity struct {
+type Principal struct {
 	Vendor    Vendor
 	Account   string
-	Principal string
+	Name      string
 	Location  string
 	EdgeScope string
-	Details   []Detail
+	Details   []PrincipalDetail
 }
 
-type Detail struct {
+type PrincipalDetail struct {
 	Label string
 	Value string
 }

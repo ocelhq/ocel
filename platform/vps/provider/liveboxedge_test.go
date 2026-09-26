@@ -64,7 +64,7 @@ func promotes(t *testing.T, stack edge.EdgeStack, id, tag string, held release, 
 	ctx := context.Background()
 	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
 		App:        liveApp,
-		Identity:   tag,
+		Build:      tag,
 		Entry:      "/",
 		Image:      fixtureAt(tag),
 		Physical:   held.physical,

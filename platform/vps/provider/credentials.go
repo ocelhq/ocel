@@ -19,26 +19,26 @@ type hostSurvey interface {
 	Destination() session.Destination
 }
 
-func (c credentials) Whoami(ctx context.Context) (provider.Identity, error) {
+func (c credentials) Whoami(ctx context.Context) (provider.Principal, error) {
 	live, err := c.provider.Session(ctx)
 	if err != nil {
-		return provider.Identity{}, err
+		return provider.Principal{}, err
 	}
 	return whoami(ctx, live)
 }
 
-func whoami(ctx context.Context, live hostSurvey) (provider.Identity, error) {
+func whoami(ctx context.Context, live hostSurvey) (provider.Principal, error) {
 	facts, err := live.Facts(ctx)
 	if err != nil {
-		return provider.Identity{}, err
+		return provider.Principal{}, err
 	}
 	dest := live.Destination()
 	key := live.HostKey()
-	return provider.Identity{
-		Vendor:    Vendor,
-		Account:   dest.Written,
-		Principal: dest.User,
-		Details: named([]provider.Detail{
+	return provider.Principal{
+		Vendor:  Vendor,
+		Account: dest.Written,
+		Name:    dest.User,
+		Details: named([]provider.PrincipalDetail{
 			{Label: "host key", Value: strings.TrimSpace(key.Type + " " + key.Fingerprint)},
 			{Label: "address", Value: fmt.Sprintf("%s port %d", dest.Address, dest.Port)},
 			{Label: "os", Value: facts.OS},
@@ -59,8 +59,8 @@ func elevation(facts session.Facts) string {
 	}
 }
 
-func named(details []provider.Detail) []provider.Detail {
-	var out []provider.Detail
+func named(details []provider.PrincipalDetail) []provider.PrincipalDetail {
+	var out []provider.PrincipalDetail
 	for _, detail := range details {
 		if detail.Value != "" {
 			out = append(out, detail)

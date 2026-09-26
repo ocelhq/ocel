@@ -39,27 +39,27 @@ func deployLoginFacts() session.Facts {
 func TestWhoamiAnswersForTheLoginEveryDeployRunsAs(t *testing.T) {
 	t.Parallel()
 
-	identity, err := vps.Whoami(context.Background(), surveyed{facts: deployLoginFacts()})
+	principal, err := vps.Whoami(context.Background(), surveyed{facts: deployLoginFacts()})
 	if err != nil {
-		t.Fatalf("Whoami() = %v, want the identity of %s: a bootstrapped host runs every deploy as that login and grants it no passwordless sudo, and a preflight that cannot say who is calling returns before it says anything else — no bootstrap standing, no known slugs, and no claim on a hostname another project on the box already serves",
+		t.Fatalf("Whoami() = %v, want %s as the principal: a bootstrapped host runs every deploy as that login and grants it no passwordless sudo, and a preflight that cannot say who is calling returns before it says anything else — no bootstrap standing, no known slugs, and no claim on a hostname another project on the box already serves",
 			err, "ocel-deploy")
 	}
-	if identity.Principal != "ocel-deploy" {
-		t.Errorf("Whoami().Principal = %q, want the login every deploy runs as", identity.Principal)
+	if principal.Name != "ocel-deploy" {
+		t.Errorf("Whoami().Principal = %q, want the login every deploy runs as", principal.Name)
 	}
-	if identity.Account != "box.example" {
-		t.Errorf("Whoami().Account = %q, want the host as the user wrote it", identity.Account)
+	if principal.Account != "box.example" {
+		t.Errorf("Whoami().Account = %q, want the host as the user wrote it", principal.Account)
 	}
-	if identity.Location != "" {
-		t.Errorf("Whoami().Location = %q, want nothing: a machine is where the user put it", identity.Location)
+	if principal.Location != "" {
+		t.Errorf("Whoami().Location = %q, want nothing: a machine is where the user put it", principal.Location)
 	}
-	if key := detail(identity, "host key"); key != "ssh-ed25519 SHA256:whoami" {
+	if key := detail(principal, "host key"); key != "ssh-ed25519 SHA256:whoami" {
 		t.Errorf("Whoami() host key = %q, want the key's type and the fingerprint that was verified", key)
 	}
-	if addr := detail(identity, "address"); addr != "203.0.113.7 port 22" {
+	if addr := detail(principal, "address"); addr != "203.0.113.7 port 22" {
 		t.Errorf("Whoami() address = %q, want the address the name resolved to and the port it answered on", addr)
 	}
-	if held := detail(identity, "elevation"); held != "neither root nor sudo without a password" {
+	if held := detail(principal, "elevation"); held != "neither root nor sudo without a password" {
 		t.Errorf("Whoami() names the elevation %q for a login holding neither, want it said plainly: a deploy login reported as holding passwordless sudo is the one grant `ocel permissions deploy` promises it never holds", held)
 	}
 }
@@ -69,12 +69,12 @@ func TestWhoamiCarriesUpTheHostThatWouldNotAnswer(t *testing.T) {
 
 	_, err := vps.Whoami(context.Background(), surveyed{err: errors.New("connection closed by remote host")})
 	if err == nil || !strings.Contains(err.Error(), "connection closed") {
-		t.Fatalf("Whoami() = %v, want the machine's own failure to answer carried up rather than an identity invented for it", err)
+		t.Fatalf("Whoami() = %v, want the machine's own failure to answer carried up rather than a principal invented for it", err)
 	}
 }
 
-func detail(identity provider.Identity, label string) string {
-	for _, held := range identity.Details {
+func detail(principal provider.Principal, label string) string {
+	for _, held := range principal.Details {
 		if held.Label == label {
 			return held.Value
 		}

@@ -49,11 +49,11 @@ func (r *Stacks) Provisioned() []provider.StackSpec {
 }
 
 func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, _ edge.Progress) (provider.Plan, error) {
-	return resources.SynthesizedPlan(ctx, r.artifacts, spec, r.State(spec.Ref).Result)
+	return resources.SynthesizedPlan(ctx, r.artifacts, spec, r.Inspect(spec.Ref).Result)
 }
 
 func (r *Stacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ edge.Progress) (provider.Plan, error) {
-	return resources.SynthesizedRemoval(ref, r.State(ref).Result), nil
+	return resources.SynthesizedRemoval(ref, r.Inspect(ref).Result), nil
 }
 
 func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.StackResult, error) {
@@ -126,11 +126,11 @@ func (r *Stacks) Destroy(_ context.Context, ref provider.StackRef, progress edge
 	return nil
 }
 
-func (r *Stacks) State(ref provider.StackRef) provider.StackState {
+func (r *Stacks) Inspect(ref provider.StackRef) provider.InspectedStack {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	result, present := r.stacks[stackKey(ref)]
-	return provider.StackState{Present: present, Result: result}
+	return provider.InspectedStack{Present: present, Result: result}
 }
 
 func deliveredEdgeBundle(spec provider.StackSpec) string {

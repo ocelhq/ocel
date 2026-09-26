@@ -86,7 +86,7 @@ func newDeployStages(spec provider.DeploySpec) deployStages {
 }
 
 type deployRun struct {
-	*stackSession
+	*edgeSession
 	gate       Gate
 	features   []string
 	transforms []string
@@ -164,10 +164,10 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		return nil, provider.RefusalError(err)
 	}
 	run := &deployRun{
-		stackSession: &stackSession{
+		edgeSession: &edgeSession{
 			provider: p,
 			front:    front,
-			store:    stackStore{records: p.Records(), name: stackrecords.EdgeStackRecord(spec.Class, spec.Slug)},
+			store:    edgeStateStore{records: p.Records(), name: stackrecords.EdgeStackRecord(spec.Class, spec.Slug)},
 		},
 		gate:           gate,
 		features:       features,
@@ -398,7 +398,7 @@ func (r *deployRun) settleHostnames(ctx context.Context) error {
 	}
 	return r.tracked.unit(r.stages.Hostnames, func(u *unitRun) error {
 		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(progress edge.Progress) error {
-			settling := &hostnames{stackSession: r.stackSession}
+			settling := &hostnames{edgeSession: r.edgeSession}
 			for _, host := range r.configured {
 				serving := r.state.Host(host.Hostname).Serving()
 				if serving == r.front.Kind() {
@@ -826,7 +826,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 				Kind:       provider.StackApp,
 				App:        entry.App,
 				Release:    entry.Build.Release().String(),
-				Identity:   entry.Build.String(),
+				Build:      entry.Build.String(),
 				Functions:  result.Functions,
 				Containers: result.Containers,
 				WrittenBy:  provider.WrittenByVersion(""),
@@ -844,11 +844,11 @@ func (r *deployRun) refuseToAdopt(ctx context.Context, stack naming.StackName) e
 	if err != nil || recorded {
 		return err
 	}
-	state, err := inspectStack(ctx, r.ref(stack))
+	inspected, err := inspectStack(ctx, r.ref(stack))
 	if err != nil {
 		return err
 	}
-	if !state.Present {
+	if !inspected.Present {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
@@ -1100,7 +1100,7 @@ func (r *deployRun) stage(ctx context.Context, entry provider.AppEntry, facts Se
 		RoutingManifest:  routing,
 		App:              entry.App,
 		Framework:        entry.Manifest.GetFramework().GetName(),
-		Identity:         r.spec.Builds[entry.App],
+		Build:            r.spec.Builds[entry.App],
 		DeploymentID:     entry.Build.DeploymentID(),
 		Entry:            facts.Entry,
 		EntryFunction:    physicalByLogical[entryLogicalName(r.manifest, entry.App, facts.Entry)],

@@ -56,7 +56,7 @@ func staged(t *testing.T, stack edge.EdgeStack, identity, revision string) {
 	t.Helper()
 	err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{
 		App:       "web",
-		Identity:  identity,
+		Build:     identity,
 		Physical:  webService,
 		Revisions: map[string]string{webService: revision},
 	})
@@ -108,7 +108,7 @@ func TestAPromotionWhoseRecordNamesNoRevisionIsRefusedRatherThanLeftUnpinned(t *
 	pins := &pinRecorder{}
 	stack := fronting(t, pins)
 	if err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{
-		App: "web", Identity: "b1", Physical: webService,
+		App: "web", Build: "b1", Physical: webService,
 	}); err != nil {
 		t.Fatalf("PutStaged(b1) = %v", err)
 	}

@@ -19,7 +19,7 @@ import (
 )
 
 type hostnames struct {
-	*stackSession
+	*edgeSession
 	configured []ConfiguredHost
 	host       string
 	live       bool
@@ -34,11 +34,11 @@ func (h *handlers) hostnames(ctx context.Context, req *contractv1.HostnameReques
 	if err != nil {
 		return nil, err
 	}
-	session, err := h.openStack(ctx, edge.ClassProduction, req.GetSlug(), req.GetEdge())
+	session, err := h.openEdgeSession(ctx, edge.ClassProduction, req.GetSlug(), req.GetEdge())
 	if err != nil {
 		return nil, err
 	}
-	return &hostnames{stackSession: session, configured: configured, host: host, live: req.GetProbe()}, nil
+	return &hostnames{edgeSession: session, configured: configured, host: host, live: req.GetProbe()}, nil
 }
 
 func (h *handlers) AddHostname(ctx context.Context, req *contractv1.HostnameRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {

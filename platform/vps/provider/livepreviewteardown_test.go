@@ -141,7 +141,7 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 		Kind:       provider.StackApp,
 		App:        app,
 		Release:    build.Release().String(),
-		Identity:   build.String(),
+		Build:      build.String(),
 		Containers: stood.Containers,
 		WrittenBy:  provider.WrittenByVersion(""),
 	}); err != nil {
@@ -149,7 +149,7 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 	}
 	if err := stack.Ledger().PutStaged(ctx, edge.DeploymentRecord{
 		App:        app,
-		Identity:   build.String(),
+		Build:      build.String(),
 		Entry:      "/",
 		Image:      image,
 		Physical:   stood.Containers[0].Physical,

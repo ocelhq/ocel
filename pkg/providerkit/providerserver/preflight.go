@@ -32,12 +32,12 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		Computes: provider.ComputeNames(p.Facts().Computes),
 	}
 
-	identity, err := p.Credentials().Whoami(ctx)
+	principal, err := p.Credentials().Whoami(ctx)
 	if err != nil {
 		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(p.Facts().Vendor, err))
 		return resp, nil
 	}
-	resp.Identity = IdentityProto(p.Facts().Vendor, identity)
+	resp.Identity = PrincipalProto(p.Facts().Vendor, principal)
 	resp.ContainerArchs, err = containerArchs(ctx, p.Runtime(), req.GetContainers())
 	if err != nil {
 		return nil, provider.RefusalError(err)
@@ -173,7 +173,7 @@ func boundHere(ctx context.Context, records records.Store, class edge.Class, slu
 	if slug == "" {
 		return nil, nil
 	}
-	state, err := (stackStore{records: records, name: stackrecords.EdgeStackRecord(class, slug)}).read(ctx)
+	state, err := (edgeStateStore{records: records, name: stackrecords.EdgeStackRecord(class, slug)}).read(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -212,19 +212,19 @@ func tierOf(class edge.Class) environmentv1.Tier {
 	return environmentv1.Tier_TIER_PRODUCTION
 }
 
-func IdentityProto(vendor provider.Vendor, id provider.Identity) *contractv1.Identity {
-	named := id.Vendor
+func PrincipalProto(vendor provider.Vendor, principal provider.Principal) *contractv1.Identity {
+	named := principal.Vendor
 	if named == "" {
 		named = vendor
 	}
 	out := &contractv1.Identity{
 		Provider:  string(named),
-		Account:   id.Account,
-		Principal: id.Principal,
-		Location:  id.Location,
-		EdgeScope: id.EdgeScope,
+		Account:   principal.Account,
+		Principal: principal.Name,
+		Location:  principal.Location,
+		EdgeScope: principal.EdgeScope,
 	}
-	for _, detail := range id.Details {
+	for _, detail := range principal.Details {
 		out.Details = append(out.Details, &contractv1.Detail{Label: detail.Label, Value: detail.Value})
 	}
 	return out

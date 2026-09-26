@@ -277,7 +277,7 @@ func staged(t *testing.T, stack edge.EdgeStack, app, identity, physical string) 
 
 	if err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{
 		App:        app,
-		Identity:   identity,
+		Build:      identity,
 		Entry:      "/",
 		Image:      imageFor(app, identity),
 		Physical:   physical,
@@ -638,7 +638,7 @@ func TestARecordNamingAContainerAndNoHealthPathIsRefusedRatherThanGatedOnAGuess(
 
 	stood, _, stack := standing(t)
 	if err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{
-		App: "web", Identity: "b1", Image: "ghcr.io/acme/web:b1", Physical: "shop-web-1111",
+		App: "web", Build: "b1", Image: "ghcr.io/acme/web:b1", Physical: "shop-web-1111",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -1205,7 +1205,7 @@ func TestAPromotionCarriesTheNamesItsDeployResolvedSoTheBoxCanRefuseToServeNone(
 	stood, _, stack := standing(t)
 	if err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{
 		App:        "web",
-		Identity:   "b1",
+		Build:      "b1",
 		Entry:      "/",
 		Image:      imageFor("web", "b1"),
 		Physical:   "shop-web-1111",

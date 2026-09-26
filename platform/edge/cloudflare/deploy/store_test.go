@@ -201,7 +201,7 @@ func TestPutStaged(t *testing.T) {
 
 		srv := fakeStoreServer(t, "s3cr3t")
 		record := edge.DeploymentRecord{
-			App: "web", Identity: "b1", FunctionURLs: map[string]string{"/": "https://fn"},
+			App: "web", Build: "b1", FunctionURLs: map[string]string{"/": "https://fn"},
 			AssetPrefix: "b1", IsrPrefix: "prod/proj/web/b1", CreatedAt: 100,
 		}
 		if err := stackOn(&cloudflare{}, testState(srv.URL, "s3cr3t")).PutStaged(t.Context(), record); err != nil {
@@ -213,7 +213,7 @@ func TestPutStaged(t *testing.T) {
 		t.Parallel()
 
 		srv := fakeStoreServer(t, "s3cr3t")
-		err := stackOn(&cloudflare{}, testState(srv.URL, "wrong")).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1"})
+		err := stackOn(&cloudflare{}, testState(srv.URL, "wrong")).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Build: "b1"})
 		if err == nil {
 			t.Fatal("expected an error for the wrong write secret")
 		}
@@ -375,7 +375,7 @@ func TestStoreRequest(t *testing.T) {
 	t.Run("a state carrying no endpoint is an error", func(t *testing.T) {
 		t.Parallel()
 
-		err := stackOn(&cloudflare{}, edge.StackState{}).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Identity: "b1"})
+		err := stackOn(&cloudflare{}, edge.StackState{}).PutStaged(t.Context(), edge.DeploymentRecord{App: "web", Build: "b1"})
 		if err == nil {
 			t.Fatal("expected an error when the root-stack state carries no endpoint")
 		}
