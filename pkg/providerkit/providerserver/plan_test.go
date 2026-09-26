@@ -45,7 +45,7 @@ func TestApplyRunsThePlanItWasShown(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, provider := gated(t, "1.2.3")
+	gate, vendor := gated(t, "1.2.3")
 
 	req := providerserver.ApplyRequest{Features: []string{fake.FeatureCache}}
 	shown, err := gate.Plan(ctx, edge.ClassProduction, req)
@@ -55,7 +55,7 @@ func TestApplyRunsThePlanItWasShown(t *testing.T) {
 	if err := gate.Apply(ctx, shown, edge.ClassProduction, req, nil); err != nil {
 		t.Fatalf("Apply() of the plan it was shown = %v, want it applied", err)
 	}
-	if len(provider.FakeBootstrap().Applied()) == 0 {
+	if len(vendor.FakeBootstrap().Applied()) == 0 {
 		t.Error("Apply() provisioned nothing for the plan it was shown")
 	}
 }
@@ -152,8 +152,8 @@ func TestPlanLeavesAnInstalledFeatureNoRunNamed(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, provider := gated(t, "1.2.3")
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	gate, vendor := gated(t, "1.2.3")
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
 	plan, err := gate.Plan(ctx, edge.ClassProduction, providerserver.ApplyRequest{Features: []string{fake.FeatureCache}})
 	if err != nil {
@@ -170,8 +170,8 @@ func TestPlanLeavesAnInstalledFeatureNoRunNamed(t *testing.T) {
 func TestPlanRefusesToEnsureAndRemoveTheSameFeature(t *testing.T) {
 	t.Parallel()
 
-	gate, provider := gated(t, "1.2.3")
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	gate, vendor := gated(t, "1.2.3")
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache)
 
 	_, err := gate.Plan(context.Background(), edge.ClassProduction, providerserver.ApplyRequest{
 		Features: []string{fake.FeatureCache},

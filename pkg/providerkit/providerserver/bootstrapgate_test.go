@@ -99,8 +99,8 @@ func TestStateReadsAutoHealFromTheRecord(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, provider := gated(t, "2.0.0")
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	gate, vendor := gated(t, "2.0.0")
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache)
 
 	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatalf("RecordBootstrap() error = %v", err)
@@ -113,7 +113,7 @@ func TestStateReadsAutoHealFromTheRecord(t *testing.T) {
 		t.Error("Status().AutoHeal is off after the record said it is on")
 	}
 
-	recorded, err := provider.Records().Read(ctx, stackrecords.BootstrapRecord(edge.ClassProduction))
+	recorded, err := vendor.Records().Read(ctx, stackrecords.BootstrapRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatalf("Read() of the bootstrap record = %v", err)
 	}
@@ -158,8 +158,8 @@ func TestEnsureReadyRefusesASchemaThisBuildCannotRead(t *testing.T) {
 func TestEnsureReadyRefusesAMissingFeatureAndOffersTheOneCommandThatAddsIt(t *testing.T) {
 	t.Parallel()
 
-	gate, provider := gated(t, "2.0.0")
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	gate, vendor := gated(t, "2.0.0")
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache)
 
 	_, err := gate.EnsureReady(context.Background(), edge.ClassProduction, []string{fake.FeatureImages}, true, &recorder{})
 	var refused refusal.Refusal
@@ -180,9 +180,9 @@ func TestEnsureReadyHealsAStaleBootstrapWithoutAcceptingReplacements(t *testing.
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, provider := gated(t, "2.0.0")
-	bootstrap := provider.FakeBootstrap()
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	gate, vendor := gated(t, "2.0.0")
+	bootstrap := vendor.FakeBootstrap()
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache)
 	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -211,9 +211,9 @@ func TestEnsureReadyLeavesAStaleBootstrapAloneWhenTheAccountNeverOptedIntoHealin
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, provider := gated(t, "2.0.0")
-	bootstrap := provider.FakeBootstrap()
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	gate, vendor := gated(t, "2.0.0")
+	bootstrap := vendor.FakeBootstrap()
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache)
 	bootstrap.MarkStale(fake.FeatureCache)
 
 	progress := &recorder{}
@@ -232,9 +232,9 @@ func TestEnsureReadyAsksForNoHealingAndGetsNone(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, provider := gated(t, "2.0.0")
-	bootstrap := provider.FakeBootstrap()
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	gate, vendor := gated(t, "2.0.0")
+	bootstrap := vendor.FakeBootstrap()
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache)
 	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -260,9 +260,9 @@ func TestEnsureReadyWillNotHealFromADevelopmentBuild(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, provider := gated(t, "dev+cafebabe")
-	bootstrap := provider.FakeBootstrap()
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	gate, vendor := gated(t, "dev+cafebabe")
+	bootstrap := vendor.FakeBootstrap()
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache)
 	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -284,9 +284,9 @@ func TestEnsureReadyReportsAHealTheCredentialsCannotDo(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, provider := gated(t, "2.0.0")
-	bootstrap := provider.FakeBootstrap()
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	gate, vendor := gated(t, "2.0.0")
+	bootstrap := vendor.FakeBootstrap()
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache)
 	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -325,9 +325,9 @@ func TestADeniedHealWithNothingToSayStillReadsAsASentence(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, provider := gated(t, "2.0.0")
-	bootstrap := provider.FakeBootstrap()
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	gate, vendor := gated(t, "2.0.0")
+	bootstrap := vendor.FakeBootstrap()
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache)
 	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
@@ -347,10 +347,10 @@ func TestAnApplyThatNeverFinishedReachesTheCLIAsOneAndReadsAsDrifted(t *testing.
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, provider := gated(t, "2.0.0")
+	gate, vendor := gated(t, "2.0.0")
 	class := edge.ClassProduction
-	bootstrapped(t, provider, class, fake.FeatureCache)
-	provider.FakeBootstrap().MarkUnfinished()
+	bootstrapped(t, vendor, class, fake.FeatureCache)
+	vendor.FakeBootstrap().MarkUnfinished()
 
 	status, err := gate.Status(ctx, class)
 	if err != nil {
@@ -368,9 +368,9 @@ func TestAnApplyThatNeverFinishedReachesTheCLIAsOneAndReadsAsDrifted(t *testing.
 func TestDowngradeIsAWriterOlderThanTheOneThatWrote(t *testing.T) {
 	t.Parallel()
 
-	gate, provider := gated(t, "1.0.0")
-	bootstrapped(t, provider, edge.ClassProduction)
-	provider.FakeBootstrap().SetWriter("2.0.0")
+	gate, vendor := gated(t, "1.0.0")
+	bootstrapped(t, vendor, edge.ClassProduction)
+	vendor.FakeBootstrap().SetWriter("2.0.0")
 
 	status, err := gate.Status(context.Background(), edge.ClassProduction)
 	if err != nil {
@@ -388,7 +388,7 @@ func TestBootstrapUsersRefuseWhileAnythingDependsOnTheBootstrap(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, provider := gated(t, "2.0.0")
+	gate, vendor := gated(t, "2.0.0")
 
 	users, err := gate.BootstrapUsers(ctx, edge.ClassPreview)
 	if err != nil {
@@ -399,7 +399,7 @@ func TestBootstrapUsersRefuseWhileAnythingDependsOnTheBootstrap(t *testing.T) {
 	}
 
 	for _, slug := range []string{"shop", "blog"} {
-		if _, err := provider.Records().Write(ctx, records.Record{Name: stackrecords.ProjectRecord(edge.ClassPreview, slug)}); err != nil {
+		if _, err := vendor.Records().Write(ctx, records.Record{Name: stackrecords.ProjectRecord(edge.ClassPreview, slug)}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -407,7 +407,7 @@ func TestBootstrapUsersRefuseWhileAnythingDependsOnTheBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := provider.Records().Write(ctx, records.Record{
+	if _, err := vendor.Records().Write(ctx, records.Record{
 		Name:  stackrecords.WildcardRecord(edge.ClassPreview),
 		Bytes: wildcard,
 	}); err != nil {
@@ -463,15 +463,15 @@ func TestASchemaNewerThanThisBuildIsRefusedWithNoEscapeHatch(t *testing.T) {
 func TestAPreviewBootstrapIsRemediatedWithItsOwnCommand(t *testing.T) {
 	t.Parallel()
 
-	gate, provider := gated(t, "2.0.0")
-	bootstrapped(t, provider, edge.ClassPreview)
+	gate, vendor := gated(t, "2.0.0")
+	bootstrapped(t, vendor, edge.ClassPreview)
 
 	_, err := gate.EnsureReady(context.Background(), edge.ClassPreview, []string{fake.FeatureImages}, true, &recorder{})
-	var refusal refusal.Refusal
-	if !errors.As(err, &refusal) {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
 		t.Fatalf("EnsureReady() = %v, want a refusal", err)
 	}
-	if !strings.Contains(refusal.Message, "`ocel bootstrap preview --features ") {
-		t.Errorf("EnsureReady() = %q, want the preview bootstrap's own command", refusal.Message)
+	if !strings.Contains(refused.Message, "`ocel bootstrap preview --features ") {
+		t.Errorf("EnsureReady() = %q, want the preview bootstrap's own command", refused.Message)
 	}
 }

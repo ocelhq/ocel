@@ -109,11 +109,11 @@ type sessionBackend struct {
 }
 
 func (s sessionBackend) Read() (envvarsserver.Backend, error) {
-	provider, err := s.session.use()
+	vendor, err := s.session.use()
 	if err != nil {
 		return envvarsserver.Backend{}, err
 	}
-	return envvarsserver.Backend{Records: provider.Records(), Cipher: provider.Cipher(), VerifyGrants: provider.Hooks().VerifyGrants}, nil
+	return envvarsserver.Backend{Records: vendor.Records(), Cipher: vendor.Cipher(), VerifyGrants: vendor.Hooks().VerifyGrants}, nil
 }
 
 type session struct {

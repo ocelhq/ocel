@@ -33,8 +33,8 @@ func newSplitRecords() (awsports.Records, *fakeDynamo) {
 }
 
 func TestASetValueOnlyEverTouchesTheVarsTable(t *testing.T) {
-	records, ddb := newSplitRecords()
-	store := envvars.Store{Records: records, Cipher: mustSealer()}
+	table, ddb := newSplitRecords()
+	store := envvars.Store{Records: table, Cipher: mustSealer()}
 	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
 
 	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {

@@ -38,16 +38,16 @@ func sealValue(t *testing.T, p *fake.Provider, key, plaintext string) {
 func deliveredBy(t *testing.T, req *contractv1.DeployRequest, publish func(*fake.Provider)) map[string]string {
 	t.Helper()
 	builtProject(t)
-	provider := fake.NewProvider(fake.Options{})
-	client := servedBy(t, provider)
+	vendor := fake.NewProvider(fake.Options{})
+	client := servedBy(t, vendor)
 	if publish != nil {
-		publish(provider)
+		publish(vendor)
 	}
 	result, _ := deploy(t, client, req)
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	specs := provider.FakeStacks().Provisioned()
+	specs := vendor.FakeStacks().Provisioned()
 	for i := len(specs) - 1; i >= 0; i-- {
 		if specs[i].App != nil {
 			return specs[i].App.Values.ContainerEnv
@@ -102,16 +102,16 @@ func deliveredByWrapping(t *testing.T, req *contractv1.DeployRequest, publish fu
 	t.Helper()
 	builtProject(t)
 	daemonWithTheBuiltImage(t, "amd64")
-	provider := fake.NewProvider(fake.Options{})
-	client := servedBy(t, provider.WrappingContainers("amd64", containerRuntimeBytes))
+	vendor := fake.NewProvider(fake.Options{})
+	client := servedBy(t, vendor.WrappingContainers("amd64", containerRuntimeBytes))
 	if publish != nil {
-		publish(provider)
+		publish(vendor)
 	}
 	result, _ := deploy(t, client, req)
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	specs := provider.FakeStacks().Provisioned()
+	specs := vendor.FakeStacks().Provisioned()
 	for i := len(specs) - 1; i >= 0; i-- {
 		if specs[i].App != nil {
 			return specs[i].App.Values.ContainerEnv
@@ -160,8 +160,8 @@ func TestNoBindingRecordIsHandedToAContainerTheRuntimeResolvesItIn(t *testing.T)
 func TestAnUnsetSecretIsRefusedByThePlanOfAWrappingProvidersContainerApp(t *testing.T) {
 	builtProject(t)
 	daemonWithTheBuiltImage(t, "amd64")
-	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
-	client := servedBy(t, provider.WrappingContainers("amd64", containerRuntimeBytes))
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+	client := servedBy(t, vendor.WrappingContainers("amd64", containerRuntimeBytes))
 
 	req := declaring(namingARegistry(containerDeployRequest("/healthz")),
 		resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, "DATABASE_URL", "")
@@ -189,8 +189,8 @@ func TestAWrappingProvidersContainerAppIsSubjectToTheSameReservedNames(t *testin
 		t.Run(what, func(t *testing.T) {
 			builtProject(t)
 			daemonWithTheBuiltImage(t, "amd64")
-			provider := fake.NewProvider(fake.Options{Region: "nowhere"})
-			client := servedBy(t, provider.WrappingContainers("amd64", containerRuntimeBytes))
+			vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+			client := servedBy(t, vendor.WrappingContainers("amd64", containerRuntimeBytes))
 
 			message, _ := refusedPlanOn(t, client, declares(namingARegistry(containerDeployRequest("/healthz"))))
 			if !strings.Contains(message, "web") {
@@ -203,15 +203,15 @@ func TestAWrappingProvidersContainerAppIsSubjectToTheSameReservedNames(t *testin
 func TestTheStagedRecordNamesEveryValueAWrappingProvidersAppDeclares(t *testing.T) {
 	builtProject(t)
 	daemonWithTheBuiltImage(t, "amd64")
-	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
-	stager := staging(t, provider)
-	client := servedBy(t, provider.WrappingContainers("amd64", containerRuntimeBytes))
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+	stager := staging(t, vendor)
+	client := servedBy(t, vendor.WrappingContainers("amd64", containerRuntimeBytes))
 
 	req := namingARegistry(containerDeployRequest("/healthz"))
 	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "REGION", "eu-west-1")
 	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, "API_TOKEN", "sensitive-token")
 	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, "DATABASE_URL", "")
-	sealValue(t, provider, "DATABASE_URL", "postgres://sealed")
+	sealValue(t, vendor, "DATABASE_URL", "postgres://sealed")
 
 	result, _ := deploy(t, client, req)
 	if result == nil || !result.GetSuccess() {
@@ -369,8 +369,8 @@ func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheApp(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			builtProject(t)
-			client, provider := deployServed(t)
-			stager := staging(t, provider)
+			client, vendor := deployServed(t)
+			stager := staging(t, vendor)
 
 			req := namingARegistry(containerDeployRequest("/healthz"))
 			req.Manifest.Apps[0].ClientBundle = tc.clientBundle
@@ -401,14 +401,14 @@ func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheApp(t *testing.T) {
 func TestTheStagedRecordNamesEveryValueTheAppDeclaresAndIncludesNone(t *testing.T) {
 	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := deployServed(t)
-	stager := staging(t, provider)
+	client, vendor := deployServed(t)
+	stager := staging(t, vendor)
 
 	req := namingARegistry(containerDeployRequest("/healthz"))
 	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "REGION", "eu-west-1")
 	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, "API_TOKEN", "sensitive-token")
 	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, "DATABASE_URL", "")
-	sealValue(t, provider, "DATABASE_URL", "postgres://sealed")
+	sealValue(t, vendor, "DATABASE_URL", "postgres://sealed")
 
 	result, _ := deploy(t, client, req)
 	if result == nil || !result.GetSuccess() {

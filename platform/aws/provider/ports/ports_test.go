@@ -32,8 +32,8 @@ func newSealer() (awsports.Cipher, *fakeKMS) {
 }
 
 func TestRecordsConformance(t *testing.T) {
-	records, _ := newRecords(t)
-	conformance.RunStore(t, records)
+	table, _ := newRecords(t)
+	conformance.RunStore(t, table)
 }
 
 func TestSealerConformance(t *testing.T) {
@@ -42,9 +42,9 @@ func TestSealerConformance(t *testing.T) {
 }
 
 func TestValueRecordsPartitionOnTheProjectAndClass(t *testing.T) {
-	records, ddb := newRecords(t)
+	table, ddb := newRecords(t)
 	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
-	store := envvars.Store{Records: records, Cipher: mustSealer()}
+	store := envvars.Store{Records: table, Cipher: mustSealer()}
 
 	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
@@ -73,16 +73,16 @@ func TestARecordNameShorterThanItsPartitionIsRefused(t *testing.T) {
 }
 
 func TestASealedValueIsOpaqueAtRest(t *testing.T) {
-	records, _ := newRecords(t)
+	table, _ := newRecords(t)
 	sealer, _ := newSealer()
 	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
-	store := envvars.Store{Records: records, Cipher: sealer}
+	store := envvars.Store{Records: table, Cipher: sealer}
 
 	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
 	}
 
-	stored, err := records.List(context.Background(), envvars.ScopedRecordName(scope))
+	stored, err := table.List(context.Background(), envvars.ScopedRecordName(scope))
 	if err != nil {
 		t.Fatalf("List err = %v", err)
 	}
@@ -264,9 +264,9 @@ func TestOneProjectsStacksDoNotShareAPartitionWithAnothers(t *testing.T) {
 }
 
 func TestABindingsPairSharesOnePrefixInsideTheProjectPartition(t *testing.T) {
-	records, ddb := newRecords(t)
+	table, ddb := newRecords(t)
 	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
-	store := envvars.Store{Records: records, Cipher: mustSealer()}
+	store := envvars.Store{Records: table, Cipher: mustSealer()}
 
 	if _, err := store.SetBinding(context.Background(), scope, "", envvars.OwnerOcel, "db",
 		envvars.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {

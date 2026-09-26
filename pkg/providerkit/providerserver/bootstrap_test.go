@@ -27,8 +27,8 @@ import (
 func contractServed(t *testing.T, version string) (contractv1connect.ProviderServiceClient, *fake.Provider) {
 	t.Helper()
 
-	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
-	return servedProvider(t, version, provider), provider
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+	return servedProvider(t, version, vendor), vendor
 }
 
 func servedProvider(t *testing.T, version string, p provider.Provider) contractv1connect.ProviderServiceClient {
@@ -83,13 +83,13 @@ func bootstrapOK(t *testing.T, client contractv1connect.ProviderServiceClient, r
 func TestBootstrapPullsInWhatAFeatureDependsOn(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
 		Features: []string{fake.FeatureImages},
 	})
 
-	applied := provider.FakeBootstrap().Applied()
+	applied := vendor.FakeBootstrap().Applied()
 	if len(applied) != 1 {
 		t.Fatalf("Apply() ran %d times, want once", len(applied))
 	}
@@ -107,14 +107,14 @@ func TestBootstrapPullsInWhatAFeatureDependsOn(t *testing.T) {
 func TestBootstrapAcceptsReplacementsWhenTheRequestDoes(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:               environmentv1.Tier_TIER_PRODUCTION,
 		Features:           []string{fake.FeatureCache},
 		AcceptReplacements: true,
 	})
 
-	applied := provider.FakeBootstrap().Applied()
+	applied := vendor.FakeBootstrap().Applied()
 	if applied[0].RefuseReplacements {
 		t.Error("Apply() refused replacements where the request accepted them")
 	}
@@ -143,7 +143,7 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	healing := true
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
@@ -151,7 +151,7 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 		AutoHeal: &healing,
 	})
 
-	recorded, err := provider.Records().Read(ctx, stackrecords.BootstrapRecord(edge.ClassProduction))
+	recorded, err := vendor.Records().Read(ctx, stackrecords.BootstrapRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatalf("Read() of the bootstrap record = %v", err)
 	}
@@ -160,7 +160,7 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 		t.Fatalf("the bootstrap record contains %q, %v, want auto_heal on", recorded.Bytes, err)
 	}
 
-	written, err := stackrecords.WrittenSchema(ctx, provider.Records(), edge.ClassProduction)
+	written, err := stackrecords.WrittenSchema(ctx, vendor.Records(), edge.ClassProduction)
 	if err != nil || written != stackrecords.SchemaVersion {
 		t.Fatalf("WrittenSchema() = %d, %v, want the bootstrap to have stamped %d", written, err, stackrecords.SchemaVersion)
 	}
@@ -190,12 +190,12 @@ func TestBootstrapRefusesToRemoveAFeatureAProjectRecorded(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
 		Features: []string{fake.FeatureImages},
 	})
-	recordProject(t, provider, "shop", fake.FeatureImages)
+	recordProject(t, vendor, "shop", fake.FeatureImages)
 
 	stream, err := client.Bootstrap(ctx, &contractv1.BootstrapRequest{
 		Tier:   environmentv1.Tier_TIER_PRODUCTION,
@@ -222,12 +222,12 @@ func TestBootstrapRefusesToRemoveAFeatureAProjectRecorded(t *testing.T) {
 func TestBootstrapRemovesInDeleteOrderWhenForced(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
 		Features: []string{fake.FeatureImages},
 	})
-	recordProject(t, provider, "shop", fake.FeatureImages)
+	recordProject(t, vendor, "shop", fake.FeatureImages)
 
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:   environmentv1.Tier_TIER_PRODUCTION,
@@ -236,7 +236,7 @@ func TestBootstrapRemovesInDeleteOrderWhenForced(t *testing.T) {
 		Force:  true,
 	})
 
-	applied := provider.FakeBootstrap().Applied()
+	applied := vendor.FakeBootstrap().Applied()
 	removing := applied[len(applied)-1]
 	if want := []string{fake.FeatureImages, fake.FeatureCache}; !slices.Equal(removing.Remove, want) {
 		t.Errorf("Apply() removed %v, want %v — what depends on a feature goes first", removing.Remove, want)
@@ -249,7 +249,7 @@ func TestBootstrapRemovesInDeleteOrderWhenForced(t *testing.T) {
 func TestBootstrapLeavesAFeatureNoRunNamed(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
 		Features: []string{fake.FeatureImages},
@@ -260,7 +260,7 @@ func TestBootstrapLeavesAFeatureNoRunNamed(t *testing.T) {
 		Features: []string{fake.FeatureCache},
 	})
 
-	applied := provider.FakeBootstrap().Applied()
+	applied := vendor.FakeBootstrap().Applied()
 	last := applied[len(applied)-1]
 	if len(last.Remove) != 0 {
 		t.Errorf("Apply() removed %v, want a run naming only %s to leave the rest of the account alone",
@@ -268,14 +268,14 @@ func TestBootstrapLeavesAFeatureNoRunNamed(t *testing.T) {
 	}
 }
 
-func recordProject(t *testing.T, provider *fake.Provider, slug string, features ...string) {
+func recordProject(t *testing.T, vendor *fake.Provider, slug string, features ...string) {
 	t.Helper()
 
 	body, err := json.Marshal(stackrecords.Project{Features: features})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := provider.Records().Write(context.Background(), records.Record{
+	if _, err := vendor.Records().Write(context.Background(), records.Record{
 		Name:  stackrecords.ProjectRecord(edge.ClassProduction, slug),
 		Bytes: body,
 	}); err != nil {
@@ -405,8 +405,8 @@ func TestAnApplyWithAConsentedPlanDrawsNoPlanOfItsOwn(t *testing.T) {
 func TestAnApplyRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache)
 
 	req := &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
@@ -417,7 +417,7 @@ func TestAnApplyRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 	if consented == nil {
 		t.Fatal("the dry run streamed no plan, and the only thing consented to is the plan")
 	}
-	provider.FakeBootstrap().MarkStale(fake.FeatureCache)
+	vendor.FakeBootstrap().MarkStale(fake.FeatureCache)
 
 	req.Dry, req.Consented = false, consented
 	_, err := streamedEvents(t, client, req)
@@ -453,8 +453,8 @@ func TestARemovalRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	client, provider := contractServed(t, "1.2.3")
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	client, vendor := contractServed(t, "1.2.3")
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache)
 
 	scope := &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION}
 	consented, err := client.PlanRemoveBootstrap(ctx, scope)
@@ -462,7 +462,7 @@ func TestARemovalRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 		t.Fatalf("PlanRemoveBootstrap() error = %v", err)
 	}
 
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	bootstrapped(t, vendor, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
 	scope.Consented = consented
 	stream, err := client.RemoveBootstrap(ctx, scope)
@@ -483,7 +483,7 @@ func TestARemovalRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 func TestBootstrapShowsThePlanItIsAboutToApply(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	plan := streamedPlan(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
 		Features: []string{fake.FeatureImages},
@@ -508,16 +508,16 @@ func TestBootstrapShowsThePlanItIsAboutToApply(t *testing.T) {
 			t.Errorf("%s has no resource-level detail", group.GetName())
 		}
 	}
-	if len(provider.FakeBootstrap().Applied()) != 1 {
+	if len(vendor.FakeBootstrap().Applied()) != 1 {
 		t.Errorf("the bootstrap was applied %d times, want the one this stream ran",
-			len(provider.FakeBootstrap().Applied()))
+			len(vendor.FakeBootstrap().Applied()))
 	}
 }
 
 func TestADryBootstrapDrawsThePlanAndProvisionsNothing(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	plan := streamedPlan(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
 		Features: []string{fake.FeatureImages},
@@ -526,7 +526,7 @@ func TestADryBootstrapDrawsThePlanAndProvisionsNothing(t *testing.T) {
 	if plan == nil || len(plan.GetGroups()) == 0 {
 		t.Fatal("a dry bootstrap streamed no plan, and drawing the plan is all it is for")
 	}
-	if applied := provider.FakeBootstrap().Applied(); len(applied) != 0 {
+	if applied := vendor.FakeBootstrap().Applied(); len(applied) != 0 {
 		t.Errorf("a dry bootstrap applied %v, want it to change nothing", applied)
 	}
 }
@@ -534,9 +534,9 @@ func TestADryBootstrapDrawsThePlanAndProvisionsNothing(t *testing.T) {
 func TestDescribeBootstrapReportsADowngrade(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.0.0")
+	client, vendor := contractServed(t, "1.0.0")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	provider.FakeBootstrap().SetWriter("2.0.0")
+	vendor.FakeBootstrap().SetWriter("2.0.0")
 
 	planned, err := client.DescribeBootstrap(context.Background(), &contractv1.DescribeBootstrapRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
@@ -584,8 +584,8 @@ func TestGetCredentialPermissionsRendersEitherTier(t *testing.T) {
 func TestGetCredentialPermissionsAppendsWhatTheEdgeDocuments(t *testing.T) {
 	t.Parallel()
 
-	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
-	client := servedProvider(t, "1.2.3", documentingProvider{Provider: provider})
+	vendor := fake.NewProvider(fake.Options{Region: "nowhere"})
+	client := servedProvider(t, "1.2.3", documentingProvider{Provider: vendor})
 
 	permissions, err := client.GetCredentialPermissions(context.Background(), &contractv1.CredentialPermissionsRequest{
 		Tier: contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY,
@@ -675,9 +675,9 @@ func TestRemoveBootstrapWillNotRemoveOneStillInUse(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	recordProject(t, provider, "shop")
+	recordProject(t, vendor, "shop")
 
 	_, err := client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
@@ -704,7 +704,7 @@ func TestRemoveBootstrapTakesTheBootstrapAndItsRecord(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	healing := true
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
@@ -731,7 +731,7 @@ func TestRemoveBootstrapTakesTheBootstrapAndItsRecord(t *testing.T) {
 	if planned.GetBootstrap().GetPresent() {
 		t.Error("DescribeBootstrap() still reports a bootstrap after it was removed")
 	}
-	if _, err := provider.Records().Read(ctx, stackrecords.BootstrapRecord(edge.ClassProduction)); !errors.Is(err, records.ErrNotFound) {
+	if _, err := vendor.Records().Read(ctx, stackrecords.BootstrapRecord(edge.ClassProduction)); !errors.Is(err, records.ErrNotFound) {
 		t.Errorf("the bootstrap record survived the removal: %v", err)
 	}
 }
@@ -740,7 +740,7 @@ func TestRemoveBootstrapTearsDownTheEdgeItWasAsked(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 
 	stream, err := client.RemoveBootstrap(ctx, &contractv1.BootstrapScope{
@@ -757,7 +757,7 @@ func TestRemoveBootstrapTearsDownTheEdgeItWasAsked(t *testing.T) {
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("RemoveBootstrap() result error = %q, want it to succeed", result.GetError())
 	}
-	if fronting := provider.FakeBootstrap().DefaultEdge(); fronting != fake.KindDirect {
+	if fronting := vendor.FakeBootstrap().DefaultEdge(); fronting != fake.KindDirect {
 		t.Errorf("RemoveBootstrap() removed the %q edge, want the %q the request named", fronting, fake.KindDirect)
 	}
 }
@@ -766,7 +766,7 @@ func TestPlanRemoveBootstrapPlansTheEdgeItWasAsked(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 
 	plan, err := client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{
@@ -779,7 +779,7 @@ func TestPlanRemoveBootstrapPlansTheEdgeItWasAsked(t *testing.T) {
 	if plan.GetEdgeKind() != string(fake.KindDirect) {
 		t.Errorf("PlanRemoveBootstrap() planned against %q, want %q", plan.GetEdgeKind(), fake.KindDirect)
 	}
-	if fronting := provider.FakeBootstrap().DefaultEdge(); fronting != fake.KindDirect {
+	if fronting := vendor.FakeBootstrap().DefaultEdge(); fronting != fake.KindDirect {
 		t.Errorf("PlanRemoveBootstrap() asked the provider for the %q edge, want the %q the request named", fronting, fake.KindDirect)
 	}
 }
@@ -788,9 +788,9 @@ func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenMoreThanOneEdgeIsRaised(t *tes
 	t.Parallel()
 
 	ctx := context.Background()
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	provider.FakeBootstrap().SetRaisedEdges(fake.KindRelay, fake.KindDirect)
+	vendor.FakeBootstrap().SetRaisedEdges(fake.KindRelay, fake.KindDirect)
 
 	plan, err := client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil {
@@ -812,9 +812,9 @@ func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenNoEdgeIsRaised(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	provider.FakeBootstrap().SetRaisedEdges()
+	vendor.FakeBootstrap().SetRaisedEdges()
 
 	plan, err := client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil {
@@ -828,13 +828,13 @@ func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenNoEdgeIsRaised(t *testing.T) {
 func TestBootstrapRaisesTheEdgeTheProjectSelected(t *testing.T) {
 	t.Parallel()
 
-	client, provider := contractServed(t, "1.2.3")
+	client, vendor := contractServed(t, "1.2.3")
 
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 		Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
 	})
-	if fronting := provider.FakeBootstrap().DefaultEdge(); fronting != fake.KindDirect {
+	if fronting := vendor.FakeBootstrap().DefaultEdge(); fronting != fake.KindDirect {
 		t.Errorf("Bootstrap() raised the %q edge, want the %q this project selected", fronting, fake.KindDirect)
 	}
 
@@ -846,7 +846,7 @@ func TestBootstrapRaisesTheEdgeTheProjectSelected(t *testing.T) {
 	if plan.GetEdgeKind() != string(fake.KindDirect) {
 		t.Errorf("the plan was drawn against %q, want the %q this project selected", plan.GetEdgeKind(), fake.KindDirect)
 	}
-	if fronting := provider.FakeBootstrap().DefaultEdge(); fronting != fake.KindDirect {
+	if fronting := vendor.FakeBootstrap().DefaultEdge(); fronting != fake.KindDirect {
 		t.Errorf("planning asked the provider for the %q edge, want the %q this project selected", fronting, fake.KindDirect)
 	}
 }

@@ -46,10 +46,10 @@ func RuntimeLayer(architecture string) (Payload, error) {
 	return runtimeLayers[goarch], nil
 }
 
-func ContainerRuntime(arch string) (Payload, error) {
-	payload, builds := containerRuntimes[arch]
+func ContainerRuntime(architecture string) (Payload, error) {
+	payload, builds := containerRuntimes[architecture]
 	if !builds {
-		return Payload{}, fmt.Errorf("this provider ships no container runtime built for %q", arch)
+		return Payload{}, fmt.Errorf("this provider ships no container runtime built for %q", architecture)
 	}
 	return payload, nil
 }

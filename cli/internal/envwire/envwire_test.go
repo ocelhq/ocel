@@ -21,10 +21,10 @@ func TestStaleOrBroken(t *testing.T) {
 	})
 
 	t.Run("a refusal keeps what it says", func(t *testing.T) {
-		refusal := provider.RefusalError(refusal.Refuse(refusal.CodeBusy,
+		refused := provider.RefusalError(refusal.Refuse(refusal.CodeBusy,
 			"the production bootstrap has no key to seal a value under"))
 
-		err := staleOrBroken(refusal)
+		err := staleOrBroken(refused)
 		if errors.Is(err, varsui.ErrStaleValue) {
 			t.Fatalf("staleOrBroken = %v, want the refusal itself: nothing about it is a version conflict", err)
 		}

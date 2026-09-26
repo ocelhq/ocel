@@ -276,7 +276,7 @@ func TestDeployGrantsAnAppOnlyWhatItsUsageEdgesName(t *testing.T) {
 
 func TestDeployGrantsNothingToAnAppWithNoUsageEdge(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 
 	req := twoAppRequest()
 	manifest := req.GetManifest()
@@ -287,7 +287,7 @@ func TestDeployGrantsNothingToAnAppWithNoUsageEdge(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	for _, spec := range provider.FakeStacks().Provisioned() {
+	for _, spec := range vendor.FakeStacks().Provisioned() {
 		if spec.App == nil || spec.App.App != "admin" {
 			continue
 		}
@@ -299,13 +299,13 @@ func TestDeployGrantsNothingToAnAppWithNoUsageEdge(t *testing.T) {
 
 func TestDeployRecordsEveryStackItProvisioned(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	entries, err := stackrecords.List(context.Background(), provider.Records(), edge.ClassProduction, "shop")
+	entries, err := stackrecords.List(context.Background(), vendor.Records(), edge.ClassProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -333,15 +333,15 @@ func TestDeployRecordsEveryStackItProvisioned(t *testing.T) {
 
 func TestDeployUploadsEveryFunctionArtifact(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	specs := provider.FakeStacks().Provisioned()
+	specs := vendor.FakeStacks().Provisioned()
 	ref := specs[1].App.Functions[0].Artifact
-	opened, err := provider.Artifacts().Open(context.Background(), ref)
+	opened, err := vendor.Artifacts().Open(context.Background(), ref)
 	if err != nil {
 		t.Fatalf("Open(%+v) after the deploy = %v, want the artifact stored where the plan named it", ref, err)
 	}
@@ -576,9 +576,9 @@ func servedBy(t *testing.T, p provider.Provider) contractv1connect.ProviderServi
 
 func deployServed(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider) {
 	t.Helper()
-	client, provider := contractServed(t, "1.0.0")
+	client, vendor := contractServed(t, "1.0.0")
 	bootstrappedOverRPC(t, client)
-	return client, provider
+	return client, vendor
 }
 
 func bootstrappedOverRPC(t *testing.T, client contractv1connect.ProviderServiceClient) {
@@ -609,8 +609,8 @@ func declaresNeed(t *testing.T, app string, need edge.Need) {
 func TestDeployWaivesANeedTheProjectAllowsToDegrade(t *testing.T) {
 	builtProject(t)
 	declaresNeed(t, "web", edge.NeedStreaming)
-	client, provider := deployServed(t)
-	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Serves(nil)
+	client, vendor := deployServed(t)
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Serves(nil)
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{
@@ -632,8 +632,8 @@ func TestDeployWaivesANeedTheProjectAllowsToDegrade(t *testing.T) {
 func TestDeployRefusesANeedTheProjectDoesNotWaive(t *testing.T) {
 	builtProject(t)
 	declaresNeed(t, "web", edge.NeedStreaming)
-	client, provider := deployServed(t)
-	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Serves(nil)
+	client, vendor := deployServed(t)
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Serves(nil)
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
@@ -927,7 +927,7 @@ func TestADeployDeclaringAWildcardForProductionIsRefusedBeforeItProvisionsAnythi
 
 func TestADeployLeavesAHostnameAnotherEdgeServesToDomainAdd(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 
 	req := deployRequest()
 	req.Edge = writtenBy("shop.example")
@@ -944,7 +944,7 @@ func TestADeployLeavesAHostnameAnotherEdgeServesToDomainAdd(t *testing.T) {
 	if !strings.Contains(note, "shop.example") || !strings.Contains(note, string(fake.KindRelay)) || !strings.Contains(note, "`ocel domain add`") {
 		t.Errorf("the note = %q, want it naming the hostname, the edge that still serves it, and that `ocel domain add` moves it", note)
 	}
-	edges := provider.Edges().(*fake.Edges)
+	edges := vendor.Edges().(*fake.Edges)
 	if bound := edges.Edge(fake.KindDirect).Bindings(); len(bound) != 0 {
 		t.Errorf("the %s edge binds %v, want nothing: moving a hostname between edges is `ocel domain add`'s to order", fake.KindDirect, bound)
 	}
@@ -975,8 +975,8 @@ func TestALaterDeployAttachesAHostnameTheConfigNewlyDeclares(t *testing.T) {
 
 func TestADeployWhoseDNSWriterFailsPromotesNothing(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
-	writer, err := provider.DNS().Open(fake.KindZone, "shop.example", "")
+	client, vendor := deployServed(t)
+	writer, err := vendor.DNS().Open(fake.KindZone, "shop.example", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -995,9 +995,9 @@ func TestADeployWhoseDNSWriterFailsPromotesNothing(t *testing.T) {
 
 func TestADeployRefusedForAReasonNoWaitingFixesFailsWithThatReason(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 	reason := "no load balancer exists in this project for shop.example: run `ocel bootstrap`"
-	provider.RefuseCertificates(refusal.Refuse(refusal.CodeNotReady, "%s", reason))
+	vendor.RefuseCertificates(refusal.Refuse(refusal.CodeNotReady, "%s", reason))
 
 	req := deployRequest()
 	req.Edge = writtenBy("shop.example")
@@ -1032,8 +1032,8 @@ func TestADeployWhoseCertificateIsStillIssuingLeavesItToDomainAdd(t *testing.T) 
 
 func TestADeployWhoseCertificateWaitsOnYouLeavesItToDomainAdd(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
-	provider.RequireValidationRecords(edge.Record{Name: "_acme.shop.example", Type: edge.RecordTypeCNAME, Value: "validate.example"})
+	client, vendor := deployServed(t)
+	vendor.RequireValidationRecords(edge.Record{Name: "_acme.shop.example", Type: edge.RecordTypeCNAME, Value: "validate.example"})
 
 	result, events := deploy(t, client, deployRequest())
 	if !result.GetSuccess() {
@@ -1117,9 +1117,9 @@ func TestDeployAnnouncesThePreviewHostnameOfTheGlobalWildcard(t *testing.T) {
 
 func TestAGlobalPreviewDeployOnAnEdgeThatRoutesByLabelHandsTheStacksTheLabelInItsHostname(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 	previewBootstrapped(t, client)
-	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).RoutesPreviewsByLabel(true)
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).RoutesPreviewsByLabel(true)
 	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindRelay, "acme.com")); !result.GetSuccess() {
 		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
 	}
@@ -1130,7 +1130,7 @@ func TestAGlobalPreviewDeployOnAnEdgeThatRoutesByLabelHandsTheStacksTheLabelInIt
 	}
 
 	want := edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", "")
-	for _, spec := range provider.FakeStacks().Provisioned() {
+	for _, spec := range vendor.FakeStacks().Provisioned() {
 		if spec.App == nil {
 			continue
 		}
@@ -1143,7 +1143,7 @@ func TestAGlobalPreviewDeployOnAnEdgeThatRoutesByLabelHandsTheStacksTheLabelInIt
 
 func TestAGlobalPreviewDeployOnAnEdgeThatDoesNotRouteByLabelHandsTheStacksNoLabel(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 	previewBootstrapped(t, client)
 	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindRelay, "acme.com")); !result.GetSuccess() {
 		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
@@ -1154,7 +1154,7 @@ func TestAGlobalPreviewDeployOnAnEdgeThatDoesNotRouteByLabelHandsTheStacksNoLabe
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	for _, spec := range provider.FakeStacks().Provisioned() {
+	for _, spec := range vendor.FakeStacks().Provisioned() {
 		if spec.App == nil {
 			continue
 		}
@@ -1167,9 +1167,9 @@ func TestAGlobalPreviewDeployOnAnEdgeThatDoesNotRouteByLabelHandsTheStacksNoLabe
 
 func TestAGlobalPreviewDeployLabelsEachAppWithTheFirstLabelOfTheHostnameItAnnounced(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 	previewBootstrapped(t, client)
-	provider.Edges().(*fake.Edges).Edge(fake.KindRelay).RoutesPreviewsByLabel(true)
+	vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).RoutesPreviewsByLabel(true)
 	if result := usePreviewWildcard(t, client, "preview.acme.com", edged(fake.KindRelay, "acme.com")); !result.GetSuccess() {
 		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
 	}
@@ -1185,7 +1185,7 @@ func TestAGlobalPreviewDeployLabelsEachAppWithTheFirstLabelOfTheHostnameItAnnoun
 	}
 
 	labels := map[string]string{}
-	for _, spec := range provider.FakeStacks().Provisioned() {
+	for _, spec := range vendor.FakeStacks().Provisioned() {
 		if spec.App == nil {
 			continue
 		}
@@ -1206,7 +1206,7 @@ func TestAGlobalPreviewDeployLabelsEachAppWithTheFirstLabelOfTheHostnameItAnnoun
 
 func TestAPreviewDeployOnTheProjectsOwnWildcardHandsTheStacksNoLabel(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 	previewBootstrapped(t, client)
 
 	result, _ := deploy(t, client, previewRequest())
@@ -1214,7 +1214,7 @@ func TestAPreviewDeployOnTheProjectsOwnWildcardHandsTheStacksNoLabel(t *testing.
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	for _, spec := range provider.FakeStacks().Provisioned() {
+	for _, spec := range vendor.FakeStacks().Provisioned() {
 		if spec.App == nil {
 			continue
 		}
@@ -1340,15 +1340,15 @@ func (d defaultingTo) Facts() provider.Facts {
 
 func TestADeployNamingNoEdgeGoesToTheEdgeTheProvidersFactsDefaultTo(t *testing.T) {
 	builtProject(t)
-	provider := defaultingTo{Provider: fake.NewProvider(fake.Options{}), kind: fake.KindDirect}
-	client := servedBy(t, provider)
+	vendor := defaultingTo{Provider: fake.NewProvider(fake.Options{}), kind: fake.KindDirect}
+	client := servedBy(t, vendor)
 
 	req := deployRequest()
 	req.Edge = writtenBy("shop.example")
 	if result, _ := deploy(t, client, req); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	fronts := provider.DNS().(*fake.DNS).Fronts()
+	fronts := vendor.DNS().(*fake.DNS).Fronts()
 	if len(fronts) == 0 || slices.ContainsFunc(fronts, func(front edge.Kind) bool { return front != fake.KindDirect }) {
 		t.Errorf("the deploy opened its DNS under %v, want the %s edge Facts().DefaultEdge names", fronts, fake.KindDirect)
 	}
@@ -1360,14 +1360,14 @@ func noteOf(result *progressv1.ResultEvent) string {
 
 func TestADeployOpensItsDNSForTheEdgeTheProviderDefaultsTo(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, vendor := deployServed(t)
 
 	req := deployRequest()
 	req.Edge = writtenBy("shop.example")
 	if result, _ := deploy(t, client, req); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
-	fronts := provider.DNS().(*fake.DNS).Fronts()
+	fronts := vendor.DNS().(*fake.DNS).Fronts()
 	if len(fronts) == 0 || slices.ContainsFunc(fronts, func(front edge.Kind) bool { return front != fake.KindRelay }) {
 		t.Errorf("the deploy opened its DNS under %v, want the %s edge the provider defaults to", fronts, fake.KindRelay)
 	}

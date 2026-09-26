@@ -38,7 +38,7 @@ type projectRemoval struct {
 }
 
 func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectRequest) (*projectRemoval, error) {
-	provider, err := h.session.use()
+	vendor, err := h.session.use()
 	if err != nil {
 		return nil, err
 	}
@@ -53,23 +53,23 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 	if err != nil {
 		return nil, err
 	}
-	store := edgeStateStore{records: provider.Records(), name: stackrecords.EdgeStackRecord(class, req.GetSlug())}
+	store := edgeStateStore{records: vendor.Records(), name: stackrecords.EdgeStackRecord(class, req.GetSlug())}
 	state, err := store.read(ctx)
 	if err != nil {
 		return nil, err
 	}
-	front, err := h.removalEdge(provider, state, req.GetEdge())
+	front, err := h.removalEdge(vendor, state, req.GetEdge())
 	if err != nil {
 		return nil, err
 	}
-	writer, err := dnsFor(provider, front, req.GetEdge())
+	writer, err := dnsFor(vendor, front, req.GetEdge())
 	if err != nil {
 		return nil, err
 	}
 	removal := &projectRemoval{
-		provider: provider,
+		provider: vendor,
 		front:    front,
-		cutover:  newDNSCutover(front, writer, req.GetEdge().GetDns().GetZone(), provider.Liveness()),
+		cutover:  newDNSCutover(front, writer, req.GetEdge().GetDns().GetZone(), vendor.Liveness()),
 		store:    store,
 		state:    state,
 		slug:     req.GetSlug(),
@@ -81,7 +81,7 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 			return nil, err
 		}
 	}
-	entries, err := stackrecords.List(ctx, provider.Records(), class, req.GetSlug())
+	entries, err := stackrecords.List(ctx, vendor.Records(), class, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}

@@ -30,16 +30,16 @@ type wildcards struct {
 }
 
 func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) (*wildcards, error) {
-	provider, err := h.session.use()
+	vendor, err := h.session.use()
 	if err != nil {
 		return nil, err
 	}
-	records := provider.Records()
-	wildcard, err := stackrecords.ReadWildcard(ctx, records)
+	store := vendor.Records()
+	wildcard, err := stackrecords.ReadWildcard(ctx, store)
 	if err != nil {
 		return nil, err
 	}
-	return &wildcards{provider: provider, records: records, recorded: wildcard, sel: sel}, nil
+	return &wildcards{provider: vendor, records: store, recorded: wildcard, sel: sel}, nil
 }
 
 func (w *wildcards) dnsCutover(front edge.Edge) (dnsCutover, error) {
@@ -140,11 +140,11 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	}
 
 	target := edge.DNSTarget{Kind: front.Kind(), ServesUnbound: front.Facts().ServesUnbound, Front: published}
-	records, err := edge.RecordsFor(target, []string{wildcard})
+	dnsRecords, err := edge.RecordsFor(target, []string{wildcard})
 	if err != nil {
 		return err
 	}
-	written, werr := cutover.write(ctx, records,
+	written, werr := cutover.write(ctx, dnsRecords,
 		fmt.Sprintf("Point %s at the %s edge", wildcard, front.Kind()), progress.Say,
 		fmt.Sprintf("If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard))
 	w.recorded.Host.Written, w.recorded.Host.Manual = written.Written, written.Manual

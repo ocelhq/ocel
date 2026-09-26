@@ -66,11 +66,11 @@ func CostManifest() *contractv1.Manifest {
 	}
 }
 
-func RunCost(t *testing.T, provider contractv1connect.ProviderServiceClient, rates costv1connect.CostServiceClient, vendor string) {
+func RunCost(t *testing.T, client contractv1connect.ProviderServiceClient, rates costv1connect.CostServiceClient, vendor string) {
 	t.Helper()
 	ctx := context.Background()
 
-	set, err := provider.Shape(ctx, &contractv1.ShapeRequest{
+	set, err := client.Shape(ctx, &contractv1.ShapeRequest{
 		Manifest:    CostManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
 	})

@@ -15,30 +15,30 @@ import (
 )
 
 func TestTheRootSchemaIsWrittenOnceAndReadBack(t *testing.T) {
-	records := fake.NewRecords()
+	store := fake.NewRecords()
 	ctx := context.Background()
 
-	if written, err := stackrecords.WrittenSchema(ctx, records, edge.ClassProduction); err != nil || written != 0 {
+	if written, err := stackrecords.WrittenSchema(ctx, store, edge.ClassProduction); err != nil || written != 0 {
 		t.Fatalf("WrittenSchema() of an unwritten tree = %d, %v, want 0", written, err)
 	}
-	if err := stackrecords.EnsureSchema(ctx, records, edge.ClassProduction); err != nil {
+	if err := stackrecords.EnsureSchema(ctx, store, edge.ClassProduction); err != nil {
 		t.Fatal(err)
 	}
-	recorded, err := records.Read(ctx, stackrecords.SchemaRecord(edge.ClassProduction))
+	recorded, err := store.Read(ctx, stackrecords.SchemaRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := stackrecords.EnsureSchema(ctx, records, edge.ClassProduction); err != nil {
+	if err := stackrecords.EnsureSchema(ctx, store, edge.ClassProduction); err != nil {
 		t.Fatalf("a second EnsureSchema() = %v, want it a no-op", err)
 	}
-	again, err := records.Read(ctx, stackrecords.SchemaRecord(edge.ClassProduction))
+	again, err := store.Read(ctx, stackrecords.SchemaRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if again.Revision != recorded.Revision {
 		t.Fatalf("the schema record was rewritten at revision %q, want the %q already written", again.Revision, recorded.Revision)
 	}
-	if written, err := stackrecords.WrittenSchema(ctx, records, edge.ClassProduction); err != nil || written != stackrecords.SchemaVersion {
+	if written, err := stackrecords.WrittenSchema(ctx, store, edge.ClassProduction); err != nil || written != stackrecords.SchemaVersion {
 		t.Fatalf("WrittenSchema() = %d, %v, want %d", written, err, stackrecords.SchemaVersion)
 	}
 }

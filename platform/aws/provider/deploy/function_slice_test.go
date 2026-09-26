@@ -422,8 +422,8 @@ func testRuntimeLayers() map[string]string {
 	}
 }
 
-func testRuntimeLayerARN(arch string) string {
-	return "arn:aws:lambda:us-east-1:123456789012:layer:ocel-runtime-" + arch + "-beefbeefbeef:3"
+func testRuntimeLayerARN(architecture string) string {
+	return "arn:aws:lambda:us-east-1:123456789012:layer:ocel-runtime-" + architecture + "-beefbeefbeef:3"
 }
 
 func TestTheReleaseBootsThroughTheAccountsRuntimeAndPublishesNoneOfItsOwn(t *testing.T) {

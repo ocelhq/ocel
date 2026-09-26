@@ -69,9 +69,9 @@ func Forget(ctx context.Context, store records.Store, class edge.Class, slug str
 	return records.Forget(ctx, store, StackRecord(class, slug, stack))
 }
 
-func List(ctx context.Context, records records.Store, class edge.Class, slug string) ([]NamedStack, error) {
+func List(ctx context.Context, store records.Store, class edge.Class, slug string) ([]NamedStack, error) {
 	under := StacksRecord(class, slug)
-	recorded, err := records.List(ctx, under)
+	recorded, err := store.List(ctx, under)
 	if err != nil {
 		return nil, fmt.Errorf("read %s's stacks: %w", slug, err)
 	}

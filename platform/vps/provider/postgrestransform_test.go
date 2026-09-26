@@ -151,9 +151,9 @@ func TestEveryFieldTheVpsBranchTypesIsOneABoxRenders(t *testing.T) {
 		`,
 	})
 	machine := &box{}
-	provider := over(machine)
-	provider.Transforming(transformkit.NodePass{Root: root, Modules: []string{"./stack.transform.ts"}})
-	if _, err := provider.ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil); err != nil {
+	vendor := over(machine)
+	vendor.Transforming(transformkit.NodePass{Root: root, Modules: []string{"./stack.transform.ts"}})
+	if _, err := vendor.ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil); err != nil {
 		t.Fatalf("a module patching every field the vps branch types was refused: %v", err)
 	}
 	runCommand := machine.commands()[machine.at("'docker' 'run'")]
@@ -178,16 +178,16 @@ func (p *perResource) Evaluate(_ context.Context, req transformkit.Request) ([]t
 func TestTwoBucketsPatchingTheOneStoreDifferentlyAreRefused(t *testing.T) {
 	t.Parallel()
 
-	provider := over(&box{kept: sealedRootKey()})
-	provider.Transforming(&perResource{patches: map[string]transformkit.Patches{
+	vendor := over(&box{kept: sealedRootKey()})
+	vendor.Transforming(&perResource{patches: map[string]transformkit.Patches{
 		"uploads": {"container": {"memory": "2g"}},
 		"avatars": {"container": {"memory": "4g"}},
 	}})
 
-	if _, err := provider.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
+	if _, err := vendor.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
 		t.Fatalf("Bucket(uploads) = %v", err)
 	}
-	_, err := provider.ProvisionBucket(context.Background(), aBucket(t, "avatars", false), nil)
+	_, err := vendor.ProvisionBucket(context.Background(), aBucket(t, "avatars", false), nil)
 	if err == nil {
 		t.Fatal("the second bucket reshaped the one store the first is already running in, and nothing said so")
 	}
@@ -201,13 +201,13 @@ func TestTwoBucketsPatchingTheOneStoreDifferentlyAreRefused(t *testing.T) {
 func TestTwoBucketsPatchingTheOneStoreTheSameWayProvisionTogether(t *testing.T) {
 	t.Parallel()
 
-	provider := over(&box{kept: sealedRootKey()})
-	provider.Transforming(&patching{patches: transformkit.Patches{"container": {"memory": "2g"}}})
+	vendor := over(&box{kept: sealedRootKey()})
+	vendor.Transforming(&patching{patches: transformkit.Patches{"container": {"memory": "2g"}}})
 
-	if _, err := provider.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
+	if _, err := vendor.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
 		t.Fatalf("Bucket(uploads) = %v", err)
 	}
-	if _, err := provider.ProvisionBucket(context.Background(), aBucket(t, "avatars", false), nil); err != nil {
+	if _, err := vendor.ProvisionBucket(context.Background(), aBucket(t, "avatars", false), nil); err != nil {
 		t.Fatalf("Bucket(avatars) = %v, want two buckets shaping the store alike to be provisioned", err)
 	}
 }

@@ -136,7 +136,7 @@ func TestDeployShipsAFunctionAsAnImageWhereTheProviderTakesItThatWay(t *testing.
 
 func TestAFunctionsImageIsNeverMistakenForTheAppsOwn(t *testing.T) {
 	stagedProject(t, "web", "admin")
-	served, provider := imagingServed(t)
+	served, vendor := imagingServed(t)
 
 	req := imagingDeployRequest()
 	req.Manifest.Functions[0].LogicalName = "web"
@@ -146,7 +146,7 @@ func TestAFunctionsImageIsNeverMistakenForTheAppsOwn(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	specs := provider.FakeStacks().Provisioned()
+	specs := vendor.FakeStacks().Provisioned()
 	app := specs[len(specs)-1]
 	if app.App.Image != "" {
 		t.Errorf("the app spec runs the image %q, want none: the app is serverless and only its functions travel as images", app.App.Image)
@@ -205,14 +205,14 @@ func TestAFunctionRunAsAnImageRefusesTheNameItsHandlerIsInjectedUnder(t *testing
 
 func TestANodeFunctionsImageIncludesTheRuntimeTheProviderHandsIt(t *testing.T) {
 	stagedProject(t, "web", "admin")
-	served, provider := imagingServed(t)
+	served, vendor := imagingServed(t)
 
 	result, _ := deploy(t, served, imagingDeployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	pushed := provider.ImageStore().Pushed()
+	pushed := vendor.ImageStore().Pushed()
 	if len(pushed) != 1 {
 		t.Fatalf("the deploy pushed %v, want the one image the app's function runs", pushed)
 	}
@@ -299,14 +299,14 @@ func regularFiles(t *testing.T, image v1.Image) []string {
 
 func TestAFunctionImageIsWrappedInTheRuntimeWhereTheProviderShipsOne(t *testing.T) {
 	stagedProject(t, "web", "admin")
-	served, provider := wrappingImagingServed(t, containerRuntimeBytes)
+	served, vendor := wrappingImagingServed(t, containerRuntimeBytes)
 
 	result, _ := deploy(t, served, imagingDeployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	pushed := provider.ImageStore().Pushed()
+	pushed := vendor.ImageStore().Pushed()
 	if len(pushed) != 1 || pushed[0].Built == nil {
 		t.Fatalf("the deploy pushed %v, want the one wrapped image the app's function runs", pushed)
 	}
@@ -329,14 +329,14 @@ func TestAFunctionImageIsWrappedInTheRuntimeWhereTheProviderShipsOne(t *testing.
 	if slices.Contains(files, strings.TrimPrefix(images.NodeRuntimeRoot, "/")) {
 		t.Errorf("the image contains a file at %s, where the node runtime's directory belongs, and a file over a directory cannot be loaded", images.NodeRuntimeRoot)
 	}
-	if asked := provider.WrappedFor(); !slices.Equal(asked, []string{"amd64"}) {
+	if asked := vendor.WrappedFor(); !slices.Equal(asked, []string{"amd64"}) {
 		t.Errorf("the provider was asked for a runtime built for %v, want the architecture the function is built for", asked)
 	}
 	digest, err := pushed[0].Built.Digest()
 	if err != nil {
 		t.Fatal(err)
 	}
-	specs := provider.FakeStacks().Provisioned()
+	specs := vendor.FakeStacks().Provisioned()
 	if spec := specs[len(specs)-1].App.Functions[0]; !strings.HasSuffix(spec.Image, "@"+digest.String()) {
 		t.Errorf("the function spec runs %q, want it pinned to the wrapped image's digest %s", spec.Image, digest)
 	}

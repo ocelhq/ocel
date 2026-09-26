@@ -33,8 +33,8 @@ type Ledger struct {
 
 var _ edge.Ledger = (*Ledger)(nil)
 
-func New(records records.Store, class edge.Class, slug string) *Ledger {
-	return &Ledger{records: records, scope: Scope(class, slug)}
+func New(store records.Store, class edge.Class, slug string) *Ledger {
+	return &Ledger{records: store, scope: Scope(class, slug)}
 }
 
 func Scope(class edge.Class, slug string) string {

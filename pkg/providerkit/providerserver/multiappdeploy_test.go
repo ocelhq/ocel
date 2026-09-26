@@ -140,8 +140,8 @@ func TestDeployStartsTheAppsStillQueuedWhenAnEarlyAppFails(t *testing.T) {
 
 func TestDeployProvisionsAppsAtTheSameTime(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
-	provider.FakeStacks().Entering(appBarrier(t, 2))
+	client, vendor := deployServed(t)
+	vendor.FakeStacks().Entering(appBarrier(t, 2))
 
 	result, _ := deploy(t, client, twoAppRequest())
 	if result == nil || !result.GetSuccess() {

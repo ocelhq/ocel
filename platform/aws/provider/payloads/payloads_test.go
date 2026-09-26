@@ -54,9 +54,9 @@ func TestPayloads(t *testing.T) {
 	}
 }
 
-func runtimeLayerFor(arch string) func() Payload {
+func runtimeLayerFor(architecture string) func() Payload {
 	return func() Payload {
-		layer, err := RuntimeLayer(arch)
+		layer, err := RuntimeLayer(architecture)
 		if err != nil {
 			panic(err)
 		}

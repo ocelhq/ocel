@@ -170,9 +170,9 @@ func quotedPath(path string) string { return "'" + path + "'" }
 func sealingStore(t *testing.T, declared ...string) string {
 	t.Helper()
 	machine := &box{}
-	provider := over(machine)
+	vendor := over(machine)
 	for _, name := range declared {
-		if _, err := provider.ProvisionBucket(context.Background(), aBucket(t, name, false), nil); err != nil {
+		if _, err := vendor.ProvisionBucket(context.Background(), aBucket(t, name, false), nil); err != nil {
 			t.Fatalf("Bucket(%s) = %v", name, err)
 		}
 	}

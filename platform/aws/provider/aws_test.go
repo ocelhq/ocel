@@ -206,9 +206,9 @@ func TestClassParamsReadTheEdgeTheyAreGiven(t *testing.T) {
 
 func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	refusal := refusal.Refuse(refusal.CodeNotReady, "/ocel/origin/secret contains something other than the origin secret bootstrap writes")
+	refused := refusal.Refuse(refusal.CodeNotReady, "/ocel/origin/secret contains something other than the origin secret bootstrap writes")
 	if _, err := p.params.resolve(classEdge{class: edge.ClassProduction, kind: cloudflare.Kind}, func() (bootstrap.ClassParams, error) {
-		return bootstrap.ClassParams{OriginSecretErr: refusal}, nil
+		return bootstrap.ClassParams{OriginSecretErr: refused}, nil
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
 		Deploy: provider.DeploySpec{Class: edge.ClassProduction},
 		Edge:   cloudflare.Kind,
 	}
-	if err := p.refuseUnreadableOriginSecret(context.Background(), pre); !errors.Is(err, refusal) {
+	if err := p.refuseUnreadableOriginSecret(context.Background(), pre); !errors.Is(err, refused) {
 		t.Fatalf("preflight = %v, want the refusal: a deploy hands every release the secret the edge presents", err)
 	}
 }

@@ -104,7 +104,7 @@ type Config struct {
 }
 
 type Propagation interface {
-	Await(ctx context.Context, records []edge.Record, say func(string)) error
+	Await(ctx context.Context, dnsRecords []edge.Record, say func(string)) error
 }
 
 func collectPostgresBinding(ctx context.Context, secrets SecretsAPI, name string, fields map[string]any) (*bindingsv1.Binding, error) {

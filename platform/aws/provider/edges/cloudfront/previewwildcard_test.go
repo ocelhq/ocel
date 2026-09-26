@@ -344,12 +344,12 @@ func TestDestroyPreviewWildcardLeavesTheEntryAnotherNamespaceIsServingPreviewsTh
 	}
 
 	err := e.DestroyPreviewWildcard(context.Background(), previewBase)
-	var refusal refusal.Refusal
-	if !errors.As(err, &refusal) {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
 		t.Fatalf("DestroyPreviewWildcard = %v, want a refusal: %s still routes every preview on %s through this one distribution", err, other, previewBase)
 	}
-	if !strings.Contains(refusal.Message, string(other)) {
-		t.Errorf("refusal = %q, want it to name the namespace still serving previews through the shared entry", refusal.Message)
+	if !strings.Contains(refused.Message, string(other)) {
+		t.Errorf("refusal = %q, want it to name the namespace still serving previews through the shared entry", refused.Message)
 	}
 	if w.front.named(previewWildcardName(previewBase)) == nil {
 		t.Error("the shared preview entry was deleted anyway, so every preview another namespace serves on it now answers nothing")

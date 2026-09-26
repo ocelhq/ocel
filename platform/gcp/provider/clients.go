@@ -69,8 +69,8 @@ func opened[T any](c *clients, cache *memo[T], doing string, open func() (T, err
 		return client, nil
 	}
 	var nothing T
-	var refusal refusal.Refusal
-	if errors.As(err, &refusal) {
+	var refused refusal.Refusal
+	if errors.As(err, &refused) {
 		return nothing, err
 	}
 	return nothing, fmt.Errorf("open the %s client for project %s: %w", doing, c.project, err)

@@ -238,11 +238,11 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	if unit := planFor(shimming, unitName); unit.Action != provider.ActionCreate {
 		t.Errorf("a binary with no %s plans %q for the unit, want the install that brings one", unitName, unit.Action)
 	}
-	refusal := refused(t, bootstrap.Apply(ctx,
+	got := refused(t, bootstrap.Apply(ctx,
 		provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: shimmed.VendorState, RefuseReplacements: true}, nil),
 		refusal.CodeNotReady)
-	if !strings.Contains(refusal.Message, engineName) {
+	if !strings.Contains(got.Message, engineName) {
 		t.Errorf("an apply that refuses replacements over a docker binary with no unit says %q, want it refused by name: running %s as root over an install that already exists replaces it, and this apply refuses replacements",
-			refusal.Message, "https://get.docker.com")
+			got.Message, "https://get.docker.com")
 	}
 }

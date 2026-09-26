@@ -28,20 +28,20 @@ func RefusalError(err error) error {
 	if errors.As(err, &trust) {
 		return hostTrustError(trust)
 	}
-	var refusal refusal.Refusal
-	if !errors.As(err, &refusal) {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
 		var already *connect.Error
 		if errors.As(err, &already) {
 			return err
 		}
 		return connect.NewError(connect.CodeInternal, err)
 	}
-	code, ok := refusalCodes[refusal.Code]
+	code, ok := refusalCodes[refused.Code]
 	if !ok {
 		code = connect.CodeInternal
 	}
-	wire := connect.NewError(code, errors.New(refusal.Message))
-	if detail, err := connect.NewErrorDetail(&contractv1.Refusal{Code: wireRefusalCodes[refusal.Code]}); err == nil {
+	wire := connect.NewError(code, errors.New(refused.Message))
+	if detail, err := connect.NewErrorDetail(&contractv1.Refusal{Code: wireRefusalCodes[refused.Code]}); err == nil {
 		wire.AddDetail(detail)
 	}
 	return wire
@@ -57,9 +57,9 @@ var wireRefusalCodes = map[refusal.Code]contractv1.RefusalCode{
 }
 
 func RefusedCode(err error) (refusal.Code, bool) {
-	var refusal refusal.Refusal
-	if errors.As(err, &refusal) {
-		return refusal.Code, true
+	var refused refusal.Refusal
+	if errors.As(err, &refused) {
+		return refused.Code, true
 	}
 	var wire *connect.Error
 	if !errors.As(err, &wire) {

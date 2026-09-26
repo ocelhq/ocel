@@ -152,8 +152,8 @@ func (s EdgeState) Uses(id string) bool {
 	return false
 }
 
-func mergeRecords(into, records []edge.Record) []edge.Record {
-	for _, rec := range records {
+func mergeRecords(into, dnsRecords []edge.Record) []edge.Record {
+	for _, rec := range dnsRecords {
 		if !slices.Contains(into, rec) {
 			into = append(into, rec)
 		}
@@ -184,12 +184,12 @@ func ReadWildcard(ctx context.Context, store records.Store) (Wildcard, error) {
 	return wildcard, nil
 }
 
-func ProjectsServedOnPreview(ctx context.Context, records records.Store, baseDomain string) ([]string, error) {
+func ProjectsServedOnPreview(ctx context.Context, store records.Store, baseDomain string) ([]string, error) {
 	if baseDomain == "" {
 		return nil, nil
 	}
 	under := EdgeStacksRecord(edge.ClassPreview)
-	recorded, err := records.List(ctx, under)
+	recorded, err := store.List(ctx, under)
 	if err != nil {
 		return nil, fmt.Errorf("read the projects served on %s: %w", edge.PreviewWildcard(baseDomain), err)
 	}

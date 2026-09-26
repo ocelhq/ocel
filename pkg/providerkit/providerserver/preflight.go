@@ -168,11 +168,11 @@ func (h *handlers) domainClaims(ctx context.Context, p provider.Provider, class 
 	return claims, nil
 }
 
-func boundHere(ctx context.Context, records records.Store, class edge.Class, slug string) ([]string, error) {
+func boundHere(ctx context.Context, store records.Store, class edge.Class, slug string) ([]string, error) {
 	if slug == "" {
 		return nil, nil
 	}
-	state, err := (edgeStateStore{records: records, name: stackrecords.EdgeStackRecord(class, slug)}).read(ctx)
+	state, err := (edgeStateStore{records: store, name: stackrecords.EdgeStackRecord(class, slug)}).read(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -237,10 +237,10 @@ var credentialTrouble = map[refusal.Code]string{
 
 func CredentialProblemProto(vendor provider.Vendor, err error) *contractv1.CredentialProblem {
 	problem := &contractv1.CredentialProblem{Provider: string(vendor)}
-	var refusal refusal.Refusal
-	if errors.As(err, &refusal) {
-		if trouble, named := credentialTrouble[refusal.Code]; named {
-			problem.Message, problem.Hint = trouble, refusal.Message
+	var refused refusal.Refusal
+	if errors.As(err, &refused) {
+		if trouble, named := credentialTrouble[refused.Code]; named {
+			problem.Message, problem.Hint = trouble, refused.Message
 			return problem
 		}
 	}

@@ -140,9 +140,9 @@ func RefuseHostTrust(trust HostTrust) error {
 }
 
 func HostTrustOf(err error) (HostTrust, bool) {
-	var refusal HostTrustRefusal
-	if errors.As(err, &refusal) {
-		return refusal.Trust, true
+	var refused HostTrustRefusal
+	if errors.As(err, &refused) {
+		return refused.Trust, true
 	}
 	var wire *connect.Error
 	if !errors.As(err, &wire) {
@@ -205,9 +205,9 @@ func hostTrustFrom(refused *contractv1.HostTrustRefusal) HostTrust {
 	return trust
 }
 
-func hostTrustError(refusal HostTrustRefusal) error {
-	wire := connect.NewError(connect.CodePermissionDenied, errors.New(refusal.Message))
-	if detail, err := connect.NewErrorDetail(HostTrustProto(refusal.Trust)); err == nil {
+func hostTrustError(refused HostTrustRefusal) error {
+	wire := connect.NewError(connect.CodePermissionDenied, errors.New(refused.Message))
+	if detail, err := connect.NewErrorDetail(HostTrustProto(refused.Trust)); err == nil {
 		wire.AddDetail(detail)
 	}
 	return wire

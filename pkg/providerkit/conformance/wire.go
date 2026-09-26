@@ -41,10 +41,10 @@ func runWire(t *testing.T, suite Suite) {
 		server := httptest.NewServer(providerserver.ConformanceMux(suite.Server))
 		t.Cleanup(server.Close)
 
-		provider := client(server.Client(), server.URL)
-		enforcesTheSessionRules(t, provider, suite.Options)
+		served := client(server.Client(), server.URL)
+		enforcesTheSessionRules(t, served, suite.Options)
 		t.Run("names the computes it runs", func(t *testing.T) {
-			namesTheComputesItRuns(t, suite, provider)
+			namesTheComputesItRuns(t, suite, served)
 		})
 	})
 
@@ -55,27 +55,27 @@ func runWire(t *testing.T, suite Suite) {
 		server := httptest.NewServer(providerserver.ConformanceMux(suite.Server))
 		t.Cleanup(server.Close)
 
-		provider := client(server.Client(), server.URL)
-		if _, err := provider.Configure(context.Background(), configureWith(t, suite.Options)); err != nil {
+		served := client(server.Client(), server.URL)
+		if _, err := served.Configure(context.Background(), configureWith(t, suite.Options)); err != nil {
 			t.Fatalf("Configure() error = %v, want the session configured", err)
 		}
-		saysWhatItWouldChange(t, provider)
+		saysWhatItWouldChange(t, served)
 	})
 
 	t.Run("spawned", func(t *testing.T) {
 		if suite.Binary == "" {
 			t.Skip("the suite names no binary, so there is nothing to spawn")
 		}
-		provider := spawn(t, suite.Binary)
+		child := spawn(t, suite.Binary)
 
-		provider.refusesAnUnpairedClient(t)
-		paired := client(provider.http, providerURL)
+		child.refusesAnUnpairedClient(t)
+		paired := client(child.http, providerURL)
 		enforcesTheSessionRules(t, paired, suite.Options)
 		t.Run("names the computes it runs", func(t *testing.T) {
 			namesTheComputesItRuns(t, suite, paired)
 		})
 
-		provider.stopsOnSIGTERM(t)
+		child.stopsOnSIGTERM(t)
 	})
 }
 
@@ -143,13 +143,13 @@ func enforcesTheSessionRules(t *testing.T, providerClient contractv1connect.Prov
 	}
 }
 
-func saysWhatItWouldChange(t *testing.T, provider contractv1connect.ProviderServiceClient) {
+func saysWhatItWouldChange(t *testing.T, client contractv1connect.ProviderServiceClient) {
 	t.Helper()
 
 	scope := &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PREVIEW}
 
-	drawn := bootstrapStream(t, provider, &contractv1.BootstrapRequest{Tier: scope.GetTier(), Dry: true})
-	applied := bootstrapStream(t, provider, scope)
+	drawn := bootstrapStream(t, client, &contractv1.BootstrapRequest{Tier: scope.GetTier(), Dry: true})
+	applied := bootstrapStream(t, client, scope)
 	for _, fault := range faults(drawn, applied) {
 		t.Error(fault)
 	}
@@ -192,10 +192,10 @@ func (s *streamed) observe(event *progressv1.OperationEvent) {
 	}
 }
 
-func bootstrapStream(t *testing.T, provider contractv1connect.ProviderServiceClient, req *contractv1.BootstrapRequest) streamed {
+func bootstrapStream(t *testing.T, client contractv1connect.ProviderServiceClient, req *contractv1.BootstrapRequest) streamed {
 	t.Helper()
 
-	stream, err := provider.Bootstrap(context.Background(), req)
+	stream, err := client.Bootstrap(context.Background(), req)
 	if err != nil {
 		t.Fatalf("Bootstrap() error = %v", err)
 	}
@@ -265,14 +265,14 @@ func spawn(t *testing.T, binary string) *spawned {
 		t.Fatalf("start %s: %v", binary, err)
 	}
 
-	provider := &spawned{cmd: cmd, exit: make(chan error, 1)}
-	go func() { provider.exit <- cmd.Wait() }()
+	child := &spawned{cmd: cmd, exit: make(chan error, 1)}
+	go func() { child.exit <- cmd.Wait() }()
 	t.Cleanup(func() {
-		if provider.exited {
+		if child.exited {
 			return
 		}
 		_ = cmd.Process.Kill()
-		provider.wait(readyTimeout)
+		child.wait(readyTimeout)
 	})
 
 	ready := make(chan channel.Readiness, 1)
@@ -300,14 +300,14 @@ func spawn(t *testing.T, binary string) *spawned {
 		if err != nil {
 			t.Fatalf("ClientConfig() error = %v", err)
 		}
-		provider.serverCert = signalled.Cert
-		provider.network, provider.address = network, address
-		provider.http = channel.HTTPClient(network, address, config)
+		child.serverCert = signalled.Cert
+		child.network, child.address = network, address
+		child.http = channel.HTTPClient(network, address, config)
 	case <-time.After(readyTimeout):
 		t.Fatalf("%s did not signal readiness within %s", binary, readyTimeout)
 	}
 
-	return provider
+	return child
 }
 
 func (s *spawned) wait(timeout time.Duration) bool {

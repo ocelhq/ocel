@@ -81,18 +81,18 @@ func dnsFor(p provider.Provider, front edge.Edge, sel *contractv1.EdgeSelection)
 }
 
 func (h *handlers) openEdgeSession(ctx context.Context, class edge.Class, slug string, sel *contractv1.EdgeSelection) (*edgeSession, error) {
-	provider, err := h.session.use()
+	vendor, err := h.session.use()
 	if err != nil {
 		return nil, err
 	}
 	if slug == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid, "this call names no project, and an edge stack belongs to one")
 	}
-	front, err := h.edgeFor(provider, sel)
+	front, err := h.edgeFor(vendor, sel)
 	if err != nil {
 		return nil, err
 	}
-	store := edgeStateStore{records: provider.Records(), name: stackrecords.EdgeStackRecord(class, slug)}
+	store := edgeStateStore{records: vendor.Records(), name: stackrecords.EdgeStackRecord(class, slug)}
 	state, err := store.read(ctx)
 	if err != nil {
 		return nil, err
@@ -104,11 +104,11 @@ func (h *handlers) openEdgeSession(ctx context.Context, class edge.Class, slug s
 	if err != nil {
 		return nil, err
 	}
-	writer, err := dnsFor(provider, front, sel)
+	writer, err := dnsFor(vendor, front, sel)
 	if err != nil {
 		return nil, err
 	}
-	session := &edgeSession{provider: provider, front: front, stack: stack, store: store, state: state}
+	session := &edgeSession{provider: vendor, front: front, stack: stack, store: store, state: state}
 	session.installDNSCutover(writer, sel.GetDns().GetZone())
 	return session, nil
 }

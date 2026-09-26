@@ -206,8 +206,8 @@ func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 	return nil
 }
 
-func edgeOver(m *machine, records records.Store) *box.Edge {
-	return box.New(m, m.ApplyOrigins, records, sshScope)
+func edgeOver(m *machine, store records.Store) *box.Edge {
+	return box.New(m, m.ApplyOrigins, store, sshScope)
 }
 
 func (m *machine) ApplyOrigins(_ context.Context, project string, class edge.Class) error {
@@ -493,8 +493,8 @@ func TestAPromotionOvertakenWhileItGatedNeverFlipsTheBoxAwayFromTheOneThatOverto
 	t.Parallel()
 
 	m := aMachine()
-	records := fake.NewRecords()
-	front := edgeOver(m, records)
+	store := fake.NewRecords()
+	front := edgeOver(m, store)
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Class: edge.ClassProduction, Slug: slug,
 	}, edge.StackState{})
@@ -509,7 +509,7 @@ func TestAPromotionOvertakenWhileItGatedNeverFlipsTheBoxAwayFromTheOneThatOverto
 	}
 	m.releasing = func(rel host.Release) error {
 		m.releasing = nil
-		overtaking := kitledger.New(records, edge.ClassProduction, slug)
+		overtaking := kitledger.New(store, edge.ClassProduction, slug)
 		if err := overtaking.Promote(context.Background(), edge.Promotion{PromotionID: "p3", Builds: map[string]string{"web": "b3"}}, "", edge.DiscardProgress()); err != nil {
 			t.Fatalf("Promote(p3): %v", err)
 		}
@@ -674,13 +674,13 @@ func TestABoundHostnameIsClaimedOnTheProxyAndPointedAtTheBoxItself(t *testing.T)
 	if owner != box.Surface(slug, edge.ClassProduction) {
 		t.Errorf("DomainOwner(%q) = %q, want the surface the binding claimed it for", hostname, owner)
 	}
-	records, err := edge.RecordsFor(edge.TargetFor(front, stack.State()), stack.State().Bound)
+	dnsRecords, err := edge.RecordsFor(edge.TargetFor(front, stack.State()), stack.State().Bound)
 	if err != nil {
 		t.Fatalf("RecordsFor: %v", err)
 	}
 	want := edge.Record{Name: hostname, Type: edge.RecordTypeA, Value: address}
-	if len(records) != 1 || records[0] != want {
-		t.Errorf("records = %v, want %v: a box answers on an address rather than a name, so the record that points at it is an A record", records, want)
+	if len(dnsRecords) != 1 || dnsRecords[0] != want {
+		t.Errorf("records = %v, want %v: a box answers on an address rather than a name, so the record that points at it is an A record", dnsRecords, want)
 	}
 	if !slices.Contains(m.calls, "claim "+hostname) {
 		t.Errorf("the binding never claimed %q on the proxy (%v), and nothing on the box would then say which project answers it", hostname, m.calls)

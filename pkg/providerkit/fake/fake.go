@@ -54,21 +54,21 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 
 func NewProvider(options Options) *Provider {
 	journal := &Journal{}
-	records := NewRecords()
-	records.journal = journal
+	store := NewRecords()
+	store.journal = journal
 	artifacts := NewArtifacts()
 	artifacts.journal = journal
 	p := &Provider{
 		journal:   journal,
 		options:   options,
-		records:   records,
+		records:   store,
 		artifacts: artifacts,
 		images:    NewImages(),
 		cipher:    NewCipher(),
 		bootstrap: NewBootstrap(),
 		stacks:    NewStacks(artifacts).journalling(journal),
 		creds:     NewCredentials(options.Region),
-		edges:     NewEdges(records),
+		edges:     NewEdges(store),
 		dns:       NewDNS(),
 
 		runtimeArch:   "amd64",

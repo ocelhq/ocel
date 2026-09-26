@@ -53,8 +53,8 @@ type Edge struct {
 
 var _ edge.Edge = (*Edge)(nil)
 
-func New(machine Machine, origins Origins, records records.Store, scope string) *Edge {
-	return &Edge{machine: machine, origins: origins, records: records, scope: scope}
+func New(machine Machine, origins Origins, store records.Store, scope string) *Edge {
+	return &Edge{machine: machine, origins: origins, records: store, scope: scope}
 }
 
 func (e *Edge) Kind() edge.Kind { return Kind }

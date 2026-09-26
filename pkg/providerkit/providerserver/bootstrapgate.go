@@ -402,12 +402,12 @@ func (g Gate) heal(ctx context.Context, status BootstrapStatus, required []strin
 	return true
 }
 
-func denied(refusal refusal.Refusal) string {
+func denied(refused refusal.Refusal) string {
 	said := "this run may not refresh what this bootstrap has fallen behind on, so it is left in place"
-	if refusal.Message == "" {
+	if refused.Message == "" {
 		return said
 	}
-	return said + ": " + refusal.Message
+	return said + ": " + refused.Message
 }
 
 func (g Gate) autoHeal(ctx context.Context, class edge.Class) (bool, error) {

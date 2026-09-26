@@ -133,11 +133,11 @@ func TestTheReleasePortRefusesTheResourcesThisProviderServesNoneOf(t *testing.T)
 		Resources: []provider.Resource{{Name: "orders", Type: provider.BindingPostgres}},
 	}
 
-	var refusal refusal.Refusal
-	if _, err := release.Plan(ctx, spec, nil); !errors.As(err, &refusal) {
+	var refused refusal.Refusal
+	if _, err := release.Plan(ctx, spec, nil); !errors.As(err, &refused) {
 		t.Errorf("Plan() of a resource this provider serves none of = %v, want a refusal", err)
 	}
-	if _, err := release.Provision(ctx, spec, nil); !errors.As(err, &refusal) {
+	if _, err := release.Provision(ctx, spec, nil); !errors.As(err, &refused) {
 		t.Errorf("Provision() of a resource this provider serves none of = %v, want a refusal rather than a release that reads as done", err)
 	}
 }

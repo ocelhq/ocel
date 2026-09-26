@@ -67,7 +67,7 @@ func liveServiceUnit() []byte {
 	}, "\n"))
 }
 
-func liveAgent(arch string) []byte { return embedded(liveBinaryName, arch) }
+func liveAgent(architecture string) []byte { return embedded(liveBinaryName, architecture) }
 
 func ContainerArch(app, declared, runs string) (string, error) {
 	if declared == "" {
@@ -81,16 +81,16 @@ func ContainerArch(app, declared, runs string) (string, error) {
 	return runs, nil
 }
 
-func ContainerRuntime(arch string) ([]byte, error) {
-	named, err := Architecture(arch)
+func ContainerRuntime(architecture string) ([]byte, error) {
+	named, err := Architecture(architecture)
 	if err != nil {
 		return nil, err
 	}
 	return embedded(runtimeName, named), nil
 }
 
-func LiveItems(arch string) []Item {
-	socket, service, agent := liveSocketUnit(), liveServiceUnit(), liveAgent(arch)
+func LiveItems(architecture string) []Item {
+	socket, service, agent := liveSocketUnit(), liveServiceUnit(), liveAgent(architecture)
 	return []Item{
 		{Kind: KindFile, Name: LiveBinary, Mode: 0o755, Owner: rootOwner, Content: agent,
 			Note: "serves apps their secret values"},

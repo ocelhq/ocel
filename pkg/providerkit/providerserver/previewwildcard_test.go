@@ -39,26 +39,26 @@ func usePreviewWildcard(t *testing.T, client contractv1connect.ProviderServiceCl
 	return result
 }
 
-func seedWildcard(t *testing.T, provider *fake.Provider, wildcard stackrecords.Wildcard) {
+func seedWildcard(t *testing.T, vendor *fake.Provider, wildcard stackrecords.Wildcard) {
 	t.Helper()
 	encoded, err := json.Marshal(wildcard)
 	if err != nil {
 		t.Fatal(err)
 	}
 	name := stackrecords.WildcardRecord(edge.ClassPreview)
-	record, err := records.ReadOrEmpty(context.Background(), provider.Records(), name)
+	record, err := records.ReadOrEmpty(context.Background(), vendor.Records(), name)
 	if err != nil {
 		t.Fatal(err)
 	}
 	record.Bytes = encoded
-	if _, err := provider.Records().Write(context.Background(), record); err != nil {
+	if _, err := vendor.Records().Write(context.Background(), record); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func readRecordedWildcard(t *testing.T, provider *fake.Provider) stackrecords.Wildcard {
+func readRecordedWildcard(t *testing.T, vendor *fake.Provider) stackrecords.Wildcard {
 	t.Helper()
-	record, err := records.ReadOrEmpty(context.Background(), provider.Records(), stackrecords.WildcardRecord(edge.ClassPreview))
+	record, err := records.ReadOrEmpty(context.Background(), vendor.Records(), stackrecords.WildcardRecord(edge.ClassPreview))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,38 +73,38 @@ func readRecordedWildcard(t *testing.T, provider *fake.Provider) stackrecords.Wi
 
 func TestUsePreviewWildcardDiscardsTheCertificateItSupersedes(t *testing.T) {
 	t.Parallel()
-	client, provider := contractServed(t, "1.0.0")
-	provider.RequireValidationRecords(validationRecord)
+	client, vendor := contractServed(t, "1.0.0")
+	vendor.RequireValidationRecords(validationRecord)
 	if result := usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com")); !result.GetSuccess() {
 		t.Fatalf("UsePreviewWildcard() = %q, want the wildcard raised", result.GetError())
 	}
 
-	provider.RotateCertificates()
-	provider.RequireValidationRecords(rotatedValidationRecord)
+	vendor.RotateCertificates()
+	vendor.RequireValidationRecords(rotatedValidationRecord)
 	if result := usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com")); !result.GetSuccess() {
 		t.Fatalf("UsePreviewWildcard() = %q, want the rotation cut over", result.GetError())
 	}
 
-	if discarded := provider.Discarded(); !slices.Contains(discarded, "issued-for-*.preview.acme.com") {
+	if discarded := vendor.Discarded(); !slices.Contains(discarded, "issued-for-*.preview.acme.com") {
 		t.Errorf("the provider discarded %v, want the superseded certificate among them", discarded)
 	}
-	if wildcard := readRecordedWildcard(t, provider); len(wildcard.Host.Superseded) != 0 {
+	if wildcard := readRecordedWildcard(t, vendor); len(wildcard.Host.Superseded) != 0 {
 		t.Errorf("the record still has %+v, want the discarded certificate forgotten", wildcard.Host.Superseded)
 	}
-	if records := provider.DNS().(*fake.DNS).Zone("acme.com").Records(); slices.Contains(records, validationRecord) {
-		t.Errorf("the zone still contains %v, want the superseded validation record released", records)
+	if dnsRecords := vendor.DNS().(*fake.DNS).Zone("acme.com").Records(); slices.Contains(dnsRecords, validationRecord) {
+		t.Errorf("the zone still contains %v, want the superseded validation record released", dnsRecords)
 	}
 }
 
 func TestUsePreviewWildcardRaisesTheEntryAndRecordsItsOwningEdge(t *testing.T) {
 	t.Parallel()
-	client, provider := contractServed(t, "1.0.0")
+	client, vendor := contractServed(t, "1.0.0")
 
 	if result := usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com")); !result.GetSuccess() {
 		t.Fatalf("UsePreviewWildcard() = %q, want the wildcard raised", result.GetError())
 	}
 
-	if raised := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Wildcard(); raised != "preview.acme.com" {
+	if raised := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Wildcard(); raised != "preview.acme.com" {
 		t.Errorf("the %s edge serves %q, want preview.acme.com reconciled on it", fake.KindRelay, raised)
 	}
 	got, err := client.GetPreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
@@ -131,13 +131,13 @@ func TestUsePreviewWildcardRaisesTheEntryAndRecordsItsOwningEdge(t *testing.T) {
 
 func TestUsePreviewWildcardOpensItsDNSForTheEdgeTheSelectionNames(t *testing.T) {
 	t.Parallel()
-	client, provider := contractServed(t, "1.0.0")
+	client, vendor := contractServed(t, "1.0.0")
 
 	selected := zoned("acme.com")
 	selected.Kind = string(fake.KindRelay)
 	usePreviewWildcard(t, client, "preview.acme.com", selected)
 
-	if fronts := provider.DNS().(*fake.DNS).Fronts(); !slices.Equal(fronts, []edge.Kind{fake.KindRelay}) {
+	if fronts := vendor.DNS().(*fake.DNS).Fronts(); !slices.Equal(fronts, []edge.Kind{fake.KindRelay}) {
 		t.Errorf("the DNS was opened under %v, want the %s edge the selection names", fronts, fake.KindRelay)
 	}
 }
@@ -182,13 +182,13 @@ func TestUsePreviewWildcardRefusesAWildcardArgument(t *testing.T) {
 
 func TestGetPreviewWildcardNamesTheProjectsServedOnIt(t *testing.T) {
 	t.Parallel()
-	client, provider := contractServed(t, "1.0.0")
+	client, vendor := contractServed(t, "1.0.0")
 	usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com"))
 
-	seedStack(t, provider, edge.ClassPreview, "shop", stackrecords.EdgeState{
+	seedStack(t, vendor, edge.ClassPreview, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{Slug: "shop", Class: edge.ClassPreview, GlobalPreview: "preview.acme.com"},
 	})
-	seedStack(t, provider, edge.ClassPreview, "blog", stackrecords.EdgeState{
+	seedStack(t, vendor, edge.ClassPreview, "blog", stackrecords.EdgeState{
 		Edge: edge.StackState{Slug: "blog", Class: edge.ClassPreview, GlobalPreview: "elsewhere.acme.com"},
 	})
 
@@ -205,12 +205,12 @@ func TestGetPreviewWildcardNamesTheProjectsServedOnIt(t *testing.T) {
 
 func TestPlanRemovePreviewWildcardRefusesWhileAProjectStillHasLivePreviews(t *testing.T) {
 	t.Parallel()
-	client, provider := contractServed(t, "1.0.0")
+	client, vendor := contractServed(t, "1.0.0")
 	usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com"))
-	seedStack(t, provider, edge.ClassPreview, "shop", stackrecords.EdgeState{
+	seedStack(t, vendor, edge.ClassPreview, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{Slug: "shop", Class: edge.ClassPreview, GlobalPreview: "preview.acme.com"},
 	})
-	seedEnvironment(t, provider, "shop", naming.AppStack("pr-7", "web", naming.NewRelease("b1", "")))
+	seedEnvironment(t, vendor, "shop", naming.AppStack("pr-7", "web", naming.NewRelease("b1", "")))
 
 	if _, err := client.PlanRemovePreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
 		Tier: environmentv1.Tier_TIER_PREVIEW,
@@ -249,7 +249,7 @@ func TestPlanRemovePreviewWildcardNamesWhatGoesAndWhatStays(t *testing.T) {
 
 func TestRemovePreviewWildcardTearsItDownAndForgetsIt(t *testing.T) {
 	t.Parallel()
-	client, provider := contractServed(t, "1.0.0")
+	client, vendor := contractServed(t, "1.0.0")
 	usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com"))
 
 	stream, err := client.RemovePreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
@@ -267,10 +267,10 @@ func TestRemovePreviewWildcardTearsItDownAndForgetsIt(t *testing.T) {
 		t.Fatalf("RemovePreviewWildcard() = %q, want the wildcard released", result.GetError())
 	}
 
-	if raised := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Wildcard(); raised != "" {
+	if raised := vendor.Edges().(*fake.Edges).Edge(fake.KindRelay).Wildcard(); raised != "" {
 		t.Errorf("the %s edge still serves %q", fake.KindRelay, raised)
 	}
-	if written := provider.DNS().(*fake.DNS).Zone("acme.com").Records(); len(written) != 0 {
+	if written := vendor.DNS().(*fake.DNS).Zone("acme.com").Records(); len(written) != 0 {
 		t.Errorf("the zone still contains %v, want the records ocel wrote taken back", written)
 	}
 	got, err := client.GetPreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
@@ -286,13 +286,13 @@ func TestRemovePreviewWildcardTearsItDownAndForgetsIt(t *testing.T) {
 
 func TestRemovePreviewWildcardOpensItsDNSForTheEdgeThatOwnsIt(t *testing.T) {
 	t.Parallel()
-	client, provider := contractServed(t, "1.0.0")
+	client, vendor := contractServed(t, "1.0.0")
 	selection := zoned("acme.com")
 	selection.Kind = string(fake.KindDirect)
 	if result := usePreviewWildcard(t, client, "preview.acme.com", selection); !result.GetSuccess() {
 		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
 	}
-	opened := len(provider.DNS().(*fake.DNS).Fronts())
+	opened := len(vendor.DNS().(*fake.DNS).Fronts())
 
 	stream, err := client.RemovePreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
 		Tier: environmentv1.Tier_TIER_PREVIEW,
@@ -304,7 +304,7 @@ func TestRemovePreviewWildcardOpensItsDNSForTheEdgeThatOwnsIt(t *testing.T) {
 	if result, err := drain(stream); err != nil || !result.GetSuccess() {
 		t.Fatalf("RemovePreviewWildcard() = %q, %v", result.GetError(), err)
 	}
-	fronts := provider.DNS().(*fake.DNS).Fronts()[opened:]
+	fronts := vendor.DNS().(*fake.DNS).Fronts()[opened:]
 	if !slices.Equal(fronts, []edge.Kind{fake.KindDirect}) {
 		t.Errorf("the release opened its DNS under %v, want the %s edge that owns the wildcard", fronts, fake.KindDirect)
 	}
@@ -312,9 +312,9 @@ func TestRemovePreviewWildcardOpensItsDNSForTheEdgeThatOwnsIt(t *testing.T) {
 
 func TestRemovePreviewWildcardRefusesWhenNothingRecordsItsOwningEdge(t *testing.T) {
 	t.Parallel()
-	client, provider := contractServed(t, "1.0.0")
+	client, vendor := contractServed(t, "1.0.0")
 
-	seedWildcard(t, provider, stackrecords.Wildcard{BaseDomain: "preview.acme.com"})
+	seedWildcard(t, vendor, stackrecords.Wildcard{BaseDomain: "preview.acme.com"})
 
 	stream, err := client.RemovePreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
 		Tier: environmentv1.Tier_TIER_PREVIEW,

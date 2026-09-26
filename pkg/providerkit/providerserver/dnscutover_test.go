@@ -137,21 +137,21 @@ func (f frontOf) Facts() edge.Facts { return edge.Facts{} }
 func TestTheCutoverAsksTheProvidersProbeWhichEdgeAnswers(t *testing.T) {
 	t.Parallel()
 
-	provider := &boxProvider{answers: "box"}
-	cutover := newDNSCutover(frontOf{kind: "box"}, nil, "", provider.Liveness())
+	vendor := &boxProvider{answers: "box"}
+	cutover := newDNSCutover(frontOf{kind: "box"}, nil, "", vendor.Liveness())
 	if kind, err := cutover.attempt(context.Background(), "shop.example.com"); err != nil || kind != "box" {
 		t.Fatalf("attempt() = %q, %v, want the edge the provider's own probe answered", kind, err)
 	}
-	if len(provider.asked) != 1 || provider.asked[0] != "shop.example.com" || provider.kinds[0] != "box" {
-		t.Errorf("the provider was asked %v as %v, want the hostname being cut over and the edge it is cut over onto", provider.asked, provider.kinds)
+	if len(vendor.asked) != 1 || vendor.asked[0] != "shop.example.com" || vendor.kinds[0] != "box" {
+		t.Errorf("the provider was asked %v as %v, want the hostname being cut over and the edge it is cut over onto", vendor.asked, vendor.kinds)
 	}
 }
 
 func TestTheCutoverRefusesAHostnameAnotherEdgeAnswersOn(t *testing.T) {
 	t.Parallel()
 
-	provider := &boxProvider{answers: "cloudfront"}
-	cutover, _ := waiting(provider.Liveness(), 3)
+	vendor := &boxProvider{answers: "cloudfront"}
+	cutover, _ := waiting(vendor.Liveness(), 3)
 	cutover.kind = "box"
 
 	probe, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
@@ -165,8 +165,8 @@ func TestTheCutoverRefusesAHostnameAnotherEdgeAnswersOn(t *testing.T) {
 	if probe.OK || probe.Edge != "cloudfront" {
 		t.Errorf("await() = %+v, want the probe to record the edge that actually answered", probe)
 	}
-	if len(provider.asked) != 3 {
-		t.Errorf("the provider's probe was asked %d time(s), want every attempt the cutover makes", len(provider.asked))
+	if len(vendor.asked) != 3 {
+		t.Errorf("the provider's probe was asked %d time(s), want every attempt the cutover makes", len(vendor.asked))
 	}
 }
 
@@ -209,15 +209,15 @@ func TestADeployGivesUpOnceItsMinuteHasPassedHoweverLongEachAttemptTakes(t *test
 	}, cutoverBudget)
 
 	_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
-	var refusal refusal.Refusal
-	if !errors.As(err, &refusal) {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
 		t.Fatalf("await() = %v, want a refusal", err)
 	}
 	if asked != 3 {
 		t.Errorf("await() asked %d time(s), want the 3 that begin inside the minute: attempts at 0s, 20s and 40s each cost 15s, and a fourth at 60s would start past the bound the deploy reports", asked)
 	}
-	if !strings.Contains(refusal.Message, "55s") {
-		t.Errorf("await() refused with %q, want the 55s it actually spent", refusal.Message)
+	if !strings.Contains(refused.Message, "55s") {
+		t.Errorf("await() refused with %q, want the 55s it actually spent", refused.Message)
 	}
 }
 
@@ -354,12 +354,12 @@ func TestALivenessThatDiagnosesNothingStillRefusesInOneSentence(t *testing.T) {
 	cutover, _ := waiting(&answering{kind: "relay", after: 99}, 2)
 
 	_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
-	var refusal refusal.Refusal
-	if !errors.As(err, &refusal) {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
 		t.Fatalf("await() = %v, want a refusal", err)
 	}
-	if strings.Contains(refusal.Message, "ended in") {
-		t.Errorf("await() refused with %q, want no dangling clause where a resolver gives no cause to name", refusal.Message)
+	if strings.Contains(refused.Message, "ended in") {
+		t.Errorf("await() refused with %q, want no dangling clause where a resolver gives no cause to name", refused.Message)
 	}
 }
 
@@ -367,17 +367,17 @@ func TestAProviderThatDiagnosesItsOwnProbeIsAskedThroughItsLiveness(t *testing.T
 	t.Parallel()
 
 	cause := "x509: certificate is valid for parked.example.net, not shop.example.com"
-	provider := diagnosingProvider{boxProvider: &boxProvider{}, cause: cause}
-	cutover, _ := waiting(provider.Liveness(), 2)
+	vendor := diagnosingProvider{boxProvider: &boxProvider{}, cause: cause}
+	cutover, _ := waiting(vendor.Liveness(), 2)
 	cutover.kind = "box"
 
 	_, err := cutover.await(context.Background(), "shop.example.com", func(string) {})
-	var refusal refusal.Refusal
-	if !errors.As(err, &refusal) {
+	var refused refusal.Refusal
+	if !errors.As(err, &refused) {
 		t.Fatalf("await() = %v, want a refusal", err)
 	}
-	if !strings.Contains(refusal.Message, cause) {
-		t.Errorf("await() refused with %q, and the cause the provider recorded never reaches the operator", refusal.Message)
+	if !strings.Contains(refused.Message, cause) {
+		t.Errorf("await() refused with %q, and the cause the provider recorded never reaches the operator", refused.Message)
 	}
 }
 
