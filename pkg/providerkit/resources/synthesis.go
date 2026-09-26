@@ -30,7 +30,7 @@ func SynthesizedPlan(ctx context.Context, store provider.ArtifactStore, spec pro
 		changes = append(changes, provider.Change{
 			Kind:   string(resource.Type),
 			Name:   resource.Name,
-			Action: provider.KeepOrCreate(slices.ContainsFunc(deployed.Bindings, bindingFor(resource))),
+			Action: provider.KeepOrCreate(slices.ContainsFunc(deployed.Bindings, BindingFor(resource))),
 		})
 	}
 	declared := DeclaredFunctions(spec)
@@ -50,7 +50,7 @@ func SynthesizedPlan(ctx context.Context, store provider.ArtifactStore, spec pro
 		})
 	}
 	for _, binding := range deployed.Bindings {
-		if slices.ContainsFunc(spec.Resources, func(resource provider.Resource) bool { return bindingFor(resource)(binding) }) {
+		if slices.ContainsFunc(spec.Resources, func(resource provider.Resource) bool { return BindingFor(resource)(binding) }) {
 			continue
 		}
 		changes = append(changes, provider.Change{Kind: string(binding.Type), Name: binding.Name, Action: provider.ActionDelete, Reason: reasonUndeclared})
@@ -102,7 +102,7 @@ func DeclaredContainers(spec provider.StackSpec) []string {
 	return []string{spec.App.App}
 }
 
-func bindingFor(resource provider.Resource) func(provider.Binding) bool {
+func BindingFor(resource provider.Resource) func(provider.Binding) bool {
 	return func(binding provider.Binding) bool {
 		return binding.Name == resource.Name && binding.Type == resource.Type
 	}
