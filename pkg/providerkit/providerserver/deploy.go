@@ -29,7 +29,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
@@ -106,8 +105,8 @@ type deployRun struct {
 	scope     envvars.Scope
 	published *publishedBindings
 
-	registry images.Registry
-	images   images.Store
+	registry provider.RegistryTarget
+	images   provider.ImageStore
 
 	dry           bool
 	dryRunPlan    dryRunPlan

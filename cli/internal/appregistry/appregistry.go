@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
@@ -11,7 +13,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
 )
 
 type Host interface {
@@ -38,13 +39,13 @@ func RequireSecret(cfg *projectconfig.Config) error {
 	return err
 }
 
-func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host, tier environmentv1.Tier) (images.Registry, bool, error) {
+func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host, tier environmentv1.Tier) (provider.RegistryTarget, bool, error) {
 	if cfg.Registry != nil {
 		password, err := secret(cfg)
 		if err != nil {
-			return images.Registry{}, false, err
+			return provider.RegistryTarget{}, false, err
 		}
-		return images.Registry{
+		return provider.RegistryTarget{
 			Server:    cfg.Registry.Server,
 			Namespace: cfg.Registry.Namespace,
 			Username:  cfg.Registry.Username,
@@ -53,19 +54,19 @@ func Resolve(ctx context.Context, cfg *projectconfig.Config, host Host, tier env
 	}
 	pushing, err := repositories(cfg)
 	if err != nil {
-		return images.Registry{}, false, err
+		return provider.RegistryTarget{}, false, err
 	}
 	if len(pushing) == 0 {
-		return images.Registry{}, false, nil
+		return provider.RegistryTarget{}, false, nil
 	}
 	resp, err := host.ResolveImageRegistry(ctx, &contractv1.ResolveImageRegistryRequest{Repositories: pushing, Tier: tier})
 	if connect.CodeOf(err) == connect.CodeUnimplemented {
-		return images.Registry{}, false, nil
+		return provider.RegistryTarget{}, false, nil
 	}
 	if err != nil {
-		return images.Registry{}, false, fmt.Errorf("resolve the registry this provider hosts: %w", err)
+		return provider.RegistryTarget{}, false, fmt.Errorf("resolve the registry this provider hosts: %w", err)
 	}
-	return images.Registry{
+	return provider.RegistryTarget{
 		Server:    resp.GetServer(),
 		Namespace: resp.GetNamespace(),
 		Username:  resp.GetUsername(),
@@ -88,7 +89,7 @@ func secret(cfg *projectconfig.Config) (string, error) {
 	return password, nil
 }
 
-func Wire(target images.Registry) *contractv1.ImageRegistry {
+func Wire(target provider.RegistryTarget) *contractv1.ImageRegistry {
 	return &contractv1.ImageRegistry{
 		Server:    target.Server,
 		Namespace: target.Namespace,

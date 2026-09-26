@@ -283,8 +283,8 @@ func TestAnImageRowRidesInsideTheAppsOwnStackGroup(t *testing.T) {
 
 func TestTheImageStoreIsOpenedFromTheTargetTheDeployNames(t *testing.T) {
 	store := fake.NewImages()
-	push := images.Push{App: "web", Source: containerTestImage, ImageRef: pushedCoordinate}
-	plan := provider.ImagePushes{Store: store, Pushes: []images.Push{push}}
+	push := provider.ImagePush{App: "web", Source: containerTestImage, ImageRef: pushedCoordinate}
+	plan := provider.ImagePushes{Store: store, Pushes: []provider.ImagePush{push}}
 
 	if err := plan.PushMissing(context.Background(), nil); err != nil {
 		t.Fatalf("PushMissing() = %v", err)
@@ -301,17 +301,17 @@ type refusingStore struct{ where string }
 
 func (s refusingStore) Destination() string { return s.where }
 
-func (s refusingStore) Has(context.Context, images.Push) (bool, error) {
+func (s refusingStore) Has(context.Context, provider.ImagePush) (bool, error) {
 	return false, nil
 }
 
-func (s refusingStore) Push(context.Context, images.Push, edge.Progress) error {
+func (s refusingStore) Push(context.Context, provider.ImagePush, edge.Progress) error {
 	return errors.New("the stream stopped short")
 }
 
 func TestATransferThatFailsNamesWhereItWasSendingRatherThanTheCoordinate(t *testing.T) {
 	store := refusingStore{where: "box.invalid"}
-	plan := provider.ImagePushes{Store: store, Pushes: []images.Push{{
+	plan := provider.ImagePushes{Store: store, Pushes: []provider.ImagePush{{
 		App: "web", Source: containerTestImage, ImageRef: loadedCoordinate,
 	}}}
 
@@ -340,7 +340,7 @@ func (p loadingProvider) Hooks() provider.Hooks {
 	return hooks
 }
 
-func (p loadingProvider) OpenDirectImages(context.Context) (images.Store, error) {
+func (p loadingProvider) OpenDirectImages(context.Context) (provider.ImageStore, error) {
 	return p.direct, nil
 }
 
@@ -453,7 +453,7 @@ func (p addressingProvider) Hooks() provider.Hooks {
 	return hooks
 }
 
-func (p addressingProvider) OpenDirectImages(context.Context) (images.Store, error) {
+func (p addressingProvider) OpenDirectImages(context.Context) (provider.ImageStore, error) {
 	return p.direct, nil
 }
 
@@ -840,16 +840,16 @@ func TestAWrappedCoordinateTheRegistryAlreadyHasIsNeitherWrappedNorPushed(t *tes
 
 type stubStore struct {
 	present bool
-	pushed  []images.Push
+	pushed  []provider.ImagePush
 }
 
-func (s *stubStore) Has(context.Context, images.Push) (bool, error) {
+func (s *stubStore) Has(context.Context, provider.ImagePush) (bool, error) {
 	return s.present, nil
 }
 
 func (s *stubStore) Destination() string { return "the stub registry" }
 
-func (s *stubStore) Push(_ context.Context, push images.Push, _ edge.Progress) error {
+func (s *stubStore) Push(_ context.Context, push provider.ImagePush, _ edge.Progress) error {
 	s.pushed = append(s.pushed, push)
 	return nil
 }
@@ -859,7 +859,7 @@ func TestShipHandsTheStoreTheWrappedImageAndClearsUpAfterIt(t *testing.T) {
 
 	store := &stubStore{}
 	cleaned := false
-	plan := provider.ImagePushes{Store: store, Pushes: []images.Push{{
+	plan := provider.ImagePushes{Store: store, Pushes: []provider.ImagePush{{
 		App:      "web",
 		ImageRef: "ghcr.io/acme/web:sha256-abc-ocel-0123456789ab",
 		Wrap: func(context.Context) (v1.Image, func(), error) {
@@ -882,7 +882,7 @@ func TestShipRunsNoWrapForACoordinateTheStoreAlreadyHas(t *testing.T) {
 	t.Parallel()
 
 	store := &stubStore{present: true}
-	plan := provider.ImagePushes{Store: store, Pushes: []images.Push{{
+	plan := provider.ImagePushes{Store: store, Pushes: []provider.ImagePush{{
 		App:      "web",
 		ImageRef: "ghcr.io/acme/web:sha256-abc-ocel-0123456789ab",
 		Wrap: func(context.Context) (v1.Image, func(), error) {

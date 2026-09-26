@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
@@ -28,22 +30,22 @@ type ECRAPI interface {
 	GetAuthorizationToken(ctx context.Context, in *ecr.GetAuthorizationTokenInput, opts ...func(*ecr.Options)) (*ecr.GetAuthorizationTokenOutput, error)
 }
 
-func Resolve(ctx context.Context, api ECRAPI) (images.Registry, error) {
+func Resolve(ctx context.Context, api ECRAPI) (provider.RegistryTarget, error) {
 	out, err := api.GetAuthorizationToken(ctx, &ecr.GetAuthorizationTokenInput{})
 	if err != nil {
-		return images.Registry{}, fmt.Errorf("mint a login for this account's image registry: %w", err)
+		return provider.RegistryTarget{}, fmt.Errorf("mint a login for this account's image registry: %w", err)
 	}
 	if len(out.AuthorizationData) == 0 {
-		return images.Registry{}, errors.New("ECR answered a login request with no authorization data, so there is nothing to push an image with")
+		return provider.RegistryTarget{}, errors.New("ECR answered a login request with no authorization data, so there is nothing to push an image with")
 	}
 	granted := out.AuthorizationData[0]
 	decoded, err := base64.StdEncoding.DecodeString(aws.ToString(granted.AuthorizationToken))
 	if err != nil {
-		return images.Registry{}, fmt.Errorf("decode the registry login ECR minted: %w", err)
+		return provider.RegistryTarget{}, fmt.Errorf("decode the registry login ECR minted: %w", err)
 	}
 	username, password, found := strings.Cut(string(decoded), ":")
 	if !found || username == "" || password == "" {
-		return images.Registry{}, errors.New("the registry login ECR minted is not a user:password pair, so nothing can log in with it")
+		return provider.RegistryTarget{}, errors.New("the registry login ECR minted is not a user:password pair, so nothing can log in with it")
 	}
 	server := aws.ToString(granted.ProxyEndpoint)
 	if _, rest, split := strings.Cut(server, "://"); split {
@@ -51,9 +53,9 @@ func Resolve(ctx context.Context, api ECRAPI) (images.Registry, error) {
 	}
 	server = strings.TrimSuffix(server, "/")
 	if server == "" {
-		return images.Registry{}, errors.New("ECR minted a login that names no registry endpoint, so there is nowhere to push to")
+		return provider.RegistryTarget{}, errors.New("ECR minted a login that names no registry endpoint, so there is nowhere to push to")
 	}
-	return images.Registry{
+	return provider.RegistryTarget{
 		Server:    server,
 		Namespace: Namespace,
 		Username:  username,
@@ -61,17 +63,17 @@ func Resolve(ctx context.Context, api ECRAPI) (images.Registry, error) {
 	}, nil
 }
 
-func Owns(target images.Registry) bool {
+func Owns(target provider.RegistryTarget) bool {
 	return target.Username == ecrUsername && target.Namespace == Namespace
 }
 
 type ecrImages struct {
 	api    ECRAPI
-	target images.Registry
-	pushed images.Store
+	target provider.RegistryTarget
+	pushed provider.ImageStore
 }
 
-func Images(target images.Registry, api ECRAPI) images.Store {
+func Images(target provider.RegistryTarget, api ECRAPI) provider.ImageStore {
 	return ecrImages{api: api, target: target, pushed: images.RegistryStore(target)}
 }
 
@@ -83,11 +85,11 @@ func (i ecrImages) GoString() string { return i.String() }
 
 func (i ecrImages) Destination() string { return i.target.Server }
 
-func (i ecrImages) Has(ctx context.Context, push images.Push) (bool, error) {
+func (i ecrImages) Has(ctx context.Context, push provider.ImagePush) (bool, error) {
 	return i.pushed.Has(ctx, push)
 }
 
-func (i ecrImages) Push(ctx context.Context, push images.Push, progress edge.Progress) error {
+func (i ecrImages) Push(ctx context.Context, push provider.ImagePush, progress edge.Progress) error {
 	repository, err := repositoryOf(i.target, push.ImageRef)
 	if err != nil {
 		return err
@@ -98,7 +100,7 @@ func (i ecrImages) Push(ctx context.Context, push images.Push, progress edge.Pro
 	return i.pushed.Push(ctx, push, progress)
 }
 
-func repositoryOf(target images.Registry, imageRef string) (string, error) {
+func repositoryOf(target provider.RegistryTarget, imageRef string) (string, error) {
 	rest, found := strings.CutPrefix(imageRef, target.Server+"/")
 	if !found {
 		return "", fmt.Errorf("%s is not an image ref under %s, so there is no repository of this account's to store it", imageRef, target.Server)

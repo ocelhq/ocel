@@ -5,7 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -40,7 +41,7 @@ func TestWhatAnInterruptedDeployLeftIsSweptBeforeAValueIsWritten(t *testing.T) {
 func TestARegistryLoginIsWrittenWhereTheSweepReadsAndSweptBeforeThePull(t *testing.T) {
 	t.Parallel()
 
-	command, err := pull(images.Registry{Server: "ghcr.io", Username: "ada", Password: "hunter2"}, "ghcr.io/shop/web:one", "sha256:0000")
+	command, err := pull(provider.RegistryTarget{Server: "ghcr.io", Username: "ada", Password: "hunter2"}, "ghcr.io/shop/web:one", "sha256:0000")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -54,7 +55,7 @@ func TestARegistryLoginIsWrittenWhereTheSweepReadsAndSweptBeforeThePull(t *testi
 		}
 		return session.Result{}, false
 	}
-	if _, err := rig.host().PullImage(context.Background(), images.Registry{Server: "ghcr.io"}, "ghcr.io/shop/web:one", "sha256:0000"); err != nil {
+	if _, err := rig.host().PullImage(context.Background(), provider.RegistryTarget{Server: "ghcr.io"}, "ghcr.io/shop/web:one", "sha256:0000"); err != nil {
 		t.Fatalf("PullImage() = %v", err)
 	}
 	swept, pulled := rig.at(sweepCommand()), rig.at("docker pull")

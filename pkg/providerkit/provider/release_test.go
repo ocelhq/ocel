@@ -13,12 +13,12 @@ import (
 )
 
 func TestAStackSpecWithARegistryRendersWithoutItsPassword(t *testing.T) {
-	target := images.Registry{Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "ghp_livesecret"}
+	target := provider.RegistryTarget{Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "ghp_livesecret"}
 	spec := provider.StackSpec{
 		Kind: provider.StackApp,
 		Images: provider.ImagePushes{
 			Store:  images.RegistryStore(target),
-			Pushes: []images.Push{{App: "web", Source: "ocel/web@sha256:abc", ImageRef: target.ImageRef("web", "sha256-abc"), Digest: "sha256:abc"}},
+			Pushes: []provider.ImagePush{{App: "web", Source: "ocel/web@sha256:abc", ImageRef: target.ImageRef("web", "sha256-abc"), Digest: "sha256:abc"}},
 		},
 	}
 	unrendered := provider.StackSpec{
@@ -82,10 +82,10 @@ func TestASpecWithAnAppsValuesRendersWithoutThem(t *testing.T) {
 
 type keptSecret struct{ password string }
 
-func (keptSecret) Has(context.Context, images.Push) (bool, error) { return false, nil }
+func (keptSecret) Has(context.Context, provider.ImagePush) (bool, error) { return false, nil }
 
 func (keptSecret) Destination() string { return "the kept registry" }
 
-func (keptSecret) Push(context.Context, images.Push, edge.Progress) error {
+func (keptSecret) Push(context.Context, provider.ImagePush, edge.Progress) error {
 	return nil
 }

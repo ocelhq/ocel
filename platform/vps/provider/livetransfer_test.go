@@ -147,8 +147,8 @@ func forget(client *http.Client) {
 	_ = resp.Body.Close()
 }
 
-func transferPush(daemon images.DockerHost, client *http.Client, runtime []byte) images.Push {
-	return images.Push{
+func transferPush(daemon images.DockerHost, client *http.Client, runtime []byte) provider.ImagePush {
+	return provider.ImagePush{
 		App:      "live-transfer",
 		Source:   transferRepository + "@" + transferDigest,
 		ImageRef: transferCoordinate(runtime),
@@ -217,7 +217,7 @@ func TestLiveAnImageIsMovedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *testi
 		t.Fatalf("the machine claims %s before anything moved it, so the transfer cannot be proven here", coordinate)
 	}
 
-	plan := provider.ImagePushes{Store: store, Pushes: []images.Push{push}}
+	plan := provider.ImagePushes{Store: store, Pushes: []provider.ImagePush{push}}
 	if err := plan.PushMissing(ctx, nil); err != nil {
 		t.Fatalf("PushMissing() onto a machine with no registry account = %v", err)
 	}
@@ -248,7 +248,7 @@ func TestLiveARedeployOfAnUnchangedAppSendsTheImageNoSecondTime(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenDirectImages() = %v", err)
 	}
-	plan := provider.ImagePushes{Store: store, Pushes: []images.Push{transferPush(daemon, client, runtime)}}
+	plan := provider.ImagePushes{Store: store, Pushes: []provider.ImagePush{transferPush(daemon, client, runtime)}}
 	if err := plan.PushMissing(ctx, nil); err != nil {
 		t.Fatalf("PushMissing() = %v", err)
 	}

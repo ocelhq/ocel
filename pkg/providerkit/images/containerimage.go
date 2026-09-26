@@ -23,11 +23,6 @@ import (
 
 const runtimeTagHexLen = 12
 
-type Runtime interface {
-	Arch(ctx context.Context, app, declared string) (string, error)
-	Binary(ctx context.Context, arch string) ([]byte, error)
-}
-
 func ContainerPlatform(arch string) string { return "linux/" + arch }
 
 func WrapContainer(base v1.Image, runtime []byte) (v1.Image, error) {
@@ -93,8 +88,6 @@ func RuntimeTag(digest string, runtime []byte) string {
 	sum := sha256.Sum256(runtime)
 	return naming.DigestTag(digest) + naming.WordSeparator + "ocel" + naming.WordSeparator + hex.EncodeToString(sum[:])[:runtimeTagHexLen]
 }
-
-type Wrapped func(ctx context.Context) (v1.Image, func(), error)
 
 func BuiltArchitecture(ctx context.Context, repository, digest string) (string, error) {
 	host, err := DockerHostFromEnv()

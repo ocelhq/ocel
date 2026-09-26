@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+
 	"github.com/google/go-containerregistry/pkg/authn"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
@@ -22,10 +24,12 @@ import (
 )
 
 type registryStore struct {
-	target Registry
+	target provider.RegistryTarget
 }
 
-func RegistryStore(target Registry) Store { return registryStore{target: target} }
+func RegistryStore(target provider.RegistryTarget) provider.ImageStore {
+	return registryStore{target: target}
+}
 
 func (r registryStore) String() string {
 	return "images pushed to " + r.target.String()
@@ -50,7 +54,7 @@ const (
 
 var registryTimeout = 30 * time.Second
 
-func (r registryStore) Has(ctx context.Context, push Push) (bool, error) {
+func (r registryStore) Has(ctx context.Context, push provider.ImagePush) (bool, error) {
 	server, repository, tag, err := splitImageRef(push.ImageRef)
 	if err != nil {
 		return false, err
@@ -74,7 +78,7 @@ func (r registryStore) Has(ctx context.Context, push Push) (bool, error) {
 	return false, err
 }
 
-func (r registryStore) manifestExists(ctx context.Context, client *http.Client, endpoint, server, repository string, push Push) (present, again bool, after time.Duration, err error) {
+func (r registryStore) manifestExists(ctx context.Context, client *http.Client, endpoint, server, repository string, push provider.ImagePush) (present, again bool, after time.Duration, err error) {
 	resp, err := r.head(ctx, client, endpoint, "")
 	if err != nil {
 		return false, resolvable(err), 0, err
@@ -296,7 +300,7 @@ func registryScheme(server string) string {
 	return "https"
 }
 
-func (r registryStore) Push(ctx context.Context, push Push, progress edge.Progress) error {
+func (r registryStore) Push(ctx context.Context, push provider.ImagePush, progress edge.Progress) error {
 	if push.Built != nil {
 		return r.pushBuilt(ctx, push)
 	}
@@ -334,7 +338,7 @@ func (r registryStore) Push(ctx context.Context, push Push, progress edge.Progre
 	return err
 }
 
-func (r registryStore) pushBuilt(ctx context.Context, push Push) error {
+func (r registryStore) pushBuilt(ctx context.Context, push provider.ImagePush) error {
 	options := []name.Option{}
 	if registryScheme(r.target.Server) == "http" {
 		options = append(options, name.Insecure)

@@ -241,7 +241,7 @@ func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress 
 	}
 	ref := names.RepositoryPath(p.options.Region, edge.ClassProduction) +
 		"/" + connectorImageName + ":" + naming.DigestTag(digest.String())
-	push := images.Push{App: connectorImageName, ImageRef: ref, Digest: digest.String(), Built: built}
+	push := provider.ImagePush{App: connectorImageName, ImageRef: ref, Digest: digest.String(), Built: built}
 
 	present, err := store.Has(ctx, push)
 	if err != nil {

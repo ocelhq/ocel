@@ -140,7 +140,7 @@ func provisioning(t *testing.T, machine *box) *vps.Provider {
 	)
 }
 
-func pulling(t *testing.T, machine *box, target images.Registry) images.Store {
+func pulling(t *testing.T, machine *box, target provider.RegistryTarget) provider.ImageStore {
 	t.Helper()
 	store, err := provisioning(t, machine).OpenRegistryImages(context.Background(), target)
 	if err != nil {
@@ -149,8 +149,8 @@ func pulling(t *testing.T, machine *box, target images.Registry) images.Store {
 	return store
 }
 
-func aTarget(server string) images.Registry {
-	return images.Registry{
+func aTarget(server string) provider.RegistryTarget {
+	return provider.RegistryTarget{
 		Server:    server,
 		Namespace: "acme",
 		Username:  pullUsername,
@@ -158,8 +158,8 @@ func aTarget(server string) images.Registry {
 	}
 }
 
-func aPull(target images.Registry) images.Push {
-	return images.Push{
+func aPull(target provider.RegistryTarget) provider.ImagePush {
+	return provider.ImagePush{
 		App:      "web",
 		Source:   "ocel/shop/web@" + pullDigest,
 		ImageRef: target.ImageRef("web", pullTag),
@@ -342,7 +342,7 @@ func TestADigestTheMachineAlreadyHasIsNeitherPushedNorPulledAgain(t *testing.T) 
 	target := aTarget(server)
 	plan := provider.ImagePushes{
 		Store:  pulling(t, machine, target),
-		Pushes: []images.Push{aPull(target)},
+		Pushes: []provider.ImagePush{aPull(target)},
 	}
 
 	if err := plan.PushMissing(context.Background(), nil); err != nil {

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/registry"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
@@ -23,7 +25,7 @@ func servingRegistry(t *testing.T) string {
 }
 
 func TestTheDaemonStoreRefusesAnImageItWasNeverHanded(t *testing.T) {
-	push := images.Push{App: "server", ImageRef: "web-server:sha256-abc", Digest: "sha256:abc"}
+	push := provider.ImagePush{App: "server", ImageRef: "web-server:sha256-abc", Digest: "sha256:abc"}
 
 	err := images.DaemonStore().Push(context.Background(), push, nil)
 	if err == nil {
@@ -36,7 +38,7 @@ func TestTheDaemonStoreRefusesAnImageItWasNeverHanded(t *testing.T) {
 
 func TestTheDaemonStoreSaysSoWhenItCannotReachTheDaemon(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "tcp://127.0.0.1:1")
-	push := images.Push{App: "server", ImageRef: "web-server:sha256-abc", Digest: "sha256:abc"}
+	push := provider.ImagePush{App: "server", ImageRef: "web-server:sha256-abc", Digest: "sha256:abc"}
 
 	present, err := images.DaemonStore().Has(context.Background(), push)
 	if err == nil {
@@ -61,8 +63,8 @@ func TestABuiltImageReachesTheRegistryWithoutADaemon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target := images.Registry{Server: host, Namespace: "ocel"}
-	push := images.Push{
+	target := provider.RegistryTarget{Server: host, Namespace: "ocel"}
+	push := provider.ImagePush{
 		App:      "server",
 		ImageRef: target.ImageRef("web-server", naming.DigestTag(digest.String())),
 		Digest:   digest.String(),

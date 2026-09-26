@@ -7,7 +7,6 @@ import (
 
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -19,9 +18,9 @@ type Hooks struct {
 	EmbedCode           func(ctx context.Context, function string, artifact ArtifactRef, progress edge.Progress) error
 	WarmFunctions       func(ctx context.Context, targets []string, progress edge.Progress) error
 	ProgramEdge         func(ctx context.Context, req EdgeProgramRequest) (EdgeProgram, error)
-	EnsureImageRegistry func(ctx context.Context, class edge.Class, repositories []string) (images.Registry, error)
-	OpenRegistryImages  func(ctx context.Context, target images.Registry) (images.Store, error)
-	OpenDirectImages    func(ctx context.Context) (images.Store, error)
+	EnsureImageRegistry func(ctx context.Context, class edge.Class, repositories []string) (RegistryTarget, error)
+	OpenRegistryImages  func(ctx context.Context, target RegistryTarget) (ImageStore, error)
+	OpenDirectImages    func(ctx context.Context) (ImageStore, error)
 	CheckHost           func(ctx context.Context, req HostCheckRequest) ([]HostCheck, error)
 	Cost                *CostHooks
 	FunctionImages      *FunctionImageHooks

@@ -5,7 +5,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/liveness"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
@@ -125,6 +124,6 @@ func (p *Provider) Certificates() provider.Certificates { return certificates{p}
 
 func (p *Provider) Connector() provider.Connector { return connector{p} }
 
-func (p *Provider) Runtime() images.Runtime { return containerRuntime{p} }
+func (p *Provider) Runtime() provider.Runtime { return containerRuntime{p} }
 
 func (p *Provider) Liveness() provider.Liveness { return &p.Net }

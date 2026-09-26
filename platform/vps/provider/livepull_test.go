@@ -78,7 +78,7 @@ func (vm machine) hashed(t *testing.T, password string) string {
 	return line
 }
 
-func (vm machine) registry(t *testing.T) images.Registry {
+func (vm machine) registry(t *testing.T) provider.RegistryTarget {
 	t.Helper()
 	port := freePort(t)
 	password := secretOf(t)
@@ -103,7 +103,7 @@ func (vm machine) registry(t *testing.T) images.Registry {
 	vm.forwarding(t, port)
 	server := fmt.Sprintf("127.0.0.1:%d", port)
 	answering(t, server)
-	return images.Registry{
+	return provider.RegistryTarget{
 		Server:    server,
 		Namespace: pullNamespace,
 		Username:  liveRegistryLogin,
@@ -149,9 +149,9 @@ func answering(t *testing.T, server string) {
 	t.Fatalf("the registry on the machine never answered at %s: %s", server, said)
 }
 
-func liveDigest(t *testing.T, target images.Registry, coordinate string) string {
+func liveDigest(t *testing.T, target provider.RegistryTarget, coordinate string) string {
 	t.Helper()
-	seed := images.Push{
+	seed := provider.ImagePush{
 		App:      pullRepository,
 		Source:   transferBase(),
 		ImageRef: coordinate,
@@ -192,7 +192,7 @@ func TestLiveTheMachinePullsTheImageAndIsLeftWithNoCredential(t *testing.T) {
 	target := vm.registry(t)
 	coordinate := target.ImageRef(pullRepository, transferTag)
 	digest := liveDigest(t, target, coordinate)
-	push := images.Push{
+	push := provider.ImagePush{
 		App:      pullRepository,
 		Source:   transferBase(),
 		ImageRef: coordinate,
@@ -207,7 +207,7 @@ func TestLiveTheMachinePullsTheImageAndIsLeftWithNoCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Images() = %v", err)
 	}
-	plan := provider.ImagePushes{Store: store, Pushes: []images.Push{push}}
+	plan := provider.ImagePushes{Store: store, Pushes: []provider.ImagePush{push}}
 
 	rows, err := plan.Rows(ctx)
 	if err != nil {

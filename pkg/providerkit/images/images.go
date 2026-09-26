@@ -1,34 +1,11 @@
 package images
 
 import (
-	"context"
-
-	v1 "github.com/google/go-containerregistry/pkg/v1"
-
 	"github.com/ocelhq/ocel/pkg/naming"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
-type Push struct {
-	App      string
-	Source   string
-	ImageRef string
-	Digest   string
-
-	Function bool
-	Built    v1.Image
-	Wrap     Wrapped
-}
-
-type Store interface {
-	Destination() string
-
-	Has(ctx context.Context, push Push) (bool, error)
-
-	Push(ctx context.Context, push Push, progress edge.Progress) error
-}
-
-func Ref(repository, tag string, target Registry) string {
+func Ref(repository, tag string, target provider.RegistryTarget) string {
 	if !target.Named() {
 		return repository + ":" + tag
 	}

@@ -35,13 +35,13 @@ func (r *deployRun) imageFunctions(
 	entry provider.AppEntry,
 	pack provider.PackAppResult,
 	routing *provider.RoutingSpec,
-) ([]images.Push, error) {
+) ([]provider.ImagePush, error) {
 	if r.images == nil {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s's functions are run from images, and nothing in this deploy names a registry to push them to", entry.App)
 	}
 	root := appbuild.ArtifactRoot()
-	var pushes []images.Push
+	var pushes []provider.ImagePush
 	for _, fn := range r.manifest.GetFunctions() {
 		if fn.GetApp() != entry.App {
 			continue
@@ -63,36 +63,36 @@ func (r *deployRun) imageFunction(
 	entry provider.AppEntry,
 	fn *contractv1.ManifestFunction,
 	overlay map[string][]byte,
-) (images.Push, error) {
+) (provider.ImagePush, error) {
 	name := fn.GetLogicalName()
 	dir, err := stagedDir(root, fn)
 	if err != nil {
-		return images.Push{}, err
+		return provider.ImagePush{}, err
 	}
 	framework := frameworkOf(fn)
 	base, err := hooks.FunctionImages.ResolveBase(ctx, framework)
 	if err != nil {
-		return images.Push{}, fmt.Errorf("read the base image %s's %s function is built on: %w", name, framework.Name, err)
+		return provider.ImagePush{}, fmt.Errorf("read the base image %s's %s function is built on: %w", name, framework.Name, err)
 	}
 	files, err := runtimeOverlay(ctx, hooks, framework, name, overlay)
 	if err != nil {
-		return images.Push{}, err
+		return provider.ImagePush{}, err
 	}
 	image, err := images.FunctionImage(base, framework, dir, files)
 	if err != nil {
-		return images.Push{}, fmt.Errorf("build %s's image: %w", name, err)
+		return provider.ImagePush{}, fmt.Errorf("build %s's image: %w", name, err)
 	}
 	image, err = r.wrapFunction(ctx, name, framework, image)
 	if err != nil {
-		return images.Push{}, err
+		return provider.ImagePush{}, err
 	}
 	digest, err := image.Digest()
 	if err != nil {
-		return images.Push{}, fmt.Errorf("build %s's image: %w", name, err)
+		return provider.ImagePush{}, fmt.Errorf("build %s's image: %w", name, err)
 	}
 	repository := functionRepository(entry.App, name)
 	target := images.Ref(repository, naming.DigestTag(digest.String()), r.registry)
-	return images.Push{
+	return provider.ImagePush{
 		App:      name,
 		Source:   pinnedImageRef(target, digest.String()),
 		ImageRef: target,

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -12,11 +14,11 @@ import (
 type pulled struct {
 	host   *host.Host
 	at     string
-	from   images.Store
-	target images.Registry
+	from   provider.ImageStore
+	target provider.RegistryTarget
 }
 
-func (p *Provider) OpenRegistryImages(_ context.Context, target images.Registry) (images.Store, error) {
+func (p *Provider) OpenRegistryImages(_ context.Context, target provider.RegistryTarget) (provider.ImageStore, error) {
 	if err := host.CheckLogin(target); err != nil {
 		return nil, err
 	}
@@ -34,11 +36,11 @@ func (p pulled) GoString() string { return p.String() }
 
 func (p pulled) Destination() string { return p.at }
 
-func (p pulled) Has(ctx context.Context, push images.Push) (bool, error) {
+func (p pulled) Has(ctx context.Context, push provider.ImagePush) (bool, error) {
 	return p.host.HasImage(ctx, push.ImageRef)
 }
 
-func (p pulled) Push(ctx context.Context, push images.Push, progress edge.Progress) error {
+func (p pulled) Push(ctx context.Context, push provider.ImagePush, progress edge.Progress) error {
 	present, err := p.from.Has(ctx, push)
 	if err != nil {
 		return err
