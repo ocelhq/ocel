@@ -14,18 +14,18 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func deployed(t *testing.T, provider *fake.Provider, class edge.Class, slug string) {
 	t.Helper()
-	seedStack(t, provider, class, slug, providerkit.EdgeStackState{
+	seedStack(t, provider, class, slug, stackrecords.EdgeState{
 		Edge: edge.StackState{Slug: slug, Class: class, Endpoint: "https://" + slug + ".fake.invalid"},
 	})
 	promoted(t, provider, class, slug)
@@ -39,13 +39,13 @@ func promoted(t *testing.T, provider *fake.Provider, class edge.Class, slug stri
 	}
 }
 
-func seedStack(t *testing.T, provider *fake.Provider, class edge.Class, slug string, state providerkit.EdgeStackState) {
+func seedStack(t *testing.T, provider *fake.Provider, class edge.Class, slug string, state stackrecords.EdgeState) {
 	t.Helper()
 	encoded, err := json.Marshal(state)
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := providerkit.EdgeStackRecord(class, slug)
+	name := stackrecords.EdgeStackRecord(class, slug)
 	held, err := records.ReadOrEmpty(context.Background(), provider.Records(), name)
 	if err != nil {
 		t.Fatal(err)
@@ -56,13 +56,13 @@ func seedStack(t *testing.T, provider *fake.Provider, class edge.Class, slug str
 	}
 }
 
-func readStack(t *testing.T, provider *fake.Provider, class edge.Class, slug string) providerkit.EdgeStackState {
+func readStack(t *testing.T, provider *fake.Provider, class edge.Class, slug string) stackrecords.EdgeState {
 	t.Helper()
-	held, err := records.ReadOrEmpty(context.Background(), provider.Records(), providerkit.EdgeStackRecord(class, slug))
+	held, err := records.ReadOrEmpty(context.Background(), provider.Records(), stackrecords.EdgeStackRecord(class, slug))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var state providerkit.EdgeStackState
+	var state stackrecords.EdgeState
 	if len(held.Bytes) > 0 {
 		if err := json.Unmarshal(held.Bytes, &state); err != nil {
 			t.Fatal(err)
@@ -141,7 +141,7 @@ func TestAddHostnameSaysWhatTheEdgeAsksOfYouAsItBinds(t *testing.T) {
 func TestAddHostnameOnAProjectThatPromotedNothingSaysNothingServesIt(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	seedStack(t, provider, edge.ClassProduction, "shop", providerkit.EdgeStackState{
+	seedStack(t, provider, edge.ClassProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{Slug: "shop", Class: edge.ClassProduction, Endpoint: "https://shop.fake.invalid"},
 	})
 
@@ -504,9 +504,9 @@ func TestAddHostnameDiscardsTheCertificateItSupersedes(t *testing.T) {
 	t.Parallel()
 	client, p := contractServed(t, "1.0.0")
 	stale := edge.Record{Name: "_stale.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_stale.validations.invalid"}
-	seedStack(t, p, edge.ClassProduction, "shop", providerkit.EdgeStackState{
+	seedStack(t, p, edge.ClassProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{Slug: "shop", Class: edge.ClassProduction, Endpoint: "https://shop.fake.invalid"},
-		Hosts: map[string]providerkit.Settled{
+		Hosts: map[string]stackrecords.Settled{
 			"app.acme.com": {Certificate: provider.Certificate{ID: "superseded", Requested: true, Written: []edge.Record{stale}}},
 		},
 	})
@@ -628,7 +628,7 @@ func TestAddHostnameKeepsTheSupersededCertificateOnRecordWhileItsReplacementIsPe
 func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) {
 	t.Parallel()
 	client, p := contractServed(t, "1.0.0")
-	seedStack(t, p, edge.ClassProduction, "shop", providerkit.EdgeStackState{
+	seedStack(t, p, edge.ClassProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{
 			Slug:     "shop",
 			Class:    edge.ClassProduction,
@@ -636,10 +636,10 @@ func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) 
 			Front:    "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
 		},
-		Hosts: map[string]providerkit.Settled{
+		Hosts: map[string]stackrecords.Settled{
 			"app.acme.com": {
 				Certificate: provider.Certificate{ID: "cert-of-yesterday"},
-				Probe:       providerkit.Probe{OK: true, Edge: fake.KindRelay},
+				Probe:       stackrecords.Probe{OK: true, Edge: fake.KindRelay},
 			},
 		},
 	})
@@ -667,7 +667,7 @@ func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) 
 func TestHostnameStatusReportsWhatTheProviderSaysOfTheCertificate(t *testing.T) {
 	t.Parallel()
 	client, p := contractServed(t, "1.0.0")
-	seedStack(t, p, edge.ClassProduction, "shop", providerkit.EdgeStackState{
+	seedStack(t, p, edge.ClassProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{
 			Slug:     "shop",
 			Class:    edge.ClassProduction,
@@ -675,10 +675,10 @@ func TestHostnameStatusReportsWhatTheProviderSaysOfTheCertificate(t *testing.T) 
 			Front:    "shop.relay.fake.invalid",
 			Bound:    []string{"app.acme.com"},
 		},
-		Hosts: map[string]providerkit.Settled{
+		Hosts: map[string]stackrecords.Settled{
 			"app.acme.com": {
 				Certificate: provider.Certificate{ID: "pending-cert", Requested: true},
-				Probe:       providerkit.Probe{OK: true, Edge: fake.KindRelay},
+				Probe:       stackrecords.Probe{OK: true, Edge: fake.KindRelay},
 			},
 		},
 	})
@@ -715,7 +715,7 @@ func TestHostnameStatusReportsWhatTheProviderSaysOfTheCertificate(t *testing.T) 
 func TestGetHostnameStatusReadsTheRecordedProbeUnlessAskedToCheckLive(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	seedStack(t, provider, edge.ClassProduction, "shop", providerkit.EdgeStackState{
+	seedStack(t, provider, edge.ClassProduction, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{
 			Slug:     "shop",
 			Class:    edge.ClassProduction,
@@ -723,8 +723,8 @@ func TestGetHostnameStatusReadsTheRecordedProbeUnlessAskedToCheckLive(t *testing
 			Bound:    []string{"app.acme.com"},
 			Fronts:   map[string]string{"app.acme.com": "shop.relay.fake.invalid"},
 		},
-		Hosts: map[string]providerkit.Settled{
-			"app.acme.com": {Probe: providerkit.Probe{At: 1755500000, OK: true, Edge: fake.KindRelay}},
+		Hosts: map[string]stackrecords.Settled{
+			"app.acme.com": {Probe: stackrecords.Probe{At: 1755500000, OK: true, Edge: fake.KindRelay}},
 		},
 	})
 

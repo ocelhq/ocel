@@ -7,11 +7,11 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -98,7 +98,7 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 	production := &heard{}
 	plan := previewPlan("")
 	plan.Ref.Class = edge.ClassProduction
-	plan.Ref.Name = naming.StackName{Env: providerkit.ProductionEnv, App: "web"}
+	plan.Ref.Name = naming.StackName{Env: stackrecords.ProductionEnv, App: "web"}
 	if _, err := p.ProvisionContainers(context.Background(), plan, production); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
@@ -126,13 +126,13 @@ func TestAProductionReleaseIsNamedNoDifferentlyForCarryingNoPreviewLabel(t *test
 	p := server.open(t)
 	plan := previewPlan("")
 	plan.Ref.Class = edge.ClassProduction
-	plan.Ref.Name = naming.StackName{Env: providerkit.ProductionEnv, App: "web"}
+	plan.Ref.Name = naming.StackName{Env: stackrecords.ProductionEnv, App: "web"}
 
 	containers, err := p.ProvisionContainers(context.Background(), plan, nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
-	want, err := names(t, p).Service("shop", providerkit.ProductionEnv, "web", "web")
+	want, err := names(t, p).Service("shop", stackrecords.ProductionEnv, "web", "web")
 	if err != nil {
 		t.Fatal(err)
 	}

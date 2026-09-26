@@ -12,10 +12,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -73,7 +73,7 @@ func holdsValues(name records.Name) bool {
 }
 
 func (r Records) table(ctx context.Context, name records.Name) (string, error) {
-	class, named := providerkit.ClassOf(name)
+	class, named := stackrecords.ClassOf(name)
 	if !named {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"%s names no class, and this account keeps each class's records in the bootstrap that owns them", name)
@@ -93,7 +93,7 @@ func Partition(name records.Name) (string, error) {
 }
 
 func unbootstrapped(name records.Name) error {
-	class, _ := providerkit.ClassOf(name)
+	class, _ := stackrecords.ClassOf(name)
 	return refusal.Refuse(refusal.CodeNotReady,
 		"this account has no Ocel bootstrap, so there is nowhere to keep a record.\nRun `%s` to create it, then try again", provider.BootstrapCommand(class))
 }

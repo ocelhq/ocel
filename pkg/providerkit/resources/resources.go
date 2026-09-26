@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -96,7 +97,7 @@ func (f *fanout) PlanDestroy(ctx context.Context, ref provider.StackRef, _ edge.
 	return providerkit.SynthesizedRemoval(ref, standing(recorded)), nil
 }
 
-func standing(recorded providerkit.RecordedStack) provider.StackResult {
+func standing(recorded stackrecords.Stack) provider.StackResult {
 	return provider.StackResult{Bindings: recorded.Bindings, Functions: recorded.Functions, Containers: recorded.Containers}
 }
 
@@ -299,7 +300,7 @@ func unownable(ref provider.StackRef, going int, noun, because, hook string) err
 		ref.Name, going, noun, because, hook)
 }
 
-func (f *fanout) removeOrphans(ctx context.Context, plan provider.StackPlan, recorded providerkit.RecordedStack, progress edge.Progress) error {
+func (f *fanout) removeOrphans(ctx context.Context, plan provider.StackPlan, recorded stackrecords.Stack, progress edge.Progress) error {
 	for _, binding := range recorded.Bindings {
 		if slices.ContainsFunc(plan.Resources, func(resource provider.Resource) bool {
 			return resource.Name == binding.Name && resource.Type == binding.Type
@@ -319,7 +320,7 @@ func (f *fanout) removeOrphans(ctx context.Context, plan provider.StackPlan, rec
 	return f.removeOrphanContainers(ctx, plan, recorded, progress)
 }
 
-func (f *fanout) removeOrphanFunctions(ctx context.Context, plan provider.StackPlan, recorded providerkit.RecordedStack, progress edge.Progress) error {
+func (f *fanout) removeOrphanFunctions(ctx context.Context, plan provider.StackPlan, recorded stackrecords.Stack, progress edge.Progress) error {
 	declared := providerkit.DeclaredFunctions(plan)
 	var orphans []provider.Function
 	for _, held := range recorded.Functions {
@@ -332,7 +333,7 @@ func (f *fanout) removeOrphanFunctions(ctx context.Context, plan provider.StackP
 	return f.removeFunctions(ctx, plan.Ref, orphans, undeclared, progress)
 }
 
-func (f *fanout) removeOrphanContainers(ctx context.Context, plan provider.StackPlan, recorded providerkit.RecordedStack, progress edge.Progress) error {
+func (f *fanout) removeOrphanContainers(ctx context.Context, plan provider.StackPlan, recorded stackrecords.Stack, progress edge.Progress) error {
 	declared := providerkit.DeclaredContainers(plan)
 	var orphans []provider.AppContainer
 	for _, held := range recorded.Containers {
@@ -361,8 +362,8 @@ func (f *fanout) remove(ctx context.Context, ref provider.StackRef, binding prov
 	return f.hooks.RemoveResource(ctx, ref, binding, progress)
 }
 
-func (f *fanout) recorded(ctx context.Context, ref provider.StackRef) (providerkit.RecordedStack, error) {
-	recorded, _, err := providerkit.ReadStack(ctx, f.records, ref.Class, ref.Project, ref.Name)
+func (f *fanout) recorded(ctx context.Context, ref provider.StackRef) (stackrecords.Stack, error) {
+	recorded, _, err := stackrecords.Read(ctx, f.records, ref.Class, ref.Project, ref.Name)
 	return recorded, err
 }
 

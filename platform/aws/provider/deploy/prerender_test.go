@@ -11,8 +11,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -67,7 +67,7 @@ func twoAppTree(t *testing.T) string {
 
 func deployedConfig(cfg Config) Config {
 	if cfg.Env == "" {
-		cfg.Env = providerkit.ProductionEnv
+		cfg.Env = stackrecords.ProductionEnv
 	}
 	return cfg
 }

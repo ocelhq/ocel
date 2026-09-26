@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	kit "github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -24,7 +24,7 @@ type ContainerFront struct {
 }
 
 func ContainerFrontRecord(class edge.Class) records.Name {
-	return append(kit.StacksRecord(class, ContainersSlug), containerFrontRecord)
+	return append(stackrecords.StacksRecord(class, ContainersSlug), containerFrontRecord)
 }
 
 func ReadContainerFront(ctx context.Context, store records.Store, class edge.Class) (ContainerFront, bool, error) {

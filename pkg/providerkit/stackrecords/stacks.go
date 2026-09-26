@@ -1,4 +1,4 @@
-package providerkit
+package stackrecords
 
 import (
 	"cmp"
@@ -14,7 +14,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type RecordedStack struct {
+type Stack struct {
 	Kind      provider.StackKind  `json:"kind"`
 	App       string              `json:"app,omitempty"`
 	Release   string              `json:"release,omitempty"`
@@ -28,28 +28,28 @@ type RecordedStack struct {
 	UpdatedAt int64              `json:"updated_at,omitempty"`
 }
 
-type StackEntry struct {
+type NamedStack struct {
 	Name naming.StackName
-	RecordedStack
+	Stack
 }
 
-func ReadStack(ctx context.Context, store records.Store, class edge.Class, slug string, stack naming.StackName) (RecordedStack, bool, error) {
+func Read(ctx context.Context, store records.Store, class edge.Class, slug string, stack naming.StackName) (Stack, bool, error) {
 	name := StackRecord(class, slug, stack)
 	held, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
-		return RecordedStack{}, false, fmt.Errorf("read %s: %w", name, err)
+		return Stack{}, false, fmt.Errorf("read %s: %w", name, err)
 	}
 	if len(held.Bytes) == 0 {
-		return RecordedStack{}, false, nil
+		return Stack{}, false, nil
 	}
-	var recorded RecordedStack
+	var recorded Stack
 	if err := json.Unmarshal(held.Bytes, &recorded); err != nil {
-		return RecordedStack{}, false, fmt.Errorf("read %s: %w", name, err)
+		return Stack{}, false, fmt.Errorf("read %s: %w", name, err)
 	}
 	return recorded, true, nil
 }
 
-func WriteStack(ctx context.Context, store records.Store, class edge.Class, slug string, stack naming.StackName, recorded RecordedStack) error {
+func Write(ctx context.Context, store records.Store, class edge.Class, slug string, stack naming.StackName, recorded Stack) error {
 	name := StackRecord(class, slug, stack)
 	held, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
@@ -65,17 +65,17 @@ func WriteStack(ctx context.Context, store records.Store, class edge.Class, slug
 	return nil
 }
 
-func ForgetStack(ctx context.Context, store records.Store, class edge.Class, slug string, stack naming.StackName) error {
+func Forget(ctx context.Context, store records.Store, class edge.Class, slug string, stack naming.StackName) error {
 	return records.Forget(ctx, store, StackRecord(class, slug, stack))
 }
 
-func ReadStacks(ctx context.Context, records records.Store, class edge.Class, slug string) ([]StackEntry, error) {
+func List(ctx context.Context, records records.Store, class edge.Class, slug string) ([]NamedStack, error) {
 	under := StacksRecord(class, slug)
 	held, err := records.List(ctx, under)
 	if err != nil {
 		return nil, fmt.Errorf("read %s's stacks: %w", slug, err)
 	}
-	entries := make([]StackEntry, 0, len(held))
+	entries := make([]NamedStack, 0, len(held))
 	for _, record := range held {
 		rest, named := record.Name.Under(under)
 		if !named {
@@ -85,15 +85,15 @@ func ReadStacks(ctx context.Context, records records.Store, class edge.Class, sl
 		if err != nil {
 			continue
 		}
-		entry := StackEntry{Name: name}
+		entry := NamedStack{Name: name}
 		if len(record.Bytes) > 0 {
-			if err := json.Unmarshal(record.Bytes, &entry.RecordedStack); err != nil {
+			if err := json.Unmarshal(record.Bytes, &entry.Stack); err != nil {
 				return nil, fmt.Errorf("read %s: %w", record.Name, err)
 			}
 		}
 		entries = append(entries, entry)
 	}
-	slices.SortFunc(entries, func(a, b StackEntry) int {
+	slices.SortFunc(entries, func(a, b NamedStack) int {
 		return cmp.Compare(a.Name.String(), b.Name.String())
 	})
 	return entries, nil

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 )
 
 func TestIdentity(t *testing.T) {
@@ -36,7 +36,7 @@ func TestIdentity(t *testing.T) {
 	t.Run("one build deployed into two environments never collides", func(t *testing.T) {
 		t.Parallel()
 
-		prod := deployedInto(providerkit.ProductionEnv, "dep1", "")
+		prod := deployedInto(stackrecords.ProductionEnv, "dep1", "")
 		preview := deployedInto("pr-7", "dep1", "")
 		other := deployedInto("pr-8", "dep1", "")
 		for _, pair := range [][2]Identity{{prod, preview}, {prod, other}, {preview, other}} {
@@ -69,7 +69,7 @@ func TestNewIdentity(t *testing.T) {
 		t.Parallel()
 
 		want := deploymentIDFor("dep1")
-		id, err := NewIdentity(want, providerkit.ProductionEnv, "")
+		id, err := NewIdentity(want, stackrecords.ProductionEnv, "")
 		if err != nil {
 			t.Fatalf("NewIdentity: %v", err)
 		}
@@ -96,16 +96,16 @@ func TestNewIdentity(t *testing.T) {
 		t.Parallel()
 
 		for _, c := range []struct{ deploymentID, environment, values string }{
-			{"", providerkit.ProductionEnv, ""},
+			{"", stackrecords.ProductionEnv, ""},
 			{"", "", "abc"},
-			{"dep" + identitySeparator + "1", providerkit.ProductionEnv, ""},
+			{"dep" + identitySeparator + "1", stackrecords.ProductionEnv, ""},
 			{deploymentIDFor("dep1"), "", ""},
-			{"dep1", providerkit.ProductionEnv, ""},
-			{strings.ToUpper(deploymentIDFor("dep1")), providerkit.ProductionEnv, ""},
-			{deploymentIDFor("dep1")[:31], providerkit.ProductionEnv, ""},
-			{deploymentIDFor("dep1") + "0", providerkit.ProductionEnv, ""},
-			{deploymentIDFor("dep1") + "\n", providerkit.ProductionEnv, ""},
-			{"../" + deploymentIDFor("dep1"), providerkit.ProductionEnv, ""},
+			{"dep1", stackrecords.ProductionEnv, ""},
+			{strings.ToUpper(deploymentIDFor("dep1")), stackrecords.ProductionEnv, ""},
+			{deploymentIDFor("dep1")[:31], stackrecords.ProductionEnv, ""},
+			{deploymentIDFor("dep1") + "0", stackrecords.ProductionEnv, ""},
+			{deploymentIDFor("dep1") + "\n", stackrecords.ProductionEnv, ""},
+			{"../" + deploymentIDFor("dep1"), stackrecords.ProductionEnv, ""},
 		} {
 			if _, err := NewIdentity(c.deploymentID, c.environment, c.values); err == nil {
 				t.Errorf("NewIdentity(%q, %q, %q) err = nil, want an error", c.deploymentID, c.environment, c.values)

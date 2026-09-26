@@ -32,6 +32,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -94,7 +95,7 @@ type deployRun struct {
 	plan       provider.DeployPlan
 	stages     deployStages
 
-	wildcard   Wildcard
+	wildcard   stackrecords.Wildcard
 	previewOn  string
 	selection  *contractv1.EdgeSelection
 	configured []ConfiguredHost
@@ -165,7 +166,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		stackSession: &stackSession{
 			provider: p,
 			front:    front,
-			store:    stackStore{records: p.Records(), name: EdgeStackRecord(plan.Class, plan.Slug)},
+			store:    stackStore{records: p.Records(), name: stackrecords.EdgeStackRecord(plan.Class, plan.Slug)},
 		},
 		gate:           gate,
 		features:       features,
@@ -260,7 +261,7 @@ func (r *deployRun) admit(ctx context.Context, progress edge.Progress) error {
 func (r *deployRun) admitDomains(ctx context.Context) error {
 	hosts := r.hostnames()
 	if r.plan.Class == edge.ClassPreview {
-		wildcard, err := readWildcard(ctx, r.provider.Records())
+		wildcard, err := stackrecords.ReadWildcard(ctx, r.provider.Records())
 		if err != nil {
 			return err
 		}
@@ -303,12 +304,12 @@ func (r *deployRun) admitDomains(ctx context.Context) error {
 }
 
 func (r *deployRun) rememberProject(ctx context.Context) error {
-	name := ProjectRecord(r.plan.Class, r.plan.Slug)
+	name := stackrecords.ProjectRecord(r.plan.Class, r.plan.Slug)
 	held, err := records.ReadOrEmpty(ctx, r.provider.Records(), name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
-	if held.Bytes, err = json.Marshal(Project{Features: r.features}); err != nil {
+	if held.Bytes, err = json.Marshal(stackrecords.Project{Features: r.features}); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
 	if _, err := r.provider.Records().Write(ctx, held); err != nil {
@@ -723,7 +724,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 				return err
 			}
 			r.bindings = result.Bindings
-			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, r.plan.Infra, RecordedStack{
+			return stackrecords.Write(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, r.plan.Infra, stackrecords.Stack{
 				Kind:      provider.StackInfra,
 				Bindings:  result.Bindings,
 				WrittenBy: provider.WrittenByVersion(""),
@@ -820,7 +821,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			if err := r.stage(ctx, entry, facts, images, values, result); err != nil {
 				return err
 			}
-			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, entry.Stack, RecordedStack{
+			return stackrecords.Write(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, entry.Stack, stackrecords.Stack{
 				Kind:       provider.StackApp,
 				App:        entry.App,
 				Release:    entry.Build.Release().String(),
@@ -838,7 +839,7 @@ func (r *deployRun) refuseToAdopt(ctx context.Context, stack naming.StackName) e
 	if inspectStack == nil {
 		return nil
 	}
-	_, recorded, err := ReadStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, stack)
+	_, recorded, err := stackrecords.Read(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, stack)
 	if err != nil || recorded {
 		return err
 	}
@@ -1200,7 +1201,7 @@ func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, er
 			if r.plan.Class != edge.ClassPreview {
 				return nil
 			}
-			return recordEnvironmentMeta(ctx, r.provider.Records(),
+			return stackrecords.RecordEnvironmentMeta(ctx, r.provider.Records(),
 				r.plan.Class, r.plan.Slug, r.plan.Env, r.plan.Label)
 		})
 	}); err != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -18,22 +19,22 @@ type stackStore struct {
 	name    records.Name
 }
 
-func (s stackStore) read(ctx context.Context) (EdgeStackState, error) {
+func (s stackStore) read(ctx context.Context) (stackrecords.EdgeState, error) {
 	held, err := records.ReadOrEmpty(ctx, s.records, s.name)
 	if err != nil {
-		return EdgeStackState{}, fmt.Errorf("read %s: %w", s.name, err)
+		return stackrecords.EdgeState{}, fmt.Errorf("read %s: %w", s.name, err)
 	}
-	var state EdgeStackState
+	var state stackrecords.EdgeState
 	if len(held.Bytes) == 0 {
 		return state, nil
 	}
 	if err := json.Unmarshal(held.Bytes, &state); err != nil {
-		return EdgeStackState{}, fmt.Errorf("read %s: %w", s.name, err)
+		return stackrecords.EdgeState{}, fmt.Errorf("read %s: %w", s.name, err)
 	}
 	return state, nil
 }
 
-func (s stackStore) write(ctx context.Context, state EdgeStackState) error {
+func (s stackStore) write(ctx context.Context, state stackrecords.EdgeState) error {
 	held, err := records.ReadOrEmpty(ctx, s.records, s.name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", s.name, err)
@@ -52,7 +53,7 @@ type stackSession struct {
 	front    edge.Edge
 	stack    edge.EdgeStack
 	store    stackStore
-	state    EdgeStackState
+	state    stackrecords.EdgeState
 	settle   settlement
 }
 
@@ -64,7 +65,7 @@ func (h *handlers) edgeFor(p provider.Provider, sel *contractv1.EdgeSelection) (
 	return p.Edges().Open(kind)
 }
 
-func (h *handlers) removalEdge(p provider.Provider, state EdgeStackState, sel *contractv1.EdgeSelection) (edge.Edge, error) {
+func (h *handlers) removalEdge(p provider.Provider, state stackrecords.EdgeState, sel *contractv1.EdgeSelection) (edge.Edge, error) {
 	if state.Kind == "" {
 		return h.edgeFor(p, sel)
 	}
@@ -91,7 +92,7 @@ func (h *handlers) openStack(ctx context.Context, class edge.Class, slug string,
 	if err != nil {
 		return nil, err
 	}
-	store := stackStore{records: provider.Records(), name: EdgeStackRecord(class, slug)}
+	store := stackStore{records: provider.Records(), name: stackrecords.EdgeStackRecord(class, slug)}
 	state, err := store.read(ctx)
 	if err != nil {
 		return nil, err

@@ -13,9 +13,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -169,7 +169,7 @@ func Open(key []byte, at records.SealScope, sealed []byte) ([]byte, error) {
 }
 
 func Located(name records.Name) (edge.Class, string, error) {
-	class, named := providerkit.ClassOf(name)
+	class, named := stackrecords.ClassOf(name)
 	if !named {
 		return "", "", refusal.Refuse(refusal.CodeInvalid,
 			"%s names no class", name)

@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -239,10 +240,10 @@ func RunRecordStore(t *testing.T, store records.Store) {
 	t.Run("every prefix the kit reads a whole subtree at is one this store can answer", func(t *testing.T) {
 		scope := envvars.Scope{Project: "conformance", Class: edge.ClassProduction}
 		for _, name := range []records.Name{
-			providerkit.ProjectsRecord(edge.ClassProduction),
-			providerkit.StacksRecord(edge.ClassProduction, scope.Project),
-			providerkit.EdgeStacksRecord(edge.ClassProduction),
-			providerkit.LedgerRecord(ledger.Scope(edge.ClassProduction, scope.Project)),
+			stackrecords.ProjectsRecord(edge.ClassProduction),
+			stackrecords.StacksRecord(edge.ClassProduction, scope.Project),
+			stackrecords.EdgeStacksRecord(edge.ClassProduction),
+			stackrecords.LedgerRecord(ledger.Scope(edge.ClassProduction, scope.Project)),
 			envvars.ScopedRecordName(scope),
 			envvars.ReferencesRecordName(scope),
 		} {
@@ -965,12 +966,12 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 		}
 
 		if records != nil {
-			recorded := providerkit.RecordedStack{Kind: provider.StackInfra, Bindings: result.Bindings}
-			if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, recorded); err != nil {
+			recorded := stackrecords.Stack{Kind: provider.StackInfra, Bindings: result.Bindings}
+			if err := stackrecords.Write(ctx, records, ref.Class, ref.Project, ref.Name, recorded); err != nil {
 				t.Fatalf("recording what the release returned, as the kit does after every Provision() = %v", err)
 			}
 			defer func() {
-				if err := providerkit.ForgetStack(ctx, records, ref.Class, ref.Project, ref.Name); err != nil {
+				if err := stackrecords.Forget(ctx, records, ref.Class, ref.Project, ref.Name); err != nil {
 					t.Errorf("forgetting the stack the teardown took = %v", err)
 				}
 			}()

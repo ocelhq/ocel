@@ -15,10 +15,10 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -39,13 +39,13 @@ func usePreviewWildcard(t *testing.T, client contractv1connect.ProviderServiceCl
 	return result
 }
 
-func seedWildcard(t *testing.T, provider *fake.Provider, held providerkit.Wildcard) {
+func seedWildcard(t *testing.T, provider *fake.Provider, held stackrecords.Wildcard) {
 	t.Helper()
 	encoded, err := json.Marshal(held)
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := providerkit.WildcardRecord(edge.ClassPreview)
+	name := stackrecords.WildcardRecord(edge.ClassPreview)
 	record, err := records.ReadOrEmpty(context.Background(), provider.Records(), name)
 	if err != nil {
 		t.Fatal(err)
@@ -56,13 +56,13 @@ func seedWildcard(t *testing.T, provider *fake.Provider, held providerkit.Wildca
 	}
 }
 
-func readHeldWildcard(t *testing.T, provider *fake.Provider) providerkit.Wildcard {
+func readHeldWildcard(t *testing.T, provider *fake.Provider) stackrecords.Wildcard {
 	t.Helper()
-	record, err := records.ReadOrEmpty(context.Background(), provider.Records(), providerkit.WildcardRecord(edge.ClassPreview))
+	record, err := records.ReadOrEmpty(context.Background(), provider.Records(), stackrecords.WildcardRecord(edge.ClassPreview))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var held providerkit.Wildcard
+	var held stackrecords.Wildcard
 	if len(record.Bytes) > 0 {
 		if err := json.Unmarshal(record.Bytes, &held); err != nil {
 			t.Fatal(err)
@@ -185,10 +185,10 @@ func TestGetPreviewWildcardNamesTheProjectsServedOnIt(t *testing.T) {
 	client, provider := contractServed(t, "1.0.0")
 	usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com"))
 
-	seedStack(t, provider, edge.ClassPreview, "shop", providerkit.EdgeStackState{
+	seedStack(t, provider, edge.ClassPreview, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{Slug: "shop", Class: edge.ClassPreview, GlobalPreview: "preview.acme.com"},
 	})
-	seedStack(t, provider, edge.ClassPreview, "blog", providerkit.EdgeStackState{
+	seedStack(t, provider, edge.ClassPreview, "blog", stackrecords.EdgeState{
 		Edge: edge.StackState{Slug: "blog", Class: edge.ClassPreview, GlobalPreview: "elsewhere.acme.com"},
 	})
 
@@ -207,7 +207,7 @@ func TestPlanRemovePreviewWildcardRefusesWhileAProjectStillHasLivePreviews(t *te
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 	usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com"))
-	seedStack(t, provider, edge.ClassPreview, "shop", providerkit.EdgeStackState{
+	seedStack(t, provider, edge.ClassPreview, "shop", stackrecords.EdgeState{
 		Edge: edge.StackState{Slug: "shop", Class: edge.ClassPreview, GlobalPreview: "preview.acme.com"},
 	})
 	seedEnvironment(t, provider, "shop", naming.AppStack("pr-7", "web", naming.NewRelease("b1", "")))
@@ -314,7 +314,7 @@ func TestRemovePreviewWildcardRefusesWhenNothingRecordsItsHolder(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 
-	seedWildcard(t, provider, providerkit.Wildcard{BaseDomain: "preview.acme.com"})
+	seedWildcard(t, provider, stackrecords.Wildcard{BaseDomain: "preview.acme.com"})
 
 	stream, err := client.RemovePreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
 		Tier: environmentv1.Tier_TIER_PREVIEW,
@@ -335,10 +335,10 @@ func TestThePreviewWildcardCarriesWhoRenewsItAndWhenItExpires(t *testing.T) {
 	t.Parallel()
 	client, p := contractServed(t, "1.0.0")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
-	seedWildcard(t, p, providerkit.Wildcard{
+	seedWildcard(t, p, stackrecords.Wildcard{
 		BaseDomain: "preview.acme.com",
 		Edge:       fake.KindRelay,
-		Settled:    providerkit.Settled{Certificate: provider.Certificate{ID: "pem:/etc/ocel/preview/certs/wildcard"}},
+		Settled:    stackrecords.Settled{Certificate: provider.Certificate{ID: "pem:/etc/ocel/preview/certs/wildcard"}},
 	})
 	expiry := time.Now().Add(9 * 24 * time.Hour).Unix()
 	p.ReportCertificate(provider.CertificateHealth{

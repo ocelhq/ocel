@@ -7,10 +7,10 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/pin"
 )
@@ -191,7 +191,7 @@ func (e *Edge) Open(state edge.StackState) (edge.EdgeStack, error) {
 }
 
 func (e *Edge) claim(class edge.Class, hostname string) records.Name {
-	return append(providerkit.EdgeStacksRecord(class), string(Kind), "domains", hostname)
+	return append(stackrecords.EdgeStacksRecord(class), string(Kind), "domains", hostname)
 }
 
 func (e *Edge) DomainOwner(ctx context.Context, hostname string) (string, error) {

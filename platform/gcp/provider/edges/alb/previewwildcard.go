@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -19,7 +19,7 @@ type previewEntry struct {
 }
 
 func (e *Edge) previewRecord() records.Name {
-	return append(providerkit.EdgeStacksRecord(edge.ClassPreview), string(Kind), "preview-wildcard")
+	return append(stackrecords.EdgeStacksRecord(edge.ClassPreview), string(Kind), "preview-wildcard")
 }
 
 func (e *Edge) heldPreview(ctx context.Context) (previewEntry, error) {
@@ -81,7 +81,7 @@ func (e *Edge) DestroyPreviewWildcard(ctx context.Context, baseDomain string) er
 	if wildcard == "" {
 		return nil
 	}
-	served, err := providerkit.ProjectsServedOnPreview(ctx, e.deps.Records, baseDomain)
+	served, err := stackrecords.ProjectsServedOnPreview(ctx, e.deps.Records, baseDomain)
 	if err != nil {
 		return err
 	}

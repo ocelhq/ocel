@@ -15,6 +15,7 @@ import (
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -85,7 +86,7 @@ func (h *VarsService) namedEnvironments(ctx context.Context, slug string) ([]str
 	if err != nil {
 		return nil, err
 	}
-	stacks, err := stackNames(ctx, vars.Records, edge.ClassPreview, slug)
+	stacks, err := stackrecords.StackNames(ctx, vars.Records, edge.ClassPreview, slug)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

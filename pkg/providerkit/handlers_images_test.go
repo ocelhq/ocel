@@ -14,11 +14,11 @@ import (
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -594,7 +594,7 @@ func TestTheStagedRecordNamesTheContainerTheReleaseStoodUp(t *testing.T) {
 	if len(staged) != 1 {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
-	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), edge.ClassProduction, "shop")
+	entries, err := stackrecords.List(context.Background(), provider.Records(), edge.ClassProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}

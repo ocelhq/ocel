@@ -9,8 +9,8 @@ import (
 	elbv2types "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -73,7 +73,7 @@ func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFir
 	if torn := engine.torn(); len(torn) != 0 {
 		t.Errorf("a claimed priority tore down %v, want nothing: the deploy recovers rather than abandons", torn)
 	}
-	if _, present, err := providerkit.ReadStack(context.Background(), cfg.Records, edge.ClassProduction, SubstrateSlug, substrateRef(edge.ClassProduction).Name); err != nil || !present {
+	if _, present, err := stackrecords.Read(context.Background(), cfg.Records, edge.ClassProduction, SubstrateSlug, substrateRef(edge.ClassProduction).Name); err != nil || !present {
 		t.Errorf("the substrate is not recorded (present %v, err %v) after the deploy that recovered", present, err)
 	}
 }

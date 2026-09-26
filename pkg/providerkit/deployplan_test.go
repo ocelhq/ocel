@@ -10,6 +10,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -77,8 +78,8 @@ func TestBuildDeployPlanNamesAnInfraStackAndOneStackPerApp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildDeployPlan() error = %v", err)
 	}
-	if plan.Infra != naming.InfraStack(ProductionEnv) {
-		t.Errorf("plan infra stack = %s, want %s", plan.Infra, naming.InfraStack(ProductionEnv))
+	if plan.Infra != naming.InfraStack(stackrecords.ProductionEnv) {
+		t.Errorf("plan infra stack = %s, want %s", plan.Infra, naming.InfraStack(stackrecords.ProductionEnv))
 	}
 	if len(plan.Apps) != 2 {
 		t.Fatalf("plan carries %d app stacks, want one per app", len(plan.Apps))
@@ -90,7 +91,7 @@ func TestBuildDeployPlanNamesAnInfraStackAndOneStackPerApp(t *testing.T) {
 		if plan.Builds[entry.App] != entry.Build.String() {
 			t.Errorf("the promotion records %q as %s's build, want %s", plan.Builds[entry.App], entry.App, entry.Build)
 		}
-		if entry.Stack.Env != ProductionEnv || entry.Stack.App != entry.App {
+		if entry.Stack.Env != stackrecords.ProductionEnv || entry.Stack.App != entry.App {
 			t.Errorf("%s's stack is %s, want it named for the app in production", entry.App, entry.Stack)
 		}
 	}
@@ -134,7 +135,7 @@ func TestBuildAppStackMovesWhenAValueVersionMoves(t *testing.T) {
 		Name:         "web",
 		DeploymentId: deploymentID,
 		Variables:    []*contractv1.ManifestVariable{{Key: "API_URL", Version: 1}},
-	}, ProductionEnv)
+	}, stackrecords.ProductionEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +143,7 @@ func TestBuildAppStackMovesWhenAValueVersionMoves(t *testing.T) {
 		Name:         "web",
 		DeploymentId: deploymentID,
 		Variables:    []*contractv1.ManifestVariable{{Key: "API_URL", Version: 2}},
-	}, ProductionEnv)
+	}, stackrecords.ProductionEnv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,16 +155,16 @@ func TestBuildAppStackMovesWhenAValueVersionMoves(t *testing.T) {
 func TestReclaimTargetsKeepAssetsARemainingReleaseStillServes(t *testing.T) {
 	t.Parallel()
 
-	shared, err := provider.NewBuild(deploymentID, ProductionEnv, "shared")
+	shared, err := provider.NewBuild(deploymentID, stackrecords.ProductionEnv, "shared")
 	if err != nil {
 		t.Fatal(err)
 	}
-	gone, err := provider.NewBuild(deploymentID, ProductionEnv, "gone")
+	gone, err := provider.NewBuild(deploymentID, stackrecords.ProductionEnv, "gone")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	targets, err := ReclaimTargets("shop", ProductionEnv,
+	targets, err := ReclaimTargets("shop", stackrecords.ProductionEnv,
 		[]string{"record:web/" + gone.String(), "record:web/" + shared.String()},
 		[]string{"record:web/" + shared.String()},
 		nil)
@@ -191,7 +192,7 @@ func TestReclaimTargetsKeepAssetsARemainingReleaseStillServes(t *testing.T) {
 func TestReclaimTargetsRefuseARecordKeyNothingWrote(t *testing.T) {
 	t.Parallel()
 
-	if _, err := ReclaimTargets("shop", ProductionEnv, []string{"record:web"}, nil, nil); err == nil {
+	if _, err := ReclaimTargets("shop", stackrecords.ProductionEnv, []string{"record:web"}, nil, nil); err == nil {
 		t.Fatal("ReclaimTargets() accepted a key carrying no identity, want a refusal")
 	}
 }
@@ -200,9 +201,9 @@ func TestClassifyStacksSplitsProductionFromPreview(t *testing.T) {
 	t.Parallel()
 
 	release := naming.NewRelease(deploymentID, "f")
-	entries := []StackEntry{
-		{Name: naming.InfraStack(ProductionEnv)},
-		{Name: naming.AppStack(ProductionEnv, "web", release)},
+	entries := []stackrecords.NamedStack{
+		{Name: naming.InfraStack(stackrecords.ProductionEnv)},
+		{Name: naming.AppStack(stackrecords.ProductionEnv, "web", release)},
 		{Name: naming.InfraStack("staging")},
 		{Name: naming.AppStack("pr-7", "web", release)},
 	}
@@ -372,11 +373,11 @@ func TestAContainerAppPackedIntoFunctionsRefusesTheDeploy(t *testing.T) {
 func TestReclaimTargetsLeaveAContainerReleaseToTheBoxThatHoldsIt(t *testing.T) {
 	t.Parallel()
 
-	gone, err := provider.NewBuild(deploymentID, ProductionEnv, "gone")
+	gone, err := provider.NewBuild(deploymentID, stackrecords.ProductionEnv, "gone")
 	if err != nil {
 		t.Fatal(err)
 	}
-	targets, err := ReclaimTargets("shop", ProductionEnv,
+	targets, err := ReclaimTargets("shop", stackrecords.ProductionEnv,
 		[]string{"record:web/ocel/web@sha256:" + strings.Repeat("a", 64), "record:api/" + gone.String()},
 		nil, nil)
 	if err != nil {
@@ -397,7 +398,7 @@ func TestReclaimTargetsRefuseAKeyThatIsNeitherABuildNorAnImageReference(t *testi
 		"record:web/garbage@sha256:" + strings.Repeat("z", 64),
 		"record:web/garbage@sha512:" + strings.Repeat("a", 128),
 	} {
-		if _, err := ReclaimTargets("shop", ProductionEnv, []string{key}, nil, nil); err == nil {
+		if _, err := ReclaimTargets("shop", stackrecords.ProductionEnv, []string{key}, nil, nil); err == nil {
 			t.Errorf("ReclaimTargets() over %q returned no refusal, and a key that names neither a build nor a digest-pinned image reference is a corrupt key rather than a container release the box reclaims", key)
 		}
 	}

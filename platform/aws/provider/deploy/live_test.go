@@ -10,8 +10,8 @@ import (
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
@@ -116,7 +116,7 @@ func TestRenderAppBundle(t *testing.T) {
 		}
 
 		production := liveConfig()
-		production.Class, production.Env = edge.ClassProduction, providerkit.ProductionEnv
+		production.Class, production.Env = edge.ClassProduction, stackrecords.ProductionEnv
 
 		for _, tc := range []struct {
 			name string

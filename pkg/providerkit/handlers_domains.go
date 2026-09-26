@@ -14,6 +14,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -146,7 +147,7 @@ func (d *hostnames) settleHost(ctx context.Context, target ConfiguredHost, progr
 	return true, d.retire(ctx, host, serving, progress)
 }
 
-func (d *hostnames) certification(host string, settled *Settled) certification {
+func (d *hostnames) certification(host string, settled *stackrecords.Settled) certification {
 	return certification{
 		provider: d.provider,
 		settle:   d.settle,
@@ -212,7 +213,7 @@ func (d *hostnames) remove(ctx context.Context, progress edge.Progress) error {
 		if err := d.checkpoint(ctx); err != nil {
 			return err
 		}
-		for _, cert := range settled.certificates() {
+		for _, cert := range settled.Certificates() {
 			if d.state.Uses(cert.ID) {
 				continue
 			}
@@ -326,12 +327,12 @@ func (d *hostnames) statusOf(ctx context.Context, host string) (*contractv1.Prod
 	return row, nil
 }
 
-func (d *hostnames) probe(ctx context.Context, host string) Probe {
+func (d *hostnames) probe(ctx context.Context, host string) stackrecords.Probe {
 	serving, err := d.settle.attempt(ctx, host)
-	return Probe{At: d.settle.now().Unix(), OK: err == nil && serving == d.settle.kind, Edge: serving}
+	return stackrecords.Probe{At: d.settle.now().Unix(), OK: err == nil && serving == d.settle.kind, Edge: serving}
 }
 
-func (d *hostnames) pendingOn(host string, cert provider.Certificate, health provider.CertificateHealth, bound bool, probe Probe) string {
+func (d *hostnames) pendingOn(host string, cert provider.Certificate, health provider.CertificateHealth, bound bool, probe stackrecords.Probe) string {
 	switch {
 	case !slices.Contains(d.declared(), host):
 		return fmt.Sprintf("this project no longer declares %s; `ocel domain rm` gives it back", host)
@@ -350,7 +351,7 @@ func (d *hostnames) pendingOn(host string, cert provider.Certificate, health pro
 	return ""
 }
 
-func servingPointer(probe Probe, kind edge.Kind) string {
+func servingPointer(probe stackrecords.Probe, kind edge.Kind) string {
 	if probe.OK && probe.Edge != "" {
 		return string(probe.Edge)
 	}
@@ -364,7 +365,7 @@ func certificateStatusWord(status string) string {
 	return strings.ToLower(status)
 }
 
-func certificateState(settled Settled, probe Probe, owed []edge.Record, status string) *contractv1.CertificateState {
+func certificateState(settled stackrecords.Settled, probe stackrecords.Probe, owed []edge.Record, status string) *contractv1.CertificateState {
 	return &contractv1.CertificateState{
 		CertificateId:     settled.Certificate.ID,
 		CertificateStatus: status,

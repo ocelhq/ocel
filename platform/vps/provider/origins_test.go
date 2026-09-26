@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -57,8 +57,8 @@ func stoodWithABucketDeclared(t *testing.T, declared ...string) (*box, *vps.Prov
 	if err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
-	if err := providerkit.WriteStack(ctx, records, edge.ClassProduction, "shop",
-		naming.InfraStack(bucket.Ref.Name.Env), providerkit.RecordedStack{
+	if err := stackrecords.Write(ctx, records, edge.ClassProduction, "shop",
+		naming.InfraStack(bucket.Ref.Name.Env), stackrecords.Stack{
 			Kind: provider.StackInfra, Bindings: []provider.Binding{binding},
 		}); err != nil {
 		t.Fatal(err)

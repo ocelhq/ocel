@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -171,7 +172,7 @@ func boundHere(ctx context.Context, records records.Store, class edge.Class, slu
 	if slug == "" {
 		return nil, nil
 	}
-	state, err := (stackStore{records: records, name: EdgeStackRecord(class, slug)}).read(ctx)
+	state, err := (stackStore{records: records, name: stackrecords.EdgeStackRecord(class, slug)}).read(ctx)
 	if err != nil {
 		return nil, err
 	}

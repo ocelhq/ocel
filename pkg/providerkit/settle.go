@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -155,7 +156,7 @@ func (s settlement) release(ctx context.Context, written []edge.Record, say func
 	return s.dns.Delete(ctx, written)
 }
 
-func (s settlement) await(ctx context.Context, hostname string, say func(string)) (Probe, error) {
+func (s settlement) await(ctx context.Context, hostname string, say func(string)) (stackrecords.Probe, error) {
 	began := s.now()
 	deadline := began.Add(s.budget)
 	bounded, stop := context.WithTimeout(ctx, s.budget)
@@ -169,16 +170,16 @@ func (s settlement) await(ctx context.Context, hostname string, say func(string)
 		case err == nil:
 			outlasted = ""
 		case ctx.Err() != nil:
-			return Probe{At: s.now().Unix(), Edge: serving}, ctx.Err()
+			return stackrecords.Probe{At: s.now().Unix(), Edge: serving}, ctx.Err()
 		case bounded.Err() != nil:
-			return Probe{At: s.now().Unix()}, s.unresolved(hostname, "", began, outlasted)
+			return stackrecords.Probe{At: s.now().Unix()}, s.unresolved(hostname, "", began, outlasted)
 		case errors.Is(err, context.DeadlineExceeded):
 			serving, outlasted = "", fmt.Sprintf("the last attempt got no answer within %s", s.window)
 		default:
-			return Probe{At: s.now().Unix(), Edge: serving}, err
+			return stackrecords.Probe{At: s.now().Unix(), Edge: serving}, err
 		}
 		if serving == s.kind {
-			return Probe{At: s.now().Unix(), OK: true, Edge: serving}, nil
+			return stackrecords.Probe{At: s.now().Unix(), OK: true, Edge: serving}, nil
 		}
 		if !s.now().Add(s.wait).Before(deadline) {
 			break
@@ -186,12 +187,12 @@ func (s settlement) await(ctx context.Context, hostname string, say func(string)
 		say(fmt.Sprintf("Waiting for %s to answer as the %s edge", hostname, s.kind))
 		if err := s.sleep(bounded, s.wait); err != nil {
 			if ctx.Err() != nil {
-				return Probe{At: s.now().Unix(), Edge: serving}, ctx.Err()
+				return stackrecords.Probe{At: s.now().Unix(), Edge: serving}, ctx.Err()
 			}
 			break
 		}
 	}
-	return Probe{At: s.now().Unix(), Edge: serving}, s.unresolved(hostname, serving, began, outlasted)
+	return stackrecords.Probe{At: s.now().Unix(), Edge: serving}, s.unresolved(hostname, serving, began, outlasted)
 }
 
 func (s settlement) attempt(ctx context.Context, hostname string) (edge.Kind, error) {

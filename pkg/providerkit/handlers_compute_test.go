@@ -7,10 +7,10 @@ import (
 	connect "connectrpc.com/connect"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -136,7 +136,7 @@ func TestTheContainerAStoodUpAppRunsOnIsRecordedAgainstItsStack(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	entries, err := providerkit.ReadStacks(context.Background(), p.Records(), edge.ClassProduction, "shop")
+	entries, err := stackrecords.List(context.Background(), p.Records(), edge.ClassProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}

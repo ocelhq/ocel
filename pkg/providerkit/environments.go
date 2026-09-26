@@ -1,124 +1,12 @@
 package providerkit
 
 import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"slices"
-	"time"
-
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
-
-const ProductionEnv = "prod"
-
-type Environment struct {
-	Identity  string
-	Persisted bool
-	Label     string
-	CreatedAt int64
-}
-
-type EnvironmentMeta struct {
-	Label     string `json:"label,omitempty"`
-	CreatedAt int64  `json:"created_at,omitempty"`
-}
-
-func recordEnvironmentMeta(ctx context.Context, store records.Store, class edge.Class, slug, env, label string) error {
-	name := EnvironmentRecord(class, slug, env)
-	held, err := records.ReadOrEmpty(ctx, store, name)
-	if err != nil {
-		return fmt.Errorf("read %s: %w", name, err)
-	}
-	var meta EnvironmentMeta
-	if len(held.Bytes) > 0 {
-		if err := json.Unmarshal(held.Bytes, &meta); err != nil {
-			return fmt.Errorf("read %s: %w", name, err)
-		}
-	}
-	if meta.CreatedAt == 0 {
-		meta.CreatedAt = time.Now().Unix()
-	}
-	if label != "" {
-		meta.Label = label
-	}
-	if held.Bytes, err = json.Marshal(meta); err != nil {
-		return fmt.Errorf("record %s: %w", name, err)
-	}
-	if _, err := store.Write(ctx, held); err != nil {
-		return fmt.Errorf("record %s: %w", name, err)
-	}
-	return nil
-}
-
-func environmentMeta(ctx context.Context, records records.Store, class edge.Class, slug string) (map[string]EnvironmentMeta, error) {
-	held, err := records.List(ctx, EnvironmentsRecord(class, slug))
-	if err != nil {
-		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
-	}
-	meta := make(map[string]EnvironmentMeta, len(held))
-	for _, record := range held {
-		var recorded EnvironmentMeta
-		if err := json.Unmarshal(record.Bytes, &recorded); err != nil {
-			continue
-		}
-		meta[record.Name[len(record.Name)-1]] = recorded
-	}
-	return meta, nil
-}
-
-func stackNames(ctx context.Context, records records.Store, class edge.Class, slug string) ([]naming.StackName, error) {
-	held, err := records.List(ctx, StacksRecord(class, slug))
-	if err != nil {
-		return nil, fmt.Errorf("read %s's environments: %w", slug, err)
-	}
-	names := make([]naming.StackName, 0, len(held))
-	for _, record := range held {
-		stack, err := naming.ParseStackName(record.Name[len(record.Name)-1])
-		if err != nil {
-			continue
-		}
-		names = append(names, stack)
-	}
-	return names, nil
-}
-
-func previewEnvironments(ctx context.Context, records records.Store, slug string) ([]Environment, error) {
-	stacks, err := stackNames(ctx, records, edge.ClassPreview, slug)
-	if err != nil {
-		return nil, err
-	}
-	persisted := map[string]bool{}
-	var identities []string
-	for _, stack := range stacks {
-		if stack.Env == "" || stack.Env == ProductionEnv {
-			continue
-		}
-		if !slices.Contains(identities, stack.Env) {
-			identities = append(identities, stack.Env)
-		}
-		persisted[stack.Env] = persisted[stack.Env] || stack.IsInfra()
-	}
-	slices.Sort(identities)
-	meta, err := environmentMeta(ctx, records, edge.ClassPreview, slug)
-	if err != nil {
-		return nil, err
-	}
-	environments := make([]Environment, 0, len(identities))
-	for _, identity := range identities {
-		environments = append(environments, Environment{
-			Identity:  identity,
-			Persisted: persisted[identity],
-			Label:     meta[identity].Label,
-			CreatedAt: meta[identity].CreatedAt,
-		})
-	}
-	return environments, nil
-}
 
 func envName(env *environmentv1.Environment) (string, error) {
 	class, err := classOf(env.GetTier())
@@ -126,7 +14,7 @@ func envName(env *environmentv1.Environment) (string, error) {
 		return "", err
 	}
 	if class == edge.ClassProduction {
-		return ProductionEnv, nil
+		return stackrecords.ProductionEnv, nil
 	}
 	identity := env.GetIdentity()
 	if identity == "" {
@@ -135,7 +23,7 @@ func envName(env *environmentv1.Environment) (string, error) {
 	if err := naming.Validate("preview name", identity); err != nil {
 		return "", refusal.Refuse(refusal.CodeInvalid, "%s", err.Error())
 	}
-	if identity == ProductionEnv {
+	if identity == stackrecords.ProductionEnv {
 		return "", refusal.Refuse(refusal.CodeInvalid, "%q names production, so it is not a preview environment's identity", identity)
 	}
 	return identity, nil

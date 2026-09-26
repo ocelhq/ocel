@@ -10,9 +10,9 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -195,7 +195,7 @@ func previewDeployed(t *testing.T, req *contractv1.DeployRequest) (*fake.Provide
 	builtProject(t)
 	client, provider := contractServed(t, "1.0.0")
 	previewBootstrapped(t, client)
-	seedWildcard(t, provider, providerkit.Wildcard{BaseDomain: "preview.acme.com", Edge: fake.KindRelay})
+	seedWildcard(t, provider, stackrecords.Wildcard{BaseDomain: "preview.acme.com", Edge: fake.KindRelay})
 	result, _ := deploy(t, client, req)
 	return provider, result
 }
@@ -205,7 +205,7 @@ func previewRefused(t *testing.T, req *contractv1.DeployRequest) string {
 	builtProject(t)
 	client, provider := contractServed(t, "1.0.0")
 	previewBootstrapped(t, client)
-	seedWildcard(t, provider, providerkit.Wildcard{BaseDomain: "preview.acme.com", Edge: fake.KindRelay})
+	seedWildcard(t, provider, stackrecords.Wildcard{BaseDomain: "preview.acme.com", Edge: fake.KindRelay})
 
 	stream, err := client.Deploy(t.Context(), req)
 	if err != nil {
