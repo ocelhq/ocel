@@ -22,12 +22,12 @@ export async function verifyOrganizationMembership(
 }
 
 export async function roleOf(userId: string, organizationId: string): Promise<string> {
-  const [held] = await db
+  const [membership] = await db
     .select({ role: member.role })
     .from(member)
     .where(and(eq(member.userId, userId), eq(member.organizationId, organizationId)))
     .limit(1);
-  return held?.role ?? "";
+  return membership?.role ?? "";
 }
 
 const administrative = new Set(["owner", "admin"]);

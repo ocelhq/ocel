@@ -99,11 +99,11 @@ describe("noteDenial", () => {
 
       await noteDenial(id, "set", {
         reason: "denied",
-        message: "the token carries no envvars.write scope",
+        message: "the token has no envvars.write scope",
       });
       const [row] = await db.select().from(connector).where(eq(connector.id, id));
       expect(row.lastDenied?.verb).toBe("set");
-      expect(row.lastDenied?.message).toBe("the token carries no envvars.write scope");
+      expect(row.lastDenied?.message).toBe("the token has no envvars.write scope");
       expect(Date.parse(row.lastDenied?.at ?? "")).not.toBeNaN();
     } finally {
       await session.cleanup();

@@ -37,7 +37,7 @@ export async function upsertConnector(request: Request): Promise<Response> {
     return parsed.refusal;
   }
 
-  const [held] = await db
+  const [saved] = await db
     .insert(connector)
     .values({
       id: uuidv7(),
@@ -55,5 +55,5 @@ export async function upsertConnector(request: Request): Promise<Response> {
     })
     .returning();
 
-  return Response.json(held, { status: 200 });
+  return Response.json(saved, { status: 200 });
 }

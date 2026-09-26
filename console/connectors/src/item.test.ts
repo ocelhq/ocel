@@ -3,7 +3,7 @@ import { REFUSALS, refuse, statusOf } from "./item";
 
 describe("statusOf", () => {
   it("answers 403 for a connector that denied the scope", () => {
-    const refused = refuse("denied", "the token carries no envvars.write scope");
+    const refused = refuse("denied", "the token has no envvars.write scope");
     expect(refused.done).toBe(false);
     if (!refused.done) {
       expect(statusOf(refused.refusal)).toBe(403);
@@ -20,7 +20,7 @@ describe("statusOf", () => {
 
   it("answers 502 for every other refusal, because the console reached nothing useful", () => {
     const own = ["denied", "unauthenticated"];
-    for (const reason of REFUSALS.filter((held) => !own.includes(held))) {
+    for (const reason of REFUSALS.filter((other) => !own.includes(other))) {
       expect(statusOf({ reason, message: "" })).toBe(502);
     }
   });

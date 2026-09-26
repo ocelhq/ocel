@@ -190,7 +190,7 @@ export function GeneralForm({
         <div className={section}>
           <h2 className={labelType}>Delete</h2>
           <p className="max-w-prose text-sm text-muted-foreground">
-            Removes the organization, its members and every project record the console holds.
+            Removes the organization, its members and every project record the console stores.
             Nothing in your cloud account is touched; your deployments keep running.
           </p>
           {deleting ? (

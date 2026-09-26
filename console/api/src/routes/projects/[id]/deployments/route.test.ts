@@ -257,7 +257,7 @@ describe("createDeployment", () => {
     }
   });
 
-  it("refuses a stage naming an app the record does not carry", async () => {
+  it("refuses a stage naming an app the record does not contain", async () => {
     const session = await createTestSessionWithOrganization();
     try {
       const created = await createProjectFor(session, "deploy-unknown-stage-app");
@@ -287,7 +287,7 @@ describe("createDeployment", () => {
     }
   });
 
-  it("refuses a usage naming an app the record does not carry", async () => {
+  it("refuses a usage naming an app the record does not contain", async () => {
     const session = await createTestSessionWithOrganization();
     try {
       const created = await createProjectFor(session, "deploy-unknown-app");
@@ -310,7 +310,7 @@ describe("createDeployment", () => {
     }
   });
 
-  it("refuses a usage naming a resource the record does not carry", async () => {
+  it("refuses a usage naming a resource the record does not contain", async () => {
     const session = await createTestSessionWithOrganization();
     try {
       const created = await createProjectFor(session, "deploy-unknown-resource");

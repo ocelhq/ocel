@@ -10,7 +10,7 @@ export const projectEnvValue = pgTable(
       .notNull()
       .references(() => project.id, { onDelete: "cascade" }),
     key: text("key").notNull(),
-    // TODO(alpha): encrypt at rest before the console holds anything but dev values (#992).
+    // TODO(alpha): encrypt at rest before the console stores anything but dev values (#992).
     value: text("value").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at")

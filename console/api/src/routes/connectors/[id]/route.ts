@@ -16,13 +16,13 @@ export async function updateConnector(request: Request, id: string): Promise<Res
     return parsed.refusal;
   }
 
-  const [held] = await db
+  const [updated] = await db
     .update(connector)
     .set(parsed.data)
     .where(eq(connector.id, owned.connectorId))
     .returning();
 
-  return Response.json(held, { status: 200 });
+  return Response.json(updated, { status: 200 });
 }
 
 export async function deleteConnector(request: Request, id: string): Promise<Response> {

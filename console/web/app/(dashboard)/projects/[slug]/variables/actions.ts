@@ -35,11 +35,11 @@ interface Reached {
   slug: string;
   projectId: string;
   connector: Dialled;
-  held: EnvironmentClass;
+  environmentClass: EnvironmentClass;
 }
 
 async function reach(projectId: string, env: string): Promise<Answer<Reached>> {
-  const held: EnvironmentClass = env === "preview" ? "preview" : "production";
+  const environmentClass: EnvironmentClass = env === "preview" ? "preview" : "production";
   const session = await requireOrganization();
   const [found] = await db
     .select({ id: project.id, slug: project.slug })
@@ -50,19 +50,22 @@ async function reach(projectId: string, env: string): Promise<Answer<Reached>> {
   if (!found) {
     return failed(404, "no such project");
   }
-  const latest = await latestTopology(found.id, held);
+  const latest = await latestTopology(found.id, environmentClass);
   if (latest.error || latest.row === null) {
     return failed(409, "this project has reported no deploy, so nothing names its variables");
   }
   const connector = await connectorFor(session.activeOrganizationId, latest.row.target);
   if (connector === null) {
-    return failed(409, "no connector runs in the account that holds these values");
+    return failed(409, "no connector runs in the account that stores these values");
   }
   const dialled = await dial(session, connector);
   if (dialled === null) {
     return failed(409, "this connector publishes no address the console can reach");
   }
-  return { ok: true, result: { slug: found.slug, projectId: found.id, connector: dialled, held } };
+  return {
+    ok: true,
+    result: { slug: found.slug, projectId: found.id, connector: dialled, environmentClass },
+  };
 }
 
 async function attempt<T>(run: () => Promise<Answer<T>>): Promise<Answer<T>> {
@@ -78,7 +81,7 @@ async function attempt<T>(run: () => Promise<Answer<T>>): Promise<Answer<T>> {
 
 export async function readState(projectId: string, env: string): Promise<Answer<State>> {
   return attempt(async () => {
-    const held: EnvironmentClass = env === "preview" ? "preview" : "production";
+    const environmentClass: EnvironmentClass = env === "preview" ? "preview" : "production";
     const session = await requireOrganization();
     const [found] = await db
       .select({ id: project.id, slug: project.slug })
@@ -89,7 +92,7 @@ export async function readState(projectId: string, env: string): Promise<Answer<
     if (!found) {
       return failed(404, "no such project");
     }
-    const latest = await latestTopology(found.id, held);
+    const latest = await latestTopology(found.id, environmentClass);
     if (latest.error || latest.row === null) {
       return failed(409, "this project has reported no deploy");
     }
@@ -100,16 +103,31 @@ export async function readState(projectId: string, env: string): Promise<Answer<
     if (dialled === null) {
       return {
         ok: true,
-        result: stateOf(found.slug, held, latest.row.topology, [], environments, can, "unknown"),
+        result: stateOf(
+          found.slug,
+          environmentClass,
+          latest.row.topology,
+          [],
+          environments,
+          can,
+          "unknown",
+        ),
       };
     }
-    const answer = await envvars.list(dialled, held, found.slug);
+    const answer = await envvars.list(dialled, environmentClass, found.slug);
     if (!answer.done) {
       return refused(dialled.id, "list", answer.refusal);
     }
     return {
       ok: true,
-      result: stateOf(found.slug, held, latest.row.topology, answer.result, environments, can),
+      result: stateOf(
+        found.slug,
+        environmentClass,
+        latest.row.topology,
+        answer.result,
+        environments,
+        can,
+      ),
     };
   });
 }
@@ -122,8 +140,8 @@ export async function revealValues(
   return attempt(async () => {
     const reached = await reach(projectId, env);
     if (!reached.ok) return reached;
-    const { slug, connector, held } = reached.result;
-    const answer = await envvars.reveal(connector, held, slug, cells);
+    const { slug, connector, environmentClass } = reached.result;
+    const answer = await envvars.reveal(connector, environmentClass, slug, cells);
     if (!answer.done) {
       return refused(connector.id, "reveal", answer.refusal);
     }
@@ -141,8 +159,8 @@ export async function setValue(
   return attempt(async () => {
     const reached = await reach(projectId, env);
     if (!reached.ok) return reached;
-    const { slug, connector, held } = reached.result;
-    const answer = await envvars.set(connector, held, slug, at, value, version);
+    const { slug, connector, environmentClass } = reached.result;
+    const answer = await envvars.set(connector, environmentClass, slug, at, value, version);
     if (!answer.done) {
       return refused(connector.id, "set", answer.refusal);
     }
@@ -159,8 +177,8 @@ export async function removeValue(
   return attempt(async () => {
     const reached = await reach(projectId, env);
     if (!reached.ok) return reached;
-    const { slug, connector, held } = reached.result;
-    const answer = await envvars.remove(connector, held, slug, at, version);
+    const { slug, connector, environmentClass } = reached.result;
+    const answer = await envvars.remove(connector, environmentClass, slug, at, version);
     if (!answer.done) {
       return refused(connector.id, "remove", answer.refusal);
     }
@@ -176,8 +194,8 @@ export async function listVersions(
   return attempt(async () => {
     const reached = await reach(projectId, env);
     if (!reached.ok) return reached;
-    const { slug, connector, held } = reached.result;
-    const answer = await envvars.versions(connector, held, slug, at);
+    const { slug, connector, environmentClass } = reached.result;
+    const answer = await envvars.versions(connector, environmentClass, slug, at);
     if (!answer.done) {
       return refused(connector.id, "versions", answer.refusal);
     }
@@ -192,15 +210,15 @@ export async function otherValues(
   return attempt(async () => {
     const reached = await reach(projectId, env);
     if (!reached.ok) return reached;
-    const { slug, connector, held } = reached.result;
-    const other: EnvironmentClass = held === "production" ? "preview" : "production";
+    const { slug, connector, environmentClass } = reached.result;
+    const other: EnvironmentClass = environmentClass === "production" ? "preview" : "production";
     const listed = await envvars.list(connector, other, slug);
     if (!listed.done) {
       return refused(connector.id, "list", listed.refusal);
     }
     const readable = listed.result.filter((value) => value.reference === undefined);
     const shown = await envvars.reveal(connector, other, slug, readable);
-    const held_values = new Map(
+    const revealed = new Map(
       shown.done
         ? shown.result.map((value) => [
             `${value.key} ${value.folder} ${value.environment}`,
@@ -219,8 +237,8 @@ export async function otherValues(
           version: value.version,
           class: "plain" as const,
           ...(value.reference && { reference: value.reference }),
-          ...(held_values.has(`${value.key} ${value.folder} ${value.environment}`) && {
-            value: held_values.get(`${value.key} ${value.folder} ${value.environment}`),
+          ...(revealed.has(`${value.key} ${value.folder} ${value.environment}`) && {
+            value: revealed.get(`${value.key} ${value.folder} ${value.environment}`),
           }),
           ...(!shown.done && { error: shown.refusal.message }),
         })),
@@ -239,8 +257,8 @@ export async function copyValues(
   return attempt(async () => {
     const reached = await reach(projectId, env);
     if (!reached.ok) return reached;
-    const { slug, connector, held } = reached.result;
-    const other: EnvironmentClass = held === "production" ? "preview" : "production";
+    const { slug, connector, environmentClass } = reached.result;
+    const other: EnvironmentClass = environmentClass === "production" ? "preview" : "production";
     const shown = await envvars.reveal(connector, other, slug, cells);
     if (!shown.done) {
       return refused(connector.id, "reveal", shown.refusal);
@@ -255,11 +273,11 @@ export async function copyValues(
     for (const at of cells) {
       const value = source.get(`${at.key} ${at.folder} ${at.environment}`);
       if (value === undefined) {
-        results.push({ ...at, saved: false, error: `${other} holds no value for ${at.key}` });
+        results.push({ ...at, saved: false, error: `${other} has no value for ${at.key}` });
         continue;
       }
       try {
-        const answer = await envvars.set(connector, held, slug, at, value, at.version);
+        const answer = await envvars.set(connector, environmentClass, slug, at, value, at.version);
         if (!answer.done) {
           await noteDenial(connector.id, "set", answer.refusal);
         }

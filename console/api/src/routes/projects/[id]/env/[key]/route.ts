@@ -33,7 +33,7 @@ export async function getProjectEnvValue(
     return addressed.refusal;
   }
 
-  const [held] = await db
+  const [found] = await db
     .select({
       key: projectEnvValue.key,
       value: projectEnvValue.value,
@@ -47,11 +47,11 @@ export async function getProjectEnvValue(
       ),
     );
 
-  if (!held) {
+  if (!found) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
   return Response.json(
-    { key: held.key, value: held.value, updatedAt: held.updatedAt.getTime() },
+    { key: found.key, value: found.value, updatedAt: found.updatedAt.getTime() },
     { status: 200 },
   );
 }

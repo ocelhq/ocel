@@ -19,29 +19,29 @@ import type {
 
 type Declared = DeploymentVariable & { folders: Set<string>; scopes: Set<string> };
 
-function classOf(held: DeploymentVariable["class"]): Class {
-  return held === "sensitive" || held === "secret" ? held : "plain";
+function classOf(kind: DeploymentVariable["class"]): Class {
+  return kind === "sensitive" || kind === "secret" ? kind : "plain";
 }
 
 function declaredOf(topology: DeploymentTopology): Map<string, Declared> {
   const out = new Map<string, Declared>();
   for (const app of topology.apps) {
     const at = app.folder ?? "";
-    for (const held of app.variables) {
-      if (held.class === "derived") {
+    for (const variable of app.variables) {
+      if (variable.class === "derived") {
         continue;
       }
-      const known = out.get(held.key) ?? {
-        ...held,
+      const known = out.get(variable.key) ?? {
+        ...variable,
         folders: new Set<string>(),
         scopes: new Set<string>(),
       };
       known.folders.add(at);
-      if (held.folder !== undefined) {
-        known.scopes.add(held.folder);
+      if (variable.folder !== undefined) {
+        known.scopes.add(variable.folder);
       }
-      known.required ||= held.required;
-      out.set(held.key, known);
+      known.required ||= variable.required;
+      out.set(variable.key, known);
     }
   }
   return out;
@@ -52,8 +52,8 @@ function foldersOf(topology: DeploymentTopology, declared: Map<string, Declared>
   for (const app of topology.apps) {
     out.add(app.folder ?? "");
   }
-  for (const held of declared.values()) {
-    for (const folder of [...held.folders, ...held.scopes]) {
+  for (const variable of declared.values()) {
+    for (const folder of [...variable.folders, ...variable.scopes]) {
       out.add(folder);
     }
   }
@@ -64,7 +64,7 @@ function appsOf(topology: DeploymentTopology): AppResolution[] {
   return topology.apps.map((app) => ({ name: app.name, folder: app.folder ?? "" }));
 }
 
-interface Held {
+interface StoredCell {
   set: boolean;
   version: number;
   reference?: Stored["reference"];
@@ -74,8 +74,8 @@ function keyOf(at: Cell & { environment: string }): string {
   return `${at.key} ${at.folder} ${at.environment}`;
 }
 
-function storedOf(stored: readonly Stored[]): Map<string, Held> {
-  const out = new Map<string, Held>();
+function storedOf(stored: readonly Stored[]): Map<string, StoredCell> {
+  const out = new Map<string, StoredCell>();
   for (const value of stored) {
     out.set(keyOf(value), {
       set: true,
@@ -120,11 +120,11 @@ function cellOf(
   key: string,
   folder: string,
   declared: Declared | undefined,
-  held: Map<string, Held>,
+  recorded: Map<string, StoredCell>,
   stored: readonly Stored[],
   environments: readonly string[],
 ): MatrixCell {
-  const found = held.get(keyOf({ key, folder, environment: "" }));
+  const found = recorded.get(keyOf({ key, folder, environment: "" }));
   const overrides = overridesOf(key, folder, stored, environments);
   return {
     folder,
@@ -143,7 +143,7 @@ export function matrixOf(
 ): State["matrix"] {
   const declared = declaredOf(topology);
   const columns = foldersOf(topology, declared);
-  const held = storedOf(stored);
+  const recorded = storedOf(stored);
 
   const keys = new Set<string>(declared.keys());
   for (const value of stored) {
@@ -151,14 +151,14 @@ export function matrixOf(
   }
 
   const rows: MatrixRow[] = [...keys].sort().map((key) => {
-    const held_key = declared.get(key);
+    const variable = declared.get(key);
     return {
       key,
-      class: held_key ? classOf(held_key.class) : "plain",
-      ...(held_key?.description && { description: held_key.description }),
-      ...(held_key && held_key.scopes.size > 0 ? { scope: [...held_key.scopes] } : {}),
-      ...(held_key?.group && { group: held_key.group }),
-      cells: columns.map((folder) => cellOf(key, folder, held_key, held, stored, environments)),
+      class: variable ? classOf(variable.class) : "plain",
+      ...(variable?.description && { description: variable.description }),
+      ...(variable && variable.scopes.size > 0 ? { scope: [...variable.scopes] } : {}),
+      ...(variable?.group && { group: variable.group }),
+      cells: columns.map((folder) => cellOf(key, folder, variable, recorded, stored, environments)),
     };
   });
 
@@ -173,7 +173,7 @@ export function matrixOf(
 
 export function stateOf(
   slug: string,
-  held: EnvironmentClass,
+  environmentClass: EnvironmentClass,
   topology: DeploymentTopology,
   stored: readonly Stored[],
   environments: readonly string[],
@@ -182,12 +182,12 @@ export function stateOf(
 ): State {
   return {
     slug,
-    tier: held,
-    other: held === "production" ? "preview" : "production",
+    tier: environmentClass,
+    other: environmentClass === "production" ? "preview" : "production",
     values,
     can,
     environments: [...environments],
-    matrix: matrixOf(topology, stored, held === "preview" ? environments : []),
+    matrix: matrixOf(topology, stored, environmentClass === "preview" ? environments : []),
   };
 }
 

@@ -9,7 +9,7 @@ import { GeneralForm } from "./form";
 
 export default async function OrganizationGeneralPage() {
   const session = await requireOrganization();
-  const [held, [members], [projects]] = await Promise.all([
+  const [organization, [members], [projects]] = await Promise.all([
     organizationOf(session.userId, session.activeOrganizationId),
     db
       .select({ count: count() })
@@ -20,7 +20,7 @@ export default async function OrganizationGeneralPage() {
       .from(project)
       .where(eq(project.organizationId, session.activeOrganizationId)),
   ]);
-  if (!held) {
+  if (!organization) {
     notFound();
   }
 
@@ -28,15 +28,15 @@ export default async function OrganizationGeneralPage() {
     <PageShell title="General">
       <GeneralForm
         organization={{
-          id: held.id,
-          name: held.name,
-          slug: held.slug,
-          role: held.role,
-          administers: held.administers,
+          id: organization.id,
+          name: organization.name,
+          slug: organization.slug,
+          role: organization.role,
+          administers: organization.administers,
         }}
         members={members.count}
         projects={projects.count}
-        createdAt={held.createdAt.toISOString()}
+        createdAt={organization.createdAt.toISOString()}
         now={new Date().toISOString()}
       />
     </PageShell>

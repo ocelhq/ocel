@@ -196,7 +196,7 @@ The console is the same drawing as ocel.dev with the drafting apparatus lifted o
 ground, hairline rules, square corners, mono labels, one electric annotation. What the
 site does with grid paper, registration crosses and heavy rules, the console does with
 nothing at all: the reader's own infrastructure is the figure on the sheet, and the shell
-is there to hold it flat.
+is there to keep it flat.
 
 Density is the difference from the site. This is an operator's surface read at 14px, on
 an 8px-and-under rhythm, with a fixed 56px header rule, a resizable sidebar and pages that
@@ -214,8 +214,8 @@ true, and it mutates nothing.
 - Zero radius, enforced by `--radius: 0rem` and explicit square variants on every primitive.
 - Depth by hairline and one tonal step to Fog. Floating layers take a zero-blur 3px offset. No glow, no blur.
 - Uppercase sans Label type names every section, column, chip and stamp.
-- Canvases may carry a faint dot ground; no other surface carries any ground.
-- Every view of infrastructure carries its "as at" stamp in Label type.
+- Canvases may show a faint dot ground; no other surface has any ground.
+- Every view of infrastructure shows its "as at" stamp in Label type.
 
 ## Colors
 
@@ -227,7 +227,7 @@ outcome rather than decorate a surface.
 
 ### Neutral
 - **Ink** (`{colors.ink}`, dark `{colors.ink-dark}`): headings, tile titles, values in a field row, the selected tile's border. Dark ink is warm off-white.
-- **Body** (`{colors.body}`, dark `{colors.body-dark}`): descriptions, field names, Label type, and every icon that is not carrying a brand.
+- **Body** (`{colors.body}`, dark `{colors.body-dark}`): descriptions, field names, Label type, and every icon that does not show a brand.
 - **Steel** (`{colors.steel}`, dark `{colors.steel-dark}`): line weight, not text. Usage edges, ghost borders, hover borders, and the undetected-framework avatar.
 - **Fog** (`{colors.fog}`, dark `{colors.fog-dark}`): the one tinted surface. Resource tiles, the sidebar, skeletons, and hover fills.
 - **Paper** (`{colors.paper}`, dark `{colors.paper-dark}`): the page and every app tile, chip, control and panel that sits on it.
@@ -238,7 +238,7 @@ outcome rather than decorate a surface.
 
 ### Tertiary
 - **Go** (`{colors.go}`, dark `{colors.go-dark}`): a succeeded outcome dot and the copied-confirmation check. Only where something actually succeeded.
-- **Warn** (`{colors.warn}`, dark `{colors.warn-dark}`): what is owed but not yet wrong — a required value nobody has filled, an incomplete group, an owed tally, a stale override. Carried as text or a 10% fill behind text, never a solid fill.
+- **Warn** (`{colors.warn}`, dark `{colors.warn-dark}`): what is missing but not yet wrong — a required value nobody has filled, an incomplete group, a missing-value tally, a stale override. Shown as text or a 10% fill behind text, never a solid fill.
 - **Destructive** (`{colors.destructive}`, dark `{colors.destructive-dark}`): a failed outcome dot, the failure banner's border and text, an app's reported error, a save that conflicted or was refused, and a value that fails its schema. Only where an operation actually failed or a value is actually invalid — an unfilled requirement is Warn, not Destructive.
 
 ### Named Rules
@@ -246,8 +246,8 @@ outcome rather than decorate a surface.
 console it is a focus ring, the active nav item, a changed value and a drop target. It
 never fills a tile, a panel, a banner, a badge, a button, an identity square or a status.
 
-**The Outcome Colour Rule.** Go and Destructive report a record, never a mood. A 8px dot
-carries them on a tile; a ghost tile carries no dot at all, because a torn-down thing has
+**The Outcome Colour Rule.** Go and Destructive report a record, never a mood. An 8px dot
+shows them on a tile; a ghost tile has no dot at all, because a torn-down thing has
 no outcome to report.
 
 **The Same Ink Rule.** The console and the site draw from one token set. A new token on
@@ -275,7 +275,7 @@ Grotesk for headings, change the `body` loader in that one file and nothing else
 Grotesk back everywhere, point `heading` and `body` at the same loader.
 
 ### Hierarchy
-- **Title** (600, 1.5rem, -0.025em): the page heading in the standard page shell, balanced and held to prose width.
+- **Title** (600, 1.5rem, -0.025em): the page heading in the standard page shell, balanced and kept to prose width.
 - **Headline** (600, 1.125rem, -0.025em): the heading inside a notice or an empty-state card on a canvas.
 - **Subject** (600, 0.875rem): a tile's name, a details-panel heading, and the name of a related app or resource in a list.
 - **Body** (400, 0.875rem / 1.25rem): the document default, set on `<body>`. Descriptions, menu items, nav labels.
@@ -300,9 +300,9 @@ are selectable text, never an image or a screenshot.
 ## Layout
 
 The shell is a resizable offcanvas sidebar plus an inset column. The column opens with a
-56px header carrying a hairline underline, the sidebar trigger and the project switcher;
+56px header with a hairline underline, the sidebar trigger and the project switcher;
 everything below it is the page. Standard pages use the page shell: 20px side padding,
-32px above, 48px below, 40px side padding from the medium breakpoint, a title block held
+32px above, 48px below, 40px side padding from the medium breakpoint, a title block kept
 to prose width, and 24px between blocks.
 
 A canvas page is the exception and takes the whole remaining viewport,
@@ -327,8 +327,8 @@ paper, no registration crosses, no rotated figure captions, no marquee, no heavy
 The shell is paper, hairlines and type so the reader's infrastructure is the only thing
 on the sheet.
 
-**The Canvas Dot Rule.** A canvas, and only a canvas, may carry a dot ground: 2px dots in
-`{colors.steel}` at 55% on a 24px gap. Every state of that canvas carries the same ground, so the
+**The Canvas Dot Rule.** A canvas, and only a canvas, may have a dot ground: 2px dots in
+`{colors.steel}` at 55% on a 24px gap. Every state of that canvas has the same ground, so the
 empty, error and loading screens sit on the same sheet as the map. No other surface in the
 console has a ground of any kind.
 
@@ -345,7 +345,7 @@ node shadows, outlines and radii are stripped to zero in the global stylesheet.
 **The No Blur Rule.** Nothing casts a soft shadow, glows, or blurs what is behind it. A
 floating layer takes the float dial; anything on the page gets a hairline or steps to Fog.
 
-**The Tonal Step Rule.** One step only, and it carries meaning: an app tile is Paper, a
+**The Tonal Step Rule.** One step only, and it encodes meaning: an app tile is Paper, a
 resource tile is Fog. The map reads as two materials — the things you wrote and the things
 they read — before a single word is read.
 
@@ -363,7 +363,7 @@ a solid Destructive border.
 
 Usage edges are dashed 1.5px bezier curves in Steel at 60% with no arrowheads, entering
 and leaving on invisible left and right handles. An edge that touches the selected tile,
-or is hovered, becomes solid Ink at full opacity. Edges never carry arrowheads, weight, or
+or is hovered, becomes solid Ink at full opacity. Edges never have arrowheads, weight, or
 animation.
 
 ## Components
@@ -388,12 +388,12 @@ The map's unit, and the reason the console is a drawing. Tiles never float and n
 - **Border:** hairline at rest, Steel on hover, Ink when selected, dashed Steel at 60% when a ghost
 - **Shadow Strategy:** none
 - **Internal Padding:** 12px
-- **Content:** a mark and the name on the top line with the status at the right; the middle carries chips or the binding name in Path type; the foot carries a Label-type count line ("3 variables · 2 reads"). An app tile that reported a url shows it in Path type with the scheme stripped, underlined on hover.
+- **Content:** a mark and the name on the top line with the status at the right; the middle shows chips or the binding name in Path type; the foot shows a Label-type count line ("3 variables · 2 reads"). An app tile that reported a url shows it in Path type with the scheme stripped, underlined on hover.
 - **Ghost:** every mark drops to 50% opacity, text goes to Body, and the outcome dot is removed entirely.
 
 ### Details Panel
 Opens when a tile is selected; 360px, Paper, hairline left edge, its own scroll. A header
-row carries the mark, the name, the provider mark or outcome dot, and a close control.
+row shows the mark, the name, the provider mark or outcome dot, and a close control.
 Below it, sections separated by a hairline top edge, each with a Label-type heading and
 20px of side padding: urls, runtime, variables, reads — or binding, keys, grants, read by.
 Field rows put the name in Body at 12px on the left and the value in Path type on the
@@ -403,7 +403,7 @@ capped at 70% of viewport height.
 ### Tables
 The list register for runs, on the shadcn Table. A hairline frame, Label-type column
 heads at 36px, rows at a fixed 56px so every run reads as one line, hairlines between
-rows, hover tints to Fog at 50%. The whole row navigates and the first cell carries the
+rows, hover tints to Fog at 50%. The whole row navigates and the first cell contains the
 real link. One colour per row: the status dot (Go for a deployed promotion, Faint for a
 teardown, Destructive for a failure). Apps are marks only, with a Destructive dot on a
 failed app and nothing on a succeeded one. The environment Badge is outline, except the
@@ -415,14 +415,14 @@ one spanning cell.
 ### Run Detail
 A Label-type breadcrumb, the promotion id as a mono Title, then one status line (dot,
 word, stamp, environment Badge, tag). Actions sit at the right as outline Buttons; those
-the console cannot perform open a Popover holding the command pane and one line on why.
+the console cannot perform open a Popover containing the command pane and one line on why.
 Below that, three blocks 24px apart, each a joined grid: cells share hairlines through
 the overview's negative-margin trick, so a block reads as one sheet ruled into panes and
 never as cards with gaps. The first block is the summary, nine field cells three across
 (name in Detail size over the value) and a full-width mono footer for run id and CLI
 version. The second is two panes, Apps and Resources, each with a Label heading and
 single-line rows. The third is the shadcn Accordion, one item open at a time: Build logs,
-Domains, Checks, each trigger carrying its count or duration in muted Detail beside the
+Domains, Checks, each trigger showing its count or duration in muted Detail beside the
 chevron. Build logs is one Terminal-material pane with the stages' lines in order and a
 dim `# stage` line where each began; the stage trace is not drawn.
 
@@ -431,7 +431,7 @@ The shadcn Badge, square, 20px tall. Outline for every environment except the li
 production promotion, which is the one Ink fill on a run page or row.
 
 ### Popover
-The shadcn Popover, square, its ring and the float offset and nothing more. Holds a command pane behind an
+The shadcn Popover, square, its ring and the float offset and nothing more. Contains a command pane behind an
 action the console cannot run itself.
 
 ### Command Pane
@@ -444,7 +444,7 @@ that cannot act names the command that can, in this pane.
 ### Provenance Strip
 Pinned top-left over the canvas, in Label type on Paper: the relative stamp, then
 promotion, tag, provider and region separated by middots. The relative time re-renders
-every 30 seconds and carries the absolute time as its title. Under a failure, a
+every 30 seconds and has the absolute time as its title. Under a failure, a
 Destructive-bordered banner sits between the switcher and the stamp, clamping the error to
 two lines with a Label-type More/Less control.
 
@@ -453,9 +453,9 @@ Three 32px squares, top-right, 6px apart: fit, zoom in, zoom out. Paper fill, ha
 border, Body icon; hover steps the border to Steel and the icon to Ink.
 
 ### Marks
-- **Pairing:** the main mark is what the thing *is* (framework, runtime, or resource type) at 20px; the corner mark is the provider service it landed on at 14px. An app carries its framework or runtime mark; a resource carries its type mark plus the provider mark.
+- **Pairing:** the main mark is what the thing *is* (framework, runtime, or resource type) at 20px; the corner mark is the provider service it landed on at 14px. An app shows its framework or runtime mark; a resource shows its type mark plus the provider mark.
 - **Sources:** simple-icons for runtimes, providers and databases, rendered at the brand's own hex; inline SVG components under `components/marks/` for frameworks, with a dark variant swapped by theme when one exists; Phosphor for the generic fallbacks (cube, package, cloud, drives) in Body colour.
-- **Never** a letter, an emoji, or a coloured square standing in for a brand that has a mark.
+- **Never** a letter, an emoji, or a coloured square in place of a brand that has a mark.
 
 ### Navigation
 - **Sidebar:** Fog ground, hairline header and footer at 56px and matching the column header, Body-coloured items with a Phosphor icon that fills and turns Electric when active. The project scope shows the slug in Ink as its group label, with an "All projects" escape above it. Icons wiggle once on hover. Resizable by a drag handle; state persists in a cookie.
@@ -481,7 +481,7 @@ the same dot ground the map will use. The loading state is the drawing before th
 - **Don't** set an identifier in mono merely because it is one. SCREAMING_SNAKE_CASE already says "literal" and costs nothing to render; a leading `/` says path; a chip says name; `tabular-nums` says digits. Keys, paths, group names, environment names and versions are sans. Mono as a badge of technicality is a costume.
 - **Do** draw from one scale: 11px sans label (500), 12px sans meta, 13px sans key (500) and path (400), 13px mono value, 14px sans body, 14px sans subject (600). Title sizes (18/22/34) are a separate register and do not mix into it.
 - **Do** size an icon from the text beside it — 14px inline with 11–14px text, 16px for a standalone control or mark, 24px for the figure in an overlay or empty state.
-- **Do** make the tonal step carry meaning: app tiles Paper, resource tiles Fog.
+- **Do** make the tonal step encode meaning: app tiles Paper, resource tiles Fog.
 - **Do** step a border rather than lift a surface: hairline at rest, Steel on hover, Ink when selected.
 - **Do** draw relationships as dashed 1.5px Steel beziers at 60% with no arrowheads, going solid Ink only when active.
 - **Do** stamp every infrastructure view with its "as at" moment and the promotion it came from.
@@ -493,8 +493,8 @@ the same dot ground the map will use. The loading state is the drawing before th
 - **Don't** add soft shadows, glows, blurs or gradients. Floating layers use the float dial; overlays use a flat 10% black scrim.
 - **Don't** bring the site's landing apparatus here: no grid paper, no registration crosses, no rotated figure captions, no marquee, no 1.5px rules.
 - **Don't** set Label type in Steel. It fails contrast at 11px; Steel is a line colour.
-- **Don't** stand a character in for an icon: no `△` for a warning, no `▸`/`▾` for a caret, no `→` for an arrow. Phosphor draws all three.
+- **Don't** use a character in place of an icon: no `△` for a warning, no `▸`/`▾` for a caret, no `→` for an arrow. Phosphor draws all three.
 - **Don't** put an outcome dot on a ghost tile, or a status colour on anything that has not actually reported one.
 - **Don't** introduce a second accent, a chart palette, or a new typeface outside `app/fonts.ts`. Plex Sans, Space Grotesk for headings, Plex Mono, and Archivo for the wordmark are the whole set.
-- **Don't** stand in for a brand mark with a letter, an emoji or a coloured square.
+- **Don't** replace a brand mark with a letter, an emoji or a coloured square.
 - **Don't** render a command, url or record as an image.

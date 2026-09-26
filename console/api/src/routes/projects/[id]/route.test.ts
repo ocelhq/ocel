@@ -201,7 +201,7 @@ describe("deleteProject", () => {
     }
   });
 
-  it("leaves a Project in another org standing and answers 404", async () => {
+  it("leaves a Project in another org in place and answers 404", async () => {
     const session = await createTestSessionWithOrganization();
     const otherSession = await createTestSessionWithOrganization();
 

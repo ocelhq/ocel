@@ -14,15 +14,15 @@ function verifying(publicKey: string) {
 }
 
 export async function connectorHeartbeat(request: Request, id: string): Promise<Response> {
-  const [held] = await db
+  const [found] = await db
     .select({ id: connector.id, publicKey: connector.publicKey })
     .from(connector)
     .where(eq(connector.id, id));
 
-  if (!held) {
+  if (!found) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
-  if (held.publicKey === null) {
+  if (found.publicKey === null) {
     return Response.json({ error: "This connector has published no key" }, { status: 401 });
   }
 
@@ -32,9 +32,9 @@ export async function connectorHeartbeat(request: Request, id: string): Promise<
   }
 
   try {
-    await jwtVerify(bearer, await verifying(held.publicKey), {
-      issuer: held.id,
-      subject: held.id,
+    await jwtVerify(bearer, await verifying(found.publicKey), {
+      issuer: found.id,
+      subject: found.id,
       audience: consoleOrigin(),
       algorithms: ["EdDSA"],
       maxTokenAge: "5m",
@@ -58,7 +58,7 @@ export async function connectorHeartbeat(request: Request, id: string): Promise<
       version: parsed.data.version,
       capabilities: parsed.data.capabilities,
     })
-    .where(eq(connector.id, held.id));
+    .where(eq(connector.id, found.id));
 
   return new Response(null, { status: 204 });
 }
