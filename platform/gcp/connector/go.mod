@@ -3,9 +3,7 @@ module github.com/ocelhq/ocel/platform/gcp/connector
 go 1.27.0
 
 require (
-	github.com/ocelhq/ocel/pkg/connectorkit v0.0.0
-	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
-	github.com/ocelhq/ocel/pkg/target v0.0.0
+	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/platform/gcp/provider v0.0.0
 )
 
@@ -23,17 +21,9 @@ require (
 	cloud.google.com/go/longrunning v1.2.0 // indirect
 	connectrpc.com/connect v1.20.0 // indirect
 	connectrpc.com/validate v0.6.0 // indirect
-	github.com/Microsoft/go-winio v0.6.3-0.20251027160822-ad3df93bed29 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/containerd/errdefs v1.0.0 // indirect
-	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
-	github.com/distribution/reference v0.6.0 // indirect
-	github.com/docker/cli v29.7.2+incompatible // indirect
-	github.com/docker/docker-credential-helpers v0.9.8 // indirect
-	github.com/docker/go-connections v0.7.0 // indirect
-	github.com/docker/go-units v0.5.0 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -43,7 +33,6 @@ require (
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.20 // indirect
 	github.com/googleapis/gax-go/v2 v2.24.0 // indirect
-	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.4 // indirect
 	github.com/lestrrat-go/dsig v1.4.0 // indirect
 	github.com/lestrrat-go/dsig-secp256k1 v1.0.0 // indirect
@@ -51,19 +40,8 @@ require (
 	github.com/lestrrat-go/httprc/v3 v3.0.6 // indirect
 	github.com/lestrrat-go/jwx/v3 v3.3.0 // indirect
 	github.com/lestrrat-go/option/v2 v2.0.0 // indirect
-	github.com/moby/docker-image-spec v1.3.1 // indirect
-	github.com/moby/moby/api v1.54.2 // indirect
-	github.com/moby/moby/client v0.4.1 // indirect
-	github.com/ocelhq/ocel/pkg/channel v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/configdoc v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/constants v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/naming v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/proto v0.0.0 // indirect
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0 // indirect
-	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
-	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/valyala/fastjson v1.6.10 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
@@ -86,29 +64,14 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5 // indirect
 	google.golang.org/grpc v1.83.2 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
-	pgregory.net/rapid v1.3.0 // indirect
 )
 
-replace github.com/ocelhq/ocel/pkg/connectorkit => ../../../pkg/connectorkit
-
-replace github.com/ocelhq/ocel/pkg/providerkit => ../../../pkg/providerkit
-
 replace github.com/ocelhq/ocel/pkg/providerkit/pulumi => ../../../pkg/providerkit/pulumi
-
-replace github.com/ocelhq/ocel/pkg/channel => ../../../pkg/channel
-
-replace github.com/ocelhq/ocel/pkg/constants => ../../../pkg/constants
-
-replace github.com/ocelhq/ocel/pkg/naming => ../../../pkg/naming
-
-replace github.com/ocelhq/ocel/pkg/configdoc => ../../../pkg/configdoc
-
-replace github.com/ocelhq/ocel/pkg/proto => ../../../pkg/proto
-
-replace github.com/ocelhq/ocel/pkg/target => ../../../pkg/target
 
 replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 
 replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/cloudflare/deploy
 
 replace github.com/ocelhq/ocel/platform/gcp/provider => ../provider
+
+replace github.com/ocelhq/ocel/pkg => ../../../pkg

@@ -6,6 +6,8 @@ on:
     paths:
       - "platform/vps/**"
       - "pkg/providerkit/**"
+      - "pkg/go.mod"
+      - "pkg/go.sum"
       - "platform/edge/contract/**"
       - "cli/internal/providerclient/**"
       - "cli/internal/prompt/**"

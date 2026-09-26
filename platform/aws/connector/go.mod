@@ -11,9 +11,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.71.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.0
 	github.com/awslabs/aws-lambda-go-api-proxy v0.16.2
-	github.com/ocelhq/ocel/pkg/connectorkit v0.0.0
-	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
-	github.com/ocelhq/ocel/pkg/target v0.0.0
+	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/platform/aws/provider v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 )
@@ -54,7 +52,7 @@ require (
 	github.com/docker/docker-credential-helpers v0.9.8 // indirect
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/felixge/httpsnoop v1.0.4 // indirect
+	github.com/felixge/httpsnoop v1.1.0 // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect
@@ -71,19 +69,15 @@ require (
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.1 // indirect
-	github.com/ocelhq/ocel/pkg/channel v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/configdoc v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/constants v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/naming v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/proto v0.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
+	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.10.2 // indirect
 	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/valyala/fastjson v1.6.10 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0 // indirect
 	go.opentelemetry.io/otel v1.45.0 // indirect
 	go.opentelemetry.io/otel/metric v1.45.0 // indirect
 	go.opentelemetry.io/otel/trace v1.45.0 // indirect
@@ -98,24 +92,10 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/ocelhq/ocel/pkg/connectorkit => ../../../pkg/connectorkit
-
-replace github.com/ocelhq/ocel/pkg/providerkit => ../../../pkg/providerkit
-
-replace github.com/ocelhq/ocel/pkg/channel => ../../../pkg/channel
-
-replace github.com/ocelhq/ocel/pkg/constants => ../../../pkg/constants
-
-replace github.com/ocelhq/ocel/pkg/naming => ../../../pkg/naming
-
-replace github.com/ocelhq/ocel/pkg/configdoc => ../../../pkg/configdoc
-
-replace github.com/ocelhq/ocel/pkg/proto => ../../../pkg/proto
-
 replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 
 replace github.com/ocelhq/ocel/platform/aws/provider => ../provider
 
 replace github.com/ocelhq/ocel/pkg/providerkit/pulumi => ../../../pkg/providerkit/pulumi
 
-replace github.com/ocelhq/ocel/pkg/target => ../../../pkg/target
+replace github.com/ocelhq/ocel/pkg => ../../../pkg

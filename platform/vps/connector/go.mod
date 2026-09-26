@@ -2,22 +2,6 @@ module github.com/ocelhq/ocel/platform/vps/connector
 
 go 1.27.0
 
-replace github.com/ocelhq/ocel/pkg/connectorkit => ../../../pkg/connectorkit
-
-replace github.com/ocelhq/ocel/pkg/providerkit => ../../../pkg/providerkit
-
-replace github.com/ocelhq/ocel/pkg/channel => ../../../pkg/channel
-
-replace github.com/ocelhq/ocel/pkg/constants => ../../../pkg/constants
-
-replace github.com/ocelhq/ocel/pkg/naming => ../../../pkg/naming
-
-replace github.com/ocelhq/ocel/pkg/configdoc => ../../../pkg/configdoc
-
-replace github.com/ocelhq/ocel/pkg/proto => ../../../pkg/proto
-
-replace github.com/ocelhq/ocel/pkg/target => ../../../pkg/target
-
 replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 
 replace github.com/ocelhq/ocel/platform/vps/provider => ../provider
@@ -25,8 +9,8 @@ replace github.com/ocelhq/ocel/platform/vps/provider => ../provider
 replace github.com/ocelhq/ocel/pkg/providerkit/pulumi => ../../../pkg/providerkit/pulumi
 
 require (
-	github.com/ocelhq/ocel/pkg/connectorkit v0.0.0-00010101000000-000000000000
-	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
+	github.com/ocelhq/ocel/pkg v0.0.0
+	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/ocelhq/ocel/platform/vps/provider v0.0.0-00010101000000-000000000000
 )
 
@@ -64,12 +48,6 @@ require (
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.1 // indirect
-	github.com/ocelhq/ocel/pkg/channel v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/configdoc v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/constants v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/naming v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/proto v0.0.0 // indirect
-	github.com/ocelhq/ocel/platform/edge/contract v0.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
@@ -90,3 +68,5 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )
+
+replace github.com/ocelhq/ocel/pkg => ../../../pkg

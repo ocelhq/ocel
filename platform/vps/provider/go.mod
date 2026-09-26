@@ -5,12 +5,8 @@ go 1.27.0
 require (
 	connectrpc.com/connect v1.20.0
 	github.com/creack/pty v1.1.24
-	github.com/ocelhq/ocel/pkg/configdoc v0.0.0
-	github.com/ocelhq/ocel/pkg/constants v0.0.0
-	github.com/ocelhq/ocel/pkg/naming v0.0.0
-	github.com/ocelhq/ocel/pkg/proto v0.0.0
-	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
-	github.com/ocelhq/ocel/pkg/transformkit v0.0.0
+	github.com/google/go-containerregistry v0.21.7
+	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 )
@@ -42,18 +38,15 @@ require (
 	github.com/docker/docker-credential-helpers v0.9.8 // indirect
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
+	github.com/evanw/esbuild v0.28.1 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/cel-go v0.26.1 // indirect
-	github.com/google/go-containerregistry v0.21.7 // indirect
 	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
 	github.com/moby/moby/api v1.54.2 // indirect
 	github.com/moby/moby/client v0.4.1 // indirect
-	github.com/ocelhq/ocel/pkg/channel v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/costkit v0.0.0 // indirect
-	github.com/ocelhq/ocel/pkg/runtimekit v0.0.0 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
@@ -77,24 +70,8 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 )
 
-replace github.com/ocelhq/ocel/pkg/providerkit => ../../../pkg/providerkit
-
-replace github.com/ocelhq/ocel/pkg/channel => ../../../pkg/channel
-
-replace github.com/ocelhq/ocel/pkg/naming => ../../../pkg/naming
-
-replace github.com/ocelhq/ocel/pkg/proto => ../../../pkg/proto
-
 replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 
 replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/cloudflare/deploy
 
-replace github.com/ocelhq/ocel/pkg/configdoc => ../../../pkg/configdoc
-
-replace github.com/ocelhq/ocel/pkg/constants => ../../../pkg/constants
-
-replace github.com/ocelhq/ocel/pkg/costkit => ../../../pkg/costkit
-
-replace github.com/ocelhq/ocel/pkg/runtimekit => ../../../pkg/runtimekit
-
-replace github.com/ocelhq/ocel/pkg/transformkit => ../../../pkg/transformkit
+replace github.com/ocelhq/ocel/pkg => ../../../pkg

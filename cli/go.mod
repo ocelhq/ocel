@@ -26,14 +26,7 @@ require (
 	github.com/moby/moby/api v1.54.2
 	github.com/moby/moby/client v0.4.1
 	github.com/moby/patternmatcher v0.6.1
-	github.com/ocelhq/ocel/pkg/channel v0.0.0
-	github.com/ocelhq/ocel/pkg/configdoc v0.0.0
-	github.com/ocelhq/ocel/pkg/connectorkit v0.0.0
-	github.com/ocelhq/ocel/pkg/constants v0.0.0
-	github.com/ocelhq/ocel/pkg/costkit v0.0.0
-	github.com/ocelhq/ocel/pkg/naming v0.0.0
-	github.com/ocelhq/ocel/pkg/proto v0.0.0
-	github.com/ocelhq/ocel/pkg/providerkit v0.0.0
+	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/platform/aws/runtime v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/ocelhq/ocel/platform/s3 v0.0.0
@@ -193,7 +186,6 @@ require (
 	github.com/morikuni/aec v1.1.0 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/muesli/termenv v0.16.0 // indirect
-	github.com/ocelhq/ocel/pkg/runtimekit v0.0.0 // indirect
 	github.com/oklog/ulid/v2 v2.1.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
@@ -259,23 +251,7 @@ tool (
 	google.golang.org/protobuf/cmd/protoc-gen-go
 )
 
-replace github.com/ocelhq/ocel/pkg/channel => ../pkg/channel
-
-replace github.com/ocelhq/ocel/pkg/proto => ../pkg/proto
-
-replace github.com/ocelhq/ocel/pkg/naming => ../pkg/naming
-
-replace github.com/ocelhq/ocel/pkg/providerkit => ../pkg/providerkit
-
 replace github.com/ocelhq/ocel/platform/edge/contract => ../platform/edge/contract
-
-replace github.com/ocelhq/ocel/pkg/configdoc => ../pkg/configdoc
-
-replace github.com/ocelhq/ocel/pkg/connectorkit => ../pkg/connectorkit
-
-replace github.com/ocelhq/ocel/pkg/constants => ../pkg/constants
-
-replace github.com/ocelhq/ocel/pkg/costkit => ../pkg/costkit
 
 replace github.com/ocelhq/ocel/platform/aws/runtime => ../platform/aws/runtime
 
@@ -283,6 +259,6 @@ replace github.com/ocelhq/ocel/platform/aws/provider => ../platform/aws/provider
 
 replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../platform/edge/cloudflare/deploy
 
-replace github.com/ocelhq/ocel/pkg/runtimekit => ../pkg/runtimekit
-
 replace github.com/ocelhq/ocel/platform/s3 => ../platform/s3
+
+replace github.com/ocelhq/ocel/pkg => ../pkg

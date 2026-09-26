@@ -2,18 +2,8 @@ go 1.27.0
 
 use (
 	./cli
-	./pkg/channel
-	./pkg/configdoc
-	./pkg/connectorkit
-	./pkg/constants
-	./pkg/costkit
-	./pkg/naming
-	./pkg/proto
-	./pkg/providerkit
+	./pkg
 	./pkg/providerkit/pulumi
-	./pkg/runtimekit
-	./pkg/target
-	./pkg/transformkit
 	./platform/aws/connector
 	./platform/aws/provider
 	./platform/aws/runtime
