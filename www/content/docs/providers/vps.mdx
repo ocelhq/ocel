@@ -90,24 +90,18 @@ location / {
 }
 ```
 
-A proxy running in a container can't reach the host's loopback. Put it on the `ocel` network
-and forward to `http://ocel-switchboard:8080`. `docker network connect ocel <container>` does
-that until the container is recreated: `docker compose up` recreates it whenever its
-definition changes, and the new container is back on its own networks only. Declare the
-network in the compose file instead, so every container compose creates joins it:
+A proxy running in a container can't reach the host's loopback. Name the docker network it
+runs on, and the switchboard joins it:
 
-```yaml title="compose.yaml"
-services:
-  proxy:
-    networks: [default, ocel]
-
-networks:
-  ocel:
-    external: true
+```json
+"proxy": { "manual": { "network": "web" } }
 ```
 
-Bootstrap creates the `ocel` network, or uses the one already there. To start your proxy
-before bootstrapping, create it yourself with `docker network create ocel`.
+Your proxy then forwards to `http://ocel-switchboard:8080`. The switchboard stays on that network
+when your proxy is recreated, by `docker compose up` after its definition changes or by the tool
+that runs it, so nothing has to be reconnected. Bootstrap refuses a network the machine doesn't
+have, so start your proxy, or `docker network create web`, first. The switchboard is still
+published on the loopback port as well.
 
 After printing the route, `ocel domain add` waits until the box proves it: a request to
 `127.0.0.1:443` for the hostname must come back from ocel, with a certificate that covers the
@@ -116,7 +110,9 @@ proxy sets it. A preview base asks for `*.<base>` and is proved on `ocel-edge-pr
 
 The switchboard keeps `X-Forwarded-Proto` and `X-Forwarded-Host` from your proxy, because apps
 build their URLs from them. It hears them only from the `ocel` network, which the loopback
-port arrives on, and never from your apps' own networks. It never takes `X-Forwarded-For` from
+port arrives on, and from the network `network` names, and never from your apps' own networks.
+Every container on that network can set them, so name one only your proxy and what you trust
+sit on. It never takes `X-Forwarded-For` from
 your proxy: every process on the machine reaches the same port, so any of them could claim to
 be any client. Apps see your proxy's address as the client. No other `X-Forwarded-*` header,
 no `Forwarded`, `X-Real-Ip` or `True-Client-Ip` header, and none of these spelled with `_` for
@@ -125,8 +121,7 @@ no `Forwarded`, `X-Real-Ip` or `True-Client-Ip` header, and none of these spelle
 Your proxy holds the certificates, so `certificates` and `proxy` can't be set together. One
 proxy fronts a box. Every project on it must name the same `proxy`, and a deploy that
 doesn't is refused with the value to write. Moving a box from one proxy to another isn't
-supported yet. `"coolify"`, `"dokploy"`, `{ "traefik": … }` and `{ "caddy": … }` are
-reserved and refused for now.
+supported yet. `{ "traefik": … }` and `{ "caddy": … }`, below, are refused for now.
 
 | | Ocel's own proxy | `manual` |
 | --- | --- | --- |
@@ -137,6 +132,54 @@ reserved and refused for now.
 | Reports a Let's Encrypt rate limit | yes | no |
 | Answers every preview hostname under a base | yes | once you route `*.<base>` |
 | Switches releases without dropping requests | yes | yes, the switchboard does it |
+
+### The `proxy` option
+
+`proxy` names the proxy on ports 80 and 443. Coolify and Dokploy aren't proxies: each runs a
+Traefik, or for Coolify a Caddy, and a `preset` fills in how it runs it. A field written beside a
+preset overrides it, for a proxy whose configuration you have edited.
+
+```json
+"proxy": "manual"
+"proxy": { "manual": { "port": 8480, "network": "coolify" } }
+"proxy": { "traefik": { "preset": "coolify" } }
+"proxy": { "traefik": { "preset": "coolify", "resolver": "le-dns" } }
+"proxy": { "traefik": { "directory": "/etc/traefik/dynamic", "resolver": "letsencrypt",
+                        "previewResolver": "cloudflare",
+                        "entrypoints": { "http": "web", "https": "websecure" },
+                        "network": "traefik" } }
+"proxy": { "caddy": { "preset": "coolify" } }
+"proxy": { "caddy": { "directory": "/etc/caddy/ocel.d", "container": "caddy",
+                      "config": "/etc/caddy/Caddyfile", "network": "web" } }
+```
+
+| Field | On | What it is | Left out |
+| --- | --- | --- | --- |
+| `preset` | `traefik`: `coolify`, `dokploy`; `caddy`: `coolify` | The tool that runs the proxy. Fills every other field. | |
+| `directory` | `traefik`, `caddy` | The directory the proxy reads ocel's file from: Traefik's `providers.file.directory`, or the directory Caddy imports. | Required, unless `preset` |
+| `resolver` | `traefik` | The `certResolver` every hostname's router names. | Required, unless `preset` |
+| `previewResolver` | `traefik` | A resolver that can issue `*.<preview base>` over DNS-01. Set, previews share one wildcard certificate. | Each preview hostname gets its own from `resolver` |
+| `entrypoints.https` | `traefik` | The entry point ocel's hostname routers attach to. | `websecure` |
+| `entrypoints.http` | `traefik` | The entry point ocel's http-to-https redirects attach to. | `web` |
+| `container` | `caddy` | The container Caddy runs in. | Caddy runs as `caddy.service` |
+| `config` | `caddy` | The config file `caddy reload --config` names inside `container`. | `/etc/caddy/Caddyfile` |
+| `network` | all | A docker network the switchboard joins, so the proxy reaches it by name. | |
+| `port` | all | The loopback port the switchboard is published on. | `8480` |
+
+A Traefik or Caddy reaches the switchboard over `network` or over `port`, so they can't be set
+together. On `manual`, `port` is always published and `network` is joined as well.
+
+| | `traefik` + `coolify` | `traefik` + `dokploy` | `caddy` + `coolify` |
+| --- | --- | --- | --- |
+| `directory` | `/data/coolify/proxy/dynamic` | `/etc/dokploy/traefik/dynamic` | `/data/coolify/proxy/caddy/dynamic` |
+| `resolver` | `letsencrypt` | `letsencrypt` | |
+| `entrypoints` | `http` / `https` | `web` / `websecure` | |
+| `network` | `coolify` | `dokploy-network` | `coolify` |
+| `container` | | | `coolify-proxy` |
+| `config` | | | `/config/caddy/Caddyfile.autosave` |
+
+A preset and the same fields written out are the same proxy, so projects on one box can name it
+either way.
 
 ## Postgres
 
@@ -176,4 +219,4 @@ the box keeps none for it. See [Bucket](/docs/sdk/bucket#on-a-vps).
 | `ssh` | The machine to deploy onto: a `Host` alias, or an object of `host`, `user`, `port` and `identityFile`. |
 | `deployKey` | The public key the `ocel-deploy` login is to answer to, as a path. Omit it and bootstrap mirrors the keys the login it bootstraps with already answers to. |
 | `certificates` | Paths on the machine to the certificate to serve a hostname with, keyed by hostname. Refused alongside `proxy`. |
-| `proxy` | What fronts the machine on ports 80 and 443. Omit it and ocel runs its own. `"manual"` puts ocel [behind your own proxy](#behind-your-own-proxy). |
+| `proxy` | What fronts the machine on ports 80 and 443. Omit it and ocel runs its own. `"manual"` puts ocel [behind your own proxy](#behind-your-own-proxy); [the `proxy` option](#the-proxy-option) lists every form. |
