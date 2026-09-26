@@ -41,7 +41,7 @@ function reset(current: State | null): void {
   store.state.value = current;
   store.environment.value = "";
   store.search.value = "";
-  store.owedOnly.value = false;
+  store.unfilledOnly.value = false;
   store.extras.value = [];
   store.expanded.value = new Set();
   store.focusing.value = null;
@@ -74,7 +74,7 @@ beforeEach(() => {
 });
 
 describe("toggleVariableGroup", () => {
-  it("turns an off group on, offering its owed members", () => {
+  it("turns an off group on, offering its missing members", () => {
     expect(statusOf("github", "")).toBe("off");
     store.toggleVariableGroup("github", "", true);
     expect(switchedOn("github", "")).toBe(true);
@@ -98,7 +98,7 @@ describe("toggleVariableGroup", () => {
     expect(store.focusing.value).toBe("GITHUB_ID /web ");
   });
 
-  it("materialises the cells a folder column owes when its group is switched on", () => {
+  it("materialises the cells a folder column is missing when its group is switched on", () => {
     expect(statusOf("github", "/web")).toBe("off");
     store.toggleVariableGroup("github", "/web", true);
     expect(switchedOn("github", "/web")).toBe(true);
@@ -107,7 +107,7 @@ describe("toggleVariableGroup", () => {
     expect(store.expanded.value.has("/web")).toBe(true);
   });
 
-  it("turns an on group off, scheduling every held member for removal", () => {
+  it("turns an on group off, scheduling every stored member for removal", () => {
     reset(
       stateOf(
         [
@@ -179,7 +179,7 @@ const halfway = () =>
   );
 
 describe("save", () => {
-  it("holds back only the column whose group is partial", async () => {
+  it("saves only the columns whose group is not partial", async () => {
     const current = halfway();
     reset(current);
     expect(statusOf("github", "")).toBe("partial");
@@ -197,7 +197,7 @@ describe("save", () => {
     ]);
     expect([...store.drafts.value.keys()]).toEqual(["GITHUB_ID  "]);
     expect(store.outcome.value?.text).toContain("switch the group off");
-    expect(store.outcome.value?.tone).toBe("owed");
+    expect(store.outcome.value?.tone).toBe("error");
   });
 
   it("saves nothing and says why when every pending change sits in a blocked column", async () => {
@@ -316,7 +316,7 @@ describe("save past a group nobody has filled", () => {
     expect(statusOf("github", "")).toBe("off");
   });
 
-  it("lets go of the switch once the saved matrix carries the group", async () => {
+  it("lets go of the switch once the saved matrix includes the group", async () => {
     reset(loose());
     store.toggleVariableGroup("github", "", true);
     store.setDraft({ key: "GITHUB_ID", folder: "", environment: "" }, "id");
@@ -363,7 +363,7 @@ describe("save on a named environment", () => {
     expect(store.outcome.value?.text).toContain("github in root must be complete");
   });
 
-  it("holds back an override draft while its own environment column is partial", async () => {
+  it("leaves an override draft unsaved while its own environment column is partial", async () => {
     const current = halfway();
     reset(current);
     store.environment.value = "preview";

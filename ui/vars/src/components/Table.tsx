@@ -64,11 +64,9 @@ import {
   hide,
   importFile,
   listing,
+  missingVariableGroupCells,
   openCopy,
   openDrawer,
-  owedLens as owedLensCount,
-  owedOnly,
-  owedVariableGroupCells,
   pickEnvironment,
   problems,
   reveal,
@@ -82,7 +80,7 @@ import {
   setFor,
   setSearch,
   shown,
-  showOwed,
+  showUnfilled,
   spotlight,
   spotlighted,
   state,
@@ -91,6 +89,8 @@ import {
   toggleGroup,
   toggleRevealVisible,
   toggleSelected,
+  unfilledLens as unfilledLensCount,
+  unfilledOnly,
   visible,
 } from "../store";
 import { Chip, ChipButton } from "./Chip";
@@ -111,13 +111,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Switch } from "./ui/switch";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
-function carriesFile(event: DragEvent): boolean {
+function hasFile(event: DragEvent): boolean {
   const types = event.dataTransfer?.types ?? [];
   return [...types].some((type) => type === "Files" || type === "text/plain");
 }
 
 function dropInto(event: DragEvent, into: string): void {
-  if (!carriesFile(event)) return;
+  if (!hasFile(event)) return;
   event.preventDefault();
   event.stopPropagation();
   const file = event.dataTransfer?.files[0];
@@ -129,7 +129,7 @@ function dropInto(event: DragEvent, into: string): void {
 }
 
 function aimAt(event: DragEvent, into: string): void {
-  if (!carriesFile(event)) return;
+  if (!hasFile(event)) return;
   event.preventDefault();
   event.stopPropagation();
   event.dataTransfer!.dropEffect = "copy";
@@ -181,7 +181,7 @@ export function Table() {
   const picked = useValue(selected);
   const revealed = useValue(shown);
   const can = useValue(ability);
-  const owedLens = useValue(owedOnly);
+  const unfilledLens = useValue(unfilledOnly);
   const total =
     list.keys.length +
     list.bundles.reduce((sum, bundle) => sum + bundle.keys, 0) +
@@ -285,7 +285,7 @@ export function Table() {
             </p>
           </div>
         )}
-        {current.recovery && total === 0 && owedLens && (
+        {current.recovery && total === 0 && unfilledLens && (
           <p className={cn(prose, "px-4 py-6")}>
             Every cell the deploy needs is filled. Save and resume below.
           </p>
@@ -302,7 +302,7 @@ function BundleSection({ bundle }: { bundle: Bundle }) {
   const states = useValue(bundleStates);
   const on = bundleOpen(states, bundle);
   const shutFolders = useValue(collapsed);
-  const { members, present, owed } = variableGroupTally(states.get(bundle.group.key) ?? []);
+  const { members, present, missing } = variableGroupTally(states.get(bundle.group.key) ?? []);
   const total = members === 0 ? bundle.keys : members;
   return (
     <tbody data-slot="bundle" data-group={bundle.group.key} data-open={on}>
@@ -337,15 +337,15 @@ function BundleSection({ bundle }: { bundle: Bundle }) {
               className={cn(
                 role.meta,
                 "shrink-0 tabular-nums",
-                on && owed > 0 ? "text-warn" : "text-muted-foreground",
+                on && missing > 0 ? "text-warn" : "text-muted-foreground",
               )}
             >
               {unknown
                 ? "unknown"
                 : !on
                   ? `off · ${plural(total, "key")}`
-                  : owed > 0
-                    ? `${plural(owed, "key")} to fill`
+                  : missing > 0
+                    ? `${plural(missing, "key")} to fill`
                     : `${present} of ${total} set`}
             </span>
           </span>
@@ -413,10 +413,10 @@ function Toolbar() {
   const env = useValue(environment);
   const envs = useValue(environments);
   const query = useValue(search);
-  const owedLens = useValue(owedOnly);
+  const unfilledLens = useValue(unfilledOnly);
   const loading = useValue(copyLoading);
   const can = useValue(ability);
-  const owing = useValue(owedLensCount);
+  const unfilledCount = useValue(unfilledLensCount);
   const folders = current.matrix.columns.filter((folder) => folder !== "");
   const items = [
     { value: "", label: "every environment" },
@@ -448,19 +448,19 @@ function Toolbar() {
           ))}
         </SelectContent>
       </Select>
-      {owing > 0 && (
+      {unfilledCount > 0 && (
         <Button
-          variant={owedLens ? "secondary" : "ghost"}
+          variant={unfilledLens ? "secondary" : "ghost"}
           size="sm"
-          data-action="owed-only"
-          aria-pressed={owedLens}
-          onClick={() => showOwed(!owedLens)}
+          data-action="unfilled-only"
+          aria-pressed={unfilledLens}
+          onClick={() => showUnfilled(!unfilledLens)}
         >
           <WarningIcon />
-          {owedLens ? "Showing" : "Show"} {owing} to fill
+          {unfilledLens ? "Showing" : "Show"} {unfilledCount} to fill
         </Button>
       )}
-      {!owedLens && list.flat && <Chip tone="muted">every folder</Chip>}
+      {!unfilledLens && list.flat && <Chip tone="muted">every folder</Chip>}
       <span className="flex-1" />
       <Input
         type="search"
@@ -595,9 +595,9 @@ function FolderGroup({ group, open }: { group: Group; open: boolean }) {
             <span className={pathName}>{group.folder}</span>
             <span className={note}>{plural(group.keys, "key")}</span>
             {readers.length > 0 && <span className={note}>read by {names(readers)}</span>}
-            {group.owed > 0 && (
-              <Chip tone="owed" data-slot="owed-count">
-                {group.owed} to fill
+            {group.unfilled > 0 && (
+              <Chip tone="warn" data-slot="unfilled-count">
+                {group.unfilled} to fill
               </Chip>
             )}
           </span>
@@ -628,9 +628,9 @@ function KeyRow({ line, flat, depth }: { line: KeyLine; flat: boolean; depth: nu
   const { row, variant } = line;
   const key = addressKey(variant.at);
   const picked = useValue(selected).has(key);
-  const groupOwed = useValue(owedVariableGroupCells).has(key);
+  const groupMissing = useValue(missingVariableGroupCells).has(key);
   const open = editable(variant);
-  const owed = variant.owed || line.needed || groupOwed;
+  const missing = variant.missing || line.needed || groupMissing;
   return (
     <>
       <tr
@@ -670,8 +670,8 @@ function KeyRow({ line, flat, depth }: { line: KeyLine; flat: boolean; depth: nu
                   {folderName(variant.at.folder)}
                 </ChipButton>
               )}
-              {owed && (
-                <Chip tone="owed" data-slot="owed">
+              {missing && (
+                <Chip tone="warn" data-slot="missing">
                   {line.needed ? "deploy needs this" : "required"}
                 </Chip>
               )}
@@ -787,14 +787,14 @@ function Value({ line }: { line: KeyLine }) {
       <Chip key="override">override</Chip>
     ),
     variant.orphaned && (
-      <Chip tone="owed" key="orphaned">
+      <Chip tone="warn" key="orphaned">
         orphaned
       </Chip>
     ),
     variant.at.environment === "" && line.overrides.length > 0 && (
       <Chip
         key="overrides"
-        tone={line.orphaned ? "owed" : "default"}
+        tone={line.orphaned ? "warn" : "default"}
         title={`overridden in ${names(line.overrides)}${line.orphaned ? "; an override names an environment that no longer exists" : ""}`}
       >
         {line.overrides.length === 1
@@ -856,7 +856,7 @@ function Linked({ variant, reference }: { variant: Variant; reference: Reference
         reads {referenceLine(reference)}
       </Chip>
       {value !== undefined ? (
-        <span className={cn(role.mono, "text-held")}>{value}</span>
+        <span className={cn(role.mono, "text-stored")}>{value}</span>
       ) : (
         <span className={cn(role.mono, "text-muted-foreground")}>{maskText}</span>
       )}

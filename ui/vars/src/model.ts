@@ -57,7 +57,7 @@ export interface AppResolution {
 
 export interface Recovery {
   deploy: string;
-  owed: Cell[];
+  missing: Cell[];
 }
 
 export interface Ability {
@@ -99,7 +99,7 @@ export interface Variant {
   version: number;
   orphaned: boolean;
   extra: boolean;
-  owed: boolean;
+  missing: boolean;
   reference?: Reference;
   problem?: string;
 }
@@ -109,10 +109,10 @@ export function addressKey(at: Address): string {
 }
 
 export function overrideOf(cell: MatrixCell, environment: string): Override | undefined {
-  return cell.overrides?.find((held) => held.environment === environment);
+  return cell.overrides?.find((override) => override.environment === environment);
 }
 
-export function held(cell: MatrixCell, environment: string): { set: boolean; version: number } {
+export function storedAt(cell: MatrixCell, environment: string): { set: boolean; version: number } {
   if (environment === "") return { set: cell.set, version: cell.version };
   const override = overrideOf(cell, environment);
   return { set: override !== undefined, version: override?.version ?? 0 };
@@ -122,16 +122,17 @@ export function cellOf(row: MatrixRow, folder: string): MatrixCell | undefined {
   return row.cells.find((cell) => cell.folder === folder);
 }
 
-export function owedCell(row: MatrixRow, cell: MatrixCell, off: ReadonlySet<string>): boolean {
-  const owing = cell.state === "required" && !cell.set && !offVariableGroup(row, cell.folder, off);
-  return owing || cell.problem !== undefined;
+export function unfilledCell(row: MatrixRow, cell: MatrixCell, off: ReadonlySet<string>): boolean {
+  const missing =
+    cell.state === "required" && !cell.set && !offVariableGroup(row, cell.folder, off);
+  return missing || cell.problem !== undefined;
 }
 
-export function owedCount(current: State): number {
+export function unfilledCount(current: State): number {
   if (unknownValues(current)) return 0;
   const off = offVariableGroupsOf(current);
   return current.matrix.rows.reduce(
-    (total, row) => total + row.cells.filter((cell) => owedCell(row, cell, off)).length,
+    (total, row) => total + row.cells.filter((cell) => unfilledCell(row, cell, off)).length,
     0,
   );
 }
@@ -179,7 +180,7 @@ export function variantOf(
     version: environment === "" ? cell.version : (override?.version ?? 0),
     orphaned: override?.orphaned === true,
     extra,
-    owed:
+    missing:
       !unknown &&
       environment === "" &&
       cell.state === "required" &&
@@ -275,7 +276,7 @@ export interface VariableGroupState {
   switchedOn: boolean;
   members: VariableGroupMember[];
   present: number;
-  owed: VariableGroupMember[];
+  missing: VariableGroupMember[];
 }
 
 export interface VariableGroupPending {
@@ -371,21 +372,21 @@ export function variableGroupStateOf(
       return member ? [member] : [];
     });
   if (members.length === 0) return undefined;
-  const owed = members.filter((member) => member.required && !member.present);
+  const missing = members.filter((member) => member.required && !member.present);
   const present = members.filter((member) => member.present).length;
   return {
     group,
     folder,
     environment,
-    status: present === 0 ? "off" : owed.length === 0 ? "complete" : "partial",
+    status: present === 0 ? "off" : missing.length === 0 ? "complete" : "partial",
     switchedOn: pending.switchedOn.has(variableGroupColumnKey(key, folder, environment)),
     members,
     present,
-    owed,
+    missing,
   };
 }
 
-const settled: VariableGroupPending = {
+const nothingPending: VariableGroupPending = {
   drafts: new Map(),
   removals: new Set(),
   switchedOn: new Set(),
@@ -393,7 +394,7 @@ const settled: VariableGroupPending = {
 
 export function offVariableGroupsOf(current: State): ReadonlySet<string> {
   const out = new Set<string>();
-  for (const derived of variableGroupStatesOf(current, "", settled)) {
+  for (const derived of variableGroupStatesOf(current, "", nothingPending)) {
     if (derived.status === "off" && !derived.group.required) {
       out.add(variableGroupColumnKey(derived.group.key, derived.folder, ""));
     }
@@ -428,13 +429,13 @@ export function variableGroupOn(derived: VariableGroupState): boolean {
   return derived.group.required || derived.switchedOn || derived.status !== "off";
 }
 
-export function owedVariableGroupCellsOf(
+export function missingVariableGroupCellsOf(
   states: readonly VariableGroupState[],
 ): ReadonlySet<string> {
   const out = new Set<string>();
   for (const derived of states) {
     if (derived.status !== "partial") continue;
-    for (const member of derived.owed) out.add(addressKey(member.at));
+    for (const member of derived.missing) out.add(addressKey(member.at));
   }
   return out;
 }
@@ -442,10 +443,10 @@ export function owedVariableGroupCellsOf(
 export function variableGroupTally(states: readonly VariableGroupState[]): {
   members: number;
   present: number;
-  owed: number;
+  missing: number;
 } {
   const seen = new Set<string>();
-  const owing = new Set<string>();
+  const missing = new Set<string>();
   let present = 0;
   for (const derived of states) {
     for (const member of derived.members) {
@@ -455,9 +456,9 @@ export function variableGroupTally(states: readonly VariableGroupState[]): {
         if (member.present) present += 1;
       }
     }
-    for (const member of derived.owed) owing.add(addressKey(member.at));
+    for (const member of derived.missing) missing.add(addressKey(member.at));
   }
-  return { members: seen.size, present, owed: owing.size };
+  return { members: seen.size, present, missing: missing.size };
 }
 
 export function blockedVariableGroupColumns(
@@ -509,7 +510,7 @@ export function environmentsOf(current: State): Environment[] {
 export interface Lens {
   environment: string;
   query: string;
-  owedOnly: boolean;
+  unfilledOnly: boolean;
 }
 
 export type Inherits = "root" | "base" | null;
@@ -533,13 +534,13 @@ export interface Bundle {
   root: KeyLine[];
   folders: BundleFolder[];
   keys: number;
-  owed: number;
+  unfilled: number;
 }
 
 export interface Group {
   folder: string;
   keys: number;
-  owed: number;
+  unfilled: number;
   lines: KeyLine[];
 }
 
@@ -552,7 +553,7 @@ export interface Listing {
 
 function lineOf(
   catalogue: Catalogue,
-  owed: ReadonlySet<string>,
+  missing: ReadonlySet<string>,
   row: MatrixRow,
   cell: MatrixCell,
   environment: string,
@@ -580,7 +581,7 @@ function lineOf(
     inherits,
     overrides: (cell.overrides ?? []).map((override) => override.environment),
     orphaned: (cell.overrides ?? []).some((override) => override.orphaned === true),
-    needed: owed.has(addressKey(at)),
+    needed: missing.has(addressKey(at)),
   };
 }
 
@@ -595,10 +596,10 @@ function matches(key: string, query: string): boolean {
 export function listingOf(
   current: State,
   catalogue: Catalogue,
-  owed: ReadonlySet<string>,
+  missing: ReadonlySet<string>,
   lens: Lens,
 ): Listing {
-  const flat = lens.owedOnly || lens.query.trim() !== "";
+  const flat = lens.unfilledOnly || lens.query.trim() !== "";
   const optional = new Map(
     variableGroupsOf(current)
       .filter((group) => !group.required)
@@ -608,13 +609,13 @@ export function listingOf(
     flat ? undefined : optional.get(row.group ?? "");
   const keys: KeyLine[] = [];
   for (const row of current.matrix.rows) {
-    if (lens.owedOnly) {
+    if (lens.unfilledOnly) {
       for (const cell of row.cells) {
-        const refused = owed.has(
+        const refused = missing.has(
           addressKey({ key: row.key, folder: cell.folder, environment: "" }),
         );
-        if (refused || (!catalogue.unknown && owedCell(row, cell, catalogue.off))) {
-          keys.push(lineOf(catalogue, owed, row, cell, ""));
+        if (refused || (!catalogue.unknown && unfilledCell(row, cell, catalogue.off))) {
+          keys.push(lineOf(catalogue, missing, row, cell, ""));
         }
       }
       continue;
@@ -622,31 +623,31 @@ export function listingOf(
     if (flat) {
       if (!matches(row.key, lens.query)) continue;
       for (const cell of row.cells) {
-        if (listed(cell)) keys.push(lineOf(catalogue, owed, row, cell, lens.environment));
+        if (listed(cell)) keys.push(lineOf(catalogue, missing, row, cell, lens.environment));
       }
       continue;
     }
     if (bundled(row)) continue;
     const root = cellOf(row, "") ?? forbiddenRoot;
-    keys.push(lineOf(catalogue, owed, row, root, listed(root) ? lens.environment : ""));
+    keys.push(lineOf(catalogue, missing, row, root, listed(root) ? lens.environment : ""));
   }
   const groups: Group[] = [];
   const bundles: Bundle[] = [];
   if (!flat) {
-    const holds = (row: MatrixRow, folder: string): boolean =>
+    const inCatalogue = (row: MatrixRow, folder: string): boolean =>
       catalogue.variants.has(addressKey({ key: row.key, folder, environment: "" }));
     for (const folder of current.matrix.columns) {
       if (folder === "") continue;
       const lines: KeyLine[] = [];
-      let owing = 0;
+      let unfilled = 0;
       for (const row of current.matrix.rows) {
         if (bundled(row)) continue;
         const cell = cellOf(row, folder);
-        if (!cell || !listed(cell) || !holds(row, folder)) continue;
-        lines.push(lineOf(catalogue, owed, row, cell, lens.environment));
-        if (!catalogue.unknown && owedCell(row, cell, catalogue.off)) owing += 1;
+        if (!cell || !listed(cell) || !inCatalogue(row, folder)) continue;
+        lines.push(lineOf(catalogue, missing, row, cell, lens.environment));
+        if (!catalogue.unknown && unfilledCell(row, cell, catalogue.off)) unfilled += 1;
       }
-      groups.push({ folder, keys: lines.length, owed: owing, lines });
+      groups.push({ folder, keys: lines.length, unfilled, lines });
     }
     for (const group of optional.values()) {
       const rows = current.matrix.rows.filter((row) => row.group === group.key);
@@ -654,11 +655,11 @@ export function listingOf(
       const root: KeyLine[] = [];
       const folders: BundleFolder[] = [];
       let count = 0;
-      let owing = 0;
+      let unfilled = 0;
       const take = (row: MatrixRow, cell: MatrixCell, into: KeyLine[]): void => {
-        into.push(lineOf(catalogue, owed, row, cell, lens.environment));
+        into.push(lineOf(catalogue, missing, row, cell, lens.environment));
         count += 1;
-        if (!catalogue.unknown && owedCell(row, cell, catalogue.off)) owing += 1;
+        if (!catalogue.unknown && unfilledCell(row, cell, catalogue.off)) unfilled += 1;
       };
       for (const row of rows) {
         const cell = cellOf(row, "");
@@ -669,12 +670,12 @@ export function listingOf(
         const lines: KeyLine[] = [];
         for (const row of rows) {
           const cell = cellOf(row, folder);
-          if (!cell || !listed(cell) || !holds(row, folder)) continue;
+          if (!cell || !listed(cell) || !inCatalogue(row, folder)) continue;
           take(row, cell, lines);
         }
         if (lines.length > 0) folders.push({ folder, lines });
       }
-      bundles.push({ group, root, folders, keys: count, owed: owing });
+      bundles.push({ group, root, folders, keys: count, unfilled });
     }
   }
   return { flat, groups, keys, bundles };
@@ -983,9 +984,9 @@ export interface CopyBranch {
 export function copyTree(plan: CopyPlan): CopyBranch[] {
   const branches = new Map<string, CopyCell[]>();
   for (const cell of [...plan.fills, ...plan.overwrites]) {
-    const held = branches.get(cell.at.folder) ?? [];
-    held.push(cell);
-    branches.set(cell.at.folder, held);
+    const cells = branches.get(cell.at.folder) ?? [];
+    cells.push(cell);
+    branches.set(cell.at.folder, cells);
   }
   return [...branches.entries()]
     .sort(([a], [b]) => (a === "" ? -1 : b === "" ? 1 : a.localeCompare(b)))
@@ -998,50 +999,52 @@ export function referenceLine(reference: Reference): string {
     : `${reference.slug}${reference.folder}/${reference.key}`;
 }
 
-export function owedLensCount(
+export function unfilledLensCount(
   current: State,
   catalogue: Catalogue,
-  owed: ReadonlySet<string>,
+  missing: ReadonlySet<string>,
 ): number {
   if (catalogue.unknown) return 0;
   let total = 0;
   for (const row of current.matrix.rows) {
     for (const cell of row.cells) {
-      const refused = owed.has(addressKey({ key: row.key, folder: cell.folder, environment: "" }));
-      if (refused || owedCell(row, cell, catalogue.off)) total += 1;
+      const refused = missing.has(
+        addressKey({ key: row.key, folder: cell.folder, environment: "" }),
+      );
+      if (refused || unfilledCell(row, cell, catalogue.off)) total += 1;
     }
   }
   return total;
 }
 
-export function owedSet(recovery: Recovery | undefined): ReadonlySet<string> {
+export function missingSet(recovery: Recovery | undefined): ReadonlySet<string> {
   return new Set(
-    (recovery?.owed ?? []).map((cell) =>
+    (recovery?.missing ?? []).map((cell) =>
       addressKey({ key: cell.key, folder: cell.folder, environment: "" }),
     ),
   );
 }
 
-export function unfilledOwed(
+export function unfilledMissing(
   catalogue: Catalogue,
-  owed: ReadonlySet<string>,
+  missing: ReadonlySet<string>,
   drafts: ReadonlyMap<string, string>,
   baselines: ReadonlyMap<string, string>,
 ): Variant[] {
   return variantsOf(catalogue).filter((variant) => {
     const key = addressKey(variant.at);
-    if (!owed.has(key)) return false;
+    if (!missing.has(key)) return false;
     if (isDirty(variant.at, drafts, baselines)) return false;
     return !variant.set || variant.problem !== undefined;
   });
 }
 
-export function doneLabel(owed: number): string {
-  return owed === 0
+export function doneLabel(unfilled: number): string {
+  return unfilled === 0
     ? "Return to the terminal"
-    : `Return with ${plural(owed, "cell")} still to fill`;
+    : `Return with ${plural(unfilled, "cell")} still to fill`;
 }
 
-export function tallyLine(owed: number): string {
-  return owed === 0 ? "every required cell is filled" : `${plural(owed, "cell")} to fill`;
+export function tallyLine(unfilled: number): string {
+  return unfilled === 0 ? "every required cell is filled" : `${plural(unfilled, "cell")} to fill`;
 }

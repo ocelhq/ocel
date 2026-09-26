@@ -6,7 +6,7 @@ import { Badge, badgeVariants } from "./ui/badge";
 const tones = {
   default: "outline",
   muted: "secondary",
-  owed: "warn",
+  warn: "warn",
   bad: "destructive",
   accent: "outline",
   soon: "ghost",

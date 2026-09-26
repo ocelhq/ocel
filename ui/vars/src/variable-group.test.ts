@@ -4,7 +4,7 @@ import {
   blockedVariableGroupColumns,
   type MatrixCell,
   type MatrixRow,
-  owedVariableGroupCellsOf,
+  missingVariableGroupCellsOf,
   type State,
   type VariableGroupPending,
   variableGroupBlockLine,
@@ -60,7 +60,7 @@ describe("variableGroupStateOf", () => {
     expect(derived?.status).toBe("off");
   });
 
-  it("reads a group with one of two owed members set as partial", () => {
+  it("reads a group with one of two required members set as partial", () => {
     const one = stateOf(
       [
         row("GITHUB_ID", [cell({ state: "required", set: true, version: 1 })], {
@@ -72,10 +72,10 @@ describe("variableGroupStateOf", () => {
     );
     const derived = variableGroupStateOf(one, "github", "", "", pending());
     expect(derived?.status).toBe("partial");
-    expect(derived?.owed.map((member) => member.at.key)).toEqual(["GITHUB_SECRET"]);
+    expect(derived?.missing.map((member) => member.at.key)).toEqual(["GITHUB_SECRET"]);
   });
 
-  it("reads a group with every owed member set as complete", () => {
+  it("reads a group with every required member set as complete", () => {
     const both = stateOf(
       [
         row("GITHUB_ID", [cell({ state: "required", set: true, version: 1 })], {
@@ -90,7 +90,7 @@ describe("variableGroupStateOf", () => {
     expect(variableGroupStateOf(both, "github", "", "", pending())?.status).toBe("complete");
   });
 
-  it("does not hold a group partial for a member that is optional by its own spelling", () => {
+  it("does not mark a group partial for a member that is optional by its own spelling", () => {
     const mixed = stateOf(
       [
         row("GITHUB_ID", [cell({ state: "required", set: true, version: 1 })], {
@@ -102,7 +102,7 @@ describe("variableGroupStateOf", () => {
     );
     const derived = variableGroupStateOf(mixed, "github", "", "", pending());
     expect(derived?.status).toBe("complete");
-    expect(derived?.owed).toEqual([]);
+    expect(derived?.missing).toEqual([]);
   });
 
   it("reads a group of entirely optional members as off when nothing is set", () => {
@@ -159,7 +159,7 @@ describe("variableGroupStateOf", () => {
     expect(variableGroupStateOf(gated, "stripe", "", "", pending())?.status).toBe("off");
   });
 
-  it("reads a required group holding one of two owed members as partial", () => {
+  it("reads a required group with one of two required members set as partial", () => {
     const gated = stateOf(
       [
         row("STRIPE_KEY", [cell({ state: "required", set: true, version: 1 })], {
@@ -171,7 +171,7 @@ describe("variableGroupStateOf", () => {
     );
     const derived = variableGroupStateOf(gated, "stripe", "", "", pending());
     expect(derived?.status).toBe("partial");
-    expect(derived?.owed.map((member) => member.at.key)).toEqual(["STRIPE_WEBHOOK"]);
+    expect(derived?.missing.map((member) => member.at.key)).toEqual(["STRIPE_WEBHOOK"]);
   });
 
   it("reads a switched-on group with nothing set as off and remembers the switch", () => {
@@ -192,7 +192,7 @@ describe("variableGroupStateOf", () => {
     const switchedOn = new Set([variableGroupColumnKey("github", "", "")]);
     const derived = variableGroupStateOf(loose, "github", "", "", pending({ switchedOn }));
     expect(derived?.status).toBe("off");
-    expect(derived?.owed).toEqual([]);
+    expect(derived?.missing).toEqual([]);
     expect([...blockedVariableGroupColumns([derived!])]).toEqual([]);
   });
 
@@ -252,12 +252,12 @@ describe("variableGroupStateOf", () => {
     );
     const derived = variableGroupStateOf(overridden, "github", "", "preview", pending());
     expect(derived?.status).toBe("partial");
-    expect(derived?.owed.map((member) => member.at.environment)).toEqual(["preview"]);
+    expect(derived?.missing.map((member) => member.at.environment)).toEqual(["preview"]);
   });
 });
 
-describe("owedVariableGroupCells", () => {
-  it("marks the owed members of a partial group and nothing in a complete one", () => {
+describe("missingVariableGroupCells", () => {
+  it("marks the missing members of a partial group and nothing in a complete one", () => {
     const mixed = stateOf(
       [
         row("GITHUB_ID", [cell({ state: "required", set: true, version: 1 })], {
@@ -274,12 +274,12 @@ describe("owedVariableGroupCells", () => {
       ],
     );
     const states = variableGroupStatesOf(mixed, "", pending());
-    expect([...owedVariableGroupCellsOf(states)]).toEqual(["GITHUB_SECRET  "]);
+    expect([...missingVariableGroupCellsOf(states)]).toEqual(["GITHUB_SECRET  "]);
   });
 });
 
 describe("blockedVariableGroupColumns", () => {
-  it("blocks only the columns holding a partial group", () => {
+  it("blocks only the columns that contain a partial group", () => {
     const perColumn = stateOf(
       [
         row(

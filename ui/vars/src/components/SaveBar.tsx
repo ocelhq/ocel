@@ -12,7 +12,7 @@ export function SaveBar({ actions, note }: { actions?: ReactNode; note?: string 
   const said = useValue(outcome);
   const text = [said?.text, note].filter(Boolean).join(" ");
   if (!actions && pending === 0 && text === "") return null;
-  const tone = said?.tone ?? (note ? "owed" : undefined);
+  const tone = said?.tone ?? (note ? "error" : undefined);
   return (
     <footer
       data-slot="bar"
@@ -40,7 +40,7 @@ export function SaveBar({ actions, note }: { actions?: ReactNode; note?: string 
         )}
         <p
           aria-live="polite"
-          className={cn(role.body, tone === "owed" ? "text-destructive" : "text-body")}
+          className={cn(role.body, tone === "error" ? "text-destructive" : "text-body")}
         >
           {text}
         </p>
