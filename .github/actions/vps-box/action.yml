@@ -21,6 +21,9 @@ inputs:
   sweep:
     description: true reclaims boxes a real run that died left behind before this one comes up.
     default: "false"
+  docker:
+    description: A docker release series, such as 28.0, to install on the box from docker's apt repository before bootstrap runs. Empty leaves the box without docker.
+    default: ""
   turbo-token:
     default: ""
   turbo-team:
@@ -123,3 +126,15 @@ runs:
           echo "OCEL_VPS_USER=$OCEL_EC2_USER"
           echo "OCEL_VPS_IDENTITY_FILE=$OCEL_EC2_KEY"
         } >> "$GITHUB_ENV"
+
+    - name: Put docker ${{ inputs.docker }} on the box before bootstrap finds it
+      if: inputs.docker != ''
+      shell: bash
+      env:
+        SERIES: ${{ inputs.docker }}
+      run: |
+        set -euo pipefail
+        ssh -i "$OCEL_VPS_IDENTITY_FILE" \
+          -o IdentitiesOnly=yes -o BatchMode=yes \
+          -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR \
+          "$OCEL_VPS_USER@$OCEL_VPS_HOST" sudo sh -s -- "$SERIES" < scripts/vps-docker.sh

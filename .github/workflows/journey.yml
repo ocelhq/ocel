@@ -85,6 +85,7 @@ jobs:
       gcp: ${{ steps.gate.outputs.gcp }}
       vps: ${{ steps.gate.outputs.vps }}
       front: ${{ steps.gate.outputs.front }}
+      engine: ${{ steps.gate.outputs.engine }}
       next: ${{ steps.gate.outputs.next }}
       preview: ${{ steps.lanes.outputs.preview }}
       variants: ${{ steps.lanes.outputs.variants }}
@@ -99,6 +100,7 @@ jobs:
       gcp_key: ${{ steps.gate-gcp.outputs.key }}
       vps_key: ${{ steps.gate-vps.outputs.key }}
       front_key: ${{ steps.gate-front.outputs.key }}
+      engine_key: ${{ steps.gate-engine.outputs.key }}
       dev_key: ${{ steps.gate-dev.outputs.key }}
       next_key: ${{ steps.gate-next.outputs.key }}
     steps:
@@ -164,18 +166,21 @@ jobs:
             gcp=$(named gcp "$lanes")
             vps=$(named vps "$lanes")
             front=$vps
+            engine=$vps
           elif [ "$real" = true ]; then
             dev=false
             aws=$(named aws "$TARGETS")
             gcp=false
             vps=$(named vps "$TARGETS")
             front=$vps
+            engine=$vps
           elif [ "$LABEL" = dogfood:release ]; then
             dev=false
             aws=false
             gcp=false
             vps=false
             front=false
+            engine=false
             preview=true
           else
             files=$(git diff --name-only "$BASE" "$HEAD")
@@ -191,6 +196,7 @@ jobs:
             gcp=$(hit "$shared"'|^platform/gcp/|^scripts/floci\.sh$')
             vps=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2)\.sh$')
             front=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2)\.sh$|^tests/fronts/')
+            engine=$(hit "$shared"'|^platform/vps/|^scripts/(incus|ec2|vps-docker)\.sh$')
             next=$(hit "$shared"'|^platform/(aws|edge)/')
             preview=$(hit '^(www|console/github|cli|packages|frameworks|pkg|sdk|proto|platform|scripts)/|^(ocel\.aws\.json|package\.json|pnpm-lock\.yaml|pnpm-workspace\.yaml|turbo\.json)$|^\.github/(actions/|workflows/journey\.yml$)')
           fi
@@ -219,6 +225,7 @@ jobs:
             echo "gcp=$gcp"
             echo "vps=$vps"
             echo "front=$front"
+            echo "engine=$engine"
             echo "next=$next"
             echo "preview=$preview"
             echo "variants=${VARIANTS:-}"
@@ -290,6 +297,23 @@ jobs:
           OCEL_JOURNEY_SEED: ""
           OCEL_JOURNEY_TOUCHED: ""
 
+      - name: Has vps over an adopted docker already passed what it reads
+        id: gate-engine
+        if: ${{ steps.lanes.outputs.engine == 'true' && steps.lanes.outputs.real != 'true' }}
+        uses: ./.github/actions/suite-gate
+        with:
+          suite: journey-vps-engine
+          task: "@ocel-tests/journeys#journey:vps-engine"
+        env:
+          OCEL_VPS_DOCKER: "28.0"
+          OCEL_JOURNEY_CONCERN: deploy
+          OCEL_JOURNEY_FIXTURES: deploy/node
+          OCEL_JOURNEY_VARIANTS: default
+          OCEL_JOURNEY_COVERAGE: every-cell
+          OCEL_JOURNEY_SKIPS: skip
+          OCEL_JOURNEY_SEED: ""
+          OCEL_JOURNEY_TOUCHED: ""
+
       - name: Has dev already passed what it reads
         id: gate-dev
         if: ${{ steps.lanes.outputs.dev == 'true' && steps.lanes.outputs.real != 'true' }}
@@ -322,12 +346,14 @@ jobs:
           GCP: ${{ steps.lanes.outputs.gcp }}
           VPS: ${{ steps.lanes.outputs.vps }}
           FRONT: ${{ steps.lanes.outputs.front }}
+          ENGINE: ${{ steps.lanes.outputs.engine }}
           DEV: ${{ steps.lanes.outputs.dev }}
           NEXT: ${{ steps.lanes.outputs.next }}
           AWS_GREEN: ${{ steps.gate-aws.outputs.green }}
           GCP_GREEN: ${{ steps.gate-gcp.outputs.green }}
           VPS_GREEN: ${{ steps.gate-vps.outputs.green }}
           FRONT_GREEN: ${{ steps.gate-front.outputs.green }}
+          ENGINE_GREEN: ${{ steps.gate-engine.outputs.green }}
           DEV_GREEN: ${{ steps.gate-dev.outputs.green }}
           NEXT_GREEN: ${{ steps.gate-next.outputs.green }}
           PREVIEW: ${{ steps.lanes.outputs.preview }}
@@ -338,16 +364,18 @@ jobs:
           gcp=$(runs "$GCP" "$GCP_GREEN")
           vps=$(runs "$VPS" "$VPS_GREEN")
           front=$(runs "$FRONT" "$FRONT_GREEN")
+          engine=$(runs "$ENGINE" "$ENGINE_GREEN")
           dev=$(runs "$DEV" "$DEV_GREEN")
           next=$(runs "$NEXT" "$NEXT_GREEN")
           any=false
-          [ "$aws$gcp$vps$front$dev$next" = falsefalsefalsefalsefalsefalse ] || any=true
+          [ "$aws$gcp$vps$front$engine$dev$next" = falsefalsefalsefalsefalsefalsefalse ] || any=true
           [ "$PREVIEW" != head ] || any=true
           {
             echo "aws=$aws"
             echo "gcp=$gcp"
             echo "vps=$vps"
             echo "front=$front"
+            echo "engine=$engine"
             echo "dev=$dev"
             echo "next=$next"
             echo "any=$any"
@@ -894,6 +922,71 @@ jobs:
           vm: ${{ env.VM }}
           box: ${{ env.BOX }}
           evidence: journey-evidence-vps-${{ matrix.front }}
+
+  vps-engine:
+    name: vps over docker 28.0
+    needs: binary
+    if: ${{ needs.binary.outputs.engine == 'true' && needs.binary.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: ${{ needs.binary.outputs.real == 'true' && 90 || 45 }}
+    concurrency:
+      group: ${{ needs.binary.outputs.real == 'true' && 'real-vps-engine' || format('journey-vps-engine-{0}', github.event.pull_request.number) }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' && github.event.action != 'labeled' }}
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      OCEL_TARGET: vps
+      OCEL_VPS_DOCKER: "28.0"
+      OCEL_JOURNEY_CONCERN: deploy
+      OCEL_JOURNEY_FIXTURES: deploy/node
+      OCEL_JOURNEY_VARIANTS: default
+      OCEL_JOURNEY_COVERAGE: every-cell
+      OCEL_JOURNEY_SKIPS: skip
+      OCEL_JOURNEY_SEED: ${{ needs.binary.outputs.seed }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_ACCOUNT_ID || '' }}
+      CLOUDFLARE_API_TOKEN: ${{ needs.binary.outputs.real == 'true' && secrets.E2E_CLOUDFLARE_API_TOKEN || '' }}
+      VM: ocel-journey-engine-${{ github.run_id }}-${{ github.run_attempt }}
+      BOX: journey-engine-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Bring up the box this lane deploys to, docker 28.0 already on it
+        uses: ./.github/actions/vps-box
+        with:
+          real: ${{ needs.binary.outputs.real }}
+          vm: ${{ env.VM }}
+          box: ${{ env.BOX }}
+          session: ocel-journey-vps-engine-${{ github.run_id }}
+          docker: ${{ env.OCEL_VPS_DOCKER }}
+          turbo-token: ${{ secrets.TURBO_TOKEN }}
+          turbo-team: ${{ vars.TURBO_TEAM }}
+          aws-region: ${{ vars.E2E_AWS_REGION }}
+          role-to-assume: ${{ secrets.E2E_AWS_ROLE_ARN }}
+          expected-aws-account-id: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          expected-cloudflare-account-id: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+
+      - name: Run the journey over the docker bootstrap adopts
+        run: pnpm --filter @ocel-tests/journeys journey
+
+      - name: Record that what vps over an adopted docker reads has passed
+        if: ${{ needs.binary.outputs.real != 'true' }}
+        uses: ./.github/actions/suite-passed
+        with:
+          suite: journey-vps-engine
+          key: ${{ needs.binary.outputs.engine_key }}
+
+      - name: Nothing left behind, and the evidence kept
+        if: always()
+        uses: ./.github/actions/vps-box-gone
+        with:
+          real: ${{ needs.binary.outputs.real }}
+          vm: ${{ env.VM }}
+          box: ${{ env.BOX }}
+          evidence: journey-evidence-vps-engine
 
   vps-front-passed:
     name: vps behind every front
