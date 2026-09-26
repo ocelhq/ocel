@@ -9,14 +9,14 @@ import (
 )
 
 const tcpTable = `  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
-   0: 00000000:0050 00000000:0000 0A 00000000:00000000 00:00000000     0        0 12345 1 0000000000000000 100 0 0 10 0
-   1: 0100007F:07E3 00000000:0000 0A 00000000:00000000 00:00000000     0        0 12346 1 0000000000000000 100 0 0 10 0
-   2: 0100007F:0016 0100007F:C1A8 01 00000000:00000000 00:00000000     0        0 12347 1 0000000000000000 100 0 0 10 0
+   0: 00000000:0050 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12345 1 0000000000000000 100 0 0 10 0
+   1: 0100007F:07E3 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 12346 1 0000000000000000 100 0 0 10 0
+   2: 0100007F:0016 0100007F:C1A8 01 00000000:00000000 00:00000000 00000000     0        0 12347 1 0000000000000000 100 0 0 10 0
 `
 
 const tcp6Table = `  sl  local_address                         remote_address                        st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode
-   0: 00000000000000000000000000000000:01BB 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000     0        0 22222 1 0000000000000000 100 0 0 10 0
-   1: 000080FE00000000FF565EFEA1B7C846:07E3 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000     0        0 22223 1 0000000000000000 100 0 0 10 0
+   0: 00000000000000000000000000000000:01BB 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 22222 1 0000000000000000 100 0 0 10 0
+   1: 000080FE00000000FF565EFEA1B7C846:07E3 00000000000000000000000000000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 22223 1 0000000000000000 100 0 0 10 0
 `
 
 func TestATableNamesEveryListeningSocketAndNothingElse(t *testing.T) {
@@ -94,5 +94,64 @@ func TestWhatTheHelperPrintsIsWhatTheBoxReadsBack(t *testing.T) {
 	}
 	if _, err := listeners.Read("caddy is listening on port eighty\n"); err == nil {
 		t.Error("Read() took a line no helper prints as a listener, so a proxy that answered something else would read as an empty netns")
+	}
+}
+
+const socketsHeld = listeners.SocketsMark + `
+/proc/812/fd socket:[12345]
+/proc/813/fd socket:[12345]
+/proc/900/fd socket:[22222]
+/proc/77/fd socket:[99999]
+` + listeners.NamesMark + `
+/proc/812/comm:nginx
+/proc/813/comm:nginx
+/proc/900/comm:docker-proxy
+/proc/77/comm:tmux: server
+`
+
+func TestAListenerIsNamedForTheProcessesThatHoldItsSocket(t *testing.T) {
+	t.Parallel()
+
+	held, err := listeners.Parse(strings.NewReader(tcpTable + tcp6Table + socketsHeld))
+	if err != nil {
+		t.Fatalf("Parse() = %v", err)
+	}
+	for port, want := range map[int][]string{80: {"nginx"}, 443: {"docker-proxy"}} {
+		if got := listeners.Holders(listeners.On(held, port)); !slices.Equal(got, want) {
+			t.Errorf("Holders(On(%d)) = %v, want %v: nginx's master and its worker share one socket and are one holder", port, got, want)
+		}
+	}
+	if got := listeners.Holders(listeners.On(held, 2019)); len(got) != 0 {
+		t.Errorf("Holders(On(2019)) = %v over sockets no process in the reading holds, want none", got)
+	}
+}
+
+func TestAHolderIsNamedAsTheKernelNamesIt(t *testing.T) {
+	t.Parallel()
+
+	table := "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n" +
+		"   0: 00000000:0050 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 99999 1 0000000000000000 100 0 0 10 0\n"
+	held, err := listeners.Parse(strings.NewReader(table + socketsHeld))
+	if err != nil {
+		t.Fatalf("Parse() = %v", err)
+	}
+	if got := listeners.Holders(held); !slices.Equal(got, []string{"tmux: server"}) {
+		t.Errorf("Holders() = %v, want the name with the space the kernel gave it", got)
+	}
+}
+
+func TestASocketLineNoReadingEverWroteIsRefusedRatherThanRead(t *testing.T) {
+	t.Parallel()
+
+	for what, said := range map[string]string{
+		"a socket with no process":   listeners.SocketsMark + "\nsocket:[12345]\n",
+		"a socket that is no inode":  listeners.SocketsMark + "\n/proc/812/fd socket:[x]\n",
+		"a process that is no pid":   listeners.SocketsMark + "\n/proc/self/fd socket:[12345]\n",
+		"a name with no process":     listeners.NamesMark + "\nnginx\n",
+		"a name under no pid at all": listeners.NamesMark + "\n/proc/x/comm:nginx\n",
+	} {
+		if _, err := listeners.Parse(strings.NewReader(tcpTable + said)); err == nil {
+			t.Errorf("Parse(%s) read it, want a refusal rather than a holder read off a line nothing wrote", what)
+		}
 	}
 }
