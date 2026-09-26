@@ -154,6 +154,14 @@ func TestAProxyMissingWhatItNeedsIsRefusedNamingTheField(t *testing.T) {
 			proxy:   map[string]any{"traefik": map[string]any{}},
 			mention: []string{`"proxy.traefik"`, `"directory"`, `"preset"`},
 		},
+		"a Traefik held null inside its object": {
+			proxy:   map[string]any{"traefik": nil},
+			mention: []string{`"proxy.traefik"`, `"directory"`, `"preset"`},
+		},
+		"a Caddy held null inside its object": {
+			proxy:   map[string]any{"caddy": nil},
+			mention: []string{`"proxy.caddy"`, `"directory"`, `"preset"`},
+		},
 		"a Traefik with no resolver": {
 			proxy:   map[string]any{"traefik": map[string]any{"directory": "/etc/traefik/dynamic"}},
 			mention: []string{`"proxy.traefik"`, `"resolver"`, `"preset"`},
