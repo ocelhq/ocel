@@ -12,6 +12,8 @@ func (*Generic[T]) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
 func (*Generic[T]) Render(proxy.Spec) ([]byte, error) { return nil, nil }
 
+func (*Generic[T]) File() string { return "" }
+
 func (*Generic[T]) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (*Generic[T]) Reload(context.Context) error { return nil }

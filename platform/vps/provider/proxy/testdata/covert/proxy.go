@@ -12,6 +12,8 @@ func (o *Overt) Guarantees() proxy.Guarantees { return o.guarantees }
 
 func (o *Overt) Render(proxy.Spec) ([]byte, error) { return nil, nil }
 
+func (o *Overt) File() string { return "" }
+
 func (o *Overt) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (o *Overt) Reload(context.Context) error { return nil }

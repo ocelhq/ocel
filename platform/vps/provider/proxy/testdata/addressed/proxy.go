@@ -12,6 +12,8 @@ func (*Addressed) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
 func (*Addressed) Render(proxy.Spec) ([]byte, error) { return nil, nil }
 
+func (*Addressed) File() string { return "" }
+
 func (*Addressed) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (*Addressed) Reload(context.Context) error { return nil }

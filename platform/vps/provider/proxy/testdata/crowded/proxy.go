@@ -12,6 +12,8 @@ func (c *Crowded) Guarantees() proxy.Guarantees { return c.guarantees }
 
 func (c *Crowded) Render(proxy.Spec) ([]byte, error) { return nil, nil }
 
+func (c *Crowded) File() string { return "" }
+
 func (c *Crowded) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (c *Crowded) Reload(context.Context) error { return nil }

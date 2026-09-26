@@ -10,6 +10,7 @@ import (
 )
 
 type yours struct {
+	file   string
 	handed *proxy.Spec
 }
 
@@ -21,6 +22,8 @@ func (y yours) Render(spec proxy.Spec) ([]byte, error) {
 	}
 	return []byte("routes " + spec.PreviewBase), nil
 }
+
+func (y yours) File() string { return y.file }
 
 func (yours) Unrendered([]byte, proxy.Permission) string { return "" }
 
