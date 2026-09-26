@@ -393,7 +393,7 @@ describe("op=poll", () => {
     expect(((await res.json()) as any).error).toBe("gone");
   });
 
-  it("asks the runtime to verify, not only to read, so a store that raises no event still settles", async () => {
+  it("asks the runtime to verify, not only to read, so a store that raises no event still completes", async () => {
     const completeUpload = vi.fn(async () => ({ state: UploadState.SUCCEEDED, error: "" }));
     const { ctx } = fakeContext({ completeUpload });
     const { GET } = createRouteHandler(storage, { runtime: ctx });
@@ -407,7 +407,7 @@ describe("op=poll", () => {
 describe("op=complete", () => {
   const completeUrl = "https://app.example.com/api/upload?op=complete";
 
-  it("settles the session the client says it finished", async () => {
+  it("completes the session the client says it finished", async () => {
     const completeUpload = vi.fn(async () => ({ state: UploadState.SUCCEEDED, error: "" }));
     const { ctx } = fakeContext({ completeUpload });
     const { POST } = createRouteHandler(storage, { runtime: ctx });

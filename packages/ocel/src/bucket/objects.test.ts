@@ -21,13 +21,13 @@ function fakeRuntime() {
   };
 
   const info = (key: string) => {
-    const held = store.get(key);
-    if (!held) return undefined;
+    const stored = store.get(key);
+    if (!stored) return undefined;
     return {
       key,
-      size: BigInt(held.body.byteLength),
-      etag: held.etag,
-      contentType: held.contentType,
+      size: BigInt(stored.body.byteLength),
+      etag: stored.etag,
+      contentType: stored.contentType,
       uploadedAt: undefined,
       metadata: {},
     };
@@ -53,9 +53,9 @@ function fakeRuntime() {
     }),
     copy: vi.fn(
       async ({ sourceKey, destinationKey }: { sourceKey: string; destinationKey: string }) => {
-        const held = store.get(sourceKey);
-        if (!held) throw Object.assign(new Error("not found"), { code: 5 });
-        store.set(destinationKey, held);
+        const stored = store.get(sourceKey);
+        if (!stored) throw Object.assign(new Error("not found"), { code: 5 });
+        store.set(destinationKey, stored);
         return { object: info(destinationKey) };
       },
     ),
@@ -117,9 +117,9 @@ function fakeRuntime() {
       });
       return new Response(null, { status: 200, headers: { etag: `"${target.key}"` } });
     }
-    const held = store.get(target.key);
-    if (!held) return new Response(null, { status: 404 });
-    return new Response(held.body, { status: 200 });
+    const stored = store.get(target.key);
+    if (!stored) return new Response(null, { status: 404 });
+    return new Response(stored.body, { status: 200 });
   });
 
   return { store, client, fetchImpl, signed };
@@ -211,10 +211,10 @@ describe("get", () => {
     const { objects } = objectsUnderTest();
     await objects.put("a.json", JSON.stringify({ ok: true }));
 
-    const held = await objects.get("a.json");
+    const read = await objects.get("a.json");
 
-    expect(held).not.toBeNull();
-    expect(await held?.text()).toBe('{"ok":true}');
+    expect(read).not.toBeNull();
+    expect(await read?.text()).toBe('{"ok":true}');
     expect(await objects.get("a.json").then((o) => o?.json())).toEqual({ ok: true });
     expect(await objects.get("a.json").then((o) => o?.bytes())).toBeInstanceOf(Uint8Array);
   });
@@ -303,7 +303,7 @@ describe("publicUrl", () => {
     expect(objects.publicUrl("a/b.png")).toBe("https://storage.example.com/store/a/b.png");
   });
 
-  it("escapes what a key segment may hold without leaving the path", () => {
+  it("escapes what a key segment may contain without leaving the path", () => {
     const { objects } = objectsUnderTest({ publicBaseUrl: "https://storage.example.com/store" });
 
     expect(objects.publicUrl("a b/c#d?e.png")).toBe(

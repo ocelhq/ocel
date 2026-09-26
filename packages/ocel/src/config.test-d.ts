@@ -104,7 +104,7 @@ describe("a project's registry", () => {
   it("is refused without a password, so nothing falls back to an anonymous push", () => {
     defineConfig({
       slug: "shop",
-      // @ts-expect-error the push authenticates, and the variable holding its secret is named here
+      // @ts-expect-error the push authenticates, and the variable containing its secret is named here
       registry: { server: "ghcr.io" },
     });
   });
@@ -130,7 +130,7 @@ describe("a project's provider", () => {
     defineConfig({ slug: "shop", provider: "aws" });
   });
 
-  it("is keyed by its identifier, holding its options", () => {
+  it("is keyed by its identifier, mapping to its options", () => {
     defineConfig({
       slug: "shop",
       provider: { gcp: { project: "acme-prod", region: "europe-west1" } },
@@ -205,7 +205,7 @@ describe("a project's edge", () => {
 });
 
 describe("a project's dns", () => {
-  it("is keyed by its identifier, holding its zone", () => {
+  it("is keyed by its identifier, mapping to its zone", () => {
     defineConfig({ slug: "shop", dns: { route53: { zone: "example.com" } } });
   });
 

@@ -2,11 +2,11 @@ import { afterEach, describe, expect, it } from "vitest";
 import { deployment } from "./deployment.js";
 import { EnvValueError } from "./errors.js";
 
-const held = process.env.OCEL_URL;
+const original = process.env.OCEL_URL;
 
 afterEach(() => {
-  if (held === undefined) delete process.env.OCEL_URL;
-  else process.env.OCEL_URL = held;
+  if (original === undefined) delete process.env.OCEL_URL;
+  else process.env.OCEL_URL = original;
 });
 
 describe("deployment.url", () => {

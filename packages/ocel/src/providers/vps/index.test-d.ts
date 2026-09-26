@@ -61,7 +61,7 @@ describe("the vps provider's proxy", () => {
     vpsProvider({ ssh: "prod", proxy: "coolify" });
   });
 
-  it("holds exactly one key", () => {
+  it("has exactly one key", () => {
     vpsProvider({
       ssh: "prod",
       // @ts-expect-error one proxy fronts a box
@@ -69,7 +69,7 @@ describe("the vps provider's proxy", () => {
     });
   });
 
-  it("carries what its key needs, or a preset that fills it", () => {
+  it("has what its key needs, or a preset that fills it", () => {
     // @ts-expect-error traefik names the directory and resolver, or a preset
     vpsProvider({ ssh: "prod", proxy: { traefik: {} } });
     // @ts-expect-error traefik names the resolver its routers ask for certificates

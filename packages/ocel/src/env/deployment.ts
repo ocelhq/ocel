@@ -19,7 +19,7 @@ export interface Deployment {
    *
    * A client bundle reads the value inlined at build time, so adding a
    * hostname with `ocel domain add` and not deploying again leaves the browser
-   * holding the hostname the last build was given. Deploy to move it.
+   * reading the hostname the last build was given. Deploy to move it.
    */
   readonly url: string;
 }

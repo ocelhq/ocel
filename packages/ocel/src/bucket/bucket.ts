@@ -89,12 +89,12 @@ export class Bucket<
     return this.objects.put(key, body, options);
   }
 
-  /** Reads the object under `key`, or `null` when the bucket holds none. */
+  /** Reads the object under `key`, or `null` when the bucket has none. */
   get(key: string, options?: GetOptions): Promise<ObjectBody | null> {
     return this.objects.get(key, options);
   }
 
-  /** What the bucket knows about `key`, or `null` when it holds none. */
+  /** What the bucket knows about `key`, or `null` when it has none. */
   head(key: string): Promise<ObjectInfo | null> {
     return this.objects.head(key);
   }

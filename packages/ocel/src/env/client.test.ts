@@ -73,7 +73,7 @@ describe("the generated client accessor", () => {
     expect(clientEnv.NEXT_PUBLIC_SITE_URL).toBe("https://example.com");
   });
 
-  it("exposes no server-only value from a build environment holding one", async () => {
+  it("exposes no server-only value from a build environment that has one", async () => {
     withBuildEnv(BUILD_ENV);
 
     const { clientEnv } = await load(GENERATED);

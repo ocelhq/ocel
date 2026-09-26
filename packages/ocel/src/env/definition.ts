@@ -98,9 +98,9 @@ export function flattenDefinitions(definitions: EnvDefinitions): FlatDefinitions
 }
 
 function claim(flat: FlatDefinitions, key: string, group?: string): void {
-  const held = flat[key];
-  if (!held) return;
-  const inside = [held.group, group].filter((name): name is string => name !== undefined);
+  const existing = flat[key];
+  if (!existing) return;
+  const inside = [existing.group, group].filter((name): name is string => name !== undefined);
   if (inside.length === 0) {
     throw new EnvDefinitionError(`'${key}' is declared twice in the same call.`);
   }

@@ -98,7 +98,7 @@ describe("getConfig", () => {
     );
   });
 
-  it("refuses a record that carries no properties", () => {
+  it("refuses a record that has no properties", () => {
     setEnv("OCEL_RESOURCE_BUCKET_storage", JSON.stringify({ name: "storage" }));
 
     expect(() => getConfig("storage", "bucket")).toThrow(

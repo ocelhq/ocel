@@ -83,8 +83,8 @@ declared `public: true`. A `put` over 16 MB is uploaded in parts without being a
 ```ts
 await uploads.put("reports/q3.pdf", bytes, { contentType: "application/pdf" });
 
-const held = await uploads.get("reports/q3.pdf");
-if (held) console.log(held.info.etag, await held.bytes());
+const report = await uploads.get("reports/q3.pdf");
+if (report) console.log(report.info.etag, await report.bytes());
 
 for await (const object of uploads.list({ prefix: "reports/" })) console.log(object.key);
 ```

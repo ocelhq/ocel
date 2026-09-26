@@ -83,7 +83,7 @@ function nodeBuiltins(entry: string): string[] {
 }
 
 describe("the bucket entry next serves", () => {
-  it("loads no node builtin of its own, so an edge bundle can hold its own modules", () => {
+  it("loads no node builtin of its own, so an edge bundle can include its modules", () => {
     expect(nodeBuiltins(join(here, "next.ts"))).toEqual([]);
   });
 });

@@ -45,7 +45,7 @@ describe("postgres()", () => {
     );
   });
 
-  it("connects through a record's url verbatim when it carries one", () => {
+  it("connects through a record's url verbatim when it has one", () => {
     const url =
       "postgres://app:s3cret@ep-cool.neon.tech/orders?sslmode=require&options=endpoint%3Dep-cool";
     vi.stubEnv(

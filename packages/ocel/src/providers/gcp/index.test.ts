@@ -3,7 +3,7 @@ import { defineConfig } from "../../config.js";
 import gcpProvider from "./index";
 
 describe("gcpProvider", () => {
-  it("returns its options keyed by the provider, carrying the project and region through", () => {
+  it("returns its options keyed by the provider, passing the project and region through", () => {
     expect(gcpProvider({ project: "acme-prod", region: "europe-west1" })).toEqual({
       gcp: { project: "acme-prod", region: "europe-west1" },
     });
