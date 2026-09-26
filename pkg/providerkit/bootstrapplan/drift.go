@@ -1,4 +1,4 @@
-package providerkit
+package bootstrapplan
 
 import (
 	"strings"
@@ -7,7 +7,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
-func RefuseGrowth(shown, fresh provider.Plan) error {
+func RefuseUnconsentedChanges(shown, fresh provider.Plan) error {
 	rows := map[string]provider.ChangeAction{}
 	for _, group := range shown.Groups {
 		rows[group.Name] = group.Action

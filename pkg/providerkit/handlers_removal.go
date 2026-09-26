@@ -12,6 +12,7 @@ import (
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
@@ -221,7 +222,7 @@ func (r *projectRemoval) holdToPlan(consented *planv1.ChangePlan) error {
 	if err != nil {
 		return err
 	}
-	return RefuseGrowth(shown, drawn)
+	return bootstrapplan.RefuseUnconsentedChanges(shown, drawn)
 }
 
 func (r *projectRemoval) run(ctx context.Context, progress edge.Progress) error {

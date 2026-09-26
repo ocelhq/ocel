@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -112,7 +112,7 @@ func TestTheAPIGatewayEdgeRunsNoCode(t *testing.T) {
 func TestTheEdgeKindReachesItsBootstrapFeature(t *testing.T) {
 	t.Parallel()
 
-	if got := providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), Kind); got != bootstrap.FeatureAPIGatewayEdge {
+	if got := bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), Kind); got != bootstrap.FeatureAPIGatewayEdge {
 		t.Errorf("bootstrapping with the %q edge raises the %q feature, want %q; nothing else stands the invoke role and the not-found API this edge fronts deployments with", Kind, got, bootstrap.FeatureAPIGatewayEdge)
 	}
 }

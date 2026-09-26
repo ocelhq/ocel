@@ -1,4 +1,4 @@
-package providerkit
+package bootstrapplan
 
 import (
 	"fmt"
@@ -41,7 +41,7 @@ func EdgeChanges(kind edge.Kind, planned []edge.PlanChange) ([]provider.Change, 
 	return changes, nil
 }
 
-func EdgeGroupOf(group edge.PlanGroup) (provider.ChangeGroup, error) {
+func EdgeGroupFromPlanGroup(group edge.PlanGroup) (provider.ChangeGroup, error) {
 	kind, _ := edge.EdgeGroupKindOf(group.Name)
 	if !edge.ValidPlanAction(group.Action) {
 		return provider.ChangeGroup{}, fmt.Errorf(

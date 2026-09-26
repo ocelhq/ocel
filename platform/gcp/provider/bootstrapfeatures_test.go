@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
@@ -26,7 +26,7 @@ func TestTheLoadBalancerIsAFeatureOnlyTheEdgeThatNeedsItPullsIn(t *testing.T) {
 		t.Errorf("the %q feature reads %q, and the one bootstrap item with a standing cost says the price in the plan", albFeature, feature.Summary)
 	}
 
-	fronted, err := providerkit.RequiredFeatures(catalogue, nil, string(alb.Kind))
+	fronted, err := bootstrapplan.RequiredFeatures(catalogue, nil, string(alb.Kind))
 	if err != nil {
 		t.Fatalf("RequiredFeatures(alb) = %v", err)
 	}
@@ -34,7 +34,7 @@ func TestTheLoadBalancerIsAFeatureOnlyTheEdgeThatNeedsItPullsIn(t *testing.T) {
 		t.Errorf("an %q bootstrap requires %v, want %q among them", alb.Kind, fronted, albFeature)
 	}
 
-	plain, err := providerkit.RequiredFeatures(catalogue, nil, string(direct.Kind))
+	plain, err := bootstrapplan.RequiredFeatures(catalogue, nil, string(direct.Kind))
 	if err != nil {
 		t.Fatalf("RequiredFeatures(direct) = %v", err)
 	}
@@ -114,14 +114,14 @@ func TestThePlanNamesTheLoadBalancerGroupOnlyForTheEdgeThatStandsItUp(t *testing
 		t.Fatalf("described = %v", err)
 	}
 
-	fronted := providerkit.DeriveGroups(read, catalogue, provider.BootstrapRequest{
+	fronted := bootstrapplan.ChangeGroups(read, catalogue, provider.BootstrapRequest{
 		Class: edge.ClassProduction, Features: []string{albFeature},
 	})
 	if !slices.ContainsFunc(fronted, func(g provider.ChangeGroup) bool { return g.Feature == albFeature }) {
 		t.Errorf("an %q plan holds %v, want a group for %q so the reader sees what it costs before it stands", alb.Kind, fronted, albFeature)
 	}
 
-	plain := providerkit.DeriveGroups(read, catalogue, provider.BootstrapRequest{Class: edge.ClassProduction})
+	plain := bootstrapplan.ChangeGroups(read, catalogue, provider.BootstrapRequest{Class: edge.ClassProduction})
 	if slices.ContainsFunc(plain, func(g provider.ChangeGroup) bool { return g.Feature == albFeature }) {
 		t.Errorf("a plan that asked for no edge holds %v, and a load balancer nothing named would stand and bill", plain)
 	}

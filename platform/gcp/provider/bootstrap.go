@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -183,7 +183,7 @@ func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	groups := providerkit.DeriveGroups(standing, b.Catalogue(), req)
+	groups := bootstrapplan.ChangeGroups(standing, b.Catalogue(), req)
 	groups[0].Changes = planned(read, stackItems(read.Names, read.Class, read.Emulated))
 
 	params := provider.ChangeGroup{
@@ -192,7 +192,7 @@ func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 		Changes: planned(read, parameterItems(read.Names, read.Class)),
 	}
 	params.Action, params.Reason = provider.RollUp(params.Changes)
-	return provider.Plan{Groups: providerkit.Vendored(Vendor, append(groups, params))}, nil
+	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(Vendor, append(groups, params))}, nil
 }
 
 func planned(read survey, items []item) []provider.Change {
@@ -797,7 +797,7 @@ func (b bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.P
 		stack.Changes = append(stack.Changes, change)
 	}
 	params.Action, params.Reason = provider.RollUp(params.Changes)
-	return provider.Plan{Groups: providerkit.Vendored(Vendor, []provider.ChangeGroup{stack, params})}, nil
+	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(Vendor, []provider.ChangeGroup{stack, params})}, nil
 }
 
 func removals(read survey) []removal {

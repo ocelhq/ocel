@@ -1,4 +1,4 @@
-package providerkit
+package bootstrapplan
 
 import (
 	"slices"
@@ -7,7 +7,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func NameStacks(described provider.BootstrapReading, catalogue []provider.Feature, name func(feature string) string) provider.BootstrapReading {
+func WithDefaultStackNames(described provider.BootstrapReading, catalogue []provider.Feature, name func(feature string) string) provider.BootstrapReading {
 	held := make(map[string]bool, len(described.Stacks))
 	for _, stack := range described.Stacks {
 		held[stack.Feature] = true
@@ -23,7 +23,7 @@ func NameStacks(described provider.BootstrapReading, catalogue []provider.Featur
 	return named
 }
 
-func DeriveGroups(described provider.BootstrapReading, catalogue []provider.Feature, req provider.BootstrapRequest) []provider.ChangeGroup {
+func ChangeGroups(described provider.BootstrapReading, catalogue []provider.Feature, req provider.BootstrapRequest) []provider.ChangeGroup {
 	standing := make(map[string]provider.BootstrapStack, len(described.Stacks))
 	for _, stack := range described.Stacks {
 		standing[stack.Feature] = stack
@@ -49,17 +49,17 @@ func DeriveGroups(described provider.BootstrapReading, catalogue []provider.Feat
 
 func baselineGroup(described provider.BootstrapReading, stack provider.BootstrapStack, class edge.Class) provider.ChangeGroup {
 	group := provider.ChangeGroup{Kind: provider.StackGroupKind, Name: stackName(stack, string(class)+" bootstrap")}
-	group.Action, group.Reason = standingAction(stack, described.Present)
+	group.Action, group.Reason = bootstrapStackAction(stack, described.Present)
 	return group
 }
 
 func featureGroup(stack provider.BootstrapStack, name string) provider.ChangeGroup {
 	group := provider.ChangeGroup{Kind: provider.StackGroupKind, Name: stackName(stack, name), Feature: name}
-	group.Action, group.Reason = standingAction(stack, true)
+	group.Action, group.Reason = bootstrapStackAction(stack, true)
 	return group
 }
 
-func standingAction(stack provider.BootstrapStack, holding bool) (provider.ChangeAction, string) {
+func bootstrapStackAction(stack provider.BootstrapStack, holding bool) (provider.ChangeAction, string) {
 	switch {
 	case !holding || !stack.Present:
 		return provider.ActionCreate, ""
@@ -70,7 +70,7 @@ func standingAction(stack provider.BootstrapStack, holding bool) (provider.Chang
 	}
 }
 
-func Vendored(vendor provider.Vendor, groups []provider.ChangeGroup) []provider.ChangeGroup {
+func PrefixWithVendor(vendor provider.Vendor, groups []provider.ChangeGroup) []provider.ChangeGroup {
 	named := slices.Clone(groups)
 	for i := range named {
 		named[i].Name = string(vendor) + "/" + named[i].Name

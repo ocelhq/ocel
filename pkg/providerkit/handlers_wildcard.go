@@ -13,6 +13,7 @@ import (
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
@@ -371,7 +372,7 @@ func (w *wildcards) releaseGroups(front edge.Edge) ([]*planv1.ChangeGroup, error
 }
 
 func edgeGroupProto(group edge.PlanGroup) (*planv1.ChangeGroup, error) {
-	converted, err := EdgeGroupOf(group)
+	converted, err := bootstrapplan.EdgeGroupFromPlanGroup(group)
 	if err != nil {
 		return nil, err
 	}

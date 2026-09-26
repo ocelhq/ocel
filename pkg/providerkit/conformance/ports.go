@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
@@ -329,7 +329,7 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 				}
 			}
 		}
-		if _, err := providerkit.FeatureLevels(catalogue, named); err != nil {
+		if _, err := bootstrapplan.FeatureLevels(catalogue, named); err != nil {
 			t.Fatalf("FeatureLevels() over the whole catalogue = %v, want an order that stands every feature up", err)
 		}
 	})
@@ -472,7 +472,7 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 
 	t.Run("Apply takes a drop in delete order", func(t *testing.T) {
 		class := edge.ClassPreview
-		levels, err := providerkit.FeatureLevels(catalogue, wanted)
+		levels, err := bootstrapplan.FeatureLevels(catalogue, wanted)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -490,7 +490,7 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 }
 
 func applicable(catalogue []provider.Feature, kind edge.Kind) ([]string, error) {
-	required, err := providerkit.RequiredFeatures(catalogue, nil, string(kind))
+	required, err := bootstrapplan.RequiredFeatures(catalogue, nil, string(kind))
 	if err != nil {
 		return nil, err
 	}
@@ -526,7 +526,7 @@ func applicable(catalogue []provider.Feature, kind edge.Kind) ([]string, error) 
 }
 
 func ordered(catalogue []provider.Feature, wanted []string) ([]string, error) {
-	levels, err := providerkit.FeatureLevels(catalogue, wanted)
+	levels, err := bootstrapplan.FeatureLevels(catalogue, wanted)
 	if err != nil {
 		return nil, err
 	}

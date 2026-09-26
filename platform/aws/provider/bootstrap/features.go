@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -173,7 +173,7 @@ func featureNames() []string {
 }
 
 func featureLevels(names []string) ([][]string, error) {
-	return providerkit.FeatureLevels(Catalogue(), names)
+	return bootstrapplan.FeatureLevels(Catalogue(), names)
 }
 
 type FeatureSet map[string]bool

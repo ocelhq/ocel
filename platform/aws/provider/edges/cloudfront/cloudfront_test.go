@@ -16,7 +16,7 @@ import (
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 	kvstypes "github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
@@ -187,7 +187,7 @@ func TestTheCloudFrontEdgeRunsNoCode(t *testing.T) {
 func TestTheEdgeKindReachesItsBootstrapFeature(t *testing.T) {
 	t.Parallel()
 
-	if got := providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), Kind); got != bootstrap.FeatureCloudFrontEdge {
+	if got := bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), Kind); got != bootstrap.FeatureCloudFrontEdge {
 		t.Errorf("bootstrapping with the %q edge raises the %q feature, want %q; nothing else stands the resolver, routes store and policies this edge reads", Kind, got, bootstrap.FeatureCloudFrontEdge)
 	}
 }

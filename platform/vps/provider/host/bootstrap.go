@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -81,7 +81,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err := b.host.servingFree(ctx, read); err != nil {
 		return provider.Plan{}, err
 	}
-	groups := providerkit.DeriveGroups(described, b.Catalogue(), req)
+	groups := bootstrapplan.ChangeGroups(described, b.Catalogue(), req)
 	groups[0].Changes = planned(read)
 	if read.rerendering && groups[0].Action == provider.ActionKeep {
 		groups[0].Action, groups[0].Reason = provider.ActionUpdate, ""
@@ -89,7 +89,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if groups[0].Reason == "" {
 		groups[0].Reason = bootstrapDocs
 	}
-	return provider.Plan{Groups: providerkit.Vendored(b.vendor, groups)}, nil
+	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(b.vendor, groups)}, nil
 }
 
 func planned(read Reading) []provider.Change {
@@ -180,7 +180,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 		return err
 	}
 	items := standing.Items()
-	if err := providerkit.RefuseGrowth(itemPlan(shown), itemPlan(standing)); err != nil {
+	if err := bootstrapplan.RefuseUnconsentedChanges(itemPlan(shown), itemPlan(standing)); err != nil {
 		return err
 	}
 
@@ -434,7 +434,7 @@ func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.P
 		Action:  provider.ActionDelete,
 		Changes: changes,
 	}
-	return provider.Plan{Groups: providerkit.Vendored(b.vendor, []provider.ChangeGroup{group})}, nil
+	return provider.Plan{Groups: bootstrapplan.PrefixWithVendor(b.vendor, []provider.ChangeGroup{group})}, nil
 }
 
 func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.Progress) error {
