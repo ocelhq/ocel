@@ -12,8 +12,8 @@ func (p *Provider) servedOnTheBox(ctx context.Context, hostname string) (edge.Ki
 	if err != nil {
 		return "", err
 	}
-	if said.Unreached != "" {
-		return "", liveness.ProbeUnanswered{Cause: said.Unreached}
+	if said.Failure != "" {
+		return "", liveness.ProbeUnanswered{Cause: said.Failure}
 	}
 	return edge.Kind(said.Edge), nil
 }

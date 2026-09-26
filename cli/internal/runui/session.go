@@ -229,13 +229,13 @@ func (s *Session) BuildOK() {
 	s.buildStart = time.Time{}
 }
 
-func (s *Session) Waiting(unset *streamv1.MissingVariables, url string) {
+func (s *Session) Waiting(missing *streamv1.MissingVariables, url string) {
 	s.logf("[waiting] %s", withoutFragment(url))
 	s.waiting = true
 	s.build.flush()
 	s.buildStart = time.Time{}
 	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Waiting{
-		Waiting: &streamv1.WaitingEvent{Missing: unset, Url: url},
+		Waiting: &streamv1.WaitingEvent{Missing: missing, Url: url},
 	}})
 }
 

@@ -66,12 +66,12 @@ func (m Manual) portCheck(ctx context.Context) provider.HostCheck {
 
 func (m Manual) routing(ctx context.Context, hostname string) (provider.HostCheck, error) {
 	check := provider.HostCheck{Subject: hostname, Verdict: provider.HostFail, Fix: Route(hostname, m.Port)}
-	answered, unreached, err := m.Box.Probe(ctx, hostname)
+	answered, failure, err := m.Box.Probe(ctx, hostname)
 	switch {
 	case err != nil:
 		return check, err
-	case unreached != "":
-		check.Finding = unreached
+	case failure != "":
+		check.Finding = failure
 	case answered != switchboard.EdgeName:
 		check.Finding = fmt.Sprintf("%s answers on this box's 443 as %q, not through ocel's switchboard", hostname, answered)
 	default:

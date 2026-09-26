@@ -551,10 +551,10 @@ func (p *projector) result(m protoreflect.Message) []string {
 	}
 
 	out := p.strand(failMark, "failed")
-	if unset := ev.GetMissing(); unset != nil {
+	if missing := ev.GetMissing(); missing != nil {
 		out = append(out, "")
-		out = append(out, envgate.Lines(unset, p.missingPaint())...)
-		out = append(out, "", envgate.RemedyLine(unset.GetRemedy()))
+		out = append(out, envgate.Lines(missing, p.missingPaint())...)
+		out = append(out, "", envgate.RemedyLine(missing.GetRemedy()))
 		if ev.GetDetail() != "" {
 			out = append(out, "")
 		}

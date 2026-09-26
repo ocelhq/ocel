@@ -14,7 +14,7 @@ type Box interface {
 	Listening(ctx context.Context) ([]listeners.Listener, error)
 	Publishing(ctx context.Context, port string) ([]string, error)
 	Claimed(ctx context.Context) ([]string, error)
-	Probe(ctx context.Context, hostname string) (answered, unreached string, err error)
+	Probe(ctx context.Context, hostname string) (answered, failure string, err error)
 }
 
 type Manual struct {

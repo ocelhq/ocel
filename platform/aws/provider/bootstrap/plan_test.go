@@ -38,7 +38,7 @@ func planned(t *testing.T, stacks cfn.API, class string, req Request) []provider
 		})
 	}
 	groups, err := PlanChanges(ctx, stacks, read, req, bootstrapplan.ChangeGroups(
-		NameStacks(defaultNamespace, described), Catalogue(),
+		WithDefaultStackNames(defaultNamespace, described), Catalogue(),
 		provider.BootstrapRequest{Class: edge.Class(class), Features: req.Features, Remove: req.Remove}))
 	if err != nil {
 		t.Fatalf("PlanChanges: %v", err)

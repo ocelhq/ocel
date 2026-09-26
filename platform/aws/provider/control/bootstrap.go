@@ -113,7 +113,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 		return provider.Plan{}, err
 	}
 	groups, err := bootstrap.PlanChanges(ctx, b.CFN, read, b.request(req),
-		bootstrapplan.ChangeGroups(bootstrap.NameStacks(b.Namespace, described(req.Class, read.Deployed)), bootstrap.Catalogue(), req))
+		bootstrapplan.ChangeGroups(bootstrap.WithDefaultStackNames(b.Namespace, described(req.Class, read.Deployed)), bootstrap.Catalogue(), req))
 	if err != nil {
 		return provider.Plan{}, err
 	}

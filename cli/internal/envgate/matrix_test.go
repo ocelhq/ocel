@@ -298,12 +298,12 @@ func TestMatrix(t *testing.T) {
 		if !errors.As(g.Check(), &refusal) {
 			t.Fatal("Check err is not an *envgate.Refusal — the root cell is still missing")
 		}
-		var unset []envgate.Cell
+		var missing []envgate.Cell
 		for _, problem := range refusal.Problems {
-			unset = append(unset, envgate.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})
+			missing = append(missing, envgate.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})
 		}
-		if want := []envgate.Cell{{Key: "STRIPE_API_KEY"}}; !reflect.DeepEqual(unset, want) {
-			t.Errorf("the deploy is refused over %+v, want %+v — a column drawn for an override must not reach the verdict", unset, want)
+		if want := []envgate.Cell{{Key: "STRIPE_API_KEY"}}; !reflect.DeepEqual(missing, want) {
+			t.Errorf("the deploy is refused over %+v, want %+v — a column drawn for an override must not reach the verdict", missing, want)
 		}
 	})
 

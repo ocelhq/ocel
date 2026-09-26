@@ -1201,14 +1201,14 @@ func TestRecovery(t *testing.T) {
 	t.Run("the state includes the deploy that is waiting and the cells it is missing", func(t *testing.T) {
 		t.Parallel()
 		store := newFakeStore()
-		unset := []envgate.Cell{{Key: "API_URL"}}
+		missing := []envgate.Cell{{Key: "API_URL"}}
 		s := serveWith(t, context.Background(), varsui.Options{
 			Gate:     discovered(t, store, def("API_URL")),
 			Store:    store,
-			Recovery: &varsui.Recovery{Deploy: "ocel deploy", Missing: unset},
+			Recovery: &varsui.Recovery{Deploy: "ocel deploy", Missing: missing},
 		})
 		got := state(t, s)
-		if got.Recovery == nil || got.Recovery.Deploy != "ocel deploy" || !reflect.DeepEqual(got.Recovery.Missing, unset) {
+		if got.Recovery == nil || got.Recovery.Deploy != "ocel deploy" || !reflect.DeepEqual(got.Recovery.Missing, missing) {
 			t.Errorf("recovery = %+v, want the deploy named and API_URL missing", got.Recovery)
 		}
 		if standalone := state(t, session(t, newFakeStore(), def("API_URL"))); standalone.Recovery != nil {
