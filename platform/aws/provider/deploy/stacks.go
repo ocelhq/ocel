@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/provider"
-	kitpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
+	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -46,13 +46,13 @@ type ReleaseConfig func(ctx context.Context, scope Scope) (Config, error)
 type Stacks struct {
 	resolve  ReleaseConfig
 	realized *Realized
-	engine   kitpulumi.Engine
+	engine   pulumi.Engine
 
 	served *servedApps
 
 	pending    *pendingSets
 	pluginOnce sync.Once
-	plugin     kitpulumi.Plugin
+	plugin     pulumi.Plugin
 	pluginErr  error
 
 	mu     sync.Mutex
@@ -64,14 +64,14 @@ type Stacks struct {
 type release struct {
 	*Stacks
 	cfg        Config
-	automation *kitpulumi.Automation
+	automation *pulumi.Automation
 }
 
 func NewStacks(resolve ReleaseConfig, realized *Realized) *Stacks {
 	return newStacks(resolve, realized, nil)
 }
 
-func newStacks(resolve ReleaseConfig, realized *Realized, engine kitpulumi.Engine) *Stacks {
+func newStacks(resolve ReleaseConfig, realized *Realized, engine pulumi.Engine) *Stacks {
 	return &Stacks{
 		resolve:  resolve,
 		realized: realized,
@@ -82,7 +82,7 @@ func newStacks(resolve ReleaseConfig, realized *Realized, engine kitpulumi.Engin
 	}
 }
 
-func (r *Stacks) assetSetPlugin() (kitpulumi.Plugin, error) {
+func (r *Stacks) assetSetPlugin() (pulumi.Plugin, error) {
 	r.pluginOnce.Do(func() { r.plugin, r.pluginErr = assetSetPlugin(r.pending) })
 	return r.plugin, r.pluginErr
 }
@@ -103,8 +103,8 @@ func (r *Stacks) at(ctx context.Context, ref provider.StackRef, kind edge.Kind) 
 		return nil, err
 	}
 	created := &release{Stacks: r, cfg: cfg}
-	created.automation = kitpulumi.New(kitpulumi.Config{
-		Backend: kitpulumi.Backend{
+	created.automation = pulumi.New(pulumi.Config{
+		Backend: pulumi.Backend{
 			URL:        cfg.BackendURL,
 			Passphrase: cfg.Passphrase,
 			Project:    cfg.PulumiProject,
@@ -115,7 +115,7 @@ func (r *Stacks) at(ctx context.Context, ref provider.StackRef, kind edge.Kind) 
 		Decode:    created.Decode,
 		Refresh:   refreshPolicy(r.realized),
 		Engine:    r.engine,
-		Plugins:   []kitpulumi.Plugin{plugin},
+		Plugins:   []pulumi.Plugin{plugin},
 	})
 	r.opened[scope] = created
 	return created, nil
@@ -135,9 +135,9 @@ func skipTeardownRefresh() bool {
 	return false
 }
 
-func refreshPolicy(realized *Realized) func(provider.StackRef, kitpulumi.Operation) bool {
-	return func(ref provider.StackRef, op kitpulumi.Operation) bool {
-		if op != kitpulumi.OperationDestroy || skipTeardownRefresh() {
+func refreshPolicy(realized *Realized) func(provider.StackRef, pulumi.Operation) bool {
+	return func(ref provider.StackRef, op pulumi.Operation) bool {
+		if op != pulumi.OperationDestroy || skipTeardownRefresh() {
 			return false
 		}
 		return !realized.realizedHere(naming.Sanitize(ref.Project), ref.Name)

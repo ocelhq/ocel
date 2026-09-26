@@ -7,7 +7,7 @@ import (
 	"maps"
 	"slices"
 
-	kitledger "github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -18,7 +18,7 @@ type Pins interface {
 
 func Promote(
 	ctx context.Context,
-	ledger *kitledger.Ledger,
+	l *ledger.Ledger,
 	pins Pins,
 	promotion edge.Promotion,
 	pointer string,
@@ -27,7 +27,7 @@ func Promote(
 	var pinning []edge.DeploymentRecord
 	for _, app := range slices.Sorted(maps.Keys(promotion.Builds)) {
 		identity := promotion.Builds[app]
-		record, staged, err := ledger.Record(ctx, app, identity)
+		record, staged, err := l.Record(ctx, app, identity)
 		if err != nil {
 			return err
 		}
@@ -44,7 +44,7 @@ func Promote(
 		}
 		pinning = append(pinning, record)
 	}
-	if err := ledger.Promote(ctx, promotion, pointer, progress); err != nil {
+	if err := l.Promote(ctx, promotion, pointer, progress); err != nil {
 		return err
 	}
 	for _, record := range pinning {
@@ -54,7 +54,7 @@ func Promote(
 				progress.Detail("Pinning " + service + " to " + revision)
 			}
 			if err := pins.Pin(ctx, service, revision); err != nil {
-				if undo := ledger.Unpromote(ctx, promotion.PromotionID, pointer); undo != nil {
+				if undo := l.Unpromote(ctx, promotion.PromotionID, pointer); undo != nil {
 					return errors.Join(err, fmt.Errorf("the ledger still names promotion %s, which Cloud Run never finished pinning: %w", promotion.PromotionID, undo))
 				}
 				return err

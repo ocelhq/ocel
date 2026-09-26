@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	kitpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
+	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -46,7 +46,7 @@ func TestTheFrontIsRefreshedBeforeItIsRaisedSoTheRoutesWrittenBesideItSurvive(t 
 
 	stacks := stacking(t)
 	front, spec := stacks.config(stacks.p.resolved, alb.Target{Class: edge.ClassProduction}, "secret", nil)
-	if front.Refresh == nil || !front.Refresh(spec.Ref, kitpulumi.OperationProvision) {
+	if front.Refresh == nil || !front.Refresh(spec.Ref, pulumi.OperationProvision) {
 		t.Error("the front stack is raised without a refresh, and its url map ignores changes to hostRules and pathMatchers by keeping " +
 			"what state says: state that never saw the host rules a bind wrote puts every project in the class back to unrouted")
 	}

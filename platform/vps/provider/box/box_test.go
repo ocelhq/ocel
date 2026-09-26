@@ -11,7 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/provider/fake"
-	kitledger "github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -509,7 +509,7 @@ func TestAPromotionOvertakenWhileItGatedNeverFlipsTheBoxAwayFromTheOneThatOverto
 	}
 	m.releasing = func(rel host.Release) error {
 		m.releasing = nil
-		overtaking := kitledger.New(store, edge.ClassProduction, slug)
+		overtaking := ledger.New(store, edge.ClassProduction, slug)
 		if err := overtaking.Promote(context.Background(), edge.Promotion{PromotionID: "p3", Builds: map[string]string{"web": "b3"}}, "", edge.DiscardProgress()); err != nil {
 			t.Fatalf("Promote(p3): %v", err)
 		}

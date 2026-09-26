@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	kitledger "github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -53,7 +53,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	next.Slug = spec.Slug
 	next.Class = spec.Class
 	s := &stack{e: e, state: next}
-	if err := s.ledger().EnsureSchema(ctx); err != nil {
+	if err := s.openLedger().EnsureSchema(ctx); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -114,18 +114,18 @@ var (
 
 func (s *stack) State() edge.StackState { return s.state }
 
-func (s *stack) ledger() *kitledger.Ledger {
-	return kitledger.New(s.e.records, s.state.Class, s.state.Slug)
+func (s *stack) openLedger() *ledger.Ledger {
+	return ledger.New(s.e.records, s.state.Class, s.state.Slug)
 }
 
-func (s *stack) Ledger() edge.Ledger { return s.ledger() }
+func (s *stack) Ledger() edge.Ledger { return s.openLedger() }
 
 func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
-	return pin.Promote(ctx, s.ledger(), s.e.pins, promotion, pointer, progress)
+	return pin.Promote(ctx, s.openLedger(), s.e.pins, promotion, pointer, progress)
 }
 
 func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progress) (edge.PruneResult, error) {
-	return s.ledger().RemovePointer(ctx, pointer)
+	return s.openLedger().RemovePointer(ctx, pointer)
 }
 
 func (s *stack) BindDomain(context.Context, edge.DomainBinding) error {
@@ -138,4 +138,4 @@ func (s *stack) UnbindDomain(_ context.Context, hostname string) error {
 	return nil
 }
 
-func (s *stack) Destroy(ctx context.Context) error { return s.ledger().Destroy(ctx) }
+func (s *stack) Destroy(ctx context.Context) error { return s.openLedger().Destroy(ctx) }

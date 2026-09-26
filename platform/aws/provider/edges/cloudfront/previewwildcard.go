@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	kitledger "github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
@@ -88,7 +88,7 @@ func reconcileWildcardDistribution(ctx context.Context, c Clients, spec distribu
 	return existing, nil
 }
 
-func bootstrapLedger(c Clients, class edge.Class, deployed bootstrap.Deployed) *kitledger.Ledger {
+func bootstrapLedger(c Clients, class edge.Class, deployed bootstrap.Deployed) *ledger.Ledger {
 	return awsports.Ledger(c.Dynamo, awsports.Table(deployed.StateTable), class, "")
 }
 
