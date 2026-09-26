@@ -10,10 +10,10 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
-const listenerCommand = "cat " + listeners.TCPPath + " " + listeners.TCP6Path
+const listenerCommand = "cat " + listeners.TCPPath + "\n" +
+	"if [ -e " + listeners.TCP6Path + " ]; then cat " + listeners.TCP6Path + "; fi"
 
-const holdersCommand = "cat " + listeners.TCPPath + "\n" +
-	"if [ -r " + listeners.TCP6Path + " ]; then cat " + listeners.TCP6Path + "; fi\n" +
+const holdersCommand = listenerCommand + "\n" +
 	"echo '" + listeners.SocketsMark + "'\n" +
 	`find /proc/[0-9]*/fd -lname 'socket:\[*' -printf '%h %l\n' 2>/dev/null || true` + "\n" +
 	"echo '" + listeners.NamesMark + "'\n" +
