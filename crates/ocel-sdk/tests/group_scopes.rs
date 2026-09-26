@@ -1,6 +1,6 @@
 mod collector;
 
-use collector::{cell, holding, Received, DECLARE_ENV};
+use collector::{cell, collector_with_cells, Received, DECLARE_ENV};
 
 #[allow(dead_code)]
 #[derive(ocel::Env)]
@@ -22,7 +22,7 @@ struct Shared {
 
 #[test]
 fn a_group_its_members_share_a_folder_declares_every_member() {
-    let (url, requests) = holding(2, vec![cell("SHARED_BOTH", "/api", "b")]);
+    let (url, requests) = collector_with_cells(2, vec![cell("SHARED_BOTH", "/api", "b")]);
     std::env::set_var("OCEL_PHASE", "discovery");
     std::env::set_var("OCEL_DEV_SERVER", &url);
     std::env::set_var("OCEL_DEV_SERVER_TOKEN", collector::TOKEN);

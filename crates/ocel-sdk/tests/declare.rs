@@ -1,6 +1,6 @@
 mod collector;
 
-use collector::{cell, holding, Received, DECLARE, DECLARE_ENV, REPORT_ENV_PROBLEMS};
+use collector::{cell, collector_with_cells, Received, DECLARE, DECLARE_ENV, REPORT_ENV_PROBLEMS};
 use ocel::proto::app::resources::v1::declare_request::Config;
 use ocel::proto::app::resources::v1::ResourceType;
 
@@ -32,7 +32,7 @@ const DB_LINE: &str = "10";
 
 #[test]
 fn discovery_posts_every_declaration_and_reports_the_problems_it_finds() {
-    let (url, requests) = holding(
+    let (url, requests) = collector_with_cells(
         4,
         vec![
             cell("DATABASE_NAME", "", "shop"),

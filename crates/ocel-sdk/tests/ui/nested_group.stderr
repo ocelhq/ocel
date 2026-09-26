@@ -1,15 +1,15 @@
-error[E0277]: `Middle` is not an ocel::Group, so no #[ocel(group)] field can hold it.
+error[E0277]: `Middle` is not an ocel::Group, so no #[ocel(group)] field can have it as its type.
   --> tests/ui/nested_group.rs:18:13
    |
 18 |     middle: Middle,
-   |             ^^^^^^ this field holds a group
+   |             ^^^^^^ this type must be an ocel::Group
    |
 help: the trait `ocel::Group` is not implemented for `Middle`
   --> tests/ui/nested_group.rs:8:1
    |
  8 | struct Middle {
    | ^^^^^^^^^^^^^
-   = note: a group's struct carries #[derive(ocel::Group)], not #[derive(ocel::Env)], and holds no #[ocel(group)] fields of its own: a group nests one level only.
+   = note: a group's struct uses #[derive(ocel::Group)], not #[derive(ocel::Env)], and contains no #[ocel(group)] fields of its own: a group nests one level only.
 help: the trait `ocel::Group` is implemented for `Inner`
   --> tests/ui/nested_group.rs:1:10
    |

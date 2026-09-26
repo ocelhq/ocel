@@ -3,7 +3,7 @@ use std::sync::{Mutex, MutexGuard};
 static ENV: Mutex<()> = Mutex::new(());
 
 fn env() -> MutexGuard<'static, ()> {
-    ENV.lock().unwrap_or_else(|held| held.into_inner())
+    ENV.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn clear(keys: &[&str]) {
@@ -25,7 +25,7 @@ const KEYS: &[&str] = &[
     "TELEMETRY_SAMPLE",
 ];
 
-fn standing() {
+fn baseline() {
     clear(KEYS);
     std::env::set_var("DATABASE_URL", "postgres://shop");
     std::env::set_var("SMTP_HOST", "mail.example");
@@ -81,7 +81,7 @@ struct Env {
 #[test]
 fn an_optional_group_is_none_until_a_member_is_delivered() {
     let _env = env();
-    standing();
+    baseline();
 
     let loaded = Env::load().expect("the struct loads without the optional group");
 
@@ -92,7 +92,7 @@ fn an_optional_group_is_none_until_a_member_is_delivered() {
 #[test]
 fn an_optional_group_missing_one_member_names_the_one_it_is_missing() {
     let _env = env();
-    standing();
+    baseline();
     std::env::set_var("GITHUB_CLIENT_ID", "id");
 
     let err = Env::load().expect_err("the group is on and half delivered");
@@ -106,7 +106,7 @@ fn an_optional_group_missing_one_member_names_the_one_it_is_missing() {
 #[test]
 fn an_optional_group_fully_delivered_loads_with_its_fields_populated() {
     let _env = env();
-    standing();
+    baseline();
     std::env::set_var("GITHUB_CLIENT_ID", "id");
     std::env::set_var("GITHUB_CLIENT_SECRET", "shhh");
 
@@ -120,7 +120,7 @@ fn an_optional_group_fully_delivered_loads_with_its_fields_populated() {
 #[test]
 fn a_required_group_reads_its_members_and_its_defaults() {
     let _env = env();
-    standing();
+    baseline();
 
     let loaded = Env::load().expect("the struct loads");
 
@@ -131,12 +131,12 @@ fn a_required_group_reads_its_members_and_its_defaults() {
 #[test]
 fn an_optional_group_whose_members_are_all_optional_stays_off_until_one_is_delivered() {
     let _env = env();
-    standing();
+    baseline();
 
     let loaded = Env::load().expect("the struct loads");
     assert!(
         loaded.analytics.is_none(),
-        "a group owed nothing switched itself on"
+        "a group with no member delivered switched itself on"
     );
 
     std::env::set_var("ANALYTICS_KEY", "an-id");
@@ -150,7 +150,7 @@ fn an_optional_group_whose_members_are_all_optional_stays_off_until_one_is_deliv
 #[test]
 fn a_live_member_delivered_on_its_own_switches_its_optional_group_on() {
     let _env = env();
-    standing();
+    baseline();
     std::env::set_var("OCEL_VAR_TELEMETRY_TOKEN", "tk_live");
 
     let loaded = Env::load().expect("the struct loads");
@@ -165,10 +165,10 @@ fn a_live_member_delivered_on_its_own_switches_its_optional_group_on() {
 #[test]
 fn a_live_member_switches_its_group_on_even_where_the_group_is_incomplete() {
     let _env = env();
-    standing();
+    baseline();
     std::env::set_var("OCEL_VAR_GITHUB_CLIENT_SECRET", "shhh");
 
-    let err = Env::load().expect_err("the group is on and owes its client id");
+    let err = Env::load().expect_err("the group is on and its client id is missing");
 
     assert_eq!(
         err.to_string(),
@@ -179,10 +179,10 @@ fn a_live_member_switches_its_group_on_even_where_the_group_is_incomplete() {
 #[test]
 fn a_required_group_with_nothing_delivered_fails_the_load() {
     let _env = env();
-    standing();
+    baseline();
     clear(&["SMTP_HOST"]);
 
-    let err = Env::load().expect_err("the required group owes its host");
+    let err = Env::load().expect_err("the required group is missing its host");
 
     assert!(matches!(err, ocel::Error::Unset { .. }));
     assert!(

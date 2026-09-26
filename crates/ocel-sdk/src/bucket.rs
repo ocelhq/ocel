@@ -41,7 +41,7 @@ type Arriving = futures_util::stream::MapErr<
     fn(<Body as connectrpc::http_body::Body>::Error) -> std::io::Error,
 >;
 
-/// What a bucket knows about one object it holds.
+/// What a bucket knows about one object it contains.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Object {
     /// The key the object is addressed by.
@@ -68,11 +68,11 @@ pub struct SignedUpload {
     pub method: String,
     /// The headers the signature covers, which the caller must send unchanged.
     pub headers: BTreeMap<String, String>,
-    /// The form fields a POST target carries, which are empty for a PUT target.
+    /// The form fields a POST target includes, which are empty for a PUT target.
     pub fields: BTreeMap<String, String>,
 }
 
-/// The bytes of one object, however the caller happened to be holding them.
+/// The bytes of one object, in whichever form the caller has them.
 #[derive(Clone, Debug, Default)]
 pub struct Payload(Bytes);
 
@@ -168,7 +168,7 @@ impl Bucket {
     }
 
     /// Read the object under `key`. The returned builder bounds the read, and awaiting it
-    /// opens one, failing with [`Error::NotFound`] when the bucket holds no such object.
+    /// opens one, failing with [`Error::NotFound`] when the bucket has no such object.
     pub fn get(&self, key: &str) -> Get<'_> {
         Get {
             bucket: self,
@@ -177,7 +177,7 @@ impl Bucket {
         }
     }
 
-    /// What the bucket knows about the object under `key`, or `None` when it holds none.
+    /// What the bucket knows about the object under `key`, or `None` when it has none.
     pub async fn head(&self, key: &str) -> Result<Option<Object>, Error> {
         let reached = self.reached("head")?;
         let response = reached
@@ -192,17 +192,17 @@ impl Bucket {
         Ok(response.into_owned().object.into_option().map(object))
     }
 
-    /// Whether the bucket holds an object under `key`.
+    /// Whether the bucket has an object under `key`.
     pub async fn exists(&self, key: &str) -> Result<bool, Error> {
         Ok(self.head(key).await?.is_some())
     }
 
-    /// Remove the object under `key`. A key the bucket does not hold is not an error.
+    /// Remove the object under `key`. A key the bucket does not have is not an error.
     pub async fn delete(&self, key: &str) -> Result<(), Error> {
         self.delete_many([key]).await
     }
 
-    /// Remove the objects under `keys`. A key the bucket does not hold is not an error.
+    /// Remove the objects under `keys`. A key the bucket does not have is not an error.
     pub async fn delete_many(
         &self,
         keys: impl IntoIterator<Item = impl AsRef<str>>,
@@ -229,7 +229,7 @@ impl Bucket {
     }
 
     /// Copy the object under `source` to `destination` within the same bucket. It fails
-    /// with [`Error::NotFound`] when the bucket holds nothing under `source`.
+    /// with [`Error::NotFound`] when the bucket has nothing under `source`.
     pub async fn copy(&self, source: &str, destination: &str) -> Result<Object, Error> {
         let reached = self.reached("copy")?;
         let response = reached
@@ -252,7 +252,7 @@ impl Bucket {
             })
     }
 
-    /// Walk the objects the bucket holds. The returned builder bounds the walk, and its
+    /// Walk the objects the bucket contains. The returned builder bounds the walk, and its
     /// stream pages through the store for as long as it is polled.
     pub fn list(&self) -> List<'_> {
         List {
@@ -263,7 +263,7 @@ impl Bucket {
     }
 
     /// Open the object under `key` for reading. It fails with [`Error::NotFound`] when the
-    /// bucket holds none.
+    /// bucket has none.
     pub async fn reader(&self, key: &str) -> Result<Reader, Error> {
         let got = self.get(key).await?;
         Ok(Reader {
@@ -458,7 +458,7 @@ impl Put<'_> {
         self
     }
 
-    /// Write only when the object under the key still carries `etag`, and fail with
+    /// Write only when the object under the key still has `etag`, and fail with
     /// [`Error::PreconditionFailed`] when it does not.
     pub fn if_match(mut self, etag: &str) -> Self {
         self.options.if_match = etag.to_string();
@@ -481,7 +481,7 @@ impl<'a> IntoFuture for Put<'a> {
             if body.len() > bucket.thresholds.single_ceiling {
                 let mut writer = Writer::open(bucket, &key, options).await?;
                 writer.put(body).await?;
-                return writer.settle().await;
+                return writer.finish().await;
             }
             let target = bucket
                 .sign(
@@ -516,10 +516,7 @@ impl<'a> IntoFuture for Put<'a> {
             }
             let response = send(bucket.reached("put")?, request, body).await?;
             refusal(&key, response.status().as_u16())?;
-            bucket
-                .head(&key)
-                .await?
-                .ok_or_else(|| Error::NotFound { key })
+            bucket.head(&key).await?.ok_or(Error::NotFound { key })
         })
     }
 }
@@ -600,7 +597,7 @@ impl GetResult {
         &self.info
     }
 
-    /// Every byte this read covers, held in memory at once.
+    /// Every byte this read covers, read into memory at once.
     pub async fn bytes(self) -> Result<Bytes, Error> {
         let key = self.key;
         Ok(self
@@ -656,7 +653,7 @@ impl<'a> List<'a> {
         self
     }
 
-    /// How many objects one page of the walk carries, at most 1000. The walk itself is not
+    /// How many objects one page of the walk returns, at most 1000. The walk itself is not
     /// bounded by it.
     pub fn limit(mut self, objects: u16) -> Self {
         self.limit = i32::from(objects);

@@ -11,7 +11,7 @@ fn bound_to(binding: &str) -> &str {
 #[non_exhaustive]
 pub enum Error {
     /// App code reached for a resource this run never provisioned, which is discovery:
-    /// the pass that reads the declarations before anything stands.
+    /// the pass that reads the declarations before anything is provisioned.
     #[error("'{resource}' cannot be used during discovery: tried to access '{access}' before the resource was provisioned")]
     Unprovisioned {
         /// The declaration the accessor belongs to, as written in code.
@@ -48,7 +48,7 @@ pub enum Error {
     },
 
     /// The address discovery was told to post declarations to is not a URL.
-    #[error("ocel: OCEL_DEV_SERVER does not hold a URL discovery can post to: '{server}'")]
+    #[error("ocel: OCEL_DEV_SERVER is not a URL discovery can post to: '{server}'")]
     DevServer {
         /// The address the environment set.
         server: String,
@@ -116,7 +116,7 @@ pub enum Error {
     },
 
     /// An operation that cannot answer with nothing named an object the bucket does not
-    /// hold.
+    /// have.
     #[error("the bucket has no object under '{key}'")]
     NotFound {
         /// The key that named nothing.
@@ -144,9 +144,7 @@ pub enum Error {
     UnreachableRuntime,
 
     /// The address the runtime was said to listen on is not a URL.
-    #[error(
-        "ocel: OCEL_RUNTIME_ADDRESS does not hold a URL the runtime can be reached at: '{address}'"
-    )]
+    #[error("ocel: OCEL_RUNTIME_ADDRESS is not a URL the runtime can be reached at: '{address}'")]
     RuntimeAddress {
         /// The address the environment set.
         address: String,

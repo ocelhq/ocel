@@ -1,4 +1,4 @@
-use super::fake::{stand, Fake, TOKEN, UPLOADED_AT};
+use super::fake::{start, Fake, TOKEN, UPLOADED_AT};
 use super::Bucket;
 use crate::Error;
 use futures_util::StreamExt;
@@ -9,15 +9,15 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 static ENV: Mutex<()> = Mutex::new(());
 
-struct Standing {
+struct Harness {
     fake: Fake,
     bucket: Bucket,
     _env: MutexGuard<'static, ()>,
 }
 
-fn standing(public_base_url: &str) -> Standing {
-    let env = ENV.lock().unwrap_or_else(|held| held.into_inner());
-    let fake = stand();
+fn harness(public_base_url: &str) -> Harness {
+    let env = ENV.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let fake = start();
     std::env::set_var(
         "OCEL_RESOURCE_BUCKET_uploads",
         format!(
@@ -26,7 +26,7 @@ fn standing(public_base_url: &str) -> Standing {
     );
     std::env::set_var("OCEL_RUNTIME_ADDRESS", &fake.address);
     std::env::set_var("OCEL_SESSION_TOKEN", TOKEN);
-    Standing {
+    Harness {
         bucket: Bucket::new("uploads"),
         fake,
         _env: env,
@@ -35,8 +35,8 @@ fn standing(public_base_url: &str) -> Standing {
 
 #[tokio::test]
 async fn an_object_comes_back_as_it_was_written() {
-    let standing = standing("");
-    let written = standing
+    let harness = harness("");
+    let written = harness
         .bucket
         .put("avatars/one.png", "the bytes")
         .content_type("image/png")
@@ -54,16 +54,16 @@ async fn an_object_comes_back_as_it_was_written() {
         Some(UNIX_EPOCH + Duration::from_secs(UPLOADED_AT as u64))
     );
     assert_eq!(
-        standing
+        harness
             .fake
             .store
-            .held("avatars/one.png")
+            .object("avatars/one.png")
             .expect("the stored object")
             .cache_control,
         "max-age=60"
     );
 
-    let read = standing
+    let read = harness
         .bucket
         .get("avatars/one.png")
         .await
@@ -74,14 +74,14 @@ async fn an_object_comes_back_as_it_was_written() {
 
 #[tokio::test]
 async fn a_range_reads_only_the_bytes_it_covers() {
-    let standing = standing("");
-    standing
+    let harness = harness("");
+    harness
         .bucket
         .put("ranged.txt", "0123456789")
         .await
         .expect("the write");
 
-    let read = standing
+    let read = harness
         .bucket
         .get("ranged.txt")
         .range(2..5)
@@ -92,10 +92,10 @@ async fn a_range_reads_only_the_bytes_it_covers() {
 }
 
 #[tokio::test]
-async fn a_read_of_a_key_the_bucket_does_not_hold_names_the_key() {
-    let standing = standing("");
-    let Err(err) = standing.bucket.get("absent.txt").await else {
-        panic!("a read of a key nothing is held under answered");
+async fn a_read_of_a_key_the_bucket_does_not_have_names_the_key() {
+    let harness = harness("");
+    let Err(err) = harness.bucket.get("absent.txt").await else {
+        panic!("a read of a key with no object under it answered");
     };
     assert_eq!(
         err.to_string(),
@@ -105,15 +105,15 @@ async fn a_read_of_a_key_the_bucket_does_not_hold_names_the_key() {
 }
 
 #[tokio::test]
-async fn a_head_of_a_key_the_bucket_does_not_hold_answers_with_nothing() {
-    let standing = standing("");
-    assert!(standing
+async fn a_head_of_a_key_the_bucket_does_not_have_answers_with_nothing() {
+    let harness = harness("");
+    assert!(harness
         .bucket
         .head("absent.txt")
         .await
         .expect("a head")
         .is_none());
-    assert!(!standing
+    assert!(!harness
         .bucket
         .exists("absent.txt")
         .await
@@ -122,15 +122,15 @@ async fn a_head_of_a_key_the_bucket_does_not_hold_answers_with_nothing() {
 
 #[tokio::test]
 async fn a_write_conditioned_on_the_key_being_free_is_refused_when_it_is_not() {
-    let standing = standing("");
-    standing
+    let harness = harness("");
+    harness
         .bucket
         .put("once.txt", "first")
         .if_not_exists()
         .await
         .expect("the first write");
 
-    let err = standing
+    let err = harness
         .bucket
         .put("once.txt", "second")
         .if_not_exists()
@@ -142,11 +142,11 @@ async fn a_write_conditioned_on_the_key_being_free_is_refused_when_it_is_not() {
     );
     assert!(matches!(err, Error::PreconditionFailed { .. }));
 
-    let written = standing
+    let written = harness
         .bucket
         .put("once.txt", "third")
         .if_match(
-            &standing
+            &harness
                 .bucket
                 .head("once.txt")
                 .await
@@ -158,7 +158,7 @@ async fn a_write_conditioned_on_the_key_being_free_is_refused_when_it_is_not() {
         .expect("the conditioned write");
     assert_eq!(written.size, 5);
 
-    let err = standing
+    let err = harness
         .bucket
         .put("once.txt", "fourth")
         .if_match("\"stale\"")
@@ -169,27 +169,27 @@ async fn a_write_conditioned_on_the_key_being_free_is_refused_when_it_is_not() {
 
 #[tokio::test]
 async fn a_listing_pages_through_the_store_without_the_caller_seeing_a_cursor() {
-    let standing = standing("");
+    let harness = harness("");
     for index in 0..5 {
-        standing
+        harness
             .bucket
             .put(&format!("photos/{index}.txt"), "x")
             .await
             .expect("the write");
     }
-    standing
+    harness
         .bucket
         .put("notes/one.txt", "x")
         .await
         .expect("the write");
 
-    let walked: Vec<String> = standing
+    let walked: Vec<String> = harness
         .bucket
         .list()
         .prefix("photos/")
         .limit(2)
         .into_stream()
-        .map(|held| held.expect("an object").key)
+        .map(|listed| listed.expect("an object").key)
         .collect()
         .await;
     assert_eq!(
@@ -205,21 +205,21 @@ async fn a_listing_pages_through_the_store_without_the_caller_seeing_a_cursor() 
 }
 
 #[tokio::test]
-async fn a_delete_of_a_key_the_bucket_does_not_hold_is_not_an_error() {
-    let standing = standing("");
-    standing
+async fn a_delete_of_a_key_the_bucket_does_not_have_is_not_an_error() {
+    let harness = harness("");
+    harness
         .bucket
         .put("gone.txt", "x")
         .await
         .expect("the write");
 
-    standing
+    harness
         .bucket
         .delete_many(["gone.txt", "never-there.txt"])
         .await
         .expect("the delete");
-    assert!(!standing.bucket.exists("gone.txt").await.expect("a head"));
-    standing
+    assert!(!harness.bucket.exists("gone.txt").await.expect("a head"));
+    harness
         .bucket
         .delete("never-there.txt")
         .await
@@ -228,21 +228,21 @@ async fn a_delete_of_a_key_the_bucket_does_not_hold_is_not_an_error() {
 
 #[tokio::test]
 async fn a_copy_leaves_the_same_bytes_under_the_new_key() {
-    let standing = standing("");
-    standing
+    let harness = harness("");
+    harness
         .bucket
-        .put("from.txt", "carried")
+        .put("from.txt", "original")
         .await
         .expect("the write");
 
-    let copied = standing
+    let copied = harness
         .bucket
         .copy("from.txt", "to.txt")
         .await
         .expect("the copy");
     assert_eq!(copied.key, "to.txt");
     assert_eq!(
-        &standing
+        &harness
             .bucket
             .get("to.txt")
             .await
@@ -250,14 +250,14 @@ async fn a_copy_leaves_the_same_bytes_under_the_new_key() {
             .bytes()
             .await
             .expect("the bytes")[..],
-        b"carried"
+        b"original"
     );
 }
 
 #[tokio::test]
 async fn a_body_too_large_for_one_request_goes_up_in_parts() {
-    let standing = standing("");
-    let bucket = standing.bucket.clone().with_thresholds(8, 4);
+    let harness = harness("");
+    let bucket = harness.bucket.clone().with_thresholds(8, 4);
     let body: Vec<u8> = (0..26u8).map(|index| b'a' + index).collect();
 
     let written = bucket
@@ -266,24 +266,20 @@ async fn a_body_too_large_for_one_request_goes_up_in_parts() {
         .expect("the write");
     assert_eq!(written.size, 26);
     assert_eq!(
-        standing
+        harness
             .fake
             .store
-            .held("big.bin")
+            .object("big.bin")
             .expect("the stored object")
             .body,
         body
     );
     assert_eq!(
-        standing
-            .fake
-            .store
-            .most_parts_at_once
-            .load(Ordering::SeqCst),
+        harness.fake.store.most_parts_at_once.load(Ordering::SeqCst),
         super::PARTS_IN_FLIGHT,
         "the parts did not go up four at a time"
     );
-    assert!(standing
+    assert!(harness
         .fake
         .store
         .aborted
@@ -294,9 +290,9 @@ async fn a_body_too_large_for_one_request_goes_up_in_parts() {
 
 #[tokio::test]
 async fn a_part_the_store_refuses_throws_the_whole_upload_away() {
-    let standing = standing("");
-    let bucket = standing.bucket.clone().with_thresholds(8, 4);
-    standing
+    let harness = harness("");
+    let bucket = harness.bucket.clone().with_thresholds(8, 4);
+    harness
         .fake
         .store
         .refuse_parts
@@ -308,7 +304,7 @@ async fn a_part_the_store_refuses_throws_the_whole_upload_away() {
         .expect_err("the store refuses every part");
     assert!(matches!(err, Error::Refused { .. }), "error = {err}");
     assert_eq!(
-        standing
+        harness
             .fake
             .store
             .aborted
@@ -317,42 +313,42 @@ async fn a_part_the_store_refuses_throws_the_whole_upload_away() {
             .as_slice(),
         ["upload-for-doomed.bin"]
     );
-    assert!(standing.fake.store.held("doomed.bin").is_none());
+    assert!(harness.fake.store.object("doomed.bin").is_none());
 }
 
 #[tokio::test]
 async fn a_completion_the_store_refuses_throws_the_whole_upload_away() {
-    let standing = standing("");
-    let bucket = standing.bucket.clone().with_thresholds(8, 4);
-    standing
+    let harness = harness("");
+    let bucket = harness.bucket.clone().with_thresholds(8, 4);
+    harness
         .fake
         .store
         .refuse_complete
         .store(true, Ordering::SeqCst);
 
     let err = bucket
-        .put("unsettled.bin", vec![b'x'; 26])
+        .put("refused.bin", vec![b'x'; 26])
         .await
         .expect_err("the store refuses to complete the upload");
     assert!(matches!(err, Error::Refused { .. }), "error = {err}");
     assert_eq!(
-        standing
+        harness
             .fake
             .store
             .aborted
             .lock()
             .expect("the aborts")
             .as_slice(),
-        ["upload-for-unsettled.bin"],
+        ["upload-for-refused.bin"],
         "a completion that failed left its parts costing storage forever"
     );
-    assert!(standing.fake.store.held("unsettled.bin").is_none());
+    assert!(harness.fake.store.object("refused.bin").is_none());
 }
 
 #[tokio::test]
-async fn a_reader_and_a_writer_carry_the_bytes_a_stream_at_a_time() {
-    let standing = standing("");
-    let bucket = standing.bucket.clone().with_thresholds(8, 4);
+async fn a_reader_and_a_writer_stream_the_bytes() {
+    let harness = harness("");
+    let bucket = harness.bucket.clone().with_thresholds(8, 4);
 
     let mut writer = bucket.writer("streamed.bin").await.expect("a writer");
     for _ in 0..4 {
@@ -368,8 +364,8 @@ async fn a_reader_and_a_writer_carry_the_bytes_a_stream_at_a_time() {
 
 #[tokio::test]
 async fn a_writer_dropped_mid_flight_throws_its_upload_away() {
-    let standing = standing("");
-    let bucket = standing.bucket.clone().with_thresholds(8, 4);
+    let harness = harness("");
+    let bucket = harness.bucket.clone().with_thresholds(8, 4);
 
     let mut writer = bucket.writer("abandoned.bin").await.expect("a writer");
     for _ in 0..4 {
@@ -381,7 +377,7 @@ async fn a_writer_dropped_mid_flight_throws_its_upload_away() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     assert_eq!(
-        standing
+        harness
             .fake
             .store
             .aborted
@@ -395,23 +391,23 @@ async fn a_writer_dropped_mid_flight_throws_its_upload_away() {
 
 #[tokio::test]
 async fn a_signature_names_the_target_the_bytes_go_to_and_come_from() {
-    let standing = standing("https://storage.shop.example/store");
-    standing
+    let harness = harness("https://storage.shop.example/store");
+    harness
         .bucket
         .put("shared.txt", "x")
         .await
         .expect("the write");
 
-    let url = standing
+    let url = harness
         .bucket
         .signed_url("shared.txt")
         .expires_in(Duration::from_secs(60))
         .download("shared.txt")
         .await
         .expect("a signed url");
-    assert_eq!(url, format!("{}/o/shared.txt", standing.fake.address));
+    assert_eq!(url, format!("{}/o/shared.txt", harness.fake.address));
 
-    let upload = standing
+    let upload = harness
         .bucket
         .signed_upload("shared.txt")
         .expires_in(Duration::from_secs(60))
@@ -420,20 +416,17 @@ async fn a_signature_names_the_target_the_bytes_go_to_and_come_from() {
         .await
         .expect("a signed upload");
     assert_eq!(upload.method, "POST");
-    assert_eq!(
-        upload.url,
-        format!("{}/o/shared.txt", standing.fake.address)
-    );
+    assert_eq!(upload.url, format!("{}/o/shared.txt", harness.fake.address));
 
     assert_eq!(
-        standing
+        harness
             .bucket
             .public_url("shared.txt")
             .expect("a public url"),
         "https://storage.shop.example/store/shared.txt"
     );
     assert_eq!(
-        standing
+        harness
             .bucket
             .public_url("a b/c#d?e.png")
             .expect("a public url"),
@@ -443,14 +436,14 @@ async fn a_signature_names_the_target_the_bytes_go_to_and_come_from() {
 
 #[tokio::test]
 async fn a_read_hands_back_the_bytes_as_they_arrive() {
-    let standing = standing("");
-    standing
+    let harness = harness("");
+    harness
         .bucket
         .put("streamed.txt", "arriving")
         .await
         .expect("the write");
 
-    let read = standing.bucket.get("streamed.txt").await.expect("the read");
+    let read = harness.bucket.get("streamed.txt").await.expect("the read");
     let mut arrived = Vec::new();
     let mut chunks = Box::pin(read.into_stream());
     while let Some(chunk) = chunks.next().await {
@@ -460,10 +453,10 @@ async fn a_read_hands_back_the_bytes_as_they_arrive() {
 }
 
 #[tokio::test]
-async fn a_bucket_reached_during_discovery_says_it_stands_on_nothing_yet() {
-    let standing = standing("");
+async fn a_bucket_reached_during_discovery_says_it_is_not_provisioned_yet() {
+    let harness = harness("");
     std::env::set_var("OCEL_PHASE", "discovery");
-    let reached = standing.bucket.head("anything.txt").await;
+    let reached = harness.bucket.head("anything.txt").await;
     std::env::remove_var("OCEL_PHASE");
 
     let err = reached.expect_err("discovery provisions nothing");
@@ -476,8 +469,8 @@ async fn a_bucket_reached_during_discovery_says_it_stands_on_nothing_yet() {
 
 #[tokio::test]
 async fn a_bucket_with_no_public_address_says_so_rather_than_guess_one() {
-    let standing = standing("");
-    let err = standing
+    let harness = harness("");
+    let err = harness
         .bucket
         .public_url("shared.txt")
         .expect_err("no public address");

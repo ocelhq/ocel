@@ -74,17 +74,17 @@ pub fn resources(item: TokenStream) -> TokenStream {
 /// ```
 ///
 /// A field's key defaults to its identifier upper-cased. A field is required unless it
-/// carries a default or is an `Option`, and its value is parsed with the field type's
+/// has a default or is an `Option`, and its value is parsed with the field type's
 /// `FromStr`. A field of type `ocel::Secret` declares the secret class and resolves its
 /// value on every read.
 ///
-/// A field tagged `#[ocel(group)]` holds an [`ocel::Group`](macro@Group) struct, whose
-/// variables are declared under a group named after the field and described by the doc
-/// comment above it. An `Option` of one makes the group optional: it stays `None` until a
-/// value is delivered for one of its members, and nothing in it is owed until then. A group
-/// holding groups of its own is a compile error, because a group nests one level only. The
-/// field's type is read as it is written, so a type alias standing for an `Option` declares
-/// no optional group: spell the `Option` on the field.
+/// A field tagged `#[ocel(group)]` has an [`ocel::Group`](macro@Group) struct as its type,
+/// whose variables are declared under a group named after the field and described by the
+/// doc comment above it. An `Option` of one makes the group optional: it stays `None` until
+/// a value is delivered for one of its members, and none of its members is required until
+/// then. A group containing groups of its own is a compile error, because a group nests one
+/// level only. The field's type is read as it is written, so a type alias for an `Option`
+/// declares no optional group: spell the `Option` on the field.
 #[proc_macro_derive(Env, attributes(ocel))]
 pub fn env(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
@@ -94,8 +94,9 @@ pub fn env(item: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Declare every field of a struct as a member of the group that holds it, and write the
-/// `load` that reads the delivered values into it.
+/// Declare every field of a struct as a member of the group named after the
+/// `#[ocel(group)]` field whose type it is, and write the `load` that reads the delivered
+/// values into it.
 ///
 /// ```ignore
 /// #[derive(ocel::Env, Clone)]
@@ -113,8 +114,8 @@ pub fn env(item: TokenStream) -> TokenStream {
 /// ```
 ///
 /// Fields are spelled as they are on an [`ocel::Env`](macro@Env) struct. What differs is
-/// that nothing is declared until an `ocel::Env` struct holds the group: a struct nothing
-/// holds declares no variables of its own.
+/// that nothing is declared until a field of an `ocel::Env` struct has the group as its
+/// type: a struct no such field names declares no variables of its own.
 #[proc_macro_derive(Group, attributes(ocel))]
 pub fn group(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
