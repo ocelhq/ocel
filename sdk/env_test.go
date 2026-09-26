@@ -868,7 +868,7 @@ type mixedGroup struct {
 	Fallback string  `ocel:"MIXED_FALLBACK,default=d"`
 }
 
-func TestEnvDoesNotOweAGroupMemberSpelledOptionalWhileTheGroupIsOn(t *testing.T) {
+func TestEnvDoesNotRequireAGroupMemberSpelledOptionalWhileTheGroupIsOn(t *testing.T) {
 	seen := discover(t, []cell{{Key: "MIXED_ANCHOR", Value: "a"}})
 
 	ocel.Env[struct {
