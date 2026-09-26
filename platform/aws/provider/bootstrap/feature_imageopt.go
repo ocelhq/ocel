@@ -3,12 +3,14 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 var imageOptimizationFeature = feature{
 	name:       FeatureImageOptimization,
 	summary:    "one shared image transform every front calls",
-	needs:      []string{needsFrameworkPrefix + "next"},
+	needs:      []string{provider.NeedsFrameworkPrefix + "next"},
 	template:   imageOptimizationTemplate,
 	payloads:   imageOptimizationPayloads,
 	placements: imageOptimizationPlacements,

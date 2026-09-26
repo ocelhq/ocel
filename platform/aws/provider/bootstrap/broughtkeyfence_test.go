@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func TestABroughtKeyIsFencedIntoTheCoreBoundaryOnlyWhileItsFeatureIsRequested(t *testing.T) {
@@ -19,7 +21,7 @@ func TestABroughtKeyIsFencedIntoTheCoreBoundaryOnlyWhileItsFeatureIsRequested(t 
 		t.Error("a run that never asked for the vars-key feature wrote the brought key into the core boundary")
 	}
 
-	if err := Run(ctx, apis, defaultNamespace, ClassProduction, Request{Features: []string{FeatureVarsKey}, VarsKey: broughtKeyARN}, nil, nil); err != nil {
+	if err := Run(ctx, apis, defaultNamespace, ClassProduction, Request{Features: []string{provider.FeatureVarsKey}, VarsKey: broughtKeyARN}, nil, nil); err != nil {
 		t.Fatalf("Run with the feature: %v", err)
 	}
 	if got, want := stacks.template(coreStackName), coreStackTemplate(defaultNamespace, ClassProduction, broughtKeyARN); got != want {
@@ -33,7 +35,7 @@ func TestABroughtKeyIsFencedIntoTheCoreBoundaryOnlyWhileItsFeatureIsRequested(t 
 		t.Fatalf("Read: %v", err)
 	}
 	for _, stack := range read.Deployed.Stacks {
-		if (stack.Name == coreStackName || stack.Feature == FeatureVarsKey) && !stack.Current() {
+		if (stack.Name == coreStackName || stack.Feature == provider.FeatureVarsKey) && !stack.Current() {
 			t.Errorf("%s reads as behind straight after it was written: a read must render the core with the key the vars-key stack records", stack.Name)
 		}
 	}

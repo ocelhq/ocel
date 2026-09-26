@@ -245,7 +245,7 @@ func TestAContainerReadingValuesLiveIsHandedTheBoxSocketReadOnlyAndItsManifestBy
 	if !strings.Contains(command, mount) {
 		t.Errorf("starting a live container runs %q, which hands it no socket to read its values through (%s)", command, mount)
 	}
-	tmpfs := quoted("--tmpfs") + " " + quoted(LiveDir+":rw,noexec,nosuid,size=8m")
+	tmpfs := quoted("--tmpfs") + " " + quoted(appbuild.ContainerLivePath+":rw,noexec,nosuid,size=8m")
 	if !strings.Contains(command, tmpfs) {
 		t.Errorf("starting a live container runs %q, which gives the runtime nowhere in memory to project the values into (%s): an image built from scratch has no /tmp, and the writable layer is the box's disk", command, tmpfs)
 	}

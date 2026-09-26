@@ -16,7 +16,6 @@ const (
 	liveUnitFile   = "/etc/systemd/system/" + LiveService
 	LiveSocketDir  = live.SocketDir
 	LiveSocket     = live.SocketPath
-	LiveDir        = live.ProjectionDir
 	liveDirTmpfs   = "rw,noexec,nosuid,size=8m"
 )
 

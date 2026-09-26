@@ -71,8 +71,8 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 	if stack.WrittenBy != string(liveWriter) {
 		t.Errorf("the core stack records writer %q, want the writer that applied it", stack.WrittenBy)
 	}
-	if stack.Schema != uint32(bootstrap.RequiredSchema) {
-		t.Errorf("the core stack records schema %d, want %d", stack.Schema, bootstrap.RequiredSchema)
+	if stack.Schema != uint32(provider.BootstrapSchema) {
+		t.Errorf("the core stack records schema %d, want %d", stack.Schema, provider.BootstrapSchema)
 	}
 
 	if status := a.stackStatus(t, coreStackName); status != "CREATE_COMPLETE" {
@@ -102,7 +102,7 @@ func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T
 		t.Errorf("the bootstrap is installed without an app boundary: %+v", deployed)
 	}
 	if deployed.VarsKeyARN != "" {
-		t.Errorf("a run that never asked for %s made a key anyway: %+v", bootstrap.FeatureVarsKey, deployed)
+		t.Errorf("a run that never asked for %s made a key anyway: %+v", provider.FeatureVarsKey, deployed)
 	}
 	for _, param := range []string{origin, passphraseParam} {
 		if !a.paramExists(t, param) {

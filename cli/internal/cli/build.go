@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/constants"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 var buildCmd = &cobra.Command{
@@ -87,7 +88,7 @@ func runBuild(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, stderr
 
 func builtInClients(cfg *projectconfig.Config, urls map[string]string) []clientenv.App {
 	if len(cfg.Apps) == 0 {
-		bundle := discovery.ClientBundle(envwire.RootFramework, cfg.Dir)
+		bundle := discovery.ClientBundle(appbuild.FrameworkNode, cfg.Dir)
 		return []clientenv.App{{Dir: cfg.Dir, ClientBundle: bundle, Variables: appurl.Variables(bundle, urls[envwire.RootApp])}}
 	}
 	apps := make([]clientenv.App, 0, len(cfg.Apps))

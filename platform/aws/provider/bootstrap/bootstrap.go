@@ -414,7 +414,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
 	review := AdmitReplacements(target.ns, req.AcceptReplacements, logf)
 	coreBody := target.core(coreVarsKey(alongside, req.VarsKey))
-	coreTags := stampTags(target.ns, Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
+	coreTags := stampTags(target.ns, Stamp{Schema: provider.BootstrapSchema, Digest: cfn.TemplateDigest(coreBody), WrittenBy: req.Writer.String()})
 	if err := cfn.Upsert(ctx, apis.CFN, target.ns.ChangeSetNameFor, target.stackName, coreBody, nil, namedIAM, coreTags, review); err != nil {
 		return err
 	}
@@ -468,7 +468,7 @@ func run(ctx context.Context, apis APIs, target spec, req Request, progress, log
 				if err != nil {
 					return fmt.Errorf("%s: %w", name, err)
 				}
-				tags := stampTags(target.ns, Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(stack.body), WrittenBy: req.Writer.String()})
+				tags := stampTags(target.ns, Stamp{Schema: provider.BootstrapSchema, Digest: cfn.TemplateDigest(stack.body), WrittenBy: req.Writer.String()})
 				if err := cfn.Upsert(gctx, apis.CFN, target.ns.ChangeSetNameFor, stackName, stack.body, stack.params, namedIAM, tags, review); err != nil {
 					return fmt.Errorf("%s: %w", name, err)
 				}
@@ -663,7 +663,7 @@ func generatePassphrase() (string, error) {
 }
 
 func coreVarsKey(alongside FeatureSet, brought string) string {
-	if alongside.Has(FeatureVarsKey) {
+	if alongside.Has(provider.FeatureVarsKey) {
 		return brought
 	}
 	return ""

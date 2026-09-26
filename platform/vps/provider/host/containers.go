@@ -205,7 +205,7 @@ func containerRun(spec Container, env handoff) []string {
 	}
 	if len(spec.Manifest) > 0 {
 		argv = append(argv, "--mount", "type=bind,src="+LiveSocketDir+",dst="+LiveSocketDir+",readonly",
-			"--tmpfs", LiveDir+":"+liveDirTmpfs)
+			"--tmpfs", appbuild.ContainerLivePath+":"+liveDirTmpfs)
 	}
 	return append(argv, "--env", appbuild.InjectedPortName+"="+appbuild.InjectedPortText, spec.Image)
 }

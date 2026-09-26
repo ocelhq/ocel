@@ -16,7 +16,7 @@ import (
 )
 
 var varsKeyFeature = feature{
-	name:      FeatureVarsKey,
+	name:      provider.FeatureVarsKey,
 	summary:   "a KMS key to encrypt variables under, the one bootstrap item with a recurring cost, about $1 a month prorated hourly",
 	template:  varsKeyTemplate,
 	afterPlan: validateBroughtKey,
@@ -33,7 +33,7 @@ Resources:
       Description: "Placeholder for the %s class's brought variable key: the stack records the key ARN as an output and creates nothing. The app boundary admits the key by that ARN."
 Outputs:
 %s`,
-			FeatureVarsKey, in.class, in.class, broughtVarsKeyOutput(in.varsKey))}
+			provider.FeatureVarsKey, in.class, in.class, broughtVarsKeyOutput(in.varsKey))}
 	}
 	return featureStack{
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
@@ -41,7 +41,7 @@ Description: "Ocel bootstrap feature (%s, %s) - the KMS key every encrypted vari
 Resources:
 %sOutputs:
 %s`,
-			FeatureVarsKey, in.class,
+			provider.FeatureVarsKey, in.class,
 			varsKeyResources(in.ns, in.class),
 			varsKeyOutputs()),
 	}

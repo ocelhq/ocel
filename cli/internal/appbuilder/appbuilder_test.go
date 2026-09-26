@@ -74,7 +74,7 @@ func writeFuncConfig(t *testing.T, outDir, app, funcRel string, cfg appbuild.Fun
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, configFileName), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, appbuild.FunctionConfigFile), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -510,8 +510,8 @@ func TestBuild(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(entries) != 1 || entries[0].Name() != configFileName {
-			t.Errorf("function directory contains %d entries, want only the %s the node builder wrote", len(entries), configFileName)
+		if len(entries) != 1 || entries[0].Name() != appbuild.FunctionConfigFile {
+			t.Errorf("function directory contains %d entries, want only the %s the node builder wrote", len(entries), appbuild.FunctionConfigFile)
 		}
 	})
 
@@ -1007,7 +1007,7 @@ func TestCollectFunctions(t *testing.T) {
 				}
 			},
 			succeeded: "collectFunctions succeeded on a .func with no config.json, want error",
-			wants:     []string{"api.func", configFileName},
+			wants:     []string{"api.func", appbuild.FunctionConfigFile},
 			wantMsg:   "want it to name the offending .func and config.json",
 		},
 		{
@@ -1036,12 +1036,12 @@ func TestCollectFunctions(t *testing.T) {
 				if err := os.MkdirAll(dir, 0o755); err != nil {
 					t.Fatal(err)
 				}
-				if err := os.WriteFile(filepath.Join(dir, configFileName), []byte("not json"), 0o644); err != nil {
+				if err := os.WriteFile(filepath.Join(dir, appbuild.FunctionConfigFile), []byte("not json"), 0o644); err != nil {
 					t.Fatal(err)
 				}
 			},
 			succeeded: "collectFunctions succeeded on invalid JSON, want error",
-			wants:     []string{"invalid " + configFileName},
+			wants:     []string{"invalid " + appbuild.FunctionConfigFile},
 			wantMsg:   "want it to flag invalid config.json",
 		},
 	}

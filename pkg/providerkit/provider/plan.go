@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
-	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type ChangeAction string
@@ -21,7 +20,6 @@ const (
 
 const (
 	StackGroupKind     = "stack"
-	EdgeGroupKind      = edge.EdgeGroupKind
 	ParameterGroupKind = "parameters"
 
 	DetailUnavailable = "resource-level detail unavailable"

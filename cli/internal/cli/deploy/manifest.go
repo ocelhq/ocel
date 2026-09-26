@@ -254,7 +254,7 @@ type appPlan struct {
 
 func appPlans(cfg *projectconfig.Config, variables map[string][]manifestbuilder.Variable) []appPlan {
 	if len(cfg.Apps) == 0 {
-		return []appPlan{{dir: cfg.Dir, clientBundle: discovery.ClientBundle(envwire.RootFramework, cfg.Dir), variables: variables[envwire.RootApp]}}
+		return []appPlan{{dir: cfg.Dir, clientBundle: discovery.ClientBundle(appbuild.FrameworkNode, cfg.Dir), variables: variables[envwire.RootApp]}}
 	}
 	plans := make([]appPlan, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
@@ -359,7 +359,7 @@ func unnamedFramework(app string, functions []manifestbuilder.Function) manifest
 			return f.Framework
 		}
 	}
-	return manifestbuilder.Framework{Name: envwire.RootFramework}
+	return manifestbuilder.Framework{Name: appbuild.FrameworkNode}
 }
 
 func healthPathOf(app projectconfig.App) string {

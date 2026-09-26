@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -32,7 +33,7 @@ const (
 var cloudFrontEdgeFeature = feature{
 	name:       FeatureCloudFrontEdge,
 	summary:    "CloudFront as the front — routes store, resolver function, cache and headers policies, asset access",
-	needs:      []string{needsEdgePrefix + KindCloudFront},
+	needs:      []string{provider.NeedsEdgePrefix + KindCloudFront},
 	template:   cloudFrontEdgeTemplate,
 	payloads:   noPayloads,
 	placements: noPlacements,

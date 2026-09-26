@@ -1,8 +1,6 @@
 package bootstrap
 
 import (
-	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
-
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -20,6 +18,8 @@ import (
 	smithy "github.com/aws/smithy-go"
 	"gopkg.in/yaml.v3"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -244,7 +244,7 @@ func (f *fakeCFN) fallBehind(stackName string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.templates[stackName] = behindTemplate
-	f.tags[stackName] = stampTags(defaultNamespace, Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(behindTemplate), WrittenBy: "1.0.0"})
+	f.tags[stackName] = stampTags(defaultNamespace, Stamp{Schema: provider.BootstrapSchema, Digest: cfn.TemplateDigest(behindTemplate), WrittenBy: "1.0.0"})
 }
 
 func (f *fakeCFN) CreateChangeSet(_ context.Context, in *cloudformation.CreateChangeSetInput, _ ...func(*cloudformation.Options)) (*cloudformation.CreateChangeSetOutput, error) {

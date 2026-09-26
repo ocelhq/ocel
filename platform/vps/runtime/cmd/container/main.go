@@ -62,7 +62,7 @@ func run(ctx context.Context, command []string, environ []string) int {
 	}
 	guard, env := originguard.GuardFromEnv(env)
 
-	values, err := resolve(ctx, manifest, vars.SocketPath, vars.ProjectionDir)
+	values, err := resolve(ctx, manifest, vars.SocketPath, appbuild.ContainerLivePath)
 	if err != nil {
 		return fatal(err.Error())
 	}

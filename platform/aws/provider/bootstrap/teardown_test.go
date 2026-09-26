@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
@@ -435,7 +437,7 @@ func TestTeardownRemovesEachFeatureStackBeforeCore(t *testing.T) {
 		defaultNamespace.FeatureStackName(FeatureImageOptimization, ClassProduction),
 		defaultNamespace.FeatureStackName(FeatureCloudFrontEdge, ClassProduction),
 		defaultNamespace.FeatureStackName(FeatureAPIGatewayEdge, ClassProduction),
-		defaultNamespace.FeatureStackName(FeatureVarsKey, ClassProduction),
+		defaultNamespace.FeatureStackName(provider.FeatureVarsKey, ClassProduction),
 		coreStackName,
 	}
 	if !slices.Equal(cfnc.deleted, want) {

@@ -22,8 +22,6 @@ import (
 
 const RootApp = "this project's app"
 
-const RootFramework = appbuild.FrameworkNode
-
 func ServeVarsUI(ctx context.Context, cfg *projectconfig.Config, runner *providerclient.Runner, preview bool, gate *envgate.Gate, recovery *varsui.Recovery) (*varsui.Session, error) {
 	assets, err := node.VarsUI()
 	if err != nil {
@@ -107,7 +105,7 @@ func DevScope(cfg *projectconfig.Config) envgate.Scope {
 
 func Apps(cfg *projectconfig.Config) []envgate.App {
 	if len(cfg.Apps) == 0 {
-		return []envgate.App{{Name: RootApp, ClientBundle: discovery.ClientBundle(RootFramework, cfg.Dir)}}
+		return []envgate.App{{Name: RootApp, ClientBundle: discovery.ClientBundle(appbuild.FrameworkNode, cfg.Dir)}}
 	}
 	apps := make([]envgate.App, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {

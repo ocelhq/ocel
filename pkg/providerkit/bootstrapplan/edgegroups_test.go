@@ -59,7 +59,7 @@ func TestEdgeGroupKeepsTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 			if err != nil {
 				t.Fatalf("EdgeGroup() error = %v", err)
 			}
-			if group.Kind != provider.EdgeGroupKind || group.Name != "cloudflare/edge" {
+			if group.Kind != edge.EdgeGroupKind || group.Name != "cloudflare/edge" {
 				t.Errorf("group = %+v, want the cloudflare edge named under its own vendor", group)
 			}
 			if group.Feature != "cloudflare-edge" {
@@ -121,7 +121,7 @@ func TestEdgeGroupFromPlanGroup(t *testing.T) {
 		t.Parallel()
 
 		converted, err := bootstrapplan.EdgeGroupFromPlanGroup(edge.PlanGroup{
-			Kind:   provider.EdgeGroupKind,
+			Kind:   edge.EdgeGroupKind,
 			Name:   "cloudflare/edge",
 			Action: edge.PlanKeep,
 			Reason: "bootstrap-scoped",
@@ -150,7 +150,7 @@ func TestEdgeGroupFromPlanGroup(t *testing.T) {
 		t.Parallel()
 
 		_, err := bootstrapplan.EdgeGroupFromPlanGroup(edge.PlanGroup{
-			Kind:   provider.EdgeGroupKind,
+			Kind:   edge.EdgeGroupKind,
 			Name:   "cloudflare/edge",
 			Action: edge.PlanDelete,
 			Changes: []edge.PlanChange{

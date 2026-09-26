@@ -16,7 +16,6 @@ import (
 const (
 	sharedStackKind = "stack"
 	parameterKind   = "parameters"
-	edgeKind        = edge.EdgeGroupKind
 	baselineTag     = "core"
 	planGutter      = "  "
 	planTypeGutter  = "   "
@@ -199,9 +198,9 @@ const (
 )
 
 var spineKinds = map[string]int{
-	sharedStackKind: rankSpineHead,
-	parameterKind:   rankSpineHead,
-	edgeKind:        rankSpineEdge,
+	sharedStackKind:    rankSpineHead,
+	parameterKind:      rankSpineHead,
+	edge.EdgeGroupKind: rankSpineEdge,
 }
 
 func spineRank(kind string) int {

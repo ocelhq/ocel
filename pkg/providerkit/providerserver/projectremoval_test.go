@@ -51,7 +51,7 @@ func TestPlanRemoveProjectNamesEveryStackTheDeployProvisioned(t *testing.T) {
 		t.Fatalf("PlanRemoveProject() error = %v", err)
 	}
 	planned := kinds(plan)
-	for _, kind := range []string{provider.StackGroupKind, provider.EdgeGroupKind, "variable values", "stored objects"} {
+	for _, kind := range []string{provider.StackGroupKind, edge.EdgeGroupKind, "variable values", "stored objects"} {
 		if !slices.Contains(planned, kind) {
 			t.Errorf("the plan names %v, want a %q group among them", planned, kind)
 		}
