@@ -16,7 +16,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-type provider struct {
+type registryHost struct {
 	mu     sync.Mutex
 	asked  [][]string
 	asking []environmentv1.Tier
@@ -24,7 +24,7 @@ type provider struct {
 	err    error
 }
 
-func (p *provider) ResolveImageRegistry(_ context.Context, req *contractv1.ResolveImageRegistryRequest) (*contractv1.ResolveImageRegistryResponse, error) {
+func (p *registryHost) ResolveImageRegistry(_ context.Context, req *contractv1.ResolveImageRegistryRequest) (*contractv1.ResolveImageRegistryResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.asked = append(p.asked, req.GetRepositories())
@@ -35,24 +35,24 @@ func (p *provider) ResolveImageRegistry(_ context.Context, req *contractv1.Resol
 	return p.answer, nil
 }
 
-func (p *provider) tiers() []environmentv1.Tier {
+func (p *registryHost) tiers() []environmentv1.Tier {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.asking
 }
 
-func (p *provider) calls() [][]string {
+func (p *registryHost) calls() [][]string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.asked
 }
 
-func hostless() *provider {
-	return &provider{err: connect.NewError(connect.CodeUnimplemented, errors.New("no registry here"))}
+func hostless() *registryHost {
+	return &registryHost{err: connect.NewError(connect.CodeUnimplemented, errors.New("no registry here"))}
 }
 
-func hosting() *provider {
-	return &provider{answer: &contractv1.ResolveImageRegistryResponse{
+func hosting() *registryHost {
+	return &registryHost{answer: &contractv1.ResolveImageRegistryResponse{
 		Server:    "native.invalid",
 		Namespace: "ocel/acme",
 		Username:  "native-bot",
@@ -139,7 +139,7 @@ func TestAProviderThatHostsNoRegistryLeavesTheDeployWithNone(t *testing.T) {
 }
 
 func TestAProviderThatFailsTheResolveFailsTheDeploy(t *testing.T) {
-	broken := &provider{err: connect.NewError(connect.CodeInternal, errors.New("the repository could not be created"))}
+	broken := &registryHost{err: connect.NewError(connect.CodeInternal, errors.New("the repository could not be created"))}
 
 	if _, _, err := Resolve(context.Background(), project(nil), broken, environmentv1.Tier_TIER_PRODUCTION); err == nil {
 		t.Fatal("Resolve() swallowed a provider that failed to answer, want the deploy stopped")

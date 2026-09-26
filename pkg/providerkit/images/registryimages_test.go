@@ -12,16 +12,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
 )
 
-func registryServing(t *testing.T, handler http.HandlerFunc) (images.Store, images.Push) {
+func registryServing(t *testing.T, handler http.HandlerFunc) (provider.ImageStore, provider.ImagePush) {
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 	host := strings.TrimPrefix(server.URL, "http://")
-	target := images.Registry{Server: host, Namespace: "acme", Username: "acme-bot", Password: "hunter2"}
-	return images.RegistryStore(target), images.Push{
+	target := provider.RegistryTarget{Server: host, Namespace: "acme", Username: "acme-bot", Password: "hunter2"}
+	return images.RegistryStore(target), provider.ImagePush{
 		App:      "web",
 		Source:   "ocel/web@sha256:abc",
 		ImageRef: target.ImageRef("web", "sha256-abc"),
@@ -246,8 +248,8 @@ func daemonServing(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	return daemon
 }
 
-func pushTo(target images.Registry) (images.Store, images.Push) {
-	return images.RegistryStore(target), images.Push{
+func pushTo(target provider.RegistryTarget) (provider.ImageStore, provider.ImagePush) {
+	return images.RegistryStore(target), provider.ImagePush{
 		App:      "web",
 		Source:   "ocel/web@sha256:abc",
 		ImageRef: target.ImageRef("web", "sha256-abc"),
@@ -272,7 +274,7 @@ func TestThePushNamesTheImageRemotelyAndHandsTheDaemonTheDeploysCredentials(t *t
 			http.Error(w, "unexpected "+r.Method+" "+r.URL.Path, http.StatusNotFound)
 		}
 	})
-	store, push := pushTo(images.Registry{Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "hunter2"})
+	store, push := pushTo(provider.RegistryTarget{Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "hunter2"})
 
 	if err := store.Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("Push() = %v", err)
@@ -310,7 +312,7 @@ func TestAnAnonymousTargetHandsTheDaemonNoCredentialsAtAll(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusCreated)
 	})
-	store, push := pushTo(images.Registry{Server: "127.0.0.1:5000"})
+	store, push := pushTo(provider.RegistryTarget{Server: "127.0.0.1:5000"})
 
 	if err := store.Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("Push() = %v", err)
@@ -330,7 +332,7 @@ func TestARegistryThatRefusesThePushStopsTheRelease(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusCreated)
 	})
-	store, push := pushTo(images.Registry{Server: "ghcr.io", Username: "acme-bot", Password: "hunter2"})
+	store, push := pushTo(provider.RegistryTarget{Server: "ghcr.io", Username: "acme-bot", Password: "hunter2"})
 
 	err := store.Push(context.Background(), push, nil)
 	if err == nil {
@@ -358,7 +360,7 @@ func TestAThrottledPushIsWaitedOutRatherThanFailingTheDeploy(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusCreated)
 	})
-	store, push := pushTo(images.Registry{Server: "ghcr.io", Username: "acme-bot", Password: "hunter2"})
+	store, push := pushTo(provider.RegistryTarget{Server: "ghcr.io", Username: "acme-bot", Password: "hunter2"})
 
 	if err := store.Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("Push() = %v, and a throttle is an answer to wait out, not a failed deploy", err)

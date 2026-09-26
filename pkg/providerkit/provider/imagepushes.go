@@ -5,16 +5,36 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	v1 "github.com/google/go-containerregistry/pkg/v1"
+
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const ImageKind = "image"
 
+type ImagePush struct {
+	App      string
+	Source   string
+	ImageRef string
+	Digest   string
+
+	Function bool
+	Built    v1.Image
+	Wrap     Wrapped
+}
+
+type ImageStore interface {
+	Destination() string
+
+	Has(ctx context.Context, push ImagePush) (bool, error)
+
+	Push(ctx context.Context, push ImagePush, progress edge.Progress) error
+}
+
 type ImagePushes struct {
-	Store  images.Store
-	Pushes []images.Push
+	Store  ImageStore
+	Pushes []ImagePush
 }
 
 func (p ImagePushes) String() string {
@@ -62,7 +82,7 @@ func (p ImagePushes) PushMissing(ctx context.Context, progress edge.Progress) er
 	return nil
 }
 
-func (p ImagePushes) push(ctx context.Context, push images.Push, progress edge.Progress) error {
+func (p ImagePushes) push(ctx context.Context, push ImagePush, progress edge.Progress) error {
 	if push.Wrap != nil {
 		if progress != nil {
 			progress.Detail("Wrapping the image in the ocel runtime")
@@ -86,7 +106,7 @@ func (p ImagePushes) ImageRef(app string) string {
 	return ""
 }
 
-func (p ImagePushes) inStore(ctx context.Context, push images.Push) (bool, error) {
+func (p ImagePushes) inStore(ctx context.Context, push ImagePush) (bool, error) {
 	if p.Store == nil {
 		return false, refusal.Refuse(refusal.CodeInvalid,
 			"%s's image is pushed to %s and this release has nothing to push it with", push.App, push.ImageRef)

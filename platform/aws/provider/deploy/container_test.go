@@ -20,7 +20,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	"github.com/ocelhq/ocel/pkg/transformkit"
@@ -67,7 +66,7 @@ func containerStackSpec(t *testing.T) (Config, provider.StackSpec) {
 		Ref:    provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
 		Kind:   provider.StackApp,
 		Tags:   map[string]string{"ocel:managed-by": "ocel"},
-		Images: provider.ImagePushes{Pushes: []images.Push{{App: "web", ImageRef: containerImage}}},
+		Images: provider.ImagePushes{Pushes: []provider.ImagePush{{App: "web", ImageRef: containerImage}}},
 		App: &provider.AppSpec{
 			App:             "web",
 			Deployment:      "d1",

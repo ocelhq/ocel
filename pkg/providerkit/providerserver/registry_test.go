@@ -13,7 +13,6 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -25,7 +24,7 @@ type hosting struct {
 	asked   [][]string
 	classes []edge.Class
 
-	target  images.Registry
+	target  provider.RegistryTarget
 	refusal error
 }
 
@@ -35,7 +34,7 @@ func (h *hosting) Hooks() provider.Hooks {
 	return hooks
 }
 
-func (h *hosting) EnsureImageRegistry(_ context.Context, class edge.Class, repositories []string) (images.Registry, error) {
+func (h *hosting) EnsureImageRegistry(_ context.Context, class edge.Class, repositories []string) (provider.RegistryTarget, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.asked = append(h.asked, repositories)
@@ -73,7 +72,7 @@ func TestAProviderWithNoRegistryOfItsOwnLeavesTheResolveUnimplemented(t *testing
 }
 
 func TestAProviderWithARegistryAnswersItsCoordinatesAndCredentials(t *testing.T) {
-	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: images.Registry{
+	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{
 		Server:    "registry.invalid",
 		Namespace: "ocel/acme",
 		Username:  "robot",
@@ -103,7 +102,7 @@ func TestAProviderWithARegistryAnswersItsCoordinatesAndCredentials(t *testing.T)
 }
 
 func TestTheProviderIsToldWhichRepositoriesTheDeployIntendsToPush(t *testing.T) {
-	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: images.Registry{Server: "registry.invalid"}}
+	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Server: "registry.invalid"}}
 	client := registryServed(t, provider)
 
 	if _, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
@@ -122,7 +121,7 @@ func TestTheProviderIsToldWhichRepositoriesTheDeployIntendsToPush(t *testing.T) 
 }
 
 func TestTheProviderIsToldWhichClassTheDeployPushesFor(t *testing.T) {
-	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: images.Registry{Server: "registry.invalid"}}
+	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Server: "registry.invalid"}}
 	client := registryServed(t, provider)
 
 	if _, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{
@@ -140,7 +139,7 @@ func TestTheProviderIsToldWhichClassTheDeployPushesFor(t *testing.T) {
 }
 
 func TestAResolveNamingNoRepositoryNeverReachesTheProvider(t *testing.T) {
-	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: images.Registry{Server: "registry.invalid"}}
+	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Server: "registry.invalid"}}
 	client := registryServed(t, provider)
 
 	if _, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{}); err == nil {
@@ -166,7 +165,7 @@ func TestAProviderThatHostsNoRegistryForThisDeployLeavesTheResolveUnimplemented(
 }
 
 func TestARegistryWithNoServerIsRefusedRatherThanPassedOn(t *testing.T) {
-	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: images.Registry{Namespace: "ocel/acme"}}
+	provider := &hosting{Provider: fake.NewProvider(fake.Options{}), target: provider.RegistryTarget{Namespace: "ocel/acme"}}
 	client := registryServed(t, provider)
 
 	_, err := client.ResolveImageRegistry(context.Background(), &contractv1.ResolveImageRegistryRequest{

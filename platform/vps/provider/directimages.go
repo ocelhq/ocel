@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -19,7 +20,7 @@ type loaded struct {
 	at   string
 }
 
-func (p *Provider) OpenDirectImages(context.Context) (images.Store, error) {
+func (p *Provider) OpenDirectImages(context.Context) (provider.ImageStore, error) {
 	return loaded{host: p.host, at: p.options.SSH.session().Destination()}, nil
 }
 
@@ -29,11 +30,11 @@ func (l loaded) GoString() string { return l.String() }
 
 func (l loaded) Destination() string { return l.at }
 
-func (l loaded) Has(ctx context.Context, push images.Push) (bool, error) {
+func (l loaded) Has(ctx context.Context, push provider.ImagePush) (bool, error) {
 	return l.host.HasImage(ctx, push.ImageRef)
 }
 
-func (l loaded) Push(ctx context.Context, push images.Push, progress edge.Progress) error {
+func (l loaded) Push(ctx context.Context, push provider.ImagePush, progress edge.Progress) error {
 	if push.Built == nil {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s: this release includes no built image to load onto the box", push.App)
@@ -41,7 +42,7 @@ func (l loaded) Push(ctx context.Context, push images.Push, progress edge.Progre
 	return l.load(ctx, push, progress)
 }
 
-func (l loaded) load(ctx context.Context, push images.Push, progress edge.Progress) error {
+func (l loaded) load(ctx context.Context, push provider.ImagePush, progress edge.Progress) error {
 	ref, err := name.NewTag(push.ImageRef, name.Insecure)
 	if err != nil {
 		return fmt.Errorf("%q is not a valid image tag: %w", push.ImageRef, err)

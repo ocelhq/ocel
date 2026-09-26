@@ -15,7 +15,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
@@ -767,9 +766,9 @@ type countedImages struct {
 
 func (c *countedImages) Destination() string { return "the counted store" }
 
-func (c *countedImages) Has(context.Context, images.Push) (bool, error) { return false, nil }
+func (c *countedImages) Has(context.Context, provider.ImagePush) (bool, error) { return false, nil }
 
-func (c *countedImages) Push(_ context.Context, _ images.Push, _ edge.Progress) error {
+func (c *countedImages) Push(_ context.Context, _ provider.ImagePush, _ edge.Progress) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.pushed++
@@ -913,7 +912,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 
 		store := &countedImages{}
 		pushing := bare
-		pushing.Images = provider.ImagePushes{Store: store, Pushes: []images.Push{{
+		pushing.Images = provider.ImagePushes{Store: store, Pushes: []provider.ImagePush{{
 			App:      "conformance",
 			Source:   "ocel/conformance@sha256:" + conformanceImageDigest,
 			ImageRef: "registry.invalid/conformance:sha256-" + conformanceImageDigest,

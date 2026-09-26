@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -20,7 +19,7 @@ type Provider interface {
 	DNS() DNS
 	Certificates() Certificates
 	Connector() Connector
-	Runtime() images.Runtime
+	Runtime() Runtime
 	Liveness() Liveness
 }
 

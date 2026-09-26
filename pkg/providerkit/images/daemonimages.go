@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+
 	"github.com/containerd/errdefs"
 	"github.com/google/go-containerregistry/pkg/name"
 	"github.com/google/go-containerregistry/pkg/v1/daemon"
@@ -13,7 +15,7 @@ import (
 
 type daemonStore struct{}
 
-func DaemonStore() Store { return daemonStore{} }
+func DaemonStore() provider.ImageStore { return daemonStore{} }
 
 func (daemonStore) String() string { return "images written to the local docker daemon" }
 
@@ -21,7 +23,7 @@ func (d daemonStore) GoString() string { return d.String() }
 
 func (daemonStore) Destination() string { return "the local docker daemon" }
 
-func (daemonStore) Has(ctx context.Context, push Push) (bool, error) {
+func (daemonStore) Has(ctx context.Context, push provider.ImagePush) (bool, error) {
 	ref, err := name.NewTag(push.ImageRef, name.Insecure)
 	if err != nil {
 		return false, fmt.Errorf("%q names nowhere the daemon can store an image: %w", push.ImageRef, err)
@@ -36,7 +38,7 @@ func (daemonStore) Has(ctx context.Context, push Push) (bool, error) {
 	return true, nil
 }
 
-func (daemonStore) Push(ctx context.Context, push Push, _ edge.Progress) error {
+func (daemonStore) Push(ctx context.Context, push provider.ImagePush, _ edge.Progress) error {
 	if push.Built == nil {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s's image is written straight into the local docker daemon, and this release has no image it was built into", push.App)

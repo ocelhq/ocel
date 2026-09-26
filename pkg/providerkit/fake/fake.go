@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -132,6 +131,6 @@ func (p *Provider) Certificates() provider.Certificates { return certificates{p}
 
 func (p *Provider) Connector() provider.Connector { return connector{} }
 
-func (p *Provider) Runtime() images.Runtime { return containerRuntime{p} }
+func (p *Provider) Runtime() provider.Runtime { return containerRuntime{p} }
 
 func (p *Provider) Liveness() provider.Liveness { return liveness{p} }

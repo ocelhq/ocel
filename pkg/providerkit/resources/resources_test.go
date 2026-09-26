@@ -9,7 +9,6 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
@@ -825,8 +824,8 @@ func TestAContainerRunningUnderAnyNameButItsAppsIsSweptOnTheNextRelease(t *testi
 	}
 }
 
-func imagePushes(store images.Store) provider.ImagePushes {
-	return provider.ImagePushes{Store: store, Pushes: []images.Push{{
+func imagePushes(store provider.ImageStore) provider.ImagePushes {
+	return provider.ImagePushes{Store: store, Pushes: []provider.ImagePush{{
 		App:      "web",
 		Source:   testImage,
 		ImageRef: "ghcr.io/acme/web:sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
@@ -966,18 +965,18 @@ func (r *retaining) ForgetReleases(_ context.Context, _ provider.StackRef, app s
 
 type refusingImages struct{ err error }
 
-func (r refusingImages) Has(context.Context, images.Push) (bool, error) { return false, nil }
+func (r refusingImages) Has(context.Context, provider.ImagePush) (bool, error) { return false, nil }
 
 func (refusingImages) Destination() string { return "the refusing registry" }
 
-func (r refusingImages) Push(context.Context, images.Push, edge.Progress) error {
+func (r refusingImages) Push(context.Context, provider.ImagePush, edge.Progress) error {
 	return r.err
 }
 
 func refusingPlan(err error) provider.ImagePushes {
 	return provider.ImagePushes{
 		Store:  refusingImages{err: err},
-		Pushes: []images.Push{{App: "web", ImageRef: testImage}},
+		Pushes: []provider.ImagePush{{App: "web", ImageRef: testImage}},
 	}
 }
 

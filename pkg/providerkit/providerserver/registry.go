@@ -7,7 +7,6 @@ import (
 	connect "connectrpc.com/connect"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
@@ -30,7 +29,7 @@ func (h *handlers) ResolveImageRegistry(ctx context.Context, req *contractv1.Res
 		return nil, provider.RefusalError(err)
 	}
 	if !target.Named() {
-		if target != (images.Registry{}) {
+		if target != (provider.RegistryTarget{}) {
 			return nil, connect.NewError(connect.CodeInternal,
 				errors.New("the provider answered an image registry with no server, which names nowhere to push to"))
 		}

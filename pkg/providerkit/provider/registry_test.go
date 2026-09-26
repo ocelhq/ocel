@@ -1,4 +1,4 @@
-package images_test
+package provider_test
 
 import (
 	"errors"
@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func TestTheCoordinateIsTheTargetPlusTheAppRepositoryAndTheDigestTag(t *testing.T) {
-	target := images.Registry{Server: "ghcr.io", Namespace: "acme/ocel"}
+	target := provider.RegistryTarget{Server: "ghcr.io", Namespace: "acme/ocel"}
 
 	if got, want := target.ImageRef("web", "sha256-abc"), "ghcr.io/acme/ocel/web:sha256-abc"; got != want {
 		t.Errorf("ImageRef() = %q, want %q", got, want)
@@ -19,12 +19,12 @@ func TestTheCoordinateIsTheTargetPlusTheAppRepositoryAndTheDigestTag(t *testing.
 
 func TestATargetNamesARegistryOnlyWhenItNamesAServer(t *testing.T) {
 	for _, tc := range []struct {
-		target images.Registry
+		target provider.RegistryTarget
 		named  bool
 	}{
-		{images.Registry{}, false},
-		{images.Registry{Namespace: "acme/ocel"}, false},
-		{images.Registry{Server: "ghcr.io"}, true},
+		{provider.RegistryTarget{}, false},
+		{provider.RegistryTarget{Namespace: "acme/ocel"}, false},
+		{provider.RegistryTarget{Server: "ghcr.io"}, true},
 	} {
 		if got := tc.target.Named(); got != tc.named {
 			t.Errorf("%v Named() = %v, want %v: a target names a registry when it says where to push, "+
@@ -34,7 +34,7 @@ func TestATargetNamesARegistryOnlyWhenItNamesAServer(t *testing.T) {
 }
 
 func TestACoordinateUnderARegistryWithNoNamespaceSitsDirectlyOnTheServer(t *testing.T) {
-	target := images.Registry{Server: "registry.fly.io"}
+	target := provider.RegistryTarget{Server: "registry.fly.io"}
 
 	if got, want := target.ImageRef("web", "sha256-abc"), "registry.fly.io/web:sha256-abc"; got != want {
 		t.Errorf("ImageRef() = %q, want %q", got, want)
@@ -42,7 +42,7 @@ func TestACoordinateUnderARegistryWithNoNamespaceSitsDirectlyOnTheServer(t *test
 }
 
 func TestAResolvedTargetRendersWithoutItsPassword(t *testing.T) {
-	target := images.Registry{Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "ghp_livesecret"}
+	target := provider.RegistryTarget{Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "ghp_livesecret"}
 
 	for _, rendered := range []string{
 		fmt.Sprintf("%v", target),

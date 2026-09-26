@@ -9,7 +9,6 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
@@ -92,7 +91,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	return resp, nil
 }
 
-func containerArchs(ctx context.Context, runtime images.Runtime, containers []*contractv1.ContainerApp) (map[string]string, error) {
+func containerArchs(ctx context.Context, runtime provider.Runtime, containers []*contractv1.ContainerApp) (map[string]string, error) {
 	if len(containers) == 0 {
 		return nil, nil
 	}
