@@ -4,7 +4,7 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
+	"github.com/ocelhq/ocel/pkg/provider/enginetest"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 

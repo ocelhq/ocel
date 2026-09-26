@@ -16,7 +16,7 @@ on:
       - "pkg/images/**"
       - "pkg/naming/**"
       - "pkg/proto/**"
-      - "pkg/providerkit/**"
+      - "pkg/provider/**"
       - "pkg/records/**"
       - "pkg/refusal/**"
       - "pkg/runtimekit/**"

@@ -1,7 +1,7 @@
 package bootstrap
 
 import (
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 var (

@@ -70,7 +70,7 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5 // indirect
 )
 
-replace github.com/ocelhq/ocel/pkg/providerkit/pulumi => ../../../pkg/providerkit/pulumi
+replace github.com/ocelhq/ocel/pkg/provider/pulumi => ../../../pkg/provider/pulumi
 
 replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 

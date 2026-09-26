@@ -2,7 +2,7 @@ package images
 
 import (
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func Ref(repository, tag string, target provider.RegistryTarget) string {

@@ -9,7 +9,7 @@ import (
 func TestTheCLINeverLinksTheProviderServer(t *testing.T) {
 	t.Parallel()
 
-	const server = "github.com/ocelhq/ocel/pkg/providerkit/providerserver"
+	const server = "github.com/ocelhq/ocel/pkg/provider/providerserver"
 	out, err := exec.Command("go", "list", "-deps", ".").CombinedOutput()
 	if err != nil {
 		t.Fatalf("go list -deps: %v\n%s", err, out)

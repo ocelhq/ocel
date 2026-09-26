@@ -3,7 +3,7 @@ package vps
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/liveness"
+	"github.com/ocelhq/ocel/pkg/provider/liveness"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 

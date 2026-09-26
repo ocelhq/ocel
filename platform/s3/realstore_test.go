@@ -12,7 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	bucketv1 "github.com/ocelhq/ocel/pkg/proto/app/bucket/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
+	"github.com/ocelhq/ocel/pkg/provider/enginetest"
 )
 
 func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }

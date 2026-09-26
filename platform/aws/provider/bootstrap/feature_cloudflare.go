@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 const KindCloudflare = "cloudflare"

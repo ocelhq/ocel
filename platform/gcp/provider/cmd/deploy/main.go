@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
+	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
 

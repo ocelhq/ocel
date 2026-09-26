@@ -9,8 +9,8 @@ import (
 
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/conformance"
 
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"

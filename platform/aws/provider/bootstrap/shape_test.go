@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/costkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func shapedOf(shaped []costkit.Shaped, typ string) []costkit.Shaped {

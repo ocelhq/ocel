@@ -9,9 +9,9 @@ import (
 
 	awssdk "github.com/aws/aws-sdk-go-v2/aws"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/provider/providerserver"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 )

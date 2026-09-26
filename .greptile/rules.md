@@ -148,8 +148,8 @@ Fails when:
 
 ## Naming
 
-The Go kits (the packages of `pkg/providerkit`, its siblings under `pkg/`, and the
-vendors under `platform/` that implement them) name things with words people already
+The Go kits (the packages under `pkg/`, and the vendors under `platform/` that
+implement the provider contract at `pkg/provider`) name things with words people already
 use, and a provider declares what it can do where the compiler checks it.
 
 1. **A name is a word people already use for the thing**, in this domain or in English:

@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
+	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
