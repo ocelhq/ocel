@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -13,7 +14,15 @@ import (
 )
 
 func TestLiveASwitchboardAPruneTookWithItsNetworkIsStoodAgainByTheNextDeployAndServes(t *testing.T) {
-	const front = "nginx"
+	prunedAndStoodAgain(t, "nginx")
+}
+
+func TestLiveASwitchboardAPruneTookIsStoodAgainOnYourProxysNetworkAndServesThroughIt(t *testing.T) {
+	prunedAndStoodAgain(t, "nginx-network")
+}
+
+func prunedAndStoodAgain(t *testing.T, front string) {
+	t.Helper()
 	vm := liveMachine(t)
 	vm.purges(t)
 	t.Cleanup(func() { vm.purges(t) })
@@ -68,8 +77,12 @@ func TestLiveASwitchboardAPruneTookWithItsNetworkIsStoodAgainByTheNextDeployAndS
 	}}); err != nil {
 		t.Fatalf("PreflightDeploy() after the prune = %v, want the switchboard and its network stood again from what bootstrap left", err)
 	}
-	if served := vm.throughTheFront(t, frontedHostname, "/"); served != "one" {
-		t.Fatalf("%s answered %q for %s after the deploy stood the switchboard again, want the release the table still routes", front, served, frontedHostname)
+	deadline := time.Now().Add(loadWait)
+	for served := vm.throughTheFront(t, frontedHostname, "/"); served != "one"; served = vm.throughTheFront(t, frontedHostname, "/") {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s answered %q for %s within %s of the deploy standing the switchboard again, want the release the table still routes", front, served, frontedHostname, loadWait)
+		}
+		time.Sleep(time.Second)
 	}
 	promotes(t, stack, "p-two", "two", standsUp(t, d, "two"), 2)
 	if served := vm.throughTheFront(t, frontedHostname, "/"); served != "two" {

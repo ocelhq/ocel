@@ -389,9 +389,10 @@ func TestASwitchboardStoodAgainIsTheOneBootstrapStandsRunningTheBinaryTheBoxHold
 
 	const sum = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"
 	for what, front := range map[string]Front{
-		"ocel's own proxy":        {},
-		"a proxy you route to":    {Manual: &ManualFront{Port: 8480}},
-		"a proxy on another port": {Manual: &ManualFront{Port: 9000}},
+		"ocel's own proxy":           {},
+		"a proxy you route to":       {Manual: &ManualFront{Port: 8480}},
+		"a proxy on another port":    {Manual: &ManualFront{Port: 9000}},
+		"a proxy on its own network": routedOnANetwork(),
 	} {
 		b := machine(nil)
 		b.answer = pruneAnswers(sum)
@@ -412,5 +413,24 @@ func TestASwitchboardStoodAgainIsTheOneBootstrapStandsRunningTheBinaryTheBoxHold
 			t.Errorf("%s: no command stood the switchboard bootstrap stands, labelled with the binary the box holds and as restored:\n%s\nran:\n%s",
 				what, words(want), strings.Join(b.commands(), "\n---\n"))
 		}
+	}
+}
+
+func TestASwitchboardStoodAgainOnYourProxysNetworkAsksAfterItBeforeRunning(t *testing.T) {
+	t.Parallel()
+
+	b := machine(nil)
+	b.answer = pruneAnswers("0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0")
+	if err := b.fronted(routedOnANetwork()).CheckProxy(context.Background()); err != nil {
+		t.Fatalf("CheckProxy() = %v, want the switchboard stood again", err)
+	}
+	stood := b.commands()[b.at(quoted("run")+" "+quoted("--detach"))]
+	asked := strings.Index(stood, "docker network inspect "+quoted("coolify"))
+	ran := strings.Index(stood, quoted("run")+" "+quoted("--detach"))
+	if asked < 0 || asked > ran {
+		t.Fatalf("the switchboard was stood again asking after coolify at %d and running at %d, want the network found before a run docker would refuse without naming the option:\n%s", asked, ran, stood)
+	}
+	if !strings.Contains(stood, "proxy.manual.network") {
+		t.Errorf("the switchboard stood again refuses a missing network without naming the option that set it:\n%s", stood)
 	}
 }
