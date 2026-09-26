@@ -8,10 +8,10 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 )
@@ -59,7 +59,7 @@ func TestAnUploadDrawsACreateRowAndThenFailsTheApplyLoudly(t *testing.T) {
 		}},
 	}
 
-	drawn, err := providerkit.SynthesizedPlan(ctx, store, plan, provider.StackResult{})
+	drawn, err := resources.SynthesizedPlan(ctx, store, plan, provider.StackResult{})
 	if err != nil {
 		t.Fatalf("SynthesizedPlan() of a stack shipping one artifact = %v, want the row the human consents to", err)
 	}
@@ -72,7 +72,7 @@ func TestAnUploadDrawsACreateRowAndThenFailsTheApplyLoudly(t *testing.T) {
 	}
 
 	var rejection refusal.Refusal
-	err = providerkit.ShipUploads(ctx, store, plan.Uploads, nil)
+	err = resources.ShipUploads(ctx, store, plan.Uploads, nil)
 	if !errors.As(err, &rejection) {
 		t.Fatalf("ShipUploads() after the plan showed the row = %v, want a loud refusal rather than a write that vanishes", err)
 	}

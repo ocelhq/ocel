@@ -1,4 +1,4 @@
-package providerkit
+package resources
 
 import (
 	"context"
@@ -67,7 +67,7 @@ func uploadsOf(t *testing.T, count int) []provider.Upload {
 func TestShipUploadsSharesOneBudgetAcrossTheAppsShippingAtOnce(t *testing.T) {
 	const apps = 4
 
-	uploads := uploadsOf(t, uploadConcurrency)
+	uploads := uploadsOf(t, UploadConcurrency)
 	store := &countingStore{
 		arrive: make(chan struct{}, apps*len(uploads)),
 		hold:   make(chan struct{}),
@@ -83,7 +83,7 @@ func TestShipUploadsSharesOneBudgetAcrossTheAppsShippingAtOnce(t *testing.T) {
 		}()
 	}
 
-	for range uploadConcurrency {
+	for range UploadConcurrency {
 		<-store.arrive
 	}
 	select {
@@ -99,7 +99,7 @@ func TestShipUploadsSharesOneBudgetAcrossTheAppsShippingAtOnce(t *testing.T) {
 			t.Fatalf("ShipUploads() for app %d = %v", slot, err)
 		}
 	}
-	if store.peak > uploadConcurrency {
-		t.Errorf("%d uploads were in flight at once, want at most %d: the apps standing up side by side share one budget rather than each taking a full one", store.peak, uploadConcurrency)
+	if store.peak > UploadConcurrency {
+		t.Errorf("%d uploads were in flight at once, want at most %d: the apps standing up side by side share one budget rather than each taking a full one", store.peak, UploadConcurrency)
 	}
 }
