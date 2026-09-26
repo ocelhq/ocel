@@ -52,7 +52,7 @@ func standingBox() []scriptedAnswer {
 		{"/proc/net/tcp &&", answer{stdout: socketTable(80, 443)}},
 		{"publish=" + caddy.HTTPPort, answer{stdout: caddy.Container + "\n"}},
 		{"publish=443", answer{stdout: caddy.Container + "\n"}},
-		{"cat /proc/net/tcp /proc/net/tcp6", answer{stdout: ""}},
+		{"cat /proc/net/tcp\n", answer{stdout: ""}},
 		{"'holds'", answer{}},
 		{"proxy.json", answer{stdout: builtInRecord}},
 	}
@@ -302,7 +302,7 @@ func TestAProcessOutsideDockerOnAServingPortIsRefusedByName(t *testing.T) {
 
 	err := preflighting(boxSaying(map[string]answer{
 		"publish=" + caddy.HTTPPort: {stdout: "\n"},
-		listeners.SocketsMark: {stdout: socketTable(80) +
+		"cat /proc/net/tcp\n": {stdout: socketTable(80) +
 			listeners.SocketsMark + "\n/proc/812/fd socket:[1]\n" + listeners.NamesMark + "\n/proc/812/comm:nginx\n"},
 	}))
 	if err == nil {
@@ -320,7 +320,7 @@ func TestAProcessOutsideDockerTheLoginCannotNameIsRefusedByWhereItIsBound(t *tes
 
 	err := preflighting(boxSaying(map[string]answer{
 		"publish=" + caddy.HTTPPort: {stdout: "\n"},
-		listeners.SocketsMark:       {stdout: socketTable(80)},
+		"cat /proc/net/tcp\n":       {stdout: socketTable(80)},
 	}))
 	if err == nil || !strings.Contains(err.Error(), "bound outside docker at 0.0.0.0:80") {
 		t.Errorf("PreflightDeploy() = %v, want the port named by where it is bound when no process can be read", err)

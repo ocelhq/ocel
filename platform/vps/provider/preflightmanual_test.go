@@ -17,12 +17,12 @@ const manualRecord = `{"proxy":{"manual":{"port":8480}},"project":"shop","class"
 
 func routedByHand(overrides map[string]answer) *scripted {
 	held := map[string]answer{
-		"proxy.json":                       {stdout: manualRecord},
-		"publish=" + caddy.HTTPPort:        {stdout: "\n"},
-		"publish=443":                      {stdout: "\n"},
-		"cat /proc/net/tcp /proc/net/tcp6": {stdout: socketTable(80, 443)},
-		"'test' '-S'":                      {code: 1, stderr: "Error: No such container: " + caddy.Container},
-		"flock -s 9":                       {stdout: "+" + base64.StdEncoding.EncodeToString([]byte(`{"grace":"30s"}`)) + "\n\n"},
+		"proxy.json":                {stdout: manualRecord},
+		"publish=" + caddy.HTTPPort: {stdout: "\n"},
+		"publish=443":               {stdout: "\n"},
+		"cat /proc/net/tcp\n":       {stdout: socketTable(80, 443)},
+		"'test' '-S'":               {code: 1, stderr: "Error: No such container: " + caddy.Container},
+		"flock -s 9":                {stdout: "+" + base64.StdEncoding.EncodeToString([]byte(`{"grace":"30s"}`)) + "\n\n"},
 	}
 	for naming, said := range overrides {
 		held[naming] = said
@@ -65,7 +65,7 @@ func TestABoxYourProxyFrontsIsReadyWithNoProxyOfOcelsOwn(t *testing.T) {
 func TestABoxYourProxyFrontsRefusesAServingPortNothingHolds(t *testing.T) {
 	t.Parallel()
 
-	err := preflightingByHand(routedByHand(map[string]answer{"cat /proc/net/tcp /proc/net/tcp6": {stdout: socketTable(80)}}))
+	err := preflightingByHand(routedByHand(map[string]answer{"cat /proc/net/tcp\n": {stdout: socketTable(80)}}))
 	if err == nil {
 		t.Fatal("PreflightDeploy() let a deploy onto a box where nothing holds 443, and nothing would reach what it serves")
 	}

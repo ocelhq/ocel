@@ -2,6 +2,8 @@ package host
 
 import (
 	"context"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -88,5 +90,17 @@ func TestAListenerReadThisHostDeniedIsRefusedWithWhatItSaid(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "Permission denied") {
 		t.Errorf("Listening() = %q, want what the host said about the read it refused", err)
+	}
+}
+
+func TestEveryListenerReadAnswersOnAHostWithIPv6Disabled(t *testing.T) {
+	t.Parallel()
+
+	absent := filepath.Join(t.TempDir(), "tcp6")
+	for name, command := range map[string]string{"the listener read": listenerCommand, "the holders read": holdersCommand} {
+		said, err := exec.Command("/bin/sh", "-c", strings.ReplaceAll(command, listeners.TCP6Path, absent)).CombinedOutput()
+		if err != nil {
+			t.Errorf("%s on a host with no %s = %v:\n%s\nand a box booted with ipv6.disable=1 has its proxy's host check refused over a table the kernel never made", name, listeners.TCP6Path, err, said)
+		}
 	}
 }
