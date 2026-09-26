@@ -60,32 +60,18 @@ jobs:
         run: scripts/banned-words.sh
 
   contract:
-    name: contract-paths
-    if: github.event_name == 'pull_request'
+    name: contract-paths-test
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: The check refuses exactly the authors and paths it names
+      - name: The contract-path check passes exactly the pull requests it names
         run: node --test scripts/contract-paths.test.mjs
-
-      - name: Only a branch of this repository or a maintainer's fork changes a contract path
-        env:
-          BASE: ${{ github.event.pull_request.base.sha }}
-          HEAD: ${{ github.event.pull_request.head.sha }}
-          REPOSITORY: ${{ github.repository }}
-          HEAD_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name }}
-          ASSOCIATION: ${{ github.event.pull_request.author_association }}
-        run: |
-          git diff --name-only --no-renames "$BASE...$HEAD" > "$RUNNER_TEMP/paths"
-          node scripts/contract-paths.mjs < "$RUNNER_TEMP/paths"
 
   actions:
     name: actionlint

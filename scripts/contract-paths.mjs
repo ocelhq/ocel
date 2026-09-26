@@ -1,7 +1,14 @@
 import { readFileSync } from "node:fs";
 import { posix } from "node:path";
 
-const contractFiles = [".greptile/rules.md", "AGENTS.md", "CLAUDE.md", "CONTRIBUTING.md"];
+const contractFiles = [
+  ".github/workflows/contract-paths.yml",
+  ".greptile/rules.md",
+  "AGENTS.md",
+  "CLAUDE.md",
+  "CONTRIBUTING.md",
+  "scripts/contract-paths.mjs",
+];
 
 const contractDirectories = [
   "crates/",
@@ -28,18 +35,36 @@ export function canChangeContract({ repository, headRepository, association }) {
   return headRepository === repository || maintainers.has(association);
 }
 
+function listChangedPaths(files) {
+  return files.flatMap((file) => [file.filename, file.previous_filename].filter(Boolean));
+}
+
+function fail(...lines) {
+  for (const line of lines) console.error(line);
+  process.exit(1);
+}
+
 if (import.meta.main) {
   const pullRequest = {
     repository: process.env.REPOSITORY ?? "",
     headRepository: process.env.HEAD_REPOSITORY ?? "",
     association: process.env.ASSOCIATION ?? "",
   };
-  const touched = readFileSync(0, "utf8").split("\n").filter(Boolean).filter(isContractPath);
-  if (touched.length > 0 && !canChangeContract(pullRequest)) {
-    console.error(
-      `Only maintainers change contract paths (CONTRIBUTING.md), and this fork's author is ${pullRequest.association || "NONE"}:`,
+  const files = readFileSync(0, "utf8")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+  const changedFiles = Number(process.env.CHANGED_FILES);
+  if (!(files.length >= changedFiles)) {
+    fail(
+      `GitHub listed ${files.length} of ${changedFiles} changed files, and this check cannot see the rest.`,
     );
-    for (const path of touched) console.error(`  ${path}`);
-    process.exit(1);
+  }
+  const touched = listChangedPaths(files).filter(isContractPath);
+  if (touched.length > 0 && !canChangeContract(pullRequest)) {
+    fail(
+      `Only maintainers change contract paths (CONTRIBUTING.md), and this fork's author is ${pullRequest.association || "NONE"}:`,
+      ...touched.map((path) => `  ${path}`),
+    );
   }
 }
