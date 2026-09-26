@@ -290,7 +290,7 @@ const saidLines = 4
 func unstarted(code int) bool { return code == 126 || code == 127 }
 
 func (h *Host) refuse(what string, result session.Result) error {
-	return providerkit.Refuse(providerkit.CodeDenied, "%s on %s: %s", what, h.named(), spoken(result))
+	return providerkit.Refuse(session.Refusing(result.Stderr), "%s on %s: %s", what, h.named(), spoken(result))
 }
 
 func spoken(result session.Result) string {

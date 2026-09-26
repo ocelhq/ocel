@@ -532,3 +532,20 @@ func TestAMaskedDockerServiceStopsThePlanRatherThanWedgingItOnAnEnableThatNeverT
 		})
 	}
 }
+
+func TestAnEngineInstallThatFailsIsRefusedForWhatWentWrongAndNotAsAPermissionProblem(t *testing.T) {
+	t.Parallel()
+
+	for said, want := range map[string]providerkit.Code{
+		dockerSource + " failed 3 times, the last timing out after 300s; its last lines:\n+ sh -c apt-get -qq update >/dev/null": providerkit.CodeNotReady,
+		"sudo: a password is required": providerkit.CodeDenied,
+	} {
+		stood := machine(nil)
+		stood.answer = func(command string) (session.Result, bool) {
+			return session.Result{Code: 1, Stderr: said}, strings.Contains(command, dockerSource)
+		}
+		if refused := refusal(t, stood.host().Install(context.Background(), engineItem()), want); !strings.Contains(refused.Message, strings.Split(said, "\n")[0]) {
+			t.Errorf("the refusal reads %q, want what the install said in it", refused.Message)
+		}
+	}
+}

@@ -74,8 +74,7 @@ func (s *Session) Run(ctx context.Context, command string) (string, error) {
 		return "", err
 	}
 	if result.Code != 0 {
-		return "", providerkit.Refuse(providerkit.CodeDenied,
-			"%s over ssh: %s", s.dest.Principal(), terse(result.problem(command)))
+		return "", s.refused(result.problem(command).Error())
 	}
 	return result.Stdout, nil
 }
@@ -91,8 +90,23 @@ func (s *Session) Stream(ctx context.Context, command string, stdin io.Reader) (
 			return Result{}, providerkit.RefuseHostTrust(*trust)
 		}
 	}
-	return Result{}, providerkit.Refuse(providerkit.CodeDenied,
-		"%s over ssh: %s", s.dest.Principal(), terse(failure{err: err, stderr: stderr}))
+	return Result{}, s.refused(failure{err: err, stderr: stderr}.Error())
+}
+
+func (s *Session) refused(said string) error {
+	return providerkit.Refuse(Refusing(said), "%s over ssh: %s", s.dest.Principal(), terse(errors.New(said)))
+}
+
+var denials = []string{"permission denied", "password is required", "not in the sudoers", "operation not permitted"}
+
+func Refusing(said string) providerkit.Code {
+	lowered := strings.ToLower(said)
+	for _, denial := range denials {
+		if strings.Contains(lowered, denial) {
+			return providerkit.CodeDenied
+		}
+	}
+	return providerkit.CodeNotReady
 }
 
 func (r Result) problem(command string) error {
@@ -197,7 +211,7 @@ func (f failure) Unwrap() error { return f.err }
 func terse(err error) string {
 	lines := strings.Split(strings.TrimSpace(err.Error()), "\n")
 	if len(lines) > 4 {
-		lines = lines[:4]
+		lines = lines[len(lines)-4:]
 	}
 	return strings.Join(lines, "\n")
 }
