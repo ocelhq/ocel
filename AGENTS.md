@@ -91,10 +91,9 @@ entry before it needs files. Dotfile directories are tooling and are exempt.
 - **`crates/`** — the cargo workspace of everything published to crates.io, and nothing
   else. `ocel` is public API.
 - **`pkg/`** — one Go module of shared packages any module may depend on;
-  `providerkit/pulumi` is a module of its own, so Pulumi's dependency tree stays out of
-  everyone else's. Its packages may import each other and `platform/edge/contract`, the one
-  `platform/` path open to them, and nothing else in the repo — never a vendor SDK, the
-  CLI, the SDK or the console.
+  `providerkit/pulumi` is a module of its own. Its packages may import each other and
+  `platform/edge/contract`, the one `platform/` path open to them, and nothing else in
+  the repo — never a vendor SDK, the CLI, the SDK or the console.
 - **`proto/`** — source of truth for the wire format. Bindings are **generated** — never
   hand-edit generated output.
 - **`scripts/`** — development and release tooling, and the emulator and ladder scripts.
