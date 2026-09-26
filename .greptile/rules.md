@@ -160,7 +160,7 @@ table:
 | Boolean | positive | `NotReady`, `DisableX` |
 | Number | its name or its type states the unit | `timeout int` |
 | Error | names the condition | `ErrBad` |
-| Word | the literal word, never a metaphor or a coined one | the words rule 9 bans |
+| Word | the literal word; no metaphor or coined word | `standing` for current, `carried` for recorded |
 | Abbreviation | only the idioms every reader predicts: `ctx`, `err`, `id`, `req`, `res`, `resp`, `opts`, `cfg`, `fn`, `buf`, `msg`, `src`, `dst`, loop indices `i` `j` `k` `n`, test params `t` `b` `f`, a one-letter method receiver, and acronyms (`URL`, `DNS`, `HTTP`, `TLS`, `API`, `CLI`, `SDK`, `JSON`, `ID`); a PR to this file extends the list | `svc`, `mgr`, `impl` |
 | File | named after its main type or concept; its test file mirrors the name | `release.go` holding `Stacks` |
 | Test | a behaviour sentence | `TestFoo2` |
@@ -187,8 +187,8 @@ the compiler checks it.
    `providerserver`; nothing re-exports another package's names.
 8. **A Plan is the diff a human consents to; a Spec is the desired state a provider is
    handed.** What a vendor keeps for itself through a run is `VendorState`.
-9. **Words that sound meaningful but say nothing are banned.** `scripts/banned-words.mjs`
-   lists them, and CI runs it. Name the actual state: current, installed, recorded, manual.
+9. **A name uses the literal word for the thing, never a metaphor or a coined word.** Name
+   the actual state: current, installed, recorded.
 
 Fails when:
 
@@ -210,7 +210,7 @@ Fails when:
   `Facts` or `Hooks` literal that already type-checks it.
 - A package re-exports or aliases another package's identifiers.
 - `Plan` names desired state, or `Spec` names a consented diff.
-- A banned word names a value, function, file, test or message.
+- A value, function, file, test or message is named with a metaphor or a coined word.
 
 ## Signal
  
