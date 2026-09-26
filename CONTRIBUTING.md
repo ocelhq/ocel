@@ -34,7 +34,6 @@ Check a change before you push it:
 
 ```sh
 pnpm exec biome ci
-node scripts/banned-words.mjs
 pnpm test
 for dir in $(go list -m -f '{{.Dir}}'); do go test -C "$dir" -race -count=1 ./...; done
 (cd python && uv sync --all-extras && uv run pytest -q)
