@@ -332,13 +332,17 @@ func (h *Host) portHeld(ctx context.Context, port string) (string, error) {
 	if slices.Contains(named, caddy.Container) {
 		return "", nil
 	}
-	held, err := h.Listening(ctx)
+	held, err := h.portHolders(ctx, "")
 	if err != nil {
 		return "", err
 	}
 	if bound := listeners.On(held, portNumber(port)); len(bound) > 0 {
-		return fmt.Sprintf("port %s is bound outside docker at %s; stop it and run `ocel bootstrap %s`",
-			port, strings.Join(listeners.Lines(bound), ", "), providerkit.ClassProduction), nil
+		by := ""
+		if names := listeners.Holders(bound); len(names) > 0 {
+			by = " by " + strings.Join(names, " and ")
+		}
+		return fmt.Sprintf("port %s is bound outside docker%s at %s; stop it and run `ocel bootstrap %s`",
+			port, by, strings.Join(listeners.Lines(bound), ", "), providerkit.ClassProduction), nil
 	}
 	return fmt.Sprintf("nothing holds port %s; run `ocel bootstrap %s`",
 		port, providerkit.ClassProduction), nil
@@ -377,13 +381,6 @@ func (p portHolder) holds() string {
 		return "container " + p.name + " publishes " + strings.Join(ports, " and ")
 	}
 	return p.name + " holds " + strings.Join(ports, " and ")
-}
-
-func (p portHolder) freed() string {
-	if p.container {
-		return "run `docker rm -f " + p.name + "`"
-	}
-	return "stop " + p.name
 }
 
 func holdingAlso(held []portHolder, name string, container bool, port string) []portHolder {
@@ -452,7 +449,7 @@ func (h *Host) servingFree(ctx context.Context, read Reading) error {
 		holds = append(holds, holder.holds())
 		names = append(names, holder.name)
 		if holder.container {
-			freed = append(freed, holder.freed())
+			freed = append(freed, "run `docker rm -f "+holder.name+"`")
 			continue
 		}
 		stopped = append(stopped, holder.name)
