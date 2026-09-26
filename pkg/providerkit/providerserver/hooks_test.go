@@ -34,7 +34,7 @@ func TestAHookGroupLeftNilIsSkippedAndOneSetRunsBothItsSteps(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			shaped, estimated = 0, 0
-			p := fake.NewProvider(fake.Options{Region: "nowhere"}).Hook(func(h *provider.Hooks) { h.Cost = tc.cost })
+			p := fake.NewProvider(fake.Options{Region: "nowhere"}).WithHooks(func(h *provider.Hooks) { h.Cost = tc.cost })
 			client, rates := costServed(t, p)
 
 			_, shapeErr := client.Shape(context.Background(), shapeRequest())

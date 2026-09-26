@@ -186,7 +186,7 @@ func TestEnsureReadyHealsAStaleBootstrapWithoutAcceptingReplacements(t *testing.
 	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
-	bootstrap.Behind(fake.FeatureCache)
+	bootstrap.MarkStale(fake.FeatureCache)
 
 	progress := &recorder{}
 	status, err := gate.EnsureReady(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress)
@@ -214,7 +214,7 @@ func TestEnsureReadyLeavesAStaleBootstrapAloneWhenTheAccountNeverOptedIntoHealin
 	gate, provider := gated(t, "2.0.0")
 	bootstrap := provider.FakeBootstrap()
 	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
-	bootstrap.Behind(fake.FeatureCache)
+	bootstrap.MarkStale(fake.FeatureCache)
 
 	progress := &recorder{}
 	if _, err := gate.EnsureReady(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
@@ -238,7 +238,7 @@ func TestEnsureReadyAsksForNoHealingAndGetsNone(t *testing.T) {
 	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
-	bootstrap.Behind(fake.FeatureCache)
+	bootstrap.MarkStale(fake.FeatureCache)
 
 	progress := &recorder{}
 	status, err := gate.EnsureReady(ctx, edge.ClassProduction, []string{fake.FeatureCache}, false, progress)
@@ -266,7 +266,7 @@ func TestEnsureReadyWillNotHealFromADevelopmentBuild(t *testing.T) {
 	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
-	bootstrap.Behind(fake.FeatureCache)
+	bootstrap.MarkStale(fake.FeatureCache)
 
 	progress := &recorder{}
 	if _, err := gate.EnsureReady(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
@@ -290,7 +290,7 @@ func TestEnsureReadyReportsAHealTheCredentialsCannotDo(t *testing.T) {
 	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
-	bootstrap.Behind(fake.FeatureCache)
+	bootstrap.MarkStale(fake.FeatureCache)
 	bootstrap.RefuseApply(refusal.Refuse(refusal.CodeDenied,
 		"ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password"))
 
@@ -331,7 +331,7 @@ func TestADeniedHealWithNothingToSayStillReadsAsASentence(t *testing.T) {
 	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatal(err)
 	}
-	bootstrap.Behind(fake.FeatureCache)
+	bootstrap.MarkStale(fake.FeatureCache)
 	bootstrap.RefuseApply(refusal.Refuse(refusal.CodeDenied, ""))
 
 	progress := &recorder{}
@@ -350,7 +350,7 @@ func TestAnApplyThatNeverFinishedReachesTheCLIAsOneAndReadsAsDrifted(t *testing.
 	gate, provider := gated(t, "2.0.0")
 	class := edge.ClassProduction
 	bootstrapped(t, provider, class, fake.FeatureCache)
-	provider.FakeBootstrap().Halfway()
+	provider.FakeBootstrap().MarkUnfinished()
 
 	status, err := gate.Status(ctx, class)
 	if err != nil {
@@ -370,7 +370,7 @@ func TestDowngradeIsAWriterOlderThanTheOneThatWrote(t *testing.T) {
 
 	gate, provider := gated(t, "1.0.0")
 	bootstrapped(t, provider, edge.ClassProduction)
-	provider.FakeBootstrap().WrittenBy("2.0.0")
+	provider.FakeBootstrap().SetWriter("2.0.0")
 
 	status, err := gate.Status(context.Background(), edge.ClassProduction)
 	if err != nil {

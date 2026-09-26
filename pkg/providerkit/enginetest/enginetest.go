@@ -59,15 +59,15 @@ func Main(m *testing.M) int {
 	return code
 }
 
-func Labelled(t *testing.T) []string {
+func RunLabelArgs(t *testing.T) []string {
 	t.Helper()
-	engage(t)
+	requireDocker(t)
 	return labelledAs(run)
 }
 
 func labelledAs(of string) []string { return []string{"--label", runLabel + "=" + of} }
 
-func engage(t *testing.T) {
+func requireDocker(t *testing.T) {
 	t.Helper()
 	begun.Do(func() {
 		if _, err := exec.LookPath(engine); err != nil {
@@ -79,7 +79,7 @@ func engage(t *testing.T) {
 			return
 		}
 		engaged.Store(true)
-		if err := sweep(ended); err != nil {
+		if err := sweep(runProcessGone); err != nil {
 			fmt.Fprintf(os.Stderr, "a run that ended without clearing up left what this one could not take either:\n%v\n", err)
 		}
 	})
@@ -88,7 +88,7 @@ func engage(t *testing.T) {
 	}
 }
 
-func ended(of string) bool {
+func runProcessGone(of string) bool {
 	at := strings.LastIndex(of, "/")
 	if at < 0 || of == run || of[:at] != hostname() {
 		return false
@@ -106,27 +106,27 @@ func ended(of string) bool {
 
 func sweep(owned func(of string) bool) error {
 	var failed []error
-	containers, err := held("ps", "--all")
+	containers, err := listLabelled("ps", "--all")
 	if err != nil {
 		return err
 	}
 	if taken := ownedBy(containers, owned); len(taken) > 0 {
-		failed = append(failed, engineDoes(append([]string{"rm", "--force", "--volumes"}, taken...)...))
+		failed = append(failed, docker(append([]string{"rm", "--force", "--volumes"}, taken...)...))
 	}
-	networks, err := held("network", "ls")
+	networks, err := listLabelled("network", "ls")
 	if err != nil {
 		return errors.Join(append(failed, err)...)
 	}
 	for _, network := range ownedBy(networks, owned) {
-		failed = append(failed, retired(network))
+		failed = append(failed, removeNetwork(network))
 	}
 	for _, root := range roots(owned) {
-		failed = append(failed, reclaimed(root))
+		failed = append(failed, removeRunRoot(root))
 	}
 	return errors.Join(failed...)
 }
 
-func held(listing ...string) (map[string]string, error) {
+func listLabelled(listing ...string) (map[string]string, error) {
 	argv := append(slices.Clone(listing), "--filter", "label="+runLabel, "--format", `{{.ID}} {{.Label "`+runLabel+`"}}`)
 	said, err := exec.Command(engine, argv...).Output()
 	if err != nil {
@@ -151,27 +151,27 @@ func ownedBy(found map[string]string, owned func(of string) bool) []string {
 	return taken
 }
 
-func retired(network string) error {
+func removeNetwork(network string) error {
 	said, err := exec.Command(engine, "network", "inspect", "--format", `{{range .Containers}}{{.Name}} {{end}}`, network).Output()
 	if err != nil {
 		return fmt.Errorf("read what stands on network %s: %w", network, err)
 	}
 	if attached := strings.Fields(string(said)); len(attached) > 0 {
-		if err := engineDoes(append([]string{"rm", "--force", "--volumes"}, attached...)...); err != nil {
+		if err := docker(append([]string{"rm", "--force", "--volumes"}, attached...)...); err != nil {
 			return err
 		}
 	}
-	return engineDoes("network", "rm", network)
+	return docker("network", "rm", network)
 }
 
-func engineDoes(argv ...string) error {
+func docker(argv ...string) error {
 	if said, err := exec.Command(engine, argv...).CombinedOutput(); err != nil {
 		return fmt.Errorf("%s %s: %w\n%s", engine, strings.Join(argv, " "), err, strings.TrimSpace(string(said)))
 	}
 	return nil
 }
 
-func bases() []string {
+func runRootParents() []string {
 	found := []string{os.TempDir()}
 	if home, err := os.UserHomeDir(); err == nil && home != os.TempDir() {
 		found = append(found, home)
@@ -181,7 +181,7 @@ func bases() []string {
 
 func roots(owned func(of string) bool) []string {
 	var found []string
-	for _, base := range bases() {
+	for _, base := range runRootParents() {
 		entries, err := os.ReadDir(base)
 		if err != nil {
 			continue
@@ -200,8 +200,8 @@ func roots(owned func(of string) bool) []string {
 	return found
 }
 
-func reclaimed(root string) error {
-	if emptied(root) == nil {
+func removeRunRoot(root string) error {
+	if emptyRunRoot(root) == nil {
 		return os.RemoveAll(root)
 	}
 	said, err := exec.Command(engine, "run", "--rm", "--network", "none", "--user", "0",
@@ -213,13 +213,13 @@ func reclaimed(root string) error {
 		}
 		return fmt.Errorf("take back %s, which holds what a container wrote as a user this run is not: %w\n%s", root, err, strings.TrimSpace(string(said)))
 	}
-	if err := emptied(root); err != nil {
+	if err := emptyRunRoot(root); err != nil {
 		return err
 	}
 	return os.RemoveAll(root)
 }
 
-func emptied(root string) error {
+func emptyRunRoot(root string) error {
 	entries, err := os.ReadDir(root)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil
@@ -236,7 +236,7 @@ func emptied(root string) error {
 	return errors.Join(failed...)
 }
 
-func named(what string) string {
+func uniqueName(what string) string {
 	var suffix [4]byte
 	if _, err := rand.Read(suffix[:]); err != nil {
 		panic(err)
@@ -244,13 +244,13 @@ func named(what string) string {
 	return rootPrefix + what + "-" + hex.EncodeToString(suffix[:])
 }
 
-type lazily[T any] struct {
+type onceOrSkip[T any] struct {
 	once    sync.Once
 	value   T
 	refused string
 }
 
-func (l *lazily[T]) get(t *testing.T, stand func() (T, string)) T {
+func (l *onceOrSkip[T]) get(t *testing.T, stand func() (T, string)) T {
 	t.Helper()
 	l.once.Do(func() { l.value, l.refused = stand() })
 	if l.refused != "" {
@@ -259,13 +259,13 @@ func (l *lazily[T]) get(t *testing.T, stand func() (T, string)) T {
 	return l.value
 }
 
-var network lazily[string]
+var network onceOrSkip[string]
 
 func Network(t *testing.T) string {
 	t.Helper()
-	labels := Labelled(t)
+	labels := RunLabelArgs(t)
 	return network.get(t, func() (string, string) {
-		name := named("net")
+		name := uniqueName("net")
 		argv := append(append([]string{"network", "create"}, labels...), name)
 		if said, err := exec.Command(engine, argv...).CombinedOutput(); err != nil {
 			return "", fmt.Sprintf("this machine's engine will not create the network the run's containers resolve each other across: %s", said)
@@ -274,11 +274,11 @@ func Network(t *testing.T) string {
 	})
 }
 
-var bound lazily[string]
+var bound onceOrSkip[string]
 
 func BindSource(t *testing.T) string {
 	t.Helper()
-	engage(t)
+	requireDocker(t)
 	root := bound.get(t, rootSeenByTheEngine)
 	dir, err := os.MkdirTemp(root, "test-")
 	if err != nil {
@@ -289,7 +289,7 @@ func BindSource(t *testing.T) string {
 
 func rootSeenByTheEngine() (string, string) {
 	var refused []string
-	for _, base := range bases() {
+	for _, base := range runRootParents() {
 		root, err := os.MkdirTemp(base, rootPrefix)
 		if err != nil {
 			refused = append(refused, fmt.Sprintf("%s: %v", base, err))

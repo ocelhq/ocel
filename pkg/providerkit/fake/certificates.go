@@ -9,7 +9,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (p *Provider) Pin(hostname, certificate string) {
+func (p *Provider) PinServingCertificate(hostname, certificate string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.pins == nil {
@@ -24,7 +24,7 @@ func (p *Provider) RefuseCertificates(err error) {
 	p.certRefusal = err
 }
 
-func (p *Provider) IssueCertificates(validation ...edge.Record) {
+func (p *Provider) RequireValidationRecords(validation ...edge.Record) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.issue = validation

@@ -101,8 +101,8 @@ func (s albStacks) config(
 ) (kitpulumi.Config, provider.StackSpec) {
 	project := naming.PulumiProject(target.Prefix())
 	config := kitpulumi.Config{
-		Access: kitpulumi.Access{
-			BackendURL: naming.StateBackendURL(cloudStorageScheme, clients.StateBucket(target.Class), project),
+		Backend: kitpulumi.Backend{
+			URL:        naming.StateBackendURL(cloudStorageScheme, clients.StateBucket(target.Class), project),
 			Passphrase: passphrase,
 			Project:    project,
 			Env: map[string]string{
@@ -123,7 +123,7 @@ func (s albStacks) config(
 	}
 }
 
-func refreshesTheFront(provider.StackRef, kitpulumi.Op) bool { return true }
+func refreshesTheFront(provider.StackRef, kitpulumi.Operation) bool { return true }
 
 func (s albStacks) passphrase(ctx context.Context, clients *clients, class edge.Class) (string, error) {
 	secrets, err := clients.Secrets()

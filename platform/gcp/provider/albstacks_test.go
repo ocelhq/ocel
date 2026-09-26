@@ -26,7 +26,7 @@ func TestEachProjectsBindingKeepsItsStateUnderAPrefixOfItsOwn(t *testing.T) {
 		{Class: class, Slug: "blog"},
 	} {
 		config, _ := stacks.config(stacks.p.resolved, target, "secret", nil)
-		prefixes[target.Slug] = config.Access.BackendURL
+		prefixes[target.Slug] = config.Backend.URL
 	}
 
 	bucket := "gs://" + stacking(t).p.resolved.StateBucket(class) + "/"
@@ -46,7 +46,7 @@ func TestTheFrontIsRefreshedBeforeItIsRaisedSoTheRoutesWrittenBesideItSurvive(t 
 
 	stacks := stacking(t)
 	front, spec := stacks.config(stacks.p.resolved, alb.Target{Class: edge.ClassProduction}, "secret", nil)
-	if front.Refresh == nil || !front.Refresh(spec.Ref, kitpulumi.OpProvision) {
+	if front.Refresh == nil || !front.Refresh(spec.Ref, kitpulumi.OperationProvision) {
 		t.Error("the front stack is raised without a refresh, and its url map ignores changes to hostRules and pathMatchers by holding " +
 			"what state says: state that never saw the host rules a bind wrote puts every project in the class back to unrouted")
 	}

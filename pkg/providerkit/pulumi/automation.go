@@ -33,15 +33,15 @@ const (
 
 const DefaultParallel = 64
 
-type Op string
+type Operation string
 
 const (
-	OpProvision Op = "provision"
-	OpDestroy   Op = "destroy"
+	OperationProvision Operation = "provision"
+	OperationDestroy   Operation = "destroy"
 )
 
-type Access struct {
-	BackendURL string
+type Backend struct {
+	URL string
 
 	Passphrase string
 
@@ -51,17 +51,17 @@ type Access struct {
 }
 
 type Engine interface {
-	Preview(ctx context.Context, setup Setup, op Op, progress edge.Progress) ([]provider.Change, error)
+	Preview(ctx context.Context, setup WorkspaceSpec, op Operation, progress edge.Progress) ([]provider.Change, error)
 
-	Up(ctx context.Context, setup Setup, progress edge.Progress) (auto.OutputMap, error)
+	Up(ctx context.Context, setup WorkspaceSpec, progress edge.Progress) (auto.OutputMap, error)
 
-	Destroy(ctx context.Context, setup Setup, progress edge.Progress) error
+	Destroy(ctx context.Context, setup WorkspaceSpec, progress edge.Progress) error
 
-	Outputs(ctx context.Context, setup Setup) (auto.OutputMap, error)
+	Outputs(ctx context.Context, setup WorkspaceSpec) (auto.OutputMap, error)
 }
 
 type Config struct {
-	Access Access
+	Backend Backend
 
 	Program func(ctx *pulumi.Context, spec provider.StackSpec) error
 
@@ -71,7 +71,7 @@ type Config struct {
 
 	Parallel int
 
-	Refresh func(ref provider.StackRef, op Op) bool
+	Refresh func(ref provider.StackRef, op Operation) bool
 
 	Engine Engine
 
@@ -87,18 +87,18 @@ func New(config Config) *Automation {
 	return &Automation{config: config, plugins: &hostedPlugins{declared: config.Plugins}}
 }
 
-func (a *Automation) Access() Access { return a.config.Access }
+func (a *Automation) Backend() Backend { return a.config.Backend }
 
 func (a *Automation) StackName(ref provider.StackRef) string { return ref.Name.String() }
 
 func (a *Automation) ProjectName(ref provider.StackRef) string {
-	if a.config.Access.Project != "" {
-		return a.config.Access.Project
+	if a.config.Backend.Project != "" {
+		return a.config.Backend.Project
 	}
 	return naming.PulumiProject(naming.Sanitize(ref.Project))
 }
 
-type Setup struct {
+type WorkspaceSpec struct {
 	Ref provider.StackRef
 
 	Stack string
@@ -118,36 +118,36 @@ type Setup struct {
 	Refresh bool
 }
 
-func (a *Automation) Workspace(spec provider.StackSpec) (Setup, error) {
-	return a.workspace(spec, OpProvision)
+func (a *Automation) Workspace(spec provider.StackSpec) (WorkspaceSpec, error) {
+	return a.workspace(spec, OperationProvision)
 }
 
-func (a *Automation) workspace(spec provider.StackSpec, op Op) (Setup, error) {
-	access := a.config.Access
+func (a *Automation) workspace(spec provider.StackSpec, op Operation) (WorkspaceSpec, error) {
+	backend := a.config.Backend
 	switch {
-	case access.BackendURL == "":
-		return Setup{}, refusal.Refuse(refusal.CodeNotReady,
+	case backend.URL == "":
+		return WorkspaceSpec{}, refusal.Refuse(refusal.CodeNotReady,
 			"this provider names no state backend, and an engine run has nowhere to keep %s's state", spec.Ref.Name)
-	case access.Passphrase == "":
-		return Setup{}, refusal.Refuse(refusal.CodeNotReady,
+	case backend.Passphrase == "":
+		return WorkspaceSpec{}, refusal.Refuse(refusal.CodeNotReady,
 			"this provider names no state passphrase, and %s's state would be written unsealed", spec.Ref.Name)
 	case a.config.Program == nil:
-		return Setup{}, refusal.Refuse(refusal.CodeNotReady,
+		return WorkspaceSpec{}, refusal.Refuse(refusal.CodeNotReady,
 			"this automation carries no program, so there is nothing for the engine to run over %s", spec.Ref.Name)
 	}
 
 	project := workspace.Project{
 		Name:    tokens.PackageName(a.ProjectName(spec.Ref)),
 		Runtime: workspace.NewProjectRuntimeInfo("go", nil),
-		Backend: &workspace.ProjectBackend{URL: access.BackendURL},
+		Backend: &workspace.ProjectBackend{URL: backend.URL},
 	}
 	env, err := a.env()
 	if err != nil {
-		return Setup{}, err
+		return WorkspaceSpec{}, err
 	}
 	program := func(ctx *pulumi.Context) error { return a.config.Program(ctx, spec) }
 
-	return Setup{
+	return WorkspaceSpec{
 		Ref:      spec.Ref,
 		Stack:    a.StackName(spec.Ref),
 		Project:  project,
@@ -171,19 +171,19 @@ func (a *Automation) parallel() int {
 	return DefaultParallel
 }
 
-func (a *Automation) refreshes(ref provider.StackRef, op Op) bool {
+func (a *Automation) refreshes(ref provider.StackRef, op Operation) bool {
 	return a.config.Refresh != nil && a.config.Refresh(ref, op)
 }
 
 func (a *Automation) env() (map[string]string, error) {
 	env := map[string]string{
-		passphraseEnvVar:           a.config.Access.Passphrase,
-		backendEnvVar:              a.config.Access.BackendURL,
+		passphraseEnvVar:           a.config.Backend.Passphrase,
+		backendEnvVar:              a.config.Backend.URL,
 		"PULUMI_SKIP_CHECKPOINTS":  "true",
 		"PULUMI_SKIP_UPDATE_CHECK": "true",
 	}
-	for _, key := range slices.Sorted(maps.Keys(a.config.Access.Env)) {
-		env[key] = a.config.Access.Env[key]
+	for _, key := range slices.Sorted(maps.Keys(a.config.Backend.Env)) {
+		env[key] = a.config.Backend.Env[key]
 	}
 	attached, err := a.plugins.attach()
 	if err != nil {
@@ -195,7 +195,7 @@ func (a *Automation) env() (map[string]string, error) {
 	return env, nil
 }
 
-func (a *Automation) Stack(ctx context.Context, spec provider.StackSpec) (auto.ConfigMap, error) {
+func (a *Automation) StackConfig(ctx context.Context, spec provider.StackSpec) (auto.ConfigMap, error) {
 	if _, err := a.Workspace(spec); err != nil {
 		return nil, err
 	}
@@ -205,18 +205,18 @@ func (a *Automation) Stack(ctx context.Context, spec provider.StackSpec) (auto.C
 	return a.config.Configure(ctx, spec)
 }
 
-func (a *Automation) setup(ctx context.Context, spec provider.StackSpec, op Op, progress edge.Progress) (Setup, error) {
+func (a *Automation) setup(ctx context.Context, spec provider.StackSpec, op Operation, progress edge.Progress) (WorkspaceSpec, error) {
 	setup, err := a.workspace(spec, op)
 	if err != nil {
-		return Setup{}, err
+		return WorkspaceSpec{}, err
 	}
-	if setup.Config, err = a.Stack(ctx, spec); err != nil {
-		return Setup{}, err
+	if setup.Config, err = a.StackConfig(ctx, spec); err != nil {
+		return WorkspaceSpec{}, err
 	}
 	if a.config.Engine == nil {
 		command, err := pinned.install(ctx, progress)
 		if err != nil {
-			return Setup{}, err
+			return WorkspaceSpec{}, err
 		}
 		setup.Options = append(setup.Options, auto.Pulumi(command))
 	}
@@ -231,14 +231,14 @@ func (a *Automation) engine() Engine {
 }
 
 func (a *Automation) Preview(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.Plan, error) {
-	return a.preview(ctx, spec, OpProvision, progress)
+	return a.preview(ctx, spec, OperationProvision, progress)
 }
 
 func (a *Automation) PreviewDestroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) (provider.Plan, error) {
-	return a.preview(ctx, provider.StackSpec{Ref: ref}, OpDestroy, progress)
+	return a.preview(ctx, provider.StackSpec{Ref: ref}, OperationDestroy, progress)
 }
 
-func (a *Automation) preview(ctx context.Context, spec provider.StackSpec, op Op, progress edge.Progress) (provider.Plan, error) {
+func (a *Automation) preview(ctx context.Context, spec provider.StackSpec, op Operation, progress edge.Progress) (provider.Plan, error) {
 	setup, err := a.setup(ctx, spec, op, progress)
 	if err != nil {
 		return provider.Plan{}, err
@@ -310,7 +310,7 @@ func plannedAction(op apitype.OpType) (provider.ChangeAction, bool) {
 }
 
 func (a *Automation) Run(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.StackResult, error) {
-	setup, err := a.setup(ctx, spec, OpProvision, progress)
+	setup, err := a.setup(ctx, spec, OperationProvision, progress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
@@ -325,7 +325,7 @@ func (a *Automation) Run(ctx context.Context, spec provider.StackSpec, progress 
 }
 
 func (a *Automation) Destroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) error {
-	setup, err := a.setup(ctx, provider.StackSpec{Ref: ref}, OpDestroy, progress)
+	setup, err := a.setup(ctx, provider.StackSpec{Ref: ref}, OperationDestroy, progress)
 	if err != nil {
 		return err
 	}
@@ -336,7 +336,7 @@ func (a *Automation) Destroy(ctx context.Context, ref provider.StackRef, progres
 }
 
 func (a *Automation) Outputs(ctx context.Context, ref provider.StackRef, progress edge.Progress) (auto.OutputMap, error) {
-	setup, err := a.setup(ctx, provider.StackSpec{Ref: ref}, OpProvision, progress)
+	setup, err := a.setup(ctx, provider.StackSpec{Ref: ref}, OperationProvision, progress)
 	if err != nil {
 		return nil, err
 	}
@@ -345,7 +345,7 @@ func (a *Automation) Outputs(ctx context.Context, ref provider.StackRef, progres
 
 const lockedMessage = "the stack is currently locked"
 
-func busy(err error, setup Setup) error {
+func busy(err error, setup WorkspaceSpec) error {
 	if err == nil || !strings.Contains(err.Error(), lockedMessage) {
 		return err
 	}
@@ -359,7 +359,7 @@ func busy(err error, setup Setup) error {
 
 type autoEngine struct{}
 
-func (autoEngine) Preview(ctx context.Context, setup Setup, op Op, progress edge.Progress) ([]provider.Change, error) {
+func (autoEngine) Preview(ctx context.Context, setup WorkspaceSpec, op Operation, progress edge.Progress) ([]provider.Change, error) {
 	stack, err := auto.UpsertStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), setup.Program, setup.Options...)
 	if err != nil {
 		return nil, fmt.Errorf("prepare stack %s: %w", setup.Stack, err)
@@ -374,7 +374,7 @@ func (autoEngine) Preview(ctx context.Context, setup Setup, op Op, progress edge
 		progress.Say("Working out what would change")
 	}
 
-	if op == OpDestroy {
+	if op == OperationDestroy {
 		_, err = stack.PreviewDestroy(ctx, optdestroy.EventStreams(engineEvents), optdestroy.Parallel(setup.Parallel))
 	} else {
 		_, err = stack.Preview(ctx, optpreview.EventStreams(engineEvents), optpreview.Parallel(setup.Parallel))
@@ -416,7 +416,7 @@ func awaitRows(drained <-chan []provider.Change, grace time.Duration) ([]provide
 	}
 }
 
-func (autoEngine) Up(ctx context.Context, setup Setup, progress edge.Progress) (auto.OutputMap, error) {
+func (autoEngine) Up(ctx context.Context, setup WorkspaceSpec, progress edge.Progress) (auto.OutputMap, error) {
 	stack, err := auto.UpsertStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), setup.Program, setup.Options...)
 	if err != nil {
 		return nil, fmt.Errorf("prepare stack %s: %w", setup.Stack, err)
@@ -455,7 +455,7 @@ func (autoEngine) Up(ctx context.Context, setup Setup, progress edge.Progress) (
 	return res.Outputs, nil
 }
 
-func (autoEngine) Destroy(ctx context.Context, setup Setup, progress edge.Progress) error {
+func (autoEngine) Destroy(ctx context.Context, setup WorkspaceSpec, progress edge.Progress) error {
 	stack, err := auto.SelectStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), nil, setup.Options...)
 	if auto.IsSelectStack404Error(err) {
 		if progress != nil {
@@ -490,7 +490,7 @@ func (autoEngine) Destroy(ctx context.Context, setup Setup, progress edge.Progre
 	return nil
 }
 
-func (autoEngine) Outputs(ctx context.Context, setup Setup) (auto.OutputMap, error) {
+func (autoEngine) Outputs(ctx context.Context, setup WorkspaceSpec) (auto.OutputMap, error) {
 	stack, err := auto.SelectStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), nil, setup.Options...)
 	if auto.IsSelectStack404Error(err) {
 		return auto.OutputMap{}, nil

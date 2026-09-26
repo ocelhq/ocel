@@ -417,7 +417,7 @@ func TestAnApplyRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 	if consented == nil {
 		t.Fatal("the dry run streamed no plan, and the only thing consented to is the plan")
 	}
-	provider.FakeBootstrap().Behind(fake.FeatureCache)
+	provider.FakeBootstrap().MarkStale(fake.FeatureCache)
 
 	req.Dry, req.Consented = false, consented
 	_, err := streamedEvents(t, client, req)
@@ -536,7 +536,7 @@ func TestDescribeBootstrapReportsADowngrade(t *testing.T) {
 
 	client, provider := contractServed(t, "1.0.0")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	provider.FakeBootstrap().WrittenBy("2.0.0")
+	provider.FakeBootstrap().SetWriter("2.0.0")
 
 	planned, err := client.DescribeBootstrap(context.Background(), &contractv1.DescribeBootstrapRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
@@ -757,7 +757,7 @@ func TestRemoveBootstrapTearsDownTheEdgeItWasAsked(t *testing.T) {
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("RemoveBootstrap() result error = %q, want it to succeed", result.GetError())
 	}
-	if fronting := provider.FakeBootstrap().Fronting(); fronting != fake.KindDirect {
+	if fronting := provider.FakeBootstrap().DefaultEdge(); fronting != fake.KindDirect {
 		t.Errorf("RemoveBootstrap() removed the %q edge, want the %q the request named", fronting, fake.KindDirect)
 	}
 }
@@ -779,7 +779,7 @@ func TestPlanRemoveBootstrapPlansTheEdgeItWasAsked(t *testing.T) {
 	if plan.GetEdgeKind() != string(fake.KindDirect) {
 		t.Errorf("PlanRemoveBootstrap() planned against %q, want %q", plan.GetEdgeKind(), fake.KindDirect)
 	}
-	if fronting := provider.FakeBootstrap().Fronting(); fronting != fake.KindDirect {
+	if fronting := provider.FakeBootstrap().DefaultEdge(); fronting != fake.KindDirect {
 		t.Errorf("PlanRemoveBootstrap() asked the provider for the %q edge, want the %q the request named", fronting, fake.KindDirect)
 	}
 }
@@ -790,7 +790,7 @@ func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenMoreThanOneEdgeStands(t *testi
 	ctx := context.Background()
 	client, provider := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	provider.FakeBootstrap().Stands(fake.KindRelay, fake.KindDirect)
+	provider.FakeBootstrap().SetRaisedEdges(fake.KindRelay, fake.KindDirect)
 
 	plan, err := client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil {
@@ -814,7 +814,7 @@ func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenNoEdgeStands(t *testing.T) {
 	ctx := context.Background()
 	client, provider := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	provider.FakeBootstrap().Stands()
+	provider.FakeBootstrap().SetRaisedEdges()
 
 	plan, err := client.PlanRemoveBootstrap(ctx, &contractv1.BootstrapScope{Tier: environmentv1.Tier_TIER_PRODUCTION})
 	if err != nil {
@@ -834,7 +834,7 @@ func TestBootstrapStandsUpTheEdgeTheProjectSelected(t *testing.T) {
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
 		Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
 	})
-	if fronting := provider.FakeBootstrap().Fronting(); fronting != fake.KindDirect {
+	if fronting := provider.FakeBootstrap().DefaultEdge(); fronting != fake.KindDirect {
 		t.Errorf("Bootstrap() stood up the %q edge, want the %q this project selected", fronting, fake.KindDirect)
 	}
 
@@ -846,7 +846,7 @@ func TestBootstrapStandsUpTheEdgeTheProjectSelected(t *testing.T) {
 	if plan.GetEdgeKind() != string(fake.KindDirect) {
 		t.Errorf("the plan was drawn against %q, want the %q this project selected", plan.GetEdgeKind(), fake.KindDirect)
 	}
-	if fronting := provider.FakeBootstrap().Fronting(); fronting != fake.KindDirect {
+	if fronting := provider.FakeBootstrap().DefaultEdge(); fronting != fake.KindDirect {
 		t.Errorf("planning asked the provider for the %q edge, want the %q this project selected", fronting, fake.KindDirect)
 	}
 }

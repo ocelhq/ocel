@@ -29,7 +29,7 @@ func TestApplyRefusesWorkThatAppearedAfterThePlanWasDrawn(t *testing.T) {
 		t.Fatalf("the cache group is %q, want the plan to show nothing owed on it", action)
 	}
 
-	p.FakeBootstrap().Behind(fake.FeatureCache)
+	p.FakeBootstrap().MarkStale(fake.FeatureCache)
 
 	err = gate.Apply(ctx, shown, edge.ClassProduction, req, nil)
 	var refused refusal.Refusal
@@ -103,7 +103,7 @@ func TestPlanSeparatesTheStaleFromTheCurrent(t *testing.T) {
 
 	gate, p := gated(t, "1.2.3")
 	bootstrapped(t, p, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
-	p.FakeBootstrap().Behind(fake.FeatureImages)
+	p.FakeBootstrap().MarkStale(fake.FeatureImages)
 
 	plan, err := gate.Plan(context.Background(), edge.ClassProduction, providerserver.ApplyRequest{
 		Features: []string{fake.FeatureImages},

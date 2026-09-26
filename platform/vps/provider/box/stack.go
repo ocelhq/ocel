@@ -104,7 +104,7 @@ func (s *stack) serve(ctx context.Context, pointer string, promotion edge.Promot
 }
 
 func (s *stack) holding(ctx context.Context, pointer, promotionID string) error {
-	holder, err := s.ledger().Holder(ctx, pointer)
+	holder, err := s.ledger().ActivePromotionID(ctx, pointer)
 	if err != nil {
 		return err
 	}

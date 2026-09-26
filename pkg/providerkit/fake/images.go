@@ -19,13 +19,13 @@ type Images struct {
 
 func NewImages() *Images { return &Images{held: map[string]bool{}} }
 
-func (i *Images) Holds(imageRef string) {
+func (i *Images) Preload(imageRef string) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.held[imageRef] = true
 }
 
-func (i *Images) Refusing(err error) {
+func (i *Images) FailPushes(err error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.failed = err

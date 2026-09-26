@@ -134,7 +134,7 @@ func headerOf(held map[string]string) map[string][]string {
 	return out
 }
 
-func aSignedStore(t *testing.T, store enginetest.Store, bucket string) signedStore {
+func aSignedStore(t *testing.T, store enginetest.ObjectStore, bucket string) signedStore {
 	t.Helper()
 	aBucketOn(t, store, bucket)
 	return signedStore{

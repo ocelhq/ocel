@@ -34,7 +34,7 @@ func (r *fakeProgress) Span(name string, _, _ time.Time, err error, attrs ...edg
 	r.spans = append(r.spans, recordedSpan{name: name, err: err, attrs: attrs})
 }
 
-func TestTheBatchSpanCarriesNoResourceIdentityAndTheStandoutDoes(t *testing.T) {
+func TestTheBatchSpanCarriesNoResourceIdentityAndTheSlowOpDoes(t *testing.T) {
 	t.Parallel()
 
 	progress := &fakeProgress{}
@@ -44,7 +44,7 @@ func TestTheBatchSpanCarriesNoResourceIdentityAndTheStandoutDoes(t *testing.T) {
 		Start:         start,
 		End:           start.Add(5 * time.Second),
 		Failed:        true,
-		Standouts: []standout{{
+		SlowOps: []slowOp{{
 			Op:     apitype.OpCreate,
 			Type:   "aws:s3/bucket:Bucket",
 			Name:   "my-bucket",
@@ -55,7 +55,7 @@ func TestTheBatchSpanCarriesNoResourceIdentityAndTheStandoutDoes(t *testing.T) {
 	}, nil)
 
 	if len(progress.spans) != 2 {
-		t.Fatalf("got %d spans, want 2 (batch + standout)", len(progress.spans))
+		t.Fatalf("got %d spans, want 2 (batch + slow op)", len(progress.spans))
 	}
 
 	batch := progress.spans[0]
@@ -87,14 +87,14 @@ func TestTheBatchSpanCarriesNoResourceIdentityAndTheStandoutDoes(t *testing.T) {
 		}
 	}
 	if !sawType {
-		t.Error("standout span is missing ATTRIBUTE_KEY_RESOURCE_TYPE")
+		t.Error("slow-op span is missing ATTRIBUTE_KEY_RESOURCE_TYPE")
 	}
 	if !sawName {
-		t.Error("standout span is missing ATTRIBUTE_KEY_RESOURCE_NAME")
+		t.Error("slow-op span is missing ATTRIBUTE_KEY_RESOURCE_NAME")
 	}
 }
 
-func TestAStandoutWhoseURNDidNotParseCarriesNoResourceIdentity(t *testing.T) {
+func TestASlowOpWhoseURNDidNotParseCarriesNoResourceIdentity(t *testing.T) {
 	t.Parallel()
 
 	progress := &fakeProgress{}
@@ -104,7 +104,7 @@ func TestAStandoutWhoseURNDidNotParseCarriesNoResourceIdentity(t *testing.T) {
 		Start:         start,
 		End:           start.Add(time.Second),
 		Failed:        true,
-		Standouts: []standout{
+		SlowOps: []slowOp{
 			{Op: apitype.OpCreate, Start: start, End: start.Add(time.Second), Failed: true},
 		},
 	}, nil)
@@ -114,7 +114,7 @@ func TestAStandoutWhoseURNDidNotParseCarriesNoResourceIdentity(t *testing.T) {
 	}
 	for _, a := range progress.spans[1].attrs {
 		if a.Key == provider.AttrKeyResourceType || a.Key == provider.AttrKeyResourceName {
-			t.Errorf("standout span carries resource identity attr %+v despite an unparseable URN", a)
+			t.Errorf("slow-op span carries resource identity attr %+v despite an unparseable URN", a)
 		}
 	}
 }

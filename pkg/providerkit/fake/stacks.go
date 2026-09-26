@@ -86,8 +86,8 @@ func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progres
 			Grants:     r.Grants,
 		})
 	}
-	result.Functions = StoodUpFunctions(spec)
-	result.Containers = StoodUpContainers(spec)
+	result.Functions = ProvisionedFunctions(spec)
+	result.Containers = ProvisionedContainers(spec)
 	if spec.App != nil {
 		result.EdgeBundleKey = deliveredEdgeBundle(spec)
 		if spec.App.ISR != nil {
@@ -141,7 +141,7 @@ func deliveredEdgeBundle(spec provider.StackSpec) string {
 	return spec.Ref.Name.String() + "/edge/bundle.json"
 }
 
-func StoodUpFunctions(spec provider.StackSpec) []provider.Function {
+func ProvisionedFunctions(spec provider.StackSpec) []provider.Function {
 	if spec.App == nil {
 		return nil
 	}
@@ -160,7 +160,7 @@ func StoodUpFunctions(spec provider.StackSpec) []provider.Function {
 	return standing
 }
 
-func StoodUpContainers(spec provider.StackSpec) []provider.AppContainer {
+func ProvisionedContainers(spec provider.StackSpec) []provider.AppContainer {
 	if spec.App == nil || spec.App.Compute != provider.ComputeContainer {
 		return nil
 	}
@@ -173,13 +173,13 @@ func StoodUpContainers(spec provider.StackSpec) []provider.AppContainer {
 	}}
 }
 
-func (r *Stacks) tookDown(names ...string) {
+func (r *Stacks) recordDestroyed(names ...string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.taken = append(r.taken, names...)
 }
 
-func (r *Stacks) TakenDown() []string {
+func (r *Stacks) Destroyed() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.taken)
@@ -205,23 +205,23 @@ func propertiesFor(t provider.BindingType, name string) map[string]string {
 }
 
 func (*Provider) ProvisionFunctions(_ context.Context, spec provider.StackSpec, _ edge.Progress) ([]provider.Function, error) {
-	return StoodUpFunctions(spec), nil
+	return ProvisionedFunctions(spec), nil
 }
 
 func (p *Provider) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ edge.Progress) error {
 	for _, function := range functions {
-		p.stacks.tookDown(function.Name)
+		p.stacks.recordDestroyed(function.Name)
 	}
 	return nil
 }
 
 func (*Provider) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ edge.Progress) ([]provider.AppContainer, error) {
-	return StoodUpContainers(spec), nil
+	return ProvisionedContainers(spec), nil
 }
 
 func (p *Provider) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ edge.Progress) error {
 	for _, container := range containers {
-		p.stacks.tookDown(container.Name)
+		p.stacks.recordDestroyed(container.Name)
 	}
 	return nil
 }

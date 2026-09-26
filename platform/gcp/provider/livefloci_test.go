@@ -76,7 +76,7 @@ func TestLiveReleaser(t *testing.T) {
 }
 
 func TestLiveRecordStore(t *testing.T) {
-	conformance.RunRecordStore(t, live(t).Records())
+	conformance.RunStore(t, live(t).Records())
 }
 
 func TestLiveRecordNamesSurviveTheCharactersTheDocumentIdIsBuiltFrom(t *testing.T) {

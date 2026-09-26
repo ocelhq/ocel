@@ -14,7 +14,7 @@ func TestARealStoreTakesEveryCallABucketIsDescribedWith(t *testing.T) {
 	if testing.Short() {
 		t.Skip("stands a real store up")
 	}
-	store := enginetest.AStore(t)
+	store := enginetest.SharedObjectStore(t)
 
 	for what, spec := range map[string]BucketSpec{
 		"a bucket the project named no origin for": {Bucket: "plain-bucket"},
@@ -22,7 +22,7 @@ func TestARealStoreTakesEveryCallABucketIsDescribedWith(t *testing.T) {
 		"a public bucket":                          {Bucket: "public-bucket", Public: true},
 		"the store's own sessions bucket":          {Bucket: constants.StoreSessionsBucket(), Internal: true},
 	} {
-		store.Takes(t, spec.Bucket)
+		store.ClaimBucket(t, spec.Bucket)
 		spec.Store = store.Name
 		spec.Endpoint = store.Inside
 		spec.Region = store.Region

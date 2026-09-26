@@ -28,7 +28,7 @@ func runsHere(t *testing.T) storeShell {
 
 func aStoredBucket(t *testing.T, bucket string) BucketSpec {
 	t.Helper()
-	store := enginetest.AStore(t)
+	store := enginetest.SharedObjectStore(t)
 	aBucketOn(t, store, bucket)
 	return bucketOn(store, bucket)
 }
@@ -45,7 +45,7 @@ func droveHere(t *testing.T, spec BucketSpec, calls []storeCall) map[string]stor
 func reachedFromHere(t *testing.T, spec BucketSpec) signedStore {
 	t.Helper()
 	return signedStore{
-		Endpoint: enginetest.AStore(t).Endpoint, Region: spec.Region, Bucket: spec.Bucket,
+		Endpoint: enginetest.SharedObjectStore(t).Endpoint, Region: spec.Region, Bucket: spec.Bucket,
 		AccessKeyID: spec.AccessKeyID, SecretKey: spec.SecretKey, PathStyle: true,
 	}
 }
@@ -127,7 +127,7 @@ func TestABucketRemovedFromTheStoreIsGoneFromTheStoreAndNotJustFromItsDisk(t *te
 		t.Errorf("the store answered %s asked after a bucket it was told to remove, so its own record of the bucket outlived the bucket", said["head"].code)
 	}
 
-	aBucketOn(t, enginetest.AStore(t), spec.Bucket)
+	aBucketOn(t, enginetest.SharedObjectStore(t), spec.Bucket)
 	if objects, uploads := heldBy(t, spec); objects != 0 || uploads != 0 {
 		t.Errorf("a bucket of the same name came back holding %d objects and %d unfinished uploads", objects, uploads)
 	}
@@ -145,7 +145,7 @@ func TestRemovingABucketTakesEveryPageOfItAndEveryUnfinishedUploadWithIt(t *test
 		t.Fatalf("the store kept a bucket of more than one page: %v", err)
 	}
 
-	aBucketOn(t, enginetest.AStore(t), spec.Bucket)
+	aBucketOn(t, enginetest.SharedObjectStore(t), spec.Bucket)
 	if objects, uploads := heldBy(t, spec); objects != 0 || uploads != 0 {
 		t.Errorf("a bucket of the same name came back holding %d objects and %d unfinished uploads", objects, uploads)
 	}

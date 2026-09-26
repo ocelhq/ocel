@@ -411,7 +411,7 @@ func TestAddHostnameBindsTheCertificateItsProviderSettles(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 	deployed(t, provider, edge.ClassProduction, "shop")
-	provider.Pin("app.acme.com", "cert-for-app")
+	provider.PinServingCertificate("app.acme.com", "cert-for-app")
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
@@ -470,7 +470,7 @@ func TestAddHostnameSettlesTheValidationRecordsItsProviderProves(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 	deployed(t, provider, edge.ClassProduction, "shop")
-	provider.IssueCertificates(validationRecord)
+	provider.RequireValidationRecords(validationRecord)
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
@@ -518,7 +518,7 @@ func TestAddHostnameDiscardsTheCertificateItSupersedes(t *testing.T) {
 	if _, err := writer.Ensure(context.Background(), []edge.Record{stale}, nil); err != nil {
 		t.Fatal(err)
 	}
-	p.IssueCertificates(validationRecord)
+	p.RequireValidationRecords(validationRecord)
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
@@ -567,13 +567,13 @@ func TestAddHostnameDiscardsTheSupersededCertificateOnlyOnceTheRebindFreesIt(t *
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 	deployed(t, provider, edge.ClassProduction, "shop")
-	provider.IssueCertificates(validationRecord)
+	provider.RequireValidationRecords(validationRecord)
 	if result := addHostname(t, client); !result.GetSuccess() {
 		t.Fatalf("AddHostname() = %q, want the hostname settled", result.GetError())
 	}
 
 	provider.RotateCertificates()
-	provider.IssueCertificates(rotatedValidationRecord)
+	provider.RequireValidationRecords(rotatedValidationRecord)
 	provider.RefuseDiscardingAServingCertificate(errors.New("the certificate is still bound to the edge"))
 	if result := addHostname(t, client); !result.GetSuccess() {
 		t.Fatalf("AddHostname() = %q, want the rotation settled with the superseded certificate discarded after the rebind", result.GetError())
@@ -595,13 +595,13 @@ func TestAddHostnameKeepsTheSupersededCertificateOnRecordWhileItsReplacementIsPe
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 	deployed(t, provider, edge.ClassProduction, "shop")
-	provider.IssueCertificates(validationRecord)
+	provider.RequireValidationRecords(validationRecord)
 	if result := addHostname(t, client); !result.GetSuccess() {
 		t.Fatalf("AddHostname() = %q, want the hostname settled", result.GetError())
 	}
 
 	provider.RotateCertificates()
-	provider.IssueCertificates(rotatedValidationRecord)
+	provider.RequireValidationRecords(rotatedValidationRecord)
 	provider.StallAfterProving(refusal.Refuse(refusal.CodeNotReady, "the certificate is still validating"))
 	if result := addHostname(t, client); result.GetSuccess() {
 		t.Fatal("AddHostname() settled the hostname, want it told to come back to a certificate still validating")
@@ -644,7 +644,7 @@ func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) 
 		},
 	})
 	promoted(t, p, edge.ClassProduction, "shop")
-	p.Pin("app.acme.com", "cert-of-today")
+	p.PinServingCertificate("app.acme.com", "cert-of-today")
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",

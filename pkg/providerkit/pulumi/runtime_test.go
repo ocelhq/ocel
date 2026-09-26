@@ -22,7 +22,7 @@ func TestSettleMovesTheStagedRuntimeIntoPlace(t *testing.T) {
 	root := filepath.Join(base, "3.146.0")
 	staging := stagedRuntime(t, root+"-1", "mine")
 
-	if err := settle(staging, root); err != nil {
+	if err := renameIntoPlace(staging, root); err != nil {
 		t.Fatalf("settle() = %v", err)
 	}
 	if got, _ := os.ReadFile(filepath.Join(root, "bin", "pulumi")); string(got) != "mine" {
@@ -38,7 +38,7 @@ func TestSettleYieldsToARuntimeAnotherProcessSettledFirst(t *testing.T) {
 	root := stagedRuntime(t, filepath.Join(base, "3.146.0"), "theirs")
 	staging := stagedRuntime(t, root+"-2", "mine")
 
-	if err := settle(staging, root); err != nil {
+	if err := renameIntoPlace(staging, root); err != nil {
 		t.Fatalf("settle() against a settled root = %v, want it to yield", err)
 	}
 	if got, _ := os.ReadFile(filepath.Join(root, "bin", "pulumi")); string(got) != "theirs" {

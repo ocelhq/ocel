@@ -12,16 +12,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
 )
 
-func bucketOn(store enginetest.Store, bucket string) BucketSpec {
+func bucketOn(store enginetest.ObjectStore, bucket string) BucketSpec {
 	return BucketSpec{
 		Store: store.Name, Endpoint: store.Inside, Region: store.Region,
 		AccessKeyID: store.AccessKeyID, SecretKey: store.SecretKey, Bucket: bucket,
 	}
 }
 
-func aBucketOn(t *testing.T, store enginetest.Store, bucket string) {
+func aBucketOn(t *testing.T, store enginetest.ObjectStore, bucket string) {
 	t.Helper()
-	store.Takes(t, bucket)
+	store.ClaimBucket(t, bucket)
 	spec := bucketOn(store, bucket)
 	calls, err := spec.calls()
 	if err != nil {
@@ -38,7 +38,7 @@ func aBucketOn(t *testing.T, store enginetest.Store, bucket string) {
 	}
 }
 
-func anAccountOn(t *testing.T, store enginetest.Store, account StoreAccount) error {
+func anAccountOn(t *testing.T, store enginetest.ObjectStore, account StoreAccount) error {
 	t.Helper()
 	account.Store = store.Name
 	account.Endpoint = store.Inside
@@ -84,7 +84,7 @@ func TestAnAppsAccountReachesTheBucketsItWasGrantedAndNoOthers(t *testing.T) {
 	if testing.Short() {
 		t.Skip("stands a real store up")
 	}
-	store := enginetest.AStore(t)
+	store := enginetest.SharedObjectStore(t)
 	root := aSignedStore(t, store, "granted-bucket")
 	aBucketOn(t, store, "ungranted-bucket")
 
@@ -113,7 +113,7 @@ func TestGrantingTheSameAppTwiceHoldsItToWhatItDeclaresNow(t *testing.T) {
 	if testing.Short() {
 		t.Skip("stands a real store up")
 	}
-	store := enginetest.AStore(t)
+	store := enginetest.SharedObjectStore(t)
 	root := aSignedStore(t, store, "first-bucket")
 	aBucketOn(t, store, "second-bucket")
 
@@ -209,7 +209,7 @@ func TestAnAppsAccountDrivesTheDataPlaneAndNothingThatReshapesTheBucket(t *testi
 	if testing.Short() {
 		t.Skip("stands a real store up")
 	}
-	store := enginetest.AStore(t)
+	store := enginetest.SharedObjectStore(t)
 	root := aSignedStore(t, store, "scoped-bucket")
 
 	account := StoreAccount{

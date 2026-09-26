@@ -101,7 +101,7 @@ func TestLiveTheBootstrapStandsUpTheStackTheDataPortsRead(t *testing.T) {
 
 	t.Run("Cipher", func(t *testing.T) { conformance.RunCipher(t, p.Cipher()) })
 	t.Run("ArtifactStore", func(t *testing.T) { conformance.RunArtifactStore(t, p.Facts(), p.Artifacts()) })
-	t.Run("RecordStore", func(t *testing.T) { conformance.RunRecordStore(t, p.Records()) })
+	t.Run("Store", func(t *testing.T) { conformance.RunStore(t, p.Records()) })
 }
 
 func TestLiveAPlanDrawnAfterAnApplyKeepsEverythingItStoodUp(t *testing.T) {

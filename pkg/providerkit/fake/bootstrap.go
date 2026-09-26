@@ -16,40 +16,40 @@ const (
 )
 
 type Bootstrap struct {
-	mu       sync.Mutex
-	applied  map[edge.Class][]string
-	behind   map[string]bool
-	writer   string
-	schema   uint32
-	refusal  error
-	requests []provider.BootstrapRequest
-	front    edge.Kind
-	standing []edge.Kind
-	halfway  bool
+	mu         sync.Mutex
+	applied    map[edge.Class][]string
+	stale      map[string]bool
+	writer     string
+	schema     uint32
+	refusal    error
+	requests   []provider.BootstrapRequest
+	front      edge.Kind
+	raised     []edge.Kind
+	unfinished bool
 }
 
 func NewBootstrap() *Bootstrap {
 	return &Bootstrap{
 		applied: map[edge.Class][]string{},
-		behind:  map[string]bool{},
+		stale:   map[string]bool{},
 		writer:  "1.0.0",
 		schema:  provider.BootstrapSchema,
 	}
 }
 
-func (b *Bootstrap) fronting(kind edge.Kind) {
+func (b *Bootstrap) setDefaultEdge(kind edge.Kind) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.front = kind
 }
 
-func (b *Bootstrap) Stands(kinds ...edge.Kind) {
+func (b *Bootstrap) SetRaisedEdges(kinds ...edge.Kind) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.standing = append(make([]edge.Kind, 0, len(kinds)), kinds...)
+	b.raised = append(make([]edge.Kind, 0, len(kinds)), kinds...)
 }
 
-func (b *Bootstrap) Fronting() edge.Kind {
+func (b *Bootstrap) DefaultEdge() edge.Kind {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.front
@@ -71,15 +71,15 @@ func (b *Bootstrap) Catalogue() []provider.Feature {
 	}
 }
 
-func (b *Bootstrap) Behind(features ...string) {
+func (b *Bootstrap) MarkStale(features ...string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for _, feature := range features {
-		b.behind[feature] = true
+		b.stale[feature] = true
 	}
 }
 
-func (b *Bootstrap) WrittenBy(writer string) {
+func (b *Bootstrap) SetWriter(writer string) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.writer = writer
@@ -91,10 +91,10 @@ func (b *Bootstrap) AtSchema(schema uint32) {
 	b.schema = schema
 }
 
-func (b *Bootstrap) Halfway() {
+func (b *Bootstrap) MarkUnfinished() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.halfway = true
+	b.unfinished = true
 }
 
 func (b *Bootstrap) RefuseApply(err error) {
@@ -113,7 +113,7 @@ func (b *Bootstrap) Describe(_ context.Context, class edge.Class) (provider.Boot
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	features, present := b.applied[class]
-	described := provider.BootstrapDescription{Class: class, Present: present, Unfinished: present && b.halfway}
+	described := provider.BootstrapDescription{Class: class, Present: present, Unfinished: present && b.unfinished}
 	if !present {
 		return described, nil
 	}
@@ -138,7 +138,7 @@ func (b *Bootstrap) stack(class edge.Class, feature string) provider.BootstrapSt
 		Feature:       feature,
 		Present:       true,
 		Schema:        b.schema,
-		DigestCurrent: !b.behind[feature],
+		DigestCurrent: !b.stale[feature],
 		WrittenBy:     b.writer,
 	}
 }
@@ -176,7 +176,7 @@ func (b *Bootstrap) Apply(_ context.Context, req provider.BootstrapRequest, prog
 	}
 	b.requests = append(b.requests, req)
 	b.applied[req.Class] = slices.Clone(req.Features)
-	b.behind = map[string]bool{}
+	b.stale = map[string]bool{}
 	if progress != nil {
 		progress.Say("bootstrapped " + string(req.Class))
 	}
@@ -222,8 +222,8 @@ func (b *Bootstrap) PlanRemove(_ context.Context, class edge.Class) (provider.Pl
 }
 
 func (b *Bootstrap) standingEdges() []edge.Kind {
-	if b.standing != nil {
-		return b.standing
+	if b.raised != nil {
+		return b.raised
 	}
 	if b.front == "" {
 		return nil

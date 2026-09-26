@@ -1016,7 +1016,7 @@ func TestADeployRefusedForAReasonNoWaitingFixesFailsWithThatReason(t *testing.T)
 func TestADeployWhoseCertificateIsStillIssuingLeavesItToDomainAdd(t *testing.T) {
 	builtProject(t)
 	client, p := deployServed(t)
-	p.IssueCertificates(edge.Record{Name: "_acme.shop.example", Type: edge.RecordTypeCNAME, Value: "validate.example"})
+	p.RequireValidationRecords(edge.Record{Name: "_acme.shop.example", Type: edge.RecordTypeCNAME, Value: "validate.example"})
 	p.StallAfterProving(provider.Resumable(refusal.Refuse(refusal.CodeNotReady, "the certificate is still validating")))
 
 	req := deployRequest()
@@ -1033,7 +1033,7 @@ func TestADeployWhoseCertificateIsStillIssuingLeavesItToDomainAdd(t *testing.T) 
 func TestADeployWhoseCertificateWaitsOnYouLeavesItToDomainAdd(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
-	provider.IssueCertificates(edge.Record{Name: "_acme.shop.example", Type: edge.RecordTypeCNAME, Value: "validate.example"})
+	provider.RequireValidationRecords(edge.Record{Name: "_acme.shop.example", Type: edge.RecordTypeCNAME, Value: "validate.example"})
 
 	result, events := deploy(t, client, deployRequest())
 	if !result.GetSuccess() {

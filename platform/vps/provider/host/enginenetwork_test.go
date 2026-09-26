@@ -45,7 +45,7 @@ func onYourNetwork(t *testing.T) yourNetwork {
 	}
 	boxNetwork := enginetest.Network(t)
 	yours := probeName(t)
-	if said, err := exec.Command(dockerEngine, append(append([]string{"network", "create"}, enginetest.Labelled(t)...), yours)...).CombinedOutput(); err != nil {
+	if said, err := exec.Command(dockerEngine, append(append([]string{"network", "create"}, enginetest.RunLabelArgs(t)...), yours)...).CombinedOutput(); err != nil {
 		t.Fatalf("create %s: %v\n%s", yours, err, said)
 	}
 	t.Cleanup(func() { _ = exec.Command(dockerEngine, "network", "rm", yours).Run() })

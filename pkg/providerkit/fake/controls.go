@@ -8,7 +8,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (p *Provider) Hook(set func(*provider.Hooks)) *Provider {
+func (p *Provider) WithHooks(set func(*provider.Hooks)) *Provider {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	set(&p.hooks)
@@ -31,13 +31,13 @@ func (p *Provider) ResourceHooks() resources.Hooks {
 	}
 }
 
-func (p *Provider) Ships(store provider.ArtifactStore) *Provider {
+func (p *Provider) WithArtifactStore(store provider.ArtifactStore) *Provider {
 	p.artifacts = store
 	p.stacks.artifacts = store
 	return p
 }
 
-func (p *Provider) Registry() *Images { return p.images }
+func (p *Provider) ImageStore() *Images { return p.images }
 
 func (p *Provider) Region() string { return p.options.Region }
 
@@ -46,7 +46,7 @@ func (p *Provider) FakeBootstrap() *Bootstrap { return p.bootstrap }
 func (p *Provider) Journal() []string { return p.journal.Entries() }
 
 func (p *Provider) ResourceStacks(hooks resources.Hooks) *Provider {
-	p.resourceStacks = resources.Stacks(p.records, p.artifacts, hooks)
+	p.resourceStacks = resources.NewHookStacks(p.records, p.artifacts, hooks)
 	return p
 }
 

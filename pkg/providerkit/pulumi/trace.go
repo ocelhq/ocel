@@ -17,12 +17,12 @@ var errResourceOperationFailed = errors.New("resource operation failed")
 const (
 	resourceLatencyOutlierThreshold = 30 * time.Second
 	engineDrainGrace                = 30 * time.Second
-	maxLatencyStandouts             = 20
+	maxSlowOps                      = 20
 	maxResourceIdentifierLen        = 256
 	engineBatchSpanName             = "pulumi resource operations"
 )
 
-type standout struct {
+type slowOp struct {
 	Op     apitype.OpType
 	Type   string
 	Name   string
@@ -32,12 +32,12 @@ type standout struct {
 }
 
 type engineTrace struct {
-	ResourceCount    int
-	Start            time.Time
-	End              time.Time
-	Failed           bool
-	Standouts        []standout
-	StandoutsDropped int
+	ResourceCount  int
+	Start          time.Time
+	End            time.Time
+	Failed         bool
+	SlowOps        []slowOp
+	SlowOpsDropped int
 }
 
 type inflightOp struct {
@@ -45,18 +45,18 @@ type inflightOp struct {
 	start time.Time
 }
 
-type openTrace struct {
+type traceCollector struct {
 	threshold time.Duration
 	inflight  map[string]inflightOp
 	trace     engineTrace
-	slowest   []standout
+	slowest   []slowOp
 }
 
-func newOpenTrace(threshold time.Duration) *openTrace {
-	return &openTrace{threshold: threshold, inflight: map[string]inflightOp{}}
+func newTraceCollector(threshold time.Duration) *traceCollector {
+	return &traceCollector{threshold: threshold, inflight: map[string]inflightOp{}}
 }
 
-func (b *openTrace) consume(ev events.EngineEvent, now time.Time) {
+func (b *traceCollector) consume(ev events.EngineEvent, now time.Time) {
 	if b.trace.Start.IsZero() {
 		b.trace.Start = now
 	}
@@ -74,7 +74,7 @@ func (b *openTrace) consume(ev events.EngineEvent, now time.Time) {
 	}
 }
 
-func (b *openTrace) finish(m apitype.StepEventMetadata, now time.Time, failed bool) {
+func (b *traceCollector) finish(m apitype.StepEventMetadata, now time.Time, failed bool) {
 	b.trace.ResourceCount++
 
 	op, ok := b.inflight[m.URN]
@@ -84,7 +84,7 @@ func (b *openTrace) finish(m apitype.StepEventMetadata, now time.Time, failed bo
 		delete(b.inflight, m.URN)
 	}
 
-	s := standout{
+	s := slowOp{
 		Op:     m.Op,
 		Type:   capIdentifier(m.Type),
 		Name:   resourceNameFromURN(m.URN),
@@ -93,7 +93,7 @@ func (b *openTrace) finish(m apitype.StepEventMetadata, now time.Time, failed bo
 		Failed: failed,
 	}
 	if failed {
-		b.trace.Standouts = append(b.trace.Standouts, s)
+		b.trace.SlowOps = append(b.trace.SlowOps, s)
 		return
 	}
 	if b.threshold > 0 && now.Sub(start) >= b.threshold {
@@ -101,8 +101,8 @@ func (b *openTrace) finish(m apitype.StepEventMetadata, now time.Time, failed bo
 	}
 }
 
-func (b *openTrace) keepSlowest(s standout) {
-	if len(b.slowest) < maxLatencyStandouts {
+func (b *traceCollector) keepSlowest(s slowOp) {
+	if len(b.slowest) < maxSlowOps {
 		b.slowest = append(b.slowest, s)
 		return
 	}
@@ -112,14 +112,14 @@ func (b *openTrace) keepSlowest(s standout) {
 			minIdx, minDur = i, d
 		}
 	}
-	b.trace.StandoutsDropped++
+	b.trace.SlowOpsDropped++
 	if d := s.End.Sub(s.Start); d > minDur {
 		b.slowest[minIdx] = s
 	}
 }
 
-func (b *openTrace) result() engineTrace {
-	b.trace.Standouts = append(b.trace.Standouts, b.slowest...)
+func (b *traceCollector) result() engineTrace {
+	b.trace.SlowOps = append(b.trace.SlowOps, b.slowest...)
 	return b.trace
 }
 
@@ -149,7 +149,7 @@ func resourceNameFromURN(raw string) string {
 func drainTrace(engineEvents <-chan events.EngineEvent, threshold time.Duration) <-chan engineTrace {
 	result := make(chan engineTrace, 1)
 	go func() {
-		b := newOpenTrace(threshold)
+		b := newTraceCollector(threshold)
 		for ev := range engineEvents {
 			b.consume(ev, time.Now())
 		}
@@ -177,10 +177,10 @@ func reportTrace(progress edge.Progress, trace engineTrace, runErr error) {
 	}
 	progress.Span(engineBatchSpanName, trace.Start, trace.End, batchErr, provider.AttrResourceCount(trace.ResourceCount))
 
-	for _, s := range trace.Standouts {
-		var standoutErr error
+	for _, s := range trace.SlowOps {
+		var slowOpErr error
 		if s.Failed {
-			standoutErr = errResourceOperationFailed
+			slowOpErr = errResourceOperationFailed
 		}
 		attrs := []edge.Attr{provider.AttrDurationMS(s.End.Sub(s.Start))}
 		if s.Type != "" {
@@ -189,11 +189,11 @@ func reportTrace(progress edge.Progress, trace engineTrace, runErr error) {
 		if s.Name != "" {
 			attrs = append(attrs, provider.AttrResourceName(s.Name))
 		}
-		progress.Span(standoutName(s.Op, s.Failed), s.Start, s.End, standoutErr, attrs...)
+		progress.Span(slowOpName(s.Op, s.Failed), s.Start, s.End, slowOpErr, attrs...)
 	}
 }
 
-func standoutName(op apitype.OpType, failed bool) string {
+func slowOpName(op apitype.OpType, failed bool) string {
 	if failed {
 		return "resource operation failed"
 	}
