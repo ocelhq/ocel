@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/liveness"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
@@ -34,7 +35,7 @@ type Provider struct {
 	dial sync.Mutex
 	live *session.Session
 
-	providerkit.NetLiveness
+	liveness.Net
 }
 
 func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
@@ -125,4 +126,4 @@ func (p *Provider) Connector() providerkit.Connector { return connector{p} }
 
 func (p *Provider) Runtime() providerkit.Runtime { return containerRuntime{p} }
 
-func (p *Provider) Liveness() providerkit.Liveness { return &p.NetLiveness }
+func (p *Provider) Liveness() providerkit.Liveness { return &p.Net }

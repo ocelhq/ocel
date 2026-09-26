@@ -216,7 +216,7 @@ func (s settlement) unresolved(hostname string, serving edge.Kind, began time.Ti
 }
 
 func (s settlement) unreached(hostname string) string {
-	cause := s.liveness.Unreached(hostname)
+	cause := s.liveness.LastProbeFailure(hostname)
 	if cause == "" {
 		return ""
 	}

@@ -18,7 +18,7 @@ type answering struct {
 	asked int
 }
 
-func (*answering) Unreached(string) string { return "" }
+func (*answering) LastProbeFailure(string) string { return "" }
 
 func (a *answering) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, error) {
 	a.asked++
@@ -107,7 +107,7 @@ type boxProvider struct {
 
 func (p *boxProvider) Liveness() Liveness { return p }
 
-func (*boxProvider) Unreached(string) string { return "" }
+func (*boxProvider) LastProbeFailure(string) string { return "" }
 
 func (p *boxProvider) ServingEdge(_ context.Context, kind edge.Kind, hostname string) (edge.Kind, error) {
 	p.asked = append(p.asked, hostname)
@@ -122,7 +122,7 @@ type diagnosingProvider struct {
 
 func (p diagnosingProvider) Liveness() Liveness { return p }
 
-func (p diagnosingProvider) Unreached(string) string { return p.cause }
+func (p diagnosingProvider) LastProbeFailure(string) string { return p.cause }
 
 type frontOf struct {
 	edge.Edge
@@ -175,7 +175,7 @@ type slowly struct {
 	asked *int
 }
 
-func (slowly) Unreached(string) string { return "" }
+func (slowly) LastProbeFailure(string) string { return "" }
 
 func (s slowly) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, error) {
 	*s.asked++
@@ -244,7 +244,7 @@ type answeringAfter struct {
 	kind  edge.Kind
 }
 
-func (answeringAfter) Unreached(string) string { return "" }
+func (answeringAfter) LastProbeFailure(string) string { return "" }
 
 func (a answeringAfter) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, error) {
 	if a.clock.Before(a.at) {
@@ -255,7 +255,7 @@ func (a answeringAfter) ServingEdge(context.Context, edge.Kind, string) (edge.Ki
 
 type hanging struct{ asked *atomic.Int32 }
 
-func (hanging) Unreached(string) string { return "" }
+func (hanging) LastProbeFailure(string) string { return "" }
 
 func (h hanging) ServingEdge(ctx context.Context, _ edge.Kind, _ string) (edge.Kind, error) {
 	h.asked.Add(1)
@@ -300,7 +300,7 @@ type stopped struct {
 
 func (stopped) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, error) { return "", nil }
 
-func (s stopped) Unreached(string) string { return s.cause }
+func (s stopped) LastProbeFailure(string) string { return s.cause }
 
 func TestAHostnameNothingAnsweredForNamesWhatStoppedTheLastAttempt(t *testing.T) {
 	t.Parallel()
@@ -327,7 +327,7 @@ func (outlasting) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, er
 	return "", context.DeadlineExceeded
 }
 
-func (o outlasting) Unreached(string) string { return o.cause }
+func (o outlasting) LastProbeFailure(string) string { return o.cause }
 
 func TestAHostnameWhoseLastAttemptOutlastedItsWindowStillNamesWhatStoppedIt(t *testing.T) {
 	t.Parallel()

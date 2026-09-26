@@ -12,4 +12,4 @@ func (p liveness) ServingEdge(_ context.Context, _ edge.Kind, hostname string) (
 	return p.edges.answering(hostname), nil
 }
 
-func (liveness) Unreached(string) string { return "" }
+func (liveness) LastProbeFailure(string) string { return "" }

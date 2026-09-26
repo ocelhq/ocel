@@ -99,7 +99,7 @@ func servingTheBox(t *testing.T) (machine, *vps.Provider, contractv1connect.Prov
 
 	vm, p := onABoxServingContainers(t)
 	t.Cleanup(func() { closing(t, p) })
-	p.Front = &url.URL{Scheme: "http", Host: vm.addr + ":80"}
+	p.ProbeAddress = &url.URL{Scheme: "http", Host: vm.addr + ":80"}
 
 	opened, err := p.Edges().Open(boxedge.Kind)
 	if err != nil {

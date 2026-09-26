@@ -3,7 +3,7 @@ package vps
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/liveness"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -13,7 +13,7 @@ func (p *Provider) servedOnTheBox(ctx context.Context, hostname string) (edge.Ki
 		return "", err
 	}
 	if said.Unreached != "" {
-		return "", providerkit.Unanswered{Cause: said.Unreached}
+		return "", liveness.ProbeUnanswered{Cause: said.Unreached}
 	}
 	return edge.Kind(said.Edge), nil
 }
