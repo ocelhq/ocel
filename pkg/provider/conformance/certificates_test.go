@@ -1,0 +1,39 @@
+package conformance_test
+
+import (
+	"os"
+	"os/exec"
+	"strings"
+	"testing"
+
+	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	"github.com/ocelhq/ocel/pkg/provider/fake"
+)
+
+const statesNoHostname = "OCEL_CERTIFIER_CHECKS_NAME_NO_HOSTNAME"
+
+func TestACertificateSuiteNamingNoHostnameSkipsItsLoopsRatherThanReportingThemPassed(t *testing.T) {
+	if os.Getenv(statesNoHostname) == "1" {
+		conformance.RunCertificates(t, fake.NewProvider(fake.Options{Region: "nowhere"}).Certificates(),
+			conformance.CertificateChecks{Kind: fake.KindRelay})
+		return
+	}
+
+	inner := exec.Command(os.Args[0], "-test.run", "^"+t.Name()+"$", "-test.v")
+	inner.Env = append(os.Environ(), statesNoHostname+"=1")
+	rendered, err := inner.CombinedOutput()
+	if err != nil {
+		t.Fatalf("the certificate tier over a suite naming no hostname = %v\n%s", err, rendered)
+	}
+	for _, named := range []string{
+		"an_issued_handle_names_what_it_terminates_and_who_renews_it",
+		"a_certificate_ocel_never_requested_is_never_ocel's_to_discard",
+		"the_handle_is_the_vocabulary_this_provider_mints",
+	} {
+		want := "--- SKIP: " + t.Name() + "/" + named
+		if !strings.Contains(string(rendered), want) {
+			t.Errorf("the output for %s has no %q, and a loop over no hostname reports a pass having checked this provider against nothing\n%s",
+				named, want, rendered)
+		}
+	}
+}

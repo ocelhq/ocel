@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func (r *Stacks) Preflight(ctx context.Context, pre provider.DeployPreflight) error {

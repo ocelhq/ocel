@@ -15,7 +15,7 @@ import (
 	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/connectorkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func TestTheConnectorImageRunsTheBinaryItContains(t *testing.T) {

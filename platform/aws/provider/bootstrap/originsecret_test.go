@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 var secretMintedAt = time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)

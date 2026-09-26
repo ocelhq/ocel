@@ -16,8 +16,8 @@ import (
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 	kvstypes "github.com/aws/aws-sdk-go-v2/service/cloudfrontkeyvaluestore/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
-	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront/resolver"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"

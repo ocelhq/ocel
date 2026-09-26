@@ -14,7 +14,7 @@ const (
 
 var reachable = map[string]bool{
 	"github.com/ocelhq/ocel/platform/vps/provider":  true,
-	"github.com/ocelhq/ocel/pkg/providerkit":        true,
+	"github.com/ocelhq/ocel/pkg/provider":           true,
 	"github.com/ocelhq/ocel/pkg/appbuild":           true,
 	"github.com/ocelhq/ocel/pkg/arch":               true,
 	"github.com/ocelhq/ocel/pkg/channel":            true,
@@ -43,7 +43,7 @@ var goSSHStack = []string{
 }
 
 var provisioningEngines = []string{
-	"github.com/ocelhq/ocel/pkg/providerkit/pulumi",
+	"github.com/ocelhq/ocel/pkg/provider/pulumi",
 	"github.com/aws/aws-sdk-go",
 	"github.com/pulumi/",
 	"github.com/cloudflare/",

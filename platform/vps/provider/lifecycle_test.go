@@ -26,7 +26,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
-	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	kitledger "github.com/ocelhq/ocel/pkg/provider/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"

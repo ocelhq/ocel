@@ -17,9 +17,9 @@ import (
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
+	"github.com/ocelhq/ocel/pkg/provider"
+	"github.com/ocelhq/ocel/pkg/provider/conformance"
+	kitpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
+	"github.com/ocelhq/ocel/pkg/provider/enginetest"
 )
 
 func TestARealStoreTakesEveryCallABucketIsDescribedWith(t *testing.T) {

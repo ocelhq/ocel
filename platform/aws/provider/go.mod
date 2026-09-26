@@ -25,7 +25,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.0
 	github.com/aws/smithy-go v1.28.1
 	github.com/ocelhq/ocel/pkg v0.0.0
-	github.com/ocelhq/ocel/pkg/providerkit/pulumi v0.0.0
+	github.com/ocelhq/ocel/pkg/provider/pulumi v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/pulumi/pulumi-aws/sdk/v7 v7.36.0
@@ -206,4 +206,4 @@ replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/clo
 
 replace github.com/ocelhq/ocel/pkg => ../../../pkg
 
-replace github.com/ocelhq/ocel/pkg/providerkit/pulumi => ../../../pkg/providerkit/pulumi
+replace github.com/ocelhq/ocel/pkg/provider/pulumi => ../../../pkg/provider/pulumi

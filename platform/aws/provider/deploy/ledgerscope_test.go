@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 

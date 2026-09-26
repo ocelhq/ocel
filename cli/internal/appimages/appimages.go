@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func Build(ctx context.Context, cfg *projectconfig.Config, archs map[string]string, progress io.Writer) (map[string]string, error) {

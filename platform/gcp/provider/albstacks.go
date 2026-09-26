@@ -10,8 +10,8 @@ import (
 	"google.golang.org/api/secretmanager/v1"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
+	"github.com/ocelhq/ocel/pkg/provider"
+	kitpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"

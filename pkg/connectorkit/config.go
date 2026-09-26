@@ -6,7 +6,7 @@ import (
 	"os"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type Config struct {

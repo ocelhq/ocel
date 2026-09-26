@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
+	kitpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )

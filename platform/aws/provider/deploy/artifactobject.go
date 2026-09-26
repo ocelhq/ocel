@@ -7,7 +7,7 @@ import (
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 func (r *release) shipArtifacts(pctx *sdk.Context, uploads []provider.Upload) (map[string]sdk.Resource, error) {

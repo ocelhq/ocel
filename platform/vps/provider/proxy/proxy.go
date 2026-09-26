@@ -3,7 +3,7 @@ package proxy
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/provider"
 )
 
 type Proxy interface {

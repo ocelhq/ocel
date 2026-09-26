@@ -6,8 +6,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/internal/depstest"
 )
 
-var providerkitBuildsOn = []string{
-	"github.com/ocelhq/ocel/pkg/providerkit",
+var providerBuildsOn = []string{
+	"github.com/ocelhq/ocel/pkg/provider",
 	"github.com/ocelhq/ocel/pkg/appbuild",
 	"github.com/ocelhq/ocel/pkg/arch",
 	"github.com/ocelhq/ocel/pkg/channel",
@@ -34,7 +34,7 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 		open    []string
 	}{
 		{name: "pkg", pattern: "./...", open: depstest.OpenToPkg},
-		{name: "providerkit", pattern: "./providerkit/...", open: providerkitBuildsOn},
+		{name: "provider", pattern: "./provider/...", open: providerBuildsOn},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()

@@ -66,7 +66,7 @@ require (
 	google.golang.org/protobuf v1.36.12 // indirect
 )
 
-replace github.com/ocelhq/ocel/pkg/providerkit/pulumi => ../../../pkg/providerkit/pulumi
+replace github.com/ocelhq/ocel/pkg/provider/pulumi => ../../../pkg/provider/pulumi
 
 replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 

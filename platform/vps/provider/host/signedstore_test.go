@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
+	"github.com/ocelhq/ocel/pkg/provider/enginetest"
 )
 
 type signedStore struct {

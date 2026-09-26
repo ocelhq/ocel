@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/enginetest"
+	"github.com/ocelhq/ocel/pkg/provider/enginetest"
 )
 
 func nowHere() time.Time { return time.Now().UTC() }

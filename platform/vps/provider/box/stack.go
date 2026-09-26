@@ -8,7 +8,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	kitledger "github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"

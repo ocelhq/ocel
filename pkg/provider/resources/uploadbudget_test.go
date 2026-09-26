@@ -1,0 +1,105 @@
+package resources
+
+import (
+	"context"
+	"io"
+	"os"
+	"path/filepath"
+	"strconv"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/ocelhq/ocel/pkg/provider"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
+)
+
+type countingStore struct {
+	mu      sync.Mutex
+	live    int
+	peak    int
+	arrive  chan struct{}
+	release chan struct{}
+}
+
+func (s *countingStore) Put(context.Context, provider.ArtifactRef, io.Reader) error { return nil }
+
+func (s *countingStore) Has(context.Context, provider.ArtifactRef) (bool, error) {
+	s.mu.Lock()
+	s.live++
+	if s.live > s.peak {
+		s.peak = s.live
+	}
+	s.mu.Unlock()
+
+	s.arrive <- struct{}{}
+	<-s.release
+
+	s.mu.Lock()
+	s.live--
+	s.mu.Unlock()
+	return true, nil
+}
+
+func (s *countingStore) Open(context.Context, provider.ArtifactRef) (io.ReadCloser, error) {
+	return nil, os.ErrNotExist
+}
+
+func (s *countingStore) RemovePrefix(context.Context, edge.Class, string, edge.Progress) error {
+	return nil
+}
+
+func uploadsOf(t *testing.T, count int) []provider.Upload {
+	t.Helper()
+	dir := t.TempDir()
+	uploads := make([]provider.Upload, 0, count)
+	for slot := range count {
+		name := strconv.Itoa(slot)
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(name), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		uploads = append(uploads, provider.Upload{Name: name, Path: path, Ref: provider.ArtifactRef{Key: name}})
+	}
+	return uploads
+}
+
+func TestShipUploadsSharesOneBudgetAcrossTheAppsShippingAtOnce(t *testing.T) {
+	const apps = 4
+
+	uploads := uploadsOf(t, UploadConcurrency)
+	store := &countingStore{
+		arrive:  make(chan struct{}, apps*len(uploads)),
+		release: make(chan struct{}),
+	}
+
+	var group sync.WaitGroup
+	failures := make([]error, apps)
+	for slot := range apps {
+		group.Add(1)
+		go func() {
+			defer group.Done()
+			failures[slot] = ShipUploads(context.Background(), store, uploads, nil)
+		}()
+	}
+
+	for range UploadConcurrency {
+		<-store.arrive
+	}
+	select {
+	case <-store.arrive:
+		t.Error("an upload started while the budget was already full: each app took a budget of its own")
+	case <-time.After(200 * time.Millisecond):
+	}
+	close(store.release)
+	group.Wait()
+
+	for slot, err := range failures {
+		if err != nil {
+			t.Fatalf("ShipUploads() for app %d = %v", slot, err)
+		}
+	}
+	if store.peak > UploadConcurrency {
+		t.Errorf("%d uploads were in flight at once, want at most %d: the apps being provisioned side by side share one budget rather than each taking a full one", store.peak, UploadConcurrency)
+	}
+}

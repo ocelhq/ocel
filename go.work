@@ -3,7 +3,7 @@ go 1.27.0
 use (
 	./cli
 	./pkg
-	./pkg/providerkit/pulumi
+	./pkg/provider/pulumi
 	./platform/aws/connector
 	./platform/aws/provider
 	./platform/aws/runtime

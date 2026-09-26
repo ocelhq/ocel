@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	kitledger "github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"

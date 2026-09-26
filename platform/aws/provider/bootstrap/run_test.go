@@ -18,7 +18,7 @@ import (
 	smithy "github.com/aws/smithy-go"
 	"gopkg.in/yaml.v3"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )

@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	"github.com/ocelhq/ocel/pkg/transformkit/transformtest"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"

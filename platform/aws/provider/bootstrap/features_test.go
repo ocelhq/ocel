@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
+	"github.com/ocelhq/ocel/pkg/provider/bootstrapplan"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 

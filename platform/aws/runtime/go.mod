@@ -63,4 +63,4 @@ replace github.com/ocelhq/ocel/platform/s3 => ../../s3
 
 replace github.com/ocelhq/ocel/pkg => ../../../pkg
 
-replace github.com/ocelhq/ocel/pkg/providerkit/pulumi => ../../../pkg/providerkit/pulumi
+replace github.com/ocelhq/ocel/pkg/provider/pulumi => ../../../pkg/provider/pulumi
