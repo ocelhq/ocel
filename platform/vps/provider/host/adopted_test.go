@@ -513,3 +513,64 @@ func TestAPlacementAloneFeedsTheSwitchboardOnlyWhileTheTableIsTheOneItRenders(t 
 		t.Errorf("a placement the switchboard refused = %d, %q, want %d saying why", code, errs, routingPlaceFailed)
 	}
 }
+
+func TestEveryRoutingFailureNamesTheFilesTheProxyActuallyKeeps(t *testing.T) {
+	t.Parallel()
+
+	claim := []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
+	failing := func(stood *adoptedBench, result session.Result) {
+		proxied := stood.answer
+		stood.answer = func(command string) (session.Result, bool) {
+			if writesProxy(command) {
+				return result, true
+			}
+			return proxied(command)
+		}
+	}
+	for what, run := range map[string]func(t *testing.T) ([]string, []string, error){
+		"a write that fails beside a proxy routed by hand": func(t *testing.T) ([]string, []string, error) {
+			stood := adoptedBox(t, routed())
+			failing(stood, session.Result{Code: 1, Stderr: "mv: no space left on device"})
+			return []string{live.RoutingTable}, []string{ProxyConfig}, stood.fronted(routedByHand()).ClaimHosts(context.Background(), claim)
+		},
+		"a write onto an unseeded box beside a proxy routed by hand": func(t *testing.T) ([]string, []string, error) {
+			stood := adoptedBox(t, routed())
+			failing(stood, session.Result{Code: routingUnseeded})
+			return []string{live.RoutingTable}, []string{ProxyConfig}, stood.fronted(routedByHand()).ClaimHosts(context.Background(), claim)
+		},
+		"a release whose write fails beside a proxy routed by hand": func(t *testing.T) ([]string, []string, error) {
+			stood := adoptedBox(t, RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}}})
+			failing(stood, session.Result{Code: 1, Stderr: "mv: no space left on device"})
+			return []string{live.RoutingTable}, []string{ProxyConfig}, stood.fronted(routedByHand()).Release(context.Background(), aRelease(), nil)
+		},
+		"a release whose write fails beside a proxy that keeps its file elsewhere": func(t *testing.T) ([]string, []string, error) {
+			stood := adoptedBox(t, RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}}})
+			failing(stood, session.Result{Code: 1, Stderr: "mv: no space left on device"})
+			return []string{live.RoutingTable, coolifyFile}, []string{ProxyConfig}, stood.host().Release(context.Background(), aRelease(), nil)
+		},
+		"a placement whose revert fails too": func(t *testing.T) ([]string, []string, error) {
+			stood := adoptedBox(t, routed())
+			stood.refused = []string{"no space left on device", "no space left on device"}
+			return []string{live.RoutingTable, coolifyFile}, []string{ProxyConfig}, stood.host().ClaimHosts(context.Background(), claim)
+		},
+	} {
+		t.Run(what, func(t *testing.T) {
+			t.Parallel()
+
+			named, unnamed, err := run(t)
+			if err == nil {
+				t.Fatalf("%s = nil, want it refused", what)
+			}
+			for _, file := range named {
+				if !strings.Contains(err.Error(), file) {
+					t.Errorf("%s refused with\n%s\nwhich never names %s", what, err, file)
+				}
+			}
+			for _, file := range unnamed {
+				if strings.Contains(err.Error(), file) {
+					t.Errorf("%s refused with\n%s\nwhich names %s, a file this proxy never reads and nothing wrote", what, err, file)
+				}
+			}
+		})
+	}
+}

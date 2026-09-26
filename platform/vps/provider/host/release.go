@@ -446,12 +446,23 @@ func (h *Host) writePair(ctx context.Context, expected tableDigest, pair routing
 	case routingMoved:
 		return "", nil, h.movedUnder(expected, result)
 	case routingUnseeded:
+		seeded := live.RoutingTable
+		if file == ProxyConfig {
+			seeded += " or " + ProxyConfig
+		}
 		return "", nil, providerkit.Refuse(providerkit.CodeNotReady,
-			"%s or %s is missing on %s; nothing was written\nRun `ocel bootstrap` for this box's class",
-			live.RoutingTable, ProxyConfig, h.named())
+			"%s is missing on %s; nothing was written\nRun `ocel bootstrap` for this box's class",
+			seeded, h.named())
 	default:
-		return "", nil, unelevated(refused, h.refuse("write "+live.RoutingTable+" and "+ProxyConfig, result, elevation))
+		return "", nil, unelevated(refused, h.refuse("write "+routingFiles(file), result, elevation))
 	}
+}
+
+func routingFiles(file string) string {
+	if file == "" {
+		return live.RoutingTable
+	}
+	return live.RoutingTable + " and " + file
 }
 
 func (h *Host) movedUnder(expected tableDigest, result session.Result) error {
@@ -626,7 +637,7 @@ func (h *Host) stranded(ctx context.Context, rel Release, cut cutover, why error
 	ctx, stop := sparing(ctx)
 	defer stop()
 	code := providerkit.CodeNotReady
-	written := live.RoutingTable + " and " + ProxyConfig
+	written := routingFiles(h.front.File())
 	rolled := written + " untouched"
 	if moved(why) {
 		code = providerkit.CodeBusy
