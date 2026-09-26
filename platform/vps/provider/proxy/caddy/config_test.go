@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/netip"
 	"net/url"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -130,6 +131,25 @@ func TestTheFrontProxyNamesNoHostnameAndForwardsEverythingToTheSwitchboard(t *te
 		if len(server.Automatic) != 0 {
 			t.Errorf("the front server declares automatic_https %s, want none: with no hostname named there is nothing to skip", server.Automatic)
 		}
+	}
+}
+
+func TestTheHostnamesAnAdoptedProxyRoutesLeaveTheBuiltinRenderAsItWas(t *testing.T) {
+	t.Parallel()
+
+	spec := specified(pinned("shop.example.com", "shop"), pinned("*.example.org", "wild"))
+	spec.Hostnames = []string{"console.example.com", edge.ProbeHostname(edge.PreviewWildcard("preview.example.com")), "shop.example.com"}
+	spec.PreviewBase = "preview.example.com"
+	written, err := (caddy.Builtin{}).Render(spec)
+	if err != nil {
+		t.Fatalf("Render() = %v", err)
+	}
+	golden, err := os.ReadFile("testdata/builtin.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(written, golden) {
+		t.Errorf("a spec naming hostnames and a preview base renders\n%s\nwant testdata/builtin.json unchanged:\n%s\nthe built-in proxy orders on demand and names no hostname, so every hostname it named is a reload the day that hostname is bound", written, golden)
 	}
 }
 

@@ -26,10 +26,12 @@ type Guarantees struct {
 }
 
 type Spec struct {
-	Pins       []Pin
-	Upstream   string
-	Edge       string
-	Permission Permission
+	Pins        []Pin
+	Hostnames   []string
+	PreviewBase string
+	Upstream    string
+	Edge        string
+	Permission  Permission
 }
 
 type Permission struct {
