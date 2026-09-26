@@ -41,7 +41,7 @@ func estimateNamed(t *testing.T, est *costv1.Estimate, resource string) *costv1.
 }
 
 func TestPriceOfAProductionDeployBehindCloudFront(t *testing.T) {
-	client, pricer := costServed(t)
+	client, costs := costServed(t)
 
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
 		Manifest:    shopManifest(),
@@ -50,7 +50,7 @@ func TestPriceOfAProductionDeployBehindCloudFront(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Shape() = %v", err)
 	}
-	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set})
+	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
 	if err != nil {
 		t.Fatalf("Price() = %v", err)
 	}
@@ -90,14 +90,14 @@ func TestPriceOfAProductionDeployBehindCloudFront(t *testing.T) {
 }
 
 func TestPriceOutsideTheCardsRegionIsSaidNotGuessed(t *testing.T) {
-	_, pricer := costServed(t)
+	_, costs := costServed(t)
 
 	set := &costv1.ResourceSet{
 		Source:    "ocel",
 		Scopes:    []*costv1.Scope{{Id: "p", Kind: "project", Name: "shop"}},
 		Resources: []*costv1.Resource{{Id: "p/aws_lb:x", Scope: "p", Vendor: "aws", Type: "aws_lb", Name: "x", Region: "eu-west-1"}},
 	}
-	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set})
+	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
 	if err != nil {
 		t.Fatalf("Price() = %v", err)
 	}
@@ -107,7 +107,7 @@ func TestPriceOutsideTheCardsRegionIsSaidNotGuessed(t *testing.T) {
 }
 
 func TestPriceBehindCloudflareIncludesTheEdgesOwnBill(t *testing.T) {
-	client, pricer := costServed(t)
+	client, costs := costServed(t)
 
 	manifest := shopManifest()
 	manifest.Apps = manifest.Apps[:1]
@@ -121,7 +121,7 @@ func TestPriceBehindCloudflareIncludesTheEdgesOwnBill(t *testing.T) {
 		t.Fatalf("Shape() = %v", err)
 	}
 	golden(t, "shape_production_cloudflare", set)
-	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set})
+	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
 	if err != nil {
 		t.Fatalf("Price() = %v", err)
 	}
@@ -150,7 +150,7 @@ func TestPriceBehindCloudflareIncludesTheEdgesOwnBill(t *testing.T) {
 }
 
 func TestPriceOfAFunctionWithUnknownArchitecturesIsNotGuessedAsX86(t *testing.T) {
-	_, pricer := costServed(t)
+	_, costs := costServed(t)
 
 	properties, _ := structpb.NewStruct(map[string]any{"memory_size": 1024})
 	set := &costv1.ResourceSet{
@@ -161,7 +161,7 @@ func TestPriceOfAFunctionWithUnknownArchitecturesIsNotGuessedAsX86(t *testing.T)
 			Properties: properties, Unknown: []string{"architectures"},
 		}},
 	}
-	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set})
+	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
 	if err != nil {
 		t.Fatalf("Price() = %v", err)
 	}
@@ -177,7 +177,7 @@ func TestPriceOfAFunctionWithUnknownArchitecturesIsNotGuessedAsX86(t *testing.T)
 }
 
 func TestPriceOfAServiceWithAnUnknownCPUStillPricesItsMemory(t *testing.T) {
-	_, pricer := costServed(t)
+	_, costs := costServed(t)
 
 	properties, _ := structpb.NewStruct(map[string]any{"desired_count": 1, "memory": 2048, "runtime_platform": map[string]any{"cpu_architecture": "ARM64"}})
 	set := &costv1.ResourceSet{
@@ -188,7 +188,7 @@ func TestPriceOfAServiceWithAnUnknownCPUStillPricesItsMemory(t *testing.T) {
 			Properties: properties, Unknown: []string{"cpu"},
 		}},
 	}
-	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set})
+	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
 	if err != nil {
 		t.Fatalf("Price() = %v", err)
 	}

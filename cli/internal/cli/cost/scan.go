@@ -108,13 +108,13 @@ func Run(ctx context.Context, deps cmddeps.Deps, cwd string, opts Options, stdou
 			}
 			return err
 		}
-		pricer, err := runner.Cost()
+		costs, err := runner.Cost()
 		if err != nil {
 			return err
 		}
 		estimates := make(map[costv1.Profile]*costv1.Estimate, len(profiles()))
 		for _, profile := range profiles() {
-			estimate, err := pricer.Price(ctx, &costv1.PriceRequest{
+			estimate, err := costs.Price(ctx, &costv1.PriceRequest{
 				Resources: set,
 				Usage:     &costv1.Usage{Profile: profile, Resources: overrides},
 			})

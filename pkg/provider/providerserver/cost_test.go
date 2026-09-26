@@ -53,13 +53,13 @@ func shapeRequest() *contractv1.ShapeRequest {
 }
 
 func TestAProviderThatPricesNothingSaysSoOnShapeAndPrice(t *testing.T) {
-	client, pricer := costServed(t, uncosted{fake.NewProvider(fake.Options{Region: "nowhere"})})
+	client, costs := costServed(t, uncosted{fake.NewProvider(fake.Options{Region: "nowhere"})})
 
 	_, err := client.Shape(context.Background(), shapeRequest())
 	if connect.CodeOf(err) != connect.CodeUnimplemented {
 		t.Fatalf("Shape() error = %v, want Unimplemented", err)
 	}
-	_, err = pricer.Price(context.Background(), &costv1.PriceRequest{Resources: &costv1.ResourceSet{Source: "ocel"}})
+	_, err = costs.Price(context.Background(), &costv1.PriceRequest{Resources: &costv1.ResourceSet{Source: "ocel"}})
 	if connect.CodeOf(err) != connect.CodeUnimplemented {
 		t.Fatalf("Price() error = %v, want Unimplemented", err)
 	}
@@ -90,14 +90,14 @@ func TestShapeHandsTheProviderTheDeployItWouldMake(t *testing.T) {
 }
 
 func TestPriceRefusesAUsageFileTheProviderCannotRead(t *testing.T) {
-	client, pricer := costServed(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
+	client, costs := costServed(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
 
 	set, err := client.Shape(context.Background(), shapeRequest())
 	if err != nil {
 		t.Fatalf("Shape() error = %v", err)
 	}
 	override, _ := structpb.NewStruct(map[string]any{"monthly_requets": 5})
-	_, err = pricer.Price(context.Background(), &costv1.PriceRequest{
+	_, err = costs.Price(context.Background(), &costv1.PriceRequest{
 		Resources: set,
 		Usage:     &costv1.Usage{Resources: map[string]*structpb.Struct{set.GetResources()[0].GetId(): override}},
 	})
@@ -108,9 +108,9 @@ func TestPriceRefusesAUsageFileTheProviderCannotRead(t *testing.T) {
 }
 
 func TestPriceRefusesAnEmptyResourceSet(t *testing.T) {
-	_, pricer := costServed(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
+	_, costs := costServed(t, fake.NewProvider(fake.Options{Region: "nowhere"}))
 
-	_, err := pricer.Price(context.Background(), &costv1.PriceRequest{})
+	_, err := costs.Price(context.Background(), &costv1.PriceRequest{})
 	var connectErr *connect.Error
 	if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeInvalidArgument {
 		t.Fatalf("Price() error = %v, want InvalidArgument", err)

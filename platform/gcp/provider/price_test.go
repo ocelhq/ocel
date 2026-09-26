@@ -46,7 +46,7 @@ func estimateOfType(t *testing.T, est *costv1.Estimate, set *costv1.ResourceSet,
 }
 
 func TestPriceOfAProductionDeployBehindTheLoadBalancer(t *testing.T) {
-	client, pricer := costServed(t)
+	client, costs := costServed(t)
 
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
 		Manifest:    shopManifest(),
@@ -56,7 +56,7 @@ func TestPriceOfAProductionDeployBehindTheLoadBalancer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Shape() = %v", err)
 	}
-	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set})
+	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
 	if err != nil {
 		t.Fatalf("Price() = %v", err)
 	}
@@ -96,7 +96,7 @@ func TestPriceOfAProductionDeployBehindTheLoadBalancer(t *testing.T) {
 }
 
 func TestPriceOfADirectDeployBillsEgressOnTheService(t *testing.T) {
-	client, pricer := costServed(t)
+	client, costs := costServed(t)
 
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
 		Manifest:    shopManifest(),
@@ -105,7 +105,7 @@ func TestPriceOfADirectDeployBillsEgressOnTheService(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Shape() = %v", err)
 	}
-	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: costv1.Profile_PROFILE_HEAVY}})
+	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set, Usage: &costv1.Usage{Profile: costv1.Profile_PROFILE_HEAVY}})
 	if err != nil {
 		t.Fatalf("Price() = %v", err)
 	}
@@ -116,7 +116,7 @@ func TestPriceOfADirectDeployBillsEgressOnTheService(t *testing.T) {
 }
 
 func TestPriceOfAServiceOutsideTheNamedRegionsFallsBackToTierOne(t *testing.T) {
-	_, pricer := costServed(t)
+	_, costs := costServed(t)
 
 	properties, _ := structpb.NewStruct(map[string]any{
 		"ingress": "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER",
@@ -132,7 +132,7 @@ func TestPriceOfAServiceOutsideTheNamedRegionsFallsBackToTierOne(t *testing.T) {
 			Id: "p/svc", Scope: "p", Vendor: "gcp", Type: "google_cloud_run_v2_service", Name: "svc", Region: "europe-west9", Properties: properties,
 		}},
 	}
-	est, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set})
+	est, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set})
 	if err != nil {
 		t.Fatalf("Price() = %v", err)
 	}
