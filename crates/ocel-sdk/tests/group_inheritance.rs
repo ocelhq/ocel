@@ -19,7 +19,7 @@ struct Inherited {
 }
 
 #[test]
-fn a_scoped_member_of_a_group_a_root_value_turned_on_is_required() {
+fn a_scoped_member_of_a_group_a_root_value_turned_on_is_reported_missing() {
     let (url, requests) = collector_with_cells(2, vec![cell("INHERITED_TOKEN", "", "t")]);
     std::env::set_var("OCEL_PHASE", "discovery");
     std::env::set_var("OCEL_DEV_SERVER", &url);

@@ -78,7 +78,7 @@ function validate(definitions: FlatDefinitions, cells: readonly VariableCell[]):
         if (
           definition.groupOptional &&
           definition.group &&
-          !groupPresent(definitions, cells, definition.group, folder)
+          !switchedOn(definitions, cells, definition.group, folder)
         )
           continue;
         if (!stored.some((c) => c.folder === folder)) {
@@ -107,7 +107,7 @@ function validate(definitions: FlatDefinitions, cells: readonly VariableCell[]):
   return problems;
 }
 
-function groupPresent(
+function switchedOn(
   definitions: FlatDefinitions,
   cells: readonly VariableCell[],
   group: string,
