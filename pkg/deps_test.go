@@ -2,6 +2,7 @@ package pkg_test
 
 import (
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 
@@ -58,4 +59,74 @@ func TestNoPackageSitsAtPkgRuntimeWhereItWouldShadowTheStandardRuntime(t *testin
 			t.Errorf("%s is a package, and every file importing it would name it runtime over the standard library's; pkg/runtime holds only packages beneath it", path)
 		}
 	}
+}
+
+const repo = "github.com/ocelhq/ocel/"
+
+var providerTestSupport = []string{
+	repo + "pkg/provider/fake",
+	repo + "pkg/provider/enginetest",
+}
+
+func TestNothingButAProviderImportsAPackageBeneathPkgProvider(t *testing.T) {
+	t.Parallel()
+
+	pkgs := depstest.Workspace(t)
+	for _, c := range []struct {
+		name    string
+		imports func(depstest.Package) []string
+		open    []string
+	}{
+		{name: "build", imports: func(p depstest.Package) []string { return p.Imports }},
+		{name: "test", imports: func(p depstest.Package) []string { return slices.Concat(p.TestImports, p.XTestImports) }, open: providerTestSupport},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			for _, p := range pkgs {
+				if provider(p.ImportPath) {
+					continue
+				}
+				for _, imported := range c.imports(p) {
+					if beneathPkgProvider(imported) && !depstest.Within(imported, c.open) {
+						t.Errorf("%s imports %s, which sits beneath pkg/provider though more than providers use it; it belongs at pkg/ top level", p.ImportPath, imported)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestAPackageOnlyProvidersImportSitsBeneathPkgProvider(t *testing.T) {
+	t.Parallel()
+
+	importers := map[string][]string{}
+	for _, p := range depstest.Workspace(t) {
+		for _, imported := range p.Imports {
+			importers[imported] = append(importers[imported], p.ImportPath)
+		}
+	}
+	for pkg, by := range importers {
+		if !depstest.Within(pkg, []string{repo + "pkg"}) || depstest.Within(pkg, []string{repo + "pkg/provider", repo + "pkg/internal"}) {
+			continue
+		}
+		if !slices.ContainsFunc(by, func(importer string) bool { return !provider(importer) }) {
+			t.Errorf("only providers import %s; it belongs beneath pkg/provider", pkg)
+		}
+	}
+}
+
+func beneathPkgProvider(pkg string) bool {
+	return strings.HasPrefix(pkg, repo+"pkg/provider/")
+}
+
+func provider(pkg string) bool {
+	if depstest.Within(pkg, []string{repo + "pkg/provider"}) {
+		return true
+	}
+	vendor, ok := strings.CutPrefix(pkg, repo+"platform/")
+	if !ok {
+		return false
+	}
+	parts := strings.Split(vendor, "/")
+	return len(parts) >= 2 && parts[1] == "provider"
 }
