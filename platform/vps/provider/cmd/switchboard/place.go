@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
@@ -97,14 +98,35 @@ func placed(argv []string, out, errs io.Writer) int {
 	if err != nil {
 		return refuse(errs, err)
 	}
-	held, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return 0
-	}
+	sum, err := regularSum(path)
 	if err != nil {
 		return refuse(errs, fmt.Errorf("read %s: %w", path, err))
 	}
-	sum := sha256.Sum256(held)
-	fmt.Fprintln(out, hex.EncodeToString(sum[:]))
+	if sum != "" {
+		fmt.Fprintln(out, sum)
+	}
 	return 0
+}
+
+func regularSum(path string) (string, error) {
+	file, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, syscall.ELOOP) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	held, err := file.Stat()
+	if err != nil {
+		return "", err
+	}
+	if !held.Mode().IsRegular() {
+		return "", nil
+	}
+	sum := sha256.New()
+	if _, err := io.Copy(sum, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(sum.Sum(nil)), nil
 }
