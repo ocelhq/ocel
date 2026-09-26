@@ -31,7 +31,7 @@ func TestEveryContainerThisHostStandsUpPullsItsImageAheadOfRunningIt(t *testing.
 			}
 		}
 		if !strings.Contains(stood.command, pullHold.start()) || !strings.Contains(stood.command, pullHold.again()) {
-			t.Errorf("%s holds off between pulls in a spelling of its own rather than the one the engine install already uses, so a fleet retrying at once is neither spread out nor capped:\n%s", what, stood.command)
+			t.Errorf("%s holds off between pulls in a spelling of its own rather than pullHold, so a fleet retrying at once is neither spread out nor capped:\n%s", what, stood.command)
 		}
 	}
 }
@@ -39,7 +39,7 @@ func TestEveryContainerThisHostStandsUpPullsItsImageAheadOfRunningIt(t *testing.
 func TestTheHoldBetweenTriesBacksOffToACeilingAndIsSpreadOut(t *testing.T) {
 	t.Parallel()
 
-	for what, held := range map[string]hold{"a pull": pullHold, "the engine install": engineInstallHold} {
+	for what, held := range map[string]hold{"a pull": pullHold} {
 		again := held.again()
 		for _, want := range []string{"backoff=$((backoff * 2))", "sleep $((backoff + jitter))", fmt.Sprintf("backoff=%d; fi", held.ceiling)} {
 			if !strings.Contains(again, want) {

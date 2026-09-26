@@ -29,6 +29,7 @@ type bench struct {
 	ran    []string
 	fed    []string
 	dials  int
+	paused []time.Duration
 	dead   error
 	floor  error
 	answer func(command string) (session.Result, bool)
@@ -52,7 +53,24 @@ func machine(stands map[providerkit.Class][]Item) *bench {
 
 func (b *bench) host() *Host { return b.fronted(Front{}) }
 
-func (b *bench) fronted(front Front) *Host { return New(b.dial, Keys{}, nil, front) }
+func (b *bench) fronted(front Front) *Host {
+	h := New(b.dial, Keys{}, nil, front)
+	h.pause = b.pause
+	return h
+}
+
+func (b *bench) pause(ctx context.Context, held time.Duration) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.paused = append(b.paused, held)
+	return ctx.Err()
+}
+
+func (b *bench) waits() []time.Duration {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]time.Duration(nil), b.paused...)
+}
 
 type recorder struct{ said *[]string }
 
