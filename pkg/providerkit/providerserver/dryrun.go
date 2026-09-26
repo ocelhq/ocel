@@ -6,6 +6,7 @@ import (
 
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -41,7 +42,7 @@ func (d *dryRunPlan) plan() provider.Plan {
 }
 
 func (r *deployRun) planValuesGroup(ctx context.Context) (provider.ChangeGroup, error) {
-	resources, err := manifestResources(r.manifest)
+	declared, err := manifestResources(r.manifest)
 	if err != nil {
 		return provider.ChangeGroup{}, err
 	}
@@ -49,15 +50,15 @@ func (r *deployRun) planValuesGroup(ctx context.Context) (provider.ChangeGroup, 
 	if err != nil {
 		return provider.ChangeGroup{}, err
 	}
-	changes := make([]provider.Change, 0, len(resources))
-	for _, resource := range resources {
+	changes := make([]provider.Change, 0, len(declared))
+	for _, resource := range declared {
 		if resource.Binding != "" {
 			continue
 		}
 		changes = append(changes, provider.Change{
 			Kind:   string(resource.Type),
 			Name:   resource.Name,
-			Action: provider.KeepOrCreate(slices.ContainsFunc(published, bindingFor(resource))),
+			Action: provider.KeepOrCreate(slices.ContainsFunc(published, resources.BindingFor(resource))),
 		})
 	}
 	group := provider.ChangeGroup{Kind: provider.ParameterGroupKind, Name: valuesGroupName, Changes: changes}
@@ -100,10 +101,4 @@ func (r *deployRun) planPromotionGroup() provider.ChangeGroup {
 
 func (r *deployRun) dryRunPlanProto() *planv1.ChangePlan {
 	return ChangePlanProto(r.dryRunPlan.plan(), r.spec.Slug, string(r.front.Kind()))
-}
-
-func bindingFor(resource provider.Resource) func(provider.Binding) bool {
-	return func(binding provider.Binding) bool {
-		return binding.Name == resource.Name && binding.Type == resource.Type
-	}
 }
