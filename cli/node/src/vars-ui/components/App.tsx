@@ -25,14 +25,15 @@ function Code({ children }: { children: React.ReactNode }) {
 function Banner() {
   const current = useValue(store.state);
   const left = useValue(store.unfilled).length;
-  const _only = useValue(store.owedOnly);
+  const _only = useValue(store.unfilledOnly);
   const recovery = current?.recovery;
   if (!current || !recovery) return null;
   return (
     <Note role="status" data-slot="banner" label="Deploy waiting" className="mb-6">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
         <p className="flex-1 basis-96">
-          Deploy <Code>{recovery.deploy}</Code> was refused {plural(recovery.owed.length, "cell")}.{" "}
+          Deploy <Code>{recovery.deploy}</Code> was refused{" "}
+          {plural(recovery.missing.length, "cell")}.{" "}
           {left === 0
             ? "All filled — save and resume below."
             : `${plural(left, "cell")} still empty.`}

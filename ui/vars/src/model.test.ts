@@ -10,17 +10,15 @@ import {
   dirtyEntries,
   doneLabel,
   environmentsOf,
-  held,
   isDirty,
   type Lens,
   listingOf,
   type MatrixCell,
   type MatrixRow,
+  missingSet,
   names,
   type OtherValue,
   overrideOptions,
-  owedCount,
-  owedSet,
   planCopy,
   readersOf,
   reduceSave,
@@ -32,8 +30,10 @@ import {
   saveSummary,
   setForOptions,
   sizeLine,
+  storedAt,
   tallyLine,
-  unfilledOwed,
+  unfilledCount,
+  unfilledMissing,
   variantAt,
   variantsOf,
 } from "./model";
@@ -74,48 +74,48 @@ const at = (key: string, folder = "", environment = ""): Address => ({
 const lens = (over: Partial<Lens> = {}): Lens => ({
   environment: "",
   query: "",
-  owedOnly: false,
+  unfilledOnly: false,
   ...over,
 });
 
 const none = new Set<string>();
 
-describe("owedCount", () => {
+describe("unfilledCount", () => {
   it("counts required empty cells and cells with a problem", () => {
     const current = stateOf([
       row("A", [cell({ state: "required" }), cell({ folder: "/web" })]),
       row("B", [cell({ set: true, version: 2, problem: "not a url" })]),
       row("C", [cell({ state: "required", set: true, version: 1 })]),
     ]);
-    expect(owedCount(current)).toBe(2);
+    expect(unfilledCount(current)).toBe(2);
   });
 });
 
-describe("owedCount with variable groups", () => {
+describe("unfilledCount with variable groups", () => {
   const grouped = (rows: MatrixRow[]): State => ({
     ...stateOf(rows),
     matrix: { columns: ["", "/web"], rows, groups: [{ key: "github", required: false }], apps: [] },
   });
 
-  it("owes nothing in an optional group nobody has turned on", () => {
+  it("leaves nothing missing in an optional group nobody has turned on", () => {
     const current = grouped([
       row("GITHUB_ID", [cell({ state: "required" })], { group: "github" }),
       row("GITHUB_SECRET", [cell({ state: "required" })], { group: "github" }),
     ]);
-    expect(owedCount(current)).toBe(0);
-    expect(variantAt(catalogueOf(current, []), at("GITHUB_ID"))?.owed).toBe(false);
+    expect(unfilledCount(current)).toBe(0);
+    expect(variantAt(catalogueOf(current, []), at("GITHUB_ID"))?.missing).toBe(false);
   });
 
-  it("owes the rest of an optional group once one member holds a value", () => {
+  it("marks the rest of an optional group missing once one member has a value", () => {
     const current = grouped([
       row("GITHUB_ID", [cell({ state: "required", set: true, version: 1 })], { group: "github" }),
       row("GITHUB_SECRET", [cell({ state: "required" })], { group: "github" }),
     ]);
-    expect(owedCount(current)).toBe(1);
-    expect(variantAt(catalogueOf(current, []), at("GITHUB_SECRET"))?.owed).toBe(true);
+    expect(unfilledCount(current)).toBe(1);
+    expect(variantAt(catalogueOf(current, []), at("GITHUB_SECRET"))?.missing).toBe(true);
   });
 
-  it("owes a required member of a required group the way the deploy gate does", () => {
+  it("marks a required member of a required group missing the way the deploy gate does", () => {
     const rows = [
       row("STRIPE_KEY", [cell({ state: "required" })], { group: "stripe" }),
       row("STRIPE_HINT", [cell({})], { group: "stripe" }),
@@ -129,20 +129,20 @@ describe("owedCount with variable groups", () => {
         apps: [],
       },
     };
-    expect(owedCount(current)).toBe(1);
-    expect(variantAt(catalogueOf(current, []), at("STRIPE_KEY"))?.owed).toBe(true);
+    expect(unfilledCount(current)).toBe(1);
+    expect(variantAt(catalogueOf(current, []), at("STRIPE_KEY"))?.missing).toBe(true);
   });
 
-  it("still owes a required cell that belongs to no group", () => {
+  it("still counts a required cell that belongs to no group", () => {
     const current = grouped([
       row("GITHUB_ID", [cell({ state: "required" })], { group: "github" }),
       row("DATABASE_URL", [cell({ state: "required" })]),
     ]);
-    expect(owedCount(current)).toBe(1);
+    expect(unfilledCount(current)).toBe(1);
   });
 });
 
-describe("held", () => {
+describe("storedAt", () => {
   const base = cell({
     set: true,
     version: 4,
@@ -150,17 +150,17 @@ describe("held", () => {
   });
 
   it("reads the base cell for the empty environment", () => {
-    expect(held(base, "")).toEqual({ set: true, version: 4 });
+    expect(storedAt(base, "")).toEqual({ set: true, version: 4 });
   });
 
   it("reads the override for a named environment", () => {
-    expect(held(base, "staging")).toEqual({ set: true, version: 2 });
-    expect(held(base, "qa")).toEqual({ set: false, version: 0 });
+    expect(storedAt(base, "staging")).toEqual({ set: true, version: 2 });
+    expect(storedAt(base, "qa")).toEqual({ set: false, version: 0 });
   });
 });
 
 describe("catalogueOf", () => {
-  it("holds every root cell and only the folder cells that are set, required, faulty or overridden", () => {
+  it("includes every root cell and only the folder cells that are set, required, faulty or overridden", () => {
     const catalogue = catalogueOf(
       stateOf(
         [
@@ -198,7 +198,7 @@ describe("catalogueOf", () => {
       "D /web qa",
     ]);
     expect(catalogue.variants.get("B  ")?.state).toBe("forbidden");
-    expect(catalogue.variants.get("B /web ")).toMatchObject({ kind: "folder", owed: true });
+    expect(catalogue.variants.get("B /web ")).toMatchObject({ kind: "folder", missing: true });
     expect(catalogue.variants.get("C /web ")?.problem).toBe("too short");
     expect(catalogue.variants.get("D /web qa")).toMatchObject({
       kind: "environment",
@@ -250,7 +250,7 @@ describe("catalogueOf", () => {
     ]);
   });
 
-  it("carries the class down so a secret is never revealable", () => {
+  it("passes the class down so a secret is never revealable", () => {
     const catalogue = catalogueOf(
       stateOf([
         row(
@@ -330,7 +330,7 @@ describe("listingOf", () => {
       ["C", "required", null, []],
       ["S", "optional", null, []],
     ]);
-    expect(listing.groups.map((group) => [group.folder, group.keys, group.owed])).toEqual([
+    expect(listing.groups.map((group) => [group.folder, group.keys, group.unfilled])).toEqual([
       ["/web", 1, 1],
       ["/api", 1, 0],
     ]);
@@ -386,7 +386,7 @@ describe("listingOf", () => {
     ["", "/web"],
   );
 
-  it("pulls an optional group into one bundle that holds its root keys and its folders", () => {
+  it("pulls an optional group into one bundle that contains its root keys and its folders", () => {
     const withGroup: State = {
       ...grouped,
       matrix: { ...grouped.matrix, groups: [{ key: "github", required: false }] },
@@ -406,7 +406,7 @@ describe("listingOf", () => {
         within.lines.map((line) => addressKey(line.variant.at)),
       ]),
     ).toEqual([["/web", ["G /web "]]]);
-    expect([bundle.keys, bundle.owed]).toEqual([2, 0]);
+    expect([bundle.keys, bundle.unfilled]).toEqual([2, 0]);
   });
 
   it("leaves a required group's keys as ordinary rows, since nothing can switch them off", () => {
@@ -427,15 +427,15 @@ describe("listingOf", () => {
     expect(listing.keys.map((line) => addressKey(line.variant.at))).toEqual(["B /web "]);
   });
 
-  it("flattens to the cells a deploy is owed, wherever they live", () => {
-    const owed = owedSet({
+  it("flattens to the cells a deploy is missing, wherever they live", () => {
+    const missing = missingSet({
       deploy: "dpl_1",
-      owed: [
+      missing: [
         { key: "C", folder: "" },
         { key: "B", folder: "/web" },
       ],
     });
-    const listing = listingOf(current, catalogue, owed, lens({ owedOnly: true }));
+    const listing = listingOf(current, catalogue, missing, lens({ unfilledOnly: true }));
     expect(listing.flat).toBe(true);
     expect(listing.groups).toEqual([]);
     expect(listing.keys.map((line) => [addressKey(line.variant.at), line.needed])).toEqual([
@@ -452,7 +452,7 @@ describe("listingOf", () => {
     expect(overrideOptions(current, catalogue, at("C", "/web"))).toEqual(["qa", "staging"]);
   });
 
-  it("offers to set a root key in a folder that reads it and holds no cell yet", () => {
+  it("offers to set a root key in a folder that reads it and has no cell yet", () => {
     const rowOf = (key: string) => current.matrix.rows.find((row) => row.key === key)!;
     expect(setForOptions(catalogue, rowOf("A"))).toEqual(["/web"]);
     expect(setForOptions(catalogueOf(current, [at("A", "/web")]), rowOf("A"))).toEqual([]);
@@ -694,17 +694,17 @@ describe("recovery", () => {
     ),
     [],
   );
-  const owed = owedSet({
+  const missing = missingSet({
     deploy: "dpl_1",
-    owed: [
+    missing: [
       { key: "B", folder: "" },
       { key: "C", folder: "" },
       { key: "D", folder: "/web" },
     ],
   });
 
-  it("counts an owed cell as filled once it is set and valid, or holds a draft", () => {
-    expect(unfilledOwed(catalogue, owed, new Map(), new Map()).map((v) => v.at)).toEqual([
+  it("counts a missing cell as filled once it is set and valid, or has a draft", () => {
+    expect(unfilledMissing(catalogue, missing, new Map(), new Map()).map((v) => v.at)).toEqual([
       at("B"),
       at("C"),
       at("D", "/web"),
@@ -714,7 +714,7 @@ describe("recovery", () => {
       [addressKey(at("C")), "fixed"],
       [addressKey(at("D", "/web")), "d"],
     ]);
-    expect(unfilledOwed(catalogue, owed, drafts, new Map())).toEqual([]);
+    expect(unfilledMissing(catalogue, missing, drafts, new Map())).toEqual([]);
   });
 });
 
@@ -753,7 +753,7 @@ describe("dirtyEntries", () => {
     ).toEqual([]);
   });
 
-  it("carries the version each dirty row was read at, in matrix order", () => {
+  it("keeps the version each dirty row was read at, in matrix order", () => {
     const drafts = new Map([
       [key(at("B")), "new"],
       [key(at("A", "/web")), "web"],
@@ -847,7 +847,7 @@ describe("reduceSave", () => {
 });
 
 describe("labels", () => {
-  it("pluralise the owed count", () => {
+  it("pluralise the unfilled count", () => {
     expect(tallyLine(0)).toBe("every required cell is filled");
     expect(tallyLine(1)).toBe("1 cell to fill");
     expect(doneLabel(0)).toBe("Return to the terminal");

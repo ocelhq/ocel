@@ -3,19 +3,19 @@ import {
   Button,
   doneLabel,
   glyph,
-  owedCount,
   role,
   SectionLabel,
   type State,
   store,
   tallyLine,
+  unfilledCount,
   useValue,
 } from "@ui/vars";
 
 import { cn } from "../lib/utils";
 
 export function Masthead({ current }: { current: State }) {
-  const unfilled = owedCount(current);
+  const unfilled = unfilledCount(current);
   const recovery = current.recovery !== undefined;
   const pending = useValue(store.dirty).length;
   const isSaving = useValue(store.saving);

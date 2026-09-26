@@ -21,7 +21,7 @@
   --color-float: var(--float-edge);
 
   --color-body: var(--muted-foreground);
-  --color-held: var(--go);
+  --color-stored: var(--go);
 
   --color-terminal: var(--terminal);
   --color-terminal-rule: var(--terminal-rule);

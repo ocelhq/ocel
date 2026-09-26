@@ -108,7 +108,7 @@ components of their registers and defer to this file on everything here.
 
 ## Invariants
 
-Held on every surface. No register overrides them.
+Fixed on every surface. No register overrides them.
 
 **The Square Rule.** Every rectangle has a zero radius. Square corners never slow a
 reader down, and radius is the first thing that dissolves a product into its component
@@ -117,7 +117,7 @@ traffic-light dots, and the cut-ring mark are circles by geometry and stay circl
 Nothing larger than 12px is a circle except the mark.
 
 **The No Blur Rule.** Nothing casts a soft shadow, glows, or blurs what is behind it. A
-blur carries no information a hairline does not. Separation is a hairline, one tonal
+blur conveys no information a hairline does not. Separation is a hairline, one tonal
 step to Fog, the dark terminal material, or the float dial's zero-blur offset.
 
 **The One Ink Rule.** One palette, one file: `ui/theme/src/tokens.css`. Light and dark,

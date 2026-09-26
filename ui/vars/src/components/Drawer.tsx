@@ -65,7 +65,7 @@ function Where({ variant }: { variant: Variant }) {
     <div className="flex flex-wrap gap-1.5">
       <Chip>{folderName(folder)}</Chip>
       <Chip>{environment === "" ? "base" : environment}</Chip>
-      {variant.orphaned && <Chip tone="owed">orphaned</Chip>}
+      {variant.orphaned && <Chip tone="warn">orphaned</Chip>}
     </div>
   );
 }
@@ -97,7 +97,7 @@ function Facts({ row, variant }: { row: MatrixRow; variant: Variant }) {
         <span className="text-foreground tabular-nums">
           {variant.set
             ? `set · v${variant.version}`
-            : variant.owed
+            : variant.missing
               ? "required, not set"
               : "not set"}
         </span>

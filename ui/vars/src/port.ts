@@ -38,17 +38,17 @@ export interface SessionPort {
   abandon(): Promise<void>;
 }
 
-let held: VarsPort | null = null;
+let installed: VarsPort | null = null;
 let session: SessionPort | null = null;
 
-export function install(port: VarsPort, held_session?: SessionPort): void {
-  held = port;
-  session = held_session ?? null;
+export function install(port: VarsPort, attending?: SessionPort): void {
+  installed = port;
+  session = attending ?? null;
 }
 
 export function port(): VarsPort {
-  if (held === null) throw new Error("@ui/vars: install(port) before reading anything");
-  return held;
+  if (installed === null) throw new Error("@ui/vars: install(port) before reading anything");
+  return installed;
 }
 
 export function sessionPort(): SessionPort | null {

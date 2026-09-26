@@ -73,7 +73,7 @@ function Panel({ here }: { here: string }) {
 
         {nothing ? (
           <p className={cn(role.body, "text-body")}>
-            {dialog.tier} holds no value for a key this project declares.
+            {dialog.tier} has no value for a key this project declares.
           </p>
         ) : (
           <>
@@ -241,10 +241,10 @@ function Here({ cell }: { cell: CopyCell }) {
   const revealed = useValue(baselines).get(addressKey(cell.at));
   if (!cell.hereSet) return <span className="text-muted-foreground">empty</span>;
   if (cell.class === "secret") {
-    return <span className="text-held">secret · v{cell.hereVersion}</span>;
+    return <span className="text-stored">secret · v{cell.hereVersion}</span>;
   }
   return (
-    <span className="truncate text-held" title={`v${cell.hereVersion}`}>
+    <span className="truncate text-stored" title={`v${cell.hereVersion}`}>
       {revealed ?? "••••••••"}
     </span>
   );
