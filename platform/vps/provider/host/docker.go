@@ -1,6 +1,7 @@
 package host
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -232,23 +233,9 @@ func (r Reading) runnableEngine(named string) error {
 }
 
 func (e Engine) release() (int, int, bool) {
-	majorSaid, rest, split := strings.Cut(e.Version, ".")
-	if !split {
-		return 0, 0, false
-	}
-	minorSaid := rest
-	if end := strings.IndexFunc(rest, func(r rune) bool { return r < '0' || r > '9' }); end >= 0 {
-		minorSaid = rest[:end]
-	}
-	major, err := strconv.Atoi(majorSaid)
-	if err != nil {
-		return 0, 0, false
-	}
-	minor, err := strconv.Atoi(minorSaid)
-	if err != nil {
-		return 0, 0, false
-	}
-	return major, minor, true
+	var major, minor int
+	read, err := fmt.Sscanf(e.Version, "%d.%d", &major, &minor)
+	return major, minor, err == nil && read == 2
 }
 
 func readEngine(rendered string) Engine {
