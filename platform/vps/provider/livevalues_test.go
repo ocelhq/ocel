@@ -79,11 +79,11 @@ func resolving(t *testing.T, p *vps.Provider) liveValues {
 	}
 }
 
-func liveValuePlan(t *testing.T, tag string, declared provider.AppValues) provider.StackPlan {
+func liveValueSpec(t *testing.T, tag string, declared provider.AppValues) provider.StackSpec {
 	t.Helper()
-	plan := livePlan(t, tag)
-	plan.App.Values = declared
-	return plan
+	spec := liveSpec(t, tag)
+	spec.App.Values = declared
+	return spec
 }
 
 func (vm machine) proves(t *testing.T, path string) {
@@ -114,7 +114,7 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 	held := resolving(t, p)
 	held.declared.Delivered["RELEASE"] = "handed-by-the-deploy"
 	spoken := &said{}
-	standing, err := p.ProvisionContainers(context.Background(), liveValuePlan(t, "one", held.declared), spoken)
+	standing, err := p.ProvisionContainers(context.Background(), liveValueSpec(t, "one", held.declared), spoken)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() with values = %v", err)
 	}
@@ -177,8 +177,8 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 func TestLiveTheEnvFileStandsAtSixHundredForTheDeployLoginForAsLongAsItExists(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
-	plan := liveValuePlan(t, "two", resolving(t, p).declared)
-	physical := host.ContainerName(plan.Ref.Name.String(), plan.App.App, plan.App.Deployment, plan.App.Image)
+	spec := liveValueSpec(t, "two", resolving(t, p).declared)
+	physical := host.ContainerName(spec.Ref.Name.String(), spec.App.App, spec.App.Deployment, spec.App.Image)
 	path := host.EnvFile(edge.ClassProduction, physical)
 
 	watching := "until=$(( $(date +%s) + 180 ))\n" +
@@ -192,7 +192,7 @@ func TestLiveTheEnvFileStandsAtSixHundredForTheDeployLoginForAsLongAsItExists(t 
 		watched <- strings.TrimSpace(vm.ssh(t, "sudo sh -c "+quote(watching)))
 	}()
 
-	if _, err := p.ProvisionContainers(context.Background(), plan, nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionContainers() with values = %v", err)
 	}
 
@@ -215,7 +215,7 @@ func TestLiveAReleaseThatFallsOverKeepsNoEnvFileAndSaysNothingOfWhatWasInIt(t *t
 	vm, p := onABoxServingContainers(t)
 
 	held := resolving(t, p)
-	broken, err := p.ProvisionContainers(context.Background(), liveValuePlan(t, "crasher", held.declared), nil)
+	broken, err := p.ProvisionContainers(context.Background(), liveValueSpec(t, "crasher", held.declared), nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() of a crash-looping app = %v, want it stood up and refused at its gate", err)
 	}
@@ -252,11 +252,11 @@ func TestLiveAContainerThatCannotBeStoodUpTakesItsEnvFileWithIt(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
 	held := resolving(t, p)
-	plan := liveValuePlan(t, "one", held.declared)
-	plan.App.Image = fixtureRepo + ":no-such-tag"
-	physical := host.ContainerName(plan.Ref.Name.String(), plan.App.App, plan.App.Deployment, plan.App.Image)
+	spec := liveValueSpec(t, "one", held.declared)
+	spec.App.Image = fixtureRepo + ":no-such-tag"
+	physical := host.ContainerName(spec.Ref.Name.String(), spec.App.App, spec.App.Deployment, spec.App.Image)
 
-	_, err := p.ProvisionContainers(context.Background(), plan, nil)
+	_, err := p.ProvisionContainers(context.Background(), spec, nil)
 	if err == nil {
 		t.Fatal("ProvisionContainers() over an image this box does not hold succeeded")
 	}

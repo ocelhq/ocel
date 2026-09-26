@@ -26,7 +26,7 @@ type albProgram struct {
 	project string
 }
 
-func (a albProgram) Run(ctx *pulumi.Context, _ provider.StackPlan) error {
+func (a albProgram) Run(ctx *pulumi.Context, _ provider.StackSpec) error {
 	return a.run(ctx, a.project)
 }
 
@@ -36,30 +36,30 @@ func (s albStacks) Up(
 	program alb.Program,
 	progress edge.Progress,
 ) (map[string]string, error) {
-	automation, plan, err := s.opened(ctx, target, program)
+	automation, spec, err := s.opened(ctx, target, program)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := automation.Run(ctx, plan, progress); err != nil {
+	if _, err := automation.Run(ctx, spec, progress); err != nil {
 		return nil, err
 	}
-	return outputsOf(ctx, automation, plan.Ref)
+	return outputsOf(ctx, automation, spec.Ref)
 }
 
 func (s albStacks) Destroy(ctx context.Context, target alb.Target, progress edge.Progress) error {
-	automation, plan, err := s.opened(ctx, target, nil)
+	automation, spec, err := s.opened(ctx, target, nil)
 	if err != nil {
 		return err
 	}
-	return automation.Destroy(ctx, plan.Ref, progress)
+	return automation.Destroy(ctx, spec.Ref, progress)
 }
 
 func (s albStacks) Outputs(ctx context.Context, target alb.Target) (map[string]string, error) {
-	automation, plan, err := s.opened(ctx, target, nil)
+	automation, spec, err := s.opened(ctx, target, nil)
 	if err != nil {
 		return nil, err
 	}
-	return outputsOf(ctx, automation, plan.Ref)
+	return outputsOf(ctx, automation, spec.Ref)
 }
 
 func outputsOf(ctx context.Context, automation *kitpulumi.Automation, ref provider.StackRef) (map[string]string, error) {
@@ -80,17 +80,17 @@ func (s albStacks) opened(
 	ctx context.Context,
 	target alb.Target,
 	program alb.Program,
-) (*kitpulumi.Automation, provider.StackPlan, error) {
+) (*kitpulumi.Automation, provider.StackSpec, error) {
 	clients, err := s.p.stood(ctx)
 	if err != nil {
-		return nil, provider.StackPlan{}, err
+		return nil, provider.StackSpec{}, err
 	}
 	passphrase, err := s.passphrase(ctx, clients, target.Class)
 	if err != nil {
-		return nil, provider.StackPlan{}, err
+		return nil, provider.StackSpec{}, err
 	}
-	config, plan := s.config(clients, target, passphrase, program)
-	return kitpulumi.New(config), plan, nil
+	config, spec := s.config(clients, target, passphrase, program)
+	return kitpulumi.New(config), spec, nil
 }
 
 func (s albStacks) config(
@@ -98,7 +98,7 @@ func (s albStacks) config(
 	target alb.Target,
 	passphrase string,
 	program alb.Program,
-) (kitpulumi.Config, provider.StackPlan) {
+) (kitpulumi.Config, provider.StackSpec) {
 	project := naming.PulumiProject(target.Prefix())
 	config := kitpulumi.Config{
 		Access: kitpulumi.Access{
@@ -117,7 +117,7 @@ func (s albStacks) config(
 	if target.Slug == "" {
 		config.Refresh = refreshesTheFront
 	}
-	return config, provider.StackPlan{
+	return config, provider.StackSpec{
 		Ref:  provider.StackRef{Project: project, Class: target.Class, Name: naming.InfraStack(target.Name())},
 		Kind: provider.StackInfra,
 	}

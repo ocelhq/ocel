@@ -81,15 +81,15 @@ func (r *deployRun) drawEdge() provider.ChangeGroup {
 }
 
 func (r *deployRun) drawPromotion() provider.ChangeGroup {
-	changes := make([]provider.Change, 0, len(r.plan.Apps))
-	for _, entry := range r.plan.Apps {
+	changes := make([]provider.Change, 0, len(r.spec.Apps))
+	for _, entry := range r.spec.Apps {
 		changes = append(changes, provider.Change{
 			Kind:   deploymentKind,
 			Name:   entry.App,
 			Action: provider.ActionCreate,
 		})
 	}
-	group := provider.ChangeGroup{Kind: promotionGroupKind, Name: r.plan.Pointer, Changes: changes}
+	group := provider.ChangeGroup{Kind: promotionGroupKind, Name: r.spec.Pointer, Changes: changes}
 	if len(changes) == 0 {
 		group.Action, group.Reason = provider.ActionUpdate, reasonPromote
 		return group
@@ -99,7 +99,7 @@ func (r *deployRun) drawPromotion() provider.ChangeGroup {
 }
 
 func (r *deployRun) drawn() *planv1.ChangePlan {
-	return ChangePlanProto(r.draft.plan(), r.plan.Slug, string(r.front.Kind()))
+	return ChangePlanProto(r.draft.plan(), r.spec.Slug, string(r.front.Kind()))
 }
 
 func bindingFor(resource provider.Resource) func(provider.Binding) bool {

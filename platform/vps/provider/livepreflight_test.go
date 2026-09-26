@@ -26,7 +26,7 @@ func liveDeployPreflight(t *testing.T, image string) provider.DeployPreflight {
 		t.Fatal(err)
 	}
 	return provider.DeployPreflight{
-		Plan: provider.DeployPlan{
+		Deploy: provider.DeploySpec{
 			Slug:  "shop",
 			Class: edge.ClassProduction,
 			Apps: []provider.AppEntry{{

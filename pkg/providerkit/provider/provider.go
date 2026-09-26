@@ -50,7 +50,7 @@ type EdgeProgram struct {
 }
 
 type DeployPreflight struct {
-	Plan      DeployPlan
+	Deploy    DeploySpec
 	Edge      edge.Kind
 	Resources []Resource
 	Grants    []Binding

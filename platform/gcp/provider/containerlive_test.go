@@ -15,15 +15,15 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 
-func containerPlanDeclaring(class edge.Class, env string, values provider.AppValues) provider.StackPlan {
-	return provider.StackPlan{
+func containerStackDeclaring(class edge.Class, env string, values provider.AppValues) provider.StackSpec {
+	return provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "shop",
 			Class:   class,
 			Name:    naming.StackName{Env: env, App: "api"},
 		},
 		Kind: provider.StackApp,
-		App: &provider.AppPlan{
+		App: &provider.AppSpec{
 			App:             "api",
 			Compute:         provider.ComputeContainer,
 			Image:           "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc",
@@ -33,10 +33,10 @@ func containerPlanDeclaring(class edge.Class, env string, values provider.AppVal
 	}
 }
 
-func revisionEnv(t *testing.T, server *runServer, plan provider.StackPlan) (*Provider, map[string]string) {
+func revisionEnv(t *testing.T, server *runServer, spec provider.StackSpec) (*Provider, map[string]string) {
 	t.Helper()
 	p := server.open(t)
-	if _, err := p.ProvisionContainers(context.Background(), plan, nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	env := map[string]string{}
@@ -48,7 +48,7 @@ func revisionEnv(t *testing.T, server *runServer, plan provider.StackPlan) (*Pro
 
 func TestAContainerDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *testing.T) {
 	t.Parallel()
-	p, env := revisionEnv(t, &runServer{}, containerPlanDeclaring(edge.ClassProduction, "production", provider.AppValues{
+	p, env := revisionEnv(t, &runServer{}, containerStackDeclaring(edge.ClassProduction, "production", provider.AppValues{
 		Secrets:   []provider.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		Delivered: map[string]string{"REGION": "eu"},
 	}))
@@ -82,7 +82,7 @@ func TestAContainerDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *te
 
 func TestAPreviewContainerReadsItsOwnEnvironmentsValues(t *testing.T) {
 	t.Parallel()
-	_, env := revisionEnv(t, &runServer{}, containerPlanDeclaring(edge.ClassPreview, "pr-7", provider.AppValues{
+	_, env := revisionEnv(t, &runServer{}, containerStackDeclaring(edge.ClassPreview, "pr-7", provider.AppValues{
 		Secrets: []provider.SecretRef{{Key: "MARK"}},
 	}))
 
@@ -97,7 +97,7 @@ func TestAPreviewContainerReadsItsOwnEnvironmentsValues(t *testing.T) {
 
 func TestAContainerWithNothingLiveBootsWithNoManifest(t *testing.T) {
 	t.Parallel()
-	_, env := revisionEnv(t, &runServer{}, containerPlanDeclaring(edge.ClassProduction, "production", provider.AppValues{
+	_, env := revisionEnv(t, &runServer{}, containerStackDeclaring(edge.ClassProduction, "production", provider.AppValues{
 		Delivered: map[string]string{"REGION": "eu"},
 	}))
 

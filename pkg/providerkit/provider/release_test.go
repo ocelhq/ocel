@@ -12,39 +12,39 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func TestAStackPlanCarryingARegistryRendersWithoutItsPassword(t *testing.T) {
+func TestAStackSpecCarryingARegistryRendersWithoutItsPassword(t *testing.T) {
 	target := images.Registry{Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "ghp_livesecret"}
-	plan := provider.StackPlan{
+	spec := provider.StackSpec{
 		Kind: provider.StackApp,
 		Images: provider.ImagePushes{
 			Store:  images.RegistryStore(target),
 			Pushes: []images.Push{{App: "web", Source: "ocel/web@sha256:abc", ImageRef: target.ImageRef("web", "sha256-abc"), Digest: "sha256:abc"}},
 		},
 	}
-	unrendered := provider.StackPlan{
+	unrendered := provider.StackSpec{
 		Kind:   provider.StackApp,
-		Images: provider.ImagePushes{Store: keptSecret{password: "ghp_livesecret"}, Pushes: plan.Images.Pushes},
+		Images: provider.ImagePushes{Store: keptSecret{password: "ghp_livesecret"}, Pushes: spec.Images.Pushes},
 	}
 
 	for _, rendered := range []string{
-		fmt.Sprintf("%v", plan),
-		fmt.Sprintf("%+v", plan),
-		fmt.Sprintf("%#v", plan),
-		fmt.Sprintf("%+v", plan.Images),
-		fmt.Sprintf("%#v", plan.Images.Store),
+		fmt.Sprintf("%v", spec),
+		fmt.Sprintf("%+v", spec),
+		fmt.Sprintf("%#v", spec),
+		fmt.Sprintf("%+v", spec.Images),
+		fmt.Sprintf("%#v", spec.Images.Store),
 		fmt.Sprintf("%+v", unrendered),
 		fmt.Sprintf("%#v", unrendered.Images),
 	} {
 		if strings.Contains(rendered, "ghp_livesecret") {
-			t.Errorf("a stack plan rendered as %q, and the registry password rides along into any log line that prints one", rendered)
+			t.Errorf("a stack spec rendered as %q, and the registry password rides along into any log line that prints one", rendered)
 		}
 		if !strings.Contains(rendered, "ghcr.io") {
-			t.Errorf("a stack plan rendered as %q, want it to still name the registry its images are pushed to", rendered)
+			t.Errorf("a stack spec rendered as %q, want it to still name the registry its images are pushed to", rendered)
 		}
 	}
 }
 
-func TestAPlanCarryingAnAppsValuesRendersWithoutThem(t *testing.T) {
+func TestASpecCarryingAnAppsValuesRendersWithoutThem(t *testing.T) {
 	values := provider.AppValues{
 		Plain:     map[string]string{"REGION": "eu-west-1"},
 		Sensitive: map[string]string{"API_TOKEN": "sk-live-secret"},
@@ -56,8 +56,8 @@ func TestAPlanCarryingAnAppsValuesRendersWithoutThem(t *testing.T) {
 			"OCEL_RESOURCE_POSTGRES_orders": `{"postgres":{"password":"hunter2"}}`,
 		},
 	}
-	app := provider.AppPlan{App: "web", Values: values}
-	plan := provider.StackPlan{Kind: provider.StackApp, App: &app}
+	app := provider.AppSpec{App: "web", Values: values}
+	spec := provider.StackSpec{Kind: provider.StackApp, App: &app}
 
 	for _, rendered := range []string{
 		fmt.Sprintf("%v", values),
@@ -66,7 +66,7 @@ func TestAPlanCarryingAnAppsValuesRendersWithoutThem(t *testing.T) {
 		fmt.Sprintf("%v", app),
 		fmt.Sprintf("%+v", app),
 		fmt.Sprintf("%#v", app),
-		fmt.Sprintf("%+v", *plan.App),
+		fmt.Sprintf("%+v", *spec.App),
 		fmt.Errorf("release %v: %w", app, errors.New("denied")).Error(),
 	} {
 		for _, held := range []string{"sk-live-secret", "hunter2", "postgres://app"} {

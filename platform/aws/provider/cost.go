@@ -17,9 +17,9 @@ const tfDataTransfer = "aws_data_transfer"
 
 func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
 	tree := &costkit.Tree{}
-	project := tree.Scope("", costkit.ScopeProject, req.Plan.Slug)
-	shared := tree.Scope(project, costkit.ScopeShared, string(req.Plan.Class))
-	environment := tree.Scope(project, costkit.ScopeEnvironment, req.Plan.Env)
+	project := tree.Scope("", costkit.ScopeProject, req.Deploy.Slug)
+	shared := tree.Scope(project, costkit.ScopeShared, string(req.Deploy.Class))
+	environment := tree.Scope(project, costkit.ScopeEnvironment, req.Deploy.Env)
 
 	var options []bootstrap.ShapeOption
 	if p.options.VarsKey != "" {
@@ -29,7 +29,7 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 	if !slices.Contains(features, bootstrap.FeatureVarsKey) {
 		features = append(slices.Clone(features), bootstrap.FeatureVarsKey)
 	}
-	standing, err := bootstrap.Shape(p.namespace, string(req.Plan.Class), features, options...)
+	standing, err := bootstrap.Shape(p.namespace, string(req.Deploy.Class), features, options...)
 	if err != nil {
 		return nil, err
 	}
@@ -46,8 +46,8 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 	if err != nil {
 		return nil, err
 	}
-	site := costkit.EdgeSite{Slug: req.Plan.Slug, Class: req.Plan.Class, Region: p.aws.Region}
-	for _, app := range req.Plan.Apps {
+	site := costkit.EdgeSite{Slug: req.Deploy.Slug, Class: req.Deploy.Class, Region: p.aws.Region}
+	for _, app := range req.Deploy.Apps {
 		site.Apps = append(site.Apps, costkit.EdgeApp{Name: app.App, Hostnames: provider.ProductionHostnames(app)})
 	}
 	shape, err := edges.Shape(front.Kind(), p.namespace, site)
@@ -56,7 +56,7 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 	}
 	tree.AddEdge(costkit.EdgeScopes{Shared: shared, Environment: environment}, shape)
 	if !shape.BillsEgress {
-		for _, app := range req.Plan.Apps {
+		for _, app := range req.Deploy.Apps {
 			tree.Add(tree.Scope(environment, costkit.ScopeApp, app.App), string(Vendor), tfDataTransfer, app.App, p.aws.Region, map[string]any{})
 		}
 	}

@@ -45,7 +45,7 @@ func (r *deployRun) stageFunctions(
 	ctx context.Context,
 	entry provider.AppEntry,
 	pack provider.AppPack,
-	routing *provider.RoutingPlan,
+	routing *provider.RoutingSpec,
 ) ([]provider.Upload, []images.Push, error) {
 	if hooks := r.provider.Hooks(); hooks.FunctionImages != nil {
 		pushes, err := r.imageFunctions(ctx, hooks, entry, pack, routing)
@@ -55,7 +55,7 @@ func (r *deployRun) stageFunctions(
 	return staged, nil, err
 }
 
-func (r *deployRun) stageApp(entry provider.AppEntry, pack provider.AppPack, routing *provider.RoutingPlan) ([]provider.Upload, error) {
+func (r *deployRun) stageApp(entry provider.AppEntry, pack provider.AppPack, routing *provider.RoutingSpec) ([]provider.Upload, error) {
 	root := appbuild.ArtifactRoot()
 	var shipping []*contractv1.ManifestFunction
 	for _, fn := range r.manifest.GetFunctions() {
@@ -92,7 +92,7 @@ func discardStaged(staged []provider.Upload) {
 	}
 }
 
-func overlayFor(base map[string][]byte, fn *contractv1.ManifestFunction, routing *provider.RoutingPlan) map[string][]byte {
+func overlayFor(base map[string][]byte, fn *contractv1.ManifestFunction, routing *provider.RoutingSpec) map[string][]byte {
 	if routing == nil || routeOf(fn) != routing.Entry {
 		return base
 	}
@@ -136,7 +136,7 @@ func (r *deployRun) stageArtifact(
 	if err != nil {
 		return provider.Upload{}, fmt.Errorf("read %s's artifact: %w", name, err)
 	}
-	coordinate := appCoordinate(r.plan, entry.App, entry.Build.Release())
+	coordinate := appCoordinate(r.spec, entry.App, entry.Build.Release())
 	coordinate.Name = name
 
 	path, err := packArtifact(dir, rels, overlay)
@@ -146,7 +146,7 @@ func (r *deployRun) stageArtifact(
 
 	return provider.Upload{
 		Name:   name,
-		Ref:    provider.ArtifactRef{Class: r.plan.Class, Bucket: provider.StoreFunctions, Key: coordinate.FunctionArtifactKey(sum)},
+		Ref:    provider.ArtifactRef{Class: r.spec.Class, Bucket: provider.StoreFunctions, Key: coordinate.FunctionArtifactKey(sum)},
 		Path:   path,
 		Digest: sum,
 	}, nil

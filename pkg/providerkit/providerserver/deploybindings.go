@@ -87,7 +87,7 @@ func ReadableAs(binding provider.Binding, declaredName string, declared provider
 
 func (r *deployRun) refuseUnpublished(ctx context.Context, missing, published []string) error {
 	elsewhere := r.publishingClasses(ctx, missing)
-	coordinate := describeCoordinate(string(r.plan.Class), bindingEnvironment(r.plan))
+	coordinate := describeCoordinate(string(r.spec.Class), bindingEnvironment(r.spec))
 
 	var b strings.Builder
 	fmt.Fprintf(&b,
@@ -98,7 +98,7 @@ func (r *deployRun) refuseUnpublished(ctx context.Context, missing, published []
 		if classes := elsewhere[name]; len(classes) > 0 {
 			fmt.Fprintf(&b,
 				"\n\n%q is published to %s instead. A publisher writes to one coordinate: point one at %s as well",
-				name, strings.Join(classes, " and "), r.plan.Class)
+				name, strings.Join(classes, " and "), r.spec.Class)
 		}
 	}
 	if len(published) == 0 {
@@ -112,10 +112,10 @@ func (r *deployRun) refuseUnpublished(ctx context.Context, missing, published []
 func (r *deployRun) publishingClasses(ctx context.Context, missing []string) map[string][]string {
 	found := map[string][]string{}
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		if class == r.plan.Class {
+		if class == r.spec.Class {
 			continue
 		}
-		names, err := r.values.PublishedNames(ctx, envvars.Scope{Project: r.plan.Slug, Class: class}, bindingEnvironment(r.plan))
+		names, err := r.values.PublishedNames(ctx, envvars.Scope{Project: r.spec.Slug, Class: class}, bindingEnvironment(r.spec))
 		if err != nil {
 			continue
 		}
@@ -140,7 +140,7 @@ func (r *deployRun) warnShadowed(progress edge.Progress, resources []provider.Re
 		progress.Say(fmt.Sprintf(
 			"a binding named %q is already published to %s, and this deploy provisions %s beside it. "+
 				"Ocel binds neither to the other on its own: put %q in `bindings` — \"bindings\": { %q: { %q: %q } } — to consume the published record instead",
-			resource.Declared, describeCoordinate(string(r.plan.Class), bindingEnvironment(r.plan)), resource.Name,
+			resource.Declared, describeCoordinate(string(r.spec.Class), bindingEnvironment(r.spec)), resource.Name,
 			resource.Declared, string(resource.Type), resource.Declared, "@"+resource.Declared))
 	}
 }

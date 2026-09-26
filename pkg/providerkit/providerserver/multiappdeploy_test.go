@@ -22,13 +22,13 @@ const promotionUnitSpan = "Promotion"
 
 const webRefusal = "the web stack would not stand up"
 
-func appBarrier(t *testing.T, width int) func(provider.StackPlan) error {
+func appBarrier(t *testing.T, width int) func(provider.StackSpec) error {
 	t.Helper()
 	var mu sync.Mutex
 	var arrived int
 	gate := make(chan struct{})
-	return func(plan provider.StackPlan) error {
-		if plan.App == nil {
+	return func(spec provider.StackSpec) error {
+		if spec.App == nil {
 			return nil
 		}
 		mu.Lock()
@@ -42,7 +42,7 @@ func appBarrier(t *testing.T, width int) func(provider.StackPlan) error {
 		case <-gate:
 			return nil
 		case <-time.After(5 * time.Second):
-			return fmt.Errorf("%s waited for %d apps to be provisioning at once and only %d ever were", plan.App.App, width, arrived)
+			return fmt.Errorf("%s waited for %d apps to be provisioning at once and only %d ever were", spec.App.App, width, arrived)
 		}
 	}
 }
@@ -100,14 +100,14 @@ func TestDeployStartsTheAppsStillQueuedWhenAnEarlyAppFails(t *testing.T) {
 	client, p := deployServed(t)
 
 	inFlight := appBarrier(t, providerserver.AppConcurrency)
-	p.FakeStacks().Entering(func(plan provider.StackPlan) error {
-		if plan.App == nil {
+	p.FakeStacks().Entering(func(spec provider.StackSpec) error {
+		if spec.App == nil {
 			return nil
 		}
-		if err := inFlight(plan); err != nil {
+		if err := inFlight(spec); err != nil {
 			return err
 		}
-		if plan.App.App == apps[0] {
+		if spec.App.App == apps[0] {
 			return errors.New(webRefusal)
 		}
 		return nil
@@ -154,11 +154,11 @@ func TestDeployFinishesASiblingOfAFailedAppAndWithholdsPromotion(t *testing.T) {
 	client, p := deployServed(t)
 
 	webFailed := make(chan struct{})
-	p.FakeStacks().Entering(func(plan provider.StackPlan) error {
-		if plan.App == nil {
+	p.FakeStacks().Entering(func(spec provider.StackSpec) error {
+		if spec.App == nil {
 			return nil
 		}
-		if plan.App.App == "web" {
+		if spec.App.App == "web" {
 			close(webFailed)
 			return errors.New(webRefusal)
 		}
@@ -222,11 +222,11 @@ func TestDeployReportsAppOutcomesInManifestOrderWhicheverFinishesFirst(t *testin
 			client, p := deployServed(t)
 
 			done := make(chan struct{})
-			p.FakeStacks().Entering(func(plan provider.StackPlan) error {
-				if plan.App == nil {
+			p.FakeStacks().Entering(func(spec provider.StackSpec) error {
+				if spec.App == nil {
 					return nil
 				}
-				if plan.App.App == first {
+				if spec.App.App == first {
 					close(done)
 					return nil
 				}
@@ -253,8 +253,8 @@ func TestDeployStartsNoAppWhenTheSharedInfrastructureFails(t *testing.T) {
 	builtProject(t)
 	client, p := deployServed(t)
 
-	p.FakeStacks().Entering(func(plan provider.StackPlan) error {
-		if plan.App == nil {
+	p.FakeStacks().Entering(func(spec provider.StackSpec) error {
+		if spec.App == nil {
 			return errors.New("the environment's infrastructure would not stand up")
 		}
 		return errors.New("an app was provisioned over infrastructure that never stood up")

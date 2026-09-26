@@ -35,22 +35,22 @@ func TestTheDeployRosterIsTheSpineInOrder(t *testing.T) {
 	t.Parallel()
 
 	t.Run("environment, shared infrastructure, apps in manifest order, edge, hostnames, promotion", func(t *testing.T) {
-		plan, err := buildDeployPlan(productionRequest(
+		spec, err := buildDeploySpec(productionRequest(
 			&contractv1.ManifestApp{Name: "web", DeploymentId: deploymentID},
 			&contractv1.ManifestApp{Name: "admin", DeploymentId: deploymentID},
 			&contractv1.ManifestApp{Name: "api", DeploymentId: deploymentID},
 		), "p1")
 		if err != nil {
-			t.Fatalf("buildDeployPlan() error = %v", err)
+			t.Fatalf("buildDeploySpec() error = %v", err)
 		}
 		want := []string{"Environment", "Shared infrastructure", "web", "admin", "api", "Edge", "Hostnames", "Promotion"}
-		if got := rosterTitles(newDeployStages(plan).Roster); strings.Join(got, ",") != strings.Join(want, ",") {
+		if got := rosterTitles(newDeployStages(spec).Roster); strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Errorf("roster = %v, want %v", got, want)
 		}
 	})
 
 	t.Run("an ephemeral preview has no shared infrastructure to walk through", func(t *testing.T) {
-		plan, err := buildDeployPlan(&contractv1.DeployRequest{
+		spec, err := buildDeploySpec(&contractv1.DeployRequest{
 			Manifest: &contractv1.Manifest{Slug: "shop", Apps: []*contractv1.ManifestApp{{Name: "web", DeploymentId: deploymentID}}},
 			Environment: &environmentv1.Environment{
 				Tier:      environmentv1.Tier_TIER_PREVIEW,
@@ -59,37 +59,37 @@ func TestTheDeployRosterIsTheSpineInOrder(t *testing.T) {
 			},
 		}, "p1")
 		if err != nil {
-			t.Fatalf("buildDeployPlan() error = %v", err)
+			t.Fatalf("buildDeploySpec() error = %v", err)
 		}
 		want := []string{"Environment", "web", "Edge", "Promotion"}
-		if got := rosterTitles(newDeployStages(plan).Roster); strings.Join(got, ",") != strings.Join(want, ",") {
+		if got := rosterTitles(newDeployStages(spec).Roster); strings.Join(got, ",") != strings.Join(want, ",") {
 			t.Errorf("roster = %v, want %v", got, want)
 		}
 	})
 }
 
-func TestBuildDeployPlanNamesAnInfraStackAndOneStackPerApp(t *testing.T) {
+func TestBuildDeploySpecNamesAnInfraStackAndOneStackPerApp(t *testing.T) {
 	t.Parallel()
 
-	plan, err := buildDeployPlan(productionRequest(
+	spec, err := buildDeploySpec(productionRequest(
 		&contractv1.ManifestApp{Name: "web", DeploymentId: deploymentID},
 		&contractv1.ManifestApp{Name: "admin", DeploymentId: deploymentID},
 	), "p1")
 	if err != nil {
-		t.Fatalf("buildDeployPlan() error = %v", err)
+		t.Fatalf("buildDeploySpec() error = %v", err)
 	}
-	if plan.Infra != naming.InfraStack(stackrecords.ProductionEnv) {
-		t.Errorf("plan infra stack = %s, want %s", plan.Infra, naming.InfraStack(stackrecords.ProductionEnv))
+	if spec.Infra != naming.InfraStack(stackrecords.ProductionEnv) {
+		t.Errorf("spec infra stack = %s, want %s", spec.Infra, naming.InfraStack(stackrecords.ProductionEnv))
 	}
-	if len(plan.Apps) != 2 {
-		t.Fatalf("plan carries %d app stacks, want one per app", len(plan.Apps))
+	if len(spec.Apps) != 2 {
+		t.Fatalf("spec carries %d app stacks, want one per app", len(spec.Apps))
 	}
-	if plan.Pointer != edge.DefaultPointer {
-		t.Errorf("a production plan points at %q, want %q", plan.Pointer, edge.DefaultPointer)
+	if spec.Pointer != edge.DefaultPointer {
+		t.Errorf("a production spec points at %q, want %q", spec.Pointer, edge.DefaultPointer)
 	}
-	for _, entry := range plan.Apps {
-		if plan.Builds[entry.App] != entry.Build.String() {
-			t.Errorf("the promotion records %q as %s's build, want %s", plan.Builds[entry.App], entry.App, entry.Build)
+	for _, entry := range spec.Apps {
+		if spec.Builds[entry.App] != entry.Build.String() {
+			t.Errorf("the promotion records %q as %s's build, want %s", spec.Builds[entry.App], entry.App, entry.Build)
 		}
 		if entry.Stack.Env != stackrecords.ProductionEnv || entry.Stack.App != entry.App {
 			t.Errorf("%s's stack is %s, want it named for the app in production", entry.App, entry.Stack)
@@ -97,10 +97,10 @@ func TestBuildDeployPlanNamesAnInfraStackAndOneStackPerApp(t *testing.T) {
 	}
 }
 
-func TestBuildDeployPlanLeavesAnEphemeralPreviewWithoutAnInfraStack(t *testing.T) {
+func TestBuildDeploySpecLeavesAnEphemeralPreviewWithoutAnInfraStack(t *testing.T) {
 	t.Parallel()
 
-	plan, err := buildDeployPlan(&contractv1.DeployRequest{
+	spec, err := buildDeploySpec(&contractv1.DeployRequest{
 		Manifest: &contractv1.Manifest{Slug: "shop", Apps: []*contractv1.ManifestApp{{Name: "web", DeploymentId: deploymentID}}},
 		Environment: &environmentv1.Environment{
 			Tier:      environmentv1.Tier_TIER_PREVIEW,
@@ -109,22 +109,22 @@ func TestBuildDeployPlanLeavesAnEphemeralPreviewWithoutAnInfraStack(t *testing.T
 		},
 	}, "p1")
 	if err != nil {
-		t.Fatalf("buildDeployPlan() error = %v", err)
+		t.Fatalf("buildDeploySpec() error = %v", err)
 	}
-	if !plan.Infra.IsZero() {
-		t.Errorf("an ephemeral preview plans infra stack %s, want none: nothing persists past the pointer", plan.Infra)
+	if !spec.Infra.IsZero() {
+		t.Errorf("an ephemeral preview specifies infra stack %s, want none: nothing persists past the pointer", spec.Infra)
 	}
-	if plan.Pointer != "pr-7" {
-		t.Errorf("a preview plan points at %q, want the environment's identity", plan.Pointer)
+	if spec.Pointer != "pr-7" {
+		t.Errorf("a preview spec points at %q, want the environment's identity", spec.Pointer)
 	}
 }
 
-func TestBuildDeployPlanRefusesAnAppNamedForTheInfraStack(t *testing.T) {
+func TestBuildDeploySpecRefusesAnAppNamedForTheInfraStack(t *testing.T) {
 	t.Parallel()
 
-	_, err := buildDeployPlan(productionRequest(&contractv1.ManifestApp{Name: naming.InfraApp, DeploymentId: deploymentID}), "p1")
+	_, err := buildDeploySpec(productionRequest(&contractv1.ManifestApp{Name: naming.InfraApp, DeploymentId: deploymentID}), "p1")
 	if err == nil || !strings.Contains(err.Error(), naming.InfraApp) {
-		t.Fatalf("buildDeployPlan() with an app named %q = %v, want a refusal naming it", naming.InfraApp, err)
+		t.Fatalf("buildDeploySpec() with an app named %q = %v, want a refusal naming it", naming.InfraApp, err)
 	}
 }
 
@@ -183,50 +183,50 @@ func functionRequest(fn *contractv1.ManifestFunction, apps ...*contractv1.Manife
 	return req
 }
 
-func TestBuildDeployPlanRefusesAnAppNameNoHostnameCanCarry(t *testing.T) {
+func TestBuildDeploySpecRefusesAnAppNameNoHostnameCanCarry(t *testing.T) {
 	t.Parallel()
 
-	_, err := buildDeployPlan(productionRequest(
+	_, err := buildDeploySpec(productionRequest(
 		&contractv1.ManifestApp{Name: "Web", DeploymentId: deploymentID}), "p1")
 	if err == nil {
-		t.Fatal("buildDeployPlan() accepted an app named \"Web\", so the store would record a name the edge lowercases out of every hostname")
+		t.Fatal("buildDeploySpec() accepted an app named \"Web\", so the store would record a name the edge lowercases out of every hostname")
 	}
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-		t.Fatalf("buildDeployPlan() = %v, want a %s refusal", err, refusal.CodeInvalid)
+		t.Fatalf("buildDeploySpec() = %v, want a %s refusal", err, refusal.CodeInvalid)
 	}
 	if !strings.Contains(refused.Message, "Web") {
-		t.Errorf("buildDeployPlan() = %q, want the refusal to name the app it will not carry", refused.Message)
+		t.Errorf("buildDeploySpec() = %q, want the refusal to name the app it will not carry", refused.Message)
 	}
 }
 
-func TestBuildDeployPlanRefusesAFunctionNoDeclaredAppOwns(t *testing.T) {
+func TestBuildDeploySpecRefusesAFunctionNoDeclaredAppOwns(t *testing.T) {
 	t.Parallel()
 
 	web := &contractv1.ManifestApp{Name: "web", DeploymentId: deploymentID}
 
 	t.Run("an undeclared app", func(t *testing.T) {
-		_, err := buildDeployPlan(functionRequest(
+		_, err := buildDeploySpec(functionRequest(
 			&contractv1.ManifestFunction{LogicalName: "admin-server", App: "admin"}, web), "p1")
 		if err == nil {
-			t.Fatal("buildDeployPlan() accepted a function naming an app no stack stands up, so the deploy would succeed with the route 404ing")
+			t.Fatal("buildDeploySpec() accepted a function naming an app no stack stands up, so the deploy would succeed with the route 404ing")
 		}
 		if !strings.Contains(err.Error(), "admin") {
-			t.Errorf("buildDeployPlan() = %v, want the refusal to name the app it cannot find", err)
+			t.Errorf("buildDeploySpec() = %v, want the refusal to name the app it cannot find", err)
 		}
 	})
 
 	t.Run("no app at all", func(t *testing.T) {
-		if _, err := buildDeployPlan(functionRequest(
+		if _, err := buildDeploySpec(functionRequest(
 			&contractv1.ManifestFunction{LogicalName: "server"}, web), "p1"); err == nil {
-			t.Fatal("buildDeployPlan() accepted a function naming no app, which would ship once into every app that deploys")
+			t.Fatal("buildDeploySpec() accepted a function naming no app, which would ship once into every app that deploys")
 		}
 	})
 
 	t.Run("a declared app", func(t *testing.T) {
-		if _, err := buildDeployPlan(functionRequest(
+		if _, err := buildDeploySpec(functionRequest(
 			&contractv1.ManifestFunction{LogicalName: "server", App: "web"}, web), "p1"); err != nil {
-			t.Fatalf("buildDeployPlan() = %v, want a function its own app declares to be accepted", err)
+			t.Fatalf("buildDeploySpec() = %v, want a function its own app declares to be accepted", err)
 		}
 	})
 }
@@ -252,11 +252,11 @@ func containerRequest(image string) *contractv1.DeployRequest {
 func TestAContainerAppIsPromotedUnderTheDigestItWasBuiltAt(t *testing.T) {
 	t.Parallel()
 
-	plan, err := buildDeployPlan(containerRequest(pinnedTestImage), "p1")
+	spec, err := buildDeploySpec(containerRequest(pinnedTestImage), "p1")
 	if err != nil {
-		t.Fatalf("buildDeployPlan() error = %v", err)
+		t.Fatalf("buildDeploySpec() error = %v", err)
 	}
-	if got := plan.Builds["api"]; got != pinnedTestImage {
+	if got := spec.Builds["api"]; got != pinnedTestImage {
 		t.Errorf("the promotion records %q as api's build, want %q: rolling back to it must repoint at a retained image rather than rebuild one", got, pinnedTestImage)
 	}
 }
@@ -264,16 +264,16 @@ func TestAContainerAppIsPromotedUnderTheDigestItWasBuiltAt(t *testing.T) {
 func TestAServerlessAppBesideAContainerKeepsItsOwnBuildIdentity(t *testing.T) {
 	t.Parallel()
 
-	plan, err := buildDeployPlan(containerRequest(pinnedTestImage), "p1")
+	spec, err := buildDeploySpec(containerRequest(pinnedTestImage), "p1")
 	if err != nil {
-		t.Fatalf("buildDeployPlan() error = %v", err)
+		t.Fatalf("buildDeploySpec() error = %v", err)
 	}
-	for _, entry := range plan.Apps {
+	for _, entry := range spec.Apps {
 		if entry.App != "web" {
 			continue
 		}
-		if plan.Builds["web"] != entry.Build.String() {
-			t.Errorf("the promotion records %q as web's build, want %s", plan.Builds["web"], entry.Build)
+		if spec.Builds["web"] != entry.Build.String() {
+			t.Errorf("the promotion records %q as web's build, want %s", spec.Builds["web"], entry.Build)
 		}
 	}
 }
@@ -284,12 +284,12 @@ func TestAContainerNamingAnAppTheManifestDoesNotDeclareRefusesTheDeploy(t *testi
 	req := containerRequest(pinnedTestImage)
 	req.Manifest.Containers[0].App = "ghost"
 
-	_, err := buildDeployPlan(req, "p1")
+	_, err := buildDeploySpec(req, "p1")
 	if err == nil {
-		t.Fatal("buildDeployPlan() admitted a container for an app this manifest never declares, and nothing would ever stand it up")
+		t.Fatal("buildDeploySpec() admitted a container for an app this manifest never declares, and nothing would ever stand it up")
 	}
 	if !strings.Contains(err.Error(), "ghost") {
-		t.Errorf("buildDeployPlan() error = %q, want it to name the app", err)
+		t.Errorf("buildDeploySpec() error = %q, want it to name the app", err)
 	}
 }
 
@@ -299,12 +299,12 @@ func TestAContainerAppWithNoContainerRefusesTheDeploy(t *testing.T) {
 	req := containerRequest(pinnedTestImage)
 	req.Manifest.Containers = nil
 
-	_, err := buildDeployPlan(req, "p1")
+	_, err := buildDeploySpec(req, "p1")
 	if err == nil {
-		t.Fatal("buildDeployPlan() admitted an app on container compute with no container, so the promotion would record no image to roll back to")
+		t.Fatal("buildDeploySpec() admitted an app on container compute with no container, so the promotion would record no image to roll back to")
 	}
 	if !strings.Contains(err.Error(), "api") {
-		t.Errorf("buildDeployPlan() error = %q, want it to name the app", err)
+		t.Errorf("buildDeploySpec() error = %q, want it to name the app", err)
 	}
 }
 
@@ -314,13 +314,13 @@ func TestAContainerAppPackedIntoFunctionsRefusesTheDeploy(t *testing.T) {
 	req := containerRequest(pinnedTestImage)
 	req.Manifest.Functions = []*contractv1.ManifestFunction{{LogicalName: "api-server", App: "api"}}
 
-	_, err := buildDeployPlan(req, "p1")
+	_, err := buildDeploySpec(req, "p1")
 	if err == nil {
-		t.Fatal("buildDeployPlan() admitted a container app that was packed into functions too, so the process and a zip would both answer the same request with nothing to say which was meant to")
+		t.Fatal("buildDeploySpec() admitted a container app that was packed into functions too, so the process and a zip would both answer the same request with nothing to say which was meant to")
 	}
 	for _, want := range []string{"api", "api-server"} {
 		if !strings.Contains(err.Error(), want) {
-			t.Errorf("buildDeployPlan() error = %q, want it to name %s", err, want)
+			t.Errorf("buildDeploySpec() error = %q, want it to name %s", err, want)
 		}
 	}
 }

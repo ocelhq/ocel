@@ -317,45 +317,45 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.Instruction
 	}, nil
 }
 
-func (p *Provider) storeSection(ctx context.Context, plan provider.StackPlan) (*live.Store, error) {
-	if !slices.ContainsFunc(plan.App.Values.Bindings, func(binding provider.Binding) bool {
+func (p *Provider) storeSection(ctx context.Context, spec provider.StackSpec) (*live.Store, error) {
+	if !slices.ContainsFunc(spec.App.Values.Bindings, func(binding provider.Binding) bool {
 		return binding.Type == provider.BindingBucket && !binding.Endpointed()
 	}) {
 		return nil, nil
 	}
-	spec := p.stores.shape()
-	if spec == nil {
-		shaped := storeContainer(resources.Instruction{Ref: storeRef(plan.Ref)})
-		spec = &shaped
+	container := p.stores.shape()
+	if container == nil {
+		shaped := storeContainer(resources.Instruction{Ref: storeRef(spec.Ref)})
+		container = &shaped
 	}
-	held, err := p.stores.once(spec.Name, func() (storeCredential, error) {
-		return p.storeCredential(ctx, plan.Ref, spec.Name)
+	held, err := p.stores.once(container.Name, func() (storeCredential, error) {
+		return p.storeCredential(ctx, spec.Ref, container.Name)
 	})
 	if err != nil {
 		return nil, err
 	}
-	own, err := p.storeAccount(ctx, plan, spec.Name, held)
+	own, err := p.storeAccount(ctx, spec, container.Name, held)
 	if err != nil {
 		return nil, err
 	}
 	return &live.Store{
-		Env:          storeRef(plan.Ref).Name.String(),
-		Endpoint:     "http://" + spec.Name + ":" + storePort,
+		Env:          storeRef(spec.Ref).Name.String(),
+		Endpoint:     "http://" + container.Name + ":" + storePort,
 		Region:       storeRegion,
 		AccessKeyID:  own.key,
 		PathStyle:    true,
-		Pointer:      storeRoute(plan.Ref, spec.Name).Pointer,
-		Volume:       spec.VolumeName(),
-		Sessions:     sessionsPrefix(plan),
-		Granted:      grantedBuckets(plan.App),
-		SweepUploads: sweptUploads(plan.App),
+		Pointer:      storeRoute(spec.Ref, container.Name).Pointer,
+		Volume:       container.VolumeName(),
+		Sessions:     sessionsPrefix(spec),
+		Granted:      grantedBuckets(spec.App),
+		SweepUploads: sweptUploads(spec.App),
 		Sealed:       base64.StdEncoding.EncodeToString(own.held.sealed),
 	}, nil
 }
 
-func sessionsPrefix(plan provider.StackPlan) string {
+func sessionsPrefix(spec provider.StackSpec) string {
 	return constants.StoreSessionsBucket() + "/" +
-		storeRef(plan.Ref).Name.String() + "/" + naming.Sanitize(appNameOf(plan.App))
+		storeRef(spec.Ref).Name.String() + "/" + naming.Sanitize(appNameOf(spec.App))
 }
 
 type appAccount struct {
@@ -363,40 +363,40 @@ type appAccount struct {
 	held storeCredential
 }
 
-func (p *Provider) storeAccount(ctx context.Context, plan provider.StackPlan, store string, root storeCredential) (appAccount, error) {
-	env := storeRef(plan.Ref).Name.String()
-	key := host.StoreAccountKey(env, appNameOf(plan.App))
+func (p *Provider) storeAccount(ctx context.Context, spec provider.StackSpec, store string, root storeCredential) (appAccount, error) {
+	env := storeRef(spec.Ref).Name.String()
+	key := host.StoreAccountKey(env, appNameOf(spec.App))
 	held, err := p.stores.once(key, func() (storeCredential, error) {
-		return p.storeCredential(ctx, plan.Ref, key)
+		return p.storeCredential(ctx, spec.Ref, key)
 	})
 	if err != nil {
 		return appAccount{}, err
 	}
 	if err := p.host.GrantStoreAccount(ctx, host.StoreAccount{
 		Store:       store,
-		Class:       plan.Ref.Class,
+		Class:       spec.Ref.Class,
 		Endpoint:    "http://127.0.0.1:" + storePort,
 		Region:      storeRegion,
 		RootKeyID:   storeAccessKey,
 		RootSecret:  root.secret,
 		AccessKeyID: key,
 		SecretKey:   held.secret,
-		Buckets:     boundBuckets(plan.App),
-		Sessions:    sessionsPrefix(plan),
+		Buckets:     boundBuckets(spec.App),
+		Sessions:    sessionsPrefix(spec),
 	}); err != nil {
 		return appAccount{}, err
 	}
 	return appAccount{key: key, held: held}, nil
 }
 
-func appNameOf(app *provider.AppPlan) string {
+func appNameOf(app *provider.AppSpec) string {
 	if app == nil {
 		return ""
 	}
 	return app.App
 }
 
-func grantedBuckets(app *provider.AppPlan) []string {
+func grantedBuckets(app *provider.AppSpec) []string {
 	if app == nil {
 		return nil
 	}
@@ -412,7 +412,7 @@ func grantedBuckets(app *provider.AppPlan) []string {
 	return held
 }
 
-func sweptUploads(app *provider.AppPlan) bool {
+func sweptUploads(app *provider.AppSpec) bool {
 	if app == nil {
 		return false
 	}
@@ -423,7 +423,7 @@ func sweptUploads(app *provider.AppPlan) bool {
 		})
 }
 
-func boundBuckets(app *provider.AppPlan) []string {
+func boundBuckets(app *provider.AppSpec) []string {
 	var held []string
 	for _, spec := range grantedBuckets(app) {
 		bucket, _, _ := strings.Cut(spec, "/")

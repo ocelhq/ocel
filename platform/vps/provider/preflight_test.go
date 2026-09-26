@@ -140,7 +140,7 @@ func preflighting(machine *scripted) error {
 		return err
 	}
 	return p.PreflightDeploy(context.Background(), provider.DeployPreflight{
-		Plan: provider.DeployPlan{
+		Deploy: provider.DeploySpec{
 			Slug:  "shop",
 			Class: edge.ClassProduction,
 			Apps:  []provider.AppEntry{{App: "web", Stack: stack, Image: deployedRef}},

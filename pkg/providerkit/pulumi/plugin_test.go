@@ -39,7 +39,7 @@ func (r *pushResource) Create(_ context.Context, req infer.CreateRequest[pushArg
 
 type pushing struct{}
 
-func (pushing) Run(pctx *sdk.Context, _ provider.StackPlan) error {
+func (pushing) Run(pctx *sdk.Context, _ provider.StackSpec) error {
 	state := &struct{ sdk.CustomResourceState }{}
 	return pctx.RegisterResource("probe:index:Push", "assets", sdk.Map{"set": sdk.String("assets")}, state)
 }
@@ -80,9 +80,9 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 		Class:   edge.ClassPreview,
 		Name:    naming.InfraStack("probe"),
 	}
-	plan := provider.StackPlan{Ref: ref, Kind: provider.StackInfra}
+	spec := provider.StackSpec{Ref: ref, Kind: provider.StackInfra}
 
-	planned, err := automation.Preview(ctx, plan, nil)
+	planned, err := automation.Preview(ctx, spec, nil)
 	if err != nil {
 		t.Fatalf("Preview() over an attached plugin = %v", err)
 	}
@@ -93,7 +93,7 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 		t.Fatalf("Preview() pushed %d times, want none: a plan writes nothing", pushed)
 	}
 
-	if _, err := automation.Run(ctx, plan, nil); err != nil {
+	if _, err := automation.Run(ctx, spec, nil); err != nil {
 		t.Fatalf("Run() over an attached plugin = %v", err)
 	}
 	if pushed := counter.created.Load(); pushed != 1 {

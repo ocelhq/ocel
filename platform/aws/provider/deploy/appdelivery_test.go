@@ -13,7 +13,7 @@ import (
 func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedAppStack(t)
+	cfg, spec := appStackSpec(t)
 	cfg.CacheStoreBucket = "isr"
 	cfg.CacheStoreObjects = &fakeArtifactStore{}
 	cfg.ISRWriterEndpoint = "https://writer.example"
@@ -26,14 +26,14 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 	if err := os.WriteFile(bundlePath, []byte(`{"version":1}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	plan.App.Packed = appBundle{Envelope: "an-envelope", Ciphertext: []byte("sealed")}
+	spec.App.Packed = appBundle{Envelope: "an-envelope", Ciphertext: []byte("sealed")}
 
 	release := releasing(t, cfg)
-	work, err := release.appWork(plan, nil)
+	work, err := release.appWork(spec, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
-	plan.Work = work
+	spec.Work = work
 
 	outputs := auto.OutputMap{"fn--web--entry": auto.OutputValue{Value: map[string]any{
 		outputKeyFunctionURL:  "https://web.lambda-url.us-east-1.on.aws/",
@@ -43,18 +43,18 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 		outputKeyFunctionName: "shop-prod-web-admin",
 	}}}
 
-	result, err := release.decodeApp(plan, outputs)
+	result, err := release.decodeApp(spec, outputs)
 	if err != nil {
 		t.Fatalf("decodeApp() = %v", err)
 	}
-	if want := appEdgeBundleKey(appCoordinate(plan)); result.EdgeBundleKey != want {
+	if want := appEdgeBundleKey(appCoordinate(spec)); result.EdgeBundleKey != want {
 		t.Errorf("EdgeBundleKey = %q, want %q: the record the edge loads code by names the key only the vendor's upload knows",
 			result.EdgeBundleKey, want)
 	}
 	if result.Envelope != "an-envelope" {
 		t.Errorf("Envelope = %q, want the one sealed beside the bundle", result.Envelope)
 	}
-	if result.ISRWriteSecret != isrWriteSecret(cfg.ISRWriterSeed, plan.App.ISR.Prefix) {
+	if result.ISRWriteSecret != isrWriteSecret(cfg.ISRWriterSeed, spec.App.ISR.Prefix) {
 		t.Errorf("ISRWriteSecret = %q, want the secret the revalidation writer demands", result.ISRWriteSecret)
 	}
 }
@@ -62,15 +62,15 @@ func TestTheReleaseHandsBackTheEdgeDeliveryOnlyItKnows(t *testing.T) {
 func TestAReleaseThatUploadsNoEdgeBundleHandsBackNoKey(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedAppStack(t)
+	cfg, spec := appStackSpec(t)
 	release := releasing(t, cfg)
-	work, err := release.appWork(plan, nil)
+	work, err := release.appWork(spec, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
-	plan.Work = work
+	spec.Work = work
 
-	result, err := release.decodeApp(plan, auto.OutputMap{
+	result, err := release.decodeApp(spec, auto.OutputMap{
 		"fn--web--entry": auto.OutputValue{Value: map[string]any{outputKeyFunctionURL: "https://web.example/"}},
 		"fn--web--admin": auto.OutputValue{Value: map[string]any{outputKeyFunctionURL: "https://admin.example/"}},
 	})

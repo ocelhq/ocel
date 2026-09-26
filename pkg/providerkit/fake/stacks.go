@@ -20,11 +20,11 @@ type Stacks struct {
 	journal   *Journal
 	refusal   error
 
-	mu      sync.Mutex
-	stacks  map[string]provider.StackResult
-	plans   []provider.StackPlan
-	taken   []string
-	entered func(provider.StackPlan) error
+	mu          sync.Mutex
+	stacks      map[string]provider.StackResult
+	provisioned []provider.StackSpec
+	taken       []string
+	entered     func(provider.StackSpec) error
 }
 
 func NewStacks(artifacts provider.ArtifactStore) *Stacks {
@@ -36,27 +36,27 @@ func (r *Stacks) journalling(journal *Journal) *Stacks {
 	return r
 }
 
-func (r *Stacks) Entering(hook func(provider.StackPlan) error) {
+func (r *Stacks) Entering(hook func(provider.StackSpec) error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.entered = hook
 }
 
-func (r *Stacks) Plans() []provider.StackPlan {
+func (r *Stacks) Provisioned() []provider.StackSpec {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return slices.Clone(r.plans)
+	return slices.Clone(r.provisioned)
 }
 
-func (r *Stacks) Plan(ctx context.Context, plan provider.StackPlan, _ edge.Progress) (provider.Plan, error) {
-	return resources.SynthesizedPlan(ctx, r.artifacts, plan, r.State(plan.Ref).Result)
+func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, _ edge.Progress) (provider.Plan, error) {
+	return resources.SynthesizedPlan(ctx, r.artifacts, spec, r.State(spec.Ref).Result)
 }
 
 func (r *Stacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ edge.Progress) (provider.Plan, error) {
 	return resources.SynthesizedRemoval(ref, r.State(ref).Result), nil
 }
 
-func (r *Stacks) Provision(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.StackResult, error) {
+func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.StackResult, error) {
 	if err := ctx.Err(); err != nil {
 		return provider.StackResult{}, err
 	}
@@ -64,18 +64,18 @@ func (r *Stacks) Provision(ctx context.Context, plan provider.StackPlan, progres
 	entered := r.entered
 	r.mu.Unlock()
 	if entered != nil {
-		if err := entered(plan); err != nil {
+		if err := entered(spec); err != nil {
 			return provider.StackResult{}, err
 		}
 	}
-	if err := plan.Images.PushMissing(ctx, progress); err != nil {
+	if err := spec.Images.PushMissing(ctx, progress); err != nil {
 		return provider.StackResult{}, err
 	}
-	if err := resources.ShipUploads(ctx, r.artifacts, plan.Uploads, progress); err != nil {
+	if err := resources.ShipUploads(ctx, r.artifacts, spec.Uploads, progress); err != nil {
 		return provider.StackResult{}, err
 	}
 	result := provider.StackResult{}
-	for _, resource := range plan.Resources {
+	for _, resource := range spec.Resources {
 		if resource.Binding != "" {
 			continue
 		}
@@ -86,20 +86,20 @@ func (r *Stacks) Provision(ctx context.Context, plan provider.StackPlan, progres
 			Grants:     r.Grants,
 		})
 	}
-	result.Functions = StoodUpFunctions(plan)
-	result.Containers = StoodUpContainers(plan)
-	if plan.App != nil {
-		result.EdgeBundleKey = deliveredEdgeBundle(plan)
-		if plan.App.ISR != nil {
-			result.ISRWriteSecret = "isr-" + plan.Ref.Name.String()
+	result.Functions = StoodUpFunctions(spec)
+	result.Containers = StoodUpContainers(spec)
+	if spec.App != nil {
+		result.EdgeBundleKey = deliveredEdgeBundle(spec)
+		if spec.App.ISR != nil {
+			result.ISRWriteSecret = "isr-" + spec.Ref.Name.String()
 		}
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.plans = append(r.plans, plan)
-	r.stacks[stackKey(plan.Ref)] = result
+	r.provisioned = append(r.provisioned, spec)
+	r.stacks[stackKey(spec.Ref)] = result
 	if progress != nil {
-		progress.Say("provisioned " + plan.Ref.Name.String())
+		progress.Say("provisioned " + spec.Ref.Name.String())
 	}
 	return result, nil
 }
@@ -133,21 +133,21 @@ func (r *Stacks) State(ref provider.StackRef) provider.StackState {
 	return provider.StackState{Present: present, Result: result}
 }
 
-func deliveredEdgeBundle(plan provider.StackPlan) string {
-	root := appbuild.AppArtifactRoot(appbuild.ArtifactRoot(), plan.App.App)
+func deliveredEdgeBundle(spec provider.StackSpec) string {
+	root := appbuild.AppArtifactRoot(appbuild.ArtifactRoot(), spec.App.App)
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(edge.AppBundleFile))); err != nil {
 		return ""
 	}
-	return plan.Ref.Name.String() + "/edge/bundle.json"
+	return spec.Ref.Name.String() + "/edge/bundle.json"
 }
 
-func StoodUpFunctions(plan provider.StackPlan) []provider.Function {
-	if plan.App == nil {
+func StoodUpFunctions(spec provider.StackSpec) []provider.Function {
+	if spec.App == nil {
 		return nil
 	}
-	standing := make([]provider.Function, 0, len(plan.App.Functions))
-	for _, function := range plan.App.Functions {
-		physical := plan.Ref.Name.String() + "-" + function.Name
+	standing := make([]provider.Function, 0, len(spec.App.Functions))
+	for _, function := range spec.App.Functions {
+		physical := spec.Ref.Name.String() + "-" + function.Name
 		standing = append(standing, provider.Function{
 			Name:     function.Name,
 			Physical: physical,
@@ -160,16 +160,16 @@ func StoodUpFunctions(plan provider.StackPlan) []provider.Function {
 	return standing
 }
 
-func StoodUpContainers(plan provider.StackPlan) []provider.AppContainer {
-	if plan.App == nil || plan.App.Compute != provider.ComputeContainer {
+func StoodUpContainers(spec provider.StackSpec) []provider.AppContainer {
+	if spec.App == nil || spec.App.Compute != provider.ComputeContainer {
 		return nil
 	}
-	physical := plan.Ref.Name.String() + "-" + plan.App.App
+	physical := spec.Ref.Name.String() + "-" + spec.App.App
 	return []provider.AppContainer{{
-		Name:     plan.App.App,
+		Name:     spec.App.App,
 		Physical: physical,
 		URL:      "https://" + physical + ".ctr.fake.invalid",
-		Image:    plan.App.Image,
+		Image:    spec.App.Image,
 	}}
 }
 
@@ -204,8 +204,8 @@ func propertiesFor(t provider.BindingType, name string) map[string]string {
 	return properties
 }
 
-func (*Provider) ProvisionFunctions(_ context.Context, plan provider.StackPlan, _ edge.Progress) ([]provider.Function, error) {
-	return StoodUpFunctions(plan), nil
+func (*Provider) ProvisionFunctions(_ context.Context, spec provider.StackSpec, _ edge.Progress) ([]provider.Function, error) {
+	return StoodUpFunctions(spec), nil
 }
 
 func (p *Provider) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ edge.Progress) error {
@@ -215,8 +215,8 @@ func (p *Provider) RemoveFunctions(_ context.Context, _ provider.StackRef, funct
 	return nil
 }
 
-func (*Provider) ProvisionContainers(_ context.Context, plan provider.StackPlan, _ edge.Progress) ([]provider.AppContainer, error) {
-	return StoodUpContainers(plan), nil
+func (*Provider) ProvisionContainers(_ context.Context, spec provider.StackSpec, _ edge.Progress) ([]provider.AppContainer, error) {
+	return StoodUpContainers(spec), nil
 }
 
 func (p *Provider) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ edge.Progress) error {

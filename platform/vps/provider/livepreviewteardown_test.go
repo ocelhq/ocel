@@ -119,10 +119,10 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 
 	ctx := context.Background()
 	build := previewBuild(t, pointer)
-	plan := provider.StackPlan{
+	spec := provider.StackSpec{
 		Ref:  previewStack(t, slug, app, pointer),
 		Kind: provider.StackApp,
-		App: &provider.AppPlan{
+		App: &provider.AppSpec{
 			App:             app,
 			Compute:         provider.ComputeContainer,
 			Deployment:      build.DeploymentID(),
@@ -130,14 +130,14 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 			HealthCheckPath: healthPath,
 		},
 	}
-	stood, err := p.Stacks().Provision(ctx, plan, nil)
+	stood, err := p.Stacks().Provision(ctx, spec, nil)
 	if err != nil {
 		t.Fatalf("Provision(%s) = %v", pointer, err)
 	}
 	if len(stood.Containers) != 1 {
 		t.Fatalf("Provision(%s) stood up %v", pointer, stood.Containers)
 	}
-	if err := stackrecords.Write(ctx, p.Records(), edge.ClassPreview, slug, plan.Ref.Name, stackrecords.Stack{
+	if err := stackrecords.Write(ctx, p.Records(), edge.ClassPreview, slug, spec.Ref.Name, stackrecords.Stack{
 		Kind:       provider.StackApp,
 		App:        app,
 		Release:    build.Release().String(),

@@ -19,15 +19,15 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPrefl
 		return err
 	}
 	return refusing([]error{
-		p.host.CheckDisk(ctx, repositories(pre.Plan)),
+		p.host.CheckDisk(ctx, repositories(pre.Deploy)),
 		p.host.CheckProxy(ctx),
 		p.host.ServingPortsHeld(ctx),
 	})
 }
 
-func repositories(plan provider.DeployPlan) []string {
+func repositories(spec provider.DeploySpec) []string {
 	var named []string
-	for _, app := range plan.Apps {
+	for _, app := range spec.Apps {
 		repository, ok := host.Repository(app.Image)
 		if !ok || slices.Contains(named, repository) {
 			continue

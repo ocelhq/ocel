@@ -14,15 +14,15 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
-func functionPlanDeclaring(class edge.Class, env string, values provider.AppValues) provider.StackPlan {
-	return provider.StackPlan{
+func functionStackDeclaring(class edge.Class, env string, values provider.AppValues) provider.StackSpec {
+	return provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "shop",
 			Class:   class,
 			Name:    naming.StackName{Env: env, App: "api"},
 		},
 		Kind: provider.StackApp,
-		App: &provider.AppPlan{
+		App: &provider.AppSpec{
 			App:     "api",
 			Compute: provider.ComputeServerless,
 			Values:  values,
@@ -36,10 +36,10 @@ func functionPlanDeclaring(class edge.Class, env string, values provider.AppValu
 	}
 }
 
-func functionRevisionEnv(t *testing.T, server *runServer, plan provider.StackPlan) (*Provider, map[string]string) {
+func functionRevisionEnv(t *testing.T, server *runServer, spec provider.StackSpec) (*Provider, map[string]string) {
 	t.Helper()
 	p := server.open(t)
-	if _, err := p.ProvisionFunctions(context.Background(), plan, nil); err != nil {
+	if _, err := p.ProvisionFunctions(context.Background(), spec, nil); err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 	env := map[string]string{}
@@ -51,7 +51,7 @@ func functionRevisionEnv(t *testing.T, server *runServer, plan provider.StackPla
 
 func TestAFunctionDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *testing.T) {
 	t.Parallel()
-	p, env := functionRevisionEnv(t, &runServer{}, functionPlanDeclaring(edge.ClassProduction, "production", provider.AppValues{
+	p, env := functionRevisionEnv(t, &runServer{}, functionStackDeclaring(edge.ClassProduction, "production", provider.AppValues{
 		Secrets:   []provider.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		Delivered: map[string]string{"REGION": "eu"},
 	}))
@@ -85,7 +85,7 @@ func TestAFunctionDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *tes
 
 func TestAPreviewFunctionReadsItsOwnEnvironmentsValues(t *testing.T) {
 	t.Parallel()
-	_, env := functionRevisionEnv(t, &runServer{}, functionPlanDeclaring(edge.ClassPreview, "pr-7", provider.AppValues{
+	_, env := functionRevisionEnv(t, &runServer{}, functionStackDeclaring(edge.ClassPreview, "pr-7", provider.AppValues{
 		Secrets: []provider.SecretRef{{Key: "MARK"}},
 	}))
 
@@ -100,7 +100,7 @@ func TestAPreviewFunctionReadsItsOwnEnvironmentsValues(t *testing.T) {
 
 func TestAFunctionWithNothingLiveBootsWithNoManifest(t *testing.T) {
 	t.Parallel()
-	_, env := functionRevisionEnv(t, &runServer{}, functionPlanDeclaring(edge.ClassProduction, "production", provider.AppValues{
+	_, env := functionRevisionEnv(t, &runServer{}, functionStackDeclaring(edge.ClassProduction, "production", provider.AppValues{
 		Delivered: map[string]string{"REGION": "eu"},
 	}))
 

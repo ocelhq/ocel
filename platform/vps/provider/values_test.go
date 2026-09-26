@@ -23,7 +23,7 @@ const (
 	standingPlain     = "eu-west-1"
 )
 
-func valuedApp() provider.AppPlan {
+func valuedApp() provider.AppSpec {
 	app := anApp()
 	app.Values = provider.AppValues{
 		Delivered: map[string]string{"API_TOKEN": standingSensitive, "REGION": standingPlain},
@@ -118,14 +118,14 @@ func TestAPreviewContainerReadsItsOwnEnvironmentsValues(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	plan := aStack(t, valuedApp())
-	plan.Ref.Class = edge.ClassPreview
-	standing, err := over(machine).ProvisionContainers(context.Background(), plan, nil)
+	spec := aStack(t, valuedApp())
+	spec.Ref.Class = edge.ClassPreview
+	standing, err := over(machine).ProvisionContainers(context.Background(), spec, nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	file := envFileWritten(t, machine, edge.ClassPreview, standing[0].Physical)
-	if !strings.Contains(file, `"class":"preview"`) || !strings.Contains(file, `"environment":"`+plan.Ref.Name.Env+`"`) {
+	if !strings.Contains(file, `"class":"preview"`) || !strings.Contains(file, `"environment":"`+spec.Ref.Name.Env+`"`) {
 		t.Errorf("the env file reads %q, want a manifest naming the preview class and the stack's environment so its own value shadows the class-wide one", file)
 	}
 }

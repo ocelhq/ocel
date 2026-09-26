@@ -13,8 +13,8 @@ func runtimeResources() []provider.Resource {
 	}
 }
 
-func runtimePlan() provider.StackPlan {
-	return provider.StackPlan{Resources: runtimeResources()}
+func runtimeSpec() provider.StackSpec {
+	return provider.StackSpec{Resources: runtimeResources()}
 }
 
 func TestProvisionsBucket(t *testing.T) {
@@ -23,7 +23,7 @@ func TestProvisionsBucket(t *testing.T) {
 	t.Run("a bucket of ours completes its own uploads", func(t *testing.T) {
 		t.Parallel()
 
-		if !provisionsBucket(runtimePlan()) {
+		if !provisionsBucket(runtimeSpec()) {
 			t.Error("provisionsBucket = false, want true for a bucket this deploy provisions")
 		}
 	})
@@ -31,10 +31,10 @@ func TestProvisionsBucket(t *testing.T) {
 	t.Run("postgres alone completes nothing", func(t *testing.T) {
 		t.Parallel()
 
-		plan := runtimePlan()
-		plan.Resources = plan.Resources[:1]
+		spec := runtimeSpec()
+		spec.Resources = spec.Resources[:1]
 
-		if provisionsBucket(plan) {
+		if provisionsBucket(spec) {
 			t.Error("provisionsBucket = true, want false where no bucket is ours")
 		}
 	})
@@ -42,10 +42,10 @@ func TestProvisionsBucket(t *testing.T) {
 	t.Run("a bound bucket completes uploads of its own", func(t *testing.T) {
 		t.Parallel()
 
-		plan := runtimePlan()
-		plan.Resources[1].Binding = plan.Resources[1].Name
+		spec := runtimeSpec()
+		spec.Resources[1].Binding = spec.Resources[1].Name
 
-		if provisionsBucket(plan) {
+		if provisionsBucket(spec) {
 			t.Error("provisionsBucket = true, want false for a bucket handed to us")
 		}
 	})

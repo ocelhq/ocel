@@ -23,12 +23,12 @@ var declaredTypes = map[provider.BindingType]string{
 }
 
 func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
-	project := "project:" + req.Plan.Slug
-	environment := "environment:" + req.Plan.Env
+	project := "project:" + req.Deploy.Slug
+	environment := "environment:" + req.Deploy.Env
 	set := &costv1.ResourceSet{
 		Scopes: []*costv1.Scope{
-			{Id: project, Kind: "project", Name: req.Plan.Slug},
-			{Id: environment, Parent: project, Kind: "environment", Name: req.Plan.Env},
+			{Id: project, Kind: "project", Name: req.Deploy.Slug},
+			{Id: environment, Parent: project, Kind: "environment", Name: req.Deploy.Env},
 		},
 	}
 	for _, resource := range req.Resources {
@@ -36,7 +36,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 			set.Resources = append(set.Resources, p.shaped(environment, typ, resource.Name))
 		}
 	}
-	for _, app := range req.Plan.Apps {
+	for _, app := range req.Deploy.Apps {
 		scope := environment + "/app:" + app.App
 		set.Scopes = append(set.Scopes, &costv1.Scope{Id: scope, Parent: environment, Kind: "app", Name: app.App})
 		if app.Compute() == provider.ComputeContainer {

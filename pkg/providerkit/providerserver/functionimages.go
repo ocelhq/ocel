@@ -34,7 +34,7 @@ func (r *deployRun) imageFunctions(
 	hooks provider.Hooks,
 	entry provider.AppEntry,
 	pack provider.AppPack,
-	routing *provider.RoutingPlan,
+	routing *provider.RoutingSpec,
 ) ([]images.Push, error) {
 	if r.images == nil {
 		return nil, refusal.Refuse(refusal.CodeInvalid,

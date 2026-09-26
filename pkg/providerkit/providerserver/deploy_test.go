@@ -160,21 +160,21 @@ func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 		t.Fatalf("the first event is %T, want the stage plan: the CLI draws the tree before any work reports into it", events[0].GetEvent())
 	}
 
-	plans := p.FakeStacks().Plans()
-	if len(plans) != 2 {
-		t.Fatalf("the stacks port saw %d plans, want the infra stack and the app stack", len(plans))
+	specs := p.FakeStacks().Provisioned()
+	if len(specs) != 2 {
+		t.Fatalf("the stacks port saw %d specs, want the infra stack and the app stack", len(specs))
 	}
-	if plans[0].Kind != provider.StackInfra || plans[1].Kind != provider.StackApp {
-		t.Fatalf("the stacks port saw %s then %s, want infra before the apps that binding to it", plans[0].Kind, plans[1].Kind)
+	if specs[0].Kind != provider.StackInfra || specs[1].Kind != provider.StackApp {
+		t.Fatalf("the stacks port saw %s then %s, want infra before the apps that binding to it", specs[0].Kind, specs[1].Kind)
 	}
-	if !slices.ContainsFunc(plans[1].App.Grants, func(binding provider.Binding) bool { return binding.Name == "orders" }) {
-		t.Errorf("the app plan grants %v, want the infra binding the app binds a client to", plans[1].App.Grants)
+	if !slices.ContainsFunc(specs[1].App.Grants, func(binding provider.Binding) bool { return binding.Name == "orders" }) {
+		t.Errorf("the app spec grants %v, want the infra binding the app binds a client to", specs[1].App.Grants)
 	}
-	if plans[1].App.Functions[0].Artifact.Key == "" {
-		t.Error("the app plan carries a function with no artifact, so the upload never reached the release")
+	if specs[1].App.Functions[0].Artifact.Key == "" {
+		t.Error("the app spec carries a function with no artifact, so the upload never reached the release")
 	}
-	if plans[1].App.Deployment != webDeploymentID {
-		t.Errorf("the app plan names deployment %q, want %q: the router serves the build the CLI built under this id", plans[1].App.Deployment, webDeploymentID)
+	if specs[1].App.Deployment != webDeploymentID {
+		t.Errorf("the app spec names deployment %q, want %q: the router serves the build the CLI built under this id", specs[1].App.Deployment, webDeploymentID)
 	}
 }
 
@@ -234,9 +234,9 @@ func twoAppRequest() *contractv1.DeployRequest {
 	return req
 }
 
-func grantNames(plan provider.StackPlan) []string {
-	names := make([]string, 0, len(plan.App.Grants))
-	for _, binding := range plan.App.Grants {
+func grantNames(spec provider.StackSpec) []string {
+	names := make([]string, 0, len(spec.App.Grants))
+	for _, binding := range spec.App.Grants {
 		names = append(names, binding.Name)
 	}
 	slices.Sort(names)
@@ -251,10 +251,10 @@ func TestDeployGrantsAnAppOnlyWhatItsUsageEdgesName(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	apps := map[string]provider.StackPlan{}
-	for _, plan := range p.FakeStacks().Plans() {
-		if plan.App != nil {
-			apps[plan.App.App] = plan
+	apps := map[string]provider.StackSpec{}
+	for _, spec := range p.FakeStacks().Provisioned() {
+		if spec.App != nil {
+			apps[spec.App.App] = spec
 		}
 	}
 	if len(apps) != 2 {
@@ -287,12 +287,12 @@ func TestDeployGrantsNothingToAnAppCarryingNoUsageEdge(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	for _, plan := range provider.FakeStacks().Plans() {
-		if plan.App == nil || plan.App.App != "admin" {
+	for _, spec := range provider.FakeStacks().Provisioned() {
+		if spec.App == nil || spec.App.App != "admin" {
 			continue
 		}
-		if len(plan.App.Grants) != 0 || len(plan.App.Values.Bindings) != 0 {
-			t.Errorf("admin is granted %v, want nothing for an app carrying no usage edge at all", plan.App.Grants)
+		if len(spec.App.Grants) != 0 || len(spec.App.Values.Bindings) != 0 {
+			t.Errorf("admin is granted %v, want nothing for an app carrying no usage edge at all", spec.App.Grants)
 		}
 	}
 }
@@ -339,8 +339,8 @@ func TestDeployUploadsEveryFunctionArtifact(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	plans := provider.FakeStacks().Plans()
-	ref := plans[1].App.Functions[0].Artifact
+	specs := provider.FakeStacks().Provisioned()
+	ref := specs[1].App.Functions[0].Artifact
 	opened, err := provider.Artifacts().Open(context.Background(), ref)
 	if err != nil {
 		t.Fatalf("Open(%+v) after the deploy = %v, want the artifact stored where the plan named it", ref, err)
@@ -362,8 +362,8 @@ func TestDeployPublishesEveryInfraBindingForItsAppsToRead(t *testing.T) {
 		t.Fatalf("a second Deploy() = %q", result.GetError())
 	}
 
-	plans := p.FakeStacks().Plans()
-	last := plans[len(plans)-1]
+	specs := p.FakeStacks().Provisioned()
+	last := specs[len(specs)-1]
 	if !slices.ContainsFunc(last.App.Grants, func(binding provider.Binding) bool {
 		return binding.Name == "orders" && binding.Properties[provider.PropertyHost] != ""
 	}) {
@@ -380,17 +380,17 @@ func (r refusingStacks) Stacks() provider.Stacks { return r.stacks }
 
 type halfBindingStacks struct{}
 
-func (halfBindingStacks) Plan(ctx context.Context, plan provider.StackPlan, _ edge.Progress) (provider.Plan, error) {
-	return resources.SynthesizedPlan(ctx, fake.NewArtifacts(), plan, provider.StackResult{})
+func (halfBindingStacks) Plan(ctx context.Context, spec provider.StackSpec, _ edge.Progress) (provider.Plan, error) {
+	return resources.SynthesizedPlan(ctx, fake.NewArtifacts(), spec, provider.StackResult{})
 }
 
 func (halfBindingStacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ edge.Progress) (provider.Plan, error) {
 	return resources.SynthesizedRemoval(ref, provider.StackResult{}), nil
 }
 
-func (halfBindingStacks) Provision(_ context.Context, plan provider.StackPlan, _ edge.Progress) (provider.StackResult, error) {
+func (halfBindingStacks) Provision(_ context.Context, spec provider.StackSpec, _ edge.Progress) (provider.StackResult, error) {
 	var result provider.StackResult
-	for _, resource := range plan.Resources {
+	for _, resource := range spec.Resources {
 		result.Bindings = append(result.Bindings, provider.Binding{
 			Type:       resource.Type,
 			Name:       resource.Name,
@@ -494,20 +494,20 @@ func (r *resolvingStacks) Resolved() []provider.Binding {
 	return slices.Clone(r.resolved)
 }
 
-func (r *resolvingStacks) Plan(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.Plan, error) {
-	return r.inner.Plan(ctx, plan, progress)
+func (r *resolvingStacks) Plan(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.Plan, error) {
+	return r.inner.Plan(ctx, spec, progress)
 }
 
 func (r *resolvingStacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) (provider.Plan, error) {
 	return r.inner.PlanDestroy(ctx, ref, progress)
 }
 
-func (r *resolvingStacks) Provision(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.StackResult, error) {
-	result, err := r.inner.Provision(ctx, plan, progress)
+func (r *resolvingStacks) Provision(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.StackResult, error) {
+	result, err := r.inner.Provision(ctx, spec, progress)
 	if err != nil {
 		return result, err
 	}
-	if plan.Kind == provider.StackInfra {
+	if spec.Kind == provider.StackInfra {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		for _, binding := range result.Bindings {
@@ -515,7 +515,7 @@ func (r *resolvingStacks) Provision(ctx context.Context, plan provider.StackPlan
 		}
 		return result, nil
 	}
-	binding, err := plan.Bindings.Named(ctx, "orders")
+	binding, err := spec.Bindings.Named(ctx, "orders")
 	if err != nil {
 		return provider.StackResult{}, err
 	}
@@ -920,8 +920,8 @@ func TestADeployDeclaringAWildcardForProductionIsRefusedBeforeItProvisionsAnythi
 	if code, _ := provider.RefusedCode(err); code != refusal.CodeInvalid || !strings.Contains(err.Error(), "domains.preview") {
 		t.Fatalf("Deploy() = %v, want it refused as invalid: a wildcard belongs to domains.preview", err)
 	}
-	if plans := p.FakeStacks().Plans(); len(plans) != 0 {
-		t.Errorf("the refused deploy provisioned %d stacks, want none: the hostname is read before anything is built", len(plans))
+	if specs := p.FakeStacks().Provisioned(); len(specs) != 0 {
+		t.Errorf("the refused deploy provisioned %d stacks, want none: the hostname is read before anything is built", len(specs))
 	}
 }
 
@@ -1130,13 +1130,13 @@ func TestAGlobalPreviewDeployOnAnEdgeThatRoutesByLabelHandsTheStacksTheLabelItsH
 	}
 
 	want := edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", "")
-	for _, plan := range provider.FakeStacks().Plans() {
-		if plan.App == nil {
+	for _, spec := range provider.FakeStacks().Provisioned() {
+		if spec.App == nil {
 			continue
 		}
-		if plan.App.PreviewLabel != want {
-			t.Errorf("the plan for %s carries the preview label %q, want %q: an edge that routes the whole label to what it stood up "+
-				"has to name it what the hostname says", plan.App.App, plan.App.PreviewLabel, want)
+		if spec.App.PreviewLabel != want {
+			t.Errorf("the spec for %s carries the preview label %q, want %q: an edge that routes the whole label to what it stood up "+
+				"has to name it what the hostname says", spec.App.App, spec.App.PreviewLabel, want)
 		}
 	}
 }
@@ -1154,13 +1154,13 @@ func TestAGlobalPreviewDeployOnAnEdgeThatDoesNotRouteByLabelHandsTheStacksNoLabe
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	for _, plan := range provider.FakeStacks().Plans() {
-		if plan.App == nil {
+	for _, spec := range provider.FakeStacks().Provisioned() {
+		if spec.App == nil {
 			continue
 		}
-		if plan.App.PreviewLabel != "" {
-			t.Errorf("the plan for %s carries the preview label %q, want none: this edge resolves a preview hostname itself, "+
-				"so it imposes no name on what the provider stands up", plan.App.App, plan.App.PreviewLabel)
+		if spec.App.PreviewLabel != "" {
+			t.Errorf("the spec for %s carries the preview label %q, want none: this edge resolves a preview hostname itself, "+
+				"so it imposes no name on what the provider stands up", spec.App.App, spec.App.PreviewLabel)
 		}
 	}
 }
@@ -1185,11 +1185,11 @@ func TestAGlobalPreviewDeployLabelsEachAppWithTheFirstLabelOfTheHostnameItAnnoun
 	}
 
 	labels := map[string]string{}
-	for _, plan := range provider.FakeStacks().Plans() {
-		if plan.App == nil {
+	for _, spec := range provider.FakeStacks().Provisioned() {
+		if spec.App == nil {
 			continue
 		}
-		labels[plan.App.App] = plan.App.PreviewLabel
+		labels[spec.App.App] = spec.App.PreviewLabel
 	}
 	for _, app := range []string{"web", "admin"} {
 		urls := servedAppURLs(result, app)
@@ -1198,7 +1198,7 @@ func TestAGlobalPreviewDeployLabelsEachAppWithTheFirstLabelOfTheHostnameItAnnoun
 		}
 		want, _, _ := strings.Cut(strings.TrimPrefix(urls[0], "https://"), ".")
 		if labels[app] != want {
-			t.Errorf("the plan for %s carries the preview label %q, and %s is the hostname announced: the label the edge hands over "+
+			t.Errorf("the spec for %s carries the preview label %q, and %s is the hostname announced: the label the edge hands over "+
 				"is the first label of that hostname or the preview answers nothing", app, labels[app], urls[0])
 		}
 	}
@@ -1214,13 +1214,13 @@ func TestAPreviewDeployOnTheProjectsOwnWildcardHandsTheStacksNoLabel(t *testing.
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	for _, plan := range provider.FakeStacks().Plans() {
-		if plan.App == nil {
+	for _, spec := range provider.FakeStacks().Provisioned() {
+		if spec.App == nil {
 			continue
 		}
-		if plan.App.PreviewLabel != "" {
-			t.Errorf("the plan for %s carries the preview label %q, want none: this project's own wildcard is answered per hostname, "+
-				"so nothing reads a name out of the label", plan.App.App, plan.App.PreviewLabel)
+		if spec.App.PreviewLabel != "" {
+			t.Errorf("the spec for %s carries the preview label %q, want none: this project's own wildcard is answered per hostname, "+
+				"so nothing reads a name out of the label", spec.App.App, spec.App.PreviewLabel)
 		}
 	}
 }

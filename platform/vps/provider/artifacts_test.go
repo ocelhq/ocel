@@ -45,7 +45,7 @@ func TestAnUploadDrawsACreateRowAndThenFailsTheApplyLoudly(t *testing.T) {
 	if err := os.WriteFile(path, []byte("a build artifact"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	plan := provider.StackPlan{
+	spec := provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "shop",
 			Class:   edge.ClassProduction,
@@ -59,7 +59,7 @@ func TestAnUploadDrawsACreateRowAndThenFailsTheApplyLoudly(t *testing.T) {
 		}},
 	}
 
-	drawn, err := resources.SynthesizedPlan(ctx, store, plan, provider.StackResult{})
+	drawn, err := resources.SynthesizedPlan(ctx, store, spec, provider.StackResult{})
 	if err != nil {
 		t.Fatalf("SynthesizedPlan() of a stack shipping one artifact = %v, want the row the human consents to", err)
 	}
@@ -72,7 +72,7 @@ func TestAnUploadDrawsACreateRowAndThenFailsTheApplyLoudly(t *testing.T) {
 	}
 
 	var rejection refusal.Refusal
-	err = resources.ShipUploads(ctx, store, plan.Uploads, nil)
+	err = resources.ShipUploads(ctx, store, spec.Uploads, nil)
 	if !errors.As(err, &rejection) {
 		t.Fatalf("ShipUploads() after the plan showed the row = %v, want a loud refusal rather than a write that vanishes", err)
 	}

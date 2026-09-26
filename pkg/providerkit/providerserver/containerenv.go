@@ -39,12 +39,12 @@ func (r *deployRun) deliver(entry provider.AppEntry, held provider.AppValues) ma
 func (r *deployRun) refuseUnsetSecret(app, key string) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"app %s declares %s as a secret and nothing is stored for it in %s: a container is handed the value the deploy resolved, so an unset secret is refused here rather than at the app's first read. Set it with `ocel env set %s <value>`",
-		app, key, describeCoordinate(string(r.plan.Class), bindingEnvironment(r.plan)), key)
+		app, key, describeCoordinate(string(r.spec.Class), bindingEnvironment(r.spec)), key)
 }
 
 func (r *deployRun) refuseContainerValues(ctx context.Context) error {
 	var stored map[envvars.Cell]bool
-	for _, entry := range r.plan.Apps {
+	for _, entry := range r.spec.Apps {
 		if !imaged(r.provider, entry.Compute()) {
 			continue
 		}
@@ -77,7 +77,7 @@ func (r *deployRun) storedCells(ctx context.Context) (map[envvars.Cell]bool, err
 	if err != nil {
 		return nil, err
 	}
-	shadowed := map[string]bool{"": true, bindingEnvironment(r.plan): true}
+	shadowed := map[string]bool{"": true, bindingEnvironment(r.spec): true}
 	stored := make(map[envvars.Cell]bool, len(held))
 	for _, metadata := range held {
 		if shadowed[metadata.Coordinate.Environment] {

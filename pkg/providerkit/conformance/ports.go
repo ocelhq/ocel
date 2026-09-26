@@ -821,7 +821,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a release asks for nothing")
 		}
-		planned, err := stacks.Plan(ctx, provider.StackPlan{
+		planned, err := stacks.Plan(ctx, provider.StackSpec{
 			Ref:       ref,
 			Kind:      provider.StackInfra,
 			Resources: resources,
@@ -839,7 +839,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a release asks for nothing")
 		}
-		bare := provider.StackPlan{Ref: ref, Kind: provider.StackInfra, Resources: resources}
+		bare := provider.StackSpec{Ref: ref, Kind: provider.StackInfra, Resources: resources}
 		without, err := stacks.Plan(ctx, bare, nil)
 		if err != nil {
 			t.Fatalf("Plan() of a release shipping no artifact = %v", err)
@@ -905,7 +905,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a release asks for nothing")
 		}
-		bare := provider.StackPlan{Ref: ref, Kind: provider.StackInfra, Resources: resources}
+		bare := provider.StackSpec{Ref: ref, Kind: provider.StackInfra, Resources: resources}
 		without, err := stacks.Plan(ctx, bare, nil)
 		if err != nil {
 			t.Fatalf("Plan() of a release pushing no image = %v", err)
@@ -948,7 +948,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a plan can ask for nothing")
 		}
-		result, err := stacks.Provision(ctx, provider.StackPlan{
+		result, err := stacks.Provision(ctx, provider.StackSpec{
 			Ref:       ref,
 			Kind:      provider.StackInfra,
 			Resources: resources,
@@ -998,7 +998,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 	})
 
 	t.Run("a refusal names a code the CLI can render", func(t *testing.T) {
-		unserved := provider.StackPlan{
+		unserved := provider.StackSpec{
 			Ref:       ref,
 			Kind:      provider.StackInfra,
 			Resources: []provider.Resource{{Name: "unserved", Type: "no-such-primitive"}},

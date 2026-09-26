@@ -14,24 +14,24 @@ import (
 
 const EveryPreview = ""
 
-func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (provider.DeployPlan, error) {
+func buildDeploySpec(req *contractv1.DeployRequest, promotionID string) (provider.DeploySpec, error) {
 	manifest := req.GetManifest()
 	env := req.GetEnvironment()
 
 	class, err := classOf(env.GetTier())
 	if err != nil {
-		return provider.DeployPlan{}, err
+		return provider.DeploySpec{}, err
 	}
 	name, err := envName(env)
 	if err != nil {
-		return provider.DeployPlan{}, err
+		return provider.DeploySpec{}, err
 	}
 	slug := manifest.GetSlug()
 	if slug == "" {
-		return provider.DeployPlan{}, refusal.Refuse(refusal.CodeInvalid, "this manifest names no project, and every stack a deploy stands up belongs to one")
+		return provider.DeploySpec{}, refusal.Refuse(refusal.CodeInvalid, "this manifest names no project, and every stack a deploy stands up belongs to one")
 	}
 
-	plan := provider.DeployPlan{
+	spec := provider.DeploySpec{
 		Slug:        slug,
 		Class:       class,
 		Env:         name,
@@ -42,31 +42,31 @@ func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (provide
 		Builds:      make(map[string]string, len(manifest.GetApps())),
 	}
 	if !ephemeral(env) {
-		plan.Infra = naming.InfraStack(name)
+		spec.Infra = naming.InfraStack(name)
 	}
 	containers, err := appContainers(manifest)
 	if err != nil {
-		return provider.DeployPlan{}, err
+		return provider.DeploySpec{}, err
 	}
 	for _, app := range manifest.GetApps() {
 		entry, err := appEntry(app, name)
 		if err != nil {
-			return provider.DeployPlan{}, err
+			return provider.DeploySpec{}, err
 		}
 		if container, ours := containers[entry.App]; ours {
 			entry.Image = container.GetImage()
 			entry.HealthCheckPath = container.GetHealthCheckPath()
 			entry.Arch = container.GetArch()
-			plan.Builds[entry.App] = entry.Image
+			spec.Builds[entry.App] = entry.Image
 		} else {
-			plan.Builds[entry.App] = entry.Build.String()
+			spec.Builds[entry.App] = entry.Build.String()
 		}
-		plan.Apps = append(plan.Apps, entry)
+		spec.Apps = append(spec.Apps, entry)
 	}
-	if err := refuseOrphanFunctions(manifest, plan.Builds); err != nil {
-		return provider.DeployPlan{}, err
+	if err := refuseOrphanFunctions(manifest, spec.Builds); err != nil {
+		return provider.DeploySpec{}, err
 	}
-	return plan, nil
+	return spec, nil
 }
 
 func appContainers(manifest *contractv1.Manifest) (map[string]*contractv1.ManifestContainer, error) {
@@ -167,14 +167,14 @@ func envScope(env *environmentv1.Environment) (string, error) {
 	return envName(env)
 }
 
-func bindingEnvironment(p provider.DeployPlan) string {
+func bindingEnvironment(p provider.DeploySpec) string {
 	if p.Class == edge.ClassProduction {
 		return ""
 	}
 	return p.Env
 }
 
-func appCoordinate(p provider.DeployPlan, app string, release naming.Release) naming.Coordinate {
+func appCoordinate(p provider.DeploySpec, app string, release naming.Release) naming.Coordinate {
 	return naming.Coordinate{
 		Project: naming.Sanitize(p.Slug),
 		Env:     p.Env,
@@ -183,7 +183,7 @@ func appCoordinate(p provider.DeployPlan, app string, release naming.Release) na
 	}
 }
 
-func appTags(p provider.DeployPlan, entry provider.AppEntry) map[string]string {
+func appTags(p provider.DeploySpec, entry provider.AppEntry) map[string]string {
 	coordinate := appCoordinate(p, entry.App, entry.Build.Release())
 	coordinate.Kind = naming.KindFunction
 	return coordinate.Tags(naming.Facts{
@@ -194,7 +194,7 @@ func appTags(p provider.DeployPlan, entry provider.AppEntry) map[string]string {
 	})
 }
 
-func infraTags(p provider.DeployPlan) map[string]string {
+func infraTags(p provider.DeploySpec) map[string]string {
 	tags := map[string]string{
 		"ocel:managed-by": "ocel",
 		"ocel:project":    naming.Sanitize(p.Slug),

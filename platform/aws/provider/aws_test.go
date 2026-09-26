@@ -214,8 +214,8 @@ func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
 	}
 
 	pre := provider.DeployPreflight{
-		Plan: provider.DeployPlan{Class: edge.ClassProduction},
-		Edge: cloudflare.Kind,
+		Deploy: provider.DeploySpec{Class: edge.ClassProduction},
+		Edge:   cloudflare.Kind,
 	}
 	if err := p.refuseUnreadableOriginSecret(context.Background(), pre); !errors.Is(err, refusal) {
 		t.Fatalf("preflight = %v, want the refusal: a deploy hands every release the secret the edge presents", err)

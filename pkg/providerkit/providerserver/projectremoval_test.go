@@ -115,8 +115,8 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 	client, provider := deployedProject(t)
 	ctx := context.Background()
 
-	plans := provider.FakeStacks().Plans()
-	ref := plans[1].App.Functions[0].Artifact
+	specs := provider.FakeStacks().Provisioned()
+	ref := specs[1].App.Functions[0].Artifact
 
 	stream, err := client.RemoveProject(ctx, projectRequest())
 	if err != nil {

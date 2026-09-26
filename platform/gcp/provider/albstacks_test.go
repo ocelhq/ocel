@@ -45,8 +45,8 @@ func TestTheFrontIsRefreshedBeforeItIsRaisedSoTheRoutesWrittenBesideItSurvive(t 
 	t.Parallel()
 
 	stacks := stacking(t)
-	front, plan := stacks.config(stacks.p.resolved, alb.Target{Class: edge.ClassProduction}, "secret", nil)
-	if front.Refresh == nil || !front.Refresh(plan.Ref, kitpulumi.OpProvision) {
+	front, spec := stacks.config(stacks.p.resolved, alb.Target{Class: edge.ClassProduction}, "secret", nil)
+	if front.Refresh == nil || !front.Refresh(spec.Ref, kitpulumi.OpProvision) {
 		t.Error("the front stack is raised without a refresh, and its url map ignores changes to hostRules and pathMatchers by holding " +
 			"what state says: state that never saw the host rules a bind wrote puts every project in the class back to unrouted")
 	}

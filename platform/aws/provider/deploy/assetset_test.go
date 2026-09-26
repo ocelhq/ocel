@@ -62,9 +62,9 @@ func TestEveryAssetSetIsARowThePlanShowsAndAnUploadTheApplyMakes(t *testing.T) {
 
 	engine := &mockedEngine{outputs: siblingAppOutputs("web")}
 	stacks := standingUp(cfg, engine)
-	plan := siblingAppPlan(t, "web")
+	spec := siblingAppSpec(t, "web")
 
-	planned, err := stacks.Plan(ctx, plan, nil)
+	planned, err := stacks.Plan(ctx, spec, nil)
 	if err != nil {
 		t.Fatalf("Plan() of an app shipping assets = %v", err)
 	}
@@ -77,7 +77,7 @@ func TestEveryAssetSetIsARowThePlanShowsAndAnUploadTheApplyMakes(t *testing.T) {
 			assets.puts, store.puts)
 	}
 
-	if _, err := stacks.Provision(ctx, siblingAppPlan(t, "web"), nil); err != nil {
+	if _, err := stacks.Provision(ctx, siblingAppSpec(t, "web"), nil); err != nil {
 		t.Fatalf("Provision() of the app whose plan showed the asset sets = %v", err)
 	}
 	if !slices.ContainsFunc(store.puts, func(key string) bool { return strings.HasSuffix(key, "/web.txt") }) {
@@ -116,7 +116,7 @@ func TestNoFunctionStandsUpBeforeTheAssetsItServes(t *testing.T) {
 
 	order := &registrationOrder{}
 	engine := &mockedEngine{outputs: siblingAppOutputs("web"), mocks: order}
-	if _, err := standingUp(cfg, engine).Provision(context.Background(), siblingAppPlan(t, "web"), nil); err != nil {
+	if _, err := standingUp(cfg, engine).Provision(context.Background(), siblingAppSpec(t, "web"), nil); err != nil {
 		t.Fatalf("Provision() = %v", err)
 	}
 
@@ -145,7 +145,7 @@ func TestAnAssetSetIsOneRowWhateverTheFileCount(t *testing.T) {
 	cfg.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
 
 	engine := &mockedEngine{outputs: siblingAppOutputs("web")}
-	planned, err := standingUp(cfg, engine).Plan(context.Background(), siblingAppPlan(t, "web"), nil)
+	planned, err := standingUp(cfg, engine).Plan(context.Background(), siblingAppSpec(t, "web"), nil)
 	if err != nil {
 		t.Fatalf("Plan() of an app shipping many files = %v", err)
 	}

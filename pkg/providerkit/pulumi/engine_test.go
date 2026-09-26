@@ -40,7 +40,7 @@ func (e *recordingEngine) Outputs(context.Context, pulumi.Setup) (auto.OutputMap
 
 type decoding struct{ program }
 
-func (decoding) Decode(_ context.Context, _ provider.StackPlan, outputs auto.OutputMap) (provider.StackResult, error) {
+func (decoding) Decode(_ context.Context, _ provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error) {
 	properties := make(map[string]string, len(outputs))
 	for name, output := range outputs {
 		properties[name], _ = output.Value.(string)

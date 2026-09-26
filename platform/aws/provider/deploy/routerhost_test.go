@@ -52,7 +52,7 @@ func routedApp() *contractv1.ManifestApp {
 	return &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: appbuild.FrameworkNext}}
 }
 
-func servingPlan(t *testing.T, cfg Config, app, runtime string, coord naming.Coordinate) provider.StackPlan {
+func servingSpec(t *testing.T, cfg Config, app, runtime string, coord naming.Coordinate) provider.StackSpec {
 	t.Helper()
 	stack := coord.Stack()
 	facts := cfg.Edge.Facts()
@@ -69,11 +69,11 @@ func servingPlan(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 	if err != nil {
 		t.Fatalf("ServingFactsFor: %v", err)
 	}
-	return provider.StackPlan{
+	return provider.StackSpec{
 		Ref:  provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
 		Kind: provider.StackApp,
 		Edge: cfg.Edge,
-		App: &provider.AppPlan{
+		App: &provider.AppSpec{
 			App:         app,
 			Framework:   runtime,
 			Deployment:  "d1",
@@ -84,14 +84,14 @@ func servingPlan(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 	}
 }
 
-func routedPlan(t *testing.T, cfg Config) provider.StackPlan {
+func routedSpec(t *testing.T, cfg Config) provider.StackSpec {
 	t.Helper()
-	return servingPlan(t, cfg, "web", appbuild.FrameworkNext, routedCoordinate(t))
+	return servingSpec(t, cfg, "web", appbuild.FrameworkNext, routedCoordinate(t))
 }
 
 func routedRouter(t *testing.T, cfg Config) *routerHost {
 	t.Helper()
-	host, err := releasing(t, cfg).routerHost(routedPlan(t, cfg))
+	host, err := releasing(t, cfg).routerHost(routedSpec(t, cfg))
 	if err != nil {
 		t.Fatalf("routerHost: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestRouterHostNamesTheEntryAndWhatTheRouterReads(t *testing.T) {
 		t.Fatal("router host = none, want the entry function to host the router")
 	}
 	if host.Entry != "/" {
-		t.Errorf("entry = %q, want the route id the plan names", host.Entry)
+		t.Errorf("entry = %q, want the route id the spec names", host.Entry)
 	}
 	want := map[string]string{
 		routingManifestEnv:        routingManifestInTask,

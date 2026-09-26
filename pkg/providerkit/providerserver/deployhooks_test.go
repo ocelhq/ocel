@@ -167,7 +167,7 @@ func (w watchedArtifacts) Put(ctx context.Context, ref provider.ArtifactRef, bod
 	return w.ArtifactStore.Put(ctx, ref, body)
 }
 
-func TestDeployHandsPreflightThePlanBeforeItUploadsAnything(t *testing.T) {
+func TestDeployHandsPreflightTheSpecBeforeItUploadsAnything(t *testing.T) {
 	builtProject(t)
 	provider := &preflighting{Provider: fake.NewProvider(fake.Options{})}
 	client := servedBy(t, provider)
@@ -180,8 +180,8 @@ func TestDeployHandsPreflightThePlanBeforeItUploadsAnything(t *testing.T) {
 		t.Fatalf("the deploy ran %d preflights, want the one that precedes the upload", len(preflighted))
 	}
 	pre := preflighted[0]
-	if pre.Plan.Slug != "shop" || len(pre.Plan.Apps) != 1 {
-		t.Errorf("preflight saw a plan for %q with %d apps, want the project and the app the manifest declares", pre.Plan.Slug, len(pre.Plan.Apps))
+	if pre.Deploy.Slug != "shop" || len(pre.Deploy.Apps) != 1 {
+		t.Errorf("preflight saw a plan for %q with %d apps, want the project and the app the manifest declares", pre.Deploy.Slug, len(pre.Deploy.Apps))
 	}
 	if len(pre.Resources) != 1 || pre.Resources[0].Name != "orders" {
 		t.Errorf("preflight saw resources %+v, want the one the manifest declares", pre.Resources)

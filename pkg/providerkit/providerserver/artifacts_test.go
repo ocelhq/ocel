@@ -270,20 +270,20 @@ func TestDeployPacksTheVendorsOverlayIntoEveryFunctionPackage(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	plan := provider.FakeStacks().Plans()[1]
-	files := packagedFiles(t, provider, plan.App.Functions[0].Artifact)
+	spec := provider.FakeStacks().Provisioned()[1]
+	files := packagedFiles(t, provider, spec.App.Functions[0].Artifact)
 	if _, held := files[builtEntrypoint]; !held {
 		t.Errorf("the package holds %v, want the built artifact's own files", files)
 	}
 	if got := files[sealedFile]; got != "sealed for web" {
 		t.Errorf("the package holds %s = %q, want the sealed values the vendor packed; without them the function boots with no variables", sealedFile, got)
 	}
-	if plan.App.Packed != "bundle for web" {
-		t.Errorf("the app plan carries %v, want what the pack handed back: the stack's env must pair with the package it sealed", plan.App.Packed)
+	if spec.App.Packed != "bundle for web" {
+		t.Errorf("the app spec carries %v, want what the pack handed back: the stack's env must pair with the package it sealed", spec.App.Packed)
 	}
 
 	packings := provider.packings()
-	if len(packings) != 1 || packings[0].App != "web" || packings[0].Values.Folder != plan.App.Values.Folder {
+	if len(packings) != 1 || packings[0].App != "web" || packings[0].Values.Folder != spec.App.Values.Folder {
 		t.Errorf("the vendor was asked to pack %+v, want the app's own values, once", packings)
 	}
 }
@@ -314,9 +314,9 @@ func TestDeployPacksTheRoutingManifestIntoTheEntryFunctionAlone(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	plan := provider.FakeStacks().Plans()[1]
+	spec := provider.FakeStacks().Provisioned()[1]
 	packages := map[string]map[string]string{}
-	for _, fn := range plan.App.Functions {
+	for _, fn := range spec.App.Functions {
 		packages[fn.Name] = packagedFiles(t, provider, fn.Artifact)
 	}
 	if got := packages["server"][edge.RoutingManifestFile]; got != string(routing) {

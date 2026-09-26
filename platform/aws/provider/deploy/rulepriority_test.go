@@ -20,10 +20,10 @@ func TestARuleKeepsThePriorityItAlreadyHoldsOnTheFront(t *testing.T) {
 	t.Parallel()
 
 	hashed := rulePriority(containerPhysical, nil)
-	cfg, plan := plannedContainerStack(t)
+	cfg, spec := containerStackSpec(t)
 	cfg.Rules = &fakeRules{held: []elbv2types.Rule{ruleRouting(hashed, containerPhysical), ruleRouting(hashed+1, "blog-prod-web-container-r0000aaaa")}}
 	release := releasing(t, cfg)
-	work, err := release.containerWork(plan, fixtureSubstrate())
+	work, err := release.containerWork(spec, fixtureSubstrate())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
@@ -38,7 +38,7 @@ func TestARuleKeepsThePriorityItAlreadyHoldsOnTheFront(t *testing.T) {
 func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFirst(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedContainerStack(t)
+	cfg, spec := containerStackSpec(t)
 	cfg.Records = fake.NewRecords()
 	cfg.BackendURL = "s3://ocel-state/conformance"
 	cfg.PulumiProject = "ocel-conformance"
@@ -53,7 +53,7 @@ func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFir
 	engine := &mockedEngine{outputs: outputs}
 	attempts := 0
 	engine.upErr = func(stack string) error {
-		if stack != plan.Ref.Name.String() {
+		if stack != spec.Ref.Name.String() {
 			return nil
 		}
 		if attempts++; attempts > 1 {
@@ -64,7 +64,7 @@ func TestAContainerDeployPlacesItsRuleAgainWhenAnotherDeployClaimsThePriorityFir
 	}
 	stacks := standingUp(cfg, engine)
 
-	if _, err := stacks.Provision(context.Background(), plan, edge.DiscardProgress()); err != nil {
+	if _, err := stacks.Provision(context.Background(), spec, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Provision() = %v, want the rule placed again at the next free priority", err)
 	}
 	if attempts != 2 {

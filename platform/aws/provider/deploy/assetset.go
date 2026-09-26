@@ -131,8 +131,8 @@ func (r *assetSetResource) Create(ctx context.Context, req infer.CreateRequest[a
 	}, nil
 }
 
-func (r *release) assetSets(plan provider.StackPlan, app, framework string, bundle appBundle, cache *isrConfig) ([]assetSet, edgeDelivery, error) {
-	coord := appCoordinate(plan)
+func (r *release) assetSets(spec provider.StackSpec, app, framework string, bundle appBundle, cache *isrConfig) ([]assetSet, edgeDelivery, error) {
+	coord := appCoordinate(spec)
 	var sets []assetSet
 	for _, planned := range []func() (*assetSet, error){
 		func() (*assetSet, error) { return staticAssetSet(r.cfg, app, framework, coord) },

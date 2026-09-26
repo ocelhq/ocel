@@ -28,9 +28,9 @@ func (r *interceptedRecords) List(ctx context.Context, under records.Name) ([]re
 	return held, err
 }
 
-func containerStacks(t *testing.T, records records.Store) (*Stacks, *mockedEngine, provider.StackPlan) {
+func containerStacks(t *testing.T, records records.Store) (*Stacks, *mockedEngine, provider.StackSpec) {
 	t.Helper()
-	cfg, plan := plannedContainerStack(t)
+	cfg, spec := containerStackSpec(t)
 	cfg.Records = records
 	cfg.BackendURL = "s3://ocel-state/conformance"
 	cfg.PulumiProject = "ocel-conformance"
@@ -41,7 +41,7 @@ func containerStacks(t *testing.T, records records.Store) (*Stacks, *mockedEngin
 		outputKeyContainerPhysical: containerPhysical,
 	}}
 	engine := &mockedEngine{outputs: outputs}
-	return standingUp(cfg, engine), engine, plan
+	return standingUp(cfg, engine), engine, spec
 }
 
 func TestTheLastContainerLeavingKeepsTheSubstrateWhenAnotherDeployClaimsItMeanwhile(t *testing.T) {

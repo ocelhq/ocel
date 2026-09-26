@@ -16,8 +16,8 @@ import (
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-func (p *Provider) ProvisionContainers(ctx context.Context, plan provider.StackPlan, progress edge.Progress) ([]provider.AppContainer, error) {
-	app := plan.App
+func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackSpec, progress edge.Progress) ([]provider.AppContainer, error) {
+	app := spec.App
 	if app == nil {
 		return nil, nil
 	}
@@ -29,15 +29,15 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan provider.StackP
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s has no health check path", app.App)
 	}
-	physical := host.ContainerName(plan.Ref.Name.String(), app.App, app.Deployment, app.Image)
-	store, err := p.storeSection(ctx, plan)
+	physical := host.ContainerName(spec.Ref.Name.String(), app.App, app.Deployment, app.Image)
+	store, err := p.storeSection(ctx, spec)
 	if err != nil {
 		return nil, fmt.Errorf("pin the store %s writes through: %w", app.App, err)
 	}
 	manifest, err := vars.Render(vars.Manifest{
-		Slug:        plan.Ref.Project,
-		Class:       string(plan.Ref.Class),
-		Environment: liveEnvironment(plan.Ref),
+		Slug:        spec.Ref.Project,
+		Class:       string(spec.Ref.Class),
+		Environment: liveEnvironment(spec.Ref),
 		Keys:        liveKeys(app.Values),
 		Bindings:    liveBindings(app.Values),
 		Store:       store,
@@ -55,12 +55,12 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan provider.StackP
 		progress.Say("Standing " + app.App + " up as " + physical)
 	}
 	if err := p.host.StandUp(ctx, host.Container{
-		Name: physical, Project: plan.Ref.Project, App: app.App, Image: app.Image,
-		Class: plan.Ref.Class, Env: app.Values.Delivered, HealthPath: app.HealthCheckPath, Manifest: manifest, Resolved: true,
+		Name: physical, Project: spec.Ref.Project, App: app.App, Image: app.Image,
+		Class: spec.Ref.Class, Env: app.Values.Delivered, HealthPath: app.HealthCheckPath, Manifest: manifest, Resolved: true,
 	}); err != nil {
 		return nil, err
 	}
-	if err := p.host.Promote(ctx, plan.Ref.Class, plan.Ref.Project, app.App, app.Image); err != nil {
+	if err := p.host.Promote(ctx, spec.Ref.Class, spec.Ref.Project, app.App, app.Image); err != nil {
 		return nil, err
 	}
 	return []provider.AppContainer{{

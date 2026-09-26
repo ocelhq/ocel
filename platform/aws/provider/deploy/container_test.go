@@ -50,7 +50,7 @@ func fixtureSubstrate() substrate {
 	}
 }
 
-func plannedContainerStack(t *testing.T) (Config, provider.StackPlan) {
+func containerStackSpec(t *testing.T) (Config, provider.StackSpec) {
 	t.Helper()
 	cfg := Config{
 		Region:         "us-east-1",
@@ -63,12 +63,12 @@ func plannedContainerStack(t *testing.T) (Config, provider.StackPlan) {
 		VarsKeyARN:     "arn:aws:kms:us-east-1:123456789012:key/abcd",
 	}
 	stack := naming.AppStack("prod", "web", fixedRelease(t))
-	plan := provider.StackPlan{
+	spec := provider.StackSpec{
 		Ref:    provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
 		Kind:   provider.StackApp,
 		Tags:   map[string]string{"ocel:managed-by": "ocel"},
 		Images: provider.ImagePushes{Pushes: []images.Push{{App: "web", ImageRef: containerImage}}},
-		App: &provider.AppPlan{
+		App: &provider.AppSpec{
 			App:             "web",
 			Deployment:      "d1",
 			Compute:         provider.ComputeContainer,
@@ -81,12 +81,12 @@ func plannedContainerStack(t *testing.T) (Config, provider.StackPlan) {
 			},
 		},
 	}
-	return cfg, plan
+	return cfg, spec
 }
 
-func declaringASecret(plan provider.StackPlan) provider.StackPlan {
-	plan.App.Values.Secrets = []provider.SecretRef{{Key: "DATABASE_URL"}}
-	return plan
+func declaringASecret(spec provider.StackSpec) provider.StackSpec {
+	spec.App.Values.Secrets = []provider.SecretRef{{Key: "DATABASE_URL"}}
+	return spec
 }
 
 func definitionEnvOf(t *testing.T, rec *inputRecorder) map[string]string {
@@ -109,9 +109,9 @@ func definitionEnvOf(t *testing.T, rec *inputRecorder) map[string]string {
 func TestAServerlessAppThatPushesAnImageIsRefused(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedContainerStack(t)
-	plan.App.Compute = provider.ComputeServerless
-	if _, _, err := releasing(t, cfg).prepare(context.Background(), plan); err == nil || !strings.Contains(err.Error(), "serverless") {
+	cfg, spec := containerStackSpec(t)
+	spec.App.Compute = provider.ComputeServerless
+	if _, _, err := releasing(t, cfg).prepare(context.Background(), spec); err == nil || !strings.Contains(err.Error(), "serverless") {
 		t.Fatalf("prepare() of a serverless app that pushes an image = %v, want it refused: functions run no image", err)
 	}
 }
@@ -119,8 +119,8 @@ func TestAServerlessAppThatPushesAnImageIsRefused(t *testing.T) {
 func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedContainerStack(t)
-	work, err := releasing(t, cfg).containerWork(plan, fixtureSubstrate())
+	cfg, spec := containerStackSpec(t)
+	work, err := releasing(t, cfg).containerWork(spec, fixtureSubstrate())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
@@ -148,13 +148,13 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 		t.Errorf("containerEnv with %s = %v, want it refused by name: the load balancer would probe a port nothing listens on", containerPortEnv, err)
 	}
 
-	plan.App.HealthCheckPath = "not a path"
-	if _, err := releasing(t, cfg).containerWork(plan, fixtureSubstrate()); err == nil {
+	spec.App.HealthCheckPath = "not a path"
+	if _, err := releasing(t, cfg).containerWork(spec, fixtureSubstrate()); err == nil {
 		t.Error("containerWork accepted a health check path a load balancer cannot probe")
 	}
 	cfg.OriginSecret = ""
-	plan.App.HealthCheckPath = "/healthz"
-	if _, err := releasing(t, cfg).containerWork(plan, fixtureSubstrate()); err == nil {
+	spec.App.HealthCheckPath = "/healthz"
+	if _, err := releasing(t, cfg).containerWork(spec, fixtureSubstrate()); err == nil {
 		t.Error("containerWork accepted a class with no origin secret, so the listener rule would admit every stranger")
 	}
 }
@@ -162,10 +162,10 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 func TestAContainerDeployedDuringARotationAcceptsBothSecretsAndItsRuleAdmitsEither(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedContainerStack(t)
+	cfg, spec := containerStackSpec(t)
 	cfg.PreviousOriginSecret = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
 	release := releasing(t, cfg)
-	work, err := release.containerWork(plan, fixtureSubstrate())
+	work, err := release.containerWork(spec, fixtureSubstrate())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
@@ -176,7 +176,7 @@ func TestAContainerDeployedDuringARotationAcceptsBothSecretsAndItsRuleAdmitsEith
 		t.Fatalf("placeRule() = %v", err)
 	}
 	rec := &inputRecorder{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", plan.Ref.Name.String(), rec)); err != nil {
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
 		t.Fatalf("run the container program: %v", err)
 	}
 	rule := recordedOf(t, rec, "aws:lb/listenerRule:ListenerRule")
@@ -195,7 +195,7 @@ func TestAContainerDeployedDuringARotationAcceptsBothSecretsAndItsRuleAdmitsEith
 	}
 
 	cfg.PreviousOriginSecret = ""
-	settled, err := releasing(t, cfg).containerWork(plan, fixtureSubstrate())
+	settled, err := releasing(t, cfg).containerWork(spec, fixtureSubstrate())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
@@ -207,8 +207,8 @@ func TestAContainerDeployedDuringARotationAcceptsBothSecretsAndItsRuleAdmitsEith
 func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedContainerStack(t)
-	plan.App.Grants = []provider.Binding{{
+	cfg, spec := containerStackSpec(t)
+	spec.App.Grants = []provider.Binding{{
 		Type: provider.BindingBucket,
 		Name: "bucket--uploads",
 		Grants: []provider.Grant{{
@@ -218,7 +218,7 @@ func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T
 		}},
 	}}
 	release := releasing(t, cfg)
-	work, err := release.containerWork(plan, fixtureSubstrate())
+	work, err := release.containerWork(spec, fixtureSubstrate())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
@@ -227,7 +227,7 @@ func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T
 	}
 
 	rec := &inputRecorder{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", plan.Ref.Name.String(), rec)); err != nil {
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
 		t.Fatalf("run the container program: %v", err)
 	}
 
@@ -304,13 +304,13 @@ func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T
 func TestAContainerWithNoGrantsRunsWithoutATaskRole(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedContainerStack(t)
-	work, err := releasing(t, cfg).containerWork(plan, fixtureSubstrate())
+	cfg, spec := containerStackSpec(t)
+	work, err := releasing(t, cfg).containerWork(spec, fixtureSubstrate())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
 	rec := &inputRecorder{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", plan.Ref.Name.String(), rec)); err != nil {
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
 		t.Fatalf("run the container program: %v", err)
 	}
 	for key := range rec.recorded {
@@ -323,18 +323,18 @@ func TestAContainerWithNoGrantsRunsWithoutATaskRole(t *testing.T) {
 func TestAContainerStackDecodesIntoTheContainerItStoodUp(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedContainerStack(t)
+	cfg, spec := containerStackSpec(t)
 	release := releasing(t, cfg)
-	work, err := release.containerWork(plan, fixtureSubstrate())
+	work, err := release.containerWork(spec, fixtureSubstrate())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
-	plan.Work = work
+	spec.Work = work
 	outputs := auto.OutputMap{"web": auto.OutputValue{Value: map[string]any{
 		outputKeyContainerURL:      "http://" + fixtureOrigin,
 		outputKeyContainerPhysical: "shop-prod-web-container-r3f8a1c90",
 	}}}
-	result, err := release.Decode(context.Background(), plan, outputs)
+	result, err := release.Decode(context.Background(), spec, outputs)
 	if err != nil {
 		t.Fatalf("Decode() = %v", err)
 	}
@@ -349,7 +349,7 @@ func TestAContainerStackDecodesIntoTheContainerItStoodUp(t *testing.T) {
 		t.Errorf("container = %+v, want the app's name, the front the edge reaches, the image it runs and the service the rule names", held)
 	}
 
-	if _, err := release.Decode(context.Background(), plan, auto.OutputMap{}); err == nil {
+	if _, err := release.Decode(context.Background(), spec, auto.OutputMap{}); err == nil {
 		t.Error("Decode() of a stack that produced no output succeeded, so a deploy would record a container with no origin")
 	}
 }
@@ -397,10 +397,10 @@ func TestARuleStepsPastThePrioritiesTheFrontAlreadyHolds(t *testing.T) {
 	t.Parallel()
 
 	hashed := rulePriority("shop-prod-web-container-r3f8a1c90", nil)
-	cfg, plan := plannedContainerStack(t)
+	cfg, spec := containerStackSpec(t)
 	cfg.Rules = &fakeRules{taken: []string{strconv.Itoa(hashed), strconv.Itoa(hashed + 1), "default"}}
 	release := releasing(t, cfg)
-	work, err := release.containerWork(plan, fixtureSubstrate())
+	work, err := release.containerWork(spec, fixtureSubstrate())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
@@ -426,10 +426,10 @@ func recordedOf(t *testing.T, rec *inputRecorder, typeToken string) resource.Pro
 func TestAContainerDeclaringASecretIsHandedAManifestAndAFencedReadRatherThanThePlaintext(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedContainerStack(t)
-	plan = declaringASecret(plan)
+	cfg, spec := containerStackSpec(t)
+	spec = declaringASecret(spec)
 	release := releasing(t, cfg)
-	work, err := release.containerWork(plan, fixtureSubstrate())
+	work, err := release.containerWork(spec, fixtureSubstrate())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
@@ -450,7 +450,7 @@ func TestAContainerDeclaringASecretIsHandedAManifestAndAFencedReadRatherThanTheP
 	}
 
 	rec := &inputRecorder{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", plan.Ref.Name.String(), rec)); err != nil {
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
 		t.Fatalf("run the container program: %v", err)
 	}
 	if recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")["taskRoleArn"].StringValue() == "" {
@@ -476,15 +476,15 @@ func TestAContainerDeclaringASecretIsHandedAManifestAndAFencedReadRatherThanTheP
 func TestATransformTagsAContainersResourcesAndAPatchNothingCarriesIsRefused(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedContainerStack(t)
+	cfg, spec := containerStackSpec(t)
 	pass := &fakePass{tags: map[string]string{"team": "shop"}}
 	cfg.Transform = pass
 	release := releasing(t, cfg)
-	work, err := release.containerWork(plan, fixtureSubstrate())
+	work, err := release.containerWork(spec, fixtureSubstrate())
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
-	if work.transformed, err = transformStackPlan(context.Background(), cfg.Transform, plan); err != nil {
+	if work.transformed, err = transformStackSpec(context.Background(), cfg.Transform, spec); err != nil {
 		t.Fatalf("transformStackPlan() = %v", err)
 	}
 	if len(pass.seen.Resources) != 1 || pass.seen.Resources[0].Type != transformTypeContainer || pass.seen.Resources[0].App != "web" {
@@ -494,7 +494,7 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingCarriesIsRefused(t *t
 		t.Fatalf("placeRule() = %v", err)
 	}
 	rec := &inputRecorder{}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", plan.Ref.Name.String(), rec)); err != nil {
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
 		t.Fatalf("run the container program: %v", err)
 	}
 	for _, token := range []string{"aws:ecs/service:Service", "aws:ecs/taskDefinition:TaskDefinition", "aws:lb/targetGroup:TargetGroup"} {
@@ -504,10 +504,10 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingCarriesIsRefused(t *t
 	}
 
 	pass.out = []transformkit.Patches{{"role": {"description": "patched"}}}
-	if work.transformed, err = transformStackPlan(context.Background(), cfg.Transform, plan); err != nil {
+	if work.transformed, err = transformStackSpec(context.Background(), cfg.Transform, spec); err != nil {
 		t.Fatalf("transformStackPlan() = %v", err)
 	}
-	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", plan.Ref.Name.String(), &inputRecorder{})); err != nil {
+	if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), &inputRecorder{})); err != nil {
 		t.Fatalf("run the container program: %v", err)
 	}
 	if err := work.transformed.refuseUnclaimed(); err == nil || !strings.Contains(err.Error(), "role") {
@@ -516,9 +516,9 @@ func TestATransformTagsAContainersResourcesAndAPatchNothingCarriesIsRefused(t *t
 }
 
 func TestAContainerWhoseClassResolvedNoAppBoundaryIsRefusedBeforeARoleIsMinted(t *testing.T) {
-	cfg, plan := plannedContainerStack(t)
+	cfg, spec := containerStackSpec(t)
 	cfg.AppBoundaryARN = ""
-	_, err := releasing(t, cfg).containerWork(plan, fixtureSubstrate())
+	_, err := releasing(t, cfg).containerWork(spec, fixtureSubstrate())
 	if err == nil || !strings.Contains(err.Error(), "boundary") {
 		t.Fatalf("containerWork() with no boundary = %v, want a refusal naming the boundary", err)
 	}
@@ -528,10 +528,10 @@ func TestAContainersTaskIsStoodUpOnTheArchitectureItsAppDeclares(t *testing.T) {
 	t.Parallel()
 
 	for declared, want := range map[string]string{"": "X86_64", arch.X8664: "X86_64", arch.ARM64: "ARM64"} {
-		cfg, plan := plannedContainerStack(t)
-		plan.App.Arch = declared
+		cfg, spec := containerStackSpec(t)
+		spec.App.Arch = declared
 		release := releasing(t, cfg)
-		work, err := release.containerWork(plan, fixtureSubstrate())
+		work, err := release.containerWork(spec, fixtureSubstrate())
 		if err != nil {
 			t.Fatalf("containerWork() = %v", err)
 		}
@@ -539,7 +539,7 @@ func TestAContainersTaskIsStoodUpOnTheArchitectureItsAppDeclares(t *testing.T) {
 			t.Fatalf("placeRule() = %v", err)
 		}
 		rec := &inputRecorder{}
-		if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", plan.Ref.Name.String(), rec)); err != nil {
+		if err := pulumi.RunErr(func(pctx *pulumi.Context) error { return work.run(pctx) }, pulumi.WithMocks("shop", spec.Ref.Name.String(), rec)); err != nil {
 			t.Fatalf("run the container program: %v", err)
 		}
 		task := recordedOf(t, rec, "aws:ecs/taskDefinition:TaskDefinition")

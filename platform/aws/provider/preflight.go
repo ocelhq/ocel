@@ -41,21 +41,21 @@ func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre provider.DeployPrefl
 	if pre.Edge == "" || pre.Progress == nil {
 		return nil
 	}
-	params, err := p.classParams(ctx, pre.Plan.Class, pre.Edge)
+	params, err := p.classParams(ctx, pre.Deploy.Class, pre.Edge)
 	if err != nil {
 		return err
 	}
 	if params.EdgeCredentialsErr != nil {
 		return nil
 	}
-	if notice := bootstrap.StaleEdgeKeyNotice(params.EdgeCredentials, time.Now(), string(pre.Plan.Class)); notice != "" {
+	if notice := bootstrap.StaleEdgeKeyNotice(params.EdgeCredentials, time.Now(), string(pre.Deploy.Class)); notice != "" {
 		pre.Progress.Detail(notice)
 	}
 	return nil
 }
 
 func (p *Provider) refuseUnreadableOriginSecret(ctx context.Context, pre provider.DeployPreflight) error {
-	params, err := p.classParams(ctx, pre.Plan.Class, pre.Edge)
+	params, err := p.classParams(ctx, pre.Deploy.Class, pre.Edge)
 	if err != nil {
 		return err
 	}
@@ -66,11 +66,11 @@ func (p *Provider) nagStaleOriginSecret(ctx context.Context, pre provider.Deploy
 	if pre.Progress == nil {
 		return nil
 	}
-	params, err := p.classParams(ctx, pre.Plan.Class, pre.Edge)
+	params, err := p.classParams(ctx, pre.Deploy.Class, pre.Edge)
 	if err != nil {
 		return err
 	}
-	if notice := bootstrap.StaleOriginSecretNotice(params.OriginSecret, time.Now(), string(pre.Plan.Class)); notice != "" {
+	if notice := bootstrap.StaleOriginSecretNotice(params.OriginSecret, time.Now(), string(pre.Deploy.Class)); notice != "" {
 		pre.Progress.Detail(notice)
 	}
 	return nil
@@ -80,7 +80,7 @@ func (p *Provider) publishRuntimeLayers(ctx context.Context, pre provider.Deploy
 	if pre.Dry {
 		return nil
 	}
-	class := pre.Plan.Class
+	class := pre.Deploy.Class
 	held, err := p.bootstrapped(ctx, class)
 	if err != nil || !held.Present {
 		return err
@@ -112,7 +112,7 @@ func refuseContainersBehindFunctionEdge(pre provider.DeployPreflight) error {
 	if pre.Edge == edges.DefaultKind {
 		return nil
 	}
-	for _, app := range pre.Plan.Apps {
+	for _, app := range pre.Deploy.Apps {
 		if app.Compute() != provider.ComputeContainer {
 			continue
 		}

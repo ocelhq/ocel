@@ -6,7 +6,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type DeployPlan struct {
+type DeploySpec struct {
 	Slug    string
 	Class   edge.Class
 	Env     string

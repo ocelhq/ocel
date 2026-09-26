@@ -196,10 +196,10 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 		Name:    naming.AppStack("prod", "web", naming.NewRelease("d1", "f1")),
 	}
 
-	served, err := stacks.Provision(context.Background(), provider.StackPlan{
+	served, err := stacks.Provision(context.Background(), provider.StackSpec{
 		Ref:  ref,
 		Kind: provider.StackApp,
-		App: &provider.AppPlan{
+		App: &provider.AppSpec{
 			App:       "web",
 			Compute:   provider.ComputeServerless,
 			Functions: []provider.FunctionSpec{{Name: "api"}},
@@ -212,10 +212,10 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 		t.Fatalf("Provision() of a serverless app = %+v, want it to reach Functions alone", served)
 	}
 
-	contained, err := stacks.Provision(context.Background(), provider.StackPlan{
+	contained, err := stacks.Provision(context.Background(), provider.StackSpec{
 		Ref:  ref,
 		Kind: provider.StackApp,
-		App: &provider.AppPlan{
+		App: &provider.AppSpec{
 			App:             "web",
 			Compute:         provider.ComputeContainer,
 			Image:           "ocel/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
@@ -236,10 +236,10 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 		t.Fatal(err)
 	}
 
-	if _, err := stacks.Provision(context.Background(), provider.StackPlan{
+	if _, err := stacks.Provision(context.Background(), provider.StackSpec{
 		Ref:  ref,
 		Kind: provider.StackApp,
-		App: &provider.AppPlan{
+		App: &provider.AppSpec{
 			App:       "web",
 			Compute:   provider.ComputeServerless,
 			Functions: []provider.FunctionSpec{{Name: "api"}},
