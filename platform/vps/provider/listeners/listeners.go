@@ -36,25 +36,32 @@ func Parse(r io.Reader) ([]Listener, error) {
 	var held []Listener
 	sockets := map[uint64][]string{}
 	names := map[string]string{}
-	section := ""
+	sections := []string{"", SocketsMark, NamesMark}
+	section, naming := 0, ""
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if mark := strings.TrimSpace(line); mark == SocketsMark || mark == NamesMark {
-			section = mark
+		if next := slices.Index(sections, strings.TrimSpace(line)); next > section {
+			section = next
 			continue
 		}
-		switch section {
+		switch sections[section] {
 		case SocketsMark:
-			if pid, inode, read := socket(line); read {
+			if pid, inode, read := socketLine(line); read {
 				sockets[inode] = append(sockets[inode], pid)
 			}
 		case NamesMark:
-			if pid, name, read := named(line); read {
-				names[pid] = name
+			pid, name, read := nameLine(line)
+			switch {
+			case !read:
+				naming = ""
+			case pid == naming:
+				names[pid] += `\n` + name
+			default:
+				names[pid], naming = name, pid
 			}
 		default:
-			listener, listening, err := tabled(line)
+			listener, listening, err := tableRow(line)
 			if err != nil {
 				return nil, err
 			}
@@ -72,7 +79,7 @@ func Parse(r io.Reader) ([]Listener, error) {
 	return held, nil
 }
 
-func tabled(line string) (Listener, bool, error) {
+func tableRow(line string) (Listener, bool, error) {
 	fields := strings.Fields(line)
 	if len(fields) < 4 || !strings.HasSuffix(fields[0], ":") || fields[3] != listenState {
 		return Listener{}, false, nil
@@ -89,7 +96,7 @@ func tabled(line string) (Listener, bool, error) {
 	return listener, true, nil
 }
 
-func socket(line string) (string, uint64, bool) {
+func socketLine(line string) (string, uint64, bool) {
 	dir, link, split := strings.Cut(strings.TrimSpace(line), " ")
 	pid, fd, pidded := strings.Cut(strings.TrimPrefix(dir, "/proc/"), "/")
 	spelled, linked := strings.CutPrefix(link, "socket:[")
@@ -101,7 +108,7 @@ func socket(line string) (string, uint64, bool) {
 	return pid, inode, err == nil
 }
 
-func named(line string) (string, string, bool) {
+func nameLine(line string) (string, string, bool) {
 	path, name, split := strings.Cut(line, ":")
 	pid, comm, pidded := strings.Cut(strings.TrimPrefix(path, "/proc/"), "/")
 	return pid, name, split && pidded && comm == "comm" && numbered(pid)
@@ -124,12 +131,12 @@ func holding(pids []string, names map[string]string) []string {
 }
 
 func Holders(held []Listener) []string {
-	var named []string
+	var holders []string
 	for _, listener := range held {
-		named = append(named, listener.Holders...)
+		holders = append(holders, listener.Holders...)
 	}
-	slices.Sort(named)
-	return slices.Compact(named)
+	slices.Sort(holders)
+	return slices.Compact(holders)
 }
 
 func local(field string) (Listener, error) {
