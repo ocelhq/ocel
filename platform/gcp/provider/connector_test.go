@@ -14,7 +14,7 @@ import (
 	"google.golang.org/api/cloudresourcemanager/v1"
 	run "google.golang.org/api/run/v2"
 
-	"github.com/ocelhq/ocel/pkg/connectorkit"
+	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
@@ -336,10 +336,10 @@ func TestTheConnectorHasOnlyTheKeyRolesItsGrantsCallFor(t *testing.T) {
 		grants []string
 		roles  []string
 	}{
-		"read alone":           {grants: []string{connectorkit.CapabilityEnvVarsRead}},
-		"read and write":       {grants: []string{connectorkit.CapabilityEnvVarsRead, connectorkit.CapabilityEnvVarsWrite}, roles: []string{connectorSealingRole}},
-		"read and reveal":      {grants: []string{connectorkit.CapabilityEnvVarsRead, connectorkit.CapabilityEnvVarsReveal}, roles: []string{connectorOpeningRole}},
-		"every grant there is": {grants: []string{connectorkit.CapabilityEnvVarsRead, connectorkit.CapabilityEnvVarsWrite, connectorkit.CapabilityEnvVarsReveal}, roles: []string{connectorSealingRole, connectorOpeningRole}},
+		"read alone":           {grants: []string{connectorserver.CapabilityEnvVarsRead}},
+		"read and write":       {grants: []string{connectorserver.CapabilityEnvVarsRead, connectorserver.CapabilityEnvVarsWrite}, roles: []string{connectorSealingRole}},
+		"read and reveal":      {grants: []string{connectorserver.CapabilityEnvVarsRead, connectorserver.CapabilityEnvVarsReveal}, roles: []string{connectorOpeningRole}},
+		"every grant there is": {grants: []string{connectorserver.CapabilityEnvVarsRead, connectorserver.CapabilityEnvVarsWrite, connectorserver.CapabilityEnvVarsReveal}, roles: []string{connectorSealingRole, connectorOpeningRole}},
 		"no grant at all":      {},
 	} {
 		t.Run(name, func(t *testing.T) {

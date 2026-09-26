@@ -17,7 +17,7 @@ import (
 	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/pkg/connectorkit"
+	"github.com/ocelhq/ocel/pkg/connectorserver"
 )
 
 var (
@@ -37,12 +37,12 @@ type options struct {
 }
 
 func (o options) grants() []string {
-	capabilities := []string{connectorkit.CapabilityEnvVarsRead}
+	capabilities := []string{connectorserver.CapabilityEnvVarsRead}
 	if o.write {
-		capabilities = append(capabilities, connectorkit.CapabilityEnvVarsWrite)
+		capabilities = append(capabilities, connectorserver.CapabilityEnvVarsWrite)
 	}
 	if o.reveal {
-		capabilities = append(capabilities, connectorkit.CapabilityEnvVarsReveal)
+		capabilities = append(capabilities, connectorserver.CapabilityEnvVarsReveal)
 	}
 	return capabilities
 }

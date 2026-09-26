@@ -1,4 +1,4 @@
-package connectorkit_test
+package connectorserver_test
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwk"
 	"github.com/lestrrat-go/jwx/v3/jwt"
 
-	"github.com/ocelhq/ocel/pkg/connectorkit"
+	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
@@ -122,8 +122,8 @@ func (c *console) token(t *testing.T, m minted) string {
 func servedConnector(t *testing.T, at *console, grants []string) *httptest.Server {
 	t.Helper()
 
-	mux, err := connectorkit.Mux(connectorkit.Spec{
-		Config: connectorkit.Config{
+	mux, err := connectorserver.Mux(connectorserver.Spec{
+		Config: connectorserver.Config{
 			Console:        at.origin,
 			ConnectorID:    connectorID,
 			OrganizationID: organizationID,
@@ -182,7 +182,7 @@ func TestAnUnauthenticatedCapabilitiesProbeIsRefused(t *testing.T) {
 func TestACapabilitiesProbeUnderAnotherAccountsTokenIsRefused(t *testing.T) {
 	at := consoleServing(t)
 	server := servedConnector(t, at, everything())
-	token := at.token(t, minted{subject: "org:someone-else", scope: []string{connectorkit.CapabilityEnvVarsRead}})
+	token := at.token(t, minted{subject: "org:someone-else", scope: []string{connectorserver.CapabilityEnvVarsRead}})
 
 	if response := probed(t, server, token); response.StatusCode != http.StatusForbidden {
 		t.Errorf("a capabilities probe for another account answered %s, want 403", response.Status)
@@ -192,7 +192,7 @@ func TestACapabilitiesProbeUnderAnotherAccountsTokenIsRefused(t *testing.T) {
 func TestACapabilitiesProbeUnderAConsoleTokenAnswers(t *testing.T) {
 	at := consoleServing(t)
 	server := servedConnector(t, at, everything())
-	token := at.token(t, minted{scope: []string{connectorkit.CapabilityEnvVarsRead}})
+	token := at.token(t, minted{scope: []string{connectorserver.CapabilityEnvVarsRead}})
 
 	response := probed(t, server, token)
 	if response.StatusCode != http.StatusOK {
@@ -229,15 +229,15 @@ func withBearer(t *testing.T, at *console, grants []string, token string) envvar
 
 func everything() []string {
 	return []string{
-		connectorkit.CapabilityEnvVarsRead,
-		connectorkit.CapabilityEnvVarsWrite,
-		connectorkit.CapabilityEnvVarsReveal,
+		connectorserver.CapabilityEnvVarsRead,
+		connectorserver.CapabilityEnvVarsWrite,
+		connectorserver.CapabilityEnvVarsReveal,
 	}
 }
 
 func TestReadPassesUnderAValidToken(t *testing.T) {
 	at := consoleServing(t)
-	vars := withBearer(t, at, everything(), at.token(t, minted{scope: []string{connectorkit.CapabilityEnvVarsRead}}))
+	vars := withBearer(t, at, everything(), at.token(t, minted{scope: []string{connectorserver.CapabilityEnvVarsRead}}))
 
 	if _, err := vars.ListValues(context.Background(), &envvarsv1.ListValuesRequest{
 		Tier: environmentv1.Tier_TIER_PRODUCTION,
@@ -264,7 +264,7 @@ func TestAnotherAudienceIsUnauthenticated(t *testing.T) {
 	at := consoleServing(t)
 	vars := withBearer(t, at, everything(), at.token(t, minted{
 		audience: "conn-other",
-		scope:    []string{connectorkit.CapabilityEnvVarsRead},
+		scope:    []string{connectorserver.CapabilityEnvVarsRead},
 	}))
 
 	_, err := vars.ListValues(context.Background(), &envvarsv1.ListValuesRequest{
@@ -280,7 +280,7 @@ func TestAnotherAccountIsDenied(t *testing.T) {
 	at := consoleServing(t)
 	vars := withBearer(t, at, everything(), at.token(t, minted{
 		subject: "org:other",
-		scope:   []string{connectorkit.CapabilityEnvVarsRead},
+		scope:   []string{connectorserver.CapabilityEnvVarsRead},
 	}))
 
 	_, err := vars.ListValues(context.Background(), &envvarsv1.ListValuesRequest{
@@ -294,7 +294,7 @@ func TestAnotherAccountIsDenied(t *testing.T) {
 
 func TestWritingWithoutTheScopeIsDenied(t *testing.T) {
 	at := consoleServing(t)
-	vars := withBearer(t, at, everything(), at.token(t, minted{scope: []string{connectorkit.CapabilityEnvVarsRead}}))
+	vars := withBearer(t, at, everything(), at.token(t, minted{scope: []string{connectorserver.CapabilityEnvVarsRead}}))
 
 	_, err := vars.SetValue(context.Background(), &envvarsv1.SetValueRequest{
 		Tier:       environmentv1.Tier_TIER_PRODUCTION,
@@ -308,7 +308,7 @@ func TestWritingWithoutTheScopeIsDenied(t *testing.T) {
 
 func TestRevealingWithoutTheGrantIsDenied(t *testing.T) {
 	at := consoleServing(t)
-	grants := []string{connectorkit.CapabilityEnvVarsRead, connectorkit.CapabilityEnvVarsWrite}
+	grants := []string{connectorserver.CapabilityEnvVarsRead, connectorserver.CapabilityEnvVarsWrite}
 	vars := withBearer(t, at, grants, at.token(t, minted{scope: everything()}))
 
 	_, err := vars.RevealValues(context.Background(), &envvarsv1.RevealValuesRequest{
@@ -323,7 +323,7 @@ func TestRevealingWithoutTheGrantIsDenied(t *testing.T) {
 
 func TestGetValueAsksForRevealOnlyWhenItReveals(t *testing.T) {
 	at := consoleServing(t)
-	reading := at.token(t, minted{scope: []string{connectorkit.CapabilityEnvVarsRead}})
+	reading := at.token(t, minted{scope: []string{connectorserver.CapabilityEnvVarsRead}})
 
 	plain := withBearer(t, at, everything(), reading)
 	if _, err := plain.GetValue(context.Background(), &envvarsv1.GetValueRequest{
@@ -377,7 +377,7 @@ func saying(t *testing.T, run func()) string {
 
 func TestEveryRequestSaysWhoAskedAndHowItWent(t *testing.T) {
 	at := consoleServing(t)
-	vars := withBearer(t, at, everything(), at.token(t, minted{scope: []string{connectorkit.CapabilityEnvVarsRead}}))
+	vars := withBearer(t, at, everything(), at.token(t, minted{scope: []string{connectorserver.CapabilityEnvVarsRead}}))
 
 	said := saying(t, func() {
 		if _, err := vars.ListValues(context.Background(), &envvarsv1.ListValuesRequest{

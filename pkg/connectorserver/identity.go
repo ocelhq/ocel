@@ -1,4 +1,4 @@
-package connectorkit
+package connectorserver
 
 import (
 	"crypto/ed25519"
@@ -17,7 +17,7 @@ type Identity struct {
 
 func LoadOrCreateIdentity(path string) (Identity, error) {
 	if path == "" {
-		return Identity{}, errors.New("connectorkit: no key path, so this connector can have no identity")
+		return Identity{}, errors.New("connectorserver: no key path, so this connector can have no identity")
 	}
 	read, err := os.ReadFile(path)
 	switch {

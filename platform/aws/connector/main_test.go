@@ -15,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
-	"github.com/ocelhq/ocel/pkg/connectorkit"
+	"github.com/ocelhq/ocel/pkg/connectorserver"
 )
 
 type proxied struct {
@@ -69,12 +69,12 @@ func TestAScheduledWakeBeatsAndAnythingElseIsServedAsARequest(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	t.Cleanup(console.Close)
-	identity, err := connectorkit.IdentityFromSeed(make([]byte, ed25519.SeedSize))
+	identity, err := connectorserver.IdentityFromSeed(make([]byte, ed25519.SeedSize))
 	if err != nil {
 		t.Fatal(err)
 	}
-	spec := connectorkit.Spec{
-		Config:   connectorkit.Config{Console: console.URL, ConnectorID: "conn-1", OrganizationID: "org-1"},
+	spec := connectorserver.Spec{
+		Config:   connectorserver.Config{Console: console.URL, ConnectorID: "conn-1", OrganizationID: "org-1"},
 		Identity: identity,
 	}
 	serve := &proxied{}

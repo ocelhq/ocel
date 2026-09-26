@@ -1,4 +1,4 @@
-package connectorkit
+package connectorserver
 
 import (
 	"encoding/json"
@@ -25,7 +25,7 @@ func ReadConfig(path string) (Config, error) {
 		return ParseConfig([]byte(raw), provider.ConnectorConfigEnvVar)
 	}
 	if path == "" {
-		return Config{}, fmt.Errorf("connectorkit: nothing names the console this connector trusts: neither %s nor a config file", provider.ConnectorConfigEnvVar)
+		return Config{}, fmt.Errorf("connectorserver: nothing names the console this connector trusts: neither %s nor a config file", provider.ConnectorConfigEnvVar)
 	}
 	read, err := os.ReadFile(path)
 	if err != nil {

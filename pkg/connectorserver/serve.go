@@ -1,4 +1,4 @@
-package connectorkit
+package connectorserver
 
 import (
 	"context"
@@ -43,10 +43,10 @@ type Spec struct {
 
 func Serve(spec Spec) error {
 	if spec.EnvVars.Records == nil {
-		return errors.New("connectorkit: Spec.EnvVars.Records is required")
+		return errors.New("connectorserver: Spec.EnvVars.Records is required")
 	}
 	if spec.EnvVars.Cipher == nil {
-		return errors.New("connectorkit: Spec.EnvVars.Cipher is required")
+		return errors.New("connectorserver: Spec.EnvVars.Cipher is required")
 	}
 
 	if spec.KeyPath != "" && !spec.Identity.HasKey() {
@@ -114,7 +114,7 @@ func listen(addr string) (net.Listener, error) {
 		return ln, nil
 	}
 	if path == "" {
-		return nil, fmt.Errorf("connectorkit: %s names no socket to bind", addr)
+		return nil, fmt.Errorf("connectorserver: %s names no socket to bind", addr)
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return nil, fmt.Errorf("clear the socket %s a run before this one left: %w", path, err)
@@ -144,12 +144,12 @@ func PublicKey(configPath string) (string, error) {
 
 func Mux(spec Spec) (*http.ServeMux, error) {
 	if err := spec.check(); err != nil {
-		return nil, fmt.Errorf("connectorkit: %w", err)
+		return nil, fmt.Errorf("connectorserver: %w", err)
 	}
 
 	guard, err := newTrust(spec)
 	if err != nil {
-		return nil, fmt.Errorf("connectorkit: %w", err)
+		return nil, fmt.Errorf("connectorserver: %w", err)
 	}
 
 	mux := http.NewServeMux()

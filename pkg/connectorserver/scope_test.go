@@ -1,4 +1,4 @@
-package connectorkit
+package connectorserver
 
 import (
 	"context"

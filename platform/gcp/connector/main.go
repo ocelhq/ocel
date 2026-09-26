@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/connectorkit"
+	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/target"
@@ -45,7 +45,7 @@ func run(listen, config string, reporting bool) error {
 		return nil
 	}
 
-	trust, err := connectorkit.ReadConfig(config)
+	trust, err := connectorserver.ReadConfig(config)
 	if err != nil {
 		return err
 	}
@@ -64,7 +64,7 @@ func run(listen, config string, reporting bool) error {
 	}
 
 	bindings := &ports.Clients{Namespace: ns, Project: project, Region: region}
-	return connectorkit.Serve(connectorkit.Spec{
+	return connectorserver.Serve(connectorserver.Spec{
 		Config:     trust,
 		Version:    version,
 		Vendor:     vendor,

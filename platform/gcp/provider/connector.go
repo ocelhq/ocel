@@ -19,7 +19,7 @@ import (
 	"google.golang.org/api/iam/v1"
 	run "google.golang.org/api/run/v2"
 
-	"github.com/ocelhq/ocel/pkg/connectorkit"
+	"github.com/ocelhq/ocel/pkg/connectorserver"
 	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
@@ -100,7 +100,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 			"this run talks to an emulator, which deploys no Cloud Run service and hands out no url a console could dial: add the connector against the project itself")
 	}
 
-	trust, err := connectorkit.ParseConfig(install.Config, "this install")
+	trust, err := connectorserver.ParseConfig(install.Config, "this install")
 	if err != nil {
 		return provider.ConnectorAddress{}, refusal.Refuse(refusal.CodeInvalid, "%s", err)
 	}
@@ -327,10 +327,10 @@ func (p *Provider) ensureConnectorAccount(ctx context.Context, grants []string, 
 
 func keyRolesFor(grants []string) []string {
 	var roles []string
-	if slices.Contains(grants, connectorkit.CapabilityEnvVarsWrite) {
+	if slices.Contains(grants, connectorserver.CapabilityEnvVarsWrite) {
 		roles = append(roles, connectorSealingRole)
 	}
-	if slices.Contains(grants, connectorkit.CapabilityEnvVarsReveal) {
+	if slices.Contains(grants, connectorserver.CapabilityEnvVarsReveal) {
 		roles = append(roles, connectorOpeningRole)
 	}
 	return roles
