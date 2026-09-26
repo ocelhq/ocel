@@ -1,8 +1,17 @@
 import { describe, expect, it } from "bun:test";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { coveredNames, FRONT_ENV, frontNamed, frontStep, stepCommand, unrefused } from "./front";
+import {
+  coveredNames,
+  FRONT_ENV,
+  frontNamed,
+  frontStep,
+  frontsDir,
+  holderOf,
+  stepCommand,
+  unrefused,
+} from "./front";
 
 describe("frontNamed", () => {
   it("runs a box behind ocel's own proxy when the run names no front", () => {
@@ -23,18 +32,29 @@ describe("frontNamed", () => {
     expect(() => frontNamed({ [FRONT_ENV]: "bare" }, dir)).toThrow(/names no "proxy"/);
   });
 
-  it("reads what a bootstrap under ocel's own proxy must name as holding the ports", () => {
-    expect(frontNamed({ [FRONT_ENV]: "nginx" })?.holder).toBe("nginx holds :80 and :443");
-    expect(frontNamed({ [FRONT_ENV]: "nginx-container" })?.holder).toBe(
+  it("reads a front's directory for its proxy option and nothing else", async () => {
+    for (const entry of await readdir(frontsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) {
+        continue;
+      }
+      const read = JSON.parse(
+        await readFile(path.join(frontsDir, entry.name, "front.json"), "utf8"),
+      );
+      expect(Object.keys(read)).toEqual(["proxy"]);
+    }
+  });
+});
+
+describe("holderOf", () => {
+  it("names what holds the ports on each front this repo carries", () => {
+    expect(holderOf(frontNamed({ [FRONT_ENV]: "nginx" })!)).toBe("nginx holds :80 and :443");
+    expect(holderOf(frontNamed({ [FRONT_ENV]: "nginx-container" })!)).toBe(
       "container ocel-front-nginx publishes :80 and :443",
     );
   });
 
-  it("refuses a front whose directory names nothing holding the ports", async () => {
-    const dir = await mkdtemp(path.join(tmpdir(), "fronts-"));
-    await mkdir(path.join(dir, "unheld"));
-    await writeFile(path.join(dir, "unheld", "front.json"), '{ "proxy": "manual" }\n', "utf8");
-    expect(() => frontNamed({ [FRONT_ENV]: "unheld" }, dir)).toThrow(/names no "holder"/);
+  it("refuses a front the journey knows nothing holding the ports for", () => {
+    expect(() => holderOf({ name: "unheld", dir: "/nowhere", proxy: "manual" })).toThrow(/unheld/);
   });
 });
 

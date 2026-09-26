@@ -1,4 +1,3 @@
 {
-  "proxy": "manual",
-  "holder": "nginx holds :80 and :443"
+  "proxy": "manual"
 }

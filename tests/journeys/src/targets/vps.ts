@@ -20,7 +20,15 @@ import type { PrepareFailures } from "../prepare";
 import type { CellUnderTest } from "../run/cellRun";
 import { migrateCommand } from "../workspace";
 import { engineSeries, unadopted } from "./engine";
-import { coveredNames, type Front, frontNamed, frontStep, stepCommand, unrefused } from "./front";
+import {
+  coveredNames,
+  type Front,
+  frontNamed,
+  frontStep,
+  holderOf,
+  stepCommand,
+  unrefused,
+} from "./front";
 import { type Gateway, openGateway } from "./gateway";
 import type { Deployment, ReleaseCycle, Sweeper, Target } from "./types";
 
@@ -246,7 +254,7 @@ export class VpsTarget implements Target, ReleaseCycle {
     );
     const said = redact(`${result.stdout}${result.stderr}`);
     await writeFile(path.join(dir, "bootstrap.log"), said, "utf8");
-    const missed = unrefused(result.code, said, front.holder);
+    const missed = unrefused(result.code, said, holderOf(front));
     if (missed !== undefined) {
       throw new Error(missed);
     }
