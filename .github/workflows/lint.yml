@@ -56,8 +56,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: The check finds exactly the words and paths it names
+        run: node --test scripts/banned-words.test.mjs
+
       - name: No tracked file uses a word the naming rules ban
-        run: scripts/banned-words.sh
+        run: node scripts/banned-words.mjs
 
   contract:
     name: contract-paths-test

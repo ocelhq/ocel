@@ -265,7 +265,7 @@ func TestOneAppsSlowWriteNeverBlocksAnotherApp(t *testing.T) {
 			t.Fatalf("api's promote exited: %v", err)
 		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("api's promote was still waiting while web was mid-write: one lock over the whole release root serialises every app on the box, and it is held across the sweep's every docker rmi")
+		t.Fatal("api's promote was still waiting while web was mid-write: one lock over the whole release root serialises every app on the box, and the sweep keeps it through every docker rmi")
 	}
 }
 
