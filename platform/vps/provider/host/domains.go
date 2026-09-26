@@ -251,15 +251,16 @@ func (h *Host) serving(ctx context.Context, loading, reloading bool, elevation s
 }
 
 func (h *Host) reverted(ctx context.Context, shaped composed, loading bool, why error, elevation string) error {
+	written := routingFiles(h.front.File())
 	if _, failedPlace, err := h.writePair(ctx, shaped.written, shaped.restoring, shaped.reloading); err != nil || failedPlace != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"serving %s failed: %v\nrestoring %s and %s also failed: %v",
-			live.RoutingTable, why, live.RoutingTable, ProxyConfig, errors.Join(err, failedPlace))
+			"serving %s failed: %v\nputting back %s also failed: %v",
+			written, why, written, errors.Join(err, failedPlace))
 	}
 	if err := h.serving(ctx, loading, shaped.reloading, elevation); err != nil {
 		return providerkit.Refuse(providerkit.CodeNotReady,
-			"serving %s failed: %v\n%s and %s were restored, but serving them again failed too, so the box may still serve what they no longer record: %v\nRun the deploy again",
-			live.RoutingTable, why, live.RoutingTable, ProxyConfig, err)
+			"serving %s failed: %v\nput back %s, but serving again failed too, so the box may still serve routes nothing records any more: %v\nRun the deploy again",
+			written, why, written, err)
 	}
 	return why
 }
