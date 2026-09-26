@@ -105,7 +105,7 @@ left behind, and only projects the harness named.
 `--shard <index>/<total>` is accepted and validated by `cell`; it selects nothing yet.
 
 A pull request and a full run — workflow dispatch, or the `journey:real` label — both run
-`deploy`, `lifecycle` and `sdk`, `lifecycle` cells first. `iac` stands up real SST and Pulumi
+`deploy`, `lifecycle` and `sdk`, `lifecycle` cells first. `iac` deploys real SST and Pulumi
 stacks, so only a workflow dispatch that names it runs it, and only with `skips=run`: the gap
 list skips every `iac` cell on `aws` and `aws.floci` (#856, #857). Either way it spreads each
 edge of a fixture group over one member of that group, and runs every cell of a member whose
@@ -166,7 +166,7 @@ if the session or the Cloudflare token resolves to an account other than the one
 role's `MaxSessionDuration` must be at least 14400 seconds, the duration the journey job
 mints, or the assume fails outright.
 
-| name                                 | kind   | what it holds                                               |
+| name                                 | kind   | what it contains                                            |
 | ------------------------------------ | ------ | ----------------------------------------------------------- |
 | `E2E_AWS_ROLE_ARN`                   | secret | the role every AWS-touching job assumes                      |
 | `E2E_AWS_REGION`                     | var    | the region the session is minted in and the apps deploy into |
@@ -190,13 +190,13 @@ OCEL_NAMESPACE=ocel-live OCEL_GCP_LIVE_PROJECT=<project> \
   go test -C platform/gcp/provider -count=1 -run '^Test(Live|Project)' ./...
 ```
 
-| name                    | kind | what it holds                                                        |
+| name                    | kind | what it contains                                                     |
 | ----------------------- | ---- | -------------------------------------------------------------------- |
 | `OCEL_GCP_LIVE_PROJECT` | env  | the real project a `TestLive` and `TestProject` run bootstraps into and tears down |
 | `OCEL_GCP_LIVE_REGION`  | env  | the region that run uses; `europe-west1` when unset                  |
 | `OCEL_GCP_PROJECT`      | env  | the project the `gcp` journey target deploys into; the emulator's `floci-local` when unset |
 | `OCEL_GCP_REGION`       | env  | the region it deploys into; `europe-west1` when unset                |
-| `OCEL_NAMESPACE`        | env  | the namespace every name the run derives carries; `ocel` when unset  |
+| `OCEL_NAMESPACE`        | env  | the namespace every name the run derives includes; `ocel` when unset |
 
 Name one fixed namespace for a real project and keep using it. Google never deletes a key
 ring, so a run under a fresh namespace leaves one behind for good, and a namespace shorter
@@ -213,7 +213,7 @@ identity federation — no key is stored — and takes down the projects it depl
 bootstrap under its namespace whether the run passed or not. A pass releases the commit
 it drove as a nightly.
 
-| name                  | kind | what it holds                                                                   |
+| name                  | kind | what it contains                                                                |
 | --------------------- | ---- | ------------------------------------------------------------------------------- |
 | `GCP_WIF_PROVIDER`    | var  | the workload identity provider the job exchanges its GitHub token at, in full    |
 | `GCP_SERVICE_ACCOUNT` | var  | the email of the service account the job impersonates                            |
@@ -222,7 +222,7 @@ it drove as a nightly.
 
 The nightly runs under the fixed namespace `ocel-nightly`, not one per run: a key ring
 Google never deletes would otherwise be stranded every night, and a namespace long enough
-to carry a run id leaves no room for a service name inside Cloud Run's 49 characters.
+to include a run id leaves no room for a service name inside Cloud Run's 49 characters.
 
 Preparing the project is a human's one-time job:
 

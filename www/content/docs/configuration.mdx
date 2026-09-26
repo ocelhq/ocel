@@ -21,7 +21,7 @@ version of the schema the CLI that wrote the file ships; `ocel init` fills it in
 creates is keyed on it, so changing it forks a new project.
 
 `provider`, `edge` and `dns` each name one choice: an object keyed by its identifier and
-holding its options, such as `{ "aws": { "region": "us-east-1" } }`, or the identifier alone
+containing its options, such as `{ "aws": { "region": "us-east-1" } }`, or the identifier alone
 when it needs none, as `"aws"` is above.
 
 The file is JSON with comments and trailing commas allowed, so a variant you are not using
@@ -44,9 +44,9 @@ apps:
 The first line is what your editor completes and validates against. Anchors and merge keys
 expand before ocel reads the document, so apps that share settings can share them once.
 
-One project reads one config: a directory holding two of `ocel.json`, `ocel.yaml`,
+One project reads one config: a directory containing two of `ocel.json`, `ocel.yaml`,
 `ocel.yml` and a [TypeScript config](/docs/typescript-config) is refused, and so is one
-holding two forms of the same target, such as `ocel.vps.json` and `ocel.vps.yaml`.
+containing two forms of the same target, such as `ocel.vps.json` and `ocel.vps.yaml`.
 
 ## Variables
 
@@ -69,7 +69,7 @@ This is for values that differ per machine, not for secrets. Secrets belong in
 
 The one secret the CLI itself needs, the password `registry` pushes with, is written as
 the placeholder alone and read from your shell, then the project's `.env`, when the push
-authenticates, so the config says where the secret comes from and never holds it:
+authenticates, so the config says where the secret comes from and never contains it:
 
 ```json title="ocel.json"
 {
@@ -90,7 +90,7 @@ every provider archive of that release on every platform. Commit it. Every machi
 every CI run then fetches the same bytes, and a CLI of another version is refused until
 you run `ocel lock` again.
 
-A project holding no `ocel.lock` gets one the first time a command fetches its providers.
+A project with no `ocel.lock` gets one the first time a command fetches its providers.
 A `--dry` run writes none: with no `ocel.lock`, or one another version wrote, it pins the
 providers for that run alone.
 
@@ -113,7 +113,7 @@ source file under that folder runs during discovery.
 
 Each folder's language is the one the source files in it are written in, not the one a
 manifest names: `.go` is go, `.py` is python, `.rs` is rust, and `.ts`, `.tsx`, `.js`,
-`.jsx`, `.mjs` or `.cjs` is js. A folder holding two of them is an error.
+`.jsx`, `.mjs` or `.cjs` is js. A folder containing two of them is an error.
 
 ## framework
 
@@ -222,7 +222,7 @@ already run: see [Bucket](/docs/sdk/bucket#a-bucket-in-a-store-you-already-run).
 `{ "$env": "NAME" }` is a [variable](/docs/environments), set with `ocel env set` for each class
 and environment, and it is the only way a password, a connection string, a CA or a key reaches a
 binding. `${NAME}` in the same file is read from your shell when the config loads, and belongs to
-the values that are not secret. Each `$env` a binding reads is owed like one your code declares:
+the values that are not secret. Each `$env` a binding reads is required like one your code declares:
 the deploy stops and names the `ocel env set` that fills it. The variables editor shows it
 grouped under the binding. The app never receives it, and a name both your code declares and a
 binding reads is refused.

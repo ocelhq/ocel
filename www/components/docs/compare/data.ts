@@ -148,7 +148,7 @@ export const tools: Tool[] = [
         ),
         ocel: ocelAccountHosted,
         verdict:
-          "You never hold a cloud account with Vercel, and Postgres comes from a Marketplace provider's account rather than yours.",
+          "You never own a cloud account with Vercel, and Postgres comes from a Marketplace provider's account rather than yours.",
       },
       {
         key: "database",
@@ -234,7 +234,7 @@ vercel env pull`,
           "Builds, deploys, the Postgres image, project networking",
         ),
         ocel: ocelAccountHosted,
-        verdict: "The project and its Postgres sit in Railway's account rather than one you hold.",
+        verdict: "The project and its Postgres sit in Railway's account rather than one you own.",
       },
       {
         key: "database",
@@ -307,7 +307,7 @@ railway dev`,
           list: [
             "You want services and managed Postgres on one canvas, and would rather add a database from a menu than reason about its provisioning, backups or networking.",
             "You want typed cross-resource references in TypeScript, so an attachment is `db.env.DATABASE_URL` rather than a copied connection string.",
-            "You do not want a cloud account of your own to hold and operate.",
+            "You do not want to own and operate a cloud account of your own.",
           ],
         },
         ocel: { list: [ocelPickOwnAccount, ocelPickOneLine, ocelPickAppCode] },
@@ -424,7 +424,7 @@ databases:
           "Anycast routing, the Machines lifecycle, Postgres operations",
         ),
         ocel: ocelAccountHosted,
-        verdict: "The account holding the app and the database is Fly's.",
+        verdict: "The account that owns the app and the database is Fly's.",
       },
       {
         key: "database",

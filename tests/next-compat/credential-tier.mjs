@@ -48,7 +48,7 @@ export function policyParts(document) {
     const alone = render([statement]);
     if (alone.length > MANAGED_POLICY_CHARS) {
       throw new Error(
-        `one statement renders to ${alone.length} characters, past the ${MANAGED_POLICY_CHARS} a managed policy carries: ${alone}`,
+        `one statement renders to ${alone.length} characters, past the ${MANAGED_POLICY_CHARS} a managed policy allows: ${alone}`,
       );
     }
     if (current.length > 0 && render([...current, statement]).length > MANAGED_POLICY_CHARS) {
@@ -62,7 +62,7 @@ export function policyParts(document) {
   }
   if (parts.length > MANAGED_SESSION_POLICIES) {
     throw new Error(
-      `the document splits into ${parts.length} managed policies, past the ${MANAGED_SESSION_POLICIES} a role session may carry`,
+      `the document splits into ${parts.length} managed policies, past the ${MANAGED_SESSION_POLICIES} a role session may attach`,
     );
   }
   return parts;

@@ -254,7 +254,7 @@ function byteDiff(a, b) {
 export function deployURL(result) {
   const url = (result?.apps ?? []).flatMap((app) => app?.urls ?? [])[0];
   if (!url) {
-    throw new Error(`deploy result carries no app URL: ${JSON.stringify(result ?? null)}`);
+    throw new Error(`deploy result has no app URL: ${JSON.stringify(result ?? null)}`);
   }
   return url;
 }
@@ -550,7 +550,7 @@ export function zipEntryNames(buffer) {
   if (count === 0xffff || start === 0xffffffff) {
     const locator = eocd - ZIP64_LOCATOR_SIZE;
     if (locator < 0 || buffer.readUInt32LE(locator) !== ZIP64_LOCATOR_SIGNATURE) {
-      throw new Error("zip end-of-central-directory is saturated but carries no zip64 locator");
+      throw new Error("zip end-of-central-directory is saturated but has no zip64 locator");
     }
     const zip64 = asIndex(
       buffer.readBigUInt64LE(locator + 8),
@@ -637,7 +637,7 @@ export function planProblems(output, { resultWritten, listed, ref }) {
     );
   } else if (readBack.includes(ref)) {
     problems.push(
-      `\`ocel preview ls\` shows ${ref} standing in the account, and only an apply may stand one up`,
+      `\`ocel preview ls\` shows ${ref} deployed in the account, and only an apply may deploy one`,
     );
   }
   return problems;

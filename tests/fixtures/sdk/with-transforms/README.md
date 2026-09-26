@@ -40,5 +40,5 @@ the Aurora cluster behind `main`, and the tags on both.
 module's `vps` rule reshapes the postgres container instead: `docker inspect` it to see the
 arguments, the shared memory and the label.
 
-`ocel deploy` targets production. Stand a branch environment up with `ocel preview up` to
+`ocel deploy` targets production. Deploy a branch environment with `ocel preview up` to
 see the same module render a different result, and `ocel preview rm` to tear it down.

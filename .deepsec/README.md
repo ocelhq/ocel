@@ -1,6 +1,6 @@
 # deepsec
 
-This directory holds the [deepsec](https://www.npmjs.com/package/deepsec)
+This directory contains the [deepsec](https://www.npmjs.com/package/deepsec)
 config for the parent repo. Checked into git so teammates inherit
 project context (auth shape, threat model, custom matchers); generated
 scan output is gitignored.

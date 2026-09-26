@@ -75,7 +75,7 @@ if (problems.length > 0) {
 }
 
 console.error(
-  `[ocel-e2e] filter scope holds: ${scheduled.size} of ${files.length} e2e suites scheduled, ` +
+  `[ocel-e2e] filter scope is right: ${scheduled.size} of ${files.length} e2e suites scheduled, ` +
     `${files.length - scheduled.size} excluded across ${paths.length} chained manifest(s)`,
 );
 

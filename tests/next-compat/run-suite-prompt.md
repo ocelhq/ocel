@@ -34,7 +34,7 @@ directory path: `previewRef` (`lib.mjs`) hashes `NEXT_TEST_DIR || appDir` into
 - Set `GITHUB_RUN_ID` to a short greppable token so stranded projects are
   attributable. The run id is truncated to 46 chars inside the slug.
 - Previews serve on the bootstrap's preview domain, which the shared entry
-  worker holds — no project claims it. Runs are separated by slug, so a local
+  worker owns — no project claims it. Runs are separated by slug, so a local
   run and a CI run no longer collide over the wildcard, though they still share
   the bootstrap's store, cache bucket and Cloudflare limits.
 - **The harness deletes the temp app dir when a suite finishes**
@@ -71,7 +71,7 @@ Hard-stop on any of these; a bad preflight makes the result meaningless.
 4. **`ocel bootstrap preview --features all` and `ocel domain use '<wildcard>' --preview`
    have been run** once on the account. Without the domain, a preview deploy has
    nowhere to serve: no project declares one of its own.
-5. **The sidecar carries `ocel`, and `OCEL_PROVIDERS_DIR` a fresh provider:**
+5. **The sidecar has `ocel` installed, and `OCEL_PROVIDERS_DIR` a fresh provider:**
    ```bash
    test -d /home/vndaba/Dev/ocelhq-work/sidecar/node_modules/ocel \
      || echo "STOP: sidecar needs the one-time repack (see README)"
@@ -216,7 +216,7 @@ all is always infra.
 
 **A 502 or a network abort may be an AWS throttle, not a defect:**
 
-- a genuine origin response carries `x-amzn-requestid`; a throttled one does not,
+- a genuine origin response has `x-amzn-requestid`; a throttled one does not,
   and its body is a Cloudflare-generated error page — which can also arrive as a
   semantically **wrong 200**;
 - a genuine invocation leaves a `START RequestId` line in CloudWatch;

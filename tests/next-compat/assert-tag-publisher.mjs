@@ -17,7 +17,7 @@ const bucket = process.env.OCEL_ASSET_BUCKET || resolveAssetBucket();
 const tag = tagProbeTag(`${Date.now()}-${process.pid}`);
 const target = new URL(`${TAG_PROBE_ROUTE}?tag=${encodeURIComponent(tag)}`, base).toString();
 
-const before = snapshotsCarrying(tag);
+const before = snapshotsWithTag(tag);
 if (before.length > 0) {
   fail(`tag ${tag} was already published before this run raised it, in ${before.join(", ")}`);
 }
@@ -30,33 +30,31 @@ if (!response.ok) {
 log(`raised at ${new Date().toISOString()}`);
 
 const deadline = Date.now() + PUBLISH_DEADLINE_MS;
-let carriers = [];
+let published = [];
 while (Date.now() < deadline) {
   await sleep(POLL_INTERVAL_MS);
-  carriers = snapshotsCarrying(tag);
-  if (carriers.length > 0) break;
+  published = snapshotsWithTag(tag);
+  if (published.length > 0) break;
   log(`not published yet, ${Math.round((deadline - Date.now()) / 1000)}s left`);
 }
 
-if (carriers.length === 0) {
+if (published.length === 0) {
   fail(
     `${tag} never reached a published tag snapshot in ${bucket} within ${PUBLISH_DEADLINE_MS / 1000}s. ` +
       `The raise itself succeeded, so the break is downstream: the stream, its filter, ` +
       `the event source mapping, or the publisher function.`,
   );
 }
-log(`published to ${carriers.join(", ")}`);
+log(`published to ${published.join(", ")}`);
 
 const dlq = deadLetterDepth();
 if (dlq > 0) {
-  fail(
-    `the publisher's dead-letter queue holds ${dlq} message(s); invalidations are being dropped`,
-  );
+  fail(`the publisher's dead-letter queue has ${dlq} message(s); invalidations are being dropped`);
 }
 
-log("tag publisher carried the invalidation end to end");
+log("tag publisher delivered the invalidation end to end");
 
-function snapshotsCarrying(tag) {
+function snapshotsWithTag(tag) {
   const keys = aws([
     "s3api",
     "list-objects-v2",

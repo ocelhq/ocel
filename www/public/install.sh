@@ -78,7 +78,7 @@ actual=$(digest "$work/$archive")
 [ "$expected" = "$actual" ] ||
   fail "checksum mismatch for $archive: expected $expected, downloaded $actual"
 
-tar -xzf "$work/$archive" -C "$work" ocel || fail "$archive holds no ocel binary"
+tar -xzf "$work/$archive" -C "$work" ocel || fail "$archive contains no ocel binary"
 mkdir -p "$destination"
 staged="$destination/.ocel.$$"
 cp "$work/ocel" "$staged"

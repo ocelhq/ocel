@@ -77,8 +77,8 @@ import { uploads } from "../resources";
 
 await uploads.put("reports/q3.pdf", bytes, { contentType: "application/pdf" });
 
-const held = await uploads.get("reports/q3.pdf");
-if (held) console.log(held.info.size, await held.text());
+const report = await uploads.get("reports/q3.pdf");
+if (report) console.log(report.info.size, await report.text());
 
 for await (const object of uploads.list({ prefix: "reports/" })) {
   console.log(object.key, object.etag);
@@ -87,7 +87,7 @@ for await (const object of uploads.list({ prefix: "reports/" })) {
 await uploads.delete(["reports/q3.pdf", "reports/q2.pdf"]);
 ```
 
-`get` and `head` answer `null` when the bucket holds nothing under the key. `copy` moves bytes
+`get` and `head` answer `null` when the bucket has nothing under the key. `copy` moves bytes
 within one bucket, and `list` is also walked a page at a time with `list().page({ cursor })`.
 A write also takes `cacheControl` and `metadata`; the metadata comes back on the object's `info`.
 
@@ -99,7 +99,7 @@ A write also takes `cacheControl` and `metadata`; the metadata comes back on the
 err := resources.Uploads.WriteAll(ctx, "reports/q3.pdf", data,
     ocel.ContentType("application/pdf"))
 
-held, err := resources.Uploads.ReadAll(ctx, "reports/q3.pdf")
+report, err := resources.Uploads.ReadAll(ctx, "reports/q3.pdf")
 
 for object, err := range resources.Uploads.List(ctx, ocel.Prefix("reports/")) {
     if err != nil {
@@ -111,7 +111,7 @@ for object, err := range resources.Uploads.List(ctx, ocel.Prefix("reports/")) {
 err = resources.Uploads.Delete(ctx, "reports/q3.pdf", "reports/q2.pdf")
 ```
 
-`NewReader` and `NewWriter` stream one object instead of holding it in memory, and a read that
+`NewReader` and `NewWriter` stream one object instead of reading it all into memory, and a read that
 finds nothing reports `ocel.ErrObjectNotFound`.
 
 </Tab>
@@ -123,8 +123,8 @@ from resources import uploads
 
 uploads.put("reports/q3.pdf", data, content_type="application/pdf")
 
-with uploads.get("reports/q3.pdf") as held:
-    print(held.info.size, held.bytes())
+with uploads.get("reports/q3.pdf") as report:
+    print(report.info.size, report.bytes())
 
 for entry in uploads.list(prefix="reports/"):
     print(entry.key, entry.etag)
@@ -148,9 +148,9 @@ resources.uploads
     .content_type("application/pdf")
     .await?;
 
-let held = resources.uploads.get("reports/q3.pdf").await?;
-println!("{}", held.info().size);
-let bytes = held.bytes().await?;
+let report = resources.uploads.get("reports/q3.pdf").await?;
+println!("{}", report.info().size);
+let bytes = report.bytes().await?;
 
 let mut walk = std::pin::pin!(resources.uploads.list().prefix("reports/").into_stream());
 while let Some(object) = walk.next().await {
@@ -169,12 +169,12 @@ the call. `reader` and `writer` stream an object, and a read that finds nothing 
 </Tabs>
 
 Conditional writes go with the write: `ifNoneMatch: "*"` (`ocel.IfNotExists()`, `if_not_exists=True`,
-`.if_not_exists()`) writes only where the bucket holds nothing, and `ifMatch` only while the object
-still carries that etag. Either unmet is refused rather than overwritten.
+`.if_not_exists()`) writes only where the bucket has nothing, and `ifMatch` only while the object
+still has that etag. Either unmet is refused rather than overwritten.
 
 ## Public buckets
 
-A bucket declared `public` serves every object it holds anonymously, and `publicUrl(key)` is the
+A bucket declared `public` serves every object it contains anonymously, and `publicUrl(key)` is the
 address. In TypeScript that method exists only on a bucket declared public; the other languages
 fail at the call on a bucket that has no public address.
 
@@ -194,7 +194,7 @@ domain you bind without your having to pass it anywhere. `ocel.BucketPublic()`, 
 
 ## Signed urls
 
-A signed url hands one object to someone who holds no credential, for as long as it stays valid.
+A signed url hands one object to someone who has no credential, for as long as it stays valid.
 `signedUrl` reads and `signedUpload` writes:
 
 ```ts
@@ -211,7 +211,7 @@ const write = await uploads.signedUpload("reports/q4.pdf", {
 ```
 
 `signedUpload` answers a `url`, a `method`, the `headers` the signature covers and the form
-`fields` a POST target carries. Send the body exactly as the target describes: a changed header
+`fields` a POST target needs. Send the body exactly as the target describes: a changed header
 breaks the signature. Both are minted against the store's public address, so both need a domain
 bound to the project.
 
@@ -282,7 +282,7 @@ gives the upload up after fifteen minutes. `pollIntervalMs` and `maxPollMs` move
 and that deadline.
 
 `allowedOrigins` is what the browser sends from. The store answers those origins and the hostnames
-the project holds, and nothing else: there is no rule that answers every origin.
+bound to the project, and nothing else: there is no rule that answers every origin.
 
 Go, Python and Rust have no browser half of their own. Mint a `signedUpload` on the server, hand
 the target to the page, and let JavaScript send the body to it.
@@ -290,13 +290,13 @@ the target to the page, and let JavaScript send the body to it.
 ## Limits
 
 A server write of 16 MB or less goes in one request. Anything larger is split into 8 MB parts,
-four in flight, and settled as one object. You do not ask for that, and nothing is stored until
+four in flight, and completed as one object. You do not ask for that, and nothing is stored until
 the last part lands.
 
 A browser upload is a single request, so it is bounded by what the store accepts in one, which on
 S3 is 5 GB. Cap it lower with `maxFileSize` on the uploader or `maxSize` on a signed upload.
 
-One listing page carries at most 1000 objects, and user metadata is capped at 2 KB per object.
+One listing page returns at most 1000 objects, and user metadata is capped at 2 KB per object.
 
 ## On a VPS
 
@@ -305,14 +305,14 @@ its data on a docker volume. Every bucket you declare is a bucket inside it. It 
 on the machine, and reaches browsers through `storage.<domain>` on the same proxy that serves your
 apps, claimed when a domain is bound to the project. Until then a signed url, a browser upload and
 a public object have no address, and the runtime refuses them rather than handing out one nothing
-can reach. A bucket answers the browsers of the hostnames the project holds at that moment: binding
+can reach. A bucket answers the browsers of the hostnames bound to the project at that moment: binding
 a hostname, by a deploy or by `ocel domain add`, adds it at once, and releasing one takes it away.
 
 The store writes to the same disk as everything else on the box, so it stops signing writes while
 the volume has less than 1 GiB, or a tenth of its size, free.
 
 Drop the last bucket a project declares in an environment and the store goes with it: the
-container, its volume and every byte those buckets held, its route on the proxy, and the
+container, its volume and every byte those buckets stored, its route on the proxy, and the
 credentials the box kept for it. Take a backup first if you want the objects.
 
 <Callout>
@@ -321,7 +321,7 @@ credentials the box kept for it. Take a backup first if you want the objects.
 </Callout>
 
 A [transform](/docs/transforms#on-a-vps) changes what the store container runs: its image, its
-memory, where its volume lives. One container holds every bucket a project declares in an
+memory, where its volume lives. One container stores every bucket a project declares in an
 environment, so it runs as one shape. Two buckets patched into different shapes are refused by
 name: gate the rule on the environment rather than on which bucket it reaches, or patch both the
 same way.
@@ -355,15 +355,15 @@ binding lives in `bindings`, on any provider:
 ```
 
 The key pair is written as variables you set with `ocel env set`, per class and environment, so
-the config never holds it and the app never reads it. Add `"pathStyle": true` for a store that
-serves no wildcard DNS. `prefix` keeps every key the app writes under it, so one bucket can hold
+the config never contains it and the app never reads it. Add `"pathStyle": true` for a store that
+serves no wildcard DNS. `prefix` keeps every key the app writes under it, so one bucket can store
 several resources, and `$env` on `bucket` or `prefix` gives each preview environment its own.
 `publicBaseUrl` is used as written, with each key appended, so it names the address the prefix is
 served on.
 Keyed by `production` or `preview`, the binding serves only that tier, and the other provisions
 its own bucket as usual.
 
-Ocel holds no admin credential for a store it does not run, so it checks the bucket at every
+Ocel has no admin credential for a store it does not run, so it checks the bucket at every
 deploy instead of configuring it. The bucket must answer. When the code sets `allowedOrigins`, the
 bucket's CORS rules must allow each of them. When it sets `public`, the bucket's policy must let
 anyone read the objects under the prefix, and the binding must name `publicBaseUrl`. A mismatch
@@ -371,15 +371,15 @@ refuses the deploy and names the difference. A rule the key pair may not read, o
 serves no bucket policy, becomes a warning naming what could not be checked.
 
 Uploads, signed urls and multipart work as they do on any bucket. Upload sessions are kept in the
-bucket itself, under the prefix, and completed by checking what the store holds.
+bucket itself, under the prefix, and completed by checking what the store contains.
 
 <Callout>
-  Issue a key scoped to that one bucket. The runtime in front of your app holds it, and the app
+  Issue a key scoped to that one bucket. The runtime in front of your app keeps it, and the app
   never sees it.
 </Callout>
 
 ## On AWS
 
 Each declared bucket is its own S3 bucket, with CORS set from `allowedOrigins` and browser uploads
-recorded by a function the deploy stands up beside it. `public` is refused: the provider blocks
+recorded by a function the deploy provisions beside it. `public` is refused: the provider blocks
 public access at the account's edge, so serve those objects through your app or a signed url.

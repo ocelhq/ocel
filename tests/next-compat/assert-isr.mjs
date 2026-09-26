@@ -2,7 +2,7 @@
 
 import { ISR_REVALIDATE_SECONDS, ISR_ROUTE, isrToken } from "./lib.mjs";
 
-const SETTLE_MS = 20_000;
+const GRACE_MS = 20_000;
 const POLL_INTERVAL_MS = 3_000;
 const CHANGE_DEADLINE_MS = 150_000;
 
@@ -14,7 +14,7 @@ if (!base) {
 }
 const target = new URL(ISR_ROUTE, base).toString();
 
-const first = await settle();
+const first = await untilServed();
 log(`initial token ${first.token} (${first.tier})`);
 if (!CACHED_TIERS.has(first.tier)) {
   fail(
@@ -25,7 +25,7 @@ if (!CACHED_TIERS.has(first.tier)) {
 }
 
 log(`waiting out the ${ISR_REVALIDATE_SECONDS}s revalidate window, then polling for a rewrite`);
-await sleep(ISR_REVALIDATE_SECONDS * 1000 + SETTLE_MS);
+await sleep(ISR_REVALIDATE_SECONDS * 1000 + GRACE_MS);
 
 const deadline = Date.now() + CHANGE_DEADLINE_MS;
 const tiersSeen = new Set();
@@ -73,8 +73,8 @@ async function probe() {
   }
 }
 
-async function settle() {
-  const deadline = Date.now() + SETTLE_MS + POLL_INTERVAL_MS;
+async function untilServed() {
+  const deadline = Date.now() + GRACE_MS + POLL_INTERVAL_MS;
   let last;
   while (Date.now() < deadline) {
     last = await probe();

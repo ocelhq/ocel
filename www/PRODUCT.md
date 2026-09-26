@@ -11,7 +11,7 @@ web
 Developers and the agents they work with. Technical, treated as such; jargon that is
 not axiomatic is still avoided.
 
-`www` serves three situations at once, because it holds both the landing page and
+`www` serves three situations at once, because it hosts both the landing page and
 the docs:
 
 - **Comparing.** A developer with a Next.js or Node app who wants hosted-platform DX
@@ -98,7 +98,7 @@ Never call the console or Ocel a cloud.
 Binding, confirmed by the owner:
 
 - **Name and mark.** `ocel`, lowercase wordmark, with the cut-ring mark as implemented in
-  `components/logo.tsx`. The identity is settled.
+  `components/logo.tsx`. The identity is final.
 - **Electric blue accent.** The `--electric` color is a brand color, not a docs-theme
   choice.
 - **Open source.** Apache-2.0, public at github.com/ocelhq/ocel, and the site says so.
@@ -133,10 +133,10 @@ Binding, confirmed by the owner:
 
 1. **Say only what ships, and label the rest.** Roadmap may appear; it is always marked
    as planned.
-2. **Show, then explain.** Code and terminal output carry the claim; prose sets it up
+2. **Show, then explain.** Code and terminal output make the claim; prose sets it up
    and gets out of the way. The reveal of how it works comes after the magic, not
    alongside it.
-3. **Every ask carries its why.** A prerequisite without a reason is a prerequisite to
+3. **Every ask states its why.** A prerequisite without a reason is a prerequisite to
    cut.
 4. **Own cloud is the whole point.** Every surface reinforces that infrastructure lands
    in the reader's account, and that Ocel sits beside their existing IaC rather than
