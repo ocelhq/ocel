@@ -54,9 +54,8 @@ The code is the documentation: read it for context, and don't restate it. Prose 
 what a human types, never what the code contains.
 
 Comments follow [Signal](.greptile/rules.md#signal). Its doc-comment exception covers the
-four paths it names and no other, however public another directory's API looks. A comment
-outside Signal's exceptions is debt: never match or extend it, and delete it when you
-change the code near it.
+four paths it names and no other, however public another directory's API looks. Never copy
+or extend a comment Signal does not allow, and delete it when you change the code near it.
 
 ## Testing
 
