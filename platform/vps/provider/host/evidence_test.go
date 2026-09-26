@@ -17,6 +17,7 @@ func inspecting() map[string]string {
 		"what a switchboard that did not come up reports":                        switchboardStanding(nil, Front{}).rising(3),
 		"what a bootstrap probes the proxy with":                                 frontProxy().probe(),
 		"what a preflight reads the proxy's state with":                          stateCommand(caddy.Container),
+		"what doctor reads a switchboard a deploy stood again with":              restoredCommand(),
 		"what a release reads to tell a stopped retiree from one still draining": runningCommand([]string{retiring}),
 	}
 }
@@ -72,7 +73,7 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 
 func inspectRosters() map[string][]string {
 	return map[string][]string{
-		"docker inspect":         {"probe", "rising", "runningCommand", "servingCommand", "stateCommand"},
+		"docker inspect":         {"probe", "restoredCommand", "restoring", "rising", "runningCommand", "servingCommand", "stateCommand"},
 		"docker network inspect": {"command", "networkCommand", "networkCreating", "networkForgetting", "networkProbe", "networkStanding"},
 		"docker image inspect":   {"imageHeld"},
 	}
