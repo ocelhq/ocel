@@ -318,6 +318,35 @@ func TestAHostnameNothingAnsweredForNamesWhatStoppedTheLastAttempt(t *testing.T)
 	}
 }
 
+type outlasting struct {
+	cause string
+}
+
+func (outlasting) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, error) {
+	return "", context.DeadlineExceeded
+}
+
+func (o outlasting) Unreached(string) string { return o.cause }
+
+func TestAHostnameWhoseLastAttemptOutlastedItsWindowStillNamesWhatStoppedIt(t *testing.T) {
+	t.Parallel()
+
+	cause := "dial tcp 203.0.113.10:443: i/o timeout"
+	settle, _ := waiting(outlasting{cause: cause}, 2)
+
+	_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
+	var refusal Refusal
+	if !errors.As(err, &refusal) || refusal.Code != CodeNotReady {
+		t.Fatalf("await() = %v, want a not-ready refusal", err)
+	}
+	if !strings.Contains(refusal.Message, cause) {
+		t.Errorf("await() refused with %q, and the window it outlasted crowds out what stopped the probe", refusal.Message)
+	}
+	if !strings.Contains(refusal.Message, "no answer within 1s") {
+		t.Errorf("await() refused with %q, want it to name the window the last attempt outlasted", refusal.Message)
+	}
+}
+
 func TestALivenessThatDiagnosesNothingStillRefusesInOneSentence(t *testing.T) {
 	t.Parallel()
 
