@@ -119,17 +119,19 @@ describe("matrixOf", () => {
 });
 
 describe("stateOf", () => {
-  const held = topology([app("web", undefined, [{ key: "API", class: "plain", required: true }])]);
+  const declared = topology([
+    app("web", undefined, [{ key: "API", class: "plain", required: true }]),
+  ]);
 
-  it("carries the caller's ability onto the state the table renders", () => {
+  it("passes the caller's ability onto the state the table renders", () => {
     expect(
-      stateOf("acme", "production", held, [], [], { write: true, reveal: false }),
+      stateOf("acme", "production", declared, [], [], { write: true, reveal: false }),
     ).toMatchObject({ can: { write: true, reveal: false }, values: "live" });
   });
 
-  it("names no ability the caller does not hold, and stays unknown when nothing was read", () => {
+  it("names no ability the caller does not have, and stays unknown when nothing was read", () => {
     expect(
-      stateOf("acme", "preview", held, [], [], { write: false, reveal: false }, "unknown"),
+      stateOf("acme", "preview", declared, [], [], { write: false, reveal: false }, "unknown"),
     ).toMatchObject({ can: { write: false, reveal: false }, values: "unknown" });
   });
 });

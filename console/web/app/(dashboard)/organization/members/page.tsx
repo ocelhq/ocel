@@ -21,12 +21,12 @@ const cell = "h-14 px-5";
 
 export default async function OrganizationMembersPage() {
   const session = await requireOrganization();
-  const [held, members, invitations] = await Promise.all([
+  const [organization, members, invitations] = await Promise.all([
     organizationOf(session.userId, session.activeOrganizationId),
     membersOf(session.activeOrganizationId),
     invitationsOf(session.activeOrganizationId),
   ]);
-  if (!held) {
+  if (!organization) {
     notFound();
   }
   const now = new Date().toISOString();
@@ -36,12 +36,12 @@ export default async function OrganizationMembersPage() {
     <PageShell
       title="Members"
       description={
-        held.administers
+        organization.administers
           ? "Everyone here can open every project in the organization."
           : "Everyone here can open every project in the organization. Owners and admins manage the list."
       }
     >
-      {held.administers && <InviteForm organizationId={held.id} />}
+      {organization.administers && <InviteForm organizationId={organization.id} />}
 
       <div className="border border-border">
         <Table className="table-fixed text-sm/5">
@@ -81,21 +81,27 @@ export default async function OrganizationMembersPage() {
                   </TableCell>
                   <TableCell className={cell}>
                     <RoleCell
-                      organizationId={held.id}
+                      organizationId={organization.id}
                       memberId={row.id}
                       role={row.role}
-                      editable={held.administers && !(self && row.role === "owner" && owners === 1)}
-                      canGrantOwner={held.role === "owner"}
+                      editable={
+                        organization.administers && !(self && row.role === "owner" && owners === 1)
+                      }
+                      canGrantOwner={organization.role === "owner"}
                     />
                   </TableCell>
                   <TableCell className={`${cell} hidden text-muted-foreground md:table-cell`}>
                     <Stamp at={row.joinedAt.toISOString()} now={now} />
                   </TableCell>
                   <TableCell className={`${cell} text-right`}>
-                    {held.administers &&
+                    {organization.administers &&
                       !self &&
-                      (row.role !== "owner" || held.role === "owner") && (
-                        <MemberActions organizationId={held.id} memberId={row.id} name={row.name} />
+                      (row.role !== "owner" || organization.role === "owner") && (
+                        <MemberActions
+                          organizationId={organization.id}
+                          memberId={row.id}
+                          name={row.name}
+                        />
                       )}
                   </TableCell>
                 </TableRow>
@@ -139,7 +145,7 @@ export default async function OrganizationMembersPage() {
                       <Stamp at={row.expiresAt.toISOString()} now={now} />
                     </TableCell>
                     <TableCell className={`${cell} text-right`}>
-                      {held.administers && <InvitationActions invitationId={row.id} />}
+                      {organization.administers && <InvitationActions invitationId={row.id} />}
                     </TableCell>
                   </TableRow>
                 ))}

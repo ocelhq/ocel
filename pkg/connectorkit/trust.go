@@ -97,7 +97,7 @@ func (t *trust) interceptor() connect.Interceptor {
 			if !slices.Contains(caller.scopes, want) {
 				t.say(caller.act, procedure, "denied")
 				return nil, connect.NewError(connect.CodePermissionDenied,
-					fmt.Errorf("the token carries no %s scope", want))
+					fmt.Errorf("the token has no %s scope", want))
 			}
 			t.say(caller.act, procedure, "pass")
 			return next(ctx, request)

@@ -13,34 +13,34 @@ const barred: Ability = { write: false, reveal: false };
 
 export async function dial(
   session: ActiveOrganizationSession,
-  held: Connector,
+  row: Connector,
 ): Promise<Dialled | null> {
-  if (held.url === null) {
+  if (row.url === null) {
     return null;
   }
   const role = await roleOf(session.userId, session.activeOrganizationId);
   return {
-    id: held.id,
-    url: held.url,
-    capabilities: held.capabilities,
+    id: row.id,
+    url: row.url,
+    capabilities: row.capabilities,
     token: await connectorToken({
-      connectorId: held.id,
+      connectorId: row.id,
       organizationId: session.activeOrganizationId,
       userId: session.userId,
-      scope: scopesFor(role, held.capabilities),
+      scope: scopesFor(role, row.capabilities),
     }),
   };
 }
 
 export async function abilityFor(
   session: ActiveOrganizationSession,
-  held: Connector | null,
+  row: Connector | null,
 ): Promise<Ability> {
-  if (held === null || held.url === null) {
+  if (row === null || row.url === null) {
     return barred;
   }
   const role = await roleOf(session.userId, session.activeOrganizationId);
-  return abilityOf(scopesFor(role, held.capabilities));
+  return abilityOf(scopesFor(role, row.capabilities));
 }
 
 export async function connectorsOf(organizationId: string): Promise<Connector[]> {

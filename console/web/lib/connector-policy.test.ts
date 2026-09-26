@@ -24,7 +24,7 @@ describe("scopesFor", () => {
     expect(scopesFor("visitor", everything)).toEqual([]);
   });
 
-  it("unions the roles a member holds at once", () => {
+  it("unions the roles a member has at once", () => {
     expect(scopesFor("member,admin", everything)).toEqual(["envvars.read", "envvars.write"]);
   });
 

@@ -5,7 +5,7 @@ import type { Latest } from "@/lib/variables";
 
 export async function latestTopology(
   projectId: string,
-  held: EnvironmentClass,
+  environmentClass: EnvironmentClass,
 ): Promise<{ error: true } | { error: false; row: Latest | null }> {
   try {
     const [row] = await db
@@ -23,7 +23,7 @@ export async function latestTopology(
       .where(
         and(
           eq(deployment.projectId, projectId),
-          eq(deployment.environmentClass, held),
+          eq(deployment.environmentClass, environmentClass),
           eq(deployment.outcome, "succeeded"),
         ),
       )

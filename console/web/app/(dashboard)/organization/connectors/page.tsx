@@ -89,9 +89,12 @@ export default async function OrganizationConnectorsPage() {
                 </p>
               </div>
               <ul className="flex min-w-52 flex-wrap gap-1">
-                {(reached?.done ? reached.result : row.capabilities).map((held) => (
-                  <li key={held} className={`border border-border px-1.5 py-0.5 ${labelType}`}>
-                    {held}
+                {(reached?.done ? reached.result : row.capabilities).map((capability) => (
+                  <li
+                    key={capability}
+                    className={`border border-border px-1.5 py-0.5 ${labelType}`}
+                  >
+                    {capability}
                   </li>
                 ))}
               </ul>

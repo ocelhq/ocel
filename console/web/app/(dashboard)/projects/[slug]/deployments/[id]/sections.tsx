@@ -60,7 +60,7 @@ const row =
 
 export function AppList({ apps }: { apps: DeploymentApp[] }) {
   if (apps.length === 0) {
-    return <p className="px-4 pb-4 text-sm text-muted-foreground">This run carried no apps.</p>;
+    return <p className="px-4 pb-4 text-sm text-muted-foreground">This run included no apps.</p>;
   }
   return (
     <ul>

@@ -57,7 +57,7 @@ function beat(
 async function paired() {
   const session = await createTestSessionWithOrganization();
   const keys = keyPair();
-  const held = await (
+  const upserted = await (
     await upsertConnector(
       new Request("http://localhost/api/connectors", {
         method: "PUT",
@@ -69,8 +69,11 @@ async function paired() {
       }),
     )
   ).json();
-  await db.update(connector).set({ publicKey: keys.publicKey }).where(eq(connector.id, held.id));
-  return { session, keys, id: held.id as string };
+  await db
+    .update(connector)
+    .set({ publicKey: keys.publicKey })
+    .where(eq(connector.id, upserted.id));
+  return { session, keys, id: upserted.id as string };
 }
 
 describe("POST /api/connectors/{id}/heartbeat", () => {
@@ -145,7 +148,7 @@ describe("POST /api/connectors/{id}/heartbeat", () => {
     }
   });
 
-  it("answers 401 when no bearer is carried", async () => {
+  it("answers 401 when no bearer is sent", async () => {
     const { session, id } = await paired();
 
     try {
@@ -155,7 +158,7 @@ describe("POST /api/connectors/{id}/heartbeat", () => {
     }
   });
 
-  it("answers 404 for an id the console does not hold", async () => {
+  it("answers 404 for an id the console has no record of", async () => {
     const keys = keyPair();
     const response = await connectorHeartbeat(
       beat(await bearer(keys.privateKey, "nobody")),

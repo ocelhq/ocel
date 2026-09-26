@@ -12,7 +12,7 @@ import {
   setValue,
 } from "./actions";
 
-function held<T>(answer: Answer<T>): T {
+function resultOf<T>(answer: Answer<T>): T {
   if (answer.ok) {
     return answer.result;
   }
@@ -21,16 +21,16 @@ function held<T>(answer: Answer<T>): T {
 
 export function consolePort(projectId: string, environment: string): VarsPort {
   return {
-    read: async () => held(await readState(projectId, environment)),
-    reveal: async (cells) => held(await revealValues(projectId, environment, [...cells])),
+    read: async () => resultOf(await readState(projectId, environment)),
+    reveal: async (cells) => resultOf(await revealValues(projectId, environment, [...cells])),
     set: async (at, value, version) => {
-      held(await setValue(projectId, environment, at, value, version));
+      resultOf(await setValue(projectId, environment, at, value, version));
     },
     remove: async (at, version) => {
-      held(await removeValue(projectId, environment, at, version));
+      resultOf(await removeValue(projectId, environment, at, version));
     },
-    history: async (at) => held(await listVersions(projectId, environment, at)),
-    other: async () => held(await otherValues(projectId, environment)),
-    copy: async (cells) => held(await copyValues(projectId, environment, [...cells])).results,
+    history: async (at) => resultOf(await listVersions(projectId, environment, at)),
+    other: async () => resultOf(await otherValues(projectId, environment)),
+    copy: async (cells) => resultOf(await copyValues(projectId, environment, [...cells])).results,
   };
 }

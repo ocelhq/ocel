@@ -20,7 +20,7 @@ export function NoConnector({ vendor }: { vendor: string | null }) {
     <Notice heading="Values live in your own cloud">
       <p className={noticeBody}>
         The keys below are what your last deploy reported. The values themselves are stored in
-        {vendor ? ` your ${vendor} account` : " your own cloud"} and the console never holds them,
+        {vendor ? ` your ${vendor} account` : " your own cloud"} and the console never stores them,
         so reading one needs a connector running there.
       </p>
       <CommandPane command="ocel connector add" />
@@ -60,12 +60,12 @@ const refusals: Record<RefusalReason, { heading: string; body: string; command?:
 };
 
 export function Refused({ reason, message }: { reason: RefusalReason; message: string }) {
-  const held = refusals[reason];
+  const refusal = refusals[reason];
   return (
-    <Notice heading={held.heading} role="alert">
-      <p className={noticeBody}>{held.body}</p>
+    <Notice heading={refusal.heading} role="alert">
+      <p className={noticeBody}>{refusal.body}</p>
       <p className="max-w-prose font-mono text-xs break-words text-muted-foreground">{message}</p>
-      {held.command && <CommandPane command={held.command} />}
+      {refusal.command && <CommandPane command={refusal.command} />}
     </Notice>
   );
 }

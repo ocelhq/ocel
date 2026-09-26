@@ -17,8 +17,10 @@ function answering(seen: string[]): Promise<string> {
   });
   return new Promise((resolve) => {
     server?.listen(0, "127.0.0.1", () => {
-      const held = server?.address();
-      resolve(typeof held === "object" && held !== null ? `http://127.0.0.1:${held.port}` : "");
+      const address = server?.address();
+      resolve(
+        typeof address === "object" && address !== null ? `http://127.0.0.1:${address.port}` : "",
+      );
     });
   });
 }
@@ -34,13 +36,15 @@ function probing(seen: string[], status: number, body: unknown): Promise<string>
   });
   return new Promise((resolve) => {
     server?.listen(0, "127.0.0.1", () => {
-      const held = server?.address();
-      resolve(typeof held === "object" && held !== null ? `http://127.0.0.1:${held.port}` : "");
+      const address = server?.address();
+      resolve(
+        typeof address === "object" && address !== null ? `http://127.0.0.1:${address.port}` : "",
+      );
     });
   });
 }
 
-it("carries the token as a bearer credential", async () => {
+it("sends the token as a bearer credential", async () => {
   const seen: string[] = [];
   const url = await answering(seen);
 
@@ -61,7 +65,7 @@ it("asks for capabilities under the path the connector is published at", () => {
   expect(capabilitiesURL("http://127.0.0.1:7777")).toBe("http://127.0.0.1:7777/v1/capabilities");
 });
 
-it("carries the console's token when it probes for capabilities", async () => {
+it("sends the console's token when it probes for capabilities", async () => {
   const seen: string[] = [];
   const url = await probing(seen, 200, { capabilities: ["envvars.read"] });
 

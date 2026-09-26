@@ -75,7 +75,7 @@ describe("project env values", () => {
     }
   });
 
-  it("carries the values `ocel dev` resolves for the linked project alone", async () => {
+  it("returns the values `ocel dev` resolves for the linked project alone", async () => {
     const session = await createTestSessionWithOrganization();
     try {
       const mine = await createProjectFor(session, "env-mine");
@@ -93,7 +93,7 @@ describe("project env values", () => {
     }
   });
 
-  it("deletes a value and reports whether one was held", async () => {
+  it("deletes a value and reports whether one was stored", async () => {
     const session = await createTestSessionWithOrganization();
     try {
       const created = await createProjectFor(session, "env-delete");
@@ -144,7 +144,7 @@ describe("project env values", () => {
     }
   });
 
-  it("answers 404 for a key the project does not hold", async () => {
+  it("answers 404 for a key the project has no value for", async () => {
     const session = await createTestSessionWithOrganization();
     try {
       const created = await createProjectFor(session, "env-no-such-key");

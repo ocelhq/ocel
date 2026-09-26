@@ -17,7 +17,7 @@ export interface Stored extends Cell {
   reference?: { slug: string; folder: string; key: string };
 }
 
-export interface Held extends Cell {
+export interface Revealed extends Cell {
   value: string;
 }
 
@@ -27,8 +27,8 @@ export interface Version {
   size: number;
 }
 
-function tierOf(held: EnvironmentClass): Tier {
-  return held === "preview" ? Tier.PREVIEW : Tier.PRODUCTION;
+function tierOf(environmentClass: EnvironmentClass): Tier {
+  return environmentClass === "preview" ? Tier.PREVIEW : Tier.PRODUCTION;
 }
 
 function cellOf(at: { key?: string; folder?: string; environment?: string } | undefined): Cell {
@@ -37,11 +37,11 @@ function cellOf(at: { key?: string; folder?: string; environment?: string } | un
 
 export function list(
   connector: Connector,
-  held: EnvironmentClass,
+  environmentClass: EnvironmentClass,
   slug: string,
 ): Promise<Outcome<Stored[]>> {
   return ask(async () => {
-    const answer = await vars(connector).listValues({ tier: tierOf(held), slug });
+    const answer = await vars(connector).listValues({ tier: tierOf(environmentClass), slug });
     return answer.values.map((value) => ({
       ...cellOf(value.coordinate),
       version: Number(value.version),
@@ -60,13 +60,13 @@ export function list(
 
 export function reveal(
   connector: Connector,
-  held: EnvironmentClass,
+  environmentClass: EnvironmentClass,
   slug: string,
   cells: readonly Cell[],
-): Promise<Outcome<Held[]>> {
+): Promise<Outcome<Revealed[]>> {
   return ask(async () => {
     const answer = await vars(connector).revealValues({
-      tier: tierOf(held),
+      tier: tierOf(environmentClass),
       slug,
       cells: cells.map((at) => ({ slug, ...at })),
     });
@@ -79,7 +79,7 @@ export function reveal(
 
 export function set(
   connector: Connector,
-  held: EnvironmentClass,
+  environmentClass: EnvironmentClass,
   slug: string,
   at: Cell,
   value: string,
@@ -87,7 +87,7 @@ export function set(
 ): Promise<Outcome<void>> {
   return ask(async () => {
     await vars(connector).setValue({
-      tier: tierOf(held),
+      tier: tierOf(environmentClass),
       coordinate: { slug, ...at },
       value,
       ...(expectedVersion !== undefined &&
@@ -98,14 +98,14 @@ export function set(
 
 export function remove(
   connector: Connector,
-  held: EnvironmentClass,
+  environmentClass: EnvironmentClass,
   slug: string,
   at: Cell,
   expectedVersion?: number,
 ): Promise<Outcome<void>> {
   return ask(async () => {
     await vars(connector).deleteValue({
-      tier: tierOf(held),
+      tier: tierOf(environmentClass),
       coordinate: { slug, ...at },
       ...(expectedVersion !== undefined &&
         expectedVersion > 0 && { expectedVersion: BigInt(expectedVersion) }),
@@ -115,13 +115,13 @@ export function remove(
 
 export function versions(
   connector: Connector,
-  held: EnvironmentClass,
+  environmentClass: EnvironmentClass,
   slug: string,
   at: Cell,
 ): Promise<Outcome<Version[]>> {
   return ask(async () => {
     const answer = await vars(connector).listVersions({
-      tier: tierOf(held),
+      tier: tierOf(environmentClass),
       coordinate: { slug, ...at },
     });
     return answer.versions.map((entry) => ({

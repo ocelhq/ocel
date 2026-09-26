@@ -93,7 +93,7 @@ describe("PUT /api/connectors", () => {
     }
   });
 
-  it("lets two orgs hold the same target", async () => {
+  it("lets two orgs register the same target", async () => {
     const one = await createTestSessionWithOrganization();
     const two = await createTestSessionWithOrganization();
 
@@ -180,7 +180,7 @@ describe("PUT /api/connectors", () => {
     }
   });
 
-  it("lets an admin hold a target", async () => {
+  it("lets an admin register a target", async () => {
     const session = await createTestSessionWithOrganization();
     const deputy = await createTestSessionWithRole(session.organization.id, "admin");
 
@@ -223,7 +223,7 @@ describe("GET /api/connectors", () => {
     const session = await createTestSessionWithOrganization();
 
     try {
-      const held = await (await upsertConnector(putRequest(dialled, session.headers))).json();
+      const upserted = await (await upsertConnector(putRequest(dialled, session.headers))).json();
 
       const never = await (await listConnectors(getRequest(session.headers))).json();
       expect(never[0].online).toBe(false);
@@ -232,14 +232,14 @@ describe("GET /api/connectors", () => {
       await db
         .update(connector)
         .set({ connectedAt: now, lastSeenAt: now })
-        .where(eq(connector.id, held.id));
+        .where(eq(connector.id, upserted.id));
       const fresh = await (await listConnectors(getRequest(session.headers))).json();
       expect(fresh[0].online).toBe(true);
 
       await db
         .update(connector)
         .set({ lastSeenAt: new Date(Date.now() - 600_000) })
-        .where(eq(connector.id, held.id));
+        .where(eq(connector.id, upserted.id));
       const stale = await (await listConnectors(getRequest(session.headers))).json();
       expect(stale[0].online).toBe(false);
     } finally {
@@ -277,7 +277,7 @@ describe("PATCH and DELETE /api/connectors/{id}", () => {
     const session = await createTestSessionWithOrganization();
 
     try {
-      const held = await (await upsertConnector(putRequest(dialled, session.headers))).json();
+      const upserted = await (await upsertConnector(putRequest(dialled, session.headers))).json();
       const response = await updateConnector(
         patchRequest(
           {
@@ -288,7 +288,7 @@ describe("PATCH and DELETE /api/connectors/{id}", () => {
           },
           session.headers,
         ),
-        held.id,
+        upserted.id,
       );
 
       expect(response.status).toBe(200);
@@ -306,13 +306,16 @@ describe("PATCH and DELETE /api/connectors/{id}", () => {
     const session = await createTestSessionWithOrganization();
 
     try {
-      const held = await (await upsertConnector(putRequest(dialled, session.headers))).json();
-      expect((await updateConnector(patchRequest({}, session.headers), held.id)).status).toBe(400);
+      const upserted = await (await upsertConnector(putRequest(dialled, session.headers))).json();
+      expect((await updateConnector(patchRequest({}, session.headers), upserted.id)).status).toBe(
+        400,
+      );
       expect(
-        (await updateConnector(patchRequest({ url: "box" }, session.headers), held.id)).status,
+        (await updateConnector(patchRequest({ url: "box" }, session.headers), upserted.id)).status,
       ).toBe(400);
       expect(
-        (await updateConnector(patchRequest({ compute: "vm" }, session.headers), held.id)).status,
+        (await updateConnector(patchRequest({ compute: "vm" }, session.headers), upserted.id))
+          .status,
       ).toBe(400);
     } finally {
       await session.cleanup();
@@ -323,14 +326,14 @@ describe("PATCH and DELETE /api/connectors/{id}", () => {
     const session = await createTestSessionWithOrganization();
 
     try {
-      const held = await (await upsertConnector(putRequest(dialled, session.headers))).json();
-      const response = await deleteConnector(deleteRequest(session.headers), held.id);
+      const upserted = await (await upsertConnector(putRequest(dialled, session.headers))).json();
+      const response = await deleteConnector(deleteRequest(session.headers), upserted.id);
 
       expect(response.status).toBe(204);
       const rows = await db
         .select()
         .from(connector)
-        .where(and(eq(connector.id, held.id)));
+        .where(and(eq(connector.id, upserted.id)));
       expect(rows).toHaveLength(0);
     } finally {
       await session.cleanup();
@@ -342,13 +345,17 @@ describe("PATCH and DELETE /api/connectors/{id}", () => {
     const other = await createTestSessionWithOrganization();
 
     try {
-      const held = await (await upsertConnector(putRequest(dialled, session.headers))).json();
+      const upserted = await (await upsertConnector(putRequest(dialled, session.headers))).json();
 
       expect(
-        (await updateConnector(patchRequest({ url: "https://x.test/c" }, other.headers), held.id))
-          .status,
+        (
+          await updateConnector(
+            patchRequest({ url: "https://x.test/c" }, other.headers),
+            upserted.id,
+          )
+        ).status,
       ).toBe(404);
-      expect((await deleteConnector(deleteRequest(other.headers), held.id)).status).toBe(404);
+      expect((await deleteConnector(deleteRequest(other.headers), upserted.id)).status).toBe(404);
     } finally {
       await session.cleanup();
       await other.cleanup();
@@ -366,19 +373,19 @@ describe("PATCH and DELETE /api/connectors/{id}", () => {
     const plain = await createTestSessionWithRole(session.organization.id, "member");
 
     try {
-      const held = await (await upsertConnector(putRequest(dialled, session.headers))).json();
+      const upserted = await (await upsertConnector(putRequest(dialled, session.headers))).json();
 
       expect(
         (
           await updateConnector(
             patchRequest({ url: "https://attacker.example/c" }, plain.headers),
-            held.id,
+            upserted.id,
           )
         ).status,
       ).toBe(403);
-      expect((await deleteConnector(deleteRequest(plain.headers), held.id)).status).toBe(403);
+      expect((await deleteConnector(deleteRequest(plain.headers), upserted.id)).status).toBe(403);
 
-      const [row] = await db.select().from(connector).where(eq(connector.id, held.id));
+      const [row] = await db.select().from(connector).where(eq(connector.id, upserted.id));
       expect(row.url).toBeNull();
     } finally {
       await plain.cleanup();

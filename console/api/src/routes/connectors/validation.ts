@@ -8,7 +8,7 @@ const vendorSchema = z
   .max(64)
   .regex(
     new RegExp(`^${SEGMENT}$`),
-    "A vendor carries lower-case letters, digits, dot, underscore, colon and dash",
+    "A vendor contains only lower-case letters, digits, dot, underscore, colon and dash",
   );
 
 const targetSchema = z

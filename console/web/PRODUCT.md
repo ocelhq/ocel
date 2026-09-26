@@ -33,7 +33,7 @@ terminal, and trusting that what they see is exactly what the CLI last reported.
 ## Positioning
 
 - **A viewer, not a cloud.** Infrastructure lives in the customer's account. The
-  console holds only what the CLI reports to it and what a connector lets it pull.
+  console stores only what the CLI reports to it and what a connector lets it pull.
 - **CLI-first.** Every mutating action the console cannot perform names the command
   that can. The command pane is the console's call to action.
 - **Own the history, borrow the state.** The console stores events the CLI pushes
@@ -109,7 +109,7 @@ Binding, confirmed by the owner:
 - The project registry and framework catalog in `lib/frameworks.ts`.
 - The CLI's local records after a deploy: `.ocel/deploy-result.json` and
   `.ocel/service-map.json`, the provider contract manifest under `proto/`. These define
-  what a deployment record can truthfully carry.
+  what a deployment record can truthfully contain.
 - **Absent, do not fabricate:** git sha or author of a deploy, build durations, cloud
   resource ids, logs, metrics, spend, queue or channel resources, live status of
   anything. Demonstration data for the overview must be labelled synthetic.
@@ -117,7 +117,7 @@ Binding, confirmed by the owner:
 ## Product Principles
 
 1. **Show what the CLI reported, stamped with when.** Every view of infrastructure
-   carries its "as at" moment and the promotion it came from.
+   shows its "as at" moment and the promotion it came from.
 2. **The command is the action.** Where the console cannot act, it names the command
    and why, in a terminal pane, not a disabled button.
 3. **Events are owned, state is borrowed.** Store what the CLI pushes; pull what lives

@@ -1,4 +1,4 @@
-export type { Cell, EnvironmentClass, Held, Stored, Version } from "./envvars";
+export type { Cell, EnvironmentClass, Revealed, Stored, Version } from "./envvars";
 export * as envvars from "./envvars";
 export * from "./item";
 export {

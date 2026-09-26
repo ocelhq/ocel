@@ -21,7 +21,7 @@ export default async function VariablesPage({
 }) {
   const { slug } = await params;
   const { env } = await searchParams;
-  const held = env === "preview" ? "preview" : "production";
+  const environmentClass = env === "preview" ? "preview" : "production";
 
   const session = await requireOrganization();
   const [found] = await db
@@ -32,7 +32,7 @@ export default async function VariablesPage({
     notFound();
   }
 
-  const latest = await latestTopology(found.id, held);
+  const latest = await latestTopology(found.id, environmentClass);
   if (latest.error) {
     return (
       <PageShell title="Variables">
@@ -56,7 +56,7 @@ export default async function VariablesPage({
   let refusal = null;
   const dialled = connector === null ? null : await dial(session, connector);
   if (dialled !== null) {
-    const answer = await envvars.list(dialled, held, found.slug);
+    const answer = await envvars.list(dialled, environmentClass, found.slug);
     if (answer.done) {
       stored = answer.result;
     } else {
@@ -67,7 +67,7 @@ export default async function VariablesPage({
   const readOnly = dialled === null || refusal !== null;
   const state = stateOf(
     found.slug,
-    held,
+    environmentClass,
     latest.row.topology,
     stored,
     environments,
@@ -88,7 +88,12 @@ export default async function VariablesPage({
       />
       {dialled === null && <NoConnector vendor={latest.row.providerName} />}
       {refusal !== null && <Refused reason={refusal.reason} message={refusal.message} />}
-      <VariablesTable projectId={found.id} environment={held} initial={state} readOnly={readOnly} />
+      <VariablesTable
+        projectId={found.id}
+        environment={environmentClass}
+        initial={state}
+        readOnly={readOnly}
+      />
     </PageShell>
   );
 }
