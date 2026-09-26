@@ -1,0 +1,31 @@
+"area:cli":
+  - changed-files:
+      - any-glob-to-any-file: ["cli/**", "packages/cli/**", "packages/cli-*/**", "proto/cli/**"]
+"area:sdk":
+  - changed-files:
+      - any-glob-to-any-file:
+          ["sdk/**", "python/**", "crates/**", "packages/ocel/**", "packages/ocel-*/**", "proto/app/**"]
+"area:provider":
+  - changed-files:
+      - any-glob-to-any-file: ["pkg/provider/**", "proto/provider/**"]
+"area:vps":
+  - changed-files:
+      - any-glob-to-any-file: "platform/vps/**"
+"area:aws":
+  - changed-files:
+      - any-glob-to-any-file: "platform/aws/**"
+"area:gcp":
+  - changed-files:
+      - any-glob-to-any-file: "platform/gcp/**"
+"area:edge":
+  - changed-files:
+      - any-glob-to-any-file: "platform/edge/**"
+"area:console":
+  - changed-files:
+      - any-glob-to-any-file: "console/**"
+"area:frameworks":
+  - changed-files:
+      - any-glob-to-any-file: "frameworks/**"
+"area:docs":
+  - changed-files:
+      - any-glob-to-any-file: "www/**"

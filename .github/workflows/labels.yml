@@ -1,0 +1,36 @@
+name: Labels
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/labels.yml"
+      - ".github/workflows/labels.yml"
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - ".github/labels.yml"
+      - ".github/workflows/labels.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: labels-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  sync:
+    name: sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The repository's labels are the ones labels.yml lists, and no others
+        uses: crazy-max/ghaction-github-labeler@548a7c3603594ec17c819e1239f281a3b801ab4d
+        with:
+          yaml-file: .github/labels.yml
+          dry-run: ${{ github.event_name == 'pull_request' }}
