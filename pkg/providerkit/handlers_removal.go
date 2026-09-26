@@ -12,9 +12,9 @@ import (
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -324,8 +324,8 @@ func (r *projectRemoval) discardCertificates(ctx context.Context, held []Certifi
 
 func (r *projectRemoval) purgeValues(ctx context.Context, progress edge.Progress) error {
 	progress.Say("Removing the project's stored variable values")
-	store := values.Store{Records: r.provider.Records(), Cipher: r.provider.Cipher()}
-	if _, err := store.Purge(ctx, values.Scope{Project: r.slug, Class: r.class}); err != nil {
+	store := envvars.Store{Records: r.provider.Records(), Cipher: r.provider.Cipher()}
+	if _, err := store.Purge(ctx, envvars.Scope{Project: r.slug, Class: r.class}); err != nil {
 		return fmt.Errorf("remove %s's stored variable values: %w", r.slug, err)
 	}
 	return nil

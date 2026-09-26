@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -34,10 +34,10 @@ func newSplitRecords() (awsports.Records, *fakeDynamo) {
 
 func TestASetValueOnlyEverTouchesTheVarsTable(t *testing.T) {
 	records, ddb := newSplitRecords()
-	store := values.Store{Records: records, Cipher: mustSealer()}
-	scope := values.Scope{Project: "shop", Class: edge.ClassProduction}
+	store := envvars.Store{Records: records, Cipher: mustSealer()}
+	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
 
-	if _, err := store.Set(context.Background(), scope, values.Coordinate{Cell: values.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
+	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
 	}
 

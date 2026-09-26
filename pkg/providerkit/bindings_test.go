@@ -11,8 +11,8 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -46,9 +46,9 @@ func publishRecord(t *testing.T, provider *fake.Provider, class edge.Class, owne
 	if err != nil {
 		t.Fatalf("BindingPair: %v", err)
 	}
-	store := values.Store{Records: provider.Records(), Cipher: provider.Cipher()}
-	scope := values.Scope{Project: "shop", Class: class}
-	if _, err := store.SetBindings(context.Background(), scope, "", owner, []values.Publishing{{Name: binding.GetName(), Pair: pair}}); err != nil {
+	store := envvars.Store{Records: provider.Records(), Cipher: provider.Cipher()}
+	scope := envvars.Scope{Project: "shop", Class: class}
+	if _, err := store.SetBindings(context.Background(), scope, "", owner, []envvars.NamedBindingWrite{{Name: binding.GetName(), Write: pair}}); err != nil {
 		t.Fatalf("SetBindings: %v", err)
 	}
 }

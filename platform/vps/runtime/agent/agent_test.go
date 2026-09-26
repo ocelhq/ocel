@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 	source "github.com/ocelhq/ocel/platform/vps/runtime/live"
@@ -381,7 +381,7 @@ func TestAContainerReadsItsSecretOffTheBoxThroughTheRuntimeAndTheAgent(t *testin
 	runtimeBinary := containerRuntime(t, dir)
 
 	b := aBox(t, dir)
-	b.set(t, shop, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, "postgres://app:hunter2@db.internal/orders")
+	b.set(t, shop, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://app:hunter2@db.internal/orders")
 	b.dump(t)
 	inspect, err := NewDocker()
 	if err != nil {

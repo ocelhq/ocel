@@ -9,8 +9,8 @@ import (
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -40,7 +40,7 @@ type Config struct {
 	VarsKeyARN     string
 	AppBoundaryARN string
 	Class          edge.Class
-	VarsReferenced map[values.Coordinate]string
+	VarsReferenced map[envvars.Coordinate]string
 
 	RuntimeLayers map[string]string
 

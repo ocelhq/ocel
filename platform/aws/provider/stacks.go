@@ -18,8 +18,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
@@ -47,8 +47,8 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	if err != nil {
 		return deploy.Config{}, err
 	}
-	store := values.Store{Records: p.Records(), Cipher: p.Cipher()}
-	referenced, err := store.ReferenceOwners(ctx, values.Scope{Project: scope.Slug, Class: scope.Class})
+	store := envvars.Store{Records: p.Records(), Cipher: p.Cipher()}
+	referenced, err := store.ReferenceOwners(ctx, envvars.Scope{Project: scope.Slug, Class: scope.Class})
 	if err != nil {
 		return deploy.Config{}, err
 	}

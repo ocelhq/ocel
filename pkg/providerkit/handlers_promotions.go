@@ -14,9 +14,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -80,8 +80,8 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 }
 
 func forgetKeptRecords(ctx context.Context, provider Provider, slug, environment string) error {
-	store := values.Store{Records: provider.Records(), Cipher: provider.Cipher()}
-	scope := values.Scope{Project: slug, Class: edge.ClassPreview}
+	store := envvars.Store{Records: provider.Records(), Cipher: provider.Cipher()}
+	scope := envvars.Scope{Project: slug, Class: edge.ClassPreview}
 	held, err := store.ListBindings(ctx, scope, environment)
 	if err != nil {
 		return fmt.Errorf("read the records kept for preview %s: %w", environment, err)
@@ -91,7 +91,7 @@ func forgetKeptRecords(ctx context.Context, provider Provider, slug, environment
 		if record.Environment != environment {
 			continue
 		}
-		if record.Owner == values.OwnerOcel || record.Owner == naming.InlineRecordOwner {
+		if record.Owner == envvars.OwnerOcel || record.Owner == naming.InlineRecordOwner {
 			kept = append(kept, record.Name)
 		}
 	}

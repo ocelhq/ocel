@@ -12,8 +12,8 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -130,8 +130,8 @@ func TestRemoveProjectPurgesTheValuesAndObjectsItsReleasesWrote(t *testing.T) {
 		t.Errorf("the artifact at %s survived the removal, want the project's whole prefix gone", ref.Key)
 	}
 
-	store := values.Store{Records: provider.Records(), Cipher: provider.Cipher()}
-	names, err := store.PublishedNames(ctx, values.Scope{Project: "shop", Class: edge.ClassProduction}, providerkit.ProductionEnv)
+	store := envvars.Store{Records: provider.Records(), Cipher: provider.Cipher()}
+	names, err := store.PublishedNames(ctx, envvars.Scope{Project: "shop", Class: edge.ClassProduction}, providerkit.ProductionEnv)
 	if err != nil {
 		t.Fatal(err)
 	}

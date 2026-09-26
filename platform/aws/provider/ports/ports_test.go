@@ -11,9 +11,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -43,14 +43,14 @@ func TestSealerConformance(t *testing.T) {
 
 func TestValueRecordsPartitionOnTheProjectAndClass(t *testing.T) {
 	records, ddb := newRecords(t)
-	scope := values.Scope{Project: "shop", Class: edge.ClassProduction}
-	store := values.Store{Records: records, Cipher: mustSealer()}
+	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
+	store := envvars.Store{Records: records, Cipher: mustSealer()}
 
-	if _, err := store.Set(context.Background(), scope, values.Coordinate{Cell: values.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
+	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
 	}
 
-	partition, err := awsports.Partition(values.Under(scope))
+	partition, err := awsports.Partition(envvars.ScopedRecordName(scope))
 	if err != nil {
 		t.Fatalf("Partition err = %v", err)
 	}
@@ -75,14 +75,14 @@ func TestARecordNameShorterThanItsPartitionIsRefused(t *testing.T) {
 func TestASealedValueIsOpaqueAtRest(t *testing.T) {
 	records, _ := newRecords(t)
 	sealer, _ := newSealer()
-	scope := values.Scope{Project: "shop", Class: edge.ClassProduction}
-	store := values.Store{Records: records, Cipher: sealer}
+	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
+	store := envvars.Store{Records: records, Cipher: sealer}
 
-	if _, err := store.Set(context.Background(), scope, values.Coordinate{Cell: values.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
+	if _, err := store.Set(context.Background(), scope, envvars.Coordinate{Cell: envvars.Cell{Key: "STRIPE_API_KEY"}}, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
 	}
 
-	held, err := records.List(context.Background(), values.Under(scope))
+	held, err := records.List(context.Background(), envvars.ScopedRecordName(scope))
 	if err != nil {
 		t.Fatalf("List err = %v", err)
 	}
@@ -265,15 +265,15 @@ func TestOneProjectsStacksDoNotShareAPartitionWithAnothers(t *testing.T) {
 
 func TestABindingsPairSharesOnePrefixInsideTheProjectPartition(t *testing.T) {
 	records, ddb := newRecords(t)
-	scope := values.Scope{Project: "shop", Class: edge.ClassProduction}
-	store := values.Store{Records: records, Cipher: mustSealer()}
+	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
+	store := envvars.Store{Records: records, Cipher: mustSealer()}
 
-	if _, err := store.SetBinding(context.Background(), scope, "", values.OwnerOcel, "db",
-		values.Pair{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
+	if _, err := store.SetBinding(context.Background(), scope, "", envvars.OwnerOcel, "db",
+		envvars.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
 		t.Fatalf("SetBinding err = %v", err)
 	}
 
-	partition, err := awsports.Partition(values.Under(scope))
+	partition, err := awsports.Partition(envvars.ScopedRecordName(scope))
 	if err != nil {
 		t.Fatalf("Partition err = %v", err)
 	}

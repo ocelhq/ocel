@@ -12,8 +12,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 )
 
 var (
@@ -36,23 +36,23 @@ func DecodeBinding(raw []byte) (*bindingsv1.Binding, error) {
 	return binding, nil
 }
 
-func BindingPair(owner string, binding *bindingsv1.Binding) (values.Pair, error) {
+func BindingPair(owner string, binding *bindingsv1.Binding) (envvars.BindingWrite, error) {
 	value, err := EncodeBinding(binding)
 	if err != nil {
-		return values.Pair{}, fmt.Errorf("render binding %s: %w", binding.GetName(), err)
+		return envvars.BindingWrite{}, fmt.Errorf("render binding %s: %w", binding.GetName(), err)
 	}
-	if len(value) > values.MaxValueBytes {
-		return values.Pair{}, refusal.Refuse(refusal.CodeInvalid, "binding %s is too large: %d bytes, limit %d", binding.GetName(), len(value), values.MaxValueBytes)
+	if len(value) > envvars.MaxValueBytes {
+		return envvars.BindingWrite{}, refusal.Refuse(refusal.CodeInvalid, "binding %s is too large: %d bytes, limit %d", binding.GetName(), len(value), envvars.MaxValueBytes)
 	}
 	record, err := EncodeBinding(redacted(binding))
 	if err != nil {
-		return values.Pair{}, fmt.Errorf("render binding %s's record: %w", binding.GetName(), err)
+		return envvars.BindingWrite{}, fmt.Errorf("render binding %s's record: %w", binding.GetName(), err)
 	}
 	shapes, err := json.Marshal(naming.BindingPropertyShapes(binding))
 	if err != nil {
-		return values.Pair{}, fmt.Errorf("render binding %s's shape: %w", binding.GetName(), err)
+		return envvars.BindingWrite{}, fmt.Errorf("render binding %s's shape: %w", binding.GetName(), err)
 	}
-	return values.Pair{Record: record, Shapes: shapes, Value: value, Owner: owner}, nil
+	return envvars.BindingWrite{Record: record, Shapes: shapes, Value: value, Owner: owner}, nil
 }
 
 func redacted(binding *bindingsv1.Binding) *bindingsv1.Binding {
@@ -96,11 +96,11 @@ func unsourcedCustom(binding *bindingsv1.Binding) error {
 }
 
 func ValidatePublisher(publisher string) error {
-	if err := values.ValidateOwner(publisher); err != nil {
+	if err := envvars.ValidateOwner(publisher); err != nil {
 		return err
 	}
-	if publisher == values.OwnerOcel {
-		return fmt.Errorf("publisher name %q names ocel's own provisioning; every record it stamps would be one ocel's next deploy may prune", values.OwnerOcel)
+	if publisher == envvars.OwnerOcel {
+		return fmt.Errorf("publisher name %q names ocel's own provisioning; every record it stamps would be one ocel's next deploy may prune", envvars.OwnerOcel)
 	}
 	return nil
 }

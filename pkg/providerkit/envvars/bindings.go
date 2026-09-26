@@ -1,4 +1,4 @@
-package values
+package envvars
 
 import (
 	"context"
@@ -22,26 +22,26 @@ const (
 )
 
 var (
-	ErrClaimed = errors.New("values: binding claimed by another publisher")
+	ErrClaimed = errors.New("envvars: binding claimed by another publisher")
 
-	ErrNotPublished = errors.New("values: binding not published")
+	ErrNotPublished = errors.New("envvars: binding not published")
 
-	ErrTornPair = errors.New("values: torn binding pair")
+	ErrTornPair = errors.New("envvars: torn binding pair")
 )
 
-type Publishing struct {
-	Name string
-	Pair Pair
+type NamedBindingWrite struct {
+	Name  string
+	Write BindingWrite
 }
 
-type Pair struct {
+type BindingWrite struct {
 	Record []byte
 	Shapes []byte
 	Value  []byte
 	Owner  string
 }
 
-type Published struct {
+type StoredBinding struct {
 	Name        string
 	Environment string
 	Record      []byte
@@ -120,15 +120,15 @@ func ValidateOwner(owner string) error {
 	return nil
 }
 
-func (s Store) SetBinding(ctx context.Context, scope Scope, environment, owner, name string, pair Pair) (int64, error) {
-	versions, err := s.SetBindings(ctx, scope, environment, owner, []Publishing{{Name: name, Pair: pair}})
+func (s Store) SetBinding(ctx context.Context, scope Scope, environment, owner, name string, pair BindingWrite) (int64, error) {
+	versions, err := s.SetBindings(ctx, scope, environment, owner, []NamedBindingWrite{{Name: name, Write: pair}})
 	if err != nil {
 		return 0, err
 	}
 	return versions[0], nil
 }
 
-func (s Store) SetBindings(ctx context.Context, scope Scope, environment, owner string, bindings []Publishing) ([]int64, error) {
+func (s Store) SetBindings(ctx context.Context, scope Scope, environment, owner string, bindings []NamedBindingWrite) ([]int64, error) {
 	if err := ValidateOwner(owner); err != nil {
 		return nil, err
 	}
@@ -160,8 +160,8 @@ func (s Store) SetBindings(ctx context.Context, scope Scope, environment, owner 
 	}
 
 	versions := make([]int64, len(bindings))
-	if err := each(ctx, len(bindings), func(ctx context.Context, i int) error {
-		version, err := s.writePair(ctx, scope, environment, owner, bindings[i].Name, bindings[i].Pair)
+	if err := forEachConcurrently(ctx, len(bindings), func(ctx context.Context, i int) error {
+		version, err := s.writePair(ctx, scope, environment, owner, bindings[i].Name, bindings[i].Write)
 		versions[i] = version
 		return err
 	}); err != nil {
@@ -170,7 +170,7 @@ func (s Store) SetBindings(ctx context.Context, scope Scope, environment, owner 
 	return versions, nil
 }
 
-func (s Store) writePair(ctx context.Context, scope Scope, environment, owner, name string, pair Pair) (int64, error) {
+func (s Store) writePair(ctx context.Context, scope Scope, environment, owner, name string, pair BindingWrite) (int64, error) {
 	sealed, err := s.Cipher.Seal(ctx, bindingCoordinate(scope, environment, name), pair.Value)
 	if err != nil {
 		return 0, err
@@ -287,7 +287,7 @@ func (s Store) RemoveBindings(ctx context.Context, scope Scope, environment stri
 			dropping = append(dropping, name)
 		}
 	}
-	if err := each(ctx, len(dropping), func(ctx context.Context, i int) error {
+	if err := forEachConcurrently(ctx, len(dropping), func(ctx context.Context, i int) error {
 		for _, name := range []records.Name{
 			bindingRecordName(scope, dropping[i], environment),
 			bindingValueName(scope, dropping[i], environment),
@@ -303,15 +303,15 @@ func (s Store) RemoveBindings(ctx context.Context, scope Scope, environment stri
 	return removed, nil
 }
 
-func (s Store) ResolveBinding(ctx context.Context, scope Scope, environment, name string) (Published, error) {
+func (s Store) ResolveBinding(ctx context.Context, scope Scope, environment, name string) (StoredBinding, error) {
 	resolved, err := s.ResolveBindings(ctx, scope, environment, []string{name})
 	if err != nil {
-		return Published{}, err
+		return StoredBinding{}, err
 	}
 	return resolved[0], nil
 }
 
-func (s Store) ResolveBindings(ctx context.Context, scope Scope, environment string, names []string) ([]Published, error) {
+func (s Store) ResolveBindings(ctx context.Context, scope Scope, environment string, names []string) ([]StoredBinding, error) {
 	for _, name := range names {
 		if err := ValidateBindingName(environment, name); err != nil {
 			return nil, err
@@ -321,10 +321,10 @@ func (s Store) ResolveBindings(ctx context.Context, scope Scope, environment str
 		return nil, nil
 	}
 
-	out := make([]Published, len(names))
+	out := make([]StoredBinding, len(names))
 	sealed := make([][]byte, len(names))
 	for range bindingAttempts {
-		held := s.pages(scope)
+		held := s.newRecordCache(scope)
 		if err := held.named(ctx, names); err != nil {
 			return nil, err
 		}
@@ -343,7 +343,7 @@ func (s Store) ResolveBindings(ctx context.Context, scope Scope, environment str
 		if torn != "" {
 			continue
 		}
-		if err := each(ctx, len(names), func(ctx context.Context, i int) error {
+		if err := forEachConcurrently(ctx, len(names), func(ctx context.Context, i int) error {
 			plaintext, err := s.Cipher.Open(ctx, bindingCoordinate(scope, out[i].Environment, names[i]), sealed[i])
 			if err != nil {
 				return fmt.Errorf("open binding %s's value: %w", names[i], err)
@@ -361,23 +361,23 @@ func (s Store) ResolveBindings(ctx context.Context, scope Scope, environment str
 		bindingAttempts, describeEnvironment(environment), ErrTornPair)
 }
 
-func (s Store) readPair(held *pages, scope Scope, environment, name string) (Published, []byte, error) {
+func (s Store) readPair(held *recordCache, scope Scope, environment, name string) (StoredBinding, []byte, error) {
 	for _, at := range shadowing(environment) {
 		record, err := decodeBindingRecord(name, held.at(bindingRecordName(scope, name, at)))
 		if err != nil {
-			return Published{}, nil, err
+			return StoredBinding{}, nil, err
 		}
 		value, err := decodeBindingValue(name, held.at(bindingValueName(scope, name, at)))
 		if err != nil {
-			return Published{}, nil, err
+			return StoredBinding{}, nil, err
 		}
 		if record.Version == 0 && value.Version == 0 {
 			continue
 		}
 		if record.Version != value.Version {
-			return Published{}, nil, ErrTornPair
+			return StoredBinding{}, nil, ErrTornPair
 		}
-		return Published{
+		return StoredBinding{
 			Name:        name,
 			Environment: at,
 			Record:      record.Record,
@@ -387,10 +387,10 @@ func (s Store) readPair(held *pages, scope Scope, environment, name string) (Pub
 			UpdatedAt:   record.UpdatedAt,
 		}, value.Sealed, nil
 	}
-	return Published{}, nil, fmt.Errorf("binding %s is not published to %s: %w", name, describeEnvironment(environment), ErrNotPublished)
+	return StoredBinding{}, nil, fmt.Errorf("binding %s is not published to %s: %w", name, describeEnvironment(environment), ErrNotPublished)
 }
 
-func (s Store) ListBindings(ctx context.Context, scope Scope, environment string) ([]Published, error) {
+func (s Store) ListBindings(ctx context.Context, scope Scope, environment string) ([]StoredBinding, error) {
 	if err := ValidateBindingEnvironment(environment); err != nil {
 		return nil, err
 	}
@@ -399,11 +399,11 @@ func (s Store) ListBindings(ctx context.Context, scope Scope, environment string
 		return nil, err
 	}
 
-	held := s.pages(scope)
+	held := s.newRecordCache(scope)
 	if err := held.all(ctx); err != nil {
 		return nil, err
 	}
-	out := make([]Published, 0, len(names))
+	out := make([]StoredBinding, 0, len(names))
 	for _, name := range names {
 		for _, at := range shadowing(environment) {
 			record, err := decodeBindingRecord(name, held.at(bindingRecordName(scope, name, at)))
@@ -413,7 +413,7 @@ func (s Store) ListBindings(ctx context.Context, scope Scope, environment string
 			if record.Version == 0 {
 				continue
 			}
-			out = append(out, Published{
+			out = append(out, StoredBinding{
 				Name:        name,
 				Environment: at,
 				Record:      record.Record,
@@ -425,32 +425,32 @@ func (s Store) ListBindings(ctx context.Context, scope Scope, environment string
 			break
 		}
 	}
-	slices.SortFunc(out, func(a, b Published) int { return strings.Compare(a.Name, b.Name) })
+	slices.SortFunc(out, func(a, b StoredBinding) int { return strings.Compare(a.Name, b.Name) })
 	return out, nil
 }
 
-type pages struct {
+type recordCache struct {
 	store Store
 	scope Scope
 	held  map[string]records.Record
 }
 
-func (s Store) pages(scope Scope) *pages {
-	return &pages{store: s, scope: scope, held: map[string]records.Record{}}
+func (s Store) newRecordCache(scope Scope) *recordCache {
+	return &recordCache{store: s, scope: scope, held: map[string]records.Record{}}
 }
 
-func (p *pages) named(ctx context.Context, names []string) error {
+func (p *recordCache) named(ctx context.Context, names []string) error {
 	if len(names) == 1 {
 		return p.load(ctx, bindingName(p.scope, names[0]))
 	}
 	return p.all(ctx)
 }
 
-func (p *pages) all(ctx context.Context) error {
+func (p *recordCache) all(ctx context.Context) error {
 	return p.load(ctx, bindingsName(p.scope))
 }
 
-func (p *pages) load(ctx context.Context, under records.Name) error {
+func (p *recordCache) load(ctx context.Context, under records.Name) error {
 	stored, err := p.store.Records.List(ctx, under)
 	if err != nil {
 		return fmt.Errorf("read %s's published bindings: %w", p.scope.Project, err)
@@ -461,7 +461,7 @@ func (p *pages) load(ctx context.Context, under records.Name) error {
 	return nil
 }
 
-func (p *pages) at(name records.Name) records.Record { return p.held[name.String()] }
+func (p *recordCache) at(name records.Name) records.Record { return p.held[name.String()] }
 
 func (s Store) PublishedNames(ctx context.Context, scope Scope, environment string) ([]string, error) {
 	held, err := s.Records.List(ctx, bindingOwnersName(scope))

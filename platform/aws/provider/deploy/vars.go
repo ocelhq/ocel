@@ -14,7 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
@@ -68,7 +68,7 @@ func varsReadPolicy(r executionRole) (string, error) {
 }
 
 func valuePartition(slug, class string) (string, error) {
-	return awsports.Partition(values.Under(values.Scope{Project: slug, Class: edge.Class(class)}))
+	return awsports.Partition(envvars.ScopedRecordName(envvars.Scope{Project: slug, Class: edge.Class(class)}))
 }
 
 type appBundle struct {
@@ -150,7 +150,7 @@ func referencedOwners(cfg Config, slug string, keys []live.Key) []string {
 	owners := map[string]bool{}
 	for _, key := range keys {
 		for _, environment := range environments {
-			cell := values.Coordinate{Cell: values.Cell{Folder: key.Folder, Key: key.Key}, Environment: environment}
+			cell := envvars.Coordinate{Cell: envvars.Cell{Folder: key.Folder, Key: key.Key}, Environment: environment}
 			if owner := cfg.VarsReferenced[cell]; owner != "" {
 				owners[owner] = true
 			}
