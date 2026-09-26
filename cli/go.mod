@@ -257,8 +257,6 @@ replace github.com/ocelhq/ocel/platform/aws/runtime => ../platform/aws/runtime
 
 replace github.com/ocelhq/ocel/platform/aws/provider => ../platform/aws/provider
 
-replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../platform/edge/cloudflare/deploy
-
 replace github.com/ocelhq/ocel/platform/s3 => ../platform/s3
 
 replace github.com/ocelhq/ocel/pkg => ../pkg
