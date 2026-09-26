@@ -1,0 +1,163 @@
+package host
+
+import (
+	"context"
+	"fmt"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
+	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
+	"github.com/ocelhq/ocel/platform/vps/provider/session"
+)
+
+type socketHeld struct {
+	port   int
+	holder string
+}
+
+func socketsSaid(held ...socketHeld) string {
+	var table, sockets, names strings.Builder
+	table.WriteString("  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n")
+	for at, one := range held {
+		inode := 40000 + at
+		fmt.Fprintf(&table, "   %d: 00000000:%04X 00000000:0000 0A 00000000:00000000 00:00000000 00000000     0        0 %d 1 0000000000000000 100 0 0 10 0\n",
+			at, one.port, inode)
+		if one.holder == "" {
+			continue
+		}
+		fmt.Fprintf(&sockets, "/proc/%d/fd socket:[%d]\n", 700+at, inode)
+		fmt.Fprintf(&names, "/proc/%d/comm:%s\n", 700+at, one.holder)
+	}
+	return table.String() + listeners.SocketsMark + "\n" + sockets.String() + listeners.NamesMark + "\n" + names.String()
+}
+
+func portsHeldOn(stood *bench, published map[string]string, held ...socketHeld) {
+	prior := stood.answer
+	stood.answer = func(command string) (session.Result, bool) {
+		for port, names := range published {
+			if strings.Contains(command, "publish="+port) {
+				return session.Result{Stdout: names}, true
+			}
+		}
+		if strings.HasPrefix(command, holdersCommand) {
+			return session.Result{Stdout: socketsSaid(held...)}, true
+		}
+		if prior != nil {
+			return prior(command)
+		}
+		return session.Result{}, false
+	}
+}
+
+func freshBox() *bench {
+	fresh := machine(nil)
+	fresh.answer = func(command string) (session.Result, bool) {
+		return session.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
+	}
+	return fresh
+}
+
+func withDocker() *bench {
+	stood := machine(map[providerkit.Class][]Item{providerkit.ClassProduction: EngineItems()})
+	stood.answer = func(command string) (session.Result, bool) {
+		return session.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
+	}
+	return stood
+}
+
+const behindYourOwnProxy = "See https://ocel.dev/docs/providers/vps#behind-your-own-proxy"
+
+func refusedBeforeWriting(t *testing.T, stood *bench, front Front, want string) {
+	t.Helper()
+
+	class := providerkit.ClassProduction
+	boot := NewBootstrap(stood.fronted(front), testVendor, "shop")
+	_, planned := boot.Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
+	applied := boot.Apply(context.Background(), providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil)
+	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
+		if refused := refusal(t, err, providerkit.CodeNotReady); refused.Message != want {
+			t.Errorf("%s refused with\n%s\nwant\n%s", step, refused.Message, want)
+		}
+	}
+	for _, command := range stood.commands() {
+		if strings.HasPrefix(command, "install ") || strings.Contains(command, dockerSource) || strings.Contains(command, "docker run") {
+			t.Errorf("the refused bootstrap still wrote: %s", command)
+		}
+	}
+}
+
+func TestABootstrapOverAProcessHoldingTheServingPortsNamesItAndStopsBeforeItsFirstWrite(t *testing.T) {
+	t.Parallel()
+
+	stood := freshBox()
+	portsHeldOn(stood, nil, socketHeld{80, "nginx"}, socketHeld{443, "nginx"})
+	refusedBeforeWriting(t, stood, Front{},
+		"nginx holds :80 and :443, where ocel's own proxy serves\n"+
+			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from nginx, or stop nginx and run `ocel bootstrap production`\n"+
+			behindYourOwnProxy)
+}
+
+func TestABootstrapOverAContainerPublishingAServingPortNamesTheContainer(t *testing.T) {
+	t.Parallel()
+
+	stood := withDocker()
+	portsHeldOn(stood, map[string]string{caddy.HTTPPort: "\n", "443": "web\n"}, socketHeld{443, "docker-proxy"})
+	refusedBeforeWriting(t, stood, Front{},
+		"container web publishes :443, where ocel's own proxy serves\n"+
+			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from web, or run `docker rm -f web` and run `ocel bootstrap production`\n"+
+			behindYourOwnProxy)
+}
+
+func TestABootstrapNamesEveryHolderOfTheServingPortsInOneRefusal(t *testing.T) {
+	t.Parallel()
+
+	stood := freshBox()
+	portsHeldOn(stood, nil, socketHeld{80, "nginx"}, socketHeld{443, "apache2"})
+	refusedBeforeWriting(t, stood, Front{},
+		"nginx holds :80 and apache2 holds :443, where ocel's own proxy serves\n"+
+			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from nginx and apache2, or stop nginx and apache2 and run `ocel bootstrap production`\n"+
+			behindYourOwnProxy)
+}
+
+func TestABootstrapOverASocketNoProcessCanBeNamedForSaysWhereItIsBound(t *testing.T) {
+	t.Parallel()
+
+	stood := freshBox()
+	portsHeldOn(stood, nil, socketHeld{80, ""})
+	refusedBeforeWriting(t, stood, Front{},
+		"the process at 0.0.0.0:80 holds :80, where ocel's own proxy serves\n"+
+			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from the process at 0.0.0.0:80, or stop the process at 0.0.0.0:80 and run `ocel bootstrap production`\n"+
+			behindYourOwnProxy)
+}
+
+func TestABootstrapWhoseServingPortsAreFreeOrOcelsOwnGoesAhead(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	for name, stood := range map[string]*bench{
+		"a fresh box":                   freshBox(),
+		"a box ocel's own proxy fronts": settledOn(t, class),
+	} {
+		portsHeldOn(stood, map[string]string{caddy.HTTPPort: caddy.Container + "\n", "443": caddy.Container + "\n"})
+		if _, err := NewBootstrap(stood.host(), testVendor, "shop").Plan(context.Background(), providerkit.BootstrapRequest{Class: class}); err != nil {
+			t.Errorf("%s: Plan() = %v, want the bootstrap let through", name, err)
+		}
+	}
+}
+
+func TestABootstrapBehindYourOwnProxyLeavesWhatHoldsTheServingPortsAlone(t *testing.T) {
+	t.Parallel()
+
+	stood := freshBox()
+	portsHeldOn(stood, nil, socketHeld{80, "nginx"}, socketHeld{443, "nginx"})
+	if _, err := NewBootstrap(stood.fronted(routedByHand()), testVendor, "shop").Plan(context.Background(),
+		providerkit.BootstrapRequest{Class: providerkit.ClassProduction}); err != nil {
+		t.Fatalf("Plan() = %v, want a box routed by hand free to keep its own proxy on 80 and 443", err)
+	}
+	if slices.ContainsFunc(stood.commands(), func(command string) bool { return strings.HasPrefix(command, holdersCommand) }) {
+		t.Error("a bootstrap behind your own proxy asked what holds the serving ports, and it holds them by design")
+	}
+}

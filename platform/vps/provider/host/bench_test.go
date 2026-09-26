@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -190,6 +191,15 @@ func (b *bench) rendered(command string) session.Result {
 				}
 			}
 		}
+		return session.Result{}
+	case strings.Contains(command, "--filter 'publish="):
+		for _, items := range b.stands {
+			if slices.ContainsFunc(items, func(item Item) bool { return item.Kind == KindContainer && item.Name == caddy.Container }) {
+				return session.Result{Stdout: caddy.Container + "\n"}
+			}
+		}
+		return session.Result{}
+	case strings.HasPrefix(command, holdersCommand):
 		return session.Result{}
 	case strings.HasPrefix(command, "cat "):
 		for _, items := range b.stands {

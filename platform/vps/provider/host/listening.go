@@ -12,6 +12,20 @@ import (
 
 const listenerCommand = "cat " + listeners.TCPPath + " " + listeners.TCP6Path
 
+const holdersCommand = listenerCommand + "\n" +
+	"echo " + listeners.SocketsMark + "\n" +
+	`find /proc/[0-9]*/fd -lname 'socket:\[*' -printf '%h %l\n' 2>/dev/null || true` + "\n" +
+	"echo " + listeners.NamesMark + "\n" +
+	`grep -H '' /proc/[0-9]*/comm 2>/dev/null || true`
+
+func (h *Host) portHolders(ctx context.Context, elevation string) ([]listeners.Listener, error) {
+	said, err := h.ran(ctx, "read what listens on this host and what holds it", holdersCommand, nil, elevation)
+	if err != nil {
+		return nil, err
+	}
+	return listeners.Parse(strings.NewReader(said))
+}
+
 func (h *Host) Listening(ctx context.Context) ([]listeners.Listener, error) {
 	said, err := h.ran(ctx, "read what listens on this host", listenerCommand, nil, "")
 	if err != nil {
