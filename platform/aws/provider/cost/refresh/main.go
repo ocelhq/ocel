@@ -139,7 +139,7 @@ func orGlobal(region string) string {
 	return region
 }
 
-func (o *offer) steps(query map[string]string, service, region string) ([]pricing.PriceStep, string, string, error) {
+func (o *offer) steps(query map[string]string, service, region string) ([]pricing.Step, string, string, error) {
 	var matched []string
 	for sku, product := range o.Products {
 		if matches(product.Attributes, query, region) {
@@ -151,7 +151,7 @@ func (o *offer) steps(query map[string]string, service, region string) ([]pricin
 		return nil, "", "", fmt.Errorf("query %v matches %d products: %v", query, len(matched), matched)
 	}
 	sku := matched[0]
-	var steps []pricing.PriceStep
+	var steps []pricing.Step
 	unit := ""
 	for _, term := range o.Terms.OnDemand[sku] {
 		if term.OfferTermCode != onDemandTerm {
@@ -166,7 +166,7 @@ func (o *offer) steps(query map[string]string, service, region string) ([]pricin
 			if err != nil {
 				return nil, "", "", fmt.Errorf("sku %s: price %q: %w", sku, dimension.PricePerUnit["USD"], err)
 			}
-			steps = append(steps, pricing.PriceStep{Start: start, Price: price})
+			steps = append(steps, pricing.Step{Start: start, Price: price})
 			unit = dimension.Unit
 		}
 	}

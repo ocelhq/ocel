@@ -52,7 +52,7 @@ var (
 	thousand     = decimal.NewFromInt(1000)
 )
 
-var table = pricing.Table{
+var formulas = pricing.Table{
 	"google_cloud_run_v2_service":                      cloudRunService,
 	"google_firestore_database":                        firestoreDatabase,
 	"google_storage_bucket":                            storageBucket,
@@ -76,11 +76,11 @@ func Price(req *costv1.PriceRequest) (*costv1.Estimate, error) {
 	if err != nil {
 		return nil, err
 	}
-	merged, formulas, err := pricing.Priced(rateCard, table)
+	merged, table, err := pricing.Priced(rateCard, formulas)
 	if err != nil {
 		return nil, err
 	}
-	estimate, err := pricing.Estimate(merged, formulas, req)
+	estimate, err := pricing.Estimate(merged, table, req)
 	if err != nil {
 		return nil, err
 	}
