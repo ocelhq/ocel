@@ -21,7 +21,7 @@ on:
       - "pkg/refusal/**"
       - "pkg/runtimekit/**"
       - "pkg/target/**"
-      - "pkg/transformkit/**"
+      - "pkg/transform/**"
       - "pkg/go.mod"
       - "pkg/go.sum"
       - "platform/edge/cloudflare/deploy/**"

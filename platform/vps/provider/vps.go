@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/transformkit"
+	"github.com/ocelhq/ocel/pkg/transform"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -26,7 +26,7 @@ type Provider struct {
 	records records.Store
 	cipher  *host.Cipher
 
-	transform transformkit.Pass
+	transform transform.Pass
 	resolve   Lookup
 	reaches   Reach
 

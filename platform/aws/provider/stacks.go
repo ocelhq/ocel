@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/transformkit"
+	"github.com/ocelhq/ocel/pkg/transform"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
@@ -136,7 +136,7 @@ func (p *Provider) requireBootstrapped(deployed bootstrap.Deployed, class edge.C
 	return nil
 }
 
-func (p *Provider) transformPass(root string) transformkit.Pass {
+func (p *Provider) transformPass(root string) transform.Pass {
 	if len(p.transforms) == 0 {
 		return nil
 	}

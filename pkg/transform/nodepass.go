@@ -1,4 +1,4 @@
-package transformkit
+package transform
 
 import (
 	"bytes"

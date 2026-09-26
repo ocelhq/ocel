@@ -13,27 +13,27 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/transformkit"
+	"github.com/ocelhq/ocel/pkg/transform"
 )
 
-//go:generate go generate -C ../../../../pkg/transformkit ./...
+//go:generate go generate -C ../../../../pkg/transform ./...
 
 const transformProvider = "aws"
 
-func NodePass(root string, modules []string) transformkit.NodePass {
-	return transformkit.NodePass{
+func NodePass(root string, modules []string) transform.NodePass {
+	return transform.NodePass{
 		Root: root, Modules: modules,
 		External:    []string{"@pulumi/*"},
 		Uninstalled: "`@ocel/transforms` brings in `@pulumi/aws` itself: install it as a devDependency and re-run.",
 	}
 }
 
-func transformStackSpec(ctx context.Context, pass transformkit.Pass, spec provider.StackSpec) (*transformPatches, error) {
+func transformStackSpec(ctx context.Context, pass transform.Pass, spec provider.StackSpec) (*transformPatches, error) {
 	if pass == nil {
 		return nil, nil
 	}
 	project, stack := naming.Sanitize(spec.Ref.Project), spec.Ref.Name
-	req := transformkit.Request{
+	req := transform.Request{
 		Provider: transformProvider,
 		EnvClass: string(spec.Ref.Class),
 		Env:      stack.Env,
@@ -41,14 +41,14 @@ func transformStackSpec(ctx context.Context, pass transformkit.Pass, spec provid
 	var candidates []transformCandidate
 
 	if app := spec.App; app != nil && app.Compute == provider.ComputeContainer {
-		req.Resources = append(req.Resources, transformkit.Resource{Type: transformTypeContainer, Name: app.App, App: app.App})
+		req.Resources = append(req.Resources, transform.Resource{Type: transformTypeContainer, Name: app.App, App: app.App})
 		candidates = append(candidates, transformCandidate{
 			key:   resourceKey{Type: transformTypeContainer, Name: app.App},
 			names: containerResourceNames(),
 		})
 	} else if app != nil {
 		for _, spec := range app.Functions {
-			req.Resources = append(req.Resources, transformkit.Resource{
+			req.Resources = append(req.Resources, transform.Resource{
 				Type: transformTypeFunction, Name: spec.Name, App: app.App,
 			})
 			candidates = append(candidates, transformCandidate{
@@ -63,13 +63,13 @@ func transformStackSpec(ctx context.Context, pass transformkit.Pass, spec provid
 			}
 			switch resource.Type {
 			case provider.BindingPostgres:
-				req.Resources = append(req.Resources, transformkit.Resource{Type: transformTypePostgres, Name: resource.Name})
+				req.Resources = append(req.Resources, transform.Resource{Type: transformTypePostgres, Name: resource.Name})
 				candidates = append(candidates, transformCandidate{
 					key:   resourceKey{Type: transformTypePostgres, Name: resource.Name},
 					names: postgresResourceNames(project, stack.Env, resource.Name),
 				})
 			case provider.BindingBucket:
-				req.Resources = append(req.Resources, transformkit.Resource{Type: transformTypeBucket, Name: resource.Name})
+				req.Resources = append(req.Resources, transform.Resource{Type: transformTypeBucket, Name: resource.Name})
 				candidates = append(candidates, transformCandidate{
 					key:   resourceKey{Type: transformTypeBucket, Name: resource.Name},
 					names: bucketResourceNames(project, stack.Env, resource.Name),
@@ -152,7 +152,7 @@ func managedRuntime(name string) string {
 	return providedFunctionRuntime
 }
 
-func resolveSpecOutputs(ctx context.Context, spec provider.StackSpec, candidates []transformCandidate, results []transformkit.Result) error {
+func resolveSpecOutputs(ctx context.Context, spec provider.StackSpec, candidates []transformCandidate, results []transform.Result) error {
 	var placed []placedOutput
 	if err := walkOutputs(candidates, results, func(ref outputRef, at outputSite, authored any) (any, error) {
 		placed = append(placed, placedOutput{Ref: ref, At: at})

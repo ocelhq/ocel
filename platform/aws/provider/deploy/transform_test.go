@@ -4,41 +4,41 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/ocelhq/ocel/pkg/transformkit"
+	"github.com/ocelhq/ocel/pkg/transform"
 )
 
 type fakePass struct {
-	seen transformkit.Request
-	out  []transformkit.Patches
+	seen transform.Request
+	out  []transform.Patches
 	tags map[string]string
 	err  error
 }
 
-func (f *fakePass) Evaluate(_ context.Context, req transformkit.Request) ([]transformkit.Result, error) {
+func (f *fakePass) Evaluate(_ context.Context, req transform.Request) ([]transform.Result, error) {
 	f.seen = req
 	if f.err != nil {
 		return nil, f.err
 	}
 	out := f.out
 	if out == nil {
-		out = make([]transformkit.Patches, len(req.Resources))
+		out = make([]transform.Patches, len(req.Resources))
 		for i := range req.Resources {
-			out[i] = transformkit.Patches{}
+			out[i] = transform.Patches{}
 		}
 	}
-	results := make([]transformkit.Result, len(out))
+	results := make([]transform.Result, len(out))
 	for i, patches := range overTheWire(out) {
-		results[i] = transformkit.Result{Patches: patches, Tags: f.tags}
+		results[i] = transform.Result{Patches: patches, Tags: f.tags}
 	}
 	return results, nil
 }
 
-func overTheWire(patches []transformkit.Patches) []transformkit.Patches {
+func overTheWire(patches []transform.Patches) []transform.Patches {
 	encoded, err := json.Marshal(patches)
 	if err != nil {
 		panic(err)
 	}
-	var decoded []transformkit.Patches
+	var decoded []transform.Patches
 	if err := json.Unmarshal(encoded, &decoded); err != nil {
 		panic(err)
 	}

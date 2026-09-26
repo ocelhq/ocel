@@ -6,21 +6,21 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	"github.com/ocelhq/ocel/pkg/transformkit"
-	"github.com/ocelhq/ocel/pkg/transformkit/transformtest"
+	"github.com/ocelhq/ocel/pkg/transform"
+	"github.com/ocelhq/ocel/pkg/transform/transformtest"
 )
 
 const patchedImage = "public.ecr.aws/docker/library/postgres@sha256:1f0c2a5b8e3d4c6f7a9b0c1d2e3f405162738495a6b7c8d9e0f1a2b3c4d5e6f7"
 
 type patching struct {
-	seen    transformkit.Request
-	patches transformkit.Patches
+	seen    transform.Request
+	patches transform.Patches
 	tags    map[string]string
 }
 
-func (a *patching) Evaluate(_ context.Context, req transformkit.Request) ([]transformkit.Result, error) {
+func (a *patching) Evaluate(_ context.Context, req transform.Request) ([]transform.Result, error) {
 	a.seen = req
-	return []transformkit.Result{{Patches: a.patches, Tags: a.tags}}, nil
+	return []transform.Result{{Patches: a.patches, Tags: a.tags}}, nil
 }
 
 func patched(t *testing.T, pass *patching) (*box, provider.Binding, error) {
@@ -50,7 +50,7 @@ func TestATransformIsAskedAboutThePostgresABoxIsAboutToStart(t *testing.T) {
 	if pass.seen.Provider != "vps" || pass.seen.EnvClass != "production" {
 		t.Errorf("the transform was told %q in %q, want the vps branch in production", pass.seen.Provider, pass.seen.EnvClass)
 	}
-	if len(pass.seen.Resources) != 1 || pass.seen.Resources[0] != (transformkit.Resource{Type: "postgres", Name: "main"}) {
+	if len(pass.seen.Resources) != 1 || pass.seen.Resources[0] != (transform.Resource{Type: "postgres", Name: "main"}) {
 		t.Errorf("the transform was offered %v, want the one postgres being provisioned", pass.seen.Resources)
 	}
 }
@@ -59,7 +59,7 @@ func TestATransformReshapesTheStackAPostgresRunsAs(t *testing.T) {
 	t.Parallel()
 
 	machine, _, err := patched(t, &patching{
-		patches: transformkit.Patches{
+		patches: transform.Patches{
 			"container": {
 				"image": patchedImage, "args": []any{"-c", "max_connections=200"},
 				"env": map[string]any{"POSTGRES_INITDB_ARGS": "--data-checksums"}, "memory": "2g", "cpus": "1.5", "shmSize": "256m",
@@ -97,17 +97,17 @@ func TestATransformThatWouldBreakWhatAnAppBindsToIsRefusedBeforeTheBoxIsReached(
 	t.Parallel()
 
 	for name, bad := range map[string]struct {
-		patches transformkit.Patches
+		patches transform.Patches
 		want    string
 	}{
-		"an image a registry can move":       {transformkit.Patches{"container": {"image": "pgvector/pgvector:pg17"}}, "sha256"},
-		"the password":                       {transformkit.Patches{"container": {"env": map[string]any{"POSTGRES_PASSWORD": "mine"}}}, "POSTGRES_PASSWORD"},
-		"the role an app signs in as":        {transformkit.Patches{"container": {"env": map[string]any{"POSTGRES_USER": "app"}}}, "POSTGRES_USER"},
-		"the database an app is bound to":    {transformkit.Patches{"container": {"env": map[string]any{"POSTGRES_DB": "other"}}}, "POSTGRES_DB"},
-		"where the data is kept":             {transformkit.Patches{"container": {"env": map[string]any{"PGDATA": "/tmp"}}}, "PGDATA"},
-		"a field the box fills itself":       {transformkit.Patches{"container": {"network": "host"}}, "network"},
-		"something the box never runs":       {transformkit.Patches{"sidecar": {"image": patchedImage}}, "sidecar"},
-		"a binding output a box cannot read": {transformkit.Patches{"container": {"memory": map[string]any{"$ocelOutput": "x"}}}, "memory"},
+		"an image a registry can move":       {transform.Patches{"container": {"image": "pgvector/pgvector:pg17"}}, "sha256"},
+		"the password":                       {transform.Patches{"container": {"env": map[string]any{"POSTGRES_PASSWORD": "mine"}}}, "POSTGRES_PASSWORD"},
+		"the role an app signs in as":        {transform.Patches{"container": {"env": map[string]any{"POSTGRES_USER": "app"}}}, "POSTGRES_USER"},
+		"the database an app is bound to":    {transform.Patches{"container": {"env": map[string]any{"POSTGRES_DB": "other"}}}, "POSTGRES_DB"},
+		"where the data is kept":             {transform.Patches{"container": {"env": map[string]any{"PGDATA": "/tmp"}}}, "PGDATA"},
+		"a field the box fills itself":       {transform.Patches{"container": {"network": "host"}}, "network"},
+		"something the box never runs":       {transform.Patches{"sidecar": {"image": patchedImage}}, "sidecar"},
+		"a binding output a box cannot read": {transform.Patches{"container": {"memory": map[string]any{"$ocelOutput": "x"}}}, "memory"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -152,7 +152,7 @@ func TestEveryFieldTheVpsBranchTypesIsOneABoxRenders(t *testing.T) {
 	})
 	machine := &box{}
 	vendor := over(machine)
-	vendor.Transforming(transformkit.NodePass{Root: root, Modules: []string{"./stack.transform.ts"}})
+	vendor.Transforming(transform.NodePass{Root: root, Modules: []string{"./stack.transform.ts"}})
 	if _, err := vendor.ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil); err != nil {
 		t.Fatalf("a module patching every field the vps branch types was refused: %v", err)
 	}
@@ -165,21 +165,21 @@ func TestEveryFieldTheVpsBranchTypesIsOneABoxRenders(t *testing.T) {
 }
 
 type perResource struct {
-	patches map[string]transformkit.Patches
+	patches map[string]transform.Patches
 }
 
-func (p *perResource) Evaluate(_ context.Context, req transformkit.Request) ([]transformkit.Result, error) {
+func (p *perResource) Evaluate(_ context.Context, req transform.Request) ([]transform.Result, error) {
 	if len(req.Resources) == 0 {
 		return nil, nil
 	}
-	return []transformkit.Result{{Patches: p.patches[req.Resources[0].Name]}}, nil
+	return []transform.Result{{Patches: p.patches[req.Resources[0].Name]}}, nil
 }
 
 func TestTwoBucketsPatchingTheOneStoreDifferentlyAreRefused(t *testing.T) {
 	t.Parallel()
 
 	vendor := over(&box{kept: sealedRootKey()})
-	vendor.Transforming(&perResource{patches: map[string]transformkit.Patches{
+	vendor.Transforming(&perResource{patches: map[string]transform.Patches{
 		"uploads": {"container": {"memory": "2g"}},
 		"avatars": {"container": {"memory": "4g"}},
 	}})
@@ -202,7 +202,7 @@ func TestTwoBucketsPatchingTheOneStoreTheSameWayProvisionTogether(t *testing.T) 
 	t.Parallel()
 
 	vendor := over(&box{kept: sealedRootKey()})
-	vendor.Transforming(&patching{patches: transformkit.Patches{"container": {"memory": "2g"}}})
+	vendor.Transforming(&patching{patches: transform.Patches{"container": {"memory": "2g"}}})
 
 	if _, err := vendor.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil); err != nil {
 		t.Fatalf("Bucket(uploads) = %v", err)

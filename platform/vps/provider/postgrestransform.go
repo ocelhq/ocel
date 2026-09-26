@@ -12,11 +12,11 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/provider/resources"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/transformkit"
+	"github.com/ocelhq/ocel/pkg/transform"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
-//go:generate go generate -C ../../../pkg/transformkit ./...
+//go:generate go generate -C ../../../pkg/transform ./...
 
 const (
 	transformProvider     = "vps"
@@ -67,12 +67,12 @@ type volumePatch struct {
 	DriverOpts map[string]string `json:"driverOpts"`
 }
 
-func nodePass(modules []string) transformkit.Pass {
+func nodePass(modules []string) transform.Pass {
 	root, err := os.Getwd()
 	if err != nil {
 		root = "."
 	}
-	return transformkit.NodePass{
+	return transform.NodePass{
 		Root: root, Modules: modules,
 		Uninstalled: "Install `@ocel/transforms` as a devDependency",
 	}
@@ -98,11 +98,11 @@ func (p *Provider) reshaped(ctx context.Context, in resources.ProvisionRequest, 
 	if p.transform == nil {
 		return spec, nil
 	}
-	results, err := p.transform.Evaluate(ctx, transformkit.Request{
+	results, err := p.transform.Evaluate(ctx, transform.Request{
 		Provider: transformProvider,
 		EnvClass: string(in.Ref.Class),
 		Env:      in.Ref.Name.Env,
-		Resources: []transformkit.Resource{
+		Resources: []transform.Resource{
 			{Type: kind, Name: in.Resource.Name},
 		},
 	})

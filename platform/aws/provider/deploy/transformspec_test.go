@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/refusal"
-	"github.com/ocelhq/ocel/pkg/transformkit"
+	"github.com/ocelhq/ocel/pkg/transform"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -71,20 +71,20 @@ func specUnderTransform() provider.StackSpec {
 }
 
 type patchingPass struct {
-	patch func([]transformkit.Patches)
+	patch func([]transform.Patches)
 }
 
-func (e patchingPass) Evaluate(_ context.Context, req transformkit.Request) ([]transformkit.Result, error) {
-	patches := make([]transformkit.Patches, len(req.Resources))
+func (e patchingPass) Evaluate(_ context.Context, req transform.Request) ([]transform.Result, error) {
+	patches := make([]transform.Patches, len(req.Resources))
 	for i := range req.Resources {
-		patches[i] = transformkit.Patches{}
+		patches[i] = transform.Patches{}
 	}
 	if e.patch != nil {
 		e.patch(patches)
 	}
-	results := make([]transformkit.Result, len(patches))
+	results := make([]transform.Result, len(patches))
 	for i, patch := range overTheWire(patches) {
-		results[i] = transformkit.Result{Patches: patch}
+		results[i] = transform.Result{Patches: patch}
 	}
 	return results, nil
 }
@@ -96,7 +96,7 @@ func placeholderFor(kind, name, property string) map[string]any {
 }
 
 func filledFromBinding(kind, name, property string) patchingPass {
-	return patchingPass{patch: func(patches []transformkit.Patches) {
+	return patchingPass{patch: func(patches []transform.Patches) {
 		patches[len(patches)-1]["lambda"] = map[string]any{"runtime": placeholderFor(kind, name, property)}
 	}}
 }
@@ -140,7 +140,7 @@ func TestASpecWithNoTransformIsLeftExactlyAsItWasGiven(t *testing.T) {
 }
 
 func TestAPatchLandsOnThePulumiResourceThatOcelConstructsForIt(t *testing.T) {
-	pass := patchingPass{patch: func(patches []transformkit.Patches) {
+	pass := patchingPass{patch: func(patches []transform.Patches) {
 		patches[len(patches)-1]["lambda"] = map[string]any{"memorySize": 2048}
 	}}
 
@@ -176,7 +176,7 @@ func TestAPatchOnAResourceThisProviderNeverConstructsIsRefused(t *testing.T) {
 	spec := specUnderTransform()
 	spec.App = nil
 	spec.Kind = provider.StackInfra
-	pass := patchingPass{patch: func(patches []transformkit.Patches) {
+	pass := patchingPass{patch: func(patches []transform.Patches) {
 		patches[1]["queue"] = map[string]any{"fifo": true}
 	}}
 
@@ -190,7 +190,7 @@ func TestABucketWithNoDeclaredOriginsCanStillBeGivenCORSByATransform(t *testing.
 	spec := specUnderTransform()
 	spec.App = nil
 	spec.Kind = provider.StackInfra
-	pass := patchingPass{patch: func(patches []transformkit.Patches) {
+	pass := patchingPass{patch: func(patches []transform.Patches) {
 		patches[1]["cors"] = map[string]any{"corsRules": []any{map[string]any{"allowedMethods": []any{"GET"}}}}
 	}}
 
@@ -329,7 +329,7 @@ func TestEveryOutputOffTheSameBindingResolvesItOnce(t *testing.T) {
 	spec := specUnderTransform()
 	spec.Bindings = bindings
 
-	pass := patchingPass{patch: func(patches []transformkit.Patches) {
+	pass := patchingPass{patch: func(patches []transform.Patches) {
 		placeholder := placeholderFor(customBindingType, "legacy", "runtime")
 		patches[len(patches)-1]["lambda"] = map[string]any{
 			"runtime":     placeholder,
