@@ -167,6 +167,71 @@ if [ -n "$held" ]; then
 fi`
 }
 
+const (
+	engineFloorMajor = 28
+	engineFloorMinor = 0
+)
+
+var engineFloor = strconv.Itoa(engineFloorMajor) + "." + strconv.Itoa(engineFloorMinor)
+
+func (r Reading) runnableEngine(named string) error {
+	command := providerkit.BootstrapCommand(r.Class)
+	held := r.Engine
+	switch held.Kind {
+	case "":
+		return nil
+	case engineSnap:
+		return providerkit.Refuse(providerkit.CodeNotReady,
+			"docker on %s is the snap package, which ocel does not run on\n"+
+				"Replace it with docker %s or later from docker's own packages; its containers do not carry over",
+			named, engineFloor)
+	case engineRootless:
+		return providerkit.Refuse(providerkit.CodeNotReady,
+			"docker on %s runs rootless, and ocel needs the system daemon behind %s\n"+
+				"Install docker %s or later as the system daemon and run `%s`",
+			named, dockerUnit, engineFloor, command)
+	case engineUnserved:
+		return providerkit.Refuse(providerkit.CodeNotReady,
+			"docker on %s is not run by %s, the system daemon ocel needs\n"+
+				"Install docker %s or later as the system daemon and run `%s`",
+			named, dockerUnit, engineFloor, command)
+	}
+	major, minor, read := held.release()
+	switch {
+	case !read:
+		return providerkit.Refuse(providerkit.CodeNotReady,
+			"docker on %s reports no version ocel can read\n"+
+				"Check that `docker version` answers as root and run `%s`",
+			named, command)
+	case major < engineFloorMajor || (major == engineFloorMajor && minor < engineFloorMinor):
+		return providerkit.Refuse(providerkit.CodeNotReady,
+			"docker %s on %s is older than %s, the oldest ocel runs on\n"+
+				"Upgrade docker to %s or later and run `%s`",
+			held.Version, named, engineFloor, engineFloor, command)
+	}
+	return nil
+}
+
+func (e Engine) release() (int, int, bool) {
+	majorSaid, rest, split := strings.Cut(e.Version, ".")
+	if !split {
+		return 0, 0, false
+	}
+	minorSaid := rest
+	if end := strings.IndexFunc(rest, func(r rune) bool { return r < '0' || r > '9' }); end >= 0 {
+		minorSaid = rest[:end]
+	}
+	major, err := strconv.Atoi(majorSaid)
+	if err != nil {
+		return 0, 0, false
+	}
+	minor, err := strconv.Atoi(minorSaid)
+	if err != nil {
+		return 0, 0, false
+	}
+	return major, minor, true
+}
+
 func readEngine(rendered string) Engine {
 	for line := range strings.Lines(rendered) {
 		columns := strings.Split(strings.TrimRight(line, "\r\n"), "\t")
