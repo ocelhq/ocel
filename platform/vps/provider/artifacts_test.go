@@ -29,7 +29,7 @@ func TestTheProviderSaysItKeepsNoArtifactStore(t *testing.T) {
 	}
 }
 
-func TestTheArtifactPortRunsTheKitsPortTier(t *testing.T) {
+func TestTheArtifactPortRunsTheConformancePortTier(t *testing.T) {
 	t.Parallel()
 
 	p := storeless(t)

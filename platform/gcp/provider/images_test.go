@@ -108,6 +108,6 @@ func TestARealDeployPushesToTheRegistryItResolved(t *testing.T) {
 		t.Fatalf("ImageRegistry() = %v, want a registry a real deploy pushes to", target)
 	}
 	if p.Hooks().OpenRegistryImages != nil {
-		t.Error("the provider sets an OpenRegistryImages hook, and Artifact Registry takes its push from the kit's own registry store")
+		t.Error("the provider sets an OpenRegistryImages hook, and Artifact Registry takes its push from providerserver's own registry store")
 	}
 }

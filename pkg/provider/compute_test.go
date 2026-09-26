@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/provider"
 )
 
-func TestTheWirePinAndTheKitNameTheSameComputes(t *testing.T) {
+func TestTheWireAndTheContractNameTheSameComputes(t *testing.T) {
 	field := (&contractv1.ManifestApp{}).ProtoReflect().Descriptor().Fields().ByName("compute")
 	if field == nil {
 		t.Fatal("ManifestApp has no compute field, so nothing pins the vocabulary on the wire")
@@ -20,7 +20,7 @@ func TestTheWirePinAndTheKitNameTheSameComputes(t *testing.T) {
 
 	rules, ok := proto.GetExtension(field.Options(), validate.E_Field).(*validate.FieldRules)
 	if !ok || rules.GetString() == nil {
-		t.Fatal("ManifestApp.compute has no buf.validate string rule, so the wire admits any compute the kit has never heard of")
+		t.Fatal("ManifestApp.compute has no buf.validate string rule, so the wire admits any compute the contract has never heard of")
 	}
 
 	pinned := slices.Sorted(slices.Values(rules.GetString().GetIn()))

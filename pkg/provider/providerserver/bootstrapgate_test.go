@@ -301,10 +301,10 @@ func TestEnsureReadyReportsAHealTheCredentialsCannotDo(t *testing.T) {
 	if !strings.Contains(progress.told(), "ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password") {
 		t.Errorf("EnsureReady() said %q, want the provider's own account of why the heal was denied", progress.told())
 	}
-	kit, _, _ := strings.Cut(refusedLine(t, progress), ": ")
+	written, _, _ := strings.Cut(refusedLine(t, progress), ": ")
 	for _, vendored := range []string{"account", "stack"} {
-		if strings.Contains(kit, vendored) {
-			t.Errorf("the kit wrote %q, and it speaks %q at a host that has no such thing", kit, vendored)
+		if strings.Contains(written, vendored) {
+			t.Errorf("providerserver wrote %q, and it speaks %q at a host that has no such thing", written, vendored)
 		}
 	}
 }
@@ -339,7 +339,7 @@ func TestADeniedHealWithNothingToSayStillReadsAsASentence(t *testing.T) {
 		t.Fatalf("EnsureReady() error = %v, want a refused heal to leave the run state", err)
 	}
 	if line := refusedLine(t, progress); strings.Contains(line, ": ") {
-		t.Errorf("the kit wrote %q, want no colon introducing a reason the provider never gave", line)
+		t.Errorf("providerserver wrote %q, want no colon introducing a reason the provider never gave", line)
 	}
 }
 

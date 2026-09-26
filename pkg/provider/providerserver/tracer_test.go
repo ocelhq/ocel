@@ -131,7 +131,7 @@ func TestEventTraceSpanUsesTheStageIDAsTheSpanID(t *testing.T) {
 		t.Errorf("SpanEvent times = %d/%d, want %d/%d", span.GetStartTimeUnixNano(), span.GetEndTimeUnixNano(), start.UnixNano(), end.UnixNano())
 	}
 	if got := attributeValue(span.GetAttributes(), progressv1.AttributeKey_ATTRIBUTE_KEY_APP); got != "web" {
-		t.Errorf("APP attribute = %q, want the kit's string key mapped onto the wire enum", got)
+		t.Errorf("APP attribute = %q, want the string key a provider sets mapped onto the wire enum", got)
 	}
 	if got := attributeValue(span.GetAttributes(), progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT); got != "3" {
 		t.Errorf("RESOURCE_COUNT attribute = %q", got)

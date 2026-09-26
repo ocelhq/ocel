@@ -33,7 +33,7 @@ func namesTheComputesItRuns(t *testing.T, suite Suite, providerClient contractv1
 		}
 		seen[compute] = true
 		if !provider.KnownCompute(compute) {
-			t.Errorf("PreflightResponse.computes names %q, which is no compute the kit knows: %v", compute, provider.ComputeNames(provider.Computes()))
+			t.Errorf("PreflightResponse.computes names %q, which is no compute the contract knows: %v", compute, provider.ComputeNames(provider.Computes()))
 		}
 	}
 

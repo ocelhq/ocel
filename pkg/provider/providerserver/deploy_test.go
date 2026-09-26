@@ -199,7 +199,7 @@ func TestDeployRefusesToPublishABlanketGrantWithoutAskingTheProvider(t *testing.
 		t.Fatalf("Deploy() = %v, want it refused: a provider that vets no grant still may not publish one over every resource", err)
 	}
 	if !strings.Contains(err.Error(), "every action") {
-		t.Fatalf("Deploy() = %v, want it to name the wildcard the kit refuses", err)
+		t.Fatalf("Deploy() = %v, want it to name the wildcard providerserver refuses", err)
 	}
 }
 
@@ -425,7 +425,7 @@ func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 		t.Errorf("Deploy() failed with %q, want it to name the property that is missing", err)
 	}
 	if entries, rerr := stackrecords.List(context.Background(), base.Records(), edge.ClassProduction, "shop"); rerr != nil || len(entries) != 0 {
-		t.Errorf("the refused deploy recorded %v, want nothing written for a binding the kit would not accept", entries)
+		t.Errorf("the refused deploy recorded %v, want nothing written for a binding providerserver would not accept", entries)
 	}
 }
 

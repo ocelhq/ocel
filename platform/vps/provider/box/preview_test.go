@@ -384,7 +384,7 @@ func TestRemovingAPreviewLeavesTheCatchAllInPlaceAndRendersItAsKeptWithAReason(t
 	}
 }
 
-func TestAProjectsOwnPreviewDomainClaimsTheHostnamesTheKitPrintsForIt(t *testing.T) {
+func TestAProjectsOwnPreviewDomainClaimsTheHostnamesTheEdgeContractNamesForIt(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
