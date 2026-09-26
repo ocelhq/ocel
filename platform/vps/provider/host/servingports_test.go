@@ -3,6 +3,9 @@ package host
 import (
 	"context"
 	"fmt"
+	"net"
+	"os"
+	"os/exec"
 	"slices"
 	"strings"
 	"testing"
@@ -159,5 +162,32 @@ func TestABootstrapBehindYourOwnProxyLeavesWhatHoldsTheServingPortsAlone(t *test
 	}
 	if slices.ContainsFunc(stood.commands(), func(command string) bool { return strings.HasPrefix(command, holdersCommand) }) {
 		t.Error("a bootstrap behind your own proxy asked what holds the serving ports, and it holds them by design")
+	}
+}
+
+func TestTheHoldersReadNamesTheProcessBehindASocketOnThisMachine(t *testing.T) {
+	t.Parallel()
+
+	listening, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { listening.Close() })
+	port := listening.Addr().(*net.TCPAddr).Port
+
+	said, err := exec.Command("/bin/sh", "-c", holdersCommand).Output()
+	if err != nil {
+		t.Fatalf("the holders read on this machine = %v", err)
+	}
+	held, err := listeners.Parse(strings.NewReader(string(said)))
+	if err != nil {
+		t.Fatalf("the holders read on this machine parses as %v, so the kernel, find and grep write something the parser never expected", err)
+	}
+	comm, err := os.ReadFile("/proc/self/comm")
+	if err != nil {
+		t.Skipf("this machine has no /proc to name a process from: %v", err)
+	}
+	if got, want := listeners.Holders(listeners.On(held, port)), []string{strings.TrimSpace(string(comm))}; !slices.Equal(got, want) {
+		t.Errorf("the socket this test holds on :%d is named %v, want %v", port, got, want)
 	}
 }
