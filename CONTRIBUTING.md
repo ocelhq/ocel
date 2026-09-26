@@ -49,13 +49,13 @@ rules 1–9 to `pkg/` and the vendors that implement the provider contract.
 
 ## Comments
 
-The code is the documentation. Prose may name what a human types, never what the code
-contains.
+The code is the documentation: read it for context, and don't restate it. Prose may name
+what a human types, never what the code contains.
 
-Comments follow [Signal](.greptile/rules.md#signal). Doc-comments belong only under
-`packages/`, `sdk/`, `python/` and `crates/`, however public another directory's API looks.
-A comment anywhere else is debt: never match or extend it, and delete it when you change
-the code near it.
+Comments follow [Signal](.greptile/rules.md#signal). Its doc-comment exception covers the
+four paths it names and no other, however public another directory's API looks. A comment
+outside Signal's exceptions is debt: never match or extend it, and delete it when you
+change the code near it.
 
 ## Testing
 
@@ -79,8 +79,8 @@ a security gap), not a style preference. Pick by measure, in order:
    the fix itself, tests excluded): fix it now, in its own commit.
 3. Anything larger: before the task ends, file a GitHub issue unless one exists, saying
    what you observed, where (`file:line`) and why it is wrong, and link it from the pull
-   request. A fix begun under 1 or 2 that grows past 50 lines is reverted and filed
-   under 3.
+   request or your report. A fix begun under 1 or 2 that grows past 50 lines is reverted
+   and filed under 3.
 
 A name that breaks the naming rules is an issue, not a style preference. In a file you
 already change, rename it; elsewhere the ≤50-line rule applies; beyond that, file it.
