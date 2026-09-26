@@ -27,7 +27,7 @@ func edgeBundleKeyFor(app, deploymentID string) string {
 }
 
 func TestAppEdgeBundleKey(t *testing.T) {
-	coord := storageCoordinate("prod", "proj", "web", releaseOf(deployedAs(testDeploymentID)))
+	coord := storageCoordinate("prod", "proj", "web", deployedAs(testDeploymentID).Release())
 	got := appEdgeBundleKey(coord)
 	want := edgeBundleKeyFor("web", testDeploymentID)
 	if got != want {
@@ -36,7 +36,7 @@ func TestAppEdgeBundleKey(t *testing.T) {
 	if !strings.HasPrefix(got, appEdgePrefix(coord)+"/") {
 		t.Errorf("key %q must live under the release's own prune-able prefix", got)
 	}
-	if other := appEdgeBundleKey(storageCoordinate("prod", "proj", "web", releaseOf(deployedAs("d2")))); other == got {
+	if other := appEdgeBundleKey(storageCoordinate("prod", "proj", "web", deployedAs("d2").Release())); other == got {
 		t.Error("two releases of one app must not share a bundle key")
 	}
 }

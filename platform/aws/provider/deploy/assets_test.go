@@ -61,7 +61,7 @@ func imageConfigKeyFor(app, deploymentID string) string {
 
 func TestAppAssetPrefix(t *testing.T) {
 	t.Parallel()
-	got := appAssetPrefix(storageCoordinate("prod", "proj", "web", releaseOf(deployedAs(testDeploymentID))))
+	got := appAssetPrefix(storageCoordinate("prod", "proj", "web", deployedAs(testDeploymentID).Release()))
 	want := assetPrefixFor("web", testDeploymentID)
 	if got != want {
 		t.Errorf("appAssetPrefix = %q, want %q", got, want)

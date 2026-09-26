@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 )
 
@@ -49,14 +50,14 @@ func deploymentIDFor(label string) string {
 	return hex.EncodeToString(sum[:16])
 }
 
-func deployedAs(deploymentID string) Identity { return fingerprinted(deploymentID, "") }
+func deployedAs(deploymentID string) provider.Build { return fingerprinted(deploymentID, "") }
 
-func fingerprinted(deploymentID, values string) Identity {
+func fingerprinted(deploymentID, values string) provider.Build {
 	return deployedInto(stackrecords.ProductionEnv, deploymentID, values)
 }
 
-func deployedInto(environment, deploymentID, values string) Identity {
-	id, err := NewIdentity(deploymentIDFor(deploymentID), environment, values)
+func deployedInto(environment, deploymentID, values string) provider.Build {
+	id, err := provider.NewBuild(deploymentIDFor(deploymentID), environment, values)
 	if err != nil {
 		panic(err)
 	}

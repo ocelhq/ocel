@@ -172,8 +172,6 @@ func overrideEnvironment(cfg Config) string {
 	return cfg.Env
 }
 
-const fingerprintValuesHexLen = 12
-
 func fingerprintValues(values map[string]string) string {
 	if len(values) == 0 {
 		return ""
@@ -186,10 +184,10 @@ func fingerprintValues(values map[string]string) string {
 
 	h := sha256.New()
 	for _, key := range keys {
-		writeLenPrefixed(h, []byte(key))
-		writeLenPrefixed(h, []byte(values[key]))
+		provider.WriteLenPrefixed(h, []byte(key))
+		provider.WriteLenPrefixed(h, []byte(values[key]))
 	}
-	return hex.EncodeToString(h.Sum(nil))[:fingerprintValuesHexLen]
+	return hex.EncodeToString(h.Sum(nil))[:provider.FingerprintHexLen]
 }
 
 var runtimeOwnedPrefixes = []string{"AWS_", "LAMBDA_"}

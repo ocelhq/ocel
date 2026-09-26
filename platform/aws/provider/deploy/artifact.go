@@ -3,7 +3,6 @@ package deploy
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -24,13 +23,6 @@ var uploadSlots = make(chan struct{}, uploadConcurrency)
 func takeUploadSlot() func() {
 	uploadSlots <- struct{}{}
 	return func() { <-uploadSlots }
-}
-
-func writeLenPrefixed(h io.Writer, b []byte) {
-	var size [8]byte
-	binary.BigEndian.PutUint64(size[:], uint64(len(b)))
-	_, _ = h.Write(size[:])
-	_, _ = h.Write(b)
 }
 
 func copyFileInto(w io.Writer, path string) error {
