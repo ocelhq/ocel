@@ -8,7 +8,7 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	kitledger "github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -25,11 +25,11 @@ var _ edge.EdgeStack = (*stack)(nil)
 
 func (s *stack) State() edge.StackState { return s.state }
 
-func (s *stack) ledger() *kitledger.Ledger {
-	return kitledger.New(s.e.records, s.state.Class, s.state.Slug)
+func (s *stack) openLedger() *ledger.Ledger {
+	return ledger.New(s.e.records, s.state.Class, s.state.Slug)
 }
 
-func (s *stack) Ledger() edge.Ledger { return s.ledger() }
+func (s *stack) Ledger() edge.Ledger { return s.openLedger() }
 
 func (s *stack) surface() string { return Surface(s.state.Slug, s.state.Class) }
 
@@ -61,7 +61,7 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 			ready = append(ready, release)
 		}
 	}
-	if err := s.ledger().Promote(ctx, promotion, pointer, progress); err != nil {
+	if err := s.openLedger().Promote(ctx, promotion, pointer, progress); err != nil {
 		return err
 	}
 	err := s.serve(ctx, pointer, promotion, ready, progress)
@@ -69,7 +69,7 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	if !errors.As(err, &unserved) {
 		return err
 	}
-	if undo := s.ledger().Unpromote(ctx, promotion.PromotionID, pointer); undo != nil {
+	if undo := s.openLedger().Unpromote(ctx, promotion.PromotionID, pointer); undo != nil {
 		return errors.Join(err, fmt.Errorf("the ledger still points %s at %s, which this box never served: %w",
 			named(pointer), promotion.PromotionID, undo))
 	}
@@ -104,7 +104,7 @@ func (s *stack) serve(ctx context.Context, pointer string, promotion edge.Promot
 }
 
 func (s *stack) stillActive(ctx context.Context, pointer, promotionID string) error {
-	active, err := s.ledger().ActivePromotionID(ctx, pointer)
+	active, err := s.openLedger().ActivePromotionID(ctx, pointer)
 	if err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ func activeOr(active string) string {
 
 func (s *stack) readyRelease(ctx context.Context, app, pointer string, promotion edge.Promotion) (promotable, bool, error) {
 	identity := promotion.Builds[app]
-	record, found, err := s.ledger().Record(ctx, app, identity)
+	record, found, err := s.openLedger().Record(ctx, app, identity)
 	if err != nil {
 		return promotable{}, false, err
 	}
@@ -233,7 +233,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, progress edge
 	if err := s.e.machine.UnroutePointer(ctx, s.surface(), named(pointer)); err != nil {
 		return edge.PruneResult{}, err
 	}
-	return s.ledger().RemovePointer(ctx, pointer)
+	return s.openLedger().RemovePointer(ctx, pointer)
 }
 
 func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) error {
@@ -322,7 +322,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 	if err := s.e.machine.ForgetNetwork(ctx, s.state.Class, s.state.Slug); err != nil {
 		errs = append(errs, err)
 	}
-	if err := s.ledger().Destroy(ctx); err != nil {
+	if err := s.openLedger().Destroy(ctx); err != nil {
 		errs = append(errs, err)
 	}
 	return errors.Join(errs...)

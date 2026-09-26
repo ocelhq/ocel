@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	kitledger "github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/pkg/stackrecords"
@@ -176,7 +176,7 @@ func (e *Edge) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.St
 	if err := s.adopt(front); err != nil {
 		return nil, err
 	}
-	if err := s.ledger().EnsureSchema(ctx); err != nil {
+	if err := s.openLedger().EnsureSchema(ctx); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -282,8 +282,8 @@ func (e *Edge) SharedPreviewRemoval() edge.PlanGroup {
 	}
 }
 
-func ledgerFor(store records.Store, class edge.Class, slug string) *kitledger.Ledger {
-	return kitledger.New(store, class, slug)
+func ledgerFor(store records.Store, class edge.Class, slug string) *ledger.Ledger {
+	return ledger.New(store, class, slug)
 }
 
 var (

@@ -26,7 +26,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
-	kitledger "github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -884,7 +884,7 @@ func firstLineOf(rendered, fragment string) string {
 
 func (j journey) promotionOf(t *testing.T, ref string) string {
 	t.Helper()
-	promotions, err := kitledger.New(j.box(t).Records(), edge.ClassProduction, lifecycleSlug).
+	promotions, err := ledger.New(j.box(t).Records(), edge.ClassProduction, lifecycleSlug).
 		History(context.Background(), edge.DefaultPointer)
 	if err != nil {
 		t.Fatalf("read the promotions this box records for %s: %v", lifecycleSlug, err)

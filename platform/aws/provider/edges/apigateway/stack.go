@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/apigateway"
 	agtypes "github.com/aws/aws-sdk-go-v2/service/apigateway/types"
 
-	kitledger "github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -55,7 +55,7 @@ func (s *stack) spec(pointer string) apiSpec {
 	}
 }
 
-func (s *stack) ledger(c Clients) *kitledger.Ledger {
+func (s *stack) openLedger(c Clients) *ledger.Ledger {
 	return awsports.Ledger(c.Dynamo, awsports.Table(s.own.StateTable), s.class(), s.slug())
 }
 
@@ -63,44 +63,44 @@ type lazyLedger struct{ s *stack }
 
 var _ edge.Ledger = (*lazyLedger)(nil)
 
-func (l *lazyLedger) resolve(ctx context.Context) (*kitledger.Ledger, error) {
+func (l *lazyLedger) resolve(ctx context.Context) (*ledger.Ledger, error) {
 	c, err := l.s.p.clientsFor(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return l.s.ledger(c), nil
+	return l.s.openLedger(c), nil
 }
 
 func (l *lazyLedger) SchemaVersion(ctx context.Context) (int, error) {
-	ledger, err := l.resolve(ctx)
+	resolved, err := l.resolve(ctx)
 	if err != nil {
 		return 0, err
 	}
-	return ledger.SchemaVersion(ctx)
+	return resolved.SchemaVersion(ctx)
 }
 
 func (l *lazyLedger) PutStaged(ctx context.Context, record edge.DeploymentRecord) error {
-	ledger, err := l.resolve(ctx)
+	resolved, err := l.resolve(ctx)
 	if err != nil {
 		return err
 	}
-	return ledger.PutStaged(ctx, record)
+	return resolved.PutStaged(ctx, record)
 }
 
 func (l *lazyLedger) History(ctx context.Context, pointer string) ([]edge.HistoryEntry, error) {
-	ledger, err := l.resolve(ctx)
+	resolved, err := l.resolve(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return ledger.History(ctx, pointer)
+	return resolved.History(ctx, pointer)
 }
 
 func (l *lazyLedger) Prune(ctx context.Context, keepN int, pointer string) (edge.PruneResult, error) {
-	ledger, err := l.resolve(ctx)
+	resolved, err := l.resolve(ctx)
 	if err != nil {
 		return edge.PruneResult{}, err
 	}
-	return ledger.Prune(ctx, keepN, pointer)
+	return resolved.Prune(ctx, keepN, pointer)
 }
 
 func (s *stack) reconcileAPI(ctx context.Context, c Clients, pointer string) (string, error) {
@@ -178,7 +178,7 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	if err := s.routePreview(ctx, c, pointer, id); err != nil {
 		return err
 	}
-	if err := s.ledger(c).Promote(ctx, promotion, pointer, progress); err != nil {
+	if err := s.openLedger(c).Promote(ctx, promotion, pointer, progress); err != nil {
 		return errors.Join(err, s.restage(ctx, c, pointer, id))
 	}
 	return nil
@@ -217,7 +217,7 @@ func (s *stack) restage(ctx context.Context, c Clients, pointer, id string) erro
 }
 
 func (s *stack) activePromotion(ctx context.Context, c Clients, pointer string) (edge.Promotion, bool, error) {
-	history, err := s.ledger(c).History(ctx, pointer)
+	history, err := s.openLedger(c).History(ctx, pointer)
 	if err != nil {
 		return edge.Promotion{}, false, err
 	}
@@ -256,7 +256,7 @@ func (s *stack) stagePatch(ctx context.Context, c Clients, promotion edge.Promot
 
 	app := apps[0]
 	identity := promotion.Builds[app]
-	record, found, err := s.ledger(c).Record(ctx, app, identity)
+	record, found, err := s.openLedger(c).Record(ctx, app, identity)
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +299,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progre
 			}
 		}
 	}
-	return s.ledger(c).RemovePointer(ctx, pointer)
+	return s.openLedger(c).RemovePointer(ctx, pointer)
 }
 
 func (s *stack) previewHost(pointer string) (string, string) {
@@ -477,7 +477,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 			unbound = false
 		}
 	}
-	ledger := s.ledger(c)
+	ledger := s.openLedger(c)
 	pointers, err := ledger.Pointers(ctx)
 	if err != nil {
 		return errors.Join(append(errs, err)...)

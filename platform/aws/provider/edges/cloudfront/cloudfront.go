@@ -299,7 +299,7 @@ func (p *cloudFront) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 	}
 
 	s := &stack{p: p, state: next, own: own}
-	if err := s.ledger(c).EnsureSchema(ctx); err != nil {
+	if err := s.openLedger(c).EnsureSchema(ctx); err != nil {
 		return nil, err
 	}
 	if spec.PruneOnly {

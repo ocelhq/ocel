@@ -5,13 +5,13 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/secretmanager/v1"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
-	kitpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
+	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
@@ -26,7 +26,7 @@ type albProgram struct {
 	project string
 }
 
-func (a albProgram) Run(ctx *pulumi.Context, _ provider.StackSpec) error {
+func (a albProgram) Run(ctx *sdk.Context, _ provider.StackSpec) error {
 	return a.run(ctx, a.project)
 }
 
@@ -62,7 +62,7 @@ func (s albStacks) Outputs(ctx context.Context, target alb.Target) (map[string]s
 	return outputsOf(ctx, automation, spec.Ref)
 }
 
-func outputsOf(ctx context.Context, automation *kitpulumi.Automation, ref provider.StackRef) (map[string]string, error) {
+func outputsOf(ctx context.Context, automation *pulumi.Automation, ref provider.StackRef) (map[string]string, error) {
 	outputs, err := automation.Outputs(ctx, ref, edge.DiscardProgress())
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func (s albStacks) opened(
 	ctx context.Context,
 	target alb.Target,
 	program alb.Program,
-) (*kitpulumi.Automation, provider.StackSpec, error) {
+) (*pulumi.Automation, provider.StackSpec, error) {
 	clients, err := s.p.openClients(ctx)
 	if err != nil {
 		return nil, provider.StackSpec{}, err
@@ -90,7 +90,7 @@ func (s albStacks) opened(
 		return nil, provider.StackSpec{}, err
 	}
 	config, spec := s.config(clients, target, passphrase, program)
-	return kitpulumi.New(config), spec, nil
+	return pulumi.New(config), spec, nil
 }
 
 func (s albStacks) config(
@@ -98,10 +98,10 @@ func (s albStacks) config(
 	target alb.Target,
 	passphrase string,
 	program alb.Program,
-) (kitpulumi.Config, provider.StackSpec) {
+) (pulumi.Config, provider.StackSpec) {
 	project := naming.PulumiProject(target.Prefix())
-	config := kitpulumi.Config{
-		Backend: kitpulumi.Backend{
+	config := pulumi.Config{
+		Backend: pulumi.Backend{
 			URL:        naming.StateBackendURL(cloudStorageScheme, clients.StateBucket(target.Class), project),
 			Passphrase: passphrase,
 			Project:    project,
@@ -123,7 +123,7 @@ func (s albStacks) config(
 	}
 }
 
-func refreshesTheFront(provider.StackRef, kitpulumi.Operation) bool { return true }
+func refreshesTheFront(provider.StackRef, pulumi.Operation) bool { return true }
 
 func (s albStacks) passphrase(ctx context.Context, clients *clients, class edge.Class) (string, error) {
 	secrets, err := clients.Secrets()

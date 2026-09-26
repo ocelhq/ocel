@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
 	"github.com/ocelhq/ocel/pkg/provider/conformance"
-	kitpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
+	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -73,9 +73,9 @@ func (e *mockedEngine) stacks() []string {
 	return slices.Clone(e.ran)
 }
 
-var _ kitpulumi.Engine = (*mockedEngine)(nil)
+var _ pulumi.Engine = (*mockedEngine)(nil)
 
-func (e *mockedEngine) Up(_ context.Context, setup kitpulumi.WorkspaceSpec, _ edge.Progress) (auto.OutputMap, error) {
+func (e *mockedEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ edge.Progress) (auto.OutputMap, error) {
 	var monitor sdk.MockResourceMonitor = standInCloud{}
 	if e.mocks != nil {
 		monitor = e.mocks
@@ -95,8 +95,8 @@ func (e *mockedEngine) Up(_ context.Context, setup kitpulumi.WorkspaceSpec, _ ed
 	return e.outputs, nil
 }
 
-func (e *mockedEngine) Preview(_ context.Context, setup kitpulumi.WorkspaceSpec, op kitpulumi.Operation, _ edge.Progress) ([]provider.Change, error) {
-	if op == kitpulumi.OperationDestroy {
+func (e *mockedEngine) Preview(_ context.Context, setup pulumi.WorkspaceSpec, op pulumi.Operation, _ edge.Progress) ([]provider.Change, error) {
+	if op == pulumi.OperationDestroy {
 		rows := make([]provider.Change, 0, len(e.previewed))
 		for _, row := range e.previewed {
 			row.Action = provider.ActionDelete
@@ -136,7 +136,7 @@ func (p *previewing) Call(args sdk.MockCallArgs) (resource.PropertyMap, error) {
 	return p.inner.Call(args)
 }
 
-func (e *mockedEngine) Destroy(_ context.Context, setup kitpulumi.WorkspaceSpec, _ edge.Progress) error {
+func (e *mockedEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ edge.Progress) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.torndown = append(e.torndown, setup.Stack)
@@ -149,7 +149,7 @@ func (e *mockedEngine) torn() []string {
 	return slices.Clone(e.torndown)
 }
 
-func (e *mockedEngine) Outputs(context.Context, kitpulumi.WorkspaceSpec) (auto.OutputMap, error) {
+func (e *mockedEngine) Outputs(context.Context, pulumi.WorkspaceSpec) (auto.OutputMap, error) {
 	return e.outputs, nil
 }
 

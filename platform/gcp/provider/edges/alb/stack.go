@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	kitledger "github.com/ocelhq/ocel/pkg/provider/ledger"
+	"github.com/ocelhq/ocel/pkg/provider/ledger"
 	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -25,14 +25,14 @@ type stack struct {
 
 func (s *stack) State() edge.StackState { return s.state }
 
-func (s *stack) ledger() *kitledger.Ledger {
+func (s *stack) openLedger() *ledger.Ledger {
 	return ledgerFor(s.e.deps.Records, s.state.Class, s.state.Slug)
 }
 
-func (s *stack) Ledger() edge.Ledger { return s.ledger() }
+func (s *stack) Ledger() edge.Ledger { return s.openLedger() }
 
 func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
-	if err := pin.Promote(ctx, s.ledger(), s.e.deps.Pins, promotion, pointer, progress); err != nil {
+	if err := pin.Promote(ctx, s.openLedger(), s.e.deps.Pins, promotion, pointer, progress); err != nil {
 		return err
 	}
 	return s.released(ctx, promotion, progress)
@@ -85,7 +85,7 @@ func (s *stack) released(ctx context.Context, promotion edge.Promotion, progress
 }
 
 func (s *stack) RemovePointer(ctx context.Context, pointer string, _ edge.Progress) (edge.PruneResult, error) {
-	return s.ledger().RemovePointer(ctx, pointer)
+	return s.openLedger().RemovePointer(ctx, pointer)
 }
 
 func (s *stack) adopt(front Front) error {
@@ -209,7 +209,7 @@ func (s *stack) serving(ctx context.Context, app string) (string, error) {
 	if app == "" {
 		return "", nil
 	}
-	history, err := s.ledger().History(ctx, "")
+	history, err := s.openLedger().History(ctx, "")
 	if err != nil {
 		return "", err
 	}
@@ -221,7 +221,7 @@ func (s *stack) serving(ctx context.Context, app string) (string, error) {
 	if !released {
 		return "", nil
 	}
-	record, staged, err := s.ledger().Record(ctx, app, identity)
+	record, staged, err := s.openLedger().Record(ctx, app, identity)
 	if err != nil || !staged {
 		return "", err
 	}
@@ -300,7 +300,7 @@ func (s *stack) Destroy(ctx context.Context) error {
 			return err
 		}
 	}
-	if err := s.ledger().Destroy(ctx); err != nil {
+	if err := s.openLedger().Destroy(ctx); err != nil {
 		return err
 	}
 	s.recorded.Hosts = nil

@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/provider"
-	kitpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
+	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -17,24 +17,24 @@ type fakeEngine struct {
 	record func(string)
 }
 
-var _ kitpulumi.Engine = (*fakeEngine)(nil)
+var _ pulumi.Engine = (*fakeEngine)(nil)
 
-func (f *fakeEngine) Preview(_ context.Context, setup kitpulumi.WorkspaceSpec, op kitpulumi.Operation, _ edge.Progress) ([]provider.Change, error) {
+func (f *fakeEngine) Preview(_ context.Context, setup pulumi.WorkspaceSpec, op pulumi.Operation, _ edge.Progress) ([]provider.Change, error) {
 	f.record("preview-" + string(op) + " " + setup.Stack)
 	return nil, nil
 }
 
-func (f *fakeEngine) Up(_ context.Context, setup kitpulumi.WorkspaceSpec, _ edge.Progress) (auto.OutputMap, error) {
+func (f *fakeEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ edge.Progress) (auto.OutputMap, error) {
 	f.record("up-stack " + setup.Stack)
 	return auto.OutputMap{}, nil
 }
 
-func (f *fakeEngine) Destroy(_ context.Context, setup kitpulumi.WorkspaceSpec, _ edge.Progress) error {
+func (f *fakeEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ edge.Progress) error {
 	f.record("destroy-stack " + setup.Stack)
 	return nil
 }
 
-func (f *fakeEngine) Outputs(context.Context, kitpulumi.WorkspaceSpec) (auto.OutputMap, error) {
+func (f *fakeEngine) Outputs(context.Context, pulumi.WorkspaceSpec) (auto.OutputMap, error) {
 	return auto.OutputMap{}, nil
 }
 
@@ -48,7 +48,7 @@ func (s *sweepingClock) Sweep(_ context.Context, project string, stack naming.St
 	return s.err
 }
 
-func tearingDown(t *testing.T, clock TagClock, engine kitpulumi.Engine) *Stacks {
+func tearingDown(t *testing.T, clock TagClock, engine pulumi.Engine) *Stacks {
 	t.Helper()
 	cfg := Config{
 		PulumiProject: "ocel",

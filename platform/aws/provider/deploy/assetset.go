@@ -13,7 +13,7 @@ import (
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/provider"
-	kitpulumi "github.com/ocelhq/ocel/pkg/provider/pulumi"
+	"github.com/ocelhq/ocel/pkg/provider/pulumi"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -156,15 +156,15 @@ func (r *release) assetSets(spec provider.StackSpec, app, framework string, bund
 	return sets, delivery, nil
 }
 
-func assetSetPlugin(pending *pendingSets) (kitpulumi.Plugin, error) {
+func assetSetPlugin(pending *pendingSets) (pulumi.Plugin, error) {
 	built, err := infer.NewProviderBuilder().
 		WithNamespace(assetSetPackage).
 		WithResources(infer.Resource(&assetSetResource{pending: pending})).
 		Build()
 	if err != nil {
-		return kitpulumi.Plugin{}, fmt.Errorf("build the asset-set plugin the engine pushes uploads through: %w", err)
+		return pulumi.Plugin{}, fmt.Errorf("build the asset-set plugin the engine pushes uploads through: %w", err)
 	}
-	return kitpulumi.Plugin{Package: assetSetPackage, Version: assetSetVersion, Provider: built}, nil
+	return pulumi.Plugin{Package: assetSetPackage, Version: assetSetVersion, Provider: built}, nil
 }
 
 type assetSetState struct {
