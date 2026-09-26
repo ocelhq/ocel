@@ -5,7 +5,7 @@ import (
 	"errors"
 
 	"connectrpc.com/connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -14,12 +14,12 @@ type connector struct{}
 var errNoConnector = connect.NewError(connect.CodeUnimplemented,
 	errors.New("this provider puts no connector on its targets; the console reaches a target of this kind through the provider itself"))
 
-func (connector) Target(context.Context) (providerkit.ConnectorTarget, error) {
-	return providerkit.ConnectorTarget{}, errNoConnector
+func (connector) Target(context.Context) (provider.ConnectorTarget, error) {
+	return provider.ConnectorTarget{}, errNoConnector
 }
 
-func (connector) Install(context.Context, providerkit.ConnectorInstall, edge.Progress) (providerkit.ConnectorAddress, error) {
-	return providerkit.ConnectorAddress{}, errNoConnector
+func (connector) Install(context.Context, provider.ConnectorInstall, edge.Progress) (provider.ConnectorAddress, error) {
+	return provider.ConnectorAddress{}, errNoConnector
 }
 
 func (connector) Remove(context.Context, edge.Progress) error { return errNoConnector }

@@ -8,22 +8,22 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type occupied struct{ *fake.Provider }
 
-func (o occupied) Hooks() providerkit.Hooks {
+func (o occupied) Hooks() provider.Hooks {
 	hooks := o.Provider.Hooks()
 	hooks.InspectStack = o.InspectStack
 	return hooks
 }
 
-func (occupied) InspectStack(context.Context, providerkit.StackRef) (providerkit.StackState, error) {
-	return providerkit.StackState{Present: true}, nil
+func (occupied) InspectStack(context.Context, provider.StackRef) (provider.StackState, error) {
+	return provider.StackState{Present: true}, nil
 }
 
 func TestDeployRefusesToAdoptAStackItHasNoRecordOf(t *testing.T) {
@@ -66,13 +66,13 @@ type embedding struct {
 	embedded []string
 }
 
-func (e *embedding) Hooks() providerkit.Hooks {
+func (e *embedding) Hooks() provider.Hooks {
 	hooks := e.Provider.Hooks()
 	hooks.EmbedCode = e.EmbedCode
 	return hooks
 }
 
-func (e *embedding) EmbedCode(_ context.Context, function string, ref providerkit.ArtifactRef, _ edge.Progress) error {
+func (e *embedding) EmbedCode(_ context.Context, function string, ref provider.ArtifactRef, _ edge.Progress) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	e.embedded = append(e.embedded, function+" "+ref.Key)
@@ -86,7 +86,7 @@ type warming struct {
 	warmed []string
 }
 
-func (w *warming) Hooks() providerkit.Hooks {
+func (w *warming) Hooks() provider.Hooks {
 	hooks := w.Provider.Hooks()
 	hooks.WarmFunctions = w.WarmFunctions
 	return hooks
@@ -135,17 +135,17 @@ type preflighting struct {
 	uploaded []string
 }
 
-func (p *preflighting) Hooks() providerkit.Hooks {
+func (p *preflighting) Hooks() provider.Hooks {
 	hooks := p.Provider.Hooks()
 	hooks.PreflightDeploy = p.PreflightDeploy
 	return hooks
 }
 
-func (p *preflighting) PreflightDeploy(ctx context.Context, pre providerkit.DeployPreflight) error {
+func (p *preflighting) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
 	return p.Provider.PreflightDeploy(ctx, pre)
 }
 
-func (p *preflighting) Artifacts() providerkit.ArtifactStore {
+func (p *preflighting) Artifacts() provider.ArtifactStore {
 	return watchedArtifacts{ArtifactStore: p.Provider.Artifacts(), on: p}
 }
 
@@ -156,11 +156,11 @@ func (p *preflighting) uploads() []string {
 }
 
 type watchedArtifacts struct {
-	providerkit.ArtifactStore
+	provider.ArtifactStore
 	on *preflighting
 }
 
-func (w watchedArtifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io.Reader) error {
+func (w watchedArtifacts) Put(ctx context.Context, ref provider.ArtifactRef, body io.Reader) error {
 	w.on.mu.Lock()
 	w.on.uploaded = append(w.on.uploaded, ref.Key)
 	w.on.mu.Unlock()

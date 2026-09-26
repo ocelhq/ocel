@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -227,9 +228,9 @@ func TestPreflightRefusesABootstrapThisBuildCannotRead(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	client, provider := contractServed(t, "1.2.3")
+	client, p := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
-	provider.FakeBootstrap().AtSchema(providerkit.BootstrapSchema + 1)
+	p.FakeBootstrap().AtSchema(provider.BootstrapSchema + 1)
 
 	_, err := client.Preflight(ctx, &contractv1.PreflightRequest{RequiredTier: environmentv1.Tier_TIER_PRODUCTION})
 	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {

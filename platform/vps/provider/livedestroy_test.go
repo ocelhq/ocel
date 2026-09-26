@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -84,7 +84,7 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	vm.runs(t, workload)
@@ -104,7 +104,7 @@ func TestLiveDestroyTakesTheStampLastAndLeavesTheEngineAndTheTrustStore(t *testi
 			t.Errorf("PlanRemove() takes %s with no reason, and the typed confirmation must name what is unrecoverable before a user types", bearing)
 		}
 	}
-	if kept := planFor(leaving, "docker"); kept.Action != providerkit.ActionKeep {
+	if kept := planFor(leaving, "docker"); kept.Action != provider.ActionKeep {
 		t.Errorf("PlanRemove() plans the engine as %q, want it kept: removing ocel is not removing what the host runs", kept.Action)
 	}
 
@@ -173,7 +173,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 		t.Fatal(err)
 	}
 	for _, class := range []edge.Class{production, preview} {
-		if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 			t.Fatalf("Apply(%s) = %v", class, err)
 		}
 	}
@@ -190,11 +190,11 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 	}
 	beside := onlyGroup(t, first)
 	for _, singleton := range append(slices.Clone(singletons), deployLogin, sealGrant(preview)) {
-		if planned := planFor(beside, singleton); planned.Action == providerkit.ActionDelete {
+		if planned := planFor(beside, singleton); planned.Action == provider.ActionDelete {
 			t.Errorf("destroying %s plans %s as %q while %s still stands on this host", production, singleton, planned.Action, preview)
 		}
 	}
-	if planned := planFor(beside, sealGrant(production)); planned.Action != providerkit.ActionDelete {
+	if planned := planFor(beside, sealGrant(production)); planned.Action != provider.ActionDelete {
 		t.Errorf("destroying %s plans %s as %q, and the grant that opens this class's values is this class's to revoke", production, sealGrant(production), planned.Action)
 	}
 
@@ -240,7 +240,7 @@ func TestLiveTheSingletonsStandWhileASiblingClassDoesAndGoWithTheLast(t *testing
 	}
 	alone := onlyGroup(t, last)
 	for _, singleton := range append(slices.Clone(singletons), deployLogin, sealGrant(preview)) {
-		if planned := planFor(alone, singleton); planned.Action != providerkit.ActionDelete {
+		if planned := planFor(alone, singleton); planned.Action != provider.ActionDelete {
 			t.Errorf("destroying the last class plans %s as %q, and a singleton nothing uses is one nobody revokes", singleton, planned.Action)
 		}
 	}

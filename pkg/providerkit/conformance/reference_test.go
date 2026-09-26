@@ -9,13 +9,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func TestReferenceProvider(t *testing.T) {
 	conformance.Run(t, conformance.Suite{
 		New:     fake.New,
 		Spec:    providerkit.Spec{Version: "test", New: fake.New},
-		Options: providerkit.Options{"region": "nowhere"},
+		Options: provider.Options{"region": "nowhere"},
 		Binary:  buildFakeProvider(t),
 		Certificates: &conformance.CertificateChecks{
 			Kind: fake.KindRelay,

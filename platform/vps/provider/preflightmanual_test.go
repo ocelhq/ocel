@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -40,11 +40,11 @@ func preflightingByHand(machine *scripted) error {
 	if err != nil {
 		return err
 	}
-	return p.PreflightDeploy(context.Background(), providerkit.DeployPreflight{
-		Plan: providerkit.DeployPlan{
+	return p.PreflightDeploy(context.Background(), provider.DeployPreflight{
+		Plan: provider.DeployPlan{
 			Slug:  "shop",
 			Class: edge.ClassProduction,
-			Apps:  []providerkit.AppEntry{{App: "web", Stack: stack, Image: deployedRef}},
+			Apps:  []provider.AppEntry{{App: "web", Stack: stack, Image: deployedRef}},
 		},
 	})
 }

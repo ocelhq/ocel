@@ -5,17 +5,18 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func TestRevisionsAreKeyedToTheAppTheRecordIsFor(t *testing.T) {
 	t.Parallel()
 
-	result := providerkit.StackResult{
-		Containers: []providerkit.AppContainer{
+	result := provider.StackResult{
+		Containers: []provider.AppContainer{
 			{Name: "web", Physical: "ocel-shop-web", Revision: "ocel-shop-web-00001"},
 			{Name: "admin", Physical: "ocel-shop-admin", Revision: "ocel-shop-admin-00001"},
 		},
-		Functions: []providerkit.Function{
+		Functions: []provider.Function{
 			{Name: "web-server", Physical: "ocel-shop-web-server", Revision: "ocel-shop-web-server-00001"},
 			{Name: "admin-server", Physical: "ocel-shop-admin-server", Revision: "ocel-shop-admin-server-00001"},
 		},
@@ -34,8 +35,8 @@ func TestRevisionsAreKeyedToTheAppTheRecordIsFor(t *testing.T) {
 func TestAnAppThatStoodUpNoRevisionRecordsNone(t *testing.T) {
 	t.Parallel()
 
-	result := providerkit.StackResult{
-		Containers: []providerkit.AppContainer{{Name: "web", Physical: "ocel-shop-web"}},
+	result := provider.StackResult{
+		Containers: []provider.AppContainer{{Name: "web", Physical: "ocel-shop-web"}},
 	}
 	if got := providerkit.RevisionsOf(result, "web", nil); got != nil {
 		t.Errorf("RevisionsOf(web) = %v, want nothing: a promotion refuses a record naming no revision rather than pinning an empty one", got)

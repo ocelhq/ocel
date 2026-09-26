@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -17,7 +18,7 @@ const containerTestImage = "ocel/shop/web@sha256:0123456789abcdef0123456789abcde
 
 func containerDeployRequest(probe string) *contractv1.DeployRequest {
 	req := deployRequest()
-	req.Manifest.Apps[0].Compute = string(providerkit.ComputeContainer)
+	req.Manifest.Apps[0].Compute = string(provider.ComputeContainer)
 	req.Manifest.Functions = nil
 	req.Manifest.Containers = []*contractv1.ManifestContainer{{
 		App:             req.Manifest.Apps[0].GetName(),
@@ -46,10 +47,10 @@ func TestTheWireAcceptsAnAppNamingContainer(t *testing.T) {
 
 	result, _, err := deployStream(t, client, req)
 	if err != nil {
-		t.Fatalf("Deploy() with an app naming %q: error = %v, want the wire pin to admit it — it is the only compute the VPS provider runs", providerkit.ComputeContainer, err)
+		t.Fatalf("Deploy() with an app naming %q: error = %v, want the wire pin to admit it — it is the only compute the VPS provider runs", provider.ComputeContainer, err)
 	}
 	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy() with an app naming %q = %q, want it to succeed", providerkit.ComputeContainer, result.GetError())
+		t.Fatalf("Deploy() with an app naming %q = %q, want it to succeed", provider.ComputeContainer, result.GetError())
 	}
 }
 
@@ -80,21 +81,21 @@ func TestTheWireRefusesAnAppNamingAComputeOutsideTheVocabulary(t *testing.T) {
 func TestTheAppPlanCarriesTheImageAndProbeAContainerAppIsStoodUpFrom(t *testing.T) {
 	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
-	provider := fake.NewProvider(fake.Options{})
-	client := servedBy(t, provider)
+	p := fake.NewProvider(fake.Options{})
+	client := servedBy(t, p)
 
 	result, _ := deploy(t, client, namingARegistry(containerDeployRequest("/healthz")))
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := provider.FakeStacks().Plans()
+	plans := p.FakeStacks().Plans()
 	app := plans[len(plans)-1].App
 	if app == nil {
 		t.Fatal("the last plan the stacks port saw stands up no app")
 	}
-	if app.Compute != providerkit.ComputeContainer {
-		t.Errorf("Compute = %q, want %q: the primitive is chosen by what the plan names", app.Compute, providerkit.ComputeContainer)
+	if app.Compute != provider.ComputeContainer {
+		t.Errorf("Compute = %q, want %q: the primitive is chosen by what the plan names", app.Compute, provider.ComputeContainer)
 	}
 	if app.Image != pushedCoordinate {
 		t.Errorf("Image = %q, want %q: the plan names the coordinate the push wrote, not the ref the build left in the local store", app.Image, pushedCoordinate)
@@ -106,18 +107,18 @@ func TestTheAppPlanCarriesTheImageAndProbeAContainerAppIsStoodUpFrom(t *testing.
 
 func TestAServerlessAppPlanNamesItsComputeAndCarriesNoImage(t *testing.T) {
 	builtProject(t)
-	provider := fake.NewProvider(fake.Options{})
-	client := servedBy(t, provider)
+	p := fake.NewProvider(fake.Options{})
+	client := servedBy(t, p)
 
 	result, _ := deploy(t, client, deployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := provider.FakeStacks().Plans()
+	plans := p.FakeStacks().Plans()
 	app := plans[len(plans)-1].App
-	if app.Compute != providerkit.ComputeServerless {
-		t.Errorf("Compute = %q, want %q", app.Compute, providerkit.ComputeServerless)
+	if app.Compute != provider.ComputeServerless {
+		t.Errorf("Compute = %q, want %q", app.Compute, provider.ComputeServerless)
 	}
 	if app.Image != "" || app.HealthCheckPath != "" {
 		t.Errorf("Image = %q and HealthCheckPath = %q, want a serverless app to carry neither", app.Image, app.HealthCheckPath)
@@ -127,21 +128,21 @@ func TestAServerlessAppPlanNamesItsComputeAndCarriesNoImage(t *testing.T) {
 func TestTheContainerAStoodUpAppRunsOnIsRecordedAgainstItsStack(t *testing.T) {
 	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
-	provider := fake.NewProvider(fake.Options{})
-	client := servedBy(t, provider)
+	p := fake.NewProvider(fake.Options{})
+	client := servedBy(t, p)
 
 	result, _ := deploy(t, client, namingARegistry(containerDeployRequest("/")))
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	entries, err := providerkit.ReadStacks(context.Background(), provider.Records(), edge.ClassProduction, "shop")
+	entries, err := providerkit.ReadStacks(context.Background(), p.Records(), edge.ClassProduction, "shop")
 	if err != nil {
 		t.Fatal(err)
 	}
 	stacks := 0
 	for _, entry := range entries {
-		if entry.Kind != providerkit.StackApp {
+		if entry.Kind != provider.StackApp {
 			continue
 		}
 		stacks++

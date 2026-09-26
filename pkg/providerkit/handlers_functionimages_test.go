@@ -17,10 +17,10 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 type imaging struct {
@@ -29,9 +29,9 @@ type imaging struct {
 	base v1.Image
 }
 
-func (i imaging) Hooks() providerkit.Hooks {
+func (i imaging) Hooks() provider.Hooks {
 	hooks := i.Provider.Hooks()
-	hooks.FunctionImages = &providerkit.FunctionImageHooks{ResolveBase: i.ResolveBase, ReadRuntime: i.ReadRuntime}
+	hooks.FunctionImages = &provider.FunctionImageHooks{ResolveBase: i.ResolveBase, ReadRuntime: i.ReadRuntime}
 	return hooks
 }
 
@@ -82,14 +82,14 @@ func imagingServed(t *testing.T) (contractv1connect.ProviderServiceClient, *fake
 
 func TestDeployShipsAFunctionAsAnImageWhereTheProviderTakesItThatWay(t *testing.T) {
 	stagedProject(t, "web", "admin")
-	served, provider := imagingServed(t)
+	served, p := imagingServed(t)
 
 	result, _ := deploy(t, served, imagingDeployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	pushed := provider.Registry().Pushed()
+	pushed := p.Registry().Pushed()
 	if len(pushed) != 1 {
 		t.Fatalf("the deploy pushed %v, want the one image the app's function runs", pushed)
 	}
@@ -97,13 +97,13 @@ func TestDeployShipsAFunctionAsAnImageWhereTheProviderTakesItThatWay(t *testing.
 		t.Errorf("the push wrote %q, want it under the registry the deploy names", pushed[0].ImageRef)
 	}
 
-	for _, ref := range provider.Artifacts().(*fake.Artifacts).Keys() {
-		if ref.Bucket == providerkit.StoreFunctions {
+	for _, ref := range p.Artifacts().(*fake.Artifacts).Keys() {
+		if ref.Bucket == provider.StoreFunctions {
 			t.Errorf("the deploy uploaded %s to the function store, want the image to be the only thing shipped", ref.Key)
 		}
 	}
 
-	plans := provider.FakeStacks().Plans()
+	plans := p.FakeStacks().Plans()
 	app := plans[len(plans)-1]
 	if len(app.Uploads) != 0 {
 		t.Errorf("the app plan carries %d uploads, want none: the function travels as an image", len(app.Uploads))
@@ -221,9 +221,9 @@ func TestANodeFunctionsImageCarriesTheRuntimeTheProviderHandsIt(t *testing.T) {
 
 type imagingWithoutRuntime struct{ imaging }
 
-func (w imagingWithoutRuntime) Hooks() providerkit.Hooks {
+func (w imagingWithoutRuntime) Hooks() provider.Hooks {
 	hooks := w.imaging.Hooks()
-	hooks.FunctionImages = &providerkit.FunctionImageHooks{ResolveBase: w.ResolveBase, ReadRuntime: w.ReadRuntime}
+	hooks.FunctionImages = &provider.FunctionImageHooks{ResolveBase: w.ResolveBase, ReadRuntime: w.ReadRuntime}
 	return hooks
 }
 
@@ -377,7 +377,7 @@ func TestAWrappedFunctionIsHandedItsPlainAndSensitiveValuesAndNoSecretOrRecord(t
 	if got, held := delivered["DATABASE_URL"]; held {
 		t.Errorf("the function is handed DATABASE_URL=%q, want the runtime inside its image to open the secret: a plaintext in the revision is readable by anyone who may describe the service", got)
 	}
-	if got, held := delivered[providerkit.ResourceEnvName(providerkit.BindingPostgres, "orders")]; held {
+	if got, held := delivered[provider.ResourceEnvName(provider.BindingPostgres, "orders")]; held {
 		t.Errorf("the function is handed the record %q, want the runtime inside its image to read it", got)
 	}
 }

@@ -6,30 +6,30 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/target"
 )
 
 func TestAnUnsetComputeTakesTheBoxsStandingProcess(t *testing.T) {
 	t.Parallel()
 
-	held, err := providerkit.ConnectorCompute("", connectorCompute)
+	held, err := provider.ConnectorCompute("", connectorCompute)
 	if err != nil {
-		t.Fatalf("providerkit.ConnectorCompute(\"\", connectorCompute) = %v, want the provider to pick for itself", err)
+		t.Fatalf("provider.ConnectorCompute(\"\", connectorCompute) = %v, want the provider to pick for itself", err)
 	}
-	if held != providerkit.ComputeContainer {
-		t.Errorf("providerkit.ConnectorCompute(\"\", connectorCompute) = %q, want %q", held, providerkit.ComputeContainer)
+	if held != provider.ComputeContainer {
+		t.Errorf("provider.ConnectorCompute(\"\", connectorCompute) = %q, want %q", held, provider.ComputeContainer)
 	}
 }
 
 func TestAComputeNoMachineHandsOutIsRefusedByTheProvider(t *testing.T) {
 	t.Parallel()
 
-	_, err := providerkit.ConnectorCompute(providerkit.ComputeServerless, connectorCompute)
+	_, err := provider.ConnectorCompute(provider.ComputeServerless, connectorCompute)
 	if err == nil {
 		t.Fatal("ConnectorCompute(serverless) = nil, want a box to refuse a compute it cannot hand out")
 	}
-	if !strings.Contains(err.Error(), string(providerkit.ComputeServerless)) {
+	if !strings.Contains(err.Error(), string(provider.ComputeServerless)) {
 		t.Errorf("err = %v, want it to name the compute it refused", err)
 	}
 }
@@ -50,7 +50,7 @@ func TestADestinationTheConsoleCannotDialIsRefusedBeforeAnyRowIsWritten(t *testi
 func TestTheHostKeyDigestStandsInATarget(t *testing.T) {
 	t.Parallel()
 
-	key := providerkit.HostKey{
+	key := provider.HostKey{
 		Type: "ssh-ed25519",
 		Key:  base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{0xff}, 51)),
 	}

@@ -22,9 +22,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
@@ -124,7 +124,7 @@ type logConfiguration struct {
 	Options map[string]string `json:"options"`
 }
 
-func (r *release) checkContainer(plan providerkit.StackPlan) (*containerWork, error) {
+func (r *release) checkContainer(plan provider.StackPlan) (*containerWork, error) {
 	app := plan.App
 	project, stack := naming.Sanitize(plan.Ref.Project), plan.Ref.Name
 	if strings.TrimSpace(app.Image) == "" {
@@ -137,11 +137,11 @@ func (r *release) checkContainer(plan providerkit.StackPlan) (*containerWork, er
 	}
 	if r.cfg.OriginSecret == "" {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"this class holds no origin secret, and a container answers only to an edge that presents one: re-run `%s`", providerkit.BootstrapCommand(plan.Ref.Class))
+			"this class holds no origin secret, and a container answers only to an edge that presents one: re-run `%s`", provider.BootstrapCommand(plan.Ref.Class))
 	}
 	if r.cfg.AppBoundaryARN == "" {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"this deploy resolved no app boundary for %s, and a task role made without one is capped by nothing: re-run `%s`", app.App, providerkit.BootstrapCommand(plan.Ref.Class))
+			"this deploy resolved no app boundary for %s, and a task role made without one is capped by nothing: re-run `%s`", app.App, provider.BootstrapCommand(plan.Ref.Class))
 	}
 	policies, err := planBindingPolicies(app.Grants)
 	if err != nil {
@@ -179,12 +179,12 @@ func (r *release) checkContainer(plan providerkit.StackPlan) (*containerWork, er
 	}, nil
 }
 
-func liveOnly(held providerkit.AppValues) providerkit.AppValues {
+func liveOnly(held provider.AppValues) provider.AppValues {
 	held.Sensitive = nil
 	return held
 }
 
-func (r *release) containerWork(plan providerkit.StackPlan, held substrate) (*containerWork, error) {
+func (r *release) containerWork(plan provider.StackPlan, held substrate) (*containerWork, error) {
 	work, err := r.checkContainer(plan)
 	if err != nil {
 		return nil, err
@@ -272,7 +272,7 @@ func presentedSecrets(current, previous string) []string {
 	return []string{current, previous}
 }
 
-func containerEnv(app string, values providerkit.AppValues, originSecret, previousSecret string, manifest []byte) (map[string]string, error) {
+func containerEnv(app string, values provider.AppValues, originSecret, previousSecret string, manifest []byte) (map[string]string, error) {
 	env := make(map[string]string, len(values.Plain)+len(values.Sensitive)+7)
 	maps.Copy(env, values.Plain)
 	maps.Copy(env, values.Sensitive)
@@ -511,123 +511,123 @@ func (w *containerWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resou
 	return role, granted, nil
 }
 
-func runsContainer(plan providerkit.StackPlan) bool {
-	return plan.App != nil && plan.App.Compute == providerkit.ComputeContainer
+func runsContainer(plan provider.StackPlan) bool {
+	return plan.App != nil && plan.App.Compute == provider.ComputeContainer
 }
 
-func (r *release) provisionContainer(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.StackResult, error) {
+func (r *release) provisionContainer(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.StackResult, error) {
 	work, err := r.checkContainer(plan)
 	if err != nil {
-		return providerkit.StackResult{}, err
+		return provider.StackResult{}, err
 	}
 	if work.transformed, err = transformStackPlan(ctx, r.cfg.Transform, plan); err != nil {
-		return providerkit.StackResult{}, err
+		return provider.StackResult{}, err
 	}
 	held, err := r.ensureSubstrate(ctx, plan.Ref, progress)
 	if err != nil {
-		return providerkit.StackResult{}, err
+		return provider.StackResult{}, err
 	}
 	work.substrate = held
 	result, err := r.runContainer(ctx, plan, work, progress)
 	if err != nil {
-		return providerkit.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, progress))
+		return provider.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, progress))
 	}
 	if err := work.transformed.refuseUnclaimed(); err != nil {
-		return providerkit.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, progress))
+		return provider.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, progress))
 	}
 	return result, nil
 }
 
-func (r *release) runContainer(ctx context.Context, plan providerkit.StackPlan, work *containerWork, progress edge.Progress) (providerkit.StackResult, error) {
+func (r *release) runContainer(ctx context.Context, plan provider.StackPlan, work *containerWork, progress edge.Progress) (provider.StackResult, error) {
 	var err error
 	for attempt := range rulePlacements {
 		if err = r.placeRule(ctx, work); err != nil {
-			return providerkit.StackResult{}, err
+			return provider.StackResult{}, err
 		}
 		plan.Work = work
-		var result providerkit.StackResult
+		var result provider.StackResult
 		if result, err = r.automation.Run(ctx, plan, progress); err == nil {
 			return result, nil
 		}
 		if !priorityTaken(err) {
-			return providerkit.StackResult{}, err
+			return provider.StackResult{}, err
 		}
 		if progress != nil {
 			progress.Detail(fmt.Sprintf("Another deploy claimed listener rule priority %d while %s was placing its own (attempt %d of %d); picking another", work.priority, work.app, attempt+1, rulePlacements))
 		}
 	}
-	return providerkit.StackResult{}, fmt.Errorf("place %s's listener rule: every priority it picked was claimed by another deploy before it could take it, %d times over: %w", work.app, rulePlacements, err)
+	return provider.StackResult{}, fmt.Errorf("place %s's listener rule: every priority it picked was claimed by another deploy before it could take it, %d times over: %w", work.app, rulePlacements, err)
 }
 
-func (r *release) abandonContainer(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) error {
+func (r *release) abandonContainer(ctx context.Context, ref provider.StackRef, progress edge.Progress) error {
 	if err := r.automation.Destroy(ctx, ref, progress); err != nil {
 		return err
 	}
 	return r.releaseSubstrate(ctx, r.cfg.Records, ref, progress)
 }
 
-func (r *release) planContainer(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.Plan, error) {
+func (r *release) planContainer(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.Plan, error) {
 	held, present, err := r.readSubstrate(ctx, plan.Ref.Class)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	if !present {
-		return providerkit.Plan{Groups: []providerkit.ChangeGroup{
+		return provider.Plan{Groups: []provider.ChangeGroup{
 			{
-				Kind:   providerkit.StackGroupKind,
+				Kind:   provider.StackGroupKind,
 				Name:   substrateRef(plan.Ref.Class).Name.String(),
-				Action: providerkit.ActionCreate,
+				Action: provider.ActionCreate,
 				Reason: "the first container deploy in the " + string(plan.Ref.Class) + " class stands up the load balancer and cluster every container app in it shares",
 				Slow:   true,
 			},
 			{
-				Kind:   providerkit.StackGroupKind,
+				Kind:   provider.StackGroupKind,
 				Name:   plan.Ref.Name.String(),
-				Action: providerkit.ActionCreate,
-				Reason: providerkit.DetailUnavailable,
+				Action: provider.ActionCreate,
+				Reason: provider.DetailUnavailable,
 				Slow:   true,
 			},
 		}}, nil
 	}
 	work, err := r.containerWork(plan, held)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	if work.transformed, err = transformStackPlan(ctx, r.cfg.Transform, plan); err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	if err := r.placeRule(ctx, work); err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	plan.Work = work
 	previewed, err := r.automation.Preview(ctx, plan, progress)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	if err := work.transformed.refuseUnclaimed(); err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	return previewed, nil
 }
 
-func (r *release) decodeContainer(work *containerWork, outputs auto.OutputMap) (providerkit.StackResult, error) {
+func (r *release) decodeContainer(work *containerWork, outputs auto.OutputMap) (provider.StackResult, error) {
 	raw, produced := outputs[work.app]
 	if !produced {
-		return providerkit.StackResult{}, fmt.Errorf("stack produced no output for %s", work.app)
+		return provider.StackResult{}, fmt.Errorf("stack produced no output for %s", work.app)
 	}
 	fields, mapped := raw.Value.(map[string]any)
 	if !mapped {
-		return providerkit.StackResult{}, fmt.Errorf("output for %s is not a map", work.app)
+		return provider.StackResult{}, fmt.Errorf("output for %s is not a map", work.app)
 	}
 	url, err := requireStringField(fields, work.app, outputKeyContainerURL)
 	if err != nil {
-		return providerkit.StackResult{}, err
+		return provider.StackResult{}, err
 	}
 	physical, err := requireStringField(fields, work.app, outputKeyContainerPhysical)
 	if err != nil {
-		return providerkit.StackResult{}, err
+		return provider.StackResult{}, err
 	}
-	return providerkit.StackResult{Containers: []providerkit.AppContainer{{
+	return provider.StackResult{Containers: []provider.AppContainer{{
 		Name:     work.app,
 		Physical: physical,
 		URL:      url,

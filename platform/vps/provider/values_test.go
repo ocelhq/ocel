@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -23,12 +23,12 @@ const (
 	standingPlain     = "eu-west-1"
 )
 
-func valuedApp() providerkit.AppPlan {
+func valuedApp() provider.AppPlan {
 	app := anApp()
-	app.Values = providerkit.AppValues{
+	app.Values = provider.AppValues{
 		Delivered: map[string]string{"API_TOKEN": standingSensitive, "REGION": standingPlain},
-		Secrets:   []providerkit.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
-		Bindings:  []providerkit.Binding{{Name: "main", Type: providerkit.BindingPostgres, Version: 3}},
+		Secrets:   []provider.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
+		Bindings:  []provider.Binding{{Name: "main", Type: provider.BindingPostgres, Version: 3}},
 	}
 	return app
 }
@@ -104,7 +104,7 @@ func TestASecretAndABindingReachTheContainerAsAManifestRatherThanAsValues(t *tes
 		t.Errorf("manifest pins %+v, want each secret by key and folder", manifest.Keys)
 	}
 	if len(manifest.Bindings) != 1 || manifest.Bindings[0].Name != "main" ||
-		manifest.Bindings[0].Key != providerkit.ResourceEnvName(providerkit.BindingPostgres, "main") ||
+		manifest.Bindings[0].Key != provider.ResourceEnvName(provider.BindingPostgres, "main") ||
 		manifest.Bindings[0].Type != bindingsv1.BindingType_BINDING_TYPE_POSTGRES || manifest.Bindings[0].Granted != 3 {
 		t.Errorf("manifest pins %+v, want the binding by name, the key the app reads it under, its type and the version granted", manifest.Bindings)
 	}
@@ -172,7 +172,7 @@ func TestAValueDeliveredUnderANameTheRuntimeReadsItsOwnFromIsRefused(t *testing.
 
 	for _, owned := range []string{originguard.HealthPathVar, vars.EnvVar} {
 		app := anApp()
-		app.Values = providerkit.AppValues{Delivered: map[string]string{owned: "x"}}
+		app.Values = provider.AppValues{Delivered: map[string]string{owned: "x"}}
 		_, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, app), nil)
 		var rejection refusal.Refusal
 		if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid || !strings.Contains(err.Error(), owned) {

@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -51,19 +51,19 @@ func onABoxServingContainers(t *testing.T) (machine, *vps.Provider) {
 	return vm, p
 }
 
-func livePlan(t *testing.T, tag string) providerkit.StackPlan {
+func livePlan(t *testing.T, tag string) provider.StackPlan {
 	t.Helper()
 	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")
 	if err != nil {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256([]byte(tag))
-	return providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
-		Kind: providerkit.StackApp,
-		App: &providerkit.AppPlan{
+	return provider.StackPlan{
+		Ref:  provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
+		Kind: provider.StackApp,
+		App: &provider.AppPlan{
 			App:             liveApp,
-			Compute:         providerkit.ComputeContainer,
+			Compute:         provider.ComputeContainer,
 			Deployment:      hex.EncodeToString(sum[:])[:32],
 			Image:           fixtureAt(tag),
 			HealthCheckPath: healthPath,

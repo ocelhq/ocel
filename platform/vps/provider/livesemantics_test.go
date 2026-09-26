@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -62,14 +62,14 @@ func mode(t *testing.T, vm machine, path string) string {
 }
 
 type planning interface {
-	Plan(context.Context, providerkit.BootstrapRequest) (providerkit.Plan, error)
+	Plan(context.Context, provider.BootstrapRequest) (provider.Plan, error)
 }
 
 func stillMoving(t *testing.T, planner planning, class edge.Class, held any) string {
 	t.Helper()
 
 	plan, err := planner.Plan(context.Background(),
-		providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: held})
+		provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: held})
 	if err != nil {
 		return "and a re-plan over it said " + err.Error()
 	}
@@ -108,7 +108,7 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 
 	dying, kill := context.WithCancel(ctx)
 	defer kill()
-	err = bootstrap.Apply(dying, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"},
+	err = bootstrap.Apply(dying, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"},
 		&killer{at: "wrote " + host.KindFile + " " + host.SealHelper, kill: kill})
 	if err == nil {
 		t.Fatal("the apply ran to completion, and a half-applied host is what this proves recovery from")
@@ -131,33 +131,33 @@ func TestLiveAnApplyKilledMidWayIsFinishedByTheSameCommand(t *testing.T) {
 		t.Error("Describe() says nothing about the apply that never finished, so status has nothing to banner and reads the host as ordinarily stale")
 	}
 
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true}, nil); err == nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true}, nil); err == nil {
 		t.Error("heal finished an apply it did not start")
 	} else if refusal := refused(t, err, refusal.CodeDenied); !strings.Contains(refusal.Message, host.StampPath(class)) {
 		t.Errorf("heal over a half-applied host says %q, want it to name the stamp that says so", refusal.Message)
 	}
 
-	plan, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: described.Reading})
+	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: described.Reading})
 	if err != nil {
 		t.Fatalf("Plan() over a half-applied host = %v", err)
 	}
 	group := onlyGroup(t, plan)
-	if group.Action != providerkit.ActionUpdate {
-		t.Errorf("Plan() over a half-applied host plans %q, want %q", group.Action, providerkit.ActionUpdate)
+	if group.Action != provider.ActionUpdate {
+		t.Errorf("Plan() over a half-applied host plans %q, want %q", group.Action, provider.ActionUpdate)
 	}
 	for _, name := range []string{helperDir, host.SealHelper} {
-		if planned := planFor(group, name); planned.Action != providerkit.ActionKeep {
+		if planned := planFor(group, name); planned.Action != provider.ActionKeep {
 			t.Errorf("Plan() shows %s as %q, want the work the dead apply already did left alone", name, planned.Action)
 		}
 	}
 	for _, name := range []string{deployLogin, "/var/lib/ocel/production", recordsDir} {
-		if planned := planFor(group, name); planned.Action != providerkit.ActionCreate {
+		if planned := planFor(group, name); planned.Action != provider.ActionCreate {
 			t.Errorf("Plan() shows %s as %q, want the work that is left", name, planned.Action)
 		}
 	}
 
 	var said sayings
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: described.Reading}, &said); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: described.Reading}, &said); err != nil {
 		t.Fatalf("the same command over a half-applied host = %v, want recovery to be the first run's command", err)
 	}
 	standing := host.KindFile + " " + host.SealHelper + ": already current"
@@ -190,7 +190,7 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
@@ -202,7 +202,7 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 	vm.purges(t)
 	vm.ssh(t, "sudo rm -f /etc/sudoers.d/ocel-seal-*")
 	vm.forgetsTheDeployLogin(t)
-	unattended := providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Unattended: true}
+	unattended := provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Unattended: true}
 	if err := bootstrap.Apply(ctx, unattended, nil); err != nil {
 		t.Fatalf("an unattended apply over a machine carrying none of ocel's own state = %v, want absent-to-present to proceed", err)
 	}
@@ -234,7 +234,7 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 		t.Errorf("%s stands at %q after the apply that refused it, want the refusal to have written nothing", recordsHelper, held)
 	}
 
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: moved.Reading}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: moved.Reading}, nil); err != nil {
 		t.Fatalf("the same apply with somebody there to accept it = %v", err)
 	}
 	if held := mode(t, vm, recordsHelper); held != "755" {
@@ -251,7 +251,7 @@ func TestLiveHealReassertsTheStateTierAndRefusesEverythingBesideWhole(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	healing := providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, Unattended: true}
+	healing := provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, Unattended: true}
 
 	vm.ssh(t, "sudo chmod 700 "+recordsDir)
 	if err := bootstrap.Apply(ctx, healing, nil); err != nil {
@@ -271,7 +271,7 @@ func TestLiveHealReassertsTheStateTierAndRefusesEverythingBesideWhole(t *testing
 		t.Errorf("%s stands at %q after a heal that refused, want a mixed set refused whole rather than half-done", recordsDir, held)
 	}
 
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("the apply that may write both = %v", err)
 	}
 	for path, want := range map[string]string{recordsDir: "750", helperDir: "755"} {
@@ -295,7 +295,7 @@ func TestLiveASymlinkWhereTheDeployLoginOwnsAPathIsRefusedRatherThanChowned(t *t
 	defer vm.ssh(t, "sudo rm -f "+recordsDir+" && sudo install -d -m 750 -o "+deployLogin+" -g "+deployLogin+" "+recordsDir)
 
 	refusal := refused(t, bootstrap.Apply(ctx,
-		providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, Unattended: true}, nil),
+		provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, Unattended: true}, nil),
 		refusal.CodeDenied)
 	if !strings.Contains(refusal.Message, recordsDir) || !strings.Contains(refusal.Message, "/etc") {
 		t.Errorf("heal over a path the deploy login pointed elsewhere says %q, want both the path and where it points named", refusal.Message)
@@ -315,7 +315,7 @@ func TestLiveHealAsTheDeployLoginReassertsItsOwnTierAndNothingBeside(t *testing.
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	healing := providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, Unattended: true}
+	healing := provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, Unattended: true}
 
 	vm.sshAs(t, deployLogin, "chmod 700 "+recordsDir)
 	if err := bootstrap.Apply(ctx, healing, nil); err != nil {

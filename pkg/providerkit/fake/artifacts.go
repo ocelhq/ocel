@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -18,14 +18,14 @@ type Artifacts struct {
 	journal *Journal
 
 	mu      sync.Mutex
-	objects map[providerkit.ArtifactRef][]byte
+	objects map[provider.ArtifactRef][]byte
 }
 
 func NewArtifacts() *Artifacts {
-	return &Artifacts{objects: map[providerkit.ArtifactRef][]byte{}}
+	return &Artifacts{objects: map[provider.ArtifactRef][]byte{}}
 }
 
-func (a *Artifacts) Put(_ context.Context, ref providerkit.ArtifactRef, body io.Reader) error {
+func (a *Artifacts) Put(_ context.Context, ref provider.ArtifactRef, body io.Reader) error {
 	blob, err := io.ReadAll(body)
 	if err != nil {
 		return err
@@ -36,20 +36,20 @@ func (a *Artifacts) Put(_ context.Context, ref providerkit.ArtifactRef, body io.
 	return nil
 }
 
-func (a *Artifacts) Keys() []providerkit.ArtifactRef {
+func (a *Artifacts) Keys() []provider.ArtifactRef {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return slices.Collect(maps.Keys(a.objects))
 }
 
-func (a *Artifacts) Has(_ context.Context, ref providerkit.ArtifactRef) (bool, error) {
+func (a *Artifacts) Has(_ context.Context, ref provider.ArtifactRef) (bool, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	_, held := a.objects[ref]
 	return held, nil
 }
 
-func (a *Artifacts) Open(_ context.Context, ref providerkit.ArtifactRef) (io.ReadCloser, error) {
+func (a *Artifacts) Open(_ context.Context, ref provider.ArtifactRef) (io.ReadCloser, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	blob, ok := a.objects[ref]

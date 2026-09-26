@@ -13,8 +13,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func TestAnAppOnlyItsUsagesNameCarriesTheRuntimeItsURLIsWrittenFor(t *testing.T) {
@@ -140,8 +140,8 @@ func TestTheManifestCarriesWhichAppsBundleReadsTheClientURL(t *testing.T) {
 	}{
 		{name: "a next app", app: projectconfig.App{Name: "web", Framework: projectconfig.Framework{Name: appbuild.FrameworkNext}}, want: true},
 		{name: "a go app", app: projectconfig.App{Name: "api", Framework: projectconfig.Framework{Name: appbuild.FrameworkGo}}, manifest: "go.mod"},
-		{name: "a container app holding a package.json", app: projectconfig.App{Name: "store", Compute: string(providerkit.ComputeContainer)}, manifest: "package.json", want: true},
-		{name: "a container app holding a go.mod", app: projectconfig.App{Name: "worker", Compute: string(providerkit.ComputeContainer)}, manifest: "go.mod"},
+		{name: "a container app holding a package.json", app: projectconfig.App{Name: "store", Compute: string(provider.ComputeContainer)}, manifest: "package.json", want: true},
+		{name: "a container app holding a go.mod", app: projectconfig.App{Name: "worker", Compute: string(provider.ComputeContainer)}, manifest: "go.mod"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

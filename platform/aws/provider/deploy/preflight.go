@@ -4,10 +4,10 @@ import (
 	"context"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
-func (r *Stacks) Preflight(ctx context.Context, pre providerkit.DeployPreflight) error {
+func (r *Stacks) Preflight(ctx context.Context, pre provider.DeployPreflight) error {
 	cfg, err := r.resolve(ctx, Scope{Class: pre.Plan.Class, Slug: pre.Plan.Slug, Env: pre.Plan.Env, Edge: pre.Edge})
 	if err != nil {
 		return err

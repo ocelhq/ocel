@@ -11,7 +11,7 @@ import (
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 )
@@ -261,7 +261,7 @@ func TestCheckEdgeEnvBudget(t *testing.T) {
 		if err := checkEdgeVariables(app.GetName(), appValuesOf(app), nil); err == nil {
 			t.Fatal("checkEdgeVariables = nil, want the app's own environment charged")
 		}
-		if err := checkEdgeVariables("web", providerkit.AppValues{}, nil); err != nil {
+		if err := checkEdgeVariables("web", provider.AppValues{}, nil); err != nil {
 			t.Errorf("checkEdgeVariables on an app that declares nothing: %v", err)
 		}
 	})

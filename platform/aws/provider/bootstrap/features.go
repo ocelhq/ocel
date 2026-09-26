@@ -10,6 +10,7 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -19,10 +20,10 @@ const (
 	FeatureCloudflareEdge    = "cloudflare-edge"
 	FeatureCloudFrontEdge    = "cloudfront-edge"
 	FeatureAPIGatewayEdge    = "apigateway-edge"
-	FeatureVarsKey           = providerkit.FeatureVarsKey
+	FeatureVarsKey           = provider.FeatureVarsKey
 
-	needsFrameworkPrefix = providerkit.NeedsFrameworkPrefix
-	needsEdgePrefix      = providerkit.NeedsEdgePrefix
+	needsFrameworkPrefix = provider.NeedsFrameworkPrefix
+	needsEdgePrefix      = provider.NeedsEdgePrefix
 )
 
 type stackRefs struct {
@@ -69,9 +70,9 @@ type feature struct {
 	payloads   func(context.Context, ObjectStore, string) (stackPayloads, error)
 	placements func(string) stackPayloads
 	after      func(context.Context, stepDeps) error
-	afterPlan  func(context.Context, ParamAPIs, Namespace, string, Request) ([]providerkit.Change, error)
+	afterPlan  func(context.Context, ParamAPIs, Namespace, string, Request) ([]provider.Change, error)
 	drop       func(context.Context, stepDeps) error
-	dropPlan   func(context.Context, ParamAPIs, Namespace, string, Request) ([]providerkit.Change, error)
+	dropPlan   func(context.Context, ParamAPIs, Namespace, string, Request) ([]provider.Change, error)
 }
 
 func (f feature) planned(in featureInputs) featureStack {
@@ -114,10 +115,10 @@ var featureRegistry = []feature{
 	varsKeyFeature,
 }
 
-func Catalogue() []providerkit.Feature {
-	out := make([]providerkit.Feature, 0, len(featureRegistry))
+func Catalogue() []provider.Feature {
+	out := make([]provider.Feature, 0, len(featureRegistry))
 	for _, f := range featureRegistry {
-		out = append(out, providerkit.Feature{
+		out = append(out, provider.Feature{
 			Name:      f.name,
 			Summary:   f.summary,
 			DependsOn: slices.Clone(f.dependsOn),

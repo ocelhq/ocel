@@ -14,6 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -50,7 +51,7 @@ func TestPlanRemoveProjectNamesEveryStackTheDeployStoodUp(t *testing.T) {
 		t.Fatalf("PlanRemoveProject() error = %v", err)
 	}
 	held := kinds(plan)
-	for _, kind := range []string{providerkit.StackGroupKind, providerkit.EdgeGroupKind, "variable values", "stored objects"} {
+	for _, kind := range []string{provider.StackGroupKind, provider.EdgeGroupKind, "variable values", "stored objects"} {
 		if !slices.Contains(held, kind) {
 			t.Errorf("the plan names %v, want a %q group among them", held, kind)
 		}
@@ -62,7 +63,7 @@ func TestPlanRemoveProjectNamesEveryStackTheDeployStoodUp(t *testing.T) {
 		if group.GetName() == "" {
 			t.Errorf("the plan carries %+v, and the CLI cannot render a nameless group", group)
 		}
-		if group.GetKind() == providerkit.StackGroupKind && !strings.HasPrefix(group.GetName(), "fake/") {
+		if group.GetKind() == provider.StackGroupKind && !strings.HasPrefix(group.GetName(), "fake/") {
 			t.Errorf("the plan carries %+v, want every stack named under the vendor that holds it", group)
 		}
 		for _, change := range group.GetChanges() {
@@ -81,7 +82,7 @@ func TestPlanRemoveProjectOfAProjectNothingDeployedNamesNoStack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanRemoveProject() error = %v", err)
 	}
-	if slices.Contains(kinds(plan), providerkit.StackGroupKind) {
+	if slices.Contains(kinds(plan), provider.StackGroupKind) {
 		t.Errorf("the plan names %v for a project that never deployed", kinds(plan))
 	}
 }
@@ -153,8 +154,8 @@ func TestRemoveProjectRefusesACallNamingNoProject(t *testing.T) {
 
 func settledProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider, *fake.DNSRecords) {
 	t.Helper()
-	client, provider := contractServed(t, "1.0.0")
-	seedStack(t, provider, edge.ClassProduction, "shop", providerkit.EdgeStackState{
+	client, p := contractServed(t, "1.0.0")
+	seedStack(t, p, edge.ClassProduction, "shop", providerkit.EdgeStackState{
 		Edge: edge.StackState{
 			Slug:     "shop",
 			Class:    edge.ClassProduction,
@@ -164,13 +165,13 @@ func settledProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fak
 		},
 		Hosts: map[string]providerkit.Settled{
 			"app.acme.com": {
-				Certificate: providerkit.Certificate{ID: "cert-for-app"},
+				Certificate: provider.Certificate{ID: "cert-for-app"},
 				Written:     []edge.Record{{Name: "app.acme.com", Type: edge.RecordTypeCNAME, Value: "shop.relay.fake.invalid"}},
 				Owed:        []edge.Record{{Name: "owed.acme.com", Type: edge.RecordTypeCNAME, Value: "shop.relay.fake.invalid"}},
 			},
 		},
 	})
-	writer, err := provider.DNS().Open(fake.KindZone, "acme.com", "")
+	writer, err := p.DNS().Open(fake.KindZone, "acme.com", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +180,7 @@ func settledProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fak
 	}, nil); err != nil {
 		t.Fatal(err)
 	}
-	return client, provider, writer.(*fake.DNSRecords)
+	return client, p, writer.(*fake.DNSRecords)
 }
 
 func settledRequest() *contractv1.ProjectRequest {
@@ -238,10 +239,10 @@ func TestRemoveProjectReleasesTheRecordsItWrote(t *testing.T) {
 
 func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 	t.Parallel()
-	client, provider := contractServed(t, "1.0.0")
+	client, p := contractServed(t, "1.0.0")
 	validation := edge.Record{Name: "_ocel.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_target.validations.invalid"}
 	stale := edge.Record{Name: "_stale.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_stale.validations.invalid"}
-	seedStack(t, provider, edge.ClassProduction, "shop", providerkit.EdgeStackState{
+	seedStack(t, p, edge.ClassProduction, "shop", providerkit.EdgeStackState{
 		Edge: edge.StackState{
 			Slug:     "shop",
 			Class:    edge.ClassProduction,
@@ -251,13 +252,13 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 		},
 		Hosts: map[string]providerkit.Settled{
 			"app.acme.com": {
-				Certificate: providerkit.Certificate{ID: "ocels-cert", Requested: true, Written: []edge.Record{validation}},
-				Superseded:  []providerkit.Certificate{{ID: "stalled-cert", Requested: true, Written: []edge.Record{stale}}},
+				Certificate: provider.Certificate{ID: "ocels-cert", Requested: true, Written: []edge.Record{validation}},
+				Superseded:  []provider.Certificate{{ID: "stalled-cert", Requested: true, Written: []edge.Record{stale}}},
 			},
-			"old.acme.com": {Certificate: providerkit.Certificate{ID: "pinned-cert"}},
+			"old.acme.com": {Certificate: provider.Certificate{ID: "pinned-cert"}},
 		},
 	})
-	writer, err := provider.DNS().Open(fake.KindZone, "acme.com", "")
+	writer, err := p.DNS().Open(fake.KindZone, "acme.com", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,13 +294,13 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 	if !result.GetSuccess() {
 		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
 	}
-	if discarded := provider.Discarded(); !slices.Contains(discarded, "ocels-cert") {
+	if discarded := p.Discarded(); !slices.Contains(discarded, "ocels-cert") {
 		t.Errorf("the provider discarded %v, want the certificate ocel requested among them", discarded)
 	}
-	if discarded := provider.Discarded(); !slices.Contains(discarded, "stalled-cert") {
+	if discarded := p.Discarded(); !slices.Contains(discarded, "stalled-cert") {
 		t.Errorf("the provider discarded %v, want the certificate a stalled rotation left behind among them", discarded)
 	}
-	if discarded := provider.Discarded(); slices.Contains(discarded, "pinned-cert") {
+	if discarded := p.Discarded(); slices.Contains(discarded, "pinned-cert") {
 		t.Errorf("the provider discarded %v, want a pinned certificate left standing", discarded)
 	}
 	if held := writer.(*fake.DNSRecords).Records(); len(held) != 0 {

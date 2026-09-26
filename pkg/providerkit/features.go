@@ -5,10 +5,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
-func FeatureLevels(catalogue []Feature, names []string) ([][]string, error) {
+func FeatureLevels(catalogue []provider.Feature, names []string) ([][]string, error) {
 	pending := map[string]bool{}
 	for _, name := range names {
 		pending[name] = true
@@ -44,7 +45,7 @@ func FeatureLevels(catalogue []Feature, names []string) ([][]string, error) {
 	return levels, nil
 }
 
-func RequiredFeatures(catalogue []Feature, frameworks []string, edgeKind string) ([]string, error) {
+func RequiredFeatures(catalogue []provider.Feature, frameworks []string, edgeKind string) ([]string, error) {
 	var needed []string
 	for _, f := range catalogue {
 		if featureNeeded(f, frameworks, edgeKind) {
@@ -54,19 +55,19 @@ func RequiredFeatures(catalogue []Feature, frameworks []string, edgeKind string)
 	return featureClosure(catalogue, needed)
 }
 
-func featureNeeded(f Feature, frameworks []string, edgeKind string) bool {
+func featureNeeded(f provider.Feature, frameworks []string, edgeKind string) bool {
 	for _, need := range f.Needs {
-		if id, ok := strings.CutPrefix(need, NeedsFrameworkPrefix); ok && slices.Contains(frameworks, id) {
+		if id, ok := strings.CutPrefix(need, provider.NeedsFrameworkPrefix); ok && slices.Contains(frameworks, id) {
 			return true
 		}
-		if kind, ok := strings.CutPrefix(need, NeedsEdgePrefix); ok && kind == edgeKind && edgeKind != "" {
+		if kind, ok := strings.CutPrefix(need, provider.NeedsEdgePrefix); ok && kind == edgeKind && edgeKind != "" {
 			return true
 		}
 	}
 	return false
 }
 
-func featureClosure(catalogue []Feature, names []string) ([]string, error) {
+func featureClosure(catalogue []provider.Feature, names []string) ([]string, error) {
 	wanted := map[string]bool{}
 	var pull func(name string, from string) error
 	pull = func(name, from string) error {
@@ -93,7 +94,7 @@ func featureClosure(catalogue []Feature, names []string) ([]string, error) {
 	return inCatalogueOrder(catalogue, keys(wanted)), nil
 }
 
-func featureDeleteOrder(catalogue []Feature, names []string) ([]string, error) {
+func featureDeleteOrder(catalogue []provider.Feature, names []string) ([]string, error) {
 	levels, err := FeatureLevels(catalogue, names)
 	if err != nil {
 		return nil, err
@@ -105,7 +106,7 @@ func featureDeleteOrder(catalogue []Feature, names []string) ([]string, error) {
 	return out, nil
 }
 
-func featureRemoval(catalogue []Feature, standing, named []string) ([]string, error) {
+func featureRemoval(catalogue []provider.Feature, standing, named []string) ([]string, error) {
 	doomed := map[string]bool{}
 	for _, name := range named {
 		if _, ok := featureNamed(catalogue, name); !ok {
@@ -157,16 +158,16 @@ func missingFeatures(standing, required []string) []string {
 	return out
 }
 
-func featureNamed(catalogue []Feature, name string) (Feature, bool) {
+func featureNamed(catalogue []provider.Feature, name string) (provider.Feature, bool) {
 	for _, f := range catalogue {
 		if f.Name == name {
 			return f, true
 		}
 	}
-	return Feature{}, false
+	return provider.Feature{}, false
 }
 
-func featureNames(catalogue []Feature) []string {
+func featureNames(catalogue []provider.Feature) []string {
 	out := make([]string, 0, len(catalogue))
 	for _, f := range catalogue {
 		out = append(out, f.Name)
@@ -174,7 +175,7 @@ func featureNames(catalogue []Feature) []string {
 	return out
 }
 
-func inCatalogueOrder(catalogue []Feature, chosen []string) []string {
+func inCatalogueOrder(catalogue []provider.Feature, chosen []string) []string {
 	var out []string
 	for _, f := range catalogue {
 		if slices.Contains(chosen, f.Name) {
@@ -184,7 +185,7 @@ func inCatalogueOrder(catalogue []Feature, chosen []string) []string {
 	return out
 }
 
-func unknownFeature(catalogue []Feature, name, from string) error {
+func unknownFeature(catalogue []provider.Feature, name, from string) error {
 	offered := strings.Join(featureNames(catalogue), ", ")
 	if offered == "" {
 		offered = "no bootstrap features at all"

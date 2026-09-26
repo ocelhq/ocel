@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -15,30 +15,30 @@ type credentials struct{ provider *Provider }
 
 type hostSurvey interface {
 	Facts(ctx context.Context) (session.Facts, error)
-	HostKey() providerkit.HostKey
+	HostKey() provider.HostKey
 	Destination() session.Destination
 }
 
-func (c credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
+func (c credentials) Whoami(ctx context.Context) (provider.Identity, error) {
 	live, err := c.provider.Session(ctx)
 	if err != nil {
-		return providerkit.Identity{}, err
+		return provider.Identity{}, err
 	}
 	return whoami(ctx, live)
 }
 
-func whoami(ctx context.Context, live hostSurvey) (providerkit.Identity, error) {
+func whoami(ctx context.Context, live hostSurvey) (provider.Identity, error) {
 	facts, err := live.Facts(ctx)
 	if err != nil {
-		return providerkit.Identity{}, err
+		return provider.Identity{}, err
 	}
 	dest := live.Destination()
 	key := live.HostKey()
-	return providerkit.Identity{
+	return provider.Identity{
 		Vendor:    Vendor,
 		Account:   dest.Written,
 		Principal: dest.User,
-		Details: named([]providerkit.Detail{
+		Details: named([]provider.Detail{
 			{Label: "host key", Value: strings.TrimSpace(key.Type + " " + key.Fingerprint)},
 			{Label: "address", Value: fmt.Sprintf("%s port %d", dest.Address, dest.Port)},
 			{Label: "os", Value: facts.OS},
@@ -59,8 +59,8 @@ func elevation(facts session.Facts) string {
 	}
 }
 
-func named(details []providerkit.Detail) []providerkit.Detail {
-	var out []providerkit.Detail
+func named(details []provider.Detail) []provider.Detail {
+	var out []provider.Detail
 	for _, detail := range details {
 		if detail.Value != "" {
 			out = append(out, detail)
@@ -69,11 +69,11 @@ func named(details []providerkit.Detail) []providerkit.Detail {
 	return out
 }
 
-func (c credentials) Permissions(tier providerkit.CredentialTier) (edge.CredentialDocument, error) {
+func (c credentials) Permissions(tier provider.CredentialTier) (edge.CredentialDocument, error) {
 	switch tier {
-	case providerkit.TierBootstrap:
+	case provider.TierBootstrap:
 		return edge.CredentialDocument{Document: bootstrapDocument(c.login())}, nil
-	case providerkit.TierDeploy:
+	case provider.TierDeploy:
 		return edge.CredentialDocument{Document: deployDocument()}, nil
 	default:
 		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,

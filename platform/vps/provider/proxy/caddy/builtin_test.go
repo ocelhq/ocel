@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
@@ -87,13 +87,13 @@ func TestTheStandingReadsWhetherTheAdminApiListensOnAPortInsideTheProxy(t *testi
 	for what, check := range map[string]struct {
 		said    string
 		err     error
-		verdict providerkit.HostVerdict
+		verdict provider.HostVerdict
 	}{
-		"only the serving ports":          {said: listened("0050", "01BB"), verdict: providerkit.HostPass},
-		"the admin port beside them":      {said: listened("0050", "01BB", "07E3"), verdict: providerkit.HostFail},
-		"nothing at all":                  {said: tcpHeader, verdict: providerkit.HostFail},
-		"a proxy that answered nothing":   {err: errors.New("no such container"), verdict: providerkit.HostFail},
-		"a table that is no socket table": {said: "garbage\n", verdict: providerkit.HostFail},
+		"only the serving ports":          {said: listened("0050", "01BB"), verdict: provider.HostPass},
+		"the admin port beside them":      {said: listened("0050", "01BB", "07E3"), verdict: provider.HostFail},
+		"nothing at all":                  {said: tcpHeader, verdict: provider.HostFail},
+		"a proxy that answered nothing":   {err: errors.New("no such container"), verdict: provider.HostFail},
+		"a table that is no socket table": {said: "garbage\n", verdict: provider.HostFail},
 	} {
 		held := &box{answer: func(string) (string, error) { return check.said, check.err }}
 		standing, err := (caddy.Builtin{Box: held}).Inspect(context.Background())

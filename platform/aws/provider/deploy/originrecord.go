@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const (
@@ -19,7 +19,7 @@ type originRecord struct {
 	FunctionURLs map[string]string `json:"functionUrls"`
 }
 
-func routeURLs(functions []appFunction, stood []providerkit.Function) map[string]string {
+func routeURLs(functions []appFunction, stood []provider.Function) map[string]string {
 	byLogical := make(map[string]string, len(stood))
 	for _, fn := range stood {
 		byLogical[fn.Name] = fn.URL
@@ -33,7 +33,7 @@ func routeURLs(functions []appFunction, stood []providerkit.Function) map[string
 	return urls
 }
 
-func writeOriginRecord(ctx context.Context, cfg Config, app string, work *appWork, result providerkit.StackResult) error {
+func writeOriginRecord(ctx context.Context, cfg Config, app string, work *appWork, result provider.StackResult) error {
 	if work == nil || work.cache == nil {
 		return nil
 	}

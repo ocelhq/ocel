@@ -17,7 +17,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -340,7 +340,7 @@ func repositoryStanding(name string, held *artifactregistry.Repository) (standin
 			"the %s repository already stands and holds %s packages, and Artifact Registry never changes the format of one: "+
 				"Cloud Run runs %s images and nothing this bootstrap does would make it hold them.\n"+
 				"Delete that repository, or bootstrap under a namespace naming another in %s",
-			name, held.Format, dockerImages, providerkit.NamespaceEnvVar)
+			name, held.Format, dockerImages, provider.NamespaceEnvVar)
 	}
 	if !pruned(held.CleanupPolicies) {
 		return standing{held: true, mends: reasonUnpruned}, nil

@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -195,7 +195,7 @@ func (h *Host) proxyInspected(ctx context.Context, class edge.Class) (bool, erro
 	return false, refusal.Refuse(refusal.CodeInvalid,
 		"%s on %s declares %s, which ocel never renders\n"+
 			"Remove %s and run `%s` to render it again from %s",
-		ProxyConfig, h.named(), declared, ProxyConfig, providerkit.BootstrapCommand(class), live.RoutingTable)
+		ProxyConfig, h.named(), declared, ProxyConfig, provider.BootstrapCommand(class), live.RoutingTable)
 }
 
 func (h *Host) reshape(ctx context.Context, change func(RoutingTable) (RoutingTable, error)) error {

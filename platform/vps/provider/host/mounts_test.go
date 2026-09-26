@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -146,11 +146,11 @@ func TestAContainerHoldingAMountTheHostNoLongerHasIsPlannedBack(t *testing.T) {
 			Class: class, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
 			Seal: Seal{Fingerprint: contentSum(minted)},
 			Stamp: Stamp{
-				Schema: providerkit.BootstrapSchema, State: StateComplete,
+				Schema: provider.BootstrapSchema, State: StateComplete,
 				Seal: Seal{Fingerprint: contentSum(minted)}, Digests: digests(items),
 			},
 		}
-		if back := planFor(planned(read), stood.ID()); back.Action != providerkit.ActionUpdate {
+		if back := planFor(planned(read), stood.ID()); back.Action != provider.ActionUpdate {
 			t.Errorf("%s reading a mount the host replaced plans %q, want it recreated: the box would call itself current while it serves a directory that is gone", stood.Name, back.Action)
 		}
 		if read.settled() {

@@ -11,7 +11,7 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	smithy "github.com/aws/smithy-go"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
@@ -110,7 +110,7 @@ func AdmitReplacements(ns Namespace, accept bool, log func(string)) cfn.ChangeRe
 
 type HealRequest struct {
 	Features []string
-	Writer   providerkit.WrittenBy
+	Writer   provider.WrittenBy
 }
 
 var ErrHealNotPermitted = errors.New("these credentials may not write this account's bootstrap stacks")
@@ -180,7 +180,7 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, log func
 	return healed, nil
 }
 
-func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale StackStamp, deployed Deployed, refs stackRefs, writer providerkit.WrittenBy, log func(string)) (bool, error) {
+func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale StackStamp, deployed Deployed, refs stackRefs, writer provider.WrittenBy, log func(string)) (bool, error) {
 	f, ok := featureNamed(stale.Feature)
 	if !ok {
 		return false, fmt.Errorf("this provider has no feature named %q", stale.Feature)

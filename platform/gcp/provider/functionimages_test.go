@@ -11,9 +11,9 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -114,7 +114,7 @@ func TestARuntimeNoBaseIsCarriedForIsRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("FunctionBase(deno) built an image on a base nothing names")
 	}
-	if code, refused := providerkit.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 		t.Errorf("FunctionBase(deno) code = %v, want %v", code, refusal.CodeInvalid)
 	}
 	if !strings.Contains(err.Error(), "deno") {
@@ -129,7 +129,7 @@ func TestANextFunctionIsRefusedLikeAnyOtherRuntimeNoBaseIsCarriedFor(t *testing.
 	if err == nil {
 		t.Fatal("FunctionBase(next) built an image, and Next on Cloud Run is not something this provider serves")
 	}
-	if code, refused := providerkit.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 		t.Errorf("FunctionBase(next) code = %v, want %v", code, refusal.CodeInvalid)
 	}
 	if !strings.Contains(err.Error(), appbuild.FrameworkNext) {
@@ -145,7 +145,7 @@ func TestAFunctionBuiltForArm64IsRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("FunctionBase() built an arm64 function, and Cloud Run runs x86_64 alone")
 	}
-	if code, refused := providerkit.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 		t.Errorf("code = %v, want %v", code, refusal.CodeInvalid)
 	}
 	for _, said := range []string{arch.ARM64, arch.X8664} {

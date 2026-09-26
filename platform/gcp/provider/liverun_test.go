@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
@@ -257,32 +258,32 @@ func serverImage(t *testing.T, p *gcp.Provider, repository, mark string) string 
 	return held(t, repository, image)
 }
 
-func serverlessPlan(app, image string, values map[string]string) providerkit.StackPlan {
+func serverlessPlan(app, image string, values map[string]string) provider.StackPlan {
 	return serverlessPlanOn(app, image, nodeRuntime, values)
 }
 
-func serverlessPlanOn(app, image string, framework appbuild.Framework, values map[string]string) providerkit.StackPlan {
-	return providerkit.StackPlan{
-		Ref: providerkit.StackRef{
+func serverlessPlanOn(app, image string, framework appbuild.Framework, values map[string]string) provider.StackPlan {
+	return provider.StackPlan{
+		Ref: provider.StackRef{
 			Project: "live",
 			Class:   edge.ClassPreview,
 			Name:    naming.AppStack(providerkit.ProductionEnv, app, liveRelease),
 		},
-		Kind: providerkit.StackApp,
-		App: &providerkit.AppPlan{
+		Kind: provider.StackApp,
+		App: &provider.AppPlan{
 			App:     app,
-			Compute: providerkit.ComputeServerless,
-			Values:  providerkit.AppValues{Delivered: values},
-			Functions: []providerkit.FunctionSpec{
+			Compute: provider.ComputeServerless,
+			Values:  provider.AppValues{Delivered: values},
+			Functions: []provider.FunctionSpec{
 				{Name: app, Framework: framework, Image: image},
 			},
 		},
 	}
 }
 
-func containerPlan(app, image string, values map[string]string) providerkit.StackPlan {
+func containerPlan(app, image string, values map[string]string) provider.StackPlan {
 	plan := serverlessPlan(app, image, values)
-	plan.App.Compute = providerkit.ComputeContainer
+	plan.App.Compute = provider.ComputeContainer
 	plan.App.Functions = nil
 	plan.App.Image = image
 	plan.App.HealthCheckPath = "/"
@@ -317,13 +318,13 @@ func TestLiveAFunctionImageBecomesAServiceThatAnswers(t *testing.T) {
 	}
 }
 
-func runningAs(t *testing.T, p *gcp.Provider, plan providerkit.StackPlan) []providerkit.Function {
+func runningAs(t *testing.T, p *gcp.Provider, plan provider.StackPlan) []provider.Function {
 	t.Helper()
 	service, err := names(t, p).Service(plan.Ref.Project, plan.Ref.Name.Env, plan.App.App, plan.App.App)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return []providerkit.Function{{Name: plan.App.App, Physical: service}}
+	return []provider.Function{{Name: plan.App.App, Physical: service}}
 }
 
 func TestLiveAContainerAppIsStoodUpAndReleasedAgainOntoANewRevision(t *testing.T) {
@@ -332,7 +333,7 @@ func TestLiveAContainerAppIsStoodUpAndReleasedAgainOntoANewRevision(t *testing.T
 	first := serverImage(t, p, "ocel-live/app", "served-one")
 	plan := containerPlan("app", first, nil)
 	t.Cleanup(func() {
-		_ = p.RemoveContainers(ctx, plan.Ref, []providerkit.AppContainer{
+		_ = p.RemoveContainers(ctx, plan.Ref, []provider.AppContainer{
 			{Name: "app", Physical: runningAs(t, p, plan)[0].Physical},
 		}, nil)
 	})

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -20,7 +21,7 @@ func TestAPreviewIdentityThatNamesProductionIsRefused(t *testing.T) {
 		t.Fatalf("envName() took %q as a preview identity, and every name a provider builds from the environment "+
 			"would then read as production's", ProductionEnv)
 	}
-	if code, refused := RefusedCode(err); !refused || code != refusal.CodeInvalid {
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 		t.Errorf("envName() code = %v, want %v", code, refusal.CodeInvalid)
 	}
 	if !strings.Contains(err.Error(), ProductionEnv) {

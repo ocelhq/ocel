@@ -3,14 +3,14 @@ package gcp
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestTheServiceShapeMatchesWhatServiceOfSends(t *testing.T) {
 	t.Parallel()
 
-	for _, compute := range []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer} {
+	for _, compute := range []provider.Compute{provider.ComputeServerless, provider.ComputeContainer} {
 		sent, err := serviceOf(serving{service: "svc", image: "img", compute: compute, health: "/healthz", ingress: ingressLoadBalancer})
 		if err != nil {
 			t.Fatal(err)

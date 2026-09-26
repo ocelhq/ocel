@@ -8,9 +8,9 @@ import (
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/liveness"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
@@ -18,13 +18,13 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 )
 
-const Vendor providerkit.Vendor = "gcp"
+const Vendor provider.Vendor = "gcp"
 
 type Provider struct {
 	options   Options
 	tokens    TokenSource
 	endpoint  string
-	namespace providerkit.Namespace
+	namespace provider.Namespace
 
 	mu       sync.Mutex
 	resolved *clients
@@ -36,16 +36,16 @@ type Provider struct {
 	liveness.Net
 }
 
-func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
-	decoded, err := providerkit.Decode[Options](Vendor, settings.Options)
+func New(_ context.Context, settings provider.Settings) (provider.Provider, error) {
+	decoded, err := provider.Decode[Options](Vendor, settings.Options)
 	if err != nil {
 		return nil, err
 	}
-	provider, err := NewProvider(decoded)
+	p, err := NewProvider(decoded)
 	if err != nil {
 		return nil, err
 	}
-	return provider, nil
+	return p, nil
 }
 
 func NewProvider(options Options) (*Provider, error) {
@@ -57,7 +57,7 @@ func NewProvider(options Options) (*Provider, error) {
 	if err != nil {
 		return nil, err
 	}
-	namespace, err := providerkit.NamespaceFromEnv()
+	namespace, err := provider.NamespaceFromEnv()
 	if err != nil {
 		return nil, err
 	}
@@ -77,24 +77,24 @@ func NewProvider(options Options) (*Provider, error) {
 	}, nil
 }
 
-func (p *Provider) Facts() providerkit.Facts {
-	return providerkit.Facts{
+func (p *Provider) Facts() provider.Facts {
+	return provider.Facts{
 		Vendor:          Vendor,
 		Bindings:        resources.Serves(p.resourceHooks()),
-		Computes:        []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer},
+		Computes:        []provider.Compute{provider.ComputeServerless, provider.ComputeContainer},
 		Edges:           slices.Clone(supportedEdges),
 		DefaultEdge:     direct.Kind,
-		DNSKinds:        []providerkit.DNSKind{dnsCloudflare},
+		DNSKinds:        []provider.DNSKind{dnsCloudflare},
 		StoresArtifacts: true,
 	}
 }
 
-func (p *Provider) Hooks() providerkit.Hooks {
-	return providerkit.Hooks{
+func (p *Provider) Hooks() provider.Hooks {
+	return provider.Hooks{
 		EnsureImageRegistry: p.EnsureImageRegistry,
 		OpenDirectImages:    p.OpenDirectImages,
-		Cost:                &providerkit.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
-		FunctionImages:      &providerkit.FunctionImageHooks{ResolveBase: p.ResolveFunctionBase, ReadRuntime: p.ReadFunctionRuntime},
+		Cost:                &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
+		FunctionImages:      &provider.FunctionImageHooks{ResolveBase: p.ResolveFunctionBase, ReadRuntime: p.ReadFunctionRuntime},
 	}
 }
 
@@ -105,24 +105,24 @@ func (p *Provider) resourceHooks() resources.Hooks {
 	}
 }
 
-func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrap, error) {
+func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 	if _, err := p.Edges().Open(kind); err != nil {
 		return nil, err
 	}
 	return bootstrapGate{p: p}, nil
 }
 
-func (p *Provider) Stacks() providerkit.Stacks {
+func (p *Provider) Stacks() provider.Stacks {
 	return resources.Stacks(p.Records(), p.Artifacts(), p.resourceHooks())
 }
 
-func (p *Provider) Artifacts() providerkit.ArtifactStore { return artifacts{p: p} }
+func (p *Provider) Artifacts() provider.ArtifactStore { return artifacts{p: p} }
 
 func (p *Provider) Records() records.Store { return recordStore{p: p} }
 
 func (p *Provider) Cipher() records.Cipher { return cipher{p: p} }
 
-func (p *Provider) Credentials() providerkit.Credentials {
+func (p *Provider) Credentials() provider.Credentials {
 	return Credentials{
 		Project:  p,
 		Region:   p.options.Region,
@@ -132,7 +132,7 @@ func (p *Provider) Credentials() providerkit.Credentials {
 	}
 }
 
-func (p *Provider) Edges() providerkit.Edges {
+func (p *Provider) Edges() provider.Edges {
 	return edges{
 		namespace: p.namespace,
 		records:   p.Records(),
@@ -145,12 +145,12 @@ func (p *Provider) Edges() providerkit.Edges {
 	}
 }
 
-func (p *Provider) DNS() providerkit.DNS { return dns{} }
+func (p *Provider) DNS() provider.DNS { return dns{} }
 
-func (p *Provider) Certificates() providerkit.Certificates { return certificates{p} }
+func (p *Provider) Certificates() provider.Certificates { return certificates{p} }
 
-func (p *Provider) Connector() providerkit.Connector { return connector{p} }
+func (p *Provider) Connector() provider.Connector { return connector{p} }
 
 func (p *Provider) Runtime() images.Runtime { return containerRuntime{p} }
 
-func (p *Provider) Liveness() providerkit.Liveness { return &p.Net }
+func (p *Provider) Liveness() provider.Liveness { return &p.Net }

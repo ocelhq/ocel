@@ -9,22 +9,23 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type RecordedStack struct {
-	Kind      StackKind  `json:"kind"`
-	App       string     `json:"app,omitempty"`
-	Release   string     `json:"release,omitempty"`
-	Identity  string     `json:"identity,omitempty"`
-	Bindings  []Binding  `json:"bindings,omitempty"`
-	Functions []Function `json:"functions,omitempty"`
+	Kind      provider.StackKind  `json:"kind"`
+	App       string              `json:"app,omitempty"`
+	Release   string              `json:"release,omitempty"`
+	Identity  string              `json:"identity,omitempty"`
+	Bindings  []provider.Binding  `json:"bindings,omitempty"`
+	Functions []provider.Function `json:"functions,omitempty"`
 
-	Containers []AppContainer `json:"containers,omitempty"`
+	Containers []provider.AppContainer `json:"containers,omitempty"`
 
-	WrittenBy WrittenBy `json:"writer,omitempty"`
-	UpdatedAt int64     `json:"updated_at,omitempty"`
+	WrittenBy provider.WrittenBy `json:"writer,omitempty"`
+	UpdatedAt int64              `json:"updated_at,omitempty"`
 }
 
 type StackEntry struct {

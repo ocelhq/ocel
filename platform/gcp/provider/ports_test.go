@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -161,8 +161,8 @@ func TestAnArtifactThatNamesNoClassOrNoStoreIsTheCallersMistake(t *testing.T) {
 
 	ctx := context.Background()
 	p := standing(t)
-	classless := providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: "bundle.zip"}
-	storeless := providerkit.ArtifactRef{Class: edge.ClassProduction, Bucket: "somewhere-else", Key: "bundle.zip"}
+	classless := provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "bundle.zip"}
+	storeless := provider.ArtifactRef{Class: edge.ClassProduction, Bucket: "somewhere-else", Key: "bundle.zip"}
 
 	for name, refused := range map[string]error{
 		"Put with no class":  p.Artifacts().Put(ctx, classless, bytes.NewReader(nil)),
@@ -204,7 +204,7 @@ func TestServesNothingUntilAResourcePrimitiveExists(t *testing.T) {
 	if got := p.Facts().Bindings; len(got) != 0 {
 		t.Errorf("Serves() = %v, want nothing until this provider provisions bindings of its own", got)
 	}
-	want := []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer}
+	want := []provider.Compute{provider.ComputeServerless, provider.ComputeContainer}
 	got := p.Facts().Computes
 	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
 		t.Errorf("Computes() = %v, want %v with serverless first, which makes it the default", got, want)
@@ -217,14 +217,14 @@ func TestTheCredentialsPortNamesTheRolesEachTierIsGranted(t *testing.T) {
 	t.Parallel()
 
 	credentials := standing(t).Credentials()
-	for tier, named := range map[providerkit.CredentialTier][]string{
-		providerkit.TierDeploy: {
+	for tier, named := range map[provider.CredentialTier][]string{
+		provider.TierDeploy: {
 			"roles/run.admin",
 			"roles/storage.objectAdmin",
 			"roles/artifactregistry.writer",
 			"roles/iam.serviceAccountUser",
 		},
-		providerkit.TierBootstrap: {
+		provider.TierBootstrap: {
 			"roles/run.admin",
 			"roles/storage.admin",
 			"roles/artifactregistry.admin",
@@ -251,7 +251,7 @@ func TestTheCredentialsPortNamesTheRolesEachTierIsGranted(t *testing.T) {
 func TestTheRolesRenderedForADeployAreTheOnesADeployUses(t *testing.T) {
 	t.Parallel()
 
-	document, err := standing(t).Credentials().Permissions(providerkit.TierDeploy)
+	document, err := standing(t).Credentials().Permissions(provider.TierDeploy)
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
@@ -269,7 +269,7 @@ func TestACredentialTierNobodyDefinedIsRefusedRatherThanRendered(t *testing.T) {
 	t.Parallel()
 
 	var refused refusal.Refusal
-	_, err := standing(t).Credentials().Permissions(providerkit.CredentialTier("root"))
+	_, err := standing(t).Credentials().Permissions(provider.CredentialTier("root"))
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Permissions(root) = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}

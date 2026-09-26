@@ -33,7 +33,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -544,7 +544,7 @@ func (s *deployFakeProviderServer) DescribeBootstrap(ctx context.Context, req *c
 		catalogue = []*contractv1.Feature{
 			feature("isr", "incremental static regeneration"),
 			feature("image-optimization", "on-demand image optimization"),
-			feature(providerkit.FeatureVarsKey, "a key the variables are sealed under"),
+			feature(provider.FeatureVarsKey, "a key the variables are sealed under"),
 			fronting("cloudflare-edge", "a Cloudflare front", "cloudflare", "isr"),
 			fronting("cloudfront-edge", "a CloudFront front", "cloudfront"),
 		}
@@ -954,7 +954,7 @@ func journalEdge(kind string, dns *contractv1.Dns, allowDegraded []string) {
 func (s *deployFakeProviderServer) Configure(ctx context.Context, req *contractv1.ConfigureRequest) (*contractv1.ConfigureResponse, error) {
 	aws, err := decodeFakeProviderOptions(req.GetConfig())
 	if err != nil {
-		return nil, providerkit.RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	path := os.Getenv(FakeConfigureJournalEnvVar)
 	if path == "" {
@@ -976,7 +976,7 @@ type fakeProviderOptions struct {
 }
 
 func decodeFakeProviderOptions(config *contractv1.ProviderConfig) (fakeProviderOptions, error) {
-	return providerkit.Decode[fakeProviderOptions]("aws", providerkit.Options(config.GetOptions().AsMap()))
+	return provider.Decode[fakeProviderOptions]("aws", provider.Options(config.GetOptions().AsMap()))
 }
 
 func journalBootstrap(req *contractv1.BootstrapRequest) {
@@ -1595,7 +1595,7 @@ func validateFixtureContainers(m *contractv1.Manifest) error {
 		if _, ok := compute[app]; !ok {
 			return fmt.Errorf("container names the app %q, which this manifest does not declare", app)
 		}
-		if compute[app] != string(providerkit.ComputeContainer) {
+		if compute[app] != string(provider.ComputeContainer) {
 			return fmt.Errorf("container names the app %q, which this manifest says runs on %q", app, compute[app])
 		}
 		if served[app] {
@@ -1610,7 +1610,7 @@ func validateFixtureContainers(m *contractv1.Manifest) error {
 		}
 	}
 	for app, kind := range compute {
-		if kind == string(providerkit.ComputeContainer) && !served[app] {
+		if kind == string(provider.ComputeContainer) && !served[app] {
 			return fmt.Errorf("app %s runs on container compute and this manifest carries no container for it", app)
 		}
 	}
@@ -1630,8 +1630,8 @@ func validateFixtureManifest(m *contractv1.Manifest) error {
 		if err := naming.ValidateDeploymentID(a.GetDeploymentId()); err != nil {
 			return fmt.Errorf("app %s: %w", a.GetName(), err)
 		}
-		if !providerkit.KnownCompute(a.GetCompute()) {
-			return fmt.Errorf("app %s carries compute %q, and a provider only runs %v", a.GetName(), a.GetCompute(), providerkit.ComputeNames(providerkit.Computes()))
+		if !provider.KnownCompute(a.GetCompute()) {
+			return fmt.Errorf("app %s carries compute %q, and a provider only runs %v", a.GetName(), a.GetCompute(), provider.ComputeNames(provider.Computes()))
 		}
 	}
 	if err := validateFixtureContainers(m); err != nil {

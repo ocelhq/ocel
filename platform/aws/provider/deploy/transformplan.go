@@ -9,9 +9,9 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 )
@@ -28,7 +28,7 @@ func NodePass(root string, modules []string) transformkit.NodePass {
 	}
 }
 
-func transformStackPlan(ctx context.Context, pass transformkit.Pass, plan providerkit.StackPlan) (*transformPatches, error) {
+func transformStackPlan(ctx context.Context, pass transformkit.Pass, plan provider.StackPlan) (*transformPatches, error) {
 	if pass == nil {
 		return nil, nil
 	}
@@ -40,7 +40,7 @@ func transformStackPlan(ctx context.Context, pass transformkit.Pass, plan provid
 	}
 	var candidates []transformCandidate
 
-	if app := plan.App; app != nil && app.Compute == providerkit.ComputeContainer {
+	if app := plan.App; app != nil && app.Compute == provider.ComputeContainer {
 		req.Resources = append(req.Resources, transformkit.Resource{Type: transformTypeContainer, Name: app.App, App: app.App})
 		candidates = append(candidates, transformCandidate{
 			key:   resourceKey{Type: transformTypeContainer, Name: app.App},
@@ -62,13 +62,13 @@ func transformStackPlan(ctx context.Context, pass transformkit.Pass, plan provid
 				continue
 			}
 			switch resource.Type {
-			case providerkit.BindingPostgres:
+			case provider.BindingPostgres:
 				req.Resources = append(req.Resources, transformkit.Resource{Type: transformTypePostgres, Name: resource.Name})
 				candidates = append(candidates, transformCandidate{
 					key:   resourceKey{Type: transformTypePostgres, Name: resource.Name},
 					names: postgresResourceNames(project, stack.Env, resource.Name),
 				})
-			case providerkit.BindingBucket:
+			case provider.BindingBucket:
 				req.Resources = append(req.Resources, transformkit.Resource{Type: transformTypeBucket, Name: resource.Name})
 				candidates = append(candidates, transformCandidate{
 					key:   resourceKey{Type: transformTypeBucket, Name: resource.Name},
@@ -94,7 +94,7 @@ func transformStackPlan(ctx context.Context, pass transformkit.Pass, plan provid
 	return indexPatches(candidates, results)
 }
 
-func translateFunctionSpec(appFramework string, spec providerkit.FunctionSpec) (functionArgs, error) {
+func translateFunctionSpec(appFramework string, spec provider.FunctionSpec) (functionArgs, error) {
 	execution, err := executionFor(spec.Framework)
 	if err != nil {
 		return functionArgs{}, err
@@ -152,7 +152,7 @@ func managedRuntime(name string) string {
 	return providedFunctionRuntime
 }
 
-func resolvePlanOutputs(ctx context.Context, plan providerkit.StackPlan, candidates []transformCandidate, results []transformkit.Result) error {
+func resolvePlanOutputs(ctx context.Context, plan provider.StackPlan, candidates []transformCandidate, results []transformkit.Result) error {
 	var placed []placedOutput
 	if err := walkOutputs(candidates, results, func(ref outputRef, at outputSite, authored any) (any, error) {
 		placed = append(placed, placedOutput{Ref: ref, At: at})
@@ -176,7 +176,7 @@ func resolvePlanOutputs(ctx context.Context, plan providerkit.StackPlan, candida
 	})
 }
 
-func publishedAs(plan providerkit.StackPlan, ref outputRef, at outputSite) (string, error) {
+func publishedAs(plan provider.StackPlan, ref outputRef, at outputSite) (string, error) {
 	if ref.Type == customBindingType {
 		return ref.Name, nil
 	}
@@ -192,7 +192,7 @@ func publishedAs(plan providerkit.StackPlan, ref outputRef, at outputSite) (stri
 	return "", &UnboundOutputError{Ref: ref, At: at, Declared: declaredBindings(plan)}
 }
 
-func declaredBindings(plan providerkit.StackPlan) []string {
+func declaredBindings(plan provider.StackPlan) []string {
 	var out []string
 	for _, resource := range plan.Resources {
 		if resource.Binding == "" {
@@ -204,7 +204,7 @@ func declaredBindings(plan providerkit.StackPlan) []string {
 	return out
 }
 
-func readPlanOutputs(ctx context.Context, plan providerkit.StackPlan, placed []placedOutput) (map[outputRef]any, error) {
+func readPlanOutputs(ctx context.Context, plan provider.StackPlan, placed []placedOutput) (map[outputRef]any, error) {
 	published := make(map[outputRef]string, len(placed))
 	for _, p := range placed {
 		name, err := publishedAs(plan, p.Ref, p.At)
@@ -261,8 +261,8 @@ func readPlanOutputs(ctx context.Context, plan providerkit.StackPlan, placed []p
 	return values, nil
 }
 
-func resolvePlanBindings(ctx context.Context, bindings providerkit.Bindings, names []string) (map[string]providerkit.Binding, error) {
-	held := make([]providerkit.Binding, len(names))
+func resolvePlanBindings(ctx context.Context, bindings provider.Bindings, names []string) (map[string]provider.Binding, error) {
+	held := make([]provider.Binding, len(names))
 	group, gctx := errgroup.WithContext(ctx)
 	for i, name := range names {
 		group.Go(func() error {
@@ -277,7 +277,7 @@ func resolvePlanBindings(ctx context.Context, bindings providerkit.Bindings, nam
 	if err := group.Wait(); err != nil {
 		return nil, err
 	}
-	records := make(map[string]providerkit.Binding, len(names))
+	records := make(map[string]provider.Binding, len(names))
 	for i, name := range names {
 		records[name] = held[i]
 	}

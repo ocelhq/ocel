@@ -17,12 +17,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
 
-const defaultNamespace = bootstrap.Namespace(providerkit.DefaultNamespace)
+const defaultNamespace = bootstrap.Namespace(provider.DefaultNamespace)
 
 var sealingKeys = []string{
 	"arn:aws:kms:eu-west-1:111122223333:key/production-key",

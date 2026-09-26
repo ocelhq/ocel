@@ -10,7 +10,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -63,7 +63,7 @@ func TestTheBatchSpanCarriesNoResourceIdentityAndTheStandoutDoes(t *testing.T) {
 		t.Fatalf("spans[0].name = %q, want the batch span name", batch.name)
 	}
 	for _, a := range batch.attrs {
-		if a.Key == providerkit.AttrKeyResourceType || a.Key == providerkit.AttrKeyResourceName {
+		if a.Key == provider.AttrKeyResourceType || a.Key == provider.AttrKeyResourceName {
 			t.Errorf("batch span carries resource identity attr %+v; it covers many resources", a)
 		}
 	}
@@ -71,12 +71,12 @@ func TestTheBatchSpanCarriesNoResourceIdentityAndTheStandoutDoes(t *testing.T) {
 	var sawType, sawName bool
 	for _, a := range progress.spans[1].attrs {
 		switch a.Key {
-		case providerkit.AttrKeyResourceType:
+		case provider.AttrKeyResourceType:
 			sawType = true
 			if a.Value != "aws:s3/bucket:Bucket" {
 				t.Errorf("RESOURCE_TYPE = %q, want the type token", a.Value)
 			}
-		case providerkit.AttrKeyResourceName:
+		case provider.AttrKeyResourceName:
 			sawName = true
 			if a.Value != "my-bucket" {
 				t.Errorf("RESOURCE_NAME = %q, want the logical name", a.Value)
@@ -113,7 +113,7 @@ func TestAStandoutWhoseURNDidNotParseCarriesNoResourceIdentity(t *testing.T) {
 		t.Fatalf("got %d spans, want 2", len(progress.spans))
 	}
 	for _, a := range progress.spans[1].attrs {
-		if a.Key == providerkit.AttrKeyResourceType || a.Key == providerkit.AttrKeyResourceName {
+		if a.Key == provider.AttrKeyResourceType || a.Key == provider.AttrKeyResourceName {
 			t.Errorf("standout span carries resource identity attr %+v despite an unparseable URN", a)
 		}
 	}

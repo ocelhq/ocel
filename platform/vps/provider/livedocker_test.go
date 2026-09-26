@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -91,7 +91,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: absent.Reading}
+	req := provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: absent.Reading}
 	plan, err := bootstrap.Plan(ctx, req)
 	if err != nil {
 		t.Fatalf("Plan() over a machine with no engine = %v", err)
@@ -99,7 +99,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	group := onlyGroup(t, plan)
 
 	engine := planFor(group, engineName)
-	if engine.Action != providerkit.ActionCreate {
+	if engine.Action != provider.ActionCreate {
 		t.Fatalf("Plan() over a machine with no engine shows %s as %q, want the install a user consents to", engineName, engine.Action)
 	}
 	for _, learned := range []*regexp.Regexp{
@@ -109,7 +109,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 			t.Errorf("the engine is planned as %q, which never names %s, and the user consenting never learns what runs on their machine", engine.Reason, learned)
 		}
 	}
-	if unit := planFor(group, unitName); unit.Action != providerkit.ActionCreate {
+	if unit := planFor(group, unitName); unit.Action != provider.ActionCreate {
 		t.Errorf("Plan() shows %s as %q on a machine that has no engine at all", unitName, unit.Action)
 	}
 	var slow bool
@@ -150,12 +150,12 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Errorf("Describe() calls a machine that has just been bootstrapped, engine and all, drifted, %s\n%s",
 			stillMoving(t, bootstrap, class, standing.Reading), vm.proxySaid(t))
 	}
-	again, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: standing.Reading})
+	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: standing.Reading})
 	if err != nil {
 		t.Fatal(err)
 	}
 	settled := onlyGroup(t, again)
-	if settled.Action != providerkit.ActionKeep {
+	if settled.Action != provider.ActionKeep {
 		t.Errorf("a re-run over a fully bootstrapped machine plans %q for the stack, want nothing left to do", settled.Action)
 	}
 	for _, change := range settled.Changes {
@@ -175,16 +175,16 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	stopped := providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: idle.Reading}
+	stopped := provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: idle.Reading}
 	restarting, err := bootstrap.Plan(ctx, stopped)
 	if err != nil {
 		t.Fatalf("Plan() over an installed engine whose daemon is idle = %v", err)
 	}
 	waking := onlyGroup(t, restarting)
-	if kept := planFor(waking, engineName); kept.Action != providerkit.ActionAdopt {
+	if kept := planFor(waking, engineName); kept.Action != provider.ActionAdopt {
 		t.Errorf("an idle daemon plans %q for %s, want the engine adopted: presence is never remediated by a second install", kept.Action, engineName)
 	}
-	if unit := planFor(waking, unitName); unit.Action != providerkit.ActionUpdate {
+	if unit := planFor(waking, unitName); unit.Action != provider.ActionUpdate {
 		t.Errorf("an idle daemon plans %q for %s, want the unit enabled", unit.Action, unitName)
 	}
 	for _, change := range waking.Changes {
@@ -227,19 +227,19 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	reinstalling, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: shimmed.Reading})
+	reinstalling, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: shimmed.Reading})
 	if err != nil {
 		t.Fatalf("Plan() over a docker binary with no unit behind it = %v", err)
 	}
 	shimming := onlyGroup(t, reinstalling)
-	if engine := planFor(shimming, engineName); engine.Action != providerkit.ActionUpdate {
+	if engine := planFor(shimming, engineName); engine.Action != provider.ActionUpdate {
 		t.Errorf("a binary with no %s plans %q for the engine, want the install shown over what stands: keeping it leaves an apply enabling a unit the machine does not carry, on every run, forever", unitName, engine.Action)
 	}
-	if unit := planFor(shimming, unitName); unit.Action != providerkit.ActionCreate {
+	if unit := planFor(shimming, unitName); unit.Action != provider.ActionCreate {
 		t.Errorf("a binary with no %s plans %q for the unit, want the install that brings one", unitName, unit.Action)
 	}
 	refusal := refused(t, bootstrap.Apply(ctx,
-		providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: shimmed.Reading, Unattended: true}, nil),
+		provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: shimmed.Reading, Unattended: true}, nil),
 		refusal.CodeNotReady)
 	if !strings.Contains(refusal.Message, engineName) {
 		t.Errorf("an unattended apply over a docker binary with no unit says %q, want it refused by name: nobody is there to consent to %s being run as root over an install that already stands",

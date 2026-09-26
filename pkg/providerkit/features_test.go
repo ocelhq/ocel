@@ -6,13 +6,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
-var testCatalogue = []Feature{
-	{Name: "isr", Summary: "incremental regeneration", Needs: []string{NeedsFrameworkPrefix + "next"}},
-	{Name: "image-optimization", Summary: "image optimizer", Needs: []string{NeedsFrameworkPrefix + "next"}},
-	{Name: "cloudflare-edge", Summary: "cloudflare front", DependsOn: []string{"isr"}, Needs: []string{NeedsEdgePrefix + "cloudflare"}},
+var testCatalogue = []provider.Feature{
+	{Name: "isr", Summary: "incremental regeneration", Needs: []string{provider.NeedsFrameworkPrefix + "next"}},
+	{Name: "image-optimization", Summary: "image optimizer", Needs: []string{provider.NeedsFrameworkPrefix + "next"}},
+	{Name: "cloudflare-edge", Summary: "cloudflare front", DependsOn: []string{"isr"}, Needs: []string{provider.NeedsEdgePrefix + "cloudflare"}},
 }
 
 func TestFeatureClosure(t *testing.T) {
@@ -69,7 +70,7 @@ func TestFeatureClosure(t *testing.T) {
 	t.Run("a dependency the catalogue does not carry names the feature that wanted it", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := featureClosure([]Feature{{Name: "isr", DependsOn: []string{"gone"}}}, []string{"isr"})
+		_, err := featureClosure([]provider.Feature{{Name: "isr", DependsOn: []string{"gone"}}}, []string{"isr"})
 		if err == nil || !strings.Contains(err.Error(), "isr depends on \"gone\"") {
 			t.Fatalf("featureClosure() = %v, want it to name the feature and the dependency", err)
 		}
@@ -116,7 +117,7 @@ func TestFeatureLevels(t *testing.T) {
 	t.Run("a set no order satisfies is named, not silently cut short", func(t *testing.T) {
 		t.Parallel()
 
-		cyclic := []Feature{
+		cyclic := []provider.Feature{
 			{Name: "hen", DependsOn: []string{"egg"}},
 			{Name: "egg", DependsOn: []string{"hen"}},
 		}

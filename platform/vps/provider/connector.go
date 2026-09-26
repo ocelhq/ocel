@@ -8,7 +8,7 @@ import (
 	"errors"
 	"net"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/target"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
-const connectorCompute = providerkit.ComputeContainer
+const connectorCompute = provider.ComputeContainer
 
 func dialable(hostname string) error {
 	if hostname == "" {
@@ -31,7 +31,7 @@ func dialable(hostname string) error {
 	return nil
 }
 
-func hostKeyDigest(offered providerkit.HostKey) (string, error) {
+func hostKeyDigest(offered provider.HostKey) (string, error) {
 	held, err := offered.Fingerprinted()
 	if err != nil {
 		return "", err
@@ -46,43 +46,43 @@ func hostKeyDigest(offered providerkit.HostKey) (string, error) {
 
 type connector struct{ *Provider }
 
-func (p connector) Target(ctx context.Context) (providerkit.ConnectorTarget, error) {
+func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error) {
 	live, err := p.Session(ctx)
 	if err != nil {
-		return providerkit.ConnectorTarget{}, err
+		return provider.ConnectorTarget{}, err
 	}
 	key, err := hostKeyDigest(live.HostKey())
 	if err != nil {
-		return providerkit.ConnectorTarget{}, refusal.Refuse(refusal.CodeDenied,
+		return provider.ConnectorTarget{}, refusal.Refuse(refusal.CodeDenied,
 			"read this host's ssh key: %s", err)
 	}
-	ns, err := providerkit.NamespaceFromEnv()
+	ns, err := provider.NamespaceFromEnv()
 	if err != nil {
-		return providerkit.ConnectorTarget{}, err
+		return provider.ConnectorTarget{}, err
 	}
 	fingerprint, err := target.Fingerprint("vps", key, ns.String())
 	if err != nil {
-		return providerkit.ConnectorTarget{}, err
+		return provider.ConnectorTarget{}, err
 	}
 	hostname := live.Destination().Written
 	if err := dialable(hostname); err != nil {
-		return providerkit.ConnectorTarget{}, err
+		return provider.ConnectorTarget{}, err
 	}
 	arch, err := p.host.Arch(ctx)
 	if err != nil {
-		return providerkit.ConnectorTarget{}, err
+		return provider.ConnectorTarget{}, err
 	}
-	described := providerkit.ConnectorTarget{
+	described := provider.ConnectorTarget{
 		Fingerprint: fingerprint,
 		Hostname:    hostname,
 		Arch:        arch,
 	}
 	standing, err := host.NewConnector(p.host).Describe(ctx)
 	if err != nil {
-		return providerkit.ConnectorTarget{}, err
+		return provider.ConnectorTarget{}, err
 	}
 	if standing.Installed {
-		described.Installed = &providerkit.ConnectorRelease{
+		described.Installed = &provider.ConnectorRelease{
 			Version:   standing.Version,
 			PublicKey: standing.PublicKey,
 			Compute:   connectorCompute,
@@ -91,27 +91,27 @@ func (p connector) Target(ctx context.Context) (providerkit.ConnectorTarget, err
 	return described, nil
 }
 
-func (p connector) Install(ctx context.Context, install providerkit.ConnectorInstall, progress edge.Progress) (providerkit.ConnectorAddress, error) {
-	compute, err := providerkit.ConnectorCompute(install.Compute, connectorCompute)
+func (p connector) Install(ctx context.Context, install provider.ConnectorInstall, progress edge.Progress) (provider.ConnectorAddress, error) {
+	compute, err := provider.ConnectorCompute(install.Compute, connectorCompute)
 	if err != nil {
-		return providerkit.ConnectorAddress{}, err
+		return provider.ConnectorAddress{}, err
 	}
 	live, err := p.Session(ctx)
 	if err != nil {
-		return providerkit.ConnectorAddress{}, err
+		return provider.ConnectorAddress{}, err
 	}
 	hostname := live.Destination().Written
 	if err := dialable(hostname); err != nil {
-		return providerkit.ConnectorAddress{}, err
+		return provider.ConnectorAddress{}, err
 	}
 	if progress != nil {
 		progress.Say("connector " + install.Version + " onto " + hostname)
 	}
 	standing, err := host.NewConnector(p.host).Install(ctx, hostname, install.Binary, install.Config, progress)
 	if err != nil {
-		return providerkit.ConnectorAddress{}, err
+		return provider.ConnectorAddress{}, err
 	}
-	return providerkit.ConnectorAddress{
+	return provider.ConnectorAddress{
 		URL:       "https://" + hostname + switchboard.ConnectorPath,
 		PublicKey: standing.PublicKey,
 		Compute:   compute,

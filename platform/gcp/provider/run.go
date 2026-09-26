@@ -15,8 +15,8 @@ import (
 	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -39,7 +39,7 @@ type serving struct {
 	image   string
 	env     map[string]string
 	account string
-	compute providerkit.Compute
+	compute provider.Compute
 	health  string
 	public  bool
 	memory  int
@@ -101,7 +101,7 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 		Ports: []*run.GoogleCloudRunV2ContainerPort{{ContainerPort: appbuild.InjectedPort}},
 		Env:   environmentOf(s.env),
 		Resources: &run.GoogleCloudRunV2ResourceRequirements{
-			CpuIdle:         s.compute == providerkit.ComputeServerless,
+			CpuIdle:         s.compute == provider.ComputeServerless,
 			Limits:          map[string]string{"cpu": revisionCPU, "memory": memory},
 			ForceSendFields: []string{"CpuIdle"},
 		},
@@ -110,7 +110,7 @@ func serviceOf(s serving) (*run.GoogleCloudRunV2Service, error) {
 	if s.most > 0 {
 		scaling.MaxInstanceCount = int64(s.most)
 	}
-	if s.compute == providerkit.ComputeContainer {
+	if s.compute == provider.ComputeContainer {
 		scaling.MinInstanceCount = 1
 		container.StartupProbe = &run.GoogleCloudRunV2Probe{
 			HttpGet: &run.GoogleCloudRunV2HTTPGetAction{Path: s.health, Port: appbuild.InjectedPort},

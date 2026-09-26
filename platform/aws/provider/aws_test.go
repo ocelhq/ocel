@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
@@ -20,7 +21,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-var defaultNamespace = bootstrap.Namespace(providerkit.DefaultNamespace)
+var defaultNamespace = bootstrap.Namespace(provider.DefaultNamespace)
 
 func TestStateBackendURLCarriesTheEndpointTheAccountIsReachedOn(t *testing.T) {
 	t.Setenv("AWS_ENDPOINT_URL", "")
@@ -46,22 +47,22 @@ func TestStateBackendURLCarriesTheEndpointTheAccountIsReachedOn(t *testing.T) {
 
 type stubBootstrap struct{ err error }
 
-func (stubBootstrap) Catalogue() []providerkit.Feature { return nil }
+func (stubBootstrap) Catalogue() []provider.Feature { return nil }
 
-func (stubBootstrap) Describe(context.Context, edge.Class) (providerkit.BootstrapReading, error) {
-	return providerkit.BootstrapReading{}, nil
+func (stubBootstrap) Describe(context.Context, edge.Class) (provider.BootstrapReading, error) {
+	return provider.BootstrapReading{}, nil
 }
 
-func (s stubBootstrap) Plan(context.Context, providerkit.BootstrapRequest) (providerkit.Plan, error) {
-	return providerkit.Plan{}, s.err
+func (s stubBootstrap) Plan(context.Context, provider.BootstrapRequest) (provider.Plan, error) {
+	return provider.Plan{}, s.err
 }
 
-func (s stubBootstrap) Apply(context.Context, providerkit.BootstrapRequest, edge.Progress) error {
+func (s stubBootstrap) Apply(context.Context, provider.BootstrapRequest, edge.Progress) error {
 	return s.err
 }
 
-func (stubBootstrap) PlanRemove(context.Context, edge.Class) (providerkit.Plan, error) {
-	return providerkit.Plan{}, nil
+func (stubBootstrap) PlanRemove(context.Context, edge.Class) (provider.Plan, error) {
+	return provider.Plan{}, nil
 }
 
 func (s stubBootstrap) Remove(context.Context, edge.Class, edge.Progress) error {
@@ -117,7 +118,7 @@ func TestBootstrapApplyForgetsWhatItStoodUp(t *testing.T) {
 	primed(t, p, "before")
 
 	if err := (settling{Bootstrap: stubBootstrap{}, settled: settledBy(t, p)}).
-		Apply(context.Background(), providerkit.BootstrapRequest{Class: edge.ClassProduction}, nil); err != nil {
+		Apply(context.Background(), provider.BootstrapRequest{Class: edge.ClassProduction}, nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -148,7 +149,7 @@ func TestBootstrapKeepsWhatAFailedApplyNeverChanged(t *testing.T) {
 
 	refused := errors.New("refused")
 	if err := (settling{Bootstrap: stubBootstrap{err: refused}, settled: settledBy(t, p)}).
-		Apply(context.Background(), providerkit.BootstrapRequest{Class: edge.ClassProduction}, nil); !errors.Is(err, refused) {
+		Apply(context.Background(), provider.BootstrapRequest{Class: edge.ClassProduction}, nil); !errors.Is(err, refused) {
 		t.Fatalf("Apply() = %v, want the refusal it was given", err)
 	}
 
@@ -212,8 +213,8 @@ func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pre := providerkit.DeployPreflight{
-		Plan: providerkit.DeployPlan{Class: edge.ClassProduction},
+	pre := provider.DeployPreflight{
+		Plan: provider.DeployPlan{Class: edge.ClassProduction},
 		Edge: cloudflare.Kind,
 	}
 	if err := p.refuseUnreadableOriginSecret(context.Background(), pre); !errors.Is(err, refusal) {
@@ -309,10 +310,10 @@ func TestTheIdentityNamesTheVendorTheProviderNamesItself(t *testing.T) {
 }
 
 func TestAVarsKeyThatNamesNoKMSKeyIsRefused(t *testing.T) {
-	if _, err := providerkit.Decode[Options](Vendor, providerkit.Options{"varsKey": "arn:aws:kms:eu-west-1:111122223333:key/abcd"}); err != nil {
+	if _, err := provider.Decode[Options](Vendor, provider.Options{"varsKey": "arn:aws:kms:eu-west-1:111122223333:key/abcd"}); err != nil {
 		t.Fatalf("a kms key arn was refused: %v", err)
 	}
-	_, err := providerkit.Decode[Options](Vendor, providerkit.Options{"varsKey": "arn:aws:s3:::a-bucket"})
+	_, err := provider.Decode[Options](Vendor, provider.Options{"varsKey": "arn:aws:s3:::a-bucket"})
 	if err == nil {
 		t.Fatal("a varsKey that names no kms key was taken")
 	}

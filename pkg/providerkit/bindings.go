@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -21,7 +22,7 @@ func (r *deployRun) admitBindings(ctx context.Context, progress edge.Progress) e
 	if err != nil {
 		return err
 	}
-	published := make(map[string]Binding, len(bindings))
+	published := make(map[string]provider.Binding, len(bindings))
 	names := make([]string, 0, len(bindings))
 	for _, binding := range bindings {
 		published[binding.Name] = binding
@@ -52,18 +53,18 @@ func (r *deployRun) admitBindings(ctx context.Context, progress edge.Progress) e
 	return nil
 }
 
-func (r *deployRun) writtenByTheDeploy(name string, published map[string]Binding) bool {
+func (r *deployRun) writtenByTheDeploy(name string, published map[string]provider.Binding) bool {
 	_, held := published[name]
 	return r.dry && !held && naming.IsInlineRecord(name)
 }
 
-func proxied(kind BindingType) bool {
-	return naming.Proxied(WireBindingType(kind))
+func proxied(kind provider.BindingType) bool {
+	return naming.Proxied(provider.WireBindingType(kind))
 }
 
-func ReadableAs(binding Binding, declaredName string, declared BindingType, proxied func(BindingType) bool) error {
+func ReadableAs(binding provider.Binding, declaredName string, declared provider.BindingType, proxied func(provider.BindingType) bool) error {
 	switch {
-	case binding.Type == BindingCustom:
+	case binding.Type == provider.BindingCustom:
 		return refusal.Refuse(refusal.CodeInvalid,
 			"`bindings` binds %s.%s to %q, and the record published under that name is a custom one: "+
 				"a custom binding is read by transforms; it is external by definition and never provisioned, so it is not bound here. "+
@@ -86,7 +87,7 @@ func ReadableAs(binding Binding, declaredName string, declared BindingType, prox
 
 func (r *deployRun) refuseUnpublished(ctx context.Context, missing, published []string) error {
 	elsewhere := r.publishingClasses(ctx, missing)
-	coordinate := describeCoordinate(string(r.plan.Class), r.plan.bindingEnvironment())
+	coordinate := describeCoordinate(string(r.plan.Class), bindingEnvironment(r.plan))
 
 	var b strings.Builder
 	fmt.Fprintf(&b,
@@ -114,7 +115,7 @@ func (r *deployRun) publishingClasses(ctx context.Context, missing []string) map
 		if class == r.plan.Class {
 			continue
 		}
-		names, err := r.values.PublishedNames(ctx, envvars.Scope{Project: r.plan.Slug, Class: class}, r.plan.bindingEnvironment())
+		names, err := r.values.PublishedNames(ctx, envvars.Scope{Project: r.plan.Slug, Class: class}, bindingEnvironment(r.plan))
 		if err != nil {
 			continue
 		}
@@ -127,7 +128,7 @@ func (r *deployRun) publishingClasses(ctx context.Context, missing []string) map
 	return found
 }
 
-func (r *deployRun) warnShadowed(progress edge.Progress, resources []Resource, published map[string]Binding) {
+func (r *deployRun) warnShadowed(progress edge.Progress, resources []provider.Resource, published map[string]provider.Binding) {
 	for _, resource := range resources {
 		if resource.Binding != "" {
 			continue
@@ -139,7 +140,7 @@ func (r *deployRun) warnShadowed(progress edge.Progress, resources []Resource, p
 		progress.Say(fmt.Sprintf(
 			"a binding named %q is already published to %s, and this deploy provisions %s beside it. "+
 				"Ocel binds neither to the other on its own: put %q in `bindings` — \"bindings\": { %q: { %q: %q } } — to consume the published record instead",
-			resource.Declared, describeCoordinate(string(r.plan.Class), r.plan.bindingEnvironment()), resource.Name,
+			resource.Declared, describeCoordinate(string(r.plan.Class), bindingEnvironment(r.plan)), resource.Name,
 			resource.Declared, string(resource.Type), resource.Declared, "@"+resource.Declared))
 	}
 }

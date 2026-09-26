@@ -11,8 +11,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/resource"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -38,7 +38,7 @@ func assetShippingConfig(t *testing.T, app string) Config {
 	return cfg
 }
 
-func assetSetRows(plan providerkit.Plan) []string {
+func assetSetRows(plan provider.Plan) []string {
 	var named []string
 	for _, group := range plan.Groups {
 		for _, change := range group.Changes {

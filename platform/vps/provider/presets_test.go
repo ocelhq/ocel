@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
 func frontFrom(t *testing.T, proxy any) host.Front {
 	t.Helper()
-	decoded, err := providerkit.Decode[vps.Options](vps.Vendor, proxied(proxy))
+	decoded, err := provider.Decode[vps.Options](vps.Vendor, proxied(proxy))
 	if err != nil {
 		t.Fatalf("Decode(%v) = %v", proxy, err)
 	}
@@ -220,7 +220,7 @@ func TestAProxyMissingWhatItNeedsIsRefusedNamingTheField(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := vps.New(context.Background(), providerkit.Settings{Options: proxied(tc.proxy)})
+			_, err := vps.New(context.Background(), provider.Settings{Options: proxied(tc.proxy)})
 			if err == nil {
 				t.Fatalf("New() with %v = nil, want a refusal", tc.proxy)
 			}

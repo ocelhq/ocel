@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -22,7 +22,7 @@ const (
 	bindAttempts = 4
 )
 
-func databaseCondition(project string, ns providerkit.Namespace) *cloudresourcemanager.Expr {
+func databaseCondition(project string, ns provider.Namespace) *cloudresourcemanager.Expr {
 	return &cloudresourcemanager.Expr{
 		Title: "ocel " + string(ns) + " database",
 		Expression: fmt.Sprintf("resource.name == %q",

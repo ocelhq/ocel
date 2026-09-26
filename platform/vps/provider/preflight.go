@@ -6,12 +6,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
-func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPreflight) error {
+func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
 	if err := p.host.CheckEngine(ctx); err != nil {
 		return err
 	}
@@ -25,7 +25,7 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPr
 	})
 }
 
-func repositories(plan providerkit.DeployPlan) []string {
+func repositories(plan provider.DeployPlan) []string {
 	var named []string
 	for _, app := range plan.Apps {
 		repository, ok := host.Repository(app.Image)

@@ -6,22 +6,22 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 )
 
-func proxied(proxy any) providerkit.Options {
-	return providerkit.Options{"ssh": "prod", "proxy": proxy}
+func proxied(proxy any) provider.Options {
+	return provider.Options{"ssh": "prod", "proxy": proxy}
 }
 
 func TestTheProxyOptionReadsEveryFormItTakes(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
-		options providerkit.Options
+		options provider.Options
 		want    *vps.Proxy
 	}{
-		"left out, ocel runs its own":        {options: providerkit.Options{"ssh": "prod"}, want: nil},
+		"left out, ocel runs its own":        {options: provider.Options{"ssh": "prod"}, want: nil},
 		"manual as a shorthand":              {options: proxied("manual"), want: &vps.Proxy{Manual: &vps.Manual{}}},
 		"manual as an object with no port":   {options: proxied(map[string]any{"manual": map[string]any{}}), want: &vps.Proxy{Manual: &vps.Manual{}}},
 		"manual as an object naming a port":  {options: proxied(map[string]any{"manual": map[string]any{"port": 9000}}), want: &vps.Proxy{Manual: &vps.Manual{Port: 9000}}},
@@ -30,11 +30,11 @@ func TestTheProxyOptionReadsEveryFormItTakes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			provider, err := vps.New(context.Background(), providerkit.Settings{Options: tc.options})
+			p, err := vps.New(context.Background(), provider.Settings{Options: tc.options})
 			if err != nil {
 				t.Fatalf("New() = %v, want %s accepted", err, name)
 			}
-			if got := provider.(*vps.Provider).Fronted(); !reflect.DeepEqual(got, tc.want) {
+			if got := p.(*vps.Provider).Fronted(); !reflect.DeepEqual(got, tc.want) {
 				t.Errorf("Fronted() = %+v, want %+v", got, tc.want)
 			}
 		})
@@ -45,7 +45,7 @@ func TestTheProxyOptionRefusesWhatThisOcelDoesNotServe(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
-		options providerkit.Options
+		options provider.Options
 		mention []string
 	}{
 		"a shorthand it does not list": {
@@ -80,12 +80,12 @@ func TestTheProxyOptionRefusesWhatThisOcelDoesNotServe(t *testing.T) {
 		"Coolify's Caddy, not served yet":             {options: proxied(map[string]any{"caddy": map[string]any{"preset": "coolify"}}), mention: []string{`"caddy"`, "not supported yet"}},
 		"Coolify's Traefik on a port, not served yet": {options: proxied(map[string]any{"traefik": map[string]any{"preset": "coolify", "port": 9000}}), mention: []string{`"traefik"`, "not supported yet"}},
 		"Coolify's Caddy on a port, not served yet":   {options: proxied(map[string]any{"caddy": map[string]any{"preset": "coolify", "port": 9000}}), mention: []string{`"caddy"`, "not supported yet"}},
-		"certificates with manual":                    {options: providerkit.Options{"ssh": "prod", "proxy": "manual", "certificates": map[string]any{"shop.example.com": "/etc/ocel/certs/shop"}}, mention: []string{"your proxy serves certificates; configure them there"}},
+		"certificates with manual":                    {options: provider.Options{"ssh": "prod", "proxy": "manual", "certificates": map[string]any{"shop.example.com": "/etc/ocel/certs/shop"}}, mention: []string{"your proxy serves certificates; configure them there"}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			_, err := vps.New(context.Background(), providerkit.Settings{Options: tc.options})
+			_, err := vps.New(context.Background(), provider.Settings{Options: tc.options})
 			if err == nil {
 				t.Fatalf("New() with %s = nil, want a refusal", name)
 			}

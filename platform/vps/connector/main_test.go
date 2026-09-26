@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func TestTheConfigTheEnvironmentCarriesIsReadAheadOfTheFile(t *testing.T) {
-	t.Setenv(providerkit.ConnectorConfigEnvVar, `{"console":"https://console.example.com","connectorId":"con_1","organizationId":"org_1","grants":["envvars.read"]}`)
+	t.Setenv(provider.ConnectorConfigEnvVar, `{"console":"https://console.example.com","connectorId":"con_1","organizationId":"org_1","grants":["envvars.read"]}`)
 	file := filepath.Join(t.TempDir(), "connector.json")
 	if err := os.WriteFile(file, []byte("not json"), 0o600); err != nil {
 		t.Fatal(err)

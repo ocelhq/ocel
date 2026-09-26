@@ -9,14 +9,14 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type publishedReader struct {
-	bindings []providerkit.Binding
+	bindings []provider.Binding
 	failure  error
 
 	mu    sync.Mutex
@@ -31,41 +31,41 @@ func (r *publishedReader) Names(context.Context) ([]string, error) {
 	return names, nil
 }
 
-func (r *publishedReader) Published(context.Context) ([]providerkit.Binding, error) {
+func (r *publishedReader) Published(context.Context) ([]provider.Binding, error) {
 	return r.bindings, nil
 }
 
-func (r *publishedReader) Named(_ context.Context, binding string) (providerkit.Binding, error) {
+func (r *publishedReader) Named(_ context.Context, binding string) (provider.Binding, error) {
 	r.mu.Lock()
 	r.asked = append(r.asked, binding)
 	r.mu.Unlock()
 	if r.failure != nil {
-		return providerkit.Binding{}, r.failure
+		return provider.Binding{}, r.failure
 	}
 	for _, held := range r.bindings {
 		if held.Name == binding {
 			return held, nil
 		}
 	}
-	return providerkit.Binding{}, refusal.Refuse(refusal.CodeInvalid, "nothing published %s", binding)
+	return provider.Binding{}, refusal.Refuse(refusal.CodeInvalid, "nothing published %s", binding)
 }
 
-func planUnderTransform() providerkit.StackPlan {
-	return providerkit.StackPlan{
-		Ref: providerkit.StackRef{
+func planUnderTransform() provider.StackPlan {
+	return provider.StackPlan{
+		Ref: provider.StackRef{
 			Project: "shop",
 			Class:   edge.ClassProduction,
 			Name:    naming.AppStack("production", "api", naming.NewRelease("dep1", "fp1")),
 		},
-		Kind: providerkit.StackApp,
-		Resources: []providerkit.Resource{
-			{Name: "db", Type: providerkit.BindingPostgres, Postgres: &providerkit.PostgresSpec{}},
-			{Name: "uploads", Type: providerkit.BindingBucket, Bucket: &providerkit.BucketSpec{}},
+		Kind: provider.StackApp,
+		Resources: []provider.Resource{
+			{Name: "db", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}},
+			{Name: "uploads", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
 		},
-		App: &providerkit.AppPlan{
+		App: &provider.AppPlan{
 			App:       "api",
 			Framework: "next",
-			Functions: []providerkit.FunctionSpec{{Name: "fn--api--users"}},
+			Functions: []provider.FunctionSpec{{Name: "fn--api--users"}},
 		},
 	}
 }
@@ -101,7 +101,7 @@ func filledFromBinding(kind, name, property string) patchingPass {
 	}}
 }
 
-func offered(t *testing.T, plan providerkit.StackPlan) (*fakePass, []string) {
+func offered(t *testing.T, plan provider.StackPlan) (*fakePass, []string) {
 	t.Helper()
 	pass := &fakePass{}
 	if _, err := transformStackPlan(context.Background(), pass, plan); err != nil {
@@ -161,7 +161,7 @@ func TestAPatchLandsOnThePulumiResourceThatOcelConstructsForIt(t *testing.T) {
 func TestAnInfraStackOffersTheResourcesItStandsUpAndNotTheOnesItIsHandled(t *testing.T) {
 	plan := planUnderTransform()
 	plan.App = nil
-	plan.Kind = providerkit.StackInfra
+	plan.Kind = provider.StackInfra
 	plan.Resources[0].Binding = "legacy-orders"
 
 	_, seen := offered(t, plan)
@@ -175,7 +175,7 @@ func TestAnInfraStackOffersTheResourcesItStandsUpAndNotTheOnesItIsHandled(t *tes
 func TestAPatchOnAResourceThisProviderNeverConstructsIsRefused(t *testing.T) {
 	plan := planUnderTransform()
 	plan.App = nil
-	plan.Kind = providerkit.StackInfra
+	plan.Kind = provider.StackInfra
 	pass := patchingPass{patch: func(patches []transformkit.Patches) {
 		patches[1]["queue"] = map[string]any{"fifo": true}
 	}}
@@ -189,7 +189,7 @@ func TestAPatchOnAResourceThisProviderNeverConstructsIsRefused(t *testing.T) {
 func TestABucketWithNoDeclaredOriginsCanStillBeGivenCORSByATransform(t *testing.T) {
 	plan := planUnderTransform()
 	plan.App = nil
-	plan.Kind = providerkit.StackInfra
+	plan.Kind = provider.StackInfra
 	pass := patchingPass{patch: func(patches []transformkit.Patches) {
 		patches[1]["cors"] = map[string]any{"corsRules": []any{map[string]any{"allowedMethods": []any{"GET"}}}}
 	}}
@@ -208,8 +208,8 @@ func TestABucketWithNoDeclaredOriginsCanStillBeGivenCORSByATransform(t *testing.
 }
 
 func TestATransformReadsABindingOutputThroughThePlansOwnBindings(t *testing.T) {
-	bindings := &publishedReader{bindings: []providerkit.Binding{
-		{Type: providerkit.BindingPostgres, Name: "legacy", Properties: map[string]string{"runtime": "nodejs22.x"}},
+	bindings := &publishedReader{bindings: []provider.Binding{
+		{Type: provider.BindingPostgres, Name: "legacy", Properties: map[string]string{"runtime": "nodejs22.x"}},
 	}}
 	plan := planUnderTransform()
 	plan.Bindings = bindings
@@ -255,8 +255,8 @@ func TestATransformReadingABindingThisProjectNeverBoundIsRefused(t *testing.T) {
 
 func TestATransformReadingAnUnpublishedRecordNamesWhatIsPublished(t *testing.T) {
 	plan := planUnderTransform()
-	plan.Bindings = &publishedReader{bindings: []providerkit.Binding{
-		{Type: providerkit.BindingBucket, Name: "archive", Properties: map[string]string{"bucket": "held"}},
+	plan.Bindings = &publishedReader{bindings: []provider.Binding{
+		{Type: provider.BindingBucket, Name: "archive", Properties: map[string]string{"bucket": "held"}},
 	}}
 
 	_, err := transformStackPlan(context.Background(), filledFromBinding(customBindingType, "absent", "runtime"), plan)
@@ -272,8 +272,8 @@ func TestATransformReadingAnUnpublishedRecordNamesWhatIsPublished(t *testing.T) 
 func TestATransformReadsABoundResourceUnderTheNameItIsPublishedAs(t *testing.T) {
 	plan := planUnderTransform()
 	plan.Resources[0].Binding = "legacy-orders"
-	plan.Bindings = &publishedReader{bindings: []providerkit.Binding{
-		{Type: providerkit.BindingPostgres, Name: "legacy-orders", Properties: map[string]string{"runtime": "nodejs22.x"}},
+	plan.Bindings = &publishedReader{bindings: []provider.Binding{
+		{Type: provider.BindingPostgres, Name: "legacy-orders", Properties: map[string]string{"runtime": "nodejs22.x"}},
 	}}
 
 	transformed, err := transformStackPlan(context.Background(), filledFromBinding("postgres", "db", "runtime"), plan)
@@ -290,7 +290,7 @@ func TestAStoreThatFailsToResolveABindingIsNotReportedAsABadProperty(t *testing.
 	torn := errors.New("the record's pair is torn")
 	plan := planUnderTransform()
 	plan.Bindings = &publishedReader{
-		bindings: []providerkit.Binding{{Type: providerkit.BindingPostgres, Name: "legacy"}},
+		bindings: []provider.Binding{{Type: provider.BindingPostgres, Name: "legacy"}},
 		failure:  torn,
 	}
 
@@ -306,8 +306,8 @@ func TestAStoreThatFailsToResolveABindingIsNotReportedAsABadProperty(t *testing.
 
 func TestABindingCarryingNoSuchPropertyNamesWhatItDoesCarry(t *testing.T) {
 	plan := planUnderTransform()
-	plan.Bindings = &publishedReader{bindings: []providerkit.Binding{{
-		Type:       providerkit.BindingPostgres,
+	plan.Bindings = &publishedReader{bindings: []provider.Binding{{
+		Type:       provider.BindingPostgres,
 		Name:       "legacy",
 		Properties: map[string]string{"host": "db.internal", "port": "5432"},
 	}}}
@@ -323,8 +323,8 @@ func TestABindingCarryingNoSuchPropertyNamesWhatItDoesCarry(t *testing.T) {
 }
 
 func TestEveryOutputOffTheSameBindingResolvesItOnce(t *testing.T) {
-	bindings := &publishedReader{bindings: []providerkit.Binding{
-		{Type: providerkit.BindingPostgres, Name: "legacy", Properties: map[string]string{"runtime": "nodejs22.x"}},
+	bindings := &publishedReader{bindings: []provider.Binding{
+		{Type: provider.BindingPostgres, Name: "legacy", Properties: map[string]string{"runtime": "nodejs22.x"}},
 	}}
 	plan := planUnderTransform()
 	plan.Bindings = bindings

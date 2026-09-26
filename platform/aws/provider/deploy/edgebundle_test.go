@@ -8,8 +8,8 @@ import (
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 )
 
@@ -268,14 +268,14 @@ func TestUploadEdgeSeal(t *testing.T) {
 
 }
 
-func appValuesOf(app *contractv1.ManifestApp) providerkit.AppValues {
+func appValuesOf(app *contractv1.ManifestApp) provider.AppValues {
 	plain := map[string]string{}
 	for _, v := range app.GetVariables() {
 		if v.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
 			plain[v.GetKey()] = v.GetValue()
 		}
 	}
-	return providerkit.AppValues{Plain: plain, Folder: app.GetFolder()}
+	return provider.AppValues{Plain: plain, Folder: app.GetFolder()}
 }
 
 func TestCheckAppEdgeVariables(t *testing.T) {

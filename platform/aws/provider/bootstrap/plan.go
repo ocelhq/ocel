@@ -11,10 +11,11 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
-func NameStacks(ns Namespace, described providerkit.BootstrapReading) providerkit.BootstrapReading {
+func NameStacks(ns Namespace, described provider.BootstrapReading) provider.BootstrapReading {
 	coreStack, err := ns.StackNameFor(string(described.Class))
 	if err != nil {
 		return described
@@ -30,7 +31,7 @@ func NameStacks(ns Namespace, described providerkit.BootstrapReading) providerki
 
 const planFanOut = 4
 
-func PlanChanges(ctx context.Context, stacks cfn.API, read Reading, req Request, groups []providerkit.ChangeGroup) ([]providerkit.ChangeGroup, error) {
+func PlanChanges(ctx context.Context, stacks cfn.API, read Reading, req Request, groups []provider.ChangeGroup) ([]provider.ChangeGroup, error) {
 	target, err := bootstrapFor(read.ns, read.class)
 	if err != nil {
 		return nil, err
@@ -41,7 +42,7 @@ func PlanChanges(ctx context.Context, stacks cfn.API, read Reading, req Request,
 		alongside[name] = true
 	}
 
-	planned := make([]providerkit.ChangeGroup, len(groups))
+	planned := make([]provider.ChangeGroup, len(groups))
 	var work sync.WaitGroup
 	inFlight := make(chan struct{}, planFanOut)
 	plan := func(look func()) {
@@ -65,12 +66,12 @@ func PlanChanges(ctx context.Context, stacks cfn.API, read Reading, req Request,
 		switch {
 		case !ok:
 			planned[i] = group
-		case group.Action == providerkit.ActionCreate:
+		case group.Action == provider.ActionCreate:
 			group.Changes = templateChanges(stack.body, group.Action)
 			planned[i] = group
-		case group.Action == providerkit.ActionDelete:
+		case group.Action == provider.ActionDelete:
 			plan(func() { planned[i] = planDelete(ctx, stacks, group, stack.body) })
-		case group.Action == providerkit.ActionUpdate:
+		case group.Action == provider.ActionUpdate:
 			plan(func() { planned[i] = planUpdate(ctx, stacks, read.ns, group, stack, req.Writer) })
 		default:
 			planned[i] = group
@@ -80,7 +81,7 @@ func PlanChanges(ctx context.Context, stacks cfn.API, read Reading, req Request,
 	return append(planned, planRuntimeLayers(ctx, stacks, read, req)), nil
 }
 
-func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]providerkit.ChangeGroup, error) {
+func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]provider.ChangeGroup, error) {
 	if !read.Deployed.Present {
 		return nil, nil
 	}
@@ -102,7 +103,7 @@ func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]providerki
 		alongside[name] = true
 	}
 
-	groups := make([]providerkit.ChangeGroup, 0, len(order)+2)
+	groups := make([]provider.ChangeGroup, 0, len(order)+2)
 	for _, feature := range append(order, "") {
 		if feature == "" {
 			groups = append(groups, removeRuntimeLayers(ctx, stacks, read))
@@ -111,11 +112,11 @@ func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]providerki
 		if feature != "" {
 			name = read.ns.FeatureStackName(feature, read.class)
 		}
-		group := providerkit.ChangeGroup{
-			Kind:    providerkit.StackGroupKind,
+		group := provider.ChangeGroup{
+			Kind:    provider.StackGroupKind,
 			Name:    name,
 			Feature: feature,
-			Action:  providerkit.ActionDelete,
+			Action:  provider.ActionDelete,
 		}
 		stack, ok := renderGroup(target, feature, featureInputs{
 			ns:             read.ns,
@@ -133,7 +134,7 @@ func PlanRemove(ctx context.Context, stacks cfn.API, read Reading) ([]providerki
 	return groups, nil
 }
 
-var stranded = map[string]providerkit.Change{
+var stranded = map[string]provider.Change{
 	"StateBucket": {
 		Reason: "the Pulumi state of every stack this bootstrap deployed; nothing can describe or remove those resources afterwards",
 		Slow:   true,
@@ -147,7 +148,7 @@ var stranded = map[string]providerkit.Change{
 	"VarsKey":   {Reason: "the key those values are encrypted under"},
 }
 
-func noteStranded(group providerkit.ChangeGroup) providerkit.ChangeGroup {
+func noteStranded(group provider.ChangeGroup) provider.ChangeGroup {
 	for i, change := range group.Changes {
 		note, ok := stranded[change.Name]
 		if !ok {
@@ -169,12 +170,12 @@ func renderGroup(target spec, feature string, in featureInputs) (featureStack, b
 	return f.planned(in), true
 }
 
-func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, group providerkit.ChangeGroup, stack featureStack, writer providerkit.WrittenBy) providerkit.ChangeGroup {
+func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, group provider.ChangeGroup, stack featureStack, writer provider.WrittenBy) provider.ChangeGroup {
 	tags := stampTags(ns, Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(stack.body), WrittenBy: writer.String()})
 	id, changes, err := cfn.Plan(ctx, stacks, ns.ChangeSetNameFor, group.Name, stack.body, stack.params,
 		[]cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}, tags)
 	if err != nil {
-		group.Reason = providerkit.WithoutDetail(group.Reason)
+		group.Reason = provider.WithoutDetail(group.Reason)
 		return group
 	}
 	if id == "" {
@@ -183,24 +184,24 @@ func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, group provide
 	}
 	cfn.DiscardChangeSet(ctx, stacks, id)
 	if group.Changes = resourceChanges(changes); len(group.Changes) == 0 {
-		group.Reason = providerkit.WithoutDetail(group.Reason)
+		group.Reason = provider.WithoutDetail(group.Reason)
 	}
 	return group
 }
 
-func planDelete(ctx context.Context, stacks cfn.API, group providerkit.ChangeGroup, body string) providerkit.ChangeGroup {
+func planDelete(ctx context.Context, stacks cfn.API, group provider.ChangeGroup, body string) provider.ChangeGroup {
 	standing, err := stackResources(ctx, stacks, group.Name)
 	if err != nil {
-		group.Changes = templateChanges(body, providerkit.ActionDelete)
-		group.Reason = providerkit.WithoutDetail(group.Reason)
+		group.Changes = templateChanges(body, provider.ActionDelete)
+		group.Reason = provider.WithoutDetail(group.Reason)
 		return group
 	}
-	group.Changes = make([]providerkit.Change, 0, len(standing))
+	group.Changes = make([]provider.Change, 0, len(standing))
 	for _, resource := range standing {
-		group.Changes = append(group.Changes, providerkit.Change{
+		group.Changes = append(group.Changes, provider.Change{
 			Kind:   resource.kind,
 			Name:   resource.id,
-			Action: providerkit.ActionDelete,
+			Action: provider.ActionDelete,
 		})
 	}
 	return group
@@ -229,10 +230,10 @@ func stackResources(ctx context.Context, stacks cfn.API, stackName string) ([]te
 	}
 }
 
-func resourceChanges(changes []cfntypes.ResourceChange) []providerkit.Change {
-	planned := make([]providerkit.Change, 0, len(changes))
+func resourceChanges(changes []cfntypes.ResourceChange) []provider.Change {
+	planned := make([]provider.Change, 0, len(changes))
 	for _, change := range changes {
-		planned = append(planned, providerkit.Change{
+		planned = append(planned, provider.Change{
 			Kind:   aws.ToString(change.ResourceType),
 			Name:   aws.ToString(change.LogicalResourceId),
 			Action: resourceAction(change),
@@ -242,17 +243,17 @@ func resourceChanges(changes []cfntypes.ResourceChange) []providerkit.Change {
 	return planned
 }
 
-func resourceAction(change cfntypes.ResourceChange) providerkit.ChangeAction {
+func resourceAction(change cfntypes.ResourceChange) provider.ChangeAction {
 	switch change.Action {
 	case cfntypes.ChangeActionAdd, cfntypes.ChangeActionImport:
-		return providerkit.ActionCreate
+		return provider.ActionCreate
 	case cfntypes.ChangeActionRemove:
-		return providerkit.ActionDelete
+		return provider.ActionDelete
 	default:
 		if replaces(change.Replacement) {
-			return providerkit.ActionReplace
+			return provider.ActionReplace
 		}
-		return providerkit.ActionUpdate
+		return provider.ActionUpdate
 	}
 }
 
@@ -281,11 +282,11 @@ func replacementReason(change cfntypes.ResourceChange) string {
 	return "this change is not one AWS makes in place"
 }
 
-func templateChanges(body string, action providerkit.ChangeAction) []providerkit.Change {
+func templateChanges(body string, action provider.ChangeAction) []provider.Change {
 	resources := templateResources(body)
-	changes := make([]providerkit.Change, 0, len(resources))
+	changes := make([]provider.Change, 0, len(resources))
 	for _, resource := range resources {
-		changes = append(changes, providerkit.Change{Kind: resource.kind, Name: resource.id, Action: action})
+		changes = append(changes, provider.Change{Kind: resource.kind, Name: resource.id, Action: action})
 	}
 	return changes
 }

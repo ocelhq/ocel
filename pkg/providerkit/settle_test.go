@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -28,7 +29,7 @@ func (a *answering) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, 
 	return "", nil
 }
 
-func waiting(liveness Liveness, attempts int) (settlement, *int) {
+func waiting(liveness provider.Liveness, attempts int) (settlement, *int) {
 	slept := 0
 	clock := time.Unix(1700000000, 0)
 	return settlement{
@@ -99,13 +100,13 @@ func TestSettleStopsWhenAnotherEdgeAnswers(t *testing.T) {
 }
 
 type boxProvider struct {
-	Provider
+	provider.Provider
 	answers edge.Kind
 	asked   []string
 	kinds   []edge.Kind
 }
 
-func (p *boxProvider) Liveness() Liveness { return p }
+func (p *boxProvider) Liveness() provider.Liveness { return p }
 
 func (*boxProvider) LastProbeFailure(string) string { return "" }
 
@@ -120,7 +121,7 @@ type diagnosingProvider struct {
 	cause string
 }
 
-func (p diagnosingProvider) Liveness() Liveness { return p }
+func (p diagnosingProvider) Liveness() provider.Liveness { return p }
 
 func (p diagnosingProvider) LastProbeFailure(string) string { return p.cause }
 
@@ -183,7 +184,7 @@ func (s slowly) ServingEdge(context.Context, edge.Kind, string) (edge.Kind, erro
 	return "", nil
 }
 
-func onTheClock(resolve func(*time.Time) Liveness, budget time.Duration) settlement {
+func onTheClock(resolve func(*time.Time) provider.Liveness, budget time.Duration) settlement {
 	clock := time.Unix(1700000000, 0)
 	return settlement{
 		kind:     "box",
@@ -203,7 +204,7 @@ func TestADeployGivesUpOnceItsMinuteHasPassedHoweverLongEachAttemptTakes(t *test
 	t.Parallel()
 
 	var asked int
-	settle := onTheClock(func(clock *time.Time) Liveness {
+	settle := onTheClock(func(clock *time.Time) provider.Liveness {
 		return slowly{clock: clock, cost: 15 * time.Second, asked: &asked}
 	}, settleBudget)
 
@@ -225,7 +226,7 @@ func TestAnAttendedSettleWaitsOutAFrontThatTakesMinutesToAnswer(t *testing.T) {
 
 	const minutes = 10 * time.Minute
 	for what, budget := range map[string]time.Duration{"domain add": attendedBudget, "a deploy": settleBudget} {
-		settle := onTheClock(func(clock *time.Time) Liveness {
+		settle := onTheClock(func(clock *time.Time) provider.Liveness {
 			return answeringAfter{clock: clock, at: clock.Add(minutes), kind: "box"}
 		}, budget)
 		_, err := settle.await(context.Background(), "shop.example.com", func(string) {})
@@ -282,8 +283,7 @@ func TestAProbeThatNeverReturnsIsCutOffAtEachAttemptAndTheSettleAtItsDeadline(t 
 	if spent := time.Since(began); spent > 2*time.Second {
 		t.Fatalf("await() returned after %s, want it held to its 300ms deadline", spent)
 	}
-	var pending pending
-	if !errors.As(err, &pending) {
+	if _, held := provider.LeftPending(err); !held {
 		t.Fatalf("await() = %v, want the hostname left pending when its wait runs out, not the run failed", err)
 	}
 	if asked.Load() < 2 {
@@ -396,7 +396,7 @@ func TestAStatusLineForAHostnameThatWillNotAnswerNamesWhatStoppedTheProbe(t *tes
 	if probe.OK {
 		t.Fatal("a hostname nothing answered for probed OK, and this test states nothing about the line it is reported under")
 	}
-	pending := rows.pendingOn("shop.example.com", Certificate{}, CertificateHealth{}, true, probe)
+	pending := rows.pendingOn("shop.example.com", provider.Certificate{}, provider.CertificateHealth{}, true, probe)
 	if !strings.Contains(pending, cause) {
 		t.Errorf("`domain status` reports %q, and never what stopped the probe: the operator is told the hostname does not answer yet and left to guess between a firewall, a record that has not propagated and a chain nothing trusts",
 			pending)

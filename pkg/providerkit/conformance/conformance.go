@@ -5,18 +5,19 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 type Suite struct {
-	New func(ctx context.Context, settings providerkit.Settings) (providerkit.Provider, error)
+	New func(ctx context.Context, settings provider.Settings) (provider.Provider, error)
 
 	Spec providerkit.Spec
 
-	Options providerkit.Options
+	Options provider.Options
 
 	Binary string
 
-	Vendor func(t *testing.T, provider providerkit.Provider)
+	Vendor func(t *testing.T, p provider.Provider)
 
 	Certificates *CertificateChecks
 }
@@ -37,11 +38,11 @@ func runHooks(t *testing.T, suite Suite) {
 	if suite.New == nil {
 		t.Skip("the suite carries no constructor, so there are no hooks to read")
 	}
-	provider, err := suite.New(context.Background(), providerkit.Settings{Options: suite.Options})
+	p, err := suite.New(context.Background(), provider.Settings{Options: suite.Options})
 	if err != nil {
 		t.Fatalf("New() error = %v, want a provider", err)
 	}
-	hooks := provider.Hooks()
+	hooks := p.Hooks()
 
 	t.Run("Cost", func(t *testing.T) {
 		if hooks.Cost == nil {
@@ -60,9 +61,9 @@ func runVendor(t *testing.T, suite Suite) {
 	if suite.New == nil {
 		t.Fatal("the suite carries vendor checks and no constructor, so there is no provider to run them against")
 	}
-	provider, err := suite.New(context.Background(), providerkit.Settings{Options: suite.Options})
+	p, err := suite.New(context.Background(), provider.Settings{Options: suite.Options})
 	if err != nil {
 		t.Fatalf("New() error = %v, want a provider", err)
 	}
-	suite.Vendor(t, provider)
+	suite.Vendor(t, p)
 }

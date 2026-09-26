@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -262,11 +262,11 @@ func TestPlanRemovalNamesTheGroupAfterTheMachineItRunsOn(t *testing.T) {
 	if want := "vps/ada@ocelbox"; group.Name != want {
 		t.Errorf("PlanRemove() named the group %q, want %q", group.Name, want)
 	}
-	if group.Action != providerkit.ActionDelete {
+	if group.Action != provider.ActionDelete {
 		t.Errorf("PlanRemove() plans the group as %q, want a delete", group.Action)
 	}
 	for _, bearing := range []string{StateDir(class), SealKeyPath(class)} {
-		at := slices.IndexFunc(group.Changes, func(c providerkit.Change) bool { return c.Name == bearing })
+		at := slices.IndexFunc(group.Changes, func(c provider.Change) bool { return c.Name == bearing })
 		if at < 0 {
 			t.Fatalf("PlanRemove() never plans %s", bearing)
 		}
@@ -288,13 +288,13 @@ func TestEverySingletonIsNamedByThePlanThatTakesTheLastClassAndByNoOther(t *test
 	}
 
 	for _, singleton := range singletons {
-		if kept := removalOf(removing(standing, beside, appsStanding{}), singleton); kept.action == providerkit.ActionDelete {
+		if kept := removalOf(removing(standing, beside, appsStanding{}), singleton); kept.action == provider.ActionDelete {
 			t.Errorf("destroying one class takes %s, and the sibling class still standing on this host deploys through it", singleton)
 		}
 	}
 	last := removing(standing, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsStanding{})
 	for _, singleton := range singletons {
-		if gone := removalOf(last, singleton); gone.action != providerkit.ActionDelete {
+		if gone := removalOf(last, singleton); gone.action != provider.ActionDelete {
 			t.Errorf("destroying the last class plans %s as %q, and a singleton nothing uses is one nobody revokes", singleton, gone.action)
 		}
 	}

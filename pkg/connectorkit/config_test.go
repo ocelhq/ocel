@@ -8,13 +8,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const carried = `{"console":"https://console.example.com","connectorId":"con_1","organizationId":"org_1","grants":["envvars.read"]}`
 
 func TestAFormWithNoFilesystemReadsItsConfigOffTheEnvironment(t *testing.T) {
-	t.Setenv(providerkit.ConnectorConfigEnvVar, carried)
+	t.Setenv(provider.ConnectorConfigEnvVar, carried)
 
 	held, err := ReadConfig("")
 	if err != nil {
@@ -29,7 +29,7 @@ func TestAFormWithNoFilesystemReadsItsConfigOffTheEnvironment(t *testing.T) {
 }
 
 func TestTheEnvironmentIsReadAheadOfAPathThatNamesNothing(t *testing.T) {
-	t.Setenv(providerkit.ConnectorConfigEnvVar, carried)
+	t.Setenv(provider.ConnectorConfigEnvVar, carried)
 
 	if _, err := ReadConfig(filepath.Join(t.TempDir(), "absent.json")); err != nil {
 		t.Errorf("ReadConfig with the environment set = %v, want the carried config read", err)
@@ -37,19 +37,19 @@ func TestTheEnvironmentIsReadAheadOfAPathThatNamesNothing(t *testing.T) {
 }
 
 func TestWithNeitherAPathNorTheEnvironmentNothingNamesTheConsole(t *testing.T) {
-	t.Setenv(providerkit.ConnectorConfigEnvVar, "")
+	t.Setenv(provider.ConnectorConfigEnvVar, "")
 
 	_, err := ReadConfig("")
 	if err == nil {
 		t.Fatal("ReadConfig = nil, want a refusal naming what would have carried the config")
 	}
-	if !strings.Contains(err.Error(), providerkit.ConnectorConfigEnvVar) {
-		t.Errorf("err = %v, want it to name %s", err, providerkit.ConnectorConfigEnvVar)
+	if !strings.Contains(err.Error(), provider.ConnectorConfigEnvVar) {
+		t.Errorf("err = %v, want it to name %s", err, provider.ConnectorConfigEnvVar)
 	}
 }
 
 func TestAPathThatNamesNoFileIsRefused(t *testing.T) {
-	t.Setenv(providerkit.ConnectorConfigEnvVar, "")
+	t.Setenv(provider.ConnectorConfigEnvVar, "")
 
 	absent := filepath.Join(t.TempDir(), "absent.json")
 	_, err := ReadConfig(absent)
@@ -62,7 +62,7 @@ func TestAPathThatNamesNoFileIsRefused(t *testing.T) {
 }
 
 func TestAConfigOnDiskIsStillRead(t *testing.T) {
-	t.Setenv(providerkit.ConnectorConfigEnvVar, "")
+	t.Setenv(provider.ConnectorConfigEnvVar, "")
 
 	path := filepath.Join(t.TempDir(), "config.json")
 	if err := os.WriteFile(path, []byte(carried), 0o600); err != nil {

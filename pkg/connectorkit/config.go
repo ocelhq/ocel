@@ -6,7 +6,7 @@ import (
 	"os"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 type Config struct {
@@ -21,11 +21,11 @@ type Config struct {
 var grantable = []string{CapabilityEnvVarsRead, CapabilityEnvVarsWrite, CapabilityEnvVarsReveal}
 
 func ReadConfig(path string) (Config, error) {
-	if carried := os.Getenv(providerkit.ConnectorConfigEnvVar); carried != "" {
-		return ParseConfig([]byte(carried), providerkit.ConnectorConfigEnvVar)
+	if carried := os.Getenv(provider.ConnectorConfigEnvVar); carried != "" {
+		return ParseConfig([]byte(carried), provider.ConnectorConfigEnvVar)
 	}
 	if path == "" {
-		return Config{}, fmt.Errorf("connectorkit: nothing names the console this connector trusts: neither %s nor a config file", providerkit.ConnectorConfigEnvVar)
+		return Config{}, fmt.Errorf("connectorkit: nothing names the console this connector trusts: neither %s nor a config file", provider.ConnectorConfigEnvVar)
 	}
 	read, err := os.ReadFile(path)
 	if err != nil {

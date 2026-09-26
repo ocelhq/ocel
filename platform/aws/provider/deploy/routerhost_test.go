@@ -14,6 +14,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -51,7 +52,7 @@ func routedApp() *contractv1.ManifestApp {
 	return &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: appbuild.FrameworkNext}}
 }
 
-func servingPlan(t *testing.T, cfg Config, app, runtime string, coord naming.Coordinate) providerkit.StackPlan {
+func servingPlan(t *testing.T, cfg Config, app, runtime string, coord naming.Coordinate) provider.StackPlan {
 	t.Helper()
 	stack := coord.Stack()
 	facts := cfg.Edge.Facts()
@@ -68,11 +69,11 @@ func servingPlan(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 	if err != nil {
 		t.Fatalf("ServingFactsFor: %v", err)
 	}
-	return providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
-		Kind: providerkit.StackApp,
+	return provider.StackPlan{
+		Ref:  provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
+		Kind: provider.StackApp,
 		Edge: cfg.Edge,
-		App: &providerkit.AppPlan{
+		App: &provider.AppPlan{
 			App:         app,
 			Framework:   runtime,
 			Deployment:  "d1",
@@ -83,7 +84,7 @@ func servingPlan(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 	}
 }
 
-func routedPlan(t *testing.T, cfg Config) providerkit.StackPlan {
+func routedPlan(t *testing.T, cfg Config) provider.StackPlan {
 	t.Helper()
 	return servingPlan(t, cfg, "web", appbuild.FrameworkNext, routedCoordinate(t))
 }

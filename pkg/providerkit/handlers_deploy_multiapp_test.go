@@ -15,18 +15,19 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const promotionUnitSpan = "Promotion"
 
 const webRefusal = "the web stack would not stand up"
 
-func appBarrier(t *testing.T, width int) func(providerkit.StackPlan) error {
+func appBarrier(t *testing.T, width int) func(provider.StackPlan) error {
 	t.Helper()
 	var mu sync.Mutex
 	var arrived int
 	gate := make(chan struct{})
-	return func(plan providerkit.StackPlan) error {
+	return func(plan provider.StackPlan) error {
 		if plan.App == nil {
 			return nil
 		}
@@ -74,7 +75,7 @@ func queuedAppRequest(apps []string) *contractv1.DeployRequest {
 		manifest.Apps = append(manifest.Apps, &contractv1.ManifestApp{
 			Name:         app,
 			Framework:    &contractv1.Framework{Name: "next"},
-			Compute:      string(providerkit.ComputeServerless),
+			Compute:      string(provider.ComputeServerless),
 			DeploymentId: fmt.Sprintf("%032x", slot+1),
 		})
 		manifest.Functions = append(manifest.Functions, &contractv1.ManifestFunction{
@@ -96,10 +97,10 @@ func TestDeployStartsTheAppsStillQueuedWhenAnEarlyAppFails(t *testing.T) {
 	queued := apps[providerkit.AppConcurrency:]
 
 	builtApps(t, apps...)
-	client, provider := deployServed(t)
+	client, p := deployServed(t)
 
 	inFlight := appBarrier(t, providerkit.AppConcurrency)
-	provider.FakeStacks().Entering(func(plan providerkit.StackPlan) error {
+	p.FakeStacks().Entering(func(plan provider.StackPlan) error {
 		if plan.App == nil {
 			return nil
 		}
@@ -150,10 +151,10 @@ func TestDeployProvisionsAppsAtTheSameTime(t *testing.T) {
 
 func TestDeployFinishesASiblingOfAFailedAppAndWithholdsPromotion(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, p := deployServed(t)
 
 	webFailed := make(chan struct{})
-	provider.FakeStacks().Entering(func(plan providerkit.StackPlan) error {
+	p.FakeStacks().Entering(func(plan provider.StackPlan) error {
 		if plan.App == nil {
 			return nil
 		}
@@ -218,10 +219,10 @@ func TestDeployReportsAppOutcomesInManifestOrderWhicheverFinishesFirst(t *testin
 	for _, first := range []string{"web", "admin"} {
 		t.Run(first+" finishes first", func(t *testing.T) {
 			builtProject(t)
-			client, provider := deployServed(t)
+			client, p := deployServed(t)
 
 			done := make(chan struct{})
-			provider.FakeStacks().Entering(func(plan providerkit.StackPlan) error {
+			p.FakeStacks().Entering(func(plan provider.StackPlan) error {
 				if plan.App == nil {
 					return nil
 				}
@@ -250,9 +251,9 @@ func TestDeployReportsAppOutcomesInManifestOrderWhicheverFinishesFirst(t *testin
 
 func TestDeployStartsNoAppWhenTheSharedInfrastructureFails(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, p := deployServed(t)
 
-	provider.FakeStacks().Entering(func(plan providerkit.StackPlan) error {
+	p.FakeStacks().Entering(func(plan provider.StackPlan) error {
 		if plan.App == nil {
 			return errors.New("the environment's infrastructure would not stand up")
 		}

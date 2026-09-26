@@ -6,27 +6,27 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
-func functionPlanDeclaring(class edge.Class, env string, values providerkit.AppValues) providerkit.StackPlan {
-	return providerkit.StackPlan{
-		Ref: providerkit.StackRef{
+func functionPlanDeclaring(class edge.Class, env string, values provider.AppValues) provider.StackPlan {
+	return provider.StackPlan{
+		Ref: provider.StackRef{
 			Project: "shop",
 			Class:   class,
 			Name:    naming.StackName{Env: env, App: "api"},
 		},
-		Kind: providerkit.StackApp,
-		App: &providerkit.AppPlan{
+		Kind: provider.StackApp,
+		App: &provider.AppPlan{
 			App:     "api",
-			Compute: providerkit.ComputeServerless,
+			Compute: provider.ComputeServerless,
 			Values:  values,
-			Functions: []providerkit.FunctionSpec{{
+			Functions: []provider.FunctionSpec{{
 				Name:      "fn--api--index",
 				Image:     "europe-west1-docker.pkg.dev/acme/ocel/api-index@sha256:abc",
 				Framework: appbuild.Framework{Name: appbuild.FrameworkNode, Arch: arch.X8664},
@@ -36,7 +36,7 @@ func functionPlanDeclaring(class edge.Class, env string, values providerkit.AppV
 	}
 }
 
-func functionRevisionEnv(t *testing.T, server *runServer, plan providerkit.StackPlan) (*Provider, map[string]string) {
+func functionRevisionEnv(t *testing.T, server *runServer, plan provider.StackPlan) (*Provider, map[string]string) {
 	t.Helper()
 	p := server.open(t)
 	if _, err := p.ProvisionFunctions(context.Background(), plan, nil); err != nil {
@@ -51,8 +51,8 @@ func functionRevisionEnv(t *testing.T, server *runServer, plan providerkit.Stack
 
 func TestAFunctionDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *testing.T) {
 	t.Parallel()
-	p, env := functionRevisionEnv(t, &runServer{}, functionPlanDeclaring(edge.ClassProduction, "production", providerkit.AppValues{
-		Secrets:   []providerkit.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
+	p, env := functionRevisionEnv(t, &runServer{}, functionPlanDeclaring(edge.ClassProduction, "production", provider.AppValues{
+		Secrets:   []provider.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		Delivered: map[string]string{"REGION": "eu"},
 	}))
 
@@ -85,8 +85,8 @@ func TestAFunctionDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *tes
 
 func TestAPreviewFunctionReadsItsOwnEnvironmentsValues(t *testing.T) {
 	t.Parallel()
-	_, env := functionRevisionEnv(t, &runServer{}, functionPlanDeclaring(edge.ClassPreview, "pr-7", providerkit.AppValues{
-		Secrets: []providerkit.SecretRef{{Key: "MARK"}},
+	_, env := functionRevisionEnv(t, &runServer{}, functionPlanDeclaring(edge.ClassPreview, "pr-7", provider.AppValues{
+		Secrets: []provider.SecretRef{{Key: "MARK"}},
 	}))
 
 	manifest, err := live.Parse([]byte(env[live.EnvVar]))
@@ -100,7 +100,7 @@ func TestAPreviewFunctionReadsItsOwnEnvironmentsValues(t *testing.T) {
 
 func TestAFunctionWithNothingLiveBootsWithNoManifest(t *testing.T) {
 	t.Parallel()
-	_, env := functionRevisionEnv(t, &runServer{}, functionPlanDeclaring(edge.ClassProduction, "production", providerkit.AppValues{
+	_, env := functionRevisionEnv(t, &runServer{}, functionPlanDeclaring(edge.ClassProduction, "production", provider.AppValues{
 		Delivered: map[string]string{"REGION": "eu"},
 	}))
 

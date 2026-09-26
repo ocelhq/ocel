@@ -12,7 +12,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -98,7 +98,7 @@ func testUploadCompleter() payloads.Placement {
 
 func TestBucketComponentTags(t *testing.T) {
 	rec := recordTags(t, func(ctx *pulumi.Context) error {
-		err := registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&providerkit.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+		err := registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&provider.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
 		return err
 	})
 
@@ -121,7 +121,7 @@ func TestBucketComponentTags(t *testing.T) {
 func TestBucketUploadCompleterDescriptionFitsLambda(t *testing.T) {
 	long := strings.Repeat("storefront-", 40)
 	rec := recordTags(t, func(ctx *pulumi.Context) error {
-		return registerBucket(ctx, long, "prod", "bucket--uploads", translateBucket(&providerkit.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope(long, "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+		return registerBucket(ctx, long, "prod", "bucket--uploads", translateBucket(&provider.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope(long, "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
 	})
 
 	got := rec.inputsOf(t, "aws:lambda/function:Function", "bucket-uploads-upload-completer")["description"].StringValue()
@@ -170,7 +170,7 @@ func TestBucketPhysicalPrefix(t *testing.T) {
 		t.Parallel()
 
 		rec := recordTags(t, func(ctx *pulumi.Context) error {
-			return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&providerkit.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+			return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&provider.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
 		})
 		prefix := rec.inputsOf(t, "aws:s3/bucketV2:BucketV2", "bucket-uploads")["bucketPrefix"].StringValue()
 		if !strings.HasPrefix(prefix, awsports.AppScope+naming.WordSeparator) {
@@ -256,7 +256,7 @@ func TestTranslateBucket(t *testing.T) {
 		t.Parallel()
 
 		origins := []string{"https://app.example.com", "https://www.example.com"}
-		got := translateBucket(&providerkit.BucketSpec{AllowedOrigins: origins})
+		got := translateBucket(&provider.BucketSpec{AllowedOrigins: origins})
 
 		if !reflect.DeepEqual(got.AllowedOrigins, origins) {
 			t.Errorf("AllowedOrigins = %v, want %v (carried through for the upload completer allowlist)", got.AllowedOrigins, origins)
@@ -278,7 +278,7 @@ func TestTranslateBucket(t *testing.T) {
 	t.Run("notification and lambda args", func(t *testing.T) {
 		t.Parallel()
 
-		got := translateBucket(&providerkit.BucketSpec{})
+		got := translateBucket(&provider.BucketSpec{})
 
 		if !reflect.DeepEqual(got.NotificationEvents, []string{"s3:ObjectCreated:*"}) {
 			t.Errorf("NotificationEvents = %v, want [s3:ObjectCreated:*]", got.NotificationEvents)
@@ -297,7 +297,7 @@ func TestTranslateBucket(t *testing.T) {
 	t.Run("IAM args", func(t *testing.T) {
 		t.Parallel()
 
-		got := translateBucket(&providerkit.BucketSpec{})
+		got := translateBucket(&provider.BucketSpec{})
 
 		if !slices.Contains(got.UploadCompleterS3Actions, "s3:GetObjectTagging") {
 			t.Errorf("UploadCompleterS3Actions = %v, want it to include s3:GetObjectTagging", got.UploadCompleterS3Actions)
@@ -313,7 +313,7 @@ func TestTranslateBucket(t *testing.T) {
 	t.Run("empty origins yield empty CORS origins", func(t *testing.T) {
 		t.Parallel()
 
-		got := translateBucket(&providerkit.BucketSpec{})
+		got := translateBucket(&provider.BucketSpec{})
 		if len(got.CORS.AllowedOrigins) != 0 {
 			t.Errorf("CORS.AllowedOrigins = %v, want empty for a bucket with no declared origins", got.CORS.AllowedOrigins)
 		}
@@ -365,7 +365,7 @@ func TestSessionStatement(t *testing.T) {
 func TestBucketCORSFollowsTheDeclaredOrigins(t *testing.T) {
 	const corsToken = "aws:s3/bucketCorsConfigurationV2:BucketCorsConfigurationV2"
 
-	registered := func(t *testing.T, spec *providerkit.BucketSpec) bool {
+	registered := func(t *testing.T, spec *provider.BucketSpec) bool {
 		t.Helper()
 		rec := recordTags(t, func(ctx *pulumi.Context) error {
 			return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(spec), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
@@ -377,13 +377,13 @@ func TestBucketCORSFollowsTheDeclaredOrigins(t *testing.T) {
 	}
 
 	t.Run("a bucket declaring no origins gets no CORS configuration", func(t *testing.T) {
-		if registered(t, &providerkit.BucketSpec{}) {
+		if registered(t, &provider.BucketSpec{}) {
 			t.Error("a CORS configuration with no allowed origins was registered; S3 rejects one, so the deploy fails on every account")
 		}
 	})
 
 	t.Run("a bucket declaring origins gets one", func(t *testing.T) {
-		if !registered(t, &providerkit.BucketSpec{AllowedOrigins: []string{"https://app.example.com"}}) {
+		if !registered(t, &provider.BucketSpec{AllowedOrigins: []string{"https://app.example.com"}}) {
 			t.Error("no CORS configuration was registered for a bucket that declares an allowed origin")
 		}
 	})
@@ -391,7 +391,7 @@ func TestBucketCORSFollowsTheDeclaredOrigins(t *testing.T) {
 
 func TestBucketUploadCompleterLogGroup(t *testing.T) {
 	rec := recordTags(t, func(ctx *pulumi.Context) error {
-		return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&providerkit.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+		return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&provider.BucketSpec{}), "ocel-state", "arn:aws:iam::111122223333:policy/ocel-app-boundary", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
 	})
 
 	group := rec.inputsOf(t, "aws:cloudwatch/logGroup:LogGroup", "bucket-uploads-upload-completer-logs")
@@ -417,7 +417,7 @@ func TestABucketWithNoBoundaryIsRefusedRatherThanMintedUncapped(t *testing.T) {
 	t.Parallel()
 
 	program := func(ctx *pulumi.Context) error {
-		return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&providerkit.BucketSpec{}), "ocel-state", "", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
+		return registerBucket(ctx, "shop", "prod", "bucket--uploads", translateBucket(&provider.BucketSpec{}), "ocel-state", "", newSessionScope("shop", "prod", "arn:aws:dynamodb:eu-west-1:111122223333:table/ocel-state"), testUploadCompleter())
 	}
 	err := pulumi.RunErr(program, pulumi.WithMocks("shop", "prod--infra", &tagRecorder{}))
 	if err == nil || !strings.Contains(err.Error(), "boundary") {

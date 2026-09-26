@@ -3,18 +3,18 @@ package deploy
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
-func runtimeResources() []providerkit.Resource {
-	return []providerkit.Resource{
-		{Name: "database--main", Declared: "database--main", Type: providerkit.BindingPostgres},
-		{Name: "bucket--uploads", Declared: "bucket--uploads", Type: providerkit.BindingBucket},
+func runtimeResources() []provider.Resource {
+	return []provider.Resource{
+		{Name: "database--main", Declared: "database--main", Type: provider.BindingPostgres},
+		{Name: "bucket--uploads", Declared: "bucket--uploads", Type: provider.BindingBucket},
 	}
 }
 
-func runtimePlan() providerkit.StackPlan {
-	return providerkit.StackPlan{Resources: runtimeResources()}
+func runtimePlan() provider.StackPlan {
+	return provider.StackPlan{Resources: runtimeResources()}
 }
 
 func TestProvisionsBucket(t *testing.T) {

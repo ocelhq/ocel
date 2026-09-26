@@ -7,25 +7,25 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/live"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 
-func containerPlanDeclaring(class edge.Class, env string, values providerkit.AppValues) providerkit.StackPlan {
-	return providerkit.StackPlan{
-		Ref: providerkit.StackRef{
+func containerPlanDeclaring(class edge.Class, env string, values provider.AppValues) provider.StackPlan {
+	return provider.StackPlan{
+		Ref: provider.StackRef{
 			Project: "shop",
 			Class:   class,
 			Name:    naming.StackName{Env: env, App: "api"},
 		},
-		Kind: providerkit.StackApp,
-		App: &providerkit.AppPlan{
+		Kind: provider.StackApp,
+		App: &provider.AppPlan{
 			App:             "api",
-			Compute:         providerkit.ComputeContainer,
+			Compute:         provider.ComputeContainer,
 			Image:           "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc",
 			HealthCheckPath: "/healthz",
 			Values:          values,
@@ -33,7 +33,7 @@ func containerPlanDeclaring(class edge.Class, env string, values providerkit.App
 	}
 }
 
-func revisionEnv(t *testing.T, server *runServer, plan providerkit.StackPlan) (*Provider, map[string]string) {
+func revisionEnv(t *testing.T, server *runServer, plan provider.StackPlan) (*Provider, map[string]string) {
 	t.Helper()
 	p := server.open(t)
 	if _, err := p.ProvisionContainers(context.Background(), plan, nil); err != nil {
@@ -48,8 +48,8 @@ func revisionEnv(t *testing.T, server *runServer, plan providerkit.StackPlan) (*
 
 func TestAContainerDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *testing.T) {
 	t.Parallel()
-	p, env := revisionEnv(t, &runServer{}, containerPlanDeclaring(edge.ClassProduction, "production", providerkit.AppValues{
-		Secrets:   []providerkit.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
+	p, env := revisionEnv(t, &runServer{}, containerPlanDeclaring(edge.ClassProduction, "production", provider.AppValues{
+		Secrets:   []provider.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		Delivered: map[string]string{"REGION": "eu"},
 	}))
 
@@ -82,8 +82,8 @@ func TestAContainerDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *te
 
 func TestAPreviewContainerReadsItsOwnEnvironmentsValues(t *testing.T) {
 	t.Parallel()
-	_, env := revisionEnv(t, &runServer{}, containerPlanDeclaring(edge.ClassPreview, "pr-7", providerkit.AppValues{
-		Secrets: []providerkit.SecretRef{{Key: "MARK"}},
+	_, env := revisionEnv(t, &runServer{}, containerPlanDeclaring(edge.ClassPreview, "pr-7", provider.AppValues{
+		Secrets: []provider.SecretRef{{Key: "MARK"}},
 	}))
 
 	manifest, err := live.Parse([]byte(env[live.EnvVar]))
@@ -97,7 +97,7 @@ func TestAPreviewContainerReadsItsOwnEnvironmentsValues(t *testing.T) {
 
 func TestAContainerWithNothingLiveBootsWithNoManifest(t *testing.T) {
 	t.Parallel()
-	_, env := revisionEnv(t, &runServer{}, containerPlanDeclaring(edge.ClassProduction, "production", providerkit.AppValues{
+	_, env := revisionEnv(t, &runServer{}, containerPlanDeclaring(edge.ClassProduction, "production", provider.AppValues{
 		Delivered: map[string]string{"REGION": "eu"},
 	}))
 

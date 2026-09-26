@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
@@ -45,7 +46,7 @@ const (
 
 const storeHealthPath = "/health/ready"
 
-func storeRoute(ref providerkit.StackRef, store string) host.AppRoute {
+func storeRoute(ref provider.StackRef, store string) host.AppRoute {
 	pointer := edge.DefaultPointer
 	if ref.Class == edge.ClassPreview {
 		pointer = ref.Name.Env
@@ -60,7 +61,7 @@ func storeRoute(ref providerkit.StackRef, store string) host.AppRoute {
 	}
 }
 
-func storeBucketSpec(ref providerkit.StackRef, store, secret string, spec host.BucketSpec) host.BucketSpec {
+func storeBucketSpec(ref provider.StackRef, store, secret string, spec host.BucketSpec) host.BucketSpec {
 	spec.Store = store
 	spec.Class = ref.Class
 	spec.Endpoint = "http://127.0.0.1:" + storePort
@@ -93,17 +94,17 @@ func storeContainer(in resources.Instruction) host.ResourceContainer {
 	}
 }
 
-func storeRef(ref providerkit.StackRef) providerkit.StackRef {
-	return providerkit.StackRef{Project: ref.Project, Class: ref.Class, Name: naming.InfraStack(ref.Name.Env)}
+func storeRef(ref provider.StackRef) provider.StackRef {
+	return provider.StackRef{Project: ref.Project, Class: ref.Class, Name: naming.InfraStack(ref.Name.Env)}
 }
 
-func storeName(ref providerkit.StackRef) string {
+func storeName(ref provider.StackRef) string {
 	return host.ResourceName(storeRef(ref).Name.String(), storeResource, storeKind)
 }
 
 var unsafeInBucketName = regexp.MustCompile(`[^a-z0-9]+`)
 
-func storeBucketName(ref providerkit.StackRef, resource string) string {
+func storeBucketName(ref provider.StackRef, resource string) string {
 	readable := strings.Trim(unsafeInBucketName.ReplaceAllString(
 		strings.ToLower(ref.Name.String()+"-"+resource), "-"), "-")
 	if len(readable) <= storeBucketNameMax {
@@ -206,14 +207,14 @@ func (s *liveStores) once(name string, stand func() (storeCredential, error)) (s
 	return held, nil
 }
 
-func storeCoordinate(ref providerkit.StackRef) records.SealScope {
+func storeCoordinate(ref provider.StackRef) records.SealScope {
 	return records.SealScope{
 		Project: ref.Project, Class: ref.Class, Env: storeRef(ref).Name.String(),
 		Folder: live.StoreSecretFolder, Binding: live.StoreSecretBinding, Name: live.StoreSecretName,
 	}
 }
 
-func (p *Provider) storeCredential(ctx context.Context, ref providerkit.StackRef, name string) (storeCredential, error) {
+func (p *Provider) storeCredential(ctx context.Context, ref provider.StackRef, name string) (storeCredential, error) {
 	at := storeCoordinate(ref)
 	sealed, err := p.host.Kept(ctx, ref.Class, name)
 	if err != nil {
@@ -244,16 +245,16 @@ func (p *Provider) storeCredential(ctx context.Context, ref providerkit.StackRef
 	return storeCredential{sealed: sealed, secret: string(opened)}, nil
 }
 
-func (p *Provider) ProvisionBucket(ctx context.Context, in resources.Instruction, progress edge.Progress) (providerkit.Binding, error) {
+func (p *Provider) ProvisionBucket(ctx context.Context, in resources.Instruction, progress edge.Progress) (provider.Binding, error) {
 
 	spec := storeContainer(in)
 	spec, err := p.reshaped(ctx, in, transformTypeBucket, spec)
 	if err != nil {
-		return providerkit.Binding{}, err
+		return provider.Binding{}, err
 	}
 	spec, err = p.stores.shaped(in.Resource.Name, spec)
 	if err != nil {
-		return providerkit.Binding{}, err
+		return provider.Binding{}, err
 	}
 	if progress != nil {
 		progress.Say("Standing bucket " + in.Resource.Name + " up in " + spec.Name)
@@ -281,7 +282,7 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.Instruction
 		return held, nil
 	})
 	if err != nil {
-		return providerkit.Binding{}, err
+		return provider.Binding{}, err
 	}
 	if stood {
 		p.stores.expiring(sessions)
@@ -289,7 +290,7 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.Instruction
 
 	origins, err := p.bucketOrigins(ctx, in.Ref, in.Resource.Bucket)
 	if err != nil {
-		return providerkit.Binding{}, err
+		return provider.Binding{}, err
 	}
 	public := declaredPublic(in.Resource.Bucket)
 	bucket := storeBucketName(in.Ref, in.Resource.Name)
@@ -299,26 +300,26 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.Instruction
 		Public:         public,
 	}))
 	if err != nil {
-		return providerkit.Binding{}, err
+		return provider.Binding{}, err
 	}
 	p.stores.expiring(standing)
 
-	return providerkit.Binding{
-		Type:     providerkit.BindingBucket,
+	return provider.Binding{
+		Type:     provider.BindingBucket,
 		Name:     in.Resource.Name,
 		Resource: in.Resource.Declared,
 		Properties: map[string]string{
-			providerkit.PropertyBucket: bucket,
-			providerkit.PropertyPublic: strconv.FormatBool(public),
-			propertySweepUploads:       strconv.FormatBool(p.stores.sweeping()),
-			propertyOrigins:            strings.Join(declaredOrigins(in.Resource.Bucket), " "),
+			provider.PropertyBucket: bucket,
+			provider.PropertyPublic: strconv.FormatBool(public),
+			propertySweepUploads:    strconv.FormatBool(p.stores.sweeping()),
+			propertyOrigins:         strings.Join(declaredOrigins(in.Resource.Bucket), " "),
 		},
 	}, nil
 }
 
-func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan) (*live.Store, error) {
-	if !slices.ContainsFunc(plan.App.Values.Bindings, func(binding providerkit.Binding) bool {
-		return binding.Type == providerkit.BindingBucket && !binding.Endpointed()
+func (p *Provider) storeSection(ctx context.Context, plan provider.StackPlan) (*live.Store, error) {
+	if !slices.ContainsFunc(plan.App.Values.Bindings, func(binding provider.Binding) bool {
+		return binding.Type == provider.BindingBucket && !binding.Endpointed()
 	}) {
 		return nil, nil
 	}
@@ -352,7 +353,7 @@ func (p *Provider) storeSection(ctx context.Context, plan providerkit.StackPlan)
 	}, nil
 }
 
-func sessionsPrefix(plan providerkit.StackPlan) string {
+func sessionsPrefix(plan provider.StackPlan) string {
 	return constants.StoreSessionsBucket() + "/" +
 		storeRef(plan.Ref).Name.String() + "/" + naming.Sanitize(appNameOf(plan.App))
 }
@@ -362,7 +363,7 @@ type appAccount struct {
 	held storeCredential
 }
 
-func (p *Provider) storeAccount(ctx context.Context, plan providerkit.StackPlan, store string, root storeCredential) (appAccount, error) {
+func (p *Provider) storeAccount(ctx context.Context, plan provider.StackPlan, store string, root storeCredential) (appAccount, error) {
 	env := storeRef(plan.Ref).Name.String()
 	key := host.StoreAccountKey(env, appNameOf(plan.App))
 	held, err := p.stores.once(key, func() (storeCredential, error) {
@@ -388,41 +389,41 @@ func (p *Provider) storeAccount(ctx context.Context, plan providerkit.StackPlan,
 	return appAccount{key: key, held: held}, nil
 }
 
-func appNameOf(app *providerkit.AppPlan) string {
+func appNameOf(app *provider.AppPlan) string {
 	if app == nil {
 		return ""
 	}
 	return app.App
 }
 
-func grantedBuckets(app *providerkit.AppPlan) []string {
+func grantedBuckets(app *provider.AppPlan) []string {
 	if app == nil {
 		return nil
 	}
 	var held []string
 	for _, binding := range append(slices.Clone(app.Values.Bindings), app.Grants...) {
-		if binding.Type != providerkit.BindingBucket || binding.Endpointed() {
+		if binding.Type != provider.BindingBucket || binding.Endpointed() {
 			continue
 		}
-		if spec := binding.Properties[providerkit.PropertyBucket]; spec != "" && !slices.Contains(held, spec) {
+		if spec := binding.Properties[provider.PropertyBucket]; spec != "" && !slices.Contains(held, spec) {
 			held = append(held, spec)
 		}
 	}
 	return held
 }
 
-func sweptUploads(app *providerkit.AppPlan) bool {
+func sweptUploads(app *provider.AppPlan) bool {
 	if app == nil {
 		return false
 	}
 	return slices.ContainsFunc(append(slices.Clone(app.Values.Bindings), app.Grants...),
-		func(binding providerkit.Binding) bool {
-			return binding.Type == providerkit.BindingBucket &&
+		func(binding provider.Binding) bool {
+			return binding.Type == provider.BindingBucket &&
 				binding.Properties[propertySweepUploads] == "true"
 		})
 }
 
-func boundBuckets(app *providerkit.AppPlan) []string {
+func boundBuckets(app *provider.AppPlan) []string {
 	var held []string
 	for _, spec := range grantedBuckets(app) {
 		bucket, _, _ := strings.Cut(spec, "/")
@@ -433,14 +434,14 @@ func boundBuckets(app *providerkit.AppPlan) []string {
 	return held
 }
 
-func declaredOrigins(spec *providerkit.BucketSpec) []string {
+func declaredOrigins(spec *provider.BucketSpec) []string {
 	if spec == nil {
 		return nil
 	}
 	return spec.AllowedOrigins
 }
 
-func (p *Provider) bucketOrigins(ctx context.Context, ref providerkit.StackRef, spec *providerkit.BucketSpec) ([]string, error) {
+func (p *Provider) bucketOrigins(ctx context.Context, ref provider.StackRef, spec *provider.BucketSpec) ([]string, error) {
 	claims, err := p.host.Claims(ctx)
 	if err != nil {
 		return nil, err
@@ -448,7 +449,7 @@ func (p *Provider) bucketOrigins(ctx context.Context, ref providerkit.StackRef, 
 	return corsOrigins(ref, declaredOrigins(spec), claims), nil
 }
 
-func corsOrigins(ref providerkit.StackRef, declared []string, claims []host.HostClaim) []string {
+func corsOrigins(ref provider.StackRef, declared []string, claims []host.HostClaim) []string {
 	origins := slices.Clone(declared)
 	owner := live.Surface(ref.Project, string(ref.Class))
 	for _, claim := range claims {
@@ -469,7 +470,7 @@ func (p *Provider) holdOrigins(ctx context.Context, project string, class edge.C
 	}
 	claims := sync.OnceValues(func() ([]host.HostClaim, error) { return p.host.Claims(ctx) })
 	for _, entry := range entries {
-		ref := providerkit.StackRef{Project: project, Class: class, Name: entry.Name}
+		ref := provider.StackRef{Project: project, Class: class, Name: entry.Name}
 		if err := p.holdStackOrigins(ctx, ref, entry, claims); err != nil {
 			return err
 		}
@@ -477,9 +478,9 @@ func (p *Provider) holdOrigins(ctx context.Context, project string, class edge.C
 	return nil
 }
 
-func (p *Provider) holdStackOrigins(ctx context.Context, ref providerkit.StackRef, entry providerkit.StackEntry, claims func() ([]host.HostClaim, error)) error {
-	buckets := slices.DeleteFunc(slices.Clone(entry.Bindings), func(binding providerkit.Binding) bool {
-		return binding.Type != providerkit.BindingBucket || p.stores.forgotten(entry.Name, binding.Name)
+func (p *Provider) holdStackOrigins(ctx context.Context, ref provider.StackRef, entry providerkit.StackEntry, claims func() ([]host.HostClaim, error)) error {
+	buckets := slices.DeleteFunc(slices.Clone(entry.Bindings), func(binding provider.Binding) bool {
+		return binding.Type != provider.BindingBucket || p.stores.forgotten(entry.Name, binding.Name)
 	})
 	if len(buckets) == 0 {
 		return nil
@@ -494,7 +495,7 @@ func (p *Provider) holdStackOrigins(ctx context.Context, ref providerkit.StackRe
 	}
 	for _, binding := range buckets {
 		if err := p.host.HoldOrigins(ctx, storeBucketSpec(ref, storeName(ref), root.secret, host.BucketSpec{
-			Bucket:         binding.Properties[providerkit.PropertyBucket],
+			Bucket:         binding.Properties[provider.PropertyBucket],
 			AllowedOrigins: corsOrigins(ref, recordedOrigins(binding), held),
 		})); err != nil {
 			return err
@@ -503,15 +504,15 @@ func (p *Provider) holdStackOrigins(ctx context.Context, ref providerkit.StackRe
 	return nil
 }
 
-func recordedOrigins(binding providerkit.Binding) []string {
+func recordedOrigins(binding provider.Binding) []string {
 	return strings.Fields(binding.Properties[propertyOrigins])
 }
 
-func declaredPublic(spec *providerkit.BucketSpec) bool {
+func declaredPublic(spec *provider.BucketSpec) bool {
 	return spec != nil && spec.Public
 }
 
-func (p *Provider) removeBucket(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, progress edge.Progress) error {
+func (p *Provider) removeBucket(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress edge.Progress) error {
 	if err := p.dropBucket(ctx, ref, binding, progress); err != nil {
 		return err
 	}
@@ -519,7 +520,7 @@ func (p *Provider) removeBucket(ctx context.Context, ref providerkit.StackRef, b
 	return p.reconcileStore(ctx, ref, progress)
 }
 
-func (p *Provider) dropBucket(ctx context.Context, ref providerkit.StackRef, binding providerkit.Binding, progress edge.Progress) error {
+func (p *Provider) dropBucket(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress edge.Progress) error {
 	store := storeName(ref)
 	held, err := p.storeRoot(ctx, ref, store)
 	if err != nil {
@@ -531,7 +532,7 @@ func (p *Provider) dropBucket(ctx context.Context, ref providerkit.StackRef, bin
 		}
 		return nil
 	}
-	bucket := binding.Properties[providerkit.PropertyBucket]
+	bucket := binding.Properties[provider.PropertyBucket]
 	if bucket == "" {
 		bucket = storeBucketName(ref, binding.Name)
 	}
@@ -550,7 +551,7 @@ func (p *Provider) dropBucket(ctx context.Context, ref providerkit.StackRef, bin
 	})
 }
 
-func (p *Provider) reconcileStore(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) error {
+func (p *Provider) reconcileStore(ctx context.Context, ref provider.StackRef, progress edge.Progress) error {
 	last, err := p.lastBucket(ctx, ref)
 	if err != nil || !last {
 		return err
@@ -558,7 +559,7 @@ func (p *Provider) reconcileStore(ctx context.Context, ref providerkit.StackRef,
 	return p.removeStore(ctx, ref, progress)
 }
 
-func (p *Provider) lastBucket(ctx context.Context, ref providerkit.StackRef) (bool, error) {
+func (p *Provider) lastBucket(ctx context.Context, ref provider.StackRef) (bool, error) {
 	entries, err := providerkit.ReadStacks(ctx, p.records, ref.Class, ref.Project)
 	if err != nil {
 		return false, err
@@ -568,7 +569,7 @@ func (p *Provider) lastBucket(ctx context.Context, ref providerkit.StackRef) (bo
 			continue
 		}
 		for _, held := range entry.Bindings {
-			if held.Type != providerkit.BindingBucket || p.stores.forgotten(entry.Name, held.Name) {
+			if held.Type != provider.BindingBucket || p.stores.forgotten(entry.Name, held.Name) {
 				continue
 			}
 			return false, nil
@@ -577,7 +578,7 @@ func (p *Provider) lastBucket(ctx context.Context, ref providerkit.StackRef) (bo
 	return true, nil
 }
 
-func (p *Provider) removeStore(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) error {
+func (p *Provider) removeStore(ctx context.Context, ref provider.StackRef, progress edge.Progress) error {
 	store := storeName(ref)
 	if progress != nil {
 		progress.Say("Taking the store " + store + " down")
@@ -597,7 +598,7 @@ func (p *Provider) removeStore(ctx context.Context, ref providerkit.StackRef, pr
 	return p.host.ForgetKept(ctx, ref.Class, accounts)
 }
 
-func (p *Provider) storeAccounts(ctx context.Context, ref providerkit.StackRef) ([]string, error) {
+func (p *Provider) storeAccounts(ctx context.Context, ref provider.StackRef) ([]string, error) {
 	entries, err := providerkit.ReadStacks(ctx, p.records, ref.Class, ref.Project)
 	if err != nil {
 		return nil, err
@@ -622,7 +623,7 @@ func (p *Provider) storeAccounts(ctx context.Context, ref providerkit.StackRef) 
 	return accounts, nil
 }
 
-func (p *Provider) removeStoreAccount(ctx context.Context, ref providerkit.StackRef, app string) error {
+func (p *Provider) removeStoreAccount(ctx context.Context, ref provider.StackRef, app string) error {
 	store := storeName(ref)
 	key := host.StoreAccountKey(storeRef(ref).Name.String(), app)
 	sealed, err := p.host.Kept(ctx, ref.Class, key)
@@ -649,7 +650,7 @@ func (p *Provider) removeStoreAccount(ctx context.Context, ref providerkit.Stack
 	return p.host.ForgetKept(ctx, ref.Class, []string{key})
 }
 
-func (p *Provider) storeRoot(ctx context.Context, ref providerkit.StackRef, store string) (storeCredential, error) {
+func (p *Provider) storeRoot(ctx context.Context, ref provider.StackRef, store string) (storeCredential, error) {
 	sealed, err := p.host.Kept(ctx, ref.Class, store)
 	if err != nil {
 		return storeCredential{}, err

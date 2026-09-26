@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
@@ -94,10 +95,10 @@ func TestANameCloudRunWouldNotBuildAUrlFromIsRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("Service() named a service too long for Cloud Run to build a url from")
 	}
-	if code, refused := providerkit.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 		t.Errorf("Service() code = %v, want %v", code, refusal.CodeInvalid)
 	}
-	if !strings.Contains(err.Error(), providerkit.NamespaceEnvVar) {
+	if !strings.Contains(err.Error(), provider.NamespaceEnvVar) {
 		t.Errorf("Service() = %v, want it to say what a user can shorten", err)
 	}
 }
@@ -200,7 +201,7 @@ func TestAPreviewLabelCloudRunWouldRefuseIsRefusedWithItsParts(t *testing.T) {
 	if err == nil {
 		t.Fatal("PreviewService() named a service Cloud Run will not take")
 	}
-	if code, refused := providerkit.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 		t.Errorf("PreviewService() code = %v, want %v", code, refusal.CodeInvalid)
 	}
 	for _, part := range []string{"shop", pointer, "web", "60"} {

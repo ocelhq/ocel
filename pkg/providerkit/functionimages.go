@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -30,10 +31,10 @@ func (r *deployRun) functionImage(logical string) string {
 
 func (r *deployRun) imageFunctions(
 	ctx context.Context,
-	hooks Hooks,
-	entry AppEntry,
-	pack AppPack,
-	routing *RoutingPlan,
+	hooks provider.Hooks,
+	entry provider.AppEntry,
+	pack provider.AppPack,
+	routing *provider.RoutingPlan,
 ) ([]images.Push, error) {
 	if r.images == nil {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
@@ -57,9 +58,9 @@ func (r *deployRun) imageFunctions(
 
 func (r *deployRun) imageFunction(
 	ctx context.Context,
-	hooks Hooks,
+	hooks provider.Hooks,
 	root string,
-	entry AppEntry,
+	entry provider.AppEntry,
 	fn *contractv1.ManifestFunction,
 	overlay map[string][]byte,
 ) (images.Push, error) {
@@ -125,7 +126,7 @@ func (r *deployRun) wrapFunction(ctx context.Context, name string, framework app
 
 func runtimeOverlay(
 	ctx context.Context,
-	hooks Hooks,
+	hooks provider.Hooks,
 	framework appbuild.Framework,
 	name string,
 	overlay map[string][]byte,

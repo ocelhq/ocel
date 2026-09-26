@@ -13,7 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const rolePolicyToken = "aws:iam/rolePolicy:RolePolicy"
@@ -106,15 +106,15 @@ func grantsBindings() []*bindingsv1.Binding {
 	}
 }
 
-func plannedBindings(bindings []*bindingsv1.Binding) []providerkit.Binding {
-	out := make([]providerkit.Binding, 0, len(bindings))
+func plannedBindings(bindings []*bindingsv1.Binding) []provider.Binding {
+	out := make([]provider.Binding, 0, len(bindings))
 	for _, binding := range bindings {
-		held := providerkit.Binding{Type: providerkit.BindingCustom, Name: binding.GetName(), Grants: providerkit.GrantsOf(binding)}
+		held := provider.Binding{Type: provider.BindingCustom, Name: binding.GetName(), Grants: provider.GrantsOf(binding)}
 		switch naming.BindingTypeOf(binding) {
 		case bindingsv1.BindingType_BINDING_TYPE_BUCKET:
-			held.Type = providerkit.BindingBucket
+			held.Type = provider.BindingBucket
 		case bindingsv1.BindingType_BINDING_TYPE_POSTGRES:
-			held.Type = providerkit.BindingPostgres
+			held.Type = provider.BindingPostgres
 		}
 		out = append(out, held)
 	}

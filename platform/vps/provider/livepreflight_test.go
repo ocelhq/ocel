@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -19,17 +19,17 @@ import (
 
 const foreignContainer = "not-ocels"
 
-func liveDeployPreflight(t *testing.T, image string) providerkit.DeployPreflight {
+func liveDeployPreflight(t *testing.T, image string) provider.DeployPreflight {
 	t.Helper()
 	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")
 	if err != nil {
 		t.Fatal(err)
 	}
-	return providerkit.DeployPreflight{
-		Plan: providerkit.DeployPlan{
+	return provider.DeployPreflight{
+		Plan: provider.DeployPlan{
 			Slug:  "shop",
 			Class: edge.ClassProduction,
-			Apps: []providerkit.AppEntry{{
+			Apps: []provider.AppEntry{{
 				App:             liveApp,
 				Stack:           stack,
 				Image:           image,

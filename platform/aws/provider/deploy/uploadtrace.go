@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -90,9 +90,9 @@ type recordedFailure struct {
 
 func errorForKind(kind string) error {
 	switch kind {
-	case providerkit.ErrorKindCanceled:
+	case provider.ErrorKindCanceled:
 		return context.Canceled
-	case providerkit.ErrorKindTimeout:
+	case provider.ErrorKindTimeout:
 		return context.DeadlineExceeded
 	default:
 		return errUploadBatchFailed
@@ -133,8 +133,8 @@ func (s *uploadBatchStats) record(o uploadOutcome) {
 	}
 
 	if o.Failed {
-		kind := providerkit.ClassifyError(o.Err)
-		if kind == providerkit.ErrorKindCanceled {
+		kind := provider.ClassifyError(o.Err)
+		if kind == provider.ErrorKindCanceled {
 			return
 		}
 		if len(s.failures) < maxUploadFailureStandouts {
@@ -214,13 +214,13 @@ func emitUploadBatch(progress edge.Progress, k uploadKind, stats *uploadBatchSta
 		end = phaseStart
 	}
 	progress.Span(uploadBatchSpanName(k), start, end, batchErr,
-		providerkit.AttrResourceCount(snap.transferred), providerkit.AttrBytes(snap.bytes))
+		provider.AttrResourceCount(snap.transferred), provider.AttrBytes(snap.bytes))
 
 	for _, f := range snap.failures {
-		progress.Span(uploadStandoutName(k, true), f.Start, f.End, errorForKind(f.Kind), providerkit.AttrBytes(f.Bytes))
+		progress.Span(uploadStandoutName(k, true), f.Start, f.End, errorForKind(f.Kind), provider.AttrBytes(f.Bytes))
 	}
 	for _, s := range snap.slowest {
 		progress.Span(uploadStandoutName(k, false), s.Start, s.End, nil,
-			providerkit.AttrDurationMS(s.End.Sub(s.Start)), providerkit.AttrBytes(s.Bytes))
+			provider.AttrDurationMS(s.End.Sub(s.Start)), provider.AttrBytes(s.Bytes))
 	}
 }

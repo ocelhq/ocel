@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -90,7 +90,7 @@ func (r *Stacks) Warm(ctx context.Context, targets []string, progress edge.Progr
 	return nil
 }
 
-func (r *Stacks) EmbedCode(ctx context.Context, physical string, artifact providerkit.ArtifactRef, progress edge.Progress) error {
+func (r *Stacks) EmbedCode(ctx context.Context, physical string, artifact provider.ArtifactRef, progress edge.Progress) error {
 	if !bytecodeEmbedRequested() {
 		return nil
 	}

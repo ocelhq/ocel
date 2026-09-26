@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -30,7 +30,7 @@ func TestAnAppSynthesizedFromFunctionsNamesTheComputeItRunsOn(t *testing.T) {
 		}
 		t.Fatalf("manifestApps() = %q, want one app synthesized from the function", names)
 	}
-	if got, want := apps[0].GetCompute(), string(providerkit.ComputeServerless); got != want {
+	if got, want := apps[0].GetCompute(), string(provider.ComputeServerless); got != want {
 		t.Errorf("app compute = %q, want %q — every other ManifestApp answers the field, and this one is read by the same code", got, want)
 	}
 }

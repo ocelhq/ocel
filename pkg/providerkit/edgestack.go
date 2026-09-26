@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -47,7 +48,7 @@ func (s stackStore) write(ctx context.Context, state EdgeStackState) error {
 }
 
 type stackSession struct {
-	provider Provider
+	provider provider.Provider
 	front    edge.Edge
 	stack    edge.EdgeStack
 	store    stackStore
@@ -55,27 +56,27 @@ type stackSession struct {
 	settle   settlement
 }
 
-func (h *handlers) edgeFor(provider Provider, sel *contractv1.EdgeSelection) (edge.Edge, error) {
+func (h *handlers) edgeFor(p provider.Provider, sel *contractv1.EdgeSelection) (edge.Edge, error) {
 	kind := edge.Kind(sel.GetKind())
 	if kind == "" {
-		kind = provider.Facts().DefaultEdge
+		kind = p.Facts().DefaultEdge
 	}
-	return provider.Edges().Open(kind)
+	return p.Edges().Open(kind)
 }
 
-func (h *handlers) removalEdge(provider Provider, state EdgeStackState, sel *contractv1.EdgeSelection) (edge.Edge, error) {
+func (h *handlers) removalEdge(p provider.Provider, state EdgeStackState, sel *contractv1.EdgeSelection) (edge.Edge, error) {
 	if state.Kind == "" {
-		return h.edgeFor(provider, sel)
+		return h.edgeFor(p, sel)
 	}
-	return provider.Edges().Open(state.Kind)
+	return p.Edges().Open(state.Kind)
 }
 
-func dnsFor(provider Provider, front edge.Edge, sel *contractv1.EdgeSelection) (edge.DNSRecords, error) {
-	kind := DNSKind(sel.GetDns().GetKind())
+func dnsFor(p provider.Provider, front edge.Edge, sel *contractv1.EdgeSelection) (edge.DNSRecords, error) {
+	kind := provider.DNSKind(sel.GetDns().GetKind())
 	if kind == "" {
 		return nil, nil
 	}
-	return provider.DNS().Open(kind, sel.GetDns().GetZone(), front.Kind())
+	return p.DNS().Open(kind, sel.GetDns().GetZone(), front.Kind())
 }
 
 func (h *handlers) openStack(ctx context.Context, class edge.Class, slug string, sel *contractv1.EdgeSelection) (*stackSession, error) {

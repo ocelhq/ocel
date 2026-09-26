@@ -5,12 +5,12 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func RunEdges(t *testing.T, facts providerkit.Facts, edges providerkit.Edges) {
+func RunEdges(t *testing.T, facts provider.Facts, edges provider.Edges) {
 	t.Helper()
 
 	supported := facts.Edges
@@ -72,7 +72,7 @@ func RunEdges(t *testing.T, facts providerkit.Facts, edges providerkit.Edges) {
 	})
 }
 
-func RunDNS(t *testing.T, facts providerkit.Facts, dns providerkit.DNS) {
+func RunDNS(t *testing.T, facts provider.Facts, dns provider.DNS) {
 	t.Helper()
 
 	supported := facts.DNSKinds
@@ -102,7 +102,7 @@ func RunDNS(t *testing.T, facts providerkit.Facts, dns providerkit.DNS) {
 	})
 
 	t.Run("a writer this provider does not have is refused as invalid", func(t *testing.T) {
-		unserved := providerkit.DNSKind("no-such-dns")
+		unserved := provider.DNSKind("no-such-dns")
 		if slices.Contains(supported, unserved) {
 			t.Skip("this provider writes dns by that name, so it is the wrong probe")
 		}

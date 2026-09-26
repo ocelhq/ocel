@@ -12,10 +12,10 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -60,10 +60,10 @@ func deliveredBy(t *testing.T, req *contractv1.DeployRequest, publish func(*fake
 func TestAResourceIsNamedAsTheRuntimeReadsIt(t *testing.T) {
 	t.Parallel()
 
-	if got := providerkit.ResourceEnvName(providerkit.BindingPostgres, "main"); got != "OCEL_RESOURCE_POSTGRES_main" {
+	if got := provider.ResourceEnvName(provider.BindingPostgres, "main"); got != "OCEL_RESOURCE_POSTGRES_main" {
 		t.Errorf("ResourceEnvName = %q, want the name `ocel dev` and the sdk already agree on", got)
 	}
-	if got := providerkit.ResourceEnvName(providerkit.BindingBucket, "uploads"); got != "OCEL_RESOURCE_BUCKET_uploads" {
+	if got := provider.ResourceEnvName(provider.BindingBucket, "uploads"); got != "OCEL_RESOURCE_BUCKET_uploads" {
 		t.Errorf("ResourceEnvName = %q, want the bucket record read under its resource name", got)
 	}
 }
@@ -151,7 +151,7 @@ func TestNoSecretPlaintextIsHandedToAContainerTheRuntimeReadsItIn(t *testing.T) 
 func TestNoBindingRecordIsHandedToAContainerTheRuntimeResolvesItIn(t *testing.T) {
 	delivered := deliveredByWrapping(t, namingARegistry(containerDeployRequest("/healthz")), nil)
 
-	name := providerkit.ResourceEnvName(providerkit.BindingPostgres, "orders")
+	name := provider.ResourceEnvName(provider.BindingPostgres, "orders")
 	if got, held := delivered[name]; held {
 		t.Errorf("a container is handed %s=%q, want the runtime inside it to read the record: the record carries the resource's own credentials", name, got)
 	}

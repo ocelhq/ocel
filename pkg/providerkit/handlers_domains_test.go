@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -501,23 +502,23 @@ func TestAddHostnameSettlesTheValidationRecordsItsProviderProves(t *testing.T) {
 
 func TestAddHostnameDiscardsTheCertificateItSupersedes(t *testing.T) {
 	t.Parallel()
-	client, provider := contractServed(t, "1.0.0")
+	client, p := contractServed(t, "1.0.0")
 	stale := edge.Record{Name: "_stale.app.acme.com", Type: edge.RecordTypeCNAME, Value: "_stale.validations.invalid"}
-	seedStack(t, provider, edge.ClassProduction, "shop", providerkit.EdgeStackState{
+	seedStack(t, p, edge.ClassProduction, "shop", providerkit.EdgeStackState{
 		Edge: edge.StackState{Slug: "shop", Class: edge.ClassProduction, Endpoint: "https://shop.fake.invalid"},
 		Hosts: map[string]providerkit.Settled{
-			"app.acme.com": {Certificate: providerkit.Certificate{ID: "superseded", Requested: true, Written: []edge.Record{stale}}},
+			"app.acme.com": {Certificate: provider.Certificate{ID: "superseded", Requested: true, Written: []edge.Record{stale}}},
 		},
 	})
-	promoted(t, provider, edge.ClassProduction, "shop")
-	writer, err := provider.DNS().Open(fake.KindZone, "acme.com", "")
+	promoted(t, p, edge.ClassProduction, "shop")
+	writer, err := p.DNS().Open(fake.KindZone, "acme.com", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := writer.Ensure(context.Background(), []edge.Record{stale}, nil); err != nil {
 		t.Fatal(err)
 	}
-	provider.IssueCertificates(validationRecord)
+	p.IssueCertificates(validationRecord)
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
@@ -531,7 +532,7 @@ func TestAddHostnameDiscardsTheCertificateItSupersedes(t *testing.T) {
 		t.Fatalf("AddHostname() = %v %q, want the hostname settled", err, result.GetError())
 	}
 
-	if discarded := provider.Discarded(); !slices.Contains(discarded, "superseded") {
+	if discarded := p.Discarded(); !slices.Contains(discarded, "superseded") {
 		t.Errorf("the provider discarded %v, want the superseded certificate among them", discarded)
 	}
 	if held := writer.(*fake.DNSRecords).Records(); slices.Contains(held, stale) {
@@ -626,8 +627,8 @@ func TestAddHostnameKeepsTheSupersededCertificateOnRecordWhileItsReplacementIsPe
 
 func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) {
 	t.Parallel()
-	client, provider := contractServed(t, "1.0.0")
-	seedStack(t, provider, edge.ClassProduction, "shop", providerkit.EdgeStackState{
+	client, p := contractServed(t, "1.0.0")
+	seedStack(t, p, edge.ClassProduction, "shop", providerkit.EdgeStackState{
 		Edge: edge.StackState{
 			Slug:     "shop",
 			Class:    edge.ClassProduction,
@@ -637,13 +638,13 @@ func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) 
 		},
 		Hosts: map[string]providerkit.Settled{
 			"app.acme.com": {
-				Certificate: providerkit.Certificate{ID: "cert-of-yesterday"},
+				Certificate: provider.Certificate{ID: "cert-of-yesterday"},
 				Probe:       providerkit.Probe{OK: true, Edge: fake.KindRelay},
 			},
 		},
 	})
-	promoted(t, provider, edge.ClassProduction, "shop")
-	provider.Pin("app.acme.com", "cert-of-today")
+	promoted(t, p, edge.ClassProduction, "shop")
+	p.Pin("app.acme.com", "cert-of-today")
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
 		Slug:       "shop",
@@ -657,7 +658,7 @@ func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) 
 		t.Fatalf("AddHostname() = %v %q, want the hostname settled again", err, result.GetError())
 	}
 
-	bindings := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Bindings()
+	bindings := p.Edges().(*fake.Edges).Edge(fake.KindRelay).Bindings()
 	if len(bindings) == 0 || bindings[len(bindings)-1].Certificate != "cert-of-today" {
 		t.Errorf("the edge was bound with %+v, want the hostname rebound with the certificate it is served with now", bindings)
 	}
@@ -665,8 +666,8 @@ func TestAddHostnameRebindsAServedHostnameWhoseCertificateChanged(t *testing.T) 
 
 func TestHostnameStatusReportsWhatTheProviderSaysOfTheCertificate(t *testing.T) {
 	t.Parallel()
-	client, provider := contractServed(t, "1.0.0")
-	seedStack(t, provider, edge.ClassProduction, "shop", providerkit.EdgeStackState{
+	client, p := contractServed(t, "1.0.0")
+	seedStack(t, p, edge.ClassProduction, "shop", providerkit.EdgeStackState{
 		Edge: edge.StackState{
 			Slug:     "shop",
 			Class:    edge.ClassProduction,
@@ -676,13 +677,13 @@ func TestHostnameStatusReportsWhatTheProviderSaysOfTheCertificate(t *testing.T) 
 		},
 		Hosts: map[string]providerkit.Settled{
 			"app.acme.com": {
-				Certificate: providerkit.Certificate{ID: "pending-cert", Requested: true},
+				Certificate: provider.Certificate{ID: "pending-cert", Requested: true},
 				Probe:       providerkit.Probe{OK: true, Edge: fake.KindRelay},
 			},
 		},
 	})
 	expiry := time.Now().Add(24 * time.Hour)
-	provider.ReportCertificate(providerkit.CertificateHealth{
+	p.ReportCertificate(provider.CertificateHealth{
 		Terminates:   true,
 		Status:       "PENDING_VALIDATION",
 		Domains:      []string{"other.acme.com"},

@@ -7,14 +7,14 @@ import (
 	"connectrpc.com/connect"
 
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func TestAHookGroupLeftNilIsSkippedAndOneSetRunsBothItsSteps(t *testing.T) {
 	var shaped, estimated int
-	counted := &providerkit.CostHooks{
-		Shape: func(context.Context, providerkit.ShapeRequest) (*costv1.ResourceSet, error) {
+	counted := &provider.CostHooks{
+		Shape: func(context.Context, provider.ShapeRequest) (*costv1.ResourceSet, error) {
 			shaped++
 			return &costv1.ResourceSet{}, nil
 		},
@@ -25,7 +25,7 @@ func TestAHookGroupLeftNilIsSkippedAndOneSetRunsBothItsSteps(t *testing.T) {
 	}
 	for _, tc := range []struct {
 		name string
-		cost *providerkit.CostHooks
+		cost *provider.CostHooks
 		skip bool
 		runs int
 	}{
@@ -34,8 +34,8 @@ func TestAHookGroupLeftNilIsSkippedAndOneSetRunsBothItsSteps(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			shaped, estimated = 0, 0
-			provider := fake.NewProvider(fake.Options{Region: "nowhere"}).Hook(func(h *providerkit.Hooks) { h.Cost = tc.cost })
-			client, rates := costServed(t, provider)
+			p := fake.NewProvider(fake.Options{Region: "nowhere"}).Hook(func(h *provider.Hooks) { h.Cost = tc.cost })
+			client, rates := costServed(t, p)
 
 			_, shapeErr := client.Shape(context.Background(), shapeRequest())
 			_, priceErr := rates.Price(context.Background(), &costv1.PriceRequest{Resources: &costv1.ResourceSet{Source: "ocel"}})

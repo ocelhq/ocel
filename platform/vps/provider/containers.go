@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
@@ -16,7 +16,7 @@ import (
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 )
 
-func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) ([]providerkit.AppContainer, error) {
+func (p *Provider) ProvisionContainers(ctx context.Context, plan provider.StackPlan, progress edge.Progress) ([]provider.AppContainer, error) {
 	app := plan.App
 	if app == nil {
 		return nil, nil
@@ -63,7 +63,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	if err := p.host.Promote(ctx, plan.Ref.Class, plan.Ref.Project, app.App, app.Image); err != nil {
 		return nil, err
 	}
-	return []providerkit.AppContainer{{
+	return []provider.AppContainer{{
 		Name:     app.App,
 		Physical: physical,
 		URL:      "http://" + physical + ":" + appbuild.InjectedPortText,
@@ -71,7 +71,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 	}}, nil
 }
 
-func (p *Provider) RemoveContainers(ctx context.Context, ref providerkit.StackRef, containers []providerkit.AppContainer, progress edge.Progress) error {
+func (p *Provider) RemoveContainers(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress edge.Progress) error {
 	for _, container := range containers {
 		if container.Physical == "" {
 			continue
@@ -89,14 +89,14 @@ func (p *Provider) RemoveContainers(ctx context.Context, ref providerkit.StackRe
 	return nil
 }
 
-func liveEnvironment(ref providerkit.StackRef) string {
+func liveEnvironment(ref provider.StackRef) string {
 	if ref.Class == edge.ClassProduction {
 		return ""
 	}
 	return ref.Name.Env
 }
 
-func liveKeys(held providerkit.AppValues) []live.Key {
+func liveKeys(held provider.AppValues) []live.Key {
 	keys := make([]live.Key, 0, len(held.Secrets))
 	for _, secret := range held.Secrets {
 		keys = append(keys, live.Key{Key: secret.Key, Folder: secret.Folder})
@@ -104,10 +104,10 @@ func liveKeys(held providerkit.AppValues) []live.Key {
 	return keys
 }
 
-func liveBindings(held providerkit.AppValues) []live.Binding {
+func liveBindings(held provider.AppValues) []live.Binding {
 	bindings := make([]live.Binding, 0, len(held.Bindings))
 	for _, binding := range held.Bindings {
-		kind := providerkit.WireBindingType(binding.Type)
+		kind := provider.WireBindingType(binding.Type)
 		resource := binding.Resource
 		if resource == "" {
 			resource = binding.Name

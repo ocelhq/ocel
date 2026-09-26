@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -238,7 +238,7 @@ func TestAnInstallLeftHalfDoneIsInstalledAgainRatherThanRefused(t *testing.T) {
 			if err := read.runnableEngine("ada@ocelbox"); err != nil {
 				t.Fatalf("runnableEngine() = %v, and an install interrupted before docker.service landed could never be finished by ocel", err)
 			}
-			if engine := planFor(planned(read), engineItem().ID()); engine.Action != providerkit.ActionUpdate {
+			if engine := planFor(planned(read), engineItem().ID()); engine.Action != provider.ActionUpdate {
 				t.Errorf("the engine plans %q, want the install shown again as a change over what stands", engine.Action)
 			}
 			refused := refuseReplacements(read, EngineItems())
@@ -288,7 +288,7 @@ func TestAnEngineThatStandsIsAdoptedAndAnIdleDaemonPlansTheUnitAlone(t *testing.
 
 	changes := planned(read)
 	engine := planFor(changes, engineItem().ID())
-	if engine.Action != providerkit.ActionAdopt {
+	if engine.Action != provider.ActionAdopt {
 		t.Errorf("a host whose engine stands plans %q for it, want it adopted: an installed engine is never installed over", engine.Action)
 	}
 	if want := "docker 28.3.1, not managed by ocel: upgrading it is yours"; engine.Reason != want {
@@ -298,7 +298,7 @@ func TestAnEngineThatStandsIsAdoptedAndAnIdleDaemonPlansTheUnitAlone(t *testing.
 		t.Error("an adopted engine is planned as slow work, and adopting it writes nothing at all")
 	}
 	unit := planFor(changes, unitItem().ID())
-	if unit.Action != providerkit.ActionUpdate {
+	if unit.Action != provider.ActionUpdate {
 		t.Errorf("a host whose daemon is idle plans %q for the unit, want it brought to serving", unit.Action)
 	}
 	if strings.Contains(unit.Reason, dockerSource) {
@@ -355,7 +355,7 @@ func TestAHostWithNoEngineHasTheInstallPlannedLastAndNamed(t *testing.T) {
 
 	changes := planned(Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: map[string]string{}})
 	engine := planFor(changes, engineItem().ID())
-	if engine.Action != providerkit.ActionCreate {
+	if engine.Action != provider.ActionCreate {
 		t.Fatalf("a host with no engine plans %q for it, want the install shown as a change to consent to", engine.Action)
 	}
 	if want := "docker " + dockerVersion + ", installed once; upgrading it is yours from then on"; engine.Reason != want {
@@ -381,7 +381,7 @@ func TestDestroyKeepsTheEngineWhicheverClassIsTheLastOne(t *testing.T) {
 	} {
 		taken := removing(standing, sibling, appsStanding{})
 		kept := removalOf(taken, dockerEngine)
-		if kept.action != providerkit.ActionKeep {
+		if kept.action != provider.ActionKeep {
 			t.Errorf("destroying %s plans %s as %q, want it kept: removing ocel never removes the workloads a host runs",
 				name, dockerEngine, kept.action)
 		}
@@ -389,7 +389,7 @@ func TestDestroyKeepsTheEngineWhicheverClassIsTheLastOne(t *testing.T) {
 			t.Errorf("destroying %s keeps %s and never says why it stays", name, dockerEngine)
 		}
 		for _, r := range taken {
-			if r.action == providerkit.ActionDelete && r.path == dockerEngine {
+			if r.action == provider.ActionDelete && r.path == dockerEngine {
 				t.Errorf("destroying %s takes %s, and a host loses the engine every container it runs needs", name, r.path)
 			}
 			if r.path == dockerUnit {
@@ -413,7 +413,7 @@ func TestAHostCarryingNothingButTheEngineHasNothingToDestroy(t *testing.T) {
 func TestSlowWorkClosesThePlanWhateverOrderTheItemsStandIn(t *testing.T) {
 	t.Parallel()
 
-	ordered := slowLast([]providerkit.Change{
+	ordered := slowLast([]provider.Change{
 		{Name: "first slow", Slow: true},
 		{Name: "a directory"},
 		{Name: "second slow", Slow: true},
@@ -428,7 +428,7 @@ func TestSlowWorkClosesThePlanWhateverOrderTheItemsStandIn(t *testing.T) {
 	}
 }
 
-func quickest(t *testing.T, changes []providerkit.Change) {
+func quickest(t *testing.T, changes []provider.Change) {
 	t.Helper()
 	var slow bool
 	for _, change := range changes {
@@ -453,7 +453,7 @@ func TestAnApplyOverAnAdoptedEngineNeverInstallsDockerAndStillStartsItsUnit(t *t
 		}
 	}
 	if err := NewBootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
-		providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil); err != nil {
+		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	if at := stood.at(dockerSource); at >= 0 {
@@ -541,8 +541,8 @@ func TestABootstrapOverAnEngineOcelCannotRunOnStopsBeforeItsFirstWrite(t *testin
 	carrying(stood, Engine{Kind: engineStandard, Version: "26.1.4"})
 
 	boot := NewBootstrap(stood.host(), testVendor, "shop")
-	_, planned := boot.Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
-	applied := boot.Apply(context.Background(), providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil)
+	_, planned := boot.Plan(context.Background(), provider.BootstrapRequest{Class: class})
+	applied := boot.Apply(context.Background(), provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil)
 	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
 		if refused := refusalOf(t, err, refusal.CodeNotReady); !strings.Contains(refused.Message, "docker 26.1.4") {
 			t.Errorf("%s refused with %q, want it to name the docker it will not run on", step, refused.Message)

@@ -3,23 +3,23 @@ package fake
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (p *Provider) Hook(set func(*providerkit.Hooks)) *Provider {
+func (p *Provider) Hook(set func(*provider.Hooks)) *Provider {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	set(&p.hooks)
 	return p
 }
 
-func (p *Provider) everyHook(hooks *providerkit.Hooks) {
+func (p *Provider) everyHook(hooks *provider.Hooks) {
 	hooks.WarmFunctions = func(context.Context, []string, edge.Progress) error { return nil }
-	hooks.EmbedCode = func(context.Context, string, providerkit.ArtifactRef, edge.Progress) error { return nil }
+	hooks.EmbedCode = func(context.Context, string, provider.ArtifactRef, edge.Progress) error { return nil }
 	hooks.InspectStack = p.InspectStack
-	hooks.VerifyGrants = func(context.Context, providerkit.Binding) error { return nil }
+	hooks.VerifyGrants = func(context.Context, provider.Binding) error { return nil }
 	hooks.PreflightDeploy = p.PreflightDeploy
 	hooks.EnsureImageRegistry = p.EnsureImageRegistry
 }
@@ -31,7 +31,7 @@ func (p *Provider) ResourceHooks() resources.Hooks {
 	}
 }
 
-func (p *Provider) Ships(store providerkit.ArtifactStore) *Provider {
+func (p *Provider) Ships(store provider.ArtifactStore) *Provider {
 	p.artifacts = store
 	p.stacks.artifacts = store
 	return p

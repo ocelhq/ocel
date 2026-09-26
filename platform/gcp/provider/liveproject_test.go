@@ -7,7 +7,7 @@ import (
 
 	"google.golang.org/api/artifactregistry/v1"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
@@ -77,14 +77,14 @@ func TestProjectARepositoryWhoseCleanupPolicyWasEditedAwayIsMendedByTheNextBoots
 		t.Fatalf("take the cleanup policies off %s: %v", name, err)
 	}
 
-	plan, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"})
+	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"})
 	if err != nil {
 		t.Fatalf("Plan(%s) = %v", class, err)
 	}
 	mending := false
 	for _, group := range plan.Groups {
 		for _, change := range group.Changes {
-			if change.Kind == "artifactregistry:repository" && change.Action == providerkit.ActionUpdate {
+			if change.Kind == "artifactregistry:repository" && change.Action == provider.ActionUpdate {
 				mending = true
 			}
 		}
@@ -93,7 +93,7 @@ func TestProjectARepositoryWhoseCleanupPolicyWasEditedAwayIsMendedByTheNextBoots
 		t.Errorf("Plan() after the policies were edited away shows %+v, want the repository row reading as an update: a survey that only asks whether a repository exists never mends one", plan.Groups)
 	}
 
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v", class, err)
 	}
 	if _, named := repositoryHeld(t, p, class).CleanupPolicies["drop-untagged"]; !named {

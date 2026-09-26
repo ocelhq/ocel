@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -28,11 +29,11 @@ type ServingQuery struct {
 
 type ServingFacts struct {
 	Entry       string
-	Routing     *RoutingPlan
-	EdgeRouting *RoutingPlan
-	Guard       *OriginGuard
-	ISR         *ISRPlan
-	Bytecode    *BytecodePlan
+	Routing     *provider.RoutingPlan
+	EdgeRouting *provider.RoutingPlan
+	Guard       *provider.OriginGuard
+	ISR         *provider.ISRPlan
+	Bytecode    *provider.BytecodePlan
 	AssetPrefix string
 }
 
@@ -43,13 +44,13 @@ func ServingFactsFor(q ServingQuery) (ServingFacts, error) {
 	}
 	facts := ServingFacts{
 		AssetPrefix: q.Coordinate.AssetKey(""),
-		Bytecode:    &BytecodePlan{Prefix: withoutSlash(q.Coordinate.BytecodePrefix())},
+		Bytecode:    &provider.BytecodePlan{Prefix: withoutSlash(q.Coordinate.BytecodePrefix())},
 	}
 	if present {
 		facts.Entry = desc.Entry
 	}
 	if q.Framework == appbuild.FrameworkNext {
-		facts.ISR = &ISRPlan{
+		facts.ISR = &provider.ISRPlan{
 			Prefix:       withoutSlash(q.Coordinate.ISRPrefix()),
 			TagNamespace: naming.ISRTagPrefix(q.Project, q.Stack),
 		}
@@ -67,18 +68,18 @@ func ServingFactsFor(q ServingQuery) (ServingFacts, error) {
 	return facts, nil
 }
 
-func guardFor(q ServingQuery, desc edge.ServeDescriptor, present bool) *OriginGuard {
+func guardFor(q ServingQuery, desc edge.ServeDescriptor, present bool) *provider.OriginGuard {
 	if q.EdgeRunsCode || q.EdgeSignsForwards || !present || desc.Entry == "" {
 		return nil
 	}
-	return &OriginGuard{Entry: desc.Entry}
+	return &provider.OriginGuard{Entry: desc.Entry}
 }
 
-func anyProxied(proxied func(BindingType) bool, grants []Binding) bool {
-	return slices.ContainsFunc(grants, func(binding Binding) bool { return proxied(binding.Type) })
+func anyProxied(proxied func(provider.BindingType) bool, grants []provider.Binding) bool {
+	return slices.ContainsFunc(grants, func(binding provider.Binding) bool { return proxied(binding.Type) })
 }
 
-func routingFor(q ServingQuery, desc edge.ServeDescriptor, present bool) (*RoutingPlan, error) {
+func routingFor(q ServingQuery, desc edge.ServeDescriptor, present bool) (*provider.RoutingPlan, error) {
 	if !present || !desc.EdgeRouting {
 		return nil, nil
 	}
@@ -94,7 +95,7 @@ func routingFor(q ServingQuery, desc edge.ServeDescriptor, present bool) (*Routi
 	if err != nil {
 		return nil, fmt.Errorf("read the routing manifest %s routes by: %w", q.App, err)
 	}
-	return &RoutingPlan{Entry: desc.Entry, Manifest: raw}, nil
+	return &provider.RoutingPlan{Entry: desc.Entry, Manifest: raw}, nil
 }
 
 func withoutSlash(prefix string) string {

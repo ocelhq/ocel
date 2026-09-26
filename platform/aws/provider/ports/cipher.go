@@ -7,7 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -39,7 +39,7 @@ func (s Cipher) key(ctx context.Context, at records.SealScope) (string, error) {
 	if s.Keys == nil {
 		return "", refusal.Refuse(refusal.CodeNotReady,
 			"nothing in this account holds a key to seal a %s value under.\nRun `%s`, then try again",
-			at.Class, providerkit.BootstrapVarsKeyCommand(at.Class))
+			at.Class, provider.BootstrapVarsKeyCommand(at.Class))
 	}
 	key, err := s.Keys.Key(ctx, at.Class)
 	if err != nil {
@@ -48,7 +48,7 @@ func (s Cipher) key(ctx context.Context, at records.SealScope) (string, error) {
 	if key == "" {
 		return "", refusal.Refuse(refusal.CodeNotReady,
 			"the %s bootstrap holds no key to seal a value under, and a key is the one bootstrap item with a standing cost.\nRun `%s` to add one, then try again",
-			at.Class, providerkit.BootstrapVarsKeyCommand(at.Class))
+			at.Class, provider.BootstrapVarsKeyCommand(at.Class))
 	}
 	return key, nil
 }

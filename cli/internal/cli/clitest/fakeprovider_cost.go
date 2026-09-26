@@ -9,6 +9,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const (
@@ -73,7 +74,7 @@ func (s *deployFakeProviderServer) Shape(_ context.Context, req *contractv1.Shap
 	}
 	for _, app := range manifest.GetApps() {
 		scope := tree.Scope(environment, costkit.ScopeApp, app.GetName())
-		if app.GetCompute() == string(providerkit.ComputeContainer) {
+		if app.GetCompute() == string(provider.ComputeContainer) {
 			tree.Add(scope, costVendor, typeContainer, app.GetName(), costRegion, map[string]any{"name": app.GetName()})
 			continue
 		}
@@ -85,7 +86,7 @@ func (s *deployFakeProviderServer) Shape(_ context.Context, req *contractv1.Shap
 			tree.Add(scope, costVendor, typeFunction, name, costRegion, map[string]any{"name": name})
 		}
 	}
-	return tree.Set(providerkit.CostSource)
+	return tree.Set(provider.CostSource)
 }
 
 func (s *deployFakeProviderServer) Price(_ context.Context, req *costv1.PriceRequest) (*costv1.Estimate, error) {

@@ -32,8 +32,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func collectAndBuildManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, ui *runui.Session, compute string, containerArchs map[string]string, urls map[string]string) (*contractv1.Manifest, []inlinebinding.Record, error) {
@@ -387,7 +387,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 		return nil, err
 	}
 	apps := cfg.Apps
-	container := compute == string(providerkit.ComputeContainer)
+	container := compute == string(provider.ComputeContainer)
 
 	if len(apps) == 0 {
 		if len(detected) > 1 {
@@ -414,7 +414,7 @@ func toAttributionApps(cfg *projectconfig.Config, functions []manifestbuilder.Fu
 	out := make([]attribution.App, 0, len(apps))
 	for _, a := range apps {
 		named[a.Name] = true
-		inAnImage := cmp.Or(a.Compute, compute) == string(providerkit.ComputeContainer)
+		inAnImage := cmp.Or(a.Compute, compute) == string(provider.ComputeContainer)
 		appDir := filepath.Join(cfg.Dir, a.Path)
 		out = append(out, attribution.App{
 			Name:      a.Name,

@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -33,7 +34,7 @@ func liveStore(p *vps.Provider) envvars.Store {
 }
 
 type liveValues struct {
-	declared providerkit.AppValues
+	declared provider.AppValues
 	reads    map[string]string
 }
 
@@ -64,21 +65,21 @@ func resolving(t *testing.T, p *vps.Provider) liveValues {
 		t.Fatalf("resolving a binding back through the helper = %v", err)
 	}
 	return liveValues{
-		declared: providerkit.AppValues{
+		declared: provider.AppValues{
 			Delivered: map[string]string{"REGION": livePlainValue, "API_TOKEN": liveSensitiveValue},
-			Secrets:   []providerkit.SecretRef{{Key: "DATABASE_URL"}},
-			Bindings:  []providerkit.Binding{{Name: "main", Type: providerkit.BindingPostgres}},
+			Secrets:   []provider.SecretRef{{Key: "DATABASE_URL"}},
+			Bindings:  []provider.Binding{{Name: "main", Type: provider.BindingPostgres}},
 		},
 		reads: map[string]string{
 			"REGION":       livePlainValue,
 			"API_TOKEN":    liveSensitiveValue,
 			"DATABASE_URL": liveSecretValue,
-			providerkit.ResourceEnvName(providerkit.BindingPostgres, "main"): string(records[0].Value),
+			provider.ResourceEnvName(provider.BindingPostgres, "main"): string(records[0].Value),
 		},
 	}
 }
 
-func liveValuePlan(t *testing.T, tag string, declared providerkit.AppValues) providerkit.StackPlan {
+func liveValuePlan(t *testing.T, tag string, declared provider.AppValues) provider.StackPlan {
 	t.Helper()
 	plan := livePlan(t, tag)
 	plan.App.Values = declared

@@ -5,8 +5,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -15,13 +15,13 @@ import (
 func TestRegistryConformance(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
-	conformance.RunDNS(t, providerkit.Facts{DNSKinds: Kinds()}, Registry{})
+	conformance.RunDNS(t, provider.Facts{DNSKinds: Kinds()}, Registry{})
 }
 
 func TestKinds(t *testing.T) {
 	t.Parallel()
 
-	if got := Kinds(); !slices.Equal(got, []providerkit.DNSKind{providerkit.DNSKind(KindCloudflare), providerkit.DNSKind(KindRoute53)}) {
+	if got := Kinds(); !slices.Equal(got, []provider.DNSKind{provider.DNSKind(KindCloudflare), provider.DNSKind(KindRoute53)}) {
 		t.Errorf("Kinds() = %v, want cloudflare and route53", got)
 	}
 }

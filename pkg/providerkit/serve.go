@@ -17,12 +17,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 type Spec struct {
 	Version string
 
-	New func(ctx context.Context, settings Settings) (Provider, error)
+	New func(ctx context.Context, settings provider.Settings) (provider.Provider, error)
 }
 
 func Serve(spec Spec) error {
@@ -75,7 +76,7 @@ func newMux(spec Spec) *http.ServeMux {
 		validate.NewInterceptor(),
 	)
 
-	held := &session{spec: spec, writer: WrittenByVersion(spec.Version)}
+	held := &session{spec: spec, writer: provider.WrittenByVersion(spec.Version)}
 	kit := &handlers{session: held, VarsService: &VarsService{Source: sessionVars{session: held}}}
 
 	path, handler := contractv1connect.NewProviderServiceHandler(kit, interceptors)
@@ -104,11 +105,11 @@ var (
 
 type session struct {
 	spec   Spec
-	writer WrittenBy
+	writer provider.WrittenBy
 
 	mu       sync.Mutex
-	provider Provider
-	settings Settings
+	provider provider.Provider
+	settings provider.Settings
 }
 
 func (s *session) transforms() []string {
@@ -117,25 +118,25 @@ func (s *session) transforms() []string {
 	return s.settings.Transforms
 }
 
-func (s *session) configure(ctx context.Context, settings Settings) error {
+func (s *session) configure(ctx context.Context, settings provider.Settings) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.provider != nil {
 		return connect.NewError(connect.CodeFailedPrecondition, errors.New("the provider session is already configured"))
 	}
-	provider, err := s.spec.New(ctx, settings)
+	p, err := s.spec.New(ctx, settings)
 	if err != nil {
-		return RefusalError(err)
+		return provider.RefusalError(err)
 	}
-	if provider == nil {
+	if p == nil {
 		return connect.NewError(connect.CodeInternal, errors.New("the provider constructor returned nothing"))
 	}
-	s.provider = provider
+	s.provider = p
 	s.settings = settings
 	return nil
 }
 
-func (s *session) use() (Provider, error) {
+func (s *session) use() (provider.Provider, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.provider == nil {

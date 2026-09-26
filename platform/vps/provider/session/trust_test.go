@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
-func generated(t *testing.T, kind string) providerkit.HostKey {
+func generated(t *testing.T, kind string) provider.HostKey {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "host_key")
 	if out, err := exec.Command("ssh-keygen", "-q", "-t", kind, "-N", "", "-f", path).CombinedOutput(); err != nil {
@@ -21,7 +21,7 @@ func generated(t *testing.T, kind string) providerkit.HostKey {
 		t.Fatal(err)
 	}
 	fields := strings.Fields(string(published))
-	key, err := (providerkit.HostKey{Type: fields[0], Key: fields[1]}).Fingerprinted()
+	key, err := (provider.HostKey{Type: fields[0], Key: fields[1]}).Fingerprinted()
 	if err != nil {
 		t.Fatalf("could not fingerprint the %s key ssh-keygen just wrote: %v", kind, err)
 	}
@@ -65,7 +65,7 @@ func TestAKeyTheUserAlreadyHoldsAnchorsTheSession(t *testing.T) {
 	t.Parallel()
 
 	key := generated(t, "ed25519")
-	anchor, trust := classify(destination(), []providerkit.HostKey{key}, known{keys: []providerkit.HostKey{key}})
+	anchor, trust := classify(destination(), []provider.HostKey{key}, known{keys: []provider.HostKey{key}})
 	if trust != nil {
 		t.Fatalf("classify() refused %+v over a key the user already holds", trust)
 	}
@@ -78,14 +78,14 @@ func TestAHostNobodyHasSeenIsAnUnknownHostKey(t *testing.T) {
 	t.Parallel()
 
 	key := generated(t, "ed25519")
-	anchor, trust := classify(destination(), []providerkit.HostKey{key}, known{})
+	anchor, trust := classify(destination(), []provider.HostKey{key}, known{})
 	if trust == nil {
 		t.Fatal("classify() trusted a host held in no known_hosts file")
 	}
-	if trust.Reason != providerkit.UnknownHostKey {
-		t.Errorf("classify() called it %s, want %s", trust.Reason, providerkit.UnknownHostKey)
+	if trust.Reason != provider.UnknownHostKey {
+		t.Errorf("classify() called it %s, want %s", trust.Reason, provider.UnknownHostKey)
 	}
-	if trust.Got != key || trust.Want != (providerkit.HostKey{}) {
+	if trust.Got != key || trust.Want != (provider.HostKey{}) {
 		t.Errorf("classify() reported got %+v want %+v, want the offered key and nothing held", trust.Got, trust.Want)
 	}
 	if trust.Address != "203.0.113.10" || trust.Port != 2222 || trust.Host != "web-1" {
@@ -94,7 +94,7 @@ func TestAHostNobodyHasSeenIsAnUnknownHostKey(t *testing.T) {
 	if len(trust.KnownHosts) == 0 {
 		t.Error("classify() named no known_hosts file, so the user cannot act on the refusal")
 	}
-	if anchor != (providerkit.HostKey{}) {
+	if anchor != (provider.HostKey{}) {
 		t.Errorf("classify() anchored on %+v while refusing", anchor)
 	}
 	if trust.Remedy != "ssh-keyscan -t "+key.Type+" -p 2222 203.0.113.10 >> /home/ada/.ssh/known_hosts" {
@@ -108,7 +108,7 @@ func TestAPlainPortNeedsNoBracketsInTheRemedy(t *testing.T) {
 	held, offering := generated(t, "ed25519"), generated(t, "ed25519")
 	plain := destination()
 	plain.Port = 22
-	_, trust := classify(plain, []providerkit.HostKey{offering}, known{keys: []providerkit.HostKey{held}})
+	_, trust := classify(plain, []provider.HostKey{offering}, known{keys: []provider.HostKey{held}})
 	if trust == nil {
 		t.Fatal("classify() trusted a host offering a key that is not the one held")
 	}
@@ -121,12 +121,12 @@ func TestADifferentKeyOfTheSameTypeIsAMismatch(t *testing.T) {
 	t.Parallel()
 
 	held, offering := generated(t, "ed25519"), generated(t, "ed25519")
-	_, trust := classify(destination(), []providerkit.HostKey{offering}, known{keys: []providerkit.HostKey{held}})
+	_, trust := classify(destination(), []provider.HostKey{offering}, known{keys: []provider.HostKey{held}})
 	if trust == nil {
 		t.Fatal("classify() trusted a host offering a key that is not the one held")
 	}
-	if trust.Reason != providerkit.HostKeyMismatch || !trust.Terminal() {
-		t.Errorf("classify() called it %s, want a terminal %s", trust.Reason, providerkit.HostKeyMismatch)
+	if trust.Reason != provider.HostKeyMismatch || !trust.Terminal() {
+		t.Errorf("classify() called it %s, want a terminal %s", trust.Reason, provider.HostKeyMismatch)
 	}
 	if trust.Got != offering || trust.Want != held {
 		t.Errorf("classify() reported got %+v want %+v, want the offered and the held key", trust.Got, trust.Want)
@@ -140,7 +140,7 @@ func TestTheStrongestOfferedKeyIsTheOneReported(t *testing.T) {
 	t.Parallel()
 
 	rsa, ed := generated(t, "rsa"), generated(t, "ed25519")
-	_, trust := classify(destination(), []providerkit.HostKey{rsa, ed}, known{})
+	_, trust := classify(destination(), []provider.HostKey{rsa, ed}, known{})
 	if trust == nil {
 		t.Fatal("classify() trusted a host held in no known_hosts file")
 	}
@@ -153,7 +153,7 @@ func TestOneKnownKeyAmongSeveralOfferedIsEnough(t *testing.T) {
 	t.Parallel()
 
 	rsa, ed := generated(t, "rsa"), generated(t, "ed25519")
-	anchor, trust := classify(destination(), []providerkit.HostKey{rsa, ed}, known{keys: []providerkit.HostKey{rsa}})
+	anchor, trust := classify(destination(), []provider.HostKey{rsa, ed}, known{keys: []provider.HostKey{rsa}})
 	if trust != nil {
 		t.Fatalf("classify() refused %+v while known_hosts holds one of the offered keys", trust)
 	}
@@ -181,7 +181,7 @@ func TestAMarkedEntryIsLeftToOpenSSH(t *testing.T) {
 	t.Parallel()
 
 	key := generated(t, "ed25519")
-	anchor, trust := classify(destination(), []providerkit.HostKey{key}, known{delegated: true})
+	anchor, trust := classify(destination(), []provider.HostKey{key}, known{delegated: true})
 	if trust != nil {
 		t.Fatalf("classify() refused %+v over a marked known_hosts entry; only ssh knows what @cert-authority and @revoked mean", trust)
 	}
@@ -213,8 +213,8 @@ func TestARevokedEntryIsNoDelegationAndAnUnknownKeyBesideItIsStillUnknown(t *tes
 		t.Fatal("markedIn() read @revoked as a delegation to a certificate authority, and a host whose old key was revoked would anchor on whatever key it offers next")
 	}
 	offered := generated(t, "ed25519")
-	_, trust := classify(destination(), []providerkit.HostKey{offered}, known{delegated: markedIn(rendered)})
-	if trust == nil || trust.Reason != providerkit.UnknownHostKey {
+	_, trust := classify(destination(), []provider.HostKey{offered}, known{delegated: markedIn(rendered)})
+	if trust == nil || trust.Reason != provider.UnknownHostKey {
 		t.Errorf("classify() = %+v over a known_hosts holding only a revoked key, want the unknown-host-key refusal", trust)
 	}
 }

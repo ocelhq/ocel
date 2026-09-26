@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
@@ -20,7 +20,7 @@ import (
 
 const (
 	liveRegion = "us-east-1"
-	liveWriter = providerkit.WrittenBy("live-suite")
+	liveWriter = provider.WrittenBy("live-suite")
 )
 
 type account struct {
@@ -46,9 +46,9 @@ func live(t *testing.T) account {
 	return account{endpoint: endpoint, aws: cfg}
 }
 
-func (a account) boot(t *testing.T) providerkit.Bootstrap {
+func (a account) boot(t *testing.T) provider.Bootstrap {
 	t.Helper()
-	p, err := aws.New(context.Background(), providerkit.Settings{Options: providerkit.Options{"region": liveRegion}})
+	p, err := aws.New(context.Background(), provider.Settings{Options: provider.Options{"region": liveRegion}})
 	if err != nil {
 		t.Fatalf("New() = %v", err)
 	}
@@ -59,7 +59,7 @@ func (a account) boot(t *testing.T) providerkit.Bootstrap {
 	return boot
 }
 
-func (a account) emptied(t *testing.T, classes ...edge.Class) providerkit.Bootstrap {
+func (a account) emptied(t *testing.T, classes ...edge.Class) provider.Bootstrap {
 	t.Helper()
 	boot := a.boot(t)
 	ctx := context.Background()
@@ -108,7 +108,7 @@ func (a account) paramStands(t *testing.T, name string) bool {
 	return err == nil
 }
 
-func groupNamed(t *testing.T, plan providerkit.Plan, name string) providerkit.ChangeGroup {
+func groupNamed(t *testing.T, plan provider.Plan, name string) provider.ChangeGroup {
 	t.Helper()
 	for _, group := range plan.Groups {
 		if group.Name == name {
@@ -116,10 +116,10 @@ func groupNamed(t *testing.T, plan providerkit.Plan, name string) providerkit.Ch
 		}
 	}
 	t.Fatalf("the plan carries no %q group, only %v", name, groupNames(plan))
-	return providerkit.ChangeGroup{}
+	return provider.ChangeGroup{}
 }
 
-func groupNames(plan providerkit.Plan) []string {
+func groupNames(plan provider.Plan) []string {
 	names := make([]string, 0, len(plan.Groups))
 	for _, group := range plan.Groups {
 		names = append(names, group.Name)
@@ -127,11 +127,11 @@ func groupNames(plan providerkit.Plan) []string {
 	return names
 }
 
-func changeFor(group providerkit.ChangeGroup, name string) providerkit.Change {
+func changeFor(group provider.ChangeGroup, name string) provider.Change {
 	for _, change := range group.Changes {
 		if change.Name == name {
 			return change
 		}
 	}
-	return providerkit.Change{}
+	return provider.Change{}
 }

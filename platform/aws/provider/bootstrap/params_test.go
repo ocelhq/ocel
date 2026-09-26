@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -52,7 +52,7 @@ func standingParams(t *testing.T) (*fakeSSM, *fakeIAM) {
 	return ssmc, iamc
 }
 
-func plannedParams(t *testing.T, ssmc *fakeSSM, iamc *fakeIAM, req Request) providerkit.ChangeGroup {
+func plannedParams(t *testing.T, ssmc *fakeSSM, iamc *fakeIAM, req Request) provider.ChangeGroup {
 	t.Helper()
 
 	var adoptions []EdgeAdoption
@@ -67,8 +67,8 @@ func plannedParams(t *testing.T, ssmc *fakeSSM, iamc *fakeIAM, req Request) prov
 	return group
 }
 
-func actions(group providerkit.ChangeGroup) map[string]providerkit.ChangeAction {
-	by := make(map[string]providerkit.ChangeAction, len(group.Changes))
+func actions(group provider.ChangeGroup) map[string]provider.ChangeAction {
+	by := make(map[string]provider.ChangeAction, len(group.Changes))
 	for _, change := range group.Changes {
 		by[change.Name] = change.Action
 	}
@@ -78,10 +78,10 @@ func actions(group providerkit.ChangeGroup) map[string]providerkit.ChangeAction 
 func TestPlanParametersOnAFreshAccountCreatesEveryStandingParameter(t *testing.T) {
 	group := plannedParams(t, newFakeSSM(), &fakeIAM{}, fronting())
 
-	if group.Kind != providerkit.ParameterGroupKind || group.Name != ParamGroupName || group.Feature != "" {
+	if group.Kind != provider.ParameterGroupKind || group.Name != ParamGroupName || group.Feature != "" {
 		t.Errorf("group = %+v, want the unfeatured parameters group", group)
 	}
-	if group.Action != providerkit.ActionCreate {
+	if group.Action != provider.ActionCreate {
 		t.Errorf("group action = %q, want create where nothing stands", group.Action)
 	}
 	names := cloudflareNames(ClassProduction)
@@ -101,7 +101,7 @@ func TestPlanParametersOnAFreshAccountCreatesEveryStandingParameter(t *testing.T
 		t.Fatalf("plan rows = %+v, want one per standing resource: %v", group.Changes, want)
 	}
 	for _, name := range want {
-		if got[name] != providerkit.ActionCreate {
+		if got[name] != provider.ActionCreate {
 			t.Errorf("%s = %q, want create", name, got[name])
 		}
 	}
@@ -122,11 +122,11 @@ func TestPlanParametersOnAConvergedAccountKeepsEverything(t *testing.T) {
 
 	group := plannedParams(t, ssmc, iamc, fronting())
 
-	if group.Action != providerkit.ActionKeep || group.Reason != paramCurrent {
+	if group.Action != provider.ActionKeep || group.Reason != paramCurrent {
 		t.Errorf("group = %q (%q), want a keep that says it is already current", group.Action, group.Reason)
 	}
 	for _, change := range group.Changes {
-		if change.Action != providerkit.ActionKeep {
+		if change.Action != provider.ActionKeep {
 			t.Errorf("%s = %q, want keep: the apply would rewrite nothing", change.Name, change.Action)
 		}
 	}
@@ -143,20 +143,20 @@ func TestPlanParametersUpdatesOnlyTheValuesTheEdgeWouldRewrite(t *testing.T) {
 
 	group := plannedParams(t, ssmc, iamc, fronting())
 
-	if group.Action != providerkit.ActionUpdate {
+	if group.Action != provider.ActionUpdate {
 		t.Errorf("group action = %q, want update where one parameter drifted", group.Action)
 	}
 	names := cloudflareNames(ClassProduction)
 	for _, change := range group.Changes {
-		want := providerkit.ActionKeep
+		want := provider.ActionKeep
 		if change.Name == names.valuesParam {
-			want = providerkit.ActionUpdate
+			want = provider.ActionUpdate
 		}
 		if change.Action != want {
 			t.Errorf("%s = %q, want %q", change.Name, change.Action, want)
 		}
 	}
-	if got := actions(group)[names.valuesParam]; got != providerkit.ActionUpdate {
+	if got := actions(group)[names.valuesParam]; got != provider.ActionUpdate {
 		t.Fatalf("%s = %q, want the drifted values updated", names.valuesParam, got)
 	}
 }
@@ -172,7 +172,7 @@ func TestPlanParametersLeavesOutWhatAnEdgeThatAdoptsNothingNeverWrites(t *testin
 		t.Fatalf("plan rows = %+v, want the origin secret and the passphrase alone", group.Changes)
 	}
 	for _, name := range []string{originSecretParam, passphraseParam} {
-		if got[name] != providerkit.ActionCreate {
+		if got[name] != provider.ActionCreate {
 			t.Errorf("%s = %q, want create", name, got[name])
 		}
 	}
@@ -186,12 +186,12 @@ func TestPlanParametersShowsWhatSeveringTheEdgeTakesWithIt(t *testing.T) {
 	names := cloudflareNames(ClassProduction)
 	got := actions(group)
 	for _, name := range append(names.edgeParams(), names.user) {
-		if got[name] != providerkit.ActionDelete {
+		if got[name] != provider.ActionDelete {
 			t.Errorf("%s = %q, want delete: severing the edge takes it", name, got[name])
 		}
 	}
 	for _, name := range []string{originSecretParam, passphraseParam} {
-		if got[name] != providerkit.ActionKeep {
+		if got[name] != provider.ActionKeep {
 			t.Errorf("%s = %q, want keep: severing the edge leaves the core parameters", name, got[name])
 		}
 	}
@@ -212,7 +212,7 @@ func TestPlanParametersRotatesAKeyPastItsAge(t *testing.T) {
 		if change.Name != names.credentialsParam && change.Name != names.user {
 			continue
 		}
-		if change.Action != providerkit.ActionUpdate || change.Reason != keyStale {
+		if change.Action != provider.ActionUpdate || change.Reason != keyStale {
 			t.Errorf("%s = %q (%q), want an update that says the key is rotated for its age", change.Name, change.Action, change.Reason)
 		}
 	}
@@ -228,11 +228,11 @@ func TestPlanParametersRemintsTheKeyTheAccountNoLongerHolds(t *testing.T) {
 	for _, change := range group.Changes {
 		switch change.Name {
 		case names.credentialsParam:
-			if change.Action != providerkit.ActionUpdate || change.Reason != keyGone {
+			if change.Action != provider.ActionUpdate || change.Reason != keyGone {
 				t.Errorf("%s = %q (%q), want an update that says why", change.Name, change.Action, change.Reason)
 			}
 		case names.user:
-			if change.Action != providerkit.ActionCreate {
+			if change.Action != provider.ActionCreate {
 				t.Errorf("%s = %q, want a fresh key minted", change.Name, change.Action)
 			}
 		}
@@ -244,18 +244,18 @@ func TestPlanParametersAsksEveryFeatureThatManagesOne(t *testing.T) {
 	t.Cleanup(func() { featureRegistry = standing })
 	featureRegistry = append(slices.Clone(standing), feature{
 		name: "test-edge",
-		afterPlan: func(context.Context, ParamAPIs, Namespace, string, Request) ([]providerkit.Change, error) {
-			return []providerkit.Change{{Kind: kindParameter, Name: "/ocel/test/written", Action: providerkit.ActionCreate}}, nil
+		afterPlan: func(context.Context, ParamAPIs, Namespace, string, Request) ([]provider.Change, error) {
+			return []provider.Change{{Kind: kindParameter, Name: "/ocel/test/written", Action: provider.ActionCreate}}, nil
 		},
-		dropPlan: func(context.Context, ParamAPIs, Namespace, string, Request) ([]providerkit.Change, error) {
-			return []providerkit.Change{{Kind: kindParameter, Name: "/ocel/test/severed", Action: providerkit.ActionDelete}}, nil
+		dropPlan: func(context.Context, ParamAPIs, Namespace, string, Request) ([]provider.Change, error) {
+			return []provider.Change{{Kind: kindParameter, Name: "/ocel/test/severed", Action: provider.ActionDelete}}, nil
 		},
 	})
 
 	ssmc, iamc := standingParams(t)
 
 	planned := actions(plannedParams(t, ssmc, iamc, Request{Features: []string{"test-edge"}}))
-	if planned["/ocel/test/written"] != providerkit.ActionCreate {
+	if planned["/ocel/test/written"] != provider.ActionCreate {
 		t.Errorf("the plan says %q about the parameter the feature writes, want it created", planned["/ocel/test/written"])
 	}
 	if _, named := planned["/ocel/test/severed"]; named {
@@ -263,7 +263,7 @@ func TestPlanParametersAsksEveryFeatureThatManagesOne(t *testing.T) {
 	}
 
 	dropped := actions(plannedParams(t, ssmc, iamc, Request{Remove: []string{"test-edge"}}))
-	if dropped["/ocel/test/severed"] != providerkit.ActionDelete {
+	if dropped["/ocel/test/severed"] != provider.ActionDelete {
 		t.Errorf("the plan says %q about what dropping the feature takes, want it deleted", dropped["/ocel/test/severed"])
 	}
 	if _, named := dropped["/ocel/test/written"]; named {

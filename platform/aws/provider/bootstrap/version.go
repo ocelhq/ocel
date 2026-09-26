@@ -1,5 +1,7 @@
 package bootstrap
 
-import "github.com/ocelhq/ocel/pkg/providerkit"
+import (
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+)
 
-const RequiredSchema = providerkit.BootstrapSchema
+const RequiredSchema = provider.BootstrapSchema

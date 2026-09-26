@@ -1,16 +1,14 @@
 package providerkit
 
 import (
-	"context"
 	"crypto/rand"
-	"errors"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -122,70 +120,17 @@ func NewStage(parent Stage, title string) Stage {
 	return Stage{ID: newStageID(), ParentID: parent.ID, Title: sanitizeTitle(title)}
 }
 
-const (
-	AttrKeyApp           = "app"
-	AttrKeyResourceCount = "resource.count"
-	AttrKeyBytes         = "bytes"
-	AttrKeyDurationMS    = "duration.ms"
-	AttrKeyResourceType  = "resource.type"
-	AttrKeyResourceName  = "resource.name"
-	AttrKeyErrorKind     = "error.kind"
-)
-
 var attributeKeys = map[string]progressv1.AttributeKey{
-	AttrKeyApp:           progressv1.AttributeKey_ATTRIBUTE_KEY_APP,
-	AttrKeyResourceCount: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT,
-	AttrKeyBytes:         progressv1.AttributeKey_ATTRIBUTE_KEY_BYTES,
-	AttrKeyDurationMS:    progressv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS,
-	AttrKeyResourceType:  progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE,
-	AttrKeyResourceName:  progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME,
-	AttrKeyErrorKind:     progressv1.AttributeKey_ATTRIBUTE_KEY_ERROR_KIND,
+	provider.AttrKeyApp:           progressv1.AttributeKey_ATTRIBUTE_KEY_APP,
+	provider.AttrKeyResourceCount: progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_COUNT,
+	provider.AttrKeyBytes:         progressv1.AttributeKey_ATTRIBUTE_KEY_BYTES,
+	provider.AttrKeyDurationMS:    progressv1.AttributeKey_ATTRIBUTE_KEY_DURATION_MS,
+	provider.AttrKeyResourceType:  progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_TYPE,
+	provider.AttrKeyResourceName:  progressv1.AttributeKey_ATTRIBUTE_KEY_RESOURCE_NAME,
+	provider.AttrKeyErrorKind:     progressv1.AttributeKey_ATTRIBUTE_KEY_ERROR_KIND,
 }
 
 func AttributeKey(key string) progressv1.AttributeKey { return attributeKeys[key] }
-
-func AttrApp(name string) edge.Attr {
-	return edge.Attr{Key: AttrKeyApp, Value: name}
-}
-
-func AttrResourceCount(n int) edge.Attr {
-	return edge.Attr{Key: AttrKeyResourceCount, Value: strconv.Itoa(n)}
-}
-
-func AttrBytes(n int64) edge.Attr {
-	return edge.Attr{Key: AttrKeyBytes, Value: strconv.FormatInt(n, 10)}
-}
-
-func AttrDurationMS(d time.Duration) edge.Attr {
-	return edge.Attr{Key: AttrKeyDurationMS, Value: strconv.FormatInt(d.Milliseconds(), 10)}
-}
-
-func AttrResourceType(typ string) edge.Attr {
-	return edge.Attr{Key: AttrKeyResourceType, Value: typ}
-}
-
-func AttrResourceName(name string) edge.Attr {
-	return edge.Attr{Key: AttrKeyResourceName, Value: name}
-}
-
-const (
-	ErrorKindCanceled = "canceled"
-	ErrorKindTimeout  = "timeout"
-	ErrorKindFailed   = "failed"
-)
-
-func ClassifyError(err error) string {
-	switch {
-	case err == nil:
-		return ""
-	case errors.Is(err, context.Canceled):
-		return ErrorKindCanceled
-	case errors.Is(err, context.DeadlineExceeded):
-		return ErrorKindTimeout
-	default:
-		return ErrorKindFailed
-	}
-}
 
 type stageScope struct {
 	sender *eventStream
@@ -267,7 +212,7 @@ func (t *eventTrace) Span(id, parentID StageID, name string, start, end time.Tim
 	status := progressv1.SpanStatus_SPAN_STATUS_OK
 	if err != nil {
 		status = progressv1.SpanStatus_SPAN_STATUS_ERROR
-		attrs = append(attrs, edge.Attr{Key: AttrKeyErrorKind, Value: ClassifyError(err)})
+		attrs = append(attrs, edge.Attr{Key: provider.AttrKeyErrorKind, Value: provider.ClassifyError(err)})
 	}
 
 	pbAttrs := make([]*progressv1.SpanAttribute, len(attrs))

@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-const testVendor providerkit.Vendor = "vps"
+const testVendor provider.Vendor = "vps"
 
 func standingHost() Reading {
 	class := edge.ClassProduction
@@ -24,7 +24,7 @@ func standingHost() Reading {
 		Class:    class,
 		Present:  true,
 		Keys:     keys,
-		Stamp:    Stamp{Schema: providerkit.BootstrapSchema, State: StateComplete, Digests: digests(Items(class, keys, ArchAMD64, Front{}))},
+		Stamp:    Stamp{Schema: provider.BootstrapSchema, State: StateComplete, Digests: digests(Items(class, keys, ArchAMD64, Front{}))},
 		Observed: digests(Items(class, keys, ArchAMD64, Front{})),
 	}
 }
@@ -212,7 +212,7 @@ func TestHealAsALoginThatIsNeitherRootNorSudoAsksForNeither(t *testing.T) {
 	}
 
 	err := NewBootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
-		providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite", Heal: true, Unattended: true}, nil)
+		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite", Heal: true, Unattended: true}, nil)
 	if err != nil {
 		t.Fatalf("heal driven by the deploy login = %v, want what that login owns reasserted without asking for root", err)
 	}

@@ -7,23 +7,24 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
-const boxVendor = providerkit.Vendor("vps")
+const boxVendor = provider.Vendor("vps")
 
-func proxied(kind providerkit.BindingType) bool {
-	return naming.Proxied(providerkit.WireBindingType(kind))
+func proxied(kind provider.BindingType) bool {
+	return naming.Proxied(provider.WireBindingType(kind))
 }
 
-func reachableResources() []providerkit.Resource {
-	return []providerkit.Resource{
-		{Name: "database--main", Declared: "database--main", Type: providerkit.BindingPostgres},
-		{Name: "bucket--uploads", Declared: "bucket--uploads", Type: providerkit.BindingBucket},
+func reachableResources() []provider.Resource {
+	return []provider.Resource{
+		{Name: "database--main", Declared: "database--main", Type: provider.BindingPostgres},
+		{Name: "bucket--uploads", Declared: "bucket--uploads", Type: provider.BindingBucket},
 	}
 }
 
-func servesBoth() []providerkit.BindingType {
-	return []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket}
+func servesBoth() []provider.BindingType {
+	return []provider.BindingType{provider.BindingPostgres, provider.BindingBucket}
 }
 
 func TestRefuseUnreachableBindings(t *testing.T) {
@@ -48,7 +49,7 @@ func TestRefuseUnreachableBindings(t *testing.T) {
 		if !errors.As(err, &missing) {
 			t.Fatalf("RefuseUnreachableBindings = %v, want an *UnreachableBindingError", err)
 		}
-		for _, want := range []string{"bucket--uploads", string(providerkit.BindingBucket), string(boxVendor)} {
+		for _, want := range []string{"bucket--uploads", string(provider.BindingBucket), string(boxVendor)} {
 			if !strings.Contains(missing.Error(), want) {
 				t.Errorf("Error() = %q, missing %q", missing.Error(), want)
 			}
@@ -58,7 +59,7 @@ func TestRefuseUnreachableBindings(t *testing.T) {
 	t.Run("an app is refused for a binding it is granted, not only for one this deploy stands up", func(t *testing.T) {
 		t.Parallel()
 
-		grants := []providerkit.Binding{{Name: "uploads", Resource: "bucket--uploads", Type: providerkit.BindingBucket}}
+		grants := []provider.Binding{{Name: "uploads", Resource: "bucket--uploads", Type: provider.BindingBucket}}
 
 		var missing *providerkit.UnreachableBindingError
 		if err := providerkit.RefuseUnreachableBindings(boxVendor, nil, proxied, nil, grants); !errors.As(err, &missing) {
@@ -81,7 +82,7 @@ func TestRefuseUnreachableBindings(t *testing.T) {
 	t.Run("a provider that proxies nothing at all reaches every type directly", func(t *testing.T) {
 		t.Parallel()
 
-		proxied := func(providerkit.BindingType) bool { return false }
+		proxied := func(provider.BindingType) bool { return false }
 		if err := providerkit.RefuseUnreachableBindings(boxVendor, nil, proxied, reachableResources(), nil); err != nil {
 			t.Fatalf("RefuseUnreachableBindings = %v, want nothing refused where nothing is proxied", err)
 		}

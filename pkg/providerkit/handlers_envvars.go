@@ -14,6 +14,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -388,7 +389,7 @@ func valuesError(err error) error {
 	case errors.Is(err, envvars.ErrNotFound):
 		return connect.NewError(connect.CodeNotFound, err)
 	default:
-		return RefusalError(err)
+		return provider.RefusalError(err)
 	}
 }
 
@@ -399,7 +400,7 @@ func bindingsError(err error) error {
 	case errors.Is(err, envvars.ErrTornPair):
 		return connect.NewError(connect.CodeAborted, err)
 	case errors.Is(err, ErrUnsourced), errors.Is(err, ErrUnreadableRecord),
-		errors.Is(err, ErrUnscopedGrant), errors.Is(err, ErrUnattachedGrant):
+		errors.Is(err, provider.ErrUnscopedGrant), errors.Is(err, ErrUnattachedGrant):
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	case errors.Is(err, envvars.ErrNotPublished):
 		return connect.NewError(connect.CodeNotFound, err)

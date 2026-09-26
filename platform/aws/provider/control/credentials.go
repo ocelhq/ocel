@@ -8,7 +8,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -40,13 +40,13 @@ func CredentialsFor(cfg aws.Config, ns bootstrap.Namespace) Credentials {
 	}
 }
 
-func (c Credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
+func (c Credentials) Whoami(ctx context.Context) (provider.Identity, error) {
 	out, err := c.STS.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
 	if err != nil {
-		return providerkit.Identity{}, refusal.Refuse(refusal.CodeDenied, "%s: %v", credentialHint, err)
+		return provider.Identity{}, refusal.Refuse(refusal.CodeDenied, "%s: %v", credentialHint, err)
 	}
 	arn := aws.ToString(out.Arn)
-	return providerkit.Identity{
+	return provider.Identity{
 		Account:   aws.ToString(out.Account),
 		Principal: principalOf(arn),
 		Location:  c.Region,
@@ -54,15 +54,15 @@ func (c Credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
 	}, nil
 }
 
-func (c Credentials) Permissions(tier providerkit.CredentialTier) (edge.CredentialDocument, error) {
+func (c Credentials) Permissions(tier provider.CredentialTier) (edge.CredentialDocument, error) {
 	var (
 		document string
 		err      error
 	)
 	switch tier {
-	case providerkit.TierBootstrap:
+	case provider.TierBootstrap:
 		document, err = bootstrap.BootstrapCredentialPermissions(c.Namespace)
-	case providerkit.TierDeploy:
+	case provider.TierDeploy:
 		document, err = bootstrap.DeployCredentialPermissions(c.Namespace)
 	default:
 		return edge.CredentialDocument{}, refusal.Refuse(refusal.CodeInvalid,
@@ -84,11 +84,11 @@ func principalOf(arn string) string {
 	return arn
 }
 
-func details(profile string) []providerkit.Detail {
+func details(profile string) []provider.Detail {
 	if profile == "" {
 		return nil
 	}
-	return []providerkit.Detail{{Label: "profile", Value: profile}}
+	return []provider.Detail{{Label: "profile", Value: profile}}
 }
 
-var _ providerkit.Credentials = Credentials{}
+var _ provider.Credentials = Credentials{}

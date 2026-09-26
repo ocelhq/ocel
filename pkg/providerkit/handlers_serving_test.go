@@ -9,9 +9,9 @@ import (
 	"testing"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -105,27 +105,27 @@ func TestTheStagedRecordCarriesTheManifestAnEdgeRunningCodeRoutesBy(t *testing.T
 }
 
 type recordingStacks struct {
-	providerkit.Stacks
+	provider.Stacks
 
 	mu    sync.Mutex
-	drawn []providerkit.StackPlan
+	drawn []provider.StackPlan
 }
 
-func (r *recordingStacks) Plan(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.Plan, error) {
+func (r *recordingStacks) Plan(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.Plan, error) {
 	r.mu.Lock()
 	r.drawn = append(r.drawn, plan)
 	r.mu.Unlock()
 	return r.Stacks.Plan(ctx, plan, progress)
 }
 
-func (r *recordingStacks) drawnApps() []providerkit.StackPlan {
+func (r *recordingStacks) drawnApps() []provider.StackPlan {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return appStacks(r.drawn)
 }
 
-func appStacks(plans []providerkit.StackPlan) []providerkit.StackPlan {
-	var apps []providerkit.StackPlan
+func appStacks(plans []provider.StackPlan) []provider.StackPlan {
+	var apps []provider.StackPlan
 	for _, plan := range plans {
 		if plan.App != nil {
 			apps = append(apps, plan)
@@ -140,7 +140,7 @@ type drawing struct {
 	releases *recordingStacks
 }
 
-func (d drawing) Stacks() providerkit.Stacks { return d.releases }
+func (d drawing) Stacks() provider.Stacks { return d.releases }
 
 func drawingProvider() drawing {
 	base := fake.NewProvider(fake.Options{})

@@ -21,7 +21,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -135,7 +135,7 @@ type uploadTarget struct {
 
 func (t uploadTarget) validate() error {
 	if t.bucket == "" {
-		return fmt.Errorf("this project has objects to publish but no asset bucket is configured; re-run `%s`", providerkit.BootstrapCommand(t.class))
+		return fmt.Errorf("this project has objects to publish but no asset bucket is configured; re-run `%s`", provider.BootstrapCommand(t.class))
 	}
 	if t.up == nil {
 		return fmt.Errorf("no asset uploader configured")

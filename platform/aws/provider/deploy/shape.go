@@ -9,8 +9,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/costkit"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -47,7 +47,7 @@ type shapedPatches struct {
 	unknown map[resourceRef][]string
 }
 
-func Shape(ctx context.Context, pass transformkit.Pass, region string, req providerkit.ShapeRequest, tree *costkit.Tree, scopes ShapeScopes) error {
+func Shape(ctx context.Context, pass transformkit.Pass, region string, req provider.ShapeRequest, tree *costkit.Tree, scopes ShapeScopes) error {
 	project := naming.Sanitize(req.Plan.Slug)
 	patched, err := shapeTransforms(ctx, pass, project, req)
 	if err != nil {
@@ -59,16 +59,16 @@ func Shape(ctx context.Context, pass transformkit.Pass, region string, req provi
 			continue
 		}
 		switch resource.Type {
-		case providerkit.BindingPostgres:
+		case provider.BindingPostgres:
 			shape.postgres(scopes.Environment, project, req.Plan.Env, resource)
-		case providerkit.BindingBucket:
+		case provider.BindingBucket:
 			shape.bucket(scopes.Environment, project, req.Plan.Env, resource)
 		}
 	}
 	substrate := false
 	for _, app := range req.Plan.Apps {
 		scope := tree.Scope(scopes.Environment, costkit.ScopeApp, app.App)
-		if app.Compute() == providerkit.ComputeContainer {
+		if app.Compute() == provider.ComputeContainer {
 			shape.container(scope, app)
 			substrate = true
 			continue
@@ -106,10 +106,10 @@ func (s costShape) plain(scope, typ, name string, properties map[string]any) {
 	s.tree.Add(scope, vendor, typ, name, s.region, properties)
 }
 
-func (s costShape) functions(scope, project string, app providerkit.AppEntry, specs []providerkit.FunctionSpec) error {
+func (s costShape) functions(scope, project string, app provider.AppEntry, specs []provider.FunctionSpec) error {
 	framework := app.Manifest.GetFramework().GetName()
 	if len(specs) == 0 {
-		specs = []providerkit.FunctionSpec{{Name: app.App}}
+		specs = []provider.FunctionSpec{{Name: app.App}}
 	}
 	for _, spec := range specs {
 		if spec.Framework.Name == "" {
@@ -136,7 +136,7 @@ func (s costShape) functions(scope, project string, app providerkit.AppEntry, sp
 	return nil
 }
 
-func (s costShape) container(scope string, app providerkit.AppEntry) {
+func (s costShape) container(scope string, app provider.AppEntry) {
 	s.plain(scope, tfECSTaskDefinition, app.App, map[string]any{
 		"cpu":                      containerCPU,
 		"memory":                   containerMemory,
@@ -159,7 +159,7 @@ func (s costShape) substrate(scope string, class edge.Class) {
 	s.plain(scope, tfLogGroup, SubstrateSlug, map[string]any{"retention_in_days": substrateLogRetentionDays, "name": "/ocel/containers/" + string(class)})
 }
 
-func (s costShape) postgres(scope, project, env string, resource providerkit.Resource) {
+func (s costShape) postgres(scope, project, env string, resource provider.Resource) {
 	args := translatePostgres(resource.Postgres)
 	names := postgresResourceNames(project, env, resource.Name)
 	s.add(scope, tfRDSCluster, resource.Name, map[string]any{
@@ -183,7 +183,7 @@ func (s costShape) postgres(scope, project, env string, resource providerkit.Res
 	s.plain(scope, tfSecret, resource.Name, map[string]any{"managed_by": "rds"})
 }
 
-func (s costShape) bucket(scope, project, env string, resource providerkit.Resource) {
+func (s costShape) bucket(scope, project, env string, resource provider.Resource) {
 	names := bucketResourceNames(project, env, resource.Name)
 	s.add(scope, tfS3Bucket, resource.Name, map[string]any{}, names["bucket"])
 	s.add(scope, tfLambdaFunction, resource.Name+"-"+uploadCompleterLocalName, map[string]any{
@@ -196,7 +196,7 @@ func (s costShape) bucket(scope, project, env string, resource providerkit.Resou
 	s.add(scope, tfLogGroup, resource.Name+"-"+uploadCompleterLocalName, map[string]any{"retention_in_days": lambdaLogRetentionDays}, names["uploadCompleterLogGroup"])
 }
 
-func shapeTransforms(ctx context.Context, pass transformkit.Pass, project string, req providerkit.ShapeRequest) (shapedPatches, error) {
+func shapeTransforms(ctx context.Context, pass transformkit.Pass, project string, req provider.ShapeRequest) (shapedPatches, error) {
 	held := shapedPatches{patches: map[resourceRef]map[string]any{}, unknown: map[resourceRef][]string{}}
 	if pass == nil {
 		return held, nil
@@ -208,21 +208,21 @@ func shapeTransforms(ctx context.Context, pass transformkit.Pass, project string
 			continue
 		}
 		switch resource.Type {
-		case providerkit.BindingPostgres:
+		case provider.BindingPostgres:
 			request.Resources = append(request.Resources, transformkit.Resource{Type: transformTypePostgres, Name: resource.Name})
 			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypePostgres, Name: resource.Name}, names: postgresResourceNames(project, req.Plan.Env, resource.Name)})
-		case providerkit.BindingBucket:
+		case provider.BindingBucket:
 			request.Resources = append(request.Resources, transformkit.Resource{Type: transformTypeBucket, Name: resource.Name})
 			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypeBucket, Name: resource.Name}, names: bucketResourceNames(project, req.Plan.Env, resource.Name)})
 		}
 	}
 	for _, app := range req.Plan.Apps {
-		if app.Compute() == providerkit.ComputeContainer {
+		if app.Compute() == provider.ComputeContainer {
 			continue
 		}
 		specs := req.Functions[app.App]
 		if len(specs) == 0 {
-			specs = []providerkit.FunctionSpec{{Name: app.App}}
+			specs = []provider.FunctionSpec{{Name: app.App}}
 		}
 		for _, spec := range specs {
 			request.Resources = append(request.Resources, transformkit.Resource{Type: transformTypeFunction, Name: spec.Name, App: app.App})

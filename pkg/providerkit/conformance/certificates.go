@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -29,23 +29,23 @@ func runCertificates(t *testing.T, suite Suite) {
 		}
 		t.Fatal("the suite declares certificate checks and carries no constructor, so there is no provider to run them against")
 	}
-	provider, err := construct(context.Background(), providerkit.Settings{Options: suite.Options})
+	p, err := construct(context.Background(), provider.Settings{Options: suite.Options})
 	if err != nil {
 		t.Fatalf("New() error = %v, want a provider", err)
 	}
 	if suite.Certificates == nil {
 		t.Fatal("the suite states no checks for the provider's Certificates port, so the only tier that holds it to anything skips over it. A provider opts out by certifying nothing, never by leaving the field off")
 	}
-	RunCertificates(t, provider.Certificates(), *suite.Certificates)
+	RunCertificates(t, p.Certificates(), *suite.Certificates)
 }
 
-func RunCertificates(t *testing.T, certificates providerkit.Certificates, checks CertificateChecks) {
+func RunCertificates(t *testing.T, certificates provider.Certificates, checks CertificateChecks) {
 	t.Helper()
 
 	ctx := context.Background()
 
 	t.Run("an empty handle is tolerated and never inspected as one", func(t *testing.T) {
-		health, err := certificates.Inspect(ctx, checks.Kind, "unbound.example.com", providerkit.Certificate{})
+		health, err := certificates.Inspect(ctx, checks.Kind, "unbound.example.com", provider.Certificate{})
 		if err != nil {
 			t.Fatalf("Inspect() of a binding naming no certificate = %v, want it tolerated: the edge conformance tier binds with an empty one", err)
 		}
@@ -110,15 +110,15 @@ func certified(t *testing.T, checks CertificateChecks) []string {
 	return checks.Hostnames
 }
 
-func held(t *testing.T, ctx context.Context, certificates providerkit.Certificates, checks CertificateChecks, hostname string) providerkit.Certificate {
+func held(t *testing.T, ctx context.Context, certificates provider.Certificates, checks CertificateChecks, hostname string) provider.Certificate {
 	t.Helper()
-	cert, err := certificates.Issue(ctx, providerkit.CertificateRequest{
+	cert, err := certificates.Issue(ctx, provider.CertificateRequest{
 		Kind:     checks.Kind,
 		Hostname: hostname,
 		Progress: edge.DiscardProgress(),
-		Prove: func(context.Context, providerkit.Certificate, []edge.Record) (providerkit.Certificate, error) {
+		Prove: func(context.Context, provider.Certificate, []edge.Record) (provider.Certificate, error) {
 			t.Errorf("Issue(%s) asked for a validation record to be proved, and a provider that issues nothing proves nothing", hostname)
-			return providerkit.Certificate{}, nil
+			return provider.Certificate{}, nil
 		},
 	})
 	if err != nil {

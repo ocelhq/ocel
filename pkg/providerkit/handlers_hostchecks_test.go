@@ -9,37 +9,37 @@ import (
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type checkingProvider struct {
 	*fake.Provider
-	asked   []providerkit.HostCheckRequest
-	answer  []providerkit.HostCheck
+	asked   []provider.HostCheckRequest
+	answer  []provider.HostCheck
 	refusal error
 }
 
-func (s *checkingProvider) Hooks() providerkit.Hooks {
+func (s *checkingProvider) Hooks() provider.Hooks {
 	hooks := s.Provider.Hooks()
 	hooks.CheckHost = s.CheckHost
 	return hooks
 }
 
-func (s *checkingProvider) CheckHost(_ context.Context, req providerkit.HostCheckRequest) ([]providerkit.HostCheck, error) {
+func (s *checkingProvider) CheckHost(_ context.Context, req provider.HostCheckRequest) ([]provider.HostCheck, error) {
 	s.asked = append(s.asked, req)
 	return s.answer, s.refusal
 }
 
-func hostChecksServed(t *testing.T, answer []providerkit.HostCheck, refusal error) (*checkingProvider, *contractv1.PreflightResponse) {
+func hostChecksServed(t *testing.T, answer []provider.HostCheck, refusal error) (*checkingProvider, *contractv1.PreflightResponse) {
 	t.Helper()
-	provider := &checkingProvider{
+	p := &checkingProvider{
 		Provider: fake.NewProvider(fake.Options{Region: "nowhere"}),
 		answer:   answer,
 		refusal:  refusal,
 	}
-	client := servedProvider(t, "1.2.3", provider)
+	client := servedProvider(t, "1.2.3", p)
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 
 	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
@@ -52,35 +52,35 @@ func hostChecksServed(t *testing.T, answer []providerkit.HostCheck, refusal erro
 	if err != nil {
 		t.Fatalf("Preflight() error = %v", err)
 	}
-	return provider, resp
+	return p, resp
 }
 
 func TestTheHostCheckIsAskedAboutTheNamesTheCallerWillRenderRatherThanThisTiers(t *testing.T) {
 	t.Parallel()
 
-	provider, _ := hostChecksServed(t, []providerkit.HostCheck{
-		{Subject: "shop.example.com", Verdict: providerkit.HostPass, Finding: "points here"},
+	p, _ := hostChecksServed(t, []provider.HostCheck{
+		{Subject: "shop.example.com", Verdict: provider.HostPass, Finding: "points here"},
 	}, nil)
 
-	if len(provider.asked) != 1 {
-		t.Fatalf("the host check was asked %d times, want once per preflight", len(provider.asked))
+	if len(p.asked) != 1 {
+		t.Fatalf("the host check was asked %d times, want once per preflight", len(p.asked))
 	}
-	if want := []string{"shop.example.com", "www.example.com"}; !slices.Equal(provider.asked[0].Hostnames, want) {
+	if want := []string{"shop.example.com", "www.example.com"}; !slices.Equal(p.asked[0].Hostnames, want) {
 		t.Errorf("the host check was handed %v, want %v: what stands is one box's business and the caller renders one section over every tier, so asking per tier buys a dns round, a dial and an exec for each of them",
-			provider.asked[0].Hostnames, want)
+			p.asked[0].Hostnames, want)
 	}
 }
 
 func TestAPreflightThatWillRenderNoHostCheckSectionAsksTheBoxForNone(t *testing.T) {
 	t.Parallel()
 
-	provider := &checkingProvider{
+	p := &checkingProvider{
 		Provider: fake.NewProvider(fake.Options{Region: "nowhere"}),
-		answer: []providerkit.HostCheck{
-			{Subject: "shop.example.com", Verdict: providerkit.HostPass, Finding: "points here"},
+		answer: []provider.HostCheck{
+			{Subject: "shop.example.com", Verdict: provider.HostPass, Finding: "points here"},
 		},
 	}
-	client := servedProvider(t, "1.2.3", provider)
+	client := servedProvider(t, "1.2.3", p)
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 
 	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{
@@ -94,9 +94,9 @@ func TestAPreflightThatWillRenderNoHostCheckSectionAsksTheBoxForNone(t *testing.
 	if !resp.GetInfrastructurePresent() {
 		t.Fatal("this preflight answered nothing about the bootstrap it just stood up, so the response is not the window an absence can be read over")
 	}
-	if len(provider.asked) != 0 {
+	if len(p.asked) != 0 {
 		t.Errorf("the host check was asked %d times by a caller that renders none of it: every `ocel deploy` calls this rpc, and it pays for a dns round per hostname, a dial to the renewal port and an exec into the proxy for an answer it throws away",
-			len(provider.asked))
+			len(p.asked))
 	}
 	if len(resp.GetHostChecks()) != 0 {
 		t.Errorf("Preflight() carried %+v to a caller that asked for none of it", resp.GetHostChecks())
@@ -106,14 +106,14 @@ func TestAPreflightThatWillRenderNoHostCheckSectionAsksTheBoxForNone(t *testing.
 func TestPreflightHandsTheStandingPortEveryHostnameItWasAskedAbout(t *testing.T) {
 	t.Parallel()
 
-	provider, resp := hostChecksServed(t, []providerkit.HostCheck{
-		{Subject: "shop.example.com", Verdict: providerkit.HostPass, Finding: "points here"},
+	p, resp := hostChecksServed(t, []provider.HostCheck{
+		{Subject: "shop.example.com", Verdict: provider.HostPass, Finding: "points here"},
 	}, nil)
 
-	if len(provider.asked) != 1 {
-		t.Fatalf("the host check was asked %d times, want once per preflight", len(provider.asked))
+	if len(p.asked) != 1 {
+		t.Fatalf("the host check was asked %d times, want once per preflight", len(p.asked))
 	}
-	asked := provider.asked[0]
+	asked := p.asked[0]
 	if asked.Class != edge.ClassProduction {
 		t.Errorf("the host check was asked about %s, want %s", asked.Class, edge.ClassProduction)
 	}
@@ -128,10 +128,10 @@ func TestPreflightHandsTheStandingPortEveryHostnameItWasAskedAbout(t *testing.T)
 func TestPreflightCarriesEveryStandingVerdictAndRefusesOnNone(t *testing.T) {
 	t.Parallel()
 
-	_, resp := hostChecksServed(t, []providerkit.HostCheck{
-		{Subject: "shop.example.com", Verdict: providerkit.HostPass, Finding: "resolves to this box"},
-		{Subject: "www.example.com", Verdict: providerkit.HostOwed, Finding: "does not resolve yet", Fix: "add the record"},
-		{Subject: "", Verdict: providerkit.HostFail, Finding: "something listens on 2019", Fix: "rebootstrap"},
+	_, resp := hostChecksServed(t, []provider.HostCheck{
+		{Subject: "shop.example.com", Verdict: provider.HostPass, Finding: "resolves to this box"},
+		{Subject: "www.example.com", Verdict: provider.HostOwed, Finding: "does not resolve yet", Fix: "add the record"},
+		{Subject: "", Verdict: provider.HostFail, Finding: "something listens on 2019", Fix: "rebootstrap"},
 	}, nil)
 
 	carried := resp.GetHostChecks()
@@ -204,13 +204,13 @@ func TestAStandingPortThatCouldNotAnswerIsReportedAndNeverGates(t *testing.T) {
 func TestADeployProceedsAgainstABoxWhoseStandingFailed(t *testing.T) {
 	builtProject(t)
 
-	provider := &checkingProvider{
+	p := &checkingProvider{
 		Provider: fake.NewProvider(fake.Options{Region: "nowhere"}),
-		answer: []providerkit.HostCheck{
-			{Subject: "shop.example.com", Verdict: providerkit.HostFail, Finding: "points somewhere else", Fix: "move the record"},
+		answer: []provider.HostCheck{
+			{Subject: "shop.example.com", Verdict: provider.HostFail, Finding: "points somewhere else", Fix: "move the record"},
 		},
 	}
-	client := servedProvider(t, "1.2.3", provider)
+	client := servedProvider(t, "1.2.3", p)
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PRODUCTION})
 
 	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{

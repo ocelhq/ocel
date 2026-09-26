@@ -8,7 +8,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -19,7 +19,7 @@ type fakeEngine struct {
 
 var _ kitpulumi.Engine = (*fakeEngine)(nil)
 
-func (f *fakeEngine) Preview(_ context.Context, setup kitpulumi.Setup, op kitpulumi.Op, _ edge.Progress) ([]providerkit.Change, error) {
+func (f *fakeEngine) Preview(_ context.Context, setup kitpulumi.Setup, op kitpulumi.Op, _ edge.Progress) ([]provider.Change, error) {
 	f.record("preview-" + string(op) + " " + setup.Stack)
 	return nil, nil
 }
@@ -59,8 +59,8 @@ func tearingDown(t *testing.T, clock TagClock, engine kitpulumi.Engine) *Stacks 
 	return newStacks(fixed(cfg), &Realized{}, engine)
 }
 
-func teardownRef() providerkit.StackRef {
-	return providerkit.StackRef{
+func teardownRef() provider.StackRef {
+	return provider.StackRef{
 		Project: "shop",
 		Class:   edge.ClassProduction,
 		Name:    naming.AppStack("production", "web", naming.NewRelease("dep1", "fp1")),

@@ -1,7 +1,7 @@
 package gcp
 
 import (
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -12,7 +12,7 @@ import (
 )
 
 type edges struct {
-	namespace providerkit.Namespace
+	namespace provider.Namespace
 	records   records.Store
 	pins      pin.Pins
 	stacks    alb.Stacks

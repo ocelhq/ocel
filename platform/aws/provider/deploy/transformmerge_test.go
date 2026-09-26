@@ -7,7 +7,7 @@ import (
 
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 )
 
@@ -26,9 +26,9 @@ func TestAnOutputThatResolvedToNothingNeverLandsInAPatch(t *testing.T) {
 		"lambda": map[string]any{"description": placeholderFor(customBindingType, "legacy", "subnetIds")},
 	}}}
 
-	err := resolvePlanOutputs(t.Context(), providerkit.StackPlan{
-		Bindings: &publishedReader{bindings: []providerkit.Binding{
-			{Type: providerkit.BindingPostgres, Name: "legacy", Properties: map[string]string{"subnetIds": ""}},
+	err := resolvePlanOutputs(t.Context(), provider.StackPlan{
+		Bindings: &publishedReader{bindings: []provider.Binding{
+			{Type: provider.BindingPostgres, Name: "legacy", Properties: map[string]string{"subnetIds": ""}},
 		}},
 	}, candidates, results)
 	var empty *EmptyOutputError

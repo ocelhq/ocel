@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
@@ -482,5 +482,5 @@ func (h *Host) servingFree(ctx context.Context, read Reading) error {
 			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from %s, or %s and run `%s`\n"+
 			"See %s",
 		strings.Join(holds, " and "), strings.Join(names, " and "), strings.Join(freed, ", "),
-		providerkit.BootstrapCommand(read.Class), behindYourOwnProxyDocs)
+		provider.BootstrapCommand(read.Class), behindYourOwnProxyDocs)
 }

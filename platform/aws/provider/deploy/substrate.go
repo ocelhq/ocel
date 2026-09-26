@@ -17,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
@@ -74,8 +75,8 @@ type substrateWork struct {
 
 const cloudFrontOriginFacingPrefixList = "com.amazonaws.global.cloudfront.origin-facing"
 
-func substrateRef(class edge.Class) providerkit.StackRef {
-	return providerkit.StackRef{Project: SubstrateSlug, Class: class, Name: naming.InfraStack(string(class))}
+func substrateRef(class edge.Class) provider.StackRef {
+	return provider.StackRef{Project: SubstrateSlug, Class: class, Name: naming.InfraStack(string(class))}
 }
 
 func substrateName(class edge.Class, parts ...string) string {
@@ -95,7 +96,7 @@ func consumersRecord(class edge.Class) records.Name {
 	return append(providerkit.StacksRecord(class, SubstrateSlug), substrateConsumers)
 }
 
-func consumerRecord(ref providerkit.StackRef) records.Name {
+func consumerRecord(ref provider.StackRef) records.Name {
 	return append(consumersRecord(ref.Class), ref.Project, ref.Name.String())
 }
 
@@ -152,7 +153,7 @@ func (r *Stacks) readSubstrate(ctx context.Context, class edge.Class) (substrate
 	return decoded, err == nil, err
 }
 
-func (r *Stacks) ensureSubstrate(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) (substrate, error) {
+func (r *Stacks) ensureSubstrate(ctx context.Context, ref provider.StackRef, progress edge.Progress) (substrate, error) {
 	r.substrates.Lock()
 	defer r.substrates.Unlock()
 	class := ref.Class
@@ -178,15 +179,15 @@ func (r *Stacks) ensureSubstrate(ctx context.Context, ref providerkit.StackRef, 
 		boundary: owner.cfg.AppBoundaryARN,
 		tags:     substrateTags(class),
 	}
-	plan := providerkit.StackPlan{
+	plan := provider.StackPlan{
 		Ref:  substrateRef(class),
-		Kind: providerkit.StackInfra,
+		Kind: provider.StackInfra,
 		Tags: substrateTags(class),
 		Work: work,
 	}
 	if err := providerkit.WriteStack(ctx, owner.cfg.Records, class, SubstrateSlug, substrateRef(class).Name, providerkit.RecordedStack{
-		Kind:      providerkit.StackInfra,
-		WrittenBy: providerkit.WrittenByVersion(""),
+		Kind:      provider.StackInfra,
+		WrittenBy: provider.WrittenByVersion(""),
 	}); err != nil {
 		return substrate{}, err
 	}
@@ -207,7 +208,7 @@ func (s substrate) front() awsports.ContainerFront {
 	return awsports.ContainerFront{VPCOrigin: s.VPCOrigin, Host: s.OriginHost}
 }
 
-func (r *Stacks) claimSubstrate(ctx context.Context, ref providerkit.StackRef) error {
+func (r *Stacks) claimSubstrate(ctx context.Context, ref provider.StackRef) error {
 	owner, err := r.substrateFor(ctx, ref.Class)
 	if err != nil {
 		return err
@@ -248,7 +249,7 @@ func (r *Stacks) claimSubstrate(ctx context.Context, ref providerkit.StackRef) e
 		"the container substrate for the %s class changed hands %d times while %s was claiming it; re-run this deploy", ref.Class, leaseAttempts, ref.Name)
 }
 
-func (r *Stacks) releaseSubstrate(ctx context.Context, store records.Store, ref providerkit.StackRef, progress edge.Progress) error {
+func (r *Stacks) releaseSubstrate(ctx context.Context, store records.Store, ref provider.StackRef, progress edge.Progress) error {
 	if store == nil {
 		return nil
 	}

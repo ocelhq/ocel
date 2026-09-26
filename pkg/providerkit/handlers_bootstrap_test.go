@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -29,13 +30,13 @@ func contractServed(t *testing.T, version string) (contractv1connect.ProviderSer
 	return servedProvider(t, version, provider), provider
 }
 
-func servedProvider(t *testing.T, version string, provider providerkit.Provider) contractv1connect.ProviderServiceClient {
+func servedProvider(t *testing.T, version string, p provider.Provider) contractv1connect.ProviderServiceClient {
 	t.Helper()
 
 	spec := providerkit.Spec{
 		Version: version,
-		New: func(context.Context, providerkit.Settings) (providerkit.Provider, error) {
-			return provider, nil
+		New: func(context.Context, provider.Settings) (provider.Provider, error) {
+			return p, nil
 		},
 	}
 	server := httptest.NewServer(providerkit.ConformanceMux(spec))
@@ -285,13 +286,13 @@ func TestDescribeBootstrapAnswersTheCatalogueAndTheStanding(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	client, provider := contractServed(t, "1.2.3")
+	client, p := contractServed(t, "1.2.3")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
 		Features: []string{fake.FeatureCache},
 		Edge:     &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
 	})
-	recordProject(t, provider, "shop", fake.FeatureCache)
+	recordProject(t, p, "shop", fake.FeatureCache)
 
 	planned, err := client.DescribeBootstrap(ctx, &contractv1.DescribeBootstrapRequest{
 		Tier:           environmentv1.Tier_TIER_PRODUCTION,
@@ -320,11 +321,11 @@ func TestDescribeBootstrapAnswersTheCatalogueAndTheStanding(t *testing.T) {
 	}
 
 	status := planned.GetBootstrap()
-	if !status.GetPresent() || status.GetSchema() != providerkit.BootstrapSchema {
-		t.Errorf("DescribeBootstrap() status = %+v, want it present at schema %d", status, providerkit.BootstrapSchema)
+	if !status.GetPresent() || status.GetSchema() != provider.BootstrapSchema {
+		t.Errorf("DescribeBootstrap() status = %+v, want it present at schema %d", status, provider.BootstrapSchema)
 	}
-	if status.GetRequiredSchema() != providerkit.BootstrapSchema {
-		t.Errorf("required_schema = %d, want %d", status.GetRequiredSchema(), providerkit.BootstrapSchema)
+	if status.GetRequiredSchema() != provider.BootstrapSchema {
+		t.Errorf("required_schema = %d, want %d", status.GetRequiredSchema(), provider.BootstrapSchema)
 	}
 	if status.GetWriter() != "1.2.3" {
 		t.Errorf("writer = %q, want the version this provider was built as", status.GetWriter())
@@ -436,7 +437,7 @@ func TestAnApplyRefusesAConsentedPlanItCannotRead(t *testing.T) {
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
 		Features: []string{fake.FeatureImages},
 		Consented: &planv1.ChangePlan{Groups: []*planv1.ChangeGroup{
-			{Kind: providerkit.StackGroupKind, Name: "core", Action: unreadable},
+			{Kind: provider.StackGroupKind, Name: "core", Action: unreadable},
 		}},
 	})
 	if err == nil {
@@ -554,8 +555,8 @@ func TestGetCredentialPermissionsRendersEitherTier(t *testing.T) {
 	client, _ := contractServed(t, "1.2.3")
 
 	for tier, want := range map[contractv1.CredentialTier]string{
-		contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP: string(providerkit.TierBootstrap),
-		contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY:    string(providerkit.TierDeploy),
+		contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP: string(provider.TierBootstrap),
+		contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY:    string(provider.TierDeploy),
 	} {
 		permissions, err := client.GetCredentialPermissions(ctx, &contractv1.CredentialPermissionsRequest{Tier: tier})
 		if err != nil {
@@ -607,15 +608,15 @@ func TestGetCredentialPermissionsAppendsWhatTheEdgeDocuments(t *testing.T) {
 const documentedHeading = "an edge token"
 
 type documentingProvider struct {
-	providerkit.Provider
+	provider.Provider
 }
 
-func (p documentingProvider) Edges() providerkit.Edges {
+func (p documentingProvider) Edges() provider.Edges {
 	return documentingEdges{Edges: p.Provider.Edges()}
 }
 
 type documentingEdges struct {
-	providerkit.Edges
+	provider.Edges
 }
 
 func (e documentingEdges) Open(kind edge.Kind) (edge.Edge, error) {

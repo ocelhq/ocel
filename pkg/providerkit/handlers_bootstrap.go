@@ -14,6 +14,7 @@ import (
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -31,19 +32,19 @@ func classOf(tier environmentv1.Tier) (edge.Class, error) {
 	}
 }
 
-func (h *handlers) gate(requested string) (Provider, Gate, error) {
-	provider, err := h.session.use()
+func (h *handlers) gate(requested string) (provider.Provider, Gate, error) {
+	p, err := h.session.use()
 	if err != nil {
 		return nil, Gate{}, err
 	}
-	kind := edgeKind(provider, requested)
-	bootstrap, err := provider.Bootstrap(kind)
+	kind := edgeKind(p, requested)
+	bootstrap, err := p.Bootstrap(kind)
 	if err != nil {
-		return nil, Gate{}, RefusalError(err)
+		return nil, Gate{}, provider.RefusalError(err)
 	}
-	return provider, Gate{
+	return p, Gate{
 		Bootstrap: bootstrap,
-		Records:   provider.Records(),
+		Records:   p.Records(),
 		WrittenBy: h.session.writer,
 		Edge:      kind,
 	}, nil
@@ -54,7 +55,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 	if err != nil {
 		return err
 	}
-	provider, gate, err := h.gate(req.GetEdge().GetKind())
+	p, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
 		return err
 	}
@@ -68,12 +69,12 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 		if req.GetConsented() == nil {
 			standing, err := gate.State(ctx, class)
 			if err != nil {
-				return nil, RefusalError(err)
+				return nil, provider.RefusalError(err)
 			}
 			if plan, err = gate.PlanFrom(ctx, standing, intent); err != nil {
-				return nil, RefusalError(err)
+				return nil, provider.RefusalError(err)
 			}
-			sender.send(planEvent(ChangePlanProto(plan, string(class), string(edgeKind(provider, req.GetEdge().GetKind())))))
+			sender.send(planEvent(ChangePlanProto(plan, string(class), string(edgeKind(p, req.GetEdge().GetKind())))))
 		}
 		if req.GetDry() {
 			return okResult(), nil
@@ -110,12 +111,12 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	}
 	standing, err := gate.State(ctx, class)
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	recorded := map[string][]string{}
 	if req.GetWithDependents() {
 		if recorded, err = gate.RecordedFeatures(ctx, class); err != nil {
-			return nil, RefusalError(err)
+			return nil, provider.RefusalError(err)
 		}
 	}
 
@@ -135,7 +136,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	return resp, nil
 }
 
-func ChangePlanProto(plan Plan, subject, kind string) *planv1.ChangePlan {
+func ChangePlanProto(plan provider.Plan, subject, kind string) *planv1.ChangePlan {
 	out := &planv1.ChangePlan{Subject: subject, EdgeKind: kind}
 	for _, group := range plan.Groups {
 		out.Groups = append(out.Groups, GroupProto(group))
@@ -143,7 +144,7 @@ func ChangePlanProto(plan Plan, subject, kind string) *planv1.ChangePlan {
 	return out
 }
 
-func GroupProto(group ChangeGroup) *planv1.ChangeGroup {
+func GroupProto(group provider.ChangeGroup) *planv1.ChangeGroup {
 	rendered := &planv1.ChangeGroup{
 		Kind:    group.Kind,
 		Name:    group.Name,
@@ -164,14 +165,14 @@ func GroupProto(group ChangeGroup) *planv1.ChangeGroup {
 	return rendered
 }
 
-func PlanOf(shown *planv1.ChangePlan) (Plan, error) {
-	plan := Plan{}
+func PlanOf(shown *planv1.ChangePlan) (provider.Plan, error) {
+	plan := provider.Plan{}
 	for _, group := range shown.GetGroups() {
 		action, err := changeAction(group.GetAction())
 		if err != nil {
-			return Plan{}, err
+			return provider.Plan{}, err
 		}
-		held := ChangeGroup{
+		held := provider.ChangeGroup{
 			Kind:    group.GetKind(),
 			Name:    group.GetName(),
 			Feature: group.GetFeature(),
@@ -181,9 +182,9 @@ func PlanOf(shown *planv1.ChangePlan) (Plan, error) {
 		}
 		for _, change := range group.GetChanges() {
 			if action, err = changeAction(change.GetAction()); err != nil {
-				return Plan{}, err
+				return provider.Plan{}, err
 			}
-			held.Changes = append(held.Changes, Change{
+			held.Changes = append(held.Changes, provider.Change{
 				Kind:   change.GetKind(),
 				Name:   change.GetName(),
 				Action: action,
@@ -196,28 +197,28 @@ func PlanOf(shown *planv1.ChangePlan) (Plan, error) {
 	return plan, nil
 }
 
-var planActions = map[ChangeAction]planv1.Change_Action{
-	"":                      planv1.Change_ACTION_UNSPECIFIED,
-	ActionCreate:            planv1.Change_ACTION_CREATE,
-	ActionUpdate:            planv1.Change_ACTION_UPDATE,
-	ActionReplace:           planv1.Change_ACTION_REPLACE,
-	ActionDelete:            planv1.Change_ACTION_DELETE,
-	ActionDisableThenDelete: planv1.Change_ACTION_DISABLE_THEN_DELETE,
-	ActionKeep:              planv1.Change_ACTION_KEEP,
-	ActionAdopt:             planv1.Change_ACTION_ADOPT,
+var planActions = map[provider.ChangeAction]planv1.Change_Action{
+	"":                               planv1.Change_ACTION_UNSPECIFIED,
+	provider.ActionCreate:            planv1.Change_ACTION_CREATE,
+	provider.ActionUpdate:            planv1.Change_ACTION_UPDATE,
+	provider.ActionReplace:           planv1.Change_ACTION_REPLACE,
+	provider.ActionDelete:            planv1.Change_ACTION_DELETE,
+	provider.ActionDisableThenDelete: planv1.Change_ACTION_DISABLE_THEN_DELETE,
+	provider.ActionKeep:              planv1.Change_ACTION_KEEP,
+	provider.ActionAdopt:             planv1.Change_ACTION_ADOPT,
 }
 
 var changeActions = invertActions(planActions)
 
-func invertActions(held map[ChangeAction]planv1.Change_Action) map[planv1.Change_Action]ChangeAction {
-	inverted := make(map[planv1.Change_Action]ChangeAction, len(held))
+func invertActions(held map[provider.ChangeAction]planv1.Change_Action) map[planv1.Change_Action]provider.ChangeAction {
+	inverted := make(map[planv1.Change_Action]provider.ChangeAction, len(held))
 	for action, drawn := range held {
 		inverted[drawn] = action
 	}
 	return inverted
 }
 
-func changeAction(drawn planv1.Change_Action) (ChangeAction, error) {
+func changeAction(drawn planv1.Change_Action) (provider.ChangeAction, error) {
 	action, known := changeActions[drawn]
 	if !known {
 		return "", refusal.Refuse(refusal.CodeInvalid,
@@ -227,23 +228,23 @@ func changeAction(drawn planv1.Change_Action) (ChangeAction, error) {
 	return action, nil
 }
 
-func planAction(action ChangeAction) planv1.Change_Action { return planActions[action] }
+func planAction(action provider.ChangeAction) planv1.Change_Action { return planActions[action] }
 
 func RollUpProto(changes []*planv1.Change) planv1.Change_Action {
-	held := make([]Change, 0, len(changes))
+	held := make([]provider.Change, 0, len(changes))
 	for _, change := range changes {
-		held = append(held, Change{Action: changeActions[change.GetAction()]})
+		held = append(held, provider.Change{Action: changeActions[change.GetAction()]})
 	}
-	action, _ := RollUp(held)
+	action, _ := provider.RollUp(held)
 	return planAction(action)
 }
 
-func BootstrapStatusProto(standing BootstrapState, writing WrittenBy, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {
+func BootstrapStatusProto(standing BootstrapState, writing provider.WrittenBy, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {
 	status := &contractv1.BootstrapStatus{
 		Tier:           tier,
 		Present:        standing.Present,
 		Schema:         uint32(standing.Schema),
-		RequiredSchema: BootstrapSchema,
+		RequiredSchema: provider.BootstrapSchema,
 		AutoHeal:       standing.AutoHeal,
 		Writer:         writing.String(),
 		Downgrade:      standing.Downgrade(writing),
@@ -273,19 +274,19 @@ func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.Boot
 		return nil, err
 	}
 	if err := gate.Vacant(ctx, class); err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	plan, err := gate.Bootstrap.PlanRemove(ctx, class)
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	return ChangePlanProto(plan, string(class), soleStandingEdge(plan)), nil
 }
 
-func soleStandingEdge(plan Plan) string {
+func soleStandingEdge(plan provider.Plan) string {
 	var kinds []edge.Kind
 	for _, group := range plan.Groups {
-		if group.Kind != EdgeGroupKind {
+		if group.Kind != provider.EdgeGroupKind {
 			continue
 		}
 		if kind, ok := edge.EdgeGroupKindOf(group.Name); ok && !slices.Contains(kinds, kind) {
@@ -317,15 +318,15 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 	})
 }
 
-func edgeKind(provider Provider, requested string) edge.Kind {
+func edgeKind(p provider.Provider, requested string) edge.Kind {
 	if requested != "" {
 		return edge.Kind(requested)
 	}
-	return provider.Facts().DefaultEdge
+	return p.Facts().DefaultEdge
 }
 
 func (h *handlers) GetCredentialPermissions(_ context.Context, req *contractv1.CredentialPermissionsRequest) (*contractv1.CredentialPermissionsResponse, error) {
-	provider, err := h.session.use()
+	p, err := h.session.use()
 	if err != nil {
 		return nil, err
 	}
@@ -333,20 +334,20 @@ func (h *handlers) GetCredentialPermissions(_ context.Context, req *contractv1.C
 	if err != nil {
 		return nil, err
 	}
-	document, err := provider.Credentials().Permissions(tier)
+	document, err := p.Credentials().Permissions(tier)
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	groups := []*contractv1.CredentialGroup{{
 		Heading:  document.Heading,
 		Document: document.Document,
 	}}
 
-	if front, err := provider.Edges().Open(edgeKind(provider, req.GetEdge().GetKind())); err == nil {
+	if front, err := p.Edges().Open(edgeKind(p, req.GetEdge().GetKind())); err == nil {
 		if document := front.Hooks().DescribeCredentialPermissions; document != nil {
 			documented, err := document(tier)
 			if err != nil {
-				return nil, RefusalError(err)
+				return nil, provider.RefusalError(err)
 			}
 			groups = append(groups, &contractv1.CredentialGroup{
 				Heading:  documented.Heading,
@@ -357,12 +358,12 @@ func (h *handlers) GetCredentialPermissions(_ context.Context, req *contractv1.C
 	return &contractv1.CredentialPermissionsResponse{Groups: groups}, nil
 }
 
-func CredentialTierOf(tier contractv1.CredentialTier) (CredentialTier, error) {
+func CredentialTierOf(tier contractv1.CredentialTier) (provider.CredentialTier, error) {
 	switch tier {
 	case contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP:
-		return TierBootstrap, nil
+		return provider.TierBootstrap, nil
 	case contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY:
-		return TierDeploy, nil
+		return provider.TierDeploy, nil
 	default:
 		return "", connect.NewError(connect.CodeInvalidArgument, errors.New(
 			"credential permissions are rendered for the bootstrap tier or the deploy tier; this request named neither"))

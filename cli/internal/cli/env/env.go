@@ -30,7 +30,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 type envOptions struct {
@@ -127,11 +127,11 @@ func drivenEnvProvider(ctx context.Context, deps cmddeps.Deps, cwd string, opts 
 
 func offerVarsKey(ctx context.Context, deps cmddeps.Deps, runner *providerclient.Runner, cfg *projectconfig.Config, opts envOptions, status *contractv1.BootstrapStatus, rep runui.Reporter, stdin io.Reader, stderr io.Writer) error {
 	front := edgewire.Selection(cfg)
-	offered, err := bootstrap.Offers(ctx, runner, envTier(opts), front, providerkit.FeatureVarsKey)
+	offered, err := bootstrap.Offers(ctx, runner, envTier(opts), front, provider.FeatureVarsKey)
 	if err != nil || !offered {
 		return err
 	}
-	plan := bootstrap.PlanOnly(status, providerkit.FeatureVarsKey)
+	plan := bootstrap.PlanOnly(status, provider.FeatureVarsKey)
 	return bootstrap.OfferPlan(ctx, runner, plan, envTier(opts), front, rep,
 		deps.StdinIsTerminal(stdin), stderr, stdin)
 }

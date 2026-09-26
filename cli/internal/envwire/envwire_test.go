@@ -8,7 +8,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/varsui"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -21,7 +21,7 @@ func TestStaleOrBroken(t *testing.T) {
 	})
 
 	t.Run("a refusal keeps what it says", func(t *testing.T) {
-		refusal := providerkit.RefusalError(refusal.Refuse(refusal.CodeBusy,
+		refusal := provider.RefusalError(refusal.Refuse(refusal.CodeBusy,
 			"the production bootstrap holds no key to seal a value under"))
 
 		err := staleOrBroken(refusal)

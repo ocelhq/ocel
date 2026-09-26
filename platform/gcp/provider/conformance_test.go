@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
@@ -28,7 +29,7 @@ func TestGCPProvider(t *testing.T) {
 
 	conformance.Run(t, conformance.Suite{
 		Spec:         providerkit.Spec{Version: "test", New: gcp.New},
-		Options:      providerkit.Options{"project": "conformance", "region": "europe-west1"},
+		Options:      provider.Options{"project": "conformance", "region": "europe-west1"},
 		Binary:       buildProvider(t),
 		Certificates: &conformance.CertificateChecks{Kind: alb.Kind},
 	})

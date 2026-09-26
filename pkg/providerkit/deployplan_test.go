@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -150,44 +151,14 @@ func TestBuildAppStackMovesWhenAValueVersionMoves(t *testing.T) {
 	}
 }
 
-func TestBuildRoundTripsThroughItsRenderedForm(t *testing.T) {
-	t.Parallel()
-
-	built, err := NewBuild(deploymentID, ProductionEnv, "v1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	parsed, err := ParseBuild(built.String())
-	if err != nil {
-		t.Fatalf("ParseBuild(%q) = %v", built, err)
-	}
-	if parsed != built {
-		t.Errorf("ParseBuild(%q) = %v, want the build it rendered", built, parsed)
-	}
-	if parsed.Release() != built.Release() {
-		t.Errorf("the parsed build releases to %s, want %s", parsed.Release(), built.Release())
-	}
-}
-
-func TestNewBuildRefusesADeploymentIdNothingCanName(t *testing.T) {
-	t.Parallel()
-
-	if _, err := NewBuild("not-a-deployment-id", ProductionEnv, ""); err == nil {
-		t.Fatal("NewBuild() with a malformed deployment id succeeded, want a refusal")
-	}
-	if _, err := NewBuild(deploymentID, "", ""); err == nil {
-		t.Fatal("NewBuild() with no environment succeeded, want a refusal: the fingerprint is scoped to one")
-	}
-}
-
 func TestReclaimTargetsKeepAssetsARemainingReleaseStillServes(t *testing.T) {
 	t.Parallel()
 
-	shared, err := NewBuild(deploymentID, ProductionEnv, "shared")
+	shared, err := provider.NewBuild(deploymentID, ProductionEnv, "shared")
 	if err != nil {
 		t.Fatal(err)
 	}
-	gone, err := NewBuild(deploymentID, ProductionEnv, "gone")
+	gone, err := provider.NewBuild(deploymentID, ProductionEnv, "gone")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -311,8 +282,8 @@ func containerRequest(image string) *contractv1.DeployRequest {
 		Manifest: &contractv1.Manifest{
 			Slug: "shop",
 			Apps: []*contractv1.ManifestApp{
-				{Name: "api", DeploymentId: deploymentID, Compute: string(ComputeContainer)},
-				{Name: "web", DeploymentId: deploymentID, Compute: string(ComputeServerless)},
+				{Name: "api", DeploymentId: deploymentID, Compute: string(provider.ComputeContainer)},
+				{Name: "web", DeploymentId: deploymentID, Compute: string(provider.ComputeServerless)},
 			},
 			Containers: []*contractv1.ManifestContainer{
 				{App: "api", Image: image, HealthCheckPath: "/"},
@@ -401,7 +372,7 @@ func TestAContainerAppPackedIntoFunctionsRefusesTheDeploy(t *testing.T) {
 func TestReclaimTargetsLeaveAContainerReleaseToTheBoxThatHoldsIt(t *testing.T) {
 	t.Parallel()
 
-	gone, err := NewBuild(deploymentID, ProductionEnv, "gone")
+	gone, err := provider.NewBuild(deploymentID, ProductionEnv, "gone")
 	if err != nil {
 		t.Fatal(err)
 	}

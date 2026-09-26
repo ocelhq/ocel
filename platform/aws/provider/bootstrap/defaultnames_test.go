@@ -1,9 +1,11 @@
 package bootstrap
 
-import "github.com/ocelhq/ocel/pkg/providerkit"
+import (
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+)
 
 var (
-	defaultNamespace = Namespace(providerkit.DefaultNamespace)
+	defaultNamespace = Namespace(provider.DefaultNamespace)
 
 	coreStackName, _       = defaultNamespace.StackNameFor(ClassProduction)
 	previewStackName, _    = defaultNamespace.StackNameFor(ClassPreview)

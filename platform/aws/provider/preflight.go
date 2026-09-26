@@ -8,14 +8,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPreflight) error {
+func (p *Provider) PreflightDeploy(ctx context.Context, pre provider.DeployPreflight) error {
 	if err := refuseContainersBehindFunctionEdge(pre); err != nil {
 		return err
 	}
@@ -37,7 +37,7 @@ func (p *Provider) PreflightDeploy(ctx context.Context, pre providerkit.DeployPr
 	return p.stacks.Preflight(ctx, pre)
 }
 
-func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre providerkit.DeployPreflight) error {
+func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre provider.DeployPreflight) error {
 	if pre.Edge == "" || pre.Progress == nil {
 		return nil
 	}
@@ -54,7 +54,7 @@ func (p *Provider) nagStaleEdgeKey(ctx context.Context, pre providerkit.DeployPr
 	return nil
 }
 
-func (p *Provider) refuseUnreadableOriginSecret(ctx context.Context, pre providerkit.DeployPreflight) error {
+func (p *Provider) refuseUnreadableOriginSecret(ctx context.Context, pre provider.DeployPreflight) error {
 	params, err := p.classParams(ctx, pre.Plan.Class, pre.Edge)
 	if err != nil {
 		return err
@@ -62,7 +62,7 @@ func (p *Provider) refuseUnreadableOriginSecret(ctx context.Context, pre provide
 	return params.OriginSecretErr
 }
 
-func (p *Provider) nagStaleOriginSecret(ctx context.Context, pre providerkit.DeployPreflight) error {
+func (p *Provider) nagStaleOriginSecret(ctx context.Context, pre provider.DeployPreflight) error {
 	if pre.Progress == nil {
 		return nil
 	}
@@ -76,7 +76,7 @@ func (p *Provider) nagStaleOriginSecret(ctx context.Context, pre providerkit.Dep
 	return nil
 }
 
-func (p *Provider) publishRuntimeLayers(ctx context.Context, pre providerkit.DeployPreflight) error {
+func (p *Provider) publishRuntimeLayers(ctx context.Context, pre provider.DeployPreflight) error {
 	if pre.Dry {
 		return nil
 	}
@@ -108,12 +108,12 @@ func saying(progress edge.Progress) func(string) {
 	return progress.Say
 }
 
-func refuseContainersBehindFunctionEdge(pre providerkit.DeployPreflight) error {
+func refuseContainersBehindFunctionEdge(pre provider.DeployPreflight) error {
 	if pre.Edge == edges.DefaultKind {
 		return nil
 	}
 	for _, app := range pre.Plan.Apps {
-		if app.Compute() != providerkit.ComputeContainer {
+		if app.Compute() != provider.ComputeContainer {
 			continue
 		}
 		return refusal.Refuse(refusal.CodeInvalid,
@@ -123,7 +123,7 @@ func refuseContainersBehindFunctionEdge(pre providerkit.DeployPreflight) error {
 	return nil
 }
 
-func refusePublicBuckets(pre providerkit.DeployPreflight) error {
+func refusePublicBuckets(pre provider.DeployPreflight) error {
 	for _, resource := range pre.Resources {
 		if resource.Bucket == nil || !resource.Bucket.Public {
 			continue

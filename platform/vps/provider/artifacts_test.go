@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -44,21 +45,21 @@ func TestAnUploadDrawsACreateRowAndThenFailsTheApplyLoudly(t *testing.T) {
 	if err := os.WriteFile(path, []byte("a build artifact"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	plan := providerkit.StackPlan{
-		Ref: providerkit.StackRef{
+	plan := provider.StackPlan{
+		Ref: provider.StackRef{
 			Project: "shop",
 			Class:   edge.ClassProduction,
 			Name:    naming.InfraStack("prod"),
 		},
-		Kind: providerkit.StackInfra,
-		Uploads: []providerkit.Upload{{
+		Kind: provider.StackInfra,
+		Uploads: []provider.Upload{{
 			Name: "web",
-			Ref:  providerkit.ArtifactRef{Class: edge.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
+			Ref:  provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
 			Path: path,
 		}},
 	}
 
-	drawn, err := providerkit.SynthesizedPlan(ctx, store, plan, providerkit.StackResult{})
+	drawn, err := providerkit.SynthesizedPlan(ctx, store, plan, provider.StackResult{})
 	if err != nil {
 		t.Fatalf("SynthesizedPlan() of a stack shipping one artifact = %v, want the row the human consents to", err)
 	}
@@ -66,8 +67,8 @@ func TestAnUploadDrawsACreateRowAndThenFailsTheApplyLoudly(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("the plan drew %d artifact rows, want 1: the row must precede the write even when the write is going to refuse", len(rows))
 	}
-	if rows[0].Action != providerkit.ActionCreate {
-		t.Fatalf("the artifact row's action is %q, want %q: a store holding nothing has nothing to keep, and a keep row reads to the human as nothing to do", rows[0].Action, providerkit.ActionCreate)
+	if rows[0].Action != provider.ActionCreate {
+		t.Fatalf("the artifact row's action is %q, want %q: a store holding nothing has nothing to keep, and a keep row reads to the human as nothing to do", rows[0].Action, provider.ActionCreate)
 	}
 
 	var rejection refusal.Refusal
@@ -80,11 +81,11 @@ func TestAnUploadDrawsACreateRowAndThenFailsTheApplyLoudly(t *testing.T) {
 	}
 }
 
-func uploadRows(plan providerkit.Plan) []providerkit.Change {
-	var rows []providerkit.Change
+func uploadRows(plan provider.Plan) []provider.Change {
+	var rows []provider.Change
 	for _, group := range plan.Groups {
 		for _, change := range group.Changes {
-			if change.Kind == providerkit.UploadKind {
+			if change.Kind == provider.UploadKind {
 				rows = append(rows, change)
 			}
 		}

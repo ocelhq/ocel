@@ -26,6 +26,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -83,7 +84,7 @@ func deployRequest() *contractv1.DeployRequest {
 			Apps: []*contractv1.ManifestApp{{
 				Name:         "web",
 				Framework:    &contractv1.Framework{Name: "next"},
-				Compute:      string(providerkit.ComputeServerless),
+				Compute:      string(provider.ComputeServerless),
 				DeploymentId: webDeploymentID,
 			}},
 			Functions: []*contractv1.ManifestFunction{{
@@ -133,7 +134,7 @@ func deployStream(
 
 func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, p := deployServed(t)
 
 	result, events := deploy(t, client, deployRequest())
 	if result == nil || !result.GetSuccess() {
@@ -157,14 +158,14 @@ func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 		t.Fatalf("the first event is %T, want the stage plan: the CLI draws the tree before any work reports into it", events[0].GetEvent())
 	}
 
-	plans := provider.FakeStacks().Plans()
+	plans := p.FakeStacks().Plans()
 	if len(plans) != 2 {
 		t.Fatalf("the stacks port saw %d plans, want the infra stack and the app stack", len(plans))
 	}
-	if plans[0].Kind != providerkit.StackInfra || plans[1].Kind != providerkit.StackApp {
+	if plans[0].Kind != provider.StackInfra || plans[1].Kind != provider.StackApp {
 		t.Fatalf("the stacks port saw %s then %s, want infra before the apps that binding to it", plans[0].Kind, plans[1].Kind)
 	}
-	if !slices.ContainsFunc(plans[1].App.Grants, func(binding providerkit.Binding) bool { return binding.Name == "orders" }) {
+	if !slices.ContainsFunc(plans[1].App.Grants, func(binding provider.Binding) bool { return binding.Name == "orders" }) {
 		t.Errorf("the app plan grants %v, want the infra binding the app binds a client to", plans[1].App.Grants)
 	}
 	if plans[1].App.Functions[0].Artifact.Key == "" {
@@ -177,8 +178,8 @@ func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 
 func TestDeployRefusesToPublishABlanketGrantWithoutAskingTheProvider(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
-	provider.FakeStacks().Grants = []providerkit.Grant{{
+	client, p := deployServed(t)
+	p.FakeStacks().Grants = []provider.Grant{{
 		Label:     "everything",
 		Actions:   []string{"*"},
 		Resources: []string{"*"},
@@ -215,7 +216,7 @@ func twoAppRequest() *contractv1.DeployRequest {
 	manifest.Apps = append(manifest.Apps, &contractv1.ManifestApp{
 		Name:         "admin",
 		Framework:    &contractv1.Framework{Name: "next"},
-		Compute:      string(providerkit.ComputeServerless),
+		Compute:      string(provider.ComputeServerless),
 		DeploymentId: adminDeploymentID,
 	})
 	manifest.Functions = append(manifest.Functions, &contractv1.ManifestFunction{
@@ -231,7 +232,7 @@ func twoAppRequest() *contractv1.DeployRequest {
 	return req
 }
 
-func grantNames(plan providerkit.StackPlan) []string {
+func grantNames(plan provider.StackPlan) []string {
 	names := make([]string, 0, len(plan.App.Grants))
 	for _, binding := range plan.App.Grants {
 		names = append(names, binding.Name)
@@ -242,14 +243,14 @@ func grantNames(plan providerkit.StackPlan) []string {
 
 func TestDeployGrantsAnAppOnlyWhatItsUsageEdgesName(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, p := deployServed(t)
 
 	if result, _ := deploy(t, client, twoAppRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 
-	apps := map[string]providerkit.StackPlan{}
-	for _, plan := range provider.FakeStacks().Plans() {
+	apps := map[string]provider.StackPlan{}
+	for _, plan := range p.FakeStacks().Plans() {
 		if plan.App != nil {
 			apps[plan.App.App] = plan
 		}
@@ -350,7 +351,7 @@ func TestDeployUploadsEveryFunctionArtifact(t *testing.T) {
 
 func TestDeployPublishesEveryInfraBindingForItsAppsToRead(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, p := deployServed(t)
 
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
@@ -359,10 +360,10 @@ func TestDeployPublishesEveryInfraBindingForItsAppsToRead(t *testing.T) {
 		t.Fatalf("a second Deploy() = %q", result.GetError())
 	}
 
-	plans := provider.FakeStacks().Plans()
+	plans := p.FakeStacks().Plans()
 	last := plans[len(plans)-1]
-	if !slices.ContainsFunc(last.App.Grants, func(binding providerkit.Binding) bool {
-		return binding.Name == "orders" && binding.Properties[providerkit.PropertyHost] != ""
+	if !slices.ContainsFunc(last.App.Grants, func(binding provider.Binding) bool {
+		return binding.Name == "orders" && binding.Properties[provider.PropertyHost] != ""
 	}) {
 		t.Fatalf("a second deploy grants %v, want the published binding read back whole", last.App.Grants)
 	}
@@ -370,34 +371,34 @@ func TestDeployPublishesEveryInfraBindingForItsAppsToRead(t *testing.T) {
 
 type refusingStacks struct {
 	*fake.Provider
-	stacks providerkit.Stacks
+	stacks provider.Stacks
 }
 
-func (r refusingStacks) Stacks() providerkit.Stacks { return r.stacks }
+func (r refusingStacks) Stacks() provider.Stacks { return r.stacks }
 
 type halfBindingStacks struct{}
 
-func (halfBindingStacks) Plan(ctx context.Context, plan providerkit.StackPlan, _ edge.Progress) (providerkit.Plan, error) {
-	return providerkit.SynthesizedPlan(ctx, fake.NewArtifacts(), plan, providerkit.StackResult{})
+func (halfBindingStacks) Plan(ctx context.Context, plan provider.StackPlan, _ edge.Progress) (provider.Plan, error) {
+	return providerkit.SynthesizedPlan(ctx, fake.NewArtifacts(), plan, provider.StackResult{})
 }
 
-func (halfBindingStacks) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ edge.Progress) (providerkit.Plan, error) {
-	return providerkit.SynthesizedRemoval(ref, providerkit.StackResult{}), nil
+func (halfBindingStacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ edge.Progress) (provider.Plan, error) {
+	return providerkit.SynthesizedRemoval(ref, provider.StackResult{}), nil
 }
 
-func (halfBindingStacks) Provision(_ context.Context, plan providerkit.StackPlan, _ edge.Progress) (providerkit.StackResult, error) {
-	var result providerkit.StackResult
+func (halfBindingStacks) Provision(_ context.Context, plan provider.StackPlan, _ edge.Progress) (provider.StackResult, error) {
+	var result provider.StackResult
 	for _, resource := range plan.Resources {
-		result.Bindings = append(result.Bindings, providerkit.Binding{
+		result.Bindings = append(result.Bindings, provider.Binding{
 			Type:       resource.Type,
 			Name:       resource.Name,
-			Properties: map[string]string{providerkit.PropertyHost: "db.invalid"},
+			Properties: map[string]string{provider.PropertyHost: "db.invalid"},
 		})
 	}
 	return result, nil
 }
 
-func (halfBindingStacks) Destroy(context.Context, providerkit.StackRef, edge.Progress) error {
+func (halfBindingStacks) Destroy(context.Context, provider.StackRef, edge.Progress) error {
 	return nil
 }
 
@@ -418,7 +419,7 @@ func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("Deploy() with a Postgres binding carrying only a host = %v, want it refused as invalid", err)
 	}
-	if !strings.Contains(err.Error(), providerkit.PropertyPort) {
+	if !strings.Contains(err.Error(), provider.PropertyPort) {
 		t.Errorf("Deploy() failed with %q, want it to name the property that is missing", err)
 	}
 	if entries, rerr := providerkit.ReadStacks(context.Background(), base.Records(), edge.ClassProduction, "shop"); rerr != nil || len(entries) != 0 {
@@ -472,11 +473,11 @@ func TestDeployResolvesThePublishedBindingsOnce(t *testing.T) {
 }
 
 type resolvingStacks struct {
-	inner providerkit.Stacks
+	inner provider.Stacks
 
 	mu       sync.Mutex
 	host     string
-	resolved []providerkit.Binding
+	resolved []provider.Binding
 }
 
 func (r *resolvingStacks) publishes(host string) {
@@ -485,36 +486,36 @@ func (r *resolvingStacks) publishes(host string) {
 	r.host = host
 }
 
-func (r *resolvingStacks) Resolved() []providerkit.Binding {
+func (r *resolvingStacks) Resolved() []provider.Binding {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.resolved)
 }
 
-func (r *resolvingStacks) Plan(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.Plan, error) {
+func (r *resolvingStacks) Plan(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.Plan, error) {
 	return r.inner.Plan(ctx, plan, progress)
 }
 
-func (r *resolvingStacks) PlanDestroy(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) (providerkit.Plan, error) {
+func (r *resolvingStacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) (provider.Plan, error) {
 	return r.inner.PlanDestroy(ctx, ref, progress)
 }
 
-func (r *resolvingStacks) Provision(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.StackResult, error) {
+func (r *resolvingStacks) Provision(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.StackResult, error) {
 	result, err := r.inner.Provision(ctx, plan, progress)
 	if err != nil {
 		return result, err
 	}
-	if plan.Kind == providerkit.StackInfra {
+	if plan.Kind == provider.StackInfra {
 		r.mu.Lock()
 		defer r.mu.Unlock()
 		for _, binding := range result.Bindings {
-			binding.Properties[providerkit.PropertyHost] = r.host
+			binding.Properties[provider.PropertyHost] = r.host
 		}
 		return result, nil
 	}
 	binding, err := plan.Bindings.Named(ctx, "orders")
 	if err != nil {
-		return providerkit.StackResult{}, err
+		return provider.StackResult{}, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -522,7 +523,7 @@ func (r *resolvingStacks) Provision(ctx context.Context, plan providerkit.StackP
 	return result, nil
 }
 
-func (r *resolvingStacks) Destroy(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) error {
+func (r *resolvingStacks) Destroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) error {
 	return r.inner.Destroy(ctx, ref, progress)
 }
 
@@ -544,21 +545,21 @@ func TestDeployProvisionsInfraBeforeEveryAppSoATransformReadsThisDeploysBinding(
 	if len(resolved) != 2 {
 		t.Fatalf("the app stack resolved %d bindings over two deploys, want one per deploy", len(resolved))
 	}
-	if host := resolved[0].Properties[providerkit.PropertyHost]; host != "db-one.invalid" {
+	if host := resolved[0].Properties[provider.PropertyHost]; host != "db-one.invalid" {
 		t.Fatalf("the first deploy's app stack resolved orders at %q, want the binding its own infra stack published: "+
 			"the app stack is provisioned after the infra stack, so the record it reads is the one this deploy just wrote", host)
 	}
-	if host := resolved[1].Properties[providerkit.PropertyHost]; host != "db-two.invalid" {
+	if host := resolved[1].Properties[provider.PropertyHost]; host != "db-two.invalid" {
 		t.Errorf("the second deploy's app stack resolved orders at %q, want %q: the app stack read a binding its own deploy replaced, "+
 			"so provisioning ran an app before the infra it reads from", host, "db-two.invalid")
 	}
 }
 
-func servedBy(t *testing.T, provider providerkit.Provider) contractv1connect.ProviderServiceClient {
+func servedBy(t *testing.T, p provider.Provider) contractv1connect.ProviderServiceClient {
 	t.Helper()
 	spec := providerkit.Spec{
 		Version: "1.0.0",
-		New:     func(context.Context, providerkit.Settings) (providerkit.Provider, error) { return provider, nil },
+		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return p, nil },
 	}
 	server := httptest.NewServer(providerkit.ConformanceMux(spec))
 	t.Cleanup(server.Close)
@@ -655,10 +656,10 @@ func TestDeployRefusesANeedTheProjectDoesNotWaive(t *testing.T) {
 
 func operatorServed(t *testing.T) (contractv1connect.ProviderServiceClient, envvarsv1connect.EnvVarsServiceClient) {
 	t.Helper()
-	provider := fake.NewProvider(fake.Options{})
+	p := fake.NewProvider(fake.Options{})
 	spec := providerkit.Spec{
 		Version: "1.0.0",
-		New:     func(context.Context, providerkit.Settings) (providerkit.Provider, error) { return provider, nil },
+		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return p, nil },
 	}
 	server := httptest.NewServer(providerkit.ConformanceMux(spec))
 	t.Cleanup(server.Close)
@@ -909,15 +910,15 @@ func TestADeployBindsItsHostnamesOnlyOnceEveryStackItProvisionsStands(t *testing
 
 func TestADeployDeclaringAWildcardForProductionIsRefusedBeforeItProvisionsAnything(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, p := deployServed(t)
 
 	req := deployRequest()
 	req.Manifest.Domains[0].Hostnames = []string{"*.shop.example"}
 	_, _, err := deployStream(t, client, req)
-	if code, _ := providerkit.RefusedCode(err); code != refusal.CodeInvalid || !strings.Contains(err.Error(), "domains.preview") {
+	if code, _ := provider.RefusedCode(err); code != refusal.CodeInvalid || !strings.Contains(err.Error(), "domains.preview") {
 		t.Fatalf("Deploy() = %v, want it refused as invalid: a wildcard belongs to domains.preview", err)
 	}
-	if plans := provider.FakeStacks().Plans(); len(plans) != 0 {
+	if plans := p.FakeStacks().Plans(); len(plans) != 0 {
 		t.Errorf("the refused deploy provisioned %d stacks, want none: the hostname is read before anything is built", len(plans))
 	}
 }
@@ -1012,9 +1013,9 @@ func TestADeployRefusedForAReasonNoWaitingFixesFailsWithThatReason(t *testing.T)
 
 func TestADeployWhoseCertificateIsStillIssuingLeavesItToDomainAdd(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
-	provider.IssueCertificates(edge.Record{Name: "_acme.shop.example", Type: edge.RecordTypeCNAME, Value: "validate.example"})
-	provider.StallAfterProving(providerkit.Pending(refusal.Refuse(refusal.CodeNotReady, "the certificate is still validating")))
+	client, p := deployServed(t)
+	p.IssueCertificates(edge.Record{Name: "_acme.shop.example", Type: edge.RecordTypeCNAME, Value: "validate.example"})
+	p.StallAfterProving(provider.Pending(refusal.Refuse(refusal.CodeNotReady, "the certificate is still validating")))
 
 	req := deployRequest()
 	req.Edge = writtenBy("shop.example")
@@ -1329,7 +1330,7 @@ type defaultingTo struct {
 	kind edge.Kind
 }
 
-func (d defaultingTo) Facts() providerkit.Facts {
+func (d defaultingTo) Facts() provider.Facts {
 	facts := d.Provider.Facts()
 	facts.DefaultEdge = d.kind
 	return facts

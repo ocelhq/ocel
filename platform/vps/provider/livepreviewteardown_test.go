@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -74,21 +75,21 @@ func teardownHostname(pointer string) string {
 	return edge.SharedPreview(teardownSlug, livePreviewBase).Hosts(pointer, []string{teardownApp})[0]
 }
 
-func previewBuild(t *testing.T, pointer string) providerkit.Build {
+func previewBuild(t *testing.T, pointer string) provider.Build {
 	t.Helper()
 
 	sum := sha256.Sum256([]byte(pointer))
-	build, err := providerkit.NewBuild(hex.EncodeToString(sum[:])[:32], pointer, "")
+	build, err := provider.NewBuild(hex.EncodeToString(sum[:])[:32], pointer, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	return build
 }
 
-func previewStack(t *testing.T, slug, app, pointer string) providerkit.StackRef {
+func previewStack(t *testing.T, slug, app, pointer string) provider.StackRef {
 	t.Helper()
 
-	return providerkit.StackRef{
+	return provider.StackRef{
 		Project: slug,
 		Class:   edge.ClassPreview,
 		Name:    naming.AppStack(pointer, app, previewBuild(t, pointer).Release()),
@@ -117,12 +118,12 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 
 	ctx := context.Background()
 	build := previewBuild(t, pointer)
-	plan := providerkit.StackPlan{
+	plan := provider.StackPlan{
 		Ref:  previewStack(t, slug, app, pointer),
-		Kind: providerkit.StackApp,
-		App: &providerkit.AppPlan{
+		Kind: provider.StackApp,
+		App: &provider.AppPlan{
 			App:             app,
-			Compute:         providerkit.ComputeContainer,
+			Compute:         provider.ComputeContainer,
 			Deployment:      build.DeploymentID(),
 			Image:           image,
 			HealthCheckPath: healthPath,
@@ -136,12 +137,12 @@ func promotesPreview(t *testing.T, p *vps.Provider, stack edge.EdgeStack, slug, 
 		t.Fatalf("Provision(%s) stood up %v", pointer, stood.Containers)
 	}
 	if err := providerkit.WriteStack(ctx, p.Records(), edge.ClassPreview, slug, plan.Ref.Name, providerkit.RecordedStack{
-		Kind:       providerkit.StackApp,
+		Kind:       provider.StackApp,
 		App:        app,
 		Release:    build.Release().String(),
 		Identity:   build.String(),
 		Containers: stood.Containers,
-		WrittenBy:  providerkit.WrittenByVersion(""),
+		WrittenBy:  provider.WrittenByVersion(""),
 	}); err != nil {
 		t.Fatalf("WriteStack(%s): %v", pointer, err)
 	}
@@ -174,7 +175,7 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 	if err := providerkit.ReclaimPreview(ctx, p, teardownSlug, pointer, removed, spoken); err != nil {
 		t.Fatalf("ReclaimPreview(%s) = %v", pointer, err)
 	}
-	infra := providerkit.StackRef{Project: teardownSlug, Class: edge.ClassPreview, Name: naming.InfraStack(pointer)}
+	infra := provider.StackRef{Project: teardownSlug, Class: edge.ClassPreview, Name: naming.InfraStack(pointer)}
 	if err := p.Stacks().Destroy(ctx, infra, spoken); err != nil {
 		t.Fatalf("Destroy(%s) = %v: an ephemeral preview stands up no infra stack, and teardown destroys one regardless", infra.Name, err)
 	}

@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -65,7 +66,7 @@ const (
 
 type bootstrapGate struct{ p *Provider }
 
-func (g bootstrapGate) Catalogue() []providerkit.Feature { return bootstrap{}.Catalogue() }
+func (g bootstrapGate) Catalogue() []provider.Feature { return bootstrap{}.Catalogue() }
 
 func (g bootstrapGate) stood(ctx context.Context) (bootstrap, error) {
 	held, err := g.p.stood(ctx)
@@ -75,23 +76,23 @@ func (g bootstrapGate) stood(ctx context.Context) (bootstrap, error) {
 	return bootstrap{clients: held, fronts: g.p.Edges()}, nil
 }
 
-func (g bootstrapGate) Describe(ctx context.Context, class edge.Class) (providerkit.BootstrapReading, error) {
+func (g bootstrapGate) Describe(ctx context.Context, class edge.Class) (provider.BootstrapReading, error) {
 	b, err := g.stood(ctx)
 	if err != nil {
-		return providerkit.BootstrapReading{}, err
+		return provider.BootstrapReading{}, err
 	}
 	return b.Describe(ctx, class)
 }
 
-func (g bootstrapGate) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
+func (g bootstrapGate) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
 	b, err := g.stood(ctx)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	return b.Plan(ctx, req)
 }
 
-func (g bootstrapGate) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress edge.Progress) error {
+func (g bootstrapGate) Apply(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
 	b, err := g.stood(ctx)
 	if err != nil {
 		return err
@@ -99,10 +100,10 @@ func (g bootstrapGate) Apply(ctx context.Context, req providerkit.BootstrapReque
 	return b.Apply(ctx, req, progress)
 }
 
-func (g bootstrapGate) PlanRemove(ctx context.Context, class edge.Class) (providerkit.Plan, error) {
+func (g bootstrapGate) PlanRemove(ctx context.Context, class edge.Class) (provider.Plan, error) {
 	b, err := g.stood(ctx)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	return b.PlanRemove(ctx, class)
 }
@@ -117,20 +118,20 @@ func (g bootstrapGate) Remove(ctx context.Context, class edge.Class, progress ed
 
 type bootstrap struct {
 	clients *clients
-	fronts  providerkit.Edges
+	fronts  provider.Edges
 }
 
-func (b bootstrap) Describe(ctx context.Context, class edge.Class) (providerkit.BootstrapReading, error) {
+func (b bootstrap) Describe(ctx context.Context, class edge.Class) (provider.BootstrapReading, error) {
 	read, err := b.survey(ctx, class)
 	if err != nil {
-		return providerkit.BootstrapReading{}, err
+		return provider.BootstrapReading{}, err
 	}
 	return b.described(ctx, read)
 }
 
-func (b bootstrap) described(ctx context.Context, read survey) (providerkit.BootstrapReading, error) {
+func (b bootstrap) described(ctx context.Context, read survey) (provider.BootstrapReading, error) {
 	items := bootstrapItems(read.Names, read.Class, read.Emulated)
-	stacks := []providerkit.BootstrapStack{{
+	stacks := []provider.BootstrapStack{{
 		Name:          read.Project + "/" + string(read.Class),
 		Present:       read.Present,
 		Schema:        uint32(read.Stamp.Schema),
@@ -140,9 +141,9 @@ func (b bootstrap) described(ctx context.Context, read survey) (providerkit.Boot
 	for _, feature := range read.Stamp.Features {
 		standing, err := b.frontStands(ctx, read.Class, feature)
 		if err != nil {
-			return providerkit.BootstrapReading{}, err
+			return provider.BootstrapReading{}, err
 		}
-		stacks = append(stacks, providerkit.BootstrapStack{
+		stacks = append(stacks, provider.BootstrapStack{
 			Name:          read.Project + "/" + string(read.Class) + "/" + feature,
 			Feature:       feature,
 			Present:       standing,
@@ -151,7 +152,7 @@ func (b bootstrap) described(ctx context.Context, read survey) (providerkit.Boot
 			WrittenBy:     read.Stamp.Writer,
 		})
 	}
-	return providerkit.BootstrapReading{
+	return provider.BootstrapReading{
 		Class:      read.Class,
 		Present:    read.Present,
 		Unfinished: read.Present && read.Stamp.State != stateComplete,
@@ -160,59 +161,59 @@ func (b bootstrap) described(ctx context.Context, read survey) (providerkit.Boot
 	}, nil
 }
 
-func (b bootstrap) held(ctx context.Context, req providerkit.BootstrapRequest) (survey, error) {
+func (b bootstrap) held(ctx context.Context, req provider.BootstrapRequest) (survey, error) {
 	if carried, held := req.Reading.(survey); held && carried.Class == req.Class {
 		return carried, nil
 	}
 	return b.survey(ctx, req.Class)
 }
 
-func (b bootstrap) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
+func (b bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
 	read, err := b.held(ctx, req)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	if err := b.preflight(ctx, read, req.Features); err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	if err := b.frontsFree(ctx, req.Class, droppedFeatures(read.Stamp.Features, req)); err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	standing, err := b.described(ctx, read)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	groups := providerkit.DeriveGroups(standing, b.Catalogue(), req)
 	groups[0].Changes = planned(read, stackItems(read.Names, read.Class, read.Emulated))
 
-	params := providerkit.ChangeGroup{
-		Kind:    providerkit.ParameterGroupKind,
-		Name:    providerkit.ParameterGroupKind,
+	params := provider.ChangeGroup{
+		Kind:    provider.ParameterGroupKind,
+		Name:    provider.ParameterGroupKind,
 		Changes: planned(read, parameterItems(read.Names, read.Class)),
 	}
-	params.Action, params.Reason = providerkit.RollUp(params.Changes)
-	return providerkit.Plan{Groups: providerkit.Vendored(Vendor, append(groups, params))}, nil
+	params.Action, params.Reason = provider.RollUp(params.Changes)
+	return provider.Plan{Groups: providerkit.Vendored(Vendor, append(groups, params))}, nil
 }
 
-func planned(read survey, items []item) []providerkit.Change {
-	changes := make([]providerkit.Change, 0, len(items))
+func planned(read survey, items []item) []provider.Change {
+	changes := make([]provider.Change, 0, len(items))
 	for _, item := range items {
-		change := providerkit.Change{
+		change := provider.Change{
 			Kind:   string(item.Kind),
 			Name:   item.Name,
-			Action: providerkit.ActionCreate,
+			Action: provider.ActionCreate,
 			Reason: item.Note,
 			Slow:   item.Slow,
 		}
 		switch {
 		case read.mends(item) != "":
-			change.Action, change.Reason = providerkit.ActionUpdate, read.mends(item)
+			change.Action, change.Reason = provider.ActionUpdate, read.mends(item)
 		case item.Shared && read.sibling && read.holds(item):
-			change.Action, change.Reason, change.Slow = providerkit.ActionKeep, sharedWith(read.Class), false
+			change.Action, change.Reason, change.Slow = provider.ActionKeep, sharedWith(read.Class), false
 		case read.Emulated && item.Kind == KindDatabase:
-			change.Action, change.Reason, change.Slow = providerkit.ActionKeep, reasonEmulated, false
+			change.Action, change.Reason, change.Slow = provider.ActionKeep, reasonEmulated, false
 		case read.holds(item):
-			change.Action, change.Reason, change.Slow = providerkit.ActionKeep, reasonStanding, false
+			change.Action, change.Reason, change.Slow = provider.ActionKeep, reasonStanding, false
 		}
 		changes = append(changes, change)
 	}
@@ -223,7 +224,7 @@ func sharedWith(class edge.Class) string {
 	return fmt.Sprintf(reasonShared, siblingOf(class))
 }
 
-func (b bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress edge.Progress) error {
+func (b bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
 	read, err := b.held(ctx, req)
 	if err != nil {
 		return err
@@ -242,7 +243,7 @@ func (b bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, 
 	}
 
 	written := stamp{
-		Schema:   providerkit.BootstrapSchema,
+		Schema:   provider.BootstrapSchema,
 		State:    stateApplying,
 		Writer:   req.WrittenBy.String(),
 		Digest:   digestOf(read.Names.Namespace(), items),
@@ -760,29 +761,29 @@ func operationFailed(doing string, operation *firestoreadmin.GoogleLongrunningOp
 
 type removal struct {
 	item   item
-	action providerkit.ChangeAction
+	action provider.ChangeAction
 	reason string
 }
 
-func (b bootstrap) PlanRemove(ctx context.Context, class edge.Class) (providerkit.Plan, error) {
+func (b bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.Plan, error) {
 	read, err := b.survey(ctx, class)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	if err := b.frontsFree(ctx, class, read.Stamp.Features); err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
-	stack, params := providerkit.ChangeGroup{
-		Kind:   providerkit.StackGroupKind,
+	stack, params := provider.ChangeGroup{
+		Kind:   provider.StackGroupKind,
 		Name:   read.Project + "/" + string(class),
-		Action: providerkit.ActionDelete,
-	}, providerkit.ChangeGroup{
-		Kind:   providerkit.ParameterGroupKind,
-		Name:   providerkit.ParameterGroupKind,
-		Action: providerkit.ActionDelete,
+		Action: provider.ActionDelete,
+	}, provider.ChangeGroup{
+		Kind:   provider.ParameterGroupKind,
+		Name:   provider.ParameterGroupKind,
+		Action: provider.ActionDelete,
 	}
 	for _, taking := range removals(read) {
-		change := providerkit.Change{
+		change := provider.Change{
 			Kind:   string(taking.item.Kind),
 			Name:   taking.item.Name,
 			Action: taking.action,
@@ -795,8 +796,8 @@ func (b bootstrap) PlanRemove(ctx context.Context, class edge.Class) (providerki
 		}
 		stack.Changes = append(stack.Changes, change)
 	}
-	params.Action, params.Reason = providerkit.RollUp(params.Changes)
-	return providerkit.Plan{Groups: providerkit.Vendored(Vendor, []providerkit.ChangeGroup{stack, params})}, nil
+	params.Action, params.Reason = provider.RollUp(params.Changes)
+	return provider.Plan{Groups: providerkit.Vendored(Vendor, []provider.ChangeGroup{stack, params})}, nil
 }
 
 func removals(read survey) []removal {
@@ -831,23 +832,23 @@ func removals(read survey) []removal {
 }
 
 func removing(read survey, held item) removal {
-	taking := removal{item: held, action: providerkit.ActionDelete}
+	taking := removal{item: held, action: provider.ActionDelete}
 	switch {
 	case held.Kind == KindKeyRing:
-		taking.action, taking.reason = providerkit.ActionKeep, reasonRingKept
+		taking.action, taking.reason = provider.ActionKeep, reasonRingKept
 	case held.Shared && read.sibling:
-		taking.action, taking.reason = providerkit.ActionKeep, sharedWith(read.Class)
+		taking.action, taking.reason = provider.ActionKeep, sharedWith(read.Class)
 	case held.Kind == KindDatabase && read.Emulated:
-		taking.action, taking.reason = providerkit.ActionKeep, reasonEmulated
+		taking.action, taking.reason = provider.ActionKeep, reasonEmulated
 	case held.Kind == KindDatabase:
-		taking.action = providerkit.ActionDisableThenDelete
+		taking.action = provider.ActionDisableThenDelete
 	case held.Kind == KindKey:
 		taking.reason, taking.item.Slow = reasonDestroy, true
 	case held.Name == read.Names.Bucket(read.Class):
 		taking.item.Slow = true
 	}
-	if taking.action != providerkit.ActionKeep && !read.holds(taking.item) {
-		taking.action, taking.reason = providerkit.ActionKeep, "nothing stands here"
+	if taking.action != provider.ActionKeep && !read.holds(taking.item) {
+		taking.action, taking.reason = provider.ActionKeep, "nothing stands here"
 	}
 	return taking
 }
@@ -877,7 +878,7 @@ func (b bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.P
 		return err
 	}
 	for _, taking := range removals(read) {
-		if taking.action == providerkit.ActionKeep {
+		if taking.action == provider.ActionKeep {
 			say(progress, "kept "+taking.item.ID()+": "+taking.reason)
 			continue
 		}

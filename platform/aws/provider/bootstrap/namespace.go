@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type Namespace providerkit.Namespace
+type Namespace provider.Namespace
 
 func suffixed(class, base string) string {
 	if class == ClassPreview {

@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
@@ -87,7 +87,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 	fronting(t, pinned, "pinned")
 
 	ctx := context.Background()
-	cert, err := pinned.Certificates().Issue(ctx, providerkit.CertificateRequest{
+	cert, err := pinned.Certificates().Issue(ctx, provider.CertificateRequest{
 		Kind: boxedge.Kind, Hostname: caddy.Container, Progress: edge.DiscardProgress(),
 	})
 	if err != nil {
@@ -102,7 +102,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 
 	spoken := vm.proxyLogBytes(t)
 	served, err := pinned.Certificates().Inspect(ctx, boxedge.Kind, caddy.Container,
-		providerkit.Certificate{ID: certs.ProxyHandle(caddy.Container)})
+		provider.Certificate{ID: certs.ProxyHandle(caddy.Container)})
 	if err != nil {
 		t.Fatalf("Inspect() over a proxy handle = %v", err)
 	}
@@ -135,7 +135,7 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 	defer closing(t, pinned)
 
 	ctx := context.Background()
-	cert, err := pinned.Certificates().Issue(ctx, providerkit.CertificateRequest{
+	cert, err := pinned.Certificates().Issue(ctx, provider.CertificateRequest{
 		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.invalid", Progress: edge.DiscardProgress(),
 	})
 	if err != nil {

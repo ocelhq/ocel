@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const (
@@ -109,7 +109,7 @@ func (s *deployFakeProviderServer) RemoveConnector(_ context.Context, _ *contrac
 
 func fakeCompute(asked string) string {
 	if asked == "" {
-		return string(providerkit.ComputeContainer)
+		return string(provider.ComputeContainer)
 	}
 	return asked
 }

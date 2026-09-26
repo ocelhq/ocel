@@ -1,4 +1,4 @@
-package providerkit
+package provider
 
 import (
 	"context"
@@ -68,4 +68,23 @@ type BootstrapRequest struct {
 	WrittenBy WrittenBy
 
 	Reading any
+}
+
+const BootstrapSchema = 1
+
+const FeatureVarsKey = "vars-key"
+
+func BootstrapCommand(class edge.Class) string {
+	if class == edge.ClassPreview {
+		return "ocel bootstrap preview"
+	}
+	return "ocel bootstrap production"
+}
+
+func BootstrapFeaturesCommand(class edge.Class) string {
+	return BootstrapCommand(class) + " --features"
+}
+
+func BootstrapVarsKeyCommand(class edge.Class) string {
+	return BootstrapFeaturesCommand(class) + " " + FeatureVarsKey
 }

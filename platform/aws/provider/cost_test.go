@@ -21,6 +21,7 @@ import (
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 )
@@ -32,7 +33,7 @@ func costServed(t *testing.T) (contractv1connect.ProviderServiceClient, costv1co
 	p := aws.NewProvider(aws.Options{Region: "us-east-1"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 	spec := providerkit.Spec{
 		Version: "test",
-		New:     func(context.Context, providerkit.Settings) (providerkit.Provider, error) { return p, nil },
+		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return p, nil },
 	}
 	server := httptest.NewServer(providerkit.ConformanceMux(spec))
 	t.Cleanup(server.Close)
@@ -174,7 +175,7 @@ func TestShapeWithABroughtVarsKeyStandsUpNoKey(t *testing.T) {
 	p := aws.NewProvider(aws.Options{Region: "us-east-1", VarsKey: "arn:aws:kms:us-east-1:1:key/k"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 	spec := providerkit.Spec{
 		Version: "test",
-		New:     func(context.Context, providerkit.Settings) (providerkit.Provider, error) { return p, nil },
+		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return p, nil },
 	}
 	server := httptest.NewServer(providerkit.ConformanceMux(spec))
 	t.Cleanup(server.Close)

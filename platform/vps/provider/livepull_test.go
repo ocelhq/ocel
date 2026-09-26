@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -207,14 +207,14 @@ func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Images() = %v", err)
 	}
-	plan := providerkit.ImagePushes{Store: store, Pushes: []images.Push{push}}
+	plan := provider.ImagePushes{Store: store, Pushes: []images.Push{push}}
 
 	rows, err := plan.Rows(ctx)
 	if err != nil {
 		t.Fatalf("Rows() over a machine holding nothing = %v", err)
 	}
-	if len(rows) != 1 || rows[0].Action != providerkit.ActionCreate {
-		t.Fatalf("the plan shows %v before anything carried the image, want one %q row", rows, providerkit.ActionCreate)
+	if len(rows) != 1 || rows[0].Action != provider.ActionCreate {
+		t.Fatalf("the plan shows %v before anything carried the image, want one %q row", rows, provider.ActionCreate)
 	}
 	if err := plan.PushMissing(ctx, nil); err != nil {
 		t.Fatalf("PushMissing() through a registry the machine can reach = %v", err)
@@ -242,8 +242,8 @@ func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Rows() over a machine that holds the digest = %v", err)
 	}
-	if len(after) != 1 || after[0].Action != providerkit.ActionKeep {
-		t.Errorf("the plan shows %v for an image the machine already pulled, want one %q row", after, providerkit.ActionKeep)
+	if len(after) != 1 || after[0].Action != provider.ActionKeep {
+		t.Errorf("the plan shows %v for an image the machine already pulled, want one %q row", after, provider.ActionKeep)
 	}
 	if err := plan.PushMissing(ctx, nil); err != nil {
 		t.Fatalf("a second Ship over a machine that already holds the digest = %v", err)

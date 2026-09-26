@@ -7,12 +7,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func storelessRef() ArtifactRef {
-	return ArtifactRef{Class: edge.ClassProduction, Bucket: StoreFunctions, Key: "shop/prod/web/bundle.zip"}
+func storelessRef() provider.ArtifactRef {
+	return provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreFunctions, Key: "shop/prod/web/bundle.zip"}
 }
 
 func TestTheStorelessStoreRefusesAWriteItCannotHonour(t *testing.T) {

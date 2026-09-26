@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -19,16 +19,16 @@ func preflightConfig() Config {
 	}
 }
 
-func preflightPlan() providerkit.DeployPlan {
-	return providerkit.DeployPlan{
+func preflightPlan() provider.DeployPlan {
+	return provider.DeployPlan{
 		Slug:  "shop",
 		Class: edge.ClassProduction,
 		Env:   "prod",
-		Apps:  []providerkit.AppEntry{{App: "web"}, {App: "docs"}},
+		Apps:  []provider.AppEntry{{App: "web"}, {App: "docs"}},
 	}
 }
 
-func preflighting(cfg Config, pre providerkit.DeployPreflight) error {
+func preflighting(cfg Config, pre provider.DeployPreflight) error {
 	return newStacks(fixed(cfg), &Realized{}, nil).Preflight(context.Background(), pre)
 }
 
@@ -38,11 +38,11 @@ func TestPreflightPolicyBudget(t *testing.T) {
 	t.Run("a bill within budget passes", func(t *testing.T) {
 		t.Parallel()
 
-		uploads := []providerkit.Resource{{Name: "bucket--uploads", Declared: "uploads", Type: providerkit.BindingBucket}}
-		pre := providerkit.DeployPreflight{
+		uploads := []provider.Resource{{Name: "bucket--uploads", Declared: "uploads", Type: provider.BindingBucket}}
+		pre := provider.DeployPreflight{
 			Plan:      preflightPlan(),
 			Resources: uploads,
-			Apps: []providerkit.AppUsage{
+			Apps: []provider.AppUsage{
 				{App: "web", Resources: uploads},
 				{App: "docs", Resources: uploads},
 			},
@@ -55,13 +55,13 @@ func TestPreflightPolicyBudget(t *testing.T) {
 	t.Run("buckets this deploy has not stood up yet are billed at the widest name AWS hands out", func(t *testing.T) {
 		t.Parallel()
 
-		pre := providerkit.DeployPreflight{
+		pre := provider.DeployPreflight{
 			Plan: preflightPlan(),
-			Apps: []providerkit.AppUsage{{App: "web"}, {App: "docs"}},
+			Apps: []provider.AppUsage{{App: "web"}, {App: "docs"}},
 		}
 		for i := range 40 {
 			name := fmt.Sprintf("bucket--%02d", i)
-			held := providerkit.Resource{Name: name, Declared: name, Type: providerkit.BindingBucket}
+			held := provider.Resource{Name: name, Declared: name, Type: provider.BindingBucket}
 			pre.Resources = append(pre.Resources, held)
 			pre.Apps[0].Resources = append(pre.Apps[0].Resources, held)
 			pre.Apps[1].Resources = append(pre.Apps[1].Resources, held)
@@ -82,16 +82,16 @@ func TestPreflightPolicyBudget(t *testing.T) {
 	t.Run("a binding already published is billed from the grants it carries", func(t *testing.T) {
 		t.Parallel()
 
-		pre := providerkit.DeployPreflight{
+		pre := provider.DeployPreflight{
 			Plan: preflightPlan(),
-			Apps: []providerkit.AppUsage{{App: "web"}, {App: "docs"}},
+			Apps: []provider.AppUsage{{App: "web"}, {App: "docs"}},
 		}
 		for i := range 40 {
 			name := fmt.Sprintf("bucket--%02d", i)
-			pre.Grants = append(pre.Grants, providerkit.Binding{
+			pre.Grants = append(pre.Grants, provider.Binding{
 				Name: name,
-				Type: providerkit.BindingBucket,
-				Grants: []providerkit.Grant{{
+				Type: provider.BindingBucket,
+				Grants: []provider.Grant{{
 					Label:     "objects",
 					Actions:   []string{"s3:GetObject", "s3:PutObject", "s3:DeleteObject"},
 					Resources: []string{"arn:aws:s3:::" + strings.Repeat("b", 50) + name + "/*"},
@@ -110,13 +110,13 @@ func TestPreflightPolicyBudget(t *testing.T) {
 	t.Run("only the app whose own role is over budget is refused", func(t *testing.T) {
 		t.Parallel()
 
-		pre := providerkit.DeployPreflight{
+		pre := provider.DeployPreflight{
 			Plan: preflightPlan(),
-			Apps: []providerkit.AppUsage{{App: "web"}, {App: "docs"}},
+			Apps: []provider.AppUsage{{App: "web"}, {App: "docs"}},
 		}
 		for i := range 40 {
 			name := fmt.Sprintf("bucket--%02d", i)
-			held := providerkit.Resource{Name: name, Declared: name, Type: providerkit.BindingBucket}
+			held := provider.Resource{Name: name, Declared: name, Type: provider.BindingBucket}
 			pre.Resources = append(pre.Resources, held)
 			pre.Apps[0].Resources = append(pre.Apps[0].Resources, held)
 		}
@@ -135,11 +135,11 @@ func TestPreflightPolicyBudget(t *testing.T) {
 		t.Parallel()
 
 		items, err := billedPolicies(
-			[]providerkit.Resource{{Name: "bucket--uploads", Declared: "uploads", Type: providerkit.BindingBucket}},
-			[]providerkit.Binding{{
+			[]provider.Resource{{Name: "bucket--uploads", Declared: "uploads", Type: provider.BindingBucket}},
+			[]provider.Binding{{
 				Name:   "bucket--uploads",
-				Type:   providerkit.BindingBucket,
-				Grants: []providerkit.Grant{{Label: "objects", Actions: []string{"s3:GetObject"}, Resources: []string{"arn:aws:s3:::uploads/*"}}},
+				Type:   provider.BindingBucket,
+				Grants: []provider.Grant{{Label: "objects", Actions: []string{"s3:GetObject"}, Resources: []string{"arn:aws:s3:::uploads/*"}}},
 			}},
 			newSessionScope("shop", "prod", preflightConfig().StateTableARN),
 		)

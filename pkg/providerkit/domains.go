@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -17,23 +18,23 @@ type EdgeStackState struct {
 }
 
 type Settled struct {
-	Certificate Certificate   `json:"certificate,omitzero"`
-	Superseded  []Certificate `json:"superseded,omitempty"`
-	Written     []edge.Record `json:"written,omitempty"`
-	Owed        []edge.Record `json:"owed,omitempty"`
-	Probe       Probe         `json:"probe,omitzero"`
+	Certificate provider.Certificate   `json:"certificate,omitzero"`
+	Superseded  []provider.Certificate `json:"superseded,omitempty"`
+	Written     []edge.Record          `json:"written,omitempty"`
+	Owed        []edge.Record          `json:"owed,omitempty"`
+	Probe       Probe                  `json:"probe,omitzero"`
 }
 
-func (s *Settled) Supersede(cert Certificate) {
+func (s *Settled) Supersede(cert provider.Certificate) {
 	if !cert.Issued() || cert.ID == s.Certificate.ID || holds(s.Superseded, cert) {
 		return
 	}
 	s.Superseded = append(s.Superseded, cert)
 }
 
-func (s Settled) certificates() []Certificate {
-	held := make([]Certificate, 0, 1+len(s.Superseded))
-	for _, cert := range append([]Certificate{s.Certificate}, s.Superseded...) {
+func (s Settled) certificates() []provider.Certificate {
+	held := make([]provider.Certificate, 0, 1+len(s.Superseded))
+	for _, cert := range append([]provider.Certificate{s.Certificate}, s.Superseded...) {
 		if cert.Issued() && !holds(held, cert) {
 			held = append(held, cert)
 		}
@@ -41,8 +42,8 @@ func (s Settled) certificates() []Certificate {
 	return held
 }
 
-func holds(certificates []Certificate, cert Certificate) bool {
-	return slices.ContainsFunc(certificates, func(other Certificate) bool { return other.ID == cert.ID })
+func holds(certificates []provider.Certificate, cert provider.Certificate) bool {
+	return slices.ContainsFunc(certificates, func(other provider.Certificate) bool { return other.ID == cert.ID })
 }
 
 func (s Settled) WrittenRecords() []edge.Record {
@@ -126,8 +127,8 @@ func (s EdgeStackState) OwedRecords() []edge.Record {
 	return owed
 }
 
-func (s EdgeStackState) Certificates() []Certificate {
-	var held []Certificate
+func (s EdgeStackState) Certificates() []provider.Certificate {
+	var held []provider.Certificate
 	for _, hostname := range s.Hostnames() {
 		for _, cert := range s.Hosts[hostname].certificates() {
 			if !holds(held, cert) {

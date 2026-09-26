@@ -29,7 +29,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const (
@@ -210,7 +210,7 @@ func scanManifest(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Con
 	} else if err != nil {
 		return nil, nil, err
 	}
-	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, scannedApps(cfg), string(providerkit.ComputeServerless), manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.BindingsFor(env.GetTier())), functions, nil)
+	manifest, err := manifestbuilder.Build(cfg.Slug, cfg.Domains, scannedApps(cfg), string(provider.ComputeServerless), manifestwire.Declarations(cfg.Dir, resources), manifestwire.Bindings(cfg.BindingsFor(env.GetTier())), functions, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -227,7 +227,7 @@ func scannedApps(cfg *projectconfig.Config) []manifestbuilder.App {
 			Domains:   a.Domains,
 			Folder:    a.Folder,
 		}
-		if a.Compute == string(providerkit.ComputeContainer) {
+		if a.Compute == string(provider.ComputeContainer) {
 			app.Image = cfg.Slug + "/" + a.Name + "@sha256:" + unbuiltDigest
 		}
 		apps = append(apps, app)
@@ -241,7 +241,7 @@ func unbuiltFunctions(cfg *projectconfig.Config) []manifestbuilder.Function {
 	}
 	functions := make([]manifestbuilder.Function, 0, len(cfg.Apps))
 	for _, a := range cfg.Apps {
-		if a.Compute == string(providerkit.ComputeContainer) {
+		if a.Compute == string(provider.ComputeContainer) {
 			continue
 		}
 		functions = append(functions, manifestbuilder.Function{Route: a.Name, App: a.Name, Framework: manifestwire.Framework(a.Framework)})

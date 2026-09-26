@@ -1,7 +1,7 @@
 package gcp
 
 import (
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -9,9 +9,9 @@ import (
 
 type dns struct{}
 
-const dnsCloudflare = providerkit.DNSKind(cloudflare.Kind)
+const dnsCloudflare = provider.DNSKind(cloudflare.Kind)
 
-func (dns) Open(kind providerkit.DNSKind, zone string, _ edge.Kind) (edge.DNSRecords, error) {
+func (dns) Open(kind provider.DNSKind, zone string, _ edge.Kind) (edge.DNSRecords, error) {
 	if kind != dnsCloudflare {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"this provider cannot write DNS records with %q; it writes them with %s", kind, dnsCloudflare)

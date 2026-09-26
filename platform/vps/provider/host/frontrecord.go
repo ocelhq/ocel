@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -188,7 +188,7 @@ func (h *Host) frontRecorded(ctx context.Context, ask asking) (*frontRecord, err
 	if err := json.Unmarshal([]byte(said), &record); err != nil {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s on %s is not a record this ocel can read: %v\nRemove it and run `%s`",
-			FrontRecordPath, h.named(), err, providerkit.BootstrapCommand(edge.ClassProduction))
+			FrontRecordPath, h.named(), err, provider.BootstrapCommand(edge.ClassProduction))
 	}
 	return &record, nil
 }
@@ -201,7 +201,7 @@ func (h *Host) FrontAgrees(ctx context.Context) error {
 	if record == nil {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s records no proxy for %s, so this deploy cannot tell what fronts it\nRun `%s`",
-			FrontRecordPath, h.named(), providerkit.BootstrapCommand(edge.ClassProduction))
+			FrontRecordPath, h.named(), provider.BootstrapCommand(edge.ClassProduction))
 	}
 	return h.proxyOption.agrees(record.front(), record.setter())
 }

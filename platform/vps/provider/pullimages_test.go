@@ -15,8 +15,8 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -340,7 +340,7 @@ func TestADigestTheMachineAlreadyHoldsIsNeitherPushedNorPulledAgain(t *testing.T
 	server, registry := standingRegistry(t)
 	machine := &box{holds: true}
 	target := aTarget(server)
-	plan := providerkit.ImagePushes{
+	plan := provider.ImagePushes{
 		Store:  pulling(t, machine, target),
 		Pushes: []images.Push{aPull(target)},
 	}

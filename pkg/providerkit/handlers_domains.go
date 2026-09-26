@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -215,7 +216,7 @@ func (d *hostnames) remove(ctx context.Context, progress edge.Progress) error {
 			if d.state.Uses(cert.ID) {
 				continue
 			}
-			if err := retireCertificate(ctx, d.provider, d.settle, cert, Certificate{}, progress); err != nil {
+			if err := retireCertificate(ctx, d.provider, d.settle, cert, provider.Certificate{}, progress); err != nil {
 				return err
 			}
 		}
@@ -246,11 +247,11 @@ func (h *handlers) GetHostnameStatus(ctx context.Context, req *contractv1.Hostna
 		return declaredHostnames(req), nil
 	}
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	resp, err := session.status(ctx)
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	return resp, nil
 }
@@ -330,7 +331,7 @@ func (d *hostnames) probe(ctx context.Context, host string) Probe {
 	return Probe{At: d.settle.now().Unix(), OK: err == nil && serving == d.settle.kind, Edge: serving}
 }
 
-func (d *hostnames) pendingOn(host string, cert Certificate, health CertificateHealth, bound bool, probe Probe) string {
+func (d *hostnames) pendingOn(host string, cert provider.Certificate, health provider.CertificateHealth, bound bool, probe Probe) string {
 	switch {
 	case !slices.Contains(d.declared(), host):
 		return fmt.Sprintf("this project no longer declares %s; `ocel domain rm` gives it back", host)

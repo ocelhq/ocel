@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func TestResolutionIsSshsOwn(t *testing.T) {
@@ -102,7 +102,7 @@ func TestAKeyAliasIsTheNameSshKeysOn(t *testing.T) {
 		t.Errorf("entry() = %q, want the alias verbatim, with no port bracketing", dest.entry())
 	}
 
-	_, trust := classify(dest, []providerkit.HostKey{{Type: "ssh-ed25519", Key: "AAAA"}}, known{})
+	_, trust := classify(dest, []provider.HostKey{{Type: "ssh-ed25519", Key: "AAAA"}}, known{})
 	if trust == nil {
 		t.Fatal("classify() = nil, want an unknown-host-key refusal")
 	}

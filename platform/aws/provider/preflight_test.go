@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -16,21 +16,21 @@ import (
 func TestAContainerAppIsRefusedBehindEveryEdgeButTheDefault(t *testing.T) {
 	t.Parallel()
 
-	apps := []providerkit.AppEntry{
-		{App: "web", Manifest: &contractv1.ManifestApp{Name: "web", Compute: string(providerkit.ComputeContainer)}},
-		{App: "api", Manifest: &contractv1.ManifestApp{Name: "api", Compute: string(providerkit.ComputeServerless)}},
+	apps := []provider.AppEntry{
+		{App: "web", Manifest: &contractv1.ManifestApp{Name: "web", Compute: string(provider.ComputeContainer)}},
+		{App: "api", Manifest: &contractv1.ManifestApp{Name: "api", Compute: string(provider.ComputeServerless)}},
 	}
-	err := refuseContainersBehindFunctionEdge(providerkit.DeployPreflight{Edge: apigateway.Kind, Plan: providerkit.DeployPlan{Apps: apps}})
+	err := refuseContainersBehindFunctionEdge(provider.DeployPreflight{Edge: apigateway.Kind, Plan: provider.DeployPlan{Apps: apps}})
 	if err == nil || !strings.Contains(err.Error(), "web") || !strings.Contains(err.Error(), string(apigateway.Kind)) {
 		t.Fatalf("preflight behind %s = %v, want the container app refused by name: that edge invokes a function and would fail at promote otherwise", apigateway.Kind, err)
 	}
-	if err := refuseContainersBehindFunctionEdge(providerkit.DeployPreflight{Edge: cloudfront.Kind, Plan: providerkit.DeployPlan{Apps: apps}}); err != nil {
+	if err := refuseContainersBehindFunctionEdge(provider.DeployPreflight{Edge: cloudfront.Kind, Plan: provider.DeployPlan{Apps: apps}}); err != nil {
 		t.Fatalf("preflight behind %s = %v, want it to pass: that edge reaches an origin by URL with the class's secret", cloudfront.Kind, err)
 	}
-	if err := refuseContainersBehindFunctionEdge(providerkit.DeployPreflight{Edge: cloudflare.Kind, Plan: providerkit.DeployPlan{Apps: apps}}); err == nil {
+	if err := refuseContainersBehindFunctionEdge(provider.DeployPreflight{Edge: cloudflare.Kind, Plan: provider.DeployPlan{Apps: apps}}); err == nil {
 		t.Fatalf("preflight behind %s passed, want the container app refused: that edge presents no origin secret, so the front would answer it 404", cloudflare.Kind)
 	}
-	if err := refuseContainersBehindFunctionEdge(providerkit.DeployPreflight{Edge: apigateway.Kind, Plan: providerkit.DeployPlan{Apps: apps[1:]}}); err != nil {
+	if err := refuseContainersBehindFunctionEdge(provider.DeployPreflight{Edge: apigateway.Kind, Plan: provider.DeployPlan{Apps: apps[1:]}}); err != nil {
 		t.Fatalf("preflight of serverless apps behind %s = %v, want it to pass", apigateway.Kind, err)
 	}
 }
@@ -38,9 +38,9 @@ func TestAContainerAppIsRefusedBehindEveryEdgeButTheDefault(t *testing.T) {
 func TestAPublicBucketIsRefusedOnAws(t *testing.T) {
 	t.Parallel()
 
-	pre := providerkit.DeployPreflight{Resources: []providerkit.Resource{
-		{Name: "avatars", Type: providerkit.BindingBucket, Bucket: &providerkit.BucketSpec{Public: true}},
-		{Name: "uploads", Type: providerkit.BindingBucket, Bucket: &providerkit.BucketSpec{}},
+	pre := provider.DeployPreflight{Resources: []provider.Resource{
+		{Name: "avatars", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{Public: true}},
+		{Name: "uploads", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
 	}}
 
 	err := refusePublicBuckets(pre)
@@ -48,7 +48,7 @@ func TestAPublicBucketIsRefusedOnAws(t *testing.T) {
 		t.Fatalf("preflight = %v, want the public bucket refused by name", err)
 	}
 
-	private := providerkit.DeployPreflight{Resources: pre.Resources[1:]}
+	private := provider.DeployPreflight{Resources: pre.Resources[1:]}
 	if err := refusePublicBuckets(private); err != nil {
 		t.Fatalf("preflight of a private bucket = %v, want it to pass", err)
 	}

@@ -3,18 +3,18 @@ package aws
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 )
 
-func (p *Provider) ProgramEdge(ctx context.Context, req providerkit.EdgeProgramRequest) (providerkit.EdgeProgram, error) {
+func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequest) (provider.EdgeProgram, error) {
 	held, err := p.bootstrapped(ctx, req.Class)
 	if err != nil {
-		return providerkit.EdgeProgram{}, err
+		return provider.EdgeProgram{}, err
 	}
 	params, err := p.classParams(ctx, req.Class, req.Kind)
 	if err != nil {
-		return providerkit.EdgeProgram{}, err
+		return provider.EdgeProgram{}, err
 	}
 	program := deploy.EdgeProgram{
 		Class:             req.Class,

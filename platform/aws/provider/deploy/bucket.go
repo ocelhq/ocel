@@ -12,7 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 )
@@ -74,7 +74,7 @@ type corsRule struct {
 	MaxAgeSeconds  int
 }
 
-func translateBucket(spec *providerkit.BucketSpec) bucketArgs {
+func translateBucket(spec *provider.BucketSpec) bucketArgs {
 	var origins []string
 	if spec != nil {
 		origins = spec.AllowedOrigins

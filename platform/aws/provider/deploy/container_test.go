@@ -19,9 +19,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
@@ -50,7 +50,7 @@ func fixtureSubstrate() substrate {
 	}
 }
 
-func plannedContainerStack(t *testing.T) (Config, providerkit.StackPlan) {
+func plannedContainerStack(t *testing.T) (Config, provider.StackPlan) {
 	t.Helper()
 	cfg := Config{
 		Region:         "us-east-1",
@@ -63,18 +63,18 @@ func plannedContainerStack(t *testing.T) (Config, providerkit.StackPlan) {
 		VarsKeyARN:     "arn:aws:kms:us-east-1:123456789012:key/abcd",
 	}
 	stack := naming.AppStack("prod", "web", fixedRelease(t))
-	plan := providerkit.StackPlan{
-		Ref:    providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
-		Kind:   providerkit.StackApp,
+	plan := provider.StackPlan{
+		Ref:    provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
+		Kind:   provider.StackApp,
 		Tags:   map[string]string{"ocel:managed-by": "ocel"},
-		Images: providerkit.ImagePushes{Pushes: []images.Push{{App: "web", ImageRef: containerImage}}},
-		App: &providerkit.AppPlan{
+		Images: provider.ImagePushes{Pushes: []images.Push{{App: "web", ImageRef: containerImage}}},
+		App: &provider.AppPlan{
 			App:             "web",
 			Deployment:      "d1",
-			Compute:         providerkit.ComputeContainer,
+			Compute:         provider.ComputeContainer,
 			Image:           containerImage,
 			HealthCheckPath: "/healthz",
-			Values: providerkit.AppValues{
+			Values: provider.AppValues{
 				Plain:     map[string]string{"GREETING": "hello"},
 				Sensitive: map[string]string{"API_TOKEN": "sensitive-token"},
 				Phase:     "production",
@@ -84,8 +84,8 @@ func plannedContainerStack(t *testing.T) (Config, providerkit.StackPlan) {
 	return cfg, plan
 }
 
-func declaringASecret(plan providerkit.StackPlan) providerkit.StackPlan {
-	plan.App.Values.Secrets = []providerkit.SecretRef{{Key: "DATABASE_URL"}}
+func declaringASecret(plan provider.StackPlan) provider.StackPlan {
+	plan.App.Values.Secrets = []provider.SecretRef{{Key: "DATABASE_URL"}}
 	return plan
 }
 
@@ -110,7 +110,7 @@ func TestAServerlessAppThatPushesAnImageIsRefused(t *testing.T) {
 	t.Parallel()
 
 	cfg, plan := plannedContainerStack(t)
-	plan.App.Compute = providerkit.ComputeServerless
+	plan.App.Compute = provider.ComputeServerless
 	if _, _, err := releasing(t, cfg).prepare(context.Background(), plan); err == nil || !strings.Contains(err.Error(), "serverless") {
 		t.Fatalf("prepare() of a serverless app that pushes an image = %v, want it refused: functions run no image", err)
 	}
@@ -143,7 +143,7 @@ func TestAContainerIsHandedItsValuesAndThePortItListensOn(t *testing.T) {
 		t.Errorf("%s = %q, want the manifest's probe path, which the runtime answers without the origin secret", originguard.HealthPathVar, got)
 	}
 
-	_, err = containerEnv("web", providerkit.AppValues{Plain: map[string]string{containerPortEnv: "3000"}}, fixtureSecret, "", nil)
+	_, err = containerEnv("web", provider.AppValues{Plain: map[string]string{containerPortEnv: "3000"}}, fixtureSecret, "", nil)
 	if err == nil || !strings.Contains(err.Error(), containerPortEnv) {
 		t.Errorf("containerEnv with %s = %v, want it refused by name: the load balancer would probe a port nothing listens on", containerPortEnv, err)
 	}
@@ -208,10 +208,10 @@ func TestAContainerStackStandsUpAFargateServiceBehindTheSharedFront(t *testing.T
 	t.Parallel()
 
 	cfg, plan := plannedContainerStack(t)
-	plan.App.Grants = []providerkit.Binding{{
-		Type: providerkit.BindingBucket,
+	plan.App.Grants = []provider.Binding{{
+		Type: provider.BindingBucket,
 		Name: "bucket--uploads",
-		Grants: []providerkit.Grant{{
+		Grants: []provider.Grant{{
 			Label:     "objects",
 			Actions:   []string{"s3:GetObject"},
 			Resources: []string{"arn:aws:s3:::uploads/*"},

@@ -6,41 +6,42 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (providerkit.Plan, error) {
+func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.Plan, error) {
 	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(class))
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	stacks, err := bootstrap.PlanRemove(ctx, b.CFN, read)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	shared, err := bootstrap.PassphraseHeldBySibling(ctx, b.CFN, b.Namespace, string(class))
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	params, err := bootstrap.PlanParameterRemoval(ctx,
 		b.paramAPIs(), b.Namespace, string(class), shared)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	if len(params.Changes) > 0 {
 		stacks = append(stacks, params)
 	}
 
-	plan := providerkit.Plan{Groups: providerkit.Vendored(groupVendor, stacks)}
+	plan := provider.Plan{Groups: providerkit.Vendored(groupVendor, stacks)}
 	fronts, err := b.standingEdges(ctx, class, read.Deployed)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	for _, front := range fronts {
 		group, err := b.removedEdgeGroup(ctx, class, front)
 		if err != nil {
-			return providerkit.Plan{}, err
+			return provider.Plan{}, err
 		}
 		if group != nil {
 			plan.Groups = append(plan.Groups, *group)
@@ -75,7 +76,7 @@ func (b Bootstrap) standingEdges(ctx context.Context, class edge.Class, deployed
 	return fronts, nil
 }
 
-func (b Bootstrap) removedEdgeGroup(ctx context.Context, class edge.Class, front edge.Edge) (*providerkit.ChangeGroup, error) {
+func (b Bootstrap) removedEdgeGroup(ctx context.Context, class edge.Class, front edge.Edge) (*provider.ChangeGroup, error) {
 	plan := front.Hooks().PlanRemoveBootstrap
 	if plan == nil {
 		return nil, nil
@@ -91,11 +92,11 @@ func (b Bootstrap) removedEdgeGroup(ctx context.Context, class edge.Class, front
 	if err != nil {
 		return nil, err
 	}
-	return &providerkit.ChangeGroup{
-		Kind:    providerkit.EdgeGroupKind,
+	return &provider.ChangeGroup{
+		Kind:    provider.EdgeGroupKind,
 		Name:    edge.EdgeGroupName(front.Kind()),
 		Feature: providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), front.Kind()),
-		Action:  providerkit.ActionDelete,
+		Action:  provider.ActionDelete,
 		Changes: changes,
 	}, nil
 }

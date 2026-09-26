@@ -13,6 +13,7 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -94,7 +95,7 @@ func Partition(name records.Name) (string, error) {
 func unbootstrapped(name records.Name) error {
 	class, _ := providerkit.ClassOf(name)
 	return refusal.Refuse(refusal.CodeNotReady,
-		"this account has no Ocel bootstrap, so there is nowhere to keep a record.\nRun `%s` to create it, then try again", providerkit.BootstrapCommand(class))
+		"this account has no Ocel bootstrap, so there is nowhere to keep a record.\nRun `%s` to create it, then try again", provider.BootstrapCommand(class))
 }
 
 func tableGone(err error) bool {

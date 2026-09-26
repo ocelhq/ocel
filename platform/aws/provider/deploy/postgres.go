@@ -8,7 +8,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const (
@@ -48,7 +48,7 @@ type postgresArgs struct {
 	Tags map[string]string
 }
 
-func translatePostgres(spec *providerkit.PostgresSpec) postgresArgs {
+func translatePostgres(spec *provider.PostgresSpec) postgresArgs {
 	version := defaultPostgresEngineVersion
 	if spec != nil && spec.Version != "" {
 		version = spec.Version

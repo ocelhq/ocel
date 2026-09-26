@@ -3,13 +3,14 @@ package providerkit
 import (
 	"context"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 )
 
 type Vars struct {
 	Records      records.Store
 	Cipher       records.Cipher
-	VerifyGrants func(ctx context.Context, binding Binding) error
+	VerifyGrants func(ctx context.Context, binding provider.Binding) error
 }
 
 type VarsSource interface {

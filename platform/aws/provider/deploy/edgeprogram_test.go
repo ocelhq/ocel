@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -109,7 +109,7 @@ func TestEdgeProgramRefusesAPreviewEntryWithNoStoreWorker(t *testing.T) {
 	if err == nil {
 		t.Fatal("Build succeeded, want a preview entry with no deployments-store worker refused")
 	}
-	if !strings.Contains(err.Error(), providerkit.BootstrapCommand(edge.ClassPreview)) {
+	if !strings.Contains(err.Error(), provider.BootstrapCommand(edge.ClassPreview)) {
 		t.Errorf("error = %q, want it to name the bootstrap that provisions the store", err)
 	}
 }

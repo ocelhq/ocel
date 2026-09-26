@@ -13,6 +13,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -44,21 +45,21 @@ func (r *recorder) told() string {
 	return strings.Join(append(slices.Clone(r.said), r.details...), "\n")
 }
 
-func gated(t *testing.T, writer providerkit.WrittenBy) (providerkit.Gate, *fake.Provider) {
+func gated(t *testing.T, writer provider.WrittenBy) (providerkit.Gate, *fake.Provider) {
 	t.Helper()
 
-	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
+	p := fake.NewProvider(fake.Options{Region: "nowhere"})
 	return providerkit.Gate{
-		Bootstrap: provider.FakeBootstrap(),
-		Records:   provider.Records(),
+		Bootstrap: p.FakeBootstrap(),
+		Records:   p.Records(),
 		WrittenBy: writer,
-	}, provider
+	}, p
 }
 
-func bootstrapped(t *testing.T, provider *fake.Provider, class edge.Class, features ...string) {
+func bootstrapped(t *testing.T, p *fake.Provider, class edge.Class, features ...string) {
 	t.Helper()
 
-	if err := provider.FakeBootstrap().Apply(context.Background(), providerkit.BootstrapRequest{
+	if err := p.FakeBootstrap().Apply(context.Background(), provider.BootstrapRequest{
 		Class:    class,
 		Features: features,
 	}, nil); err != nil {
@@ -69,8 +70,8 @@ func bootstrapped(t *testing.T, provider *fake.Provider, class edge.Class, featu
 func TestStateReadsWhatTheVendorDescribes(t *testing.T) {
 	t.Parallel()
 
-	gate, provider := gated(t, "2.0.0")
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	gate, p := gated(t, "2.0.0")
+	bootstrapped(t, p, edge.ClassProduction, fake.FeatureCache)
 
 	state, err := gate.State(context.Background(), edge.ClassProduction)
 	if err != nil {
@@ -82,8 +83,8 @@ func TestStateReadsWhatTheVendorDescribes(t *testing.T) {
 	if want := []string{fake.FeatureCache}; !slices.Equal(state.Features, want) {
 		t.Errorf("State().Features = %v, want %v", state.Features, want)
 	}
-	if state.Schema != providerkit.BootstrapSchema {
-		t.Errorf("State().Schema = %d, want %d", state.Schema, providerkit.BootstrapSchema)
+	if state.Schema != provider.BootstrapSchema {
+		t.Errorf("State().Schema = %d, want %d", state.Schema, provider.BootstrapSchema)
 	}
 	if state.WrittenBy != "1.0.0" {
 		t.Errorf("State().WrittenBy = %q, want the writer the core stack carries", state.WrittenBy)
@@ -139,9 +140,9 @@ func TestAdmitRefusesABootstrapThatIsNotThere(t *testing.T) {
 func TestAdmitRefusesASchemaThisBuildCannotRead(t *testing.T) {
 	t.Parallel()
 
-	gate, provider := gated(t, "2.0.0")
-	bootstrapped(t, provider, edge.ClassProduction)
-	provider.FakeBootstrap().AtSchema(providerkit.BootstrapSchema + 1)
+	gate, p := gated(t, "2.0.0")
+	bootstrapped(t, p, edge.ClassProduction)
+	p.FakeBootstrap().AtSchema(provider.BootstrapSchema + 1)
 
 	_, err := gate.Admit(context.Background(), edge.ClassProduction, nil, true, &recorder{})
 	var refused refusal.Refusal
@@ -439,7 +440,7 @@ func TestOccupancyRefusesWhileAnythingStandsOnTheBootstrap(t *testing.T) {
 func TestASchemaNewerThanThisBuildIsRefusedWithNoEscapeHatch(t *testing.T) {
 	t.Parallel()
 
-	err := providerkit.RefuseSchemaAhead(providerkit.BootstrapSchema+1, true, edge.ClassProduction)
+	err := providerkit.RefuseSchemaAhead(provider.BootstrapSchema+1, true, edge.ClassProduction)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("RefuseSchemaAhead() = %v, want a %s refusal", err, refusal.CodeNotReady)
@@ -453,7 +454,7 @@ func TestASchemaNewerThanThisBuildIsRefusedWithNoEscapeHatch(t *testing.T) {
 	if got := strings.Count(refused.Message, "\n"); got != 1 {
 		t.Errorf("RefuseSchemaAhead() = %q, want exactly two lines", refused.Message)
 	}
-	if err := providerkit.RefuseSchemaAhead(providerkit.BootstrapSchema, true, edge.ClassProduction); err != nil {
+	if err := providerkit.RefuseSchemaAhead(provider.BootstrapSchema, true, edge.ClassProduction); err != nil {
 		t.Errorf("RefuseSchemaAhead() at the schema this build writes = %v, want it admitted", err)
 	}
 }

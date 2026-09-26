@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
@@ -21,7 +21,7 @@ func TestEveryNameThisProviderDerivesCarriesTheNamespace(t *testing.T) {
 		{name: "the default where a run names none", namespace: "", stem: "ocel"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv(providerkit.NamespaceEnvVar, tc.namespace)
+			t.Setenv(provider.NamespaceEnvVar, tc.namespace)
 
 			names := names(t, newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"}))
 			for what, got := range map[string]string{
@@ -76,11 +76,11 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 			name:      "a namespace no cloud takes",
 			namespace: "Not A Namespace",
 			project:   "acme-prod",
-			names:     providerkit.NamespaceEnvVar,
+			names:     provider.NamespaceEnvVar,
 		},
 		{
 			name:      "a namespace and project too long for a bucket",
-			namespace: strings.Repeat("a", providerkit.MaxNamespaceLength),
+			namespace: strings.Repeat("a", provider.MaxNamespaceLength),
 			project:   "acme-prod-" + strings.Repeat("b", 20),
 			names:     "-production-state",
 		},
@@ -104,7 +104,7 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv(providerkit.NamespaceEnvVar, tc.namespace)
+			t.Setenv(provider.NamespaceEnvVar, tc.namespace)
 
 			var refused refusal.Refusal
 			p, err := gcp.NewProvider(gcp.Options{Project: tc.project, Region: "europe-west1"})
@@ -119,7 +119,7 @@ func TestANamespaceNoNameCanBeDerivedFromIsRefusedAtConstruction(t *testing.T) {
 }
 
 func TestTheLongestNamespaceARuntimeAccountLeavesRoomForIsTaken(t *testing.T) {
-	t.Setenv(providerkit.NamespaceEnvVar, strings.Repeat("a", 19))
+	t.Setenv(provider.NamespaceEnvVar, strings.Repeat("a", 19))
 
 	if _, err := gcp.NewProvider(gcp.Options{Project: "acme-prod", Region: "europe-west1"}); err != nil {
 		t.Fatalf("NewProvider() under a 19 character namespace = %v, want it taken: Google gives a service account id 30 characters and the longest class is 10", err)

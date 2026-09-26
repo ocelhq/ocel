@@ -1,4 +1,4 @@
-package providerkit
+package provider
 
 import (
 	"bytes"

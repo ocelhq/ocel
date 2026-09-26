@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
@@ -109,8 +109,8 @@ func TestManualSaysYourProxyRenewsACertificate(t *testing.T) {
 	}
 }
 
-func verdicts(standing proxy.Standing) map[string]providerkit.HostCheck {
-	held := map[string]providerkit.HostCheck{}
+func verdicts(standing proxy.Standing) map[string]provider.HostCheck {
+	held := map[string]provider.HostCheck{}
 	for _, check := range standing {
 		held[check.Subject] = check
 	}
@@ -134,7 +134,7 @@ func TestManualStandsWhenYourProxyHolds443AndRoutesEveryClaimToTheSwitchboard(t 
 		t.Fatalf("Inspect() = %+v, want :443 and each claim checked", standing)
 	}
 	for subject, check := range checks {
-		if check.Verdict != providerkit.HostPass {
+		if check.Verdict != provider.HostPass {
 			t.Errorf("%s = %v: %s, want it to pass", subject, check.Verdict, check.Finding)
 		}
 	}
@@ -148,7 +148,7 @@ func TestManualFailsWhenNothingHolds443(t *testing.T) {
 		t.Fatalf("Inspect() = %v", err)
 	}
 	check := verdicts(standing)["tcp 443"]
-	if check.Verdict != providerkit.HostFail || !strings.Contains(check.Finding, "nothing listens on 443") {
+	if check.Verdict != provider.HostFail || !strings.Contains(check.Finding, "nothing listens on 443") {
 		t.Errorf("tcp 443 = %+v, want it failed for nothing listening", check)
 	}
 }
@@ -162,7 +162,7 @@ func TestManualStandsWhenAContainerOfYoursPublishes443WithNothingListeningOnTheH
 		t.Fatalf("Inspect() = %v", err)
 	}
 	check := verdicts(standing)["tcp 443"]
-	if check.Verdict != providerkit.HostPass || !strings.Contains(check.Finding, "traefik") {
+	if check.Verdict != provider.HostPass || !strings.Contains(check.Finding, "traefik") {
 		t.Errorf("tcp 443 = %+v, want it passed naming traefik: an engine without its userland proxy publishes through the firewall and nothing listens", check)
 	}
 }
@@ -176,7 +176,7 @@ func TestManualFailsWhenOcelsOwnProxyHolds443(t *testing.T) {
 		t.Fatalf("Inspect() = %v", err)
 	}
 	check := verdicts(standing)["tcp 443"]
-	if check.Verdict != providerkit.HostFail || !strings.Contains(check.Finding, caddy.Container) {
+	if check.Verdict != provider.HostFail || !strings.Contains(check.Finding, caddy.Container) {
 		t.Errorf("tcp 443 = %+v, want it failed naming %s", check, caddy.Container)
 	}
 	if !slices.Contains(held.asked, "publishing 443") {
@@ -198,7 +198,7 @@ func TestManualFailsAClaimYourProxyDoesNotRouteAndSaysWhereToRouteIt(t *testing.
 		t.Fatalf("Inspect() = %v", err)
 	}
 	check := verdicts(standing)["api.example.com"]
-	if check.Verdict != providerkit.HostFail {
+	if check.Verdict != provider.HostFail {
 		t.Fatalf("api.example.com = %+v, want it failed", check)
 	}
 	if !strings.Contains(check.Finding, "answered nothing over tls") {
@@ -222,7 +222,7 @@ func TestManualFailsAClaimAnsweredByAnotherEdge(t *testing.T) {
 		t.Fatalf("Inspect() = %v", err)
 	}
 	check := verdicts(standing)["shop.example.com"]
-	if check.Verdict != providerkit.HostFail || !strings.Contains(check.Finding, "cloudflare") {
+	if check.Verdict != provider.HostFail || !strings.Contains(check.Finding, "cloudflare") {
 		t.Errorf("shop.example.com = %+v, want it failed naming the edge that answered", check)
 	}
 }
@@ -236,7 +236,7 @@ func TestManualFailsTheListenCheckItCouldNotRead(t *testing.T) {
 		t.Fatalf("Inspect() = %v", err)
 	}
 	check := verdicts(standing)["tcp 443"]
-	if check.Verdict != providerkit.HostFail || !strings.Contains(check.Finding, "permission denied") {
+	if check.Verdict != provider.HostFail || !strings.Contains(check.Finding, "permission denied") {
 		t.Errorf("tcp 443 = %+v, want it failed with what the read met", check)
 	}
 }

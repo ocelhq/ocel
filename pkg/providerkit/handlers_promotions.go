@@ -15,19 +15,20 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnvironmentsRequest) (*contractv1.ListEnvironmentsResponse, error) {
-	provider, err := h.session.use()
+	p, err := h.session.use()
 	if err != nil {
 		return nil, err
 	}
-	environments, err := previewEnvironments(ctx, provider.Records(), req.GetSlug())
+	environments, err := previewEnvironments(ctx, p.Records(), req.GetSlug())
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	resp := &contractv1.ListEnvironmentsResponse{Environments: make([]*contractv1.PreviewEnvironment, 0, len(environments))}
 	for _, environment := range environments {
@@ -79,8 +80,8 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 	})
 }
 
-func forgetKeptRecords(ctx context.Context, provider Provider, slug, environment string) error {
-	store := envvars.Store{Records: provider.Records(), Cipher: provider.Cipher()}
+func forgetKeptRecords(ctx context.Context, p provider.Provider, slug, environment string) error {
+	store := envvars.Store{Records: p.Records(), Cipher: p.Cipher()}
 	scope := envvars.Scope{Project: slug, Class: edge.ClassPreview}
 	held, err := store.ListBindings(ctx, scope, environment)
 	if err != nil {
@@ -110,11 +111,11 @@ func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromo
 		return &contractv1.ListPromotionsResponse{}, nil
 	}
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	history, err := session.stack.Ledger().History(ctx, "")
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	return &contractv1.ListPromotionsResponse{Promotions: promotionHistoryProto(history)}, nil
 }
@@ -122,15 +123,15 @@ func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromo
 func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest) (*contractv1.RollbackResponse, error) {
 	session, err := h.openStack(ctx, edge.ClassProduction, req.GetSlug(), req.GetEdge())
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	history, err := session.stack.Ledger().History(ctx, "")
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	target, err := rollbackTarget(history, req.GetTo(), req.GetTag())
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 
 	flip := session.front.Facts().FlipBound
@@ -142,10 +143,10 @@ func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest
 		Flip:        &flip,
 	}
 	if err := session.stack.Promote(ctx, promoted, "", edge.DiscardProgress()); err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	if err := session.checkpoint(ctx); err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	return &contractv1.RollbackResponse{Promoted: promotionProto(promoted)}, nil
 }
@@ -271,21 +272,21 @@ func flipBoundProto(flip *edge.FlipBound) *progressv1.FlipBound {
 	return &progressv1.FlipBound{TypicalMs: flip.Typical.Milliseconds(), Published: flip.Published}
 }
 
-func ReclaimPreview(ctx context.Context, provider Provider, slug, pointer string, removed edge.PruneResult, progress edge.Progress) error {
+func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer string, removed edge.PruneResult, progress edge.Progress) error {
 	targets, err := ReclaimTargets(slug, pointer,
 		removed.RemovedRecordKeys, removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys)
 	if err != nil {
 		return err
 	}
-	if err := reclaim(ctx, provider, slug, edge.ClassPreview, targets, progress); err != nil {
+	if err := reclaim(ctx, p, slug, edge.ClassPreview, targets, progress); err != nil {
 		return err
 	}
-	return reclaimStanding(ctx, provider, slug, pointer,
+	return reclaimStanding(ctx, p, slug, pointer,
 		removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys, progress)
 }
 
-func reclaimStanding(ctx context.Context, provider Provider, slug, pointer string, surviving, servingHere []string, progress edge.Progress) error {
-	entries, err := ReadStacks(ctx, provider.Records(), edge.ClassPreview, slug)
+func reclaimStanding(ctx context.Context, p provider.Provider, slug, pointer string, surviving, servingHere []string, progress edge.Progress) error {
+	entries, err := ReadStacks(ctx, p.Records(), edge.ClassPreview, slug)
 	if err != nil {
 		return err
 	}
@@ -303,19 +304,19 @@ func reclaimStanding(ctx context.Context, provider Provider, slug, pointer strin
 	var errs []error
 	for _, entry := range standing {
 		progress.Say("Destroying " + entry.Name.String())
-		ref := StackRef{Project: slug, Class: edge.ClassPreview, Name: entry.Name}
-		if err := provider.Stacks().Destroy(ctx, ref, progress); err != nil {
+		ref := provider.StackRef{Project: slug, Class: edge.ClassPreview, Name: entry.Name}
+		if err := p.Stacks().Destroy(ctx, ref, progress); err != nil {
 			errs = append(errs, fmt.Errorf("destroy %s: %w", entry.Name, err))
 			continue
 		}
-		if err := ForgetStack(ctx, provider.Records(), edge.ClassPreview, slug, entry.Name); err != nil {
+		if err := ForgetStack(ctx, p.Records(), edge.ClassPreview, slug, entry.Name); err != nil {
 			errs = append(errs, err)
 		}
 		if entry.Name.IsInfra() {
 			continue
 		}
 		for _, prefix := range reclaimedPrefixes(slug, pointer, entry.Name.App, entry.Name.Release, elsewhere, here) {
-			if err := provider.Artifacts().RemovePrefix(ctx, edge.ClassPreview, prefix, progress); err != nil {
+			if err := p.Artifacts().RemovePrefix(ctx, edge.ClassPreview, prefix, progress); err != nil {
 				errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
 			}
 		}

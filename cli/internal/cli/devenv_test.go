@@ -28,8 +28,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
@@ -1142,8 +1142,8 @@ func TestRunWritesTheBrowsersURLForTheAppItRunsIn(t *testing.T) {
 		{Name: "web", Path: filepath.Join("apps", "web"), Folder: "/web", Framework: projectconfig.Framework{Name: appbuild.FrameworkNext}},
 		{Name: "api", Path: filepath.Join("apps", "api"), Folder: "/api", Framework: projectconfig.Framework{Name: appbuild.FrameworkGo}},
 		{Name: "webhooks", Path: filepath.Join("apps", "web-hooks"), Framework: projectconfig.Framework{Name: appbuild.FrameworkPython}},
-		{Name: "store", Path: filepath.Join("apps", "store"), Folder: "/store", Compute: string(providerkit.ComputeContainer)},
-		{Name: "worker", Path: filepath.Join("apps", "worker"), Folder: "/worker", Compute: string(providerkit.ComputeContainer)},
+		{Name: "store", Path: filepath.Join("apps", "store"), Folder: "/store", Compute: string(provider.ComputeContainer)},
+		{Name: "worker", Path: filepath.Join("apps", "worker"), Folder: "/worker", Compute: string(provider.ComputeContainer)},
 	}}
 	writeApp(t, filepath.Join(root, "apps", "store", "package.json"), "{}")
 	writeApp(t, filepath.Join(root, "apps", "worker", "go.mod"), "module example.com/worker")

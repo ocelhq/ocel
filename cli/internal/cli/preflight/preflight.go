@@ -14,7 +14,7 @@ import (
 	streamv1 "github.com/ocelhq/ocel/pkg/proto/cli/stream/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func Run(ctx context.Context, rep runui.Reporter, runner *providerclient.Runner, cfg *projectconfig.Config, required environmentv1.Tier, slug string, domains []string, frameworks []string, bootstrapHint string) (*contractv1.PreflightResponse, error) {
@@ -81,7 +81,7 @@ func Frameworks(cfg *projectconfig.Config) []string {
 func Containers(cfg *projectconfig.Config) []*contractv1.ContainerApp {
 	var containers []*contractv1.ContainerApp
 	for _, app := range cfg.Apps {
-		if app.Compute == string(providerkit.ComputeContainer) {
+		if app.Compute == string(provider.ComputeContainer) {
 			containers = append(containers, &contractv1.ContainerApp{App: app.Name, Arch: app.Framework.Arch})
 		}
 	}

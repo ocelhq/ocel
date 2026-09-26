@@ -12,7 +12,7 @@ import (
 	"time"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -234,7 +234,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 		t.Fatal(err)
 	}
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 			t.Fatalf("Apply(%s) behind %s = %v", class, front, err)
 		}
 	}
@@ -250,8 +250,8 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 
 	fixtures(t, vm)
 	d := vm.deployingBehind(t, proxy)
-	if err := d.PreflightDeploy(ctx, providerkit.DeployPreflight{Plan: providerkit.DeployPlan{
-		Slug: frontedSlug, Class: edge.ClassProduction, Apps: []providerkit.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
+	if err := d.PreflightDeploy(ctx, provider.DeployPreflight{Plan: provider.DeployPlan{
+		Slug: frontedSlug, Class: edge.ClassProduction, Apps: []provider.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
 	}}); err != nil {
 		t.Fatalf("PreflightDeploy() behind %s = %v", front, err)
 	}
@@ -304,12 +304,12 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 		meanwhile(vm)
 	}
 
-	checks, err := d.CheckHost(ctx, providerkit.HostCheckRequest{Class: edge.ClassProduction})
+	checks, err := d.CheckHost(ctx, provider.HostCheckRequest{Class: edge.ClassProduction})
 	if err != nil {
 		t.Fatalf("CheckHost() = %v", err)
 	}
 	for _, check := range checks {
-		if check.Verdict == providerkit.HostFail {
+		if check.Verdict == provider.HostFail {
 			t.Errorf("%s fails behind %s: %s", check.Subject, front, check.Finding)
 		}
 	}

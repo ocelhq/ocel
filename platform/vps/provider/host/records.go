@@ -8,7 +8,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -56,7 +56,7 @@ func (r *Records) tier(ctx context.Context, name records.Name) (edge.Class, stri
 func unbootstrapped(class edge.Class) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"this host has no ocel bootstrap\nRun `%s`",
-		providerkit.BootstrapCommand(class))
+		provider.BootstrapCommand(class))
 }
 
 func (r *Records) Read(ctx context.Context, name records.Name) (records.Record, error) {

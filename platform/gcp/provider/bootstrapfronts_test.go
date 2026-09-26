@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
@@ -72,13 +72,13 @@ func surveyed(features ...string) survey {
 	}
 }
 
-func featureStack(described providerkit.BootstrapReading, name string) (providerkit.BootstrapStack, bool) {
+func featureStack(described provider.BootstrapReading, name string) (provider.BootstrapStack, bool) {
 	for _, stack := range described.Stacks {
 		if stack.Feature == name {
 			return stack, true
 		}
 	}
-	return providerkit.BootstrapStack{}, false
+	return provider.BootstrapStack{}, false
 }
 
 func TestAFeatureWhoseFrontNeverCameUpIsReportedAbsentSoTheGateRaisesItAgain(t *testing.T) {
@@ -145,7 +145,7 @@ func TestRemovingTheFeatureTakesTheLoadBalancerDownRatherThanJustForgettingIt(t 
 	t.Parallel()
 
 	b, registry := fronting(t)
-	req := providerkit.BootstrapRequest{Class: edge.ClassProduction, Remove: []string{albFeature}}
+	req := provider.BootstrapRequest{Class: edge.ClassProduction, Remove: []string{albFeature}}
 	if err := b.dropFronts(context.Background(), surveyed(albFeature), req, nil); err != nil {
 		t.Fatalf("dropFronts = %v", err)
 	}
@@ -160,7 +160,7 @@ func TestAFeatureWhoseFrontRefusedToComeDownStaysStamped(t *testing.T) {
 
 	b, registry := fronting(t)
 	registry.front.refusal = refusal.Refuse(refusal.CodeInvalid, "shop.example.com is still bound")
-	req := providerkit.BootstrapRequest{Class: edge.ClassProduction, Remove: []string{albFeature}}
+	req := provider.BootstrapRequest{Class: edge.ClassProduction, Remove: []string{albFeature}}
 
 	if err := b.dropFronts(context.Background(), surveyed(albFeature), req, nil); err == nil {
 		t.Fatal("dropFronts = nil though the front refused, and the apply would go on to un-stamp a feature that is still standing")
@@ -175,7 +175,7 @@ func TestRemovingTheFeatureIsRefusedWhileAHostnameIsStillBoundToItsFront(t *test
 
 	b, registry := fronting(t)
 	registry.front.bound = []string{"shop.example.com"}
-	req := providerkit.BootstrapRequest{Class: edge.ClassProduction, Remove: []string{albFeature}}
+	req := provider.BootstrapRequest{Class: edge.ClassProduction, Remove: []string{albFeature}}
 
 	var refusal refusal.Refusal
 	err := b.dropFronts(context.Background(), surveyed(albFeature), req, nil)
@@ -192,7 +192,7 @@ func TestAFeatureNothingStoodUpIsNotTornDownOnRemoval(t *testing.T) {
 	t.Parallel()
 
 	b, registry := fronting(t)
-	req := providerkit.BootstrapRequest{Class: edge.ClassProduction, Remove: []string{albFeature}}
+	req := provider.BootstrapRequest{Class: edge.ClassProduction, Remove: []string{albFeature}}
 	if err := b.dropFronts(context.Background(), surveyed(), req, nil); err != nil {
 		t.Fatalf("dropFronts = %v", err)
 	}
@@ -205,7 +205,7 @@ func TestTheFrontsABootstrapRaisesComeFromWhatItsFeaturesDeclareTheyNeed(t *test
 	t.Parallel()
 
 	b, registry := fronting(t)
-	req := providerkit.BootstrapRequest{Class: edge.ClassProduction, Features: []string{albFeature}}
+	req := provider.BootstrapRequest{Class: edge.ClassProduction, Features: []string{albFeature}}
 	if err := b.raiseFronts(context.Background(), req, nil); err != nil {
 		t.Fatalf("raiseFronts = %v", err)
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -28,36 +29,36 @@ func runPorts(t *testing.T, suite Suite) {
 	if suite.New == nil {
 		t.Skip("the suite carries no constructor, so there are no ports to exercise")
 	}
-	provider, err := suite.New(context.Background(), providerkit.Settings{Options: suite.Options})
+	p, err := suite.New(context.Background(), provider.Settings{Options: suite.Options})
 	if err != nil {
 		t.Fatalf("New() error = %v, want a provider", err)
 	}
-	RunPorts(t, provider)
+	RunPorts(t, p)
 }
 
-func RunPorts(t *testing.T, provider providerkit.Provider) {
+func RunPorts(t *testing.T, p provider.Provider) {
 	t.Helper()
 
-	t.Run("RecordStore", func(t *testing.T) { RunRecordStore(t, provider.Records()) })
-	t.Run("Cipher", func(t *testing.T) { RunCipher(t, provider.Cipher()) })
-	facts := provider.Facts()
-	t.Run("ArtifactStore", func(t *testing.T) { RunArtifactStore(t, facts, provider.Artifacts()) })
+	t.Run("RecordStore", func(t *testing.T) { RunRecordStore(t, p.Records()) })
+	t.Run("Cipher", func(t *testing.T) { RunCipher(t, p.Cipher()) })
+	facts := p.Facts()
+	t.Run("ArtifactStore", func(t *testing.T) { RunArtifactStore(t, facts, p.Artifacts()) })
 	t.Run("Stacks", func(t *testing.T) {
-		RunStacks(t, facts, provider.Stacks(), provider.Artifacts(), provider.Records())
+		RunStacks(t, facts, p.Stacks(), p.Artifacts(), p.Records())
 	})
 	t.Run("Bootstrap", func(t *testing.T) {
-		RunBootstrap(t, bootstrapOf(t, provider), facts.DefaultEdge)
+		RunBootstrap(t, bootstrapOf(t, p), facts.DefaultEdge)
 	})
-	t.Run("Credentials", func(t *testing.T) { RunCredentials(t, provider.Credentials()) })
-	t.Run("Edges", func(t *testing.T) { RunEdges(t, facts, provider.Edges()) })
-	t.Run("DNS", func(t *testing.T) { RunDNS(t, facts, provider.DNS()) })
+	t.Run("Credentials", func(t *testing.T) { RunCredentials(t, p.Credentials()) })
+	t.Run("Edges", func(t *testing.T) { RunEdges(t, facts, p.Edges()) })
+	t.Run("DNS", func(t *testing.T) { RunDNS(t, facts, p.DNS()) })
 }
 
-func bootstrapOf(t *testing.T, provider providerkit.Provider) providerkit.Bootstrap {
+func bootstrapOf(t *testing.T, p provider.Provider) provider.Bootstrap {
 	t.Helper()
-	bootstrap, err := provider.Bootstrap(provider.Facts().DefaultEdge)
+	bootstrap, err := p.Bootstrap(p.Facts().DefaultEdge)
 	if err != nil {
-		t.Fatalf("Bootstrap(%q) error = %v, want the bootstrap for this provider's default edge", provider.Facts().DefaultEdge, err)
+		t.Fatalf("Bootstrap(%q) error = %v, want the bootstrap for this provider's default edge", p.Facts().DefaultEdge, err)
 	}
 	return bootstrap
 }
@@ -297,7 +298,7 @@ func RunCipher(t *testing.T, cipher records.Cipher) {
 	}
 }
 
-func RunBootstrap(t *testing.T, bootstrap providerkit.Bootstrap, kind edge.Kind) {
+func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -322,8 +323,8 @@ func RunBootstrap(t *testing.T, bootstrap providerkit.Bootstrap, kind edge.Kind)
 				}
 			}
 			for _, need := range f.Needs {
-				if !strings.HasPrefix(need, providerkit.NeedsFrameworkPrefix) && !strings.HasPrefix(need, providerkit.NeedsEdgePrefix) {
-					t.Errorf("%s needs %q, which is neither a %s nor an %s token", f.Name, need, providerkit.NeedsFrameworkPrefix, providerkit.NeedsEdgePrefix)
+				if !strings.HasPrefix(need, provider.NeedsFrameworkPrefix) && !strings.HasPrefix(need, provider.NeedsEdgePrefix) {
+					t.Errorf("%s needs %q, which is neither a %s nor an %s token", f.Name, need, provider.NeedsFrameworkPrefix, provider.NeedsEdgePrefix)
 				}
 			}
 		}
@@ -355,7 +356,7 @@ func RunBootstrap(t *testing.T, bootstrap providerkit.Bootstrap, kind edge.Kind)
 		if err != nil {
 			t.Fatalf("Describe(%s) = %v", class, err)
 		}
-		plan, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class})
+		plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class})
 		if err != nil {
 			t.Fatalf("Plan(%s) = %v", class, err)
 		}
@@ -364,20 +365,20 @@ func RunBootstrap(t *testing.T, bootstrap providerkit.Bootstrap, kind edge.Kind)
 			if group.Name == "" {
 				t.Errorf("Plan() returned %+v, and no plan can render a nameless group", group)
 			}
-			if !providerkit.ValidChangeAction(group.Action) {
+			if !provider.ValidChangeAction(group.Action) {
 				t.Errorf("Plan() returned group action %q, which is none the plan knows", group.Action)
 			}
-			if group.Action == providerkit.ActionUpdate && len(group.Changes) == 0 && group.Reason == "" {
+			if group.Action == provider.ActionUpdate && len(group.Changes) == 0 && group.Reason == "" {
 				t.Errorf("Plan() returned %q as an update with neither children nor a reason, which reads as no change at all", group.Name)
 			}
-			if group.Action == providerkit.ActionCreate {
+			if group.Action == provider.ActionCreate {
 				creates++
 			}
 			for _, change := range group.Changes {
 				if change.Name == "" {
 					t.Errorf("Plan() returned %+v under %q, and no plan can render a nameless change", change, group.Name)
 				}
-				if !providerkit.ValidChangeAction(change.Action) {
+				if !provider.ValidChangeAction(change.Action) {
 					t.Errorf("Plan() returned change action %q, which is none the plan knows", change.Action)
 				}
 			}
@@ -393,11 +394,11 @@ func RunBootstrap(t *testing.T, bootstrap providerkit.Bootstrap, kind edge.Kind)
 		}
 		class := edge.ClassProduction
 		drop := wanted
-		plan, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class, Remove: drop})
+		plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, Remove: drop})
 		if err != nil {
 			t.Fatalf("Plan(%s, drop %v) = %v", class, drop, err)
 		}
-		leaving := map[string]providerkit.ChangeAction{}
+		leaving := map[string]provider.ChangeAction{}
 		for _, group := range plan.Groups {
 			if group.Feature != "" {
 				leaving[group.Feature] = group.Action
@@ -409,7 +410,7 @@ func RunBootstrap(t *testing.T, bootstrap providerkit.Bootstrap, kind edge.Kind)
 				t.Errorf("Plan() drops %q and shows no group for it; the plan is the only thing asked about before the apply", name)
 				continue
 			}
-			if action != providerkit.ActionDelete {
+			if action != provider.ActionDelete {
 				t.Errorf("Plan() shows %q as %q though it was dropped, and a drop takes its stack down", name, action)
 			}
 		}
@@ -421,7 +422,7 @@ func RunBootstrap(t *testing.T, bootstrap providerkit.Bootstrap, kind edge.Kind)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, Features: raising}, nil); err != nil {
+		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, Features: raising}, nil); err != nil {
 			t.Fatalf("Apply() of what the %q edge stands up (%v) = %v", kind, raising, err)
 		}
 
@@ -443,14 +444,14 @@ func RunBootstrap(t *testing.T, bootstrap providerkit.Bootstrap, kind edge.Kind)
 			if group.Kind == "" || group.Name == "" {
 				t.Errorf("PlanRemove() returned %+v, and a removal plan cannot render a nameless group", group)
 			}
-			if !providerkit.ValidChangeAction(group.Action) {
+			if !provider.ValidChangeAction(group.Action) {
 				t.Errorf("PlanRemove() returned action %q, which is none the plan knows", group.Action)
 			}
 			for _, change := range group.Changes {
 				if change.Kind == "" || change.Name == "" {
 					t.Errorf("PlanRemove() returned row %+v, and a removal plan cannot render a nameless row", change)
 				}
-				if !providerkit.ValidChangeAction(change.Action) {
+				if !provider.ValidChangeAction(change.Action) {
 					t.Errorf("PlanRemove() returned row action %q, which is none the plan knows", change.Action)
 				}
 			}
@@ -478,7 +479,7 @@ func RunBootstrap(t *testing.T, bootstrap providerkit.Bootstrap, kind edge.Kind)
 		for i := len(levels) - 1; i >= 0; i-- {
 			dropping = append(dropping, levels[i]...)
 		}
-		if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, Remove: dropping}, nil); err != nil {
+		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, Remove: dropping}, nil); err != nil {
 			t.Fatalf("Apply() dropping what the %q edge stands up (%v) = %v", kind, dropping, err)
 		}
 		if err := bootstrap.Remove(ctx, class, nil); err != nil {
@@ -487,7 +488,7 @@ func RunBootstrap(t *testing.T, bootstrap providerkit.Bootstrap, kind edge.Kind)
 	})
 }
 
-func applicable(catalogue []providerkit.Feature, kind edge.Kind) ([]string, error) {
+func applicable(catalogue []provider.Feature, kind edge.Kind) ([]string, error) {
 	required, err := providerkit.RequiredFeatures(catalogue, nil, string(kind))
 	if err != nil {
 		return nil, err
@@ -523,7 +524,7 @@ func applicable(catalogue []providerkit.Feature, kind edge.Kind) ([]string, erro
 	return wanted, nil
 }
 
-func ordered(catalogue []providerkit.Feature, wanted []string) ([]string, error) {
+func ordered(catalogue []provider.Feature, wanted []string) ([]string, error) {
 	levels, err := providerkit.FeatureLevels(catalogue, wanted)
 	if err != nil {
 		return nil, err
@@ -535,7 +536,7 @@ func ordered(catalogue []providerkit.Feature, wanted []string) ([]string, error)
 	return out, nil
 }
 
-func RunCredentials(t *testing.T, credentials providerkit.Credentials) {
+func RunCredentials(t *testing.T, credentials provider.Credentials) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -563,7 +564,7 @@ func RunCredentials(t *testing.T, credentials providerkit.Credentials) {
 	})
 
 	t.Run("permissions are rendered for either tier, or said not to exist yet", func(t *testing.T) {
-		for _, tier := range []providerkit.CredentialTier{providerkit.TierBootstrap, providerkit.TierDeploy} {
+		for _, tier := range []provider.CredentialTier{provider.TierBootstrap, provider.TierDeploy} {
 			if err := permissionsRendered(credentials, tier); err != nil {
 				t.Errorf("Permissions(%s) = %v, want the permissions that tier needs or a %s refusal saying there are none to render yet",
 					tier, err, refusal.CodeNotReady)
@@ -572,7 +573,7 @@ func RunCredentials(t *testing.T, credentials providerkit.Credentials) {
 	})
 }
 
-func permissionsRendered(credentials providerkit.Credentials, tier providerkit.CredentialTier) error {
+func permissionsRendered(credentials provider.Credentials, tier provider.CredentialTier) error {
 	_, err := credentials.Permissions(tier)
 	var refused refusal.Refusal
 	if errors.As(err, &refused) && refused.Code == refusal.CodeNotReady {
@@ -581,11 +582,11 @@ func permissionsRendered(credentials providerkit.Credentials, tier providerkit.C
 	return err
 }
 
-func RunArtifactStore(t *testing.T, facts providerkit.Facts, artifacts providerkit.ArtifactStore) {
+func RunArtifactStore(t *testing.T, facts provider.Facts, artifacts provider.ArtifactStore) {
 	t.Helper()
 
 	ctx := context.Background()
-	ref := providerkit.ArtifactRef{Class: edge.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
+	ref := provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
 	body := []byte("a build artifact")
 
 	if !facts.StoresArtifacts {
@@ -613,7 +614,7 @@ func RunArtifactStore(t *testing.T, facts providerkit.Facts, artifacts providerk
 		if err != nil || !held {
 			t.Errorf("Has() of an artifact just put = %v, %v, want true: a deploy re-uploads every unchanged build without it", held, err)
 		}
-		absent := providerkit.ArtifactRef{Class: ref.Class, Bucket: ref.Bucket, Key: ref.Key + ".never-written"}
+		absent := provider.ArtifactRef{Class: ref.Class, Bucket: ref.Bucket, Key: ref.Key + ".never-written"}
 		held, err = artifacts.Has(ctx, absent)
 		if err != nil {
 			t.Errorf("Has() of a key nothing wrote = %v, want a plain false", err)
@@ -624,7 +625,7 @@ func RunArtifactStore(t *testing.T, facts providerkit.Facts, artifacts providerk
 	})
 
 	t.Run("Open of a key nothing wrote refuses rather than answering empty", func(t *testing.T) {
-		absent := providerkit.ArtifactRef{Class: ref.Class, Bucket: ref.Bucket, Key: ref.Key + ".never-written"}
+		absent := provider.ArtifactRef{Class: ref.Class, Bucket: ref.Bucket, Key: ref.Key + ".never-written"}
 		opened, err := artifacts.Open(ctx, absent)
 		if err == nil {
 			opened.Close()
@@ -633,7 +634,7 @@ func RunArtifactStore(t *testing.T, facts providerkit.Facts, artifacts providerk
 	})
 
 	t.Run("RemovePrefix takes the prefix and nothing beside it", func(t *testing.T) {
-		kept := providerkit.ArtifactRef{Class: ref.Class, Bucket: ref.Bucket, Key: "conformance/" + t.Name() + "-sibling/bundle.zip"}
+		kept := provider.ArtifactRef{Class: ref.Class, Bucket: ref.Bucket, Key: "conformance/" + t.Name() + "-sibling/bundle.zip"}
 		if err := artifacts.Put(ctx, kept, bytes.NewReader(body)); err != nil {
 			t.Fatal(err)
 		}
@@ -649,9 +650,9 @@ func RunArtifactStore(t *testing.T, facts providerkit.Facts, artifacts providerk
 
 	t.Run("RemovePrefix of one class leaves the other class's artifacts", func(t *testing.T) {
 		key := "conformance/" + t.Name() + "/bundle.zip"
-		production := providerkit.ArtifactRef{Class: edge.ClassProduction, Bucket: ref.Bucket, Key: key}
-		preview := providerkit.ArtifactRef{Class: edge.ClassPreview, Bucket: ref.Bucket, Key: key}
-		for _, at := range []providerkit.ArtifactRef{production, preview} {
+		production := provider.ArtifactRef{Class: edge.ClassProduction, Bucket: ref.Bucket, Key: key}
+		preview := provider.ArtifactRef{Class: edge.ClassPreview, Bucket: ref.Bucket, Key: key}
+		for _, at := range []provider.ArtifactRef{production, preview} {
 			if err := artifacts.Put(ctx, at, bytes.NewReader(body)); err != nil {
 				t.Fatal(err)
 			}
@@ -673,7 +674,7 @@ func RunArtifactStore(t *testing.T, facts providerkit.Facts, artifacts providerk
 	})
 }
 
-func runStorelessArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore, ref providerkit.ArtifactRef) {
+func runStorelessArtifactStore(t *testing.T, artifacts provider.ArtifactStore, ref provider.ArtifactRef) {
 	t.Helper()
 
 	ctx := context.Background()
@@ -724,15 +725,15 @@ func runStorelessArtifactStore(t *testing.T, artifacts providerkit.ArtifactStore
 	})
 }
 
-func declared(serves []providerkit.BindingType) []providerkit.Resource {
-	resources := make([]providerkit.Resource, 0, len(serves))
+func declared(serves []provider.BindingType) []provider.Resource {
+	resources := make([]provider.Resource, 0, len(serves))
 	for _, kind := range serves {
-		resources = append(resources, providerkit.Resource{Name: "c-" + string(kind), Type: kind})
+		resources = append(resources, provider.Resource{Name: "c-" + string(kind), Type: kind})
 	}
 	return resources
 }
 
-func planRows(t *testing.T, plan providerkit.Plan, verb string) int {
+func planRows(t *testing.T, plan provider.Plan, verb string) int {
 	t.Helper()
 
 	rows := 0
@@ -740,14 +741,14 @@ func planRows(t *testing.T, plan providerkit.Plan, verb string) int {
 		if group.Name == "" {
 			t.Errorf("%s() returned %+v, and no plan can render a nameless group", verb, group)
 		}
-		if !providerkit.ValidChangeAction(group.Action) {
+		if !provider.ValidChangeAction(group.Action) {
 			t.Errorf("%s() returned group action %q, which is none the plan knows", verb, group.Action)
 		}
 		for _, change := range group.Changes {
 			if change.Name == "" {
 				t.Errorf("%s() returned %+v under %q, and no plan can render a nameless row", verb, change, group.Name)
 			}
-			if !providerkit.ValidChangeAction(change.Action) {
+			if !provider.ValidChangeAction(change.Action) {
 				t.Errorf("%s() returned change action %q, which is none the plan knows", verb, change.Action)
 			}
 			rows++
@@ -796,11 +797,11 @@ func writtenArtifact(t *testing.T) string {
 	return path
 }
 
-func RunStacks(t *testing.T, facts providerkit.Facts, stacks providerkit.Stacks, artifacts providerkit.ArtifactStore, records records.Store) {
+func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artifacts provider.ArtifactStore, records records.Store) {
 	t.Helper()
 
 	ctx := context.Background()
-	ref := providerkit.StackRef{
+	ref := provider.StackRef{
 		Project: "conformance",
 		Class:   edge.ClassPreview,
 		Name:    naming.InfraStack("conformance"),
@@ -819,9 +820,9 @@ func RunStacks(t *testing.T, facts providerkit.Facts, stacks providerkit.Stacks,
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a release asks for nothing")
 		}
-		planned, err := stacks.Plan(ctx, providerkit.StackPlan{
+		planned, err := stacks.Plan(ctx, provider.StackPlan{
 			Ref:       ref,
-			Kind:      providerkit.StackInfra,
+			Kind:      provider.StackInfra,
 			Resources: resources,
 		}, nil)
 		if err != nil {
@@ -837,7 +838,7 @@ func RunStacks(t *testing.T, facts providerkit.Facts, stacks providerkit.Stacks,
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a release asks for nothing")
 		}
-		bare := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackInfra, Resources: resources}
+		bare := provider.StackPlan{Ref: ref, Kind: provider.StackInfra, Resources: resources}
 		without, err := stacks.Plan(ctx, bare, nil)
 		if err != nil {
 			t.Fatalf("Plan() of a release shipping no artifact = %v", err)
@@ -845,9 +846,9 @@ func RunStacks(t *testing.T, facts providerkit.Facts, stacks providerkit.Stacks,
 
 		path := writtenArtifact(t)
 		shipping := bare
-		shipping.Uploads = []providerkit.Upload{{
+		shipping.Uploads = []provider.Upload{{
 			Name:   "conformance",
-			Ref:    providerkit.ArtifactRef{Class: ref.Class, Bucket: providerkit.StoreFunctions, Key: uploadKey(t)},
+			Ref:    provider.ArtifactRef{Class: ref.Class, Bucket: provider.StoreFunctions, Key: uploadKey(t)},
 			Path:   path,
 			Digest: conformanceArtifactDigest,
 		}}
@@ -903,7 +904,7 @@ func RunStacks(t *testing.T, facts providerkit.Facts, stacks providerkit.Stacks,
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a release asks for nothing")
 		}
-		bare := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackInfra, Resources: resources}
+		bare := provider.StackPlan{Ref: ref, Kind: provider.StackInfra, Resources: resources}
 		without, err := stacks.Plan(ctx, bare, nil)
 		if err != nil {
 			t.Fatalf("Plan() of a release pushing no image = %v", err)
@@ -911,7 +912,7 @@ func RunStacks(t *testing.T, facts providerkit.Facts, stacks providerkit.Stacks,
 
 		store := &countedImages{}
 		pushing := bare
-		pushing.Images = providerkit.ImagePushes{Store: store, Pushes: []images.Push{{
+		pushing.Images = provider.ImagePushes{Store: store, Pushes: []images.Push{{
 			App:      "conformance",
 			Source:   "ocel/conformance@sha256:" + conformanceImageDigest,
 			ImageRef: "registry.invalid/conformance:sha256-" + conformanceImageDigest,
@@ -946,9 +947,9 @@ func RunStacks(t *testing.T, facts providerkit.Facts, stacks providerkit.Stacks,
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a plan can ask for nothing")
 		}
-		result, err := stacks.Provision(ctx, providerkit.StackPlan{
+		result, err := stacks.Provision(ctx, provider.StackPlan{
 			Ref:       ref,
-			Kind:      providerkit.StackInfra,
+			Kind:      provider.StackInfra,
 			Resources: resources,
 		}, nil)
 		if err != nil {
@@ -958,13 +959,13 @@ func RunStacks(t *testing.T, facts providerkit.Facts, stacks providerkit.Stacks,
 			t.Fatalf("Provision() returned %d bindings for %d resources, and an app binds to each by name", len(result.Bindings), len(resources))
 		}
 		for _, binding := range result.Bindings {
-			if err := providerkit.VerifyProperties(binding); err != nil {
+			if err := provider.VerifyProperties(binding); err != nil {
 				t.Errorf("Provision() returned a binding the kit refuses to record: %v", err)
 			}
 		}
 
 		if records != nil {
-			recorded := providerkit.RecordedStack{Kind: providerkit.StackInfra, Bindings: result.Bindings}
+			recorded := providerkit.RecordedStack{Kind: provider.StackInfra, Bindings: result.Bindings}
 			if err := providerkit.WriteStack(ctx, records, ref.Class, ref.Project, ref.Name, recorded); err != nil {
 				t.Fatalf("recording what the release returned, as the kit does after every Provision() = %v", err)
 			}
@@ -984,7 +985,7 @@ func RunStacks(t *testing.T, facts providerkit.Facts, stacks providerkit.Stacks,
 		}
 		for _, group := range removal.Groups {
 			for _, change := range group.Changes {
-				if change.Action != providerkit.ActionDelete && change.Action != providerkit.ActionDisableThenDelete {
+				if change.Action != provider.ActionDelete && change.Action != provider.ActionDisableThenDelete {
 					t.Errorf("PlanDestroy() shows %s as %q, and a teardown takes everything down", change.Name, change.Action)
 				}
 			}
@@ -996,10 +997,10 @@ func RunStacks(t *testing.T, facts providerkit.Facts, stacks providerkit.Stacks,
 	})
 
 	t.Run("a refusal names a code the CLI can render", func(t *testing.T) {
-		unserved := providerkit.StackPlan{
+		unserved := provider.StackPlan{
 			Ref:       ref,
-			Kind:      providerkit.StackInfra,
-			Resources: []providerkit.Resource{{Name: "unserved", Type: "no-such-primitive"}},
+			Kind:      provider.StackInfra,
+			Resources: []provider.Resource{{Name: "unserved", Type: "no-such-primitive"}},
 		}
 		result, err := stacks.Provision(ctx, unserved, nil)
 		if err == nil {

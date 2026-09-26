@@ -13,11 +13,12 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func planned(t *testing.T, stacks cfn.API, class string, req Request) []providerkit.ChangeGroup {
+func planned(t *testing.T, stacks cfn.API, class string, req Request) []provider.ChangeGroup {
 	t.Helper()
 
 	ctx := context.Background()
@@ -26,9 +27,9 @@ func planned(t *testing.T, stacks cfn.API, class string, req Request) []provider
 		t.Fatalf("Read: %v", err)
 	}
 	deployed := read.Deployed
-	described := providerkit.BootstrapReading{Class: edge.Class(class), Present: deployed.Present}
+	described := provider.BootstrapReading{Class: edge.Class(class), Present: deployed.Present}
 	for _, stack := range deployed.Stacks {
-		described.Stacks = append(described.Stacks, providerkit.BootstrapStack{
+		described.Stacks = append(described.Stacks, provider.BootstrapStack{
 			Name:          stack.Name,
 			Feature:       stack.Feature,
 			Present:       stack.Present,
@@ -38,14 +39,14 @@ func planned(t *testing.T, stacks cfn.API, class string, req Request) []provider
 	}
 	groups, err := PlanChanges(ctx, stacks, read, req, providerkit.DeriveGroups(
 		NameStacks(defaultNamespace, described), Catalogue(),
-		providerkit.BootstrapRequest{Class: edge.Class(class), Features: req.Features, Remove: req.Remove}))
+		provider.BootstrapRequest{Class: edge.Class(class), Features: req.Features, Remove: req.Remove}))
 	if err != nil {
 		t.Fatalf("PlanChanges: %v", err)
 	}
 	return groups
 }
 
-func groupNamed(t *testing.T, groups []providerkit.ChangeGroup, name string) providerkit.ChangeGroup {
+func groupNamed(t *testing.T, groups []provider.ChangeGroup, name string) provider.ChangeGroup {
 	t.Helper()
 
 	for _, group := range groups {
@@ -54,10 +55,10 @@ func groupNamed(t *testing.T, groups []providerkit.ChangeGroup, name string) pro
 		}
 	}
 	t.Fatalf("the plan carries no group for %s", name)
-	return providerkit.ChangeGroup{}
+	return provider.ChangeGroup{}
 }
 
-func changeNamed(t *testing.T, group providerkit.ChangeGroup, name string) providerkit.Change {
+func changeNamed(t *testing.T, group provider.ChangeGroup, name string) provider.Change {
 	t.Helper()
 
 	for _, change := range group.Changes {
@@ -66,7 +67,7 @@ func changeNamed(t *testing.T, group providerkit.ChangeGroup, name string) provi
 		}
 	}
 	t.Fatalf("%s carries no change for %s; it carries %v", group.Name, name, group.Changes)
-	return providerkit.Change{}
+	return provider.Change{}
 }
 
 func (f *fakeCFN) misstamp(stackName string) {
@@ -79,11 +80,11 @@ func TestPlanOnAFreshAccountReadsEveryResourceOffTheTemplates(t *testing.T) {
 	groups := planned(t, newFakeCFN(), ClassProduction, everything())
 
 	core := groupNamed(t, groups, coreStackName)
-	if core.Action != providerkit.ActionCreate {
+	if core.Action != provider.ActionCreate {
 		t.Errorf("the core group is %q, want it created where nothing stands", core.Action)
 	}
 	bucket := changeNamed(t, core, "StateBucket")
-	if bucket.Kind != "AWS::S3::Bucket" || bucket.Action != providerkit.ActionCreate {
+	if bucket.Kind != "AWS::S3::Bucket" || bucket.Action != provider.ActionCreate {
 		t.Errorf("StateBucket = %+v, want the bucket its own template declares, created", bucket)
 	}
 	for _, group := range groups {
@@ -108,17 +109,17 @@ func TestPlanReadsAnUpdateOffAChangeSetItNeverExecutes(t *testing.T) {
 	before := stacks.updates
 
 	group := groupNamed(t, planned(t, stacks, ClassProduction, everything()), stack)
-	if group.Action != providerkit.ActionUpdate {
+	if group.Action != provider.ActionUpdate {
 		t.Fatalf("%s is %q, want it updated where its content is behind", stack, group.Action)
 	}
 	queue := changeNamed(t, group, "RevalidateQueue")
-	if queue.Action != providerkit.ActionReplace {
+	if queue.Action != provider.ActionReplace {
 		t.Errorf("RevalidateQueue = %q, want a replacement where CloudFormation cannot change it in place", queue.Action)
 	}
 	if queue.Reason == "" {
 		t.Error("the replacement says nothing about why the queue cannot be changed in place")
 	}
-	if added := changeNamed(t, group, "Revalidator"); added.Action != providerkit.ActionCreate {
+	if added := changeNamed(t, group, "Revalidator"); added.Action != provider.ActionCreate {
 		t.Errorf("Revalidator = %q, want it created", added.Action)
 	}
 	if stacks.updates != before {
@@ -156,7 +157,7 @@ func TestPlanStillUpdatesAStackWhoseStampAloneIsBehind(t *testing.T) {
 
 	groups := planned(t, stacks, ClassProduction, everything())
 	group := groupNamed(t, groups, stack)
-	if group.Action != providerkit.ActionUpdate {
+	if group.Action != provider.ActionUpdate {
 		t.Errorf("%s is %q, want it updated where only its stamp is behind — the restamp is on the apply path", stack, group.Action)
 	}
 	if len(group.Changes) != 0 {
@@ -165,7 +166,7 @@ func TestPlanStillUpdatesAStackWhoseStampAloneIsBehind(t *testing.T) {
 	if group.Reason == "" {
 		t.Errorf("%s says nothing about why it is updated with nothing under it", stack)
 	}
-	if other := groupNamed(t, groups, coreStackName); other.Action != providerkit.ActionKeep {
+	if other := groupNamed(t, groups, coreStackName); other.Action != provider.ActionKeep {
 		t.Errorf("%s is %q, want the stacks nothing is stale about kept", coreStackName, other.Action)
 	}
 	if left := stacks.leftBehind(); len(left) != 0 {
@@ -217,18 +218,18 @@ func TestPlanReadsEveryGroupAtOnceAndHandsThemBackInOrder(t *testing.T) {
 		t.Fatalf("Read: %v", err)
 	}
 
-	var groups []providerkit.ChangeGroup
+	var groups []provider.ChangeGroup
 	for _, feature := range append([]string{""}, featureNames()...) {
 		stack := coreStackName
 		if feature != "" {
 			stack = defaultNamespace.FeatureStackName(feature, ClassProduction)
 		}
 		stacks.fallBehind(stack)
-		groups = append(groups, providerkit.ChangeGroup{
-			Kind:    providerkit.StackGroupKind,
+		groups = append(groups, provider.ChangeGroup{
+			Kind:    provider.StackGroupKind,
 			Name:    stack,
 			Feature: feature,
-			Action:  providerkit.ActionUpdate,
+			Action:  provider.ActionUpdate,
 		})
 	}
 	gate := gateOf(stacks, min(len(groups), planFanOut))
@@ -268,13 +269,13 @@ func TestPlanSaysSoWhenItCannotDiffAnUpdate(t *testing.T) {
 	stacks.fallBehind(stack)
 
 	group := groupNamed(t, planned(t, unplannable{stacks}, ClassProduction, everything()), stack)
-	if group.Action != providerkit.ActionUpdate {
+	if group.Action != provider.ActionUpdate {
 		t.Fatalf("%s is %q, want it still updated where the diff could not be read", stack, group.Action)
 	}
 	if len(group.Changes) != 0 {
 		t.Errorf("%s carries %v though nothing could be read off CloudFormation", stack, group.Changes)
 	}
-	if !strings.Contains(group.Reason, providerkit.DetailUnavailable) {
+	if !strings.Contains(group.Reason, provider.DetailUnavailable) {
 		t.Errorf("%s reads %q, want it to own up to the detail it could not read", stack, group.Reason)
 	}
 }
@@ -288,11 +289,11 @@ func TestPlanListsWhatADroppedFeatureTakesWithIt(t *testing.T) {
 		Remove:   []string{FeatureISR},
 	})
 	group := groupNamed(t, groups, stack)
-	if group.Action != providerkit.ActionDelete || group.Feature != FeatureISR {
+	if group.Action != provider.ActionDelete || group.Feature != FeatureISR {
 		t.Fatalf("%s = %+v, want the dropped feature deleted", stack, group)
 	}
 	queue := changeNamed(t, group, "RevalidateQueue")
-	if queue.Action != providerkit.ActionDelete || queue.Kind == "" {
+	if queue.Action != provider.ActionDelete || queue.Kind == "" {
 		t.Errorf("RevalidateQueue = %+v, want the queue the stack holds deleted", queue)
 	}
 }
@@ -315,7 +316,7 @@ func TestPlanListsTheResourcesTheStandingStackHoldsNotTheOnesThisBuildWouldRende
 		Remove:   []string{FeatureISR},
 	}), stack)
 	leftover := changeNamed(t, group, "LeftoverQueue")
-	if leftover.Kind != "AWS::SQS::Queue" || leftover.Action != providerkit.ActionDelete {
+	if leftover.Kind != "AWS::SQS::Queue" || leftover.Action != provider.ActionDelete {
 		t.Errorf("LeftoverQueue = %+v, want what the account holds, deleted", leftover)
 	}
 	for _, change := range group.Changes {
@@ -339,10 +340,10 @@ func TestPlanFallsBackToTheTemplateWhenItCannotReadTheStandingStack(t *testing.T
 		Features: []string{FeatureImageOptimization, FeatureCloudflareEdge},
 		Remove:   []string{FeatureISR},
 	}), stack)
-	if queue := changeNamed(t, group, "RevalidateQueue"); queue.Action != providerkit.ActionDelete {
+	if queue := changeNamed(t, group, "RevalidateQueue"); queue.Action != provider.ActionDelete {
 		t.Errorf("RevalidateQueue = %+v, want the template's best guess at what goes", queue)
 	}
-	if !strings.Contains(group.Reason, providerkit.DetailUnavailable) {
+	if !strings.Contains(group.Reason, provider.DetailUnavailable) {
 		t.Errorf("%s reads %q, want it to own up to reading the listing off a template rather than the account", stack, group.Reason)
 	}
 }

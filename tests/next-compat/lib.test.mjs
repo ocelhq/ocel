@@ -79,7 +79,7 @@ describe("namespaceProblem", () => {
 
   it("names the one default namespace the product itself derives", () => {
     expect(DEFAULT_NAMESPACE).toBe(
-      readFileSync("../../pkg/providerkit/namespace.go", "utf8").match(
+      readFileSync("../../pkg/providerkit/provider/namespace.go", "utf8").match(
         /DefaultNamespace Namespace = "([a-z0-9-]+)"/,
       )?.[1],
     );

@@ -9,6 +9,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -19,61 +20,61 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 	if err != nil {
 		return nil, err
 	}
-	provider, gate, err := h.gate(req.GetEdge().GetKind())
+	p, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
 	}
 
 	resp := &contractv1.PreflightResponse{
 		Identity: &contractv1.Identity{},
-		Computes: ComputeNames(provider.Facts().Computes),
+		Computes: provider.ComputeNames(p.Facts().Computes),
 	}
 
-	identity, err := provider.Credentials().Whoami(ctx)
+	identity, err := p.Credentials().Whoami(ctx)
 	if err != nil {
-		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(provider.Facts().Vendor, err))
+		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(p.Facts().Vendor, err))
 		return resp, nil
 	}
-	resp.Identity = IdentityProto(provider.Facts().Vendor, identity)
-	resp.ContainerArchs, err = containerArchs(ctx, provider.Runtime(), req.GetContainers())
+	resp.Identity = IdentityProto(p.Facts().Vendor, identity)
+	resp.ContainerArchs, err = containerArchs(ctx, p.Runtime(), req.GetContainers())
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
-	if err := h.edgeIdentity(ctx, provider, gate.Edge, req.GetEdge(), resp); err != nil {
+	if err := h.edgeIdentity(ctx, p, gate.Edge, req.GetEdge(), resp); err != nil {
 		return nil, err
 	}
 
 	required, err := RequiredFeatures(gate.Bootstrap.Catalogue(), req.GetFrameworks(), string(gate.Edge))
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 
 	standing, err := gate.State(ctx, class)
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	resp.Bootstrap = BootstrapStatusProto(standing, h.session.writer, req.GetRequiredTier(), required)
 
 	if standing.Present {
 		resp.InfraTier, resp.InfrastructurePresent = tierOf(class), true
-		if err := checkCompat(standing.Schema, true, BootstrapSchema).explain(standing.Schema, BootstrapSchema, BootstrapCommand(class)); err != nil {
-			return nil, RefusalError(err)
+		if err := checkCompat(standing.Schema, true, provider.BootstrapSchema).explain(standing.Schema, provider.BootstrapSchema, provider.BootstrapCommand(class)); err != nil {
+			return nil, provider.RefusalError(err)
 		}
 		resp.KnownSlugs, err = slugsBesides(ctx, gate, class, req.GetSlug())
 		if err != nil {
-			return nil, RefusalError(err)
+			return nil, provider.RefusalError(err)
 		}
-		resp.DomainClaims, err = h.domainClaims(ctx, provider, class, req)
+		resp.DomainClaims, err = h.domainClaims(ctx, p, class, req)
 		if err != nil {
-			return nil, RefusalError(err)
+			return nil, provider.RefusalError(err)
 		}
 		if req.GetCheckHosts() {
-			resp.HostChecks = h.hostChecks(ctx, provider, class, req.GetHostCheckDomains())
+			resp.HostChecks = h.hostChecks(ctx, p, class, req.GetHostCheckDomains())
 		}
 		if class == edge.ClassPreview {
-			resp.PreviewWildcard, err = heldPreviewWildcard(ctx, provider)
+			resp.PreviewWildcard, err = heldPreviewWildcard(ctx, p)
 			if err != nil {
-				return nil, RefusalError(err)
+				return nil, provider.RefusalError(err)
 			}
 		}
 		return resp, nil
@@ -81,7 +82,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 
 	sibling, err := gate.State(ctx, siblingOf(class))
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	if sibling.Present {
 		resp.InfraTier, resp.InfrastructurePresent = tierOf(sibling.Class), true
@@ -106,7 +107,7 @@ func containerArchs(ctx context.Context, runtime images.Runtime, containers []*c
 
 func (h *handlers) edgeIdentity(
 	ctx context.Context,
-	provider Provider,
+	p provider.Provider,
 	kind edge.Kind,
 	sel *contractv1.EdgeSelection,
 	resp *contractv1.PreflightResponse,
@@ -114,9 +115,9 @@ func (h *handlers) edgeIdentity(
 	if kind == "" {
 		return nil
 	}
-	front, err := h.edgeFor(provider, sel)
+	front, err := h.edgeFor(p, sel)
 	if err != nil {
-		return RefusalError(err)
+		return provider.RefusalError(err)
 	}
 	verify := front.Hooks().VerifyCredentials
 	if verify == nil {
@@ -124,22 +125,22 @@ func (h *handlers) edgeIdentity(
 	}
 	scope, err := verify(ctx)
 	if err != nil {
-		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(Vendor(kind), err))
+		resp.CredentialProblems = append(resp.CredentialProblems, CredentialProblemProto(provider.Vendor(kind), err))
 		return nil
 	}
 	resp.Identity.EdgeScope = scope.Account
 	return nil
 }
 
-func (h *handlers) domainClaims(ctx context.Context, provider Provider, class edge.Class, req *contractv1.PreflightRequest) ([]*contractv1.DomainClaim, error) {
+func (h *handlers) domainClaims(ctx context.Context, p provider.Provider, class edge.Class, req *contractv1.PreflightRequest) ([]*contractv1.DomainClaim, error) {
 	if len(req.GetDomains()) == 0 {
 		return nil, nil
 	}
-	front, err := h.edgeFor(provider, req.GetEdge())
+	front, err := h.edgeFor(p, req.GetEdge())
 	if err != nil {
 		return nil, err
 	}
-	ours, err := boundHere(ctx, provider.Records(), class, req.GetSlug())
+	ours, err := boundHere(ctx, p.Records(), class, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +210,7 @@ func tierOf(class edge.Class) environmentv1.Tier {
 	return environmentv1.Tier_TIER_PRODUCTION
 }
 
-func IdentityProto(vendor Vendor, id Identity) *contractv1.Identity {
+func IdentityProto(vendor provider.Vendor, id provider.Identity) *contractv1.Identity {
 	named := id.Vendor
 	if named == "" {
 		named = vendor
@@ -233,7 +234,7 @@ var credentialTrouble = map[refusal.Code]string{
 	refusal.CodeInvalid:  "misconfigured",
 }
 
-func CredentialProblemProto(vendor Vendor, err error) *contractv1.CredentialProblem {
+func CredentialProblemProto(vendor provider.Vendor, err error) *contractv1.CredentialProblem {
 	problem := &contractv1.CredentialProblem{Provider: string(vendor)}
 	var refusal refusal.Refusal
 	if errors.As(err, &refusal) {

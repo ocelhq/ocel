@@ -1,4 +1,4 @@
-package providerkit
+package provider
 
 import (
 	"strings"
@@ -25,7 +25,7 @@ const (
 
 	DetailUnavailable = "resource-level detail unavailable"
 
-	reasonCurrent = "already current"
+	ReasonCurrent = "already current"
 )
 
 func ValidChangeAction(action ChangeAction) bool {
@@ -78,7 +78,7 @@ func RollUp(changes []Change) (ChangeAction, string) {
 	}
 	switch {
 	case len(changes) == unwritten:
-		return ActionKeep, reasonCurrent
+		return ActionKeep, ReasonCurrent
 	case len(changes) == creates:
 		return ActionCreate, ""
 	case len(changes) == deletes:
@@ -96,4 +96,11 @@ func WithoutDetail(reason string) string {
 		return reason
 	}
 	return reason + "; " + DetailUnavailable
+}
+
+func KeepOrCreate(stands bool) ChangeAction {
+	if stands {
+		return ActionKeep
+	}
+	return ActionCreate
 }

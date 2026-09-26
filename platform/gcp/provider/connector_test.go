@@ -15,7 +15,7 @@ import (
 	run "google.golang.org/api/run/v2"
 
 	"github.com/ocelhq/ocel/pkg/connectorkit"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func TestTheConnectorImageRunsTheBinaryItCarries(t *testing.T) {
@@ -67,7 +67,7 @@ func TestTheConnectorServiceRunsOnOneInstanceAtMostAndIsReachableWithoutIAM(t *t
 		service: "ocel-connector",
 		image:   "example.com/ocel-connector:sha256-abc",
 		account: "ocel-connector@project.iam.gserviceaccount.com",
-		compute: providerkit.ComputeServerless,
+		compute: provider.ComputeServerless,
 		public:  true,
 		memory:  connectorMemory,
 		most:    connectorInstances,
@@ -93,7 +93,7 @@ func TestTheConnectorServiceRunsOnOneInstanceAtMostAndIsReachableWithoutIAM(t *t
 func TestAnAppServiceStillScalesAsItDid(t *testing.T) {
 	t.Parallel()
 
-	held, err := serviceOf(serving{service: "app", image: "example.com/app:tag", compute: providerkit.ComputeServerless})
+	held, err := serviceOf(serving{service: "app", image: "example.com/app:tag", compute: provider.ComputeServerless})
 	if err != nil {
 		t.Fatalf("serviceOf: %v", err)
 	}
@@ -197,23 +197,23 @@ func TestTheConnectorIsNamedForTheNamespaceAndFitsWhatIAMTakes(t *testing.T) {
 func TestAnUnsetComputeTakesTheCloudRunServiceThatScalesToNothing(t *testing.T) {
 	t.Parallel()
 
-	held, err := providerkit.ConnectorCompute("", connectorCompute)
+	held, err := provider.ConnectorCompute("", connectorCompute)
 	if err != nil {
-		t.Fatalf("providerkit.ConnectorCompute(\"\", connectorCompute) = %v, want the provider to pick for itself", err)
+		t.Fatalf("provider.ConnectorCompute(\"\", connectorCompute) = %v, want the provider to pick for itself", err)
 	}
-	if held != providerkit.ComputeServerless {
-		t.Errorf("providerkit.ConnectorCompute(\"\", connectorCompute) = %q, want %q", held, providerkit.ComputeServerless)
+	if held != provider.ComputeServerless {
+		t.Errorf("provider.ConnectorCompute(\"\", connectorCompute) = %q, want %q", held, provider.ComputeServerless)
 	}
 }
 
 func TestAComputeThisProjectDoesNotRunTheConnectorOnIsRefusedHere(t *testing.T) {
 	t.Parallel()
 
-	_, err := providerkit.ConnectorCompute(providerkit.ComputeContainer, connectorCompute)
+	_, err := provider.ConnectorCompute(provider.ComputeContainer, connectorCompute)
 	if err == nil {
 		t.Fatal("ConnectorCompute(container) = nil, want the compute no gcp connector is built for refused by the provider")
 	}
-	if !strings.Contains(err.Error(), string(providerkit.ComputeContainer)) {
+	if !strings.Contains(err.Error(), string(provider.ComputeContainer)) {
 		t.Errorf("err = %v, want it to name the compute it refused", err)
 	}
 }
@@ -245,7 +245,7 @@ func TestTheConnectorServiceMountsItsKeyOutOfSecretManager(t *testing.T) {
 	held, err := serviceOf(serving{
 		service: "ocel-connector",
 		image:   "example.com/ocel-connector:sha256-abc",
-		compute: providerkit.ComputeServerless,
+		compute: provider.ComputeServerless,
 		mounts:  []secretMount{connectorKeyMount("ocel-connector-key")},
 	})
 	if err != nil {

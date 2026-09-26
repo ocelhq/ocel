@@ -18,7 +18,7 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	smithy "github.com/aws/smithy-go"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const (
@@ -595,8 +595,8 @@ func TemplateDigest(body string) string {
 }
 
 func onlyDevWriterMoved(have, want []cfntypes.Tag) bool {
-	from := providerkit.WrittenBy(tagValue(have, TagBootstrappedBy))
-	to := providerkit.WrittenBy(tagValue(want, TagBootstrappedBy))
+	from := provider.WrittenBy(tagValue(have, TagBootstrappedBy))
+	to := provider.WrittenBy(tagValue(want, TagBootstrappedBy))
 	if from == to || !from.Development() || !to.Development() {
 		return false
 	}

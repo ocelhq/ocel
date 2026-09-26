@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const DefaultHealthCheckPath = "/"
@@ -24,7 +24,7 @@ func buildContainers(manifestApps []*contractv1.ManifestApp, apps []App, functio
 
 	containers := make([]*contractv1.ManifestContainer, 0, len(manifestApps))
 	for _, a := range manifestApps {
-		if a.GetCompute() != string(providerkit.ComputeContainer) {
+		if a.GetCompute() != string(provider.ComputeContainer) {
 			continue
 		}
 		name := a.GetName()

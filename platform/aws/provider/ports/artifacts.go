@@ -12,7 +12,7 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -66,11 +66,11 @@ func (a Artifacts) bucket(ctx context.Context, class edge.Class, store string) (
 	}
 	name, client := "", a.S3
 	switch store {
-	case providerkit.StoreFunctions:
+	case provider.StoreFunctions:
 		name = held.Functions
-	case providerkit.StoreAssets:
+	case provider.StoreAssets:
 		name = held.Assets
-	case providerkit.StoreCache:
+	case provider.StoreCache:
 		if len(held.Caches) > 1 {
 			return "", nil, refusal.Refuse(refusal.CodeInvalid,
 				"this account keeps %d cache stores, one for each edge it fronts, and an artifact names no edge", len(held.Caches))
@@ -81,11 +81,11 @@ func (a Artifacts) bucket(ctx context.Context, class edge.Class, store string) (
 	default:
 		return "", nil, refusal.Refuse(refusal.CodeInvalid,
 			"this provider keeps no %q store; it keeps %q, %q and %q",
-			store, providerkit.StoreFunctions, providerkit.StoreAssets, providerkit.StoreCache)
+			store, provider.StoreFunctions, provider.StoreAssets, provider.StoreCache)
 	}
 	if name == "" {
 		return "", nil, refusal.Refuse(refusal.CodeNotReady,
-			"this account has no %s store yet.\nRun `%s` to create it, then try again", store, providerkit.BootstrapCommand(class))
+			"this account has no %s store yet.\nRun `%s` to create it, then try again", store, provider.BootstrapCommand(class))
 	}
 	return name, client, nil
 }
@@ -97,7 +97,7 @@ func (a Artifacts) reach(cache CacheBucket) S3API {
 	return a.S3
 }
 
-func (a Artifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io.Reader) error {
+func (a Artifacts) Put(ctx context.Context, ref provider.ArtifactRef, body io.Reader) error {
 	bucket, client, err := a.bucket(ctx, ref.Class, ref.Bucket)
 	if err != nil {
 		return err
@@ -120,7 +120,7 @@ func (a Artifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io
 	return nil
 }
 
-func (a Artifacts) Has(ctx context.Context, ref providerkit.ArtifactRef) (bool, error) {
+func (a Artifacts) Has(ctx context.Context, ref provider.ArtifactRef) (bool, error) {
 	bucket, client, err := a.bucket(ctx, ref.Class, ref.Bucket)
 	if err != nil {
 		return false, err
@@ -152,7 +152,7 @@ func absent(err error) bool {
 	return errors.As(err, &missing) || errors.As(err, &gone)
 }
 
-func (a Artifacts) Open(ctx context.Context, ref providerkit.ArtifactRef) (io.ReadCloser, error) {
+func (a Artifacts) Open(ctx context.Context, ref provider.ArtifactRef) (io.ReadCloser, error) {
 	bucket, client, err := a.bucket(ctx, ref.Class, ref.Bucket)
 	if err != nil {
 		return nil, err
@@ -233,4 +233,4 @@ func (a Artifacts) sweep(ctx context.Context, client S3API, bucket, prefix strin
 	}
 }
 
-var _ providerkit.ArtifactStore = Artifacts{}
+var _ provider.ArtifactStore = Artifacts{}

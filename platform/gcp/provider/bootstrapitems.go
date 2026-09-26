@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -91,7 +91,7 @@ func bootstrapItems(names Names, class edge.Class, emulated bool) []item {
 	return slices.Concat(stackItems(names, class, emulated), parameterItems(names, class))
 }
 
-func digestOf(namespace providerkit.Namespace, items []item) string {
+func digestOf(namespace provider.Namespace, items []item) string {
 	sum := sha256.New()
 	sum.Write([]byte(namespace.String() + "\n"))
 	for _, item := range items {

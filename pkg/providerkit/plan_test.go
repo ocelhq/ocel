@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -15,33 +16,33 @@ import (
 func TestAnApplyMayShrinkThePlanItShowedAndNeverGrowIt(t *testing.T) {
 	t.Parallel()
 
-	shown := providerkit.Plan{Groups: []providerkit.ChangeGroup{{
-		Kind: providerkit.StackGroupKind,
+	shown := provider.Plan{Groups: []provider.ChangeGroup{{
+		Kind: provider.StackGroupKind,
 		Name: "core",
-		Changes: []providerkit.Change{
-			{Kind: "dir", Name: "/etc/ocel", Action: providerkit.ActionCreate},
-			{Kind: "unit", Name: "docker", Action: providerkit.ActionKeep},
+		Changes: []provider.Change{
+			{Kind: "dir", Name: "/etc/ocel", Action: provider.ActionCreate},
+			{Kind: "unit", Name: "docker", Action: provider.ActionKeep},
 		},
 	}}}
 
-	shrunk := providerkit.Plan{Groups: []providerkit.ChangeGroup{{
-		Kind: providerkit.StackGroupKind,
+	shrunk := provider.Plan{Groups: []provider.ChangeGroup{{
+		Kind: provider.StackGroupKind,
 		Name: "core",
-		Changes: []providerkit.Change{
-			{Kind: "dir", Name: "/etc/ocel", Action: providerkit.ActionKeep},
-			{Kind: "unit", Name: "docker", Action: providerkit.ActionKeep},
+		Changes: []provider.Change{
+			{Kind: "dir", Name: "/etc/ocel", Action: provider.ActionKeep},
+			{Kind: "unit", Name: "docker", Action: provider.ActionKeep},
 		},
 	}}}
 	if err := providerkit.RefuseGrowth(shown, shrunk); err != nil {
 		t.Fatalf("RefuseGrowth() over a plan that only shrank = %v, want the apply to run", err)
 	}
 
-	grown := providerkit.Plan{Groups: []providerkit.ChangeGroup{{
-		Kind: providerkit.StackGroupKind,
+	grown := provider.Plan{Groups: []provider.ChangeGroup{{
+		Kind: provider.StackGroupKind,
 		Name: "core",
-		Changes: []providerkit.Change{
-			{Kind: "dir", Name: "/etc/ocel", Action: providerkit.ActionCreate},
-			{Kind: "unit", Name: "docker", Action: providerkit.ActionCreate},
+		Changes: []provider.Change{
+			{Kind: "dir", Name: "/etc/ocel", Action: provider.ActionCreate},
+			{Kind: "unit", Name: "docker", Action: provider.ActionCreate},
 		},
 	}}}
 	err := providerkit.RefuseGrowth(shown, grown)
@@ -57,12 +58,12 @@ func TestAnApplyMayShrinkThePlanItShowedAndNeverGrowIt(t *testing.T) {
 func TestAGroupTheShownPlanNeverCarriedIsWorkNobodyConsentedTo(t *testing.T) {
 	t.Parallel()
 
-	shown := providerkit.Plan{Groups: []providerkit.ChangeGroup{
-		{Kind: providerkit.StackGroupKind, Name: "core", Action: providerkit.ActionKeep},
+	shown := provider.Plan{Groups: []provider.ChangeGroup{
+		{Kind: provider.StackGroupKind, Name: "core", Action: provider.ActionKeep},
 	}}
-	grown := providerkit.Plan{Groups: []providerkit.ChangeGroup{
-		{Kind: providerkit.StackGroupKind, Name: "core", Action: providerkit.ActionKeep},
-		{Kind: providerkit.StackGroupKind, Name: "cache-stack", Action: providerkit.ActionCreate},
+	grown := provider.Plan{Groups: []provider.ChangeGroup{
+		{Kind: provider.StackGroupKind, Name: "core", Action: provider.ActionKeep},
+		{Kind: provider.StackGroupKind, Name: "cache-stack", Action: provider.ActionCreate},
 	}}
 
 	err := providerkit.RefuseGrowth(shown, grown)
@@ -78,19 +79,19 @@ func TestApplyRefusesWorkThatAppearedAfterThePlanWasDrawn(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, provider := gated(t, "1.2.3")
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
+	gate, p := gated(t, "1.2.3")
+	bootstrapped(t, p, edge.ClassProduction, fake.FeatureCache)
 
 	req := providerkit.ApplyRequest{Features: []string{fake.FeatureCache}}
 	shown, err := gate.Plan(ctx, edge.ClassProduction, req)
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
-	if action := groupFor(t, shown, fake.FeatureCache).Action; action != providerkit.ActionKeep {
+	if action := groupFor(t, shown, fake.FeatureCache).Action; action != provider.ActionKeep {
 		t.Fatalf("the cache group is %q, want the plan to show nothing owed on it", action)
 	}
 
-	provider.FakeBootstrap().Behind(fake.FeatureCache)
+	p.FakeBootstrap().Behind(fake.FeatureCache)
 
 	err = gate.Apply(ctx, shown, edge.ClassProduction, req, nil)
 	var refused refusal.Refusal
@@ -121,7 +122,7 @@ func TestApplyRunsThePlanItWasShown(t *testing.T) {
 	}
 }
 
-func groupFor(t *testing.T, plan providerkit.Plan, feature string) providerkit.ChangeGroup {
+func groupFor(t *testing.T, plan provider.Plan, feature string) provider.ChangeGroup {
 	t.Helper()
 
 	for _, group := range plan.Groups {
@@ -130,7 +131,7 @@ func groupFor(t *testing.T, plan providerkit.Plan, feature string) providerkit.C
 		}
 	}
 	t.Fatalf("Plan() carries no group for %q; it carries %v", feature, plan.Groups)
-	return providerkit.ChangeGroup{}
+	return provider.ChangeGroup{}
 }
 
 func TestPlanOnAFreshAccountCreatesTheBaselineAndEveryFeature(t *testing.T) {
@@ -147,10 +148,10 @@ func TestPlanOnAFreshAccountCreatesTheBaselineAndEveryFeature(t *testing.T) {
 		t.Fatalf("Plan() = %v, want the baseline and the closure of images", plan.Groups)
 	}
 	for _, group := range plan.Groups {
-		if group.Action != providerkit.ActionCreate {
+		if group.Action != provider.ActionCreate {
 			t.Errorf("Plan() has %s at %q, want it created on an account holding nothing", group.Name, group.Action)
 		}
-		if group.Kind != providerkit.StackGroupKind || group.Name == "" {
+		if group.Kind != provider.StackGroupKind || group.Name == "" {
 			t.Errorf("Plan() returned %+v, and a plan renders a kind and a name", group)
 		}
 	}
@@ -162,9 +163,9 @@ func TestPlanOnAFreshAccountCreatesTheBaselineAndEveryFeature(t *testing.T) {
 func TestPlanSeparatesTheStaleFromTheCurrent(t *testing.T) {
 	t.Parallel()
 
-	gate, provider := gated(t, "1.2.3")
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
-	provider.FakeBootstrap().Behind(fake.FeatureImages)
+	gate, p := gated(t, "1.2.3")
+	bootstrapped(t, p, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	p.FakeBootstrap().Behind(fake.FeatureImages)
 
 	plan, err := gate.Plan(context.Background(), edge.ClassProduction, providerkit.ApplyRequest{
 		Features: []string{fake.FeatureImages},
@@ -172,11 +173,11 @@ func TestPlanSeparatesTheStaleFromTheCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Plan() error = %v", err)
 	}
-	if action := groupFor(t, plan, fake.FeatureCache).Action; action != providerkit.ActionKeep {
+	if action := groupFor(t, plan, fake.FeatureCache).Action; action != provider.ActionKeep {
 		t.Errorf("the cache group is %q, want it kept where nothing about it moved", action)
 	}
 	stale := groupFor(t, plan, fake.FeatureImages)
-	if stale.Action != providerkit.ActionUpdate {
+	if stale.Action != provider.ActionUpdate {
 		t.Errorf("the images group is %q, want it updated where its content is behind", stale.Action)
 	}
 	if stale.Reason == "" && len(stale.Changes) == 0 {
@@ -188,9 +189,9 @@ func TestPlanShowsARemovalItRefusesToApply(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	gate, provider := gated(t, "1.2.3")
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
-	recordProject(t, provider, "shop", fake.FeatureImages)
+	gate, p := gated(t, "1.2.3")
+	bootstrapped(t, p, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	recordProject(t, p, "shop", fake.FeatureImages)
 
 	req := providerkit.ApplyRequest{Remove: []string{fake.FeatureImages}}
 	plan, err := gate.Plan(ctx, edge.ClassProduction, req)
@@ -198,7 +199,7 @@ func TestPlanShowsARemovalItRefusesToApply(t *testing.T) {
 		t.Fatalf("Plan() error = %v, want a plan that shows the removal rather than refusing it", err)
 	}
 	removed := groupFor(t, plan, fake.FeatureImages)
-	if removed.Action != providerkit.ActionDelete {
+	if removed.Action != provider.ActionDelete {
 		t.Errorf("the images group is %q, want it deleted where the run named it for removal", removed.Action)
 	}
 	if !strings.Contains(removed.Reason, "shop") {
@@ -252,7 +253,7 @@ func TestEdgeGroupCarriesTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		planned []edge.PlanChange
-		action  providerkit.ChangeAction
+		action  provider.ChangeAction
 		reason  string
 	}{
 		{
@@ -261,7 +262,7 @@ func TestEdgeGroupCarriesTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 				{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanCreate},
 				{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanCreate},
 			},
-			action: providerkit.ActionCreate,
+			action: provider.ActionCreate,
 		},
 		{
 			name: "everything stands",
@@ -269,7 +270,7 @@ func TestEdgeGroupCarriesTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 				{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanKeep, Reason: "already current"},
 				{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanKeep, Reason: "already current"},
 			},
-			action: providerkit.ActionKeep,
+			action: provider.ActionKeep,
 			reason: "already current",
 		},
 		{
@@ -278,7 +279,7 @@ func TestEdgeGroupCarriesTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 				{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanKeep},
 				{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanUpdate, Reason: "the deployed script differs"},
 			},
-			action: providerkit.ActionUpdate,
+			action: provider.ActionUpdate,
 		},
 		{
 			name: "one is missing",
@@ -286,7 +287,7 @@ func TestEdgeGroupCarriesTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 				{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanKeep},
 				{Kind: "Cloudflare::Worker", Name: "ocel-isr-writer", Action: edge.PlanCreate},
 			},
-			action: providerkit.ActionUpdate,
+			action: provider.ActionUpdate,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -296,7 +297,7 @@ func TestEdgeGroupCarriesTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 			if err != nil {
 				t.Fatalf("EdgeGroup() error = %v", err)
 			}
-			if group.Kind != providerkit.EdgeGroupKind || group.Name != "cloudflare/edge" {
+			if group.Kind != provider.EdgeGroupKind || group.Name != "cloudflare/edge" {
 				t.Errorf("group = %+v, want the cloudflare edge named under its own vendor", group)
 			}
 			if group.Feature != "cloudflare-edge" {
@@ -312,7 +313,7 @@ func TestEdgeGroupCarriesTheEdgesOwnKindsAndRollsTheirActionsUp(t *testing.T) {
 				if change.Kind != tc.planned[i].Kind || change.Name != tc.planned[i].Name {
 					t.Errorf("change %d = %+v, want the edge's own kind and name verbatim", i, change)
 				}
-				if !providerkit.ValidChangeAction(change.Action) {
+				if !provider.ValidChangeAction(change.Action) {
 					t.Errorf("change %d is %q, which no renderer knows", i, change.Action)
 				}
 			}
@@ -343,11 +344,11 @@ func TestEdgeGroupThatAccountsForNothingIsNotCalledCurrent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EdgeGroup() error = %v", err)
 	}
-	if group.Action == providerkit.ActionKeep {
+	if group.Action == provider.ActionKeep {
 		t.Errorf("group = %+v, want an edge that listed no resource not to claim it is current", group)
 	}
-	if group.Reason != providerkit.DetailUnavailable {
-		t.Errorf("group reason = %q, want %q", group.Reason, providerkit.DetailUnavailable)
+	if group.Reason != provider.DetailUnavailable {
+		t.Errorf("group reason = %q, want %q", group.Reason, provider.DetailUnavailable)
 	}
 }
 
@@ -358,7 +359,7 @@ func TestEdgeGroupOf(t *testing.T) {
 		t.Parallel()
 
 		converted, err := providerkit.EdgeGroupOf(edge.PlanGroup{
-			Kind:   providerkit.EdgeGroupKind,
+			Kind:   provider.EdgeGroupKind,
 			Name:   "cloudflare/edge",
 			Action: edge.PlanKeep,
 			Reason: "bootstrap-scoped",
@@ -366,7 +367,7 @@ func TestEdgeGroupOf(t *testing.T) {
 		if err != nil {
 			t.Fatalf("EdgeGroupOf() error = %v", err)
 		}
-		if converted.Action != providerkit.ActionKeep || converted.Reason != "bootstrap-scoped" {
+		if converted.Action != provider.ActionKeep || converted.Reason != "bootstrap-scoped" {
 			t.Errorf("group = %+v, want the kept group and the reason it is kept for", converted)
 		}
 		if len(converted.Changes) != 0 {
@@ -387,7 +388,7 @@ func TestEdgeGroupOf(t *testing.T) {
 		t.Parallel()
 
 		_, err := providerkit.EdgeGroupOf(edge.PlanGroup{
-			Kind:   providerkit.EdgeGroupKind,
+			Kind:   provider.EdgeGroupKind,
 			Name:   "cloudflare/edge",
 			Action: edge.PlanDelete,
 			Changes: []edge.PlanChange{
@@ -408,7 +409,7 @@ func TestEdgeGroupOf(t *testing.T) {
 func TestVendoredNamesEveryGroupUnderTheVendorThatHoldsIt(t *testing.T) {
 	t.Parallel()
 
-	groups := []providerkit.ChangeGroup{{Kind: providerkit.StackGroupKind, Name: "ocel-bootstrap"}}
+	groups := []provider.ChangeGroup{{Kind: provider.StackGroupKind, Name: "ocel-bootstrap"}}
 	named := providerkit.Vendored("aws", groups)
 	if named[0].Name != "aws/ocel-bootstrap" {
 		t.Errorf("group name = %q, want the stack under its vendor", named[0].Name)
@@ -421,9 +422,9 @@ func TestVendoredNamesEveryGroupUnderTheVendorThatHoldsIt(t *testing.T) {
 func TestFeatureNeedingEdgeFindsTheFeatureTheEdgeParticipatesThrough(t *testing.T) {
 	t.Parallel()
 
-	catalogue := []providerkit.Feature{
+	catalogue := []provider.Feature{
 		{Name: "isr"},
-		{Name: "cloudflare-edge", Needs: []string{providerkit.NeedsEdgePrefix + "cloudflare"}},
+		{Name: "cloudflare-edge", Needs: []string{provider.NeedsEdgePrefix + "cloudflare"}},
 	}
 	if got := providerkit.FeatureNeedingEdge(catalogue, "cloudflare"); got != "cloudflare-edge" {
 		t.Errorf("FeatureNeedingEdge(cloudflare) = %q, want the feature that names it", got)
@@ -436,15 +437,15 @@ func TestFeatureNeedingEdgeFindsTheFeatureTheEdgeParticipatesThrough(t *testing.
 func TestDeriveGroupsNamesTheStacksTheVendorDescribed(t *testing.T) {
 	t.Parallel()
 
-	described := providerkit.BootstrapReading{
+	described := provider.BootstrapReading{
 		Class:   edge.ClassPreview,
 		Present: true,
-		Stacks: []providerkit.BootstrapStack{
-			{Name: "core", Present: true, Schema: providerkit.BootstrapSchema, DigestCurrent: true},
-			{Name: "cache-stack", Feature: fake.FeatureCache, Present: true, Schema: providerkit.BootstrapSchema},
+		Stacks: []provider.BootstrapStack{
+			{Name: "core", Present: true, Schema: provider.BootstrapSchema, DigestCurrent: true},
+			{Name: "cache-stack", Feature: fake.FeatureCache, Present: true, Schema: provider.BootstrapSchema},
 		},
 	}
-	groups := providerkit.DeriveGroups(described, fake.NewBootstrap().Catalogue(), providerkit.BootstrapRequest{
+	groups := providerkit.DeriveGroups(described, fake.NewBootstrap().Catalogue(), provider.BootstrapRequest{
 		Class:    edge.ClassPreview,
 		Features: []string{fake.FeatureCache},
 		Remove:   []string{fake.FeatureImages},
@@ -452,13 +453,13 @@ func TestDeriveGroupsNamesTheStacksTheVendorDescribed(t *testing.T) {
 	if len(groups) != 3 {
 		t.Fatalf("DeriveGroups() = %v, want the baseline, the kept feature and the dropped one", groups)
 	}
-	if groups[0].Name != "core" || groups[0].Action != providerkit.ActionKeep {
+	if groups[0].Name != "core" || groups[0].Action != provider.ActionKeep {
 		t.Errorf("the baseline group = %+v, want core kept", groups[0])
 	}
-	if groups[1].Name != "cache-stack" || groups[1].Action != providerkit.ActionUpdate {
+	if groups[1].Name != "cache-stack" || groups[1].Action != provider.ActionUpdate {
 		t.Errorf("the cache group = %+v, want the stale stack updated", groups[1])
 	}
-	if groups[2].Action != providerkit.ActionDelete || groups[2].Feature != fake.FeatureImages {
+	if groups[2].Action != provider.ActionDelete || groups[2].Feature != fake.FeatureImages {
 		t.Errorf("the images group = %+v, want the dropped feature deleted", groups[2])
 	}
 }
@@ -466,63 +467,45 @@ func TestDeriveGroupsNamesTheStacksTheVendorDescribed(t *testing.T) {
 func TestAnAdoptedRowCrossesTheWireAsItself(t *testing.T) {
 	t.Parallel()
 
-	if !providerkit.ValidChangeAction(providerkit.ActionAdopt) {
+	if !provider.ValidChangeAction(provider.ActionAdopt) {
 		t.Fatal("ValidChangeAction(adopt) = false, and a plan that adopts what it finds fails every conformance check")
 	}
-	shown := providerkit.Plan{Groups: []providerkit.ChangeGroup{{
-		Kind:   providerkit.StackGroupKind,
+	shown := provider.Plan{Groups: []provider.ChangeGroup{{
+		Kind:   provider.StackGroupKind,
 		Name:   "core",
-		Action: providerkit.ActionKeep,
-		Changes: []providerkit.Change{
-			{Kind: "docker:engine", Name: "docker", Action: providerkit.ActionAdopt, Reason: "docker 28.3.1, not managed by ocel: upgrading it is yours"},
+		Action: provider.ActionKeep,
+		Changes: []provider.Change{
+			{Kind: "docker:engine", Name: "docker", Action: provider.ActionAdopt, Reason: "docker 28.3.1, not managed by ocel: upgrading it is yours"},
 		},
 	}}}
 	read, err := providerkit.PlanOf(providerkit.ChangePlanProto(shown, "production", ""))
 	if err != nil {
 		t.Fatalf("PlanOf() over a plan that adopts = %v, want it read back", err)
 	}
-	if got := read.Groups[0].Changes[0].Action; got != providerkit.ActionAdopt {
-		t.Errorf("an adopted row reads back as %q, want %q", got, providerkit.ActionAdopt)
-	}
-}
-
-func TestAGroupThatAdoptsAndKeepsRollsUpAsKept(t *testing.T) {
-	t.Parallel()
-
-	action, reason := providerkit.RollUp([]providerkit.Change{
-		{Kind: "dir", Name: "/etc/ocel", Action: providerkit.ActionKeep},
-		{Kind: "docker:engine", Name: "docker", Action: providerkit.ActionAdopt},
-	})
-	if action != providerkit.ActionKeep || reason == "" {
-		t.Errorf("RollUp() over a keep and an adopt = %q %q, want it kept: adopting writes nothing", action, reason)
-	}
-	if action, _ := providerkit.RollUp([]providerkit.Change{
-		{Kind: "dir", Name: "/etc/ocel", Action: providerkit.ActionCreate},
-		{Kind: "docker:engine", Name: "docker", Action: providerkit.ActionAdopt},
-	}); action != providerkit.ActionUpdate {
-		t.Errorf("RollUp() over a create and an adopt = %q, want %q: what is adopted already stands, as what is kept does", action, providerkit.ActionUpdate)
+	if got := read.Groups[0].Changes[0].Action; got != provider.ActionAdopt {
+		t.Errorf("an adopted row reads back as %q, want %q", got, provider.ActionAdopt)
 	}
 }
 
 func TestAnAdoptionWritesNothingAndSoNeverGrowsThePlan(t *testing.T) {
 	t.Parallel()
 
-	plan := func(action providerkit.ChangeAction) providerkit.Plan {
-		return providerkit.Plan{Groups: []providerkit.ChangeGroup{{
-			Kind:    providerkit.StackGroupKind,
+	plan := func(action provider.ChangeAction) provider.Plan {
+		return provider.Plan{Groups: []provider.ChangeGroup{{
+			Kind:    provider.StackGroupKind,
 			Name:    "core",
-			Changes: []providerkit.Change{{Kind: "docker:engine", Name: "docker", Action: action}},
+			Changes: []provider.Change{{Kind: "docker:engine", Name: "docker", Action: action}},
 		}}}
 	}
-	for shown, standing := range map[providerkit.ChangeAction]providerkit.ChangeAction{
-		providerkit.ActionAdopt: providerkit.ActionAdopt,
-		providerkit.ActionKeep:  providerkit.ActionAdopt,
+	for shown, standing := range map[provider.ChangeAction]provider.ChangeAction{
+		provider.ActionAdopt: provider.ActionAdopt,
+		provider.ActionKeep:  provider.ActionAdopt,
 	} {
 		if err := providerkit.RefuseGrowth(plan(shown), plan(standing)); err != nil {
 			t.Errorf("RefuseGrowth() from %s to %s = %v, want the apply to run", shown, standing, err)
 		}
 	}
-	if err := providerkit.RefuseGrowth(plan(providerkit.ActionAdopt), plan(providerkit.ActionCreate)); err == nil {
+	if err := providerkit.RefuseGrowth(plan(provider.ActionAdopt), plan(provider.ActionCreate)); err == nil {
 		t.Error("RefuseGrowth() let an install through where the plan showed the engine adopted, and nobody consented to one")
 	}
 }

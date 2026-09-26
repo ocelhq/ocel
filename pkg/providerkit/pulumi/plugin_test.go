@@ -9,7 +9,7 @@ import (
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -39,7 +39,7 @@ func (r *pushResource) Create(_ context.Context, req infer.CreateRequest[pushArg
 
 type pushing struct{}
 
-func (pushing) Run(pctx *sdk.Context, _ providerkit.StackPlan) error {
+func (pushing) Run(pctx *sdk.Context, _ provider.StackPlan) error {
 	state := &struct{ sdk.CustomResourceState }{}
 	return pctx.RegisterResource("probe:index:Push", "assets", sdk.Map{"set": sdk.String("assets")}, state)
 }
@@ -75,12 +75,12 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 		Plugins: []pulumi.Plugin{probePlugin(t, counter)},
 	})
 
-	ref := providerkit.StackRef{
+	ref := provider.StackRef{
 		Project: "probe",
 		Class:   edge.ClassPreview,
 		Name:    naming.InfraStack("probe"),
 	}
-	plan := providerkit.StackPlan{Ref: ref, Kind: providerkit.StackInfra}
+	plan := provider.StackPlan{Ref: ref, Kind: provider.StackInfra}
 
 	planned, err := automation.Preview(ctx, plan, nil)
 	if err != nil {
@@ -105,7 +105,7 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 	}
 }
 
-func changedRows(plan providerkit.Plan) int {
+func changedRows(plan provider.Plan) int {
 	rows := 0
 	for _, group := range plan.Groups {
 		rows += len(group.Changes)

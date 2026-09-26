@@ -16,7 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -28,7 +28,7 @@ const (
 type Session struct {
 	target  Target
 	dest    Destination
-	anchor  providerkit.HostKey
+	anchor  provider.HostKey
 	control string
 }
 
@@ -49,7 +49,7 @@ func Open(ctx context.Context, target Target) (*Session, error) {
 	}
 	anchor, trust := classify(dest, keys, recorded(ctx, dest))
 	if trust != nil {
-		return nil, providerkit.RefuseHostTrust(*trust)
+		return nil, provider.RefuseHostTrust(*trust)
 	}
 
 	session := &Session{target: target, dest: dest, anchor: anchor, control: multiplex()}
@@ -60,7 +60,7 @@ func Open(ctx context.Context, target Target) (*Session, error) {
 	return session, nil
 }
 
-func (s *Session) HostKey() providerkit.HostKey { return s.anchor }
+func (s *Session) HostKey() provider.HostKey { return s.anchor }
 
 func (s *Session) Destination() Destination { return s.dest }
 
@@ -90,7 +90,7 @@ func (s *Session) Stream(ctx context.Context, command string, stdin io.Reader) (
 	if strings.Contains(stderr, "Host key verification failed") {
 		keys, _ := offered(ctx, s.dest)
 		if _, trust := classify(s.dest, keys, recorded(ctx, s.dest)); trust != nil {
-			return Result{}, providerkit.RefuseHostTrust(*trust)
+			return Result{}, provider.RefuseHostTrust(*trust)
 		}
 	}
 	unreached := refusal.CodeNotReady

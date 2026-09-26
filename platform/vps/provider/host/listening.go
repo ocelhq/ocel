@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -54,10 +54,10 @@ func (h *Host) Publishing(ctx context.Context, port string) ([]string, error) {
 
 func publishers(said string) []string { return strings.Fields(said) }
 
-func (h *Host) CheckSwitchboard(ctx context.Context, class edge.Class) providerkit.HostCheck {
+func (h *Host) CheckSwitchboard(ctx context.Context, class edge.Class) provider.HostCheck {
 	board := switchboardStanding(nil, h.proxyOption)
-	check := providerkit.HostCheck{Subject: board.name, Verdict: providerkit.HostFail,
-		Fix: "run `" + providerkit.BootstrapCommand(class) + "` to stand it again"}
+	check := provider.HostCheck{Subject: board.name, Verdict: provider.HostFail,
+		Fix: "run `" + provider.BootstrapCommand(class) + "` to stand it again"}
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		check.Finding = fmt.Sprintf("ask the engine about %s: %v", board.name, err)
@@ -69,7 +69,7 @@ func (h *Host) CheckSwitchboard(ctx context.Context, class edge.Class) providerk
 		check.Finding = fmt.Sprintf("ask %s whether it answers: %v", board.name, err)
 		return check
 	case result.Code == 0:
-		check.Verdict, check.Fix = providerkit.HostPass, ""
+		check.Verdict, check.Fix = provider.HostPass, ""
 		check.Finding = fmt.Sprintf("%s is running and answers over its control socket in %s", board.name, switchboard.ControlDir)
 		if at, restored := h.restoredAt(ctx, elevation); restored {
 			check.Finding += fmt.Sprintf("; a deploy stood it again at %s after it was removed, as a prune removes it whenever it is stopped", at)
