@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )

@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
