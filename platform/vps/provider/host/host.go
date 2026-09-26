@@ -611,7 +611,7 @@ func readSurvey(rendered string) (map[string]string, Seal, error) {
 			continue
 		}
 		columns := strings.Split(strings.TrimRight(line, "\r"), "\t")
-		if columns[0] == kindEngineHeld {
+		if columns[0] == engineFactsRow {
 			continue
 		}
 		if columns[0] == kindLink {
