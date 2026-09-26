@@ -166,7 +166,7 @@ const (
 func pulled(t *testing.T, stood *bench, server, hex string) error {
 	t.Helper()
 	_, err := stood.host().PullImage(context.Background(),
-		images.RegistryTarget{Server: server, Namespace: "acme"},
+		images.Registry{Server: server, Namespace: "acme"},
 		server+"/acme/web:sha256-"+hex, "sha256:"+hex)
 	return err
 }

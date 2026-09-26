@@ -234,14 +234,14 @@ func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress 
 	if err != nil {
 		return "", err
 	}
-	store := images.RegistryImages(at)
+	store := images.RegistryStore(at)
 	names, err := p.Names(ctx)
 	if err != nil {
 		return "", err
 	}
 	ref := names.RepositoryPath(p.options.Region, edge.ClassProduction) +
 		"/" + connectorImageName + ":" + naming.DigestTag(digest.String())
-	push := images.ImagePush{App: connectorImageName, ImageRef: ref, Digest: digest.String(), Built: built}
+	push := images.Push{App: connectorImageName, ImageRef: ref, Digest: digest.String(), Built: built}
 
 	held, err := store.Has(ctx, push)
 	if err != nil {

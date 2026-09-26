@@ -15,13 +15,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
 )
 
-func registryServing(t *testing.T, handler http.HandlerFunc) (images.ImageStore, images.ImagePush) {
+func registryServing(t *testing.T, handler http.HandlerFunc) (images.Store, images.Push) {
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 	host := strings.TrimPrefix(server.URL, "http://")
-	target := images.RegistryTarget{Server: host, Namespace: "acme", Username: "acme-bot", Password: "hunter2"}
-	return images.RegistryImages(target), images.ImagePush{
+	target := images.Registry{Server: host, Namespace: "acme", Username: "acme-bot", Password: "hunter2"}
+	return images.RegistryStore(target), images.Push{
 		App:      "web",
 		Source:   "ocel/web@sha256:abc",
 		ImageRef: target.ImageRef("web", "sha256-abc"),
@@ -196,19 +196,19 @@ func TestARealmOnAnotherHostIsNotHandedTheRegistryPassword(t *testing.T) {
 }
 
 func TestAPlainHTTPRealmIsHandedTheRegistryPasswordOnlyOnLoopback(t *testing.T) {
-	if err := images.CredentialsTravelTo("http://ghcr.io/token", "ghcr.io"); err == nil {
+	if err := images.RefuseForeignTokenRealm("http://ghcr.io/token", "ghcr.io"); err == nil {
 		t.Error("a plain-http realm on an https registry was accepted, so the deploy's password would cross the wire in clear")
 	}
-	if err := images.CredentialsTravelTo("http://elsewhere.invalid/token", "ghcr.io"); err == nil {
+	if err := images.RefuseForeignTokenRealm("http://elsewhere.invalid/token", "ghcr.io"); err == nil {
 		t.Error("a plain-http realm on another host was accepted")
 	}
-	if err := images.CredentialsTravelTo("token", "ghcr.io"); err == nil {
+	if err := images.RefuseForeignTokenRealm("token", "ghcr.io"); err == nil {
 		t.Error("a realm naming no scheme was accepted")
 	}
-	if err := images.CredentialsTravelTo("https://auth.docker.io/token", "registry-1.docker.io"); err != nil {
+	if err := images.RefuseForeignTokenRealm("https://auth.docker.io/token", "registry-1.docker.io"); err != nil {
 		t.Errorf("the https realm a registry delegates to was refused: %v", err)
 	}
-	if err := images.CredentialsTravelTo("http://127.0.0.1:5000/token", "127.0.0.1:5000"); err != nil {
+	if err := images.RefuseForeignTokenRealm("http://127.0.0.1:5000/token", "127.0.0.1:5000"); err != nil {
 		t.Errorf("a loopback registry's own plain-http realm was refused: %v", err)
 	}
 }
@@ -246,8 +246,8 @@ func daemonServing(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	return daemon
 }
 
-func pushTo(target images.RegistryTarget) (images.ImageStore, images.ImagePush) {
-	return images.RegistryImages(target), images.ImagePush{
+func pushTo(target images.Registry) (images.Store, images.Push) {
+	return images.RegistryStore(target), images.Push{
 		App:      "web",
 		Source:   "ocel/web@sha256:abc",
 		ImageRef: target.ImageRef("web", "sha256-abc"),
@@ -272,7 +272,7 @@ func TestThePushNamesTheImageRemotelyAndHandsTheDaemonTheDeploysCredentials(t *t
 			http.Error(w, "unexpected "+r.Method+" "+r.URL.Path, http.StatusNotFound)
 		}
 	})
-	store, push := pushTo(images.RegistryTarget{Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "hunter2"})
+	store, push := pushTo(images.Registry{Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "hunter2"})
 
 	if err := store.Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("Push() = %v", err)
@@ -310,7 +310,7 @@ func TestAnAnonymousTargetHandsTheDaemonNoCredentialsAtAll(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusCreated)
 	})
-	store, push := pushTo(images.RegistryTarget{Server: "127.0.0.1:5000"})
+	store, push := pushTo(images.Registry{Server: "127.0.0.1:5000"})
 
 	if err := store.Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("Push() = %v", err)
@@ -330,7 +330,7 @@ func TestARegistryThatRefusesThePushStopsTheRelease(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusCreated)
 	})
-	store, push := pushTo(images.RegistryTarget{Server: "ghcr.io", Username: "acme-bot", Password: "hunter2"})
+	store, push := pushTo(images.Registry{Server: "ghcr.io", Username: "acme-bot", Password: "hunter2"})
 
 	err := store.Push(context.Background(), push, nil)
 	if err == nil {
@@ -358,7 +358,7 @@ func TestAThrottledPushIsWaitedOutRatherThanFailingTheDeploy(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusCreated)
 	})
-	store, push := pushTo(images.RegistryTarget{Server: "ghcr.io", Username: "acme-bot", Password: "hunter2"})
+	store, push := pushTo(images.Registry{Server: "ghcr.io", Username: "acme-bot", Password: "hunter2"})
 
 	if err := store.Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("Push() = %v, and a throttle is an answer to wait out, not a failed deploy", err)
@@ -392,10 +392,10 @@ func TestARegistryThatNeverAnswersStopsTheDeployRatherThanHangingIt(t *testing.T
 }
 
 func TestAHostnameThatResolvesToNothingIsReportedRatherThanRetried(t *testing.T) {
-	if images.Addressable(&net.DNSError{Err: "no such host", IsNotFound: true}) {
+	if images.Resolvable(&net.DNSError{Err: "no such host", IsNotFound: true}) {
 		t.Error("a hostname that resolves to nothing is retried five times, so a typo takes seconds to report")
 	}
-	if !images.Addressable(errors.New("connection reset by peer")) {
+	if !images.Resolvable(errors.New("connection reset by peer")) {
 		t.Error("a transport error the next attempt might survive is not retried")
 	}
 }

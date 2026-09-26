@@ -13,17 +13,17 @@ import (
 )
 
 func TestAStackPlanCarryingARegistryRendersWithoutItsPassword(t *testing.T) {
-	target := images.RegistryTarget{Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "ghp_livesecret"}
+	target := images.Registry{Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "ghp_livesecret"}
 	plan := providerkit.StackPlan{
 		Kind: providerkit.StackApp,
-		Images: providerkit.ImagePlan{
-			Store:  images.RegistryImages(target),
-			Pushes: []images.ImagePush{{App: "web", Source: "ocel/web@sha256:abc", ImageRef: target.ImageRef("web", "sha256-abc"), Digest: "sha256:abc"}},
+		Images: providerkit.ImagePushes{
+			Store:  images.RegistryStore(target),
+			Pushes: []images.Push{{App: "web", Source: "ocel/web@sha256:abc", ImageRef: target.ImageRef("web", "sha256-abc"), Digest: "sha256:abc"}},
 		},
 	}
 	unrendered := providerkit.StackPlan{
 		Kind:   providerkit.StackApp,
-		Images: providerkit.ImagePlan{Store: keptSecret{password: "ghp_livesecret"}, Pushes: plan.Images.Pushes},
+		Images: providerkit.ImagePushes{Store: keptSecret{password: "ghp_livesecret"}, Pushes: plan.Images.Pushes},
 	}
 
 	for _, rendered := range []string{
@@ -82,10 +82,10 @@ func TestAPlanCarryingAnAppsValuesRendersWithoutThem(t *testing.T) {
 
 type keptSecret struct{ password string }
 
-func (keptSecret) Has(context.Context, images.ImagePush) (bool, error) { return false, nil }
+func (keptSecret) Has(context.Context, images.Push) (bool, error) { return false, nil }
 
 func (keptSecret) Destination() string { return "the kept registry" }
 
-func (keptSecret) Push(context.Context, images.ImagePush, edge.Progress) error {
+func (keptSecret) Push(context.Context, images.Push, edge.Progress) error {
 	return nil
 }

@@ -11,10 +11,10 @@ import (
 type Images struct {
 	mu     sync.Mutex
 	held   map[string]bool
-	asked  []images.ImagePush
-	pushed []images.ImagePush
+	asked  []images.Push
+	pushed []images.Push
 	failed error
-	opened []images.RegistryTarget
+	opened []images.Registry
 }
 
 func NewImages() *Images { return &Images{held: map[string]bool{}} }
@@ -31,27 +31,27 @@ func (i *Images) Refusing(err error) {
 	i.failed = err
 }
 
-func (i *Images) Asked() []images.ImagePush {
+func (i *Images) Asked() []images.Push {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	return append([]images.ImagePush(nil), i.asked...)
+	return append([]images.Push(nil), i.asked...)
 }
 
-func (i *Images) Pushed() []images.ImagePush {
+func (i *Images) Pushed() []images.Push {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	return append([]images.ImagePush(nil), i.pushed...)
+	return append([]images.Push(nil), i.pushed...)
 }
 
-func (i *Images) Opened() []images.RegistryTarget {
+func (i *Images) Opened() []images.Registry {
 	i.mu.Lock()
 	defer i.mu.Unlock()
-	return append([]images.RegistryTarget(nil), i.opened...)
+	return append([]images.Registry(nil), i.opened...)
 }
 
 func (i *Images) Destination() string { return RegistryServer }
 
-func (i *Images) Has(_ context.Context, push images.ImagePush) (bool, error) {
+func (i *Images) Has(_ context.Context, push images.Push) (bool, error) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.asked = append(i.asked, push)
@@ -61,7 +61,7 @@ func (i *Images) Has(_ context.Context, push images.ImagePush) (bool, error) {
 	return i.held[push.ImageRef], nil
 }
 
-func (i *Images) Push(_ context.Context, push images.ImagePush, _ edge.Progress) error {
+func (i *Images) Push(_ context.Context, push images.Push, _ edge.Progress) error {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	if i.failed != nil {
@@ -72,13 +72,13 @@ func (i *Images) Push(_ context.Context, push images.ImagePush, _ edge.Progress)
 	return nil
 }
 
-func (i *Images) open(target images.RegistryTarget) {
+func (i *Images) open(target images.Registry) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	i.opened = append(i.opened, target)
 }
 
-func (p *Provider) OpenRegistryImages(_ context.Context, target images.RegistryTarget) (images.ImageStore, error) {
+func (p *Provider) OpenRegistryImages(_ context.Context, target images.Registry) (images.Store, error) {
 	p.images.open(target)
 	return p.images, nil
 }

@@ -1,7 +1,7 @@
 package images
 
-var CredentialsTravelTo = credentialsTravelTo
+var RefuseForeignTokenRealm = refuseForeignTokenRealm
 
-var Addressable = addressable
+var Resolvable = resolvable
 
 var RegistryTimeout = &registryTimeout

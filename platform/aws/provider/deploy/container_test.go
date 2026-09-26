@@ -67,7 +67,7 @@ func plannedContainerStack(t *testing.T) (Config, providerkit.StackPlan) {
 		Ref:    providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
 		Kind:   providerkit.StackApp,
 		Tags:   map[string]string{"ocel:managed-by": "ocel"},
-		Images: providerkit.ImagePlan{Pushes: []images.ImagePush{{App: "web", ImageRef: containerImage}}},
+		Images: providerkit.ImagePushes{Pushes: []images.Push{{App: "web", ImageRef: containerImage}}},
 		App: &providerkit.AppPlan{
 			App:             "web",
 			Deployment:      "d1",

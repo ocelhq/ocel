@@ -19,7 +19,7 @@ type loaded struct {
 	at   string
 }
 
-func (p *Provider) OpenDirectImages(context.Context) (images.ImageStore, error) {
+func (p *Provider) OpenDirectImages(context.Context) (images.Store, error) {
 	return loaded{host: p.host, at: p.options.SSH.session().Destination()}, nil
 }
 
@@ -29,11 +29,11 @@ func (l loaded) GoString() string { return l.String() }
 
 func (l loaded) Destination() string { return l.at }
 
-func (l loaded) Has(ctx context.Context, push images.ImagePush) (bool, error) {
+func (l loaded) Has(ctx context.Context, push images.Push) (bool, error) {
 	return l.host.HoldsImage(ctx, push.ImageRef)
 }
 
-func (l loaded) Push(ctx context.Context, push images.ImagePush, progress edge.Progress) error {
+func (l loaded) Push(ctx context.Context, push images.Push, progress edge.Progress) error {
 	if push.Built == nil {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s: this release carries no built image to load onto the box", push.App)
@@ -41,7 +41,7 @@ func (l loaded) Push(ctx context.Context, push images.ImagePush, progress edge.P
 	return l.load(ctx, push, progress)
 }
 
-func (l loaded) load(ctx context.Context, push images.ImagePush, progress edge.Progress) error {
+func (l loaded) load(ctx context.Context, push images.Push, progress edge.Progress) error {
 	ref, err := name.NewTag(push.ImageRef, name.Insecure)
 	if err != nil {
 		return fmt.Errorf("%q is not a valid image tag: %w", push.ImageRef, err)

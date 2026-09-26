@@ -258,7 +258,7 @@ func (b *box) fedTo(needle string) string {
 	return ""
 }
 
-func standing(t *testing.T, machine *box) images.ImageStore {
+func standing(t *testing.T, machine *box) images.Store {
 	t.Helper()
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
@@ -289,9 +289,9 @@ func daemonHolding(t *testing.T, tar string) *int {
 	return &reads
 }
 
-func aPush(t *testing.T) images.ImagePush {
+func aPush(t *testing.T) images.Push {
 	t.Helper()
-	return images.ImagePush{
+	return images.Push{
 		App:      "web",
 		Source:   "ocel/shop/web@sha256:abc",
 		ImageRef: loadedImageRef,
@@ -415,7 +415,7 @@ func TestAWrappedImagePulledOntoTheMachineIsPinnedToTheDigestOfWhatWasPushed(t *
 	served := httptest.NewServer(registry.New(registry.Logger(log.New(io.Discard, "", 0))))
 	t.Cleanup(served.Close)
 	server := strings.TrimPrefix(served.URL, "http://")
-	store, err := p.OpenRegistryImages(context.Background(), images.RegistryTarget{Server: server})
+	store, err := p.OpenRegistryImages(context.Background(), images.Registry{Server: server})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -424,7 +424,7 @@ func TestAWrappedImagePulledOntoTheMachineIsPinnedToTheDigestOfWhatWasPushed(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	push := images.ImagePush{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: server + "/shop/web:sha256-abc-ocel-0123", Built: built}
+	push := images.Push{App: "web", Source: "ocel/shop/web@sha256:abc", ImageRef: server + "/shop/web:sha256-abc-ocel-0123", Built: built}
 	if err := store.Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("Push() = %v", err)
 	}

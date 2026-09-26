@@ -143,7 +143,7 @@ func (r *deployRun) stageFunctions(
 	entry AppEntry,
 	pack AppPack,
 	routing *RoutingPlan,
-) ([]Upload, []images.ImagePush, error) {
+) ([]Upload, []images.Push, error) {
 	if hooks := r.provider.Hooks(); hooks.FunctionImages != nil {
 		pushes, err := r.imageFunctions(ctx, hooks, entry, pack, routing)
 		return nil, pushes, err

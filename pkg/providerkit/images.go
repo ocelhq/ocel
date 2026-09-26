@@ -12,12 +12,12 @@ import (
 
 const ImageKind = "image"
 
-type ImagePlan struct {
-	Store  images.ImageStore
-	Pushes []images.ImagePush
+type ImagePushes struct {
+	Store  images.Store
+	Pushes []images.Push
 }
 
-func (p ImagePlan) String() string {
+func (p ImagePushes) String() string {
 	targets := make([]string, 0, len(p.Pushes))
 	for _, push := range p.Pushes {
 		targets = append(targets, push.App+" to "+push.ImageRef)
@@ -28,9 +28,9 @@ func (p ImagePlan) String() string {
 	return "images pushing " + strings.Join(targets, ", ")
 }
 
-func (p ImagePlan) GoString() string { return p.String() }
+func (p ImagePushes) GoString() string { return p.String() }
 
-func (p ImagePlan) Rows(ctx context.Context) ([]Change, error) {
+func (p ImagePushes) Rows(ctx context.Context) ([]Change, error) {
 	rows := make([]Change, 0, len(p.Pushes))
 	for _, push := range p.Pushes {
 		held, err := p.held(ctx, push)
@@ -42,7 +42,7 @@ func (p ImagePlan) Rows(ctx context.Context) ([]Change, error) {
 	return rows, nil
 }
 
-func (p ImagePlan) Ship(ctx context.Context, progress edge.Progress) error {
+func (p ImagePushes) PushMissing(ctx context.Context, progress edge.Progress) error {
 	for _, push := range p.Pushes {
 		held, err := p.held(ctx, push)
 		if err != nil {
@@ -62,7 +62,7 @@ func (p ImagePlan) Ship(ctx context.Context, progress edge.Progress) error {
 	return nil
 }
 
-func (p ImagePlan) push(ctx context.Context, push images.ImagePush, progress edge.Progress) error {
+func (p ImagePushes) push(ctx context.Context, push images.Push, progress edge.Progress) error {
 	if push.Wrap != nil {
 		if progress != nil {
 			progress.Detail("Wrapping the image in the ocel runtime")
@@ -77,7 +77,7 @@ func (p ImagePlan) push(ctx context.Context, push images.ImagePush, progress edg
 	return p.Store.Push(ctx, push, progress)
 }
 
-func (p ImagePlan) ImageRef(app string) string {
+func (p ImagePushes) ImageRef(app string) string {
 	for _, push := range p.Pushes {
 		if !push.Function && push.App == app {
 			return push.ImageRef
@@ -86,7 +86,7 @@ func (p ImagePlan) ImageRef(app string) string {
 	return ""
 }
 
-func (p ImagePlan) held(ctx context.Context, push images.ImagePush) (bool, error) {
+func (p ImagePushes) held(ctx context.Context, push images.Push) (bool, error) {
 	if p.Store == nil {
 		return false, refusal.Refuse(refusal.CodeInvalid,
 			"%s's image is pushed to %s and this release carries nothing to push it with", push.App, push.ImageRef)
@@ -98,7 +98,7 @@ func (p ImagePlan) held(ctx context.Context, push images.ImagePush) (bool, error
 	return held, nil
 }
 
-func imageStoreFor(ctx context.Context, provider Provider, target images.RegistryTarget) (images.ImageStore, error) {
+func imageStoreFor(ctx context.Context, provider Provider, target images.Registry) (images.Store, error) {
 	hooks := provider.Hooks()
 	if !target.Named() {
 		if hooks.OpenDirectImages == nil {
@@ -109,5 +109,5 @@ func imageStoreFor(ctx context.Context, provider Provider, target images.Registr
 	if hooks.OpenRegistryImages != nil {
 		return hooks.OpenRegistryImages(ctx, target)
 	}
-	return images.RegistryImages(target), nil
+	return images.RegistryStore(target), nil
 }

@@ -6,6 +6,6 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
 )
 
-func (p *Provider) OpenDirectImages(context.Context) (images.ImageStore, error) {
-	return images.DaemonImages(), nil
+func (p *Provider) OpenDirectImages(context.Context) (images.Store, error) {
+	return images.DaemonStore(), nil
 }

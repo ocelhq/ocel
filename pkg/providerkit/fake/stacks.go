@@ -67,7 +67,7 @@ func (r *Stacks) Provision(ctx context.Context, plan providerkit.StackPlan, prog
 			return providerkit.StackResult{}, err
 		}
 	}
-	if err := plan.Images.Ship(ctx, progress); err != nil {
+	if err := plan.Images.PushMissing(ctx, progress); err != nil {
 		return providerkit.StackResult{}, err
 	}
 	if err := providerkit.ShipUploads(ctx, r.artifacts, plan.Uploads, progress); err != nil {

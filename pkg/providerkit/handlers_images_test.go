@@ -272,17 +272,17 @@ func TestAnImageRowRidesInsideTheAppsOwnStackGroup(t *testing.T) {
 
 func TestTheImageStoreIsOpenedFromTheTargetTheDeployCarries(t *testing.T) {
 	store := fake.NewImages()
-	push := images.ImagePush{App: "web", Source: containerTestImage, ImageRef: pushedCoordinate}
-	plan := providerkit.ImagePlan{Store: store, Pushes: []images.ImagePush{push}}
+	push := images.Push{App: "web", Source: containerTestImage, ImageRef: pushedCoordinate}
+	plan := providerkit.ImagePushes{Store: store, Pushes: []images.Push{push}}
 
-	if err := plan.Ship(context.Background(), nil); err != nil {
-		t.Fatalf("Ship() = %v", err)
+	if err := plan.PushMissing(context.Background(), nil); err != nil {
+		t.Fatalf("PushMissing() = %v", err)
 	}
-	if err := plan.Ship(context.Background(), nil); err != nil {
-		t.Fatalf("Ship() = %v", err)
+	if err := plan.PushMissing(context.Background(), nil); err != nil {
+		t.Fatalf("PushMissing() = %v", err)
 	}
 	if pushed := store.Pushed(); len(pushed) != 1 {
-		t.Errorf("Ship() pushed %d times, want the second run to find the digest already there", len(pushed))
+		t.Errorf("PushMissing() pushed %d times, want the second run to find the digest already there", len(pushed))
 	}
 }
 
@@ -290,29 +290,29 @@ type refusingStore struct{ where string }
 
 func (s refusingStore) Destination() string { return s.where }
 
-func (s refusingStore) Has(context.Context, images.ImagePush) (bool, error) {
+func (s refusingStore) Has(context.Context, images.Push) (bool, error) {
 	return false, nil
 }
 
-func (s refusingStore) Push(context.Context, images.ImagePush, edge.Progress) error {
+func (s refusingStore) Push(context.Context, images.Push, edge.Progress) error {
 	return errors.New("the stream stopped short")
 }
 
 func TestATransferThatFailsNamesWhereItWasSendingRatherThanTheCoordinate(t *testing.T) {
 	store := refusingStore{where: "box.invalid"}
-	plan := providerkit.ImagePlan{Store: store, Pushes: []images.ImagePush{{
+	plan := providerkit.ImagePushes{Store: store, Pushes: []images.Push{{
 		App: "web", Source: containerTestImage, ImageRef: loadedCoordinate,
 	}}}
 
-	err := plan.Ship(context.Background(), nil)
+	err := plan.PushMissing(context.Background(), nil)
 	if err == nil {
-		t.Fatal("Ship() = nil over a store that refuses every push")
+		t.Fatal("PushMissing() = nil over a store that refuses every push")
 	}
 	if !strings.Contains(err.Error(), store.where) {
-		t.Errorf("Ship() = %v, want the destination %q the deploy announced it was sending to", err, store.where)
+		t.Errorf("PushMissing() = %v, want the destination %q the deploy announced it was sending to", err, store.where)
 	}
 	if strings.Contains(err.Error(), loadedCoordinate) {
-		t.Errorf("Ship() = %v: a direct transfer that failed reads as a push to a registry that was never involved", err)
+		t.Errorf("PushMissing() = %v: a direct transfer that failed reads as a push to a registry that was never involved", err)
 	}
 }
 
@@ -329,7 +329,7 @@ func (p loadingProvider) Hooks() providerkit.Hooks {
 	return hooks
 }
 
-func (p loadingProvider) OpenDirectImages(context.Context) (images.ImageStore, error) {
+func (p loadingProvider) OpenDirectImages(context.Context) (images.Store, error) {
 	return p.direct, nil
 }
 
@@ -442,7 +442,7 @@ func (p addressingProvider) Hooks() providerkit.Hooks {
 	return hooks
 }
 
-func (p addressingProvider) OpenDirectImages(context.Context) (images.ImageStore, error) {
+func (p addressingProvider) OpenDirectImages(context.Context) (images.Store, error) {
 	return p.direct, nil
 }
 

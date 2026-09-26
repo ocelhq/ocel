@@ -23,9 +23,9 @@ func servingRegistry(t *testing.T) string {
 }
 
 func TestTheDaemonStoreRefusesAnImageItWasNeverHanded(t *testing.T) {
-	push := images.ImagePush{App: "server", ImageRef: "web-server:sha256-abc", Digest: "sha256:abc"}
+	push := images.Push{App: "server", ImageRef: "web-server:sha256-abc", Digest: "sha256:abc"}
 
-	err := images.DaemonImages().Push(context.Background(), push, nil)
+	err := images.DaemonStore().Push(context.Background(), push, nil)
 	if err == nil {
 		t.Fatal("Push() took an image the deploy never built, want it refused: nothing was handed over to write")
 	}
@@ -36,9 +36,9 @@ func TestTheDaemonStoreRefusesAnImageItWasNeverHanded(t *testing.T) {
 
 func TestTheDaemonStoreSaysSoWhenItCannotReachTheDaemon(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "tcp://127.0.0.1:1")
-	push := images.ImagePush{App: "server", ImageRef: "web-server:sha256-abc", Digest: "sha256:abc"}
+	push := images.Push{App: "server", ImageRef: "web-server:sha256-abc", Digest: "sha256:abc"}
 
-	held, err := images.DaemonImages().Has(context.Background(), push)
+	held, err := images.DaemonStore().Has(context.Background(), push)
 	if err == nil {
 		t.Fatalf("Has() = %v, nil against a daemon nothing answers on, want the failure surfaced: a deploy would take silence for an absent image and push over nothing", held)
 	}
@@ -61,15 +61,15 @@ func TestABuiltImageReachesTheRegistryWithoutADaemon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	target := images.RegistryTarget{Server: host, Namespace: "ocel"}
-	push := images.ImagePush{
+	target := images.Registry{Server: host, Namespace: "ocel"}
+	push := images.Push{
 		App:      "server",
 		ImageRef: target.ImageRef("web-server", naming.DigestTag(digest.String())),
 		Digest:   digest.String(),
 		Built:    image,
 	}
 
-	store := images.RegistryImages(target)
+	store := images.RegistryStore(target)
 	held, err := store.Has(context.Background(), push)
 	if err != nil {
 		t.Fatalf("Has() error = %v", err)

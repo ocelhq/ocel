@@ -765,9 +765,9 @@ type countedImages struct {
 
 func (c *countedImages) Destination() string { return "the counted store" }
 
-func (c *countedImages) Has(context.Context, images.ImagePush) (bool, error) { return false, nil }
+func (c *countedImages) Has(context.Context, images.Push) (bool, error) { return false, nil }
 
-func (c *countedImages) Push(_ context.Context, _ images.ImagePush, _ edge.Progress) error {
+func (c *countedImages) Push(_ context.Context, _ images.Push, _ edge.Progress) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.pushed++
@@ -911,7 +911,7 @@ func RunStacks(t *testing.T, facts providerkit.Facts, stacks providerkit.Stacks,
 
 		store := &countedImages{}
 		pushing := bare
-		pushing.Images = providerkit.ImagePlan{Store: store, Pushes: []images.ImagePush{{
+		pushing.Images = providerkit.ImagePushes{Store: store, Pushes: []images.Push{{
 			App:      "conformance",
 			Source:   "ocel/conformance@sha256:" + conformanceImageDigest,
 			ImageRef: "registry.invalid/conformance:sha256-" + conformanceImageDigest,

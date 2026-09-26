@@ -21,19 +21,19 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type registryImages struct {
-	target RegistryTarget
+type registryStore struct {
+	target Registry
 }
 
-func RegistryImages(target RegistryTarget) ImageStore { return registryImages{target: target} }
+func RegistryStore(target Registry) Store { return registryStore{target: target} }
 
-func (r registryImages) String() string {
+func (r registryStore) String() string {
 	return "images pushed to " + r.target.String()
 }
 
-func (r registryImages) GoString() string { return r.String() }
+func (r registryStore) GoString() string { return r.String() }
 
-func (r registryImages) Destination() string { return r.target.Server }
+func (r registryStore) Destination() string { return r.target.Server }
 
 var manifestTypes = []string{
 	"application/vnd.oci.image.index.v1+json",
@@ -50,7 +50,7 @@ const (
 
 var registryTimeout = 30 * time.Second
 
-func (r registryImages) Has(ctx context.Context, push ImagePush) (bool, error) {
+func (r registryStore) Has(ctx context.Context, push Push) (bool, error) {
 	server, repository, tag, err := splitImageRef(push.ImageRef)
 	if err != nil {
 		return false, err
@@ -66,7 +66,7 @@ func (r registryImages) Has(ctx context.Context, push ImagePush) (bool, error) {
 				return false, err
 			}
 		}
-		held, again, wait, err = r.look(ctx, client, endpoint, server, repository, push)
+		held, again, wait, err = r.manifestExists(ctx, client, endpoint, server, repository, push)
 		if !again {
 			return held, err
 		}
@@ -74,10 +74,10 @@ func (r registryImages) Has(ctx context.Context, push ImagePush) (bool, error) {
 	return false, err
 }
 
-func (r registryImages) look(ctx context.Context, client *http.Client, endpoint, server, repository string, push ImagePush) (held, again bool, after time.Duration, err error) {
+func (r registryStore) manifestExists(ctx context.Context, client *http.Client, endpoint, server, repository string, push Push) (held, again bool, after time.Duration, err error) {
 	resp, err := r.head(ctx, client, endpoint, "")
 	if err != nil {
-		return false, addressable(err), 0, err
+		return false, resolvable(err), 0, err
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
 		authorization, err := r.authorize(ctx, client, resp, server, repository)
@@ -86,13 +86,13 @@ func (r registryImages) look(ctx context.Context, client *http.Client, endpoint,
 			return false, false, 0, err
 		}
 		if resp, err = r.head(ctx, client, endpoint, authorization); err != nil {
-			return false, addressable(err), 0, err
+			return false, resolvable(err), 0, err
 		}
 	}
 	defer resp.Body.Close()
 	switch {
 	case resp.StatusCode == http.StatusOK:
-		return answersFor(resp, push.Digest), false, 0, nil
+		return digestMatches(resp, push.Digest), false, 0, nil
 	case resp.StatusCode == http.StatusNotFound:
 		return false, false, 0, nil
 	case resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500:
@@ -102,7 +102,7 @@ func (r registryImages) look(ctx context.Context, client *http.Client, endpoint,
 	}
 }
 
-func answersFor(resp *http.Response, digest string) bool {
+func digestMatches(resp *http.Response, digest string) bool {
 	if digest == "" {
 		return true
 	}
@@ -110,7 +110,7 @@ func answersFor(resp *http.Response, digest string) bool {
 	return answered == "" || answered == digest
 }
 
-func addressable(err error) bool {
+func resolvable(err error) bool {
 	var dns *net.DNSError
 	return !errors.As(err, &dns) || !dns.IsNotFound
 }
@@ -145,7 +145,7 @@ func pause(ctx context.Context, wait time.Duration) error {
 	}
 }
 
-func (r registryImages) head(ctx context.Context, client *http.Client, endpoint, authorization string) (*http.Response, error) {
+func (r registryStore) head(ctx context.Context, client *http.Client, endpoint, authorization string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodHead, endpoint, nil)
 	if err != nil {
 		return nil, err
@@ -161,7 +161,7 @@ func (r registryImages) head(ctx context.Context, client *http.Client, endpoint,
 	return resp, nil
 }
 
-func (r registryImages) authorize(ctx context.Context, client *http.Client, refused *http.Response, server, repository string) (string, error) {
+func (r registryStore) authorize(ctx context.Context, client *http.Client, refused *http.Response, server, repository string) (string, error) {
 	scheme, params := challenge(refused.Header.Get("WWW-Authenticate"))
 	switch strings.ToLower(scheme) {
 	case "basic":
@@ -173,16 +173,16 @@ func (r registryImages) authorize(ctx context.Context, client *http.Client, refu
 	}
 }
 
-func (r registryImages) basic() string {
+func (r registryStore) basic() string {
 	return "Basic " + base64.StdEncoding.EncodeToString([]byte(r.target.Username+":"+r.target.Password))
 }
 
-func (r registryImages) bearer(ctx context.Context, client *http.Client, params map[string]string, server, repository string) (string, error) {
+func (r registryStore) bearer(ctx context.Context, client *http.Client, params map[string]string, server, repository string) (string, error) {
 	realm := params["realm"]
 	if realm == "" {
 		return "", fmt.Errorf("the registry asked for a bearer token and named no realm to fetch it from")
 	}
-	if err := credentialsTravelTo(realm, server); err != nil {
+	if err := refuseForeignTokenRealm(realm, server); err != nil {
 		return "", err
 	}
 	query := url.Values{}
@@ -227,7 +227,7 @@ func (r registryImages) bearer(ctx context.Context, client *http.Client, params 
 	return "Bearer " + token, nil
 }
 
-func credentialsTravelTo(realm, server string) error {
+func refuseForeignTokenRealm(realm, server string) error {
 	at, err := url.Parse(realm)
 	if err != nil {
 		return fmt.Errorf("%s asked for a token to be bought at %q, which is no url ocel can reach: %w", server, realm, err)
@@ -296,9 +296,9 @@ func registryScheme(server string) string {
 	return "https"
 }
 
-func (r registryImages) Push(ctx context.Context, push ImagePush, progress edge.Progress) error {
+func (r registryStore) Push(ctx context.Context, push Push, progress edge.Progress) error {
 	if push.Built != nil {
-		return r.write(ctx, push)
+		return r.pushBuilt(ctx, push)
 	}
 	host, err := DockerHostFromEnv()
 	if err != nil {
@@ -316,7 +316,7 @@ func (r registryImages) Push(ctx context.Context, push ImagePush, progress edge.
 	if err := host.Tag(ctx, client, push.Source, named, tag); err != nil {
 		return err
 	}
-	defer r.unname(ctx, client, named, tag)
+	defer r.untagLocal(ctx, client, named, tag)
 
 	var wait time.Duration
 	var again bool
@@ -326,7 +326,7 @@ func (r registryImages) Push(ctx context.Context, push ImagePush, progress edge.
 				return err
 			}
 		}
-		again, wait, err = r.upload(ctx, client, host, named, tag, progress)
+		again, wait, err = r.pushViaDaemon(ctx, client, host, named, tag, progress)
 		if !again {
 			return err
 		}
@@ -334,7 +334,7 @@ func (r registryImages) Push(ctx context.Context, push ImagePush, progress edge.
 	return err
 }
 
-func (r registryImages) write(ctx context.Context, push ImagePush) error {
+func (r registryStore) pushBuilt(ctx context.Context, push Push) error {
 	options := []name.Option{}
 	if registryScheme(r.target.Server) == "http" {
 		options = append(options, name.Insecure)
@@ -353,7 +353,7 @@ func (r registryImages) write(ctx context.Context, push ImagePush) error {
 	return nil
 }
 
-func (r registryImages) upload(ctx context.Context, client *http.Client, host DockerHost, named, tag string, progress edge.Progress) (again bool, after time.Duration, err error) {
+func (r registryStore) pushViaDaemon(ctx context.Context, client *http.Client, host DockerHost, named, tag string, progress edge.Progress) (again bool, after time.Duration, err error) {
 	endpoint := "http://docker/images/" + named + "/push?" + url.Values{"tag": {tag}}.Encode()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
 	if err != nil {
@@ -373,7 +373,7 @@ func (r registryImages) upload(ctx context.Context, client *http.Client, host Do
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		return resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500, retryAfter(resp),
-			fmt.Errorf("the daemon at %s answered %q pushing %s:%s: %s", host.Address, resp.Status, named, tag, said(resp.Body))
+			fmt.Errorf("the daemon at %s answered %q pushing %s:%s: %s", host.Address, resp.Status, named, tag, readErrorBody(resp.Body))
 	}
 	if err := drainPush(resp.Body, progress); err != nil {
 		var refusal registryRefusal
@@ -382,7 +382,7 @@ func (r registryImages) upload(ctx context.Context, client *http.Client, host Do
 	return false, 0, nil
 }
 
-func (r registryImages) unname(ctx context.Context, client *http.Client, named, tag string) {
+func (r registryStore) untagLocal(ctx context.Context, client *http.Client, named, tag string) {
 	endpoint := "http://docker/images/" + named + ":" + tag + "?" + url.Values{"noprune": {"1"}}.Encode()
 	req, err := http.NewRequestWithContext(context.WithoutCancel(ctx), http.MethodDelete, endpoint, nil)
 	if err != nil {
@@ -395,7 +395,7 @@ func (r registryImages) unname(ctx context.Context, client *http.Client, named, 
 	_ = resp.Body.Close()
 }
 
-func (r registryImages) registryAuth() (string, error) {
+func (r registryStore) registryAuth() (string, error) {
 	if r.target.Username == "" && r.target.Password == "" {
 		return "", nil
 	}
@@ -431,7 +431,7 @@ func drainPush(body io.Reader, progress edge.Progress) error {
 			return fmt.Errorf("read the daemon's push progress: %w", err)
 		}
 		if line.Error != "" {
-			return registryRefusal{said: line.Error, again: Throttled(line.Error)}
+			return registryRefusal{said: line.Error, again: RetryablePush(line.Error)}
 		}
 		if progress != nil && line.Status != "" {
 			progress.Detail(line.Status)
@@ -439,7 +439,7 @@ func drainPush(body io.Reader, progress edge.Progress) error {
 	}
 }
 
-func Throttled(said string) bool {
+func RetryablePush(said string) bool {
 	lowered := strings.ToLower(said)
 	for _, refusal := range []string{"unauthorized", "authentication required", "denied", "forbidden"} {
 		if strings.Contains(lowered, refusal) {
@@ -454,7 +454,7 @@ func Throttled(said string) bool {
 	return false
 }
 
-func said(body io.Reader) string {
+func readErrorBody(body io.Reader) string {
 	raw, _ := io.ReadAll(io.LimitReader(body, 4096))
 	return strings.TrimSpace(string(raw))
 }
