@@ -36,7 +36,7 @@ class Postgres:
     @property
     def connection_string(self) -> str:
         """The postgres URL of the delivered binding: the record's url verbatim when it
-        carries one, and otherwise one built from its host, port, database and credentials,
+        has one, and otherwise one built from its host, port, database and credentials,
         percent-encoded, with its tls mode as ``sslmode``."""
         properties = postgres_binding(self.name)
         if properties.url:
@@ -50,7 +50,7 @@ class Postgres:
 
     async def pool(self):
         """The asyncpg pool over the delivered binding, opened on the first call and returned
-        as it stands on every one after. A record under verify-full that names a CA trusts
+        unchanged on every one after. A record under verify-full that names a CA trusts
         that CA for the server's certificate."""
         if self._pool is None:
             async with self._opening:

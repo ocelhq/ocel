@@ -24,7 +24,7 @@ def test_a_declared_database_reaches_the_dev_server_with_the_file_that_declared_
     assert int(line) > 0
 
 
-def test_a_declaration_carries_the_dev_server_token(collector):
+def test_a_declaration_sends_the_dev_server_token(collector):
     postgres("main")
 
     assert collector.authorizations == ["Bearer opensesame"]
@@ -98,7 +98,7 @@ def test_a_binding_is_read_from_the_projected_live_directory(monkeypatch, tmp_pa
     assert postgres("main").connection_string == "postgres://u:p@h:5432/d"
 
 
-def test_a_binding_of_another_type_is_refused_for_the_type_it_carries(monkeypatch):
+def test_a_binding_of_another_type_is_refused_for_the_type_it_contains(monkeypatch):
     monkeypatch.delenv("OCEL_PHASE", raising=False)
     monkeypatch.setenv(
         "OCEL_RESOURCE_POSTGRES_main",
@@ -112,7 +112,7 @@ def test_a_binding_of_another_type_is_refused_for_the_type_it_carries(monkeypatc
     )
 
 
-def test_a_binding_carrying_nothing_at_all_is_refused_for_the_type_it_carries(monkeypatch):
+def test_a_binding_of_no_type_at_all_is_refused_for_the_type_it_contains(monkeypatch):
     monkeypatch.delenv("OCEL_PHASE", raising=False)
     monkeypatch.setenv("OCEL_RESOURCE_POSTGRES_main", json.dumps({"name": "main"}))
 
@@ -124,7 +124,7 @@ def test_a_binding_carrying_nothing_at_all_is_refused_for_the_type_it_carries(mo
     )
 
 
-def test_a_value_that_is_not_a_binding_record_is_reported_without_quoting_what_it_held(monkeypatch):
+def test_a_value_that_is_not_a_binding_record_is_reported_without_quoting_it(monkeypatch):
     monkeypatch.delenv("OCEL_PHASE", raising=False)
     monkeypatch.setenv("OCEL_RESOURCE_POSTGRES_main", "s3cret-not-json")
 
@@ -151,7 +151,7 @@ def test_a_binding_the_deploy_delivers_is_read_past_the_fields_this_app_uses(mon
     )
 
 
-def test_the_connection_string_carries_credentials_no_url_could_hold_unescaped(monkeypatch):
+def test_the_connection_string_escapes_credentials_no_url_could_contain_unescaped(monkeypatch):
     monkeypatch.delenv("OCEL_PHASE", raising=False)
     monkeypatch.setenv(
         "OCEL_RESOURCE_POSTGRES_main",

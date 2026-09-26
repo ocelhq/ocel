@@ -17,7 +17,7 @@ def define(source: str, filename: str) -> dict:
     return namespace
 
 
-def test_a_key_no_variable_could_carry_is_refused():
+def test_a_key_that_is_not_a_usable_variable_name_is_refused():
     with pytest.raises(ocel.EnvDefinitionError) as raised:
 
         class Env(ocel.Env):
@@ -205,7 +205,10 @@ def test_a_file_run_again_with_a_line_prepended_declares_its_own_key_again(monke
         (["/apps/web/"], "must not end with '/'"),
         (["/apps//web"], "no empty segments"),
         (["/apps/web#1"], "may not contain '#'"),
-        (["/apps/web", "/apps/web"], "is named twice"),
+        (
+            ["/apps/web", "/apps/web"],
+            "is named twice. A scoped variable has one value per folder it names.",
+        ),
         ([], "an empty folder scope says nothing"),
     ],
 )
@@ -345,7 +348,7 @@ def test_every_variable_reaches_the_dev_server_with_its_class_and_what_it_needs(
         assert definition.source == f"{__file__}:{line}"
 
 
-def test_a_required_key_the_store_holds_no_cell_for_is_reported(collector):
+def test_a_required_key_the_store_has_no_cell_for_is_reported(collector):
     collector.cells = [VariableCell(key="PRESENT", value="v")]
 
     class Env(ocel.Env):
@@ -417,7 +420,7 @@ def test_nothing_is_reported_when_every_cell_satisfies_its_annotation(collector)
     assert collector.reported() == []
 
 
-def test_a_live_cell_stands_without_a_value_and_is_never_checked(collector):
+def test_a_live_cell_without_a_value_counts_as_set_and_is_never_checked(collector):
     collector.cells = [VariableCell(key="SIGNING_KEY")]
 
     class Env(ocel.Env):
@@ -437,7 +440,7 @@ def test_the_namespaced_value_wins_over_a_bare_name_of_the_same_key(monkeypatch)
     assert Env().name == "baked"
 
 
-def test_a_default_stands_in_only_where_nothing_is_set(monkeypatch):
+def test_a_default_applies_only_where_nothing_is_set(monkeypatch):
     monkeypatch.setenv("NAME", "set")
     monkeypatch.delenv("UNSET_NAME", raising=False)
 
@@ -522,7 +525,7 @@ def test_every_annotation_parses_the_delivered_text_into_itself(monkeypatch):
     assert env.level is Level.INFO
 
 
-def test_an_int_refuses_text_no_integer_stands_behind(monkeypatch):
+def test_an_int_refuses_text_that_is_not_an_integer(monkeypatch):
     monkeypatch.setenv("PORT", "80.5")
 
     class Env(ocel.Env):
@@ -598,7 +601,7 @@ def test_a_variable_scoped_to_the_folder_this_app_is_bound_to_is_read(monkeypatc
     assert Env().flag is True
 
 
-def test_a_value_is_read_once_and_stands_for_the_life_of_the_instance(monkeypatch):
+def test_a_value_is_read_once_and_kept_for_the_life_of_the_instance(monkeypatch):
     monkeypatch.setenv("PORT", "8080")
 
     class Env(ocel.Env):
@@ -631,7 +634,7 @@ def test_a_secret_resolves_on_every_read(monkeypatch):
     assert key.value == "rotated"
 
 
-def test_a_value_only_the_live_directory_holds_is_read_from_its_file(monkeypatch, tmp_path):
+def test_a_value_only_the_live_directory_has_is_read_from_its_file(monkeypatch, tmp_path):
     monkeypatch.delenv("FILE_ONLY", raising=False)
     monkeypatch.delenv("OCEL_VAR_FILE_ONLY", raising=False)
     (tmp_path / "FILE_ONLY").write_bytes(b"from the file\n")
@@ -660,7 +663,7 @@ def test_a_delivered_variable_wins_over_the_live_directory_file_of_the_same_key(
     assert (env.file_shadowed, env.file_bare) == ("baked", "bare")
 
 
-def test_a_key_the_live_directory_holds_no_file_for_is_unset(monkeypatch, tmp_path):
+def test_a_key_the_live_directory_has_no_file_for_is_unset(monkeypatch, tmp_path):
     monkeypatch.delenv("FILE_MISSING", raising=False)
     monkeypatch.setenv("OCEL_LIVE_DIR", str(tmp_path))
 
@@ -780,7 +783,7 @@ def test_a_declaration_the_server_refuses_says_what_it_said(monkeypatch):
     assert str(raised.value).startswith("ocel: declare env: ")
 
 
-def test_an_instance_taken_during_discovery_reads_the_environment_it_stands_in(collector):
+def test_an_instance_taken_during_discovery_reads_the_environment_it_runs_in(collector):
     os.environ["OCEL_VAR_GREETING"] = "hello"
     try:
 
@@ -840,7 +843,7 @@ def test_a_secret_in_a_group_resolves_on_every_read(monkeypatch):
     assert secret.value == "rotated"
 
 
-def test_an_optional_group_one_member_is_delivered_for_is_owed_the_rest(collector):
+def test_an_optional_group_one_member_is_delivered_for_reports_the_rest_missing(collector):
     collector.cells = [VariableCell(key="GITHUB_CLIENT_ID", value="id")]
 
     class GitHub(ocel.Group):
@@ -857,7 +860,7 @@ def test_an_optional_group_one_member_is_delivered_for_is_owed_the_rest(collecto
     ]
 
 
-def test_an_optional_group_nothing_is_delivered_for_is_owed_nothing(collector):
+def test_an_optional_group_nothing_is_delivered_for_reports_nothing_missing(collector):
     class GitHub(ocel.Group):
         client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
         client_secret: str = ocel.var(key="GITHUB_CLIENT_SECRET")
@@ -869,7 +872,7 @@ def test_an_optional_group_nothing_is_delivered_for_is_owed_nothing(collector):
     assert collector.reported() == []
 
 
-def test_a_required_group_nothing_is_delivered_for_is_owed_every_member(collector):
+def test_a_required_group_nothing_is_delivered_for_reports_every_member_missing(collector):
     class GitHub(ocel.Group):
         client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
         client_secret: str = ocel.var(key="GITHUB_CLIENT_SECRET")
@@ -884,7 +887,7 @@ def test_a_required_group_nothing_is_delivered_for_is_owed_every_member(collecto
     ]
 
 
-def test_a_member_spelled_optional_is_not_owed_when_the_group_is_on(collector):
+def test_a_member_spelled_optional_is_not_required_when_the_group_is_on(collector):
     collector.cells = [VariableCell(key="SMTP_HOST", value="mail.example")]
 
     class Smtp(ocel.Group):
@@ -960,7 +963,7 @@ def test_a_group_declares_only_through_the_class_that_names_it(collector):
     ]
 
 
-def test_a_member_is_not_reachable_beside_the_group_that_holds_it(monkeypatch):
+def test_a_member_is_not_reachable_beside_the_group_that_contains_it(monkeypatch):
     monkeypatch.setenv("GITHUB_CLIENT_ID", "id")
     monkeypatch.setenv("CLIENT_ID", "outer")
 
@@ -998,8 +1001,7 @@ def test_a_group_nesting_a_group_is_refused():
         _ = Outer
 
     assert str(raised.value) == (
-        "Outer.inner is itself a group. A group contains variables, and groups nest "
-        "one level only."
+        "Outer.inner is itself a group. A group contains variables, and groups nest one level only."
     )
 
 
@@ -1042,7 +1044,7 @@ def test_two_attributes_naming_one_group_are_refused():
     )
 
 
-def test_an_optional_group_a_live_member_alone_stands_for_is_on(collector):
+def test_an_optional_group_with_only_a_live_member_is_on(collector):
     collector.cells = [VariableCell(key="GITHUB_CLIENT_SECRET")]
 
     class GitHub(ocel.Group):
@@ -1074,7 +1076,7 @@ def test_a_class_of_env_annotated_as_a_group_is_refused():
     )
 
 
-def test_a_scoped_member_of_a_group_a_root_value_turned_on_is_owed(collector):
+def test_a_scoped_member_of_a_group_a_root_value_turned_on_is_reported_missing(collector):
     collector.cells = [VariableCell(key="INHERITED_TOKEN", value="t")]
 
     class Inherited(ocel.Group):

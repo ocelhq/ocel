@@ -35,7 +35,7 @@ def test_a_declared_bucket_reaches_the_dev_server_with_the_file_that_declared_it
     assert int(line) > 0
 
 
-def test_a_bucket_declared_public_carries_the_origins_it_allows(collector):
+def test_a_bucket_declared_public_declares_the_origins_it_allows(collector):
     bucket("uploads", public=True, allowed_origins=("https://app.example", "https://www.example"))
 
     declared = collector.declares[0][2].config.value
@@ -86,40 +86,40 @@ def uploads(monkeypatch):
     fake.close()
 
 
-def test_what_the_bucket_knows_about_an_object_it_holds(uploads):
-    uploads.store.objects["a.txt"] = fakebucket.Held(b"hello", "text/plain", {"by": "me"})
+def test_what_the_bucket_knows_about_one_of_its_objects(uploads):
+    uploads.store.objects["a.txt"] = fakebucket.Stored(b"hello", "text/plain", {"by": "me"})
 
-    held = bucket("uploads").head("a.txt")
+    info = bucket("uploads").head("a.txt")
 
-    assert held is not None
-    assert held.key == "a.txt"
-    assert held.size == 5
-    assert held.content_type == "text/plain"
-    assert held.metadata == {"by": "me"}
-    assert held.etag
-    assert held.uploaded_at == datetime(2023, 11, 14, 22, 13, 20, tzinfo=timezone.utc)
+    assert info is not None
+    assert info.key == "a.txt"
+    assert info.size == 5
+    assert info.content_type == "text/plain"
+    assert info.metadata == {"by": "me"}
+    assert info.etag
+    assert info.uploaded_at == datetime(2023, 11, 14, 22, 13, 20, tzinfo=timezone.utc)
 
 
-def test_a_key_the_bucket_does_not_hold_is_known_as_nothing(uploads):
+def test_a_key_with_no_object_under_it_is_known_as_nothing(uploads):
     assert bucket("uploads").head("gone.txt") is None
     assert bucket("uploads").exists("gone.txt") is False
 
 
-def test_every_call_carries_the_runtime_session_token(uploads):
+def test_every_call_sends_the_runtime_session_token(uploads):
     bucket("uploads").head("a.txt")
 
     assert uploads.store.authorizations == ["Bearer letmein"]
 
 
-def test_deleting_a_key_the_bucket_does_not_hold_is_not_an_error(uploads):
-    uploads.store.objects["a.txt"] = fakebucket.Held(b"hello", "text/plain", {})
+def test_deleting_a_key_with_no_object_under_it_is_not_an_error(uploads):
+    uploads.store.objects["a.txt"] = fakebucket.Stored(b"hello", "text/plain", {})
 
     bucket("uploads").delete("a.txt", "gone.txt")
 
     assert uploads.store.objects == {}
 
 
-def test_copying_an_object_the_bucket_does_not_hold_names_what_was_missing(uploads):
+def test_copying_an_object_the_bucket_does_not_have_names_what_was_missing(uploads):
     with pytest.raises(ObjectNotFound) as raised:
         bucket("uploads").copy("gone.txt", "kept.txt")
     assert str(raised.value) == 'the bucket has no object under "gone.txt"'
@@ -127,29 +127,29 @@ def test_copying_an_object_the_bucket_does_not_hold_names_what_was_missing(uploa
 
 
 def test_a_copy_lands_under_the_destination_key(uploads):
-    uploads.store.objects["a.txt"] = fakebucket.Held(b"hello", "text/plain", {})
+    uploads.store.objects["a.txt"] = fakebucket.Stored(b"hello", "text/plain", {})
 
-    held = bucket("uploads").copy("a.txt", "b.txt")
+    copied = bucket("uploads").copy("a.txt", "b.txt")
 
-    assert held.key == "b.txt"
+    assert copied.key == "b.txt"
     assert uploads.store.objects["b.txt"].data == b"hello"
 
 
 def test_a_listing_walks_every_page_of_the_prefix_it_was_given(uploads):
     for key in ["kept/a", "kept/b", "kept/c", "other/d"]:
-        uploads.store.objects[key] = fakebucket.Held(b"x", "", {})
+        uploads.store.objects[key] = fakebucket.Stored(b"x", "", {})
 
     listed = list(bucket("uploads").list(prefix="kept/"))
 
-    assert [held.key for held in listed] == ["kept/a", "kept/b", "kept/c"]
+    assert [info.key for info in listed] == ["kept/a", "kept/b", "kept/c"]
     assert [asked[2] for asked in uploads.store.listed] == ["", "kept/c"]
 
 
 def test_bytes_written_under_a_key_come_back_as_they_went_in(uploads):
-    held = bucket("uploads").put("a.txt", b"hello")
+    landed = bucket("uploads").put("a.txt", b"hello")
 
-    assert held.key == "a.txt"
-    assert held.size == 5
+    assert landed.key == "a.txt"
+    assert landed.size == 5
     assert bucket("uploads").get("a.txt").bytes() == b"hello"
 
 
@@ -159,7 +159,7 @@ def test_text_written_under_a_key_comes_back_decoded(uploads):
     assert bucket("uploads").get("a.txt").text() == "héllo"
 
 
-def test_a_file_written_by_path_carries_its_bytes(uploads, tmp_path):
+def test_a_file_written_by_path_writes_its_bytes(uploads, tmp_path):
     source = tmp_path / "a.txt"
     source.write_bytes(b"from a file")
 
@@ -178,7 +178,7 @@ def test_an_open_file_is_read_to_its_end(uploads, tmp_path):
     assert uploads.store.objects["a.txt"].data == b"from a handle"
 
 
-def test_a_write_carries_the_media_type_and_metadata_it_was_given(uploads):
+def test_a_write_sends_the_media_type_and_metadata_it_was_given(uploads):
     bucket("uploads").put(
         "a.txt",
         b"hello",
@@ -187,13 +187,13 @@ def test_a_write_carries_the_media_type_and_metadata_it_was_given(uploads):
         metadata={"by": "me"},
     )
 
-    held = uploads.store.objects["a.txt"]
-    assert held.content_type == "text/plain"
-    assert held.cache_control == "public, max-age=60"
-    assert held.metadata == {"by": "me"}
+    stored = uploads.store.objects["a.txt"]
+    assert stored.content_type == "text/plain"
+    assert stored.cache_control == "public, max-age=60"
+    assert stored.metadata == {"by": "me"}
 
 
-def test_a_write_that_must_not_replace_refuses_a_key_the_bucket_holds(uploads):
+def test_a_write_that_must_not_replace_refuses_a_key_the_bucket_has(uploads):
     bucket("uploads").put("a.txt", b"first")
 
     with pytest.raises(PreconditionFailed) as raised:
@@ -211,15 +211,15 @@ def test_a_write_conditioned_on_a_version_refuses_another(uploads):
         bucket("uploads").put("a.txt", b"second", if_match='"not-the-etag"')
 
 
-def test_a_write_conditioned_on_the_version_it_holds_goes_through(uploads):
-    held = bucket("uploads").put("a.txt", b"first")
+def test_a_write_conditioned_on_the_current_version_goes_through(uploads):
+    first = bucket("uploads").put("a.txt", b"first")
 
-    bucket("uploads").put("a.txt", b"second", if_match=held.etag)
+    bucket("uploads").put("a.txt", b"second", if_match=first.etag)
 
     assert uploads.store.objects["a.txt"].data == b"second"
 
 
-def test_reading_a_key_the_bucket_does_not_hold_names_what_was_missing(uploads):
+def test_reading_a_key_the_bucket_does_not_have_names_what_was_missing(uploads):
     with pytest.raises(ObjectNotFound) as raised:
         bucket("uploads").get("gone.txt")
     assert str(raised.value) == 'the bucket has no object under "gone.txt"'
@@ -295,9 +295,9 @@ def test_a_body_too_big_for_one_request_goes_up_in_parts(uploads):
     store._single_ceiling = 8
     store._part_size = 4
 
-    held = store.put("a.txt", b"0123456789abcde", content_type="text/plain")
+    landed = store.put("a.txt", b"0123456789abcde", content_type="text/plain")
 
-    assert held.size == 15
+    assert landed.size == 15
     assert uploads.store.objects["a.txt"].data == b"0123456789abcde"
     assert uploads.store.objects["a.txt"].content_type == "text/plain"
     assert uploads.store.uploads == {}
@@ -328,7 +328,7 @@ def test_a_write_in_parts_that_must_not_replace_is_refused(uploads):
 
 
 def test_a_signed_url_is_signed_for_someone_outside_the_runtime(uploads):
-    uploads.store.objects["a.txt"] = fakebucket.Held(b"hello", "text/plain", {})
+    uploads.store.objects["a.txt"] = fakebucket.Stored(b"hello", "text/plain", {})
 
     url = bucket("uploads").signed_url("a.txt", expires_in=timedelta(minutes=5), download="a.txt")
 
@@ -341,7 +341,7 @@ def test_a_signed_url_is_signed_for_someone_outside_the_runtime(uploads):
     assert "download=a.txt" in url
 
 
-def test_a_signed_upload_carries_the_form_the_uploader_must_send(uploads):
+def test_a_signed_upload_includes_the_form_the_uploader_must_send(uploads):
     signed = bucket("uploads").signed_upload(
         "a.txt", expires_in=60, max_size=1024, content_type="text/plain"
     )
@@ -359,7 +359,7 @@ def test_a_public_object_is_addressed_under_the_address_the_deploy_delivered(upl
     assert bucket("uploads").public_url("a/b.txt") == "https://storage.example/uploads/a/b.txt"
 
 
-def test_a_public_url_escapes_what_a_key_segment_may_hold(uploads):
+def test_a_public_url_escapes_what_a_key_segment_may_contain(uploads):
     assert bucket("uploads").public_url("a b/c#d?e.png") == (
         "https://storage.example/uploads/a%20b/c%23d%3Fe.png"
     )
@@ -412,22 +412,22 @@ def test_a_fake_that_answers_like_a_bucket_satisfies_the_sync_protocol():
 async def test_bytes_written_by_the_async_twin_come_back_as_they_went_in(uploads):
     store = bucket("uploads")
 
-    held = await store.put_async("a.txt", b"hello", content_type="text/plain")
+    landed = await store.put_async("a.txt", b"hello", content_type="text/plain")
 
-    assert held.size == 5
+    assert landed.size == 5
     read = await store.get_async("a.txt")
     assert await read.text() == "hello"
 
 
 @pytest.mark.asyncio
-async def test_the_async_twins_answer_for_the_keys_the_bucket_holds(uploads):
+async def test_the_async_twins_answer_for_the_keys_the_bucket_has(uploads):
     store = bucket("uploads")
     await store.put_async("kept/a", b"1")
     await store.put_async("kept/b", b"2")
 
     assert (await store.head_async("kept/a")).size == 1
     assert await store.exists_async("kept/b") is True
-    assert [held.key async for held in store.list_async(prefix="kept/")] == ["kept/a", "kept/b"]
+    assert [info.key async for info in store.list_async(prefix="kept/")] == ["kept/a", "kept/b"]
 
     await store.copy_async("kept/a", "kept/c")
     await store.delete_async("kept/a", "gone.txt")
@@ -437,7 +437,7 @@ async def test_the_async_twins_answer_for_the_keys_the_bucket_holds(uploads):
 
 
 @pytest.mark.asyncio
-async def test_an_async_read_of_a_key_the_bucket_does_not_hold_names_what_was_missing(uploads):
+async def test_an_async_read_of_a_key_the_bucket_does_not_have_names_what_was_missing(uploads):
     with pytest.raises(ObjectNotFound):
         await bucket("uploads").get_async("gone.txt")
 
@@ -468,7 +468,7 @@ async def test_an_async_part_the_store_refuses_abandons_the_whole_write(uploads)
 
 
 @pytest.mark.asyncio
-async def test_an_async_write_that_must_not_replace_refuses_a_key_the_bucket_holds(uploads):
+async def test_an_async_write_that_must_not_replace_refuses_a_key_the_bucket_has(uploads):
     store = bucket("uploads")
     await store.put_async("a.txt", b"first")
 
@@ -492,7 +492,7 @@ async def test_an_object_opened_async_for_writing_lands_when_it_is_closed(upload
 
 
 @pytest.mark.asyncio
-async def test_an_async_signed_upload_carries_the_form_the_uploader_must_send(uploads):
+async def test_an_async_signed_upload_includes_the_form_the_uploader_must_send(uploads):
     signed = await bucket("uploads").signed_upload_async("a.txt", max_size=1024)
 
     assert signed.method == "POST"

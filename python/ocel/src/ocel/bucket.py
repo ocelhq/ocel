@@ -58,7 +58,7 @@ _PARTS_IN_FLIGHT = 4
 
 class ObjectNotFound(FileNotFoundError):
     """Raised when an operation that cannot answer with ``None`` names an object the bucket
-    does not hold."""
+    does not have."""
 
     #: The key that named nothing.
     key: str
@@ -72,7 +72,7 @@ class ObjectNotFound(FileNotFoundError):
 
 
 class PreconditionFailed(Exception):
-    """Raised when a write carried ``if_not_exists`` or ``if_match`` and the object did not
+    """Raised when a write set ``if_not_exists`` or ``if_match`` and the object did not
     meet it."""
 
     #: The key whose current state refused the write.
@@ -85,7 +85,7 @@ class PreconditionFailed(Exception):
 
 @dataclass(frozen=True)
 class ObjectInfo:
-    """What a bucket knows about one object it holds."""
+    """What a bucket knows about one of its objects."""
 
     #: The key the object is addressed by.
     key: str
@@ -112,7 +112,7 @@ class SignedUpload:
     method: str
     #: The headers the signature covers, which the caller must send unchanged.
     headers: Mapping[str, str] = field(default_factory=dict)
-    #: The form fields a POST target carries, which are empty for a PUT target.
+    #: The form fields a POST upload sends with the body, which are empty for a PUT target.
     fields: Mapping[str, str] = field(default_factory=dict)
     #: When the target stops being valid, or ``None`` when its lifetime was left to the
     #: runtime.
@@ -121,7 +121,7 @@ class SignedUpload:
 
 @runtime_checkable
 class SyncBucket(Protocol):
-    """The synchronous surface a bucket handle answers to, which a fake stands in for."""
+    """The synchronous surface a bucket handle answers to, which a fake can implement."""
 
     #: The name the bucket was declared under.
     name: str
@@ -153,7 +153,7 @@ class SyncBucket(Protocol):
         ...
 
     def exists(self, key: str) -> bool:
-        """Whether the bucket holds an object under ``key``."""
+        """Whether the bucket has an object under ``key``."""
         ...
 
     def delete(self, *keys: str) -> None:
@@ -196,7 +196,7 @@ class SyncBucket(Protocol):
 
 @runtime_checkable
 class AsyncBucket(Protocol):
-    """The awaited surface a bucket handle answers to, which a fake stands in for."""
+    """The awaited surface a bucket handle answers to, which a fake can implement."""
 
     #: The name the bucket was declared under.
     name: str
@@ -230,7 +230,7 @@ class AsyncBucket(Protocol):
         ...
 
     async def exists_async(self, key: str) -> bool:
-        """Whether the bucket holds an object under ``key``."""
+        """Whether the bucket has an object under ``key``."""
         ...
 
     async def delete_async(self, *keys: str) -> None:
@@ -316,9 +316,9 @@ class Bucket:
         if_match: str | None = None,
     ) -> ObjectInfo:
         """Write ``data`` as the whole object under ``key`` and return the object that
-        landed. A body that outgrows what one request carries is written in parts. With
-        ``if_not_exists`` the write goes through only while the bucket holds nothing under
-        the key, and with ``if_match`` only while the object it holds carries that etag;
+        landed. A body larger than one request can send is written in parts. With
+        ``if_not_exists`` the write goes through only while the bucket has nothing under
+        the key, and with ``if_match`` only while the object under it has that etag;
         either unmet raises :class:`PreconditionFailed`."""
         options = _WriteOptions(content_type, cache_control, metadata, if_not_exists, if_match)
         writer = _Writer(self, key, options)
@@ -329,17 +329,17 @@ class Bucket:
             writer.abort()
             raise
         writer.close()
-        held = self.head(key)
-        if held is None:
+        landed = self.head(key)
+        if landed is None:
             raise ObjectNotFound(key)
-        return held
+        return landed
 
     def get(self, key: str, *, range: tuple[int, int | None] | None = None) -> "ObjectBody":
         """Read the object under ``key``, or the ``(offset, length)`` byte range of it that
         ``range`` names, with a ``length`` of ``None`` reading to the end. Raises
-        :class:`ObjectNotFound` when the bucket holds none."""
-        held = self.head(key)
-        if held is None:
+        :class:`ObjectNotFound` when the bucket has none."""
+        info = self.head(key)
+        if info is None:
             raise ObjectNotFound(key)
         target = self._sign("get", key, SignedOperation.GET, SignedAudience.INTERNAL)
         headers = dict(target.headers)
@@ -352,7 +352,7 @@ class Bucket:
             raise _refused_status(key, response.status) or RuntimeError(
                 f'reading "{key}" was refused ({response.status})'
             )
-        return ObjectBody(held, stream, response)
+        return ObjectBody(info, stream, response)
 
     def open(self, key: str, mode: str = "rb", **write_options) -> IO[bytes]:
         """Open the object under ``key`` as a binary file. ``"rb"`` reads it and ``"wb"``
@@ -375,7 +375,7 @@ class Bucket:
         raise ValueError(f"a bucket object opens as 'rb' or 'wb', not {mode!r}")
 
     def head(self, key: str) -> ObjectInfo | None:
-        """What the bucket knows about the object under ``key``, or ``None`` when it holds
+        """What the bucket knows about the object under ``key``, or ``None`` when it has
         none."""
         reached = self._runtime("head")
         response = reached.client.head(
@@ -384,12 +384,12 @@ class Bucket:
         return _object(response.object, key) if response.object else None
 
     def exists(self, key: str) -> bool:
-        """Whether the bucket holds an object under ``key``."""
+        """Whether the bucket has an object under ``key``."""
         return self.head(key) is not None
 
     def delete(self, *keys: str) -> None:
-        """Remove the objects under ``keys``. A key the bucket does not hold is not an
-        error."""
+        """Remove the objects under ``keys``. A key with no object under it is not
+        an error."""
         if not keys:
             return
         reached = self._runtime("delete")
@@ -399,7 +399,7 @@ class Bucket:
 
     def copy(self, src: str, dst: str) -> ObjectInfo:
         """Copy the object under ``src`` to ``dst`` within the same bucket, and return the
-        object that landed. Raises :class:`ObjectNotFound` when the bucket holds nothing
+        object that landed. Raises :class:`ObjectNotFound` when the bucket has nothing
         under ``src``."""
         reached = self._runtime("copy")
         try:
@@ -412,8 +412,8 @@ class Bucket:
         return _object(response.object, dst)
 
     def list(self, *, prefix: str | None = None, limit: int | None = None) -> Iterator[ObjectInfo]:
-        """Walk the objects the bucket holds under ``prefix``, a page at a time, yielding
-        at most ``limit`` objects per page."""
+        """Walk the bucket's objects under ``prefix``, a page at a time, yielding at most
+        ``limit`` objects per page."""
         reached = self._runtime("list")
         cursor = ""
         while True:
@@ -426,8 +426,8 @@ class Bucket:
                 ),
                 headers=reached.headers,
             )
-            for held in response.objects:
-                yield _object(held, held.key)
+            for entry in response.objects:
+                yield _object(entry, entry.key)
             cursor = response.next_cursor
             if not cursor:
                 return
@@ -512,17 +512,17 @@ class Bucket:
             await writer.abort()
             raise
         await writer.close()
-        held = await self.head_async(key)
-        if held is None:
+        landed = await self.head_async(key)
+        if landed is None:
             raise ObjectNotFound(key)
-        return held
+        return landed
 
     async def get_async(
         self, key: str, *, range: tuple[int, int | None] | None = None
     ) -> "AsyncObjectBody":
         """What :meth:`get` does, awaited."""
-        held = await self.head_async(key)
-        if held is None:
+        info = await self.head_async(key)
+        if info is None:
             raise ObjectNotFound(key)
         target = await self._sign_async(
             "get_async", key, SignedOperation.GET, SignedAudience.INTERNAL
@@ -537,7 +537,7 @@ class Bucket:
             raise _refused_status(key, response.status) or RuntimeError(
                 f'reading "{key}" was refused ({response.status})'
             )
-        return AsyncObjectBody(held, stream, response)
+        return AsyncObjectBody(info, stream, response)
 
     def open_async(self, key: str, mode: str = "rb", **write_options):
         """What :meth:`open` does, as an async context manager whose ``read`` and ``write``
@@ -604,8 +604,8 @@ class Bucket:
                 ),
                 headers=reached.headers,
             )
-            for held in response.objects:
-                yield _object(held, held.key)
+            for entry in response.objects:
+                yield _object(entry, entry.key)
             cursor = response.next_cursor
             if not cursor:
                 return
@@ -740,7 +740,7 @@ def bucket(name: str, *, public: bool = False, allowed_origins: Sequence[str] = 
     """Declare a bucket named ``name`` and return the handle an app reads and writes its
     objects through. Call it from a file under the project's discovery folder: during
     discovery the call is the declaration, and at runtime it reads the binding the deploy
-    delivered for that name. A ``public`` bucket serves every object it holds anonymously
+    delivered for that name. A ``public`` bucket serves every one of its objects anonymously
     over HTTP, and ``allowed_origins`` names the browser origins allowed to upload straight
     to the store."""
     if not discovering():
@@ -824,8 +824,7 @@ class AsyncObjectBody:
 
     async def bytes(self) -> bytes:
         """Every byte of the object, read to the end."""
-        held = [chunk async for chunk in self]
-        return b"".join(held)
+        return b"".join([chunk async for chunk in self])
 
     async def text(self, encoding: str = "utf-8") -> str:
         """Every byte of the object, decoded."""
@@ -884,7 +883,7 @@ class _Writer:
             self._guarded(self._put_whole)
             return
         self._guarded(lambda: self._drain(True))
-        self._guarded(self._settle)
+        self._guarded(self._complete)
 
     def abort(self) -> None:
         self._closed = True
@@ -967,7 +966,7 @@ class _Writer:
             raise RuntimeError(f'part {number} of "{self._key}" was refused ({response.status})')
         return CompletedPart(part_number=number, etag=response.headers.get("etag", ""))
 
-    def _settle(self) -> None:
+    def _complete(self) -> None:
         self._completed.sort(key=lambda part: part.part_number)
         upload_id, self._upload_id = self._upload_id, ""
         try:
@@ -1006,20 +1005,20 @@ class _ReadStream(io.RawIOBase):
     def __init__(self, body: ObjectBody):
         self._body = body
         self._chunks = iter(body)
-        self._held = b""
+        self._unread = b""
 
     def readable(self) -> bool:
         return True
 
     def readinto(self, target) -> int:
-        while not self._held:
+        while not self._unread:
             chunk = next(self._chunks, b"")
             if not chunk:
                 return 0
-            self._held = chunk
-        taken = min(len(target), len(self._held))
-        target[:taken] = self._held[:taken]
-        self._held = self._held[taken:]
+            self._unread = chunk
+        taken = min(len(target), len(self._unread))
+        target[:taken] = self._unread[:taken]
+        self._unread = self._unread[taken:]
         return taken
 
     def close(self) -> None:
@@ -1078,7 +1077,7 @@ class _AsyncWriter:
             await self._guarded(self._put_whole())
             return
         await self._guarded(self._drain(True))
-        await self._guarded(self._settle())
+        await self._guarded(self._complete())
 
     async def abort(self) -> None:
         self._closed = True
@@ -1159,7 +1158,7 @@ class _AsyncWriter:
             raise RuntimeError(f'part {number} of "{self._key}" was refused ({response.status})')
         return CompletedPart(part_number=number, etag=response.headers.get("etag", ""))
 
-    async def _settle(self) -> None:
+    async def _complete(self) -> None:
         self._completed.sort(key=lambda part: part.part_number)
         upload_id, self._upload_id = self._upload_id, ""
         try:
@@ -1200,20 +1199,20 @@ class _AsyncReadStream:
         self._key = key
         self._body: AsyncObjectBody | None = None
         self._chunks: AsyncIterator[bytes] | None = None
-        self._held = b""
+        self._unread = b""
 
     async def read(self, size: int = -1) -> bytes:
         """The next ``size`` bytes of the object, or every byte left when ``size`` is
         negative."""
         read = bytearray()
         while size < 0 or len(read) < size:
-            if not self._held:
-                self._held = await anext(await self._opened(), b"")
-                if not self._held:
+            if not self._unread:
+                self._unread = await anext(await self._opened(), b"")
+                if not self._unread:
                     break
-            taken = len(self._held) if size < 0 else min(size - len(read), len(self._held))
-            read += self._held[:taken]
-            self._held = self._held[taken:]
+            taken = len(self._unread) if size < 0 else min(size - len(read), len(self._unread))
+            read += self._unread[:taken]
+            self._unread = self._unread[taken:]
         return bytes(read)
 
     async def aclose(self) -> None:
@@ -1245,7 +1244,7 @@ class _AsyncWriteStream:
         return len(data)
 
     async def aclose(self) -> None:
-        """Settle the write and land the object."""
+        """Finish the write and land the object."""
         await self._writer.close()
 
     async def __aenter__(self) -> "_AsyncWriteStream":
@@ -1383,8 +1382,8 @@ def _download_filename(key: str, download: bool | str | None) -> str:
 def _expires_at(expires_in: float | timedelta | None) -> datetime | None:
     if expires_in is None:
         return None
-    held = expires_in if isinstance(expires_in, timedelta) else timedelta(seconds=expires_in)
-    return datetime.now(timezone.utc) + held
+    lifetime = expires_in if isinstance(expires_in, timedelta) else timedelta(seconds=expires_in)
+    return datetime.now(timezone.utc) + lifetime
 
 
 def _duration(expires_in: float | timedelta) -> Duration:
