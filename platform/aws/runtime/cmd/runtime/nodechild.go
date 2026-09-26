@@ -13,7 +13,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/platform/aws/runtime/bytecode"
 )
 

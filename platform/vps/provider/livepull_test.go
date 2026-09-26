@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )

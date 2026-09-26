@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/constants"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"

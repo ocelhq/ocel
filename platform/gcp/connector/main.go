@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/connectorkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
-	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
+	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"

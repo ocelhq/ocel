@@ -8,7 +8,7 @@ import (
 )
 
 var imageMachinery = []string{
-	"github.com/ocelhq/ocel/pkg/providerkit/images",
+	"github.com/ocelhq/ocel/pkg/images",
 	"github.com/docker/",
 	"github.com/google/go-containerregistry/",
 }

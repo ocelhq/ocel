@@ -6,11 +6,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 const ContractVersion = "provider.v1"

@@ -14,8 +14,8 @@ import (
 	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
-	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
-	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/arch"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 

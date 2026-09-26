@@ -12,8 +12,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/records"
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 

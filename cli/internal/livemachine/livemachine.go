@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/images"
 )
 
 type Machine struct {

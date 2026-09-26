@@ -3,8 +3,8 @@ package gcp
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/arch"
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
 

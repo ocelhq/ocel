@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/images"
 )
 
 func awayFromAnyDaemon(t *testing.T) {

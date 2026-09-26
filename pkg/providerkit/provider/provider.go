@@ -1,7 +1,7 @@
 package provider
 
 import (
-	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/records"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 

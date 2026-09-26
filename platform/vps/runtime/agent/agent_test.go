@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
-	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
 	source "github.com/ocelhq/ocel/platform/vps/runtime/live"

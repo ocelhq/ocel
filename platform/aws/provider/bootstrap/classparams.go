@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"

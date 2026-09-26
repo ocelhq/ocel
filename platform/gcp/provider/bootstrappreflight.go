@@ -9,7 +9,7 @@ import (
 	"google.golang.org/api/cloudresourcemanager/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )

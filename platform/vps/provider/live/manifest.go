@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )

@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const broughtKeyARN = "arn:aws:kms:eu-west-1:123456789012:key/brought-1234"

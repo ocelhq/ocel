@@ -17,9 +17,9 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-	"github.com/ocelhq/ocel/pkg/providerkit/records"
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
+	"github.com/ocelhq/ocel/pkg/records"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )

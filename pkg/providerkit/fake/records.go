@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/records"
 )
 
 type Records struct {

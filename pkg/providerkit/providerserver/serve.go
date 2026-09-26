@@ -14,10 +14,10 @@ import (
 	"connectrpc.com/validate"
 
 	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 

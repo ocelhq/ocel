@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"

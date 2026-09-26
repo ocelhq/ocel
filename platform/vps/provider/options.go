@@ -12,7 +12,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/configdoc"
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/manual"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"

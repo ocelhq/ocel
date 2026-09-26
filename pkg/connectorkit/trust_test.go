@@ -19,10 +19,10 @@ import (
 	"github.com/lestrrat-go/jwx/v3/jwt"
 
 	"github.com/ocelhq/ocel/pkg/connectorkit"
+	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 )
 

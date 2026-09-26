@@ -11,7 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func TestServeNeedsAConstructor(t *testing.T) {

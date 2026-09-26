@@ -21,7 +21,7 @@ import (
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/images"
 )
 
 const (

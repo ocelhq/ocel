@@ -11,7 +11,7 @@ import (
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )

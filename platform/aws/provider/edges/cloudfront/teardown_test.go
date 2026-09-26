@@ -11,7 +11,7 @@ import (
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/surface"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"

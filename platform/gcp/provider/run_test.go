@@ -8,9 +8,9 @@ import (
 
 	run "google.golang.org/api/run/v2"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func desiredOf(t *testing.T, s serving) *run.GoogleCloudRunV2Service {

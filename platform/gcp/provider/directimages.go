@@ -3,7 +3,7 @@ package gcp
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 

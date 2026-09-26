@@ -7,7 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func TestAnApplyMayShrinkThePlanItShowedAndNeverGrowIt(t *testing.T) {

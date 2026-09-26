@@ -8,13 +8,13 @@ import (
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
+	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/arch"
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
-	"github.com/ocelhq/ocel/pkg/providerkit/arch"
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func (r *deployRun) recordFunctionImage(logical, ref string) {

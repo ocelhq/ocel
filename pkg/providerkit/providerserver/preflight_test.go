@@ -10,14 +10,14 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/arch"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 

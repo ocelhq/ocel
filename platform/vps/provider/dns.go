@@ -2,7 +2,7 @@ package vps
 
 import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )

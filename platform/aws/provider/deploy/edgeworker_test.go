@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )

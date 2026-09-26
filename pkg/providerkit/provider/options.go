@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/configdoc"
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 type Options map[string]any

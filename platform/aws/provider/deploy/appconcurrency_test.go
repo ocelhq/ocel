@@ -10,8 +10,8 @@ import (
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"

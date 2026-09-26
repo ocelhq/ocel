@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/arch"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"

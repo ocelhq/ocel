@@ -13,7 +13,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"

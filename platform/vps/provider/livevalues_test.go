@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/appbuild"
+	"github.com/ocelhq/ocel/pkg/envvars"
+	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
-	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
-	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"

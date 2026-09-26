@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	"github.com/ocelhq/ocel/pkg/runtimekit/child"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"

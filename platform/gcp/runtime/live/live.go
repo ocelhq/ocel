@@ -4,9 +4,9 @@ import (
 	"context"
 	"maps"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/records"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"

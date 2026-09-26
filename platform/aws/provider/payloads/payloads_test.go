@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/arch"
 )
 
 func TestPayloads(t *testing.T) {

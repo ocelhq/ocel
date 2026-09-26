@@ -15,7 +15,7 @@ import (
 	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
-	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/arch"
 )
 
 const (

@@ -9,9 +9,9 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 type Cell struct {

@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/ocelhq/ocel/pkg/connectorkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
+	"github.com/ocelhq/ocel/pkg/envvarsserver"
 	"github.com/ocelhq/ocel/platform/vps/connector/hostports"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"

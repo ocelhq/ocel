@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
