@@ -117,7 +117,7 @@ describe("every entry that invokes ocel", () => {
 });
 
 describe("projectSlug", () => {
-  it("is a valid single DNS label carrying the run id", () => {
+  it("is a valid single DNS label containing the run id", () => {
     const slug = projectSlug({ runId: "1234567890" });
     expect(slug).toMatch(DNS_LABEL);
     expect(slug).toContain("1234567890");
@@ -153,7 +153,7 @@ describe("projectSlug", () => {
     expect(slug.length).toBeLessThanOrEqual(MAX_SLUG_LEN);
   });
 
-  it("carries the prefix the sweeper reclaims projects by", () => {
+  it("starts with the prefix the sweeper reclaims projects by", () => {
     expect(projectSlug({ runId: "7" }).startsWith(SLUG_PREFIX)).toBe(true);
   });
 });
@@ -242,7 +242,7 @@ describe("strandedProjectSlugs", () => {
 describe("renderOcelConfig", () => {
   const config = renderOcelConfig({ slug: "e2e-42" });
 
-  it("carries the run's project slug and the provider", () => {
+  it("names the run's project slug and the provider", () => {
     expect(config).toContain(`slug: "e2e-42"`);
     expect(config).toContain("awsProvider()");
   });
@@ -1129,7 +1129,7 @@ function buildZip(entries, comment = "") {
 describe("planProblems", () => {
   const untouched = { resultWritten: false, listed: "No previews.\n", ref: "smoke-abc123" };
 
-  it("passes a plan that says how to apply it, wrote no result and stood no preview up", () => {
+  it("passes a plan that says how to apply it, wrote no result and deployed no preview", () => {
     expect(planProblems(`+ e2e-x--infra\n\n${PLAN_APPLY_HINT}\n`, untouched)).toEqual([]);
   });
 
@@ -1291,7 +1291,7 @@ describe("suiteResultFromJest", () => {
     });
   });
 
-  it("marks a suite whose testResult carries a testExecError as a runtime error, even with assertions", () => {
+  it("marks a suite whose testResult has a testExecError as a runtime error, even with assertions", () => {
     expect(
       suiteResultFromJest({
         testResults: [
@@ -1420,7 +1420,7 @@ describe("mergeBaselineManifest", () => {
     expect(Object.keys(merged.suites)).toEqual(["test/a.test.ts", "test/b.test.ts"]);
   });
 
-  it("carries the include pattern through untouched", () => {
+  it("passes the include pattern through untouched", () => {
     const merged = mergeBaselineManifest([manifest({})]);
     expect(merged.rules.include).toEqual([BASELINE_INCLUDE_PATTERN]);
   });

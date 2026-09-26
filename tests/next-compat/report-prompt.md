@@ -46,7 +46,7 @@ for j in <job-ids>; do
 done; wait
 ```
 
-`--allow-escape-sequences` is required — the logs carry ANSI and `gh` refuses to
+`--allow-escape-sequences` is required — the logs contain ANSI and `gh` refuses to
 emit them without it. Expect tens of MB. Fetch the jobs in parallel.
 
 The GitHub UI's per-job summary (`.../jobs/<internal-id>/summary_raw`) needs a

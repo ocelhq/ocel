@@ -179,7 +179,7 @@ One theme, two registers. The landing page is the printed sheet in full: grid pa
 showing through, registration crosses in the margins, figure captions running down the
 edge, and a heavy 1.5px foreground rule under the header. The docs and the console
 dashboard are the same drawing with the scaffolding lifted off: plain paper, hairlines
-only, and the accent held back to link underlines and the mark, so nothing competes with
+only, and the accent limited to link underlines and the mark, so nothing competes with
 the reader's work. The materials never change between them. Only how much of the
 drafting apparatus is left visible.
 
@@ -229,13 +229,13 @@ A monochrome drawing with one saturated line and one confirmation green.
 
 ### Hierarchy
 - **Display** (600, `clamp(2.125rem, 5vw, 3.375rem)`, 1.04 to 1.15, -0.035em): the page title in docs at the small end, the landing hero at the large end, and the docs index hero fixed at 2.5rem between them. One phrase inside it may take Electric.
-- **Headline** (600, 1.375rem, 1.25, -0.03em): section headings. In docs they carry 2.5rem of space above; the landing sets its section headings larger at 34px with -0.02em.
+- **Headline** (600, 1.375rem, 1.25, -0.03em): section headings. In docs they have 2.5rem of space above; the landing sets its section headings larger at 34px with -0.02em.
 - **Title** (600, 1.0625rem, 1.4): sub-headings, tile titles, and sidebar navigation, which is set in the display face at 0.875rem.
-- **Lede** (400, 1.125rem, 1.55): the one sentence under a display title, in Body color, held to about 34 characters. Nowhere else.
+- **Lede** (400, 1.125rem, 1.55): the one sentence under a display title, in Body color, capped at about 34 characters. Nowhere else.
 - **Statement** (600, 38px to 50px, 1.1, -0.03em): the landing's full-width statements and closing call, set between Headline and Display. Landing register only.
 - **Index** (600, 2.5rem, 1.1, -0.035em): the docs index and comparison page titles.
 - **Small** (400, 0.9375rem, 1.6): landing running text and buttons, docs table cells and the compare panes.
-- **Body** (400, 1rem, 1.6): prose in Body color. Max width follows the docs column, about 65 to 75 characters. On the docs index the prose is held to 35rem while figures, tiles, and tabs keep the full 56rem column.
+- **Body** (400, 1rem, 1.6): prose in Body color. Max width follows the docs column, about 65 to 75 characters. On the docs index the prose is capped at 35rem while figures, tiles, and tabs keep the full 56rem column.
 - **Label** (500 mono, 0.6875rem, 0.14em, uppercase): sidebar separators, table of contents heading, table headers, the docs badge, keyboard keys, figure captions, and content tabs. Steel, except tabs, which are controls: Body at rest and Ink when active.
 - **Filename** (400 mono, 0.75rem): the title bar of a code block. A path is code, so it keeps its case and its natural tracking.
 - **Eyebrow** (mono, 0.75rem, 0.08em): the line above a landing section, in Electric. Landing register only.
@@ -248,13 +248,13 @@ A monochrome drawing with one saturated line and one confirmation green.
 
 ## Layout
 
-The docs use the Fumadocs three-column shell: sidebar, article, and a clerk-style table of contents. The article column is prose width; the docs index widens to 56rem and drops the table of contents, breadcrumb, and footer. The landing holds a 1180px container with 20px side padding on mobile and 40px from the medium breakpoint, and 64px to 84px of vertical padding per section.
+The docs use the Fumadocs three-column shell: sidebar, article, and a clerk-style table of contents. The article column is prose width; the docs index widens to 56rem and drops the table of contents, breadcrumb, and footer. The landing uses a 1180px container with 20px side padding on mobile and 40px from the medium breakpoint, and 64px to 84px of vertical padding per section.
 
 Rhythm is on an 8px base. Tiles sit in a responsive grid of at least 16rem columns with 16px gaps. Compared code panes sit side by side from the medium breakpoint and stack below it. Docs section headings take 2.5rem above; the landing register in docs takes 5rem.
 
 Hero layouts split text and figure. In docs the figure is the overview diagram, first on mobile and right of the text on large screens. On the landing the figure is a live terminal in a two-column grid weighted slightly toward the terminal.
 
-Dividers are structural. A hairline under the hero, under table rows, and between compared panes carries the layout; margin alone never does.
+Dividers are structural. A hairline under the hero, under table rows, and between compared panes structures the layout; margin alone never does.
 
 ### Named Rules
 **The Two Registers Rule.** The landing page may show the drafting apparatus: 48px grid paper faded by a radial mask, mono "+" registration crosses in the margins, rotated figure captions along the edge, a 1.5px foreground rule under the header, and a marquee. Docs and the console dashboard show none of it. They keep paper, hairlines, and type so nothing competes with the work at hand.

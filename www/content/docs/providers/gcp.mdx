@@ -40,11 +40,11 @@ called `direct`, it costs nothing while it serves nothing, and it binds no hostn
 your own.
 
 A hostname on Google Cloud costs a load balancer. Name the `alb` edge and `ocel bootstrap`
-stands up one global external Application Load Balancer per class — one address, one
+provisions one global external Application Load Balancer per class — one address, one
 certificate map, one URL map, Cloud CDN on every backend — and every project in that class
 is answered by it. It is the only thing ocel provisions on Google Cloud that bills while
 it serves no traffic: about $18 a month per class for the forwarding rule, plus
-Premium-tier egress. The bootstrap plan says so before it stands anything up.
+Premium-tier egress. The bootstrap plan says so before it provisions anything.
 
 ```json title="ocel.json"
 {
@@ -67,13 +67,13 @@ Run `ocel domain use '*.preview.example.com' --preview` and previews are answere
 same load balancer: one host rule for the wildcard, and one serverless network endpoint
 group whose URL mask resolves each preview hostname to the Cloud Run service its first
 label names. A preview is a deploy and nothing else — no route is written when one is
-opened, and a hostname no preview stands behind is answered 404 by the load balancer. A
+opened, and a hostname no preview serves is answered 404 by the load balancer. A
 project-level `domains.preview` is not served here, because that hostname leaves the
 project out of the label every service in the class is named by.
 
 [`cloudflare`](/docs/providers/cloudflare) is the edge bought independently of Google.
 
-Standing the load balancer up needs two more services on:
+Provisioning the load balancer needs two more services on:
 
 ```bash
 gcloud services enable compute.googleapis.com certificatemanager.googleapis.com \

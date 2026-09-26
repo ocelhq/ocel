@@ -13,7 +13,7 @@ running them.
 
 ## One-time setup (out of band, by a human)
 
-Use a **disposable AWS account and Cloudflare account** that hold nothing else.
+Use a **disposable AWS account and Cloudflare account** that contain nothing else.
 
 No project is created by hand — each run mints its own — but the zone must be
 prepared:
@@ -25,7 +25,7 @@ prepared:
    entry worker; a record you made yourself is left alone but must be **proxied
    (orange cloud)**, since an unproxied hostname never reaches a worker.
 2. Provision the preview bootstrap once and give it the wildcard — both are
-   account-global, not per-project. From a scratch directory holding an
+   account-global, not per-project. From a scratch directory containing an
    `ocel.config.ts` that declares the AWS provider:
    ```bash
    ocel bootstrap preview --features all
@@ -51,7 +51,7 @@ prepared:
 | `E2E_EXPECTED_AWS_ACCOUNT_ID`        | the account id the guard requires the session to resolve to    |
 | `E2E_CLOUDFLARE_API_TOKEN`           | Cloudflare API token                                           |
 | `E2E_CLOUDFLARE_ACCOUNT_ID`          | Cloudflare account id passed to the provider                   |
-| `E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID` | the account id the guard requires the token to hold            |
+| `E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID` | the account id the guard requires the token to belong to       |
 | `TURBO_TOKEN`                        | Vercel token for turbo's remote cache (optional, with `TURBO_TEAM`) |
 
 ### Variables
@@ -93,7 +93,7 @@ worker-script limits mid-flight; re-dispatch and merge again if it does.
 
 Newly *added* cases are included automatically — the manifest only ever excludes
 what it lists. When a fix makes a case pass, **delete that case's line from its
-suite's `failed` array** and commit; the next run holds the fix in place. Delete
+suite's `failed` array** and commit; the next run keeps the fix in place. Delete
 the suite's whole entry once its `failed` array is empty, and drop a
 `"runtimeError": true` entry to re-enable a whole file.
 
@@ -155,7 +155,7 @@ the `destroy` job both need a live runner. The next run's `sweep` job reclaims
 it, so nothing accumulates, but until then its store instance, staged
 deployments and assets keep billing, and its slug stays taken.
 
-The wildcard itself is held by the shared entry worker, not by any project, so a
+The wildcard itself is owned by the shared entry worker, not by any project, so a
 stranded run no longer blocks another from deploying previews.
 
 ```bash

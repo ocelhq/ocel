@@ -110,7 +110,7 @@ if (!entryName) {
 }
 const taskPath = `${TASK_ROOT}/${entryName}`;
 log(
-  `the cache is published at s3://${assetBucket}/${cacheKey}, so the artifact must carry ${entryName}`,
+  `the cache is published at s3://${assetBucket}/${cacheKey}, so the artifact must contain ${entryName}`,
 );
 
 const artifactPrefix = `${result.slug}/`;
@@ -181,13 +181,13 @@ if (!entries.includes(entryName)) {
   fail(
     `${functionName}'s deployment package has ${entries.length} entries but not ${entryName}` +
       (near.length
-        ? `. It does carry ${near.join(", ")} — an embedded cache under a name the runtime will not look for, which ` +
+        ? `. It does contain ${near.join(", ")} — an embedded cache under a name the runtime will not look for, which ` +
           `leaves every cold start silently falling back to S3.`
         : ` and nothing under .ocel/bytecode/ at all, so the function was moved onto a repackaged artifact that ` +
-          `carries no cache.`),
+          `contains no cache.`),
   );
 }
-log(`the deployed package carries ${entryName} among its ${entries.length} entries`);
+log(`the deployed package contains ${entryName} among its ${entries.length} entries`);
 
 const burstStart = Date.now();
 log(`bursting ${BURST_SIZE} concurrent requests to force fresh sandboxes`);

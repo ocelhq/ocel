@@ -60,7 +60,7 @@ if (!result.slug || !app?.name || !app?.buildId) {
 const deployedAt = Date.parse(result.deployedAt ?? "");
 if (!Number.isFinite(deployedAt)) {
   fail(
-    `${resultPath} carries no readable deployedAt (${JSON.stringify(result.deployedAt)}) — nothing here can say when the warm pass ran`,
+    `${resultPath} has no readable deployedAt (${JSON.stringify(result.deployedAt)}) — nothing here can say when the warm pass ran`,
   );
 }
 

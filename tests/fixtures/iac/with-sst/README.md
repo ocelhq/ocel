@@ -1,10 +1,10 @@
 # with-sst
 
-Rung three of the [fixture ladder](../../sdk/with-transforms), standing on two rungs at once
+Rung three of the [fixture ladder](../../sdk/with-transforms), building on two rungs at once
 as [with-pulumi](../with-pulumi) does in Pulumi: SST owns the database and the network it sits
 in, and ocel still deploys the app — into that network. Bindings are how the app reaches what
 SST provisioned; transforms are how ocel renders what it provisions itself. `sst.config.ts`,
-`ocel.json` and `transforms/network.transform.ts` are the three files that carry it.
+`ocel.json` and `transforms/network.transform.ts` are the three files that make it work.
 
 ## Run it
 
@@ -33,5 +33,5 @@ aws lambda get-function-configuration \
 reports the subnets and security groups a route's Lambda runs in — the same ids `sst deploy`
 published.
 
-`ocel deploy` targets production. Stand a branch environment up with `ocel preview up`, and
+`ocel deploy` targets production. Deploy a branch environment with `ocel preview up`, and
 `ocel preview rm` to tear it down; publish from SST into the same environment first.

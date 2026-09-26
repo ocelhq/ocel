@@ -51,11 +51,11 @@ async function assertCookieStamp() {
   const cookies = response.headers.getSetCookie?.() ?? [];
   if (!cookies.some((c) => c.startsWith("ocel-proxy-seen=1"))) {
     fail(
-      `/ carried no ocel-proxy-seen cookie (Set-Cookie: ${cookies.join(", ") || "(none)"}) — proxy.ts's ` +
+      `/ set no ocel-proxy-seen cookie (Set-Cookie: ${cookies.join(", ") || "(none)"}) — proxy.ts's ` +
         `NextResponse.next() touch on the fall-through path did not reach the client`,
     );
   }
-  log("fall-through: / carries the cookie proxy.ts stamps on every unmatched path");
+  log("fall-through: / sets the cookie proxy.ts stamps on every unmatched path");
 }
 
 async function fetchText(path) {

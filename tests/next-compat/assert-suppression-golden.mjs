@@ -9,7 +9,7 @@ import {
   PREFETCH_PURPOSE_VALUE,
 } from "./lib.mjs";
 
-const SETTLE_MS = 20_000;
+const GRACE_MS = 20_000;
 const POLL_INTERVAL_MS = 3_000;
 const STALE_WAIT_MS = (GOLDEN_REVALIDATE_SECONDS + 2) * 1_000;
 
@@ -26,7 +26,7 @@ if (!base) {
 }
 const target = new URL(GOLDEN_ROUTE, base).toString();
 
-await settle();
+await untilServed();
 
 let failures = 0;
 for (const variant of VARIANTS) {
@@ -92,8 +92,8 @@ async function probe(variant, extra) {
   };
 }
 
-async function settle() {
-  const deadline = Date.now() + SETTLE_MS + POLL_INTERVAL_MS;
+async function untilServed() {
+  const deadline = Date.now() + GRACE_MS + POLL_INTERVAL_MS;
   let last;
   while (Date.now() < deadline) {
     last = await probe(VARIANTS[0], {}).catch((error) => ({

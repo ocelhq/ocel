@@ -44,7 +44,7 @@ the code it uploaded, the environment it sealed — is not on the type, and nami
 refuses the deploy.
 
 A module with no branch for the provider the project deploys to refuses the deploy, rather
-than quietly doing nothing, and so does a patch that reaches no resource the deploy stands up.
+than quietly doing nothing, and so does a patch that reaches no resource the deploy provisions.
 
 `role` is the execution role every function in an app shares, so two functions patching it
 differently refuses rather than letting one win.
@@ -58,7 +58,7 @@ differently refuses rather than letting one win.
 ## On a VPS
 
 A box has no Pulumi resources, so the `vps` branch patches what the box runs instead: the
-container and the volume a `postgres` or a `bucket` stands up as.
+container and the volume a `postgres` or a `bucket` runs as.
 
 ```ts title="transforms/stack.transform.ts"
 import { defineTransform } from "@ocel/transforms";
@@ -87,7 +87,7 @@ export default defineTransform({
 | `bucket` | `container` | `image`, `args`, `env`, `memory`, `cpus`, `shmSize` |
 | `bucket` | `volume` | `driver`, `driverOpts` |
 
-One store holds every bucket the project declares, so the `bucket` branch shapes that single
+One store contains every bucket the project declares, so the `bucket` branch shapes that single
 container and volume rather than one per declaration. Gate the rule on the environment, not on
 which bucket it reaches.
 
@@ -100,7 +100,7 @@ is written down; a box has no binding outputs to fill one from.
 
 ## Gates and tags
 
-A rule can carry an `if` gate, decided from the environment being deployed and the app the
+A rule can have an `if` gate, decided from the environment being deployed and the app the
 candidate resource belongs to, and `tags` to union into every resource it reaches. Write a
 list of rules where one is not enough:
 

@@ -7,7 +7,7 @@ a secret `SECRET_TOKEN`. The declarations sit in the default discovery directory
 the provisioning step.
 
 It doubles as the fixture the journey suites under [`tests/journeys`](../../../journeys) drive through
-the real binary, so it also carries a test surface of no use to the product.
+the real binary, so it also has a test surface of no use to the product.
 
 ## Run it
 

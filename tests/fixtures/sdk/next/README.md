@@ -6,7 +6,7 @@ writes a row when an upload completes, a plain `GREETING` and a secret `SECRET_T
 sit in the default discovery directory, and each one is the provisioning step.
 
 It doubles as the fixture the journey suites under [`tests/journeys`](../../../journeys) drive through
-the real binary, so it also carries a test surface of no use to the product.
+the real binary, so it also has a test surface of no use to the product.
 
 ## Run it
 
