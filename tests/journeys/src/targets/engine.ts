@@ -15,7 +15,7 @@ export function engineSeries(env: NodeJS.ProcessEnv): string | undefined {
   return series;
 }
 
-export function unadopted(said: string, series: string): string | undefined {
+export function adoptionMissed(said: string, series: string): string | undefined {
   const plain = stripVTControlCharacters(said);
   const row = new RegExp(
     `adopt docker\\s+docker:engine\\s+— docker ${series.replaceAll(".", "\\.")}\\.\\d+, not managed by ocel: upgrading it is yours`,

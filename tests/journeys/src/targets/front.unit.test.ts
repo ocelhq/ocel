@@ -9,8 +9,8 @@ import {
   frontStep,
   frontsDir,
   holderOf,
+  refusalMissed,
   stepCommand,
-  unrefused,
 } from "./front";
 
 describe("frontNamed", () => {
@@ -58,25 +58,25 @@ describe("holderOf", () => {
   });
 });
 
-describe("unrefused", () => {
+describe("refusalMissed", () => {
   const holder = "nginx holds :80 and :443";
   const refused =
     '✗ Failed\n  not_ready: nginx holds :80 and :443, where ocel\'s own proxy serves\n  Add `"proxy": "manual"` ...\n';
 
   it("passes a bootstrap that refused naming what holds the ports", () => {
-    expect(unrefused(1, refused, holder)).toBeUndefined();
+    expect(refusalMissed(1, refused, holder)).toBeUndefined();
   });
 
   it("reads the refusal through the colour a terminal paints it in", () => {
-    expect(unrefused(1, `\u001b[31m${refused}\u001b[0m`, holder)).toBeUndefined();
+    expect(refusalMissed(1, `\u001b[31m${refused}\u001b[0m`, holder)).toBeUndefined();
   });
 
   it("fails a bootstrap that went ahead over a box whose ports are held", () => {
-    expect(unrefused(0, "Bootstrapped production\n", holder)).toContain("went ahead");
+    expect(refusalMissed(0, "Bootstrapped production\n", holder)).toContain("went ahead");
   });
 
   it("fails a refusal that never names what holds the ports", () => {
-    expect(unrefused(1, "✗ Failed\n  denied: no route to host\n", holder)).toContain(holder);
+    expect(refusalMissed(1, "✗ Failed\n  denied: no route to host\n", holder)).toContain(holder);
   });
 });
 

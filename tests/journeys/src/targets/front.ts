@@ -57,7 +57,11 @@ export function holderOf(front: Front): string {
   return holder;
 }
 
-export function unrefused(code: number | null, said: string, holder: string): string | undefined {
+export function refusalMissed(
+  code: number | null,
+  said: string,
+  holder: string,
+): string | undefined {
   if (code === 0) {
     return `a bootstrap under ocel's own proxy went ahead over a box where ${holder}`;
   }
