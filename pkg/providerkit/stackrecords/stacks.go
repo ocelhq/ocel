@@ -35,15 +35,15 @@ type NamedStack struct {
 
 func Read(ctx context.Context, store records.Store, class edge.Class, slug string, stack naming.StackName) (Stack, bool, error) {
 	name := StackRecord(class, slug, stack)
-	held, err := records.ReadOrEmpty(ctx, store, name)
+	row, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return Stack{}, false, fmt.Errorf("read %s: %w", name, err)
 	}
-	if len(held.Bytes) == 0 {
+	if len(row.Bytes) == 0 {
 		return Stack{}, false, nil
 	}
 	var recorded Stack
-	if err := json.Unmarshal(held.Bytes, &recorded); err != nil {
+	if err := json.Unmarshal(row.Bytes, &recorded); err != nil {
 		return Stack{}, false, fmt.Errorf("read %s: %w", name, err)
 	}
 	return recorded, true, nil
@@ -51,15 +51,15 @@ func Read(ctx context.Context, store records.Store, class edge.Class, slug strin
 
 func Write(ctx context.Context, store records.Store, class edge.Class, slug string, stack naming.StackName, recorded Stack) error {
 	name := StackRecord(class, slug, stack)
-	held, err := records.ReadOrEmpty(ctx, store, name)
+	row, err := records.ReadOrEmpty(ctx, store, name)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
 	recorded.UpdatedAt = time.Now().Unix()
-	if held.Bytes, err = json.Marshal(recorded); err != nil {
+	if row.Bytes, err = json.Marshal(recorded); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
-	if _, err := store.Write(ctx, held); err != nil {
+	if _, err := store.Write(ctx, row); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
 	return nil
@@ -71,12 +71,12 @@ func Forget(ctx context.Context, store records.Store, class edge.Class, slug str
 
 func List(ctx context.Context, records records.Store, class edge.Class, slug string) ([]NamedStack, error) {
 	under := StacksRecord(class, slug)
-	held, err := records.List(ctx, under)
+	recorded, err := records.List(ctx, under)
 	if err != nil {
 		return nil, fmt.Errorf("read %s's stacks: %w", slug, err)
 	}
-	entries := make([]NamedStack, 0, len(held))
-	for _, record := range held {
+	entries := make([]NamedStack, 0, len(recorded))
+	for _, record := range recorded {
 		rest, named := record.Name.Under(under)
 		if !named {
 			continue

@@ -56,7 +56,7 @@ func TestApplyRunsThePlanItWasShown(t *testing.T) {
 		t.Fatalf("Apply() of the plan it was shown = %v, want it applied", err)
 	}
 	if len(provider.FakeBootstrap().Applied()) == 0 {
-		t.Error("Apply() stood nothing up for the plan it was shown")
+		t.Error("Apply() provisioned nothing for the plan it was shown")
 	}
 }
 
@@ -68,7 +68,7 @@ func groupFor(t *testing.T, plan provider.Plan, feature string) provider.ChangeG
 			return group
 		}
 	}
-	t.Fatalf("Plan() carries no group for %q; it carries %v", feature, plan.Groups)
+	t.Fatalf("Plan() has no group for %q; it has %v", feature, plan.Groups)
 	return provider.ChangeGroup{}
 }
 
@@ -87,7 +87,7 @@ func TestPlanOnAFreshAccountCreatesTheBaselineAndEveryFeature(t *testing.T) {
 	}
 	for _, group := range plan.Groups {
 		if group.Action != provider.ActionCreate {
-			t.Errorf("Plan() has %s at %q, want it created on an account holding nothing", group.Name, group.Action)
+			t.Errorf("Plan() has %s at %q, want it created on an empty account", group.Name, group.Action)
 		}
 		if group.Kind != provider.StackGroupKind || group.Name == "" {
 			t.Errorf("Plan() returned %+v, and a plan renders a kind and a name", group)
@@ -148,7 +148,7 @@ func TestPlanShowsARemovalItRefusesToApply(t *testing.T) {
 	}
 }
 
-func TestPlanLeavesAStandingFeatureNoRunNamed(t *testing.T) {
+func TestPlanLeavesAnInstalledFeatureNoRunNamed(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -178,7 +178,7 @@ func TestPlanRefusesToEnsureAndRemoveTheSameFeature(t *testing.T) {
 		Remove:   []string{fake.FeatureCache},
 	})
 	if err == nil {
-		t.Fatal("Plan() took a run that both stands a feature up and takes it down")
+		t.Fatal("Plan() took a run that both installs a feature and takes it down")
 	}
 	if !strings.Contains(err.Error(), fake.FeatureCache) {
 		t.Errorf("err = %v, want it to name the feature asked for both ways", err)

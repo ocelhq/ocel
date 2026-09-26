@@ -93,8 +93,8 @@ func (w *DNSRecords) Delete(_ context.Context, records []edge.Record) error {
 	if w.refusal != nil {
 		return w.refusal
 	}
-	w.records = slices.DeleteFunc(w.records, func(held edge.Record) bool {
-		return slices.Contains(records, held)
+	w.records = slices.DeleteFunc(w.records, func(record edge.Record) bool {
+		return slices.Contains(records, record)
 	})
 	return nil
 }

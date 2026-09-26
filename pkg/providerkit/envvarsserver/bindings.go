@@ -252,10 +252,10 @@ func ValidateInlineClaim(publisher, name string) error {
 
 func VerifyBinding(binding *bindingsv1.Binding) error {
 	if binding.GetName() == "" {
-		return fmt.Errorf("a binding carries no name; the name is what a consuming app binds to: %w", ErrUnreadableRecord)
+		return fmt.Errorf("a binding has no name; the name is what a consuming app binds to: %w", ErrUnreadableRecord)
 	}
 	if naming.BindingTypeOf(binding) == bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED {
-		return fmt.Errorf("binding %s carries no properties, so it has no type a consumer can resolve it against: %w", binding.GetName(), ErrUnreadableRecord)
+		return fmt.Errorf("binding %s has no properties, so it has no type a consumer can resolve it against: %w", binding.GetName(), ErrUnreadableRecord)
 	}
 	if naming.BindingTypeOf(binding) == bindingsv1.BindingType_BINDING_TYPE_CUSTOM {
 		if binding.GetSource() == "" {
@@ -263,7 +263,7 @@ func VerifyBinding(binding *bindingsv1.Binding) error {
 		}
 		if len(binding.GetGrants()) > 0 {
 			return fmt.Errorf(
-				"binding %s is a custom record carrying %d grants: no consumer attaches a custom binding's grants yet; a grant nobody attaches is a permission the record claims and no app holds. "+
+				"binding %s is a custom record with %d grants: no consumer attaches a custom binding's grants yet; a grant nobody attaches is a permission the record claims and no app has. "+
 					"Publish it without them: %w",
 				binding.GetName(), len(binding.GetGrants()), ErrUnattachedGrant)
 		}
@@ -276,7 +276,7 @@ const grantWildcard = "*"
 func VerifyGrantScope(binding *bindingsv1.Binding) error {
 	for _, g := range binding.GetGrants() {
 		if len(g.GetActions()) == 0 {
-			return fmt.Errorf("binding %s carries a grant over %v naming no action: a grant names what an app may do with the resource it binds: %w",
+			return fmt.Errorf("binding %s has a grant over %v naming no action: a grant names what an app may do with the resource it binds: %w",
 				binding.GetName(), g.GetResources(), provider.ErrUnscopedGrant)
 		}
 		if len(g.GetResources()) == 0 {

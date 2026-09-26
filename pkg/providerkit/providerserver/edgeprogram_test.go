@@ -50,7 +50,7 @@ func previewBootstrapped(t *testing.T, client contractv1connect.ProviderServiceC
 	})
 }
 
-func TestUsePreviewWildcardCarriesTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
+func TestUsePreviewWildcardSendsTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 
@@ -64,7 +64,7 @@ func TestUsePreviewWildcardCarriesTheProviderProgramToAnEdgeThatRunsCode(t *test
 	}
 	spec := specs[0]
 	if spec.Program == nil {
-		t.Fatal("the wildcard carries no program, and the relay edge answers every preview from an entry worker")
+		t.Fatal("the wildcard has no program, and the relay edge answers every preview from an entry worker")
 	}
 	if spec.Program.StoreScriptName != fake.ProgramStore {
 		t.Errorf("StoreScriptName = %q, want %q", spec.Program.StoreScriptName, fake.ProgramStore)
@@ -91,7 +91,7 @@ func TestUsePreviewWildcardLeavesAnEdgeThatRunsNoCodeUnprogrammed(t *testing.T) 
 		t.Fatalf("the edge reconciled %d wildcards, want the one raised", len(specs))
 	}
 	if specs[0].Program != nil {
-		t.Errorf("the wildcard carries %+v, want no program: the direct edge runs none of our code", specs[0].Program)
+		t.Errorf("the wildcard has %+v, want no program: the direct edge runs none of our code", specs[0].Program)
 	}
 }
 
@@ -115,7 +115,7 @@ func TestUsePreviewWildcardRefusesAnEdgeThatRunsCodeForAProviderThatWritesNoProg
 	}
 }
 
-func TestDeployCarriesTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
+func TestDeploySendsTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 
@@ -128,11 +128,11 @@ func TestDeployCarriesTheProviderProgramToAnEdgeThatRunsCode(t *testing.T) {
 
 	stacks := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks()
 	if len(stacks) != 1 {
-		t.Fatalf("the edge reconciled %d stacks, want the one this deploy stands up", len(stacks))
+		t.Fatalf("the edge reconciled %d stacks, want the one this deploy provisions", len(stacks))
 	}
 	spec := stacks[0]
 	if spec.Program == nil {
-		t.Fatal("the stack carries no program, and the relay edge answers every request from an entry worker")
+		t.Fatal("the stack has no program, and the relay edge answers every request from an entry worker")
 	}
 	if spec.Program.Name != fake.ProgramName("shop", edge.ClassProduction) {
 		t.Errorf("Name = %q, want %q", spec.Program.Name, fake.ProgramName("shop", edge.ClassProduction))
@@ -168,10 +168,10 @@ func TestDeployLeavesAnEdgeThatRunsNoCodeUnprogrammed(t *testing.T) {
 
 	stacks := provider.Edges().(*fake.Edges).Edge(fake.KindDirect).Stacks()
 	if len(stacks) != 1 {
-		t.Fatalf("the edge reconciled %d stacks, want the one this deploy stands up", len(stacks))
+		t.Fatalf("the edge reconciled %d stacks, want the one this deploy provisions", len(stacks))
 	}
 	if stacks[0].Program != nil {
-		t.Errorf("the stack carries %+v, want no program: the direct edge runs none of our code", stacks[0].Program)
+		t.Errorf("the stack has %+v, want no program: the direct edge runs none of our code", stacks[0].Program)
 	}
 }
 
@@ -179,7 +179,7 @@ func TestDeployRefusesAnEdgeThatRunsCodeForAProviderThatWritesNoProgram(t *testi
 	builtProject(t)
 	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
 	client := servedProvider(t, "1.0.0", unprogrammed{provider})
-	standsBootstrapped(t, client)
+	bootstrappedOverRPC(t, client)
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindRelay)}
@@ -225,7 +225,7 @@ func onlyStack(t *testing.T, provider *fake.Provider) edge.StackSpec {
 	t.Helper()
 	stacks := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks()
 	if len(stacks) != 1 {
-		t.Fatalf("the edge reconciled %d stacks, want the one this deploy stands up", len(stacks))
+		t.Fatalf("the edge reconciled %d stacks, want the one this deploy provisions", len(stacks))
 	}
 	if !stacks[0].PruneRoutes {
 		t.Error("the stack keeps routes it no longer serves, want the edge sweeping them as it reconciles")
@@ -256,10 +256,10 @@ func TestPreviewDeployOnTheSharedWildcardPrunesItsOwnWorker(t *testing.T) {
 		t.Error("the stack uploads a worker of its own, though the shared preview entry is what answers on the wildcard")
 	}
 	if len(spec.Domains) != 0 {
-		t.Errorf("Domains = %v, want none: the shared entry holds the route", spec.Domains)
+		t.Errorf("Domains = %v, want none: the shared entry owns the route", spec.Domains)
 	}
 	if got := spec.Program.Worker.Vars[fake.ProgramPreviewVar]; got != "" {
-		t.Errorf("Vars[%s] = %q, want empty: the shared entry carries the base domain, not the project's worker",
+		t.Errorf("Vars[%s] = %q, want empty: the shared entry has the base domain, not the project's worker",
 			fake.ProgramPreviewVar, got)
 	}
 }
@@ -323,7 +323,7 @@ func productionStack(t *testing.T, provider *fake.Provider) edge.StackSpec {
 	t.Helper()
 	stacks := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks()
 	if len(stacks) != 1 {
-		t.Fatalf("the edge reconciled %d stacks, want the one this deploy stands up", len(stacks))
+		t.Fatalf("the edge reconciled %d stacks, want the one this deploy provisions", len(stacks))
 	}
 	return stacks[0]
 }

@@ -67,7 +67,7 @@ func TestFeaturesWithDependencies(t *testing.T) {
 		}
 	})
 
-	t.Run("a dependency the catalogue does not carry names the feature that wanted it", func(t *testing.T) {
+	t.Run("a dependency the catalogue does not include names the feature that wanted it", func(t *testing.T) {
 		t.Parallel()
 
 		_, err := FeaturesWithDependencies([]provider.Feature{{Name: "isr", DependsOn: []string{"gone"}}}, []string{"isr"})
@@ -149,50 +149,50 @@ func TestFeaturesToRemove(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name     string
-		standing []string
-		named    []string
-		want     []string
-		wantErr  bool
+		name      string
+		installed []string
+		named     []string
+		want      []string
+		wantErr   bool
 	}{
 		{
-			name:     "a run that names nothing removes nothing",
-			standing: []string{"isr", "image-optimization"},
+			name:      "a run that names nothing removes nothing",
+			installed: []string{"isr", "image-optimization"},
 		},
 		{
-			name:     "a standing name left out is left alone",
-			standing: []string{"isr", "image-optimization"},
-			named:    []string{"image-optimization"},
-			want:     []string{"image-optimization"},
+			name:      "an installed name left out is left alone",
+			installed: []string{"isr", "image-optimization"},
+			named:     []string{"image-optimization"},
+			want:      []string{"image-optimization"},
 		},
 		{
-			name:     "what stands on a removed feature goes with it",
-			standing: []string{"isr", "cloudflare-edge"},
-			named:    []string{"isr"},
-			want:     []string{"isr", "cloudflare-edge"},
+			name:      "what depends on a removed feature goes with it",
+			installed: []string{"isr", "cloudflare-edge"},
+			named:     []string{"isr"},
+			want:      []string{"isr", "cloudflare-edge"},
 		},
 		{
-			name:     "a name that is not standing is nothing to remove",
-			standing: []string{"isr"},
-			named:    []string{"image-optimization"},
+			name:      "a name that is not installed is nothing to remove",
+			installed: []string{"isr"},
+			named:     []string{"image-optimization"},
 		},
 		{
-			name:     "a dependent that was never there is not conjured up",
-			standing: []string{"isr"},
-			named:    []string{"isr"},
-			want:     []string{"isr"},
+			name:      "a dependent that was never there is not conjured up",
+			installed: []string{"isr"},
+			named:     []string{"isr"},
+			want:      []string{"isr"},
 		},
 		{
-			name:     "a name no catalogue offers is refused",
-			standing: []string{"isr"},
-			named:    []string{"nonesuch"},
-			wantErr:  true,
+			name:      "a name no catalogue offers is refused",
+			installed: []string{"isr"},
+			named:     []string{"nonesuch"},
+			wantErr:   true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := FeaturesToRemove(testCatalogue, tc.standing, tc.named)
+			got, err := FeaturesToRemove(testCatalogue, tc.installed, tc.named)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("FeaturesToRemove() = %v, want a refusal naming what this provider does not offer", got)

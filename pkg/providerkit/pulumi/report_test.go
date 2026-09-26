@@ -34,7 +34,7 @@ func (r *fakeProgress) Span(name string, _, _ time.Time, err error, attrs ...edg
 	r.spans = append(r.spans, recordedSpan{name: name, err: err, attrs: attrs})
 }
 
-func TestTheBatchSpanCarriesNoResourceIdentityAndTheSlowOpDoes(t *testing.T) {
+func TestTheBatchSpanHasNoResourceIdentityAndTheSlowOpDoes(t *testing.T) {
 	t.Parallel()
 
 	progress := &fakeProgress{}
@@ -64,7 +64,7 @@ func TestTheBatchSpanCarriesNoResourceIdentityAndTheSlowOpDoes(t *testing.T) {
 	}
 	for _, a := range batch.attrs {
 		if a.Key == provider.AttrKeyResourceType || a.Key == provider.AttrKeyResourceName {
-			t.Errorf("batch span carries resource identity attr %+v; it covers many resources", a)
+			t.Errorf("batch span has resource identity attr %+v; it covers many resources", a)
 		}
 	}
 
@@ -82,7 +82,7 @@ func TestTheBatchSpanCarriesNoResourceIdentityAndTheSlowOpDoes(t *testing.T) {
 				t.Errorf("RESOURCE_NAME = %q, want the logical name", a.Value)
 			}
 			if strings.Contains(a.Value, "urn:pulumi") {
-				t.Fatal("RESOURCE_NAME carried the raw URN")
+				t.Fatal("RESOURCE_NAME contained the raw URN")
 			}
 		}
 	}
@@ -94,7 +94,7 @@ func TestTheBatchSpanCarriesNoResourceIdentityAndTheSlowOpDoes(t *testing.T) {
 	}
 }
 
-func TestASlowOpWhoseURNDidNotParseCarriesNoResourceIdentity(t *testing.T) {
+func TestASlowOpWhoseURNDidNotParseHasNoResourceIdentity(t *testing.T) {
 	t.Parallel()
 
 	progress := &fakeProgress{}
@@ -114,7 +114,7 @@ func TestASlowOpWhoseURNDidNotParseCarriesNoResourceIdentity(t *testing.T) {
 	}
 	for _, a := range progress.spans[1].attrs {
 		if a.Key == provider.AttrKeyResourceType || a.Key == provider.AttrKeyResourceName {
-			t.Errorf("slow-op span carries resource identity attr %+v despite an unparseable URN", a)
+			t.Errorf("slow-op span has resource identity attr %+v despite an unparseable URN", a)
 		}
 	}
 }

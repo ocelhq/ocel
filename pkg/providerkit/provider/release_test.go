@@ -12,7 +12,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func TestAStackSpecCarryingARegistryRendersWithoutItsPassword(t *testing.T) {
+func TestAStackSpecWithARegistryRendersWithoutItsPassword(t *testing.T) {
 	target := images.Registry{Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "ghp_livesecret"}
 	spec := provider.StackSpec{
 		Kind: provider.StackApp,
@@ -44,7 +44,7 @@ func TestAStackSpecCarryingARegistryRendersWithoutItsPassword(t *testing.T) {
 	}
 }
 
-func TestASpecCarryingAnAppsValuesRendersWithoutThem(t *testing.T) {
+func TestASpecWithAnAppsValuesRendersWithoutThem(t *testing.T) {
 	values := provider.AppValues{
 		Plain:     map[string]string{"REGION": "eu-west-1"},
 		Sensitive: map[string]string{"API_TOKEN": "sk-live-secret"},
@@ -69,9 +69,9 @@ func TestASpecCarryingAnAppsValuesRendersWithoutThem(t *testing.T) {
 		fmt.Sprintf("%+v", *spec.App),
 		fmt.Errorf("release %v: %w", app, errors.New("denied")).Error(),
 	} {
-		for _, held := range []string{"sk-live-secret", "hunter2", "postgres://app"} {
-			if strings.Contains(rendered, held) {
-				t.Errorf("an app's values rendered as %q, and %s rides along into any log line, error wrap or panic dump that prints one", rendered, held)
+		for _, secret := range []string{"sk-live-secret", "hunter2", "postgres://app"} {
+			if strings.Contains(rendered, secret) {
+				t.Errorf("an app's values rendered as %q, and %s rides along into any log line, error wrap or panic dump that prints one", rendered, secret)
 			}
 		}
 		if !strings.Contains(rendered, "API_TOKEN") {

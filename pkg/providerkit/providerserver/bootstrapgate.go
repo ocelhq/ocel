@@ -40,24 +40,24 @@ func (g Gate) Status(ctx context.Context, class edge.Class) (BootstrapStatus, er
 	if err != nil {
 		return BootstrapStatus{}, err
 	}
-	standing := BootstrapStatus{Class: class, Present: described.Present, Stacks: described.Stacks,
+	status := BootstrapStatus{Class: class, Present: described.Present, Stacks: described.Stacks,
 		Unfinished: described.Unfinished, VendorState: described.VendorState}
-	var carried []string
+	var present []string
 	for _, stack := range described.Stacks {
 		if stack.Feature == "" {
-			standing.Schema = int(stack.Schema)
-			standing.WrittenBy = provider.WrittenBy(stack.WrittenBy)
+			status.Schema = int(stack.Schema)
+			status.WrittenBy = provider.WrittenBy(stack.WrittenBy)
 			continue
 		}
 		if stack.Present {
-			carried = append(carried, stack.Feature)
+			present = append(present, stack.Feature)
 		}
 	}
-	standing.Features = bootstrapplan.InCatalogueOrder(g.Bootstrap.Catalogue(), carried)
-	if standing.AutoHeal, err = g.autoHeal(ctx, class); err != nil {
+	status.Features = bootstrapplan.InCatalogueOrder(g.Bootstrap.Catalogue(), present)
+	if status.AutoHeal, err = g.autoHeal(ctx, class); err != nil {
 		return BootstrapStatus{}, err
 	}
-	return standing, nil
+	return status, nil
 }
 
 func (s BootstrapStatus) Stale(required []string) []string {
@@ -104,23 +104,23 @@ type ApplyRequest struct {
 }
 
 type featureChange struct {
-	standing  BootstrapStatus
+	status    BootstrapStatus
 	requested []string
 	removing  []string
 	ordered   []string
 }
 
-func (g Gate) resolveFeatureChange(standing BootstrapStatus, req ApplyRequest) (featureChange, error) {
+func (g Gate) resolveFeatureChange(status BootstrapStatus, req ApplyRequest) (featureChange, error) {
 	catalogue := g.Bootstrap.Catalogue()
-	class := standing.Class
-	if err := RefuseSchemaAhead(standing.Schema, standing.Present, class); err != nil {
+	class := status.Class
+	if err := RefuseSchemaAhead(status.Schema, status.Present, class); err != nil {
 		return featureChange{}, err
 	}
 	asked, err := bootstrapplan.FeaturesWithDependencies(catalogue, req.Features)
 	if err != nil {
 		return featureChange{}, err
 	}
-	removing, err := bootstrapplan.FeaturesToRemove(catalogue, standing.Features, req.Remove)
+	removing, err := bootstrapplan.FeaturesToRemove(catalogue, status.Features, req.Remove)
 	if err != nil {
 		return featureChange{}, err
 	}
@@ -138,7 +138,7 @@ func (g Gate) resolveFeatureChange(standing BootstrapStatus, req ApplyRequest) (
 	if err != nil {
 		return featureChange{}, err
 	}
-	return featureChange{standing: standing, requested: requested, removing: removing, ordered: ordered}, nil
+	return featureChange{status: status, requested: requested, removing: removing, ordered: ordered}, nil
 }
 
 func (g Gate) withEdgeFeature(catalogue []provider.Feature, requested []string) []string {
@@ -171,24 +171,24 @@ func (c featureChange) request(class edge.Class, req ApplyRequest, writer provid
 		Remove:             c.ordered,
 		RefuseReplacements: !req.AcceptReplacements,
 		WrittenBy:          writer,
-		VendorState:        c.standing.VendorState,
+		VendorState:        c.status.VendorState,
 	}
 }
 
 func (g Gate) Plan(ctx context.Context, class edge.Class, req ApplyRequest) (provider.Plan, error) {
-	standing, err := g.Status(ctx, class)
+	status, err := g.Status(ctx, class)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return g.PlanFrom(ctx, standing, req)
+	return g.PlanFrom(ctx, status, req)
 }
 
-func (g Gate) PlanFrom(ctx context.Context, standing BootstrapStatus, req ApplyRequest) (provider.Plan, error) {
-	change, err := g.resolveFeatureChange(standing, req)
+func (g Gate) PlanFrom(ctx context.Context, status BootstrapStatus, req ApplyRequest) (provider.Plan, error) {
+	change, err := g.resolveFeatureChange(status, req)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	class := standing.Class
+	class := status.Class
 	plan, err := g.Bootstrap.Plan(ctx, change.request(class, req, g.WrittenBy))
 	if err != nil {
 		return provider.Plan{}, err
@@ -224,11 +224,11 @@ func (g Gate) noteDependents(ctx context.Context, class edge.Class, groups []pro
 }
 
 func (g Gate) Apply(ctx context.Context, shown provider.Plan, class edge.Class, req ApplyRequest, progress edge.Progress) error {
-	standing, err := g.Status(ctx, class)
+	status, err := g.Status(ctx, class)
 	if err != nil {
 		return err
 	}
-	change, err := g.resolveFeatureChange(standing, req)
+	change, err := g.resolveFeatureChange(status, req)
 	if err != nil {
 		return err
 	}
@@ -243,7 +243,7 @@ func (g Gate) Apply(ctx context.Context, shown provider.Plan, class edge.Class, 
 		return err
 	}
 
-	autoHeal := change.standing.AutoHeal
+	autoHeal := change.status.AutoHeal
 	if req.AutoHeal != nil {
 		autoHeal = *req.AutoHeal
 	}
@@ -261,11 +261,11 @@ func (g Gate) Remove(ctx context.Context, shown provider.Plan, class edge.Class,
 		return err
 	}
 	if len(shown.Groups) > 0 {
-		standing, err := g.Bootstrap.PlanRemove(ctx, class)
+		current, err := g.Bootstrap.PlanRemove(ctx, class)
 		if err != nil {
 			return err
 		}
-		if err := bootstrapplan.RefuseUnconsentedChanges(shown, standing); err != nil {
+		if err := bootstrapplan.RefuseUnconsentedChanges(shown, current); err != nil {
 			return err
 		}
 	}
@@ -296,17 +296,17 @@ func (g Gate) admitRemovals(ctx context.Context, class edge.Class, removing []st
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
-		"removing %s would break %d project(s) already deployed here: %s — re-run with --force to remove it anyway, or leave it standing",
+		"removing %s would break %d project(s) already deployed here: %s — re-run with --force to remove it anyway, or leave it installed",
 		strings.Join(removing, ", "), len(dependents), strings.Join(dependents, ", "))
 }
 
 func (g Gate) RecordedFeatures(ctx context.Context, class edge.Class) (map[string][]string, error) {
-	held, err := g.Records.List(ctx, stackrecords.ProjectsRecord(class))
+	projects, err := g.Records.List(ctx, stackrecords.ProjectsRecord(class))
 	if err != nil {
 		return nil, fmt.Errorf("read the projects deployed here: %w", err)
 	}
 	recorded := map[string][]string{}
-	for _, record := range held {
+	for _, record := range projects {
 		rest, under := record.Name.Under(stackrecords.ProjectsRecord(class))
 		if !under || len(rest) != 1 || len(record.Bytes) == 0 {
 			continue
@@ -335,28 +335,28 @@ func ProjectsDependingOn(recorded map[string][]string, dropped []string) []strin
 }
 
 func (g Gate) EnsureReady(ctx context.Context, class edge.Class, required []string, heal bool, progress edge.Progress) (BootstrapStatus, error) {
-	standing, err := g.Status(ctx, class)
+	status, err := g.Status(ctx, class)
 	if err != nil {
 		return BootstrapStatus{}, err
 	}
 	command := provider.BootstrapCommand(class)
-	if err := CheckSchema(standing.Schema, standing.Present, class); err != nil {
-		return standing, err
+	if err := CheckSchema(status.Schema, status.Present, class); err != nil {
+		return status, err
 	}
-	if err := standing.lacking(required, command); err != nil {
-		return standing, err
+	if err := status.lacking(required, command); err != nil {
+		return status, err
 	}
-	if heal && g.heal(ctx, standing, required, progress) {
-		if standing, err = g.Status(ctx, class); err != nil {
+	if heal && g.heal(ctx, status, required, progress) {
+		if status, err = g.Status(ctx, class); err != nil {
 			return BootstrapStatus{}, err
 		}
 	}
-	if stale := standing.Stale(required); len(stale) > 0 {
+	if stale := status.Stale(required); len(stale) > 0 {
 		detail(progress, fmt.Sprintf(
 			"this account's Ocel bootstrap is the shape this build needs but its content is behind: %s. Re-run `%s` to refresh it",
 			strings.Join(stale, ", "), command))
 	}
-	return standing, nil
+	return status, nil
 }
 
 func (s BootstrapStatus) lacking(required []string, command string) error {
@@ -369,8 +369,8 @@ func (s BootstrapStatus) lacking(required []string, command string) error {
 		strings.Join(missing, ", "), command, strings.Join(missing, ","))
 }
 
-func (g Gate) heal(ctx context.Context, standing BootstrapStatus, required []string, progress edge.Progress) bool {
-	if !standing.AutoHeal || len(standing.healable(required)) == 0 {
+func (g Gate) heal(ctx context.Context, status BootstrapStatus, required []string, progress edge.Progress) bool {
+	if !status.AutoHeal || len(status.healable(required)) == 0 {
 		return false
 	}
 	if !g.WrittenBy.Release() {
@@ -378,14 +378,14 @@ func (g Gate) heal(ctx context.Context, standing BootstrapStatus, required []str
 			"this provider is a development build (%s), so it leaves the account's stale bootstrap stacks as they are", g.WrittenBy))
 		return false
 	}
-	if !standing.WrittenBy.Release() {
+	if !status.WrittenBy.Release() {
 		detail(progress, fmt.Sprintf(
-			"this account's bootstrap was written by a development build (%s), so it is refreshed only by the run that writes it next", standing.WrittenBy))
+			"this account's bootstrap was written by a development build (%s), so it is refreshed only by the run that writes it next", status.WrittenBy))
 		return false
 	}
 	err := g.Bootstrap.Apply(ctx, provider.BootstrapRequest{
-		Class:              standing.Class,
-		Features:           standing.Features,
+		Class:              status.Class,
+		Features:           status.Features,
 		RefuseReplacements: true,
 		Heal:               true,
 		WrittenBy:          g.WrittenBy,
@@ -396,14 +396,14 @@ func (g Gate) heal(ctx context.Context, standing BootstrapStatus, required []str
 		return false
 	}
 	if err != nil {
-		detail(progress, "could not refresh this account's bootstrap, and this run continues against it as it stands: "+err.Error())
+		detail(progress, "could not refresh this account's bootstrap, and this run continues against the bootstrap already in place: "+err.Error())
 		return false
 	}
 	return true
 }
 
 func denied(refusal refusal.Refusal) string {
-	said := "this run may not refresh what this bootstrap has fallen behind on, so it is left as it stands"
+	said := "this run may not refresh what this bootstrap has fallen behind on, so it is left in place"
 	if refusal.Message == "" {
 		return said
 	}
@@ -411,30 +411,30 @@ func denied(refusal refusal.Refusal) string {
 }
 
 func (g Gate) autoHeal(ctx context.Context, class edge.Class) (bool, error) {
-	held, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.BootstrapRecord(class))
+	recorded, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.BootstrapRecord(class))
 	if err != nil {
 		return false, fmt.Errorf("read the %s bootstrap record: %w", class, err)
 	}
-	if len(held.Bytes) == 0 {
+	if len(recorded.Bytes) == 0 {
 		return false, nil
 	}
 	var state stackrecords.BootstrapSettings
-	if err := json.Unmarshal(held.Bytes, &state); err != nil {
+	if err := json.Unmarshal(recorded.Bytes, &state); err != nil {
 		return false, fmt.Errorf("read the %s bootstrap record: %w", class, err)
 	}
 	return state.AutoHeal, nil
 }
 
 func (g Gate) RecordBootstrap(ctx context.Context, class edge.Class, state stackrecords.BootstrapSettings) error {
-	held, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.BootstrapRecord(class))
+	recorded, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.BootstrapRecord(class))
 	if err != nil {
 		return fmt.Errorf("read the %s bootstrap record: %w", class, err)
 	}
-	held.Bytes, err = json.Marshal(state)
+	recorded.Bytes, err = json.Marshal(state)
 	if err != nil {
 		return fmt.Errorf("record the %s bootstrap: %w", class, err)
 	}
-	if _, err := g.Records.Write(ctx, held); err != nil {
+	if _, err := g.Records.Write(ctx, recorded); err != nil {
 		return fmt.Errorf("record the %s bootstrap: %w", class, err)
 	}
 	return nil
@@ -446,12 +446,12 @@ type BootstrapUsers struct {
 }
 
 func (g Gate) BootstrapUsers(ctx context.Context, class edge.Class) (BootstrapUsers, error) {
-	held, err := g.Records.List(ctx, stackrecords.ProjectsRecord(class))
+	recorded, err := g.Records.List(ctx, stackrecords.ProjectsRecord(class))
 	if err != nil {
 		return BootstrapUsers{}, fmt.Errorf("read the projects deployed here: %w", err)
 	}
 	var projects []string
-	for _, record := range held {
+	for _, record := range recorded {
 		rest, under := record.Name.Under(stackrecords.ProjectsRecord(class))
 		if !under || rest[0] == "" {
 			continue

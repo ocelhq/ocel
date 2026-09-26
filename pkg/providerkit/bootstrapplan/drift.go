@@ -30,7 +30,7 @@ func RefuseUnconsentedChanges(shown, fresh provider.Plan) error {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
-		"%s stood as the plan was drawn and no longer does, so this apply would do work nobody consented to.\n"+
+		"%s needed no change when the plan was drawn and now does, so this apply would do work nobody consented to.\n"+
 			"Draw the plan again and consent to what it shows now",
 		strings.Join(grown, ", "))
 }
@@ -39,8 +39,8 @@ func rowKey(group provider.ChangeGroup, change provider.Change) string {
 	return group.Name + "/" + change.Kind + "/" + change.Name
 }
 
-func appendGrown(grown []string, name string, shown, standing provider.ChangeAction) []string {
-	if !standing.Writes() || (shown != "" && shown.Writes()) {
+func appendGrown(grown []string, name string, shown, current provider.ChangeAction) []string {
+	if !current.Writes() || (shown != "" && shown.Writes()) {
 		return grown
 	}
 	return append(grown, name)

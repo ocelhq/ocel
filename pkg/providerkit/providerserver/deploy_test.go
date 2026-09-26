@@ -127,14 +127,14 @@ func deployStream(
 	for stream.Receive() {
 		event := stream.Msg()
 		events = append(events, event)
-		if held := event.GetResult(); held != nil {
-			result = held
+		if got := event.GetResult(); got != nil {
+			result = got
 		}
 	}
 	return result, events, stream.Err()
 }
 
-func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
+func TestDeployProvisionsInfraThenAppsAndPromotes(t *testing.T) {
 	builtProject(t)
 	client, p := deployServed(t)
 
@@ -153,7 +153,7 @@ func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 		t.Fatalf("Deploy() returned bindings %q, want only orders, the one the manifest declares", names)
 	}
 	if len(result.GetFunctions()) != 1 || result.GetFunctions()[0].GetUrl() == "" {
-		t.Fatalf("Deploy() returned functions %v, want the one it stood up, carrying its url", result.GetFunctions())
+		t.Fatalf("Deploy() returned functions %v, want the one it provisioned, with its url", result.GetFunctions())
 	}
 
 	if events[0].GetStagePlan() == nil {
@@ -171,7 +171,7 @@ func TestDeployStandsUpInfraThenAppsAndPromotes(t *testing.T) {
 		t.Errorf("the app spec grants %v, want the infra binding the app binds a client to", specs[1].App.Grants)
 	}
 	if specs[1].App.Functions[0].Artifact.Key == "" {
-		t.Error("the app spec carries a function with no artifact, so the upload never reached the release")
+		t.Error("the app spec has a function with no artifact, so the upload never reached the release")
 	}
 	if specs[1].App.Deployment != webDeploymentID {
 		t.Errorf("the app spec names deployment %q, want %q: the router serves the build the CLI built under this id", specs[1].App.Deployment, webDeploymentID)
@@ -258,7 +258,7 @@ func TestDeployGrantsAnAppOnlyWhatItsUsageEdgesName(t *testing.T) {
 		}
 	}
 	if len(apps) != 2 {
-		t.Fatalf("the stacks port stood up %d apps, want web and admin", len(apps))
+		t.Fatalf("the stacks port provisioned %d apps, want web and admin", len(apps))
 	}
 
 	if want := []string{"orders", "uploads"}; !slices.Equal(grantNames(apps["admin"]), want) {
@@ -274,7 +274,7 @@ func TestDeployGrantsAnAppOnlyWhatItsUsageEdgesName(t *testing.T) {
 	}
 }
 
-func TestDeployGrantsNothingToAnAppCarryingNoUsageEdge(t *testing.T) {
+func TestDeployGrantsNothingToAnAppWithNoUsageEdge(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 
@@ -292,12 +292,12 @@ func TestDeployGrantsNothingToAnAppCarryingNoUsageEdge(t *testing.T) {
 			continue
 		}
 		if len(spec.App.Grants) != 0 || len(spec.App.Values.Bindings) != 0 {
-			t.Errorf("admin is granted %v, want nothing for an app carrying no usage edge at all", spec.App.Grants)
+			t.Errorf("admin is granted %v, want nothing for an app with no usage edge at all", spec.App.Grants)
 		}
 	}
 }
 
-func TestDeployRecordsEveryStackItStoodUp(t *testing.T) {
+func TestDeployRecordsEveryStackItProvisioned(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 
@@ -321,13 +321,13 @@ func TestDeployRecordsEveryStackItStoodUp(t *testing.T) {
 		app = entry
 	}
 	if len(infra.Bindings) != 1 || infra.Bindings[0].Name != "orders" {
-		t.Errorf("the infra stack records bindings %v, want the resource it stood up", infra.Bindings)
+		t.Errorf("the infra stack records bindings %v, want the resource it provisioned", infra.Bindings)
 	}
 	if app.App != "web" || app.Build == "" {
 		t.Errorf("the app stack records %+v, want it named for the app and the build it serves", app.Stack)
 	}
 	if len(app.Functions) != 1 {
-		t.Errorf("the app stack records %d functions, want the one it stood up", len(app.Functions))
+		t.Errorf("the app stack records %d functions, want the one it provisioned", len(app.Functions))
 	}
 }
 
@@ -419,7 +419,7 @@ func TestDeployRefusesABindingMissingAPropertyBeforeItRecordsIt(t *testing.T) {
 	stream.Close()
 
 	if connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatalf("Deploy() with a Postgres binding carrying only a host = %v, want it refused as invalid", err)
+		t.Fatalf("Deploy() with a Postgres binding with only a host = %v, want it refused as invalid", err)
 	}
 	if !strings.Contains(err.Error(), provider.PropertyPort) {
 		t.Errorf("Deploy() failed with %q, want it to name the property that is missing", err)
@@ -570,18 +570,18 @@ func servedBy(t *testing.T, p provider.Provider) contractv1connect.ProviderServi
 	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
-	standsBootstrapped(t, client)
+	bootstrappedOverRPC(t, client)
 	return client
 }
 
 func deployServed(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider) {
 	t.Helper()
 	client, provider := contractServed(t, "1.0.0")
-	standsBootstrapped(t, client)
+	bootstrappedOverRPC(t, client)
 	return client, provider
 }
 
-func standsBootstrapped(t *testing.T, client contractv1connect.ProviderServiceClient) {
+func bootstrappedOverRPC(t *testing.T, client contractv1connect.ProviderServiceClient) {
 	t.Helper()
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PRODUCTION,
@@ -620,7 +620,7 @@ func TestDeployWaivesANeedTheProjectAllowsToDegrade(t *testing.T) {
 
 	result, events := deploy(t, client, req)
 	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy() waiving %s = %q, want the deploy to stand up degraded", edge.NeedStreaming, result.GetError())
+		t.Fatalf("Deploy() waiving %s = %q, want the deploy to succeed degraded", edge.NeedStreaming, result.GetError())
 	}
 	if !slices.ContainsFunc(events, func(event *progressv1.OperationEvent) bool {
 		return event.GetDegraded().GetNeed() == string(edge.NeedStreaming)
@@ -670,7 +670,7 @@ func operatorServed(t *testing.T) (contractv1connect.ProviderServiceClient, envv
 	if _, err := deploys.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
-	standsBootstrapped(t, deploys)
+	bootstrappedOverRPC(t, deploys)
 	return deploys, envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL)
 }
 
@@ -819,9 +819,9 @@ func servedURLs(result *progressv1.ResultEvent) []string {
 }
 
 func servedAppURLs(result *progressv1.ResultEvent, app string) []string {
-	for _, held := range result.GetApps() {
-		if held.GetApp() == app {
-			return held.GetUrls()
+	for _, appResult := range result.GetApps() {
+		if appResult.GetApp() == app {
+			return appResult.GetUrls()
 		}
 	}
 	return nil
@@ -847,7 +847,7 @@ func writtenBy(zone string) *contractv1.EdgeSelection {
 	return &contractv1.EdgeSelection{Dns: &contractv1.Dns{Kind: string(fake.KindZone), Zone: zone}}
 }
 
-func TestTheFirstDeploySettlesAHostnameItsDNSWriterPoints(t *testing.T) {
+func TestTheFirstDeployAttachesAHostnameItsDNSWriterPoints(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -858,12 +858,12 @@ func TestTheFirstDeploySettlesAHostnameItsDNSWriterPoints(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 	if !slices.Equal(servedURLs(result), []string{"https://shop.example"}) || noteOf(result) != "" {
-		t.Errorf("the first deploy returned urls %v and the note %q, want the hostname it settled printed: no record was left to write by hand, so nothing waits on anyone",
+		t.Errorf("the first deploy returned urls %v and the note %q, want the hostname it attached printed: no record was left to write by hand, so nothing waits on anyone",
 			servedURLs(result), noteOf(result))
 	}
 }
 
-func TestTheFirstDeploySettlesALocalhostNameWithNoDNSWriter(t *testing.T) {
+func TestTheFirstDeployAttachesALocalhostNameWithNoDNSWriter(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -881,7 +881,7 @@ func TestTheFirstDeploySettlesALocalhostNameWithNoDNSWriter(t *testing.T) {
 	}
 }
 
-func TestADeployBindsItsHostnamesOnlyOnceEveryStackItProvisionsStands(t *testing.T) {
+func TestADeployBindsItsHostnamesOnlyOnceEveryStackItProvisionsIsUp(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -906,7 +906,7 @@ func TestADeployBindsItsHostnamesOnlyOnceEveryStackItProvisionsStands(t *testing
 		}
 	}
 	if bound < 0 || provisioned < 0 || bound < provisioned {
-		t.Errorf("the deploy said %v, want shop.example bound only after every stack was provisioned: an edge binds what already stands, such as the box's store name", said)
+		t.Errorf("the deploy said %v, want shop.example bound only after every stack was provisioned: an edge binds what already exists, such as the box's store name", said)
 	}
 }
 
@@ -953,7 +953,7 @@ func TestADeployLeavesAHostnameAnotherEdgeServesToDomainAdd(t *testing.T) {
 	}
 }
 
-func TestALaterDeploySettlesAHostnameTheConfigNewlyDeclares(t *testing.T) {
+func TestALaterDeployAttachesAHostnameTheConfigNewlyDeclares(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -966,7 +966,7 @@ func TestALaterDeploySettlesAHostnameTheConfigNewlyDeclares(t *testing.T) {
 	req.Manifest.Domains[0].Hostnames = append(req.Manifest.Domains[0].Hostnames, "www.shop.example")
 	result, _ := deploy(t, client, req)
 	if !result.GetSuccess() {
-		t.Fatalf("a deploy declaring one more hostname = %q, want it settled: the config is the declaration and the deploy reconciles it", result.GetError())
+		t.Fatalf("a deploy declaring one more hostname = %q, want it attached: the config is the declaration and the deploy reconciles it", result.GetError())
 	}
 	if want := []string{"https://shop.example", "https://www.shop.example"}; !slices.Equal(servedURLs(result), want) {
 		t.Errorf("the deploy printed %v, want %v", servedURLs(result), want)
@@ -996,7 +996,7 @@ func TestADeployWhoseDNSWriterFailsPromotesNothing(t *testing.T) {
 func TestADeployRefusedForAReasonNoWaitingFixesFailsWithThatReason(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
-	reason := "no load balancer stands in this project for shop.example: run `ocel bootstrap`"
+	reason := "no load balancer exists in this project for shop.example: run `ocel bootstrap`"
 	provider.RefuseCertificates(refusal.Refuse(refusal.CodeNotReady, "%s", reason))
 
 	req := deployRequest()
@@ -1009,7 +1009,7 @@ func TestADeployRefusedForAReasonNoWaitingFixesFailsWithThatReason(t *testing.T)
 		t.Errorf("Deploy() = %q, want the refusal's own remedy", result.GetError())
 	}
 	if _, promoted := spanStatuses(events)[promotionUnitSpan]; promoted {
-		t.Error("the run promoted, want nothing promoted over a hostname that could not be settled")
+		t.Error("the run promoted, want nothing promoted over a hostname that could not be attached")
 	}
 }
 
@@ -1023,7 +1023,7 @@ func TestADeployWhoseCertificateIsStillIssuingLeavesItToDomainAdd(t *testing.T) 
 	req.Edge = writtenBy("shop.example")
 	result, _ := deploy(t, client, req)
 	if !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want it to succeed: an issuance still in flight holds back the hostname, not the release", result.GetError())
+		t.Fatalf("Deploy() = %q, want it to succeed: an issuance still in flight delays the hostname, not the release", result.GetError())
 	}
 	if !strings.Contains(noteOf(result), "the certificate is still validating") {
 		t.Errorf("the note = %q, want it naming the issuance it waits on", noteOf(result))
@@ -1064,7 +1064,7 @@ func TestDeployNeedingManualRecordsSucceedsAndLeavesTheHostnameToDomainAdd(t *te
 
 	result, events := deploy(t, client, deployRequest())
 	if !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want it to succeed: a record only you can write holds back the hostname, not the release", result.GetError())
+		t.Fatalf("Deploy() = %q, want it to succeed: a record only you can write delays the hostname, not the release", result.GetError())
 	}
 	if len(servedURLs(result)) != 0 {
 		t.Errorf("the deploy printed %v, want no url: shop.example answers nowhere until its record is written", servedURLs(result))
@@ -1115,7 +1115,7 @@ func TestDeployAnnouncesThePreviewHostnameOfTheGlobalWildcard(t *testing.T) {
 	}
 }
 
-func TestAGlobalPreviewDeployOnAnEdgeThatRoutesByLabelHandsTheStacksTheLabelItsHostnameCarries(t *testing.T) {
+func TestAGlobalPreviewDeployOnAnEdgeThatRoutesByLabelHandsTheStacksTheLabelInItsHostname(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 	previewBootstrapped(t, client)
@@ -1135,7 +1135,7 @@ func TestAGlobalPreviewDeployOnAnEdgeThatRoutesByLabelHandsTheStacksTheLabelItsH
 			continue
 		}
 		if spec.App.PreviewLabel != want {
-			t.Errorf("the spec for %s carries the preview label %q, want %q: an edge that routes the whole label to what it stood up "+
+			t.Errorf("the spec for %s has the preview label %q, want %q: an edge that routes the whole label to what it provisioned "+
 				"has to name it what the hostname says", spec.App.App, spec.App.PreviewLabel, want)
 		}
 	}
@@ -1159,8 +1159,8 @@ func TestAGlobalPreviewDeployOnAnEdgeThatDoesNotRouteByLabelHandsTheStacksNoLabe
 			continue
 		}
 		if spec.App.PreviewLabel != "" {
-			t.Errorf("the spec for %s carries the preview label %q, want none: this edge resolves a preview hostname itself, "+
-				"so it imposes no name on what the provider stands up", spec.App.App, spec.App.PreviewLabel)
+			t.Errorf("the spec for %s has the preview label %q, want none: this edge resolves a preview hostname itself, "+
+				"so it imposes no name on what the provider provisions", spec.App.App, spec.App.PreviewLabel)
 		}
 	}
 }
@@ -1198,7 +1198,7 @@ func TestAGlobalPreviewDeployLabelsEachAppWithTheFirstLabelOfTheHostnameItAnnoun
 		}
 		want, _, _ := strings.Cut(strings.TrimPrefix(urls[0], "https://"), ".")
 		if labels[app] != want {
-			t.Errorf("the spec for %s carries the preview label %q, and %s is the hostname announced: the label the edge hands over "+
+			t.Errorf("the spec for %s has the preview label %q, and %s is the hostname announced: the label the edge hands over "+
 				"is the first label of that hostname or the preview answers nothing", app, labels[app], urls[0])
 		}
 	}
@@ -1219,13 +1219,13 @@ func TestAPreviewDeployOnTheProjectsOwnWildcardHandsTheStacksNoLabel(t *testing.
 			continue
 		}
 		if spec.App.PreviewLabel != "" {
-			t.Errorf("the spec for %s carries the preview label %q, want none: this project's own wildcard is answered per hostname, "+
+			t.Errorf("the spec for %s has the preview label %q, want none: this project's own wildcard is answered per hostname, "+
 				"so nothing reads a name out of the label", spec.App.App, spec.App.PreviewLabel)
 		}
 	}
 }
 
-func TestDeployAnnouncesAPreviewHostnamePerAppWhenTheProjectCarriesMoreThanOne(t *testing.T) {
+func TestDeployAnnouncesAPreviewHostnamePerAppWhenTheProjectHasMoreThanOne(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 	previewBootstrapped(t, client)
@@ -1247,7 +1247,7 @@ func TestDeployAnnouncesAPreviewHostnamePerAppWhenTheProjectCarriesMoreThanOne(t
 		"https://" + edge.SharedPreview("shop", "preview.acme.com").Host("pr-7", "admin"),
 	}
 	if !slices.Equal(servedURLs(result), want) {
-		t.Errorf("the preview deploy announced %v, want %v: the appless hostname is ambiguous once a project carries two apps",
+		t.Errorf("the preview deploy announced %v, want %v: the appless hostname is ambiguous once a project has two apps",
 			servedURLs(result), want)
 	}
 }
@@ -1295,7 +1295,7 @@ func TestDeployServesAHostnameDeclaredOnAnAppRatherThanTheProject(t *testing.T) 
 		t.Fatalf("Deploy() of a project whose only hostname sits on an app = %q, want it admitted", result.GetError())
 	}
 	if !slices.Equal(servedURLs(result), []string{"https://shop.example"}) {
-		t.Errorf("the deploy returned urls %v, want the app-declared hostname it settled printed", servedURLs(result))
+		t.Errorf("the deploy returned urls %v, want the app-declared hostname it attached printed", servedURLs(result))
 	}
 }
 
@@ -1320,10 +1320,10 @@ func TestDeployAnnouncesEachAppsOwnHostnameUnderThatApp(t *testing.T) {
 		t.Fatalf("Deploy() = %q", result.GetError())
 	}
 	if got := servedAppURLs(result, "web"); !slices.Equal(got, []string{"https://shop.example"}) {
-		t.Errorf("web carries %v, want the hostname web itself declares", got)
+		t.Errorf("web has %v, want the hostname web itself declares", got)
 	}
 	if got := servedAppURLs(result, "admin"); !slices.Equal(got, []string{"https://admin.shop.example"}) {
-		t.Errorf("admin carries %v, want the hostname admin itself declares", got)
+		t.Errorf("admin has %v, want the hostname admin itself declares", got)
 	}
 }
 

@@ -77,7 +77,7 @@ func VerifyProperties(binding Binding) error {
 	for _, name := range RequiredProperties(binding.Type) {
 		if binding.Properties[name] == "" {
 			return refusal.Refuse(refusal.CodeInvalid,
-				"binding %s came back without %q: every %s binding carries %v, and an app binds a client to the whole set",
+				"binding %s came back without %q: every %s binding includes %v, and an app binds a client to the whole set",
 				binding.Name, name, binding.Type, RequiredProperties(binding.Type))
 		}
 	}
@@ -118,7 +118,7 @@ func BindingMessage(binding Binding) (*bindingsv1.Binding, error) {
 		}
 		custom, err := structpb.NewStruct(fields)
 		if err != nil {
-			return nil, refusal.Refuse(refusal.CodeInvalid, "binding %s carries properties no record can hold: %v", binding.Name, err)
+			return nil, refusal.Refuse(refusal.CodeInvalid, "binding %s has properties no record can store: %v", binding.Name, err)
 		}
 		message.Properties = &bindingsv1.Binding_Custom{Custom: custom}
 	}
@@ -156,7 +156,7 @@ func BindingOf(message *bindingsv1.Binding) Binding {
 		binding.Type = kind
 	}
 	for _, name := range naming.BindingPropertyNames(message) {
-		if value, held := naming.BindingProperty(message, name); held {
+		if value, ok := naming.BindingProperty(message, name); ok {
 			binding.Properties[name] = fmt.Sprint(value)
 		}
 	}
@@ -164,21 +164,21 @@ func BindingOf(message *bindingsv1.Binding) Binding {
 }
 
 func GrantsOf(message *bindingsv1.Binding) []Grant {
-	held := message.GetGrants()
-	if len(held) == 0 {
+	grants := message.GetGrants()
+	if len(grants) == 0 {
 		return nil
 	}
-	out := make([]Grant, 0, len(held))
-	for _, grant := range held {
-		carried := Grant{Label: grant.GetLabel(), Actions: grant.GetActions(), Resources: grant.GetResources()}
+	out := make([]Grant, 0, len(grants))
+	for _, grant := range grants {
+		decoded := Grant{Label: grant.GetLabel(), Actions: grant.GetActions(), Resources: grant.GetResources()}
 		for _, condition := range grant.GetConditions() {
-			carried.Conditions = append(carried.Conditions, GrantCondition{
+			decoded.Conditions = append(decoded.Conditions, GrantCondition{
 				Operator: condition.GetOperator(),
 				Key:      condition.GetKey(),
 				Values:   condition.GetValues(),
 			})
 		}
-		out = append(out, carried)
+		out = append(out, decoded)
 	}
 	return out
 }

@@ -53,7 +53,7 @@ func deliveredBy(t *testing.T, req *contractv1.DeployRequest, publish func(*fake
 			return specs[i].App.Values.ContainerEnv
 		}
 	}
-	t.Fatal("no plan the stacks port saw stands up an app")
+	t.Fatal("no plan the stacks port saw provisions an app")
 	return nil
 }
 
@@ -69,10 +69,10 @@ func TestAResourceIsNamedAsTheRuntimeReadsIt(t *testing.T) {
 }
 
 func TestADeployThatProvisionsNamesNoPhase(t *testing.T) {
-	daemonHoldingTheBuiltImage(t, "amd64")
+	daemonWithTheBuiltImage(t, "amd64")
 	delivered := deliveredBy(t, namingARegistry(containerDeployRequest("/healthz")), nil)
 
-	if got, held := delivered[constants.PhaseEnvName]; held {
+	if got, ok := delivered[constants.PhaseEnvName]; ok {
 		t.Errorf("%s = %q, want a deploy that provisions to name no phase at all", constants.PhaseEnvName, got)
 	}
 }
@@ -87,7 +87,7 @@ func TestAContainerAppRefusesTheNameTheProviderInjects(t *testing.T) {
 	}
 }
 
-func TestAServerlessAppIsNotHeldToTheContainerReservation(t *testing.T) {
+func TestAServerlessAppIsNotSubjectToTheContainerReservation(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -101,7 +101,7 @@ func TestAServerlessAppIsNotHeldToTheContainerReservation(t *testing.T) {
 func deliveredByWrapping(t *testing.T, req *contractv1.DeployRequest, publish func(*fake.Provider)) map[string]string {
 	t.Helper()
 	builtProject(t)
-	daemonHoldingTheBuiltImage(t, "amd64")
+	daemonWithTheBuiltImage(t, "amd64")
 	provider := fake.NewProvider(fake.Options{})
 	client := servedBy(t, provider.WrappingContainers("amd64", containerRuntimeBytes))
 	if publish != nil {
@@ -117,7 +117,7 @@ func deliveredByWrapping(t *testing.T, req *contractv1.DeployRequest, publish fu
 			return specs[i].App.Values.ContainerEnv
 		}
 	}
-	t.Fatal("no plan the stacks port saw stands up an app")
+	t.Fatal("no plan the stacks port saw provisions an app")
 	return nil
 }
 
@@ -143,7 +143,7 @@ func TestNoSecretPlaintextIsHandedToAContainerTheRuntimeReadsItIn(t *testing.T) 
 		sealValue(t, p, "DATABASE_URL", "postgres://sealed")
 	})
 
-	if got, held := delivered["DATABASE_URL"]; held {
+	if got, ok := delivered["DATABASE_URL"]; ok {
 		t.Errorf("a container is handed DATABASE_URL=%q, want the runtime inside it to open the secret: a plaintext resolved on the deploy machine outlives the deploy in the box's own configuration", got)
 	}
 }
@@ -152,14 +152,14 @@ func TestNoBindingRecordIsHandedToAContainerTheRuntimeResolvesItIn(t *testing.T)
 	delivered := deliveredByWrapping(t, namingARegistry(containerDeployRequest("/healthz")), nil)
 
 	name := provider.ResourceEnvName(provider.BindingPostgres, "orders")
-	if got, held := delivered[name]; held {
-		t.Errorf("a container is handed %s=%q, want the runtime inside it to read the record: the record carries the resource's own credentials", name, got)
+	if got, ok := delivered[name]; ok {
+		t.Errorf("a container is handed %s=%q, want the runtime inside it to read the record: the record contains the resource's own credentials", name, got)
 	}
 }
 
 func TestAnUnsetSecretIsRefusedByThePlanOfAWrappingProvidersContainerApp(t *testing.T) {
 	builtProject(t)
-	daemonHoldingTheBuiltImage(t, "amd64")
+	daemonWithTheBuiltImage(t, "amd64")
 	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
 	client := servedBy(t, provider.WrappingContainers("amd64", containerRuntimeBytes))
 
@@ -173,11 +173,11 @@ func TestAnUnsetSecretIsRefusedByThePlanOfAWrappingProvidersContainerApp(t *test
 		}
 	}
 	if entered(t, events, "web") {
-		t.Error("the deploy was already standing web up when the unset secret was refused")
+		t.Error("the deploy was already provisioning web when the unset secret was refused")
 	}
 }
 
-func TestAWrappingProvidersContainerAppIsHeldToTheSameReservedNames(t *testing.T) {
+func TestAWrappingProvidersContainerAppIsSubjectToTheSameReservedNames(t *testing.T) {
 	for what, declares := range map[string]func(*contractv1.DeployRequest) *contractv1.DeployRequest{
 		"the port a provider injects": func(req *contractv1.DeployRequest) *contractv1.DeployRequest {
 			return declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "PORT", "3000")
@@ -188,7 +188,7 @@ func TestAWrappingProvidersContainerAppIsHeldToTheSameReservedNames(t *testing.T
 	} {
 		t.Run(what, func(t *testing.T) {
 			builtProject(t)
-			daemonHoldingTheBuiltImage(t, "amd64")
+			daemonWithTheBuiltImage(t, "amd64")
 			provider := fake.NewProvider(fake.Options{Region: "nowhere"})
 			client := servedBy(t, provider.WrappingContainers("amd64", containerRuntimeBytes))
 
@@ -202,9 +202,9 @@ func TestAWrappingProvidersContainerAppIsHeldToTheSameReservedNames(t *testing.T
 
 func TestTheStagedRecordNamesEveryValueAWrappingProvidersAppDeclares(t *testing.T) {
 	builtProject(t)
-	daemonHoldingTheBuiltImage(t, "amd64")
+	daemonWithTheBuiltImage(t, "amd64")
 	provider := fake.NewProvider(fake.Options{Region: "nowhere"})
-	held := staging(t, provider)
+	stager := staging(t, provider)
 	client := servedBy(t, provider.WrappingContainers("amd64", containerRuntimeBytes))
 
 	req := namingARegistry(containerDeployRequest("/healthz"))
@@ -218,7 +218,7 @@ func TestTheStagedRecordNamesEveryValueAWrappingProvidersAppDeclares(t *testing.
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	staged := held.records()
+	staged := stager.records()
 	if len(staged) != 1 {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
@@ -232,7 +232,7 @@ func TestTheStagedRecordNamesEveryValueAWrappingProvidersAppDeclares(t *testing.
 }
 
 func TestTheDeploymentURLIsDeliveredToAContainerRatherThanRefusedAsAnOcelName(t *testing.T) {
-	daemonHoldingTheBuiltImage(t, "amd64")
+	daemonWithTheBuiltImage(t, "amd64")
 	req := namingARegistry(containerDeployRequest("/healthz"))
 	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, constants.AppURLEnvName, "https://shop.example")
 	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, appbuild.ClientURLEnvName, "https://shop.example")
@@ -281,7 +281,7 @@ func refusedPlanOn(
 		events = append(events, stream.Msg())
 		result := stream.Msg().GetResult()
 		if result.GetSuccess() {
-			t.Fatal("a plan of it succeeded, want it refused before the deploy that would carry it out is ever run")
+			t.Fatal("a plan of it succeeded, want it refused before the deploy that would perform it is ever run")
 		}
 		if result.GetError() != "" {
 			refusal = result.GetError()
@@ -327,7 +327,7 @@ func TestAContainerAppsReservedNamesAreRefusedByThePlanRatherThanByTheDeploy(t *
 				t.Errorf("the refusal reads %q and never names the app that declares it", message)
 			}
 			if entered(t, events, "web") {
-				t.Error("the deploy was already standing web up when the name was refused: settling on a plan is where a name a provider owns is read, and a refusal that waits for the app's own unit is one a user meets only once the deploy is under way")
+				t.Error("the deploy was already provisioning web when the name was refused: planning is where a name a provider owns is read, and a refusal that waits for the app's own unit is one a user meets only once the deploy is under way")
 			}
 		})
 	}
@@ -342,11 +342,11 @@ func TestAnUnsetSecretIsRefusedByThePlanOfAContainerApp(t *testing.T) {
 		}
 	}
 	if entered(t, events, "web") {
-		t.Error("the deploy was already standing web up when the unset secret was refused")
+		t.Error("the deploy was already provisioning web when the unset secret was refused")
 	}
 }
 
-func TestAServerlessAppIsHeldToNeitherReservation(t *testing.T) {
+func TestAServerlessAppIsSubjectToNeitherReservation(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 
@@ -359,7 +359,7 @@ func TestAServerlessAppIsHeldToNeitherReservation(t *testing.T) {
 }
 
 func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheApp(t *testing.T) {
-	daemonHoldingTheBuiltImage(t, "amd64")
+	daemonWithTheBuiltImage(t, "amd64")
 	for name, tc := range map[string]struct {
 		clientBundle bool
 		want         []string
@@ -370,7 +370,7 @@ func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheApp(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			builtProject(t)
 			client, provider := deployServed(t)
-			held := staging(t, provider)
+			stager := staging(t, provider)
 
 			req := namingARegistry(containerDeployRequest("/healthz"))
 			req.Manifest.Apps[0].ClientBundle = tc.clientBundle
@@ -383,7 +383,7 @@ func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheApp(t *testing.T) {
 				t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 			}
 
-			staged := held.records()
+			staged := stager.records()
 			if len(staged) != 1 {
 				t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 			}
@@ -398,11 +398,11 @@ func TestTheStagedRecordLeavesOutOnlyWhatOcelWritesForTheApp(t *testing.T) {
 	}
 }
 
-func TestTheStagedRecordNamesEveryValueTheAppDeclaresAndCarriesNone(t *testing.T) {
-	daemonHoldingTheBuiltImage(t, "amd64")
+func TestTheStagedRecordNamesEveryValueTheAppDeclaresAndIncludesNone(t *testing.T) {
+	daemonWithTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
-	held := staging(t, provider)
+	stager := staging(t, provider)
 
 	req := namingARegistry(containerDeployRequest("/healthz"))
 	declaring(req, resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, "REGION", "eu-west-1")
@@ -415,7 +415,7 @@ func TestTheStagedRecordNamesEveryValueTheAppDeclaresAndCarriesNone(t *testing.T
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	staged := held.records()
+	staged := stager.records()
 	if len(staged) != 1 {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
@@ -427,9 +427,9 @@ func TestTheStagedRecordNamesEveryValueTheAppDeclaresAndCarriesNone(t *testing.T
 		t.Errorf("the staged record names %v of what web declares, and a promotion reads that record to decide whether putting the app back would serve it an empty environment", named)
 	}
 	rendered := fmt.Sprint(staged[0])
-	for _, held := range []string{"eu-west-1", "sensitive-token", "postgres://sealed"} {
-		if strings.Contains(rendered, held) {
-			t.Errorf("the staged record reads %q and carries a value in plaintext: a record outlives the deploy that wrote it, and the names alone are what a promotion needs", rendered)
+	for _, secret := range []string{"eu-west-1", "sensitive-token", "postgres://sealed"} {
+		if strings.Contains(rendered, secret) {
+			t.Errorf("the staged record reads %q and contains a value in plaintext: a record outlives the deploy that wrote it, and the names alone are what a promotion needs", rendered)
 		}
 	}
 }

@@ -77,8 +77,8 @@ func newMux(config Config) *http.ServeMux {
 		validate.NewInterceptor(),
 	)
 
-	held := &session{config: config, writer: provider.WrittenByVersion(config.Version)}
-	kit := &handlers{session: held, Service: &envvarsserver.Service{Source: sessionBackend{session: held}}}
+	s := &session{config: config, writer: provider.WrittenByVersion(config.Version)}
+	kit := &handlers{session: s, Service: &envvarsserver.Service{Source: sessionBackend{session: s}}}
 
 	path, handler := contractv1connect.NewProviderServiceHandler(kit, interceptors)
 	mux.Handle(path, handler)

@@ -161,7 +161,7 @@ func TestEventTraceSpanRecordsAFailureAsAnErrorKindNeverRawText(t *testing.T) {
 		t.Fatal("no ATTRIBUTE_KEY_ERROR_KIND attribute on a failed span")
 	}
 	if strings.Contains(got, "hunter2") {
-		t.Fatal("ERROR_KIND attribute carried the raw error text")
+		t.Fatal("ERROR_KIND attribute contained the raw error text")
 	}
 	if got != provider.ErrorKindFailed {
 		t.Errorf("ERROR_KIND = %q, want a bounded classification", got)

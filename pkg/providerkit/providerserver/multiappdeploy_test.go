@@ -20,7 +20,7 @@ import (
 
 const promotionUnitSpan = "Promotion"
 
-const webRefusal = "the web stack would not stand up"
+const webRefusal = "the web stack could not be provisioned"
 
 func appBarrier(t *testing.T, width int) func(provider.StackSpec) error {
 	t.Helper()
@@ -115,7 +115,7 @@ func TestDeployStartsTheAppsStillQueuedWhenAnEarlyAppFails(t *testing.T) {
 
 	result, events := deploy(t, client, queuedAppRequest(apps))
 	if result == nil || result.GetSuccess() {
-		t.Fatalf("Deploy() succeeded, want it to fail: one of its apps did not stand up")
+		t.Fatalf("Deploy() succeeded, want it to fail: one of its apps was not provisioned")
 	}
 
 	want := make([]string, 0, len(apps))
@@ -145,7 +145,7 @@ func TestDeployProvisionsAppsAtTheSameTime(t *testing.T) {
 
 	result, _ := deploy(t, client, twoAppRequest())
 	if result == nil || !result.GetSuccess() {
-		t.Fatalf("Deploy() = %q, want two apps standing up at once and the deploy succeeding", result.GetError())
+		t.Fatalf("Deploy() = %q, want two apps provisioning at once and the deploy succeeding", result.GetError())
 	}
 }
 
@@ -172,7 +172,7 @@ func TestDeployFinishesASiblingOfAFailedAppAndWithholdsPromotion(t *testing.T) {
 
 	result, events := deploy(t, client, twoAppRequest())
 	if result == nil || result.GetSuccess() {
-		t.Fatalf("Deploy() succeeded, want it to fail: one of its two apps did not stand up")
+		t.Fatalf("Deploy() succeeded, want it to fail: one of its two apps was not provisioned")
 	}
 
 	statuses := spanStatuses(events)
@@ -191,7 +191,7 @@ func TestDeployFinishesASiblingOfAFailedAppAndWithholdsPromotion(t *testing.T) {
 		t.Fatalf("the result reports %v, want %v", got, want)
 	}
 	if detail := result.GetApps()[0].GetError(); !strings.Contains(detail, webRefusal) {
-		t.Errorf("web's outcome carries %q, want the failure that stopped it", detail)
+		t.Errorf("web's outcome includes %q, want the failure that stopped it", detail)
 	}
 }
 
@@ -255,14 +255,14 @@ func TestDeployStartsNoAppWhenTheSharedInfrastructureFails(t *testing.T) {
 
 	p.FakeStacks().Entering(func(spec provider.StackSpec) error {
 		if spec.App == nil {
-			return errors.New("the environment's infrastructure would not stand up")
+			return errors.New("the environment's infrastructure could not be provisioned")
 		}
-		return errors.New("an app was provisioned over infrastructure that never stood up")
+		return errors.New("an app was provisioned over infrastructure that was never provisioned")
 	})
 
 	result, events := deploy(t, client, twoAppRequest())
 	if result == nil || result.GetSuccess() {
-		t.Fatalf("Deploy() succeeded, want it to fail: its shared infrastructure did not stand up")
+		t.Fatalf("Deploy() succeeded, want it to fail: its shared infrastructure was not provisioned")
 	}
 	statuses := spanStatuses(events)
 	for _, app := range []string{"web", "admin"} {
@@ -295,7 +295,7 @@ func TestDeployReportsAppOutcomesWhenAnAppRefusesTheRequest(t *testing.T) {
 		t.Fatalf("Deploy() = %v, want the refusal to name what the manifest is missing", err)
 	}
 	if result == nil {
-		t.Fatal("a refused run reported no per-app outcomes at all, so the sibling that stood up is lost")
+		t.Fatal("a refused run reported no per-app outcomes at all, so the sibling that was provisioned is lost")
 	}
 	want := []string{"web=APP_OUTCOME_SUCCEEDED", "admin=APP_OUTCOME_FAILED"}
 	if got := outcomes(result); !slices.Equal(got, want) {

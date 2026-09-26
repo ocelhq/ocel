@@ -21,7 +21,7 @@ func productionHosts(hosts []*contractv1.ConfiguredHostname) ([]ConfiguredHost, 
 		if err != nil {
 			return nil, err
 		}
-		if host == "" || slices.ContainsFunc(out, func(held ConfiguredHost) bool { return held.Hostname == host }) {
+		if host == "" || slices.ContainsFunc(out, func(configured ConfiguredHost) bool { return configured.Hostname == host }) {
 			continue
 		}
 		out = append(out, ConfiguredHost{Hostname: host, App: raw.GetApp()})

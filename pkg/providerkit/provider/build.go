@@ -67,7 +67,7 @@ func ParseBuild(rendered string) (Build, error) {
 		return Build{}, fmt.Errorf("deployment identity %q must be a deployment id and a fingerprint joined by %q", rendered, identitySeparator)
 	}
 	if strings.Contains(fingerprint, identitySeparator) {
-		return Build{}, fmt.Errorf("deployment identity %q carries more than one %q", rendered, identitySeparator)
+		return Build{}, fmt.Errorf("deployment identity %q contains more than one %q", rendered, identitySeparator)
 	}
 	return Build{deploymentID: deploymentID, fingerprint: fingerprint}, nil
 }

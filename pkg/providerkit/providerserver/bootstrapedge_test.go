@@ -60,7 +60,7 @@ func TestABootstrapBehindAnotherEdgeEnsuresNothing(t *testing.T) {
 	}
 }
 
-func TestAStandingEdgeFeatureLeftOutIsKept(t *testing.T) {
+func TestAnInstalledEdgeFeatureLeftOutIsKept(t *testing.T) {
 	t.Parallel()
 
 	gate, p := fronting(t, fake.KindRelay)
@@ -100,7 +100,7 @@ func TestAnEdgeFeatureGoesOnlyWhenTheRunNamesIt(t *testing.T) {
 	}
 }
 
-func TestAnUnrequestedStandingEdgeFeatureIsKept(t *testing.T) {
+func TestAnUnrequestedInstalledEdgeFeatureIsKept(t *testing.T) {
 	t.Parallel()
 
 	gate, p := fronting(t, fake.KindDirect)
@@ -114,7 +114,7 @@ func TestAnUnrequestedStandingEdgeFeatureIsKept(t *testing.T) {
 	}
 	for _, group := range plan.Groups {
 		if group.Feature == fake.FeatureImages && group.Action == provider.ActionDelete {
-			t.Fatalf("bootstrapping behind %s deletes %s, want another edge's standing feature untouched", fake.KindDirect, fake.FeatureImages)
+			t.Fatalf("bootstrapping behind %s deletes %s, want another edge's installed feature untouched", fake.KindDirect, fake.FeatureImages)
 		}
 	}
 }
@@ -161,11 +161,11 @@ func TestRemovingTheFeatureTheChosenEdgeFrontsThroughIsRefused(t *testing.T) {
 		t.Errorf("refusal = %q, want it to name the edge this project fronts with", err)
 	}
 	if strings.Contains(err.Error(), "either ensured or removed") {
-		t.Errorf("refusal = %q, want the real conflict rather than features the run never asked to stand up", err)
+		t.Errorf("refusal = %q, want the real conflict rather than features the run never asked to install", err)
 	}
 }
 
-func TestRemovingWhatTheFrontingFeatureStandsOnIsRefusedByName(t *testing.T) {
+func TestRemovingWhatTheFrontingFeatureDependsOnIsRefusedByName(t *testing.T) {
 	t.Parallel()
 
 	gate, provider := fronting(t, fake.KindRelay)
@@ -181,7 +181,7 @@ func TestRemovingWhatTheFrontingFeatureStandsOnIsRefusedByName(t *testing.T) {
 		t.Errorf("refusal = %q, want it to name what the cascade would take", err)
 	}
 	if strings.Contains(err.Error(), "either ensured or removed") {
-		t.Errorf("refusal = %q, want the real conflict rather than features the run never asked to stand up", err)
+		t.Errorf("refusal = %q, want the real conflict rather than features the run never asked to install", err)
 	}
 }
 
@@ -221,7 +221,7 @@ func TestARunNamingNoEdgeStillNeedsTheDefaultEdgesFeature(t *testing.T) {
 			continue
 		}
 		if !stack.GetRequired() || !stack.GetPresent() {
-			t.Fatalf("%s = %+v, want the default edge's feature required and standing after a bootstrap that named no edge", fake.FeatureImages, stack)
+			t.Fatalf("%s = %+v, want the default edge's feature required and installed after a bootstrap that named no edge", fake.FeatureImages, stack)
 		}
 		return
 	}

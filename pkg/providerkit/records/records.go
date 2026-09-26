@@ -64,27 +64,27 @@ type Record struct {
 }
 
 func ReadOrEmpty(ctx context.Context, store Store, name Name) (Record, error) {
-	held, err := store.Read(ctx, name)
+	recorded, err := store.Read(ctx, name)
 	if errors.Is(err, ErrNotFound) {
 		return Record{Name: name}, nil
 	}
 	if err != nil {
 		return Record{}, err
 	}
-	held.Name = name
-	return held, nil
+	recorded.Name = name
+	return recorded, nil
 }
 
 func Forget(ctx context.Context, store Store, name Name) error {
 	for range forgetAttempts {
-		held, err := store.Read(ctx, name)
+		recorded, err := store.Read(ctx, name)
 		if errors.Is(err, ErrNotFound) {
 			return nil
 		}
 		if err != nil {
 			return err
 		}
-		err = store.Remove(ctx, name, held.Revision)
+		err = store.Remove(ctx, name, recorded.Revision)
 		if err == nil || errors.Is(err, ErrNotFound) {
 			return nil
 		}

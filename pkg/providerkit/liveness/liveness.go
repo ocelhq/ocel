@@ -122,9 +122,9 @@ func (l *Net) request(ctx context.Context, scheme, hostname string, addresses []
 			DialContext: func(ctx context.Context, network, _ string) (net.Conn, error) {
 				var failed error
 				for _, address := range addresses {
-					held, err := l.dial(ctx, network, address)
+					conn, err := l.dial(ctx, network, address)
 					if err == nil {
-						return held, nil
+						return conn, nil
 					}
 					failed = err
 				}
@@ -208,11 +208,11 @@ func dialAddress(target *url.URL) string {
 }
 
 func onPort(addresses []string, port string) []string {
-	held := make([]string, 0, len(addresses))
+	answered := make([]string, 0, len(addresses))
 	for _, address := range addresses {
-		held = append(held, net.JoinHostPort(address, port))
+		answered = append(answered, net.JoinHostPort(address, port))
 	}
-	return held
+	return answered
 }
 
 func (l *Net) resolveAuthoritative(ctx context.Context, hostname string) ([]string, error) {
@@ -254,7 +254,7 @@ func (l *Net) queryNameserver(ctx context.Context, nameserver, hostname string) 
 		return nil, err
 	}
 	if len(addresses) == 0 {
-		return nil, fmt.Errorf("it holds no address for %s", hostname)
+		return nil, fmt.Errorf("it has no address for %s", hostname)
 	}
 	return onPort(addresses, "443"), nil
 }
@@ -263,15 +263,15 @@ func (l *Net) zoneOf(ctx context.Context, hostname string) (string, []string, er
 	labels := strings.Split(strings.TrimSuffix(hostname, "."), ".")
 	for at := range max(len(labels)-1, 1) {
 		candidate := strings.Join(labels[at:], ".")
-		held, err := l.system().NS(ctx, candidate+".")
+		servers, err := l.system().NS(ctx, candidate+".")
 		if ctx.Err() != nil {
 			return "", nil, ctx.Err()
 		}
-		if err != nil || len(held) == 0 {
+		if err != nil || len(servers) == 0 {
 			continue
 		}
-		named := make([]string, 0, len(held))
-		for _, ns := range held {
+		named := make([]string, 0, len(servers))
+		for _, ns := range servers {
 			named = append(named, strings.TrimSuffix(ns.Host, "."))
 		}
 		return candidate, named, nil

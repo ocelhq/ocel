@@ -98,7 +98,7 @@ func TestAnArtifactDigestNamesOneTreeAndOneOverlay(t *testing.T) {
 		dir := builtTree(t, files)
 		bare, with := digested(t, dir, nil), digested(t, dir, sealed)
 		if bare == with {
-			t.Error("the digest ignored the overlay, so a resealed package would land on the key the old one holds")
+			t.Error("the digest ignored the overlay, so a resealed package would land on the key the old one is stored under")
 		}
 		if again := digested(t, dir, sealed); again != with {
 			t.Errorf("one tree and one overlay digest to %q then %q, want one key", with, again)
@@ -133,7 +133,7 @@ func packed(t *testing.T, dir string, overlay map[string][]byte) *zip.Reader {
 	return archive
 }
 
-func TestAPackedArtifactCarriesTheTreeTheOverlayAndItsSymlinks(t *testing.T) {
+func TestAPackedArtifactContainsTheTreeTheOverlayAndItsSymlinks(t *testing.T) {
 	t.Run("the tree and the overlay round trip", func(t *testing.T) {
 		dir := builtTree(t, map[string]string{"src/server.js": "handler", "package.json": "{}"})
 		files := map[string]string{}
@@ -156,11 +156,11 @@ func TestAPackedArtifactCarriesTheTreeTheOverlayAndItsSymlinks(t *testing.T) {
 		}
 		for name, body := range want {
 			if files[name] != body {
-				t.Errorf("the package holds %s = %q, want %q", name, files[name], body)
+				t.Errorf("the package contains %s = %q, want %q", name, files[name], body)
 			}
 		}
 		if len(files) != len(want) {
-			t.Errorf("the package holds %v, want exactly %v", files, want)
+			t.Errorf("the package contains %v, want exactly %v", files, want)
 		}
 	})
 
@@ -173,8 +173,8 @@ func TestAPackedArtifactCarriesTheTreeTheOverlayAndItsSymlinks(t *testing.T) {
 		for _, entry := range packed(t, dir, nil).File {
 			entries[entry.Name] = entry
 		}
-		link, held := entries["link.js"]
-		if !held {
+		link, ok := entries["link.js"]
+		if !ok {
 			t.Fatal("the package dropped the symlink")
 		}
 		if link.Mode()&os.ModeSymlink == 0 {
@@ -264,7 +264,7 @@ func TestDeployPacksTheVendorsOverlayIntoEveryFunctionPackage(t *testing.T) {
 	builtProject(t)
 	provider := &packingProvider{Provider: fake.NewProvider(fake.Options{})}
 	client := servedBy(t, provider)
-	standsBootstrapped(t, client)
+	bootstrappedOverRPC(t, client)
 
 	if result, _ := deploy(t, client, deployRequest()); !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q", result.GetError())
@@ -272,14 +272,14 @@ func TestDeployPacksTheVendorsOverlayIntoEveryFunctionPackage(t *testing.T) {
 
 	spec := provider.FakeStacks().Provisioned()[1]
 	files := packagedFiles(t, provider, spec.App.Functions[0].Artifact)
-	if _, held := files[builtEntrypoint]; !held {
-		t.Errorf("the package holds %v, want the built artifact's own files", files)
+	if _, ok := files[builtEntrypoint]; !ok {
+		t.Errorf("the package contains %v, want the built artifact's own files", files)
 	}
 	if got := files[sealedFile]; got != "sealed for web" {
-		t.Errorf("the package holds %s = %q, want the sealed values the vendor packed; without them the function boots with no variables", sealedFile, got)
+		t.Errorf("the package contains %s = %q, want the sealed values the vendor packed; without them the function boots with no variables", sealedFile, got)
 	}
 	if spec.App.VendorState != "bundle for web" {
-		t.Errorf("the app spec carries %v, want what the pack handed back: the stack's env must pair with the package it sealed", spec.App.VendorState)
+		t.Errorf("the app spec has %v, want what the pack handed back: the stack's env must pair with the package it sealed", spec.App.VendorState)
 	}
 
 	requests := provider.packings()
@@ -295,7 +295,7 @@ func TestDeployPacksTheRoutingManifestIntoTheEntryFunctionAlone(t *testing.T) {
 
 	provider := &packingProvider{Provider: fake.NewProvider(fake.Options{})}
 	client := servedBy(t, provider)
-	standsBootstrapped(t, client)
+	bootstrappedOverRPC(t, client)
 
 	req := deployRequest()
 	req.Edge = &contractv1.EdgeSelection{Kind: string(fake.KindDirect)}
@@ -320,10 +320,10 @@ func TestDeployPacksTheRoutingManifestIntoTheEntryFunctionAlone(t *testing.T) {
 		packages[fn.Name] = packagedFiles(t, provider, fn.Artifact)
 	}
 	if got := packages["server"][edge.RoutingManifestFile]; got != string(routing) {
-		t.Errorf("the entry function's package holds %s = %q, want the routing manifest it routes the app with", edge.RoutingManifestFile, got)
+		t.Errorf("the entry function's package contains %s = %q, want the routing manifest it routes the app with", edge.RoutingManifestFile, got)
 	}
-	if _, held := packages["feed"][edge.RoutingManifestFile]; held {
-		t.Errorf("a function that routes nothing carries %s", edge.RoutingManifestFile)
+	if _, ok := packages["feed"][edge.RoutingManifestFile]; ok {
+		t.Errorf("a function that routes nothing contains %s", edge.RoutingManifestFile)
 	}
 	if packages["server"][sealedFile] == "" || packages["feed"][sealedFile] == "" {
 		t.Error("the sealed values reach only some of the app's functions, want every one of them")

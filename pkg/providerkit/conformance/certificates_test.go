@@ -26,13 +26,13 @@ func TestACertificateSuiteNamingNoHostnameSkipsItsLoopsRatherThanReportingThemPa
 		t.Fatalf("the certificate tier over a suite naming no hostname = %v\n%s", err, rendered)
 	}
 	for _, named := range []string{
-		"a_held_handle_names_what_it_terminates_and_who_renews_it",
+		"an_issued_handle_names_what_it_terminates_and_who_renews_it",
 		"a_certificate_ocel_never_requested_is_never_ocel's_to_discard",
 		"the_handle_is_the_vocabulary_this_provider_mints",
 	} {
 		want := "--- SKIP: " + t.Name() + "/" + named
 		if !strings.Contains(string(rendered), want) {
-			t.Errorf("%s carries no %q, and a loop over no hostname reports a pass having held this provider to nothing\n%s",
+			t.Errorf("the output for %s has no %q, and a loop over no hostname reports a pass having checked this provider against nothing\n%s",
 				named, want, rendered)
 		}
 	}

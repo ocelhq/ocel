@@ -49,11 +49,11 @@ func TestReclaimTargetsRefuseARecordKeyNothingWrote(t *testing.T) {
 	t.Parallel()
 
 	if _, err := ReclaimTargets("shop", stackrecords.ProductionEnv, []string{"record:web"}, nil, nil); err == nil {
-		t.Fatal("ReclaimTargets() accepted a key carrying no build, want a refusal")
+		t.Fatal("ReclaimTargets() accepted a key naming no build, want a refusal")
 	}
 }
 
-func TestReclaimTargetsLeaveAContainerReleaseToTheBoxThatHoldsIt(t *testing.T) {
+func TestReclaimTargetsLeaveAContainerReleaseToTheBoxThatRunsIt(t *testing.T) {
 	t.Parallel()
 
 	gone, err := provider.NewBuild(deploymentID, stackrecords.ProductionEnv, "gone")
@@ -64,7 +64,7 @@ func TestReclaimTargetsLeaveAContainerReleaseToTheBoxThatHoldsIt(t *testing.T) {
 		[]string{"record:web/ocel/web@sha256:" + strings.Repeat("a", 64), "record:api/" + gone.String()},
 		nil, nil)
 	if err != nil {
-		t.Fatalf("ReclaimTargets() over a promotion carrying a container release = %v, want the release the box keeps by image reference left to it: a container app puts nothing in the artifact store and its container comes down with the pointer", err)
+		t.Fatalf("ReclaimTargets() over a promotion naming a container release = %v, want the release the box keeps by image reference left to it: a container app puts nothing in the artifact store and its container comes down with the pointer", err)
 	}
 	if len(targets) != 1 || targets[0].App != "api" {
 		t.Fatalf("ReclaimTargets() returned %+v, want only the function release", targets)

@@ -181,7 +181,7 @@ func TestNeedCheckServesACodeNeedWithoutAskingAnEdgeThatChecksNoEntitlement(t *t
 		t.Fatal(err)
 	}
 	if front.Hooks().CheckCodeEntitlement != nil {
-		t.Fatal("the reference edge checks an entitlement, so it cannot stand for one that checks none")
+		t.Fatal("the reference edge checks an entitlement, so it cannot represent one that checks none")
 	}
 
 	records, err := providerserver.EdgeNeedCheck{Edge: front, Root: root}.Run(context.Background(), oneApp())

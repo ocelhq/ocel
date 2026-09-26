@@ -14,22 +14,22 @@ import (
 )
 
 type store struct {
-	held   map[string]records.Record
+	rows   map[string]records.Record
 	rev    int
 	racing func(name string)
 }
 
-func newStore() *store { return &store{held: map[string]records.Record{}} }
+func newStore() *store { return &store{rows: map[string]records.Record{}} }
 
 func (s *store) Read(ctx context.Context, name records.Name) (records.Record, error) {
 	if err := ctx.Err(); err != nil {
 		return records.Record{}, err
 	}
-	held, ok := s.held[name.String()]
+	recorded, ok := s.rows[name.String()]
 	if !ok {
 		return records.Record{}, records.ErrNotFound
 	}
-	return held, nil
+	return recorded, nil
 }
 
 func (s *store) Write(ctx context.Context, record records.Record) (records.Revision, error) {
@@ -39,17 +39,17 @@ func (s *store) Write(ctx context.Context, record records.Record) (records.Revis
 	if s.racing != nil {
 		s.racing(record.Name.String())
 	}
-	if held := s.held[record.Name.String()]; held.Revision != record.Revision {
+	if recorded := s.rows[record.Name.String()]; recorded.Revision != record.Revision {
 		return "", records.ErrStale
 	}
 	s.rev++
 	record.Revision = records.Revision(strconv.Itoa(s.rev))
-	s.held[record.Name.String()] = record
+	s.rows[record.Name.String()] = record
 	return record.Revision, nil
 }
 
 func (s *store) WritePair(ctx context.Context, first, second records.Record) error {
-	if held := s.held[second.Name.String()]; held.Revision != second.Revision {
+	if recorded := s.rows[second.Name.String()]; recorded.Revision != second.Revision {
 		return records.ErrStale
 	}
 	if _, err := s.Write(ctx, first); err != nil {
@@ -63,20 +63,20 @@ func (s *store) Remove(ctx context.Context, name records.Name, expected records.
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	held, ok := s.held[name.String()]
+	recorded, ok := s.rows[name.String()]
 	if !ok {
 		return records.ErrNotFound
 	}
-	if held.Revision != expected {
+	if recorded.Revision != expected {
 		return records.ErrStale
 	}
-	delete(s.held, name.String())
+	delete(s.rows, name.String())
 	return nil
 }
 
 func (s *store) List(_ context.Context, under records.Name) ([]records.Record, error) {
 	var out []records.Record
-	for key, record := range s.held {
+	for key, record := range s.rows {
 		if strings.HasPrefix(key, under.String()+"/") {
 			out = append(out, record)
 		}
@@ -127,7 +127,7 @@ func TestClaimTagRefusesASecondClaimant(t *testing.T) {
 		t.Fatalf("a second claim on the same tag = %v, want the tag refused", err)
 	}
 	if !strings.Contains(refused.Message, "p1") {
-		t.Fatalf("the refusal does not name the holder: %s", refused.Message)
+		t.Fatalf("the refusal does not name the owner: %s", refused.Message)
 	}
 }
 
@@ -139,7 +139,7 @@ func TestClaimTagLetsTheSamePromotionReclaimIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := l.claimTag(ctx, edge.Promotion{PromotionID: "p1", Tag: "live"}); err != nil {
-		t.Fatalf("the holder reclaiming its own tag = %v, want it allowed", err)
+		t.Fatalf("the owner reclaiming its own tag = %v, want it allowed", err)
 	}
 }
 
@@ -156,9 +156,9 @@ func TestPromoteRefusesAPointerAnotherDeployMoved(t *testing.T) {
 			return
 		}
 		records.racing = nil
-		held := records.held[pointer]
-		held.Revision = "another deploy got here"
-		records.held[pointer] = held
+		recorded := records.rows[pointer]
+		recorded.Revision = "another deploy got here"
+		records.rows[pointer] = recorded
 	}
 
 	err := l.Promote(ctx, edge.Promotion{PromotionID: "p2"}, "", edge.DiscardProgress())
@@ -167,9 +167,9 @@ func TestPromoteRefusesAPointerAnotherDeployMoved(t *testing.T) {
 		t.Fatalf("promote onto a moved pointer = %v, want a busy refusal", err)
 	}
 
-	held, err := l.pointerAt(ctx, edge.DefaultPointer)
-	if err != nil || held != "p1" {
-		t.Fatalf("the pointer holds %q, %v, want the promotion the winner left there", held, err)
+	active, err := l.pointerAt(ctx, edge.DefaultPointer)
+	if err != nil || active != "p1" {
+		t.Fatalf("the pointer names %q, %v, want the promotion the winner left there", active, err)
 	}
 	entries, err := l.History(ctx, "")
 	if err != nil || len(entries) != 2 {
@@ -279,8 +279,8 @@ func TestPruneKeepsARecordAnUnprunedPromotionStillNames(t *testing.T) {
 	if strings.Join(result.SurvivingRecordKeys, ",") != "record:web/b1" {
 		t.Fatalf("surviving record keys = %v, want the build the kept promotion serves", result.SurvivingRecordKeys)
 	}
-	if _, held, err := l.Record(ctx, "web", "b1"); err != nil || !held {
-		t.Fatalf("the record the kept promotion serves = held %v, %v, want it kept", held, err)
+	if _, found, err := l.Record(ctx, "web", "b1"); err != nil || !found {
+		t.Fatalf("the record the kept promotion serves = found %v, %v, want it kept", found, err)
 	}
 }
 
@@ -334,8 +334,8 @@ func TestPointersAndDestroy(t *testing.T) {
 	if err := l.Destroy(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if len(records.held) != 0 {
-		t.Fatalf("Destroy() left %d records behind", len(records.held))
+	if len(records.rows) != 0 {
+		t.Fatalf("Destroy() left %d records behind", len(records.rows))
 	}
 }
 
@@ -361,11 +361,11 @@ func TestStagedRecordsRoundTrip(t *testing.T) {
 
 func activeIn(t *testing.T, l *Ledger, pointer string) string {
 	t.Helper()
-	held, err := l.pointerAt(context.Background(), pointerOr(pointer))
+	active, err := l.pointerAt(context.Background(), pointerOr(pointer))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return held
+	return active
 }
 
 func TestUnpromotingPutsThePointerBackOnThePromotionItDisplaced(t *testing.T) {
@@ -380,8 +380,8 @@ func TestUnpromotingPutsThePointerBackOnThePromotionItDisplaced(t *testing.T) {
 	if err := l.Unpromote(ctx, "p2", ""); err != nil {
 		t.Fatalf("Unpromote(p2) = %v", err)
 	}
-	if held := activeIn(t, l, ""); held != "p1" {
-		t.Errorf("the pointer holds %q after p2 was taken back, want p1: an edge that could not serve p2 is still serving p1", held)
+	if active := activeIn(t, l, ""); active != "p1" {
+		t.Errorf("the pointer names %q after p2 was taken back, want p1: an edge that could not serve p2 is still serving p1", active)
 	}
 	entries, err := l.History(ctx, "")
 	if err != nil || len(entries) != 2 {
@@ -399,8 +399,8 @@ func TestUnpromotingTheFirstPromotionLeavesThePointerAtNothing(t *testing.T) {
 	if err := l.Unpromote(ctx, "p1", "staging"); err != nil {
 		t.Fatalf("Unpromote(p1) = %v", err)
 	}
-	if held := activeIn(t, l, "staging"); held != "" {
-		t.Errorf("the pointer holds %q after its first promotion was taken back, want nothing: the edge serves nothing under it", held)
+	if active := activeIn(t, l, "staging"); active != "" {
+		t.Errorf("the pointer names %q after its first promotion was taken back, want nothing: the edge serves nothing under it", active)
 	}
 }
 
@@ -416,15 +416,15 @@ func TestUnpromotingLeavesAPointerAnotherPromotionHasSinceTaken(t *testing.T) {
 	if err := l.Unpromote(ctx, "p2", ""); err != nil {
 		t.Fatalf("Unpromote(p2) = %v", err)
 	}
-	if held := activeIn(t, l, ""); held != "p3" {
-		t.Errorf("the pointer holds %q, want p3: taking p2 back must not undo the promotion that followed it", held)
+	if active := activeIn(t, l, ""); active != "p3" {
+		t.Errorf("the pointer names %q, want p3: taking p2 back must not undo the promotion that followed it", active)
 	}
 
 	if err := l.Unpromote(ctx, "p3", ""); err != nil {
 		t.Fatalf("Unpromote(p3) = %v", err)
 	}
-	if held := activeIn(t, l, ""); held != "p1" {
-		t.Errorf("the pointer holds %q once p3 was taken back too, want p1: p2 was taken back first, so the edge never served it and p1 is what it still serves", held)
+	if active := activeIn(t, l, ""); active != "p1" {
+		t.Errorf("the pointer names %q once p3 was taken back too, want p1: p2 was taken back first, so the edge never served it and p1 is what it still serves", active)
 	}
 }
 
@@ -437,8 +437,8 @@ func TestUnpromotingUnderAnInterruptedDeployStillPutsThePointerBack(t *testing.T
 	if err := l.Unpromote(ctx, "p2", ""); err != nil {
 		t.Fatalf("Unpromote(p2) under a cancelled context = %v: an interrupted deploy is exactly the one whose edge never served its promotion", err)
 	}
-	if held := activeIn(t, l, ""); held != "p1" {
-		t.Errorf("the pointer holds %q, want p1", held)
+	if active := activeIn(t, l, ""); active != "p1" {
+		t.Errorf("the pointer names %q, want p1", active)
 	}
 	if err := l.Promote(context.Background(), edge.Promotion{PromotionID: "p3", Tag: "v2"}, "", edge.DiscardProgress()); err != nil {
 		t.Errorf("a retried deploy tagged v2 = %v, want the tag the interrupted one claimed freed", err)
@@ -467,7 +467,7 @@ func historyOf(t *testing.T, l *Ledger) []string {
 	return ids
 }
 
-func TestARollbackTakenBackWhileALaterPromotionHeldThePointerLeavesTheReleaseItRolledOffServing(t *testing.T) {
+func TestARollbackTakenBackWhileALaterPromotionOwnedThePointerLeavesTheReleaseItRolledOffServing(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 	promoting(t, l, edge.Promotion{PromotionID: "p1"}, edge.Promotion{PromotionID: "p2"}, edge.Promotion{PromotionID: "p3"})
@@ -479,8 +479,8 @@ func TestARollbackTakenBackWhileALaterPromotionHeldThePointerLeavesTheReleaseItR
 	if err := l.Unpromote(ctx, "p4", ""); err != nil {
 		t.Fatalf("Unpromote(p4) = %v", err)
 	}
-	if held := activeIn(t, l, ""); held != "p3" {
-		t.Errorf("the pointer holds %q, want p3: the rollback onto p2 and the promotion of p4 were both taken back, so the edge still serves p3", held)
+	if active := activeIn(t, l, ""); active != "p3" {
+		t.Errorf("the pointer names %q, want p3: the rollback onto p2 and the promotion of p4 were both taken back, so the edge still serves p3", active)
 	}
 }
 
@@ -527,7 +527,7 @@ func TestATagTheEdgeNeverServedIsFreeForTheDeployThatRetriesIt(t *testing.T) {
 	}
 }
 
-func TestARollbackTakenBackKeepsTheTagItsReleaseAlreadyHeld(t *testing.T) {
+func TestARollbackTakenBackKeepsTheTagItsReleaseAlreadyHad(t *testing.T) {
 	l, _ := fixture()
 	ctx := context.Background()
 	promoting(t, l, edge.Promotion{PromotionID: "p1", Tag: "v1"}, edge.Promotion{PromotionID: "p2"})
@@ -552,9 +552,9 @@ func TestAPromotionThatLostThePointerRaceFreesItsTag(t *testing.T) {
 			return
 		}
 		records.racing = nil
-		held := records.held[pointer]
-		held.Revision = "another deploy got here"
-		records.held[pointer] = held
+		recorded := records.rows[pointer]
+		recorded.Revision = "another deploy got here"
+		records.rows[pointer] = recorded
 	}
 	if err := l.Promote(ctx, edge.Promotion{PromotionID: "p2", Tag: "v1"}, "", edge.DiscardProgress()); err == nil {
 		t.Fatal("a promotion onto a moved pointer succeeded")
@@ -578,7 +578,7 @@ func TestPromoteRefusesAPointerThatMovedAfterItWasRead(t *testing.T) {
 			return
 		}
 		recordStore.racing = nil
-		racer := records.Record{Name: l.pointerName(edge.DefaultPointer), Bytes: []byte(`{"promotionId":"p9"}`), Revision: recordStore.held[pointer].Revision}
+		racer := records.Record{Name: l.pointerName(edge.DefaultPointer), Bytes: []byte(`{"promotionId":"p9"}`), Revision: recordStore.rows[pointer].Revision}
 		if _, err := recordStore.Write(ctx, racer); err != nil {
 			t.Fatal(err)
 		}
@@ -589,7 +589,7 @@ func TestPromoteRefusesAPointerThatMovedAfterItWasRead(t *testing.T) {
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("promote onto a pointer another deploy moved after it was read = %v, want a busy refusal: the promotion records what it displaced, and a pointer that moved displaced something else", err)
 	}
-	if held := activeIn(t, l, ""); held != "p9" {
-		t.Errorf("the pointer holds %q, want the winner's p9", held)
+	if active := activeIn(t, l, ""); active != "p9" {
+		t.Errorf("the pointer names %q, want the winner's p9", active)
 	}
 }

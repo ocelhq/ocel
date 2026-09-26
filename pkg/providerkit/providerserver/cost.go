@@ -87,7 +87,7 @@ func (h *handlers) Price(ctx context.Context, req *costv1.PriceRequest) (*costv1
 	}
 	cost := p.Hooks().Cost
 	if cost == nil {
-		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("this provider carries no rate card"))
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("this provider ships no rate card"))
 	}
 	estimated, err := cost.Estimate(ctx, req)
 	var usage *costkit.UsageError

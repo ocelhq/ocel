@@ -42,7 +42,7 @@ func TestAnUnknownHostKeyIsRecoverableAndNamesTheFingerprint(t *testing.T) {
 	message := trust.Message()
 	for _, want := range []string{"web-1", "203.0.113.10", "port 2222", "SHA256:got", "/home/ada/.ssh/known_hosts"} {
 		if !strings.Contains(message, want) {
-			t.Errorf("Message() = %q, want it to carry %q", message, want)
+			t.Errorf("Message() = %q, want it to include %q", message, want)
 		}
 	}
 	if !strings.Contains(message, trust.Remedy) {
@@ -50,7 +50,7 @@ func TestAnUnknownHostKeyIsRecoverableAndNamesTheFingerprint(t *testing.T) {
 	}
 }
 
-func TestAChangedHostKeyIsTerminalAndCarriesTheKeygenRemedy(t *testing.T) {
+func TestAChangedHostKeyIsTerminalAndIncludesTheKeygenRemedy(t *testing.T) {
 	t.Parallel()
 
 	trust := changedHostKey()
@@ -60,7 +60,7 @@ func TestAChangedHostKeyIsTerminalAndCarriesTheKeygenRemedy(t *testing.T) {
 	message := trust.Message()
 	for _, want := range []string{"SHA256:got", "SHA256:want"} {
 		if !strings.Contains(message, want) {
-			t.Errorf("Message() = %q, want it to carry %q", message, want)
+			t.Errorf("Message() = %q, want it to include %q", message, want)
 		}
 	}
 	if !strings.Contains(message, trust.Remedy) {
@@ -96,7 +96,7 @@ func TestATrustRefusalSurvivesTheWire(t *testing.T) {
 		t.Run(string(trust.Reason), func(t *testing.T) {
 			wire := provider.RefusalError(provider.RefuseHostTrust(trust))
 			if connect.CodeOf(wire) != connect.CodePermissionDenied {
-				t.Errorf("RefusalError() carried %s, want %s", connect.CodeOf(wire), connect.CodePermissionDenied)
+				t.Errorf("RefusalError() sent %s, want %s", connect.CodeOf(wire), connect.CodePermissionDenied)
 			}
 			read, ok := provider.HostTrustOf(wire)
 			if !ok {
@@ -109,7 +109,7 @@ func TestATrustRefusalSurvivesTheWire(t *testing.T) {
 	}
 }
 
-func TestAnOrdinaryRefusalCarriesNoTrustDecision(t *testing.T) {
+func TestAnOrdinaryRefusalIncludesNoTrustDecision(t *testing.T) {
 	t.Parallel()
 
 	for _, err := range []error{
@@ -118,7 +118,7 @@ func TestAnOrdinaryRefusalCarriesNoTrustDecision(t *testing.T) {
 		fmt.Errorf("wrapped: %w", errors.New("no")),
 	} {
 		if _, ok := provider.HostTrustOf(err); ok {
-			t.Errorf("HostTrustOf(%v) read a trust decision out of an error that holds none", err)
+			t.Errorf("HostTrustOf(%v) read a trust decision out of an error that contains none", err)
 		}
 	}
 }
@@ -134,7 +134,7 @@ func TestTheKnownHostsEntryIsTheNameSshKeysOn(t *testing.T) {
 		{"the default port stays bare", provider.HostTrust{Address: "203.0.113.10", Port: 22}, "203.0.113.10"},
 		{"an unstated port stays bare", provider.HostTrust{Address: "203.0.113.10"}, "203.0.113.10"},
 		{"another port is bracketed", provider.HostTrust{Address: "203.0.113.10", Port: 2222}, "[203.0.113.10]:2222"},
-		{"the written host stands in for a missing address", provider.HostTrust{Host: "web-1", Port: 22}, "web-1"},
+		{"the written host takes the place of a missing address", provider.HostTrust{Host: "web-1", Port: 22}, "web-1"},
 		{"a key alias wins over the address", provider.HostTrust{Address: "203.0.113.10", Port: 2222, KeyAlias: "ocel-vps"}, "ocel-vps"},
 		{"nothing named keys on nothing", provider.HostTrust{Port: 2222}, ""},
 	} {
@@ -181,10 +181,10 @@ func TestAKeyIsFingerprintedOnlyWhenItIsShapedLikeOne(t *testing.T) {
 		key  provider.HostKey
 	}{
 		{"an unnamed type", provider.HostKey{Key: blob}},
-		{"a type carrying an escape", provider.HostKey{Type: "ssh-ed25519\033[2K", Key: blob}},
-		{"a type carrying a newline", provider.HostKey{Type: "ssh-ed25519\nx", Key: blob}},
-		{"a blob carrying a newline", provider.HostKey{Type: "ssh-ed25519", Key: blob + "\n" + blob}},
-		{"a blob carrying a space", provider.HostKey{Type: "ssh-ed25519", Key: blob + " x"}},
+		{"a type containing an escape", provider.HostKey{Type: "ssh-ed25519\033[2K", Key: blob}},
+		{"a type containing a newline", provider.HostKey{Type: "ssh-ed25519\nx", Key: blob}},
+		{"a blob containing a newline", provider.HostKey{Type: "ssh-ed25519", Key: blob + "\n" + blob}},
+		{"a blob containing a space", provider.HostKey{Type: "ssh-ed25519", Key: blob + " x"}},
 		{"an empty blob", provider.HostKey{Type: "ssh-ed25519"}},
 		{"a fingerprint the blob does not hash to", provider.HostKey{Type: "ssh-ed25519", Key: blob, Fingerprint: "SHA256:nope"}},
 	} {

@@ -47,7 +47,7 @@ type Connector interface {
 
 func ConnectorCompute(requested Compute, supported ...Compute) (Compute, error) {
 	if len(supported) == 0 {
-		return "", refusal.Refuse(refusal.CodeInvalid, "this target stands no connector, so it hands out no compute to run one on")
+		return "", refusal.Refuse(refusal.CodeInvalid, "this target runs no connector, so it hands out no compute to run one on")
 	}
 	if requested == "" {
 		return supported[0], nil

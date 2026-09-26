@@ -27,23 +27,23 @@ type HostnameState struct {
 }
 
 func (s *HostnameState) Supersede(cert provider.Certificate) {
-	if !cert.Issued() || cert.ID == s.Certificate.ID || holds(s.Superseded, cert) {
+	if !cert.Issued() || cert.ID == s.Certificate.ID || containsCertificate(s.Superseded, cert) {
 		return
 	}
 	s.Superseded = append(s.Superseded, cert)
 }
 
 func (s HostnameState) Certificates() []provider.Certificate {
-	held := make([]provider.Certificate, 0, 1+len(s.Superseded))
+	issued := make([]provider.Certificate, 0, 1+len(s.Superseded))
 	for _, cert := range append([]provider.Certificate{s.Certificate}, s.Superseded...) {
-		if cert.Issued() && !holds(held, cert) {
-			held = append(held, cert)
+		if cert.Issued() && !containsCertificate(issued, cert) {
+			issued = append(issued, cert)
 		}
 	}
-	return held
+	return issued
 }
 
-func holds(certificates []provider.Certificate, cert provider.Certificate) bool {
+func containsCertificate(certificates []provider.Certificate, cert provider.Certificate) bool {
 	return slices.ContainsFunc(certificates, func(other provider.Certificate) bool { return other.ID == cert.ID })
 }
 
@@ -129,15 +129,15 @@ func (s EdgeState) ManualRecords() []edge.Record {
 }
 
 func (s EdgeState) Certificates() []provider.Certificate {
-	var held []provider.Certificate
+	var certificates []provider.Certificate
 	for _, hostname := range s.Hostnames() {
 		for _, cert := range s.Hosts[hostname].Certificates() {
-			if !holds(held, cert) {
-				held = append(held, cert)
+			if !containsCertificate(certificates, cert) {
+				certificates = append(certificates, cert)
 			}
 		}
 	}
-	return held
+	return certificates
 }
 
 func (s EdgeState) Uses(id string) bool {
@@ -174,14 +174,14 @@ func ReadWildcard(ctx context.Context, store records.Store) (Wildcard, error) {
 	if err != nil {
 		return Wildcard{}, fmt.Errorf("read %s: %w", name, err)
 	}
-	var held Wildcard
+	var wildcard Wildcard
 	if len(record.Bytes) == 0 {
-		return held, nil
+		return wildcard, nil
 	}
-	if err := json.Unmarshal(record.Bytes, &held); err != nil {
+	if err := json.Unmarshal(record.Bytes, &wildcard); err != nil {
 		return Wildcard{}, fmt.Errorf("read %s: %w", name, err)
 	}
-	return held, nil
+	return wildcard, nil
 }
 
 func ProjectsServedOnPreview(ctx context.Context, records records.Store, baseDomain string) ([]string, error) {
@@ -189,12 +189,12 @@ func ProjectsServedOnPreview(ctx context.Context, records records.Store, baseDom
 		return nil, nil
 	}
 	under := EdgeStacksRecord(edge.ClassPreview)
-	held, err := records.List(ctx, under)
+	recorded, err := records.List(ctx, under)
 	if err != nil {
 		return nil, fmt.Errorf("read the projects served on %s: %w", edge.PreviewWildcard(baseDomain), err)
 	}
 	var served []string
-	for _, record := range held {
+	for _, record := range recorded {
 		rest, named := record.Name.Under(under)
 		if !named || len(record.Bytes) == 0 {
 			continue

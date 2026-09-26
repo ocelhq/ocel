@@ -56,7 +56,7 @@ func TestRefuseUnservedProxiedBindings(t *testing.T) {
 		}
 	})
 
-	t.Run("an app is refused for a binding it is granted, not only for one this deploy stands up", func(t *testing.T) {
+	t.Run("an app is refused for a binding it is granted, not only for one this deploy provisions", func(t *testing.T) {
 		t.Parallel()
 
 		grants := []provider.Binding{{Name: "uploads", Resource: "bucket--uploads", Type: provider.BindingBucket}}

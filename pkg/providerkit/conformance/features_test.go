@@ -12,7 +12,7 @@ func TestTheSuiteAppliesOnlyWhatTheEdgeItOpenedTheBootstrapperForRequires(t *tes
 	t.Parallel()
 
 	catalogue := []provider.Feature{
-		{Name: "state", Summary: "stands under every edge"},
+		{Name: "state", Summary: "installed under every edge"},
 		{Name: "other-front", Summary: "the front the other edge is served from", Needs: []string{provider.NeedsEdgePrefix + "other"}},
 	}
 
@@ -27,7 +27,7 @@ func TestTheSuiteAppliesOnlyWhatTheEdgeItOpenedTheBootstrapperForRequires(t *tes
 		slices.Sort(got)
 		slices.Sort(want)
 		if !slices.Equal(got, want) {
-			t.Errorf("the suite applies %v under the %q edge, want %v: a feature an edge token gates stands only under that edge, "+
+			t.Errorf("the suite applies %v under the %q edge, want %v: a feature an edge token gates is installed only under that edge, "+
 				"and asking a bootstrap opened for another one to raise it is asking for what its provider refuses", got, kind, want)
 		}
 	}

@@ -34,11 +34,11 @@ func TestAValueIsSealedAndComesBackVersioned(t *testing.T) {
 		t.Fatalf("first Set() = %+v, want version 1 sized to the plaintext", first)
 	}
 
-	held, err := store.Get(ctx, scope, at("DATABASE_URL"), false)
+	value, err := store.Get(ctx, scope, at("DATABASE_URL"), false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if held.Plaintext != "" {
+	if value.Plaintext != "" {
 		t.Fatal("Get() without reveal returned the plaintext")
 	}
 
@@ -80,9 +80,9 @@ func TestADeletedValueIsGoneButItsVersionsSurvive(t *testing.T) {
 	if _, err := store.Get(ctx, scope, at("KEY"), false); !errors.Is(err, envvars.ErrNotFound) {
 		t.Fatalf("Get() after Delete() = %v, want ErrNotFound", err)
 	}
-	held, err := store.List(ctx, scope)
-	if err != nil || len(held) != 0 {
-		t.Fatalf("List() after Delete() = %d values, %v, want the tombstone hidden", len(held), err)
+	listed, err := store.List(ctx, scope)
+	if err != nil || len(listed) != 0 {
+		t.Fatalf("List() after Delete() = %d values, %v, want the tombstone hidden", len(listed), err)
 	}
 
 	versions, err := store.Versions(ctx, scope, at("KEY"))
@@ -99,7 +99,7 @@ func TestADeletedValueIsGoneButItsVersionsSurvive(t *testing.T) {
 	}
 	written, err := store.Set(ctx, scope, at("KEY"), "four", nil)
 	if err != nil || written.Version != 4 {
-		t.Fatalf("Set() after Delete() = %+v, %v, want the version to carry on", written, err)
+		t.Fatalf("Set() after Delete() = %+v, %v, want the version to continue", written, err)
 	}
 }
 
@@ -175,13 +175,13 @@ func TestAReferenceRefusesToShadowAValueItsOwnConsumersRead(t *testing.T) {
 	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
 	consumer := envvars.Scope{Project: "web", Class: edge.ClassProduction}
 
-	if _, err := store.Set(ctx, scope, at("KEY"), "held here", nil); err != nil {
+	if _, err := store.Set(ctx, scope, at("KEY"), "set here", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetReference(ctx, consumer, at("KEY"), envvars.Target{Project: "shop", Cell: envvars.Cell{Key: "KEY"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Set(ctx, shared, at("KEY"), "held elsewhere", nil); err != nil {
+	if _, err := store.Set(ctx, shared, at("KEY"), "set elsewhere", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -199,13 +199,13 @@ func TestSettingAValueOverAReferenceIsRefused(t *testing.T) {
 	ctx := context.Background()
 	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
 
-	if _, err := store.Set(ctx, shared, at("KEY"), "held elsewhere", nil); err != nil {
+	if _, err := store.Set(ctx, shared, at("KEY"), "set elsewhere", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetReference(ctx, scope, at("KEY"), envvars.Target{Project: "platform", Cell: envvars.Cell{Key: "KEY"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Set(ctx, scope, at("KEY"), "held here now", nil); !errors.Is(err, envvars.ErrIsReference) {
+	if _, err := store.Set(ctx, scope, at("KEY"), "set here now", nil); !errors.Is(err, envvars.ErrIsReference) {
 		t.Fatalf("Set() over a reference = %v, want ErrIsReference", err)
 	}
 }
@@ -214,7 +214,7 @@ func TestTheReverseIndexAnswersWhoReadsACell(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	if _, err := store.Set(ctx, scope, at("KEY"), "held here", nil); err != nil {
+	if _, err := store.Set(ctx, scope, at("KEY"), "set here", nil); err != nil {
 		t.Fatal(err)
 	}
 	target := envvars.Target{Project: "shop", Cell: envvars.Cell{Key: "KEY"}}
@@ -243,7 +243,7 @@ func TestTheReverseIndexAnswersWhoReadsACell(t *testing.T) {
 	}
 }
 
-func TestRevealAnswersOnlyTheCellsThatHoldValues(t *testing.T) {
+func TestRevealAnswersOnlyTheCellsThatHaveValues(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
@@ -252,7 +252,7 @@ func TestRevealAnswersOnlyTheCellsThatHoldValues(t *testing.T) {
 	}
 	found, err := store.Reveal(ctx, scope, []envvars.Coordinate{at("A"), at("B")})
 	if err != nil || len(found) != 1 || found[0].Plaintext != "one" {
-		t.Fatalf("Reveal() = %+v, %v, want only the cell that holds a value", found, err)
+		t.Fatalf("Reveal() = %+v, %v, want only the cell that has a value", found, err)
 	}
 }
 
@@ -290,7 +290,7 @@ func TestPurgeFreesTheCellsTheProjectWasReading(t *testing.T) {
 	ctx := context.Background()
 	consumer := envvars.Scope{Project: "web", Class: edge.ClassProduction}
 
-	if _, err := store.Set(ctx, scope, at("KEY"), "held here", nil); err != nil {
+	if _, err := store.Set(ctx, scope, at("KEY"), "set here", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetReference(ctx, consumer, at("KEY"), envvars.Target{Project: "shop", Cell: envvars.Cell{Key: "KEY"}}); err != nil {
@@ -306,7 +306,7 @@ func TestPurgeFreesTheCellsTheProjectWasReading(t *testing.T) {
 	}
 
 	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
-	if _, err := store.Set(ctx, shared, at("KEY"), "held elsewhere", nil); err != nil {
+	if _, err := store.Set(ctx, shared, at("KEY"), "set elsewhere", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetReference(ctx, scope, at("KEY"), envvars.Target{Project: "platform", Cell: envvars.Cell{Key: "KEY"}}); err != nil {
@@ -314,7 +314,7 @@ func TestPurgeFreesTheCellsTheProjectWasReading(t *testing.T) {
 	}
 }
 
-func TestPurgeTakesEveryRecordAProjectHolds(t *testing.T) {
+func TestPurgeTakesEveryRecordAProjectOwns(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
@@ -332,9 +332,9 @@ func TestPurgeTakesEveryRecordAProjectHolds(t *testing.T) {
 	if _, err := store.Purge(ctx, scope); err != nil {
 		t.Fatal(err)
 	}
-	held, err := store.List(ctx, scope)
-	if err != nil || len(held) != 0 {
-		t.Fatalf("List() after Purge() = %d values, %v", len(held), err)
+	listed, err := store.List(ctx, scope)
+	if err != nil || len(listed) != 0 {
+		t.Fatalf("List() after Purge() = %d values, %v", len(listed), err)
 	}
 	names, err := store.PublishedNames(ctx, scope, "")
 	if err != nil || len(names) != 0 {
@@ -363,16 +363,16 @@ func TestAKeyKeepsItsShapeThroughTheRecordTree(t *testing.T) {
 		}
 	}
 	for i, cell := range awkward {
-		held, err := store.Get(ctx, scope, cell, true)
-		if err != nil || held.Plaintext != string(rune('a'+i)) {
-			t.Fatalf("Get(%+v) = %q, %v, want the value written there and no other", cell, held.Plaintext, err)
+		value, err := store.Get(ctx, scope, cell, true)
+		if err != nil || value.Plaintext != string(rune('a'+i)) {
+			t.Fatalf("Get(%+v) = %q, %v, want the value written there and no other", cell, value.Plaintext, err)
 		}
 	}
-	held, err := store.List(ctx, scope)
-	if err != nil || len(held) != len(awkward) {
-		t.Fatalf("List() = %d values, %v, want the %d written", len(held), err, len(awkward))
+	listed, err := store.List(ctx, scope)
+	if err != nil || len(listed) != len(awkward) {
+		t.Fatalf("List() = %d values, %v, want the %d written", len(listed), err, len(awkward))
 	}
-	for _, m := range held {
+	for _, m := range listed {
 		if m.Coordinate.Key == "" {
 			t.Fatalf("List() returned a value whose coordinate did not survive the round trip: %+v", m)
 		}
@@ -392,12 +392,12 @@ func TestABindingNameBelongsToOnePublisher(t *testing.T) {
 		t.Fatalf("a second publisher taking the name = %v, want ErrClaimed", err)
 	}
 	if !strings.Contains(err.Error(), "neon") {
-		t.Fatalf("the refusal does not name the holder: %v", err)
+		t.Fatalf("the refusal does not name the owner: %v", err)
 	}
 
 	version, err := store.SetBinding(ctx, scope, "", "neon", "db", pair)
 	if err != nil || version != 2 {
-		t.Fatalf("the holder republishing = %d, %v, want version 2", version, err)
+		t.Fatalf("the owner republishing = %d, %v, want version 2", version, err)
 	}
 }
 
@@ -473,7 +473,7 @@ func TestReferenceOwnersNamesTheProjectsAValueIsBorrowedFrom(t *testing.T) {
 	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Set(ctx, scope, at("OWN"), "held here", nil); err != nil {
+	if _, err := store.Set(ctx, scope, at("OWN"), "set here", nil); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.SetReference(ctx, scope, at("DATABASE_URL"), envvars.Target{Project: "platform", Cell: envvars.Cell{Key: "DATABASE_URL"}}); err != nil {
@@ -485,7 +485,7 @@ func TestReferenceOwnersNamesTheProjectsAValueIsBorrowedFrom(t *testing.T) {
 		t.Fatalf("ReferenceOwners() = %v, %v, want only the borrowed cell", owners, err)
 	}
 	if owners[at("DATABASE_URL")] != "platform" {
-		t.Fatalf("ReferenceOwners() = %v, want the borrowed cell to name the project holding it", owners)
+		t.Fatalf("ReferenceOwners() = %v, want the borrowed cell to name the project that owns it", owners)
 	}
 }
 
@@ -554,7 +554,7 @@ func TestRevealReadsTheProjectOnceAndOpensEachCiphertextOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, key := range []string{"A", "B", "C"} {
-		if _, err := store.Set(ctx, scope, at(key), "held "+key, nil); err != nil {
+		if _, err := store.Set(ctx, scope, at(key), "value "+key, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -571,7 +571,7 @@ func TestRevealReadsTheProjectOnceAndOpensEachCiphertextOnce(t *testing.T) {
 		at("A"), at("B"), at("C"), at("PRIMARY_URL"), at("REPLICA_URL"), at("NEVER_SET"),
 	})
 	if err != nil || len(found) != 5 {
-		t.Fatalf("Reveal() = %d values, %v, want the five that hold one", len(found), err)
+		t.Fatalf("Reveal() = %d values, %v, want the five that have one", len(found), err)
 	}
 	if watched.lists != 1 {
 		t.Errorf("Reveal() listed the project's cells %d times, want one query for the whole batch", watched.lists)
@@ -632,7 +632,7 @@ func TestResolvingOneBindingReadsThatBindingAlone(t *testing.T) {
 		t.Fatalf("ResolveBinding() = %q, %v, want the pair published to the environment", resolved.Value, err)
 	}
 	if watched.reads != 0 || watched.lists != 1 {
-		t.Fatalf("ResolveBinding() made %d point reads and %d queries, want one query holding the whole pair", watched.reads, watched.lists)
+		t.Fatalf("ResolveBinding() made %d point reads and %d queries, want one query returning the whole pair", watched.reads, watched.lists)
 	}
 	if under := watched.under[0].String(); !strings.HasSuffix(under, "bindings/db") {
 		t.Errorf("ResolveBinding() queried under %q, want the prefix one binding's records and values share", under)
@@ -643,7 +643,7 @@ func TestRevealUnderACancelledContextNeverReadsAsEmptyValues(t *testing.T) {
 	store, scope := fixture()
 	var wanted []envvars.Coordinate
 	for _, key := range []string{"A", "B", "C", "D", "E", "F", "G", "H"} {
-		if _, err := store.Set(context.Background(), scope, at(key), "held "+key, nil); err != nil {
+		if _, err := store.Set(context.Background(), scope, at(key), "value "+key, nil); err != nil {
 			t.Fatal(err)
 		}
 		wanted = append(wanted, at(key))

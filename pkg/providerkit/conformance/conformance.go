@@ -36,7 +36,7 @@ func runHooks(t *testing.T, suite Suite) {
 	t.Helper()
 
 	if suite.New == nil {
-		t.Skip("the suite carries no constructor, so there are no hooks to read")
+		t.Skip("the suite has no constructor, so there are no hooks to read")
 	}
 	p, err := suite.New(context.Background(), provider.Settings{Options: suite.Options})
 	if err != nil {
@@ -59,7 +59,7 @@ func runVendor(t *testing.T, suite Suite) {
 		t.Skip("this provider hangs no checks of its own here; its live tests are its own to run")
 	}
 	if suite.New == nil {
-		t.Fatal("the suite carries vendor checks and no constructor, so there is no provider to run them against")
+		t.Fatal("the suite has vendor checks and no constructor, so there is no provider to run them against")
 	}
 	p, err := suite.New(context.Background(), provider.Settings{Options: suite.Options})
 	if err != nil {

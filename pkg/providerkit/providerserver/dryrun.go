@@ -28,16 +28,16 @@ type dryRunPlan struct {
 }
 
 func (d *dryRunPlan) plan() provider.Plan {
-	var held provider.Plan
-	held.Groups = append(held.Groups, d.infra.Groups...)
+	var plan provider.Plan
+	plan.Groups = append(plan.Groups, d.infra.Groups...)
 	if len(d.parameters.Changes) > 0 {
-		held.Groups = append(held.Groups, d.parameters)
+		plan.Groups = append(plan.Groups, d.parameters)
 	}
 	for _, app := range d.apps {
-		held.Groups = append(held.Groups, app.Groups...)
+		plan.Groups = append(plan.Groups, app.Groups...)
 	}
-	held.Groups = append(held.Groups, d.edge, d.promotion)
-	return held
+	plan.Groups = append(plan.Groups, d.edge, d.promotion)
+	return plan
 }
 
 func (r *deployRun) planValuesGroup(ctx context.Context) (provider.ChangeGroup, error) {

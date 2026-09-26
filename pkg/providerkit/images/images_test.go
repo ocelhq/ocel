@@ -11,7 +11,7 @@ func TestALocalRepositoryScopedToItsProjectPushesUnderItsAppAlone(t *testing.T) 
 	got := Ref(localRepository, localTag, Registry{Server: "registry.invalid", Namespace: "ocel"})
 	want := "registry.invalid/ocel/web:" + localTag
 	if got != want {
-		t.Errorf("the push writes %q, want %q: the project scopes the repository on the box that built the image, and a registry holds one repository per app", got, want)
+		t.Errorf("the push writes %q, want %q: the project scopes the repository on the box that built the image, and a registry has one repository per app", got, want)
 	}
 }
 

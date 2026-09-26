@@ -20,7 +20,7 @@ func TestTheWirePinAndTheKitNameTheSameComputes(t *testing.T) {
 
 	rules, ok := proto.GetExtension(field.Options(), validate.E_Field).(*validate.FieldRules)
 	if !ok || rules.GetString() == nil {
-		t.Fatal("ManifestApp.compute carries no buf.validate string rule, so the wire admits any compute the kit has never heard of")
+		t.Fatal("ManifestApp.compute has no buf.validate string rule, so the wire admits any compute the kit has never heard of")
 	}
 
 	pinned := slices.Sorted(slices.Values(rules.GetString().GetIn()))
@@ -31,22 +31,22 @@ func TestTheWirePinAndTheKitNameTheSameComputes(t *testing.T) {
 }
 
 func TestConnectorComputeDefaultsToTheFirstSupported(t *testing.T) {
-	held, err := provider.ConnectorCompute("", provider.ComputeContainer, provider.ComputeServerless)
+	compute, err := provider.ConnectorCompute("", provider.ComputeContainer, provider.ComputeServerless)
 	if err != nil {
 		t.Fatalf("ConnectorCompute(\"\", container, serverless) = %v, want the target to pick for itself", err)
 	}
-	if held != provider.ComputeContainer {
-		t.Errorf("ConnectorCompute(\"\", container, serverless) = %q, want %q", held, provider.ComputeContainer)
+	if compute != provider.ComputeContainer {
+		t.Errorf("ConnectorCompute(\"\", container, serverless) = %q, want %q", compute, provider.ComputeContainer)
 	}
 }
 
 func TestConnectorComputeTakesAnySupported(t *testing.T) {
-	held, err := provider.ConnectorCompute(provider.ComputeServerless, provider.ComputeContainer, provider.ComputeServerless)
+	compute, err := provider.ConnectorCompute(provider.ComputeServerless, provider.ComputeContainer, provider.ComputeServerless)
 	if err != nil {
 		t.Fatalf("ConnectorCompute(serverless, container, serverless) = %v, want it taken", err)
 	}
-	if held != provider.ComputeServerless {
-		t.Errorf("ConnectorCompute(serverless, ...) = %q, want %q", held, provider.ComputeServerless)
+	if compute != provider.ComputeServerless {
+		t.Errorf("ConnectorCompute(serverless, ...) = %q, want %q", compute, provider.ComputeServerless)
 	}
 }
 

@@ -6,7 +6,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
-func TestABucketBindingCarriesThePublicAddressItWasPublishedUnder(t *testing.T) {
+func TestABucketBindingIncludesThePublicAddressItWasPublishedUnder(t *testing.T) {
 	t.Parallel()
 
 	message, err := provider.BindingMessage(provider.Binding{
@@ -21,11 +21,11 @@ func TestABucketBindingCarriesThePublicAddressItWasPublishedUnder(t *testing.T) 
 		t.Fatalf("BindingMessage: %v", err)
 	}
 
-	held := message.GetBucket()
-	if held.GetBucket() != "shop-prod-uploads" {
-		t.Errorf("the binding names bucket %q, want the store the provider stood up", held.GetBucket())
+	bucket := message.GetBucket()
+	if bucket.GetBucket() != "shop-prod-uploads" {
+		t.Errorf("the binding names bucket %q, want the store the provider provisioned", bucket.GetBucket())
 	}
-	if held.GetPublicBaseUrl() != "https://storage.example.com/shop-prod-uploads" {
-		t.Errorf("the binding carries public base url %q, and without it an app declaring a public bucket has no address to hand out", held.GetPublicBaseUrl())
+	if bucket.GetPublicBaseUrl() != "https://storage.example.com/shop-prod-uploads" {
+		t.Errorf("the binding has public base url %q, and without it an app declaring a public bucket has no address to hand out", bucket.GetPublicBaseUrl())
 	}
 }

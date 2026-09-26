@@ -21,7 +21,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func TestPreflightReportsWhoThisRunIsAndWhatItCarries(t *testing.T) {
+func TestPreflightReportsWhoThisRunIsAndWhatItIncludes(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -53,7 +53,7 @@ func TestPreflightReportsWhoThisRunIsAndWhatItCarries(t *testing.T) {
 	}
 
 	if !resp.GetInfrastructurePresent() || resp.GetInfraTier() != environmentv1.Tier_TIER_PRODUCTION {
-		t.Errorf("Preflight() = %v/%v, want the production bootstrap it just stood up", resp.GetInfrastructurePresent(), resp.GetInfraTier())
+		t.Errorf("Preflight() = %v/%v, want the production bootstrap it just installed", resp.GetInfrastructurePresent(), resp.GetInfraTier())
 	}
 	if !resp.GetBootstrap().GetPresent() || resp.GetBootstrap().GetWriter() != "1.2.3" {
 		t.Errorf("Preflight() bootstrap = %+v, want it present and written by this build", resp.GetBootstrap())
@@ -171,7 +171,7 @@ func TestPreflightRequiresTheFeaturesTheEdgeNeeds(t *testing.T) {
 	}
 }
 
-func TestPreflightCarriesTheGlobalPreviewWildcard(t *testing.T) {
+func TestPreflightReturnsTheGlobalPreviewWildcard(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -194,15 +194,15 @@ func TestPreflightCarriesTheGlobalPreviewWildcard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Preflight() error = %v", err)
 	}
-	held := resp.GetPreviewWildcard()
-	if held.GetBaseDomain() != "preview.acme.com" {
-		t.Fatalf("Preflight() wildcard = %+v, want the recorded base domain", held)
+	wildcard := resp.GetPreviewWildcard()
+	if wildcard.GetBaseDomain() != "preview.acme.com" {
+		t.Fatalf("Preflight() wildcard = %+v, want the recorded base domain", wildcard)
 	}
-	if !held.GetRouteInstalled() {
+	if !wildcard.GetRouteInstalled() {
 		t.Error("Preflight() says the shared entry route is not installed, though the edge owns it")
 	}
-	if held.GetGrammarMin() != edge.PreviewGrammarMin || held.GetGrammarMax() != edge.PreviewGrammarMax {
-		t.Errorf("Preflight() wildcard grammar = %d–%d, want %d–%d", held.GetGrammarMin(), held.GetGrammarMax(), edge.PreviewGrammarMin, edge.PreviewGrammarMax)
+	if wildcard.GetGrammarMin() != edge.PreviewGrammarMin || wildcard.GetGrammarMax() != edge.PreviewGrammarMax {
+		t.Errorf("Preflight() wildcard grammar = %d–%d, want %d–%d", wildcard.GetGrammarMin(), wildcard.GetGrammarMax(), edge.PreviewGrammarMin, edge.PreviewGrammarMax)
 	}
 }
 
@@ -218,10 +218,10 @@ func TestPreflightFallsBackToTheSiblingClass(t *testing.T) {
 		t.Fatalf("Preflight() error = %v", err)
 	}
 	if !resp.GetInfrastructurePresent() || resp.GetInfraTier() != environmentv1.Tier_TIER_PRODUCTION {
-		t.Errorf("Preflight() = %v/%v, want it to name the production bootstrap that does stand", resp.GetInfrastructurePresent(), resp.GetInfraTier())
+		t.Errorf("Preflight() = %v/%v, want it to name the production bootstrap that is installed", resp.GetInfrastructurePresent(), resp.GetInfraTier())
 	}
 	if resp.GetBootstrap().GetPresent() {
-		t.Error("Preflight() reports a preview bootstrap that was never stood up")
+		t.Error("Preflight() reports a preview bootstrap that was never installed")
 	}
 }
 
@@ -290,7 +290,7 @@ func TestPreflightDoesNotReportThisProjectsOwnHostnameAsSomeoneElsesClaim(t *tes
 	}
 	claims := resp.GetDomainClaims()
 	if len(claims) != 1 || claims[0].GetStatus() != contractv1.DomainClaim_STATUS_UNCLAIMED {
-		t.Fatalf("Preflight() reported %+v for a hostname this project already serves, want it unclaimed: a redeploy would otherwise be refused for holding its own domain", claims)
+		t.Fatalf("Preflight() reported %+v for a hostname this project already serves, want it unclaimed: a redeploy would otherwise be refused for serving its own domain", claims)
 	}
 }
 
@@ -331,14 +331,14 @@ func TestPreflightReportsAnUnreadableOwnerRatherThanStoppingTheDeploy(t *testing
 		Domains:      []string{"acme.com"},
 	})
 	if err != nil {
-		t.Fatalf("Preflight() error = %v, want a deploy that carries on: who serves a hostname is advisory, and a provider that hiccups enumerating owners has said nothing about this project", err)
+		t.Fatalf("Preflight() error = %v, want a deploy that continues: who serves a hostname is advisory, and a provider that hiccups enumerating owners has said nothing about this project", err)
 	}
 	claims := resp.GetDomainClaims()
 	if len(claims) != 1 || claims[0].GetStatus() != contractv1.DomainClaim_STATUS_UNSPECIFIED {
 		t.Fatalf("Preflight() reported %+v for a hostname whose owner could not be read, want it unanswered rather than claimed or cleared", claims)
 	}
 	if !strings.Contains(claims[0].GetCause(), "throttled") {
-		t.Errorf("claim cause = %q, want the reason the owner could not be read: a guard that goes quiet without saying why is one nobody can tell from a hostname nobody holds", claims[0].GetCause())
+		t.Errorf("claim cause = %q, want the reason the owner could not be read: a guard that goes quiet without saying why is one nobody can tell from a hostname nobody owns", claims[0].GetCause())
 	}
 }
 
@@ -442,7 +442,7 @@ func TestPreflightNamesNoEdgeScopeForAnEdgeThatChecksNoCredentials(t *testing.T)
 		t.Fatal(err)
 	}
 	if front.Hooks().VerifyCredentials != nil {
-		t.Fatal("the reference edge checks its credentials, so it cannot stand for one that checks none")
+		t.Fatal("the reference edge checks its credentials, so it cannot represent one that checks none")
 	}
 
 	resp, err := client.Preflight(context.Background(), &contractv1.PreflightRequest{

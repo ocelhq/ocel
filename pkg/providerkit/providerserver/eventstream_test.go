@@ -161,7 +161,7 @@ func TestEventStreamFailPassesARefusalBackToTheCaller(t *testing.T) {
 
 	refusal := connect.NewError(connect.CodeInvalidArgument, errors.New("no"))
 	if err := sender.fail(refusal); !errors.Is(err, refusal) {
-		t.Fatalf("fail(refusal) = %v, want the refusal returned so the RPC carries the code", err)
+		t.Fatalf("fail(refusal) = %v, want the refusal returned so the RPC returns the code", err)
 	}
 	if err := sender.fail(errors.New("the engine gave up")); err != nil {
 		t.Fatalf("fail(failure) = %v, want nil so the failure travels as a result event", err)
@@ -178,7 +178,7 @@ func TestEventStreamFailPassesARefusalBackToTheCaller(t *testing.T) {
 		t.Fatalf("result success=%t refused=%t error=%q, want the refusal's envelope marked refused so it is not read as the verdict", result.GetSuccess(), result.GetRefused(), result.GetError())
 	}
 	if result := events[1].GetResult(); result.GetSuccess() || result.GetRefused() || result.GetError() != "the engine gave up" {
-		t.Fatalf("result success=%t refused=%t error=%q, want the failure carried as an unsuccessful result", result.GetSuccess(), result.GetRefused(), result.GetError())
+		t.Fatalf("result success=%t refused=%t error=%q, want the failure reported as an unsuccessful result", result.GetSuccess(), result.GetRefused(), result.GetError())
 	}
 }
 
@@ -198,7 +198,7 @@ func TestAnUnimplementedFailureIsARefusalOnlyOnAStreamThatSaysSo(t *testing.T) {
 	answering := newEventStream(context.Background(), (&recordingStream{}).send)
 	answering.refusing(connect.CodeUnimplemented)
 	if err := answering.fail(unimplemented); !errors.Is(err, unimplemented) {
-		t.Errorf("fail(unimplemented) = %v on a stream that answers unimplemented, want it returned so the RPC carries the code", err)
+		t.Errorf("fail(unimplemented) = %v on a stream that answers unimplemented, want it returned so the RPC returns the code", err)
 	}
 	if err := answering.close(); err != nil {
 		t.Fatalf("close() error = %v", err)

@@ -87,7 +87,7 @@ func imagingServed(t *testing.T) (contractv1connect.ProviderServiceClient, *fake
 	t.Helper()
 	base := fake.NewProvider(fake.Options{})
 	served := servedBy(t, imaging{Provider: base})
-	standsBootstrapped(t, served)
+	bootstrappedOverRPC(t, served)
 	return served, base
 }
 
@@ -117,10 +117,10 @@ func TestDeployShipsAFunctionAsAnImageWhereTheProviderTakesItThatWay(t *testing.
 	specs := p.FakeStacks().Provisioned()
 	app := specs[len(specs)-1]
 	if len(app.Uploads) != 0 {
-		t.Errorf("the app spec carries %d uploads, want none: the function travels as an image", len(app.Uploads))
+		t.Errorf("the app spec has %d uploads, want none: the function travels as an image", len(app.Uploads))
 	}
 	if len(app.App.Functions) != 1 {
-		t.Fatalf("the app spec carries %d functions, want the one the manifest declares", len(app.App.Functions))
+		t.Fatalf("the app spec has %d functions, want the one the manifest declares", len(app.App.Functions))
 	}
 	spec := app.App.Functions[0]
 	if spec.Image == "" {
@@ -157,7 +157,7 @@ func TestAFunctionsImageIsNeverMistakenForTheAppsOwn(t *testing.T) {
 	}
 }
 
-func refusedImagedDeploy(t *testing.T, name, value, stood string) string {
+func refusedImagedDeploy(t *testing.T, name, value, provisioned string) string {
 	t.Helper()
 	stagedProject(t, "web", "admin")
 	served, _ := imagingServed(t)
@@ -172,7 +172,7 @@ func refusedImagedDeploy(t *testing.T, name, value, stood string) string {
 	for stream.Receive() {
 		result := stream.Msg().GetResult()
 		if result.GetSuccess() {
-			t.Fatal(stood)
+			t.Fatal(provisioned)
 		}
 		if result.GetError() != "" {
 			refusal = result.GetError()
@@ -183,7 +183,7 @@ func refusedImagedDeploy(t *testing.T, name, value, stood string) string {
 
 func TestAFunctionRunAsAnImageRefusesTheNameThePortIsInjectedUnder(t *testing.T) {
 	refusal := refusedImagedDeploy(t, "PORT", "3000",
-		"Deploy() stood up an app declaring PORT, want it refused: the image is told which port to bind under that very name")
+		"Deploy() provisioned an app declaring PORT, want it refused: the image is told which port to bind under that very name")
 
 	for _, want := range []string{"PORT", "web"} {
 		if !strings.Contains(refusal, want) {
@@ -194,7 +194,7 @@ func TestAFunctionRunAsAnImageRefusesTheNameThePortIsInjectedUnder(t *testing.T)
 
 func TestAFunctionRunAsAnImageRefusesTheNameItsHandlerIsInjectedUnder(t *testing.T) {
 	refusal := refusedImagedDeploy(t, images.HandlerName, "/tmp/theirs.mjs",
-		"Deploy() stood up an app declaring OCEL_HANDLER, want it refused: the image tells its runtime which file to serve under that very name")
+		"Deploy() provisioned an app declaring OCEL_HANDLER, want it refused: the image tells its runtime which file to serve under that very name")
 
 	for _, want := range []string{images.HandlerName, "web", "runtime"} {
 		if !strings.Contains(refusal, want) {
@@ -203,7 +203,7 @@ func TestAFunctionRunAsAnImageRefusesTheNameItsHandlerIsInjectedUnder(t *testing
 	}
 }
 
-func TestANodeFunctionsImageCarriesTheRuntimeTheProviderHandsIt(t *testing.T) {
+func TestANodeFunctionsImageIncludesTheRuntimeTheProviderHandsIt(t *testing.T) {
 	stagedProject(t, "web", "admin")
 	served, provider := imagingServed(t)
 
@@ -220,13 +220,13 @@ func TestANodeFunctionsImageCarriesTheRuntimeTheProviderHandsIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	var held []string
+	var names []string
 	for _, layer := range layers {
-		held = append(held, tarNames(t, layer)...)
+		names = append(names, tarNames(t, layer)...)
 	}
 	want := strings.TrimPrefix(images.NodeRuntimePath, "/")
-	if !slices.Contains(held, want) {
-		t.Errorf("the image holds %v and nothing at %s, so nothing serves the node function it was built for", held, images.NodeRuntimePath)
+	if !slices.Contains(names, want) {
+		t.Errorf("the image contains %v and nothing at %s, so nothing serves the node function it was built for", names, images.NodeRuntimePath)
 	}
 }
 
@@ -242,10 +242,10 @@ func (imagingWithoutRuntime) ReadRuntime(context.Context, appbuild.Framework) ([
 	return nil, nil
 }
 
-func TestANodeFunctionIsRefusedWhereTheProviderCarriesNoRuntime(t *testing.T) {
+func TestANodeFunctionIsRefusedWhereTheProviderShipsNoRuntime(t *testing.T) {
 	stagedProject(t, "web", "admin")
 	served := servedBy(t, imagingWithoutRuntime{imaging{Provider: fake.NewProvider(fake.Options{})}})
-	standsBootstrapped(t, served)
+	bootstrappedOverRPC(t, served)
 
 	result, _ := deploy(t, served, imagingDeployRequest())
 	if result.GetSuccess() {
@@ -262,7 +262,7 @@ func wrappingImagingServed(t *testing.T, runtime []byte) (contractv1connect.Prov
 	t.Helper()
 	base := fake.NewProvider(fake.Options{})
 	served := servedBy(t, imaging{Provider: base.WrappingContainers("amd64", runtime)})
-	standsBootstrapped(t, served)
+	bootstrappedOverRPC(t, served)
 	return served, base
 }
 
@@ -297,7 +297,7 @@ func regularFiles(t *testing.T, image v1.Image) []string {
 	return names
 }
 
-func TestAFunctionImageIsWrappedInTheRuntimeWhereTheProviderCarriesOne(t *testing.T) {
+func TestAFunctionImageIsWrappedInTheRuntimeWhereTheProviderShipsOne(t *testing.T) {
 	stagedProject(t, "web", "admin")
 	served, provider := wrappingImagingServed(t, containerRuntimeBytes)
 
@@ -323,11 +323,11 @@ func TestAFunctionImageIsWrappedInTheRuntimeWhereTheProviderCarriesOne(t *testin
 		strings.TrimPrefix(appbuild.ContainerRuntimePath, "/"),
 	} {
 		if !slices.Contains(files, want) {
-			t.Errorf("the image holds %v and nothing at /%s", files, want)
+			t.Errorf("the image contains %v and nothing at /%s", files, want)
 		}
 	}
 	if slices.Contains(files, strings.TrimPrefix(images.NodeRuntimeRoot, "/")) {
-		t.Errorf("the image holds a file at %s, where the node runtime's directory stands, and a file over a directory cannot be loaded", images.NodeRuntimeRoot)
+		t.Errorf("the image contains a file at %s, where the node runtime's directory belongs, and a file over a directory cannot be loaded", images.NodeRuntimeRoot)
 	}
 	if asked := provider.WrappedFor(); !slices.Equal(asked, []string{"amd64"}) {
 		t.Errorf("the provider was asked for a runtime built for %v, want the architecture the function is built for", asked)
@@ -385,10 +385,10 @@ func TestAWrappedFunctionIsHandedItsPlainAndSensitiveValuesAndNoSecretOrRecord(t
 			t.Errorf("the function is handed %s=%q, want %q: the runtime reads a declared value off the environment it boots in", key, delivered[key], want)
 		}
 	}
-	if got, held := delivered["DATABASE_URL"]; held {
+	if got, ok := delivered["DATABASE_URL"]; ok {
 		t.Errorf("the function is handed DATABASE_URL=%q, want the runtime inside its image to open the secret: a plaintext in the revision is readable by anyone who may describe the service", got)
 	}
-	if got, held := delivered[provider.ResourceEnvName(provider.BindingPostgres, "orders")]; held {
+	if got, ok := delivered[provider.ResourceEnvName(provider.BindingPostgres, "orders")]; ok {
 		t.Errorf("the function is handed the record %q, want the runtime inside its image to read it", got)
 	}
 }
@@ -406,7 +406,7 @@ func TestAnUnsetSecretIsRefusedByThePlanOfAWrappedFunction(t *testing.T) {
 		}
 	}
 	if entered(t, events, "web") {
-		t.Error("the deploy was already standing web up when the unset secret was refused")
+		t.Error("the deploy was already provisioning web when the unset secret was refused")
 	}
 }
 

@@ -24,7 +24,7 @@ func TestTheRootSchemaIsWrittenOnceAndReadBack(t *testing.T) {
 	if err := stackrecords.EnsureSchema(ctx, records, edge.ClassProduction); err != nil {
 		t.Fatal(err)
 	}
-	held, err := records.Read(ctx, stackrecords.SchemaRecord(edge.ClassProduction))
+	recorded, err := records.Read(ctx, stackrecords.SchemaRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,8 +35,8 @@ func TestTheRootSchemaIsWrittenOnceAndReadBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if again.Revision != held.Revision {
-		t.Fatalf("the schema record was rewritten at revision %q, want the %q already written", again.Revision, held.Revision)
+	if again.Revision != recorded.Revision {
+		t.Fatalf("the schema record was rewritten at revision %q, want the %q already written", again.Revision, recorded.Revision)
 	}
 	if written, err := stackrecords.WrittenSchema(ctx, records, edge.ClassProduction); err != nil || written != stackrecords.SchemaVersion {
 		t.Fatalf("WrittenSchema() = %d, %v, want %d", written, err, stackrecords.SchemaVersion)
@@ -60,9 +60,9 @@ func TestARecordTreeAnOlderOcelWroteIsRefused(t *testing.T) {
 	if !strings.Contains(refused.Message, behind) || !strings.Contains(refused.Message, strconv.Itoa(stackrecords.SchemaVersion)) {
 		t.Errorf("refusal = %q, want it to name both the schema written and the schema this build reads", refused.Message)
 	}
-	held, err := store.Read(ctx, stackrecords.SchemaRecord(edge.ClassProduction))
-	if err != nil || string(held.Bytes) != behind {
-		t.Fatalf("the refused tree was stamped %q, want it left at %q rather than claimed as this build's", held.Bytes, behind)
+	recorded, err := store.Read(ctx, stackrecords.SchemaRecord(edge.ClassProduction))
+	if err != nil || string(recorded.Bytes) != behind {
+		t.Fatalf("the refused tree was stamped %q, want it left at %q rather than claimed as this build's", recorded.Bytes, behind)
 	}
 }
 
@@ -80,8 +80,8 @@ func TestARecordTreeANewerOcelWroteIsRefused(t *testing.T) {
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("EnsureSchema() over a newer tree = %v, want it refused as not ready", err)
 	}
-	held, err := store.Read(ctx, stackrecords.SchemaRecord(edge.ClassProduction))
-	if err != nil || string(held.Bytes) != ahead {
-		t.Fatalf("the refused downgrade left %q behind, want the tree untouched at %q", held.Bytes, ahead)
+	recorded, err := store.Read(ctx, stackrecords.SchemaRecord(edge.ClassProduction))
+	if err != nil || string(recorded.Bytes) != ahead {
+		t.Fatalf("the refused downgrade left %q behind, want the tree untouched at %q", recorded.Bytes, ahead)
 	}
 }

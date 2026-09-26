@@ -8,14 +8,14 @@ import (
 )
 
 func WithDefaultStackNames(described provider.BootstrapDescription, catalogue []provider.Feature, name func(feature string) string) provider.BootstrapDescription {
-	held := make(map[string]bool, len(described.Stacks))
+	featured := make(map[string]bool, len(described.Stacks))
 	for _, stack := range described.Stacks {
-		held[stack.Feature] = true
+		featured[stack.Feature] = true
 	}
 	named := described
 	named.Stacks = slices.Clone(described.Stacks)
 	for _, feature := range append([]string{""}, featureNames(catalogue)...) {
-		if held[feature] {
+		if featured[feature] {
 			continue
 		}
 		named.Stacks = append(named.Stacks, provider.BootstrapStack{Name: name(feature), Feature: feature})
@@ -24,14 +24,14 @@ func WithDefaultStackNames(described provider.BootstrapDescription, catalogue []
 }
 
 func ChangeGroups(described provider.BootstrapDescription, catalogue []provider.Feature, req provider.BootstrapRequest) []provider.ChangeGroup {
-	standing := make(map[string]provider.BootstrapStack, len(described.Stacks))
+	current := make(map[string]provider.BootstrapStack, len(described.Stacks))
 	for _, stack := range described.Stacks {
-		standing[stack.Feature] = stack
+		current[stack.Feature] = stack
 	}
 
-	groups := []provider.ChangeGroup{baselineGroup(described, standing[""], req.Class)}
+	groups := []provider.ChangeGroup{baselineGroup(described, current[""], req.Class)}
 	for _, name := range req.Features {
-		groups = append(groups, featureGroup(standing[name], name))
+		groups = append(groups, featureGroup(current[name], name))
 	}
 	for _, name := range req.Remove {
 		if slices.Contains(req.Features, name) {
@@ -39,7 +39,7 @@ func ChangeGroups(described provider.BootstrapDescription, catalogue []provider.
 		}
 		groups = append(groups, provider.ChangeGroup{
 			Kind:    provider.StackGroupKind,
-			Name:    stackName(standing[name], name),
+			Name:    stackName(current[name], name),
 			Feature: name,
 			Action:  provider.ActionDelete,
 		})
@@ -59,9 +59,9 @@ func featureGroup(stack provider.BootstrapStack, name string) provider.ChangeGro
 	return group
 }
 
-func bootstrapStackAction(stack provider.BootstrapStack, holding bool) (provider.ChangeAction, string) {
+func bootstrapStackAction(stack provider.BootstrapStack, described bool) (provider.ChangeAction, string) {
 	switch {
-	case !holding || !stack.Present:
+	case !described || !stack.Present:
 		return provider.ActionCreate, ""
 	case behind(stack):
 		return provider.ActionUpdate, ""

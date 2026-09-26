@@ -43,17 +43,17 @@ func kinds(plan *planv1.ChangePlan) []string {
 	return out
 }
 
-func TestPlanRemoveProjectNamesEveryStackTheDeployStoodUp(t *testing.T) {
+func TestPlanRemoveProjectNamesEveryStackTheDeployProvisioned(t *testing.T) {
 	client, _ := deployedProject(t)
 
 	plan, err := client.PlanRemoveProject(context.Background(), projectRequest())
 	if err != nil {
 		t.Fatalf("PlanRemoveProject() error = %v", err)
 	}
-	held := kinds(plan)
+	planned := kinds(plan)
 	for _, kind := range []string{provider.StackGroupKind, provider.EdgeGroupKind, "variable values", "stored objects"} {
-		if !slices.Contains(held, kind) {
-			t.Errorf("the plan names %v, want a %q group among them", held, kind)
+		if !slices.Contains(planned, kind) {
+			t.Errorf("the plan names %v, want a %q group among them", planned, kind)
 		}
 	}
 	if plan.GetSubject() != "shop" {
@@ -61,14 +61,14 @@ func TestPlanRemoveProjectNamesEveryStackTheDeployStoodUp(t *testing.T) {
 	}
 	for _, group := range plan.GetGroups() {
 		if group.GetName() == "" {
-			t.Errorf("the plan carries %+v, and the CLI cannot render a nameless group", group)
+			t.Errorf("the plan contains %+v, and the CLI cannot render a nameless group", group)
 		}
 		if group.GetKind() == provider.StackGroupKind && !strings.HasPrefix(group.GetName(), "fake/") {
-			t.Errorf("the plan carries %+v, want every stack named under the vendor that holds it", group)
+			t.Errorf("the plan contains %+v, want every stack named under the vendor that hosts it", group)
 		}
 		for _, change := range group.GetChanges() {
 			if change.GetKind() == "" || change.GetName() == "" {
-				t.Errorf("the plan carries row %+v, and a row renders as a name in a type column", change)
+				t.Errorf("the plan contains row %+v, and a row renders as a name in a type column", change)
 			}
 		}
 	}
@@ -152,7 +152,7 @@ func TestRemoveProjectRefusesACallNamingNoProject(t *testing.T) {
 	}
 }
 
-func settledProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider, *fake.DNSRecords) {
+func cutOverProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fake.Provider, *fake.DNSRecords) {
 	t.Helper()
 	client, p := contractServed(t, "1.0.0")
 	seedStack(t, p, edge.ClassProduction, "shop", stackrecords.EdgeState{
@@ -183,24 +183,24 @@ func settledProject(t *testing.T) (contractv1connect.ProviderServiceClient, *fak
 	return client, p, writer.(*fake.DNSRecords)
 }
 
-func settledRequest() *contractv1.ProjectRequest {
+func cutOverRequest() *contractv1.ProjectRequest {
 	req := projectRequest()
 	req.Edge = zoned("acme.com")
 	return req
 }
 
-func TestPlanRemoveProjectNamesTheRecordsAndCertificatesItsHostnamesHold(t *testing.T) {
+func TestPlanRemoveProjectNamesTheRecordsAndCertificatesItsHostnamesUse(t *testing.T) {
 	t.Parallel()
-	client, _, _ := settledProject(t)
+	client, _, _ := cutOverProject(t)
 
-	plan, err := client.PlanRemoveProject(context.Background(), settledRequest())
+	plan, err := client.PlanRemoveProject(context.Background(), cutOverRequest())
 	if err != nil {
 		t.Fatalf("PlanRemoveProject() error = %v", err)
 	}
-	held := kinds(plan)
+	planned := kinds(plan)
 	for _, kind := range []string{"DNS record", "certificate"} {
-		if !slices.Contains(held, kind) {
-			t.Errorf("the plan names %v, want a %q item among them", held, kind)
+		if !slices.Contains(planned, kind) {
+			t.Errorf("the plan names %v, want a %q item among them", planned, kind)
 		}
 	}
 	for _, item := range plan.GetGroups() {
@@ -219,9 +219,9 @@ func TestPlanRemoveProjectNamesTheRecordsAndCertificatesItsHostnamesHold(t *test
 
 func TestRemoveProjectReleasesTheRecordsItWrote(t *testing.T) {
 	t.Parallel()
-	client, _, writer := settledProject(t)
+	client, _, writer := cutOverProject(t)
 
-	stream, err := client.RemoveProject(context.Background(), settledRequest())
+	stream, err := client.RemoveProject(context.Background(), cutOverRequest())
 	if err != nil {
 		t.Fatalf("RemoveProject() error = %v", err)
 	}
@@ -232,8 +232,8 @@ func TestRemoveProjectReleasesTheRecordsItWrote(t *testing.T) {
 	if !result.GetSuccess() {
 		t.Fatalf("RemoveProject() = %q, want the project removed", result.GetError())
 	}
-	if held := writer.Records(); len(held) != 0 {
-		t.Errorf("the zone still holds %v, want every record ocel wrote for this project released", held)
+	if written := writer.Records(); len(written) != 0 {
+		t.Errorf("the zone still contains %v, want every record ocel wrote for this project released", written)
 	}
 }
 
@@ -266,7 +266,7 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	plan, err := client.PlanRemoveProject(context.Background(), settledRequest())
+	plan, err := client.PlanRemoveProject(context.Background(), cutOverRequest())
 	if err != nil {
 		t.Fatalf("PlanRemoveProject() error = %v", err)
 	}
@@ -283,7 +283,7 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 		}
 	}
 
-	stream, err := client.RemoveProject(context.Background(), settledRequest())
+	stream, err := client.RemoveProject(context.Background(), cutOverRequest())
 	if err != nil {
 		t.Fatalf("RemoveProject() error = %v", err)
 	}
@@ -301,10 +301,10 @@ func TestRemoveProjectDiscardsTheCertificateOcelRequested(t *testing.T) {
 		t.Errorf("the provider discarded %v, want the certificate a stalled rotation left behind among them", discarded)
 	}
 	if discarded := p.Discarded(); slices.Contains(discarded, "pinned-cert") {
-		t.Errorf("the provider discarded %v, want a pinned certificate left standing", discarded)
+		t.Errorf("the provider discarded %v, want a pinned certificate left in place", discarded)
 	}
-	if held := writer.(*fake.DNSRecords).Records(); len(held) != 0 {
-		t.Errorf("the zone still holds %v, want the validation record released with the certificate", held)
+	if written := writer.(*fake.DNSRecords).Records(); len(written) != 0 {
+		t.Errorf("the zone still contains %v, want the validation record released with the certificate", written)
 	}
 }
 
@@ -331,7 +331,7 @@ func TestARemovalRefusesWorkTheConsentedProjectPlanNeverShowed(t *testing.T) {
 	if _, err := drain(stream); err == nil {
 		t.Fatal("RemoveProject() = nil, want a removal that outgrew its consented plan refused")
 	} else if !strings.Contains(err.Error(), "admin") {
-		t.Errorf("the refusal reads %q, want it to name what stood up under the plan", err)
+		t.Errorf("the refusal reads %q, want it to name what was provisioned under the plan", err)
 	}
 }
 
@@ -359,7 +359,7 @@ func TestARemovalRunsTheConsentedProjectPlanItWasHanded(t *testing.T) {
 	}
 }
 
-func TestARemovalOpensTheEdgeTheProjectStandsOnRatherThanTheDefault(t *testing.T) {
+func TestARemovalOpensTheEdgeTheProjectRunsOnRatherThanTheDefault(t *testing.T) {
 	builtProject(t)
 	client, _ := deployServed(t)
 	req := deployRequest()
@@ -373,12 +373,12 @@ func TestARemovalOpensTheEdgeTheProjectStandsOnRatherThanTheDefault(t *testing.T
 		t.Fatalf("PlanRemoveProject() error = %v", err)
 	}
 	if plan.GetEdgeKind() != string(fake.KindDirect) {
-		t.Errorf("the removal plans against the %q edge, want the %q edge the project stands on",
+		t.Errorf("the removal plans against the %q edge, want the %q edge the project runs on",
 			plan.GetEdgeKind(), fake.KindDirect)
 	}
 }
 
-func TestARemovalOpensItsDNSForTheEdgeTheProjectStandsOnWhenTheConfigNamesNone(t *testing.T) {
+func TestARemovalOpensItsDNSForTheEdgeTheProjectRunsOnWhenTheConfigNamesNone(t *testing.T) {
 	builtProject(t)
 	client, provider := deployServed(t)
 	req := deployRequest()
@@ -396,6 +396,6 @@ func TestARemovalOpensItsDNSForTheEdgeTheProjectStandsOnWhenTheConfigNamesNone(t
 	}
 	fronts := provider.DNS().(*fake.DNS).Fronts()[opened:]
 	if len(fronts) == 0 || slices.ContainsFunc(fronts, func(front edge.Kind) bool { return front != fake.KindDirect }) {
-		t.Errorf("the removal opened its DNS under %v, want the %s edge the stack stands on", fronts, fake.KindDirect)
+		t.Errorf("the removal opened its DNS under %v, want the %s edge the stack runs on", fronts, fake.KindDirect)
 	}
 }

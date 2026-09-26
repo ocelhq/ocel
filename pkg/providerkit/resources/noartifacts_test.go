@@ -51,12 +51,12 @@ func TestTheStorelessStoreRefusesAReadRatherThanAnsweringEmpty(t *testing.T) {
 func TestTheStorelessStoreAnswersHasWithAPlainFalse(t *testing.T) {
 	t.Parallel()
 
-	held, err := NoArtifacts{}.Has(context.Background(), storelessRef())
+	present, err := NoArtifacts{}.Has(context.Background(), storelessRef())
 	if err != nil {
 		t.Fatalf("Has() = %v, want a plain false: it is the gate plan synthesis draws its create row from", err)
 	}
-	if held {
-		t.Error("Has() claims a store that keeps nothing holds an artifact")
+	if present {
+		t.Error("Has() claims a store that keeps nothing has an artifact")
 	}
 }
 

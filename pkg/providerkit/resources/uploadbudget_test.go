@@ -15,11 +15,11 @@ import (
 )
 
 type countingStore struct {
-	mu     sync.Mutex
-	live   int
-	peak   int
-	arrive chan struct{}
-	hold   chan struct{}
+	mu      sync.Mutex
+	live    int
+	peak    int
+	arrive  chan struct{}
+	release chan struct{}
 }
 
 func (s *countingStore) Put(context.Context, provider.ArtifactRef, io.Reader) error { return nil }
@@ -33,7 +33,7 @@ func (s *countingStore) Has(context.Context, provider.ArtifactRef) (bool, error)
 	s.mu.Unlock()
 
 	s.arrive <- struct{}{}
-	<-s.hold
+	<-s.release
 
 	s.mu.Lock()
 	s.live--
@@ -69,8 +69,8 @@ func TestShipUploadsSharesOneBudgetAcrossTheAppsShippingAtOnce(t *testing.T) {
 
 	uploads := uploadsOf(t, UploadConcurrency)
 	store := &countingStore{
-		arrive: make(chan struct{}, apps*len(uploads)),
-		hold:   make(chan struct{}),
+		arrive:  make(chan struct{}, apps*len(uploads)),
+		release: make(chan struct{}),
 	}
 
 	var group sync.WaitGroup
@@ -91,7 +91,7 @@ func TestShipUploadsSharesOneBudgetAcrossTheAppsShippingAtOnce(t *testing.T) {
 		t.Error("an upload started while the budget was already full: each app took a budget of its own")
 	case <-time.After(200 * time.Millisecond):
 	}
-	close(store.hold)
+	close(store.release)
 	group.Wait()
 
 	for slot, err := range failures {
@@ -100,6 +100,6 @@ func TestShipUploadsSharesOneBudgetAcrossTheAppsShippingAtOnce(t *testing.T) {
 		}
 	}
 	if store.peak > UploadConcurrency {
-		t.Errorf("%d uploads were in flight at once, want at most %d: the apps standing up side by side share one budget rather than each taking a full one", store.peak, UploadConcurrency)
+		t.Errorf("%d uploads were in flight at once, want at most %d: the apps being provisioned side by side share one budget rather than each taking a full one", store.peak, UploadConcurrency)
 	}
 }

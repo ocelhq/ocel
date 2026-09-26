@@ -28,7 +28,7 @@ func runPorts(t *testing.T, suite Suite) {
 	t.Helper()
 
 	if suite.New == nil {
-		t.Skip("the suite carries no constructor, so there are no ports to exercise")
+		t.Skip("the suite has no constructor, so there are no ports to exercise")
 	}
 	p, err := suite.New(context.Background(), provider.Settings{Options: suite.Options})
 	if err != nil {
@@ -92,12 +92,12 @@ func RunStore(t *testing.T, store records.Store) {
 		if revision == "" {
 			t.Fatal("Write() returned an empty revision, and a compare-and-set has nothing to compare")
 		}
-		held, err := store.Read(ctx, name)
-		if err != nil || !bytes.Equal(held.Bytes, []byte("one")) {
-			t.Fatalf("Read() = %q, %v, want the bytes just written", held.Bytes, err)
+		recorded, err := store.Read(ctx, name)
+		if err != nil || !bytes.Equal(recorded.Bytes, []byte("one")) {
+			t.Fatalf("Read() = %q, %v, want the bytes just written", recorded.Bytes, err)
 		}
-		if held.Revision != revision {
-			t.Fatalf("Read() revision = %q, want the %q Write() reported", held.Revision, revision)
+		if recorded.Revision != revision {
+			t.Fatalf("Read() revision = %q, want the %q Write() reported", recorded.Revision, revision)
 		}
 	})
 
@@ -116,16 +116,16 @@ func RunStore(t *testing.T, store records.Store) {
 		if _, err := store.Write(ctx, records.Record{Name: name, Bytes: []byte("one")}); err != nil {
 			t.Fatal(err)
 		}
-		held, err := store.Read(ctx, name)
+		recorded, err := store.Read(ctx, name)
 		if err != nil {
 			t.Fatal(err)
 		}
-		held.Bytes = []byte("two")
-		if _, err := store.Write(ctx, held); err != nil {
+		recorded.Bytes = []byte("two")
+		if _, err := store.Write(ctx, recorded); err != nil {
 			t.Fatalf("Write() at the revision read = %v, want it stored", err)
 		}
-		held.Bytes = []byte("three")
-		if _, err := store.Write(ctx, held); !errors.Is(err, records.ErrStale) {
+		recorded.Bytes = []byte("three")
+		if _, err := store.Write(ctx, recorded); !errors.Is(err, records.ErrStale) {
 			t.Fatalf("a second write at a revision that moved = %v, want ErrStale", err)
 		}
 	})
@@ -138,7 +138,7 @@ func RunStore(t *testing.T, store records.Store) {
 		); err != nil {
 			t.Fatalf("WritePair() of two new records = %v, want both stored", err)
 		}
-		held, err := store.Read(ctx, record)
+		recorded, err := store.Read(ctx, record)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -149,14 +149,14 @@ func RunStore(t *testing.T, store records.Store) {
 
 		moved := beside
 		moved.Revision = "a revision nobody wrote"
-		held.Bytes, moved.Bytes = []byte("two"), []byte("two")
-		if err := store.WritePair(ctx, held, moved); !errors.Is(err, records.ErrStale) {
+		recorded.Bytes, moved.Bytes = []byte("two"), []byte("two")
+		if err := store.WritePair(ctx, recorded, moved); !errors.Is(err, records.ErrStale) {
 			t.Fatalf("WritePair() where one half moved = %v, want ErrStale", err)
 		}
 		for _, name := range []records.Name{record, value} {
-			stood, err := store.Read(ctx, name)
-			if err != nil || !bytes.Equal(stood.Bytes, []byte("one")) {
-				t.Fatalf("Read(%s) after a refused pair write = %q, %v, want the bytes from the write that landed", name, stood.Bytes, err)
+			recorded, err := store.Read(ctx, name)
+			if err != nil || !bytes.Equal(recorded.Bytes, []byte("one")) {
+				t.Fatalf("Read(%s) after a refused pair write = %q, %v, want the bytes from the write that landed", name, recorded.Bytes, err)
 			}
 		}
 	})
@@ -168,10 +168,10 @@ func RunStore(t *testing.T, store records.Store) {
 			t.Fatal(err)
 		}
 		if err := store.Remove(ctx, name, "a revision nobody wrote"); !errors.Is(err, records.ErrStale) {
-			t.Fatalf("Remove() at a revision that never held = %v, want ErrStale", err)
+			t.Fatalf("Remove() at a revision that was never current = %v, want ErrStale", err)
 		}
 		if err := store.Remove(ctx, name, revision); err != nil {
-			t.Fatalf("Remove() at the revision held = %v, want it gone", err)
+			t.Fatalf("Remove() at the current revision = %v, want it gone", err)
 		}
 		if _, err := store.Read(ctx, name); !errors.Is(err, records.ErrNotFound) {
 			t.Fatalf("Read() after Remove() = %v, want ErrNotFound", err)
@@ -179,7 +179,7 @@ func RunStore(t *testing.T, store records.Store) {
 	})
 
 	t.Run("one class's records are not the other's", func(t *testing.T) {
-		production, preview := in(edge.ClassProduction, t, "held"), in(edge.ClassPreview, t, "held")
+		production, preview := in(edge.ClassProduction, t, "isolated"), in(edge.ClassPreview, t, "isolated")
 		if _, err := store.Write(ctx, records.Record{Name: production, Bytes: []byte("production")}); err != nil {
 			t.Fatal(err)
 		}
@@ -189,9 +189,9 @@ func RunStore(t *testing.T, store records.Store) {
 		if _, err := store.Write(ctx, records.Record{Name: preview, Bytes: []byte("preview")}); err != nil {
 			t.Fatal(err)
 		}
-		held, err := store.Read(ctx, production)
-		if err != nil || string(held.Bytes) != "production" {
-			t.Fatalf("Read() of the production name = %q, %v, want the production bytes untouched", held.Bytes, err)
+		recorded, err := store.Read(ctx, production)
+		if err != nil || string(recorded.Bytes) != "production" {
+			t.Fatalf("Read() of the production name = %q, %v, want the production bytes untouched", recorded.Bytes, err)
 		}
 	})
 
@@ -210,16 +210,16 @@ func RunStore(t *testing.T, store records.Store) {
 			t.Fatal(err)
 		}
 
-		held, err := store.List(ctx, under(t, "tree"))
+		listed, err := store.List(ctx, under(t, "tree"))
 		if err != nil {
 			t.Fatalf("List() = %v", err)
 		}
-		if len(held) != len(leaves) {
-			t.Fatalf("List() returned %d records, want the %d written under the prefix and nothing beside them", len(held), len(leaves))
+		if len(listed) != len(leaves) {
+			t.Fatalf("List() returned %d records, want the %d written under the prefix and nothing beside them", len(listed), len(leaves))
 		}
-		for _, record := range held {
+		for _, record := range listed {
 			if !bytes.Equal(record.Bytes, []byte(record.Name.String())) {
-				t.Errorf("List() returned %s carrying %q, want the bytes written at that name", record.Name, record.Bytes)
+				t.Errorf("List() returned %s containing %q, want the bytes written at that name", record.Name, record.Bytes)
 			}
 			if record.Revision == "" {
 				t.Errorf("List() returned %s with no revision, and a caller cannot then remove it", record.Name)
@@ -306,14 +306,14 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 	catalogue := bootstrap.Catalogue()
 	wanted, err := applicable(catalogue, kind)
 	if err != nil {
-		t.Fatalf("the features the %q edge stands up = %v", kind, err)
+		t.Fatalf("the features the %q edge installs = %v", kind, err)
 	}
 
-	t.Run("every feature is one the catalogue can stand up", func(t *testing.T) {
+	t.Run("every feature is one the catalogue can install", func(t *testing.T) {
 		named := make([]string, 0, len(catalogue))
 		for _, f := range catalogue {
 			if f.Name == "" {
-				t.Error("the catalogue carries a feature with no name, and nothing can ask for it")
+				t.Error("the catalogue has a feature with no name, and nothing can ask for it")
 			}
 			named = append(named, f.Name)
 		}
@@ -330,7 +330,7 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 			}
 		}
 		if _, err := bootstrapplan.FeatureLevels(catalogue, named); err != nil {
-			t.Fatalf("FeatureLevels() over the whole catalogue = %v, want an order that stands every feature up", err)
+			t.Fatalf("FeatureLevels() over the whole catalogue = %v, want an order that installs every feature", err)
 		}
 	})
 
@@ -391,7 +391,7 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 
 	t.Run("Plan shows a dropped feature leaving", func(t *testing.T) {
 		if len(wanted) == 0 {
-			t.Skipf("the %q edge stands no feature of this provider up, so nothing can be dropped", kind)
+			t.Skipf("the %q edge installs no feature of this provider, so nothing can be dropped", kind)
 		}
 		class := edge.ClassProduction
 		drop := wanted
@@ -417,14 +417,14 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 		}
 	})
 
-	t.Run("what Apply stands up, Describe reports and Remove takes down", func(t *testing.T) {
+	t.Run("what Apply installs, Describe reports and Remove takes down", func(t *testing.T) {
 		class := edge.ClassPreview
 		raising, err := ordered(catalogue, wanted)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, Features: raising}, nil); err != nil {
-			t.Fatalf("Apply() of what the %q edge stands up (%v) = %v", kind, raising, err)
+			t.Fatalf("Apply() of what the %q edge installs (%v) = %v", kind, raising, err)
 		}
 
 		described, err := bootstrap.Describe(ctx, class)
@@ -481,7 +481,7 @@ func RunBootstrap(t *testing.T, bootstrap provider.Bootstrap, kind edge.Kind) {
 			dropping = append(dropping, levels[i]...)
 		}
 		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, Remove: dropping}, nil); err != nil {
-			t.Fatalf("Apply() dropping what the %q edge stands up (%v) = %v", kind, dropping, err)
+			t.Fatalf("Apply() dropping what the %q edge installs (%v) = %v", kind, dropping, err)
 		}
 		if err := bootstrap.Remove(ctx, class, nil); err != nil {
 			t.Fatalf("Remove() = %v", err)
@@ -494,31 +494,31 @@ func applicable(catalogue []provider.Feature, kind edge.Kind) ([]string, error) 
 	if err != nil {
 		return nil, err
 	}
-	standing := map[string]bool{}
+	applies := map[string]bool{}
 	for _, name := range required {
-		standing[name] = true
+		applies[name] = true
 	}
 	for _, f := range catalogue {
 		if len(f.Needs) == 0 {
-			standing[f.Name] = true
+			applies[f.Name] = true
 		}
 	}
 	for grew := true; grew; {
 		grew = false
 		for _, f := range catalogue {
-			if !standing[f.Name] {
+			if !applies[f.Name] {
 				continue
 			}
 			for _, dep := range f.DependsOn {
-				if !standing[dep] {
-					standing[dep], grew = true, true
+				if !applies[dep] {
+					applies[dep], grew = true, true
 				}
 			}
 		}
 	}
-	wanted := make([]string, 0, len(standing))
+	wanted := make([]string, 0, len(applies))
 	for _, f := range catalogue {
-		if standing[f.Name] {
+		if applies[f.Name] {
 			wanted = append(wanted, f.Name)
 		}
 	}
@@ -547,7 +547,7 @@ func RunCredentials(t *testing.T, credentials provider.Credentials) {
 		if err != nil {
 			var refused refusal.Refusal
 			if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
-				t.Fatalf("Whoami() failed with %v, want a Refusal carrying %s so the CLI can render a credential problem", err, refusal.CodeDenied)
+				t.Fatalf("Whoami() failed with %v, want a Refusal with code %s so the CLI can render a credential problem", err, refusal.CodeDenied)
 			}
 			if refused.Message == "" {
 				t.Error("Whoami() refused with no message, so the CLI has nothing to tell the user")
@@ -611,16 +611,16 @@ func RunArtifactStore(t *testing.T, facts provider.Facts, artifacts provider.Art
 	})
 
 	t.Run("Has answers for a key stored and for one nothing wrote", func(t *testing.T) {
-		held, err := artifacts.Has(ctx, ref)
-		if err != nil || !held {
-			t.Errorf("Has() of an artifact just put = %v, %v, want true: a deploy re-uploads every unchanged build without it", held, err)
+		present, err := artifacts.Has(ctx, ref)
+		if err != nil || !present {
+			t.Errorf("Has() of an artifact just put = %v, %v, want true: a deploy re-uploads every unchanged build without it", present, err)
 		}
 		absent := provider.ArtifactRef{Class: ref.Class, Bucket: ref.Bucket, Key: ref.Key + ".never-written"}
-		held, err = artifacts.Has(ctx, absent)
+		present, err = artifacts.Has(ctx, absent)
 		if err != nil {
 			t.Errorf("Has() of a key nothing wrote = %v, want a plain false", err)
 		}
-		if held {
+		if present {
 			t.Error("Has() claims a key nothing wrote is stored, so a changed build would never be uploaded")
 		}
 	})
@@ -668,7 +668,7 @@ func RunArtifactStore(t *testing.T, facts provider.Facts, artifacts provider.Art
 		opened.Close()
 	})
 
-	t.Run("RemovePrefix of a prefix holding nothing is not an error", func(t *testing.T) {
+	t.Run("RemovePrefix of a prefix containing nothing is not an error", func(t *testing.T) {
 		if err := artifacts.RemovePrefix(ctx, ref.Class, "conformance/"+t.Name()+"/nothing-here/", nil); err != nil {
 			t.Fatalf("RemovePrefix() of a prefix nothing was written under = %v, want nil", err)
 		}
@@ -706,12 +706,12 @@ func runStorelessArtifactStore(t *testing.T, artifacts provider.ArtifactStore, r
 	})
 
 	t.Run("Has answers a plain false", func(t *testing.T) {
-		held, err := artifacts.Has(ctx, ref)
+		present, err := artifacts.Has(ctx, ref)
 		if err != nil {
 			t.Fatalf("Has() = %v, want a plain false: plan synthesis draws its create row from this answer", err)
 		}
-		if held {
-			t.Error("Has() claims a provider that keeps no artifacts holds one")
+		if present {
+			t.Error("Has() claims a provider that keeps no artifacts has one")
 		}
 	})
 
@@ -830,7 +830,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 			t.Fatalf("Plan() of every primitive this provider serves = %v", err)
 		}
 		if rows := planRows(t, planned, "Plan"); rows == 0 {
-			t.Fatal("Plan() of a release standing up every primitive showed nothing, and the plan is the only thing a human consents to")
+			t.Fatal("Plan() of a release provisioning every primitive showed nothing, and the plan is the only thing a human consents to")
 		}
 	})
 
@@ -874,11 +874,11 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 			t.Fatalf("Provision() of the release whose plan showed the artifact = %v", err)
 		}
 		shipped := shipping.Uploads[0].Ref
-		held, err := artifacts.Has(ctx, shipped)
+		present, err := artifacts.Has(ctx, shipped)
 		if err != nil {
 			t.Fatalf("Has() of the artifact the release shipped = %v", err)
 		}
-		if !held {
+		if !present {
 			t.Fatal("the plan showed an artifact row and Provision() left nothing in the store, " +
 				"so the plan promised a write the apply never made")
 		}
@@ -896,7 +896,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 			t.Fatalf("read the artifact a release would ship: %v", err)
 		}
 		if !bytes.Equal(got, want) {
-			t.Errorf("the store holds %q under the shipped key, want %q", got, want)
+			t.Errorf("the store has %q under the shipped key, want %q", got, want)
 		}
 	})
 
@@ -943,7 +943,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 		}
 	})
 
-	t.Run("every binding a plan asks for comes back carrying the properties its type promises", func(t *testing.T) {
+	t.Run("every binding a plan asks for comes back with the properties its type promises", func(t *testing.T) {
 		resources := declared(facts.Bindings)
 		if len(resources) == 0 {
 			t.Skip("this provider serves no resource primitive, so a plan can ask for nothing")
@@ -982,7 +982,7 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 			t.Fatalf("PlanDestroy() of the stack just provisioned = %v", err)
 		}
 		if rows := planRows(t, removal, "PlanDestroy"); rows == 0 {
-			t.Error("PlanDestroy() of a stack standing showed nothing going, and a teardown is consented to by what it shows")
+			t.Error("PlanDestroy() of a provisioned stack showed nothing going, and a teardown is consented to by what it shows")
 		}
 		for _, group := range removal.Groups {
 			for _, change := range group.Changes {
@@ -1006,12 +1006,12 @@ func RunStacks(t *testing.T, facts provider.Facts, stacks provider.Stacks, artif
 		result, err := stacks.Provision(ctx, unserved, nil)
 		if err == nil {
 			if len(result.Bindings) == 0 {
-				t.Fatal("Provision() of a primitive this provider does not serve stood nothing up and refused nothing, so a release reads as done where nothing happened")
+				t.Fatal("Provision() of a primitive this provider does not serve provisioned nothing and refused nothing, so a release reads as done where nothing happened")
 			}
 			if derr := stacks.Destroy(ctx, ref, nil); derr != nil {
 				t.Fatal(derr)
 			}
-			t.Skip("this provider stands up a resource of any type, so there is no unserved primitive to refuse")
+			t.Skip("this provider provisions a resource of any type, so there is no unserved primitive to refuse")
 		}
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) {

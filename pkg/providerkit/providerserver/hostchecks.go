@@ -45,7 +45,7 @@ func (h *handlers) hostChecks(ctx context.Context, p provider.Provider, class ed
 	if err != nil {
 		return HostChecksProto([]provider.HostCheck{{
 			Verdict: provider.HostFail,
-			Finding: fmt.Sprintf("what stands on this box for the life of it could not be read, so none of it was judged: %v", err),
+			Finding: fmt.Sprintf("the current state of this box could not be read, so none of it was judged: %v", err),
 			Fix:     "run `ocel doctor` once the machine answers again",
 		}})
 	}

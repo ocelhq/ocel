@@ -24,20 +24,20 @@ func TestPermissionsMayBeUnwrittenSoLongAsTheProviderSaysSo(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
-		err  error
-		held bool
+		err   error
+		named bool
 	}{
-		"a document":              {err: nil, held: true},
-		"none written yet":        {err: refusal.Refuse(refusal.CodeNotReady, "no permissions document yet"), held: true},
-		"a tier it will not name": {err: refusal.Refuse(refusal.CodeInvalid, "no such tier"), held: false},
-		"something broken":        {err: errors.New("the document would not render"), held: false},
+		"a document":              {err: nil, named: true},
+		"none written yet":        {err: refusal.Refuse(refusal.CodeNotReady, "no permissions document yet"), named: true},
+		"a tier it will not name": {err: refusal.Refuse(refusal.CodeInvalid, "no such tier"), named: false},
+		"something broken":        {err: errors.New("the document would not render"), named: false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
 			err := permissionsRendered(permissionsPort{err: tc.err}, edge.TierBootstrap)
-			if held := err == nil; held != tc.held {
-				t.Errorf("permissionsRendered() = %v, want held = %v", err, tc.held)
+			if named := err == nil; named != tc.named {
+				t.Errorf("permissionsRendered() = %v, want named = %v", err, tc.named)
 			}
 		})
 	}

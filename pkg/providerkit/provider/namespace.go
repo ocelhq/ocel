@@ -25,7 +25,7 @@ func ParseNamespace(given string) (Namespace, error) {
 		return "", fmt.Errorf("namespace %q is %d characters; every name a bootstrap derives from it has to fit the shortest limit it lands under, which leaves %d", given, len(given), MaxNamespaceLength)
 	}
 	if err := naming.Validate("namespace", given); err != nil || given[0] < 'a' || given[0] > 'z' {
-		return "", fmt.Errorf("namespace %q is not the field every name derived from it carries: start with a lowercase letter, carry only lowercase letters, digits and single dashes, and end with a letter or digit", given)
+		return "", fmt.Errorf("namespace %q is not the field every name derived from it contains: start with a lowercase letter, use only lowercase letters, digits and single dashes, and end with a letter or digit", given)
 	}
 	return Namespace(given), nil
 }

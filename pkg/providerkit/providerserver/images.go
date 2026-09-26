@@ -33,7 +33,7 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry provider.AppEntry) (i
 	repository, digest, pinned := strings.Cut(ref, "@")
 	if !pinned || repository == "" || digest == "" {
 		return images.Push{}, refusal.Refuse(refusal.CodeInvalid,
-			"app %s carries the image %q, which pins no digest, so there is nothing to push under a coordinate", app, ref)
+			"app %s names the image %q, which pins no digest, so there is nothing to push under a coordinate", app, ref)
 	}
 	arch, err := images.BuiltArchitecture(ctx, repository, digest)
 	if err != nil {
@@ -54,7 +54,7 @@ func (r *deployRun) wrappedPush(ctx context.Context, entry provider.AppEntry) (i
 	}
 	if len(runtime) == 0 {
 		return images.Push{}, refusal.Refuse(refusal.CodeNotReady,
-			"this provider carries no container runtime built for %s, and %s's image is built for it", arch, app)
+			"this provider ships no container runtime built for %s, and %s's image is built for it", arch, app)
 	}
 	return images.Push{
 		App:      app,
@@ -96,7 +96,7 @@ func (r *deployRun) imagePushes(ctx context.Context, entry provider.AppEntry, fu
 		return provider.ImagePushes{}, refusal.Refuse(refusal.CodeInvalid,
 			"%s runs as a container, and this provider is served by pulling its image from a registry rather than being handed one: "+
 				"nothing names a registry, so the image has nowhere to go and the machine has nowhere to pull it from.\n"+
-				"    → name a `registry` in the project config, with `password` set to the name of the environment variable holding the token",
+				"    → name a `registry` in the project config, with `password` set to the name of the environment variable that contains the token",
 			entry.App)
 	}
 	push, err := r.containerPush(ctx, entry)

@@ -45,7 +45,7 @@ func (p *Provider) StallAfterProving(err error) {
 func (p *Provider) RefuseDiscardingAServingCertificate(err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.discardHeld = err
+	p.servingDiscardRefusal = err
 }
 
 func (p *Provider) Discarded() []string {
@@ -75,11 +75,11 @@ func (p certificates) Issue(ctx context.Context, req provider.CertificateRequest
 	if req.Current.Requested && req.Current.ID == cert.ID {
 		return req.Current, nil
 	}
-	settled, err := req.Prove(ctx, cert, validation)
+	proven, err := req.Prove(ctx, cert, validation)
 	if err != nil {
-		return settled, err
+		return proven, err
 	}
-	return settled, pending
+	return proven, pending
 }
 
 func issuedFor(hostname string, rotation int) string {
@@ -116,7 +116,7 @@ func (p certificates) Inspect(_ context.Context, _ edge.Kind, hostname string, c
 
 func (p certificates) Discard(_ context.Context, cert provider.Certificate, _ edge.Progress) error {
 	p.mu.Lock()
-	refusal := p.discardHeld
+	refusal := p.servingDiscardRefusal
 	p.mu.Unlock()
 	if refusal != nil && p.edges.serving(cert.ID) {
 		return refusal

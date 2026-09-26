@@ -99,7 +99,7 @@ func TestTheFakeIsImportedByTestCodeAlone(t *testing.T) {
 	}
 
 	if scanned == 0 {
-		t.Fatal("the sweep read no production Go file, so it holds nothing to the criterion it claims to prove")
+		t.Fatal("the sweep read no production Go file, so it checks nothing against the criterion it claims to prove")
 	}
 	if witnesses == 0 {
 		t.Fatalf("no test file imports %q, so the sweep is matching a path this tree no longer uses", fakePath)

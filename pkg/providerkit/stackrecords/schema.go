@@ -17,11 +17,11 @@ const schemaAttempts = 8
 
 func EnsureSchema(ctx context.Context, store records.Store, class edge.Class) error {
 	for range schemaAttempts {
-		held, err := records.ReadOrEmpty(ctx, store, SchemaRecord(class))
+		recorded, err := records.ReadOrEmpty(ctx, store, SchemaRecord(class))
 		if err != nil {
 			return fmt.Errorf("read the record schema: %w", err)
 		}
-		written, err := schemaVersionOf(held)
+		written, err := schemaVersionOf(recorded)
 		if err != nil {
 			return err
 		}
@@ -37,8 +37,8 @@ func EnsureSchema(ctx context.Context, store records.Store, class edge.Class) er
 				"this account's records are at schema %d and this build reads schema %d: an older ocel wrote them under a layout this build does not read, and there is no migration between the two. Remove what that ocel deployed with the ocel that deployed it, then bootstrap this account afresh",
 				written, SchemaVersion)
 		}
-		held.Bytes = []byte(strconv.Itoa(SchemaVersion))
-		if _, err := store.Write(ctx, held); err != nil {
+		recorded.Bytes = []byte(strconv.Itoa(SchemaVersion))
+		if _, err := store.Write(ctx, recorded); err != nil {
 			if errors.Is(err, records.ErrStale) {
 				continue
 			}
@@ -50,20 +50,20 @@ func EnsureSchema(ctx context.Context, store records.Store, class edge.Class) er
 }
 
 func WrittenSchema(ctx context.Context, store records.Store, class edge.Class) (int, error) {
-	held, err := records.ReadOrEmpty(ctx, store, SchemaRecord(class))
+	recorded, err := records.ReadOrEmpty(ctx, store, SchemaRecord(class))
 	if err != nil {
 		return 0, fmt.Errorf("read the record schema: %w", err)
 	}
-	return schemaVersionOf(held)
+	return schemaVersionOf(recorded)
 }
 
-func schemaVersionOf(held records.Record) (int, error) {
-	if len(held.Bytes) == 0 {
+func schemaVersionOf(recorded records.Record) (int, error) {
+	if len(recorded.Bytes) == 0 {
 		return 0, nil
 	}
-	written, err := strconv.Atoi(string(held.Bytes))
+	written, err := strconv.Atoi(string(recorded.Bytes))
 	if err != nil {
-		return 0, fmt.Errorf("read the record schema: %q is not a schema version", held.Bytes)
+		return 0, fmt.Errorf("read the record schema: %q is not a schema version", recorded.Bytes)
 	}
 	return written, nil
 }

@@ -16,8 +16,8 @@ var resourceTypes = map[resourcesv1.ResourceType]provider.BindingType{
 func manifestResources(manifest *contractv1.Manifest) ([]provider.Resource, error) {
 	declared := manifest.GetResources()
 	resources := make([]provider.Resource, 0, len(declared))
-	for _, held := range declared {
-		resource, err := manifestResource(held)
+	for _, resource := range declared {
+		resource, err := manifestResource(resource)
 		if err != nil {
 			return nil, err
 		}
@@ -26,9 +26,9 @@ func manifestResources(manifest *contractv1.Manifest) ([]provider.Resource, erro
 	return resources, nil
 }
 
-func manifestResource(held *contractv1.ManifestResource) (provider.Resource, error) {
-	name := held.GetLogicalName()
-	declared := held.GetResource().GetName()
+func manifestResource(message *contractv1.ManifestResource) (provider.Resource, error) {
+	name := message.GetLogicalName()
+	declared := message.GetResource().GetName()
 	if name == "" {
 		name = declared
 	}
@@ -38,16 +38,16 @@ func manifestResource(held *contractv1.ManifestResource) (provider.Resource, err
 	if name == "" {
 		return provider.Resource{}, refusal.Refuse(refusal.CodeInvalid, "this manifest declares a resource with no name, and a binding is bound by name")
 	}
-	kind, known := resourceTypes[held.GetResource().GetType()]
+	kind, known := resourceTypes[message.GetResource().GetType()]
 	if !known {
-		return provider.Resource{}, refusal.Refuse(refusal.CodeInvalid, "resource %s declares no type, so nothing knows what to stand up for it", name)
+		return provider.Resource{}, refusal.Refuse(refusal.CodeInvalid, "resource %s declares no type, so nothing knows what to provision for it", name)
 	}
-	resource := provider.Resource{Name: name, Declared: declared, Type: kind, Binding: held.GetBinding()}
+	resource := provider.Resource{Name: name, Declared: declared, Type: kind, Binding: message.GetBinding()}
 	switch {
-	case held.GetPostgres() != nil:
-		resource.Postgres = &provider.PostgresSpec{Version: held.GetPostgres().GetVersion()}
-	case held.GetBucket() != nil:
-		resource.Bucket = &provider.BucketSpec{AllowedOrigins: held.GetBucket().GetAllowedOrigins(), Public: held.GetBucket().GetPublic()}
+	case message.GetPostgres() != nil:
+		resource.Postgres = &provider.PostgresSpec{Version: message.GetPostgres().GetVersion()}
+	case message.GetBucket() != nil:
+		resource.Bucket = &provider.BucketSpec{AllowedOrigins: message.GetBucket().GetAllowedOrigins(), Public: message.GetBucket().GetPublic()}
 	}
 	return resource, nil
 }

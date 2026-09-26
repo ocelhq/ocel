@@ -88,7 +88,7 @@ func TestStateReadsWhatTheVendorDescribes(t *testing.T) {
 		t.Errorf("Status().Schema = %d, want %d", status.Schema, provider.BootstrapSchema)
 	}
 	if status.WrittenBy != "1.0.0" {
-		t.Errorf("Status().WrittenBy = %q, want the writer the core stack carries", status.WrittenBy)
+		t.Errorf("Status().WrittenBy = %q, want the writer the core stack records", status.WrittenBy)
 	}
 	if status.AutoHeal {
 		t.Error("Status().AutoHeal is on with no bootstrap record written")
@@ -113,13 +113,13 @@ func TestStateReadsAutoHealFromTheRecord(t *testing.T) {
 		t.Error("Status().AutoHeal is off after the record said it is on")
 	}
 
-	held, err := provider.Records().Read(ctx, stackrecords.BootstrapRecord(edge.ClassProduction))
+	recorded, err := provider.Records().Read(ctx, stackrecords.BootstrapRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatalf("Read() of the bootstrap record = %v", err)
 	}
 	var settings stackrecords.BootstrapSettings
-	if err := json.Unmarshal(held.Bytes, &settings); err != nil || !settings.AutoHeal {
-		t.Fatalf("the bootstrap record holds %q, %v, want auto_heal on", held.Bytes, err)
+	if err := json.Unmarshal(recorded.Bytes, &settings); err != nil || !settings.AutoHeal {
+		t.Fatalf("the bootstrap record contains %q, %v, want auto_heal on", recorded.Bytes, err)
 	}
 }
 
@@ -221,7 +221,7 @@ func TestEnsureReadyLeavesAStaleBootstrapAloneWhenTheAccountNeverOptedIntoHealin
 		t.Fatalf("EnsureReady() error = %v", err)
 	}
 	if got := len(bootstrap.Applied()); got != 1 {
-		t.Errorf("Apply() ran %d times, want only the bootstrap that stood it up", got)
+		t.Errorf("Apply() ran %d times, want only the bootstrap that installed it", got)
 	}
 	if !strings.Contains(progress.told(), "its content is behind") {
 		t.Errorf("EnsureReady() said %q, want it to report the drift it left state", progress.told())
@@ -273,7 +273,7 @@ func TestEnsureReadyWillNotHealFromADevelopmentBuild(t *testing.T) {
 		t.Fatalf("EnsureReady() error = %v", err)
 	}
 	if got := len(bootstrap.Applied()); got != 1 {
-		t.Errorf("Apply() ran %d times, want a development build to leave the account as it stands", got)
+		t.Errorf("Apply() ran %d times, want a development build to leave the account unchanged", got)
 	}
 	if !strings.Contains(progress.told(), "development build (dev+cafebabe)") {
 		t.Errorf("EnsureReady() said %q, want it to name the build that declined to heal", progress.told())
@@ -384,7 +384,7 @@ func TestDowngradeIsAWriterOlderThanTheOneThatWrote(t *testing.T) {
 	}
 }
 
-func TestBootstrapUsersRefuseWhileAnythingStandsOnTheBootstrap(t *testing.T) {
+func TestBootstrapUsersRefuseWhileAnythingDependsOnTheBootstrap(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()

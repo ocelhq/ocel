@@ -151,13 +151,13 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 		AutoHeal: &healing,
 	})
 
-	held, err := provider.Records().Read(ctx, stackrecords.BootstrapRecord(edge.ClassProduction))
+	recorded, err := provider.Records().Read(ctx, stackrecords.BootstrapRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatalf("Read() of the bootstrap record = %v", err)
 	}
 	var state stackrecords.BootstrapSettings
-	if err := json.Unmarshal(held.Bytes, &state); err != nil || !state.AutoHeal {
-		t.Fatalf("the bootstrap record holds %q, %v, want auto_heal on", held.Bytes, err)
+	if err := json.Unmarshal(recorded.Bytes, &state); err != nil || !state.AutoHeal {
+		t.Fatalf("the bootstrap record contains %q, %v, want auto_heal on", recorded.Bytes, err)
 	}
 
 	written, err := stackrecords.WrittenSchema(ctx, provider.Records(), edge.ClassProduction)
@@ -182,7 +182,7 @@ func TestBootstrapRecordsAutoHealAndTheRecordSchema(t *testing.T) {
 		t.Fatalf("DescribeBootstrap() error = %v", err)
 	}
 	if !planned.GetBootstrap().GetAutoHeal() {
-		t.Error("a bootstrap that named no auto_heal turned the standing one off")
+		t.Error("a bootstrap that named no auto_heal turned the existing one off")
 	}
 }
 
@@ -239,7 +239,7 @@ func TestBootstrapRemovesInDeleteOrderWhenForced(t *testing.T) {
 	applied := provider.FakeBootstrap().Applied()
 	removing := applied[len(applied)-1]
 	if want := []string{fake.FeatureImages, fake.FeatureCache}; !slices.Equal(removing.Remove, want) {
-		t.Errorf("Apply() removed %v, want %v — what stands on a feature goes first", removing.Remove, want)
+		t.Errorf("Apply() removed %v, want %v — what depends on a feature goes first", removing.Remove, want)
 	}
 	if len(removing.Features) != 0 {
 		t.Errorf("Apply() was asked for %v, want a run that named only removals to ensure nothing", removing.Features)
@@ -283,7 +283,7 @@ func recordProject(t *testing.T, provider *fake.Provider, slug string, features 
 	}
 }
 
-func TestDescribeBootstrapAnswersTheCatalogueAndTheStanding(t *testing.T) {
+func TestDescribeBootstrapAnswersTheCatalogueAndTheCurrentStatus(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -333,7 +333,7 @@ func TestDescribeBootstrapAnswersTheCatalogueAndTheStanding(t *testing.T) {
 	}
 	for _, stack := range status.GetStacks() {
 		if !stack.GetRequired() {
-			t.Errorf("stack %s is not required, and everything standing was asked for", stack.GetName())
+			t.Errorf("stack %s is not required, and everything installed was asked for", stack.GetName())
 		}
 		if stack.GetWrittenBy() == "" {
 			t.Errorf("stack %s says nobody wrote it", stack.GetName())
@@ -376,7 +376,7 @@ func streamedEvents(t *testing.T, client contractv1connect.ProviderServiceClient
 	return events, stream.Err()
 }
 
-func TestAnApplyCarryingAConsentedPlanDrawsNoPlanOfItsOwn(t *testing.T) {
+func TestAnApplyWithAConsentedPlanDrawsNoPlanOfItsOwn(t *testing.T) {
 	t.Parallel()
 
 	client, _ := contractServed(t, "1.2.3")
@@ -442,7 +442,7 @@ func TestAnApplyRefusesAConsentedPlanItCannotRead(t *testing.T) {
 		}},
 	})
 	if err == nil {
-		t.Fatal("Bootstrap() = nil, want an apply carrying an action this kit cannot read refused")
+		t.Fatal("Bootstrap() = nil, want an apply naming an action this kit cannot read refused")
 	}
 	if !strings.Contains(err.Error(), unreadable.String()) {
 		t.Errorf("the refusal reads %q, want it to name the action it could not read", err)
@@ -476,7 +476,7 @@ func TestARemovalRefusesWorkTheConsentedPlanNeverShowed(t *testing.T) {
 		t.Fatal("RemoveBootstrap() = nil, want a removal that outgrew its consented plan refused")
 	}
 	if !strings.Contains(stream.Err().Error(), fake.FeatureImages) {
-		t.Errorf("the refusal reads %q, want it to name what stood up under the plan", stream.Err())
+		t.Errorf("the refusal reads %q, want it to name what the plan installed", stream.Err())
 	}
 }
 
@@ -502,19 +502,19 @@ func TestBootstrapShowsThePlanItIsAboutToApply(t *testing.T) {
 	}
 	for _, group := range plan.GetGroups() {
 		if group.GetAction() != planv1.Change_ACTION_CREATE {
-			t.Errorf("%s is %s, want it created on an account holding nothing", group.GetName(), group.GetAction())
+			t.Errorf("%s is %s, want it created on an empty account", group.GetName(), group.GetAction())
 		}
 		if len(group.GetChanges()) == 0 {
-			t.Errorf("%s carries no resource-level detail", group.GetName())
+			t.Errorf("%s has no resource-level detail", group.GetName())
 		}
 	}
 	if len(provider.FakeBootstrap().Applied()) != 1 {
-		t.Errorf("the bootstrap was applied %d times, want the one this stream carried out",
+		t.Errorf("the bootstrap was applied %d times, want the one this stream ran",
 			len(provider.FakeBootstrap().Applied()))
 	}
 }
 
-func TestADryBootstrapDrawsThePlanAndStandsNothingUp(t *testing.T) {
+func TestADryBootstrapDrawsThePlanAndProvisionsNothing(t *testing.T) {
 	t.Parallel()
 
 	client, provider := contractServed(t, "1.2.3")
@@ -784,7 +784,7 @@ func TestPlanRemoveBootstrapPlansTheEdgeItWasAsked(t *testing.T) {
 	}
 }
 
-func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenMoreThanOneEdgeStands(t *testing.T) {
+func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenMoreThanOneEdgeIsRaised(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -797,18 +797,18 @@ func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenMoreThanOneEdgeStands(t *testi
 		t.Fatalf("PlanRemoveBootstrap() error = %v", err)
 	}
 	if plan.GetEdgeKind() != "" {
-		t.Errorf("PlanRemoveBootstrap() says this account is fronted by the %q edge, want no single edge named where two stand", plan.GetEdgeKind())
+		t.Errorf("PlanRemoveBootstrap() says this account is fronted by the %q edge, want no single edge named where two are raised", plan.GetEdgeKind())
 	}
 	for _, kind := range []edge.Kind{fake.KindRelay, fake.KindDirect} {
 		if !slices.ContainsFunc(plan.GetGroups(), func(g *planv1.ChangeGroup) bool {
 			return g.GetName() == string(kind)+"/edge"
 		}) {
-			t.Errorf("plan groups = %+v, want a group named for the %q edge that stands", plan.GetGroups(), kind)
+			t.Errorf("plan groups = %+v, want a group named for the %q edge that is raised", plan.GetGroups(), kind)
 		}
 	}
 }
 
-func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenNoEdgeStands(t *testing.T) {
+func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenNoEdgeIsRaised(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -821,11 +821,11 @@ func TestPlanRemoveBootstrapDropsTheEdgePhraseWhenNoEdgeStands(t *testing.T) {
 		t.Fatalf("PlanRemoveBootstrap() error = %v", err)
 	}
 	if plan.GetEdgeKind() != "" {
-		t.Errorf("PlanRemoveBootstrap() says this account is fronted by the %q edge, want none named where none stands", plan.GetEdgeKind())
+		t.Errorf("PlanRemoveBootstrap() says this account is fronted by the %q edge, want none named where none is raised", plan.GetEdgeKind())
 	}
 }
 
-func TestBootstrapStandsUpTheEdgeTheProjectSelected(t *testing.T) {
+func TestBootstrapRaisesTheEdgeTheProjectSelected(t *testing.T) {
 	t.Parallel()
 
 	client, provider := contractServed(t, "1.2.3")
@@ -835,7 +835,7 @@ func TestBootstrapStandsUpTheEdgeTheProjectSelected(t *testing.T) {
 		Edge: &contractv1.EdgeSelection{Kind: string(fake.KindDirect)},
 	})
 	if fronting := provider.FakeBootstrap().DefaultEdge(); fronting != fake.KindDirect {
-		t.Errorf("Bootstrap() stood up the %q edge, want the %q this project selected", fronting, fake.KindDirect)
+		t.Errorf("Bootstrap() raised the %q edge, want the %q this project selected", fronting, fake.KindDirect)
 	}
 
 	plan := streamedPlan(t, client, &contractv1.BootstrapRequest{

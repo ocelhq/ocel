@@ -47,7 +47,7 @@ func computesDeclared(t *testing.T, suite Suite) []provider.Compute {
 	t.Helper()
 
 	if suite.Server.New == nil {
-		t.Fatal("the suite carries no Spec.New, so nothing can read Computes() back off the provider the wire is serving")
+		t.Fatal("the suite has no Spec.New, so nothing can read Computes() back off the provider the wire is serving")
 	}
 	p, err := suite.Server.New(context.Background(), provider.Settings{Options: suite.Options})
 	if err != nil {

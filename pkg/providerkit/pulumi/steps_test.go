@@ -23,7 +23,7 @@ func mutating(op apitype.OpType, kind, name string) events.EngineEvent {
 	return events.EngineEvent{ResourcePreEvent: &apitype.ResourcePreEvent{Metadata: step(op, kind, name)}}
 }
 
-func settled(op apitype.OpType, kind, name string) events.EngineEvent {
+func outputs(op apitype.OpType, kind, name string) events.EngineEvent {
 	return events.EngineEvent{ResOutputsEvent: &apitype.ResOutputsEvent{Metadata: step(op, kind, name)}}
 }
 
@@ -38,7 +38,7 @@ func rowsOf(t *testing.T, stream ...events.EngineEvent) []provider.Change {
 	close(engineEvents)
 	rows, err := awaitRows(drained, time.Second)
 	if err != nil {
-		t.Fatalf("awaitRows() = %v, want the rows the stream carried", err)
+		t.Fatalf("awaitRows() = %v, want the rows the stream sent", err)
 	}
 	return rows
 }
@@ -52,8 +52,8 @@ func TestEveryStepTheEngineShowsBecomesAPlanRow(t *testing.T) {
 		mutating(apitype.OpUpdate, "aws:s3/bucket:Bucket", "uploads"),
 		mutating(apitype.OpDelete, "aws:s3/bucket:Bucket", "exports"),
 		mutating(apitype.OpReplace, "aws:rds/instance:Instance", "reporting"),
-		settled(apitype.OpSame, "aws:iam/role:Role", "app"),
-		settled(apitype.OpSame, stackResourceType, "ocel-shop-prod"),
+		outputs(apitype.OpSame, "aws:iam/role:Role", "app"),
+		outputs(apitype.OpSame, stackResourceType, "ocel-shop-prod"),
 	) {
 		rows[change.Name] = change.Action
 	}
@@ -69,7 +69,7 @@ func TestEveryStepTheEngineShowsBecomesAPlanRow(t *testing.T) {
 			t.Errorf("%s reads %q, want %q", name, rows[name], action)
 		}
 	}
-	if _, carried := rows["ocel-shop-prod"]; carried {
+	if _, listed := rows["ocel-shop-prod"]; listed {
 		t.Error("the stack resource itself is a plan row, and nothing in the customer's account answers to it")
 	}
 }
@@ -77,14 +77,14 @@ func TestEveryStepTheEngineShowsBecomesAPlanRow(t *testing.T) {
 func TestAKeepRowComesFromTheEngineOutputsEventAndNowhereElse(t *testing.T) {
 	t.Parallel()
 
-	rows := rowsOf(t, settled(apitype.OpSame, "aws:iam/role:Role", "app"))
+	rows := rowsOf(t, outputs(apitype.OpSame, "aws:iam/role:Role", "app"))
 	if len(rows) != 1 || rows[0].Action != provider.ActionKeep || rows[0].Name != "app" {
-		t.Fatalf("a stream carrying only an outputs event for a standing resource read as %+v, want one keep row for app", rows)
+		t.Fatalf("a stream with only an outputs event for an unchanged resource read as %+v, want one keep row for app", rows)
 	}
 
 	silent := rowsOf(t, mutating(apitype.OpSame, "aws:iam/role:Role", "app"))
 	if len(silent) != 0 {
-		t.Errorf("a pre-event for a standing resource read as %+v, want nothing: a keep is what the engine's outputs say stood", silent)
+		t.Errorf("a pre-event for an unchanged resource read as %+v, want nothing: a keep is what the engine's outputs say is unchanged", silent)
 	}
 }
 
@@ -92,11 +92,11 @@ func TestTheSameResourceIsOneRowHoweverManyOutputsEventsItSends(t *testing.T) {
 	t.Parallel()
 
 	rows := rowsOf(t,
-		settled(apitype.OpSame, "aws:iam/role:Role", "app"),
-		settled(apitype.OpSame, "aws:iam/role:Role", "app"),
+		outputs(apitype.OpSame, "aws:iam/role:Role", "app"),
+		outputs(apitype.OpSame, "aws:iam/role:Role", "app"),
 	)
 	if len(rows) != 1 {
-		t.Errorf("two outputs events for one standing resource read as %+v, want one row", rows)
+		t.Errorf("two outputs events for one unchanged resource read as %+v, want one row", rows)
 	}
 }
 
@@ -105,9 +105,9 @@ func TestRowsReadInOneOrderWhateverOrderTheEngineSendsThem(t *testing.T) {
 
 	stream := []events.EngineEvent{
 		mutating(apitype.OpCreate, "aws:s3/bucket:Bucket", "uploads"),
-		settled(apitype.OpSame, "aws:iam/role:Role", "app"),
+		outputs(apitype.OpSame, "aws:iam/role:Role", "app"),
 		mutating(apitype.OpCreate, "aws:lambda/function:Function", "web"),
-		settled(apitype.OpSame, "aws:s3/object:Object", "artifact"),
+		outputs(apitype.OpSame, "aws:s3/object:Object", "artifact"),
 	}
 	want := rowsOf(t, stream...)
 	if len(want) != 4 {

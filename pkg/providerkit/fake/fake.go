@@ -13,15 +13,15 @@ import (
 const Vendor provider.Vendor = "fake"
 
 type Provider struct {
-	mu          sync.Mutex
-	pins        map[string]string
-	certRefusal error
-	issue       []edge.Record
-	discarded   []string
-	discardHeld error
-	rotation    int
-	pending     error
-	health      *provider.CertificateHealth
+	mu                    sync.Mutex
+	pins                  map[string]string
+	certRefusal           error
+	issue                 []edge.Record
+	discarded             []string
+	servingDiscardRefusal error
+	rotation              int
+	pending               error
+	health                *provider.CertificateHealth
 
 	preflightRefusal error
 	preflighted      []provider.DeployPreflight

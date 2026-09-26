@@ -35,11 +35,11 @@ func TestADigestTagTheRegistryAnswersForIsAlreadyThere(t *testing.T) {
 		asked = r.Method + " " + r.URL.Path
 	})
 
-	held, err := store.Has(context.Background(), push)
+	present, err := store.Has(context.Background(), push)
 	if err != nil {
 		t.Fatalf("Has() = %v", err)
 	}
-	if !held {
+	if !present {
 		t.Error("Has() said no for a manifest the registry answers for, so the deploy would push what is already there")
 	}
 	if asked != "HEAD /v2/acme/web/manifests/sha256-abc" {
@@ -47,17 +47,17 @@ func TestADigestTagTheRegistryAnswersForIsAlreadyThere(t *testing.T) {
 	}
 }
 
-func TestADigestTagTheRegistryDoesNotHoldIsPushed(t *testing.T) {
+func TestADigestTagTheRegistryDoesNotHaveIsPushed(t *testing.T) {
 	store, push := registryServing(t, func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "manifest unknown", http.StatusNotFound)
 	})
 
-	held, err := store.Has(context.Background(), push)
+	present, err := store.Has(context.Background(), push)
 	if err != nil {
 		t.Fatalf("Has() = %v", err)
 	}
-	if held {
-		t.Error("Has() said yes for a manifest the registry does not hold")
+	if present {
+		t.Error("Has() said yes for a manifest the registry does not have")
 	}
 }
 
@@ -78,11 +78,11 @@ func TestABearerChallengeIsAnsweredWithATokenBoughtWithTheRegistryPassword(t *te
 		}
 	})
 
-	held, err := store.Has(context.Background(), push)
+	present, err := store.Has(context.Background(), push)
 	if err != nil {
 		t.Fatalf("Has() = %v", err)
 	}
-	if !held {
+	if !present {
 		t.Error("Has() gave up on a challenge it was handed a token for")
 	}
 	if !strings.HasPrefix(bought, "acme-bot:hunter2?") || !strings.Contains(bought, "scope=repository%3Aacme%2Fweb%3Apull") {
@@ -105,11 +105,11 @@ func TestABasicChallengeIsAnsweredWithTheRegistryPassword(t *testing.T) {
 		presented = user + ":" + password
 	})
 
-	held, err := store.Has(context.Background(), push)
+	present, err := store.Has(context.Background(), push)
 	if err != nil {
 		t.Fatalf("Has() = %v", err)
 	}
-	if !held || presented != "acme-bot:hunter2" {
+	if !present || presented != "acme-bot:hunter2" {
 		t.Errorf("Has() authenticated as %q, want the deploy's own credentials", presented)
 	}
 }
@@ -135,12 +135,12 @@ func TestAThrottledRegistryIsWaitedOutRatherThanTreatedAsEmpty(t *testing.T) {
 		}
 	})
 
-	held, err := store.Has(context.Background(), push)
+	present, err := store.Has(context.Background(), push)
 	if err != nil {
 		t.Fatalf("Has() = %v", err)
 	}
-	if !held || asked != 2 {
-		t.Errorf("Has() asked %d times and answered %v; a throttle is an expected answer, not a missing image", asked, held)
+	if !present || asked != 2 {
+		t.Errorf("Has() asked %d times and answered %v; a throttle is an expected answer, not a missing image", asked, present)
 	}
 }
 
@@ -149,27 +149,27 @@ func TestAManifestTheRegistryAnswersForUnderAnotherDigestIsNotThisImage(t *testi
 		w.Header().Set("Docker-Content-Digest", "sha256:someoneelses")
 	})
 
-	held, err := store.Has(context.Background(), push)
+	present, err := store.Has(context.Background(), push)
 	if err != nil {
 		t.Fatalf("Has() = %v", err)
 	}
-	if held {
-		t.Error("Has() read a tag holding a foreign digest as this image, so the release would point a container at whatever was there")
+	if present {
+		t.Error("Has() read a tag pointing at a foreign digest as this image, so the release would point a container at whatever was there")
 	}
 }
 
-func TestAWrappedPushIsHeldByItsTagAloneSinceItsDigestIsOnlyKnownAfterTheWrap(t *testing.T) {
+func TestAWrappedPushIsFoundByItsTagAloneSinceItsDigestIsOnlyKnownAfterTheWrap(t *testing.T) {
 	store, push := registryServing(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Docker-Content-Digest", "sha256:whateverthewrapproduced")
 	})
 	push.Digest = ""
 
-	held, err := store.Has(context.Background(), push)
+	present, err := store.Has(context.Background(), push)
 	if err != nil {
 		t.Fatalf("Has() = %v", err)
 	}
-	if !held {
-		t.Error("Has() read a standing wrapped tag as missing, so every deploy of an unchanged image would wrap and push it again")
+	if !present {
+		t.Error("Has() read an existing wrapped tag as missing, so every deploy of an unchanged image would wrap and push it again")
 	}
 }
 
@@ -213,7 +213,7 @@ func TestAPlainHTTPRealmIsHandedTheRegistryPasswordOnlyOnLoopback(t *testing.T) 
 	}
 }
 
-func TestAScopeCarryingACommaSurvivesTheChallenge(t *testing.T) {
+func TestAScopeContainingACommaSurvivesTheChallenge(t *testing.T) {
 	var bought string
 	store, push := registryServing(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/token" {
@@ -290,21 +290,21 @@ func TestThePushNamesTheImageRemotelyAndHandsTheDaemonTheDeploysCredentials(t *t
 	if err != nil {
 		t.Fatalf("the daemon was handed %q as its registry auth: %v", authorization, err)
 	}
-	var carried map[string]string
-	if err := json.Unmarshal(decoded, &carried); err != nil {
+	var headers map[string]string
+	if err := json.Unmarshal(decoded, &headers); err != nil {
 		t.Fatalf("the daemon was handed %q as its registry auth: %v", decoded, err)
 	}
-	if carried["username"] != "acme-bot" || carried["password"] != "hunter2" || carried["serveraddress"] != "ghcr.io" {
-		t.Errorf("the daemon was handed %v, want the deploy's own credentials for the registry it pushes to", carried)
+	if headers["username"] != "acme-bot" || headers["password"] != "hunter2" || headers["serveraddress"] != "ghcr.io" {
+		t.Errorf("the daemon was handed %v, want the deploy's own credentials for the registry it pushes to", headers)
 	}
 }
 
 func TestAnAnonymousTargetHandsTheDaemonNoCredentialsAtAll(t *testing.T) {
-	var carried string
+	var header string
 	var sent bool
 	daemonServing(t, func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/push") {
-			carried, sent = r.Header.Get("X-Registry-Auth"), r.Header.Get("X-Registry-Auth") != ""
+			header, sent = r.Header.Get("X-Registry-Auth"), r.Header.Get("X-Registry-Auth") != ""
 			w.Write([]byte(`{"status":"Pushed"}`))
 			return
 		}
@@ -316,7 +316,7 @@ func TestAnAnonymousTargetHandsTheDaemonNoCredentialsAtAll(t *testing.T) {
 		t.Fatalf("Push() = %v", err)
 	}
 	if sent {
-		t.Errorf("Push() handed the daemon %q for a registry the deploy has no credentials for", carried)
+		t.Errorf("Push() handed the daemon %q for a registry the deploy has no credentials for", header)
 	}
 }
 
@@ -372,9 +372,9 @@ func TestARegistryThatNeverAnswersStopsTheDeployRatherThanHangingIt(t *testing.T
 	store, push := registryServing(t, func(w http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
 	})
-	held := *images.RegistryTimeout
+	timeout := *images.RegistryTimeout
 	*images.RegistryTimeout = 50 * time.Millisecond
-	t.Cleanup(func() { *images.RegistryTimeout = held })
+	t.Cleanup(func() { *images.RegistryTimeout = timeout })
 
 	done := make(chan error, 1)
 	go func() {

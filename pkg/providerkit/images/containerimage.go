@@ -41,7 +41,7 @@ func WrapContainer(base v1.Image, runtime []byte) (v1.Image, error) {
 			"the image names neither an ENTRYPOINT nor a CMD, so there is nothing for the runtime to run in front of: give it one")
 	}
 	if len(runtime) == 0 {
-		return nil, refusal.Refuse(refusal.CodeNotReady, "this provider carries no runtime built for %s", file.Architecture)
+		return nil, refusal.Refuse(refusal.CodeNotReady, "this provider ships no runtime built for %s", file.Architecture)
 	}
 	packed, err := runtimeLayer(runtime)
 	if err != nil {

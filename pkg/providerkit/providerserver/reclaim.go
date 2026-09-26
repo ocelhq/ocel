@@ -33,19 +33,19 @@ func destroyPointerStacks(ctx context.Context, p provider.Provider, slug, pointe
 	if err != nil {
 		return err
 	}
-	standing := make([]stackrecords.NamedStack, 0, len(entries))
+	provisioned := make([]stackrecords.NamedStack, 0, len(entries))
 	for _, entry := range entries {
 		if entry.Name.Env == pointer {
-			standing = append(standing, entry)
+			provisioned = append(provisioned, entry)
 		}
 	}
-	slices.SortStableFunc(standing, func(a, b stackrecords.NamedStack) int {
+	slices.SortStableFunc(provisioned, func(a, b stackrecords.NamedStack) int {
 		return cmp.Compare(infraLast(a.Name), infraLast(b.Name))
 	})
 	elsewhere, here := releasesOf(surviving), releasesOf(servingHere)
 
 	var errs []error
-	for _, entry := range standing {
+	for _, entry := range provisioned {
 		progress.Say("Destroying " + entry.Name.String())
 		ref := provider.StackRef{Project: slug, Class: edge.ClassPreview, Name: entry.Name}
 		if err := p.Stacks().Destroy(ctx, ref, progress); err != nil {

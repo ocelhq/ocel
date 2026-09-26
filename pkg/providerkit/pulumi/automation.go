@@ -133,7 +133,7 @@ func (a *Automation) workspace(spec provider.StackSpec, op Operation) (Workspace
 			"this provider names no state passphrase, and %s's state would be written unsealed", spec.Ref.Name)
 	case a.config.Program == nil:
 		return WorkspaceSpec{}, refusal.Refuse(refusal.CodeNotReady,
-			"this automation carries no program, so there is nothing for the engine to run over %s", spec.Ref.Name)
+			"this automation has no program, so there is nothing for the engine to run over %s", spec.Ref.Name)
 	}
 
 	project := workspace.Project{
@@ -261,8 +261,8 @@ func (a *Automation) preview(ctx context.Context, spec provider.StackSpec, op Op
 
 const stackResourceType = "pulumi:pulumi:Stack"
 
-func planRows(mutations, standing []apitype.StepEventMetadata) []provider.Change {
-	rows := make(map[string]provider.Change, len(mutations)+len(standing))
+func planRows(mutations, unchanged []apitype.StepEventMetadata) []provider.Change {
+	rows := make(map[string]provider.Change, len(mutations)+len(unchanged))
 	for _, step := range mutations {
 		action, mutates := plannedAction(step.Op)
 		if !mutates || step.Type == stackResourceType {
@@ -270,7 +270,7 @@ func planRows(mutations, standing []apitype.StepEventMetadata) []provider.Change
 		}
 		rows[step.URN] = row(step, action)
 	}
-	for _, step := range standing {
+	for _, step := range unchanged {
 		if step.Op != apitype.OpSame || step.Type == stackResourceType {
 			continue
 		}
@@ -392,16 +392,16 @@ func (autoEngine) Preview(ctx context.Context, setup WorkspaceSpec, op Operation
 func drainRows(engineEvents <-chan events.EngineEvent) <-chan []provider.Change {
 	drained := make(chan []provider.Change, 1)
 	go func() {
-		var mutations, standing []apitype.StepEventMetadata
+		var mutations, unchanged []apitype.StepEventMetadata
 		for ev := range engineEvents {
 			switch {
 			case ev.ResourcePreEvent != nil:
 				mutations = append(mutations, ev.ResourcePreEvent.Metadata)
 			case ev.ResOutputsEvent != nil:
-				standing = append(standing, ev.ResOutputsEvent.Metadata)
+				unchanged = append(unchanged, ev.ResOutputsEvent.Metadata)
 			}
 		}
-		drained <- planRows(mutations, standing)
+		drained <- planRows(mutations, unchanged)
 	}()
 	return drained
 }

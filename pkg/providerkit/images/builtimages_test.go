@@ -38,12 +38,12 @@ func TestTheDaemonStoreSaysSoWhenItCannotReachTheDaemon(t *testing.T) {
 	t.Setenv("DOCKER_HOST", "tcp://127.0.0.1:1")
 	push := images.Push{App: "server", ImageRef: "web-server:sha256-abc", Digest: "sha256:abc"}
 
-	held, err := images.DaemonStore().Has(context.Background(), push)
+	present, err := images.DaemonStore().Has(context.Background(), push)
 	if err == nil {
-		t.Fatalf("Has() = %v, nil against a daemon nothing answers on, want the failure surfaced: a deploy would take silence for an absent image and push over nothing", held)
+		t.Fatalf("Has() = %v, nil against a daemon nothing answers on, want the failure surfaced: a deploy would take silence for an absent image and push over nothing", present)
 	}
-	if held {
-		t.Error("Has() answered that a daemon it never reached holds the image")
+	if present {
+		t.Error("Has() answered that a daemon it never reached has the image")
 	}
 }
 
@@ -70,12 +70,12 @@ func TestABuiltImageReachesTheRegistryWithoutADaemon(t *testing.T) {
 	}
 
 	store := images.RegistryStore(target)
-	held, err := store.Has(context.Background(), push)
+	present, err := store.Has(context.Background(), push)
 	if err != nil {
 		t.Fatalf("Has() error = %v", err)
 	}
-	if held {
-		t.Fatal("the registry answered that it already holds an image nothing has pushed")
+	if present {
+		t.Fatal("the registry answered that it already has an image nothing has pushed")
 	}
 	if err := store.Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("Push() error = %v", err)
@@ -87,12 +87,12 @@ func TestABuiltImageReachesTheRegistryWithoutADaemon(t *testing.T) {
 	}
 	pulled, err := remote.Image(ref)
 	if err != nil {
-		t.Fatalf("the registry holds no image at %s after the push: %v", ref, err)
+		t.Fatalf("the registry has no image at %s after the push: %v", ref, err)
 	}
 	if got, err := pulled.Digest(); err != nil || got != digest {
-		t.Errorf("the registry holds %s at %s, want %s", got, ref, digest)
+		t.Errorf("the registry has %s at %s, want %s", got, ref, digest)
 	}
-	if held, err := store.Has(context.Background(), push); err != nil || !held {
-		t.Errorf("Has() = %v, %v after the push, want the store to say the digest is already there", held, err)
+	if present, err := store.Has(context.Background(), push); err != nil || !present {
+		t.Errorf("Has() = %v, %v after the push, want the store to say the digest is already there", present, err)
 	}
 }

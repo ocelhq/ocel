@@ -119,9 +119,9 @@ func refsName(target Scope, at Coordinate) records.Name {
 	return append(ReferencesRecordName(target), records.Escape(at.Folder), records.Escape(at.Key))
 }
 
-func refName(target Scope, at Coordinate, from Scope, holds Coordinate) records.Name {
-	holds = holds.canonical()
-	return append(refsName(target, at), from.Project, records.Escape(holds.Folder), records.Escape(holds.Key), records.Escape(holds.Environment))
+func refName(target Scope, at Coordinate, from Scope, sourceAt Coordinate) records.Name {
+	sourceAt = sourceAt.canonical()
+	return append(refsName(target, at), from.Project, records.Escape(sourceAt.Folder), records.Escape(sourceAt.Key), records.Escape(sourceAt.Environment))
 }
 
 func cellOf(name records.Name) (Coordinate, bool) {

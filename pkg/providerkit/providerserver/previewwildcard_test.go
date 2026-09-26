@@ -39,9 +39,9 @@ func usePreviewWildcard(t *testing.T, client contractv1connect.ProviderServiceCl
 	return result
 }
 
-func seedWildcard(t *testing.T, provider *fake.Provider, held stackrecords.Wildcard) {
+func seedWildcard(t *testing.T, provider *fake.Provider, wildcard stackrecords.Wildcard) {
 	t.Helper()
-	encoded, err := json.Marshal(held)
+	encoded, err := json.Marshal(wildcard)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,19 +56,19 @@ func seedWildcard(t *testing.T, provider *fake.Provider, held stackrecords.Wildc
 	}
 }
 
-func readHeldWildcard(t *testing.T, provider *fake.Provider) stackrecords.Wildcard {
+func readRecordedWildcard(t *testing.T, provider *fake.Provider) stackrecords.Wildcard {
 	t.Helper()
 	record, err := records.ReadOrEmpty(context.Background(), provider.Records(), stackrecords.WildcardRecord(edge.ClassPreview))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var held stackrecords.Wildcard
+	var wildcard stackrecords.Wildcard
 	if len(record.Bytes) > 0 {
-		if err := json.Unmarshal(record.Bytes, &held); err != nil {
+		if err := json.Unmarshal(record.Bytes, &wildcard); err != nil {
 			t.Fatal(err)
 		}
 	}
-	return held
+	return wildcard
 }
 
 func TestUsePreviewWildcardDiscardsTheCertificateItSupersedes(t *testing.T) {
@@ -82,17 +82,17 @@ func TestUsePreviewWildcardDiscardsTheCertificateItSupersedes(t *testing.T) {
 	provider.RotateCertificates()
 	provider.RequireValidationRecords(rotatedValidationRecord)
 	if result := usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com")); !result.GetSuccess() {
-		t.Fatalf("UsePreviewWildcard() = %q, want the rotation settled", result.GetError())
+		t.Fatalf("UsePreviewWildcard() = %q, want the rotation cut over", result.GetError())
 	}
 
 	if discarded := provider.Discarded(); !slices.Contains(discarded, "issued-for-*.preview.acme.com") {
 		t.Errorf("the provider discarded %v, want the superseded certificate among them", discarded)
 	}
-	if held := readHeldWildcard(t, provider); len(held.Host.Superseded) != 0 {
-		t.Errorf("the record still carries %+v, want the discarded certificate forgotten", held.Host.Superseded)
+	if wildcard := readRecordedWildcard(t, provider); len(wildcard.Host.Superseded) != 0 {
+		t.Errorf("the record still has %+v, want the discarded certificate forgotten", wildcard.Host.Superseded)
 	}
 	if records := provider.DNS().(*fake.DNS).Zone("acme.com").Records(); slices.Contains(records, validationRecord) {
-		t.Errorf("the zone still holds %v, want the superseded validation record released", records)
+		t.Errorf("the zone still contains %v, want the superseded validation record released", records)
 	}
 }
 
@@ -105,7 +105,7 @@ func TestUsePreviewWildcardRaisesTheEntryAndRecordsItsOwningEdge(t *testing.T) {
 	}
 
 	if raised := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Wildcard(); raised != "preview.acme.com" {
-		t.Errorf("the %s edge holds %q, want preview.acme.com reconciled on it", fake.KindRelay, raised)
+		t.Errorf("the %s edge serves %q, want preview.acme.com reconciled on it", fake.KindRelay, raised)
 	}
 	got, err := client.GetPreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
 		Tier: environmentv1.Tier_TIER_PREVIEW,
@@ -113,18 +113,18 @@ func TestUsePreviewWildcardRaisesTheEntryAndRecordsItsOwningEdge(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetPreviewWildcard() error = %v", err)
 	}
-	held := got.GetWildcard()
-	if held.GetBaseDomain() != "preview.acme.com" {
-		t.Fatalf("GetPreviewWildcard() = %+v, want the recorded base domain", held)
+	wildcard := got.GetWildcard()
+	if wildcard.GetBaseDomain() != "preview.acme.com" {
+		t.Fatalf("GetPreviewWildcard() = %+v, want the recorded base domain", wildcard)
 	}
-	if !held.GetRouteInstalled() {
+	if !wildcard.GetRouteInstalled() {
 		t.Error("GetPreviewWildcard() says the shared entry route is not installed, though the edge owns it")
 	}
-	if held.GetGrammarMin() != edge.PreviewGrammarMin || held.GetGrammarMax() != edge.PreviewGrammarMax {
+	if wildcard.GetGrammarMin() != edge.PreviewGrammarMin || wildcard.GetGrammarMax() != edge.PreviewGrammarMax {
 		t.Errorf("grammar = %d..%d, want the contract's %d..%d",
-			held.GetGrammarMin(), held.GetGrammarMax(), edge.PreviewGrammarMin, edge.PreviewGrammarMax)
+			wildcard.GetGrammarMin(), wildcard.GetGrammarMax(), edge.PreviewGrammarMin, edge.PreviewGrammarMax)
 	}
-	if len(held.GetCertificate().GetRecordsWritten()) == 0 {
+	if len(wildcard.GetCertificate().GetRecordsWritten()) == 0 {
 		t.Error("the wildcard names no written record, though a zone was selected")
 	}
 }
@@ -231,7 +231,7 @@ func TestPlanRemovePreviewWildcardNamesWhatGoesAndWhatStays(t *testing.T) {
 		t.Fatalf("PlanRemovePreviewWildcard() error = %v", err)
 	}
 	if plan.GetSubject() != "preview.acme.com" || plan.GetEdgeKind() != string(fake.KindRelay) {
-		t.Errorf("PlanRemovePreviewWildcard() = %+v, want it addressed to the recorded holder", plan)
+		t.Errorf("PlanRemovePreviewWildcard() = %+v, want it addressed to the recorded owning edge", plan)
 	}
 	var deletes, keeps int
 	for _, item := range plan.GetGroups() {
@@ -243,7 +243,7 @@ func TestPlanRemovePreviewWildcardNamesWhatGoesAndWhatStays(t *testing.T) {
 		}
 	}
 	if deletes == 0 || keeps == 0 {
-		t.Errorf("the plan removes %d and keeps %d, want it to name both the entry it deletes and what it leaves standing", deletes, keeps)
+		t.Errorf("the plan removes %d and keeps %d, want it to name both the entry it deletes and what it leaves in place", deletes, keeps)
 	}
 }
 
@@ -268,10 +268,10 @@ func TestRemovePreviewWildcardTearsItDownAndForgetsIt(t *testing.T) {
 	}
 
 	if raised := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Wildcard(); raised != "" {
-		t.Errorf("the %s edge still holds %q", fake.KindRelay, raised)
+		t.Errorf("the %s edge still serves %q", fake.KindRelay, raised)
 	}
 	if written := provider.DNS().(*fake.DNS).Zone("acme.com").Records(); len(written) != 0 {
-		t.Errorf("the zone still holds %v, want the records ocel wrote taken back", written)
+		t.Errorf("the zone still contains %v, want the records ocel wrote taken back", written)
 	}
 	got, err := client.GetPreviewWildcard(context.Background(), &contractv1.PreviewWildcardRequest{
 		Tier: environmentv1.Tier_TIER_PREVIEW,
@@ -284,12 +284,12 @@ func TestRemovePreviewWildcardTearsItDownAndForgetsIt(t *testing.T) {
 	}
 }
 
-func TestRemovePreviewWildcardOpensItsDNSForTheEdgeThatHoldsIt(t *testing.T) {
+func TestRemovePreviewWildcardOpensItsDNSForTheEdgeThatOwnsIt(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	held := zoned("acme.com")
-	held.Kind = string(fake.KindDirect)
-	if result := usePreviewWildcard(t, client, "preview.acme.com", held); !result.GetSuccess() {
+	selection := zoned("acme.com")
+	selection.Kind = string(fake.KindDirect)
+	if result := usePreviewWildcard(t, client, "preview.acme.com", selection); !result.GetSuccess() {
 		t.Fatalf("UsePreviewWildcard() = %q", result.GetError())
 	}
 	opened := len(provider.DNS().(*fake.DNS).Fronts())
@@ -306,7 +306,7 @@ func TestRemovePreviewWildcardOpensItsDNSForTheEdgeThatHoldsIt(t *testing.T) {
 	}
 	fronts := provider.DNS().(*fake.DNS).Fronts()[opened:]
 	if !slices.Equal(fronts, []edge.Kind{fake.KindDirect}) {
-		t.Errorf("the release opened its DNS under %v, want the %s edge that holds the wildcard", fronts, fake.KindDirect)
+		t.Errorf("the release opened its DNS under %v, want the %s edge that owns the wildcard", fronts, fake.KindDirect)
 	}
 }
 
@@ -331,7 +331,7 @@ func TestRemovePreviewWildcardRefusesWhenNothingRecordsItsOwningEdge(t *testing.
 	}
 }
 
-func TestThePreviewWildcardCarriesWhoRenewsItAndWhenItExpires(t *testing.T) {
+func TestThePreviewWildcardNamesWhoRenewsItAndWhenItExpires(t *testing.T) {
 	t.Parallel()
 	client, p := contractServed(t, "1.0.0")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
@@ -367,18 +367,18 @@ func TestThePreviewWildcardCarriesWhoRenewsItAndWhenItExpires(t *testing.T) {
 	assertWildcardRenewal(t, "Preflight()", resp.GetPreviewWildcard(), expiry)
 }
 
-func assertWildcardRenewal(t *testing.T, what string, held *contractv1.PreviewWildcard, expiry int64) {
+func assertWildcardRenewal(t *testing.T, what string, wildcard *contractv1.PreviewWildcard, expiry int64) {
 	t.Helper()
-	if held.GetBaseDomain() != "preview.acme.com" {
-		t.Fatalf("%s wildcard = %+v, want the seeded base domain", what, held)
+	if wildcard.GetBaseDomain() != "preview.acme.com" {
+		t.Fatalf("%s wildcard = %+v, want the seeded base domain", what, wildcard)
 	}
-	if held.GetRenewalStatus() == "" {
+	if wildcard.GetRenewalStatus() == "" {
 		t.Errorf("%s says nothing about who renews the wildcard, and a pinned pair is the one certificate nothing on the box renews", what)
 	}
-	if held.GetExpiresAt() != expiry {
-		t.Errorf("%s expires at %d, want %d", what, held.GetExpiresAt(), expiry)
+	if wildcard.GetExpiresAt() != expiry {
+		t.Errorf("%s expires at %d, want %d", what, wildcard.GetExpiresAt(), expiry)
 	}
-	if !held.GetExpiringSoon() {
+	if !wildcard.GetExpiringSoon() {
 		t.Errorf("%s does not call a wildcard nine days out expiring soon", what)
 	}
 }

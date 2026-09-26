@@ -47,8 +47,8 @@ type taken struct {
 func (k *taken) take(name, by string) error {
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	if holder, held := k.by[name]; held && holder != by {
-		return fmt.Errorf("%s already took %q on the store this run shares, and a test that reads what another wrote proves nothing about its own", holder, name)
+	if owner, taken := k.by[name]; taken && owner != by {
+		return fmt.Errorf("%s already took %q on the store this run shares, and a test that reads what another wrote proves nothing about its own", owner, name)
 	}
 	k.by[name] = by
 	return nil

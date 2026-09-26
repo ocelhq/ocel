@@ -28,7 +28,7 @@ func buildDeploySpec(req *contractv1.DeployRequest, promotionID string) (provide
 	}
 	slug := manifest.GetSlug()
 	if slug == "" {
-		return provider.DeploySpec{}, refusal.Refuse(refusal.CodeInvalid, "this manifest names no project, and every stack a deploy stands up belongs to one")
+		return provider.DeploySpec{}, refusal.Refuse(refusal.CodeInvalid, "this manifest names no project, and every stack a deploy provisions belongs to one")
 	}
 
 	spec := provider.DeploySpec{
@@ -89,14 +89,14 @@ func appContainers(manifest *contractv1.Manifest) (map[string]*contractv1.Manife
 		}
 		if _, twice := containers[app]; twice {
 			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"app %q carries two containers, and an app is served by one process", app)
+				"app %q declares two containers, and an app is served by one process", app)
 		}
 		containers[app] = container
 	}
 	for app, kind := range compute {
 		if kind == string(provider.ComputeContainer) && containers[app].GetImage() == "" {
 			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"app %q runs on container compute and this manifest carries no image for it", app)
+				"app %q runs on container compute and this manifest names no image for it", app)
 		}
 	}
 	for _, fn := range manifest.GetFunctions() {
@@ -127,7 +127,7 @@ func refuseOrphanFunctions(manifest *contractv1.Manifest, declared map[string]st
 func appEntry(app *contractv1.ManifestApp, env string) (provider.AppEntry, error) {
 	name := app.GetName()
 	if name == "" {
-		return provider.AppEntry{}, refusal.Refuse(refusal.CodeInvalid, "this manifest carries an app with no name, and a stack is named after the app it serves")
+		return provider.AppEntry{}, refusal.Refuse(refusal.CodeInvalid, "this manifest declares an app with no name, and a stack is named after the app it serves")
 	}
 	if name == naming.InfraApp {
 		return provider.AppEntry{}, refusal.Refuse(refusal.CodeInvalid,
