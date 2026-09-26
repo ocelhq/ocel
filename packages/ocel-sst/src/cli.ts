@@ -33,7 +33,7 @@ export function runBindings(args: string[], target: Target, input?: string): voi
 export function checkTarget(target: Target): void {
   if (!target.project) {
     throw new Error(
-      "an ocel project is required: it is the directory holding ocel.json, whose apps consume this binding, and it is never read from an SST stage or stack name",
+      "an ocel project is required: it is the directory containing ocel.json, whose apps consume this binding, and it is never read from an SST stage or stack name",
     );
   }
   if (target.class !== "production" && target.class !== "preview") {

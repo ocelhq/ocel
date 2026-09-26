@@ -152,7 +152,7 @@ type OwnedNames<L> = L extends readonly (infer F)[] ? Extract<F, string> : never
 
 /**
  * What a rule may patch under `aws`, typed from the args pulumi-aws takes with
- * the fields ocel owns removed. A binding output stands in for any leaf.
+ * the fields ocel owns removed. A binding output can take the place of any leaf.
  */
 export type AwsSurfaces = {
   [T in AwsResourceType]: {

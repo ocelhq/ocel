@@ -29,7 +29,7 @@ export interface DescribedPostgresResource {
   grants?: Grant[];
 }
 
-/** Where a binding lands: an ocel class, one preview environment, and the project holding both. */
+/** Where a binding lands: an ocel class, one preview environment, and the project containing both. */
 export interface BindOptions {
   class?: "production" | "preview";
   environment?: string;
@@ -124,7 +124,7 @@ export const customProvider = bindingProvider<CustomInputs>(
  * `"bindings": { "postgres": { "orders": "@sst-pg-orders" } }` in `ocel.json` —
  * and the resource is either an SST component, whose own binding description is
  * passed through, or the postgres fields written out by hand. `class` defaults to production, `environment` names one preview
- * environment, and `project` is the directory holding `ocel.json`, which is
+ * environment, and `project` is the directory containing `ocel.json`, which is
  * the SST config root unless it is given.
  */
 export function postgres(
@@ -153,20 +153,20 @@ export function postgres(
  * A record only transforms read: the properties written out by hand, under a
  * name a transform names.
  *
- * Ocel neither types nor interprets what a custom binding carries — it hands the
+ * Ocel neither types nor interprets what a custom binding contains — it hands the
  * values to a transform that fills a surface field with them, so nothing is
  * delivered to an app and no grants are accepted.
  */
 export type CustomProperties = Record<string, Input<unknown>>;
 
 /**
- * Publishes one set of values your own infrastructure holds as one ocel custom
+ * Publishes one set of values from your own infrastructure as one ocel custom
  * binding, as a side effect of this apply.
  *
  * The name is the one a transform reads — `bind.custom("network", …)` here,
  * `bindings.custom.network.subnetIds` in a transform module. `class` defaults to
  * production, `environment` names one preview environment, and `project` is the
- * directory holding `ocel.json`, which is the SST config root unless it is
+ * directory containing `ocel.json`, which is the SST config root unless it is
  * given.
  */
 export function custom(name: string, properties: CustomProperties, opts?: BindOptions): void {
@@ -255,7 +255,7 @@ function configRoot(): string {
   const root = cli?.paths?.root;
   if (!root) {
     throw new Error(
-      "@ocel/sst publishes into the ocel project holding ocel.json, and SST named no config root here; pass `project` to say which directory holds it",
+      "@ocel/sst publishes into the ocel project containing ocel.json, and SST named no config root here; pass `project` to say which directory contains it",
     );
   }
   return root;

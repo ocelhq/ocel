@@ -26,7 +26,7 @@ export interface DescribedPostgresResource {
  * A record only transforms read: the properties written out by hand, under a
  * name a transform names.
  *
- * Ocel neither types nor interprets what a custom binding carries — it hands the
+ * Ocel neither types nor interprets what a custom binding contains — it hands the
  * values to a transform that fills a surface field with them, so nothing is
  * delivered to an app and no grants are accepted.
  */
@@ -34,7 +34,7 @@ export type CustomProperties = Record<string, Input<unknown>>;
 
 /**
  * Where a binding lands: an ocel class, one preview environment, the project
- * holding both, and the Pulumi resource this one hangs under.
+ * containing both, and the Pulumi resource this one hangs under.
  */
 export interface BindOptions {
   class?: "production" | "preview";
@@ -132,7 +132,7 @@ export const customProvider = bindingProvider<CustomInputs>(
  * — and the resource is the postgres fields read off whatever provisioned it,
  * each of them an output this update resolves.
  * `class` defaults to production, `environment` names one preview environment,
- * and `project` is the directory holding `ocel.json`, which is the
+ * and `project` is the directory containing `ocel.json`, which is the
  * directory Pulumi runs the program from unless it is given.
  */
 export function postgres(
@@ -144,13 +144,13 @@ export function postgres(
 }
 
 /**
- * Publishes one set of values your own infrastructure holds as one ocel custom
+ * Publishes one set of values from your own infrastructure as one ocel custom
  * binding, as a side effect of this update.
  *
  * The name is the one a transform reads — `bind.custom("network", …)` here,
  * `bindings.custom.network.subnetIds` in a transform module. `class` defaults to
  * production, `environment` names one preview environment, and `project` is the
- * directory holding `ocel.json`, which is the directory Pulumi runs the
+ * directory containing `ocel.json`, which is the directory Pulumi runs the
  * program from unless it is given.
  */
 export function custom(name: string, properties: CustomProperties, opts?: BindOptions): void {

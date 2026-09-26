@@ -70,7 +70,7 @@ describe("the record a postgres binding publishes as", () => {
 
   it("refuses a resource missing a field an app resolving it reads", () => {
     const { password, ...rest } = fixture.postgres;
-    expect(() => postgresBinding("orders", { properties: rest })).toThrow(/carries no password/);
+    expect(() => postgresBinding("orders", { properties: rest })).toThrow(/has no password/);
   });
 
   it("refuses a port that is not a whole number", () => {

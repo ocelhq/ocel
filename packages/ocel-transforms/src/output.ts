@@ -14,7 +14,7 @@ declare const resolvedValue: unique symbol;
  * A value the deploy reads from a record your own infrastructure published, in
  * place of one a transform module could write down. It is resolved provider-side
  * against the records published to the environment being deployed, so a module
- * never holds the value itself.
+ * never contains the value itself.
  */
 export interface BindingOutput<T = unknown> {
   readonly [outputPlaceholderKey]: BindingOutputRef;
@@ -24,7 +24,7 @@ export interface BindingOutput<T = unknown> {
 /** A leaf a transform may fill with either an authored value or a binding output. */
 export type Linked<T> = T | BindingOutput<T>;
 
-/** The properties one record carries, each read as a binding output. */
+/** The properties one record has, each read as a binding output. */
 export type BindingProperties = { readonly [property: string]: BindingOutput<any> };
 
 /** The records of one resource type, addressed by the name the config keys them under. */
@@ -57,7 +57,7 @@ export function isBindingOutput(value: unknown): value is BindingOutput {
 /**
  * The records a transform module reads, one placeholder per property named.
  * Nothing is resolved here: `bindings.postgres.orders.host` is the instruction
- * the deploy carries out against the records published to the environment it
+ * the deploy applies against the records published to the environment it
  * targets, and `bindings.custom.network.subnetIds` reads a record nothing
  * declared.
  */
@@ -100,7 +100,7 @@ function placeholder(type: string, name: string, property: string): BindingOutpu
   }
   if (property === "") {
     throw new Error(
-      `a binding output of ${type}.${name} names no property — name the property that record carries`,
+      `a binding output of ${type}.${name} names no property — name the property that record has`,
     );
   }
   return Object.freeze({

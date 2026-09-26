@@ -67,7 +67,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-function settled(value: unknown): Promise<unknown> {
+function unwrap(value: unknown): Promise<unknown> {
   return new Promise((resolve) => {
     output(value).apply(resolve);
   });
@@ -76,7 +76,7 @@ function settled(value: unknown): Promise<unknown> {
 async function inputs(one: Built) {
   const resolved: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(one.props)) {
-    resolved[key] = await settled(value);
+    resolved[key] = await unwrap(value);
   }
   return resolved as never;
 }
@@ -140,7 +140,7 @@ describe("declaring a postgres binding", () => {
     expect(() => declare({ class: "preview", environment: "*" })).toThrow(/reserved/);
   });
 
-  it("keeps only the fields a postgres binding carries", async () => {
+  it("keeps only the fields a postgres binding contains", async () => {
     postgres("orders", { ...properties, extra: "dropped" } as never, {
       project: root,
     });
@@ -179,7 +179,7 @@ describe("publishing a postgres binding", () => {
     expect(argv().args.slice(-1)).toEqual(["--preview"]);
   });
 
-  it("holds a digest and never a property", async () => {
+  it("outputs a digest and never a property", async () => {
     const created = await postgresProvider.create(await inputs(declare()));
 
     expect(created.outs.digest).toMatch(/^[0-9a-f]{64}$/);
@@ -250,7 +250,7 @@ describe("changing a published postgres binding", () => {
     });
   });
 
-  it("holds still when nothing changed", async () => {
+  it("reports no change when nothing changed", async () => {
     const olds = (await postgresProvider.create(await inputs(declare()))).outs;
 
     expect(await postgresProvider.diff("id", olds, await inputs(declare()))).toMatchObject({
@@ -326,7 +326,7 @@ describe("declaring a custom binding", () => {
     });
   });
 
-  it("holds still when nothing changed", async () => {
+  it("reports no change when nothing changed", async () => {
     const olds = (await customProvider.create(await inputs(declareCustom()))).outs;
 
     expect(await customProvider.diff("id", olds, await inputs(declareCustom()))).toMatchObject({

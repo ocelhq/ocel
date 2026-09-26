@@ -31,7 +31,7 @@ export const misspelled = defineTransform({
     function: {
       lambda: {
         vpcConfig: {
-          // @ts-expect-error the record carries subnetIds, not subnetId
+          // @ts-expect-error the record has subnetIds, not subnetId
           subnetIds: bindings.custom.network.subnetId,
         },
       },

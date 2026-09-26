@@ -19,4 +19,4 @@ curl -fsSL https://ocel.dev/install.sh | sh
 brew install --cask ocelhq/tap/ocel
 ```
 
-The `ocel` package is the SDK your app imports; it no longer carries the binary.
+The `ocel` package is the SDK your app imports; it no longer includes the binary.

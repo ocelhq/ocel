@@ -110,7 +110,7 @@ describe("evaluate", () => {
     },
   );
 
-  it("carries a patch for every resource the aws provider constructs", () => {
+  it("returns a patch for every resource the aws provider constructs", () => {
     const modules = [
       module(
         "./everything.transform.ts",
@@ -202,7 +202,7 @@ describe("evaluate", () => {
     expect(seen).toEqual(["preview", "pr-12"]);
   });
 
-  it("unions the tags a rule carries and refuses ocel's own prefix", () => {
+  it("unions the tags a rule sets and refuses ocel's own prefix", () => {
     const kept = [
       module("./tags.transform.ts", defineTransform({ tags: { team: "core" }, aws: {} })),
     ];

@@ -25,12 +25,12 @@ export function scoped(name: string, grants: Grant[] | undefined): Grant[] | und
   for (const grant of grants) {
     if (grant.actions.length === 0 || grant.actions.some(unscopedAction)) {
       throw new Error(
-        `binding ${name} carries a grant over ${grant.actions.join(", ") || "no action"}: an action naming a whole service reaches past the resource the binding names`,
+        `binding ${name} includes a grant over ${grant.actions.join(", ") || "no action"}: an action naming a whole service reaches past the resource the binding names`,
       );
     }
     if (grant.resources.length === 0 || grant.resources.includes(wildcard)) {
       throw new Error(
-        `binding ${name} carries a grant over ${grant.resources.join(", ") || "no resource"}: an app receives permissions for the resource it binds and nothing else`,
+        `binding ${name} includes a grant over ${grant.resources.join(", ") || "no resource"}: an app receives permissions for the resource it binds and nothing else`,
       );
     }
   }
