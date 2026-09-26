@@ -371,31 +371,3 @@ func (r *projectRemoval) forget(ctx context.Context, progress edge.Progress) err
 	}
 	return records.Forget(ctx, r.provider.Records(), stackrecords.ProjectRecord(r.class, r.slug))
 }
-
-func reclaim(
-	ctx context.Context,
-	p provider.Provider,
-	slug string,
-	class edge.Class,
-	targets []ReclaimTarget,
-	progress edge.Progress,
-) error {
-	var errs []error
-	for _, target := range targets {
-		progress.Say("Reclaiming " + target.App + " " + target.Build.String())
-		ref := provider.StackRef{Project: slug, Class: class, Name: target.Stack}
-		if err := p.Stacks().Destroy(ctx, ref, progress); err != nil {
-			errs = append(errs, fmt.Errorf("destroy %s: %w", target.Stack, err))
-			continue
-		}
-		if err := stackrecords.Forget(ctx, p.Records(), class, slug, target.Stack); err != nil {
-			errs = append(errs, err)
-		}
-		for _, prefix := range target.Prefixes {
-			if err := p.Artifacts().RemovePrefix(ctx, class, prefix, progress); err != nil {
-				errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
-			}
-		}
-	}
-	return errors.Join(errs...)
-}
