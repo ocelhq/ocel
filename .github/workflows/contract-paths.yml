@@ -37,4 +37,9 @@ jobs:
           ASSOCIATION: ${{ github.event.pull_request.author_association }}
         run: |
           gh api "repos/$REPOSITORY/pulls/$NUMBER/files" --paginate --jq '.[]' > "$RUNNER_TEMP/files"
-          node scripts/contract-paths.mjs < "$RUNNER_TEMP/files"
+          node scripts/contract-paths.mjs \
+            --repository="$REPOSITORY" \
+            --head-repository="$HEAD_REPOSITORY" \
+            --association="$ASSOCIATION" \
+            --changed-files="$CHANGED_FILES" \
+            < "$RUNNER_TEMP/files"

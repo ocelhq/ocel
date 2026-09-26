@@ -10,15 +10,14 @@ const fork = { repository: "ocelhq/ocel", headRepository: "someone/ocel" };
 const branch = { repository: "ocelhq/ocel", headRepository: "ocelhq/ocel" };
 
 function runCheck(pullRequest, files, changedFiles = files.length) {
-  return spawnSync(process.execPath, [script], {
+  const options = [
+    `--repository=${pullRequest.repository}`,
+    `--head-repository=${pullRequest.headRepository}`,
+    `--association=${pullRequest.association}`,
+    `--changed-files=${changedFiles}`,
+  ];
+  return spawnSync(process.execPath, [script, ...options], {
     input: files.map((file) => JSON.stringify(file)).join("\n"),
-    env: {
-      PATH: process.env.PATH,
-      REPOSITORY: pullRequest.repository,
-      HEAD_REPOSITORY: pullRequest.headRepository,
-      ASSOCIATION: pullRequest.association,
-      CHANGED_FILES: String(changedFiles),
-    },
   });
 }
 
