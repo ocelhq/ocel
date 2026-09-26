@@ -1,33 +1,11 @@
-## Rules
+CONTRIBUTING.md is binding for agents; read it before any change.
 
-- Never auto-add an agent or AI name as a commit co-author.
-- The code is the documentation — get context from it, and don't restate it. Prose may
-  name what a human types, never what the code contains.
-- Zero comments by default. Comment only to mark a gap — `TODO`/`FIXME` with a why.
-  Doc-comments only under the literal paths `packages/`, `sdk/`, `python/` and `crates/` — no other
-  directory qualifies, however public its surface feels. An existing comment elsewhere is debt,
-  not precedent: never match it, never extend it, delete it when touching nearby code.
-  One exception: a fixture config shows a variant that conflicts with what is live
-  as a commented-out line, with one line saying when to pick it — never more.
-- The commits are the ADRs. Rationale belongs in the commit message and PR bodies. Nowhere else.
-- Do not generate changie entries (`.changes/`) unless explicitly instructed.
-- **Clean break** — TODO(alpha): remove when the first non-alpha version ships. Nothing
-  is released, so nothing has consumers: replace old behaviour outright and delete the
-  old path in the same diff. No shims, aliases, deprecated fallbacks, or migrations for
-  unreleased state. Reviewers enforce this as the "Clean break" review rule.
-- The code is the source of truth for memory too: write nothing to agent memory.
-  Remembering is a user-initiated act — only an explicit "remember this" saves an entry.
-- **Fix what you find** — an issue discovered mid-task gets exactly one of two
-  dispositions: a fix, or a filed follow-up issue. "Out of scope" is not a disposition.
-  An issue here is observed incorrectness — a bug, broken invariant, or security gap —
-  not a style preference. Pick by measure, in order:
-  1. The issue lives in a file this task already modifies → fix it now, and add a
-     regression test.
-  2. Elsewhere, and the fix is ≤50 changed lines (insertions + deletions of the fix
-     itself, tests excluded) → fix it now, in its own commit.
-  3. Anything larger → file a GitHub issue (if none already exists) before the task ends: what you observed,
-     where (`file:line`), why it is wrong — and link it from the PR body or report.
-     A fix attempted under 1 or 2 that grows past 50 lines is reverted and filed under 3.
+@CONTRIBUTING.md
+
+## Memory
+
+The code is the source of truth for memory too: write nothing to agent memory.
+Remembering is a user-initiated act — only an explicit "remember this" saves an entry.
 
 ## About Ocel
 
@@ -156,8 +134,3 @@ The skills speak in terms of five canonical triage roles. This file maps those r
 When a skill mentions a role (e.g. "apply the AFK-ready triage label"), use the corresponding label string from this table.
 
 Edit the right-hand column to match whatever vocabulary you actually use.
-
-### Review rules
-
-`.greptile/rules.md` is the set of gates every change must pass. A rule finding is
-fixed or escalated to the human — those are the only two dispositions.
