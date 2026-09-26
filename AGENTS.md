@@ -4,8 +4,8 @@ CONTRIBUTING.md is binding for agents; read it before any change.
 
 ## Memory
 
-The code is the source of truth for memory too: write nothing to agent memory.
-Remembering is a user-initiated act — only an explicit "remember this" saves an entry.
+Write nothing to agent memory; the code is the source of truth. Only an explicit
+"remember this" from the user saves an entry.
 
 ## About Ocel
 

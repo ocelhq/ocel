@@ -12,4 +12,4 @@ Include:
 
 Redact your own secrets before you send logs.
 
-Ocel is in alpha, so fixes land in the next release only.
+Ocel is in alpha: a fix ships in the next release, and no earlier release is patched.

@@ -121,7 +121,7 @@ already change, rename it; elsewhere the ≤50-line rule applies; beyond that, f
 - The subject says what is true after the change, not what you did:
   `fix(cli): deploy reads ocel.json from the project root`.
 - The body gives the rationale. Commit messages and pull request bodies are the
-  decision records: rationale lives there and nowhere else.
+  decision records, and no file in the repository repeats their rationale.
 - Every commit builds and passes its checks.
 - No agent or AI co-author or attribution lines.
 
