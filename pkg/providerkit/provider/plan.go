@@ -89,7 +89,7 @@ func RollUp(changes []Change) (ChangeAction, string) {
 	}
 }
 
-func WithoutDetail(reason string) string {
+func WithDetailUnavailable(reason string) string {
 	if reason == "" {
 		return DetailUnavailable
 	}

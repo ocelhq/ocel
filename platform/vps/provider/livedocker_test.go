@@ -239,7 +239,7 @@ func TestLiveTheEngineIsInstalledOnConsentAndAnIdleDaemonIsOnlyStarted(t *testin
 		t.Errorf("a binary with no %s plans %q for the unit, want the install that brings one", unitName, unit.Action)
 	}
 	refusal := refused(t, bootstrap.Apply(ctx,
-		provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: shimmed.VendorState, Unattended: true}, nil),
+		provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: shimmed.VendorState, RefuseReplacements: true}, nil),
 		refusal.CodeNotReady)
 	if !strings.Contains(refusal.Message, engineName) {
 		t.Errorf("an unattended apply over a docker binary with no unit says %q, want it refused by name: nobody is there to consent to %s being run as root over an install that already stands",

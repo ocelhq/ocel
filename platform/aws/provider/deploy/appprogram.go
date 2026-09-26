@@ -341,7 +341,7 @@ func (r *release) appEnv(spec provider.StackSpec, bundle appBundle, sessions ses
 	for key, value := range app.Values.Plain {
 		env[key] = value
 	}
-	maps.Copy(env, app.Values.Injected())
+	maps.Copy(env, app.Values.PhaseEnv())
 	if app.Values.Folder != "" {
 		env[constants.AppFolderEnvName] = app.Values.Folder
 	}

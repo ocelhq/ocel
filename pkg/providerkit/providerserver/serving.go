@@ -16,7 +16,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type ServingQuery struct {
+type AppServingInput struct {
 	Root              string
 	Project           string
 	App               string
@@ -27,7 +27,7 @@ type ServingQuery struct {
 	EdgeSignsForwards bool
 }
 
-type ServingFacts struct {
+type AppServing struct {
 	Entry       string
 	Routing     *provider.RoutingSpec
 	EdgeRouting *provider.RoutingSpec
@@ -37,12 +37,12 @@ type ServingFacts struct {
 	AssetPrefix string
 }
 
-func ServingFactsFor(q ServingQuery) (ServingFacts, error) {
+func AppServingFor(q AppServingInput) (AppServing, error) {
 	desc, present, err := appbuild.ReadServeDescriptor(q.Root, q.App)
 	if err != nil {
-		return ServingFacts{}, err
+		return AppServing{}, err
 	}
-	facts := ServingFacts{
+	facts := AppServing{
 		AssetPrefix: q.Coordinate.AssetKey(""),
 		Bytecode:    &provider.BytecodeSpec{Prefix: withoutSlash(q.Coordinate.BytecodePrefix())},
 	}
@@ -57,7 +57,7 @@ func ServingFactsFor(q ServingQuery) (ServingFacts, error) {
 	}
 	routing, err := routingFor(q, desc, present)
 	if err != nil {
-		return ServingFacts{}, err
+		return AppServing{}, err
 	}
 	if q.EdgeRunsCode {
 		facts.EdgeRouting = routing
@@ -68,7 +68,7 @@ func ServingFactsFor(q ServingQuery) (ServingFacts, error) {
 	return facts, nil
 }
 
-func guardFor(q ServingQuery, desc edge.ServeDescriptor, present bool) *provider.OriginGuard {
+func guardFor(q AppServingInput, desc edge.ServeDescriptor, present bool) *provider.OriginGuard {
 	if q.EdgeRunsCode || q.EdgeSignsForwards || !present || desc.Entry == "" {
 		return nil
 	}
@@ -79,7 +79,7 @@ func anyProxied(proxied func(provider.BindingType) bool, grants []provider.Bindi
 	return slices.ContainsFunc(grants, func(binding provider.Binding) bool { return proxied(binding.Type) })
 }
 
-func routingFor(q ServingQuery, desc edge.ServeDescriptor, present bool) (*provider.RoutingSpec, error) {
+func routingFor(q AppServingInput, desc edge.ServeDescriptor, present bool) (*provider.RoutingSpec, error) {
 	if !present || !desc.EdgeRouting {
 		return nil, nil
 	}

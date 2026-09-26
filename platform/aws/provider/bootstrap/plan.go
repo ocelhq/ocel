@@ -175,7 +175,7 @@ func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, group provide
 	id, changes, err := cfn.Plan(ctx, stacks, ns.ChangeSetNameFor, group.Name, stack.body, stack.params,
 		[]cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}, tags)
 	if err != nil {
-		group.Reason = provider.WithoutDetail(group.Reason)
+		group.Reason = provider.WithDetailUnavailable(group.Reason)
 		return group
 	}
 	if id == "" {
@@ -184,7 +184,7 @@ func planUpdate(ctx context.Context, stacks cfn.API, ns Namespace, group provide
 	}
 	cfn.DiscardChangeSet(ctx, stacks, id)
 	if group.Changes = resourceChanges(changes); len(group.Changes) == 0 {
-		group.Reason = provider.WithoutDetail(group.Reason)
+		group.Reason = provider.WithDetailUnavailable(group.Reason)
 	}
 	return group
 }
@@ -193,7 +193,7 @@ func planDelete(ctx context.Context, stacks cfn.API, group provider.ChangeGroup,
 	standing, err := stackResources(ctx, stacks, group.Name)
 	if err != nil {
 		group.Changes = templateChanges(body, provider.ActionDelete)
-		group.Reason = provider.WithoutDetail(group.Reason)
+		group.Reason = provider.WithDetailUnavailable(group.Reason)
 		return group
 	}
 	group.Changes = make([]provider.Change, 0, len(standing))

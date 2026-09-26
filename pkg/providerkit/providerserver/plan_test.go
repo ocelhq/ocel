@@ -199,9 +199,9 @@ func TestAnAdoptedRowCrossesTheWireAsItself(t *testing.T) {
 			{Kind: "docker:engine", Name: "docker", Action: provider.ActionAdopt, Reason: "docker 28.3.1, not managed by ocel: upgrading it is yours"},
 		},
 	}}}
-	read, err := providerserver.PlanOf(providerserver.ChangePlanProto(shown, "production", ""))
+	read, err := providerserver.PlanFromProto(providerserver.ChangePlanProto(shown, "production", ""))
 	if err != nil {
-		t.Fatalf("PlanOf() over a plan that adopts = %v, want it read back", err)
+		t.Fatalf("PlanFromProto() over a plan that adopts = %v, want it read back", err)
 	}
 	if got := read.Groups[0].Changes[0].Action; got != provider.ActionAdopt {
 		t.Errorf("an adopted row reads back as %q, want %q", got, provider.ActionAdopt)

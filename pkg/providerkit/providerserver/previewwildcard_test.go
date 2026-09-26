@@ -96,7 +96,7 @@ func TestUsePreviewWildcardDiscardsTheCertificateItSupersedes(t *testing.T) {
 	}
 }
 
-func TestUsePreviewWildcardRaisesTheEntryAndRecordsItsHolder(t *testing.T) {
+func TestUsePreviewWildcardRaisesTheEntryAndRecordsItsOwningEdge(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 
@@ -310,7 +310,7 @@ func TestRemovePreviewWildcardOpensItsDNSForTheEdgeThatHoldsIt(t *testing.T) {
 	}
 }
 
-func TestRemovePreviewWildcardRefusesWhenNothingRecordsItsHolder(t *testing.T) {
+func TestRemovePreviewWildcardRefusesWhenNothingRecordsItsOwningEdge(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
 

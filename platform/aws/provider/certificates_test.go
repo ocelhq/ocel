@@ -119,7 +119,7 @@ func TestIssueRefusesAsNotReadyWhileACMIsStillValidating(t *testing.T) {
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("issue() error = %v, want the run told to come back to it", err)
 	}
-	if _, pending := provider.LeftPending(err); !pending {
+	if _, pending := provider.ResumableMessage(err); !pending {
 		t.Errorf("issue() error = %v, want it marked pending: ACM issues on its own time, and a deploy leaves the hostname to `ocel domain add` rather than failing", err)
 	}
 	if cert.ID != issuedARN {

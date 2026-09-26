@@ -202,7 +202,7 @@ func TestLiveAnUnattendedApplyInstallsWhatIsAbsentAndStopsAtWhatStands(t *testin
 	vm.purges(t)
 	vm.ssh(t, "sudo rm -f /etc/sudoers.d/ocel-seal-*")
 	vm.forgetsTheDeployLogin(t)
-	unattended := provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Unattended: true}
+	unattended := provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", RefuseReplacements: true}
 	if err := bootstrap.Apply(ctx, unattended, nil); err != nil {
 		t.Fatalf("an unattended apply over a machine carrying none of ocel's own state = %v, want absent-to-present to proceed", err)
 	}
@@ -251,7 +251,7 @@ func TestLiveHealReassertsTheStateTierAndRefusesEverythingBesideWhole(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	healing := provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, Unattended: true}
+	healing := provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, RefuseReplacements: true}
 
 	vm.ssh(t, "sudo chmod 700 "+recordsDir)
 	if err := bootstrap.Apply(ctx, healing, nil); err != nil {
@@ -295,7 +295,7 @@ func TestLiveASymlinkWhereTheDeployLoginOwnsAPathIsRefusedRatherThanChowned(t *t
 	defer vm.ssh(t, "sudo rm -f "+recordsDir+" && sudo install -d -m 750 -o "+deployLogin+" -g "+deployLogin+" "+recordsDir)
 
 	refusal := refused(t, bootstrap.Apply(ctx,
-		provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, Unattended: true}, nil),
+		provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, RefuseReplacements: true}, nil),
 		refusal.CodeDenied)
 	if !strings.Contains(refusal.Message, recordsDir) || !strings.Contains(refusal.Message, "/etc") {
 		t.Errorf("heal over a path the deploy login pointed elsewhere says %q, want both the path and where it points named", refusal.Message)
@@ -315,7 +315,7 @@ func TestLiveHealAsTheDeployLoginReassertsItsOwnTierAndNothingBeside(t *testing.
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	healing := provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, Unattended: true}
+	healing := provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Heal: true, RefuseReplacements: true}
 
 	vm.sshAs(t, deployLogin, "chmod 700 "+recordsDir)
 	if err := bootstrap.Apply(ctx, healing, nil); err != nil {

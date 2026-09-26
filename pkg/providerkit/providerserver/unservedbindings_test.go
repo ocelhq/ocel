@@ -27,27 +27,27 @@ func servesBoth() []provider.BindingType {
 	return []provider.BindingType{provider.BindingPostgres, provider.BindingBucket}
 }
 
-func TestRefuseUnreachableBindings(t *testing.T) {
+func TestRefuseUnservedProxiedBindings(t *testing.T) {
 	t.Parallel()
 
 	t.Run("a provider serving every proxied type its plan reaches is let past", func(t *testing.T) {
 		t.Parallel()
 
-		if err := providerserver.RefuseUnreachableBindings("aws", servesBoth(), proxied,
+		if err := providerserver.RefuseUnservedProxiedBindings("aws", servesBoth(), proxied,
 			reachableResources(), nil); err != nil {
-			t.Fatalf("RefuseUnreachableBindings = %v, want nil", err)
+			t.Fatalf("RefuseUnservedProxiedBindings = %v, want nil", err)
 		}
 	})
 
 	t.Run("a provider serving no primitive at all refuses by resource, type and vendor", func(t *testing.T) {
 		t.Parallel()
 
-		err := providerserver.RefuseUnreachableBindings(boxVendor, nil, proxied,
+		err := providerserver.RefuseUnservedProxiedBindings(boxVendor, nil, proxied,
 			reachableResources(), nil)
 
-		var missing *providerserver.UnreachableBindingError
+		var missing *providerserver.UnservedProxiedBindingError
 		if !errors.As(err, &missing) {
-			t.Fatalf("RefuseUnreachableBindings = %v, want an *UnreachableBindingError", err)
+			t.Fatalf("RefuseUnservedProxiedBindings = %v, want an *UnservedProxiedBindingError", err)
 		}
 		for _, want := range []string{"bucket--uploads", string(provider.BindingBucket), string(boxVendor)} {
 			if !strings.Contains(missing.Error(), want) {
@@ -61,9 +61,9 @@ func TestRefuseUnreachableBindings(t *testing.T) {
 
 		grants := []provider.Binding{{Name: "uploads", Resource: "bucket--uploads", Type: provider.BindingBucket}}
 
-		var missing *providerserver.UnreachableBindingError
-		if err := providerserver.RefuseUnreachableBindings(boxVendor, nil, proxied, nil, grants); !errors.As(err, &missing) {
-			t.Fatalf("RefuseUnreachableBindings = %v, want an *UnreachableBindingError", err)
+		var missing *providerserver.UnservedProxiedBindingError
+		if err := providerserver.RefuseUnservedProxiedBindings(boxVendor, nil, proxied, nil, grants); !errors.As(err, &missing) {
+			t.Fatalf("RefuseUnservedProxiedBindings = %v, want an *UnservedProxiedBindingError", err)
 		}
 		if missing.Resource != "bucket--uploads" {
 			t.Errorf("Resource = %q, want the name the app declared it under", missing.Resource)
@@ -73,9 +73,9 @@ func TestRefuseUnreachableBindings(t *testing.T) {
 	t.Run("postgres goes direct, so a provider that serves none is still let past", func(t *testing.T) {
 		t.Parallel()
 
-		if err := providerserver.RefuseUnreachableBindings(boxVendor, nil, proxied,
+		if err := providerserver.RefuseUnservedProxiedBindings(boxVendor, nil, proxied,
 			reachableResources()[:1], nil); err != nil {
-			t.Fatalf("RefuseUnreachableBindings = %v, want postgres to reach its provider directly", err)
+			t.Fatalf("RefuseUnservedProxiedBindings = %v, want postgres to reach its provider directly", err)
 		}
 	})
 
@@ -83,8 +83,8 @@ func TestRefuseUnreachableBindings(t *testing.T) {
 		t.Parallel()
 
 		proxied := func(provider.BindingType) bool { return false }
-		if err := providerserver.RefuseUnreachableBindings(boxVendor, nil, proxied, reachableResources(), nil); err != nil {
-			t.Fatalf("RefuseUnreachableBindings = %v, want nothing refused where nothing is proxied", err)
+		if err := providerserver.RefuseUnservedProxiedBindings(boxVendor, nil, proxied, reachableResources(), nil); err != nil {
+			t.Fatalf("RefuseUnservedProxiedBindings = %v, want nothing refused where nothing is proxied", err)
 		}
 	})
 }

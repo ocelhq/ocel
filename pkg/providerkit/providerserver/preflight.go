@@ -74,7 +74,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 			resp.HostChecks = h.hostChecks(ctx, p, class, req.GetHostCheckDomains())
 		}
 		if class == edge.ClassPreview {
-			resp.PreviewWildcard, err = heldPreviewWildcard(ctx, p)
+			resp.PreviewWildcard, err = recordedPreviewWildcard(ctx, p)
 			if err != nil {
 				return nil, provider.RefusalError(err)
 			}

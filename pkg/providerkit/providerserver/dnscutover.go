@@ -143,7 +143,7 @@ func (s dnsCutover) waiting(headline string, manual []edge.Record) error {
 	if !s.manual.fail || len(manual) == 0 {
 		return nil
 	}
-	return provider.Pending(manualRecordsPending{headline: headline, records: manual})
+	return provider.Resumable(manualRecordsPending{headline: headline, records: manual})
 }
 
 func (s dnsCutover) release(ctx context.Context, written []edge.Record, say func(string)) error {
@@ -208,11 +208,11 @@ func (s dnsCutover) unresolved(hostname string, serving edge.Kind, began time.Ti
 		if outlasted != "" {
 			cause += ", and " + outlasted
 		}
-		return provider.Pending(refusal.Refuse(refusal.CodeNotReady,
+		return provider.Resumable(refusal.Refuse(refusal.CodeNotReady,
 			"%s does not answer as the %s edge yet%s — this run gave up after about %s, and `ocel domain add` picks up where it stopped",
 			hostname, s.kind, cause, waited))
 	}
-	return provider.Pending(refusal.Refuse(refusal.CodeNotReady,
+	return provider.Resumable(refusal.Refuse(refusal.CodeNotReady,
 		"%s answers as the %s edge, not the %s one this project deploys to — this run gave up after about %s",
 		hostname, serving, s.kind, waited))
 }

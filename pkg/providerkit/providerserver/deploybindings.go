@@ -18,7 +18,7 @@ func (r *deployRun) admitBindings(ctx context.Context, progress edge.Progress) e
 	if err != nil {
 		return err
 	}
-	bindings, err := r.reader().Published(ctx)
+	bindings, err := r.publishedBindings().Published(ctx)
 	if err != nil {
 		return err
 	}
@@ -46,7 +46,7 @@ func (r *deployRun) admitBindings(ctx context.Context, progress edge.Progress) e
 		if resource.Binding == "" || r.writtenByTheDeploy(resource.Binding, published) {
 			continue
 		}
-		if err := ReadableAs(published[resource.Binding], resource.Declared, resource.Type, proxied); err != nil {
+		if err := RefuseMismatchedBinding(published[resource.Binding], resource.Declared, resource.Type, proxied); err != nil {
 			return err
 		}
 	}
@@ -62,7 +62,7 @@ func proxied(kind provider.BindingType) bool {
 	return naming.Proxied(provider.WireBindingType(kind))
 }
 
-func ReadableAs(binding provider.Binding, declaredName string, declared provider.BindingType, proxied func(provider.BindingType) bool) error {
+func RefuseMismatchedBinding(binding provider.Binding, declaredName string, declared provider.BindingType, proxied func(provider.BindingType) bool) error {
 	switch {
 	case binding.Type == provider.BindingCustom:
 		return refusal.Refuse(refusal.CodeInvalid,
@@ -134,7 +134,7 @@ func (r *deployRun) warnShadowed(progress edge.Progress, resources []provider.Re
 			continue
 		}
 		namesake, held := published[resource.Declared]
-		if !held || ReadableAs(namesake, resource.Declared, resource.Type, proxied) != nil {
+		if !held || RefuseMismatchedBinding(namesake, resource.Declared, resource.Type, proxied) != nil {
 			continue
 		}
 		progress.Say(fmt.Sprintf(

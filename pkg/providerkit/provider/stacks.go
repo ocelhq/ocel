@@ -114,17 +114,17 @@ type BytecodeSpec struct {
 }
 
 type AppValues struct {
-	Plain     map[string]string
-	Sensitive map[string]string
-	Secrets   []SecretRef
-	Bindings  []Binding
-	Owners    map[string]string
-	Folder    string
-	Delivered map[string]string
-	Phase     string
+	Plain        map[string]string
+	Sensitive    map[string]string
+	Secrets      []SecretRef
+	Bindings     []Binding
+	Owners       map[string]string
+	Folder       string
+	ContainerEnv map[string]string
+	Phase        string
 }
 
-func (v AppValues) Injected() map[string]string {
+func (v AppValues) PhaseEnv() map[string]string {
 	if v.Phase == "" {
 		return nil
 	}
@@ -132,9 +132,9 @@ func (v AppValues) Injected() map[string]string {
 }
 
 func (v AppValues) String() string {
-	return fmt.Sprintf("values folder %q plain %v sensitive %v secrets %v bindings %v delivered %d entries [redacted]",
+	return fmt.Sprintf("values folder %q plain %v sensitive %v secrets %v bindings %v container env %d entries [redacted]",
 		v.Folder, slices.Sorted(maps.Keys(v.Plain)), slices.Sorted(maps.Keys(v.Sensitive)),
-		secretNames(v.Secrets), bindingNames(v.Bindings), len(v.Delivered))
+		secretNames(v.Secrets), bindingNames(v.Bindings), len(v.ContainerEnv))
 }
 
 func (v AppValues) GoString() string { return v.String() }

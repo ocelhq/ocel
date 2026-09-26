@@ -1017,7 +1017,7 @@ func TestADeployWhoseCertificateIsStillIssuingLeavesItToDomainAdd(t *testing.T) 
 	builtProject(t)
 	client, p := deployServed(t)
 	p.IssueCertificates(edge.Record{Name: "_acme.shop.example", Type: edge.RecordTypeCNAME, Value: "validate.example"})
-	p.StallAfterProving(provider.Pending(refusal.Refuse(refusal.CodeNotReady, "the certificate is still validating")))
+	p.StallAfterProving(provider.Resumable(refusal.Refuse(refusal.CodeNotReady, "the certificate is still validating")))
 
 	req := deployRequest()
 	req.Edge = writtenBy("shop.example")

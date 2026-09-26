@@ -52,8 +52,8 @@ func functionRevisionEnv(t *testing.T, server *runServer, spec provider.StackSpe
 func TestAFunctionDeclaringASecretIsHandedAManifestRatherThanThePlaintext(t *testing.T) {
 	t.Parallel()
 	p, env := functionRevisionEnv(t, &runServer{}, functionStackDeclaring(edge.ClassProduction, "production", provider.AppValues{
-		Secrets:   []provider.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
-		Delivered: map[string]string{"REGION": "eu"},
+		Secrets:      []provider.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
+		ContainerEnv: map[string]string{"REGION": "eu"},
 	}))
 
 	for name, value := range env {
@@ -101,7 +101,7 @@ func TestAPreviewFunctionReadsItsOwnEnvironmentsValues(t *testing.T) {
 func TestAFunctionWithNothingLiveBootsWithNoManifest(t *testing.T) {
 	t.Parallel()
 	_, env := functionRevisionEnv(t, &runServer{}, functionStackDeclaring(edge.ClassProduction, "production", provider.AppValues{
-		Delivered: map[string]string{"REGION": "eu"},
+		ContainerEnv: map[string]string{"REGION": "eu"},
 	}))
 
 	if held, carried := env[live.EnvVar]; carried {

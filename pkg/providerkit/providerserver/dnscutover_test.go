@@ -283,7 +283,7 @@ func TestAProbeThatNeverReturnsIsCutOffAtEachAttemptAndTheSettleAtItsDeadline(t 
 	if spent := time.Since(began); spent > 2*time.Second {
 		t.Fatalf("await() returned after %s, want it held to its 300ms deadline", spent)
 	}
-	if _, held := provider.LeftPending(err); !held {
+	if _, held := provider.ResumableMessage(err); !held {
 		t.Fatalf("await() = %v, want the hostname left pending when its wait runs out, not the run failed", err)
 	}
 	if asked.Load() < 2 {

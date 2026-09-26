@@ -183,7 +183,7 @@ func (p *Provider) issued(
 			return held != nil && held.Managed != nil && held.Managed.State != certificateProvisioning
 		})
 	if code, _ := provider.RefusedCode(err); code == refusal.CodeNotReady {
-		return provider.Pending(err)
+		return provider.Resumable(err)
 	}
 	if err != nil {
 		return err

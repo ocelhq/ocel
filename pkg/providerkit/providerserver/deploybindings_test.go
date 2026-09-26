@@ -155,24 +155,24 @@ func TestDeployRefusesABindingTheRecordCannotSatisfy(t *testing.T) {
 	})
 }
 
-func TestReadableAs(t *testing.T) {
+func TestRefuseMismatchedBinding(t *testing.T) {
 	t.Run("refuses a custom record bound as a binding", func(t *testing.T) {
-		err := providerserver.ReadableAs(provider.Binding{Name: "flags", Type: provider.BindingCustom}, "settings", provider.BindingPostgres, proxied)
+		err := providerserver.RefuseMismatchedBinding(provider.Binding{Name: "flags", Type: provider.BindingCustom}, "settings", provider.BindingPostgres, proxied)
 		if err == nil || !strings.Contains(err.Error(), "`bindings.custom.flags.<property>`") {
-			t.Errorf("ReadableAs = %v, want a custom record sent to transforms by the key a transform reads it under", err)
+			t.Errorf("RefuseMismatchedBinding = %v, want a custom record sent to transforms by the key a transform reads it under", err)
 		}
 	})
 
 	t.Run("admits a record of the declared type ocel provisioned", func(t *testing.T) {
-		if err := providerserver.ReadableAs(provider.Binding{Name: "uploads", Type: provider.BindingBucket}, "uploads", provider.BindingBucket, proxied); err != nil {
-			t.Errorf("ReadableAs = %v, want a record ocel published bound", err)
+		if err := providerserver.RefuseMismatchedBinding(provider.Binding{Name: "uploads", Type: provider.BindingBucket}, "uploads", provider.BindingBucket, proxied); err != nil {
+			t.Errorf("RefuseMismatchedBinding = %v, want a record ocel published bound", err)
 		}
 	})
 
 	t.Run("refuses a published bucket the runtime has no store to reach it in", func(t *testing.T) {
 		published := provider.Binding{Name: "uploads", Type: provider.BindingBucket, Source: "terraform", Properties: map[string]string{provider.PropertyBucket: "acme"}}
-		if err := providerserver.ReadableAs(published, "uploads", provider.BindingBucket, proxied); err == nil {
-			t.Error("ReadableAs = nil, want a bucket ocel's backend cannot reach refused")
+		if err := providerserver.RefuseMismatchedBinding(published, "uploads", provider.BindingBucket, proxied); err == nil {
+			t.Error("RefuseMismatchedBinding = nil, want a bucket ocel's backend cannot reach refused")
 		}
 	})
 
@@ -180,19 +180,19 @@ func TestReadableAs(t *testing.T) {
 		bound := provider.Binding{Name: "ocel:bucket.uploads", Type: provider.BindingBucket, Source: "ocel.json", Properties: map[string]string{
 			provider.PropertyBucket: "acme", provider.PropertyEndpoint: "https://abc.r2.cloudflarestorage.com",
 		}}
-		if err := providerserver.ReadableAs(bound, "uploads", provider.BindingBucket, proxied); err != nil {
-			t.Errorf("ReadableAs = %v, want a bucket the runtime serves from its record admitted", err)
+		if err := providerserver.RefuseMismatchedBinding(bound, "uploads", provider.BindingBucket, proxied); err != nil {
+			t.Errorf("RefuseMismatchedBinding = %v, want a bucket the runtime serves from its record admitted", err)
 		}
 	})
 
 	t.Run("a shape mismatch names the declared name and the external name apart", func(t *testing.T) {
-		err := providerserver.ReadableAs(provider.Binding{Name: "sst-pg-orders", Type: provider.BindingBucket}, "orders", provider.BindingPostgres, proxied)
+		err := providerserver.RefuseMismatchedBinding(provider.Binding{Name: "sst-pg-orders", Type: provider.BindingBucket}, "orders", provider.BindingPostgres, proxied)
 		if err == nil {
-			t.Fatal("ReadableAs = nil, want a bucket refused where a postgres was declared")
+			t.Fatal("RefuseMismatchedBinding = nil, want a bucket refused where a postgres was declared")
 		}
 		for _, want := range []string{"orders", "sst-pg-orders"} {
 			if !strings.Contains(err.Error(), want) {
-				t.Errorf("ReadableAs = %v, want it to name %q — the two ids differ and only one of them is greppable in the app", err, want)
+				t.Errorf("RefuseMismatchedBinding = %v, want it to name %q — the two ids differ and only one of them is greppable in the app", err, want)
 			}
 		}
 	})

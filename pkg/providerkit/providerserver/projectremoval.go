@@ -199,14 +199,14 @@ func (h *handlers) RemoveProject(ctx context.Context, req *contractv1.ProjectReq
 		if err != nil {
 			return err
 		}
-		if err := removal.holdToPlan(req.GetConsented()); err != nil {
+		if err := removal.refuseIfPlanGrew(req.GetConsented()); err != nil {
 			return err
 		}
 		return removal.run(ctx, progress)
 	})
 }
 
-func (r *projectRemoval) holdToPlan(consented *planv1.ChangePlan) error {
+func (r *projectRemoval) refuseIfPlanGrew(consented *planv1.ChangePlan) error {
 	if len(consented.GetGroups()) == 0 {
 		return nil
 	}
@@ -214,11 +214,11 @@ func (r *projectRemoval) holdToPlan(consented *planv1.ChangePlan) error {
 	if err != nil {
 		return err
 	}
-	shown, err := PlanOf(consented)
+	shown, err := PlanFromProto(consented)
 	if err != nil {
 		return err
 	}
-	drawn, err := PlanOf(standing)
+	drawn, err := PlanFromProto(standing)
 	if err != nil {
 		return err
 	}
@@ -257,7 +257,7 @@ func (r *projectRemoval) run(ctx context.Context, progress edge.Progress) error 
 		progress.Say("Leaving the project on record: the rerun reads its progress from what is still here")
 		return err
 	}
-	return r.forget(ctx, progress)
+	return r.forgetProjectIfEmpty(ctx, progress)
 }
 
 func (r *projectRemoval) unbind(ctx context.Context, progress edge.Progress) error {
@@ -357,7 +357,7 @@ func (r *projectRemoval) environments() []string {
 	return envs
 }
 
-func (r *projectRemoval) forget(ctx context.Context, progress edge.Progress) error {
+func (r *projectRemoval) forgetProjectIfEmpty(ctx context.Context, progress edge.Progress) error {
 	remaining, err := stackrecords.List(ctx, r.provider.Records(), r.class, r.slug)
 	if err != nil {
 		return err

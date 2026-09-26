@@ -99,7 +99,7 @@ func TestBootstrapPullsInWhatAFeatureDependsOn(t *testing.T) {
 	if applied[0].Class != edge.ClassProduction {
 		t.Errorf("Apply() ran against %s, want %s", applied[0].Class, edge.ClassProduction)
 	}
-	if !applied[0].Unattended {
+	if !applied[0].RefuseReplacements {
 		t.Error("Apply() ran attended where nothing accepted replacements")
 	}
 }
@@ -115,8 +115,8 @@ func TestBootstrapAcceptsReplacementsWhenTheRequestDoes(t *testing.T) {
 	})
 
 	applied := provider.FakeBootstrap().Applied()
-	if applied[0].Unattended {
-		t.Error("Apply() ran unattended where the request accepted replacements")
+	if applied[0].RefuseReplacements {
+		t.Error("Apply() refused replacements where the request accepted them")
 	}
 }
 
