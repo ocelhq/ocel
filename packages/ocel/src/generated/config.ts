@@ -298,8 +298,6 @@ export interface VpsProviderOptions {
 
 /** What fronts this machine on ports 80 and 443. Leave it out and ocel runs its own proxy; name the one the machine already runs to deploy behind it. */
 export type VpsProxy =
-  | "coolify"
-  | "dokploy"
   | "manual"
   | {
       /** A Traefik the machine already runs, reading ocel's routes from a directory its file provider watches. */
@@ -321,27 +319,81 @@ export type VpsProxy =
     };
 
 /** A Traefik the machine already runs, reading ocel's routes from a directory its file provider watches. */
-export interface VpsTraefik {
-  /** The directory Traefik's file provider watches, where ocel writes its routers. */
-  directory: string;
-  /** The entrypoint that serves https; websecure when left out. */
-  entrypoint?: string;
-  /** The docker network Traefik reaches ocel's switchboard on. */
-  network?: string;
-  /** The certificate resolver ocel's routers ask for certificates. */
-  resolver: string;
+export type VpsTraefik =
+  | {
+      /** The directory Traefik's file provider watches, where ocel writes its routers. */
+      directory?: string;
+      /** The entry points ocel's routers attach to. */
+      entrypoints?: VpsEntrypoints;
+      /** A docker network ocel's switchboard joins, so Traefik reaches it by name. Not with port. */
+      network?: string;
+      /** The loopback port ocel's switchboard is published on for Traefik to reach; 8480 when left out. Not with network. */
+      port?: number;
+      /** The host tool whose Traefik this is. It fills in every other field, and a field written beside it overrides. */
+      preset: "coolify" | "dokploy";
+      /** A resolver that can issue the preview base's wildcard over DNS-01. Set, previews share one wildcard certificate; left out, each preview hostname gets its own from resolver. */
+      previewResolver?: string;
+      /** The certificate resolver every hostname router ocel writes names. */
+      resolver?: string;
+    }
+  | {
+      /** The directory Traefik's file provider watches, where ocel writes its routers. */
+      directory: string;
+      /** The entry points ocel's routers attach to. */
+      entrypoints?: VpsEntrypoints;
+      /** A docker network ocel's switchboard joins, so Traefik reaches it by name. Not with port. */
+      network?: string;
+      /** The loopback port ocel's switchboard is published on for Traefik to reach; 8480 when left out. Not with network. */
+      port?: number;
+      preset?: never;
+      /** A resolver that can issue the preview base's wildcard over DNS-01. Set, previews share one wildcard certificate; left out, each preview hostname gets its own from resolver. */
+      previewResolver?: string;
+      /** The certificate resolver every hostname router ocel writes names. */
+      resolver: string;
+    };
+
+/** The entry points ocel's routers attach to. */
+export interface VpsEntrypoints {
+  /** The entry point ocel's http-to-https redirect routers attach to; web when left out. */
+  http?: string;
+  /** The entry point ocel's hostname routers attach to; websecure when left out. */
+  https?: string;
 }
 
 /** A Caddy the machine already runs, importing ocel's site blocks from a directory. */
-export interface VpsCaddy {
-  /** The container Caddy runs in, when it runs in one. */
-  container?: string;
-  /** The directory the running Caddy imports site blocks from. */
-  directory: string;
-}
+export type VpsCaddy =
+  | {
+      /** The config file caddy reload names inside the container; /etc/caddy/Caddyfile when left out. */
+      config?: string;
+      /** The container Caddy runs in; left out, Caddy runs as the systemd caddy.service. */
+      container?: string;
+      /** The directory the running Caddy imports site blocks from. */
+      directory?: string;
+      /** A docker network ocel's switchboard joins, so Caddy reaches it by name. Not with port. */
+      network?: string;
+      /** The loopback port ocel's switchboard is published on for Caddy to reach; 8480 when left out. Not with network. */
+      port?: number;
+      /** The host tool whose Caddy this is. It fills in every other field, and a field written beside it overrides. */
+      preset: "coolify";
+    }
+  | {
+      /** The config file caddy reload names inside the container; /etc/caddy/Caddyfile when left out. */
+      config?: string;
+      /** The container Caddy runs in; left out, Caddy runs as the systemd caddy.service. */
+      container?: string;
+      /** The directory the running Caddy imports site blocks from. */
+      directory: string;
+      /** A docker network ocel's switchboard joins, so Caddy reaches it by name. Not with port. */
+      network?: string;
+      /** The loopback port ocel's switchboard is published on for Caddy to reach; 8480 when left out. Not with network. */
+      port?: number;
+      preset?: never;
+    };
 
 /** A proxy you route to ocel yourself; ocel writes nothing to it. */
 export interface VpsManual {
+  /** A docker network ocel's switchboard also joins, so a proxy on it reaches the switchboard by name even after it is recreated. */
+  network?: string;
   /** The loopback port your proxy forwards to ocel's switchboard on; 8480 when left out. */
   port?: number;
 }

@@ -16,6 +16,13 @@ import (
 
 func routedByHand() Front { return Front{Manual: &ManualFront{Port: manual.DefaultPort}} }
 
+func coolifysTraefik() Front {
+	return Front{Traefik: &TraefikFront{
+		Preset: "coolify", Directory: "/data/coolify/proxy/dynamic", Resolver: "letsencrypt",
+		Entrypoints: Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
+	}}
+}
+
 func TestABoxFrontedByHandStandsNothingOfOcelsOwnProxy(t *testing.T) {
 	t.Parallel()
 
@@ -200,6 +207,54 @@ func TestADeployOntoABoxRecordedForAnotherProxyIsRefusedNamingWhoSetIt(t *testin
 			recorded: Front{Manual: &ManualFront{Port: 9000}}, ours: routedByHand(),
 			wanted: []string{"set by blog/preview", "add `\"proxy\": { \"manual\": { \"port\": 9000 } }`"},
 		},
+		"the box routes by hand beside a network": {
+			recorded: Front{Manual: &ManualFront{Port: manual.DefaultPort, Network: "coolify"}}, ours: routedByHand(),
+			wanted: []string{"a proxy you route yourself", "add `\"proxy\": { \"manual\": { \"network\": \"coolify\" } }`"},
+		},
+		"the box runs Coolify's Traefik": {
+			recorded: coolifysTraefik(), ours: routedByHand(),
+			wanted: []string{"Coolify's Traefik", "set by blog/preview", "add `\"proxy\": { \"traefik\": { \"preset\": \"coolify\" } }`"},
+		},
+		"the box runs Coolify's Traefik with a resolver of its own": {
+			recorded: func() Front {
+				front := coolifysTraefik()
+				front.Traefik.Resolver = "le-dns"
+				return front
+			}(),
+			ours:   coolifysTraefik(),
+			wanted: []string{"Coolify's Traefik", "add `\"proxy\": { \"traefik\": { \"preset\": \"coolify\", \"resolver\": \"le-dns\" } }`"},
+		},
+		"the box runs a Traefik spelled out": {
+			recorded: Front{Traefik: &TraefikFront{
+				Directory: "/etc/traefik/dynamic", Resolver: "letsencrypt", PreviewResolver: "cloudflare",
+				Entrypoints: Entrypoints{HTTP: "web", HTTPS: "websecure"}, Network: "traefik",
+			}},
+			ours: Front{},
+			wanted: []string{"your Traefik", "add `\"proxy\": { \"traefik\": { \"directory\": \"/etc/traefik/dynamic\", \"resolver\": \"letsencrypt\", " +
+				"\"previewResolver\": \"cloudflare\", \"network\": \"traefik\" } }`"},
+		},
+		"the box runs a Traefik on its own port and entry points": {
+			recorded: Front{Traefik: &TraefikFront{
+				Directory: "/etc/traefik/dynamic", Resolver: "letsencrypt",
+				Entrypoints: Entrypoints{HTTP: "insecure", HTTPS: "secure"}, Port: 9000,
+			}},
+			ours: Front{},
+			wanted: []string{"add `\"proxy\": { \"traefik\": { \"directory\": \"/etc/traefik/dynamic\", \"resolver\": \"letsencrypt\", " +
+				"\"entrypoints\": { \"http\": \"insecure\", \"https\": \"secure\" }, \"port\": 9000 } }`"},
+		},
+		"the box runs Coolify's Caddy": {
+			recorded: Front{Caddy: &CaddyFront{
+				Preset: "coolify", Directory: "/data/coolify/proxy/caddy/dynamic", Container: "coolify-proxy",
+				Config: "/config/caddy/Caddyfile.autosave", Network: "coolify",
+			}},
+			ours:   coolifysTraefik(),
+			wanted: []string{"Coolify's Caddy", "add `\"proxy\": { \"caddy\": { \"preset\": \"coolify\" } }`"},
+		},
+		"the box runs a systemd Caddy": {
+			recorded: Front{Caddy: &CaddyFront{Directory: "/etc/caddy/ocel.d", Config: "/etc/caddy/Caddyfile", Port: 8480}},
+			ours:     routedByHand(),
+			wanted:   []string{"your Caddy", "add `\"proxy\": { \"caddy\": { \"directory\": \"/etc/caddy/ocel.d\" } }`"},
+		},
 		"the box runs ocel's own proxy, the project routes by hand": {
 			recorded: Front{}, ours: routedByHand(),
 			wanted: []string{"ocel's own proxy", "set by blog/preview", "remove `\"proxy\"`"},
@@ -227,6 +282,29 @@ func TestADeployOntoABoxRecordedForItsOwnProxyGoesAhead(t *testing.T) {
 	recordOn(t, stood, providerkit.ClassProduction, routedByHand(), "blog")
 	if err := stood.fronted(routedByHand()).FrontAgrees(context.Background()); err != nil {
 		t.Errorf("FrontAgrees() = %v, want a box that routes the way this project says let through", err)
+	}
+}
+
+func TestAPresetAndTheSameProxySpelledOutAreOneProxy(t *testing.T) {
+	t.Parallel()
+
+	spelled := Front{Traefik: &TraefikFront{
+		Directory: "/data/coolify/proxy/dynamic", Resolver: "letsencrypt",
+		Entrypoints: Entrypoints{HTTP: "http", HTTPS: "https"}, Network: "coolify",
+	}}
+	for name, tc := range map[string]struct{ recorded, ours Front }{
+		"recorded as the preset, deployed spelled out": {recorded: coolifysTraefik(), ours: spelled},
+		"recorded spelled out, deployed as the preset": {recorded: spelled, ours: coolifysTraefik()},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			stood := settledOn(t, providerkit.ClassProduction)
+			recordOn(t, stood, providerkit.ClassProduction, tc.recorded, "blog")
+			if err := stood.fronted(tc.ours).FrontAgrees(context.Background()); err != nil {
+				t.Errorf("FrontAgrees() = %v, want a preset and the values it fills agreed as one proxy", err)
+			}
+		})
 	}
 }
 

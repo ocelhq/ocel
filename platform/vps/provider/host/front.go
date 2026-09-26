@@ -12,11 +12,38 @@ import (
 )
 
 type Front struct {
-	Manual *ManualFront `json:"manual,omitempty"`
+	Manual  *ManualFront  `json:"manual,omitempty"`
+	Traefik *TraefikFront `json:"traefik,omitempty"`
+	Caddy   *CaddyFront   `json:"caddy,omitempty"`
 }
 
 type ManualFront struct {
-	Port int `json:"port"`
+	Port    int    `json:"port"`
+	Network string `json:"network,omitempty"`
+}
+
+type TraefikFront struct {
+	Preset          string      `json:"preset,omitempty"`
+	Directory       string      `json:"directory"`
+	Resolver        string      `json:"resolver"`
+	PreviewResolver string      `json:"previewResolver,omitempty"`
+	Entrypoints     Entrypoints `json:"entrypoints"`
+	Network         string      `json:"network,omitempty"`
+	Port            int         `json:"port,omitempty"`
+}
+
+type Entrypoints struct {
+	HTTP  string `json:"http"`
+	HTTPS string `json:"https"`
+}
+
+type CaddyFront struct {
+	Preset    string `json:"preset,omitempty"`
+	Directory string `json:"directory"`
+	Container string `json:"container,omitempty"`
+	Config    string `json:"config"`
+	Network   string `json:"network,omitempty"`
+	Port      int    `json:"port,omitempty"`
 }
 
 func openFront(front Front, box frontBox) proxy.Proxy {
@@ -50,7 +77,7 @@ func (state RoutingTable) hostnames() []string {
 	return slices.Compact(named)
 }
 
-func (f Front) adopted() bool { return !openFront(f, frontBox{}).Guarantees().OwnsPorts }
+func (f Front) adopted() bool { return f != Front{} }
 
 func (h *Host) RouteBy(hostname string) string {
 	if h.proxyOption.Manual == nil {

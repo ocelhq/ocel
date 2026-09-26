@@ -2,9 +2,11 @@ package vps
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -30,28 +32,37 @@ type Proxy struct {
 }
 
 type Traefik struct {
-	Directory  string `json:"directory" doc:"The directory Traefik's file provider watches, where ocel writes its routers."`
-	Resolver   string `json:"resolver" doc:"The certificate resolver ocel's routers ask for certificates."`
-	Entrypoint string `json:"entrypoint,omitempty" doc:"The entrypoint that serves https; websecure when left out."`
-	Network    string `json:"network,omitempty" doc:"The docker network Traefik reaches ocel's switchboard on."`
+	Preset          string       `json:"preset,omitempty" enum:"coolify,dokploy" doc:"The host tool whose Traefik this is. It fills in every other field, and a field written beside it overrides."`
+	Directory       string       `json:"directory" unless:"preset" doc:"The directory Traefik's file provider watches, where ocel writes its routers."`
+	Resolver        string       `json:"resolver" unless:"preset" doc:"The certificate resolver every hostname router ocel writes names."`
+	PreviewResolver string       `json:"previewResolver,omitempty" doc:"A resolver that can issue the preview base's wildcard over DNS-01. Set, previews share one wildcard certificate; left out, each preview hostname gets its own from resolver."`
+	Entrypoints     *Entrypoints `json:"entrypoints,omitempty" doc:"The entry points ocel's routers attach to."`
+	Network         string       `json:"network,omitempty" doc:"A docker network ocel's switchboard joins, so Traefik reaches it by name. Not with port."`
+	Port            int          `json:"port,omitempty" doc:"The loopback port ocel's switchboard is published on for Traefik to reach; 8480 when left out. Not with network."`
+}
+
+type Entrypoints struct {
+	HTTP  string `json:"http,omitempty" doc:"The entry point ocel's http-to-https redirect routers attach to; web when left out."`
+	HTTPS string `json:"https,omitempty" doc:"The entry point ocel's hostname routers attach to; websecure when left out."`
 }
 
 type Caddy struct {
-	Directory string `json:"directory" doc:"The directory the running Caddy imports site blocks from."`
-	Container string `json:"container,omitempty" doc:"The container Caddy runs in, when it runs in one."`
+	Preset    string `json:"preset,omitempty" enum:"coolify" doc:"The host tool whose Caddy this is. It fills in every other field, and a field written beside it overrides."`
+	Directory string `json:"directory" unless:"preset" doc:"The directory the running Caddy imports site blocks from."`
+	Container string `json:"container,omitempty" doc:"The container Caddy runs in; left out, Caddy runs as the systemd caddy.service."`
+	Config    string `json:"config,omitempty" doc:"The config file caddy reload names inside the container; /etc/caddy/Caddyfile when left out."`
+	Network   string `json:"network,omitempty" doc:"A docker network ocel's switchboard joins, so Caddy reaches it by name. Not with port."`
+	Port      int    `json:"port,omitempty" doc:"The loopback port ocel's switchboard is published on for Caddy to reach; 8480 when left out. Not with network."`
 }
 
 type Manual struct {
-	Port int `json:"port,omitempty" doc:"The loopback port your proxy forwards to ocel's switchboard on; 8480 when left out."`
+	Port    int    `json:"port,omitempty" doc:"The loopback port your proxy forwards to ocel's switchboard on; 8480 when left out."`
+	Network string `json:"network,omitempty" doc:"A docker network ocel's switchboard also joins, so a proxy on it reaches the switchboard by name even after it is recreated."`
 }
 
-const (
-	proxyCoolify = "coolify"
-	proxyDokploy = "dokploy"
-	proxyManual  = "manual"
-)
+const proxyManual = "manual"
 
-func (Proxy) Shorthands() []string { return []string{proxyCoolify, proxyDokploy, proxyManual} }
+func (Proxy) Shorthands() []string { return []string{proxyManual} }
 
 func (p *Proxy) UnmarshalJSON(data []byte) error {
 	trimmed := bytes.TrimSpace(data)
@@ -62,9 +73,6 @@ func (p *Proxy) UnmarshalJSON(data []byte) error {
 		}
 		if !slices.Contains(p.Shorthands(), shorthand) {
 			return fmt.Errorf(`option "proxy" names %q, which is none of %s`, shorthand, strings.Join(p.Shorthands(), ", "))
-		}
-		if shorthand != proxyManual {
-			return unsupported(strconv.Quote(shorthand))
 		}
 		*p = Proxy{Manual: &Manual{}}
 		return nil
@@ -89,14 +97,47 @@ func (p *Proxy) UnmarshalJSON(data []byte) error {
 }
 
 func (p *Proxy) front() host.Front {
-	if p == nil || p.Manual == nil {
+	switch {
+	case p == nil:
+		return host.Front{}
+	case p.Traefik != nil:
+		filled := p.Traefik.written().Filled()
+		return host.Front{Traefik: &filled}
+	case p.Caddy != nil:
+		filled := p.Caddy.written().Filled()
+		return host.Front{Caddy: &filled}
+	case p.Manual != nil:
+		return host.Front{Manual: &host.ManualFront{Port: cmp.Or(p.Manual.Port, manual.DefaultPort), Network: p.Manual.Network}}
+	default:
 		return host.Front{}
 	}
-	port := p.Manual.Port
-	if port == 0 {
-		port = manual.DefaultPort
+}
+
+func (t *Traefik) written() host.TraefikFront {
+	var entrypoints host.Entrypoints
+	if t.Entrypoints != nil {
+		entrypoints = host.Entrypoints{HTTP: t.Entrypoints.HTTP, HTTPS: t.Entrypoints.HTTPS}
 	}
-	return host.Front{Manual: &host.ManualFront{Port: port}}
+	return host.TraefikFront{
+		Preset:          t.Preset,
+		Directory:       t.Directory,
+		Resolver:        t.Resolver,
+		PreviewResolver: t.PreviewResolver,
+		Entrypoints:     entrypoints,
+		Network:         t.Network,
+		Port:            t.Port,
+	}
+}
+
+func (c *Caddy) written() host.CaddyFront {
+	return host.CaddyFront{
+		Preset:    c.Preset,
+		Directory: c.Directory,
+		Container: c.Container,
+		Config:    c.Config,
+		Network:   c.Network,
+		Port:      c.Port,
+	}
 }
 
 func unsupported(spelled string) error {
@@ -113,12 +154,89 @@ func (p *Proxy) usable(certificates map[string]string) error {
 	}
 	switch {
 	case p.Traefik != nil:
+		if err := p.Traefik.usable(); err != nil {
+			return err
+		}
 		return providerkit.Refuse(providerkit.CodeInvalid, "%s", unsupported(`{ "traefik": … }`))
 	case p.Caddy != nil:
+		if err := p.Caddy.usable(); err != nil {
+			return err
+		}
 		return providerkit.Refuse(providerkit.CodeInvalid, "%s", unsupported(`{ "caddy": … }`))
 	}
-	if port := p.Manual.Port; port < 0 || port > 65535 {
-		return providerkit.Refuse(providerkit.CodeInvalid, "option %q names port %d, which is outside 1-65535", "proxy", port)
+	return reaching("proxy.manual", p.Manual.Network, p.Manual.Port)
+}
+
+func (t *Traefik) usable() error {
+	const at = "proxy.traefik"
+	if err := presetKnown(at, t.Preset, host.TraefikPresets()); err != nil {
+		return err
+	}
+	filled := t.written().Filled()
+	if err := needs(at, "directory", filled.Directory); err != nil {
+		return err
+	}
+	if err := needs(at, "resolver", filled.Resolver); err != nil {
+		return err
+	}
+	return reachedOnce(at, t.Preset, t.Network, filled.Network, t.Port)
+}
+
+func (c *Caddy) usable() error {
+	const at = "proxy.caddy"
+	if err := presetKnown(at, c.Preset, host.CaddyPresets()); err != nil {
+		return err
+	}
+	filled := c.written().Filled()
+	if err := needs(at, "directory", filled.Directory); err != nil {
+		return err
+	}
+	return reachedOnce(at, c.Preset, c.Network, filled.Network, c.Port)
+}
+
+func presetKnown(at, preset string, known []string) error {
+	if preset == "" || slices.Contains(known, preset) {
+		return nil
+	}
+	quoted := make([]string, 0, len(known))
+	for _, name := range known {
+		quoted = append(quoted, strconv.Quote(name))
+	}
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"option %q names %q, which is none of %s", at+".preset", preset, strings.Join(quoted, ", "))
+}
+
+func needs(at, field, filled string) error {
+	if filled != "" {
+		return nil
+	}
+	return providerkit.Refuse(providerkit.CodeInvalid,
+		"option %q names no %q: write one, or a %q that fills it", at, field, "preset")
+}
+
+func reachedOnce(at, preset, written, network string, port int) error {
+	switch {
+	case network == "" || port == 0:
+		return reaching(at, network, port)
+	case written == "":
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"option %q sets %q beside the %q %s that preset %q fills: the proxy reaches the switchboard by one of them",
+			at, "port", "network", network, preset)
+	default:
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"option %q sets both %q and %q: the proxy reaches the switchboard by one of them", at, "network", "port")
+	}
+}
+
+var dockerNetworkName = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`)
+
+func reaching(at, network string, port int) error {
+	if port < 0 || port > 65535 {
+		return providerkit.Refuse(providerkit.CodeInvalid, "option %q names %d, which is outside 1-65535", at+".port", port)
+	}
+	if network != "" && !dockerNetworkName.MatchString(network) {
+		return providerkit.Refuse(providerkit.CodeInvalid,
+			"option %q names %q, which is no docker network name: letters, digits, _, . and -, starting with a letter or digit", at+".network", network)
 	}
 	return nil
 }

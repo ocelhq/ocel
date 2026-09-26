@@ -48,3 +48,5 @@ func ReachVerdict(ctx context.Context, dial Reach, address string) providerkit.H
 }
 
 func (p *Provider) Fronted() *Proxy { return p.options.Proxy }
+
+func FrontOf(p *Proxy) host.Front { return p.front() }
