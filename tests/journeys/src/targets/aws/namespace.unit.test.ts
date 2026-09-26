@@ -111,9 +111,12 @@ describe("acceptable names", () => {
 
 describe("the namespace bound", () => {
   it("is the one the provider parses against", async () => {
-    const go = await readFile(path.join(repoRoot, "pkg", "providerkit", "namespace.go"), "utf8");
+    const go = await readFile(
+      path.join(repoRoot, "pkg", "providerkit", "provider", "namespace.go"),
+      "utf8",
+    );
     const declared = go.match(/MaxNamespaceLength\s*=\s*(\d+)/);
-    assert.ok(declared, "providerkit/namespace.go declares no MaxNamespaceLength");
+    assert.ok(declared, "providerkit/provider/namespace.go declares no MaxNamespaceLength");
     assert.equal(Number(declared[1]), LONGEST_NAMESPACE);
   });
 });
