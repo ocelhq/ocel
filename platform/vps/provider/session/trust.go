@@ -27,16 +27,16 @@ type known struct {
 }
 
 func recorded(ctx context.Context, dest Destination) known {
-	var held known
+	var listed known
 	for _, file := range dest.KnownHosts {
 		rendered, err := output(ctx, "ssh-keygen", "-F", dest.entry(), "-f", file)
 		if err != nil {
 			continue
 		}
-		held.keys = append(held.keys, keysIn(rendered)...)
-		held.delegated = held.delegated || markedIn(rendered)
+		listed.keys = append(listed.keys, keysIn(rendered)...)
+		listed.delegated = listed.delegated || markedIn(rendered)
 	}
-	return held
+	return listed
 }
 
 func keysIn(rendered string) []provider.HostKey {
@@ -66,17 +66,17 @@ func markedIn(rendered string) bool {
 	return false
 }
 
-func classify(dest Destination, offered []provider.HostKey, held known) (provider.HostKey, *provider.HostTrust) {
+func classify(dest Destination, offered []provider.HostKey, listed known) (provider.HostKey, *provider.HostTrust) {
 	if len(offered) == 0 {
 		return provider.HostKey{}, nil
 	}
 	ordered := preferred(offered)
 	for _, key := range ordered {
-		if slices.ContainsFunc(held.keys, func(k provider.HostKey) bool { return k.Key == key.Key }) {
+		if slices.ContainsFunc(listed.keys, func(k provider.HostKey) bool { return k.Key == key.Key }) {
 			return key, nil
 		}
 	}
-	if held.delegated {
+	if listed.delegated {
 		return ordered[0], nil
 	}
 	trust := provider.HostTrust{
@@ -87,16 +87,16 @@ func classify(dest Destination, offered []provider.HostKey, held known) (provide
 		KnownHosts: dest.KnownHosts,
 		Got:        ordered[0],
 	}
-	if len(held.keys) == 0 {
+	if len(listed.keys) == 0 {
 		trust.Reason = provider.UnknownHostKey
 		trust.Remedy = remedy(trust)
 		return provider.HostKey{}, &trust
 	}
 	trust.Reason = provider.HostKeyMismatch
-	trust.Want = preferred(held.keys)[0]
+	trust.Want = preferred(listed.keys)[0]
 	for _, key := range ordered {
-		if paired := slices.IndexFunc(held.keys, func(k provider.HostKey) bool { return k.Type == key.Type }); paired >= 0 {
-			trust.Got, trust.Want = key, held.keys[paired]
+		if paired := slices.IndexFunc(listed.keys, func(k provider.HostKey) bool { return k.Type == key.Type }); paired >= 0 {
+			trust.Got, trust.Want = key, listed.keys[paired]
 			break
 		}
 	}

@@ -8,7 +8,7 @@ import {
   frontNamed,
   frontStep,
   frontsDir,
-  holderOf,
+  ownerOf,
   refusalMissed,
   stepCommand,
 } from "./front";
@@ -45,49 +45,49 @@ describe("frontNamed", () => {
   });
 });
 
-describe("holderOf", () => {
-  it("names what holds the ports on each front this repo carries", () => {
-    expect(holderOf(frontNamed({ [FRONT_ENV]: "nginx" })!)).toBe("nginx holds :80 and :443");
-    expect(holderOf(frontNamed({ [FRONT_ENV]: "nginx-container" })!)).toBe(
+describe("ownerOf", () => {
+  it("names what owns the ports on each front this repo includes", () => {
+    expect(ownerOf(frontNamed({ [FRONT_ENV]: "nginx" })!)).toBe("nginx listens on :80 and :443");
+    expect(ownerOf(frontNamed({ [FRONT_ENV]: "nginx-container" })!)).toBe(
       "container ocel-front-nginx publishes :80 and :443",
     );
-    expect(holderOf(frontNamed({ [FRONT_ENV]: "nginx-network" })!)).toBe(
+    expect(ownerOf(frontNamed({ [FRONT_ENV]: "nginx-network" })!)).toBe(
       "container ocel-front-nginx-network publishes :80 and :443",
     );
   });
 
-  it("knows what holds the ports on every front directory the lanes can name", async () => {
+  it("knows what owns the ports on every front directory the lanes can name", async () => {
     for (const entry of await readdir(frontsDir, { withFileTypes: true })) {
       if (entry.isDirectory()) {
-        expect(() => holderOf(frontNamed({ [FRONT_ENV]: entry.name })!)).not.toThrow();
+        expect(() => ownerOf(frontNamed({ [FRONT_ENV]: entry.name })!)).not.toThrow();
       }
     }
   });
 
-  it("refuses a front the journey knows nothing holding the ports for", () => {
-    expect(() => holderOf({ name: "unheld", dir: "/nowhere", proxy: "manual" })).toThrow(/unheld/);
+  it("refuses a front the journey knows no owner of the ports for", () => {
+    expect(() => ownerOf({ name: "unowned", dir: "/nowhere", proxy: "manual" })).toThrow(/unowned/);
   });
 });
 
 describe("refusalMissed", () => {
-  const holder = "nginx holds :80 and :443";
+  const owner = "nginx listens on :80 and :443";
   const refused =
-    '✗ Failed\n  not_ready: nginx holds :80 and :443, where ocel\'s own proxy serves\n  Add `"proxy": "manual"` ...\n';
+    '✗ Failed\n  not_ready: nginx listens on :80 and :443, where ocel\'s own proxy serves\n  Add `"proxy": "manual"` ...\n';
 
-  it("passes a bootstrap that refused naming what holds the ports", () => {
-    expect(refusalMissed(1, refused, holder)).toBeUndefined();
+  it("passes a bootstrap that refused naming what owns the ports", () => {
+    expect(refusalMissed(1, refused, owner)).toBeUndefined();
   });
 
   it("reads the refusal through the colour a terminal paints it in", () => {
-    expect(refusalMissed(1, `\u001b[31m${refused}\u001b[0m`, holder)).toBeUndefined();
+    expect(refusalMissed(1, `\u001b[31m${refused}\u001b[0m`, owner)).toBeUndefined();
   });
 
-  it("fails a bootstrap that went ahead over a box whose ports are held", () => {
-    expect(refusalMissed(0, "Bootstrapped production\n", holder)).toContain("went ahead");
+  it("fails a bootstrap that went ahead over a box whose ports are taken", () => {
+    expect(refusalMissed(0, "Bootstrapped production\n", owner)).toContain("went ahead");
   });
 
-  it("fails a refusal that never names what holds the ports", () => {
-    expect(refusalMissed(1, "✗ Failed\n  denied: no route to host\n", holder)).toContain(holder);
+  it("fails a refusal that never names what owns the ports", () => {
+    expect(refusalMissed(1, "✗ Failed\n  denied: no route to host\n", owner)).toContain(owner);
   });
 });
 

@@ -41,8 +41,8 @@ func TestTheRoutingTableReadsBackAsTheTableThatWroteIt(t *testing.T) {
 	t.Parallel()
 
 	for what, table := range map[string]RoutingTable{
-		"a box serving nothing":            {Grace: DrainWindow},
-		"a box carrying every kind of row": everything(),
+		"a box serving nothing":        {Grace: DrainWindow},
+		"a box with every kind of row": everything(),
 	} {
 		read, err := ReadRoutingTable(mustWrite(t, table))
 		if err != nil {
@@ -63,7 +63,7 @@ func TestTheRoutingTableSpeaksNoProxysVocabulary(t *testing.T) {
 	written := string(mustWrite(t, everything()))
 	for _, caddy := range []string{"@id", "apps", "servers", "handle", "reverse_proxy", "dial", "load_files", "grace_period", "ocel-app-", "ocel-host-"} {
 		if strings.Contains(written, `"`+caddy) {
-			t.Errorf("the routing table carries %q, a word of the proxy it is rendered into:\n%s", caddy, written)
+			t.Errorf("the routing table contains %q, a word of the proxy it is rendered into:\n%s", caddy, written)
 		}
 	}
 	if written != strings.ToLower(written) {
@@ -116,6 +116,6 @@ func TestWhatTheBoxsAgentReadsItsStoreBaseFromIsTheTableADeployWrote(t *testing.
 		t.Errorf("the agent reads a store base of %q off the table a deploy wrote, want https://storage.shop.example.com", base)
 	}
 	if len(claims) != len(storing().Claims) {
-		t.Errorf("the agent reads %d claims off a table holding %d", len(claims), len(storing().Claims))
+		t.Errorf("the agent reads %d claims off a table with %d", len(claims), len(storing().Claims))
 	}
 }

@@ -125,7 +125,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	}
 	for _, item := range host.Items(class, nil, host.ArchAMD64, host.Front{}) {
 		if stamp.Digests[item.ID()] == "" {
-			t.Errorf("the stamp carries no digest for %s, and nothing can say whether it drifted", item.ID())
+			t.Errorf("the stamp records no digest for %s, and nothing can say whether it drifted", item.ID())
 		}
 	}
 	if owner := strings.TrimSpace(vm.ssh(t, "stat -c %U /etc/ocel/production")); owner != "root" {
@@ -134,17 +134,17 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U /var/lib/ocel/production/records")); owner != deployLogin {
 		t.Errorf("the record tier is owned by %q, want %s: it is the deploy login's alone", owner, deployLogin)
 	}
-	standsAsDecided(t, vm)
+	accountAsDecided(t, vm)
 
-	standing, err := bootstrap.Describe(ctx, class)
+	described, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatalf("Describe() after Apply() = %v", err)
 	}
-	if !standing.Present || !standing.Stacks[0].DigestCurrent {
-		t.Fatalf("Describe() after Apply() = %+v, want a present bootstrap standing at the digest applied, %s\n%s",
-			standing.Stacks, stillMoving(t, bootstrap, class, standing.VendorState), vm.proxySaid(t))
+	if !described.Present || !described.Stacks[0].DigestCurrent {
+		t.Fatalf("Describe() after Apply() = %+v, want a present bootstrap current at the digest applied, %s\n%s",
+			described.Stacks, stillMoving(t, bootstrap, class, described.VendorState), vm.proxySaid(t))
 	}
-	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: standing.VendorState})
+	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: described.VendorState})
 	if err != nil {
 		t.Fatalf("a second Plan() = %v", err)
 	}
@@ -181,12 +181,12 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		t.Error("Describe() still claims a bootstrap after Remove()")
 	}
 	for _, path := range []string{"/etc/ocel", "/var/lib/ocel", "/usr/local/lib/ocel"} {
-		if left := strings.TrimSpace(vm.ssh(t, "test -e "+path+" && echo standing || echo gone")); left != "gone" {
+		if left := strings.TrimSpace(vm.ssh(t, "test -e "+path+" && echo present || echo gone")); left != "gone" {
 			t.Errorf("%s is %s after Remove(), and a destroy leaves no bytes behind", path, left)
 		}
 	}
 	if left := strings.TrimSpace(vm.ssh(t, "getent passwd "+deployLogin+" || true")); left != "" {
-		t.Errorf("%s still stands as %q after Remove(), and a login nothing deploys as is a login nobody revokes", deployLogin, left)
+		t.Errorf("%s still exists as %q after Remove(), and a login nothing deploys as is a login nobody revokes", deployLogin, left)
 	}
 	if err := bootstrap.Remove(ctx, class, nil); err != nil {
 		t.Errorf("a second Remove() = %v, want an already-forgotten target to be a no-op", err)
@@ -220,7 +220,7 @@ func TestLiveAnUnfinishedApplyIsReportedAsDrifted(t *testing.T) {
 		t.Fatalf("Describe() over an unfinished apply = %v", err)
 	}
 	if !described.Present {
-		t.Fatal("Describe() reads no bootstrap where a stamp stands, and an unfinished apply still stamped the host")
+		t.Fatal("Describe() reads no bootstrap where a stamp exists, and an unfinished apply still stamped the host")
 	}
 	if described.Stacks[0].DigestCurrent {
 		t.Error("Describe() calls an unfinished apply current, so a partially applied host reads as a healthy one")
@@ -234,7 +234,7 @@ func TestLiveAnUnfinishedApplyIsReportedAsDrifted(t *testing.T) {
 	}
 }
 
-func TestLiveApplyRefusesWorkTheShownPlanNeverCarried(t *testing.T) {
+func TestLiveApplyRefusesWorkTheShownPlanNeverIncluded(t *testing.T) {
 	vm := liveMachine(t)
 	p := vm.provider(t)
 	defer closing(t, p)
@@ -262,7 +262,7 @@ func TestLiveApplyRefusesWorkTheShownPlanNeverCarried(t *testing.T) {
 
 	err = bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: shown.VendorState}, nil)
 	if err == nil {
-		t.Fatal("Apply() did work the plan the user consented to never carried")
+		t.Fatal("Apply() did work the plan the user consented to never included")
 	}
 	var rejection refusal.Refusal
 	if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid {
@@ -283,7 +283,7 @@ func TestLiveForgettingARecordNothingWroteIsAlreadyForgotten(t *testing.T) {
 func onlyGroup(t *testing.T, plan provider.Plan) provider.ChangeGroup {
 	t.Helper()
 	if len(plan.Groups) != 1 {
-		t.Fatalf("the plan carries %d groups, want the one core group this provider stands up", len(plan.Groups))
+		t.Fatalf("the plan has %d groups, want the one core group this provider installs", len(plan.Groups))
 	}
 	return plan.Groups[0]
 }
@@ -294,7 +294,7 @@ func (vm machine) proxySaid(t *testing.T) string {
 	state := vm.inspects(t, "container", caddy.Container,
 		"{{.State.Status}} exit={{.State.ExitCode}} restarts={{.RestartCount}} error={{.State.Error}}")
 	if state == "" {
-		return caddy.Container + " stands on this host as nothing the engine knows about"
+		return caddy.Container + " exists on this host as nothing the engine knows about"
 	}
 	return caddy.Container + " is " + state + ", and it said:\n" +
 		vm.ssh(t, "sudo docker logs --tail 15 "+caddy.Container+" 2>&1 || true")
@@ -313,7 +313,7 @@ func stampOn(t *testing.T, vm machine) host.Stamp {
 	t.Helper()
 	var stamp host.Stamp
 	if err := json.Unmarshal([]byte(vm.ssh(t, "sudo cat /etc/ocel/production/stamp.json")), &stamp); err != nil {
-		t.Fatalf("the stamp this host carries is not one ocel can read: %v", err)
+		t.Fatalf("the stamp this host has is not one ocel can read: %v", err)
 	}
 	return stamp
 }

@@ -22,7 +22,7 @@ func TestTheUnitIsWrittenAfterEverythingItWatches(t *testing.T) {
 	items := ConnectorItems([]byte("#!/bin/sh\n"), connectorConfig())
 	at := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindUnit })
 	if at < 0 {
-		t.Fatal("nothing stands the connector up, so a reboot leaves the console dialling a socket nobody is listening on")
+		t.Fatal("nothing starts the connector, so a reboot leaves the console dialling a socket nobody is listening on")
 	}
 	unit := items[at]
 	for _, watched := range unit.Watch {
@@ -44,16 +44,16 @@ func TestTheUnitIsRestartedWhenTheBinaryOrTheConfigChanges(t *testing.T) {
 		at := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindUnit })
 		return items[at]
 	}
-	held := unitOf(ConnectorItems([]byte("one"), connectorConfig()))
+	first := unitOf(ConnectorItems([]byte("one"), connectorConfig()))
 	for name, items := range map[string][]Item{
 		"another binary": ConnectorItems([]byte("two"), connectorConfig()),
 		"another config": ConnectorItems([]byte("one"), []byte(`{"console":"https://elsewhere.example"}`)),
 	} {
-		if unitOf(items).Digest() == held.Digest() {
+		if unitOf(items).Digest() == first.Digest() {
 			t.Errorf("%s leaves the unit item current, so nothing restarts the process serving the old one", name)
 		}
 	}
-	if unitOf(ConnectorItems([]byte("one"), connectorConfig())).Digest() != held.Digest() {
+	if unitOf(ConnectorItems([]byte("one"), connectorConfig())).Digest() != first.Digest() {
 		t.Error("the same binary and config draw a different unit item, so every run restarts the connector")
 	}
 }
@@ -70,30 +70,30 @@ func TestTheUnitRunsUnelevatedOverASocketAndComesBackOnABoot(t *testing.T) {
 		"After=docker.service",
 	} {
 		if !strings.Contains(written, want) {
-			t.Errorf("the unit carries no %q:\n%s", want, written)
+			t.Errorf("the unit has no %q:\n%s", want, written)
 		}
 	}
 	if strings.Contains(written, "RuntimeDirectory") {
-		t.Errorf("the unit lets systemd own %s, which the proxy has bind-mounted: a stop would take the directory the container still holds:\n%s", ConnectorRun, written)
+		t.Errorf("the unit lets systemd own %s, which the proxy has bind-mounted: a stop would take the directory the container still mounts:\n%s", ConnectorRun, written)
 	}
 }
 
-func TestTheConfigTheConnectorReadsNamesTheKeyOnlyTheBoxHolds(t *testing.T) {
+func TestTheConfigTheConnectorReadsNamesTheKeyOnlyTheBoxHas(t *testing.T) {
 	t.Parallel()
 
 	written, err := keyPathed(connectorConfig())
 	if err != nil {
 		t.Fatalf("keyPathed: %v", err)
 	}
-	var held map[string]any
-	if err := json.Unmarshal(written, &held); err != nil {
+	var config map[string]any
+	if err := json.Unmarshal(written, &config); err != nil {
 		t.Fatalf("the config is not an object: %v", err)
 	}
-	if held["keyPath"] != ConnectorKey {
-		t.Errorf("keyPath = %v, want %s: the connector mints its own key and the console only ever sees the public half", held["keyPath"], ConnectorKey)
+	if config["keyPath"] != ConnectorKey {
+		t.Errorf("keyPath = %v, want %s: the connector mints its own key and the console only ever sees the public half", config["keyPath"], ConnectorKey)
 	}
-	if held["console"] != "https://ocel.app" {
-		t.Errorf("the install dropped what the console told it: %v", held)
+	if config["console"] != "https://ocel.app" {
+		t.Errorf("the install dropped what the console told it: %v", config)
 	}
 	if _, err := keyPathed([]byte("[]")); err == nil {
 		t.Error("keyPathed() took a config that is no object")
@@ -173,7 +173,7 @@ esac`)
 		t.Fatal(err)
 	}
 	if observed[stated.ID()] != stated.Digest() {
-		t.Errorf("the probe reads the unit as %q and the item states %q, so every re-run restarts a connector that stands",
+		t.Errorf("the probe reads the unit as %q and the item states %q, so every re-run restarts a connector that is already running",
 			observed[stated.ID()], stated.Digest())
 	}
 }
@@ -191,26 +191,26 @@ func TestTakingTheConnectorOffLeavesNoUnitBinaryOrKey(t *testing.T) {
 		t.Errorf("the removal leaves the unit running:\n%s", written)
 	}
 	if !strings.Contains(written, "daemon-reload") {
-		t.Errorf("the removal leaves systemd holding a unit whose file is gone:\n%s", written)
+		t.Errorf("the removal leaves systemd keeping a unit whose file is gone:\n%s", written)
 	}
 }
 
 func TestWhatTheConnectorSaysAboutItselfIsReadBack(t *testing.T) {
 	t.Parallel()
 
-	held, err := readConnectorState("version=0.4.1\nkey=ZmFrZQ==\n")
+	state, err := readConnectorState("version=0.4.1\nkey=ZmFrZQ==\n")
 	if err != nil {
-		t.Fatalf("readConnectorStanding: %v", err)
+		t.Fatalf("readConnectorState: %v", err)
 	}
-	if !held.Installed || held.Version != "0.4.1" || held.PublicKey != "ZmFrZQ==" {
-		t.Errorf("standing = %+v, want the version and key the box printed", held)
+	if !state.Installed || state.Version != "0.4.1" || state.PublicKey != "ZmFrZQ==" {
+		t.Errorf("state = %+v, want the version and key the box printed", state)
 	}
 	absent, err := readConnectorState("\n")
 	if err != nil || absent.Installed {
-		t.Errorf("standing = %+v, %v, want nothing installed", absent, err)
+		t.Errorf("state = %+v, %v, want nothing installed", absent, err)
 	}
 	if _, err := readConnectorState("version=0.4.1\nkey=\n"); err == nil {
-		t.Error("a connector holding no key was reported as paired, and the console can verify no heartbeat against it")
+		t.Error("a connector with no key was reported as paired, and the console can verify no heartbeat against it")
 	}
 }
 
@@ -234,12 +234,12 @@ func TestTheConnectorPathOnTheBoxHostnameReachesTheConnectorAheadOfEverySurface(
 		t.Errorf("the switchboard refuses the front proxy a certificate for the connector hostname nothing else claims (%v), and the console dials the connector over https", err)
 	}
 
-	held, err := ReadRoutingTable(mustWrite(t, state))
+	read, err := ReadRoutingTable(mustWrite(t, state))
 	if err != nil {
 		t.Fatalf("ReadRoutingTable: %v", err)
 	}
-	if held.Connector != "box.example.com" {
-		t.Errorf("the route the render wrote reads back as %q, so the next deploy takes it with it", held.Connector)
+	if read.Connector != "box.example.com" {
+		t.Errorf("the route the render wrote reads back as %q, so the next deploy takes it with it", read.Connector)
 	}
 }
 
@@ -250,12 +250,12 @@ func TestABoxWithNoConnectorForwardsNothingToOne(t *testing.T) {
 	if upstream, ok := routedBy(t, state)("box.example.com", switchboard.ConnectorPath); ok {
 		t.Errorf("a box nothing was added to still routes %s to %q", switchboard.ConnectorPath, upstream)
 	}
-	held, err := ReadRoutingTable(mustWrite(t, RoutingTable{Grace: DeployWindow}))
+	read, err := ReadRoutingTable(mustWrite(t, RoutingTable{Grace: DeployWindow}))
 	if err != nil {
 		t.Fatalf("ReadRoutingTable: %v", err)
 	}
-	if held.Connector != "" {
-		t.Errorf("a table carrying no connector read back as %q", held.Connector)
+	if read.Connector != "" {
+		t.Errorf("a table with no connector read back as %q", read.Connector)
 	}
 }
 

@@ -45,7 +45,7 @@ type scriptedAnswer struct {
 	said   answer
 }
 
-func standingBox() []scriptedAnswer {
+func healthyBox() []scriptedAnswer {
 	return []scriptedAnswer{
 		{"docker version", answer{}},
 		{"docker info", answer{stdout: roomySaid}},
@@ -55,7 +55,7 @@ func standingBox() []scriptedAnswer {
 		{"publish=" + caddy.HTTPPort, answer{stdout: caddy.Container + "\n"}},
 		{"publish=443", answer{stdout: caddy.Container + "\n"}},
 		{"cat /proc/net/tcp\n", answer{stdout: ""}},
-		{"'holds'", answer{}},
+		{"'answers'", answer{}},
 		{"proxy.json", answer{stdout: builtInRecord}},
 	}
 }
@@ -63,19 +63,19 @@ func standingBox() []scriptedAnswer {
 const builtInRecord = `{"proxy":null,"project":"shop","class":"production"}`
 
 func boxSaying(overrides map[string]answer) *scripted {
-	held := standingBox()
-	for at, one := range held {
+	script := healthyBox()
+	for at, one := range script {
 		if said, named := overrides[one.naming]; named {
-			held[at].said = said
+			script[at].said = said
 		}
 	}
 	for naming, said := range overrides {
-		if !slices.ContainsFunc(held, func(one scriptedAnswer) bool { return one.naming == naming }) {
-			held = append(held, scriptedAnswer{naming, said})
+		if !slices.ContainsFunc(script, func(one scriptedAnswer) bool { return one.naming == naming }) {
+			script = append(script, scriptedAnswer{naming, said})
 		}
 	}
 	return &scripted{answer: func(command string) (answer, bool) {
-		for _, one := range held {
+		for _, one := range script {
 			if strings.Contains(command, one.naming) {
 				return one.said, true
 			}
@@ -87,11 +87,11 @@ func boxSaying(overrides map[string]answer) *scripted {
 func TestNoTwoThingsThisBenchScriptsAreNamedByTheSameCommand(t *testing.T) {
 	t.Parallel()
 
-	held := standingBox()
-	for _, one := range held {
-		for _, other := range held {
+	bench := healthyBox()
+	for _, one := range bench {
+		for _, other := range bench {
 			if one.naming != other.naming && strings.Contains(one.naming, other.naming) {
-				t.Errorf("this bench answers %q and %q, and the first holds the second: whichever is reached first wins, and a bench that answers a different command on a different run proves nothing about either",
+				t.Errorf("this bench answers %q and %q, and the first contains the second: whichever is reached first wins, and a bench that answers a different command on a different run proves nothing about either",
 					one.naming, other.naming)
 			}
 		}
@@ -99,19 +99,19 @@ func TestNoTwoThingsThisBenchScriptsAreNamedByTheSameCommand(t *testing.T) {
 }
 
 func (s *scripted) Stream(_ context.Context, command string, stdin io.Reader) (session.Result, error) {
-	var carried string
+	var input string
 	if stdin != nil {
 		raw, err := io.ReadAll(stdin)
 		if err != nil {
 			return session.Result{}, err
 		}
-		carried = string(raw)
+		input = string(raw)
 	}
 	s.mu.Lock()
 	s.ran = append(s.ran, command)
-	s.fed = append(s.fed, carried)
+	s.fed = append(s.fed, input)
 	s.mu.Unlock()
-	if said, held := s.answer(command); held {
+	if said, known := s.answer(command); known {
 		return session.Result{Code: said.code, Stdout: said.stdout, Stderr: said.stderr}, nil
 	}
 	return session.Result{}, nil
@@ -160,12 +160,12 @@ func TestABoxThatIsReadyRefusesNothingBeforeADeploy(t *testing.T) {
 		"the engine answering as this login": "docker version",
 		"what the docker data root has left": "docker info",
 		"the switchboard's upstreams":        "'upstreams'",
-		"the front proxy's admin socket":     "'holds'",
+		"the front proxy's admin socket":     "'answers'",
 		"which container publishes port 80":  "publish=" + caddy.HTTPPort,
 		"which container publishes port 443": "publish=443",
 	} {
 		if !strings.Contains(joined, fragment) {
-			t.Errorf("a preflight over a standing box never asked about %s:\n%s", what, joined)
+			t.Errorf("a preflight over a healthy box never asked about %s:\n%s", what, joined)
 		}
 	}
 }
@@ -227,23 +227,23 @@ func proxyStates() map[string]map[string]answer {
 			"docker inspect": {stdout: runningState},
 		},
 		"the front proxy is not there at all": {
-			"'holds'":        {code: 1, stderr: "Error: No such container: " + caddy.Container},
+			"'answers'":      {code: 1, stderr: "Error: No such container: " + caddy.Container},
 			"docker inspect": {code: 1, stdout: "Error: No such object: " + caddy.Container},
 		},
 		"the front proxy exited": {
-			"'holds'":        {code: 1, stderr: "Error response from daemon: container is not running"},
+			"'answers'":      {code: 1, stderr: "Error response from daemon: container is not running"},
 			"docker inspect": {stdout: exitedState},
 		},
 		"the front proxy has no admin socket": {
-			"'holds'":        {code: 3, stderr: "ocel-switchboard: nothing answered on " + caddy.AdminSocket + ": dial unix " + caddy.AdminSocket + ": connect: no such file or directory"},
+			"'answers'":      {code: 3, stderr: "ocel-switchboard: nothing answered on " + caddy.AdminSocket + ": dial unix " + caddy.AdminSocket + ": connect: no such file or directory"},
 			"docker inspect": {stdout: runningState},
 		},
 		"the front proxy's admin socket is left behind and nothing answers on it": {
-			"'holds'":        {code: 3, stderr: "ocel-switchboard: nothing answered on " + caddy.AdminSocket + ": dial unix " + caddy.AdminSocket + ": connect: connection refused"},
+			"'answers'":      {code: 3, stderr: "ocel-switchboard: nothing answered on " + caddy.AdminSocket + ": dial unix " + caddy.AdminSocket + ": connect: connection refused"},
 			"docker inspect": {stdout: runningState},
 		},
 		"the front proxy answers with no http app loaded": {
-			"'holds'":        {code: 3, stderr: "ocel-switchboard: " + caddy.AdminSocket + " holds nothing at /config/apps/http"},
+			"'answers'":      {code: 3, stderr: "ocel-switchboard: " + caddy.AdminSocket + " serves nothing at /config/apps/http"},
 			"docker inspect": {stdout: runningState},
 		},
 	}
@@ -261,8 +261,8 @@ func TestEachContainerTheBoxServesThroughIsRefusedByNameAndByWhatIsWrongWithIt(t
 		said[what] = err.Error()
 	}
 	for what, message := range said {
-		for other, held := range said {
-			if other != what && held == message {
+		for other, theirs := range said {
+			if other != what && theirs == message {
 				t.Errorf("%q and %q are refused with the same words, and they have different fixes:\n%s", what, other, message)
 			}
 		}
@@ -276,7 +276,7 @@ func TestEachContainerTheBoxServesThroughIsRefusedByNameAndByWhatIsWrongWithIt(t
 		"the front proxy exited":                                                  {caddy.Container, "exited"},
 		"the front proxy has no admin socket":                                     {caddy.Container, caddy.AdminSocket, "no such file"},
 		"the front proxy's admin socket is left behind and nothing answers on it": {caddy.Container, caddy.AdminSocket, "connection refused"},
-		"the front proxy answers with no http app loaded":                         {caddy.Container, "holds nothing"},
+		"the front proxy answers with no http app loaded":                         {caddy.Container, "serves nothing"},
 	} {
 		for _, named := range wanted {
 			if !strings.Contains(said[what], named) {
@@ -296,7 +296,7 @@ func TestAForeignListenerOnAServingPortIsRefusedByName(t *testing.T) {
 		t.Fatal("PreflightDeploy() let a deploy onto a box where something else publishes port 80")
 	}
 	if !strings.Contains(err.Error(), "not-ocels") {
-		t.Errorf("PreflightDeploy() = %q, want the container holding the port named", err)
+		t.Errorf("PreflightDeploy() = %q, want the container publishing the port named", err)
 	}
 }
 
@@ -318,7 +318,7 @@ func TestAProcessOutsideDockerOnAServingPortIsRefusedByWhereItIsBound(t *testing
 	}
 }
 
-func TestAServingPortNothingHoldsIsRefusedBecauseItMustBeTaken(t *testing.T) {
+func TestAServingPortNothingListensOnIsRefusedBecauseItMustBeTaken(t *testing.T) {
 	t.Parallel()
 
 	err := preflighting(boxSaying(map[string]answer{
@@ -327,8 +327,8 @@ func TestAServingPortNothingHoldsIsRefusedBecauseItMustBeTaken(t *testing.T) {
 	if err == nil {
 		t.Fatal("PreflightDeploy() read a free port 80 as fine, and on a bootstrapped box these ports are taken by the proxy rather than free")
 	}
-	if !strings.Contains(err.Error(), "nothing holds port "+caddy.HTTPPort) {
-		t.Errorf("PreflightDeploy() = %q, want the port named as one nothing holds", err)
+	if !strings.Contains(err.Error(), "nothing listens on port "+caddy.HTTPPort) {
+		t.Errorf("PreflightDeploy() = %q, want the port named as one nothing listens on", err)
 	}
 }
 
@@ -345,8 +345,8 @@ func ahead(machine *scripted, fragment string, said answer) *scripted {
 	return machine
 }
 
-func pruned(stood map[string]answer, restored answer) *scripted {
-	return ahead(boxSaying(stood), "'docker' 'run'", restored)
+func pruned(script map[string]answer, restored answer) *scripted {
+	return ahead(boxSaying(script), "'docker' 'run'", restored)
 }
 
 func prunedBoard() map[string]answer {
@@ -366,16 +366,16 @@ func ranWith(machine *scripted, fragment string) string {
 	return ""
 }
 
-func TestASwitchboardAPruneRemovedIsStoodAgainAndTheDeployGoesOn(t *testing.T) {
+func TestASwitchboardAPruneRemovedIsRestartedAndTheDeployGoesOn(t *testing.T) {
 	t.Parallel()
 
 	machine := pruned(prunedBoard(), answer{})
 	if err := preflighting(machine); err != nil {
-		t.Fatalf("PreflightDeploy() = %v, want a switchboard a prune removed stood again from what bootstrap left: Dokploy prunes every stopped container nightly, and the box still holds everything the switchboard is made of", err)
+		t.Fatalf("PreflightDeploy() = %v, want a switchboard a prune removed restarted from what bootstrap left: Dokploy prunes every stopped container nightly, and the box still has everything the switchboard is made of", err)
 	}
-	stood := ranWith(machine, "'docker' 'run'")
-	if stood == "" {
-		t.Fatalf("the preflight stood no container:\n%s", strings.Join(machine.ran, "\n"))
+	runCommand := ranWith(machine, "'docker' 'run'")
+	if runCommand == "" {
+		t.Fatalf("the preflight started no container:\n%s", strings.Join(machine.ran, "\n"))
 	}
 	for what, fragment := range map[string]string{
 		"the network it runs on, which the same prune takes": "docker network create 'ocel'",
@@ -384,20 +384,20 @@ func TestASwitchboardAPruneRemovedIsStoodAgainAndTheDeployGoesOn(t *testing.T) {
 		"the label the doctor reads the restoration from":         "'ocel.restored=",
 		"its rejoining every project network that is still there": "docker network connect \"$net\" 'ocel-switchboard'",
 	} {
-		if !strings.Contains(stood, fragment) {
-			t.Errorf("the switchboard was stood again without %s (%s):\n%s", what, fragment, stood)
+		if !strings.Contains(runCommand, fragment) {
+			t.Errorf("the switchboard was restarted without %s (%s):\n%s", what, fragment, runCommand)
 		}
 	}
-	if strings.Contains(stood, "docker rm") {
-		t.Errorf("the switchboard was stood again by removing whatever holds its name:\n%s\nwant it stood only while no container holds the name, or two deploys that both found it gone remove each other's", stood)
+	if strings.Contains(runCommand, "docker rm") {
+		t.Errorf("the switchboard was restarted by removing whatever owns its name:\n%s\nwant it started only while no container owns the name, or two deploys that both found it gone remove each other's", runCommand)
 	}
-	locked := strings.Index(stood, "flock -x 9\n")
-	guarded := strings.Index(stood, "if ! docker inspect --type container --format '{{.Id}}' 'ocel-switchboard'")
-	run := strings.Index(stood, "'docker' 'run'")
-	unlocked := strings.Index(stood, "flock -u 9\n")
-	closed := strings.LastIndex(stood[:max(unlocked, 0)], "\nfi\n")
+	locked := strings.Index(runCommand, "flock -x 9\n")
+	guarded := strings.Index(runCommand, "if ! docker inspect --type container --format '{{.Id}}' 'ocel-switchboard'")
+	run := strings.Index(runCommand, "'docker' 'run'")
+	unlocked := strings.Index(runCommand, "flock -u 9\n")
+	closed := strings.LastIndex(runCommand[:max(unlocked, 0)], "\nfi\n")
 	if locked < 0 || locked >= guarded || guarded >= run || run >= closed || closed >= unlocked {
-		t.Errorf("the switchboard was stood again outside the routing lock or outside the check that no container holds its name:\n%s\nwant the lock taken, then the name checked, then the container run inside that check, then the lock let go: two deploys that both found it gone otherwise both run one, and the second fails on the name the first took", stood)
+		t.Errorf("the switchboard was restarted outside the routing lock or outside the check that no container owns its name:\n%s\nwant the lock taken, then the name checked, then the container run inside that check, then the lock let go: two deploys that both found it gone otherwise both run one, and the second fails on the name the first took", runCommand)
 	}
 }
 
@@ -420,18 +420,18 @@ func TestASwitchboardAPruneRemovedIsRefusedWhenWhatItMountsIsGoneToo(t *testing.
 				t.Errorf("without %s the refusal is %q, want %q in it", what, err, wanted)
 			}
 		}
-		if stood := ranWith(machine, "'docker' 'run'"); stood != "" {
-			t.Errorf("without %s the preflight still stood a switchboard, and docker creates a bind source that is not there as an empty root directory:\n%s", what, stood)
+		if runCommand := ranWith(machine, "'docker' 'run'"); runCommand != "" {
+			t.Errorf("without %s the preflight still started a switchboard, and docker creates a bind source that is not there as an empty root directory:\n%s", what, runCommand)
 		}
 	}
 }
 
-func TestASwitchboardThatCouldNotBeStoodAgainIsRefusedWithWhatTheBoxSaid(t *testing.T) {
+func TestASwitchboardThatCouldNotBeRestartedIsRefusedWithWhatTheBoxSaid(t *testing.T) {
 	t.Parallel()
 
 	err := preflighting(pruned(prunedBoard(), answer{code: 1, stderr: "gcr.io/distroless/static-debian12 was not pulled in 5 attempts"}))
 	if err == nil {
-		t.Fatal("PreflightDeploy() let a deploy past a switchboard it could not stand again")
+		t.Fatal("PreflightDeploy() let a deploy past a switchboard it could not restart")
 	}
 	for _, wanted := range []string{host.SwitchboardContainer, "not pulled", "bootstrap"} {
 		if !strings.Contains(err.Error(), wanted) {

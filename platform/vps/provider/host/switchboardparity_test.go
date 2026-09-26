@@ -26,7 +26,7 @@ func parityTables() map[string]RoutingTable {
 	}
 	return map[string]RoutingTable{
 		"a box serving nothing":                   {Grace: DrainWindow},
-		"a box carrying every kind of row":        everything(),
+		"a box with every kind of row":            everything(),
 		"a store beside an app":                   storing(),
 		"a project-wide claim on one app":         claimedBy(routed(), HostClaim{Hostname: claimed, Owner: surface, Pointer: pointed}),
 		"an app's own claim on a two-app surface": claimedBy(twoApps(), HostClaim{Hostname: claimed, Owner: surface, Pointer: pointed, App: "api"}),

@@ -77,7 +77,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 	defer closing(t, p)
 
 	site := fronting(t, p, "certified")
-	one := standsUp(t, p, "one")
+	one := provisioned(t, p, "one")
 	promotes(t, site.stack, "p-one", "one", one, 1)
 
 	at := caddy.PinsDir + "/live"
@@ -97,7 +97,7 @@ func TestLiveTheProxyHandleIsReadOffAHandshakeAndAsksTheAdminApiNothing(t *testi
 		t.Fatalf("Certificate(%s) = %q, want %q: a hostname a pinned pair covers is served off that pair", caddy.Container, cert.ID, certs.PinHandle(at))
 	}
 	if cert.Requested {
-		t.Error("Issue().Requested = true on a box, and ocel placed no key material here so it holds authority to remove none")
+		t.Error("Issue().Requested = true on a box, and ocel placed no key material here so it has authority to remove none")
 	}
 
 	spoken := vm.proxyLogBytes(t)
@@ -155,7 +155,7 @@ func TestLiveAPinnedPairIsVerifiedFromTheCertificateAndTheKeyIsNeverRead(t *test
 	if err := pinned.Certificates().Discard(ctx, cert, edge.DiscardProgress()); err != nil {
 		t.Errorf("Discard() = %v, want nil", err)
 	}
-	if !vm.stands(t, caddy.PinKey(at)) {
+	if !vm.exists(t, caddy.PinKey(at)) {
 		t.Errorf("%s is gone from the box, and ocel never places or removes key material here", caddy.PinKey(at))
 	}
 }

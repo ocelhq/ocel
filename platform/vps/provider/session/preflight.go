@@ -20,11 +20,11 @@ printf 'kernel=%s\n' "$(uname -r)"
 . /etc/os-release 2>/dev/null && printf 'os=%s\n' "$PRETTY_NAME"
 [ -d /run/systemd/system ] && printf 'systemd=yes\n' || printf 'systemd=no\n'
 sudo -n true >/dev/null 2>&1 && printf 'sudo=yes\n' || printf 'sudo=no\n'
-held=''
+found=''
 for tool in ` + toolList + `; do
-PATH="$PATH:/usr/sbin:/sbin" command -v "$tool" >/dev/null 2>&1 && held="$held $tool"
+PATH="$PATH:/usr/sbin:/sbin" command -v "$tool" >/dev/null 2>&1 && found="$found $tool"
 done
-printf 'tools=%s\n' "$held"`
+printf 'tools=%s\n' "$found"`
 
 var toolList = strings.Join(bootstrapTools, " ")
 
@@ -76,10 +76,10 @@ func Requirements() []Requirement {
 	}
 }
 
-func absent(held []string) []string {
+func absent(present []string) []string {
 	var missing []string
 	for _, tool := range bootstrapTools {
-		if !slices.Contains(held, tool) {
+		if !slices.Contains(present, tool) {
 			missing = append(missing, tool)
 		}
 	}

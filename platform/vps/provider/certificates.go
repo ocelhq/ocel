@@ -21,12 +21,12 @@ func (p certificates) Issue(ctx context.Context, req provider.CertificateRequest
 		if strings.HasPrefix(req.Hostname, "*.") {
 			return provider.Certificate{}, nil
 		}
-		held, err := p.host.FrontProxy().Certificate(ctx, req.Hostname)
-		if held.Trouble != nil && refused(held.Trouble) {
-			return provider.Certificate{}, held.Trouble
+		current, err := p.host.FrontProxy().Certificate(ctx, req.Hostname)
+		if current.Trouble != nil && refused(current.Trouble) {
+			return provider.Certificate{}, current.Trouble
 		}
 		if err != nil && req.Progress != nil {
-			req.Progress.Say("could not read what the proxy holds for " + req.Hostname + ": " + err.Error())
+			req.Progress.Say("could not read the certificate the proxy has for " + req.Hostname + ": " + err.Error())
 		}
 		return provider.Certificate{ID: certs.ProxyHandle(req.Hostname)}, nil
 	}

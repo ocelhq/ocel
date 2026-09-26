@@ -22,15 +22,15 @@ func TestTheHandleNamesWhoIsOnTheHookWhenItExpires(t *testing.T) {
 		t.Errorf("%q reads as a pinned pair, and the whole of the vocabulary is which of the two renews it", proxied)
 	}
 
-	held := certs.PinHandle("/etc/ocel/preview/certs/wildcard")
-	if held != "pem:/etc/ocel/preview/certs/wildcard" {
-		t.Errorf("PinHandle() = %q", held)
+	handle := certs.PinHandle("/etc/ocel/preview/certs/wildcard")
+	if handle != "pem:/etc/ocel/preview/certs/wildcard" {
+		t.Errorf("PinHandle() = %q", handle)
 	}
-	if certs.Renewal(held) == certs.Renewal(proxied) {
+	if certs.Renewal(handle) == certs.Renewal(proxied) {
 		t.Error("a pinned pair and one the proxy obtained name the same renewer, and that is the only distinction an operator has to act on")
 	}
-	if !strings.Contains(certs.Renewal(held), "you") {
-		t.Errorf("Renewal(a pinned pair) = %q, want it to say the operator renews it", certs.Renewal(held))
+	if !strings.Contains(certs.Renewal(handle), "you") {
+		t.Errorf("Renewal(a pinned pair) = %q, want it to say the operator renews it", certs.Renewal(handle))
 	}
 }
 
@@ -82,6 +82,6 @@ func TestExpiryIsReportedAgainstTheRenewalWindowAndNeverGuessed(t *testing.T) {
 		t.Error("an expired certificate reads as live, and a box would serve a hostname under it")
 	}
 	if (certs.Leaf{}).ExpiresAt() != 0 {
-		t.Error("a certificate carrying no NotAfter reports an expiry anyway")
+		t.Error("a certificate with no NotAfter reports an expiry anyway")
 	}
 }

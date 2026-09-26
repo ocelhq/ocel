@@ -55,7 +55,7 @@ func TestAStoreThatRefusedToExpireItsOwnUploadsIsSweptByTheRuntime(t *testing.T)
 	machine := &box{kept: sealedRootKey(), refuses: lifecycleAnswering("lifecycle=501\n")}
 	manifest := manifestAfterBucket(t, machine)
 	if manifest.Store == nil || !manifest.Store.SweepUploads {
-		t.Error("the store refused the rule that abandons unfinished uploads and nothing sweeps them, so an upload left open holds its parts on the volume forever")
+		t.Error("the store refused the rule that abandons unfinished uploads and nothing sweeps them, so an upload left open keeps its parts on the volume forever")
 	}
 }
 
@@ -76,7 +76,7 @@ func TestAStoreThatRefusedToExpireItsUploadsIsSweptByADeployThatOnlyBuildsTheApp
 	}
 	manifest := manifestIn(t, machine)
 	if manifest.Store == nil || !manifest.Store.SweepUploads {
-		t.Error("the store refused the rule that abandons unfinished uploads and the app was told to sweep nothing, because what the store answered was only ever held in the memory of the run that asked it")
+		t.Error("the store refused the rule that abandons unfinished uploads and the app was told to sweep nothing, because what the store answered was only ever kept in the memory of the run that asked it")
 	}
 }
 
@@ -92,15 +92,15 @@ func (b *box) proxied() string {
 	return b.routingDoc
 }
 
-func holdingBuckets(t *testing.T, p *vps.Provider, stack naming.StackName, named ...string) {
+func withBuckets(t *testing.T, p *vps.Provider, stack naming.StackName, named ...string) {
 	t.Helper()
 	records := fake.NewRecords()
 	bindings := make([]provider.Binding, 0, len(named))
 	for _, name := range named {
-		held := bindingBucket()
-		held.Name, held.Resource = name, name
-		held.Properties = map[string]string{provider.PropertyBucket: "prod-web-r0a1b2c3d-" + name}
-		bindings = append(bindings, held)
+		binding := bindingBucket()
+		binding.Name, binding.Resource = name, name
+		binding.Properties = map[string]string{provider.PropertyBucket: "prod-web-r0a1b2c3d-" + name}
+		bindings = append(bindings, binding)
 	}
 	recorded := stackrecords.Stack{Kind: provider.StackApp, App: "web", Bindings: bindings}
 	if err := stackrecords.Write(context.Background(), records,
@@ -110,7 +110,7 @@ func holdingBuckets(t *testing.T, p *vps.Provider, stack naming.StackName, named
 	p.Recording(records)
 }
 
-func standingBucket(t *testing.T, machine *box, p *vps.Provider, name string) provider.Binding {
+func provisionedBucket(t *testing.T, machine *box, p *vps.Provider, name string) provider.Binding {
 	t.Helper()
 	binding, err := p.ProvisionBucket(context.Background(), aBucket(t, name, false), nil)
 	if err != nil {
@@ -126,8 +126,8 @@ func TestTheStoreGoesDownWithTheLastBucketTheProjectKeepsInIt(t *testing.T) {
 	machine := &box{kept: sealedRootKey()}
 	p := over(machine)
 	stack := aStackName(t)
-	binding := standingBucket(t, machine, p, "uploads")
-	holdingBuckets(t, p, stack, "uploads")
+	binding := provisionedBucket(t, machine, p, "uploads")
+	withBuckets(t, p, stack, "uploads")
 
 	ref := provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack}
 	if err := p.RemoveResource(context.Background(), ref, binding, nil); err != nil {
@@ -142,7 +142,7 @@ func TestTheStoreGoesDownWithTheLastBucketTheProjectKeepsInIt(t *testing.T) {
 		"/kept/" + store,
 	} {
 		if !strings.Contains(joined, want) {
-			t.Errorf("the last bucket went and %q never ran, so the store it lived in stands on with its data and its credential:\n%s", want, joined)
+			t.Errorf("the last bucket went and %q never ran, so the store it lived in stays running with its data and its credential:\n%s", want, joined)
 		}
 	}
 	if strings.Contains(machine.proxied(), store+":9000") {
@@ -150,14 +150,14 @@ func TestTheStoreGoesDownWithTheLastBucketTheProjectKeepsInIt(t *testing.T) {
 	}
 }
 
-func TestAStoreStillHoldingABucketIsLeftStanding(t *testing.T) {
+func TestAStoreStillContainingABucketIsLeftRunning(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{kept: sealedRootKey()}
 	p := over(machine)
 	stack := aStackName(t)
-	binding := standingBucket(t, machine, p, "uploads")
-	holdingBuckets(t, p, stack, "uploads", "assets")
+	binding := provisionedBucket(t, machine, p, "uploads")
+	withBuckets(t, p, stack, "uploads", "assets")
 
 	ref := provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack}
 	if err := p.RemoveResource(context.Background(), ref, binding, nil); err != nil {
@@ -176,8 +176,8 @@ func TestATeardownThatStoppedHalfwayIsRunAgainWithoutComplaint(t *testing.T) {
 	machine := &box{kept: sealedRootKey()}
 	p := over(machine)
 	stack := aStackName(t)
-	binding := standingBucket(t, machine, p, "uploads")
-	holdingBuckets(t, p, stack, "uploads")
+	binding := provisionedBucket(t, machine, p, "uploads")
+	withBuckets(t, p, stack, "uploads")
 
 	ref := provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack}
 	for again := range 2 {
@@ -196,8 +196,8 @@ func TestATeardownThatStoppedAfterTheStoreWentIsFinishedByTheNextRun(t *testing.
 	own := host.StoreAccountKey(naming.InfraStack(ref.Name.Env).String(), "web")
 
 	stopped := over(machine)
-	binding := standingBucket(t, machine, stopped, "uploads")
-	holdingBuckets(t, stopped, stack, "uploads")
+	binding := provisionedBucket(t, machine, stopped, "uploads")
+	withBuckets(t, stopped, stack, "uploads")
 	machine.refuses = func(command string) (session.Result, bool) {
 		if !strings.Contains(command, "/kept/"+own) {
 			return session.Result{}, false
@@ -212,7 +212,7 @@ func TestATeardownThatStoppedAfterTheStoreWentIsFinishedByTheNextRun(t *testing.
 	machine.kept = ""
 	machine.forget()
 	again := over(machine)
-	holdingBuckets(t, again, stack, "uploads")
+	withBuckets(t, again, stack, "uploads")
 	if err := again.RemoveResource(context.Background(), ref, binding, nil); err != nil {
 		t.Fatalf("RemoveResource(bucket) run 2 = %v", err)
 	}
@@ -235,8 +235,8 @@ func TestAnAppThatGoesTakesItsOwnStoreAccountWithIt(t *testing.T) {
 	machine := &box{kept: sealedRootKey()}
 	p := over(machine)
 	stack := aStackName(t)
-	standingBucket(t, machine, p, "uploads")
-	holdingBuckets(t, p, stack, "uploads")
+	provisionedBucket(t, machine, p, "uploads")
+	withBuckets(t, p, stack, "uploads")
 
 	ref := provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack}
 	err := p.RemoveContainers(context.Background(), ref,

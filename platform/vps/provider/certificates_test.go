@@ -193,7 +193,7 @@ func TestAnUnpinnedHostnameGetsTheProxysOwnHandleAndAsksNothingOfTheBox(t *testi
 		t.Errorf("Issue() = %q, want %q", cert.ID, certs.ProxyHandle("shop.example.com"))
 	}
 	if cert.Requested {
-		t.Error("Issue().Requested = true: Requested is a claim of delete authority, and ocel places no key material on a box so it holds authority to remove none")
+		t.Error("Issue().Requested = true: Requested is a claim of delete authority, and ocel places no key material on a box so it has authority to remove none")
 	}
 	if len(cert.Written) != 0 || len(cert.Manual) != 0 {
 		t.Errorf("Issue() owes records %v/%v, and an http-01 hostname owes no validation record", cert.Written, cert.Manual)
@@ -339,7 +339,7 @@ func TestAPinHandleNamingAPathOutsideTheProxysOwnDirectoryIsRefusedBeforeItIsRea
 
 func asRefusal(err error, refusal *refusal.Refusal) bool { return errors.As(err, refusal) }
 
-func TestABoxHoldsNoCertificateForThePreviewWildcardItself(t *testing.T) {
+func TestABoxHasNoCertificateForThePreviewWildcardItself(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
@@ -351,7 +351,7 @@ func TestABoxHoldsNoCertificateForThePreviewWildcardItself(t *testing.T) {
 
 	cert := certificateFor(t, p, wildcard)
 	if cert.Issued() {
-		t.Fatalf("Certificate(%s) = %q: the catch-all terminates nothing and every preview under it holds its own http-01 certificate, so a handle here names a certificate this box will never obtain and `ocel domain status` reports forever on a slot nothing fills",
+		t.Fatalf("Certificate(%s) = %q: the catch-all terminates nothing and every preview under it has its own http-01 certificate, so a handle here names a certificate this box will never obtain and `ocel domain status` reports forever on a slot nothing fills",
 			wildcard, cert.ID)
 	}
 	health, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, wildcard, cert)

@@ -26,16 +26,16 @@ func previewSpec() edge.PreviewWildcardSpec {
 func TestThePreviewEntryBearsNoCertificateAndStillPublishesAFrontToPointAt(t *testing.T) {
 	t.Parallel()
 
-	_, front, _ := standing(t)
+	_, front, _ := reconciled(t)
 	ctx := context.Background()
 	spec := previewSpec()
 	if spec.Certificate != "" {
-		t.Fatalf("this test is meant to reconcile a wildcard carrying no certificate and carries %q", spec.Certificate)
+		t.Fatalf("this test is meant to reconcile a wildcard with no certificate and has %q", spec.Certificate)
 	}
 
 	published, err := front.ReconcilePreviewWildcard(ctx, spec)
 	if err != nil {
-		t.Fatalf("ReconcilePreviewWildcard with no certificate = %v: a box terminates each preview hostname on its own http-01 certificate, so there is no wildcard certificate for this spec to carry", err)
+		t.Fatalf("ReconcilePreviewWildcard with no certificate = %v: a box terminates each preview hostname on its own http-01 certificate, so there is no wildcard certificate for this spec to include", err)
 	}
 	if published != address {
 		t.Fatalf("the wildcard published %q, want the box's address %q: %s resolves to one A record and it is the box", published, address, edge.PreviewWildcard(previewBase))
@@ -50,10 +50,10 @@ func TestThePreviewEntryBearsNoCertificateAndStillPublishesAFrontToPointAt(t *te
 	}
 }
 
-func TestTheWildcardIsOwnedByThePreviewEntryWhileItsRouteStandsAndByNobodyAfter(t *testing.T) {
+func TestTheWildcardIsOwnedByThePreviewEntryWhileItsRouteExistsAndByNobodyAfter(t *testing.T) {
 	t.Parallel()
 
-	_, front, _ := standing(t)
+	_, front, _ := reconciled(t)
 	ctx := context.Background()
 	wildcard := edge.PreviewWildcard(previewBase)
 
@@ -82,13 +82,13 @@ func TestTheWildcardIsOwnedByThePreviewEntryWhileItsRouteStandsAndByNobodyAfter(
 func TestAPreviewWildcardWithNoBaseIsRefusedRatherThanInstalledAsADefaultRoute(t *testing.T) {
 	t.Parallel()
 
-	_, front, _ := standing(t)
+	_, front, _ := reconciled(t)
 	spec := previewSpec()
 	spec.BaseDomain = ""
 
 	_, err := front.ReconcilePreviewWildcard(context.Background(), spec)
 	if err == nil {
-		t.Fatal("a preview wildcard naming no base domain was installed, and the route it renders carries no host matcher: it receives every hostname pointed at this machine, a mistyped production hostname included")
+		t.Fatal("a preview wildcard naming no base domain was installed, and the route it renders has no host matcher: it receives every hostname pointed at this machine, a mistyped production hostname included")
 	}
 	if !strings.Contains(err.Error(), "no base domain") {
 		t.Errorf("the refusal reads %q, want the missing base domain named", err)
@@ -98,7 +98,7 @@ func TestAPreviewWildcardWithNoBaseIsRefusedRatherThanInstalledAsADefaultRoute(t
 func TestABoxAlreadyServingOnePreviewBaseRefusesASecondRatherThanSwappingIt(t *testing.T) {
 	t.Parallel()
 
-	_, front, _ := standing(t)
+	_, front, _ := reconciled(t)
 	ctx := context.Background()
 	if _, err := front.ReconcilePreviewWildcard(ctx, previewSpec()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
@@ -111,10 +111,10 @@ func TestABoxAlreadyServingOnePreviewBaseRefusesASecondRatherThanSwappingIt(t *t
 	}
 }
 
-func previewStack(t *testing.T, stood *machine) edge.EdgeStack {
+func previewStack(t *testing.T, m *machine) edge.EdgeStack {
 	t.Helper()
 
-	front := edgeOver(stood, fake.NewRecords())
+	front := edgeOver(m, fake.NewRecords())
 	if _, err := front.ReconcilePreviewWildcard(context.Background(), previewSpec()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
@@ -142,61 +142,61 @@ func previewed(t *testing.T, stack edge.EdgeStack, pointer string, apps ...strin
 	}
 }
 
-func claimedOn(t *testing.T, stood *machine) []host.HostClaim {
+func claimedOn(t *testing.T, m *machine) []host.HostClaim {
 	t.Helper()
 
-	held, err := stood.Claims(context.Background())
+	claims, err := m.Claims(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	return held
+	return claims
 }
 
 func TestAPreviewOfAMultiAppProjectClaimsOneHostnamePerApp(t *testing.T) {
 	t.Parallel()
 
-	stood := aMachine()
-	previewed(t, previewStack(t, stood), "pr-7", "api", "web")
+	m := aMachine()
+	previewed(t, previewStack(t, m), "pr-7", "api", "web")
 
 	surface := box.Surface(slug, edge.ClassPreview)
 	want := []host.HostClaim{
 		{Hostname: slug + "--pr-7--api." + previewBase, Owner: surface, Pointer: "pr-7", App: "api"},
 		{Hostname: slug + "--pr-7--web." + previewBase, Owner: surface, Pointer: "pr-7", App: "web"},
 	}
-	if held := claimedOn(t, stood); !slices.Equal(held, want) {
-		t.Fatalf("the box holds %v, want %v: a preview is one routing entry per app the project has, each on its own hostname and its own per-host certificate", held, want)
+	if claimed := claimedOn(t, m); !slices.Equal(claimed, want) {
+		t.Fatalf("the box records %v, want %v: a preview is one routing entry per app the project has, each on its own hostname and its own per-host certificate", claimed, want)
 	}
 }
 
 func TestAPreviewOfASingleAppProjectClaimsTheOneHostnameTheBranchIsNamedFor(t *testing.T) {
 	t.Parallel()
 
-	stood := aMachine()
-	previewed(t, previewStack(t, stood), "pr-7", "web")
+	m := aMachine()
+	previewed(t, previewStack(t, m), "pr-7", "web")
 
 	want := []host.HostClaim{{
 		Hostname: slug + "--pr-7." + previewBase,
 		Owner:    box.Surface(slug, edge.ClassPreview),
 		Pointer:  "pr-7",
 	}}
-	if held := claimedOn(t, stood); !slices.Equal(held, want) {
-		t.Fatalf("the box holds %v, want %v", held, want)
+	if claimed := claimedOn(t, m); !slices.Equal(claimed, want) {
+		t.Fatalf("the box records %v, want %v", claimed, want)
 	}
 }
 
 func TestTwoBranchesOfOneProjectEachKeepTheirOwnPreviewHostname(t *testing.T) {
 	t.Parallel()
 
-	stood := aMachine()
-	stack := previewStack(t, stood)
+	m := aMachine()
+	stack := previewStack(t, m)
 	previewed(t, stack, "pr-7", "web")
 	previewed(t, stack, "pr-9", "web")
 
-	held := claimedOn(t, stood)
-	if len(held) != 2 {
-		t.Fatalf("the box holds %v, want one hostname per live branch: the preview hostname is a function of the branch name, so a second branch is a second name rather than a second deploy of the first", held)
+	claimed := claimedOn(t, m)
+	if len(claimed) != 2 {
+		t.Fatalf("the box records %v, want one hostname per live branch: the preview hostname is a function of the branch name, so a second branch is a second name rather than a second deploy of the first", claimed)
 	}
-	for _, claim := range held {
+	for _, claim := range claimed {
 		if !strings.Contains(claim.Hostname, "--"+claim.Pointer+".") {
 			t.Errorf("%s is claimed under branch %q", claim.Hostname, claim.Pointer)
 		}
@@ -206,32 +206,32 @@ func TestTwoBranchesOfOneProjectEachKeepTheirOwnPreviewHostname(t *testing.T) {
 func TestRemovingAPreviewPointerTakesItsHostnamesOffTheBoxWithIt(t *testing.T) {
 	t.Parallel()
 
-	stood := aMachine()
-	stack := previewStack(t, stood)
+	m := aMachine()
+	stack := previewStack(t, m)
 	previewed(t, stack, "pr-7", "api", "web")
 	previewed(t, stack, "pr-9", "api", "web")
 
 	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
-	for _, claim := range claimedOn(t, stood) {
+	for _, claim := range claimedOn(t, m) {
 		if claim.Pointer == "pr-7" {
-			t.Errorf("%s is still claimed on this box after the preview it belongs to was removed: the box's proxy holds a certificate per hostname, and a name nothing serves keeps being renewed", claim.Hostname)
+			t.Errorf("%s is still claimed on this box after the preview it belongs to was removed: the box's proxy keeps a certificate per hostname, and a name nothing serves keeps being renewed", claim.Hostname)
 		}
 		if claim.Pointer != "pr-9" {
 			t.Errorf("removing one preview took %s with it, and it belongs to branch %q", claim.Hostname, claim.Pointer)
 		}
 	}
-	if len(claimedOn(t, stood)) != 2 {
-		t.Errorf("the box holds %v after one of two branches went, want the other branch's two hostnames", claimedOn(t, stood))
+	if len(claimedOn(t, m)) != 2 {
+		t.Errorf("the box records %v after one of two branches went, want the other branch's two hostnames", claimedOn(t, m))
 	}
 }
 
-func TestAPreviewHostnameDnsWillNotCarryIsRefusedRatherThanClaimed(t *testing.T) {
+func TestAPreviewHostnameDnsWillNotResolveIsRefusedRatherThanClaimed(t *testing.T) {
 	t.Parallel()
 
-	stood := aMachine()
-	stack := previewStack(t, stood)
+	m := aMachine()
+	stack := previewStack(t, m)
 	over := strings.Repeat("b", edge.PreviewLabelMaxLen)
 	staged(t, stack, "web", "b1", slug+"-web-1")
 
@@ -239,11 +239,11 @@ func TestAPreviewHostnameDnsWillNotCarryIsRefusedRatherThanClaimed(t *testing.T)
 		PromotionID: "p-over", Ts: 1, Builds: map[string]string{"web": "b1"},
 	}, over, edge.DiscardProgress())
 	if err == nil {
-		t.Fatalf("a preview whose hostname carries a %d-character label was claimed on this box: DNS caps a label at %d, so the name resolves nowhere and its acme order can never succeed. The check lives in the CLI's preflight alone, and a caller that skips preflight reaches this",
+		t.Fatalf("a preview whose hostname has a %d-character label was claimed on this box: DNS caps a label at %d, so the name resolves nowhere and its acme order can never succeed. The check lives in the CLI's preflight alone, and a caller that skips preflight reaches this",
 			len(slug)+len(edge.PreviewAppSeparator)+len(over), edge.PreviewLabelMaxLen)
 	}
-	if held := claimedOn(t, stood); len(held) != 0 {
-		t.Errorf("the refusal still left %v claimed on the box", held)
+	if claimed := claimedOn(t, m); len(claimed) != 0 {
+		t.Errorf("the refusal still left %v claimed on the box", claimed)
 	}
 }
 
@@ -254,23 +254,23 @@ func TestAPreviewClaimsTheHostnamesThePreviewSiteItselfNames(t *testing.T) {
 		"one app":  {"web"},
 		"two apps": {"api", "web"},
 	} {
-		stood := aMachine()
-		previewed(t, previewStack(t, stood), "pr-7", apps...)
+		m := aMachine()
+		previewed(t, previewStack(t, m), "pr-7", apps...)
 
 		site := edge.SharedPreview(slug, previewBase)
 		want := site.Hosts("pr-7", apps)
-		var held []string
-		for _, claim := range claimedOn(t, stood) {
-			held = append(held, claim.Hostname)
+		var claimed []string
+		for _, claim := range claimedOn(t, m) {
+			claimed = append(claimed, claim.Hostname)
 			if claim.App != "" && site.Host("pr-7", claim.App) != claim.Hostname {
 				t.Errorf("%s: %s is claimed under app %q, and that is not the app the hostname is built from", what, claim.Hostname, claim.App)
 			}
 		}
-		slices.Sort(held)
+		slices.Sort(claimed)
 		slices.Sort(want)
-		if !slices.Equal(held, want) {
+		if !slices.Equal(claimed, want) {
 			t.Errorf("%s: the box claims %v and the preview site names %v: the rule that a project of one app serves one hostname with no app segment lives in PreviewSite.Hosts, and a second copy of it here is one drift away from a CLI printing a URL this box does not route",
-				what, held, want)
+				what, claimed, want)
 		}
 	}
 }
@@ -278,13 +278,13 @@ func TestAPreviewClaimsTheHostnamesThePreviewSiteItselfNames(t *testing.T) {
 func TestAProductionPromotionClaimsNoPreviewHostnameAtAll(t *testing.T) {
 	t.Parallel()
 
-	stood, front, stack := standing(t)
+	m, front, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
-	if held := claimedOn(t, stood); len(held) != 0 {
-		t.Errorf("a production promotion claimed %v", held)
+	if claimed := claimedOn(t, m); len(claimed) != 0 {
+		t.Errorf("a production promotion claimed %v", claimed)
 	}
 
 	pointed, err := front.Reconcile(context.Background(), edge.StackSpec{
@@ -299,39 +299,39 @@ func TestAProductionPromotionClaimsNoPreviewHostnameAtAll(t *testing.T) {
 	}, "pr-7", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote under a pointer: %v", err)
 	}
-	if held := claimedOn(t, stood); len(held) != 0 {
-		t.Errorf("a production promotion under pointer pr-7 on a box that knows a preview base claimed %v: the class is the whole of what decides whether a promotion claims a preview hostname, and the pointer and the base alone do not", held)
+	if claimed := claimedOn(t, m); len(claimed) != 0 {
+		t.Errorf("a production promotion under pointer pr-7 on a box that knows a preview base claimed %v: the class is the whole of what decides whether a promotion claims a preview hostname, and the pointer and the base alone do not", claimed)
 	}
 }
 
 func callsATeardownMakes(t *testing.T) []string {
 	t.Helper()
 
-	stood := aMachine()
-	stack := previewStack(t, stood)
+	m := aMachine()
+	stack := previewStack(t, m)
 	previewed(t, stack, "pr-7", "api", "web")
-	stood.visited = nil
+	m.visited = nil
 	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
-	reached := slices.DeleteFunc(stood.reached(), func(call string) bool { return call == "HoldOrigins" })
+	reached := slices.DeleteFunc(m.reached(), func(call string) bool { return call == "ApplyOrigins" })
 	if len(reached) == 0 {
 		t.Fatal("a teardown reached no call on the box that this fake can refuse, so every case below would be vacuous")
 	}
 	return reached
 }
 
-func TestATeardownThatFellOverLeavesThePointersHistoryStandingForTheNextRun(t *testing.T) {
+func TestATeardownThatFellOverLeavesThePointersHistoryInPlaceForTheNextRun(t *testing.T) {
 	t.Parallel()
 
 	for _, call := range callsATeardownMakes(t) {
 		t.Run(call, func(t *testing.T) {
 			t.Parallel()
 
-			stood := aMachine()
-			stack := previewStack(t, stood)
+			m := aMachine()
+			stack := previewStack(t, m)
 			previewed(t, stack, "pr-7", "api", "web")
-			stood.refuseOn(call, errors.New("the box answered nothing over its ssh session"))
+			m.refuseOn(call, errors.New("the box answered nothing over its ssh session"))
 
 			if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardProgress()); err == nil {
 				t.Fatalf("a teardown whose %s refused reported success, and a step a teardown never makes is a step this table names for nothing", call)
@@ -350,37 +350,37 @@ func TestATeardownThatFellOverLeavesThePointersHistoryStandingForTheNextRun(t *t
 func TestRemovingAPointerNothingWasEverPromotedUnderTakesNothingAndRefusesNothing(t *testing.T) {
 	t.Parallel()
 
-	stood := aMachine()
-	stack := previewStack(t, stood)
+	m := aMachine()
+	stack := previewStack(t, m)
 
 	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer of a preview that is already gone = %v, and teardown is run again on every retry", err)
 	}
 }
 
-func TestRemovingAPreviewLeavesTheCatchAllStandingAndRendersItAsKeptWithAReason(t *testing.T) {
+func TestRemovingAPreviewLeavesTheCatchAllInPlaceAndRendersItAsKeptWithAReason(t *testing.T) {
 	t.Parallel()
 
-	stood := aMachine()
-	stack := previewStack(t, stood)
+	m := aMachine()
+	stack := previewStack(t, m)
 	previewed(t, stack, "pr-7", "web")
-	front := edgeOver(stood, fake.NewRecords())
+	front := edgeOver(m, fake.NewRecords())
 
 	if _, err := stack.RemovePointer(context.Background(), "pr-7", edge.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
 
-	held, err := front.DomainOwner(context.Background(), edge.PreviewWildcard(previewBase))
+	owner, err := front.DomainOwner(context.Background(), edge.PreviewWildcard(previewBase))
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
-	if held != edge.PreviewEntryOwner {
+	if owner != edge.PreviewEntryOwner {
 		t.Fatalf("the catch-all is owned by %q after a preview came down, want %q: it is a bootstrap item answering for every project this box serves, and taking it with one project's preview takes every other project's previews off the air",
-			held, edge.PreviewEntryOwner)
+			owner, edge.PreviewEntryOwner)
 	}
 	kept := front.SharedPreviewRemoval()
 	if kept.Action != edge.PlanKeep || kept.Reason == "" {
-		t.Errorf("the catch-all renders as %+v, want a kept row carrying why it is kept", kept)
+		t.Errorf("the catch-all renders as %+v, want a kept row saying why it is kept", kept)
 	}
 }
 
@@ -388,8 +388,8 @@ func TestAProjectsOwnPreviewDomainClaimsTheHostnamesTheKitPrintsForIt(t *testing
 	t.Parallel()
 
 	ctx := context.Background()
-	stood := aMachine()
-	front := edgeOver(stood, fake.NewRecords())
+	m := aMachine()
+	front := edgeOver(m, fake.NewRecords())
 	if _, err := front.ReconcilePreviewWildcard(ctx, previewSpec()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
@@ -403,7 +403,7 @@ func TestAProjectsOwnPreviewDomainClaimsTheHostnamesTheKitPrintsForIt(t *testing
 	previewed(t, stack, "pr-7", "web")
 
 	var claimed []string
-	for _, claim := range claimedOn(t, stood) {
+	for _, claim := range claimedOn(t, m) {
 		claimed = append(claimed, claim.Hostname)
 	}
 	want := edge.ProjectPreview(previewBase).Hosts("pr-7", []string{"web"})
@@ -422,8 +422,8 @@ func TestAStackOpenedFromItsOwnStateServesTheSamePreviewSiteItWasReconciledFor(t
 	t.Parallel()
 
 	ctx := context.Background()
-	stood := aMachine()
-	front := edgeOver(stood, fake.NewRecords())
+	m := aMachine()
+	front := edgeOver(m, fake.NewRecords())
 	if _, err := front.ReconcilePreviewWildcard(ctx, previewSpec()); err != nil {
 		t.Fatalf("ReconcilePreviewWildcard: %v", err)
 	}
@@ -443,7 +443,7 @@ func TestAStackOpenedFromItsOwnStateServesTheSamePreviewSiteItWasReconciledFor(t
 	previewed(t, opened, "pr-9", "web")
 
 	var claimed []string
-	for _, claim := range claimedOn(t, stood) {
+	for _, claim := range claimedOn(t, m) {
 		if claim.Pointer == "pr-9" {
 			claimed = append(claimed, claim.Hostname)
 		}

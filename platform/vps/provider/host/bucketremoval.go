@@ -30,14 +30,14 @@ func readAnswers(said string) map[string]storeAnswer {
 		if !cut {
 			continue
 		}
-		if held, is := strings.CutSuffix(name, ".body"); is {
+		if call, is := strings.CutSuffix(name, ".body"); is {
 			decoded, err := base64.StdEncoding.DecodeString(value)
 			if err != nil {
 				continue
 			}
-			answer := answers[held]
+			answer := answers[call]
 			answer.body = decoded
-			answers[held] = answer
+			answers[call] = answer
 			continue
 		}
 		answer := answers[name]
@@ -85,7 +85,7 @@ func storeScript(store string, runs []*http.Request, calls []storeCall) string {
 		"trap 'rm -rf \"$tmp\"' EXIT\n")
 	for i, req := range runs {
 		call := calls[i]
-		held := "\"$tmp/" + strconv.Itoa(i) + "\""
+		codeFile := "\"$tmp/" + strconv.Itoa(i) + "\""
 		argv := append([]string{"docker", "exec", "--interactive", store}, storeCurl...)
 		argv = append(argv, "--output", "-", "--write-out", "%{stderr}%{http_code}",
 			"--request", req.Method)
@@ -101,8 +101,8 @@ func storeScript(store string, runs []*http.Request, calls []storeCall) string {
 		if len(call.body) > 0 {
 			fed = "printf '%s' " + quoted(base64.StdEncoding.EncodeToString(call.body)) + " | base64 -d | "
 		}
-		written.WriteString("said=$(" + fed + words(argv) + " 2>" + held + " | base64 | tr -d '\\n')\n")
-		written.WriteString("printf '%s=%s\\n' " + quoted(call.name) + " \"$(cat " + held + ")\"\n")
+		written.WriteString("said=$(" + fed + words(argv) + " 2>" + codeFile + " | base64 | tr -d '\\n')\n")
+		written.WriteString("printf '%s=%s\\n' " + quoted(call.name) + " \"$(cat " + codeFile + ")\"\n")
 		if call.capture {
 			written.WriteString("printf '%s.body=%s\\n' " + quoted(call.name) + " \"$said\"\n")
 		}
@@ -181,8 +181,8 @@ func objectsIn(answer storeAnswer) ([]string, error) {
 			"unreadable object listing from the store: %v", err)
 	}
 	keys := make([]string, 0, len(listed.Contents))
-	for _, held := range listed.Contents {
-		keys = append(keys, held.Key)
+	for _, object := range listed.Contents {
+		keys = append(keys, object.Key)
 	}
 	return keys, nil
 }
@@ -216,19 +216,19 @@ func deleteCall(keys []string) (storeCall, error) {
 	}, nil
 }
 
-func heldSignature(keys []string, uploads []storedUpload) string {
-	held := fmt.Sprint(len(keys), " ", len(uploads))
+func contentSignature(keys []string, uploads []storedUpload) string {
+	signature := fmt.Sprint(len(keys), " ", len(uploads))
 	if len(keys) > 0 {
-		held += " " + keys[0]
+		signature += " " + keys[0]
 	}
 	if len(uploads) > 0 {
-		held += " " + uploads[0].UploadID
+		signature += " " + uploads[0].UploadID
 	}
-	return held
+	return signature
 }
 
 func removedBucket(spec BucketSpec, clock func() time.Time, run storeShell) error {
-	for held := ""; ; {
+	for previous := ""; ; {
 		listed, err := droveStore(spec, listingCalls(), clock(), run)
 		if err != nil {
 			return err
@@ -244,13 +244,13 @@ func removedBucket(spec BucketSpec, clock func() time.Time, run storeShell) erro
 		if len(uploads) == 0 && len(keys) == 0 {
 			break
 		}
-		signature := heldSignature(keys, uploads)
-		if signature == held {
+		signature := contentSignature(keys, uploads)
+		if signature == previous {
 			return refusal.Refuse(refusal.CodeNotReady,
-				"bucket %s still holds %d objects and %d unfinished uploads after deletion",
+				"bucket %s still contains %d objects and %d unfinished uploads after deletion",
 				spec.Bucket, len(keys), len(uploads))
 		}
-		held = signature
+		previous = signature
 		calls := abortCalls(uploads)
 		if len(keys) > 0 {
 			call, err := deleteCall(keys)

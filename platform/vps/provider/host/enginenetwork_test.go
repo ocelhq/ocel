@@ -16,12 +16,12 @@ import (
 
 func freePort(t *testing.T) int {
 	t.Helper()
-	held, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer held.Close()
-	return held.Addr().(*net.TCPAddr).Port
+	defer listener.Close()
+	return listener.Addr().(*net.TCPAddr).Port
 }
 
 type yourNetwork struct {
@@ -76,11 +76,11 @@ func onYourNetwork(t *testing.T) yourNetwork {
 	return yourNetwork{binary: binary, yours: yours, box: boxNetwork, here: here}
 }
 
-func (y yourNetwork) standing(t *testing.T, port int) boxContainer {
+func (y yourNetwork) switchboardOn(t *testing.T, port int) boxContainer {
 	t.Helper()
-	board := switchboardStanding(y.binary, Front{Manual: &ManualFront{Port: port, Network: y.yours}})
+	board := switchboardBox(y.binary, Front{Manual: &ManualFront{Port: port, Network: y.yours}})
 	if said, err := y.shell(board.writing(containerRising)); err != nil {
-		t.Fatalf("the write that stands the switchboard on %s = %v, want it serving: it resolves every network it relays from as it starts\n%s\n%s", y.yours, err, said, logsOf(SwitchboardContainer))
+		t.Fatalf("the write that starts the switchboard on %s = %v, want it serving: it resolves every network it relays from as it starts\n%s\n%s", y.yours, err, said, logsOf(SwitchboardContainer))
 	}
 	return board
 }
@@ -110,18 +110,18 @@ func (y yourNetwork) stated(t *testing.T, board boxContainer) bool {
 	return false
 }
 
-func TestASwitchboardOnYourProxysNetworkStandsOnItAndIsReadAsStatedUntilItLeaves(t *testing.T) {
+func TestASwitchboardOnYourProxysNetworkJoinsItAndIsReadAsStatedUntilItLeaves(t *testing.T) {
 	y := onYourNetwork(t)
 	yours := y.yours
 	port := freePort(t)
-	missing := switchboardStanding(y.binary, Front{Manual: &ManualFront{Port: port, Network: yours + "-gone"}})
+	missing := switchboardBox(y.binary, Front{Manual: &ManualFront{Port: port, Network: yours + "-gone"}})
 	if said, err := y.shell(missing.writing(containerRising)); err == nil || !strings.Contains(said, "proxy.manual.network") {
 		t.Errorf("the write onto a network this box does not have = %v, %q, want it refused naming the option that set it", err, said)
 	}
 
-	board := y.standing(t, port)
+	board := y.switchboardOn(t, port)
 	if !y.stated(t, board) {
-		t.Fatalf("the switchboard ocel stood on %s does not read as the item it writes it from", yours)
+		t.Fatalf("the switchboard ocel started on %s does not read as the item it writes it from", yours)
 	}
 
 	if said, err := exec.Command(dockerEngine, "network", "disconnect", yours, SwitchboardContainer).CombinedOutput(); err != nil {
@@ -132,9 +132,9 @@ func TestASwitchboardOnYourProxysNetworkStandsOnItAndIsReadAsStatedUntilItLeaves
 	}
 }
 
-func TestASwitchboardAPruneTookIsStoodAgainOnYourProxysNetworkAndReadAsStated(t *testing.T) {
+func TestASwitchboardAPruneTookIsStartedAgainOnYourProxysNetworkAndReadAsStated(t *testing.T) {
 	y := onYourNetwork(t)
-	board := y.standing(t, freePort(t))
+	board := y.switchboardOn(t, freePort(t))
 	if said, err := exec.Command(dockerEngine, "rm", "--force", SwitchboardContainer).CombinedOutput(); err != nil {
 		t.Fatalf("remove the switchboard as a prune does: %v\n%s", err, said)
 	}
@@ -145,13 +145,13 @@ func TestASwitchboardAPruneTookIsStoodAgainOnYourProxysNetworkAndReadAsStated(t 
 	gone := board
 	gone.networks = []userNetwork{{name: y.yours + "-gone", option: "proxy.manual.network"}}
 	if said, err := y.shell(gone.restoring(containerRising)); err == nil || !strings.Contains(said, "proxy.manual.network") {
-		t.Errorf("standing the switchboard again onto a network this box does not have = %v, %q, want it refused naming the option that set it", err, said)
+		t.Errorf("starting the switchboard again onto a network this box does not have = %v, %q, want it refused naming the option that set it", err, said)
 	}
 
 	if said, err := y.shell(board.restoring(containerRising)); err != nil {
-		t.Fatalf("standing the switchboard again = %v, want it serving on %s\n%s\n%s", err, y.yours, said, logsOf(SwitchboardContainer))
+		t.Fatalf("starting the switchboard again = %v, want it serving on %s\n%s\n%s", err, y.yours, said, logsOf(SwitchboardContainer))
 	}
 	if !y.stated(t, board) {
-		t.Errorf("the switchboard stood again after a prune does not read as the one bootstrap stands on %s, so your proxy would reach nothing until a bootstrap", y.yours)
+		t.Errorf("the switchboard started again after a prune does not read as the one bootstrap starts on %s, so your proxy would reach nothing until a bootstrap", y.yours)
 	}
 }

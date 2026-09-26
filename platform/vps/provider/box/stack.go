@@ -44,21 +44,21 @@ func named(pointer string) string {
 	return pointer
 }
 
-type standing struct {
+type promotable struct {
 	key    host.RouteKey
 	app    string
 	record edge.DeploymentRecord
 }
 
 func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer string, progress edge.Progress) error {
-	ready := make([]standing, 0, len(promotion.Builds))
+	ready := make([]promotable, 0, len(promotion.Builds))
 	for _, app := range slices.Sorted(maps.Keys(promotion.Builds)) {
-		held, serves, err := s.standing(ctx, app, pointer, promotion)
+		release, serves, err := s.readyRelease(ctx, app, pointer, promotion)
 		if err != nil {
 			return err
 		}
 		if serves {
-			ready = append(ready, held)
+			ready = append(ready, release)
 		}
 	}
 	if err := s.ledger().Promote(ctx, promotion, pointer, progress); err != nil {
@@ -76,7 +76,7 @@ func (s *stack) Promote(ctx context.Context, promotion edge.Promotion, pointer s
 	return err
 }
 
-func (s *stack) serve(ctx context.Context, pointer string, promotion edge.Promotion, ready []standing, progress edge.Progress) error {
+func (s *stack) serve(ctx context.Context, pointer string, promotion edge.Promotion, ready []promotable, progress edge.Progress) error {
 	claims, err := s.previewClaims(ctx, pointer, slices.Sorted(maps.Keys(promotion.Builds)))
 	if err != nil {
 		return host.Unserved{Err: err}
@@ -85,73 +85,73 @@ func (s *stack) serve(ctx context.Context, pointer string, promotion edge.Promot
 		return host.Unserved{Err: err}
 	}
 	apps := make([]host.AppRelease, 0, len(ready))
-	for _, held := range ready {
-		if err := s.standUp(ctx, held, progress); err != nil {
+	for _, release := range ready {
+		if err := s.rerun(ctx, release, progress); err != nil {
 			return host.Unserved{Err: err}
 		}
 		apps = append(apps, host.AppRelease{
-			RouteKey:   held.key,
-			Target:     held.record.Physical + ":" + appbuild.InjectedPortText,
-			HealthPath: held.record.HealthPath,
+			RouteKey:   release.key,
+			Target:     release.record.Physical + ":" + appbuild.InjectedPortText,
+			HealthPath: release.record.HealthPath,
 		})
 	}
 	return s.e.machine.Release(ctx, host.Release{
 		Apps:          apps,
 		DeployTimeout: host.DeployWindow,
 		DrainTimeout:  host.DrainWindow,
-		Holding:       func(ctx context.Context) error { return s.holding(ctx, pointer, promotion.PromotionID) },
+		StillActive:   func(ctx context.Context) error { return s.stillActive(ctx, pointer, promotion.PromotionID) },
 	}, progress)
 }
 
-func (s *stack) holding(ctx context.Context, pointer, promotionID string) error {
-	holder, err := s.ledger().ActivePromotionID(ctx, pointer)
+func (s *stack) stillActive(ctx context.Context, pointer, promotionID string) error {
+	active, err := s.ledger().ActivePromotionID(ctx, pointer)
 	if err != nil {
 		return err
 	}
-	if holder == promotionID {
+	if active == promotionID {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeBusy,
-		"promotion %s no longer holds %s, which now names %s: another deploy moved it while this one gated, and this deploy stopped rather than flip the box onto a release the ledger no longer names. Re-run this deploy once the other one has finished if its release should serve",
-		promotionID, named(pointer), holderOr(holder))
+		"promotion %s is no longer active on %s, which now names %s: another deploy moved it while this one gated, and this deploy stopped rather than flip the box onto a release the ledger no longer names. Re-run this deploy once the other one has finished if its release should serve",
+		promotionID, named(pointer), activeOr(active))
 }
 
-func holderOr(holder string) string {
-	if holder == "" {
+func activeOr(active string) string {
+	if active == "" {
 		return "nothing"
 	}
-	return holder
+	return active
 }
 
-func (s *stack) standing(ctx context.Context, app, pointer string, promotion edge.Promotion) (standing, bool, error) {
+func (s *stack) readyRelease(ctx context.Context, app, pointer string, promotion edge.Promotion) (promotable, bool, error) {
 	identity := promotion.Builds[app]
 	record, found, err := s.ledger().Record(ctx, app, identity)
 	if err != nil {
-		return standing{}, false, err
+		return promotable{}, false, err
 	}
 	if !found {
-		return standing{}, false, refusal.Refuse(refusal.CodeInvalid,
+		return promotable{}, false, refusal.Refuse(refusal.CodeInvalid,
 			"promote %s: no deployment record for %s/%s\nRe-run the deploy that built it",
 			promotion.PromotionID, app, identity)
 	}
 	if record.Physical == "" {
-		return standing{}, false, nil
+		return promotable{}, false, nil
 	}
 	if record.Image == "" || record.HealthPath == "" {
-		return standing{}, false, refusal.Refuse(refusal.CodeInvalid,
+		return promotable{}, false, refusal.Refuse(refusal.CodeInvalid,
 			"promote %s: the record for %s/%s (container %s) lacks an image (%q) or health path (%q)",
 			promotion.PromotionID, app, identity, record.Physical, record.Image, record.HealthPath)
 	}
-	held, err := s.e.machine.HoldsImage(ctx, record.Image)
+	hasImage, err := s.e.machine.HasImage(ctx, record.Image)
 	if err != nil {
-		return standing{}, false, err
+		return promotable{}, false, err
 	}
-	if !held {
-		return standing{}, false, refusal.Refuse(refusal.CodeNotReady,
-			"promote %s: this box no longer holds %s for %s/%s; %s is unchanged\nDeploy again",
+	if !hasImage {
+		return promotable{}, false, refusal.Refuse(refusal.CodeNotReady,
+			"promote %s: this box no longer has %s for %s/%s; %s is unchanged\nDeploy again",
 			promotion.PromotionID, record.Image, app, identity, app)
 	}
-	return standing{key: s.routeKey(pointer, app), app: app, record: record}, true, nil
+	return promotable{key: s.routeKey(pointer, app), app: app, record: record}, true, nil
 }
 
 func declaredBy(record edge.DeploymentRecord) []string {
@@ -166,18 +166,18 @@ func declaredBy(record edge.DeploymentRecord) []string {
 	return declared
 }
 
-func (s *stack) standUp(ctx context.Context, held standing, progress edge.Progress) error {
-	record := held.record
+func (s *stack) rerun(ctx context.Context, release promotable, progress edge.Progress) error {
+	record := release.record
 	if progress != nil {
-		progress.Say("Standing " + held.app + " back up as " + record.Physical)
+		progress.Say("Starting " + release.app + " again as " + record.Physical)
 	}
-	if err := s.e.machine.StandUp(ctx, host.Container{
-		Name: record.Physical, Project: s.state.Slug, App: held.app, Image: record.Image, Class: s.state.Class,
+	if err := s.e.machine.RunContainer(ctx, host.Container{
+		Name: record.Physical, Project: s.state.Slug, App: release.app, Image: record.Image, Class: s.state.Class,
 		HealthPath: record.HealthPath, Declared: declaredBy(record),
 	}); err != nil {
 		return err
 	}
-	return s.e.machine.Promote(ctx, s.state.Class, s.state.Slug, held.app, record.Image)
+	return s.e.machine.Promote(ctx, s.state.Class, s.state.Slug, release.app, record.Image)
 }
 
 func (s *stack) previewSite() edge.PreviewSite {
@@ -227,7 +227,7 @@ func (s *stack) RemovePointer(ctx context.Context, pointer string, progress edge
 	if err := s.e.machine.DisclaimPointer(ctx, s.surface(), named(pointer)); err != nil {
 		return edge.PruneResult{}, err
 	}
-	if err := s.holdOrigins(ctx); err != nil {
+	if err := s.applyOrigins(ctx); err != nil {
 		progress.Say(s.released("preview "+pointer, err).Error())
 	}
 	if err := s.e.machine.UnroutePointer(ctx, s.surface(), named(pointer)); err != nil {
@@ -275,10 +275,10 @@ func (s *stack) claim(ctx context.Context, claims []host.HostClaim) error {
 	if err := s.e.machine.ClaimHosts(ctx, claims); err != nil {
 		return err
 	}
-	return s.holdOrigins(ctx)
+	return s.applyOrigins(ctx)
 }
 
-func (s *stack) holdOrigins(ctx context.Context) error {
+func (s *stack) applyOrigins(ctx context.Context) error {
 	return s.e.origins(ctx, s.state.Slug, s.state.Class)
 }
 
@@ -296,14 +296,14 @@ func (s *stack) UnbindDomain(ctx context.Context, hostname string) error {
 	}
 	s.state.Release(hostname)
 	s.state.PublishFront(hostname, "")
-	if err := s.holdOrigins(ctx); err != nil {
+	if err := s.applyOrigins(ctx); err != nil {
 		return edge.Warned(s.released(hostname, err))
 	}
 	return nil
 }
 
 func (s *stack) released(what string, err error) error {
-	return fmt.Errorf("%s is released, but this project's buckets still answer it as an origin until the next deploy holds them to what the project claims: %w", what, err)
+	return fmt.Errorf("%s is released, but this project's buckets still answer it as an origin until the next deploy brings them in line with what the project claims: %w", what, err)
 }
 
 func (s *stack) Destroy(ctx context.Context) error {

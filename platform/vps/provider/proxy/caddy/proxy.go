@@ -32,46 +32,46 @@ func (b Builtin) Reload(ctx context.Context) error {
 	return err
 }
 
-func (b Builtin) Inspect(ctx context.Context) (proxy.Standing, error) {
+func (b Builtin) Inspect(ctx context.Context) (proxy.Checks, error) {
 	check := provider.HostCheck{Subject: fmt.Sprintf("%s tcp %d", Container, AdminPort)}
 	said, err := b.Box.Ran(ctx, "read what listens inside "+Container, listening())
 	if err != nil {
 		check.Verdict = provider.HostFail
 		check.Finding = fmt.Sprintf("read listeners inside %s: %v", Container, err)
 		check.Fix = "check the proxy is running"
-		return proxy.Standing{check}, nil
+		return proxy.Checks{check}, nil
 	}
-	held, err := listeners.Parse(strings.NewReader(said))
+	found, err := listeners.Parse(strings.NewReader(said))
 	switch {
 	case err != nil:
 		check.Verdict = provider.HostFail
 		check.Finding = fmt.Sprintf("read listeners inside %s: %v", Container, err)
 		check.Fix = "check the proxy is running with its own /proc mounted"
-	case len(held) == 0:
+	case len(found) == 0:
 		check.Verdict = provider.HostFail
-		check.Finding = fmt.Sprintf("%s reports no listening sockets; a serving proxy holds at least %s and %s",
+		check.Finding = fmt.Sprintf("%s reports no listening sockets; a serving proxy listens on at least %s and %s",
 			Container, HTTPPort, HTTPSPort)
 		check.Fix = "check the proxy is running with its own /proc mounted"
-	case len(listeners.On(held, AdminPort)) > 0:
+	case len(listeners.On(found, AdminPort)) > 0:
 		check.Verdict = provider.HostFail
 		check.Finding = fmt.Sprintf("%s listens on %d inside %s: the admin api is open to anything that reaches the proxy",
-			strings.Join(listeners.Lines(listeners.On(held, AdminPort)), ", "), AdminPort, Container)
+			strings.Join(listeners.Lines(listeners.On(found, AdminPort)), ", "), AdminPort, Container)
 		check.Fix = "run `ocel bootstrap production` to bind the admin endpoint to " + AdminSocket
 	default:
 		check.Verdict = provider.HostPass
 		check.Finding = fmt.Sprintf("nothing listens on tcp %d inside %s; admin is on %s only", AdminPort, Container, AdminSocket)
 	}
-	return proxy.Standing{check}, nil
+	return proxy.Checks{check}, nil
 }
 
 func (b Builtin) Certificate(ctx context.Context, hostname string) (proxy.Certificate, error) {
-	held := proxy.Certificate{Renewal: certs.ProxyRenewal}
+	certificate := proxy.Certificate{Renewal: certs.ProxyRenewal}
 	logged, err := b.Box.Said(ctx, logging())
 	if err != nil {
-		return held, err
+		return certificate, err
 	}
 	if limit, said := certs.RateLimited(logged); said && limit.Covers(hostname) && !limit.Spent(time.Now()) {
-		held.Trouble = limit.Refusal(hostname)
+		certificate.Trouble = limit.Refusal(hostname)
 	}
-	return held, nil
+	return certificate, nil
 }

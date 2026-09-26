@@ -23,13 +23,13 @@ func sites(t *testing.T, marker string) []string {
 		if err != nil {
 			t.Fatal(err)
 		}
-		holding := ""
+		enclosing := ""
 		for _, line := range strings.Split(string(read), "\n") {
 			if name, cut := functionName(line); cut {
-				holding = name
+				enclosing = name
 			}
-			if strings.Contains(line, marker) && holding != "" && !slices.Contains(found, holding) {
-				found = append(found, holding)
+			if strings.Contains(line, marker) && enclosing != "" && !slices.Contains(found, enclosing) {
+				found = append(found, enclosing)
 			}
 		}
 	}
@@ -41,11 +41,11 @@ func functionName(line string) (string, bool) {
 	if !strings.HasPrefix(line, "func ") {
 		return "", false
 	}
-	held := strings.TrimPrefix(line, "func ")
-	if strings.HasPrefix(held, "(") {
-		_, held, _ = strings.Cut(held, ") ")
+	signature := strings.TrimPrefix(line, "func ")
+	if strings.HasPrefix(signature, "(") {
+		_, signature, _ = strings.Cut(signature, ") ")
 	}
-	name, _, cut := strings.Cut(held, "(")
+	name, _, cut := strings.Cut(signature, "(")
 	return name, cut
 }
 
@@ -53,7 +53,7 @@ func rendered(t *testing.T, marker string, roster []string, why string) {
 	t.Helper()
 	found := sites(t, marker)
 	if len(found) == 0 {
-		t.Fatalf("no source in this package renders %s, so the roster this bench holds to it proves nothing", marker)
+		t.Fatalf("no source in this package renders %s, so the roster this bench checks against it proves nothing", marker)
 	}
 	slices.Sort(roster)
 	if !slices.Equal(found, roster) {

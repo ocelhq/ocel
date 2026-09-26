@@ -57,7 +57,7 @@ func networkCreating(class edge.Class, project string) string {
 		"fi"
 }
 
-func networkStanding(class edge.Class, project string) string {
+func joinNetworkScript(class edge.Class, project string) string {
 	network := quoted(AppNetwork(class, project))
 	return networkCreating(class, project) + "\n" +
 		"if ! docker network connect " + network + " " + quoted(SwitchboardContainer) + " >/dev/null 2>&1 && " +
@@ -71,14 +71,14 @@ func networkForgetting(class edge.Class, project string) string {
 	network := quoted(AppNetwork(class, project))
 	return "if docker network inspect " + network + " >/dev/null 2>&1; then\n" +
 		"if docker network inspect --format " + quoted(membersFormat) + " " + network +
-		" | grep -qvx " + quoted(SwitchboardContainer) + "; then printf '%s\\n' " + quoted(networkHeld) + "; exit 0; fi\n" +
+		" | grep -qvx " + quoted(SwitchboardContainer) + "; then printf '%s\\n' " + quoted(networkInUse) + "; exit 0; fi\n" +
 		"docker network disconnect --force " + network + " " + quoted(SwitchboardContainer) + " >/dev/null 2>&1 || true\n" +
 		"docker network rm " + network + " >/dev/null\n" +
 		"fi"
 }
 
 func (h *Host) join(ctx context.Context, spec Container, elevation string) error {
-	return h.joining(ctx, spec.App, spec.Class, spec.Project, networkStanding(spec.Class, spec.Project), elevation)
+	return h.joining(ctx, spec.App, spec.Class, spec.Project, joinNetworkScript(spec.Class, spec.Project), elevation)
 }
 
 func (h *Host) joining(ctx context.Context, who string, class edge.Class, project, command, elevation string) error {
@@ -183,11 +183,11 @@ func ContainerName(stack, app, deployment, image string) string {
 
 const appPulls = 5
 
-func containerStanding(spec Container, held handoff) string {
-	return imageHeld(spec.Image, appPulls) + words(containerRun(spec, held)) + " >/dev/null"
+func runContainerScript(spec Container, env handoff) string {
+	return imagePulled(spec.Image, appPulls) + words(containerRun(spec, env)) + " >/dev/null"
 }
 
-func containerRun(spec Container, held handoff) []string {
+func containerRun(spec Container, env handoff) []string {
 	argv := []string{"docker", "run", "--detach",
 		"--name", spec.Name,
 		"--restart", appRestart,
@@ -196,12 +196,12 @@ func containerRun(spec Container, held handoff) []string {
 		"--label", LabelProject + "=" + naming.Sanitize(spec.Project),
 		"--label", LabelApp + "=" + spec.App,
 		"--label", LabelRef + "=" + spec.Image,
-		"--label", LabelEnv + "=" + held.digest,
+		"--label", LabelEnv + "=" + env.digest,
 	}
 	argv = append(argv, logging()...)
 	argv = append(argv, confined(appCapabilities, false)...)
-	if held.path != "" {
-		argv = append(argv, "--env-file", held.path)
+	if env.path != "" {
+		argv = append(argv, "--env-file", env.path)
 	}
 	if len(spec.Manifest) > 0 {
 		argv = append(argv, "--mount", "type=bind,src="+LiveSocketDir+",dst="+LiveSocketDir+",readonly",
@@ -250,7 +250,7 @@ func servingCommand(name string) string {
 		quoted(name) + " 2>/dev/null || true"
 }
 
-func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
+func (h *Host) RunContainer(ctx context.Context, spec Container) (err error) {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return err
@@ -260,11 +260,11 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 	}
 	said := h.said(ctx, servingCommand(spec.Name), elevation)
 	if spec.Resolved {
-		held, err := handing(spec)
+		env, err := handing(spec)
 		if err != nil {
 			return err
 		}
-		if stillServing(said, spec.Image, held.digest) {
+		if stillServing(said, spec.Image, env.digest) {
 			return nil
 		}
 	} else {
@@ -283,7 +283,7 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 		switch {
 		case known && len(note.Handed) > 0:
 			return refusal.Refuse(refusal.CodeNotReady,
-				"%s is gone from this box and was handed %s, which a promotion cannot carry\nRun `ocel deploy`",
+				"%s is gone from this box and was handed %s, which a promotion cannot pass on\nRun `ocel deploy`",
 				spec.Name, strings.Join(note.Handed, ", "))
 		case known:
 			spec.Manifest = note.Live
@@ -297,7 +297,7 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 				spec.Name)
 		}
 	}
-	held, err := handing(spec)
+	env, err := handing(spec)
 	if err != nil {
 		return err
 	}
@@ -308,8 +308,8 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 	if err := h.sweep(ctx, elevation); err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, h.forget(ctx, held)) }()
-	if err := h.hand(ctx, held, spec); err != nil {
+	defer func() { err = errors.Join(err, h.forget(ctx, env)) }()
+	if err := h.hand(ctx, env, spec); err != nil {
 		return err
 	}
 	if spec.Resolved {
@@ -317,9 +317,9 @@ func (h *Host) StandUp(ctx context.Context, spec Container) (err error) {
 			return err
 		}
 	}
-	_, stood := h.ran(ctx, "stand "+spec.App+" up as "+spec.Name,
-		containerStanding(spec, held), nil, elevation)
-	return stood
+	_, err = h.ran(ctx, "run "+spec.App+" as "+spec.Name,
+		runContainerScript(spec, env), nil, elevation)
+	return err
 }
 
 func (h *Host) TakeDown(ctx context.Context, class edge.Class, name string) error {

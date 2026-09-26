@@ -68,7 +68,7 @@ func TestAnUploadDrawsACreateRowAndThenFailsTheApplyLoudly(t *testing.T) {
 		t.Fatalf("the plan drew %d artifact rows, want 1: the row must precede the write even when the write is going to refuse", len(rows))
 	}
 	if rows[0].Action != provider.ActionCreate {
-		t.Fatalf("the artifact row's action is %q, want %q: a store holding nothing has nothing to keep, and a keep row reads to the human as nothing to do", rows[0].Action, provider.ActionCreate)
+		t.Fatalf("the artifact row's action is %q, want %q: a store containing nothing has nothing to keep, and a keep row reads to the human as nothing to do", rows[0].Action, provider.ActionCreate)
 	}
 
 	var rejection refusal.Refusal

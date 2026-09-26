@@ -55,7 +55,7 @@ func Parse(what string, block []byte) (Leaf, error) {
 		parsed, err := x509.ParseCertificate(found.Bytes)
 		if err != nil {
 			return Leaf{}, refusal.Refuse(refusal.CodeInvalid,
-				"%s holds an unreadable certificate block: %v", what, err)
+				"%s contains an unreadable certificate block: %v", what, err)
 		}
 		return Leaf{Domains: names(parsed), NotAfter: parsed.NotAfter}, nil
 	}

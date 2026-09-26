@@ -22,22 +22,22 @@ import (
 )
 
 type bench struct {
-	mu     sync.Mutex
-	dest   session.Destination
-	facts  session.Facts
-	stands map[edge.Class][]Item
-	ran    []string
-	fed    []string
-	dials  int
-	paused []time.Duration
-	dead   error
-	floor  error
-	answer func(command string) (session.Result, bool)
-	broke  func(command string) error
-	after  func(b *bench, command string)
+	mu        sync.Mutex
+	dest      session.Destination
+	facts     session.Facts
+	installed map[edge.Class][]Item
+	ran       []string
+	fed       []string
+	dials     int
+	paused    []time.Duration
+	dead      error
+	floor     error
+	answer    func(command string) (session.Result, bool)
+	broke     func(command string) error
+	after     func(b *bench, command string)
 }
 
-func machine(stands map[edge.Class][]Item) *bench {
+func machine(installed map[edge.Class][]Item) *bench {
 	return &bench{
 		dest: session.Destination{
 			Written:    "ocelbox",
@@ -46,8 +46,8 @@ func machine(stands map[edge.Class][]Item) *bench {
 			User:       "ada",
 			KnownHosts: []string{"/home/ada/.ssh/known_hosts"},
 		},
-		facts:  session.Facts{Root: true, Systemd: true, Arch: "x86_64"},
-		stands: stands,
+		facts:     session.Facts{Root: true, Systemd: true, Arch: "x86_64"},
+		installed: installed,
 	}
 }
 
@@ -59,10 +59,10 @@ func (b *bench) fronted(front Front) *Host {
 	return h
 }
 
-func (b *bench) pause(ctx context.Context, held time.Duration) error {
+func (b *bench) pause(ctx context.Context, wait time.Duration) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.paused = append(b.paused, held)
+	b.paused = append(b.paused, wait)
 	return ctx.Err()
 }
 
@@ -195,14 +195,14 @@ func (b *bench) rendered(command string) session.Result {
 	case readsProxy(command):
 		return session.Result{Stdout: pairSaid(string(routingTableItem().Content), string(proxyConfigItem().Content))}
 	case strings.Contains(command, "for p in"):
-		for class, items := range b.stands {
+		for class, items := range b.installed {
 			if strings.Contains(command, quoted(StampPath(class))) {
 				return session.Result{Stdout: surveyed(items)}
 			}
 		}
 		return session.Result{}
 	case command == frontReading():
-		for _, items := range b.stands {
+		for _, items := range b.installed {
 			for _, item := range items {
 				if item.Name == FrontRecordPath {
 					return session.Result{Stdout: string(item.Content)}
@@ -211,16 +211,16 @@ func (b *bench) rendered(command string) session.Result {
 		}
 		return session.Result{}
 	case strings.Contains(command, "--filter 'publish="):
-		for _, items := range b.stands {
+		for _, items := range b.installed {
 			if slices.ContainsFunc(items, func(item Item) bool { return item.Kind == KindContainer && item.Name == caddy.Container }) {
 				return session.Result{Stdout: caddy.Container + "\n"}
 			}
 		}
 		return session.Result{}
-	case strings.HasPrefix(command, holdersCommand):
+	case strings.HasPrefix(command, ownersCommand):
 		return session.Result{}
 	case strings.HasPrefix(command, "cat "):
-		for _, items := range b.stands {
+		for _, items := range b.installed {
 			for _, item := range items {
 				if command == "cat "+quoted(item.Name) {
 					return session.Result{Stdout: string(item.Content)}
@@ -257,42 +257,42 @@ func bootstrapped(t *testing.T, class edge.Class) []Item {
 	return append(Items(class, []byte(aKey+"\n"), ArchAMD64, Front{}), stamp)
 }
 
-func TestASurveyedHostReadsBackAsTheItemsThatStandOnIt(t *testing.T) {
+func TestASurveyedHostReadsBackAsTheItemsThatAreInstalledOnIt(t *testing.T) {
 	t.Parallel()
 
 	class := edge.ClassProduction
 	items := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
-	stood := machine(map[edge.Class][]Item{class: items})
+	box := machine(map[edge.Class][]Item{class: items})
 
-	read, err := stood.host().Survey(context.Background(), class)
+	read, err := box.host().Survey(context.Background(), class)
 	if err != nil {
 		t.Fatalf("Survey() = %v", err)
 	}
 	for _, item := range items {
 		if !read.current(item) {
-			t.Errorf("%s surveys as absent or moved, so nothing this bench proves about a standing host means anything", item.ID())
+			t.Errorf("%s surveys as absent or moved, so nothing this bench proves about a bootstrapped host means anything", item.ID())
 		}
 	}
 }
 
-func settledOn(t *testing.T, class edge.Class) *bench {
+func bootstrappedOn(t *testing.T, class edge.Class) *bench {
 	t.Helper()
 	seeded := string(routingTableItem().Content)
-	return settledHolding(t, class, &seeded, nil)
+	return bootstrappedWith(t, class, &seeded, nil)
 }
 
-func settledHolding(t *testing.T, class edge.Class, table, config *string) *bench {
+func bootstrappedWith(t *testing.T, class edge.Class, table, config *string) *bench {
 	t.Helper()
 
 	keys := []byte(aKey + "\n")
 	items := Items(class, keys, ArchAMD64, Front{})
 	minted := []byte("the key this box minted for itself")
-	standing := make([]Item, 0, len(items)+1)
+	present := make([]Item, 0, len(items)+1)
 	for _, item := range items {
 		if item.Kind == KindSealKey {
 			item.Content = minted
 		}
-		standing = append(standing, item)
+		present = append(present, item)
 	}
 	record, err := frontRecordItem(Front{}, "shop", class)
 	if err != nil {
@@ -308,32 +308,32 @@ func settledHolding(t *testing.T, class edge.Class, table, config *string) *benc
 	if err != nil {
 		t.Fatal(err)
 	}
-	stood := machine(map[edge.Class][]Item{class: append(standing, stamp, record)})
-	proxied := servesPair(stood, table, config)
-	stood.answer = func(command string) (session.Result, bool) {
+	box := machine(map[edge.Class][]Item{class: append(present, stamp, record)})
+	proxied := servesPair(box, table, config)
+	box.answer = func(command string) (session.Result, bool) {
 		if command == "cat ~/.ssh/authorized_keys 2>/dev/null" {
 			return session.Result{Stdout: aKey + "\n"}, true
 		}
 		return proxied(command)
 	}
-	return stood
+	return box
 }
 
-func TestABoxStandingAtTheStampAWriteLeftDescribesItselfAsCurrent(t *testing.T) {
+func TestABoxAtTheStampAWriteLeftDescribesItselfAsCurrent(t *testing.T) {
 	t.Parallel()
 
 	class := edge.ClassProduction
-	stood := settledOn(t, class)
+	box := bootstrappedOn(t, class)
 
-	described, err := NewBootstrap(stood.host(), testVendor, "shop").Describe(context.Background(), class)
+	described, err := NewBootstrap(box.host(), testVendor, "shop").Describe(context.Background(), class)
 	if err != nil {
 		t.Fatalf("Describe() = %v", err)
 	}
 	if !described.Present {
-		t.Fatal("Describe() reads no bootstrap where a stamp stands")
+		t.Fatal("Describe() reads no bootstrap where a stamp exists")
 	}
 	if !described.Stacks[0].DigestCurrent {
-		t.Fatalf("Describe() calls a box standing at every digest its stamp records drifted, and a box that can never report itself settled is one every re-run rewrites: %+v",
+		t.Fatalf("Describe() calls a box at every digest its stamp records drifted, and a box that can never report itself up to date is one every re-run rewrites: %+v",
 			described.Stacks)
 	}
 }
@@ -342,16 +342,16 @@ func TestOneProbeThatCouldNotLookRefusesTheWholeReadingRatherThanPlanningOverIt(
 	t.Parallel()
 
 	class := edge.ClassProduction
-	stood := settledOn(t, class)
-	held := stood.answer
-	stood.answer = func(command string) (session.Result, bool) {
+	box := bootstrappedOn(t, class)
+	answered := box.answer
+	box.answer = func(command string) (session.Result, bool) {
 		if strings.Contains(command, "for p in") {
 			return session.Result{Stdout: strings.Join([]string{kindUnreadable, deployUser, "0", KindUser, "getent passwd exited 126"}, "\t") + "\n"}, true
 		}
-		return held(command)
+		return answered(command)
 	}
 
-	described, err := NewBootstrap(stood.host(), testVendor, "shop").Describe(context.Background(), class)
+	described, err := NewBootstrap(box.host(), testVendor, "shop").Describe(context.Background(), class)
 	if err == nil {
 		t.Fatalf("Describe() over a survey that could not run one of its probes = %+v, want a refusal: a plan built on it writes over whatever the probe could not see", described)
 	}
@@ -364,27 +364,27 @@ func TestOneItemTheReadingCannotHashIsDriftRatherThanAnAbsence(t *testing.T) {
 	t.Parallel()
 
 	class := edge.ClassProduction
-	stood := settledOn(t, class)
-	held := stood.stands[class]
-	for at, item := range held {
+	box := bootstrappedOn(t, class)
+	installed := box.installed[class]
+	for at, item := range installed {
 		if item.Name == SwitchboardBinary {
-			held[at].Content = nil
+			installed[at].Content = nil
 		}
 	}
 
-	read, err := stood.host().Read(context.Background(), class)
+	read, err := box.host().Read(context.Background(), class)
 	if err != nil {
 		t.Fatalf("Read() = %v", err)
 	}
 	if read.current(proxyItem(KindFile)) {
 		t.Fatal("the reading calls a helper it read no bytes of current, so this test proves nothing about what drift is")
 	}
-	if !read.standing(KindFile, SwitchboardBinary) {
+	if !read.observed(KindFile, SwitchboardBinary) {
 		t.Errorf("%s is absent from a reading every write is planned against, and absence is a lie there: a file this reading could not hash is drift it must name",
 			SwitchboardBinary)
 	}
-	if read.settled() {
-		t.Errorf("a box whose %s does not hash as ocel writes it reports itself settled", SwitchboardBinary)
+	if read.upToDate() {
+		t.Errorf("a box whose %s does not hash as ocel writes it reports itself up to date", SwitchboardBinary)
 	}
 }
 
@@ -402,7 +402,7 @@ func writesProxy(command string) bool {
 }
 
 func expectedDigest(command string) string {
-	_, checked, _ := strings.Cut(command, `if [ "$held" != `)
+	_, checked, _ := strings.Cut(command, `if [ "$current" != `)
 	expected, _, _ := strings.Cut(checked, " ]")
 	return strings.Trim(expected, "'")
 }
@@ -436,38 +436,38 @@ func renderedFrom(document string) string {
 }
 
 func pairSaid(table, config string) string {
-	line := func(held string) string {
-		if held == "" {
+	line := func(value string) string {
+		if value == "" {
 			return "\n"
 		}
-		return "+" + base64.StdEncoding.EncodeToString([]byte(held)) + "\n"
+		return "+" + base64.StdEncoding.EncodeToString([]byte(value)) + "\n"
 	}
 	return line(table) + line(config)
 }
 
-func servesProxy(b *bench, held *string) func(string) (session.Result, bool) {
-	return servesPair(b, held, nil)
+func servesProxy(b *bench, table *string) func(string) (session.Result, bool) {
+	return servesPair(b, table, nil)
 }
 
-func servesPair(b *bench, held, config *string) func(string) (session.Result, bool) {
+func servesPair(b *bench, table, config *string) func(string) (session.Result, bool) {
 	return func(command string) (session.Result, bool) {
 		b.mu.Lock()
 		defer b.mu.Unlock()
 		switch {
 		case writesProxy(command):
-			if expected := expectedDigest(command); expected != digested(*held) {
-				return session.Result{Code: routingMoved, Stderr: digested(*held)}, true
+			if expected := expectedDigest(command); expected != digested(*table) {
+				return session.Result{Code: routingMoved, Stderr: digested(*table)}, true
 			}
-			*held = tableOf(b.fed[len(b.fed)-1])
+			*table = tableOf(b.fed[len(b.fed)-1])
 			if config != nil {
 				*config = configOf(b.fed[len(b.fed)-1])
 			}
-			return session.Result{Stdout: digested(*held)}, true
+			return session.Result{Stdout: digested(*table)}, true
 		case readsProxy(command):
 			if config != nil {
-				return session.Result{Stdout: pairSaid(*held, *config)}, true
+				return session.Result{Stdout: pairSaid(*table, *config)}, true
 			}
-			return session.Result{Stdout: pairSaid(*held, renderedFrom(*held))}, true
+			return session.Result{Stdout: pairSaid(*table, renderedFrom(*table))}, true
 		default:
 			return session.Result{}, false
 		}

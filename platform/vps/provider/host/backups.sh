@@ -93,7 +93,7 @@ dump() {
 
 restore() {
   container=$1 database=$2 file=$3
-  [ -s "$file" ] || abort "$file is not a dump this host holds"
+  [ -s "$file" ] || abort "$file is not a dump this host keeps"
   roles="${file%.dump}.roles.sql"
   if [ -s "$roles" ]; then
     docker exec --interactive "$container" psql -U "$superuser" -d "$database" <"$roles" >/dev/null 2>&1 || true

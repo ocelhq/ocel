@@ -64,19 +64,19 @@ func TestTheSealHelperMintsAKeyOnceAndMintsNothingOverIt(t *testing.T) {
 
 	root := sealDir(t)
 	if rendered, code := sealHelperAt(t, root, "", "init"); code != 0 {
-		t.Fatalf("init on a class carrying no key exited %d with %q", code, rendered)
+		t.Fatalf("init on a class with no key exited %d with %q", code, rendered)
 	}
 
 	key := filepath.Join(root, sealClass, "seal.key")
-	held, err := os.Stat(key)
+	info, err := os.Stat(key)
 	if err != nil {
 		t.Fatalf("init exited 0 and wrote no key: %v", err)
 	}
-	if held.Size() != sealKeyBytes {
-		t.Errorf("the key is %d bytes, want %d: AES-256 is sealed to nothing narrower", held.Size(), sealKeyBytes)
+	if info.Size() != sealKeyBytes {
+		t.Errorf("the key is %d bytes, want %d: AES-256 is sealed to nothing narrower", info.Size(), sealKeyBytes)
 	}
-	if held.Mode().Perm() != sealKeyMode {
-		t.Errorf("the key stands at %04o, want %04o: every secret on this host opens to whoever reads it", held.Mode().Perm(), sealKeyMode)
+	if info.Mode().Perm() != sealKeyMode {
+		t.Errorf("the key is at mode %04o, want %04o: every secret on this host opens to whoever reads it", info.Mode().Perm(), sealKeyMode)
 	}
 
 	minted, err := os.ReadFile(key)
@@ -127,7 +127,7 @@ func TestTheSealHelperRoundTripsAValueAndOpensItNowhereElse(t *testing.T) {
 		t.Fatalf("seal exited %d", code)
 	}
 	if strings.Contains(sealed, encoded(plaintext)) {
-		t.Fatal("the helper answered a seal carrying the value it was handed")
+		t.Fatal("the helper answered a seal containing the value it was handed")
 	}
 
 	opened, code := sealHelperAt(t, root, sealed, append([]string{"open"}, aCoordinate...)...)
@@ -223,7 +223,7 @@ func TestTheSealKeyIsRootsAloneAndIsWrittenAfterTheHelperThatMintsIt(t *testing.
 		t.Fatalf("nothing in the item set mints %s, so a bootstrapped host seals nothing", SealKeyPath(class))
 	}
 	if key.Mode != sealKeyMode || key.Owner != rootOwner {
-		t.Errorf("%s is written %04o to %q, want %04o to %s: the deploy login opens values, it does not hold the key",
+		t.Errorf("%s is written %04o to %q, want %04o to %s: the deploy login opens values, it does not own the key",
 			key.Name, key.Mode, key.Owner, sealKeyMode, rootOwner)
 	}
 	if len(key.Content) != 0 {
@@ -263,7 +263,7 @@ func TestTheDeployLoginIsWhitelistedOnTheHelperAndOnNothingBeside(t *testing.T) 
 		t.Errorf("the fragment reads %q, want %q: one helper, the class it seals under, the two verbs a deploy uses and no path beside it", written, want)
 	}
 	if fragment.Name != sudoersSeal(edge.ClassProduction) || strings.ContainsAny(strings.TrimPrefix(fragment.Name, sudoersRoot+"/"), ".~") {
-		t.Errorf("the fragment stands at %q, want one file per class under %s whose name sudo will read: sudoers.d skips names carrying '.' or '~'", fragment.Name, sudoersRoot)
+		t.Errorf("the fragment sits at %q, want one file per class under %s whose name sudo will read: sudoers.d skips names containing '.' or '~'", fragment.Name, sudoersRoot)
 	}
 	if at(items, principal().Name) > at(items, fragment.Name) {
 		t.Error("the sudoers line is written before the login it names exists")
@@ -277,22 +277,22 @@ func TestTheSurveyReadsTheKeysFingerprintWithoutReadingTheKey(t *testing.T) {
 	fingerprint := "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 	rendered := KindSealKey + "\t" + SealKeyPath(class) + "\t400\troot\t" + fingerprint + "\t2026-08-26T09:00:00Z\n"
 
-	observed, held, err := readSurvey(rendered)
+	observed, seal, err := readSurvey(rendered)
 	if err != nil {
 		t.Fatalf("readSurvey() over the row a host answers with = %v", err)
 	}
-	if held.Fingerprint != fingerprint {
-		t.Errorf("the survey read the fingerprint %q, want %q", held.Fingerprint, fingerprint)
+	if seal.Fingerprint != fingerprint {
+		t.Errorf("the survey read the fingerprint %q, want %q", seal.Fingerprint, fingerprint)
 	}
-	if held.CreatedAt != "2026-08-26T09:00:00Z" {
-		t.Errorf("the survey read %q as when the key came into being", held.CreatedAt)
+	if seal.CreatedAt != "2026-08-26T09:00:00Z" {
+		t.Errorf("the survey read %q as when the key came into being", seal.CreatedAt)
 	}
 	if got := observed[sealKey(class).ID()]; got != sealKey(class).Digest() {
-		t.Errorf("a key standing as ocel minted it surveys as %q, want %q: the bytes of a key are never what says it is current", got, sealKey(class).Digest())
+		t.Errorf("a key unchanged since ocel minted it surveys as %q, want %q: the bytes of a key are never what says it is current", got, sealKey(class).Digest())
 	}
 }
 
-func TestTheSurveyTheHostRunsAnswersForAKeyThatStandsAndSaysNothingForOneThatDoesNot(t *testing.T) {
+func TestTheSurveyTheHostRunsAnswersForAKeyThatExistsAndSaysNothingForOneThatDoesNot(t *testing.T) {
 	t.Parallel()
 
 	root := sealDir(t)
@@ -300,31 +300,31 @@ func TestTheSurveyTheHostRunsAnswersForAKeyThatStandsAndSaysNothingForOneThatDoe
 	item := Item{Kind: KindSealKey, Name: key, Mode: sealKeyMode, Owner: owning(t), Class: edge.ClassProduction}
 
 	if rendered := sh(t, t.TempDir(), sealSurvey(item)); strings.TrimSpace(rendered) != "" {
-		t.Fatalf("the survey answered %q where no key stands", rendered)
+		t.Fatalf("the survey answered %q where no key exists", rendered)
 	}
 
 	if _, code := sealHelperAt(t, root, "", "init"); code != 0 {
 		t.Fatalf("init exited %d", code)
 	}
-	observed, held, err := readSurvey(sh(t, t.TempDir(), sealSurvey(item)))
+	observed, seal, err := readSurvey(sh(t, t.TempDir(), sealSurvey(item)))
 	if err != nil {
 		t.Fatalf("readSurvey() over what the survey script answers = %v", err)
 	}
-	if len(held.Fingerprint) != 64 {
-		t.Errorf("the survey read %q as the key's fingerprint, want a SHA256", held.Fingerprint)
+	if len(seal.Fingerprint) != 64 {
+		t.Errorf("the survey read %q as the key's fingerprint, want a SHA256", seal.Fingerprint)
 	}
-	if held.Algorithm != SealAlgorithm {
-		t.Errorf("the survey read the algorithm %q, want %q", held.Algorithm, SealAlgorithm)
+	if seal.Algorithm != SealAlgorithm {
+		t.Errorf("the survey read the algorithm %q, want %q", seal.Algorithm, SealAlgorithm)
 	}
-	if !strings.HasSuffix(held.CreatedAt, "Z") {
-		t.Errorf("the survey read %q as when the key came into being, want a UTC instant", held.CreatedAt)
+	if !strings.HasSuffix(seal.CreatedAt, "Z") {
+		t.Errorf("the survey read %q as when the key came into being, want a UTC instant", seal.CreatedAt)
 	}
 	if got := observed[item.ID()]; got != item.Digest() {
-		t.Errorf("a key standing as ocel minted it surveys as %q, want %q", got, item.Digest())
+		t.Errorf("a key unchanged since ocel minted it surveys as %q, want %q", got, item.Digest())
 	}
 }
 
-func TestWritingAKeyThatStandsReassertsItsPostureAndMintsNothing(t *testing.T) {
+func TestWritingAKeyThatExistsReassertsItsPostureAndMintsNothing(t *testing.T) {
 	t.Parallel()
 
 	root := sealDir(t)
@@ -349,7 +349,7 @@ func TestWritingAKeyThatStandsReassertsItsPostureAndMintsNothing(t *testing.T) {
 	log := ran(t, stubbed)
 	for _, want := range []string{"chown root:root " + key, "chmod 0400 " + key} {
 		if !strings.Contains(log, want) {
-			t.Errorf("writing a key that stands ran\n%s\nwant it to run %q", log, want)
+			t.Errorf("writing a key that exists ran\n%s\nwant it to run %q", log, want)
 		}
 	}
 	again, err := os.ReadFile(key)
@@ -357,7 +357,7 @@ func TestWritingAKeyThatStandsReassertsItsPostureAndMintsNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(again) != string(minted) {
-		t.Error("writing a key that stands minted a new one, and every value sealed to the old one went with it")
+		t.Error("writing a key that exists minted a new one, and every value sealed to the old one went with it")
 	}
 }
 
@@ -366,7 +366,7 @@ func owning(t *testing.T) string {
 	return strings.TrimSpace(sh(t, t.TempDir(), "id -un"))
 }
 
-func TestAReplacedKeyIsDriftThoughEveryPathStillStandsAsItWasWritten(t *testing.T) {
+func TestAReplacedKeyIsDriftThoughEveryPathIsStillAsItWasWritten(t *testing.T) {
 	t.Parallel()
 
 	class := edge.ClassProduction
@@ -379,13 +379,13 @@ func TestAReplacedKeyIsDriftThoughEveryPathStillStandsAsItWasWritten(t *testing.
 		Class: class, Keys: keys, Present: true, Observed: observed, Seal: minted,
 		Stamp: Stamp{State: StateComplete, Digests: observed, Seal: minted},
 	}
-	if !read.settled() {
-		t.Fatal("a host standing exactly as it was applied reads as drifted")
+	if !read.upToDate() {
+		t.Fatal("a host exactly as it was applied reads as drifted")
 	}
 
 	read.Seal = Seal{Fingerprint: "0000000000000000", Algorithm: SealAlgorithm, CreatedAt: "2026-08-26T10:00:00Z"}
-	if read.settled() {
-		t.Error("a host whose seal key was replaced reads as settled, so drift in what every secret opens to is invisible")
+	if read.upToDate() {
+		t.Error("a host whose seal key was replaced reads as up to date, so drift in what every secret opens to is invisible")
 	}
 }
 
@@ -424,14 +424,14 @@ func TestAnApplyOverAReplacedKeyRefusesRatherThanRestampingIt(t *testing.T) {
 	}
 }
 
-func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *testing.T) {
+func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingRemains(t *testing.T) {
 	t.Parallel()
 
 	production, preview := edge.ClassProduction, edge.ClassPreview
 	keys := []byte(aKey + "\n")
-	held := digests(Items(production, keys, ArchAMD64, Front{}))
+	installed := digests(Items(production, keys, ArchAMD64, Front{}))
 
-	alone := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsStanding{})
+	alone := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: installed}, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsPresent{})
 	key := removalOf(alone, SealKeyPath(production))
 	if key.path == "" {
 		t.Fatalf("destroy leaves %s behind, and a key nothing takes is every sealed value still openable", SealKeyPath(production))
@@ -440,7 +440,7 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *
 		t.Error("destroy takes the seal key with no reason, and the typed confirmation must name what is unrecoverable")
 	}
 	if index(alone, key.path) > index(alone, ClassDir(production)) {
-		t.Error("the class directory is removed before the key it carries is named, so the confirmation names bytes that are already gone")
+		t.Error("the class directory is removed before the key it contains is named, so the confirmation names bytes that are already gone")
 	}
 	for _, singleton := range []string{SealHelper, sudoersSeal(production)} {
 		if removalOf(alone, singleton).path == "" {
@@ -449,12 +449,12 @@ func TestDestroyNamesTheKeyAsDataBearingAndKeepsTheHelperWhileASiblingStands(t *
 	}
 
 	beside := digests(Items(preview, keys, ArchAMD64, Front{}))
-	shared := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: beside}, appsStanding{})
+	shared := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: installed}, Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: beside}, appsPresent{})
 	if removalOf(shared, SealHelper).path != "" {
-		t.Errorf("destroying one class takes %s, which a standing sibling still seals through", SealHelper)
+		t.Errorf("destroying one class takes %s, which an installed sibling still seals through", SealHelper)
 	}
 	if removalOf(shared, sudoersSeal(preview)).path != "" {
-		t.Errorf("destroying %s takes %s, the line the standing %s class seals through", production, sudoersSeal(preview), preview)
+		t.Errorf("destroying %s takes %s, the line the installed %s class seals through", production, sudoersSeal(preview), preview)
 	}
 	if removalOf(shared, sudoersSeal(production)).path == "" {
 		t.Errorf("destroying %s leaves %s behind, and a line that opens a class whose key is gone is a grant nothing revokes", production, sudoersSeal(production))
@@ -531,7 +531,7 @@ func TestTheHelperIsRunInTheShapeTheSudoersLineWhitelists(t *testing.T) {
 	}
 }
 
-func TestAValueSealedToNoClassIsRefusedRatherThanSealedToWhateverStands(t *testing.T) {
+func TestAValueSealedToNoClassIsRefusedRatherThanSealedToWhateverClassExists(t *testing.T) {
 	t.Parallel()
 
 	_, err := sealArgv("seal", records.SealScope{Project: "shop", Name: "DATABASE_URL"})

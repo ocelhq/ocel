@@ -109,7 +109,7 @@ func (vm machine) beside(t *testing.T, container, command string) string {
 
 func quote(arg string) string { return "'" + strings.ReplaceAll(arg, "'", `'\''`) + "'" }
 
-func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *testing.T) {
+func TestLiveTheProxyIsStateTheBoxKeepsAndIsWrittenBackWhenItIsGone(t *testing.T) {
 	vm := liveMachine(t)
 	vm.purges(t)
 	p := vm.provider(t)
@@ -148,17 +148,17 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 			host.SwitchboardContainer, vm.ssh(t, "sudo docker logs --tail 40 "+host.SwitchboardContainer+" 2>&1 || true"))
 	}
 	if mode := strings.TrimSpace(vm.ssh(t, "sudo stat -c '%a %U' "+quote(host.ProxyData))); mode != "700 root" {
-		t.Errorf("%s stands as %q, want 700 root: it holds every private key on this box and the acme account key that issues for all of them", host.ProxyData, mode)
+		t.Errorf("%s is %q, want 700 root: it stores every private key on this box and the acme account key that issues for all of them", host.ProxyData, mode)
 	}
 
-	for _, held := range []string{"/data/caddy", "/data/config/caddy/autosave.json"} {
-		if answer := vm.inside(t, "test -e "+quote(held)+" && echo held || echo gone"); !strings.Contains(answer, "held") {
-			t.Errorf("%s is not inside the proxy, so what caddy persists is somewhere this test cannot see", held)
+	for _, persisted := range []string{"/data/caddy", "/data/config/caddy/autosave.json"} {
+		if answer := vm.inside(t, "test -e "+quote(persisted)+" && echo present || echo gone"); !strings.Contains(answer, "present") {
+			t.Errorf("%s is not inside the proxy, so what caddy persists is somewhere this test cannot see", persisted)
 		}
 	}
 	mounts := vm.inspects(t, "container", caddy.Container, "{{range .Mounts}}{{.Type}}:{{.Destination}}:{{.RW}} {{end}}")
 	if !strings.Contains(mounts, "bind:/data:true") {
-		t.Errorf("the proxy holds /data as %q, want the bootstrap-owned host path: a named volume appears in no removal plan and would leave every private key on this box after a destroy", mounts)
+		t.Errorf("the proxy mounts /data as %q, want the bootstrap-owned host path: a named volume appears in no removal plan and would leave every private key on this box after a destroy", mounts)
 	}
 	if strings.Contains(mounts, "bind:/config") {
 		t.Errorf("the proxy binds /config from the host, and what caddy autosaves belongs under the one path a destroy takes: %s", mounts)
@@ -173,27 +173,27 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 		t.Errorf("%s is owned by %q, want root", caddy.AdminSocket, owner)
 	}
 	if len(mode) != 3 || mode[1] != '0' || mode[2] != '0' {
-		t.Errorf("%s stands at %q, want nothing for group or other: the socket's permissions are the whole of its access control", caddy.AdminSocket, mode)
+		t.Errorf("%s is %q, want nothing for group or other: the socket's permissions are the whole of its access control", caddy.AdminSocket, mode)
 	}
 
 	listening := vm.inside(t, "command -v netstat >/dev/null || echo no-netstat\nnetstat -ltn")
 	if strings.Contains(listening, "no-netstat") {
-		t.Fatalf("the proxy image carries no netstat, and a listing nothing produced carries no port to find:\n%s", listening)
+		t.Fatalf("the proxy image has no netstat, and a listing nothing produced names no port to find:\n%s", listening)
 	}
 	if strings.Contains(listening, ":"+adminPort) {
-		t.Errorf("the proxy carries a tcp listener on %s, and binding the admin endpoint anywhere but the socket is the failure this pick exists to avoid:\n%s", adminPort, listening)
+		t.Errorf("the proxy has a tcp listener on %s, and binding the admin endpoint anywhere but the socket is the failure this pick exists to avoid:\n%s", adminPort, listening)
 	}
 	if bound := vm.ssh(t, "ss -ltn 2>/dev/null || netstat -ltn 2>/dev/null || true"); strings.Contains(bound, ":"+adminPort) {
 		t.Errorf("something on this host listens on %s, and the admin endpoint binds no port at all:\n%s", adminPort, bound)
 	}
 	address := vm.inspects(t, "container", caddy.Container, "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}")
 	if address == "" {
-		t.Fatal("the proxy holds no address on the shared network, so what a peer container can reach cannot be proven here")
+		t.Fatal("the proxy has no address on the shared network, so what a peer container can reach cannot be proven here")
 	}
 	for _, target := range []string{caddy.Container, address} {
 		peered := vm.peers(t, "curl -sS -m 5 -o /dev/null -w '%{http_code}' http://"+target+":"+adminPort+"/config/")
 		if code := strings.TrimSpace(peered); len(code) >= 3 && code[len(code)-3:] == "200" {
-			t.Errorf("a container on the shared network reached the admin endpoint at %s:%s and got %q: every app this box runs would hold arbitrary config replacement of its own edge",
+			t.Errorf("a container on the shared network reached the admin endpoint at %s:%s and got %q: every app this box runs would have arbitrary config replacement of its own edge",
 				target, adminPort, strings.TrimSpace(peered))
 		}
 	}
@@ -205,30 +205,30 @@ func TestLiveTheProxyStandsAsStateTheBoxHoldsAndIsWrittenBackWhenItIsGone(t *tes
 		t.Errorf("the switchboard read its upstreams as %q, want an empty set over its control socket: the binary bootstrap mounts is what the release loop drives", flight)
 	}
 	if kind := strings.TrimSpace(vm.ssh(t, "sudo head -c 4 "+host.SwitchboardBinary+" | od -An -c | tr -d ' '")); !strings.Contains(kind, "ELF") {
-		t.Errorf("%s stands as %q, want an elf executable: the image it runs in lends it no interpreter", host.SwitchboardBinary, kind)
+		t.Errorf("%s is %q, want an elf executable: the image it runs in lends it no interpreter", host.SwitchboardBinary, kind)
 	}
 	if mode := strings.TrimSpace(vm.ssh(t, "stat -c %a:%U:%G "+host.SwitchboardBinary)); mode != "755:root:root" {
-		t.Errorf("%s stands at %q, want 755:root:root: root alone writes what routes every hostname, and the deploy login runs it to read what the box serves", host.SwitchboardBinary, mode)
+		t.Errorf("%s is %q, want 755:root:root: root alone writes what routes every hostname, and the deploy login runs it to read what the box serves", host.SwitchboardBinary, mode)
 	}
 	board := vm.inspects(t, "container", host.SwitchboardContainer, "{{range .Mounts}}{{.Type}}:{{.Destination}}:{{.RW}} {{end}}")
-	for _, held := range []string{"bind:/ocel/switchboard:false", "bind:" + vars.RoutingDir + ":false"} {
-		if !strings.Contains(board, held) {
-			t.Errorf("the switchboard mounts %q, want %s among them: a directory it reads and cannot write", board, held)
+	for _, mount := range []string{"bind:/ocel/switchboard:false", "bind:" + vars.RoutingDir + ":false"} {
+		if !strings.Contains(board, mount) {
+			t.Errorf("the switchboard mounts %q, want %s among them: a directory it reads and cannot write", board, mount)
 		}
 	}
 	if published := vm.inspects(t, "container", host.SwitchboardContainer, "{{json .HostConfig.PortBindings}}"); published != "{}" && published != "null" {
 		t.Errorf("the switchboard publishes %s, and nothing but the front proxy is reached from off the box", published)
 	}
 
-	standing, err := bootstrap.Describe(ctx, class)
+	described, err := bootstrap.Describe(ctx, class)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !standing.Stacks[0].DigestCurrent {
+	if !described.Stacks[0].DigestCurrent {
 		t.Errorf("Describe() calls a box whose proxy has just been installed drifted, %s\n%s",
-			stillMoving(t, bootstrap, class, standing.VendorState), vm.proxySaid(t))
+			stillMoving(t, bootstrap, class, described.VendorState), vm.proxySaid(t))
 	}
-	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: standing.VendorState})
+	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", VendorState: described.VendorState})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -316,7 +316,7 @@ func TestLiveTheFileOnTheBoxIsTheConfigTheProxyServes(t *testing.T) {
 	}
 
 	if served := vm.frontGrace(t); served != moved {
-		t.Errorf("the file on the box declares %q and the running proxy serves %s: caddy's --resume uses the last autosaved configuration, overriding --config, so a box recreated after a changed config would keep serving the old one while every digest ocel holds says it does not",
+		t.Errorf("the file on the box declares %q and the running proxy serves %s: caddy's --resume uses the last autosaved configuration, overriding --config, so a box recreated after a changed config would keep serving the old one while every digest ocel records says it does not",
 			moved, served)
 	}
 
@@ -325,7 +325,7 @@ func TestLiveTheFileOnTheBoxIsTheConfigTheProxyServes(t *testing.T) {
 	}
 }
 
-func TestLiveTheProxysConfigIsStatedAndItsLogCarriesNoQueryString(t *testing.T) {
+func TestLiveTheProxysConfigIsStatedAndItsLogContainsNoQueryString(t *testing.T) {
 	vm := liveMachine(t)
 	vm.purges(t)
 	p := vm.provider(t)
@@ -347,24 +347,24 @@ func TestLiveTheProxysConfigIsStatedAndItsLogCarriesNoQueryString(t *testing.T) 
 	}()
 
 	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U:%a "+host.ProxyConfig)); owner != deployLogin+":640" {
-		t.Errorf("%s stands as %q, want the deploy principal's own file: the config is what a deploy renders", host.ProxyConfig, owner)
+		t.Errorf("%s is owned by %q, want the deploy principal's own file: the config is what a deploy renders", host.ProxyConfig, owner)
 	}
 	if owner := strings.TrimSpace(vm.ssh(t, "sudo stat -c %U:%a "+vars.RoutingTable)); owner != deployLogin+":640" {
-		t.Errorf("%s stands as %q, want the deploy principal's own file: the table is what a deploy writes", vars.RoutingTable, owner)
+		t.Errorf("%s is owned by %q, want the deploy principal's own file: the table is what a deploy writes", vars.RoutingTable, owner)
 	}
 	grace := vm.frontGrace(t)
 	if grace == "" || grace == "null" {
-		t.Errorf("the proxy reports its grace period as %q, and caddy's default is eternal: one hung request would hold a retired server open forever", grace)
+		t.Errorf("the proxy reports its grace period as %q, and caddy's default is eternal: one hung request would keep a retired server open forever", grace)
 	}
 
 	vm.peers(t, "curl -sS -m 5 -o /dev/null -H 'Authorization: Bearer TOPSECRET' "+
 		"'http://"+caddy.Container+"/callback?code=TOPSECRET&state=xyz'")
 	logged := vm.ssh(t, "sudo docker logs --tail 20 "+caddy.Container+" 2>&1 || true")
 	if !strings.Contains(logged, "/callback") {
-		t.Fatalf("the proxy logged no request at all, so what its log carries is not a decision:\n%s", logged)
+		t.Fatalf("the proxy logged no request at all, so what its log contains is not a decision:\n%s", logged)
 	}
 	if strings.Contains(logged, "TOPSECRET") {
-		t.Errorf("a secret carried in a query string and a bearer token both reached the proxy's log:\n%s", logged)
+		t.Errorf("a secret sent in a query string and a bearer token both reached the proxy's log:\n%s", logged)
 	}
 	if !strings.Contains(logged, "REDACTED") {
 		t.Errorf("the authorization header is logged as itself rather than redacted:\n%s", logged)
@@ -412,12 +412,12 @@ func TestLiveDestroyTakesOcelsProxyAndLeavesTheContainersTheHostRuns(t *testing.
 			t.Errorf("%s still runs after a destroy, and a container nobody wrote back is one nobody takes down", named)
 		}
 	}
-	if stood := vm.inspects(t, "network", host.ProxyNetwork, "{{.Name}}"); stood != "" {
-		t.Errorf("the network %s stands after a destroy", host.ProxyNetwork)
+	if network := vm.inspects(t, "network", host.ProxyNetwork, "{{.Name}}"); network != "" {
+		t.Errorf("the network %s still exists after a destroy", host.ProxyNetwork)
 	}
 	for _, gone := range []string{host.SwitchboardBinary, host.ProxyConfig, host.ProxyData, vars.RoutingTable} {
-		if vm.stands(t, gone) {
-			t.Errorf("%s stands after a destroy took the last class on this host", gone)
+		if vm.exists(t, gone) {
+			t.Errorf("%s still exists after a destroy took the last class on this host", gone)
 		}
 	}
 	if !vm.running(t, workload) {

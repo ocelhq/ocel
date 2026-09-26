@@ -89,12 +89,12 @@ func liveValueSpec(t *testing.T, tag string, declared provider.AppValues) provid
 func (vm machine) proves(t *testing.T, path string) {
 	t.Helper()
 	vm.ssh(t, "sudo install -m 600 /dev/null "+quote(path))
-	if !vm.stands(t, path) {
-		t.Fatalf("this machine reads %s as gone with a file standing at it, so nothing it says about %s being gone after a deploy means anything", path, path)
+	if !vm.exists(t, path) {
+		t.Fatalf("this machine reads %s as gone with a file present at it, so nothing it says about %s being gone after a deploy means anything", path, path)
 	}
 	vm.ssh(t, "sudo rm -f "+quote(path))
-	if vm.stands(t, path) {
-		t.Fatalf("this machine reads %s as standing after it was taken, so nothing it says about a path means anything", path)
+	if vm.exists(t, path) {
+		t.Fatalf("this machine reads %s as present after it was taken, so nothing it says about a path means anything", path)
 	}
 }
 
@@ -111,16 +111,16 @@ func (vm machine) reads(t *testing.T, container, name string) string {
 func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftOnTheBox(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
-	held := resolving(t, p)
-	held.declared.ContainerEnv["RELEASE"] = "handed-by-the-deploy"
+	resolved := resolving(t, p)
+	resolved.declared.ContainerEnv["RELEASE"] = "handed-by-the-deploy"
 	spoken := &said{}
-	standing, err := p.ProvisionContainers(context.Background(), liveValueSpec(t, "one", held.declared), spoken)
+	started, err := p.ProvisionContainers(context.Background(), liveValueSpec(t, "one", resolved.declared), spoken)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() with values = %v", err)
 	}
-	physical := standing[0].Physical
+	physical := started[0].Physical
 
-	for name, want := range held.reads {
+	for name, want := range resolved.reads {
 		if got := vm.reads(t, physical, name); got != want {
 			t.Errorf("the app reads %s as %q off its own environment, want %q", name, got, want)
 		}
@@ -134,15 +134,15 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 
 	path := host.EnvFile(edge.ClassProduction, physical)
 	vm.proves(t, path)
-	if vm.stands(t, path) {
-		t.Errorf("%s survived the deploy that wrote it, and it holds every value the deploy resolved in plaintext", path)
+	if vm.exists(t, path) {
+		t.Errorf("%s survived the deploy that wrote it, and it stores every value the deploy resolved in plaintext", path)
 	}
 
 	output := strings.Join(spoken.lines, "\n")
 	if output == "" {
 		t.Fatal("the deploy said nothing at all, so what it does not say proves nothing")
 	}
-	for name, value := range held.reads {
+	for name, value := range resolved.reads {
 		if strings.Contains(output, value) {
 			t.Errorf("%s's value is in what this deploy said:\n%s", name, output)
 		}
@@ -151,11 +151,11 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 	inspected := vm.inspects(t, "container", physical, "{{json .Config.Env}}")
 	for _, value := range []string{liveSecretValue, liveBindingPassword} {
 		if strings.Contains(inspected, value) {
-			t.Errorf("the container's configuration reads %q and carries a value the runtime reads live: anyone who may inspect the container would read it", inspected)
+			t.Errorf("the container's configuration reads %q and contains a value the runtime reads live: anyone who may inspect the container would read it", inspected)
 		}
 	}
 	if !strings.Contains(inspected, liveSensitiveValue) {
-		t.Errorf("the container's configuration reads %q and does not carry the sensitive value the deploy baked in", inspected)
+		t.Errorf("the container's configuration reads %q and does not contain the sensitive value the deploy baked in", inspected)
 	}
 
 	rotated := liveSecretValue + "-rotated"
@@ -174,7 +174,7 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 	}
 }
 
-func TestLiveTheEnvFileStandsAtSixHundredForTheDeployLoginForAsLongAsItExists(t *testing.T) {
+func TestLiveTheEnvFileIsSixHundredForTheDeployLoginForAsLongAsItExists(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
 	spec := liveValueSpec(t, "two", resolving(t, p).declared)
@@ -199,11 +199,11 @@ func TestLiveTheEnvFileStandsAtSixHundredForTheDeployLoginForAsLongAsItExists(t 
 	select {
 	case posture := <-watched:
 		if posture == "missed" {
-			t.Fatalf("%s was never sampled while it stood: the deploy writes it, runs a container off it and takes it back over three round trips to this machine, so a watcher that missed all three read a path this deploy never wrote and every other reading of that path in this suite proves nothing",
+			t.Fatalf("%s was never sampled while it existed: the deploy writes it, runs a container off it and takes it back over three round trips to this machine, so a watcher that missed all three read a path this deploy never wrote and every other reading of that path in this suite proves nothing",
 				path)
 		}
 		if posture != "600 "+deployLogin {
-			t.Errorf("%s stood at %q while it existed, want `600 %s`: every value the app holds is readable by whoever the mode and the owner admit",
+			t.Errorf("%s was %q while it existed, want `600 %s`: every value the app is given is readable by whoever the mode and the owner admit",
 				path, posture, deployLogin)
 		}
 	case <-time.After(5 * time.Minute):
@@ -214,10 +214,10 @@ func TestLiveTheEnvFileStandsAtSixHundredForTheDeployLoginForAsLongAsItExists(t 
 func TestLiveAReleaseThatFallsOverKeepsNoEnvFileAndSaysNothingOfWhatWasInIt(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
-	held := resolving(t, p)
-	broken, err := p.ProvisionContainers(context.Background(), liveValueSpec(t, "crasher", held.declared), nil)
+	resolved := resolving(t, p)
+	broken, err := p.ProvisionContainers(context.Background(), liveValueSpec(t, "crasher", resolved.declared), nil)
 	if err != nil {
-		t.Fatalf("ProvisionContainers() of a crash-looping app = %v, want it stood up and refused at its gate", err)
+		t.Fatalf("ProvisionContainers() of a crash-looping app = %v, want it started and refused at its gate", err)
 	}
 	physical := broken[0].Physical
 
@@ -232,7 +232,7 @@ func TestLiveAReleaseThatFallsOverKeepsNoEnvFileAndSaysNothingOfWhatWasInIt(t *t
 			t.Errorf("the evidence a failed release captured reads\n%s\nand never names %s", said, want)
 		}
 	}
-	for name, value := range held.reads {
+	for name, value := range resolved.reads {
 		if strings.Contains(said, value) {
 			t.Errorf("%s's value is in the evidence a failed release captured:\n%s", name, said)
 		}
@@ -243,32 +243,32 @@ func TestLiveAReleaseThatFallsOverKeepsNoEnvFileAndSaysNothingOfWhatWasInIt(t *t
 
 	path := host.EnvFile(edge.ClassProduction, physical)
 	vm.proves(t, path)
-	if vm.stands(t, path) {
+	if vm.exists(t, path) {
 		t.Errorf("%s survived a deploy that fell over", path)
 	}
 }
 
-func TestLiveAContainerThatCannotBeStoodUpTakesItsEnvFileWithIt(t *testing.T) {
+func TestLiveAContainerThatCannotBeStartedTakesItsEnvFileWithIt(t *testing.T) {
 	vm, p := onABoxServingContainers(t)
 
-	held := resolving(t, p)
-	spec := liveValueSpec(t, "one", held.declared)
+	resolved := resolving(t, p)
+	spec := liveValueSpec(t, "one", resolved.declared)
 	spec.App.Image = fixtureRepo + ":no-such-tag"
 	physical := host.ContainerName(spec.Ref.Name.String(), spec.App.App, spec.App.Deployment, spec.App.Image)
 
 	_, err := p.ProvisionContainers(context.Background(), spec, nil)
 	if err == nil {
-		t.Fatal("ProvisionContainers() over an image this box does not hold succeeded")
+		t.Fatal("ProvisionContainers() over an image this box does not have succeeded")
 	}
 
 	path := host.EnvFile(edge.ClassProduction, physical)
 	vm.proves(t, path)
-	if vm.stands(t, path) {
-		t.Errorf("%s survived a stand-up that never happened, and nothing after this deploy takes it back", path)
+	if vm.exists(t, path) {
+		t.Errorf("%s survived a container start that never happened, and nothing after this deploy takes it back", path)
 	}
-	for name, value := range held.reads {
+	for name, value := range resolved.reads {
 		if strings.Contains(err.Error(), value) {
-			t.Errorf("%s's value is in the refusal a failed stand-up returned: %s", name, err)
+			t.Errorf("%s's value is in the refusal a failed container start returned: %s", name, err)
 		}
 	}
 }

@@ -36,7 +36,7 @@ type machine struct {
 	swept       map[string]bool
 	calls       []string
 	releases    []host.Release
-	stood       []host.Container
+	started     []host.Container
 	headed      []string
 	previewBase string
 	refusals    map[string]error
@@ -77,17 +77,17 @@ func (m *machine) RouteBy(hostname string) string {
 	return manual.Route(hostname, m.byHand)
 }
 
-func (m *machine) HoldsImage(_ context.Context, coordinate string) (bool, error) {
-	if err := m.refuse("HoldsImage"); err != nil {
+func (m *machine) HasImage(_ context.Context, coordinate string) (bool, error) {
+	if err := m.refuse("HasImage"); err != nil {
 		return false, err
 	}
 	return !m.swept[coordinate], nil
 }
 
-func (m *machine) StandUp(_ context.Context, spec host.Container) error {
-	m.calls = append(m.calls, "stand-up "+spec.Name)
-	m.stood = append(m.stood, spec)
-	return m.refuse("StandUp")
+func (m *machine) RunContainer(_ context.Context, spec host.Container) error {
+	m.calls = append(m.calls, "run "+spec.Name)
+	m.started = append(m.started, spec)
+	return m.refuse("RunContainer")
 }
 
 func (m *machine) ForgetNetwork(_ context.Context, class edge.Class, project string) error {
@@ -207,12 +207,12 @@ func (m *machine) DisclaimSurface(_ context.Context, owner string) error {
 }
 
 func edgeOver(m *machine, records records.Store) *box.Edge {
-	return box.New(m, m.HoldOrigins, records, sshScope)
+	return box.New(m, m.ApplyOrigins, records, sshScope)
 }
 
-func (m *machine) HoldOrigins(_ context.Context, project string, class edge.Class) error {
-	m.calls = append(m.calls, "hold origins "+project+"/"+string(class))
-	return m.refuse("HoldOrigins")
+func (m *machine) ApplyOrigins(_ context.Context, project string, class edge.Class) error {
+	m.calls = append(m.calls, "apply origins "+project+"/"+string(class))
+	return m.refuse("ApplyOrigins")
 }
 
 func (m *machine) PreviewEntry(context.Context) (string, error) {
@@ -258,18 +258,18 @@ func TestTheBoxEdge(t *testing.T) {
 	})
 }
 
-func standing(t *testing.T) (*machine, *box.Edge, edge.EdgeStack) {
+func reconciled(t *testing.T) (*machine, *box.Edge, edge.EdgeStack) {
 	t.Helper()
 
-	stood := aMachine()
-	front := edgeOver(stood, fake.NewRecords())
+	m := aMachine()
+	front := edgeOver(m, fake.NewRecords())
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Class: edge.ClassProduction, Slug: slug,
 	}, edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	return stood, front, stack
+	return m, front, stack
 }
 
 func staged(t *testing.T, stack edge.EdgeStack, app, identity, physical string) {
@@ -289,7 +289,7 @@ func staged(t *testing.T, stack edge.EdgeStack, app, identity, physical string) 
 
 func imageFor(app, identity string) string { return "ghcr.io/acme/" + app + ":" + identity }
 
-func TestTheEdgeAnswersTheFactsABoxCanStandBehind(t *testing.T) {
+func TestTheEdgeAnswersTheFactsABoxCanSitBehind(t *testing.T) {
 	t.Parallel()
 
 	front := edgeOver(aMachine(), fake.NewRecords())
@@ -308,7 +308,7 @@ func TestTheEdgeAnswersTheFactsABoxCanStandBehind(t *testing.T) {
 	}
 }
 
-func TestTheFlipCarriesNoPropagationNoteToPrint(t *testing.T) {
+func TestTheFlipReturnsNoPropagationNoteToPrint(t *testing.T) {
 	t.Parallel()
 
 	bound := edgeOver(aMachine(), fake.NewRecords()).Facts().FlipBound
@@ -323,27 +323,27 @@ func TestTheFlipCarriesNoPropagationNoteToPrint(t *testing.T) {
 func TestBootstrappingTheEdgeTouchesTheBoxNotAtAll(t *testing.T) {
 	t.Parallel()
 
-	stood := aMachine()
-	front := edgeOver(stood, fake.NewRecords())
+	m := aMachine()
+	front := edgeOver(m, fake.NewRecords())
 	out, err := front.Bootstrap(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
 	if out.Trust != edge.TrustInternal {
-		t.Errorf("Bootstrap trust = %q, want %q: the proxy and everything it stands on are the box bootstrap's items", out.Trust, edge.TrustInternal)
+		t.Errorf("Bootstrap trust = %q, want %q: the proxy and everything it depends on are the box bootstrap's items", out.Trust, edge.TrustInternal)
 	}
 	if err := front.Teardown(context.Background(), edge.ClassProduction); err != nil {
 		t.Fatalf("Teardown: %v", err)
 	}
-	if len(stood.calls) != 0 {
-		t.Errorf("bootstrapping and tearing the edge down reached the box (%v); the proxy, its baseline, its helper and its data directory are bootstrap items and not edge methods", stood.calls)
+	if len(m.calls) != 0 {
+		t.Errorf("bootstrapping and tearing the edge down reached the box (%v); the proxy, its baseline, its helper and its data directory are bootstrap items and not edge methods", m.calls)
 	}
 }
 
 func TestPromoteEnsuresTheContainerIsRunningBeforeItFlips(t *testing.T) {
 	t.Parallel()
 
-	stood, _, stack := standing(t)
+	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 
 	if err := stack.Promote(context.Background(), edge.Promotion{
@@ -352,19 +352,19 @@ func TestPromoteEnsuresTheContainerIsRunningBeforeItFlips(t *testing.T) {
 		t.Fatalf("Promote: %v", err)
 	}
 
-	want := []string{"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + appbuild.InjectedPortText}
-	if !slices.Equal(stood.calls, want) {
-		t.Fatalf("Promote drove the box as %v, want %v: it makes the promotion's containers running and only then flips", stood.calls, want)
+	want := []string{"run shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + appbuild.InjectedPortText}
+	if !slices.Equal(m.calls, want) {
+		t.Fatalf("Promote drove the box as %v, want %v: it makes the promotion's containers running and only then flips", m.calls, want)
 	}
-	if stood.releases[0].Apps[0].HealthPath != "/healthz" {
-		t.Errorf("the release is gated on %q, want the path the record names: up is a 2xx on the path the wire named", stood.releases[0].Apps[0].HealthPath)
+	if m.releases[0].Apps[0].HealthPath != "/healthz" {
+		t.Errorf("the release is gated on %q, want the path the record names: up is a 2xx on the path the wire named", m.releases[0].Apps[0].HealthPath)
 	}
 }
 
 func TestAPromotionOfSeveralAppsFlipsThemAllInOneRelease(t *testing.T) {
 	t.Parallel()
 
-	stood, _, stack := standing(t)
+	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	staged(t, stack, "api", "b1", "shop-api-1111")
 
@@ -375,12 +375,12 @@ func TestAPromotionOfSeveralAppsFlipsThemAllInOneRelease(t *testing.T) {
 	}
 
 	want := []string{
-		"stand-up shop-api-1111", "head shop/api at " + imageFor("api", "b1"),
-		"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"),
+		"run shop-api-1111", "head shop/api at " + imageFor("api", "b1"),
+		"run shop-web-1111", "head shop/web at " + imageFor("web", "b1"),
 		"release api onto shop-api-1111:" + appbuild.InjectedPortText + ", web onto shop-web-1111:" + appbuild.InjectedPortText,
 	}
-	if !slices.Equal(stood.calls, want) {
-		t.Fatalf("a promotion of two apps drove the box as %v, want %v: every container stands before one release flips them all, so a failure on either leaves the box on the promotion it was serving", stood.calls, want)
+	if !slices.Equal(m.calls, want) {
+		t.Fatalf("a promotion of two apps drove the box as %v, want %v: every container is running before one release flips them all, so a failure on either leaves the box on the promotion it was serving", m.calls, want)
 	}
 }
 
@@ -388,8 +388,8 @@ func TestAPromotionTheBoxNeverServedLeavesThePointerOnTheOneItServes(t *testing.
 	t.Parallel()
 
 	for what, refuse := range map[string]func(*machine){
-		"a container that would not stand": func(m *machine) {
-			m.refuseOn("StandUp", refusal.Refuse(refusal.CodeNotReady, "docker run failed"))
+		"a container that would not run": func(m *machine) {
+			m.refuseOn("RunContainer", refusal.Refuse(refusal.CodeNotReady, "docker run failed"))
 		},
 		"a release the box kept off": func(m *machine) {
 			m.refuseOn("Release", host.Unserved{Err: refusal.Refuse(refusal.CodeNotReady, "the gate exited 4; the previous release is still live")})
@@ -398,19 +398,19 @@ func TestAPromotionTheBoxNeverServedLeavesThePointerOnTheOneItServes(t *testing.
 		t.Run(what, func(t *testing.T) {
 			t.Parallel()
 
-			stood, _, stack := standing(t)
+			m, _, stack := reconciled(t)
 			staged(t, stack, "web", "b1", "shop-web-1111")
 			staged(t, stack, "web", "b2", "shop-web-2222")
 			if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
 				t.Fatalf("Promote(p1): %v", err)
 			}
-			refuse(stood)
+			refuse(m)
 
 			if err := promoted(t, stack, "p2", "web", "b2"); err == nil {
 				t.Fatalf("a promotion refused by %s succeeded", what)
 			}
 			if active := activePromotion(t, stack); active != "p1" {
-				t.Errorf("after %s the pointer stands at %q, want p1: the box still serves p1, and a rollback read from a pointer at p2 re-points from a release that never served", what, active)
+				t.Errorf("after %s the pointer is at %q, want p1: the box still serves p1, and a rollback read from a pointer at p2 re-points from a release that never served", what, active)
 			}
 		})
 	}
@@ -419,19 +419,19 @@ func TestAPromotionTheBoxNeverServedLeavesThePointerOnTheOneItServes(t *testing.
 func TestAPromotionThatFailedAfterTheFlipKeepsThePointerOnTheReleaseTheBoxServes(t *testing.T) {
 	t.Parallel()
 
-	stood, _, stack := standing(t)
+	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	staged(t, stack, "web", "b2", "shop-web-2222")
 	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
-	stood.refuseOn("Release", refusal.Refuse(refusal.CodeNotReady, "flipped onto shop-web-2222, which now serve, but shop-web-1111 was drained and unrouted but not stopped"))
+	m.refuseOn("Release", refusal.Refuse(refusal.CodeNotReady, "flipped onto shop-web-2222, which now serve, but shop-web-1111 was drained and unrouted but not stopped"))
 
 	if err := promoted(t, stack, "p2", "web", "b2"); err == nil {
 		t.Fatal("a promotion whose retiree would not stop after the flip reported success")
 	}
 	if active := activePromotion(t, stack); active != "p2" {
-		t.Errorf("after a failure past the flip the pointer stands at %q, want p2: the box is serving p2", active)
+		t.Errorf("after a failure past the flip the pointer is at %q, want p2: the box is serving p2", active)
 	}
 }
 
@@ -461,8 +461,8 @@ func (h honouring) Remove(ctx context.Context, name records.Name, expected recor
 func TestAPromotionInterruptedBeforeItsFlipStillPutsThePointerBack(t *testing.T) {
 	t.Parallel()
 
-	stood := aMachine()
-	front := edgeOver(stood, honouring{fake.NewRecords()})
+	m := aMachine()
+	front := edgeOver(m, honouring{fake.NewRecords()})
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Class: edge.ClassProduction, Slug: slug,
 	}, edge.StackState{})
@@ -476,7 +476,7 @@ func TestAPromotionInterruptedBeforeItsFlipStillPutsThePointerBack(t *testing.T)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stood.releasing = func(host.Release) error {
+	m.releasing = func(host.Release) error {
 		cancel()
 		return host.Unserved{Err: refusal.Refuse(refusal.CodeNotReady, "the gate was interrupted; the previous release is still live")}
 	}
@@ -485,16 +485,16 @@ func TestAPromotionInterruptedBeforeItsFlipStillPutsThePointerBack(t *testing.T)
 		t.Fatal("a promotion interrupted before its flip succeeded")
 	}
 	if active := activePromotion(t, stack); active != "p1" {
-		t.Errorf("after a promotion interrupted before its flip the pointer stands at %q, want p1: the interrupt that stopped the release is the context the unwind ran under", active)
+		t.Errorf("after a promotion interrupted before its flip the pointer is at %q, want p1: the interrupt that stopped the release is the context the unwind ran under", active)
 	}
 }
 
 func TestAPromotionOvertakenWhileItGatedNeverFlipsTheBoxAwayFromTheOneThatOvertookIt(t *testing.T) {
 	t.Parallel()
 
-	stood := aMachine()
+	m := aMachine()
 	records := fake.NewRecords()
-	front := edgeOver(stood, records)
+	front := edgeOver(m, records)
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Class: edge.ClassProduction, Slug: slug,
 	}, edge.StackState{})
@@ -507,16 +507,16 @@ func TestAPromotionOvertakenWhileItGatedNeverFlipsTheBoxAwayFromTheOneThatOverto
 	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
 		t.Fatalf("Promote(p1): %v", err)
 	}
-	stood.releasing = func(rel host.Release) error {
-		stood.releasing = nil
+	m.releasing = func(rel host.Release) error {
+		m.releasing = nil
 		overtaking := kitledger.New(records, edge.ClassProduction, slug)
 		if err := overtaking.Promote(context.Background(), edge.Promotion{PromotionID: "p3", Builds: map[string]string{"web": "b3"}}, "", edge.DiscardProgress()); err != nil {
 			t.Fatalf("Promote(p3): %v", err)
 		}
-		if rel.Holding == nil {
+		if rel.StillActive == nil {
 			return nil
 		}
-		if err := rel.Holding(context.Background()); err != nil {
+		if err := rel.StillActive(context.Background()); err != nil {
 			return host.Unserved{Err: err}
 		}
 		return nil
@@ -530,7 +530,7 @@ func TestAPromotionOvertakenWhileItGatedNeverFlipsTheBoxAwayFromTheOneThatOverto
 		t.Errorf("the refusal reads %q and never names the promotion that overtook it", err)
 	}
 	if active := activePromotion(t, stack); active != "p3" {
-		t.Errorf("the pointer stands at %q, want p3, the promotion that overtook p2", active)
+		t.Errorf("the pointer is at %q, want p3, the promotion that overtook p2", active)
 	}
 }
 
@@ -547,10 +547,10 @@ func activePromotion(t *testing.T, stack edge.EdgeStack) string {
 	return entries[at].PromotionID
 }
 
-func TestARollbackStandsThePreviousContainerBackUpAndFlipsOntoIt(t *testing.T) {
+func TestARollbackRestartsThePreviousContainerAndFlipsOntoIt(t *testing.T) {
 	t.Parallel()
 
-	stood, _, stack := standing(t)
+	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	staged(t, stack, "web", "b2", "shop-web-2222")
 
@@ -563,7 +563,7 @@ func TestARollbackStandsThePreviousContainerBackUpAndFlipsOntoIt(t *testing.T) {
 			t.Fatalf("Promote(%s): %v", promotion.PromotionID, err)
 		}
 	}
-	stood.calls = nil
+	m.calls = nil
 
 	if err := stack.Promote(ctx, edge.Promotion{
 		PromotionID: "p3", Ts: 3, Builds: map[string]string{"web": "b1"},
@@ -571,9 +571,9 @@ func TestARollbackStandsThePreviousContainerBackUpAndFlipsOntoIt(t *testing.T) {
 		t.Fatalf("Promote(rollback): %v", err)
 	}
 
-	want := []string{"stand-up shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + appbuild.InjectedPortText}
-	if !slices.Equal(stood.calls, want) {
-		t.Fatalf("a rollback drove the box as %v, want %v: nothing provisions on this path, so re-pointing at a release that is not running is a ledger edit and not a restored site", stood.calls, want)
+	want := []string{"run shop-web-1111", "head shop/web at " + imageFor("web", "b1"), "release web onto shop-web-1111:" + appbuild.InjectedPortText}
+	if !slices.Equal(m.calls, want) {
+		t.Fatalf("a rollback drove the box as %v, want %v: nothing provisions on this path, so re-pointing at a release that is not running is a ledger edit and not a restored site", m.calls, want)
 	}
 }
 
@@ -592,8 +592,8 @@ func (s staleAt) Write(ctx context.Context, record records.Record) (records.Revi
 func TestADeployThatLostTheRaceForThePointerNeverReachesTheProxy(t *testing.T) {
 	t.Parallel()
 
-	stood := aMachine()
-	front := edgeOver(stood, staleAt{Store: fake.NewRecords(), at: "pointers"})
+	m := aMachine()
+	front := edgeOver(m, staleAt{Store: fake.NewRecords(), at: "pointers"})
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Class: edge.ClassProduction, Slug: slug,
 	}, edge.StackState{})
@@ -612,15 +612,15 @@ func TestADeployThatLostTheRaceForThePointerNeverReachesTheProxy(t *testing.T) {
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Errorf("Promote refused with %v, want %s: the deploy that lost the race is told another one moved the pointer", err, refusal.CodeBusy)
 	}
-	if len(stood.calls) != 0 {
-		t.Errorf("a deploy that lost the pointer still reached the box (%v); the flip rewrites the whole box's proxy configuration, so a deploy that lost the race would retire a live app's route on its way past", stood.calls)
+	if len(m.calls) != 0 {
+		t.Errorf("a deploy that lost the pointer still reached the box (%v); the flip rewrites the whole box's proxy configuration, so a deploy that lost the race would retire a live app's route on its way past", m.calls)
 	}
 }
 
 func TestAnAppWithNoContainerOnThisBoxFlipsNothing(t *testing.T) {
 	t.Parallel()
 
-	stood, _, stack := standing(t)
+	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "")
 
 	if err := stack.Promote(context.Background(), edge.Promotion{
@@ -628,15 +628,15 @@ func TestAnAppWithNoContainerOnThisBoxFlipsNothing(t *testing.T) {
 	}, "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
-	if len(stood.calls) != 0 {
-		t.Errorf("a promotion naming no container on this box drove the proxy (%v); there is nothing here for it to put in front", stood.calls)
+	if len(m.calls) != 0 {
+		t.Errorf("a promotion naming no container on this box drove the proxy (%v); there is nothing here for it to put in front", m.calls)
 	}
 }
 
 func TestARecordNamingAContainerAndNoHealthPathIsRefusedRatherThanGatedOnAGuess(t *testing.T) {
 	t.Parallel()
 
-	stood, _, stack := standing(t)
+	m, _, stack := reconciled(t)
 	if err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{
 		App: "web", Build: "b1", Image: "ghcr.io/acme/web:b1", Physical: "shop-web-1111",
 	}); err != nil {
@@ -652,8 +652,8 @@ func TestARecordNamingAContainerAndNoHealthPathIsRefusedRatherThanGatedOnAGuess(
 	if !strings.Contains(err.Error(), "health path") {
 		t.Errorf("Promote refused with %q, want it to name the health path it has no value for", err)
 	}
-	if len(stood.calls) != 0 {
-		t.Errorf("the box was reached before the record was found unusable: %v", stood.calls)
+	if len(m.calls) != 0 {
+		t.Errorf("the box was reached before the record was found unusable: %v", m.calls)
 	}
 }
 
@@ -661,7 +661,7 @@ func TestABoundHostnameIsClaimedOnTheProxyAndPointedAtTheBoxItself(t *testing.T)
 	t.Parallel()
 
 	const hostname = "shop.example.com"
-	stood, front, stack := standing(t)
+	m, front, stack := reconciled(t)
 	ctx := context.Background()
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
@@ -682,8 +682,8 @@ func TestABoundHostnameIsClaimedOnTheProxyAndPointedAtTheBoxItself(t *testing.T)
 	if len(records) != 1 || records[0] != want {
 		t.Errorf("records = %v, want %v: a box answers on an address rather than a name, so the record that points at it is an A record", records, want)
 	}
-	if !slices.Contains(stood.calls, "claim "+hostname) {
-		t.Errorf("the binding never claimed %q on the proxy (%v), and nothing on the box would then say which project answers it", hostname, stood.calls)
+	if !slices.Contains(m.calls, "claim "+hostname) {
+		t.Errorf("the binding never claimed %q on the proxy (%v), and nothing on the box would then say which project answers it", hostname, m.calls)
 	}
 }
 
@@ -691,7 +691,7 @@ func TestAHostnameBoundAfterAPromotionAnswersFromTheReleasedContainer(t *testing
 	t.Parallel()
 
 	const hostname = "shop.example.com"
-	stood, _, stack := standing(t)
+	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
 		t.Fatalf("Promote: %v", err)
@@ -700,13 +700,13 @@ func TestAHostnameBoundAfterAPromotionAnswersFromTheReleasedContainer(t *testing
 		t.Fatalf("BindDomain: %v", err)
 	}
 
-	at := slices.IndexFunc(stood.claims, func(claim host.HostClaim) bool { return claim.Hostname == hostname })
+	at := slices.IndexFunc(m.claims, func(claim host.HostClaim) bool { return claim.Hostname == hostname })
 	if at < 0 {
-		t.Fatalf("the box claims %v, want %s among them", stood.claims, hostname)
+		t.Fatalf("the box claims %v, want %s among them", m.claims, hostname)
 	}
-	claim := stood.claims[at]
+	claim := m.claims[at]
 	want := "shop-web-1111:" + appbuild.InjectedPortText
-	if got := stood.upstream[host.RouteKey{Owner: claim.Owner, Pointer: claim.Pointer, App: claim.App}]; got != want {
+	if got := m.upstream[host.RouteKey{Owner: claim.Owner, Pointer: claim.Pointer, App: claim.App}]; got != want {
 		t.Errorf("%s is claimed onto a route that answers from %q, want %q: the release was promoted before the bind, and no later promotion comes to route it",
 			hostname, got, want)
 	}
@@ -717,8 +717,8 @@ func TestAHostnameOneProjectUnbindsIsOneAnotherCanBind(t *testing.T) {
 
 	const hostname = "moving.example.com"
 	ctx := context.Background()
-	stood := aMachine()
-	first := standingOn(t, stood, "shop")
+	m := aMachine()
+	first := reconciledOn(t, m, "shop")
 	if err := first.BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
 	}
@@ -726,18 +726,18 @@ func TestAHostnameOneProjectUnbindsIsOneAnotherCanBind(t *testing.T) {
 		t.Fatalf("UnbindDomain: %v", err)
 	}
 
-	if err := standingOn(t, stood, "market").BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
-		t.Errorf("binding %q after the project holding it released it = %v; a name one project gives up comes back into circulation, or moving a domain between projects is a change only someone with a shell on the box can make", hostname, err)
+	if err := reconciledOn(t, m, "market").BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
+		t.Errorf("binding %q after the project that claimed it released it = %v; a name one project gives up comes back into circulation, or moving a domain between projects is a change only someone with a shell on the box can make", hostname, err)
 	}
 }
 
-func TestAHostnameATornDownProjectHeldIsOneAnotherCanBind(t *testing.T) {
+func TestAHostnameATornDownProjectClaimedIsOneAnotherCanBind(t *testing.T) {
 	t.Parallel()
 
 	const hostname = "moving.example.com"
 	ctx := context.Background()
-	stood := aMachine()
-	first := standingOn(t, stood, "shop")
+	m := aMachine()
+	first := reconciledOn(t, m, "shop")
 	if err := first.BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
 	}
@@ -745,19 +745,19 @@ func TestAHostnameATornDownProjectHeldIsOneAnotherCanBind(t *testing.T) {
 		t.Fatalf("Destroy: %v", err)
 	}
 
-	if err := standingOn(t, stood, "market").BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
-		t.Errorf("binding %q after the project holding it was torn down = %v; a destroyed surface answers for nothing, so a claim outliving it locks the name up for good", hostname, err)
+	if err := reconciledOn(t, m, "market").BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
+		t.Errorf("binding %q after the project that claimed it was torn down = %v; a destroyed surface answers for nothing, so a claim outliving it locks the name up for good", hostname, err)
 	}
 }
 
-func TestATeardownTakesTheClaimsTheBoxHoldsRatherThanTheOnesItsStateRemembers(t *testing.T) {
+func TestATeardownTakesTheClaimsTheBoxRecordsRatherThanTheOnesItsStateRemembers(t *testing.T) {
 	t.Parallel()
 
 	const hostname = "moving.example.com"
 	ctx := context.Background()
-	stood := aMachine()
-	front := edgeOver(stood, fake.NewRecords())
-	first := standingOn(t, stood, "shop")
+	m := aMachine()
+	front := edgeOver(m, fake.NewRecords())
+	first := reconciledOn(t, m, "shop")
 	if err := first.BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
 	}
@@ -766,40 +766,40 @@ func TestATeardownTakesTheClaimsTheBoxHoldsRatherThanTheOnesItsStateRemembers(t 
 	forgotten.Bound, forgotten.Fronts, forgotten.Front = nil, nil, ""
 	reopened, err := front.Open(forgotten)
 	if err != nil {
-		t.Fatalf("Open a state carrying no binding: %v", err)
+		t.Fatalf("Open a state with no binding: %v", err)
 	}
 	if err := reopened.Destroy(ctx); err != nil {
 		t.Fatalf("Destroy: %v", err)
 	}
 
-	if err := standingOn(t, stood, "market").BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
-		t.Errorf("binding %q after the project holding it was torn down through a state that had lost the binding = %v; the claim is written on the box before the state naming it is persisted anywhere, so a teardown that releases only what its own state remembers strands every claim that outran it", hostname, err)
+	if err := reconciledOn(t, m, "market").BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
+		t.Errorf("binding %q after the project that claimed it was torn down through a state that had lost the binding = %v; the claim is written on the box before the state naming it is persisted anywhere, so a teardown that releases only what its own state remembers strands every claim that outran it", hostname, err)
 	}
 }
 
-func TestAHostnameAnotherProjectStillHoldsIsRefusedNamingWhoHoldsIt(t *testing.T) {
+func TestAHostnameAnotherProjectStillClaimsIsRefusedNamingWhoClaimsIt(t *testing.T) {
 	t.Parallel()
 
 	const hostname = "contested.example.com"
 	ctx := context.Background()
-	stood := aMachine()
-	if err := standingOn(t, stood, "shop").BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
+	m := aMachine()
+	if err := reconciledOn(t, m, "shop").BindDomain(ctx, edge.DomainBinding{Hostname: hostname}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
 	}
 
-	err := standingOn(t, stood, "market").BindDomain(ctx, edge.DomainBinding{Hostname: hostname})
+	err := reconciledOn(t, m, "market").BindDomain(ctx, edge.DomainBinding{Hostname: hostname})
 	if err == nil {
-		t.Fatalf("binding %q over the project still holding it succeeded, and that project's site goes dark with nothing telling it why", hostname)
+		t.Fatalf("binding %q over the project still claiming it succeeded, and that project's site goes dark with nothing telling it why", hostname)
 	}
 	if !strings.Contains(err.Error(), box.Surface("shop", edge.ClassProduction)) {
-		t.Errorf("the refusal reads %q and never names the surface holding %q, so nobody knows where to unbind it", err, hostname)
+		t.Errorf("the refusal reads %q and never names the surface claiming %q, so nobody knows where to unbind it", err, hostname)
 	}
-	owner, err := edgeOver(stood, fake.NewRecords()).DomainOwner(ctx, hostname)
+	owner, err := edgeOver(m, fake.NewRecords()).DomainOwner(ctx, hostname)
 	if err != nil {
 		t.Fatalf("DomainOwner: %v", err)
 	}
 	if want := box.Surface("shop", edge.ClassProduction); owner != want {
-		t.Errorf("DomainOwner(%q) = %q, want %q: a refused bind leaves the claim where it stood", hostname, owner, want)
+		t.Errorf("DomainOwner(%q) = %q, want %q: a refused bind leaves the claim where it was", hostname, owner, want)
 	}
 }
 
@@ -823,14 +823,14 @@ func TestTheRemovalPlanNamesTheEdgesRowsAndNotTheContainersReleasesOwn(t *testin
 		kinds = append(kinds, change.Kind)
 	}
 	if !slices.Contains(kinds, box.RouteKind) || !slices.Contains(kinds, box.CertificateKind) {
-		t.Errorf("the removal rows are %v, want the routes this project claimed and the certificates it holds", kinds)
+		t.Errorf("the removal rows are %v, want the routes this project claimed and the certificates it has", kinds)
 	}
 	for _, change := range groups[0].Changes {
 		if change.Kind != box.CertificateKind {
 			continue
 		}
 		if change.Action != edge.PlanKeep {
-			t.Errorf("the plan offers to %q the certificate for %s: ocel places no key material on a box, so it holds the authority to remove none", change.Action, change.Name)
+			t.Errorf("the plan offers to %q the certificate for %s: ocel places no key material on a box, so it has the authority to remove none", change.Action, change.Name)
 		}
 		if !strings.Contains(change.Reason, "renew") {
 			t.Errorf("the certificate row reads %q, want it to name who renews it: that is the only distinction an operator has to act on", change.Reason)
@@ -838,14 +838,14 @@ func TestTheRemovalPlanNamesTheEdgesRowsAndNotTheContainersReleasesOwn(t *testin
 	}
 }
 
-func TestTheKeptCertificateIsNamedByTheHandleThatHoldsItAndSaysWhoRenewsIt(t *testing.T) {
+func TestTheKeptCertificateIsNamedByTheHandleThatStoresItAndSaysWhoRenewsIt(t *testing.T) {
 	t.Parallel()
 
 	const pinned = "pr-7.preview.example.com"
 	at := caddy.PinsDir + "/wildcard"
-	stood := aMachine()
-	stood.pins = []host.Pin{{Hostname: "*.preview.example.com", Path: at}}
-	front := edgeOver(stood, fake.NewRecords())
+	m := aMachine()
+	m.pins = []host.Pin{{Hostname: "*.preview.example.com", Path: at}}
+	front := edgeOver(m, fake.NewRecords())
 
 	kept := map[string]edge.PlanChange{}
 	for _, change := range front.ProjectRemovals(edge.ProjectScope{
@@ -856,12 +856,12 @@ func TestTheKeptCertificateIsNamedByTheHandleThatHoldsItAndSaysWhoRenewsIt(t *te
 		}
 	}
 
-	held, named := kept[certs.PinHandle(at)]
+	row, named := kept[certs.PinHandle(at)]
 	if !named {
-		t.Fatalf("the rows kept are %v, want the pair covering %s named by the handle that holds it: naming it by hostname says this box's proxy obtained and renews a certificate the operator placed, which is the wrong-wording bug in the other direction", slices.Sorted(maps.Keys(kept)), pinned)
+		t.Fatalf("the rows kept are %v, want the pair covering %s named by the handle that stores it: naming it by hostname says this box's proxy obtained and renews a certificate the operator placed, which is the wrong-wording bug in the other direction", slices.Sorted(maps.Keys(kept)), pinned)
 	}
-	if !strings.Contains(held.Reason, at) || !strings.Contains(held.Reason, "you") {
-		t.Errorf("the row for a pinned pair reads %q, want it to name the path it sits at and the operator who renews it", held.Reason)
+	if !strings.Contains(row.Reason, at) || !strings.Contains(row.Reason, "you") {
+		t.Errorf("the row for a pinned pair reads %q, want it to name the path it sits at and the operator who renews it", row.Reason)
 	}
 	if _, obtained := kept[certs.ProxyHandle("shop.example.com")]; !obtained {
 		t.Errorf("the rows kept are %v, want shop.example.com named by the proxy handle: nothing on this box pins it, so the proxy obtained it and renews it", slices.Sorted(maps.Keys(kept)))
@@ -879,13 +879,13 @@ func TestReleasingAPreviewWildcardNamesTheRouteItTakesAndTheCatchAllItLeaves(t *
 	removed, kept := front.PreviewWildcardRemovals(wildcard)
 
 	if removed.Action != edge.PlanDelete {
-		t.Errorf("the removed group is actioned %q, want %q: releasing the wildcard takes down what holds it", removed.Action, edge.PlanDelete)
+		t.Errorf("the removed group is actioned %q, want %q: releasing the wildcard takes down the route that serves it", removed.Action, edge.PlanDelete)
 	}
 	if len(removed.Changes) != 1 || removed.Changes[0].Name != wildcard {
-		t.Fatalf("the removed group carries %v, want the one route claiming %s", removed.Changes, wildcard)
+		t.Fatalf("the removed group has %v, want the one route claiming %s", removed.Changes, wildcard)
 	}
 	if removed.Changes[0].Kind != box.RouteKind || removed.Changes[0].Action != edge.PlanDelete {
-		t.Errorf("the wildcard row is %q actioned %q, want a %q delete: a box holds a wildcard as a claim on its own proxy and nothing else",
+		t.Errorf("the wildcard row is %q actioned %q, want a %q delete: a box records a wildcard as a claim on its own proxy and nothing else",
 			removed.Changes[0].Kind, removed.Changes[0].Action, box.RouteKind)
 	}
 	shared := front.SharedPreviewRemoval()
@@ -902,7 +902,7 @@ func TestTheSharedCatchAllIsAKeptRowThatSaysWhyItStays(t *testing.T) {
 		t.Errorf("the shared catch-all is actioned %q, want %q: it is a bootstrap item and it answers for every project this box serves", shared.Action, edge.PlanKeep)
 	}
 	if len(shared.Changes) != 0 {
-		t.Errorf("the shared catch-all carries rows %v; a kept group that lists rows reads as a removal that spared them", shared.Changes)
+		t.Errorf("the shared catch-all has rows %v; a kept group that lists rows reads as a removal that spared them", shared.Changes)
 	}
 	if shared.Reason == "" {
 		t.Error("the shared catch-all is kept for no stated reason, and a kept row a user cannot explain is one they cannot decide to remove by hand")
@@ -912,10 +912,10 @@ func TestTheSharedCatchAllIsAKeptRowThatSaysWhyItStays(t *testing.T) {
 	}
 }
 
-func standingOn(t *testing.T, stood *machine, named string) edge.EdgeStack {
+func reconciledOn(t *testing.T, m *machine, named string) edge.EdgeStack {
 	t.Helper()
 
-	front := edgeOver(stood, fake.NewRecords())
+	front := edgeOver(m, fake.NewRecords())
 	stack, err := front.Reconcile(context.Background(), edge.StackSpec{
 		Version: "test", Class: edge.ClassProduction, Slug: named,
 	}, edge.StackState{})
@@ -935,8 +935,8 @@ func promoted(t *testing.T, stack edge.EdgeStack, id, app, identity string) erro
 func TestTwoProjectsRunningTheSameAppNameOnOneBoxAreReleasedSeparately(t *testing.T) {
 	t.Parallel()
 
-	stood := aMachine()
-	shop, blog := standingOn(t, stood, "shop"), standingOn(t, stood, "blog")
+	m := aMachine()
+	shop, blog := reconciledOn(t, m, "shop"), reconciledOn(t, m, "blog")
 	staged(t, shop, "web", "b1", "shop-web-1111")
 	staged(t, blog, "web", "b1", "blog-web-1111")
 
@@ -948,7 +948,7 @@ func TestTwoProjectsRunningTheSameAppNameOnOneBoxAreReleasedSeparately(t *testin
 	}
 
 	keys := map[string]bool{}
-	for _, rel := range stood.releases {
+	for _, rel := range m.releases {
 		for _, app := range rel.Apps {
 			keys[app.Owner] = true
 		}
@@ -961,7 +961,7 @@ func TestTwoProjectsRunningTheSameAppNameOnOneBoxAreReleasedSeparately(t *testin
 func TestARollbackOntoASweptImageIsRefusedBeforeThePointerMoves(t *testing.T) {
 	t.Parallel()
 
-	stood, _, stack := standing(t)
+	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	staged(t, stack, "web", "b2", "shop-web-2222")
 	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
@@ -970,8 +970,8 @@ func TestARollbackOntoASweptImageIsRefusedBeforeThePointerMoves(t *testing.T) {
 	if err := promoted(t, stack, "p2", "web", "b2"); err != nil {
 		t.Fatalf("Promote(p2): %v", err)
 	}
-	stood.swept[imageFor("web", "b1")] = true
-	stood.calls = nil
+	m.swept[imageFor("web", "b1")] = true
+	m.calls = nil
 
 	err := stack.Promote(context.Background(), edge.Promotion{
 		PromotionID: "p3", Ts: 3, Builds: map[string]string{"web": "b1"},
@@ -986,8 +986,8 @@ func TestARollbackOntoASweptImageIsRefusedBeforeThePointerMoves(t *testing.T) {
 	if !strings.Contains(err.Error(), "Deploy again") {
 		t.Errorf("the refusal reads %q and never says what to do instead", err)
 	}
-	if len(stood.calls) != 0 {
-		t.Errorf("the box was reached before the image was found gone: %v", stood.calls)
+	if len(m.calls) != 0 {
+		t.Errorf("the box was reached before the image was found gone: %v", m.calls)
 	}
 
 	entries, err := stack.Ledger().History(context.Background(), "")
@@ -996,17 +996,17 @@ func TestARollbackOntoASweptImageIsRefusedBeforeThePointerMoves(t *testing.T) {
 	}
 	at := slices.IndexFunc(entries, func(entry edge.HistoryEntry) bool { return entry.Active })
 	if at < 0 {
-		t.Fatalf("the ledger holds no active promotion after a refused rollback (%v), and a pointer standing at nothing is not the release still serving", entries)
+		t.Fatalf("the ledger records no active promotion after a refused rollback (%v), and a pointer at nothing is not the release still serving", entries)
 	}
 	if entries[at].PromotionID != "p2" {
-		t.Errorf("the pointer stands at %s after a refused rollback, want the release still serving: the ensure runs before the flip so a rollback that cannot serve leaves nothing moved", entries[at].PromotionID)
+		t.Errorf("the pointer is at %s after a refused rollback, want the release still serving: the ensure runs before the flip so a rollback that cannot serve leaves nothing moved", entries[at].PromotionID)
 	}
 }
 
 func TestAPromotionPutsTheReleaseItServesAtTheHeadOfTheBoxsWindow(t *testing.T) {
 	t.Parallel()
 
-	stood, _, stack := standing(t)
+	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	staged(t, stack, "web", "b2", "shop-web-2222")
 	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
@@ -1019,8 +1019,8 @@ func TestAPromotionPutsTheReleaseItServesAtTheHeadOfTheBoxsWindow(t *testing.T) 
 		t.Fatalf("Promote(rollback): %v", err)
 	}
 
-	if len(stood.headed) == 0 || stood.headed[len(stood.headed)-1] != imageFor("web", "b1") {
-		t.Errorf("the box's release window heads at %v, want %s: a rollback that leaves the window alone is swept off the box by the next deploy's reconcile while the ledger still offers it", stood.headed, imageFor("web", "b1"))
+	if len(m.headed) == 0 || m.headed[len(m.headed)-1] != imageFor("web", "b1") {
+		t.Errorf("the box's release window heads at %v, want %s: a rollback that leaves the window alone is swept off the box by the next deploy's reconcile while the ledger still offers it", m.headed, imageFor("web", "b1"))
 	}
 }
 
@@ -1031,10 +1031,10 @@ func (r *reported) Detail(message string) { r.lines = append(r.lines, message) }
 
 func (r *reported) Span(string, time.Time, time.Time, error, ...edge.Attr) {}
 
-func TestAPromotionSaysItIsStandingTheContainerBackUpBeforeItStandsIt(t *testing.T) {
+func TestAPromotionSaysItIsRestartingTheContainerBeforeItStartsIt(t *testing.T) {
 	t.Parallel()
 
-	_, _, stack := standing(t)
+	_, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	heard := &reported{}
 	if err := stack.Promote(context.Background(), edge.Promotion{
@@ -1043,34 +1043,34 @@ func TestAPromotionSaysItIsStandingTheContainerBackUpBeforeItStandsIt(t *testing
 		t.Fatalf("Promote: %v", err)
 	}
 	if !slices.ContainsFunc(heard.lines, func(line string) bool { return strings.Contains(line, "shop-web-1111") }) {
-		t.Errorf("the promotion reported %v and never named the container it stood up; a rollback provisions nothing, so this is the only row saying the box put a container back before the flip", heard.lines)
+		t.Errorf("the promotion reported %v and never named the container it started; a rollback provisions nothing, so this is the only row saying the box put a container back before the flip", heard.lines)
 	}
 }
 
 func TestRemovingAPointerTakesTheRoutesItPointedAt(t *testing.T) {
 	t.Parallel()
 
-	stood, _, stack := standing(t)
+	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
-	if len(stood.upstream) != 1 {
-		t.Fatalf("the promotion routed %v, and this test needs a route to remove", stood.upstream)
+	if len(m.upstream) != 1 {
+		t.Fatalf("the promotion routed %v, and this test needs a route to remove", m.upstream)
 	}
 
 	if _, err := stack.RemovePointer(context.Background(), "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
-	if len(stood.upstream) != 0 {
-		t.Errorf("the routes left after the pointer was removed are %v; nothing offers those releases any more and the proxy still forwards to their containers", stood.upstream)
+	if len(m.upstream) != 0 {
+		t.Errorf("the routes left after the pointer was removed are %v; nothing offers those releases any more and the proxy still forwards to their containers", m.upstream)
 	}
 }
 
 func TestRemovingAPointerTakesTheRouteOfAnAppTheLedgerNoLongerRemembers(t *testing.T) {
 	t.Parallel()
 
-	stood, _, stack := standing(t)
+	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	staged(t, stack, "worker", "b1", "shop-worker-1111")
 	if err := stack.Promote(context.Background(), edge.Promotion{
@@ -1099,15 +1099,15 @@ func TestRemovingAPointerTakesTheRouteOfAnAppTheLedgerNoLongerRemembers(t *testi
 	if _, err := stack.RemovePointer(context.Background(), "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("RemovePointer: %v", err)
 	}
-	if len(stood.upstream) != 0 {
-		t.Errorf("the routes left after the pointer was removed are %v; the ledger remembers only the promotions it retained, so an app dropped from the build set and aged out of that window keeps a route forwarding to a container this box removed. The proxy is what says which routes are live", stood.upstream)
+	if len(m.upstream) != 0 {
+		t.Errorf("the routes left after the pointer was removed are %v; the ledger remembers only the promotions it retained, so an app dropped from the build set and aged out of that window keeps a route forwarding to a container this box removed. The proxy is what says which routes are live", m.upstream)
 	}
 }
 
 func TestDestroyingAStackLeavesNoRouteOnTheBoxAtAll(t *testing.T) {
 	t.Parallel()
 
-	stood, _, stack := standing(t)
+	m, _, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	staged(t, stack, "worker", "b1", "shop-worker-1111")
 	if err := stack.Promote(context.Background(), edge.Promotion{
@@ -1119,8 +1119,8 @@ func TestDestroyingAStackLeavesNoRouteOnTheBoxAtAll(t *testing.T) {
 	if err := stack.Destroy(context.Background()); err != nil {
 		t.Fatalf("Destroy: %v", err)
 	}
-	if len(stood.upstream) != 0 {
-		t.Errorf("a torn-down project leaves %v on this box's proxy, forwarding to containers the teardown removed", stood.upstream)
+	if len(m.upstream) != 0 {
+		t.Errorf("a torn-down project leaves %v on this box's proxy, forwarding to containers the teardown removed", m.upstream)
 	}
 }
 
@@ -1128,19 +1128,19 @@ func TestABindNamingAnAppClaimsTheHostnameForThatAppAndTheSurfaceStillOwnsIt(t *
 	t.Parallel()
 
 	const hostname = "api.example.com"
-	stood, front, stack := standing(t)
+	m, front, stack := reconciled(t)
 	ctx := context.Background()
 	if err := stack.BindDomain(ctx, edge.DomainBinding{Hostname: hostname, App: "api"}); err != nil {
 		t.Fatalf("BindDomain: %v", err)
 	}
 
-	claims, err := stood.Claims(ctx)
+	claims, err := m.Claims(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := host.HostClaim{Hostname: hostname, Owner: box.Surface(slug, edge.ClassProduction), Pointer: edge.DefaultPointer, App: "api"}
 	if len(claims) != 1 || claims[0] != want {
-		t.Errorf("the box holds %v, want %v: a project running two apps binds a hostname to one of them, and a claim that drops the app leaves the render unable to tell which route answers it", claims, want)
+		t.Errorf("the box records %v, want %v: a project running two apps binds a hostname to one of them, and a claim that drops the app leaves the render unable to tell which route answers it", claims, want)
 	}
 
 	owner, err := front.DomainOwner(ctx, hostname)
@@ -1157,7 +1157,7 @@ func TestTheRemovalPlanKeepsABoundHostnamesCertificateUnderTheProxysOwnHandle(t 
 
 	const bound = "shop.example.com"
 
-	_, front, stack := standing(t)
+	_, front, stack := reconciled(t)
 	staged(t, stack, "web", "b1", "shop-web-1111")
 	if err := promoted(t, stack, "p1", "web", "b1"); err != nil {
 		t.Fatalf("Promote: %v", err)
@@ -1170,12 +1170,12 @@ func TestTheRemovalPlanKeepsABoundHostnamesCertificateUnderTheProxysOwnHandle(t 
 		t.Fatalf("RemovePointer: %v", err)
 	}
 
-	held := keptCertificate(t, front.ProjectRemovals(edge.ProjectScope{Slug: slug, Class: edge.ClassProduction, Hostnames: []string{bound}}))
-	if held.Name != certs.ProxyHandle(bound) {
-		t.Errorf("the plan keeps %q, want the proxy's own handle for %s: the row a teardown shows is the store entry it is declining to touch", held.Name, bound)
+	certificate := keptCertificate(t, front.ProjectRemovals(edge.ProjectScope{Slug: slug, Class: edge.ClassProduction, Hostnames: []string{bound}}))
+	if certificate.Name != certs.ProxyHandle(bound) {
+		t.Errorf("the plan keeps %q, want the proxy's own handle for %s: the row a teardown shows is the store entry it is declining to touch", certificate.Name, bound)
 	}
-	if held.Reason == "" {
-		t.Errorf("%+v is kept with no reason, and a kept row is the whole of what tells the operator why bytes this teardown found are still there", held)
+	if certificate.Reason == "" {
+		t.Errorf("%+v is kept with no reason, and a kept row is the whole of what tells the operator why bytes this teardown found are still there", certificate)
 	}
 }
 
@@ -1191,7 +1191,7 @@ func keptCertificate(t *testing.T, groups []edge.PlanGroup) edge.PlanChange {
 		}
 	}
 	if len(certificates) != 1 {
-		t.Fatalf("the removal plan carries %d certificate rows, want the one behind the bound hostname: %v", len(certificates), groups)
+		t.Fatalf("the removal plan has %d certificate rows, want the one behind the bound hostname: %v", len(certificates), groups)
 	}
 	if certificates[0].Action != edge.PlanKeep {
 		t.Fatalf("the plan renders %+v, want it kept: ocel placed no key in the proxy's store, so it removes none", certificates[0])
@@ -1199,10 +1199,10 @@ func keptCertificate(t *testing.T, groups []edge.PlanGroup) edge.PlanChange {
 	return certificates[0]
 }
 
-func TestAPromotionCarriesTheNamesItsDeployResolvedSoTheBoxCanRefuseToServeNone(t *testing.T) {
+func TestAPromotionPassesTheNamesItsDeployResolvedSoTheBoxCanRefuseToServeNone(t *testing.T) {
 	t.Parallel()
 
-	stood, _, stack := standing(t)
+	m, _, stack := reconciled(t)
 	if err := stack.Ledger().PutStaged(context.Background(), edge.DeploymentRecord{
 		App:        "web",
 		Build:      "b1",
@@ -1221,17 +1221,17 @@ func TestAPromotionCarriesTheNamesItsDeployResolvedSoTheBoxCanRefuseToServeNone(
 	}, "", edge.DiscardProgress()); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
-	if len(stood.stood) != 1 {
-		t.Fatalf("the promotion stood up %d containers, want the one the record names", len(stood.stood))
+	if len(m.started) != 1 {
+		t.Fatalf("the promotion started %d containers, want the one the record names", len(m.started))
 	}
-	spec := stood.stood[0]
+	spec := m.started[0]
 	if spec.Resolved {
-		t.Error("the promotion says it resolved the app's values, and it resolved none: a container standing under the values a since-changed deploy handed it would then read as replaceable")
+		t.Error("the promotion says it resolved the app's values, and it resolved none: a container running under the values a since-changed deploy handed it would then read as replaceable")
 	}
 	if !slices.Equal(spec.Declared, []string{"API_TOKEN", "DATABASE_URL", "orders"}) {
 		t.Errorf("the promotion names %v of what the record says web was handed, and a box that is told none of them puts the app back with an empty environment rather than refusing", spec.Declared)
 	}
 	if spec.HealthPath != "/healthz" {
-		t.Errorf("the promotion carries the health path %q, want the record's: a container the box re-creates is handed the path its runtime lets probes through on", spec.HealthPath)
+		t.Errorf("the promotion passes the health path %q, want the record's: a container the box re-creates is handed the path its runtime lets probes through on", spec.HealthPath)
 	}
 }

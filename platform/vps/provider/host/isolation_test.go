@@ -10,18 +10,18 @@ import (
 )
 
 func handedTo(spec Container) handoff {
-	held, err := handing(spec)
+	delivery, err := handing(spec)
 	if err != nil {
 		panic(err)
 	}
-	return held
+	return delivery
 }
 
 const (
-	appContainer      = "the app container a deploy stands up"
+	appContainer      = "the app container a deploy runs"
 	proxyContainer    = "the proxy container a bootstrap runs"
 	boardContainer    = "the switchboard container a bootstrap runs"
-	resourceContainer = "the resource container a deploy stands up"
+	resourceContainer = "the resource container a deploy runs"
 )
 
 func resourced() ResourceContainer {
@@ -38,12 +38,12 @@ func running() map[string]string {
 	return map[string]string{
 		appContainer:      words(containerRun(valued(), handedTo(valued()))),
 		proxyContainer:    words(frontProxy().run()),
-		boardContainer:    words(switchboardStanding(nil, Front{}).run()),
+		boardContainer:    words(switchboardBox(nil, Front{}).run()),
 		resourceContainer: words(resourceRun(resourced(), "0123456789ab", EnvFile(resourced().Class, resourced().Name))),
 	}
 }
 
-func owed() map[string][]string {
+func entitledPaths() map[string][]string {
 	return map[string][]string{
 		appContainer:      {EnvFile(valued().Class, valued().Name)},
 		proxyContainer:    {proxyRoot, caddy.PinsDir, ProxyData},
@@ -57,7 +57,7 @@ func TestNoContainerIsHandedTheSocketThatIsRootUnderAnotherName(t *testing.T) {
 
 	for what, command := range running() {
 		if strings.Contains(command, "docker.sock") {
-			t.Errorf("%s runs %q: the daemon socket is root on this machine, and a container holding it opens every sealed value and reads every sibling's environment",
+			t.Errorf("%s runs %q: the daemon socket is root on this machine, and a container with it mounted opens every sealed value and reads every sibling's environment",
 				what, command)
 		}
 	}
@@ -87,11 +87,11 @@ func TestNoContainerIsRunPrivileged(t *testing.T) {
 }
 
 func source(token string) string {
-	held := strings.Trim(token, "'")
-	if from, _, cut := strings.Cut(held, ":"); cut {
+	bare := strings.Trim(token, "'")
+	if from, _, cut := strings.Cut(bare, ":"); cut {
 		return from
 	}
-	return held
+	return bare
 }
 
 func underARoot(path string) bool {
@@ -103,8 +103,8 @@ func underARoot(path string) bool {
 	return false
 }
 
-func holds(held []string, path string) bool {
-	for _, one := range held {
+func includes(paths []string, path string) bool {
+	for _, one := range paths {
 		if one == path {
 			return true
 		}
@@ -112,13 +112,13 @@ func holds(held []string, path string) bool {
 	return false
 }
 
-func TestEveryPathAContainerIsToldAboutUnderTheKeyOrTheRecordsIsOneItIsOwed(t *testing.T) {
+func TestEveryPathAContainerIsToldAboutUnderTheKeyOrTheRecordsIsOneItIsEntitledTo(t *testing.T) {
 	t.Parallel()
 
-	allowed := owed()
+	allowed := entitledPaths()
 	for what, command := range running() {
 		if len(allowed[what]) == 0 {
-			t.Fatalf("%s is rendered by this bench and nothing says which paths under %s and %s it is owed, so what it names proves nothing",
+			t.Fatalf("%s is rendered by this bench and nothing says which paths under %s and %s it is entitled to, so what it names proves nothing",
 				what, classRoot, stateRoot)
 		}
 		named := 0
@@ -128,8 +128,8 @@ func TestEveryPathAContainerIsToldAboutUnderTheKeyOrTheRecordsIsOneItIsOwed(t *t
 				continue
 			}
 			named++
-			if !holds(allowed[what], path) {
-				t.Errorf("%s runs %q and names %q, which is none of %v: the seal key, every sealed record and every other app's values live under %s and %s, and a run has business with nothing there but what it is owed",
+			if !includes(allowed[what], path) {
+				t.Errorf("%s runs %q and names %q, which is none of %v: the seal key, every sealed record and every other app's values live under %s and %s, and a run has business with nothing there but what it is entitled to",
 					what, command, path, allowed[what], classRoot, stateRoot)
 			}
 		}
@@ -140,15 +140,15 @@ func TestEveryPathAContainerIsToldAboutUnderTheKeyOrTheRecordsIsOneItIsOwed(t *t
 	}
 }
 
-func TestNothingAContainerIsOwedIsTheKeyTheRecordsOrTheClassStateItself(t *testing.T) {
+func TestNothingAContainerIsEntitledToIsTheKeyTheRecordsOrTheClassStateItself(t *testing.T) {
 	t.Parallel()
 
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		for what, allowed := range owed() {
+		for what, allowed := range entitledPaths() {
 			for _, path := range allowed {
 				for _, refused := range []string{ClassDir(class), RecordsDir(class), SealKeyPath(class)} {
 					if path == refused || strings.HasPrefix(path, refused+"/") {
-						t.Errorf("%s is owed %q, which stands under %s: the key that opens every sealed value and the records it sealed are what that path holds",
+						t.Errorf("%s is entitled to %q, which sits under %s: the key that opens every sealed value and the records it sealed are what that path contains",
 							what, path, refused)
 					}
 				}
@@ -157,9 +157,9 @@ func TestNothingAContainerIsOwedIsTheKeyTheRecordsOrTheClassStateItself(t *testi
 	}
 }
 
-func TestEveryContainerThisPackageRunsIsHeldToTheIsolationRules(t *testing.T) {
+func TestEveryContainerThisPackageRunsIsBoundByTheIsolationRules(t *testing.T) {
 	t.Parallel()
 
 	rendered(t, `[]string{"docker", "run"`, []string{"containerRun", "resourceRun", "run"},
-		"a container run built somewhere this bench does not read is held to none of the rules in this file")
+		"a container run built somewhere this bench does not read is bound by none of the rules in this file")
 }

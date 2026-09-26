@@ -67,9 +67,9 @@ func anAccountOn(t *testing.T, store enginetest.ObjectStore, account StoreAccoun
 
 func writingAs(t *testing.T, store signedStore, bucket, key string) string {
 	t.Helper()
-	held := store
-	held.Bucket = bucket
-	call, err := held.call("wrote", "PUT", key, "", nil, []byte(probeBody), false, time.Now().UTC())
+	inBucket := store
+	inBucket.Bucket = bucket
+	call, err := inBucket.call("wrote", "PUT", key, "", nil, []byte(probeBody), false, time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -82,7 +82,7 @@ func writingAs(t *testing.T, store signedStore, bucket, key string) string {
 
 func TestAnAppsAccountReachesTheBucketsItWasGrantedAndNoOthers(t *testing.T) {
 	if testing.Short() {
-		t.Skip("stands a real store up")
+		t.Skip("runs a real store")
 	}
 	store := enginetest.SharedObjectStore(t)
 	root := aSignedStore(t, store, "granted-bucket")
@@ -97,21 +97,21 @@ func TestAnAppsAccountReachesTheBucketsItWasGrantedAndNoOthers(t *testing.T) {
 		t.Fatalf("the store granted the app no account of its own: %v", err)
 	}
 
-	held := root
-	held.AccessKeyID = account.AccessKeyID
-	held.SecretKey = account.SecretKey
+	asApp := root
+	asApp.AccessKeyID = account.AccessKeyID
+	asApp.SecretKey = account.SecretKey
 
-	if code := writingAs(t, held, "granted-bucket", "own.txt"); code != "200" {
+	if code := writingAs(t, asApp, "granted-bucket", "own.txt"); code != "200" {
 		t.Errorf("the app's own account answered %s writing to the bucket it was granted", code)
 	}
-	if code := writingAs(t, held, "ungranted-bucket", "other.txt"); code != "403" {
+	if code := writingAs(t, asApp, "ungranted-bucket", "other.txt"); code != "403" {
 		t.Errorf("the app's own account answered %s writing to a bucket it was never granted, and an account that reaches every bucket is the root credential by another name", code)
 	}
 }
 
-func TestGrantingTheSameAppTwiceHoldsItToWhatItDeclaresNow(t *testing.T) {
+func TestGrantingTheSameAppTwiceLimitsItToWhatItDeclaresNow(t *testing.T) {
 	if testing.Short() {
-		t.Skip("stands a real store up")
+		t.Skip("runs a real store")
 	}
 	store := enginetest.SharedObjectStore(t)
 	root := aSignedStore(t, store, "first-bucket")
@@ -130,13 +130,13 @@ func TestGrantingTheSameAppTwiceHoldsItToWhatItDeclaresNow(t *testing.T) {
 		t.Fatalf("a second deploy of the same app was refused its account: %v", err)
 	}
 
-	held := root
-	held.AccessKeyID = account.AccessKeyID
-	held.SecretKey = account.SecretKey
-	if code := writingAs(t, held, "second-bucket", "now.txt"); code != "200" {
+	asApp := root
+	asApp.AccessKeyID = account.AccessKeyID
+	asApp.SecretKey = account.SecretKey
+	if code := writingAs(t, asApp, "second-bucket", "now.txt"); code != "200" {
 		t.Errorf("the account answered %s writing to the bucket the app declares now", code)
 	}
-	if code := writingAs(t, held, "first-bucket", "then.txt"); code != "403" {
+	if code := writingAs(t, asApp, "first-bucket", "then.txt"); code != "403" {
 		t.Errorf("the account answered %s writing to a bucket the app no longer declares", code)
 	}
 }
@@ -156,7 +156,7 @@ func TestAnAccountIsNamedInWhatEveryStoreKeepsAnAccessKeyIn(t *testing.T) {
 func TestTheSecretAnAppReachesTheStoreWithNeverRidesTheCommandLine(t *testing.T) {
 	t.Parallel()
 
-	const secret = "a-secret-no-process-list-should-hold"
+	const secret = "a-secret-no-process-list-should-show"
 	account := StoreAccount{
 		Store: "shop-prod-store-s3", Endpoint: "http://127.0.0.1:9000", Region: "us-east-1",
 		RootKeyID: "ocel", RootSecret: "root-secret",
@@ -172,12 +172,12 @@ func TestTheSecretAnAppReachesTheStoreWithNeverRidesTheCommandLine(t *testing.T)
 		if err != nil {
 			t.Fatalf("accountScript(%s) = %v", call.what, err)
 		}
-		for what, held := range map[string]string{
+		for what, form := range map[string]string{
 			"in the clear": secret,
 			"base64'd":     base64.StdEncoding.EncodeToString(call.body),
 		} {
-			if strings.Contains(script, held) {
-				t.Errorf("the script that would %s carries the app's store secret %s, and every process on the box reads it out of the process list:\n%s",
+			if strings.Contains(script, form) {
+				t.Errorf("the script that would %s contains the app's store secret %s, and every process on the box reads it out of the process list:\n%s",
 					call.what, what, script)
 			}
 		}
@@ -186,15 +186,15 @@ func TestTheSecretAnAppReachesTheStoreWithNeverRidesTheCommandLine(t *testing.T)
 
 func askingAs(t *testing.T, store signedStore, bucket, name, method, key, query string, body []byte) string {
 	t.Helper()
-	held := store
-	held.Bucket = bucket
+	inBucket := store
+	inBucket.Bucket = bucket
 	headers := map[string]string{}
 	if query == "cors" {
 		sum := md5.Sum(body)
 		headers["Content-Type"] = "application/xml"
 		headers["Content-MD5"] = base64.StdEncoding.EncodeToString(sum[:])
 	}
-	call, err := held.call(name, method, key, query, headers, body, false, time.Now().UTC())
+	call, err := inBucket.call(name, method, key, query, headers, body, false, time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func askingAs(t *testing.T, store signedStore, bucket, name, method, key, query 
 
 func TestAnAppsAccountDrivesTheDataPlaneAndNothingThatReshapesTheBucket(t *testing.T) {
 	if testing.Short() {
-		t.Skip("stands a real store up")
+		t.Skip("runs a real store")
 	}
 	store := enginetest.SharedObjectStore(t)
 	root := aSignedStore(t, store, "scoped-bucket")
@@ -221,9 +221,9 @@ func TestAnAppsAccountDrivesTheDataPlaneAndNothingThatReshapesTheBucket(t *testi
 	if err := anAccountOn(t, store, account); err != nil {
 		t.Fatalf("the store granted the app no account of its own: %v", err)
 	}
-	held := root
-	held.AccessKeyID = account.AccessKeyID
-	held.SecretKey = account.SecretKey
+	asApp := root
+	asApp.AccessKeyID = account.AccessKeyID
+	asApp.SecretKey = account.SecretKey
 
 	cors, err := corsBody([]string{"https://taken.example.com"})
 	if err != nil {
@@ -247,7 +247,7 @@ func TestAnAppsAccountDrivesTheDataPlaneAndNothingThatReshapesTheBucket(t *testi
 		{"open a multipart upload", "POST", "big.txt", "uploads", nil, "200"},
 		{"delete an object", "DELETE", "own.txt", "", nil, "204"},
 	} {
-		code := askingAs(t, held, "scoped-bucket", allowed.name, allowed.method, allowed.key, allowed.query, allowed.body)
+		code := askingAs(t, asApp, "scoped-bucket", allowed.name, allowed.method, allowed.key, allowed.query, allowed.body)
 		if code != allowed.code {
 			t.Errorf("the app's own account answered %s asked to %s, which is what its data plane does all day", code, allowed.name)
 		}
@@ -263,7 +263,7 @@ func TestAnAppsAccountDrivesTheDataPlaneAndNothingThatReshapesTheBucket(t *testi
 		{"open the bucket to the anonymous", "PUT", "policy", policy},
 		{"take the whole bucket down", "DELETE", "", nil},
 	} {
-		code := askingAs(t, held, "scoped-bucket", refused.name, refused.method, "", refused.query, refused.body)
+		code := askingAs(t, asApp, "scoped-bucket", refused.name, refused.method, "", refused.query, refused.body)
 		if code != "403" {
 			t.Errorf("the app's own account answered %s asked to %s, and reshaping the bucket is the deploy's to do and not the app's", code, refused.name)
 		}

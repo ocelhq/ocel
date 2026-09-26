@@ -12,7 +12,7 @@ import (
 
 func TestARealStoreTakesEveryCallABucketIsDescribedWith(t *testing.T) {
 	if testing.Short() {
-		t.Skip("stands a real store up")
+		t.Skip("provisions a real store")
 	}
 	store := enginetest.SharedObjectStore(t)
 

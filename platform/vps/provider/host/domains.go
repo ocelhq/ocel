@@ -141,10 +141,10 @@ func (h *Host) RemovePreviewEntry(ctx context.Context, base string) error {
 		if state.PreviewBase != base {
 			return state, nil
 		}
-		if held := claimedUnder(state.Claims, base); len(held) > 0 {
+		if claimed := claimedUnder(state.Claims, base); len(claimed) > 0 {
 			return RoutingTable{}, refusal.Refuse(refusal.CodeBusy,
 				"this box still claims %s under %s\nRun `ocel preview rm` first",
-				strings.Join(held, ", "), edge.PreviewWildcard(base))
+				strings.Join(claimed, ", "), edge.PreviewWildcard(base))
 		}
 		state.PreviewBase = ""
 		return state, nil
@@ -153,32 +153,32 @@ func (h *Host) RemovePreviewEntry(ctx context.Context, base string) error {
 
 func claimedUnder(claims []HostClaim, base string) []string {
 	under := "." + strings.ToLower(base)
-	held := make([]string, 0, len(claims))
+	claimed := make([]string, 0, len(claims))
 	for _, claim := range claims {
 		if strings.HasSuffix(strings.ToLower(claim.Hostname), under) {
-			held = append(held, claim.Hostname)
+			claimed = append(claimed, claim.Hostname)
 		}
 	}
-	slices.Sort(held)
-	return held
+	slices.Sort(claimed)
+	return claimed
 }
 
 func (h *Host) routingTable(ctx context.Context) (RoutingTable, error) {
-	held, err := h.tableHeld(ctx)
+	current, err := h.currentTable(ctx)
 	if err != nil {
 		return RoutingTable{}, err
 	}
-	return ReadRoutingTable(held.table)
+	return ReadRoutingTable(current.table)
 }
 
 func (h *Host) proxyInspected(ctx context.Context, class edge.Class) (bool, error) {
-	held, err := h.pairHeld(ctx)
+	current, err := h.currentPair(ctx)
 	if err != nil {
 		return false, err
 	}
 	stale := false
-	if held.table != nil {
-		table, err := ReadRoutingTable(held.table)
+	if current.table != nil {
+		table, err := ReadRoutingTable(current.table)
 		if err != nil {
 			return false, err
 		}
@@ -186,9 +186,9 @@ func (h *Host) proxyInspected(ctx context.Context, class edge.Class) (bool, erro
 		if err != nil {
 			return false, err
 		}
-		stale = held.config != nil && !bytes.Equal(held.config, rendered)
+		stale = current.config != nil && !bytes.Equal(current.config, rendered)
 	}
-	declared := h.front.Unrendered(held.config, SwitchboardPermission)
+	declared := h.front.Unrendered(current.config, SwitchboardPermission)
 	if declared == "" {
 		return stale, nil
 	}
@@ -199,8 +199,8 @@ func (h *Host) proxyInspected(ctx context.Context, class edge.Class) (bool, erro
 }
 
 func (h *Host) reshape(ctx context.Context, change func(RoutingTable) (RoutingTable, error)) error {
-	return h.recomposed(ctx, func(standing RoutingTable) (RoutingTable, error) {
-		changed, err := change(standing)
+	return h.recomposed(ctx, func(current RoutingTable) (RoutingTable, error) {
+		changed, err := change(current)
 		if err != nil {
 			return RoutingTable{}, err
 		}
@@ -212,7 +212,7 @@ func (h *Host) reshape(ctx context.Context, change func(RoutingTable) (RoutingTa
 }
 
 func (h *Host) rerender(ctx context.Context) error {
-	return h.recomposed(ctx, func(standing RoutingTable) (RoutingTable, error) { return standing, nil })
+	return h.recomposed(ctx, func(current RoutingTable) (RoutingTable, error) { return current, nil })
 }
 
 func (h *Host) recomposed(ctx context.Context, compose func(RoutingTable) (RoutingTable, error)) error {

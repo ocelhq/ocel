@@ -271,7 +271,7 @@
                 "type": "string"
               },
               "port": {
-                "description": "The port sshd listens on. Omit it and ssh's own default stands.",
+                "description": "The port sshd listens on. Omit it and ssh's own default applies.",
                 "type": "integer"
               },
               "user": {

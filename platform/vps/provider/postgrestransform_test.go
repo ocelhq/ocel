@@ -40,7 +40,7 @@ func TestABoxRendersTransforms(t *testing.T) {
 	}
 }
 
-func TestATransformIsAskedAboutThePostgresABoxIsAboutToStandUp(t *testing.T) {
+func TestATransformIsAskedAboutThePostgresABoxIsAboutToStart(t *testing.T) {
 	t.Parallel()
 
 	pass := &patching{}
@@ -51,7 +51,7 @@ func TestATransformIsAskedAboutThePostgresABoxIsAboutToStandUp(t *testing.T) {
 		t.Errorf("the transform was told %q in %q, want the vps branch in production", pass.seen.Provider, pass.seen.EnvClass)
 	}
 	if len(pass.seen.Resources) != 1 || pass.seen.Resources[0] != (transformkit.Resource{Type: "postgres", Name: "main"}) {
-		t.Errorf("the transform was offered %v, want the one postgres being stood up", pass.seen.Resources)
+		t.Errorf("the transform was offered %v, want the one postgres being provisioned", pass.seen.Resources)
 	}
 }
 
@@ -71,15 +71,15 @@ func TestATransformReshapesTheStackAPostgresRunsAs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
-	stood := machine.commands()[machine.at("'docker' 'run'")]
+	runCommand := machine.commands()[machine.at("'docker' 'run'")]
 	for _, want := range []string{
 		"'" + patchedImage + "' '-c' 'max_connections=200'",
 		"'--memory' '2g'", "'--cpus' '1.5'", "'--shm-size' '256m'",
 		"'--label' 'team=core'",
 		"'--network' 'ocel-production-shop'",
 	} {
-		if !strings.Contains(stood, want) {
-			t.Errorf("the container was stood up without %s:\n%s", want, stood)
+		if !strings.Contains(runCommand, want) {
+			t.Errorf("the container was started without %s:\n%s", want, runCommand)
 		}
 	}
 	kept := machine.commands()[machine.at("'docker' 'volume' 'create'")]
@@ -88,7 +88,7 @@ func TestATransformReshapesTheStackAPostgresRunsAs(t *testing.T) {
 			t.Errorf("the volume was created without %s:\n%s", want, kept)
 		}
 	}
-	if !strings.Contains(strings.Join(machine.carried(), "\n"), "POSTGRES_INITDB_ARGS=--data-checksums") {
+	if !strings.Contains(strings.Join(machine.feeds(), "\n"), "POSTGRES_INITDB_ARGS=--data-checksums") {
 		t.Error("the environment a transform added never reached the container")
 	}
 }
@@ -96,7 +96,7 @@ func TestATransformReshapesTheStackAPostgresRunsAs(t *testing.T) {
 func TestATransformThatWouldBreakWhatAnAppBindsToIsRefusedBeforeTheBoxIsReached(t *testing.T) {
 	t.Parallel()
 
-	for name, held := range map[string]struct {
+	for name, bad := range map[string]struct {
 		patches transformkit.Patches
 		want    string
 	}{
@@ -106,18 +106,18 @@ func TestATransformThatWouldBreakWhatAnAppBindsToIsRefusedBeforeTheBoxIsReached(
 		"the database an app is bound to":    {transformkit.Patches{"container": {"env": map[string]any{"POSTGRES_DB": "other"}}}, "POSTGRES_DB"},
 		"where the data is kept":             {transformkit.Patches{"container": {"env": map[string]any{"PGDATA": "/tmp"}}}, "PGDATA"},
 		"a field the box fills itself":       {transformkit.Patches{"container": {"network": "host"}}, "network"},
-		"something the box never stands up":  {transformkit.Patches{"sidecar": {"image": patchedImage}}, "sidecar"},
+		"something the box never runs":       {transformkit.Patches{"sidecar": {"image": patchedImage}}, "sidecar"},
 		"a binding output a box cannot read": {transformkit.Patches{"container": {"memory": map[string]any{"$ocelOutput": "x"}}}, "memory"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			machine, _, err := patched(t, &patching{patches: held.patches})
+			machine, _, err := patched(t, &patching{patches: bad.patches})
 			if err == nil {
 				t.Fatal("the transform was rendered")
 			}
-			if !strings.Contains(err.Error(), held.want) || !strings.Contains(err.Error(), "main") {
-				t.Errorf("the refusal reads %q and never names %s on main", err, held.want)
+			if !strings.Contains(err.Error(), bad.want) || !strings.Contains(err.Error(), "main") {
+				t.Errorf("the refusal reads %q and never names %s on main", err, bad.want)
 			}
 			if machine.at("'docker'") >= 0 {
 				t.Errorf("the box was reached before the refusal:\n%s", strings.Join(machine.commands(), "\n"))
@@ -156,10 +156,10 @@ func TestEveryFieldTheVpsBranchTypesIsOneABoxRenders(t *testing.T) {
 	if _, err := provider.ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil); err != nil {
 		t.Fatalf("a module patching every field the vps branch types was refused: %v", err)
 	}
-	stood := machine.commands()[machine.at("'docker' 'run'")]
+	runCommand := machine.commands()[machine.at("'docker' 'run'")]
 	for _, want := range []string{patchedImage, "'--memory' '2g'", "'--cpus' '1.5'", "'--shm-size' '256m'", "'--label' 'team=core'"} {
-		if !strings.Contains(stood, want) {
-			t.Errorf("the module's %s never reached the box:\n%s", want, stood)
+		if !strings.Contains(runCommand, want) {
+			t.Errorf("the module's %s never reached the box:\n%s", want, runCommand)
 		}
 	}
 }
@@ -198,7 +198,7 @@ func TestTwoBucketsPatchingTheOneStoreDifferentlyAreRefused(t *testing.T) {
 	}
 }
 
-func TestTwoBucketsPatchingTheOneStoreTheSameWayStandUpTogether(t *testing.T) {
+func TestTwoBucketsPatchingTheOneStoreTheSameWayProvisionTogether(t *testing.T) {
 	t.Parallel()
 
 	provider := over(&box{kept: sealedRootKey()})
@@ -208,6 +208,6 @@ func TestTwoBucketsPatchingTheOneStoreTheSameWayStandUpTogether(t *testing.T) {
 		t.Fatalf("Bucket(uploads) = %v", err)
 	}
 	if _, err := provider.ProvisionBucket(context.Background(), aBucket(t, "avatars", false), nil); err != nil {
-		t.Fatalf("Bucket(avatars) = %v, want two buckets shaping the store alike to stand up", err)
+		t.Fatalf("Bucket(avatars) = %v, want two buckets shaping the store alike to be provisioned", err)
 	}
 }

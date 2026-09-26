@@ -52,9 +52,9 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		}
 	}
 	if progress != nil {
-		progress.Say("Standing " + app.App + " up as " + physical)
+		progress.Say("Starting " + app.App + " as " + physical)
 	}
-	if err := p.host.StandUp(ctx, host.Container{
+	if err := p.host.RunContainer(ctx, host.Container{
 		Name: physical, Project: spec.Ref.Project, App: app.App, Image: app.Image,
 		Class: spec.Ref.Class, Env: app.Values.ContainerEnv, HealthPath: app.HealthCheckPath, Manifest: manifest, Resolved: true,
 	}); err != nil {
@@ -96,17 +96,17 @@ func liveEnvironment(ref provider.StackRef) string {
 	return ref.Name.Env
 }
 
-func liveKeys(held provider.AppValues) []live.Key {
-	keys := make([]live.Key, 0, len(held.Secrets))
-	for _, secret := range held.Secrets {
+func liveKeys(values provider.AppValues) []live.Key {
+	keys := make([]live.Key, 0, len(values.Secrets))
+	for _, secret := range values.Secrets {
 		keys = append(keys, live.Key{Key: secret.Key, Folder: secret.Folder})
 	}
 	return keys
 }
 
-func liveBindings(held provider.AppValues) []live.Binding {
-	bindings := make([]live.Binding, 0, len(held.Bindings))
-	for _, binding := range held.Bindings {
+func liveBindings(values provider.AppValues) []live.Binding {
+	bindings := make([]live.Binding, 0, len(values.Bindings))
+	for _, binding := range values.Bindings {
 		kind := provider.WireBindingType(binding.Type)
 		resource := binding.Resource
 		if resource == "" {

@@ -42,13 +42,13 @@ func entries(t *testing.T, dir string) []string {
 	return names
 }
 
-func holding(t *testing.T, path string) string {
+func contents(t *testing.T, path string) string {
 	t.Helper()
-	held, err := os.ReadFile(path)
+	body, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return string(held)
+	return string(body)
 }
 
 func TestAPlacedFileIsWhatWasFedAndNothingElseIsLeftBeside(t *testing.T) {
@@ -58,17 +58,17 @@ func TestAPlacedFileIsWhatWasFedAndNothingElseIsLeftBeside(t *testing.T) {
 	if code, _, errs := fed(t, strings.NewReader("http:\n  routers: {}\n"), "place", at); code != 0 {
 		t.Fatalf("place = %d: %s", code, errs)
 	}
-	if got := holding(t, at); got != "http:\n  routers: {}\n" {
-		t.Errorf("%s holds %q, want what place was fed", at, got)
+	if got := contents(t, at); got != "http:\n  routers: {}\n" {
+		t.Errorf("%s reads %q, want what place was fed", at, got)
 	}
 	if got := entries(t, dir); !slices.Equal(got, []string{"ocel.yml"}) {
-		t.Errorf("the directory holds %q after the place, want ocel.yml alone: anything left beside it is a file the proxy may read", got)
+		t.Errorf("the directory contains %q after the place, want ocel.yml alone: anything left beside it is a file the proxy may read", got)
 	}
-	held, err := os.Stat(at)
+	info, err := os.Stat(at)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mode := held.Mode().Perm(); mode != 0o644 {
+	if mode := info.Mode().Perm(); mode != 0o644 {
 		t.Errorf("%s is mode %v, want 0644: the proxy that reads it may run as a user other than the one that placed it", at, mode)
 	}
 }
@@ -110,7 +110,7 @@ func TestAReaderOfAFileBeingPlacedSeesTheOldOneWholeUntilTheNewOneIsWhole(t *tes
 			t.Errorf("a place stages into %q, which a proxy reading every %s file in the directory parses half written", name, read)
 		}
 	}
-	if got := holding(t, at); got != "the old routes\n" {
+	if got := contents(t, at); got != "the old routes\n" {
 		t.Errorf("%s reads %q while the place is half fed, want the old file whole", at, got)
 	}
 
@@ -121,11 +121,11 @@ func TestAReaderOfAFileBeingPlacedSeesTheOldOneWholeUntilTheNewOneIsWhole(t *tes
 	if code := <-exited; code != 0 {
 		t.Fatalf("place = %d", code)
 	}
-	if got := holding(t, at); got != "the first half of the new routes\n" {
+	if got := contents(t, at); got != "the first half of the new routes\n" {
 		t.Errorf("%s reads %q once the place returns, want the new file whole", at, got)
 	}
 	if got := entries(t, dir); !slices.Equal(got, []string{"ocel.caddy"}) {
-		t.Errorf("the directory holds %q after the place, want ocel.caddy alone", got)
+		t.Errorf("the directory contains %q after the place, want ocel.caddy alone", got)
 	}
 }
 
@@ -153,11 +153,11 @@ func TestAPlaceWhoseFeedIsCutShortLeavesTheOldFileAndNothingBesideIt(t *testing.
 	if !strings.Contains(errs, "the connection dropped") {
 		t.Errorf("a place whose feed dropped said %q, which never says why", errs)
 	}
-	if got := holding(t, at); got != "the old routes\n" {
+	if got := contents(t, at); got != "the old routes\n" {
 		t.Errorf("%s reads %q after a place whose feed dropped, want the old file untouched", at, got)
 	}
 	if got := entries(t, dir); !slices.Equal(got, []string{"ocel.yml"}) {
-		t.Errorf("the directory holds %q after a place whose feed dropped, want ocel.yml alone", got)
+		t.Errorf("the directory contains %q after a place whose feed dropped, want ocel.yml alone", got)
 	}
 }
 
@@ -178,7 +178,7 @@ func TestUnplaceRemovesThePlacedFileAndAFileAlreadyGoneIsNoFailure(t *testing.T)
 		}
 	}
 	if got := entries(t, dir); !slices.Equal(got, []string{"coolify.yaml"}) {
-		t.Errorf("the directory holds %q after unplace, want only what ocel never placed", got)
+		t.Errorf("the directory contains %q after unplace, want only what ocel never placed", got)
 	}
 }
 
@@ -194,7 +194,7 @@ func TestPlacedSaysTheSumOfThePlacedFileOrNothingWhenItIsGone(t *testing.T) {
 	}
 	sum := sha256.Sum256([]byte("the routes\n"))
 	if code, out, errs := ran(t, "placed", at); code != 0 || out != hex.EncodeToString(sum[:])+"\n" {
-		t.Errorf("placed = %d, %q, %q, want the sha256 of what the file holds", code, out, errs)
+		t.Errorf("placed = %d, %q, %q, want the sha256 of what the file contains", code, out, errs)
 	}
 }
 
@@ -250,13 +250,13 @@ func TestAPlaceOrUnplaceOverALinkReplacesOrRemovesTheLinkAndNeverWhatItLeadsTo(t
 	if code, _, errs := fed(t, strings.NewReader("ocel's routes\n"), "place", at); code != 0 {
 		t.Fatalf("place over a link = %d: %s", code, errs)
 	}
-	if held, err := os.Lstat(at); err != nil || !held.Mode().IsRegular() {
-		t.Errorf("%s after a place over a link is %v (%v), want a regular file in place of the link", at, held, err)
+	if info, err := os.Lstat(at); err != nil || !info.Mode().IsRegular() {
+		t.Errorf("%s after a place over a link is %v (%v), want a regular file in place of the link", at, info, err)
 	}
-	if got := holding(t, at); got != "ocel's routes\n" {
+	if got := contents(t, at); got != "ocel's routes\n" {
 		t.Errorf("%s reads %q, want what place was fed", at, got)
 	}
-	if got := holding(t, victim); got != "theirs\n" {
+	if got := contents(t, victim); got != "theirs\n" {
 		t.Errorf("%s reads %q after a place over a link to it, want it untouched", victim, got)
 	}
 
@@ -270,9 +270,9 @@ func TestAPlaceOrUnplaceOverALinkReplacesOrRemovesTheLinkAndNeverWhatItLeadsTo(t
 		t.Fatalf("unplace of a link = %d: %s", code, errs)
 	}
 	if _, err := os.Lstat(at); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("%s stands after unplace: %v", at, err)
+		t.Errorf("%s still exists after unplace: %v", at, err)
 	}
-	if got := holding(t, victim); got != "theirs\n" {
+	if got := contents(t, victim); got != "theirs\n" {
 		t.Errorf("%s reads %q after unplace of a link to it, want it untouched", victim, got)
 	}
 }
@@ -309,11 +309,11 @@ func TestEveryPathOutsideTheMountedDirectoryIsRefusedAndNothingIsTouched(t *test
 			}
 		}
 	}
-	if got := holding(t, victim); got != "theirs\n" {
+	if got := contents(t, victim); got != "theirs\n" {
 		t.Errorf("%s reads %q, want it untouched", victim, got)
 	}
 	if got := entries(t, dir); !slices.Equal(got, []string{"nested"}) {
-		t.Errorf("the directory holds %q after every refusal, want nothing placed", got)
+		t.Errorf("the directory contains %q after every refusal, want nothing placed", got)
 	}
 }
 

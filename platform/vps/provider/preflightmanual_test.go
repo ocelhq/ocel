@@ -17,7 +17,7 @@ import (
 const manualRecord = `{"proxy":{"manual":{"port":8480}},"project":"shop","class":"production"}`
 
 func routedByHand(overrides map[string]answer) *scripted {
-	held := map[string]answer{
+	script := map[string]answer{
 		"proxy.json":                {stdout: manualRecord},
 		"publish=" + caddy.HTTPPort: {stdout: "\n"},
 		"publish=443":               {stdout: "\n"},
@@ -26,9 +26,9 @@ func routedByHand(overrides map[string]answer) *scripted {
 		"flock -s 9":                {stdout: "+" + base64.StdEncoding.EncodeToString([]byte(`{"grace":"30s"}`)) + "\n\n"},
 	}
 	for naming, said := range overrides {
-		held[naming] = said
+		script[naming] = said
 	}
-	return boxSaying(held)
+	return boxSaying(script)
 }
 
 func preflightingByHand(machine *scripted) error {
@@ -54,7 +54,7 @@ func TestABoxYourProxyFrontsIsReadyWithNoProxyOfOcelsOwn(t *testing.T) {
 
 	machine := routedByHand(nil)
 	if err := preflightingByHand(machine); err != nil {
-		t.Fatalf("PreflightDeploy() = %v, want a box whose own proxy holds 80 and 443 let through", err)
+		t.Fatalf("PreflightDeploy() = %v, want a box whose own proxy listens on 80 and 443 let through", err)
 	}
 	for _, command := range machine.ran {
 		if strings.Contains(command, "'test' '-S'") {
@@ -63,15 +63,15 @@ func TestABoxYourProxyFrontsIsReadyWithNoProxyOfOcelsOwn(t *testing.T) {
 	}
 }
 
-func TestABoxYourProxyFrontsRefusesAServingPortNothingHolds(t *testing.T) {
+func TestABoxYourProxyFrontsRefusesAServingPortNothingListensOn(t *testing.T) {
 	t.Parallel()
 
 	err := preflightingByHand(routedByHand(map[string]answer{"cat /proc/net/tcp\n": {stdout: socketTable(80)}}))
 	if err == nil {
-		t.Fatal("PreflightDeploy() let a deploy onto a box where nothing holds 443, and nothing would reach what it serves")
+		t.Fatal("PreflightDeploy() let a deploy onto a box where nothing listens on 443, and nothing would reach what it serves")
 	}
 	if !strings.Contains(err.Error(), "nothing listens on 443") || !strings.Contains(err.Error(), "your proxy") {
-		t.Errorf("PreflightDeploy() = %q, want 443 named as the port your proxy must hold", err)
+		t.Errorf("PreflightDeploy() = %q, want 443 named as the port your proxy must listen on", err)
 	}
 }
 
@@ -80,7 +80,7 @@ func TestABoxYourProxyFrontsRefusesOcelsOwnProxyOnAServingPort(t *testing.T) {
 
 	err := preflightingByHand(routedByHand(map[string]answer{"publish=443": {stdout: caddy.Container + "\n"}}))
 	if err == nil {
-		t.Fatalf("PreflightDeploy() let a deploy past %s holding 443 on a box your proxy fronts", caddy.Container)
+		t.Fatalf("PreflightDeploy() let a deploy past %s publishing 443 on a box your proxy fronts", caddy.Container)
 	}
 	if !strings.Contains(err.Error(), caddy.Container) {
 		t.Errorf("PreflightDeploy() = %q, want %s named", err, caddy.Container)

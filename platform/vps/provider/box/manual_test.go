@@ -13,16 +13,16 @@ import (
 )
 
 func routedByHand() *machine {
-	stood := aMachine()
-	stood.byHand = manual.DefaultPort
-	return stood
+	m := aMachine()
+	m.byHand = manual.DefaultPort
+	return m
 }
 
 func TestABindOnABoxYourProxyFrontsSaysWhatToRouteToTheSwitchboard(t *testing.T) {
 	t.Parallel()
 
-	stood := routedByHand()
-	stack := standingOn(t, stood, slug)
+	m := routedByHand()
+	stack := reconciledOn(t, m, slug)
 	var said []string
 	if err := stack.BindDomain(context.Background(), edge.DomainBinding{
 		Hostname: "shop.example.com",
@@ -38,7 +38,7 @@ func TestABindOnABoxYourProxyFrontsSaysWhatToRouteToTheSwitchboard(t *testing.T)
 func TestABindOnABoxOcelsOwnProxyFrontsAsksNothingOfYou(t *testing.T) {
 	t.Parallel()
 
-	stack := standingOn(t, aMachine(), slug)
+	stack := reconciledOn(t, aMachine(), slug)
 	var said []string
 	if err := stack.BindDomain(context.Background(), edge.DomainBinding{
 		Hostname: "shop.example.com",
@@ -66,7 +66,7 @@ func TestAPreviewWildcardOnABoxYourProxyFrontsSaysWhatToRoute(t *testing.T) {
 	}
 }
 
-func TestACertificateYourProxyHoldsIsKeptAsYours(t *testing.T) {
+func TestACertificateYourProxyServesIsKeptAsYours(t *testing.T) {
 	t.Parallel()
 
 	front := edgeOver(routedByHand(), fake.NewRecords())
@@ -76,8 +76,8 @@ func TestACertificateYourProxyHoldsIsKeptAsYours(t *testing.T) {
 		if change.Kind != box.CertificateKind {
 			continue
 		}
-		if change.Name != certs.ProxyHandle("shop.example.com") || change.Action != edge.PlanKeep || change.Reason != "held by your proxy" {
-			t.Errorf("the certificate row is %+v, want %s kept as held by your proxy", change, certs.ProxyHandle("shop.example.com"))
+		if change.Name != certs.ProxyHandle("shop.example.com") || change.Action != edge.PlanKeep || change.Reason != "your proxy serves it" {
+			t.Errorf("the certificate row is %+v, want %s kept as served by your proxy", change, certs.ProxyHandle("shop.example.com"))
 		}
 	}
 }

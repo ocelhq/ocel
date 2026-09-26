@@ -25,7 +25,7 @@ func TestABucketIsNeverOpenedToEveryOriginThereIs(t *testing.T) {
 	}
 	for _, call := range calls {
 		if call.query == "cors" && call.method != http.MethodDelete {
-			t.Errorf("a bucket no origin is known for is still held to some CORS rule: %q", call.body)
+			t.Errorf("a bucket no origin is known for is still bound by some CORS rule: %q", call.body)
 		}
 		if strings.Contains(string(call.body), "<AllowedOrigin>*<") {
 			t.Errorf("%s opens the bucket to every origin: %q", call.what, call.body)
@@ -33,7 +33,7 @@ func TestABucketIsNeverOpenedToEveryOriginThereIs(t *testing.T) {
 	}
 }
 
-func TestABucketNoOriginIsKnownForIsHeldToNoRuleAtAll(t *testing.T) {
+func TestABucketNoOriginIsKnownForIsBoundByNoRuleAtAll(t *testing.T) {
 	t.Parallel()
 
 	spec := aStore()
@@ -47,5 +47,5 @@ func TestABucketNoOriginIsKnownForIsHeldToNoRuleAtAll(t *testing.T) {
 			return
 		}
 	}
-	t.Errorf("a bucket no origin is known for keeps whatever rule it last held: %v. The hostname it answered was released, or the origin it declared was dropped, and its browsers are still answered", calls)
+	t.Errorf("a bucket no origin is known for keeps whatever rule it last had: %v. The hostname it answered was released, or the origin it declared was dropped, and its browsers are still answered", calls)
 }

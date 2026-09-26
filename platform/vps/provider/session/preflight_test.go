@@ -14,7 +14,7 @@ func TestALoginThatAnswersEveryRequirementIsLetPast(t *testing.T) {
 	t.Parallel()
 
 	if err := met(answering(), "ubuntu@203.0.113.10"); err != nil {
-		t.Errorf("met() = %v, want a host that carries everything bootstrap asks for to be let past", err)
+		t.Errorf("met() = %v, want a host that has everything bootstrap asks for to be let past", err)
 	}
 }
 

@@ -34,48 +34,48 @@ func serving() engine {
 	return engine{installed: true, unit: true, active: "active", enabled: "enabled", server: "28.3.1", dockerd: "28.3.1"}
 }
 
-func daemon(t *testing.T, held engine) string {
+func daemon(t *testing.T, fake engine) string {
 	t.Helper()
 	dir := t.TempDir()
 	write := func(name, body string) {
 		t.Helper()
 		executable(t, filepath.Join(dir, name), "#!/bin/sh\n"+body)
 	}
-	if held.installed {
+	if fake.installed {
 		answer := "echo 'Cannot connect to the Docker daemon at unix:///var/run/docker.sock' >&2; exit 1"
-		if held.server != "" {
-			answer = "printf '%s\\n' " + quoted(held.server)
+		if fake.server != "" {
+			answer = "printf '%s\\n' " + quoted(fake.server)
 		}
 		write(dockerEngine, `case "$1" in
 version) `+answer+` ;;
 esac
 exit 0`)
-		write(dockerDaemon, "printf 'Docker version %s, build 38b7060\\n' "+quoted(held.dockerd))
+		write(dockerDaemon, "printf 'Docker version %s, build 38b7060\\n' "+quoted(fake.dockerd))
 	}
-	if held.snap {
+	if fake.snap {
 		write("snap", `[ "$1" = list ] && [ "$2" = docker ]`)
 	}
 	write("pgrep", `[ "$1" = -x ] || exit 1
 case "$2" in
-rootlesskit) `+strconv.FormatBool(held.rootless)+` ;;
-dockerd) `+strconv.FormatBool(held.outside)+` ;;
+rootlesskit) `+strconv.FormatBool(fake.rootless)+` ;;
+dockerd) `+strconv.FormatBool(fake.outside)+` ;;
 *) exit 1 ;;
 esac`)
-	if held.extras {
+	if fake.extras {
 		write("dockerd-rootless.sh", "exit 0")
 	}
 	known := "exit 1"
-	if held.unit {
+	if fake.unit {
 		known = "exit 0"
 	}
 	manager := `case "$1" in
 cat) ` + known + ` ;;
-is-active) printf '%s\n' ` + quoted(held.active) + ` ;;
-is-enabled) printf '%s\n' ` + quoted(held.enabled) + ` ;;
+is-active) printf '%s\n' ` + quoted(fake.active) + ` ;;
+is-enabled) printf '%s\n' ` + quoted(fake.enabled) + ` ;;
 list-unit-files) exit 0 ;;
 *) exit 1 ;;
 esac`
-	if held.deaf {
+	if fake.deaf {
 		manager = "exit 126"
 	}
 	write("systemctl", manager)
@@ -91,24 +91,24 @@ esac`
 	return dir
 }
 
-func probed(t *testing.T, held engine) map[string]string {
+func probed(t *testing.T, fake engine) map[string]string {
 	t.Helper()
-	observed, err := engineProbed(t, held)
+	observed, err := engineProbed(t, fake)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return observed
 }
 
-func engineProbed(t *testing.T, held engine) (map[string]string, error) {
+func engineProbed(t *testing.T, fake engine) (map[string]string, error) {
 	t.Helper()
-	observed, _, err := readSurvey(engineRendered(t, held))
+	observed, _, err := readSurvey(engineRendered(t, fake))
 	return observed, err
 }
 
-func engineRendered(t *testing.T, held engine) string {
+func engineRendered(t *testing.T, fake engine) string {
 	t.Helper()
-	dir := daemon(t, held)
+	dir := daemon(t, fake)
 	cmd := exec.Command("/bin/sh", "-c", engineProbe()+"\n"+unitProbe(unitItem()))
 	cmd.Env = []string{"PATH=" + dir}
 	var stderr strings.Builder
@@ -120,17 +120,17 @@ func engineRendered(t *testing.T, held engine) string {
 	return string(rendered)
 }
 
-func engineHeld(t *testing.T, held engine) Engine {
+func engineRead(t *testing.T, fake engine) Engine {
 	t.Helper()
-	return readEngine(engineRendered(t, held))
+	return readEngine(engineRendered(t, fake))
 }
 
-func TestTheReadCarriesTheEngineVersionBesideItsItemAndNeverInIt(t *testing.T) {
+func TestTheReadReportsTheEngineVersionBesideItsItemAndNeverInIt(t *testing.T) {
 	t.Parallel()
 
 	older, newer := serving(), serving()
 	newer.server, newer.dockerd = "29.8.0", "29.8.0"
-	if got := engineHeld(t, older); got != (Engine{Kind: engineStandard, Version: "28.3.1"}) {
+	if got := engineRead(t, older); got != (Engine{Kind: engineStandard, Version: "28.3.1"}) {
 		t.Errorf("a host serving docker 28.3.1 from docker.service reads as %+v", got)
 	}
 	if probed(t, older)[engineItem().ID()] != probed(t, newer)[engineItem().ID()] {
@@ -139,17 +139,17 @@ func TestTheReadCarriesTheEngineVersionBesideItsItemAndNeverInIt(t *testing.T) {
 
 	down := serving()
 	down.server, down.dockerd = "", "28.0.4"
-	if got := engineHeld(t, down).Version; got != "28.0.4" {
+	if got := engineRead(t, down).Version; got != "28.0.4" {
 		t.Errorf("a host whose daemon is down reads docker %q, want the version dockerd itself reports", got)
 	}
 }
 
-func TestTheReadNamesWhatKindOfDockerTheHostCarries(t *testing.T) {
+func TestTheReadNamesWhatKindOfDockerTheHostRuns(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
-		held engine
-		want engineKind
+		found engine
+		want  engineKind
 	}{
 		"docker's own packages":          {serving(), engineStandard},
 		"a masked docker.service":        {engine{installed: true, unit: true, active: "inactive", enabled: "masked", dockerd: "28.3.1"}, engineMasked},
@@ -162,7 +162,7 @@ func TestTheReadNamesWhatKindOfDockerTheHostCarries(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			if got := engineHeld(t, tc.held).Kind; got != tc.want {
+			if got := engineRead(t, tc.found).Kind; got != tc.want {
 				t.Errorf("the read names %q, want %q", got, tc.want)
 			}
 		})
@@ -197,7 +197,7 @@ func TestAHostThatRunsNoContainersIsProbedAsHavingNeither(t *testing.T) {
 
 	observed := probed(t, engine{})
 	for _, item := range EngineItems() {
-		if _, stood := observed[item.ID()]; stood {
+		if _, present := observed[item.ID()]; present {
 			t.Errorf("the probe read %s on a host that has no docker at all", item.ID())
 		}
 	}
@@ -206,14 +206,14 @@ func TestAHostThatRunsNoContainersIsProbedAsHavingNeither(t *testing.T) {
 func TestADaemonSystemdDoesNotRunIsRefusedRatherThanInstalledOver(t *testing.T) {
 	t.Parallel()
 
-	held := engine{installed: true, outside: true, dockerd: "28.3.1"}
-	observed := probed(t, held)
-	if _, stood := observed[unitItem().ID()]; stood {
-		t.Errorf("the probe read %s on a host whose docker binary carries no unit file", unitItem().ID())
+	fake := engine{installed: true, outside: true, dockerd: "28.3.1"}
+	observed := probed(t, fake)
+	if _, present := observed[unitItem().ID()]; present {
+		t.Errorf("the probe read %s on a host whose docker binary has no unit file", unitItem().ID())
 	}
-	read := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: observed, Engine: engineHeld(t, held)}
-	if !read.standing(KindEngine, dockerEngine) {
-		t.Fatalf("the probe read no engine on a host carrying a docker binary, and an unattended run would fetch %s and run it as root over an install that is already there", dockerSource)
+	read := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: observed, Engine: engineRead(t, fake)}
+	if !read.observed(KindEngine, dockerEngine) {
+		t.Fatalf("the probe read no engine on a host with a docker binary, and an apply would fetch %s and run it as root over an install that is already there", dockerSource)
 	}
 	if read.current(engineItem()) {
 		t.Fatalf("a docker binary with no %s reads as serving, and apply would enable a unit that does not exist, on every run, forever", dockerUnit)
@@ -227,32 +227,32 @@ func TestADaemonSystemdDoesNotRunIsRefusedRatherThanInstalledOver(t *testing.T) 
 func TestAnInstallLeftHalfDoneIsInstalledAgainRatherThanRefused(t *testing.T) {
 	t.Parallel()
 
-	for name, held := range map[string]engine{
+	for name, fake := range map[string]engine{
 		"docker's cli with no daemon":             {installed: true, dockerd: "28.3.1"},
 		"docker's rootless extras with no daemon": {installed: true, extras: true, dockerd: "28.3.1"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			read := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: probed(t, held), Engine: engineHeld(t, held)}
+			read := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: probed(t, fake), Engine: engineRead(t, fake)}
 			if err := read.runnableEngine("ada@ocelbox"); err != nil {
 				t.Fatalf("runnableEngine() = %v, and an install interrupted before docker.service landed could never be finished by ocel", err)
 			}
 			if engine := planFor(planned(read), engineItem().ID()); engine.Action != provider.ActionUpdate {
-				t.Errorf("the engine plans %q, want the install shown again as a change over what stands", engine.Action)
+				t.Errorf("the engine plans %q, want the install shown again as a change over what is installed", engine.Action)
 			}
 			refused := refuseReplacements(read, EngineItems())
 			if refused == nil || !strings.Contains(refused.Error(), engineItem().ID()) {
-				t.Errorf("an unattended apply over a half-done install = %v, want it refused: rebuilding an engine is what nobody there can consent to", refused)
+				t.Errorf("an apply that refuses replacements over a half-done install = %v, want it refused: rebuilding an engine is a replacement that apply never consented to", refused)
 			}
 		})
 	}
 }
 
-func TestAnInstalledEngineWhoseDaemonIsIdleIsProbedAsStandingAndNotCurrent(t *testing.T) {
+func TestAnInstalledEngineWhoseDaemonIsIdleIsProbedAsInstalledAndNotCurrent(t *testing.T) {
 	t.Parallel()
 
-	for name, held := range map[string]engine{
+	for name, fake := range map[string]engine{
 		"stopped":         {installed: true, unit: true, active: "inactive", enabled: "enabled"},
 		"off at boot":     {installed: true, unit: true, active: "active", enabled: "disabled"},
 		"stopped and off": {installed: true, unit: true, active: "inactive", enabled: "disabled"},
@@ -261,12 +261,12 @@ func TestAnInstalledEngineWhoseDaemonIsIdleIsProbedAsStandingAndNotCurrent(t *te
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			observed := probed(t, held)
+			observed := probed(t, fake)
 			if observed[engineItem().ID()] != engineItem().Digest() {
 				t.Error("the probe calls an installed engine absent, and the plan would fetch the install script over a host that already has one")
 			}
 			read := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: observed}
-			if !read.standing(KindUnit, dockerUnit) {
+			if !read.observed(KindUnit, dockerUnit) {
 				t.Fatalf("the probe read no unit on a host whose docker.service is %s", name)
 			}
 			if read.current(unitItem()) {
@@ -276,7 +276,7 @@ func TestAnInstalledEngineWhoseDaemonIsIdleIsProbedAsStandingAndNotCurrent(t *te
 	}
 }
 
-func TestAnEngineThatStandsIsAdoptedAndAnIdleDaemonPlansTheUnitAlone(t *testing.T) {
+func TestAnInstalledEngineIsAdoptedAndAnIdleDaemonPlansTheUnitAlone(t *testing.T) {
 	t.Parallel()
 
 	class := edge.ClassProduction
@@ -289,7 +289,7 @@ func TestAnEngineThatStandsIsAdoptedAndAnIdleDaemonPlansTheUnitAlone(t *testing.
 	changes := planned(read)
 	engine := planFor(changes, engineItem().ID())
 	if engine.Action != provider.ActionAdopt {
-		t.Errorf("a host whose engine stands plans %q for it, want it adopted: an installed engine is never installed over", engine.Action)
+		t.Errorf("a host whose engine is installed plans %q for it, want it adopted: an installed engine is never installed over", engine.Action)
 	}
 	if want := "docker 28.3.1, not managed by ocel: upgrading it is yours"; engine.Reason != want {
 		t.Errorf("the adopted engine is planned with the reason %q, want %q: the user is never told the engine is theirs to upgrade", engine.Reason, want)
@@ -312,11 +312,11 @@ func TestAnEngineThatStandsIsAdoptedAndAnIdleDaemonPlansTheUnitAlone(t *testing.
 func TestTheEngineCanOnlyEverBePresentOrAbsent(t *testing.T) {
 	t.Parallel()
 
-	stood := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: map[string]string{
+	read := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: map[string]string{
 		engineItem().ID(): engineItem().Digest(),
 	}}
-	if !stood.current(engineItem()) {
-		t.Fatal("an engine the probe found is not current, so a standing engine would re-run the install script")
+	if !read.current(engineItem()) {
+		t.Fatal("an engine the probe found is not current, so an installed engine would re-run the install script")
 	}
 	if !strings.Contains(engineItem().command(), dockerSource) {
 		t.Errorf("the engine is installed by %q, want the script the plan names", engineItem().command())
@@ -373,13 +373,13 @@ func TestDestroyKeepsTheEngineWhicheverClassIsTheLastOne(t *testing.T) {
 
 	production, preview := edge.ClassProduction, edge.ClassPreview
 	keys := []byte(aKey + "\n")
-	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
+	destroyed := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
 
 	for name, sibling := range map[string]Reading{
 		"the last class on the host": {Class: preview, Observed: map[string]string{}},
 		"a class beside its sibling": {Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))},
 	} {
-		taken := removing(standing, sibling, appsStanding{})
+		taken := removing(destroyed, sibling, appsPresent{})
 		kept := removalOf(taken, dockerEngine)
 		if kept.action != provider.ActionKeep {
 			t.Errorf("destroying %s plans %s as %q, want it kept: removing ocel never removes the workloads a host runs",
@@ -399,18 +399,18 @@ func TestDestroyKeepsTheEngineWhicheverClassIsTheLastOne(t *testing.T) {
 	}
 }
 
-func TestAHostCarryingNothingButTheEngineHasNothingToDestroy(t *testing.T) {
+func TestAHostWithNothingButTheEngineHasNothingToDestroy(t *testing.T) {
 	t.Parallel()
 
 	production, preview := edge.ClassProduction, edge.ClassPreview
 	engine := digests(EngineItems())
-	taken := removing(Reading{Arch: ArchAMD64, Class: production, Observed: engine}, Reading{Arch: ArchAMD64, Class: preview, Observed: engine}, appsStanding{})
+	taken := removing(Reading{Arch: ArchAMD64, Class: production, Observed: engine}, Reading{Arch: ArchAMD64, Class: preview, Observed: engine}, appsPresent{})
 	if len(taken) != 0 {
-		t.Errorf("a machine carrying nothing but docker plans %d removals, want a destroy with nothing to say", len(taken))
+		t.Errorf("a machine with nothing but docker plans %d removals, want a destroy with nothing to say", len(taken))
 	}
 }
 
-func TestSlowWorkClosesThePlanWhateverOrderTheItemsStandIn(t *testing.T) {
+func TestSlowWorkClosesThePlanWhateverOrderTheItemsComeIn(t *testing.T) {
 	t.Parallel()
 
 	ordered := slowLast([]provider.Change{
@@ -446,21 +446,21 @@ func TestAnApplyOverAnAdoptedEngineNeverInstallsDockerAndStillStartsItsUnit(t *t
 	t.Parallel()
 
 	class := edge.ClassProduction
-	stood := settledOn(t, class)
-	for at, item := range stood.stands[class] {
+	box := bootstrappedOn(t, class)
+	for at, item := range box.installed[class] {
 		if item.ID() == unitItem().ID() {
-			stood.stands[class][at].Content = []byte("active=inactive\nenabled=disabled\n")
+			box.installed[class][at].Content = []byte("active=inactive\nenabled=disabled\n")
 		}
 	}
-	if err := NewBootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
+	if err := NewBootstrap(box.host(), testVendor, "shop").Apply(context.Background(),
 		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
-	if at := stood.at(dockerSource); at >= 0 {
-		t.Errorf("the apply ran the install script over an engine it adopted:\n%s", stood.commands()[at])
+	if at := box.at(dockerSource); at >= 0 {
+		t.Errorf("the apply ran the install script over an engine it adopted:\n%s", box.commands()[at])
 	}
-	if stood.at("systemctl enable --now "+quoted(dockerUnit)) < 0 {
-		t.Errorf("the apply never started the idle %s the adopted engine runs under:\n%s", dockerUnit, strings.Join(stood.commands(), "\n"))
+	if box.at("systemctl enable --now "+quoted(dockerUnit)) < 0 {
+		t.Errorf("the apply never started the idle %s the adopted engine runs under:\n%s", dockerUnit, strings.Join(box.commands(), "\n"))
 	}
 }
 
@@ -468,13 +468,13 @@ func TestAnEngineOcelCannotRunOnIsRefusedWithWhatToDoAboutIt(t *testing.T) {
 	t.Parallel()
 
 	for name, tc := range map[string]struct {
-		held Engine
-		want string
+		found Engine
+		want  string
 	}{
 		"an engine older than the floor": {Engine{Kind: engineStandard, Version: "26.1.4"},
 			"docker 26.1.4 on ada@ocelbox is older than 28.0, the oldest ocel runs on\nUpgrade docker to 28.0 or later and run `ocel bootstrap production`"},
 		"the snap package": {Engine{Kind: engineSnap, Version: "27.2.0"},
-			"docker on ada@ocelbox is the snap package, which ocel does not run on\nReplace it with docker 28.0 or later from docker's own packages; its containers do not carry over"},
+			"docker on ada@ocelbox is the snap package, which ocel does not run on\nReplace it with docker 28.0 or later from docker's own packages; its containers do not move over"},
 		"a rootless daemon": {Engine{Kind: engineRootless, Version: "28.3.1"},
 			"docker on ada@ocelbox runs rootless, and ocel needs the system daemon behind docker.service\nInstall docker 28.0 or later as the system daemon and run `ocel bootstrap production`"},
 		"a daemon systemd does not run": {Engine{Kind: engineUnserved, Version: "28.3.1"},
@@ -487,7 +487,7 @@ func TestAnEngineOcelCannotRunOnIsRefusedWithWhatToDoAboutIt(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			read := Reading{Class: edge.ClassProduction, Engine: tc.held}
+			read := Reading{Class: edge.ClassProduction, Engine: tc.found}
 			if refused := refusalOf(t, read.runnableEngine("ada@ocelbox"), refusal.CodeNotReady); refused.Message != tc.want {
 				t.Errorf("the refusal reads\n%s\nwant\n%s", refused.Message, tc.want)
 			}
@@ -498,7 +498,7 @@ func TestAnEngineOcelCannotRunOnIsRefusedWithWhatToDoAboutIt(t *testing.T) {
 func TestAnEngineAtOrPastTheFloorAndNoEngineAtAllAreLetThrough(t *testing.T) {
 	t.Parallel()
 
-	for _, held := range []Engine{
+	for _, allowed := range []Engine{
 		{},
 		{Kind: engineStandard, Version: "28.0.0"},
 		{Kind: engineStandard, Version: "28.0.4"},
@@ -506,8 +506,8 @@ func TestAnEngineAtOrPastTheFloorAndNoEngineAtAllAreLetThrough(t *testing.T) {
 		{Kind: engineStandard, Version: "29.8.0"},
 		{Kind: engineStandard, Version: "30.0.0-rc.1"},
 	} {
-		if err := (Reading{Class: edge.ClassProduction, Engine: held}).runnableEngine("ada@ocelbox"); err != nil {
-			t.Errorf("an engine read as %+v = %v, want it let through", held, err)
+		if err := (Reading{Class: edge.ClassProduction, Engine: allowed}).runnableEngine("ada@ocelbox"); err != nil {
+			t.Errorf("an engine read as %+v = %v, want it let through", allowed, err)
 		}
 	}
 	if err := (Reading{Class: edge.ClassProduction, Engine: Engine{Kind: engineStandard, Version: "27.5.1"}}).runnableEngine("ada@ocelbox"); err == nil {
@@ -515,14 +515,14 @@ func TestAnEngineAtOrPastTheFloorAndNoEngineAtAllAreLetThrough(t *testing.T) {
 	}
 }
 
-func carrying(stood *bench, held Engine) {
-	prior := stood.answer
-	stood.answer = func(command string) (session.Result, bool) {
+func reportingEngine(box *bench, reported Engine) {
+	prior := box.answer
+	box.answer = func(command string) (session.Result, bool) {
 		if strings.Contains(command, "for p in") {
-			said := stood.rendered(command)
+			said := box.rendered(command)
 			said.Stdout = strings.ReplaceAll(said.Stdout,
 				engineFactsRow+"\t"+dockerEngine+"\t0\t"+string(engineStandard)+"\t28.3.1\n",
-				engineFactsRow+"\t"+dockerEngine+"\t0\t"+string(held.Kind)+"\t"+held.Version+"\n")
+				engineFactsRow+"\t"+dockerEngine+"\t0\t"+string(reported.Kind)+"\t"+reported.Version+"\n")
 			return said, true
 		}
 		if prior != nil {
@@ -536,11 +536,11 @@ func TestABootstrapOverAnEngineOcelCannotRunOnStopsBeforeItsFirstWrite(t *testin
 	t.Parallel()
 
 	class := edge.ClassProduction
-	stood := settledOn(t, class)
-	stood.stands[class] = slices.DeleteFunc(stood.stands[class], func(item Item) bool { return item.Name == ClassDir(class) })
-	carrying(stood, Engine{Kind: engineStandard, Version: "26.1.4"})
+	box := bootstrappedOn(t, class)
+	box.installed[class] = slices.DeleteFunc(box.installed[class], func(item Item) bool { return item.Name == ClassDir(class) })
+	reportingEngine(box, Engine{Kind: engineStandard, Version: "26.1.4"})
 
-	boot := NewBootstrap(stood.host(), testVendor, "shop")
+	boot := NewBootstrap(box.host(), testVendor, "shop")
 	_, planned := boot.Plan(context.Background(), provider.BootstrapRequest{Class: class})
 	applied := boot.Apply(context.Background(), provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil)
 	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
@@ -548,7 +548,7 @@ func TestABootstrapOverAnEngineOcelCannotRunOnStopsBeforeItsFirstWrite(t *testin
 			t.Errorf("%s refused with %q, want it to name the docker it will not run on", step, refused.Message)
 		}
 	}
-	for _, command := range stood.commands() {
+	for _, command := range box.commands() {
 		if strings.HasPrefix(command, "install ") || strings.Contains(command, dockerSource) {
 			t.Errorf("the refused bootstrap still wrote: %s", command)
 		}
@@ -558,14 +558,14 @@ func TestABootstrapOverAnEngineOcelCannotRunOnStopsBeforeItsFirstWrite(t *testin
 func TestAMaskedDockerServiceStopsThePlanRatherThanWedgingItOnAnEnableThatNeverTakes(t *testing.T) {
 	t.Parallel()
 
-	for name, held := range map[string]engine{
+	for name, fake := range map[string]engine{
 		"with docker installed": {installed: true, unit: true, active: "inactive", enabled: "masked", dockerd: "28.3.1"},
 		"with no docker at all": {unit: true, active: "inactive", enabled: "masked"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			read := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: probed(t, held), Engine: engineHeld(t, held)}
+			read := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: probed(t, fake), Engine: engineRead(t, fake)}
 			refused := refusalOf(t, read.runnableEngine("ada@ocelbox"), refusal.CodeNotReady)
 			if !strings.Contains(refused.Message, "systemctl unmask "+dockerUnit) {
 				t.Errorf("a masked %s is refused with %q, want the unmask to run named: apply would otherwise run `systemctl enable --now` against it on every run, forever", dockerUnit, refused.Message)
@@ -593,13 +593,13 @@ func TestAWriteThatFailsIsDeniedOnlyWhenSudoRefusedTheLogin(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			stood := machine(nil)
-			stood.facts.Root, stood.facts.Sudo = tc.root, !tc.root
-			stood.answer = func(command string) (session.Result, bool) {
+			box := machine(nil)
+			box.facts.Root, box.facts.Sudo = tc.root, !tc.root
+			box.answer = func(command string) (session.Result, bool) {
 				return session.Result{Code: 1, Stderr: tc.said}, strings.Contains(command, "install -d")
 			}
 			item := Item{Kind: KindDir, Name: "/srv/ocel", Mode: 0o755, Owner: rootOwner}
-			if refused := refusalOf(t, stood.host().Install(context.Background(), item), tc.want); !strings.Contains(refused.Message, strings.Split(tc.said, "\n")[0]) {
+			if refused := refusalOf(t, box.host().Install(context.Background(), item), tc.want); !strings.Contains(refused.Message, strings.Split(tc.said, "\n")[0]) {
 				t.Errorf("the refusal reads %q, want what the host said in it", refused.Message)
 			}
 		})

@@ -16,8 +16,8 @@ const boulderSaid = `{"level":"error","ts":1788128443.02,"logger":"tls.obtain","
 func TestACertificateAuthoritysRateLimitIsTranslatedRatherThanRelayed(t *testing.T) {
 	t.Parallel()
 
-	limit, held := RateLimited(boulderSaid)
-	if !held {
+	limit, limited := RateLimited(boulderSaid)
+	if !limited {
 		t.Fatal("the CA's rate-limit response was not read as one, so the box would relay a line of acme jargon and say nothing about what to do next")
 	}
 	said := limit.Refusal("shop--pr-7--web.preview.acme.com").Error()
@@ -40,19 +40,19 @@ func TestACertificateAuthoritysRateLimitIsTranslatedRatherThanRelayed(t *testing
 		"the http status verbatim": "HTTP 429",
 	} {
 		if strings.Contains(said, raw) {
-			t.Errorf("the refusal carries %s verbatim, which is the failure mode this translation exists to buy out of:\n%s", what, said)
+			t.Errorf("the refusal includes %s verbatim, which is the failure mode this translation exists to buy out of:\n%s", what, said)
 		}
 	}
 }
 
-func TestTheResetIsReadOffARetryAfterWhenTheDetailCarriesNoTimestamp(t *testing.T) {
+func TestTheResetIsReadOffARetryAfterWhenTheDetailHasNoTimestamp(t *testing.T) {
 	t.Parallel()
 
 	said := `{"msg":"could not get certificate from issuer","error":"HTTP 429 urn:ietf:params:acme:error:rateLimited - ` +
 		`too many certificates already issued for \"acme.com\" (Retry-After: 3600)"}`
-	limit, held := RateLimited(said)
-	if !held {
-		t.Fatal("a rate-limit response carrying its reset as a Retry-After was not read as one")
+	limit, limited := RateLimited(said)
+	if !limited {
+		t.Fatal("a rate-limit response giving its reset as a Retry-After was not read as one")
 	}
 	if limit.Domain != "acme.com" {
 		t.Errorf("the registered domain reads as %q, want acme.com", limit.Domain)
@@ -88,9 +88,9 @@ func spoken(t *testing.T) time.Time {
 func TestALimitTheCaNamedNoResetTimeForIsSpentOffTheLineItWasSaidOn(t *testing.T) {
 	t.Parallel()
 
-	limit, held := RateLimited(logLine(`too many certificates already issued for \"acme.com\" (Retry-After: 3600)`))
-	if !held {
-		t.Fatal("a rate-limit response carrying its reset as a Retry-After was not read as one")
+	limit, limited := RateLimited(logLine(`too many certificates already issued for \"acme.com\" (Retry-After: 3600)`))
+	if !limited {
+		t.Fatal("a rate-limit response giving its reset as a Retry-After was not read as one")
 	}
 	if !limit.ResetAt.IsZero() {
 		t.Fatalf("this line names no reset timestamp and one read as %v, so the window below is not the one under test", limit.ResetAt)
@@ -107,8 +107,8 @@ func TestALimitTheCaNamedNoResetTimeForIsSpentOffTheLineItWasSaidOn(t *testing.T
 func TestALimitWithNoResetAtAllIsSpentOnceItsOwnWindowHasPassed(t *testing.T) {
 	t.Parallel()
 
-	limit, held := RateLimited(logLine(`too many certificates already issued for \"acme.com\"`))
-	if !held {
+	limit, limited := RateLimited(logLine(`too many certificates already issued for \"acme.com\"`))
+	if !limited {
 		t.Fatal("a rate-limit response naming neither a reset time nor a Retry-After was not read as one")
 	}
 	at := spoken(t)
@@ -120,11 +120,11 @@ func TestALimitWithNoResetAtAllIsSpentOnceItsOwnWindowHasPassed(t *testing.T) {
 	}
 }
 
-func TestALineCarryingNoTimestampBoundsNothingAndIsNotRefusedOn(t *testing.T) {
+func TestALineWithNoTimestampBoundsNothingAndIsNotRefusedOn(t *testing.T) {
 	t.Parallel()
 
-	limit, held := RateLimited(`{"error":"urn:ietf:params:acme:error:rateLimited - too many certificates already issued for \"acme.com\" (Retry-After: 3600)"}`)
-	if !held {
+	limit, limited := RateLimited(`{"error":"urn:ietf:params:acme:error:rateLimited - too many certificates already issued for \"acme.com\" (Retry-After: 3600)"}`)
+	if !limited {
 		t.Fatal("a rate-limit response with no docker timestamp ahead of it was not read as one")
 	}
 	if !limit.Spent(time.Now()) {
@@ -135,16 +135,16 @@ func TestALineCarryingNoTimestampBoundsNothingAndIsNotRefusedOn(t *testing.T) {
 func TestARetryAfterTooLargeToBeADurationDoesNotWrapIntoAWindowAlreadyPast(t *testing.T) {
 	t.Parallel()
 
-	limit, held := RateLimited(logLine(`too many certificates already issued for \"acme.com\" (Retry-After: 1234567890123456789)`))
-	if !held {
-		t.Fatal("a rate-limit response carrying an absurd Retry-After was not read as one")
+	limit, limited := RateLimited(logLine(`too many certificates already issued for \"acme.com\" (Retry-After: 1234567890123456789)`))
+	if !limited {
+		t.Fatal("a rate-limit response with an absurd Retry-After was not read as one")
 	}
 	if limit.RetryAfter <= 0 || limit.RetryAfter > retryAfterCeiling {
-		t.Errorf("the reset reads as %v, want it clamped to at most %v: %d seconds is more than a duration holds, and what it wraps to is a window already elapsed",
+		t.Errorf("the reset reads as %v, want it clamped to at most %v: %d seconds is more than a duration can represent, and what it wraps to is a window already elapsed",
 			limit.RetryAfter, retryAfterCeiling, int64(1234567890123456789))
 	}
 	if limit.Spent(spoken(t).Add(time.Second)) {
-		t.Error("a Retry-After too large to hold in a duration overflows into a window already past, so the refusal it should have bought never fires")
+		t.Error("a Retry-After too large to fit in a duration overflows into a window already past, so the refusal it should have bought never fires")
 	}
 }
 
@@ -167,13 +167,13 @@ func TestTheTwoSecondaryCeilingsAreTranslatedRatherThanRelayed(t *testing.T) {
 			[]string{"300", "3h0m0s", "2026-08-30T15:00:00Z", "ocel preview rm"},
 		},
 	} {
-		limit, held := RateLimited(logLine(reading.detail))
-		if !held {
+		limit, limited := RateLimited(logLine(reading.detail))
+		if !limited {
 			t.Errorf("%s was not read as a rate limit at all, so the response surfaces raw, which is the failure mode this translation exists to buy out of", what)
 			continue
 		}
 		if !limit.Covers(reading.hostname) {
-			t.Errorf("%s does not cover %s, so the refusal it carries is never raised", what, reading.hostname)
+			t.Errorf("%s does not cover %s, so the refusal it names is never raised", what, reading.hostname)
 			continue
 		}
 		refusal := limit.Refusal(reading.hostname).Error()
@@ -184,7 +184,7 @@ func TestTheTwoSecondaryCeilingsAreTranslatedRatherThanRelayed(t *testing.T) {
 		}
 		for _, raw := range []string{"urn:ietf:params:acme:error", "HTTP 429", "letsencrypt.org/docs/rate-limits"} {
 			if strings.Contains(refusal, raw) {
-				t.Errorf("the refusal for %s carries %q verbatim:\n%s", what, raw, refusal)
+				t.Errorf("the refusal for %s includes %q verbatim:\n%s", what, raw, refusal)
 			}
 		}
 	}
@@ -193,16 +193,16 @@ func TestTheTwoSecondaryCeilingsAreTranslatedRatherThanRelayed(t *testing.T) {
 func TestAnAccountWideCeilingCoversEveryHostnameAndAFailedAuthorizationCoversOne(t *testing.T) {
 	t.Parallel()
 
-	orders, held := RateLimited(logLine(`too many new orders (300) from this account in the last 3h0m0s`))
-	if !held {
+	orders, limited := RateLimited(logLine(`too many new orders (300) from this account in the last 3h0m0s`))
+	if !limited {
 		t.Fatal("the new-order ceiling was not read as a rate limit")
 	}
 	if !orders.Covers("shop.example.com") {
 		t.Error("the new-order ceiling covers no hostname, and it is counted per account: every name this box orders is behind it")
 	}
 
-	failed, held := RateLimited(logLine(`too many failed authorizations (5) for \"pr-7.preview.acme.com\" in the last 1h0m0s`))
-	if !held {
+	failed, limited := RateLimited(logLine(`too many failed authorizations (5) for \"pr-7.preview.acme.com\" in the last 1h0m0s`))
+	if !limited {
 		t.Fatal("the failed-authorization ceiling was not read as a rate limit")
 	}
 	if !failed.Covers("pr-7.preview.acme.com") {
@@ -222,7 +222,7 @@ func TestALogWithNoRateLimitInItIsNotReadAsOne(t *testing.T) {
 		"an unreachable CA":           `{"level":"error","msg":"could not get certificate from issuer","error":"dial tcp 127.0.0.1:9: connect: connection refused"}`,
 		"a failed http-01 validation": `{"level":"error","msg":"validating authorization","error":"urn:ietf:params:acme:error:unauthorized - Invalid response from http://pr-7.preview.acme.com/.well-known/acme-challenge/x"}`,
 	} {
-		if limit, held := RateLimited(said); held {
+		if limit, limited := RateLimited(said); limited {
 			t.Errorf("%s was read as a rate-limit response naming %q, and a refusal telling the user to run `ocel preview rm` over an unrelated failure sends them to delete work that was not the problem", what, limit.Domain)
 		}
 	}

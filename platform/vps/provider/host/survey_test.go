@@ -19,7 +19,7 @@ func TestASurveyLineCutShortIsRefusedRatherThanRead(t *testing.T) {
 		_, _, err := readSurvey(probe.line + "\n")
 		var refusal refusal.Refusal
 		if !errors.As(err, &refusal) {
-			t.Errorf("readSurvey over %s = %v, want a refusal rather than a host read as carrying nothing", what, err)
+			t.Errorf("readSurvey over %s = %v, want a refusal rather than a host read as having nothing", what, err)
 			continue
 		}
 		if !strings.Contains(refusal.Message, probe.said) {
@@ -48,7 +48,7 @@ func TestAProbeThatCouldNotLookNamesWhatItCouldNotRead(t *testing.T) {
 	}
 	for _, want := range []string{"docker", KindEngine, "systemctl would not run"} {
 		if !strings.Contains(err.Error(), want) {
-			t.Errorf("refusal = %v, want it to carry %q", err, want)
+			t.Errorf("refusal = %v, want it to include %q", err, want)
 		}
 	}
 }

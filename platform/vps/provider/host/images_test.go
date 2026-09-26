@@ -14,22 +14,22 @@ const (
 	imageID  = "sha256:abcdef"
 )
 
-func (b *bench) carried() []string {
+func (b *bench) feeds() []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return append([]string(nil), b.fed...)
 }
 
-func imaged(b *bench, holds bool) {
+func imaged(b *bench, present bool) {
 	b.answer = func(command string) (session.Result, bool) {
 		switch {
 		case strings.Contains(command, "docker image ls"):
-			if holds {
+			if present {
 				return session.Result{Stdout: imageID + "\n"}, true
 			}
 			return session.Result{}, true
 		case strings.Contains(command, "docker load"):
-			holds = true
+			present = true
 			return session.Result{Stdout: "Loaded image: " + imageRef + "\n"}, true
 		default:
 			return session.Result{}, false
@@ -37,73 +37,73 @@ func imaged(b *bench, holds bool) {
 	}
 }
 
-func TestAnImageTheMachineAlreadyHoldsIsAnswered(t *testing.T) {
-	stood := machine(nil)
-	imaged(stood, true)
+func TestAnImageTheMachineAlreadyHasIsAnswered(t *testing.T) {
+	rig := machine(nil)
+	imaged(rig, true)
 
-	held, err := stood.host().HoldsImage(context.Background(), imageRef)
+	has, err := rig.host().HasImage(context.Background(), imageRef)
 	if err != nil {
-		t.Fatalf("HoldsImage() = %v", err)
+		t.Fatalf("HasImage() = %v", err)
 	}
-	if !held {
-		t.Error("HoldsImage() says no over a machine whose daemon names the image ref, so an unchanged redeploy would stream the whole image again")
+	if !has {
+		t.Error("HasImage() says no over a machine whose daemon names the image ref, so an unchanged redeploy would stream the whole image again")
 	}
-	for _, command := range stood.commands() {
+	for _, command := range rig.commands() {
 		if strings.Contains(command, quoted(imageRef)) {
 			return
 		}
 	}
-	t.Errorf("no command named %s, so the answer is about something else: %v", imageRef, stood.commands())
+	t.Errorf("no command named %s, so the answer is about something else: %v", imageRef, rig.commands())
 }
 
-func TestAnImageTheMachineDoesNotHoldIsAbsentRatherThanAFailure(t *testing.T) {
-	stood := machine(nil)
-	imaged(stood, false)
+func TestAnImageTheMachineDoesNotHaveIsAbsentRatherThanAFailure(t *testing.T) {
+	rig := machine(nil)
+	imaged(rig, false)
 
-	held, err := stood.host().HoldsImage(context.Background(), imageRef)
+	has, err := rig.host().HasImage(context.Background(), imageRef)
 	if err != nil {
-		t.Fatalf("HoldsImage() over a machine that does not hold it = %v, want an absence", err)
+		t.Fatalf("HasImage() over a machine that does not have it = %v, want an absence", err)
 	}
-	if held {
-		t.Error("HoldsImage() says yes over a machine whose daemon names nothing")
+	if has {
+		t.Error("HasImage() says yes over a machine whose daemon names nothing")
 	}
 }
 
 func TestADaemonThatDoesNotAnswerIsRefusedRatherThanReadAsAnAbsence(t *testing.T) {
-	stood := machine(nil)
-	stood.answer = func(command string) (session.Result, bool) {
+	rig := machine(nil)
+	rig.answer = func(command string) (session.Result, bool) {
 		if strings.Contains(command, "docker image ls") {
 			return session.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon"}, true
 		}
 		return session.Result{}, false
 	}
 
-	_, err := stood.host().HoldsImage(context.Background(), imageRef)
+	_, err := rig.host().HasImage(context.Background(), imageRef)
 	if err == nil {
-		t.Fatal("HoldsImage() read a daemon that is not running as an image that is merely absent, so the transfer would be attempted against nothing")
+		t.Fatal("HasImage() read a daemon that is not running as an image that is merely absent, so the transfer would be attempted against nothing")
 	}
 	if !strings.Contains(err.Error(), "Cannot connect to the Docker daemon") {
-		t.Errorf("HoldsImage() = %v, want the machine's own reason", err)
+		t.Errorf("HasImage() = %v, want the machine's own reason", err)
 	}
 }
 
 func TestTheImageIsFedToTheDaemonAndTheCoordinateIsCheckedAfterwards(t *testing.T) {
-	stood := machine(nil)
-	imaged(stood, false)
+	rig := machine(nil)
+	imaged(rig, false)
 
-	said, err := stood.host().LoadImage(context.Background(), imageRef, strings.NewReader("tar-bytes"))
+	said, err := rig.host().LoadImage(context.Background(), imageRef, strings.NewReader("tar-bytes"))
 	if err != nil {
 		t.Fatalf("LoadImage() = %v", err)
 	}
 	if !strings.Contains(said, imageRef) {
 		t.Errorf("LoadImage() said %q, want what the daemon said it loaded", said)
 	}
-	if !strings.Contains(strings.Join(stood.carried(), "\n"), "tar-bytes") {
-		t.Errorf("the tar never reached the machine: %v", stood.carried())
+	if !strings.Contains(strings.Join(rig.feeds(), "\n"), "tar-bytes") {
+		t.Errorf("the tar never reached the machine: %v", rig.feeds())
 	}
 
 	var loaded, checked bool
-	for _, command := range stood.commands() {
+	for _, command := range rig.commands() {
 		switch {
 		case strings.Contains(command, "docker load"):
 			loaded = true
@@ -115,13 +115,13 @@ func TestTheImageIsFedToTheDaemonAndTheCoordinateIsCheckedAfterwards(t *testing.
 		}
 	}
 	if !loaded || !checked {
-		t.Errorf("a load that is never checked promotes an image ref the machine may not answer to: %v", stood.commands())
+		t.Errorf("a load that is never checked promotes an image ref the machine may not answer to: %v", rig.commands())
 	}
 }
 
 func TestALoadThatLeavesTheCoordinateUnansweredIsRefused(t *testing.T) {
-	stood := machine(nil)
-	stood.answer = func(command string) (session.Result, bool) {
+	rig := machine(nil)
+	rig.answer = func(command string) (session.Result, bool) {
 		switch {
 		case strings.Contains(command, "docker image ls"):
 			return session.Result{}, true
@@ -134,28 +134,28 @@ func TestALoadThatLeavesTheCoordinateUnansweredIsRefused(t *testing.T) {
 		}
 	}
 
-	_, err := stood.host().LoadImage(context.Background(), imageRef, strings.NewReader("tar-bytes"))
+	_, err := rig.host().LoadImage(context.Background(), imageRef, strings.NewReader("tar-bytes"))
 	if err == nil {
 		t.Fatal("LoadImage() succeeded where the machine answers to no such imageRef afterwards")
 	}
 	for _, named := range []string{imageRef, "content digest sha256:abc", "95%"} {
 		if !strings.Contains(err.Error(), named) {
-			t.Errorf("LoadImage() = %v, want %q in it: a load the box took and then does not hold explains itself with what the box's engine and disk say, or the cause is read off the wrong machine", err, named)
+			t.Errorf("LoadImage() = %v, want %q in it: a load the box took and then does not have explains itself with what the box's engine and disk say, or the cause is read off the wrong machine", err, named)
 		}
 	}
 }
 
 func refusedPull(said string) (*bench, *int) {
-	stood := machine(nil)
+	rig := machine(nil)
 	var asked int
-	stood.answer = func(command string) (session.Result, bool) {
+	rig.answer = func(command string) (session.Result, bool) {
 		if !strings.Contains(command, "docker pull") {
 			return session.Result{}, false
 		}
 		asked++
 		return session.Result{Code: 1, Stderr: said}, true
 	}
-	return stood, &asked
+	return rig, &asked
 }
 
 const (
@@ -163,18 +163,18 @@ const (
 	markedHex = "4295030000000000000000000000000000000000000000000000000000000000"
 )
 
-func pulled(t *testing.T, stood *bench, server, hex string) error {
+func pulled(t *testing.T, rig *bench, server, hex string) error {
 	t.Helper()
-	_, err := stood.host().PullImage(context.Background(),
+	_, err := rig.host().PullImage(context.Background(),
 		images.Registry{Server: server, Namespace: "acme"},
 		server+"/acme/web:sha256-"+hex, "sha256:"+hex)
 	return err
 }
 
 func TestAFatalPullIsNotAskedAgainBecauseTheRegistryAnswersOnPortFiveThousand(t *testing.T) {
-	stood, asked := refusedPull("Error response from daemon: manifest unknown")
+	rig, asked := refusedPull("Error response from daemon: manifest unknown")
 
-	if err := pulled(t, stood, "registry.example.com:5000", plainHex); err == nil {
+	if err := pulled(t, rig, "registry.example.com:5000", plainHex); err == nil {
 		t.Fatal("PullImage() = nil over a machine whose daemon says the manifest is unknown")
 	}
 	if *asked != 1 {
@@ -184,21 +184,21 @@ func TestAFatalPullIsNotAskedAgainBecauseTheRegistryAnswersOnPortFiveThousand(t 
 }
 
 func TestAFatalPullIsNotAskedAgainBecauseTheDigestHexReadsAsAStatusCode(t *testing.T) {
-	stood, asked := refusedPull("Error response from daemon: manifest unknown")
+	rig, asked := refusedPull("Error response from daemon: manifest unknown")
 
-	if err := pulled(t, stood, "registry.example.com:9443", markedHex); err == nil {
+	if err := pulled(t, rig, "registry.example.com:9443", markedHex); err == nil {
 		t.Fatal("PullImage() = nil over a machine whose daemon says the manifest is unknown")
 	}
 	if *asked != 1 {
 		t.Errorf("the machine was told to pull %d times over a manifest that does not exist, want the refusal taken at its word: "+
-			"the digest ocel pinned carries the hex 429 and 503, and a digest is random", *asked)
+			"the digest ocel pinned contains the hex 429 and 503, and a digest is random", *asked)
 	}
 }
 
 func TestAThrottledPullIsStillAskedAgainWhereTheDaemonSaysSo(t *testing.T) {
-	stood, asked := refusedPull("toomanyrequests: You have reached your pull rate limit")
+	rig, asked := refusedPull("toomanyrequests: You have reached your pull rate limit")
 
-	if err := pulled(t, stood, "registry.example.com:9443", plainHex); err == nil {
+	if err := pulled(t, rig, "registry.example.com:9443", plainHex); err == nil {
 		t.Fatal("PullImage() = nil over a registry that throttled every pull")
 	}
 	if *asked != pullAttempts {
@@ -207,9 +207,9 @@ func TestAThrottledPullIsStillAskedAgainWhereTheDaemonSaysSo(t *testing.T) {
 }
 
 func TestALoginOutsideTheDockerGroupReachesTheDaemonAsRoot(t *testing.T) {
-	stood := machine(nil)
-	stood.facts = session.Facts{Systemd: true}
-	stood.answer = func(command string) (session.Result, bool) {
+	rig := machine(nil)
+	rig.facts = session.Facts{Systemd: true}
+	rig.answer = func(command string) (session.Result, bool) {
 		if strings.Contains(command, "docker") && !strings.HasPrefix(command, "sudo -n ") {
 			return session.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, true
 		}
@@ -219,20 +219,20 @@ func TestALoginOutsideTheDockerGroupReachesTheDaemonAsRoot(t *testing.T) {
 		return session.Result{}, false
 	}
 
-	held, err := stood.host().HoldsImage(context.Background(), imageRef)
+	has, err := rig.host().HasImage(context.Background(), imageRef)
 	if err != nil {
-		t.Fatalf("HoldsImage() as a login the docker group does not hold = %v", err)
+		t.Fatalf("HasImage() as a login outside the docker group = %v", err)
 	}
-	if !held {
-		t.Error("HoldsImage() gave up on a login that cannot reach the socket unelevated rather than becoming root")
+	if !has {
+		t.Error("HasImage() gave up on a login that cannot reach the socket unelevated rather than becoming root")
 	}
 }
 
 func TestADaemonThatIsDownIsNotReadAsALoginOutsideTheDockerGroup(t *testing.T) {
-	stood := machine(nil)
-	stood.facts = session.Facts{Systemd: true}
+	rig := machine(nil)
+	rig.facts = session.Facts{Systemd: true}
 	var probes int
-	stood.answer = func(command string) (session.Result, bool) {
+	rig.answer = func(command string) (session.Result, bool) {
 		if strings.Contains(command, dockerReach) {
 			probes++
 			return session.Result{Code: 1, Stderr: "Cannot connect to the Docker daemon at unix:///var/run/docker.sock. Is the docker daemon running?"}, true
@@ -242,21 +242,21 @@ func TestADaemonThatIsDownIsNotReadAsALoginOutsideTheDockerGroup(t *testing.T) {
 		}
 		return session.Result{}, false
 	}
-	h := stood.host()
+	h := rig.host()
 
-	_, err := h.HoldsImage(context.Background(), imageRef)
+	_, err := h.HasImage(context.Background(), imageRef)
 	if err == nil {
-		t.Fatal("HoldsImage() over a machine whose daemon is down succeeded")
+		t.Fatal("HasImage() over a machine whose daemon is down succeeded")
 	}
 	if !strings.Contains(err.Error(), "Is the docker daemon running?") {
-		t.Errorf("HoldsImage() = %v, want the reason the unelevated probe gave", err)
+		t.Errorf("HasImage() = %v, want the reason the unelevated probe gave", err)
 	}
 	if strings.Contains(err.Error(), "password") {
-		t.Errorf("HoldsImage() = %v: a daemon that is down is reported as a login that cannot become root", err)
+		t.Errorf("HasImage() = %v: a daemon that is down is reported as a login that cannot become root", err)
 	}
 
-	if _, err := h.HoldsImage(context.Background(), imageRef); err == nil {
-		t.Fatal("HoldsImage() = nil on a second ask over the same dead daemon")
+	if _, err := h.HasImage(context.Background(), imageRef); err == nil {
+		t.Fatal("HasImage() = nil on a second ask over the same dead daemon")
 	}
 	if probes != 2 {
 		t.Errorf("the daemon was probed %d times over two asks, want one probe each: a refusal that is cached leaves the deploy unable to recover once the daemon returns", probes)
@@ -264,22 +264,22 @@ func TestADaemonThatIsDownIsNotReadAsALoginOutsideTheDockerGroup(t *testing.T) {
 }
 
 func TestTheDaemonIsFoundOnceHoweverManyImagesAreAskedAbout(t *testing.T) {
-	stood := machine(nil)
-	imaged(stood, true)
-	h := stood.host()
+	rig := machine(nil)
+	imaged(rig, true)
+	h := rig.host()
 
 	for range 3 {
-		if _, err := h.HoldsImage(context.Background(), imageRef); err != nil {
+		if _, err := h.HasImage(context.Background(), imageRef); err != nil {
 			t.Fatal(err)
 		}
 	}
 	var found int
-	for _, command := range stood.commands() {
+	for _, command := range rig.commands() {
 		if strings.Contains(command, dockerReach) {
 			found++
 		}
 	}
 	if found > 1 {
-		t.Errorf("the daemon was looked for %d times over three questions about images: %v", found, stood.commands())
+		t.Errorf("the daemon was looked for %d times over three questions about images: %v", found, rig.commands())
 	}
 }

@@ -18,9 +18,8 @@ func (*Generic[T]) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (*Generic[T]) Reload(context.Context) error { return nil }
 
-func (*Generic[T]) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
+func (*Generic[T]) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
 func (*Generic[T]) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
-

@@ -58,14 +58,14 @@ func wroteObjects(t *testing.T, spec BucketSpec, count int) {
 		var calls []probeCall
 		for i := written; i < count && i < written+batch; i++ {
 			at := strconv.Itoa(i)
-			call, err := store.call("put"+at, http.MethodPut, "held/"+at+".txt", "",
+			call, err := store.call("put"+at, http.MethodPut, "stored/"+at+".txt", "",
 				nil, []byte(probeBody), false, time.Now().UTC())
 			if err != nil {
 				t.Fatal(err)
 			}
 			calls = append(calls, call)
 		}
-		said, err := runsHere(t)("write what the bucket is to hold", probeScript(calls))
+		said, err := runsHere(t)("write what the bucket is to store", probeScript(calls))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -94,7 +94,7 @@ func anOpenUpload(t *testing.T, spec BucketSpec, key string) {
 	}})
 }
 
-func heldBy(t *testing.T, spec BucketSpec) (int, int) {
+func contentsOf(t *testing.T, spec BucketSpec) (int, int) {
 	t.Helper()
 	said := droveHere(t, spec, listingCalls())
 	objects, err := objectsIn(said["objects"])
@@ -110,7 +110,7 @@ func heldBy(t *testing.T, spec BucketSpec) (int, int) {
 
 func TestABucketRemovedFromTheStoreIsGoneFromTheStoreAndNotJustFromItsDisk(t *testing.T) {
 	if testing.Short() {
-		t.Skip("stands a real store up")
+		t.Skip("runs a real store")
 	}
 	spec := aStoredBucket(t, "removed-bucket")
 	wroteObjects(t, spec, 3)
@@ -128,39 +128,39 @@ func TestABucketRemovedFromTheStoreIsGoneFromTheStoreAndNotJustFromItsDisk(t *te
 	}
 
 	aBucketOn(t, enginetest.SharedObjectStore(t), spec.Bucket)
-	if objects, uploads := heldBy(t, spec); objects != 0 || uploads != 0 {
-		t.Errorf("a bucket of the same name came back holding %d objects and %d unfinished uploads", objects, uploads)
+	if objects, uploads := contentsOf(t, spec); objects != 0 || uploads != 0 {
+		t.Errorf("a bucket of the same name came back containing %d objects and %d unfinished uploads", objects, uploads)
 	}
 }
 
 func TestRemovingABucketTakesEveryPageOfItAndEveryUnfinishedUploadWithIt(t *testing.T) {
 	if testing.Short() {
-		t.Skip("stands a real store up")
+		t.Skip("runs a real store")
 	}
 	spec := aStoredBucket(t, "crowded-bucket")
 	wroteObjects(t, spec, 1001)
-	anOpenUpload(t, spec, "held/unfinished.bin")
+	anOpenUpload(t, spec, "stored/unfinished.bin")
 
 	if err := removedBucket(spec, nowHere, runsHere(t)); err != nil {
 		t.Fatalf("the store kept a bucket of more than one page: %v", err)
 	}
 
 	aBucketOn(t, enginetest.SharedObjectStore(t), spec.Bucket)
-	if objects, uploads := heldBy(t, spec); objects != 0 || uploads != 0 {
-		t.Errorf("a bucket of the same name came back holding %d objects and %d unfinished uploads", objects, uploads)
+	if objects, uploads := contentsOf(t, spec); objects != 0 || uploads != 0 {
+		t.Errorf("a bucket of the same name came back containing %d objects and %d unfinished uploads", objects, uploads)
 	}
 }
 
-func TestABucketTheStoreNoLongerHoldsIsRemovedAgainWithoutComplaint(t *testing.T) {
+func TestABucketNoLongerInTheStoreIsRemovedAgainWithoutComplaint(t *testing.T) {
 	if testing.Short() {
-		t.Skip("stands a real store up")
+		t.Skip("runs a real store")
 	}
 	spec := aStoredBucket(t, "twice-removed")
 	if err := removedBucket(spec, nowHere, runsHere(t)); err != nil {
 		t.Fatal(err)
 	}
 	if err := removedBucket(spec, nowHere, runsHere(t)); err != nil {
-		t.Errorf("removing a bucket the store no longer holds failed, and a teardown that cannot be run twice cannot be resumed: %v", err)
+		t.Errorf("removing a bucket no longer in the store failed, and a teardown that cannot be run twice cannot be resumed: %v", err)
 	}
 }
 

@@ -158,17 +158,17 @@ func (f Front) unlabelled() Front {
 	return f
 }
 
-func (f Front) agrees(held Front, setter string) error {
-	if f.same(held) {
+func (f Front) agrees(recorded Front, setter string) error {
+	if f.same(recorded) {
 		return nil
 	}
 	remedy := "remove `\"proxy\"` from this project's vps options"
-	if held.adopted() {
-		remedy = "add `\"proxy\": " + held.spelled() + "`"
+	if recorded.adopted() {
+		remedy = "add `\"proxy\": " + recorded.spelled() + "`"
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
 		"this box routes through %s (set by %s); %s\nOne proxy fronts a box, and moving a box to another is not supported yet",
-		held.named(), setter, remedy)
+		recorded.named(), setter, remedy)
 }
 
 func frontReading() string {
@@ -209,18 +209,18 @@ func (h *Host) FrontAgrees(ctx context.Context) error {
 const unrecordedSetter = "a bootstrap that left no record"
 
 func (b Bootstrap) recorded(ctx context.Context, read Reading) (Reading, error) {
-	held, err := b.host.frontRecorded(ctx, b.host.reach)
+	existing, err := b.host.frontRecorded(ctx, b.host.reach)
 	if err != nil {
 		return Reading{}, err
 	}
 	record := frontRecord{Proxy: b.host.proxyOption.recorded(), Project: b.project, Class: read.Class}
 	switch {
-	case held != nil:
-		if err := b.host.proxyOption.agrees(held.front(), held.setter()); err != nil {
+	case existing != nil:
+		if err := b.host.proxyOption.agrees(existing.front(), existing.setter()); err != nil {
 			return Reading{}, err
 		}
-		record = *held
-	case read.standing(KindContainer, caddy.Container):
+		record = *existing
+	case read.observed(KindContainer, caddy.Container):
 		if err := b.host.proxyOption.agrees(Front{}, unrecordedSetter); err != nil {
 			return Reading{}, err
 		}

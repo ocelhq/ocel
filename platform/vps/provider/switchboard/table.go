@@ -100,7 +100,7 @@ func Read(document []byte) (*Table, error) {
 		return nil, fmt.Errorf("the routing table is not one ocel wrote: %w", err)
 	}
 	if decoder.More() {
-		return nil, fmt.Errorf("the routing table holds more than one table")
+		return nil, fmt.Errorf("the routing table contains more than one table")
 	}
 	grace, err := time.ParseDuration(read.Grace)
 	if err != nil {
@@ -120,14 +120,14 @@ func Read(document []byte) (*Table, error) {
 		key := claimKey{hostClaim.Owner, hostClaim.Pointer, hostClaim.App}
 		claimed[key] = append(claimed[key], hostClaim.Hostname)
 	}
-	standing := slices.SortedFunc(slices.Values(read.Routes), byIdentity)
+	routes := slices.SortedFunc(slices.Values(read.Routes), byIdentity)
 	running := map[surfaceKey][]string{}
-	for at, appRoute := range standing {
+	for at, appRoute := range routes {
 		address, err := appRoute.valid()
 		if err != nil {
 			return nil, err
 		}
-		standing[at].Upstream = address
+		routes[at].Upstream = address
 		if appRoute.app() && !slices.Contains(running[appRoute.surface()], appRoute.App) {
 			running[appRoute.surface()] = append(running[appRoute.surface()], appRoute.App)
 		}
@@ -156,8 +156,8 @@ func Read(document []byte) (*Table, error) {
 		table.admitted[edge.ProbeHostname(edge.PreviewWildcard(read.PreviewBase))] = true
 	}
 	pinned := map[string]bool{}
-	for _, held := range read.Pins {
-		pinned[held.Hostname] = true
+	for _, pin := range read.Pins {
+		pinned[pin.Hostname] = true
 	}
 	for hostname := range table.admitted {
 		if pinned[hostname] || pinned[wildcardOver(hostname)] {
@@ -165,7 +165,7 @@ func Read(document []byte) (*Table, error) {
 		}
 	}
 	answeredBy := map[string]route{}
-	for _, appRoute := range standing {
+	for _, appRoute := range routes {
 		hostnames := claimed[appRoute.key()]
 		if appRoute.app() && len(running[appRoute.surface()]) == 1 {
 			hostnames = append(slices.Clone(hostnames), claimed[claimKey{appRoute.Owner, appRoute.Pointer, ""}]...)

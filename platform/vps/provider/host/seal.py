@@ -36,7 +36,7 @@ def cipher(lib, key, nonce, body, aad, sealing):
     lib.EVP_aes_256_gcm.restype = ctypes.c_void_p
     ctx = lib.EVP_CIPHER_CTX_new()
     if not ctx:
-        abort("libcrypto held no cipher context")
+        abort("libcrypto gave no cipher context")
     try:
         init = lib.EVP_EncryptInit_ex if sealing else lib.EVP_DecryptInit_ex
         update = lib.EVP_EncryptUpdate if sealing else lib.EVP_DecryptUpdate
@@ -97,7 +97,7 @@ def additional(at):
     return "".join(part.replace("%", "%25").replace("/", "%2F") + "/" for part in at).encode()
 
 
-def coordinate(held, args):
+def coordinate(class_name, args):
     at = dict.fromkeys(COORDINATE, "")
     while args:
         flag = args.pop(0)
@@ -107,19 +107,19 @@ def coordinate(held, args):
         if not args:
             abort("%s was given no value" % flag)
         at[field] = args.pop(0)
-    at["class"] = held
+    at["class"] = class_name
     return additional([at[field] for field in COORDINATE])
 
 
 def key_of(path):
     try:
         with open(path, "rb") as f:
-            held = f.read()
+            key = f.read()
     except OSError as err:
         abort("cannot read key %s: %s" % (path, err))
-    if len(held) != KEY_BYTES:
-        abort("%s is %d bytes, want %d" % (path, len(held), KEY_BYTES))
-    return held
+    if len(key) != KEY_BYTES:
+        abort("%s is %d bytes, want %d" % (path, len(key), KEY_BYTES))
+    return key
 
 
 def mint(path):
@@ -149,10 +149,10 @@ def mint(path):
 def main(argv):
     if len(argv) < 2:
         abort("usage: seal <class> init|seal|open [coordinate flags]")
-    held, verb, rest = argv[0], argv[1], list(argv[2:])
-    if not re.fullmatch("[a-z0-9-]+", held):
-        abort("%s is not a valid class" % held)
-    path = os.path.join(SEAL_ROOT, held, "seal.key")
+    class_name, verb, rest = argv[0], argv[1], list(argv[2:])
+    if not re.fullmatch("[a-z0-9-]+", class_name):
+        abort("%s is not a valid class" % class_name)
+    path = os.path.join(SEAL_ROOT, class_name, "seal.key")
 
     if verb == "init":
         if rest:
@@ -162,7 +162,7 @@ def main(argv):
     if verb not in ("seal", "open"):
         abort("unknown verb %s" % verb)
 
-    aad = coordinate(held, rest)
+    aad = coordinate(class_name, rest)
     key = key_of(path)
     fed = sys.stdin.buffer.read().strip()
     try:

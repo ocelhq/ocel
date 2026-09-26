@@ -58,12 +58,12 @@ func frontAt(t *testing.T) string {
 
 func freeAddress(t *testing.T) string {
 	t.Helper()
-	held, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer held.Close()
-	return held.Addr().String()
+	defer listener.Close()
+	return listener.Addr().String()
 }
 
 func tableFile(t *testing.T, upstreams map[string]string) string {
@@ -126,29 +126,29 @@ type serving struct {
 
 func served(t *testing.T, table string, flags ...string) serving {
 	t.Helper()
-	stood := serving{data: freeAddress(t), front: frontAt(t), admit: admitAt(t), control: controlAt(t), done: make(chan int, 1), errs: &strings.Builder{}}
+	running := serving{data: freeAddress(t), front: frontAt(t), admit: admitAt(t), control: controlAt(t), done: make(chan int, 1), errs: &strings.Builder{}}
 	ctx, stop := context.WithCancel(t.Context())
-	stood.stop = stop
-	argv := append([]string{"serve", "--listen", stood.data, "--front", stood.front, "--admit", stood.admit, "--table", table}, flags...)
-	go func() { stood.done <- run(ctx, argv, strings.NewReader(""), io.Discard, stood.errs) }()
+	running.stop = stop
+	argv := append([]string{"serve", "--listen", running.data, "--front", running.front, "--admit", running.admit, "--table", table}, flags...)
+	go func() { running.done <- run(ctx, argv, strings.NewReader(""), io.Discard, running.errs) }()
 	t.Cleanup(func() {
 		stop()
-		<-stood.done
+		<-running.done
 	})
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if conn, err := net.Dial("unix", stood.control); err == nil {
+		if conn, err := net.Dial("unix", running.control); err == nil {
 			_ = conn.Close()
-			return stood
+			return running
 		}
 		select {
-		case code := <-stood.done:
-			t.Fatalf("serve exited %d before its control socket answered: %s", code, stood.errs)
+		case code := <-running.done:
+			t.Fatalf("serve exited %d before its control socket answered: %s", code, running.errs)
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
-	t.Fatalf("serve never answered on %s", stood.control)
-	return stood
+	t.Fatalf("serve never answered on %s", running.control)
+	return running
 }
 
 func (s serving) ask(t *testing.T, host string) (int, string, string) {
@@ -169,12 +169,12 @@ func (s serving) ask(t *testing.T, host string) (int, string, string) {
 
 func TestServeAnswersEachHostnameItsTableClaimsAndNamesTheBox(t *testing.T) {
 	web := backend(t, "web")
-	stood := served(t, tableFile(t, map[string]string{"shop.example.com": web}))
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": web}))
 
-	if status, body, named := stood.ask(t, "shop.example.com"); status != http.StatusOK || body != "web" || named != switchboard.EdgeName {
+	if status, body, named := running.ask(t, "shop.example.com"); status != http.StatusOK || body != "web" || named != switchboard.EdgeName {
 		t.Errorf("shop.example.com answered %d %q naming %q, want the app's 200 naming %s", status, body, named, switchboard.EdgeName)
 	}
-	if status, _, named := stood.ask(t, "unclaimed.example.com"); status != http.StatusNotFound || named != switchboard.EdgeName {
+	if status, _, named := running.ask(t, "unclaimed.example.com"); status != http.StatusNotFound || named != switchboard.EdgeName {
 		t.Errorf("an unclaimed hostname answered %d naming %q, want a 404 naming %s", status, named, switchboard.EdgeName)
 	}
 }
@@ -185,16 +185,16 @@ func TestServeTrustsWhatArrivesOverTheFrontSocketAndNothingElse(t *testing.T) {
 		seen <- r.Header.Get("X-Forwarded-Proto")
 	}))
 	t.Cleanup(upstream.Close)
-	stood := served(t, tableFile(t, map[string]string{"shop.example.com": strings.TrimPrefix(upstream.URL, "http://")}))
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": strings.TrimPrefix(upstream.URL, "http://")}))
 	dialer := &net.Dialer{}
 	fronting := &http.Client{Transport: &http.Transport{
 		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return dialer.DialContext(ctx, "unix", stood.front)
+			return dialer.DialContext(ctx, "unix", running.front)
 		},
 	}}
 
 	for what, client := range map[string]*http.Client{"http": http.DefaultClient, "https": fronting} {
-		request, err := http.NewRequest(http.MethodGet, "http://"+stood.data+"/", nil)
+		request, err := http.NewRequest(http.MethodGet, "http://"+running.data+"/", nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -213,7 +213,7 @@ func TestServeTrustsWhatArrivesOverTheFrontSocketAndNothingElse(t *testing.T) {
 
 func TestServeAnswersTheFrontProxysAdmissionOnASocketOfItsOwn(t *testing.T) {
 	web := backend(t, "web")
-	stood := served(t, tableFile(t, map[string]string{"shop.example.com": web}))
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": web}))
 	asking := func(client *http.Client, at string) (int, string) {
 		t.Helper()
 		request, err := http.NewRequest(http.MethodGet, at+switchboard.AdmitPath+"?"+switchboard.AdmitField+"=shop.example.com", nil)
@@ -238,23 +238,23 @@ func TestServeAnswersTheFrontProxysAdmissionOnASocketOfItsOwn(t *testing.T) {
 		}}}
 	}
 
-	if status, _ := asking(over(stood.admit), "http://switchboard"); status != http.StatusOK {
+	if status, _ := asking(over(running.admit), "http://switchboard"); status != http.StatusOK {
 		t.Errorf("the admit socket answered the front proxy %d for a claimed hostname, want 200", status)
 	}
-	if status, body := asking(http.DefaultClient, "http://"+stood.data); status != http.StatusOK || body != "web" {
+	if status, body := asking(http.DefaultClient, "http://"+running.data); status != http.StatusOK || body != "web" {
 		t.Errorf("the data listener answered %d %q for the admit path on a claimed hostname, want it forwarded to web like any other path: a forwarded request must never reach the admission", status, body)
 	}
-	if status, body := asking(over(stood.front), "http://switchboard"); status != http.StatusOK || body != "web" {
+	if status, body := asking(over(running.front), "http://switchboard"); status != http.StatusOK || body != "web" {
 		t.Errorf("the front socket answered %d %q for the admit path on a claimed hostname, want it forwarded to web like any other path: a forwarded request must never reach the admission", status, body)
 	}
-	if status, _ := asking(over(stood.control), "http://switchboard"); status/100 == 2 {
+	if status, _ := asking(over(running.control), "http://switchboard"); status/100 == 2 {
 		t.Errorf("the control socket answered %d for the admit path, want it to serve control alone", status)
 	}
-	held, err := os.Stat(stood.admit)
+	info, err := os.Stat(running.admit)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if mode := held.Mode().Perm(); mode != 0o600 {
+	if mode := info.Mode().Perm(); mode != 0o600 {
 		t.Errorf("the admit socket is mode %v, want 0600: whoever can connect to it is answered as the front proxy", mode)
 	}
 }
@@ -270,29 +270,29 @@ func TestServeRefusesAnAdmitSocketItCannotTake(t *testing.T) {
 }
 
 func TestTheControlAndFrontSocketsAreTheServingUsersAlone(t *testing.T) {
-	stood := served(t, tableFile(t, nil))
+	running := served(t, tableFile(t, nil))
 
 	for socket, why := range map[string]string{
-		stood.control: "whoever can connect to it can reroute every hostname on the box",
-		stood.front:   "whoever can connect to it is trusted to say who the client was",
+		running.control: "whoever can connect to it can reroute every hostname on the box",
+		running.front:   "whoever can connect to it is trusted to say who the client was",
 	} {
-		held, err := os.Stat(socket)
+		info, err := os.Stat(socket)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if mode := held.Mode().Perm(); mode != 0o600 {
+		if mode := info.Mode().Perm(); mode != 0o600 {
 			t.Errorf("%s is mode %v, want 0600: %s", socket, mode, why)
 		}
 	}
 }
 
 func TestServeRefusesToTakeTheControlSocketFromASwitchboardStillAnsweringOnIt(t *testing.T) {
-	stood := served(t, tableFile(t, nil))
+	running := served(t, tableFile(t, nil))
 
 	var errs strings.Builder
 	code := run(t.Context(), []string{"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil)}, strings.NewReader(""), io.Discard, &errs)
 	if code != exitRefused {
-		t.Errorf("a second serve on %s = %d, want %d: it would unlink the socket the first answers on and leave it unreachable", stood.control, code, exitRefused)
+		t.Errorf("a second serve on %s = %d, want %d: it would unlink the socket the first answers on and leave it unreachable", running.control, code, exitRefused)
 	}
 	if code, _, errs := ran(t, "upstreams"); code != 0 {
 		t.Errorf("the first switchboard answered upstreams = %d, %q after the second was refused, want it still reachable", code, errs)
@@ -359,8 +359,8 @@ func TestServeReplacesASocketNothingAnswersOn(t *testing.T) {
 	_ = stale.Close()
 
 	web := backend(t, "web")
-	stood := served(t, tableFile(t, map[string]string{"shop.example.com": web}))
-	if status, body, _ := stood.ask(t, "shop.example.com"); status != http.StatusOK || body != "web" {
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": web}))
+	if status, body, _ := running.ask(t, "shop.example.com"); status != http.StatusOK || body != "web" {
 		t.Errorf("a switchboard started over a dead socket answered %d %q, want it serving", status, body)
 	}
 }
@@ -371,9 +371,9 @@ func TestServeHearsARelayingPeerOnTheSchemeAndNeverOnTheClient(t *testing.T) {
 		seen <- r.Header.Clone()
 	}))
 	t.Cleanup(upstream.Close)
-	stood := served(t, tableFile(t, map[string]string{"shop.example.com": strings.TrimPrefix(upstream.URL, "http://")}), "--relay", "127.0.0.1")
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": strings.TrimPrefix(upstream.URL, "http://")}), "--relay", "127.0.0.1")
 
-	request, err := http.NewRequest(http.MethodGet, "http://"+stood.data+"/", nil)
+	request, err := http.NewRequest(http.MethodGet, "http://"+running.data+"/", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -393,7 +393,7 @@ func TestServeHearsARelayingPeerOnTheSchemeAndNeverOnTheClient(t *testing.T) {
 
 func TestARelayedNetworkIsTheOneTheSwitchboardIsNamedOnNeverTheOneItsDefaultRouteLeavesBy(t *testing.T) {
 	const relayed, app = "ocel", "ocel--shop--production"
-	held := func() ([]net.Addr, error) {
+	addresses := func() ([]net.Addr, error) {
 		return []net.Addr{
 			&net.IPNet{IP: net.ParseIP("127.0.0.1"), Mask: net.CIDRMask(8, 32)},
 			&net.IPNet{IP: net.ParseIP("172.19.0.2"), Mask: net.CIDRMask(16, 32)},
@@ -410,29 +410,29 @@ func TestARelayedNetworkIsTheOneTheSwitchboardIsNamedOnNeverTheOneItsDefaultRout
 			return nil, fmt.Errorf("no such host %s", name)
 		}
 	}
-	got, err := networkHeld(t.Context(), relayed, resolve, held)
+	got, err := networkPrefixes(t.Context(), relayed, resolve, addresses)
 	if err != nil {
-		t.Fatalf("networkHeld() = %v", err)
+		t.Fatalf("networkPrefixes() = %v", err)
 	}
 	if want := []netip.Prefix{netip.MustParsePrefix("172.19.0.0/16")}; !slices.Equal(got, want) {
-		t.Errorf("networkHeld(ocel) = %v, want %v: an app network the switchboard joins may carry its default route, and every app container on it would be heard on the scheme it claims", got, want)
+		t.Errorf("networkPrefixes(ocel) = %v, want %v: an app network the switchboard joins may be the one its default route leaves by, and every app container on it would be heard on the scheme it claims", got, want)
 	}
 }
 
-func TestARelayedNetworkTheSwitchboardHoldsNoAddressOnIsRefused(t *testing.T) {
-	held := func() ([]net.Addr, error) {
+func TestARelayedNetworkTheSwitchboardHasNoAddressOnIsRefused(t *testing.T) {
+	addresses := func() ([]net.Addr, error) {
 		return []net.Addr{&net.IPNet{IP: net.ParseIP("172.21.0.2"), Mask: net.CIDRMask(16, 32)}}, nil
 	}
 	for name, resolve := range map[string]func(context.Context, string) ([]netip.Addr, error){
 		"a name nothing answers for": func(context.Context, string) ([]netip.Addr, error) {
 			return nil, errors.New("no such host")
 		},
-		"a name answered with an address held elsewhere": func(context.Context, string) ([]netip.Addr, error) {
+		"a name answered with an address assigned elsewhere": func(context.Context, string) ([]netip.Addr, error) {
 			return []netip.Addr{netip.MustParseAddr("172.19.0.9")}, nil
 		},
 	} {
-		if got, err := networkHeld(t.Context(), "ocel", resolve, held); err == nil {
-			t.Errorf("%s: networkHeld() = %v, want a refusal: relaying from a network this switchboard is not on hears nobody it should", name, got)
+		if got, err := networkPrefixes(t.Context(), "ocel", resolve, addresses); err == nil {
+			t.Errorf("%s: networkPrefixes() = %v, want a refusal: relaying from a network this switchboard is not on hears nobody it should", name, got)
 		}
 	}
 }
@@ -479,10 +479,10 @@ func TestServeStampsHTTPSOnItsHTTPSListenerWhateverThePeerSends(t *testing.T) {
 	}
 }
 
-func interfaces(held ...string) func() ([]net.Addr, error) {
+func interfaces(cidrs ...string) func() ([]net.Addr, error) {
 	return func() ([]net.Addr, error) {
 		var addrs []net.Addr
-		for _, spelled := range held {
+		for _, spelled := range cidrs {
 			ip, network, err := net.ParseCIDR(spelled)
 			if err != nil {
 				return nil, err
@@ -495,7 +495,7 @@ func interfaces(held ...string) func() ([]net.Addr, error) {
 
 func TestTheHTTPSListenerOnANetworkBindsOnlyTheSwitchboardsAddressOnIt(t *testing.T) {
 	const relayed = "ocel"
-	held := interfaces("127.0.0.1/8", "172.19.0.2/16", "10.0.1.7/24", "fd00:c0::7/64")
+	addresses := interfaces("127.0.0.1/8", "172.19.0.2/16", "10.0.1.7/24", "fd00:c0::7/64")
 	resolve := func(_ context.Context, name string) ([]netip.Addr, error) {
 		switch name {
 		case switchboard.Name + ".coolify":
@@ -506,7 +506,7 @@ func TestTheHTTPSListenerOnANetworkBindsOnlyTheSwitchboardsAddressOnIt(t *testin
 			return nil, fmt.Errorf("no such host %s", name)
 		}
 	}
-	got, err := httpsBinds(t.Context(), "coolify:8443", resolve, held)
+	got, err := httpsBinds(t.Context(), "coolify:8443", resolve, addresses)
 	if err != nil {
 		t.Fatalf("httpsBinds() = %v", err)
 	}
@@ -545,17 +545,17 @@ func TestTheHTTPSListenerRefusesAnAddressThatBindsEveryInterface(t *testing.T) {
 	}
 }
 
-func TestTheHTTPSListenerRefusesANetworkTheSwitchboardHoldsNoAddressOn(t *testing.T) {
-	held := interfaces("172.21.0.2/16")
+func TestTheHTTPSListenerRefusesANetworkTheSwitchboardHasNoAddressOn(t *testing.T) {
+	addresses := interfaces("172.21.0.2/16")
 	for name, resolve := range map[string]func(context.Context, string) ([]netip.Addr, error){
 		"a name nothing answers for": func(context.Context, string) ([]netip.Addr, error) {
 			return nil, errors.New("no such host")
 		},
-		"a name answered with an address held elsewhere": func(context.Context, string) ([]netip.Addr, error) {
+		"a name answered with an address assigned elsewhere": func(context.Context, string) ([]netip.Addr, error) {
 			return []netip.Addr{netip.MustParseAddr("10.0.1.9")}, nil
 		},
 	} {
-		got, err := httpsBinds(t.Context(), "coolify:8443", resolve, held)
+		got, err := httpsBinds(t.Context(), "coolify:8443", resolve, addresses)
 		if err == nil {
 			t.Errorf("%s: httpsBinds() = %v, want a refusal: a listener bound anywhere else would stamp https for peers the user's proxy is not", name, got)
 			continue
@@ -590,26 +590,26 @@ func TestServeRefusesATableAFrontSocketOrARelayItCannotTake(t *testing.T) {
 
 func TestLoadSwapsTheTableTheSwitchboardServesAndRefusesOneItCannotRead(t *testing.T) {
 	blue, green := backend(t, "blue"), backend(t, "green")
-	stood := served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
 
 	if code, out, errs := ran(t, "load", tableFile(t, map[string]string{"shop.example.com": green})); code != 0 {
 		t.Fatalf("load = %d, %q %q", code, out, errs)
 	}
-	if _, body, _ := stood.ask(t, "shop.example.com"); body != "green" {
+	if _, body, _ := running.ask(t, "shop.example.com"); body != "green" {
 		t.Errorf("after the load shop.example.com answered %q, want green", body)
 	}
 	code, _, errs := ran(t, "load", documentAt(t, []byte(`{"grace":"30s","routes":[{"owner":"o","pointer":"p","app":"web","upstream":"nowhere"}]}`)))
 	if code != exitRefused || !strings.Contains(errs, "nowhere") {
 		t.Errorf("loading a table routing to no address = %d, %q, want %d naming what it could not dial", code, errs, exitRefused)
 	}
-	if _, body, _ := stood.ask(t, "shop.example.com"); body != "green" {
+	if _, body, _ := running.ask(t, "shop.example.com"); body != "green" {
 		t.Errorf("after a refused load shop.example.com answered %q, want green still serving", body)
 	}
 }
 
 func TestLoadTakesATablePathRelativeToWhereItRan(t *testing.T) {
 	green := backend(t, "green")
-	stood := served(t, tableFile(t, nil))
+	running := served(t, tableFile(t, nil))
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "routing.json"), []byte(`{"grace":"1s","claims":[{"owner":"o","hostname":"shop.example.com","pointer":"p"}],"routes":[{"owner":"o","pointer":"p","app":"web","upstream":"`+green+`"}]}`), 0o600); err != nil {
 		t.Fatal(err)
@@ -619,14 +619,14 @@ func TestLoadTakesATablePathRelativeToWhereItRan(t *testing.T) {
 	if code, out, errs := ran(t, "load", "routing.json"); code != 0 {
 		t.Fatalf("load routing.json = %d, %q %q", code, out, errs)
 	}
-	if _, body, _ := stood.ask(t, "shop.example.com"); body != "green" {
+	if _, body, _ := running.ask(t, "shop.example.com"); body != "green" {
 		t.Errorf("after loading a relative path shop.example.com answered %q, want green", body)
 	}
 }
 
 func TestFlipSwitchesThenPrintsEachRetireeTheMomentItDrains(t *testing.T) {
 	blue, green := backend(t, "blue"), backend(t, "green")
-	stood := served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
 
 	code, out, errs := ran(t, "flip", "--drain-timeout", "5", "--retire", "tcp/"+blue, tableFile(t, map[string]string{"shop.example.com": green}))
 	if code != 0 {
@@ -635,7 +635,7 @@ func TestFlipSwitchesThenPrintsEachRetireeTheMomentItDrains(t *testing.T) {
 	if out != switchboard.Drained+" "+blue+"\n" {
 		t.Errorf("flip printed %q, want %q: the release reads each retiree's outcome off these lines", out, switchboard.Drained+" "+blue+"\n")
 	}
-	if _, body, _ := stood.ask(t, "shop.example.com"); body != "green" {
+	if _, body, _ := running.ask(t, "shop.example.com"); body != "green" {
 		t.Errorf("after the flip shop.example.com answered %q, want green", body)
 	}
 	if code, out, errs := ran(t, "flip", tableFile(t, map[string]string{"shop.example.com": blue})); code != 0 || out != "" {
@@ -643,26 +643,26 @@ func TestFlipSwitchesThenPrintsEachRetireeTheMomentItDrains(t *testing.T) {
 	}
 }
 
-func TestAFlipWhoseCeilingPassesPrintsWhatTheRetireeStillHeldAndSucceeds(t *testing.T) {
+func TestAFlipWhoseCeilingPassesPrintsWhatTheRetireeStillHadInFlightAndSucceeds(t *testing.T) {
 	release := make(chan struct{})
-	held := make(chan struct{}, 1)
+	arrived := make(chan struct{}, 1)
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		held <- struct{}{}
+		arrived <- struct{}{}
 		<-release
 		_, _ = io.WriteString(w, "slow")
 	}))
 	t.Cleanup(slow.Close)
 	t.Cleanup(func() { close(release) })
 	blue, green := strings.TrimPrefix(slow.URL, "http://"), backend(t, "green")
-	stood := served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
 	go func() {
-		request, _ := http.NewRequest(http.MethodGet, "http://"+stood.data+"/", nil)
+		request, _ := http.NewRequest(http.MethodGet, "http://"+running.data+"/", nil)
 		request.Host = "shop.example.com"
 		if said, err := http.DefaultClient.Do(request); err == nil {
 			_ = said.Body.Close()
 		}
 	}()
-	<-held
+	<-arrived
 
 	code, out, errs := ran(t, "flip", "--drain-timeout", "1", "--retire", blue, tableFile(t, map[string]string{"shop.example.com": green}))
 	if code != 0 {
@@ -699,7 +699,7 @@ func TestAFlipWhoseAnswerIsCutShortAfterADrainLineExitsRefused(t *testing.T) {
 
 func TestAFlipTheSwitchboardRefusesSwitchesNothing(t *testing.T) {
 	blue := backend(t, "blue")
-	stood := served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
 
 	for what, argv := range map[string][]string{
 		"a table it cannot read":   {"flip", "--drain-timeout", "5", "--retire", blue, documentAt(t, []byte(`{}`))},
@@ -712,7 +712,7 @@ func TestAFlipTheSwitchboardRefusesSwitchesNothing(t *testing.T) {
 			t.Errorf("a flip with %s = %d, %q, want %d and nothing drained", what, code, out, exitRefused)
 		}
 	}
-	if _, body, _ := stood.ask(t, "shop.example.com"); body != "blue" {
+	if _, body, _ := running.ask(t, "shop.example.com"); body != "blue" {
 		t.Errorf("after the refused flips shop.example.com answered %q, want blue still serving", body)
 	}
 }
@@ -729,11 +729,11 @@ func TestIdleNamesOnlyTheTargetsNoRouteDialsAndNoFlipIsDraining(t *testing.T) {
 		t.Errorf("idle printed %q, want only %s: the routed upstream is serving", out, green)
 	}
 	if code, out, _ := ran(t, "idle", "blue"); code != exitRefused || out != "" {
-		t.Errorf("idle blue = %d, %q, want it refused: an address with no port keys nothing and would read as idle whatever holds it", code, out)
+		t.Errorf("idle blue = %d, %q, want it refused: an address with no port keys nothing and would read as idle whatever listens on it", code, out)
 	}
 }
 
-func TestUpstreamsListsWhatEachUpstreamHoldsInFlight(t *testing.T) {
+func TestUpstreamsListsWhatEachUpstreamHasInFlight(t *testing.T) {
 	blue := backend(t, "blue")
 	served(t, tableFile(t, map[string]string{"shop.example.com": blue}))
 
@@ -746,7 +746,7 @@ func TestUpstreamsListsWhatEachUpstreamHoldsInFlight(t *testing.T) {
 		t.Fatalf("upstreams printed %q: %v", out, err)
 	}
 	if !slices.Equal(listed, []switchboard.Upstream{{Address: blue}}) {
-		t.Errorf("upstreams listed %+v, want the one routed upstream holding nothing", listed)
+		t.Errorf("upstreams listed %+v, want the one routed upstream with nothing in flight", listed)
 	}
 
 	served(t, tableFile(t, nil))
@@ -769,18 +769,18 @@ func TestEveryVerbThatSpeaksToTheSwitchboardNamesTheSocketItCouldNotReach(t *tes
 
 func TestServeStopsOnItsContextAndLetsARequestInFlightFinishWithinTheGrace(t *testing.T) {
 	release := make(chan struct{})
-	held := make(chan struct{}, 1)
+	arrived := make(chan struct{}, 1)
 	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		held <- struct{}{}
+		arrived <- struct{}{}
 		<-release
 		_, _ = io.WriteString(w, "slow")
 	}))
 	t.Cleanup(slow.Close)
-	stood := served(t, tableFile(t, map[string]string{"shop.example.com": strings.TrimPrefix(slow.URL, "http://")}))
+	running := served(t, tableFile(t, map[string]string{"shop.example.com": strings.TrimPrefix(slow.URL, "http://")}))
 
 	answered := make(chan string, 1)
 	go func() {
-		request, _ := http.NewRequest(http.MethodGet, "http://"+stood.data+"/", nil)
+		request, _ := http.NewRequest(http.MethodGet, "http://"+running.data+"/", nil)
 		request.Host = "shop.example.com"
 		said, err := http.DefaultClient.Do(request)
 		if err != nil {
@@ -791,13 +791,13 @@ func TestServeStopsOnItsContextAndLetsARequestInFlightFinishWithinTheGrace(t *te
 		body, _ := io.ReadAll(said.Body)
 		answered <- string(body)
 	}()
-	<-held
-	stood.stop()
+	<-arrived
+	running.stop()
 	deadline := time.Now().Add(5 * time.Second)
-	for conn, err := net.Dial("tcp", stood.data); err == nil; conn, err = net.Dial("tcp", stood.data) {
+	for conn, err := net.Dial("tcp", running.data); err == nil; conn, err = net.Dial("tcp", running.data) {
 		_ = conn.Close()
 		if time.Now().After(deadline) {
-			t.Fatalf("serve still takes connections on %s five seconds after it was told to stop", stood.data)
+			t.Fatalf("serve still takes connections on %s five seconds after it was told to stop", running.data)
 		}
 	}
 	close(release)
@@ -805,10 +805,10 @@ func TestServeStopsOnItsContextAndLetsARequestInFlightFinishWithinTheGrace(t *te
 		t.Errorf("the request in flight when serve was told to stop answered %q, want its upstream's answer", body)
 	}
 	select {
-	case code := <-stood.done:
-		stood.done <- code
+	case code := <-running.done:
+		running.done <- code
 		if code != 0 {
-			t.Errorf("serve exited %d on its context, want 0: %s", code, stood.errs)
+			t.Errorf("serve exited %d on its context, want 0: %s", code, running.errs)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("serve never returned after its context ended")
@@ -859,13 +859,13 @@ func TestTheGateCallsATargetUpOnlyOnATwoHundredAndNamesTheOneThatWasNot(t *testi
 	}
 }
 
-func TestAVerbTheSwitchboardDoesNotCarryIsRefusedWithTheOnesItDoes(t *testing.T) {
+func TestAVerbTheSwitchboardDoesNotKnowIsRefusedWithTheOnesItDoes(t *testing.T) {
 	for _, argv := range [][]string{{}, {"forget", "shop.example.com"}, {"config", "/"}, {"listeners"}} {
 		code, _, errs := ran(t, argv...)
 		if code != exitRefused {
 			t.Errorf("%v = %d, want the usage refusal", argv, code)
 		}
-		for _, verb := range []string{"serve", "load", "gate", "flip", "idle", "upstreams", "leaf", "probe", "inodes", "holds"} {
+		for _, verb := range []string{"serve", "load", "gate", "flip", "idle", "upstreams", "leaf", "probe", "inodes", "answers"} {
 			if !strings.Contains(errs, verb) {
 				t.Errorf("the usage %q never names %s", errs, verb)
 			}

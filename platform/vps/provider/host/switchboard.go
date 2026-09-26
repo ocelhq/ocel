@@ -31,7 +31,7 @@ var switchboardCapabilities = []string{"DAC_OVERRIDE", "DAC_READ_SEARCH"}
 
 func switchboardBinary(arch string) []byte { return embedded(switchboard.Name, arch) }
 
-func switchboardStanding(binary []byte, front Front) boxContainer {
+func switchboardBox(binary []byte, front Front) boxContainer {
 	var relaying []string
 	if front.adopted() {
 		relaying = []string{"--relay-network", ProxyNetwork}
@@ -91,15 +91,15 @@ const (
 )
 
 func (s boxContainer) sources() []string {
-	held := make([]string, 0, len(s.binds))
+	paths := make([]string, 0, len(s.binds))
 	for _, bind := range s.binds {
 		source, _, _ := strings.Cut(bind, ":")
-		held = append(held, source)
+		paths = append(paths, source)
 	}
-	return held
+	return paths
 }
 
-func standingRead(board boxContainer) string {
+func presenceRead(board boxContainer) string {
 	var script []string
 	missing := func(test, path string) {
 		script = append(script, "[ "+test+" "+quoted(path)+" ] || printf 'missing=%s\\n' "+quoted(path))
@@ -119,10 +119,10 @@ func (s boxContainer) restoring(attempts int) string {
 	return "set -e\n" +
 		routingLocked("-x") +
 		"if ! docker inspect --type container --format " + quoted("{{.Id}}") + " " + quoted(s.name) + " >/dev/null 2>&1; then\n" +
-		s.networksStanding() +
+		s.networksPresent() +
 		networkCommand() + "\n" +
-		bindsStanding(s.files) +
-		imageHeld(s.image, containerPulls) +
+		bindsPresent(s.files) +
+		imagePulled(s.image, containerPulls) +
 		s.started() +
 		rejoining(s.name) +
 		"fi\n" +
@@ -131,8 +131,8 @@ func (s boxContainer) restoring(attempts int) string {
 }
 
 func (h *Host) restoreSwitchboard(ctx context.Context, elevation string) error {
-	board := switchboardStanding(nil, h.proxyOption)
-	said, err := h.ran(ctx, "read what "+board.name+" is stood from", standingRead(board), nil, elevation)
+	board := switchboardBox(nil, h.proxyOption)
+	said, err := h.ran(ctx, "read what "+board.name+" is started from", presenceRead(board), nil, elevation)
 	if err != nil {
 		return err
 	}
@@ -148,7 +148,7 @@ func (h *Host) restoreSwitchboard(ctx context.Context, elevation string) error {
 	}
 	if len(missing) > 0 {
 		return refusal.Refuse(refusal.CodeNotReady,
-			"no %s container on %s, and it cannot be stood again without %s\n"+
+			"no %s container on %s, and it cannot be started again without %s\n"+
 				"Run `ocel bootstrap %s`",
 			board.name, h.named(), strings.Join(missing, ", "), edge.ClassProduction)
 	}
@@ -162,7 +162,7 @@ func (h *Host) restoreSwitchboard(ctx context.Context, elevation string) error {
 	}
 	if result.Code != 0 {
 		return refusal.Refuse(refusal.CodeNotReady,
-			"no %s container on %s, and standing it again failed: %s\n"+
+			"no %s container on %s, and starting it again failed: %s\n"+
 				"Run `ocel bootstrap %s`",
 			board.name, h.named(), spoken(result), edge.ClassProduction)
 	}

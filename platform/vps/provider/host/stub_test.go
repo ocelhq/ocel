@@ -24,23 +24,23 @@ func runnable(t *testing.T, path string, body []byte, mode os.FileMode) {
 }
 
 type misses struct {
-	held  chan string
+	seen  chan string
 	count atomic.Int64
 }
 
-func newMisses() *misses { return &misses{held: make(chan string, 64)} }
+func newMisses() *misses { return &misses{seen: make(chan string, 64)} }
 
 func (m *misses) progress(what string) {
 	m.count.Add(1)
 	select {
-	case m.held <- what:
+	case m.seen <- what:
 	default:
 	}
 }
 
 func (m *misses) tally() (int, string) {
 	select {
-	case first := <-m.held:
+	case first := <-m.seen:
 		return int(m.count.Load()), first
 	default:
 		return int(m.count.Load()), ""
@@ -99,9 +99,9 @@ func TestAStubTheHarnessWritesRunsWhileTheRestOfTheSuiteForks(t *testing.T) {
 		go func() {
 			defer surveying.Done()
 			for range 150 {
-				held := standing()
+				account := decidedAccount()
 				cmd := exec.Command("/bin/sh", "-c", deployLogin().survey())
-				cmd.Env = append(os.Environ(), "PATH="+stubs(t, &held)+":"+os.Getenv("PATH"))
+				cmd.Env = append(os.Environ(), "PATH="+stubs(t, &account)+":"+os.Getenv("PATH"))
 				rendered, err := cmd.CombinedOutput()
 				if err != nil {
 					missed.progress(string(rendered))
@@ -112,8 +112,8 @@ func TestAStubTheHarnessWritesRunsWhileTheRestOfTheSuiteForks(t *testing.T) {
 					missed.progress(err.Error())
 					continue
 				}
-				if _, stood := observed[principal().ID()]; !stood {
-					missed.progress("the survey read no account where one stands")
+				if _, found := observed[principal().ID()]; !found {
+					missed.progress("the survey read no account where one exists")
 				}
 			}
 		}()
@@ -121,7 +121,7 @@ func TestAStubTheHarnessWritesRunsWhileTheRestOfTheSuiteForks(t *testing.T) {
 	surveying.Wait()
 
 	if count, first := missed.tally(); count > 0 {
-		t.Errorf("%d of the harness's %d write-then-exec cycles read a host carrying no account, and every assertion the stubs carry is unreadable the same way. The first of them said: %s",
+		t.Errorf("%d of the harness's %d write-then-exec cycles read a host with no account, and every assertion made through the stubs is unreadable the same way. The first of them said: %s",
 			count, 8*150, first)
 	}
 }

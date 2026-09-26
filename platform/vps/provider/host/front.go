@@ -83,7 +83,7 @@ func (unservedFront) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (u unservedFront) Reload(context.Context) error { return u.refused() }
 
-func (u unservedFront) Inspect(context.Context) (proxy.Standing, error) { return nil, u.refused() }
+func (u unservedFront) Inspect(context.Context) (proxy.Checks, error) { return nil, u.refused() }
 
 func (u unservedFront) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, u.refused()

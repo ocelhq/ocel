@@ -67,13 +67,13 @@ func TestAnAnswerTheCallAllowsIsNotAFailure(t *testing.T) {
 		t.Fatal(err)
 	}
 	script := curlCommand(spec.Store, req, create)
-	held, driven, cut := strings.Cut(script, "answered=$(")
+	before, driven, cut := strings.Cut(script, "answered=$(")
 	if !cut {
 		t.Fatalf("the script drives the store without reading what it answered:\n%s", script)
 	}
 	_, tail, _ := strings.Cut(driven, "\n")
 	for _, code := range append(create.allow, "500") {
-		run := exec.Command("sh", "-c", held+"answered="+code+"\n"+tail)
+		run := exec.Command("sh", "-c", before+"answered="+code+"\n"+tail)
 		out, err := run.CombinedOutput()
 		if (code == "500") != (err != nil) {
 			t.Errorf("the store answering %s exited %v: %s", code, err, strings.TrimSpace(string(out)))
@@ -99,7 +99,7 @@ func TestEveryCurlTheStoreIsDrivenWithGivesUpOnAStalledStore(t *testing.T) {
 	} {
 		for _, bound := range []string{"--connect-timeout", "--max-time"} {
 			if !strings.Contains(script, bound) {
-				t.Errorf("%s runs curl without %s, so a store that stops answering holds the deploy forever:\n%s", what, bound, script)
+				t.Errorf("%s runs curl without %s, so a store that stops answering stalls the deploy forever:\n%s", what, bound, script)
 			}
 		}
 	}

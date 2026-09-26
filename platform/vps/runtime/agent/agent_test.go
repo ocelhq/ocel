@@ -28,7 +28,7 @@ const containerID = "021294b7a2a44cb5a12500a19d9fa7842f10fae35f15cfe25105844c754
 
 func TestACallerIsKnownByTheContainerItsCgroupNamesUnderEitherDriver(t *testing.T) {
 	t.Parallel()
-	for name, held := range map[string]struct {
+	for name, tc := range map[string]struct {
 		cgroup string
 		want   string
 	}{
@@ -40,9 +40,9 @@ func TestACallerIsKnownByTheContainerItsCgroupNamesUnderEitherDriver(t *testing.
 		"a scope that is not the engine's":    {"0::/system.slice/podman-" + containerID + ".scope\n", ""},
 	} {
 		t.Run(name, func(t *testing.T) {
-			got, found := ContainerID(held.cgroup)
-			if got != held.want || found != (held.want != "") {
-				t.Errorf("ContainerID(%q) = %q, %v, want %q", held.cgroup, got, found, held.want)
+			got, found := ContainerID(tc.cgroup)
+			if got != tc.want || found != (tc.want != "") {
+				t.Errorf("ContainerID(%q) = %q, %v, want %q", tc.cgroup, got, found, tc.want)
 			}
 		})
 	}
@@ -168,7 +168,7 @@ func TestTheAgentAnswersACallerWithTheValuesItsOwnContainerWasHandedAndNothingIt
 		t.Errorf("the agent asked the engine about %v, want the one container the caller's cgroup names", inspect.asked)
 	}
 	if len(resolve.given) != 1 || resolve.given[0].Slug != "shop" || resolve.given[0].Environment != "pr-7" {
-		t.Errorf("the agent resolved %+v, want the manifest the engine holds for the caller's container: nothing the caller sends names a scope", resolve.given)
+		t.Errorf("the agent resolved %+v, want the manifest the engine has for the caller's container: nothing the caller sends names a scope", resolve.given)
 	}
 
 	over := source.Over(vars.Manifest{Slug: "shop", Class: "production", Keys: []live.Key{{Key: "DATABASE_URL"}}}, socket)
@@ -243,7 +243,7 @@ func TestTheAgentMeasuresTheVolumeTheCallersOwnManifestNamesAndNoOther(t *testin
 		t.Fatalf("the agent answered %q, which is no measurement: %v", body, err)
 	}
 	if answer.Free != 7<<30 || answer.Total != 40<<30 {
-		t.Errorf("the agent answered %+v, want what the store's volume holds", answer)
+		t.Errorf("the agent answered %+v, want what the store's volume reports", answer)
 	}
 	if len(space.asked) != 1 || space.asked[0] != "shop-prod-store-s3-data" {
 		t.Errorf("the agent measured %v, want the volume the caller's own manifest names", space.asked)
@@ -299,7 +299,7 @@ func TestAContainerHandedNoManifestIsToldSoRatherThanHandedAnything(t *testing.T
 		Resolve: resolve,
 	})
 	if status, body := ask(t, socket); status != http.StatusNotFound {
-		t.Errorf("a container carrying no manifest was answered %d %q", status, body)
+		t.Errorf("a container with no manifest was answered %d %q", status, body)
 	}
 	if len(resolve.given) != 0 {
 		t.Errorf("the agent resolved %+v for a container that declared nothing live", resolve.given)
@@ -321,7 +321,7 @@ func TestAnEngineThatCannotBeAskedIsReportedAsTheBoxsFault(t *testing.T) {
 func engineOrSkip(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("docker"); err != nil {
-		t.Skip("this machine carries no docker, so no container can ask the agent for anything")
+		t.Skip("this machine has no docker, so no container can ask the agent for anything")
 	}
 	if err := exec.Command("docker", "info").Run(); err != nil {
 		t.Skip("the docker on this machine answers nothing, so no container can ask the agent for anything")

@@ -60,7 +60,7 @@ var (
 
 func RateLimited(said string) (RateLimit, bool) {
 	for _, line := range strings.Split(said, "\n") {
-		if limit, held := rateLimitedOn(line); held {
+		if limit, limited := rateLimitedOn(line); limited {
 			return limit, true
 		}
 	}
@@ -122,14 +122,14 @@ func timestamped(line string) (time.Time, string) {
 }
 
 func waited(seconds string) time.Duration {
-	held, err := strconv.ParseInt(seconds, 10, 64)
-	if err != nil || held > int64(retryAfterCeiling/time.Second) {
+	parsed, err := strconv.ParseInt(seconds, 10, 64)
+	if err != nil || parsed > int64(retryAfterCeiling/time.Second) {
 		return retryAfterCeiling
 	}
-	if held < 0 {
+	if parsed < 0 {
 		return 0
 	}
-	return time.Duration(held) * time.Second
+	return time.Duration(parsed) * time.Second
 }
 
 func (r RateLimit) Covers(hostname string) bool {

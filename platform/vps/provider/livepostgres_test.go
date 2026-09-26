@@ -12,12 +12,12 @@ import (
 
 func (vm machine) queries(t *testing.T, binding provider.Binding, statement string) string {
 	t.Helper()
-	held := binding.Properties
-	image := strings.TrimSpace(vm.ssh(t, "sudo docker inspect -f '{{.Config.Image}}' "+quote(held[provider.PropertyHost])))
+	props := binding.Properties
+	image := strings.TrimSpace(vm.ssh(t, "sudo docker inspect -f '{{.Config.Image}}' "+quote(props[provider.PropertyHost])))
 	return strings.TrimSpace(vm.ssh(t, "sudo docker run --rm --network "+quote(host.AppNetwork(edge.ClassProduction, "shop"))+
-		" --env "+quote("PGPASSWORD="+held[provider.PropertyPassword])+" "+quote(image)+
-		" psql -h "+quote(held[provider.PropertyHost])+" -p "+quote(held[provider.PropertyPort])+
-		" -U "+quote(held[provider.PropertyUsername])+" -d "+quote(held[provider.PropertyDatabase])+
+		" --env "+quote("PGPASSWORD="+props[provider.PropertyPassword])+" "+quote(image)+
+		" psql -h "+quote(props[provider.PropertyHost])+" -p "+quote(props[provider.PropertyPort])+
+		" -U "+quote(props[provider.PropertyUsername])+" -d "+quote(props[provider.PropertyDatabase])+
 		" -tA -v ON_ERROR_STOP=1 -c "+quote(statement)+" 2>&1 || true"))
 }
 
@@ -57,15 +57,15 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 		t.Error("a second deploy bound to another password, and every app the first one bound is locked out")
 	}
 	if now := vm.ssh(t, "sudo docker inspect -f '{{.Id}} {{.State.StartedAt}}' "+quote(name)); now != started {
-		t.Errorf("a second deploy of an unchanged postgres moved it from %q to %q, and every connection it held was dropped for nothing", started, now)
+		t.Errorf("a second deploy of an unchanged postgres moved it from %q to %q, and every connection it had open was dropped for nothing", started, now)
 	}
 	if said := vm.queries(t, again, "SELECT id FROM kept"); said != "7" {
 		t.Errorf("the data a second deploy finds is %q, want the row the first one wrote", said)
 	}
 
 	dumped := strings.TrimSpace(vm.ssh(t, "sudo "+host.BackupsHelper+" production dump "+quote(name)+" main"))
-	if !vm.stands(t, dumped) {
-		t.Fatalf("the helper said it dumped %s to %q and nothing stands there", name, dumped)
+	if !vm.exists(t, dumped) {
+		t.Fatalf("the helper said it dumped %s to %q and nothing exists there", name, dumped)
 	}
 	if armed := strings.TrimSpace(vm.ssh(t, "systemctl is-enabled "+host.BackupsTimer+" || true")); armed != "enabled" {
 		t.Errorf("the daily dump is %q on a bootstrapped box, and a database nothing dumps is one disk away from gone", armed)
@@ -76,7 +76,7 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 		t.Fatalf("moving %s from 16 to 17 = %v", name, err)
 	}
 	if said := vm.queries(t, upgraded, "SELECT id FROM kept"); said != "7" {
-		t.Errorf("the data after the move to 17 is %q, want the row version 16 held", said)
+		t.Errorf("the data after the move to 17 is %q, want the row version 16 stored", said)
 	}
 	if said := vm.queries(t, upgraded, "SHOW server_version_num"); !strings.HasPrefix(said, "17") {
 		t.Errorf("the server answers as version %q after the move to 17", said)
@@ -94,10 +94,10 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 	if volumes := strings.TrimSpace(vm.ssh(t, "sudo docker volume ls -q --filter name="+quote("^"+name))); volumes != "" {
 		t.Errorf("the volume %q outlives the stack that declared it, and nothing after this reclaims the disk", volumes)
 	}
-	if vm.stands(t, host.BackupsDir(edge.ClassProduction, name)) {
+	if vm.exists(t, host.BackupsDir(edge.ClassProduction, name)) {
 		t.Errorf("the dumps taken of %s outlive the stack that declared it", name)
 	}
-	if vm.stands(t, host.KeptPath(edge.ClassProduction, name)) {
+	if vm.exists(t, host.KeptPath(edge.ClassProduction, name)) {
 		t.Errorf("the sealed password for %s outlives the server it opened", name)
 	}
 }

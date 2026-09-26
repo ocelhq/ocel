@@ -83,13 +83,13 @@ func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Provision
 		return provider.Binding{}, err
 	}
 	if progress != nil {
-		progress.Say("Standing postgres " + in.Resource.Name + " up as " + spec.Name)
+		progress.Say("Provisioning postgres " + in.Resource.Name + " as " + spec.Name)
 	}
-	secret, err := p.held(ctx, in, spec.Name)
+	secret, err := p.postgresSecret(ctx, in, spec.Name)
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	if err := p.host.StandResource(ctx, spec, secret); err != nil {
+	if err := p.host.RunResource(ctx, spec, secret); err != nil {
 		return provider.Binding{}, err
 	}
 	return provider.Binding{
@@ -106,11 +106,11 @@ func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Provision
 	}, nil
 }
 
-func (p *Provider) held(ctx context.Context, in resources.ProvisionRequest, name string) (string, error) {
-	return p.heldSecret(ctx, in, name, postgresSecretFolder, postgresSecretName, mintPostgresSecret)
+func (p *Provider) postgresSecret(ctx context.Context, in resources.ProvisionRequest, name string) (string, error) {
+	return p.recordedSecret(ctx, in, name, postgresSecretFolder, postgresSecretName, mintPostgresSecret)
 }
 
-func (p *Provider) heldSecret(ctx context.Context, in resources.ProvisionRequest, name, folder, item string, mint func() (string, error)) (string, error) {
+func (p *Provider) recordedSecret(ctx context.Context, in resources.ProvisionRequest, name, folder, item string, mint func() (string, error)) (string, error) {
 	at := records.SealScope{
 		Project: in.Ref.Project, Class: in.Ref.Class, Env: in.Ref.Name.String(),
 		Folder: folder, Binding: in.Resource.Name, Name: item,

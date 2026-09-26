@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	reasonStanding = "already current"
-	bootstrapDocs  = "https://ocel.dev/docs/providers/vps#bootstrap"
+	reasonCurrent = "already current"
+	bootstrapDocs = "https://ocel.dev/docs/providers/vps#bootstrap"
 )
 
 type Bootstrap struct {
@@ -45,7 +45,7 @@ func (b Bootstrap) described(ctx context.Context, read Reading) (provider.Bootst
 	if read, err = b.recorded(ctx, read); err != nil {
 		return provider.BootstrapDescription{}, err
 	}
-	if read.standing(KindRoutingTable, live.RoutingTable) || read.standing(KindProxyConfig, ProxyConfig) {
+	if read.observed(KindRoutingTable, live.RoutingTable) || read.observed(KindProxyConfig, ProxyConfig) {
 		if read.rerendering, err = b.host.proxyInspected(ctx, read.Class); err != nil {
 			return provider.BootstrapDescription{}, err
 		}
@@ -59,7 +59,7 @@ func (b Bootstrap) described(ctx context.Context, read Reading) (provider.Bootst
 			Name:          principal,
 			Present:       read.Present,
 			Schema:        uint32(read.Stamp.Schema),
-			DigestCurrent: read.settled(),
+			DigestCurrent: read.upToDate(),
 			WrittenBy:     read.Stamp.Writer,
 		}},
 	}, nil
@@ -109,8 +109,8 @@ func planned(read Reading) []provider.Change {
 		case item.Kind == KindEngine && read.current(item):
 			change.Action, change.Reason, change.Slow = provider.ActionAdopt, adoptedEngine(read.Engine.Version), false
 		case read.current(item):
-			change.Action, change.Reason = provider.ActionKeep, reasonStanding
-		case read.standing(item.Kind, item.Name):
+			change.Action, change.Reason = provider.ActionKeep, reasonCurrent
+		case read.observed(item.Kind, item.Name):
 			change.Action = provider.ActionUpdate
 			if change.Reason == "" {
 				change.Reason = "drifted"
@@ -144,8 +144,8 @@ func slowLast(changes []provider.Change) []provider.Change {
 }
 
 func (b Bootstrap) reading(ctx context.Context, req provider.BootstrapRequest) (Reading, error) {
-	if held, carried := req.VendorState.(Reading); carried && held.Class == req.Class {
-		return held, nil
+	if cached, ok := req.VendorState.(Reading); ok && cached.Class == req.Class {
+		return cached, nil
 	}
 	return b.read(ctx, req.Class)
 }
@@ -166,26 +166,26 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 	if err != nil {
 		return err
 	}
-	standing, err := b.read(ctx, req.Class)
+	current, err := b.read(ctx, req.Class)
 	if err != nil {
 		return err
 	}
-	if err := standing.adopting(); err != nil {
+	if err := current.adopting(); err != nil {
 		return err
 	}
-	if err := standing.runnableEngine(b.host.named()); err != nil {
+	if err := current.runnableEngine(b.host.named()); err != nil {
 		return err
 	}
-	if err := b.host.servingFree(ctx, standing); err != nil {
+	if err := b.host.servingFree(ctx, current); err != nil {
 		return err
 	}
-	items := standing.Items()
-	if err := bootstrapplan.RefuseUnconsentedChanges(itemPlan(shown), itemPlan(standing)); err != nil {
+	items := current.Items()
+	if err := bootstrapplan.RefuseUnconsentedChanges(itemPlan(shown), itemPlan(current)); err != nil {
 		return err
 	}
 
 	if req.RefuseReplacements {
-		if err := refuseReplacements(standing, items); err != nil {
+		if err := refuseReplacements(current, items); err != nil {
 			return err
 		}
 	}
@@ -196,13 +196,13 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 		Writer:  req.WrittenBy.String(),
 		Digests: digests(items),
 	}
-	if err := b.write(ctx, standing, ClassItems(req.Class), progress); err != nil {
+	if err := b.write(ctx, current, ClassItems(req.Class), progress); err != nil {
 		return err
 	}
 	if err := b.host.Stamp(ctx, req.Class, stamp); err != nil {
 		return err
 	}
-	if err := b.write(ctx, standing, StorageItems(req.Class, standing.Keys), progress); err != nil {
+	if err := b.write(ctx, current, StorageItems(req.Class, current.Keys), progress); err != nil {
 		return err
 	}
 
@@ -215,24 +215,24 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 			"%s has no seal key",
 			req.Class)
 	}
-	held := Reading{Class: req.Class, Present: true, Seal: minted.Seal, Stamp: standing.Stamp}
-	if err := held.adopting(); err != nil {
+	sealed := Reading{Class: req.Class, Present: true, Seal: minted.Seal, Stamp: current.Stamp}
+	if err := sealed.adopting(); err != nil {
 		return err
 	}
-	if err := b.write(ctx, standing, EngineItems(), progress); err != nil {
+	if err := b.write(ctx, current, EngineItems(), progress); err != nil {
 		return err
 	}
 	served, err := b.host.Read(ctx, req.Class)
 	if err != nil {
 		return err
 	}
-	if err := b.write(ctx, served, LiveItems(standing.Arch), progress); err != nil {
+	if err := b.write(ctx, served, LiveItems(current.Arch), progress); err != nil {
 		return err
 	}
-	if err := b.write(ctx, served, standing.recorded, progress); err != nil {
+	if err := b.write(ctx, served, current.recorded, progress); err != nil {
 		return err
 	}
-	if err := b.write(ctx, served, ProxyItems(standing.Arch, standing.Front), progress); err != nil {
+	if err := b.write(ctx, served, ProxyItems(current.Arch, current.Front), progress); err != nil {
 		return err
 	}
 	if err := b.host.rerender(ctx); err != nil {
@@ -298,7 +298,7 @@ func healable(read Reading) ([]Item, []string, error) {
 			work = append(work, item)
 			continue
 		}
-		if daemonHeld(item) || routingHeld(item) || rewrittenByDeploys(item) || !read.standing(item.Kind, item.Name) {
+		if daemonState(item) || routingState(item) || rewrittenByDeploys(item) || !read.observed(item.Kind, item.Name) {
 			left = append(left, item.ID())
 			continue
 		}
@@ -312,7 +312,7 @@ func healable(read Reading) ([]Item, []string, error) {
 	return work, left, nil
 }
 
-func daemonHeld(item Item) bool {
+func daemonState(item Item) bool {
 	switch item.Kind {
 	case KindEngine, KindUnit, KindNetwork, KindContainer:
 		return true
@@ -325,13 +325,13 @@ func deployOwned(item Item) bool {
 	if item.Kind != KindDir && item.Kind != KindFile {
 		return false
 	}
-	if beneath(sshDir, item.Name) || routingHeld(item) {
+	if beneath(sshDir, item.Name) || routingState(item) {
 		return false
 	}
 	return item.Owner == stateOwner && beneath(stateRoot, item.Name)
 }
 
-func routingHeld(item Item) bool {
+func routingState(item Item) bool {
 	return beneath(proxyRoot, item.Name) || beneath(live.RoutingDir, item.Name)
 }
 
@@ -348,10 +348,10 @@ func replacing(item Item) bool {
 	}
 }
 
-func refuseReplacements(standing Reading, items []Item) error {
+func refuseReplacements(read Reading, items []Item) error {
 	var over []string
 	for _, item := range items {
-		if !standing.current(item) && standing.standing(item.Kind, item.Name) && replacing(item) {
+		if !read.current(item) && read.observed(item.Kind, item.Name) && replacing(item) {
 			over = append(over, item.ID())
 		}
 	}
@@ -368,20 +368,20 @@ func (r Reading) adopting() error {
 	if !r.Present || recorded == "" || r.Seal.Fingerprint == recorded {
 		return nil
 	}
-	standing := r.Seal.Fingerprint
-	if standing == "" {
-		if r.standing(KindSealKey, SealKeyPath(r.Class)) {
+	present := r.Seal.Fingerprint
+	if present == "" {
+		if r.observed(KindSealKey, SealKeyPath(r.Class)) {
 			return nil
 		}
-		standing = "no key at all"
+		present = "no key at all"
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
-		"%s records seal key %s, but %s holds %s\nRestore the recorded key, or `ocel destroy` the class",
-		StampPath(r.Class), recorded, SealKeyPath(r.Class), standing)
+		"%s records seal key %s, but %s contains %s\nRestore the recorded key, or `ocel destroy` the class",
+		StampPath(r.Class), recorded, SealKeyPath(r.Class), present)
 }
 
-func (b Bootstrap) write(ctx context.Context, standing Reading, items []Item, progress edge.Progress) error {
-	return b.writing(ctx, standing, items, progress, func(ctx context.Context, item Item) error {
+func (b Bootstrap) write(ctx context.Context, read Reading, items []Item, progress edge.Progress) error {
+	return b.writing(ctx, read, items, progress, func(ctx context.Context, item Item) error {
 		if item.Kind == KindEngine {
 			return b.host.installEngine(ctx, progress)
 		}
@@ -389,11 +389,11 @@ func (b Bootstrap) write(ctx context.Context, standing Reading, items []Item, pr
 	})
 }
 
-func (b Bootstrap) writing(ctx context.Context, standing Reading, items []Item, progress edge.Progress,
+func (b Bootstrap) writing(ctx context.Context, read Reading, items []Item, progress edge.Progress,
 	install func(context.Context, Item) error) error {
 	for _, item := range items {
-		if standing.current(item) {
-			say(progress, item.ID()+": "+reasonStanding)
+		if read.current(item) {
+			say(progress, item.ID()+": "+reasonCurrent)
 			continue
 		}
 		if err := install(ctx, item); err != nil {
@@ -470,7 +470,7 @@ func leavingKnownHosts(forget string) string {
 	return "to drop this host from known_hosts: " + forget
 }
 
-const dirHeld = "dir=held"
+const dirNonEmpty = "dir=nonempty"
 
 type removal struct {
 	kind   string
@@ -505,11 +505,11 @@ func (r removal) command() string {
 			"done"
 	case r.kind == KindNetwork:
 		return "if ! docker network rm " + quoted(r.path) + " >/dev/null 2>&1 && " +
-			"docker network inspect " + quoted(r.path) + " >/dev/null 2>&1; then printf '%s\\n' " + quoted(networkHeld) + "; fi"
+			"docker network inspect " + quoted(r.path) + " >/dev/null 2>&1; then printf '%s\\n' " + quoted(networkInUse) + "; fi"
 	case r.kind == KindRoutingTable || r.kind == KindProxyConfig:
 		return routingLocked("-x") + "rm -f " + quoted(r.path)
 	case r.shared:
-		return "rmdir " + quoted(r.path) + " 2>/dev/null || printf '%s\\n' " + quoted(dirHeld)
+		return "rmdir " + quoted(r.path) + " 2>/dev/null || printf '%s\\n' " + quoted(dirNonEmpty)
 	default:
 		return "rm -rf " + quoted(r.path)
 	}
@@ -524,7 +524,7 @@ func (b Bootstrap) removals(ctx context.Context, class edge.Class) ([]removal, e
 	if err != nil {
 		return nil, err
 	}
-	apps, err := b.host.appsStanding(ctx, class)
+	apps, err := b.host.presentApps(ctx, class)
 	if err != nil {
 		return nil, err
 	}
@@ -538,7 +538,7 @@ const (
 	KindResourceVolumes = "docker:resource-volumes"
 )
 
-type appsStanding struct{ containers, networks, volumes bool }
+type appsPresent struct{ containers, networks, volumes bool }
 
 func classSelector(class edge.Class) string { return LabelClass + "=" + string(class) }
 
@@ -551,19 +551,19 @@ func appsProbe(class edge.Class) string {
 		"fi"
 }
 
-func (h *Host) appsStanding(ctx context.Context, class edge.Class) (appsStanding, error) {
+func (h *Host) presentApps(ctx context.Context, class edge.Class) (appsPresent, error) {
 	said, err := h.run(ctx, "ask what "+string(class)+" still runs", appsProbe(class), nil)
 	if err != nil {
-		return appsStanding{}, err
+		return appsPresent{}, err
 	}
-	return appsStanding{
+	return appsPresent{
 		containers: strings.Contains(said, "containers"),
 		networks:   strings.Contains(said, "networks"),
 		volumes:    strings.Contains(said, "volumes"),
 	}, nil
 }
 
-func appsRemoving(class edge.Class, apps appsStanding) []removal {
+func appsRemoving(class edge.Class, apps appsPresent) []removal {
 	var taken []removal
 	if apps.containers {
 		taken = append(taken, taking(KindApps, classSelector(class),
@@ -580,9 +580,9 @@ func appsRemoving(class edge.Class, apps appsStanding) []removal {
 	return taken
 }
 
-func removing(read, sibling Reading, apps appsStanding) []removal {
+func removing(read, sibling Reading, apps appsPresent) []removal {
 	beside := sibling.Class
-	last := !sibling.standing(KindDir, ClassDir(beside)) && !sibling.standing(KindDir, StateDir(beside))
+	last := !sibling.observed(KindDir, ClassDir(beside)) && !sibling.observed(KindDir, StateDir(beside))
 
 	beneath := append(appsRemoving(read.Class, apps),
 		taking(KindDir, StateDir(read.Class), "deploy records"),
@@ -612,20 +612,20 @@ func removing(read, sibling Reading, apps appsStanding) []removal {
 	}
 	ordered := slices.Concat(beneath, stamp, above)
 
-	standing := make([]removal, 0, len(ordered))
+	present := make([]removal, 0, len(ordered))
 	for _, candidate := range ordered {
 		if candidate.kind == KindApps || candidate.kind == KindResourceVolumes || candidate.kind == KindAppNetworks ||
-			read.standing(candidate.kind, candidate.path) || sibling.standing(candidate.kind, candidate.path) {
-			standing = append(standing, candidate)
+			read.observed(candidate.kind, candidate.path) || sibling.observed(candidate.kind, candidate.path) {
+			present = append(present, candidate)
 		}
 	}
-	if len(standing) == 0 {
+	if len(present) == 0 {
 		return nil
 	}
-	if read.standing(KindEngine, dockerEngine) || sibling.standing(KindEngine, dockerEngine) {
-		return append([]removal{keptEngine()}, standing...)
+	if read.observed(KindEngine, dockerEngine) || sibling.observed(KindEngine, dockerEngine) {
+		return append([]removal{keptEngine()}, present...)
 	}
-	return standing
+	return present
 }
 
 func other(class edge.Class) edge.Class {

@@ -33,21 +33,21 @@ func probingConfig(t *testing.T, state RoutingTable, rendered []byte, joined ...
 	return ask
 }
 
-func probedBox(t *testing.T, state RoutingTable, rendered []byte, joined ...string) (standingProxy, func(hostname string) answered) {
+func probedBox(t *testing.T, state RoutingTable, rendered []byte, joined ...string) (liveProxy, func(hostname string) answered) {
 	t.Helper()
 
-	stood := proxyStanding(t)
+	proxy := aLiveProxy(t)
 	for _, network := range joined {
-		if out, err := exec.Command(dockerEngine, "network", "connect", network, stood.board).CombinedOutput(); err != nil && !strings.Contains(string(out), "already exists") {
+		if out, err := exec.Command(dockerEngine, "network", "connect", network, proxy.board).CombinedOutput(); err != nil && !strings.Contains(string(out), "already exists") {
 			t.Fatalf("put the switchboard on %s: %v\n%s", network, err, out)
 		}
 	}
-	stood.stages(t, routingTableItem().Content, state, rendered)
-	stood.drives(t, "load", stood.table)
-	stood.reloads(t)
+	proxy.stages(t, routingTableItem().Content, state, rendered)
+	proxy.drives(t, "load", proxy.table)
+	proxy.reloads(t)
 	at := "http://127.0.0.1:" + caddy.HTTPPort
 
-	return stood, func(hostname string) answered {
+	return proxy, func(hostname string) answered {
 		t.Helper()
 		request, err := http.NewRequest(http.MethodGet, at+"/", nil)
 		if err != nil {
@@ -59,7 +59,7 @@ func probedBox(t *testing.T, state RoutingTable, rendered []byte, joined ...stri
 		said, err := http.DefaultClient.Do(request)
 		if err != nil {
 			t.Fatalf("ask the running proxy for %q: %v\n%s\n%s", hostname, err,
-				strings.TrimSpace(logsOf(stood.name)), strings.TrimSpace(logsOf(stood.board)))
+				strings.TrimSpace(logsOf(proxy.name)), strings.TrimSpace(logsOf(proxy.board)))
 		}
 		defer said.Body.Close()
 		body, err := io.ReadAll(said.Body)
@@ -113,7 +113,7 @@ func TestARealProxyForwardsAClaimedHostnameToTheProjectThatClaimedIt(t *testing.
 	ask := probing(t, state)
 
 	if said := ask(claimed); said.status == http.StatusNotFound {
-		t.Errorf("the claimed hostname %q was answered %d by the box's own default, want the route of the surface that claimed it: the default stands behind every route ocel writes and never in front of one", claimed, said.status)
+		t.Errorf("the claimed hostname %q was answered %d by the box's own default, want the route of the surface that claimed it: the default sits behind every route ocel writes and never in front of one", claimed, said.status)
 	} else if said.edge != switchboard.EdgeName {
 		t.Errorf("the surface's route answered %q with %s: %q, want %q: the probe a bind waits on reads this header off the hostname itself, so a route that forwards without naming the edge leaves every hostname the box actually serves reported as served by nothing", claimed, edge.HeaderEdge, said.edge, switchboard.EdgeName)
 	}
@@ -131,7 +131,7 @@ func TestARealProxyAnswersEveryHostnameOneSurfaceClaimsOnTheAppItRuns(t *testing
 	for _, hostname := range []string{claimed, second} {
 		said := ask(hostname)
 		if said.status == http.StatusNotFound {
-			t.Errorf("%q was answered %d by the box's own default, want the one app its surface runs: a project binds a second domain without giving up the first, and the route this renders carries every hostname the surface claims", hostname, said.status)
+			t.Errorf("%q was answered %d by the box's own default, want the one app its surface runs: a project binds a second domain without giving up the first, and the route this renders names every hostname the surface claims", hostname, said.status)
 			continue
 		}
 		if said.edge != switchboard.EdgeName {
@@ -140,30 +140,30 @@ func TestARealProxyAnswersEveryHostnameOneSurfaceClaimsOnTheAppItRuns(t *testing
 	}
 }
 
-func standingAppOn(t *testing.T, network, named, body string) string {
+func appOn(t *testing.T, network, named, body string) string {
 	t.Helper()
 
 	name := probeName(t) + "-" + named
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
 	run := append([]string{"run", "--rm", "--detach", "--name", name}, enginetest.RunLabelArgs(t)...)
-	stood, err := exec.Command(dockerEngine, append(run, "--network", network, caddy.Image,
+	out, err := exec.Command(dockerEngine, append(run, "--network", network, caddy.Image,
 		"caddy", "respond", "--listen", ":"+appbuild.InjectedPortText, body)...).CombinedOutput()
 	if err != nil {
-		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", stood)
+		t.Skipf("this machine's engine will not run the app the proxy forwards to: %s", out)
 	}
 	t.Cleanup(func() { exec.Command(dockerEngine, "rm", "--force", name).Run() })
 	return name + ":" + appbuild.InjectedPortText
 }
 
-func standingApp(t *testing.T, body string) (network, upstream string) {
+func anApp(t *testing.T, body string) (network, upstream string) {
 	t.Helper()
 
 	network = enginetest.Network(t)
-	return network, standingAppOn(t, network, "app", body)
+	return network, appOn(t, network, "app", body)
 }
 
 func TestARealProxyServesTheAppsBodyUnderTheHostnameAndNamesTheEdgeThatServedIt(t *testing.T) {
-	network, upstream := standingApp(t, "the app answered")
+	network, upstream := anApp(t, "the app answered")
 
 	state := RoutingTable{
 		Grace:  DrainWindow,
@@ -176,13 +176,13 @@ func TestARealProxyServesTheAppsBodyUnderTheHostnameAndNamesTheEdgeThatServedIt(
 		t.Errorf("the bound hostname was answered %d %q, want the body of the app its surface runs", said.status, said.body)
 	}
 	if said.edge != switchboard.EdgeName {
-		t.Errorf("the bound hostname was answered with %s: %q, want %q. The settle reads that header off the answer to decide which edge serves a hostname, so a forwarded route that names no edge leaves `ocel domain add` waiting on a box that is already serving",
+		t.Errorf("the bound hostname was answered with %s: %q, want %q. The domain check reads that header off the answer to decide which edge serves a hostname, so a forwarded route that names no edge leaves `ocel domain add` waiting on a box that is already serving",
 			edge.HeaderEdge, said.edge, switchboard.EdgeName)
 	}
 }
 
 func TestARealProxyStopsServingAHostnameTheProjectUnbound(t *testing.T) {
-	network, upstream := standingApp(t, "the app answered")
+	network, upstream := anApp(t, "the app answered")
 
 	bound := RoutingTable{
 		Grace:  DrainWindow,

@@ -13,15 +13,15 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
-func TestLiveASwitchboardAPruneTookWithItsNetworkIsStoodAgainByTheNextDeployAndServes(t *testing.T) {
-	prunedAndStoodAgain(t, "nginx")
+func TestLiveASwitchboardAPruneTookWithItsNetworkIsStartedAgainByTheNextDeployAndServes(t *testing.T) {
+	prunedAndRestarted(t, "nginx")
 }
 
-func TestLiveASwitchboardAPruneTookIsStoodAgainOnYourProxysNetworkAndServesThroughIt(t *testing.T) {
-	prunedAndStoodAgain(t, "nginx-network")
+func TestLiveASwitchboardAPruneTookIsStartedAgainOnYourProxysNetworkAndServesThroughIt(t *testing.T) {
+	prunedAndRestarted(t, "nginx-network")
 }
 
-func prunedAndStoodAgain(t *testing.T, front string) {
+func prunedAndRestarted(t *testing.T, front string) {
 	t.Helper()
 	vm := liveMachine(t)
 	vm.purges(t)
@@ -56,7 +56,7 @@ func prunedAndStoodAgain(t *testing.T, front string) {
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	promotes(t, stack, "p-one", "one", standsUp(t, d, "one"), 1)
+	promotes(t, stack, "p-one", "one", provisioned(t, d, "one"), 1)
 	recorded(t, d, frontedSlug, stack.State())
 	bindsBehind(t, d, front)
 	if served := vm.throughTheFront(t, frontedHostname, "/"); served != "one" {
@@ -66,25 +66,25 @@ func prunedAndStoodAgain(t *testing.T, front string) {
 	vm.ssh(t, "sudo docker stop "+host.SwitchboardContainer+" >/dev/null")
 	vm.ssh(t, "sudo docker container prune -f >/dev/null && sudo docker network prune -f >/dev/null")
 	if state := vm.state(t, host.SwitchboardContainer); state != "gone" {
-		t.Fatalf("%s is %s after the prune, and a switchboard the prune left proves nothing about standing it again", host.SwitchboardContainer, state)
+		t.Fatalf("%s is %s after the prune, and a switchboard the prune left proves nothing about starting it again", host.SwitchboardContainer, state)
 	}
-	if held := strings.TrimSpace(vm.ssh(t, "sudo docker network inspect "+quote(host.ProxyNetwork)+" >/dev/null 2>&1 && echo held || echo gone")); held != "gone" {
-		t.Fatalf("the %s network is %s after the prune, want it gone with the switchboard as a host tool's nightly cleanup leaves it", host.ProxyNetwork, held)
+	if network := strings.TrimSpace(vm.ssh(t, "sudo docker network inspect "+quote(host.ProxyNetwork)+" >/dev/null 2>&1 && echo present || echo gone")); network != "gone" {
+		t.Fatalf("the %s network is %s after the prune, want it gone with the switchboard as a host tool's nightly cleanup leaves it", host.ProxyNetwork, network)
 	}
 
 	if err := d.PreflightDeploy(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
 		Slug: frontedSlug, Class: edge.ClassProduction, Apps: []provider.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
 	}}); err != nil {
-		t.Fatalf("PreflightDeploy() after the prune = %v, want the switchboard and its network stood again from what bootstrap left", err)
+		t.Fatalf("PreflightDeploy() after the prune = %v, want the switchboard and its network started again from what bootstrap left", err)
 	}
 	deadline := time.Now().Add(loadWait)
 	for served := vm.throughTheFront(t, frontedHostname, "/"); served != "one"; served = vm.throughTheFront(t, frontedHostname, "/") {
 		if time.Now().After(deadline) {
-			t.Fatalf("%s answered %q for %s within %s of the deploy standing the switchboard again, want the release the table still routes", front, served, frontedHostname, loadWait)
+			t.Fatalf("%s answered %q for %s within %s of the deploy starting the switchboard again, want the release the table still routes", front, served, frontedHostname, loadWait)
 		}
 		time.Sleep(time.Second)
 	}
-	promotes(t, stack, "p-two", "two", standsUp(t, d, "two"), 2)
+	promotes(t, stack, "p-two", "two", provisioned(t, d, "two"), 2)
 	if served := vm.throughTheFront(t, frontedHostname, "/"); served != "two" {
 		t.Errorf("%s answered %q for %s after a deploy onto the restored switchboard, want two", front, served, frontedHostname)
 	}
@@ -96,7 +96,7 @@ func prunedAndStoodAgain(t *testing.T, front string) {
 	reported := false
 	for _, check := range checks {
 		if check.Subject == host.SwitchboardContainer {
-			reported = check.Verdict == provider.HostPass && strings.Contains(check.Finding, "a deploy stood it again")
+			reported = check.Verdict == provider.HostPass && strings.Contains(check.Finding, "a deploy started it again")
 			if !reported {
 				t.Errorf("the doctor says %v %q of %s, want it passed and the restoration named", check.Verdict, check.Finding, host.SwitchboardContainer)
 			}

@@ -12,7 +12,7 @@ import (
 
 const trustQuestion = "Trust that key and record"
 
-var owedABootstrap = regexp.MustCompile("⚠ not bootstrapped\n\\s+→ run `ocel bootstrap production`")
+var needsBootstrap = regexp.MustCompile("⚠ not bootstrapped\n\\s+→ run `ocel bootstrap production`")
 
 func TestLifecycleFirstContactIsTheUsersDecisionAndTheRunGoesOnThroughIt(t *testing.T) {
 	run := lifecycle(t)
@@ -25,7 +25,7 @@ func TestLifecycleFirstContactIsTheUsersDecisionAndTheRunGoesOnThroughIt(t *test
 	if !strings.Contains(rendered, "SHA256:") {
 		t.Errorf("first contact never showed a fingerprint to decide on:\n%s", rendered)
 	}
-	if !owedABootstrap.MatchString(rendered) {
+	if !needsBootstrap.MatchString(rendered) {
 		t.Errorf("the accepted key did not re-drive the command it refused:\n%s", rendered)
 	}
 
@@ -34,7 +34,7 @@ func TestLifecycleFirstContactIsTheUsersDecisionAndTheRunGoesOnThroughIt(t *test
 		t.Fatalf("nothing was written to %s, so ocel's trust and ssh's trust are not the same trust: %v", run.store, err)
 	}
 	if !strings.Contains(string(recorded), run.vm.addr) {
-		t.Errorf("%s holds no entry for %s:\n%s", run.store, run.vm.addr, recorded)
+		t.Errorf("%s has no entry for %s:\n%s", run.store, run.vm.addr, recorded)
 	}
 	if !strings.Contains(rendered, run.store) {
 		t.Errorf("the question never named the file it would write to:\n%s", rendered)
@@ -58,11 +58,11 @@ func TestLifecycleAChangedHostKeyIsRefusedOutrightAndNothingIsAsked(t *testing.T
 	if strings.Contains(rendered, trustQuestion) {
 		t.Errorf("a changed host key was offered as a question rather than refused:\n%s", rendered)
 	}
-	held, err := os.ReadFile(run.store)
+	current, err := os.ReadFile(run.store)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(held, []byte(decoy)) {
+	if !bytes.Equal(current, []byte(decoy)) {
 		t.Errorf("the refusal edited %s, and a mismatch must never touch the user's trust store", run.store)
 	}
 }

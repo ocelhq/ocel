@@ -26,50 +26,50 @@ export function frontNamed(env: NodeJS.ProcessEnv, dir = frontsDir): Front | und
   if (!name) {
     return undefined;
   }
-  const held = fronts(dir);
-  if (!held.includes(name)) {
+  const named = fronts(dir);
+  if (!named.includes(name)) {
     throw new Error(
-      `${FRONT_ENV}=${name} names no front under ${dir}; the fronts there are ${held.join(", ") || "none"}`,
+      `${FRONT_ENV}=${name} names no front under ${dir}; the fronts there are ${named.join(", ") || "none"}`,
     );
   }
   const at = path.join(dir, name);
   const read = JSON.parse(readFileSync(path.join(at, "front.json"), "utf8")) as { proxy?: unknown };
   if (read.proxy === undefined) {
     throw new Error(
-      `${path.join(at, "front.json")} names no "proxy" for the projects on its box to carry`,
+      `${path.join(at, "front.json")} names no "proxy" for the projects on its box to use`,
     );
   }
   return { name, dir: at, proxy: read.proxy };
 }
 
-const portHolders: Record<string, string> = {
-  nginx: "nginx holds :80 and :443",
+const portOwners: Record<string, string> = {
+  nginx: "nginx listens on :80 and :443",
   "nginx-container": "container ocel-front-nginx publishes :80 and :443",
   "nginx-network": "container ocel-front-nginx-network publishes :80 and :443",
 };
 
-export function holderOf(front: Front): string {
-  const holder = portHolders[front.name];
-  if (holder === undefined) {
+export function ownerOf(front: Front): string {
+  const owner = portOwners[front.name];
+  if (owner === undefined) {
     throw new Error(
-      `the journey knows nothing that holds :80 and :443 on the ${front.name} front, so it cannot check the refusal a bootstrap under ocel's own proxy gives there; name it in portHolders`,
+      `the journey knows nothing that listens on :80 and :443 on the ${front.name} front, so it cannot check the refusal a bootstrap under ocel's own proxy gives there; name it in portOwners`,
     );
   }
-  return holder;
+  return owner;
 }
 
 export function refusalMissed(
   code: number | null,
   said: string,
-  holder: string,
+  owner: string,
 ): string | undefined {
   if (code === 0) {
-    return `a bootstrap under ocel's own proxy went ahead over a box where ${holder}`;
+    return `a bootstrap under ocel's own proxy went ahead over a box where ${owner}`;
   }
-  if (stripVTControlCharacters(said).includes(holder)) {
+  if (stripVTControlCharacters(said).includes(owner)) {
     return undefined;
   }
-  return `a bootstrap under ocel's own proxy was refused without saying "${holder}":\n${said}`;
+  return `a bootstrap under ocel's own proxy was refused without saying "${owner}":\n${said}`;
 }
 
 export function frontStep(front: Front, step: FrontStep): string {

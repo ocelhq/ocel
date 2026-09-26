@@ -73,7 +73,7 @@ func TestDescribingAHostNeedsNoPowerToWriteToIt(t *testing.T) {
 
 	described, err := NewBootstrap(hostFor(conn), testVendor, "shop").Describe(ctx, edge.ClassProduction)
 	if err != nil {
-		t.Fatalf("Describe() = %v, want what this login can see of the host: the preflight reports bootstrap standing through Describe, and a Describe that demands root turns every deploy under %s into a refusal that carries no claims, no standing and no known slugs",
+		t.Fatalf("Describe() = %v, want what this login can see of the host: the preflight reports bootstrap state through Describe, and a Describe that demands root turns every deploy under %s into a refusal that includes no claims, no bootstrap state and no known slugs",
 			err, "ocel-deploy")
 	}
 	if described.Present {

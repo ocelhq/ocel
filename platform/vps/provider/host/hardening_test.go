@@ -30,7 +30,7 @@ func TestAnAppContainerIsConfinedAndItsLogIsRotated(t *testing.T) {
 		"a count of log files kept":                          quoted("--log-opt") + " " + quoted("max-file="+logMaxFiles),
 	} {
 		if !strings.Contains(command, wanted) {
-			t.Errorf("standing a container up runs %q, which carries no %s (%s)", command, what, wanted)
+			t.Errorf("starting a container runs %q, which includes no %s (%s)", command, what, wanted)
 		}
 	}
 	added := capabilitiesAdded(argv)
@@ -53,7 +53,7 @@ func TestTheProxyIsConfinedToBindingItsPortsAndItsLogIsRotated(t *testing.T) {
 	argv := frontProxy().run()
 	command := words(argv)
 	if strings.Contains(command, quoted(noNewPrivileges)) {
-		t.Errorf("the proxy is run under %s, and its image carries cap_net_bind_service=ep as a file capability on the binary, which the kernel refuses to exec once no_new_privs is set:\n%s", noNewPrivileges, command)
+		t.Errorf("the proxy is run under %s, and its image ships cap_net_bind_service=ep as a file capability on the binary, which the kernel refuses to exec once no_new_privs is set:\n%s", noNewPrivileges, command)
 	}
 	for _, wanted := range []string{
 		quoted("--cap-drop") + " " + quoted("ALL"),

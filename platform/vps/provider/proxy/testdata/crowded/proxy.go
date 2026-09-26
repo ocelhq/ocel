@@ -18,12 +18,11 @@ func (c *Crowded) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (c *Crowded) Reload(context.Context) error { return nil }
 
-func (c *Crowded) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
+func (c *Crowded) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
 func (c *Crowded) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
-
 
 const upstream = "localhost:8080"
 

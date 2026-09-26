@@ -41,7 +41,7 @@ func TestWhatListensOnThisHostIsReadWithoutElevation(t *testing.T) {
 	}
 	read := listenerRead(b)
 	if read == "" {
-		t.Fatalf("nothing this host ran names %s, so there is no command to hold to the rule:\n%s",
+		t.Fatalf("nothing this host ran names %s, so there is no command to check against the rule:\n%s",
 			listeners.TCPPath, strings.Join(b.commands(), "\n"))
 	}
 	if strings.Contains(read, "sudo") {
@@ -59,12 +59,12 @@ func TestWhatListensOnThisHostIsNeitherSilencedNorForcedToSucceed(t *testing.T) 
 	}
 	read := listenerRead(b)
 	if read == "" {
-		t.Fatalf("nothing this host ran names %s, so there is no command to hold to the rule:\n%s",
+		t.Fatalf("nothing this host ran names %s, so there is no command to check against the rule:\n%s",
 			listeners.TCPPath, strings.Join(b.commands(), "\n"))
 	}
 	for _, swallowed := range []string{"2>/dev/null", "|| true"} {
 		if strings.Contains(read, swallowed) {
-			t.Errorf("this host reads what listens on it with %q, and %q turns a denied read into an empty answer that reads as a port nothing holds",
+			t.Errorf("this host reads what listens on it with %q, and %q turns a denied read into an empty answer that reads as a port nothing listens on",
 				read, swallowed)
 		}
 	}
@@ -86,7 +86,7 @@ func TestAListenerReadThisHostDeniedIsRefusedWithWhatItSaid(t *testing.T) {
 	}
 	_, err := b.host().Listening(context.Background())
 	if err == nil {
-		t.Fatal("Listening() read a denied /proc as a host with nothing bound, and that is reported upstream as a port nothing holds")
+		t.Fatal("Listening() read a denied /proc as a host with nothing bound, and that is reported upstream as a port nothing listens on")
 	}
 	if !strings.Contains(err.Error(), "Permission denied") {
 		t.Errorf("Listening() = %q, want what the host said about the read it refused", err)
@@ -97,7 +97,7 @@ func TestEveryListenerReadAnswersOnAHostWithIPv6Disabled(t *testing.T) {
 	t.Parallel()
 
 	absent := filepath.Join(t.TempDir(), "tcp6")
-	for name, command := range map[string]string{"the listener read": listenerCommand, "the holders read": holdersCommand} {
+	for name, command := range map[string]string{"the listener read": listenerCommand, "the owners read": ownersCommand} {
 		said, err := exec.Command("/bin/sh", "-c", strings.ReplaceAll(command, listeners.TCP6Path, absent)).CombinedOutput()
 		if err != nil {
 			t.Errorf("%s on a host with no %s = %v:\n%s\nand a box booted with ipv6.disable=1 has its proxy's host check refused over a table the kernel never made", name, listeners.TCP6Path, err, said)

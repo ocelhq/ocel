@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestAnObjectTheDaemonDoesNotHoldIsToldApartFromACommandItRefused(t *testing.T) {
+func TestAnObjectTheDaemonDoesNotHaveIsToldApartFromACommandItRefused(t *testing.T) {
 	t.Parallel()
 
 	for said, gone := range map[string]bool{
@@ -33,7 +33,7 @@ func TestWhatACommandInAContainerSaidIsToldApartFromTheEngineRefusingToRunIt(t *
 	t.Parallel()
 
 	for rendered, want := range map[string]string{
-		"held\n" + containerSaid:                        "held",
+		"present\n" + containerSaid:                     "present",
 		containerSaid:                                   "",
 		"600:root\n" + containerSaid:                    "600:root",
 		"one\ntwo\n" + containerSaid:                    "one\ntwo",
@@ -50,7 +50,7 @@ func TestWhatACommandInAContainerSaidIsToldApartFromTheEngineRefusingToRunIt(t *
 		"Error response from daemon: No such container: ocel-proxy\n",
 		"docker: Error response from daemon: network ocel not found.\n",
 		"Cannot connect to the Docker daemon at unix:///var/run/docker.sock\n",
-		"held\n",
+		"present\n",
 	} {
 		if said, ran := spoken(refused); ran {
 			t.Errorf("spoken(%q) = %q, true: a command the engine never ran that reads as an answer is the value every assertion built on it then compares", refused, said)

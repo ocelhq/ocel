@@ -20,9 +20,8 @@ func (Second) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (Second) Reload(context.Context) error { return nil }
 
-func (Second) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
+func (Second) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
 func (Second) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
-

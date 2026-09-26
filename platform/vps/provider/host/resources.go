@@ -34,13 +34,13 @@ func keptCommand(path string) string {
 		"if [ -s " + quoted(path) + " ]; then cat " + quoted(path) + "; fi"
 }
 
-func (h *Host) unhand(ctx context.Context, held handoff) error {
+func (h *Host) unhand(ctx context.Context, delivery handoff) error {
 	taking, stop := context.WithTimeout(context.WithoutCancel(ctx), forgetWindow)
 	defer stop()
-	if _, err := h.owning(taking, "take back "+held.path, "rm -f "+quoted(held.path), nil); err != nil {
+	if _, err := h.owning(taking, "take back "+delivery.path, "rm -f "+quoted(delivery.path), nil); err != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
-			"could not remove %s on %s, which holds a plaintext credential: %v",
-			held.path, h.named(), err)
+			"could not remove %s on %s, which contains a plaintext credential: %v",
+			delivery.path, h.named(), err)
 	}
 	return nil
 }
@@ -88,7 +88,7 @@ func (h *Host) ForgetKept(ctx context.Context, class edge.Class, names []string)
 	for _, name := range names {
 		paths = append(paths, quoted(KeptPath(class, name)))
 	}
-	_, err := h.owning(ctx, "forget what "+strings.Join(names, ", ")+" was held to",
+	_, err := h.owning(ctx, "forget what "+strings.Join(names, ", ")+" was bound to",
 		"rm -f "+strings.Join(paths, " "), nil)
 	return err
 }
@@ -103,7 +103,7 @@ func (h *Host) Kept(ctx context.Context, class edge.Class, name string) ([]byte,
 
 func (h *Host) KeepOnce(ctx context.Context, class edge.Class, name string, candidate []byte) ([]byte, error) {
 	fed := base64.StdEncoding.EncodeToString(candidate) + "\n"
-	said, err := h.owning(ctx, "keep what "+name+" is held to", keepCommand(class, KeptPath(class, name)), []byte(fed))
+	said, err := h.owning(ctx, "keep what "+name+" is bound to", keepCommand(class, KeptPath(class, name)), []byte(fed))
 	if err != nil {
 		return nil, err
 	}
@@ -212,8 +212,8 @@ func volumeCreating(spec ResourceContainer) string {
 	return words(append(argv, spec.volume())) + " >/dev/null"
 }
 
-func resourceStanding(spec ResourceContainer, digest, envFile string) string {
-	return imageHeld(spec.Image, appPulls) + words(resourceRun(spec, digest, envFile)) + " >/dev/null"
+func runResourceScript(spec ResourceContainer, digest, envFile string) string {
+	return imagePulled(spec.Image, appPulls) + words(resourceRun(spec, digest, envFile)) + " >/dev/null"
 }
 
 func resourceRun(spec ResourceContainer, digest, envFile string) []string {
@@ -252,11 +252,11 @@ func (h *Host) initialisedUnder(ctx context.Context, spec ResourceContainer, ele
 	if err != nil {
 		return "", err
 	}
-	held := strings.Fields(said)
-	if len(held) == 0 || slices.Contains(held, spec.Volume.Generation) {
+	generations := strings.Fields(said)
+	if len(generations) == 0 || slices.Contains(generations, spec.Volume.Generation) {
 		return "", nil
 	}
-	return held[0], nil
+	return generations[0], nil
 }
 
 func swapCommand(spec ResourceContainer, from, digest, envFile, dump string) string {
@@ -291,13 +291,13 @@ func (h *Host) upgrade(ctx context.Context, spec ResourceContainer, from, digest
 	if err != nil {
 		return err
 	}
-	held, err := h.handResource(ctx, spec, secret)
+	delivery, err := h.handResource(ctx, spec, secret)
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, h.unhand(ctx, held)) }()
+	defer func() { err = errors.Join(err, h.unhand(ctx, delivery)) }()
 	if _, err := h.ran(ctx, "move "+spec.Resource+" from version "+from+" to "+spec.Volume.Generation,
-		swapCommand(spec, from, digest, held.path, strings.TrimSpace(dumped)), nil, elevation); err != nil {
+		swapCommand(spec, from, digest, delivery.path, strings.TrimSpace(dumped)), nil, elevation); err != nil {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"%s could not move from version %s to %s and is back on %s, data intact: %v",
 			spec.Resource, from, spec.Volume.Generation, from, err)
@@ -315,10 +315,10 @@ func (h *Host) handResource(ctx context.Context, spec ResourceContainer, secret 
 	if err != nil {
 		return handoff{}, err
 	}
-	held := handoff{path: EnvFile(spec.Class, spec.Name)}
+	delivery := handoff{path: EnvFile(spec.Class, spec.Name)}
 	_, err = h.owning(ctx, "write what "+spec.Resource+" is handed",
-		"install -m 0600 /dev/stdin "+quoted(held.path), rendered)
-	return held, err
+		"install -m 0600 /dev/stdin "+quoted(delivery.path), rendered)
+	return delivery, err
 }
 
 func readyCommand(spec ResourceContainer) string {
@@ -335,7 +335,7 @@ func readyCommand(spec ResourceContainer) string {
 		"done"
 }
 
-func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret string) (err error) {
+func (h *Host) RunResource(ctx context.Context, spec ResourceContainer, secret string) (err error) {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return err
@@ -344,7 +344,7 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 	if err != nil {
 		return err
 	}
-	if err := h.joining(ctx, spec.Resource, spec.Class, spec.Project, networkStanding(spec.Class, spec.Project), elevation); err != nil {
+	if err := h.joining(ctx, spec.Resource, spec.Class, spec.Project, joinNetworkScript(spec.Class, spec.Project), elevation); err != nil {
 		return err
 	}
 	said := h.said(ctx, servingCommand(spec.Name), elevation)
@@ -358,7 +358,7 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 	if from != "" {
 		if !strings.HasPrefix(said, "running ") {
 			return refusal.Refuse(refusal.CodeNotReady,
-				"%s holds version %s data, this deploy declares %s, and %s is not running to dump it\n"+
+				"%s has version %s data, this deploy declares %s, and %s is not running to dump it\n"+
 					"Run `docker start %s` or set the version back to %s",
 				spec.Resource, from, spec.Volume.Generation, spec.Name, spec.Name, from)
 		}
@@ -376,15 +376,15 @@ func (h *Host) StandResource(ctx context.Context, spec ResourceContainer, secret
 	if _, err := h.ran(ctx, "keep a volume for "+spec.Resource, volumeCreating(spec), nil, elevation); err != nil {
 		return err
 	}
-	held, err := h.handResource(ctx, spec, secret)
+	delivery, err := h.handResource(ctx, spec, secret)
 	if err != nil {
 		return err
 	}
-	defer func() { err = errors.Join(err, h.unhand(ctx, held)) }()
-	_, refused, stood := h.spoke(ctx, "stand "+spec.Resource+" up as "+spec.Name,
-		resourceStanding(spec, digest, held.path), nil, elevation)
-	if stood != nil && !strings.Contains(refused, nameTaken) {
-		return stood
+	defer func() { err = errors.Join(err, h.unhand(ctx, delivery)) }()
+	_, refused, failed := h.spoke(ctx, "run "+spec.Resource+" as "+spec.Name,
+		runResourceScript(spec, digest, delivery.path), nil, elevation)
+	if failed != nil && !strings.Contains(refused, nameTaken) {
+		return failed
 	}
 	if _, err := h.ran(ctx, "wait for "+spec.Resource+" to answer", readyCommand(spec), nil, elevation); err != nil {
 		return err

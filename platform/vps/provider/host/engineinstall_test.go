@@ -85,25 +85,25 @@ func (r *told) said() []string {
 }
 
 func installsOn(dir string, progress *told) (*bench, *[]int) {
-	stood := machine(nil)
+	box := machine(nil)
 	var toldBefore []int
-	stood.answer = func(command string) (session.Result, bool) {
+	box.answer = func(command string) (session.Result, bool) {
 		if !strings.Contains(command, dockerSource) {
 			return session.Result{}, false
 		}
 		toldBefore = append(toldBefore, len(progress.said()))
 		return installedOn(dir, command), true
 	}
-	return stood, &toldBefore
+	return box, &toldBefore
 }
 
 func TestAnInstallScriptThatFailedTwiceIsRunAgainRatherThanFailingTheApply(t *testing.T) {
 	t.Parallel()
 
 	dir, attempts := installer(t, 2)
-	stood, _ := installsOn(dir, &told{})
-	if err := stood.host().installEngine(context.Background(), nil); err != nil {
-		t.Fatalf("installEngine() = %v on a host whose install script failed twice and then stood", err)
+	box, _ := installsOn(dir, &told{})
+	if err := box.host().installEngine(context.Background(), nil); err != nil {
+		t.Fatalf("installEngine() = %v on a host whose install script failed twice and then succeeded", err)
 	}
 	ran, err := os.ReadFile(attempts)
 	if err != nil {
@@ -114,12 +114,12 @@ func TestAnInstallScriptThatFailedTwiceIsRunAgainRatherThanFailingTheApply(t *te
 	}
 }
 
-func TestAnInstallScriptThatNeverStandsIsRefusedWithABound(t *testing.T) {
+func TestAnInstallScriptThatNeverSucceedsIsRefusedWithABound(t *testing.T) {
 	t.Parallel()
 
 	dir, attempts := installer(t, 99)
-	stood, _ := installsOn(dir, &told{})
-	refused := refusalOf(t, stood.host().installEngine(context.Background(), nil), refusal.CodeNotReady)
+	box, _ := installsOn(dir, &told{})
+	refused := refusalOf(t, box.host().installEngine(context.Background(), nil), refusal.CodeNotReady)
 	ran, err := os.ReadFile(attempts)
 	if err != nil {
 		t.Fatal(err)
@@ -138,23 +138,23 @@ func TestTheWaitBetweenInstallAttemptsGrowsAndIsNotTheSameOnEveryHost(t *testing
 	spread := map[string]bool{}
 	for range 6 {
 		dir, _ := installer(t, 99)
-		stood, _ := installsOn(dir, &told{})
-		if err := stood.host().installEngine(context.Background(), nil); err == nil {
-			t.Fatal("installEngine() stood on a host whose install script never stood")
+		box, _ := installsOn(dir, &told{})
+		if err := box.host().installEngine(context.Background(), nil); err == nil {
+			t.Fatal("installEngine() succeeded on a host whose install script never succeeded")
 		}
-		waits := stood.waits()
+		waits := box.waits()
 		if len(waits) != engineInstallTries-1 {
 			t.Fatalf("the engine step waited %v over %d attempts, want one wait between each pair", waits, engineInstallTries)
 		}
-		if floor := time.Duration(engineInstallHold.base) * time.Second; waits[0] < floor {
+		if floor := time.Duration(engineInstallBackoff.base) * time.Second; waits[0] < floor {
 			t.Errorf("the first wait is %s, want at least %s: a mirror mid-sync needs longer than a round trip to finish it", waits[0], floor)
 		}
 		if waits[1] <= waits[0] {
 			t.Errorf("the second wait %s is no longer than the first %s, and a retry that does not back off hammers a mirror that is already refusing", waits[1], waits[0])
 		}
-		for _, held := range waits {
-			if ceiling := time.Duration(engineInstallHold.ceiling+engineInstallHold.spread) * time.Second; held > ceiling {
-				t.Errorf("the engine step waited %s, past the %s ceiling: an apply that stalls unboundedly is one nobody can time out", held, ceiling)
+		for _, wait := range waits {
+			if ceiling := time.Duration(engineInstallBackoff.ceiling+engineInstallBackoff.spread) * time.Second; wait > ceiling {
+				t.Errorf("the engine step waited %s, past the %s ceiling: an apply that stalls unboundedly is one nobody can time out", wait, ceiling)
 			}
 		}
 		spread[fmt.Sprint(waits)] = true
@@ -170,9 +170,9 @@ func TestEveryFailedInstallTryIsToldBeforeTheNextOneRuns(t *testing.T) {
 	dir, _ := installerSaying(t, 99, `echo 'E: Failed to fetch http://us-east-1.ec2.archive.ubuntu.com/ubuntu/dists/noble-updates/InRelease  Could not connect' >&2
 echo 'E: Some index files failed to download.' >&2`)
 	progress := &told{}
-	stood, toldBefore := installsOn(dir, progress)
-	if err := stood.host().installEngine(context.Background(), progress); err == nil {
-		t.Fatal("installEngine() stood on a host whose install script never stood")
+	box, toldBefore := installsOn(dir, progress)
+	if err := box.host().installEngine(context.Background(), progress); err == nil {
+		t.Fatal("installEngine() succeeded on a host whose install script never succeeded")
 	}
 	details := progress.said()
 	if len(*toldBefore) != engineInstallTries {
@@ -196,14 +196,14 @@ echo 'E: Some index files failed to download.' >&2`)
 func TestAnInstallSudoRefusedIsNotTriedAgain(t *testing.T) {
 	t.Parallel()
 
-	stood := machine(nil)
-	stood.facts.Root, stood.facts.Sudo = false, true
-	stood.answer = func(command string) (session.Result, bool) {
+	box := machine(nil)
+	box.facts.Root, box.facts.Sudo = false, true
+	box.answer = func(command string) (session.Result, bool) {
 		return session.Result{Code: 1, Stderr: "sudo: a password is required"}, strings.Contains(command, dockerSource)
 	}
-	refusalOf(t, stood.host().installEngine(context.Background(), nil), refusal.CodeDenied)
+	refusalOf(t, box.host().installEngine(context.Background(), nil), refusal.CodeDenied)
 	tries := 0
-	for _, command := range stood.commands() {
+	for _, command := range box.commands() {
 		if strings.Contains(command, dockerSource) {
 			tries++
 		}
@@ -211,7 +211,7 @@ func TestAnInstallSudoRefusedIsNotTriedAgain(t *testing.T) {
 	if tries != 1 {
 		t.Errorf("the install tried %d times against a sudo that refused the login, want once: sudo does not change its mind between tries", tries)
 	}
-	if waits := stood.waits(); len(waits) != 0 {
+	if waits := box.waits(); len(waits) != 0 {
 		t.Errorf("the install waited %v after a sudo refusal before refusing", waits)
 	}
 }
@@ -227,7 +227,7 @@ echo 'E: Failed to fetch http://us-east-1.ec2.archive.ubuntu.com/ubuntu/dists/no
 echo 'E: Some index files failed to download.' >&2`)
 	said, err := installing(t, dir)
 	if err == nil {
-		t.Fatalf("the engine step succeeded on a host whose install script never stood:\n%s", said)
+		t.Fatalf("the engine step succeeded on a host whose install script never succeeded:\n%s", said)
 	}
 	lines := strings.Split(strings.TrimSpace(said), "\n")
 	if len(lines) > saidLines {

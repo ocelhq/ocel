@@ -262,7 +262,7 @@ func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) (BucketStat
 			"cannot encode bucket %s: %v", spec.Bucket, err)
 	}
 	now := time.Now().UTC()
-	var standing BucketState
+	var current BucketState
 	for _, call := range calls {
 		if call.name == lifecycleCall {
 			taken, err := droveStore(spec, []storeCall{call}, now, func(what, script string) (string, error) {
@@ -272,7 +272,7 @@ func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) (BucketStat
 				return BucketState{}, refusal.Refuse(refusal.CodeNotReady,
 					"could not %s on %s: %v", call.what, h.named(), err)
 			}
-			standing.ExpiresUploads = slices.Contains(storeTook, taken[call.name].code)
+			current.ExpiresUploads = slices.Contains(storeTook, taken[call.name].code)
 			continue
 		}
 		req, err := spec.signed(call, now)
@@ -284,10 +284,10 @@ func (h *Host) ProvisionBucket(ctx context.Context, spec BucketSpec) (BucketStat
 				"could not %s on %s: %v", call.what, h.named(), err)
 		}
 	}
-	return standing, nil
+	return current, nil
 }
 
-func (h *Host) HoldOrigins(ctx context.Context, spec BucketSpec) error {
+func (h *Host) ApplyOrigins(ctx context.Context, spec BucketSpec) error {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return err

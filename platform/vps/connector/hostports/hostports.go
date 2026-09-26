@@ -18,12 +18,12 @@ import (
 
 type Records struct{}
 
-func (Records) Holds(_ context.Context, class edge.Class) (bool, error) {
+func (Records) HasStore(_ context.Context, class edge.Class) (bool, error) {
 	if _, err := os.Stat(host.RecordsHelper); err != nil {
 		return false, nil
 	}
-	held, err := os.Stat(host.RecordsDir(class))
-	return err == nil && held.IsDir(), nil
+	info, err := os.Stat(host.RecordsDir(class))
+	return err == nil && info.IsDir(), nil
 }
 
 func (Records) Records(ctx context.Context, class edge.Class, stdin io.Reader, argv ...string) (string, error) {

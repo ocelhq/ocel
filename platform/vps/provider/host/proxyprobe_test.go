@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
-func TestAProbeStandsWhereAnInterruptedRunLeftItsContainerBehind(t *testing.T) {
+func TestAProbeStartsWhereAnInterruptedRunLeftItsContainerBehind(t *testing.T) {
 	engineOrSkip(t)
 
 	if out, err := exec.Command(dockerEngine, "run", "--detach", "--name", probeName(t),
@@ -16,5 +16,5 @@ func TestAProbeStandsWhereAnInterruptedRunLeftItsContainerBehind(t *testing.T) {
 		t.Fatalf("plant the container a killed run would have left under the name this probe takes: %v\n%s", err, out)
 	}
 
-	proxyStanding(t)
+	aLiveProxy(t)
 }

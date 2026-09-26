@@ -165,14 +165,14 @@ func TestTheProxyOrdersOnDemandOnlyWhatTheSwitchboardAdmits(t *testing.T) {
 	if len(policies) != 2 {
 		t.Fatalf("the config declares %d automation policies, want the internal names' and the catch-all", len(policies))
 	}
-	for _, held := range policies {
-		if !held.OnDemand {
-			t.Errorf("the policy for %v orders ahead of any handshake, want every order on demand: a policy that is not on demand holds a hostname list that changes with every bind", held.Subjects)
+	for _, policy := range policies {
+		if !policy.OnDemand {
+			t.Errorf("the policy for %v orders ahead of any handshake, want every order on demand: a policy that is not on demand has a hostname list that changes with every bind", policy.Subjects)
 		}
 	}
 	internal, public := policies[0], policies[1]
 	if len(public.Subjects) != 0 || len(public.Issuers) != 0 {
-		t.Errorf("the catch-all policy is %+v, want no subjects and caddy's default issuer: an issuer list carrying the internal CA falls through to it for a public name whose order failed, and serves it self-signed for hours", public)
+		t.Errorf("the catch-all policy is %+v, want no subjects and caddy's default issuer: an issuer list including the internal CA falls through to it for a public name whose order failed, and serves it self-signed for hours", public)
 	}
 	if len(internal.Issuers) != 1 || internal.Issuers[0]["module"] != "internal" || len(internal.Issuers[0]) != 1 {
 		t.Errorf("the policy for names no public CA issues is issued by %v, want caddy's internal CA alone", internal.Issuers)
@@ -236,7 +236,7 @@ func TestAReloadLeavesEveryStreamTheGraceItTakesRatherThanCuttingIt(t *testing.T
 		for _, route := range server.Routes {
 			for _, handler := range route.Handle {
 				if handler["stream_close_delay"] != "30s" {
-					t.Errorf("a forward closes its streams after %v, want 30s: caddy closes every websocket a reverse_proxy holds the moment a reload unloads it", handler["stream_close_delay"])
+					t.Errorf("a forward closes its streams after %v, want 30s: caddy closes every websocket a reverse_proxy has open the moment a reload unloads it", handler["stream_close_delay"])
 				}
 			}
 		}
@@ -253,7 +253,7 @@ func TestWhatARenderSaysDependsOnWhichPairsArePinnedAndNotOnTheOrderTheyCameIn(t
 	}
 	three, _ := render(t, specified(pinned("a.example.com", "a")))
 	if bytes.Equal(one, three) {
-		t.Error("a render carrying one pin fewer says the same, so the running proxy keeps serving a pair the operator took away")
+		t.Error("a render with one pin fewer says the same, so the running proxy keeps serving a pair the operator took away")
 	}
 }
 
@@ -268,7 +268,7 @@ func TestEveryPinnedPairIsLoadedOnceOffTheDirectoryTheProxyMounts(t *testing.T) 
 		loaded := read.Apps.TLS.Certificates.LoadFiles[at]
 		mounted := caddy.PinsMount + "/" + leaf
 		if loaded.Certificate != caddy.PinCertificate(mounted) || loaded.Key != caddy.PinKey(mounted) {
-			t.Errorf("the pair pinned at %s is loaded from %s and %s, want the path it stands at inside the proxy", leaf, loaded.Certificate, loaded.Key)
+			t.Errorf("the pair pinned at %s is loaded from %s and %s, want the path it sits at inside the proxy", leaf, loaded.Certificate, loaded.Key)
 		}
 		if !slices.Equal(loaded.Tags, []string{mounted}) {
 			t.Errorf("the pair pinned at %s is tagged %v, want its own path and nothing else: a tag is how a handshake is handed this pair, and one that names a claimed hostname changes the config with every bind", leaf, loaded.Tags)
@@ -289,10 +289,10 @@ func connectionPolicies(t *testing.T, read rendered) []connectionPolicy {
 	t.Helper()
 	var policies []connectionPolicy
 	for _, server := range read.Apps.HTTP.Servers {
-		for _, held := range server.Policies {
+		for _, raw := range server.Policies {
 			var policy connectionPolicy
-			if err := json.Unmarshal(held, &policy); err != nil {
-				t.Fatalf("read the connection policy %s: %v", held, err)
+			if err := json.Unmarshal(raw, &policy); err != nil {
+				t.Fatalf("read the connection policy %s: %v", raw, err)
 			}
 			policies = append(policies, policy)
 		}
@@ -333,7 +333,7 @@ func TestAHandshakeForAPinnedNameIsHandedItsPinAheadOfAnythingOrderedOnDemand(t 
 	}
 }
 
-func TestWhatTheProxyCouldNotHoldIsRefusedRatherThanRendered(t *testing.T) {
+func TestWhatTheProxyCouldNotServeIsRefusedRatherThanRendered(t *testing.T) {
 	t.Parallel()
 
 	for what, spec := range map[string]proxy.Spec{
@@ -368,7 +368,7 @@ func TestTheAdminApiIsReachedOverItsSocketAloneAndNoConfigOrdersWithoutTheSwitch
 		t.Errorf("a config ordering nothing at all reads as declaring %s: it is stale, not dangerous", foreign)
 	}
 
-	alteredApp := func(app string, change func(held map[string]any)) []byte {
+	alteredApp := func(app string, change func(config map[string]any)) []byte {
 		var copied map[string]any
 		if err := json.Unmarshal(written, &copied); err != nil {
 			t.Fatal(err)
@@ -381,10 +381,10 @@ func TestTheAdminApiIsReachedOverItsSocketAloneAndNoConfigOrdersWithoutTheSwitch
 		return said
 	}
 	altered := func(change func(automation map[string]any)) []byte {
-		return alteredApp("tls", func(held map[string]any) { change(held["automation"].(map[string]any)) })
+		return alteredApp("tls", func(tls map[string]any) { change(tls["automation"].(map[string]any)) })
 	}
-	relay := func(held map[string]any) map[string]any {
-		return held["servers"].(map[string]any)["admit"].(map[string]any)
+	relay := func(httpApp map[string]any) map[string]any {
+		return httpApp["servers"].(map[string]any)["admit"].(map[string]any)
 	}
 	onDemand := func(automation map[string]any) map[string]any { return automation["on_demand"].(map[string]any) }
 	for foreign, config := range map[string][]byte{
@@ -440,24 +440,24 @@ func TestTheProxyAsksTheSwitchboardsAdmissionThroughARelayOnlyItsOwnLoopbackReac
 		t.Fatal(err)
 	}
 	if address, err := netip.ParseAddrPort(endpoint.Host); err != nil || !address.Addr().IsLoopback() || endpoint.Path != permission.Path {
-		t.Fatalf("the proxy asks %s, want a loopback address inside the proxy at the admission's path %s: caddy asks over tcp alone, and the admission answers only over the socket the front proxy holds", endpoint, permission.Path)
+		t.Fatalf("the proxy asks %s, want a loopback address inside the proxy at the admission's path %s: caddy asks over tcp alone, and the admission answers only over the socket the front proxy owns", endpoint, permission.Path)
 	}
-	for name, held := range read.Apps.HTTP.Servers {
+	for name, server := range read.Apps.HTTP.Servers {
 		if name == "ocel" {
 			continue
 		}
-		if !slices.Equal(held.Listen, []string{endpoint.Host}) {
-			t.Errorf("the relay listens on %v, want %s alone: whoever reaches it is answered as the front proxy", held.Listen, endpoint.Host)
+		if !slices.Equal(server.Listen, []string{endpoint.Host}) {
+			t.Errorf("the relay listens on %v, want %s alone: whoever reaches it is answered as the front proxy", server.Listen, endpoint.Host)
 		}
-		if len(held.Routes) != 1 || len(held.Routes[0].Match) != 0 || len(held.Routes[0].Handle) != 1 {
-			t.Fatalf("the relay runs routes %+v, want one forward", held.Routes)
+		if len(server.Routes) != 1 || len(server.Routes[0].Match) != 0 || len(server.Routes[0].Handle) != 1 {
+			t.Fatalf("the relay runs routes %+v, want one forward", server.Routes)
 		}
-		upstreams, _ := json.Marshal(held.Routes[0].Handle[0]["upstreams"])
-		if held.Routes[0].Handle[0]["handler"] != "reverse_proxy" || string(upstreams) != `[{"dial":"`+permission.Dial+`"}]` {
-			t.Errorf("the relay runs %v, want a forward to %s and nothing else", held.Routes[0].Handle[0], permission.Dial)
+		upstreams, _ := json.Marshal(server.Routes[0].Handle[0]["upstreams"])
+		if server.Routes[0].Handle[0]["handler"] != "reverse_proxy" || string(upstreams) != `[{"dial":"`+permission.Dial+`"}]` {
+			t.Errorf("the relay runs %v, want a forward to %s and nothing else", server.Routes[0].Handle[0], permission.Dial)
 		}
-		if len(held.Policies) != 0 || held.Errors != nil {
-			t.Errorf("the relay declares tls policies %s and errors %+v, want neither: it answers the proxy in plain http what the admission said", held.Policies, held.Errors)
+		if len(server.Policies) != 0 || server.Errors != nil {
+			t.Errorf("the relay declares tls policies %s and errors %+v, want neither: it answers the proxy in plain http what the admission said", server.Policies, server.Errors)
 		}
 	}
 }
@@ -482,6 +482,6 @@ func TestTheAccessLogKeepsThePathAndRedactsTheQuery(t *testing.T) {
 	}
 	uri := logging.Logs["ocel"].Encoder.Fields["request>uri"]
 	if uri.Filter != "regexp" || uri.Regexp != `\?.*$` || uri.Value != "?redacted" {
-		t.Errorf("the access log writes the request uri through %+v, want the query string replaced and the path kept: a query carries tokens", uri)
+		t.Errorf("the access log writes the request uri through %+v, want the query string replaced and the path kept: a query contains tokens", uri)
 	}
 }

@@ -74,25 +74,25 @@ func TestLiveAnUnknownHostIsRefusedWithEverythingTheUserNeeds(t *testing.T) {
 		t.Errorf("Open() refused over %+v, want the alias as written and the resolved address", trust)
 	}
 	if trust.Got.Type == "" || trust.Got.Key == "" || !strings.HasPrefix(trust.Got.Fingerprint, "SHA256:") {
-		t.Errorf("Open() refused carrying %+v, want the key type, blob and SHA256 fingerprint", trust.Got)
+		t.Errorf("Open() refused reporting %+v, want the key type, blob and SHA256 fingerprint", trust.Got)
 	}
 	if len(trust.KnownHosts) == 0 || trust.KnownHosts[0] != h.knownHosts {
 		t.Errorf("Open() named %v, want the known_hosts file ssh_config points at", trust.KnownHosts)
 	}
 }
 
-func TestLiveAKeyTheUserHoldsOpensTheSession(t *testing.T) {
+func TestLiveAKeyTheUserTrustsOpensTheSession(t *testing.T) {
 	h := live(t)
 	key := h.trust(t)
 
 	live, err := Open(context.Background(), h.target)
 	if err != nil {
-		t.Fatalf("Open() = %v, want a session against a host the user's known_hosts holds", err)
+		t.Fatalf("Open() = %v, want a session against a host the user's known_hosts lists", err)
 	}
 	defer live.Close()
 
 	if live.HostKey().Fingerprint != key.Fingerprint {
-		t.Errorf("Fingerprint() = %s, want the key known_hosts holds, %s", live.HostKey().Fingerprint, key.Fingerprint)
+		t.Errorf("Fingerprint() = %s, want the key known_hosts lists, %s", live.HostKey().Fingerprint, key.Fingerprint)
 	}
 	if want := os.Getenv("OCEL_INCUS_USER") + "@" + alias; live.Destination().Principal() != want {
 		t.Errorf("Principal() = %q, want %q", live.Destination().Principal(), want)
@@ -188,7 +188,7 @@ func TestLiveALoginWithoutPasswordlessSudoIsRefused(t *testing.T) {
 	}
 	defer admin.Close()
 	if _, err := admin.Run(context.Background(), lodger); err != nil {
-		t.Fatalf("could not stand up a login without sudo: %v", err)
+		t.Fatalf("could not create a login without sudo: %v", err)
 	}
 
 	plain := h.target

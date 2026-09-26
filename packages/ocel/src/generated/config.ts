@@ -403,7 +403,7 @@ export interface VpsTarget {
   host: string;
   /** The private key to authenticate with, as a path. */
   identityFile?: string;
-  /** The port sshd listens on. Omit it and ssh's own default stands. */
+  /** The port sshd listens on. Omit it and ssh's own default applies. */
   port?: number;
   /** The account to log in as. Omit it and ssh resolves the user itself. */
   user?: string;

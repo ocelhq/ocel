@@ -30,7 +30,7 @@ const (
 )
 
 type RecordTransport interface {
-	Holds(ctx context.Context, class edge.Class) (bool, error)
+	HasStore(ctx context.Context, class edge.Class) (bool, error)
 
 	Records(ctx context.Context, class edge.Class, stdin io.Reader, argv ...string) (string, error)
 }
@@ -46,11 +46,11 @@ func (r *Records) tier(ctx context.Context, name records.Name) (edge.Class, stri
 	if err != nil {
 		return "", "", false, err
 	}
-	stood, err := r.over.Holds(ctx, class)
+	provisioned, err := r.over.HasStore(ctx, class)
 	if err != nil {
 		return "", "", false, err
 	}
-	return class, encoded, stood, nil
+	return class, encoded, provisioned, nil
 }
 
 func unbootstrapped(class edge.Class) error {
@@ -60,11 +60,11 @@ func unbootstrapped(class edge.Class) error {
 }
 
 func (r *Records) Read(ctx context.Context, name records.Name) (records.Record, error) {
-	class, encoded, stood, err := r.tier(ctx, name)
+	class, encoded, provisioned, err := r.tier(ctx, name)
 	if err != nil {
 		return records.Record{}, err
 	}
-	if !stood {
+	if !provisioned {
 		return records.Record{}, records.ErrNotFound
 	}
 	rendered, err := r.helper(ctx, class, nil, "read", encoded)
@@ -79,11 +79,11 @@ func (r *Records) Read(ctx context.Context, name records.Name) (records.Record, 
 }
 
 func (r *Records) Write(ctx context.Context, record records.Record) (records.Revision, error) {
-	class, encoded, stood, err := r.tier(ctx, record.Name)
+	class, encoded, provisioned, err := r.tier(ctx, record.Name)
 	if err != nil {
 		return "", err
 	}
-	if !stood {
+	if !provisioned {
 		return "", unbootstrapped(class)
 	}
 	rendered, err := r.helper(ctx, class, bytes.NewReader(body(record)), "write", encoded, string(record.Revision))
@@ -94,7 +94,7 @@ func (r *Records) Write(ctx context.Context, record records.Record) (records.Rev
 }
 
 func (r *Records) WritePair(ctx context.Context, first, second records.Record) error {
-	class, one, stood, err := r.tier(ctx, first.Name)
+	class, one, provisioned, err := r.tier(ctx, first.Name)
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func (r *Records) WritePair(ctx context.Context, first, second records.Record) e
 			"%s and %s belong to different classes",
 			first.Name, second.Name)
 	}
-	if !stood {
+	if !provisioned {
 		return unbootstrapped(class)
 	}
 	fed := append(body(first), body(second)...)
@@ -128,11 +128,11 @@ func (r *Records) WritePair(ctx context.Context, first, second records.Record) e
 }
 
 func (r *Records) Remove(ctx context.Context, name records.Name, expected records.Revision) error {
-	class, encoded, stood, err := r.tier(ctx, name)
+	class, encoded, provisioned, err := r.tier(ctx, name)
 	if err != nil {
 		return err
 	}
-	if !stood {
+	if !provisioned {
 		return records.ErrNotFound
 	}
 	rendered, err := r.helper(ctx, class, nil, "remove", encoded, string(expected))
@@ -147,18 +147,18 @@ func (r *Records) Remove(ctx context.Context, name records.Name, expected record
 }
 
 func (r *Records) List(ctx context.Context, under records.Name) ([]records.Record, error) {
-	class, encoded, stood, err := r.tier(ctx, under)
+	class, encoded, provisioned, err := r.tier(ctx, under)
 	if err != nil {
 		return nil, err
 	}
-	if !stood {
+	if !provisioned {
 		return nil, nil
 	}
 	rendered, err := r.helper(ctx, class, nil, "list", encoded)
 	if err != nil {
 		return nil, err
 	}
-	var held []records.Record
+	var found []records.Record
 	for _, line := range strings.Split(strings.TrimSpace(rendered), "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
@@ -176,9 +176,9 @@ func (r *Records) List(ctx context.Context, under records.Name) ([]records.Recor
 		if err != nil {
 			return nil, refusal.Refuse(refusal.CodeDenied, "%s is not a record ocel wrote", name)
 		}
-		held = append(held, records.Record{Name: name, Bytes: bytes, Revision: records.Revision(columns[1])})
+		found = append(found, records.Record{Name: name, Bytes: bytes, Revision: records.Revision(columns[1])})
 	}
-	return held, nil
+	return found, nil
 }
 
 func (r *Records) helper(ctx context.Context, class edge.Class, stdin io.Reader, args ...string) (string, error) {
@@ -187,8 +187,8 @@ func (r *Records) helper(ctx context.Context, class edge.Class, stdin io.Reader,
 
 type sshRecords struct{ host *Host }
 
-func (s sshRecords) Holds(ctx context.Context, class edge.Class) (bool, error) {
-	return s.host.holds(ctx, class)
+func (s sshRecords) HasStore(ctx context.Context, class edge.Class) (bool, error) {
+	return s.host.hasStore(ctx, class)
 }
 
 func (s sshRecords) Records(ctx context.Context, class edge.Class, stdin io.Reader, argv ...string) (string, error) {

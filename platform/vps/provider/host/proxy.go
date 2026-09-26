@@ -49,10 +49,10 @@ const (
 	migrateSysctl = "net.ipv4.tcp_migrate_req"
 	migrateKnob   = "/proc/sys/net/ipv4/tcp_migrate_req"
 	migrateFact   = "migrate="
-	migrateHeld   = "held"
+	migrateSet    = "set"
 	migrateUnset  = "unset"
 	mountsFact    = "mounts="
-	mountsHeld    = "held"
+	mountsIntact  = "intact"
 	mountsMoved   = "moved"
 	execUnstarted = "126|127"
 )
@@ -61,7 +61,7 @@ var proxyCapabilities = []string{"NET_BIND_SERVICE", "DAC_OVERRIDE", "DAC_READ_S
 
 const (
 	networkFact   = "network=present"
-	networkHeld   = "network=held"
+	networkInUse  = "network=in-use"
 	networkJoined = "joined"
 	networkLeft   = "left"
 )
@@ -103,7 +103,7 @@ func embedded(name, arch string) []byte {
 
 func ProxyItems(arch string, front Front) []Item {
 	binary := switchboardBinary(arch)
-	board := switchboardStanding(binary, front)
+	board := switchboardBox(binary, front)
 	if front.adopted() {
 		return []Item{
 			dir(SwitchboardDir, 0o755, rootOwner, ""),
@@ -216,7 +216,7 @@ func notAFile(name string) string {
 	return "printf '%s\\n' " + quoted(name+" is not a regular file") + " >&2; exit 1"
 }
 
-func bindsStanding(files []string) string {
+func bindsPresent(files []string) string {
 	var written string
 	for _, name := range files {
 		written += "if [ ! -f " + quoted(name) + " ]; then " + notAFile(name) + "; fi\n"
@@ -321,10 +321,10 @@ func (s boxContainer) factsOver(binds []string) []byte {
 		"ports=" + marshalled(published(s.ports)),
 		"config=" + s.config,
 		"state=running",
-		mountsFact + mountsHeld,
+		mountsFact + mountsIntact,
 	}
 	if s.migrates {
-		stated = append(stated, migrateFact+migrateHeld)
+		stated = append(stated, migrateFact+migrateSet)
 	}
 	for _, joined := range s.networks {
 		stated = append(stated, joinedFact(joined)+networkJoined)
@@ -337,21 +337,21 @@ func (s boxContainer) factsOver(binds []string) []byte {
 }
 
 func published(ports []publish) map[string][]map[string]string {
-	held := map[string][]map[string]string{}
+	bindings := map[string][]map[string]string{}
 	for _, port := range ports {
-		held[port.target+"/tcp"] = []map[string]string{{"HostIp": port.addr, "HostPort": port.port}}
+		bindings[port.target+"/tcp"] = []map[string]string{{"HostIp": port.addr, "HostPort": port.port}}
 	}
-	return held
+	return bindings
 }
 
 func proxyServing() []string { return []string{caddy.HTTPPort, caddy.HTTPSPort} }
 
 func servingPublished() []publish {
-	var held []publish
+	var publishes []publish
 	for _, port := range proxyServing() {
-		held = append(held, publish{port: port, target: port})
+		publishes = append(publishes, publish{port: port, target: port})
 	}
-	return held
+	return publishes
 }
 
 func marshalled(value any) string {
@@ -402,9 +402,9 @@ func (s boxContainer) run(sysctls ...string) []string {
 
 func (s boxContainer) writing(attempts int) string {
 	written := "set -e\n" +
-		s.networksStanding() +
-		bindsStanding(s.files) +
-		imageHeld(s.image, containerPulls) +
+		s.networksPresent() +
+		bindsPresent(s.files) +
+		imagePulled(s.image, containerPulls) +
 		"docker rm --force " + quoted(s.name) + " >/dev/null 2>&1 || true\n" +
 		s.started()
 	if s.joins {
@@ -423,17 +423,17 @@ func (s boxContainer) started() string {
 		"else\n" + run + "fi\n"
 }
 
-func (s boxContainer) networksStanding() string {
-	var standing string
+func (s boxContainer) networksPresent() string {
+	var checks string
 	for _, joined := range s.networks {
 		missing := fmt.Sprintf("option %q names the docker network %s, which this box does not have: start the proxy that creates it, or create it with docker network create %s",
 			joined.option, joined.name, joined.name)
-		standing += "if ! docker network inspect " + quoted(joined.name) + " >/dev/null 2>&1; then\n" +
+		checks += "if ! docker network inspect " + quoted(joined.name) + " >/dev/null 2>&1; then\n" +
 			"printf '%s\\n' " + quoted(missing) + " >&2\n" +
 			"exit 1\n" +
 			"fi\n"
 	}
-	return standing
+	return checks
 }
 
 func joinedFact(joined userNetwork) string { return "network:" + joined.name + "=" }
@@ -444,16 +444,16 @@ func rejoining(name string) string {
 		"done\n"
 }
 
-func imageHeld(imageRef string, attempts int) string {
+func imagePulled(imageRef string, attempts int) string {
 	image := quoted(imageRef)
-	return "at=0\n" + pullHold.start() +
+	return "at=0\n" + scriptPullBackoff.start() +
 		"until docker image inspect " + image + " >/dev/null 2>&1 || docker pull " + image + " >/dev/null; do\n" +
 		"at=$((at + 1))\n" +
 		"if [ \"$at\" -ge " + fmt.Sprint(attempts) + " ]; then\n" +
 		"printf '%s\\n' " + quoted(fmt.Sprintf("%s was not pulled in %d attempts", imageRef, attempts)) + " >&2\n" +
 		"exit 1\n" +
 		"fi\n" +
-		pullHold.again() +
+		scriptPullBackoff.again() +
 		"done\n"
 }
 
@@ -479,14 +479,14 @@ func (s boxContainer) rising(attempts int) string {
 		"exit 1"
 }
 
-func standingProbe(kind, name, ask, fact string) string {
+func presenceProbe(kind, name, ask, fact string) string {
 	return "if command -v " + quoted(dockerEngine) + " >/dev/null 2>&1 && " + ask + "; then\n" +
 		reports(quoted(kind), quoted(name), "0", quoted(rootOwner),
 			`"$(printf '%s\n' `+quoted(fact)+` | sha256sum | cut -d' ' -f1)"`) + "\nfi"
 }
 
 func networkProbe() string {
-	return standingProbe(KindNetwork, ProxyNetwork,
+	return presenceProbe(KindNetwork, ProxyNetwork,
 		"docker network inspect "+quoted(ProxyNetwork)+" >/dev/null 2>&1", networkFact)
 }
 
@@ -496,8 +496,8 @@ func (s boxContainer) probe() string {
 		template += "\n" + joinedFact(joined) + `{{if index .NetworkSettings.Networks "` + joined.name + `"}}` + networkJoined + `{{else}}` + networkLeft + `{{end}}`
 	}
 	if s.migrates {
-		template += "\n" + migrateFact + `{{if eq (index .HostConfig.Sysctls "` + migrateSysctl + `") "1"}}` + migrateHeld + `{{else}}` + migrateUnset + `{{end}}`
-		normalized = "if [ ! -e " + quoted(migrateKnob) + " ]; then facts=\"${facts%" + migrateFact + "*}" + migrateFact + migrateHeld + "\"; fi\n"
+		template += "\n" + migrateFact + `{{if eq (index .HostConfig.Sysctls "` + migrateSysctl + `") "1"}}` + migrateSet + `{{else}}` + migrateUnset + `{{end}}`
+		normalized = "if [ ! -e " + quoted(migrateKnob) + " ]; then facts=\"${facts%" + migrateFact + "*}" + migrateFact + migrateSet + "\"; fi\n"
 	}
 	return "if command -v " + quoted(dockerEngine) + " >/dev/null 2>&1 && " +
 		"facts=$(docker inspect --type container --format " + quoted(template) + " " + quoted(s.name) + " 2>/dev/null); then\n" +
@@ -517,7 +517,7 @@ func (s boxContainer) mountsProbe() string {
 		compared += "if outside=$(stat -c %d:%i " + quoted(source) + " 2>/dev/null) && " +
 			"! printf '%s\\n' \"$inside\" | grep -Fqx -- " + quoted(dest) + "\" $outside\"; then mounts=" + mountsMoved + "; fi\n"
 	}
-	return "mounts=" + mountsHeld + "\n" +
+	return "mounts=" + mountsIntact + "\n" +
 		"if inside=$(" + words(asked) + " 2>/dev/null); then\n" + compared +
 		"else case $? in " + execUnstarted + ") mounts=" + mountsMoved + " ;; esac\n" +
 		"fi\n" +

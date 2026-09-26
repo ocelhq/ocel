@@ -18,11 +18,11 @@ type account struct {
 	password string
 }
 
-func standing() account {
+func decidedAccount() account {
 	return account{shell: "/bin/sh", home: "/var/lib/ocel", groups: "ocel-deploy docker", password: "*"}
 }
 
-func stubs(t *testing.T, held *account) string {
+func stubs(t *testing.T, existing *account) string {
 	t.Helper()
 	dir := t.TempDir()
 	log := filepath.Join(dir, "log")
@@ -34,11 +34,11 @@ func stubs(t *testing.T, held *account) string {
 
 	passwd, shadow := "", ""
 	identity := "exit 1\n"
-	if held != nil {
-		passwd = deployUser + ":x:997:997::" + held.home + ":" + held.shell
-		identity = "printf '%s\\n' " + quoted(held.groups) + "\n"
-		if held.password != "" {
-			shadow = deployUser + ":" + held.password + ":20000:0:99999:7:::"
+	if existing != nil {
+		passwd = deployUser + ":x:997:997::" + existing.home + ":" + existing.shell
+		identity = "printf '%s\\n' " + quoted(existing.groups) + "\n"
+		if existing.password != "" {
+			shadow = deployUser + ":" + existing.password + ":20000:0:99999:7:::"
 		}
 	}
 	write("getent", said+`case "$1 $2" in
@@ -100,32 +100,32 @@ func TestThePrincipalIsWrittenWithALockedPasswordAndNeverThroughPasswd(t *testin
 	}
 }
 
-func TestAPrincipalThatAlreadyStandsIsMovedRatherThanRemade(t *testing.T) {
+func TestAPrincipalThatAlreadyExistsIsMovedRatherThanRemade(t *testing.T) {
 	t.Parallel()
 
-	held := standing()
-	dir := stubs(t, &held)
+	existing := decidedAccount()
+	dir := stubs(t, &existing)
 	sh(t, dir, principal().command())
 	log := ran(t, dir)
 
 	if strings.Contains(log, "useradd") {
-		t.Errorf("writing a principal that already stands ran\n%s\nwant the account it found brought to what ocel writes", log)
+		t.Errorf("writing a principal that already exists ran\n%s\nwant the account it found brought to what ocel writes", log)
 	}
 	if !strings.Contains(log, "usermod -g "+deployUser+" -aG docker -d /var/lib/ocel -s /bin/sh "+deployUser) {
-		t.Errorf("writing a principal that already stands ran\n%s\nwant every field ocel names set on it, and the supplementary list appended to rather than replaced", log)
+		t.Errorf("writing a principal that already exists ran\n%s\nwant every field ocel names set on it, and the supplementary list appended to rather than replaced", log)
 	}
 }
 
-func TestTheProbeAndTheWriteAgreeOnWhatAStandingPrincipalIs(t *testing.T) {
+func TestTheProbeAndTheWriteAgreeOnWhatACurrentPrincipalIs(t *testing.T) {
 	t.Parallel()
 
-	held := standing()
-	observed, _, err := readSurvey(sh(t, stubs(t, &held), deployLogin().survey()))
+	existing := decidedAccount()
+	observed, _, err := readSurvey(sh(t, stubs(t, &existing), deployLogin().survey()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, want := observed[principal().ID()], principal().Digest(); got != want {
-		t.Errorf("the probe read %q of a principal standing as ocel writes it, want %q", got, want)
+		t.Errorf("the probe read %q of a principal that exists as ocel writes it, want %q", got, want)
 	}
 }
 
@@ -142,14 +142,14 @@ func TestAPrincipalThatDriftedFromWhatOcelWroteIsNotCurrent(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			held := standing()
-			drift(&held)
-			observed, _, err := readSurvey(sh(t, stubs(t, &held), deployLogin().survey()))
+			existing := decidedAccount()
+			drift(&existing)
+			observed, _, err := readSurvey(sh(t, stubs(t, &existing), deployLogin().survey()))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, stood := observed[principal().ID()]; !stood {
-				t.Fatal("the probe read no account where one stands, so a drifted principal reads as one nothing has created")
+			if _, present := observed[principal().ID()]; !present {
+				t.Fatal("the probe read no account where one exists, so a drifted principal reads as one nothing has created")
 			}
 			if observed[principal().ID()] == principal().Digest() {
 				t.Errorf("the probe calls a principal with %s current, and nothing would ever bring it back", name)
@@ -158,7 +158,7 @@ func TestAPrincipalThatDriftedFromWhatOcelWroteIsNotCurrent(t *testing.T) {
 	}
 }
 
-func TestAGetentThatWillNotRunIsNotAHostCarryingNoAccount(t *testing.T) {
+func TestAGetentThatWillNotRunIsNotAHostWithNoAccount(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -179,9 +179,9 @@ func TestAGetentThatFindsNoSuchAccountIsAnAbsenceAndNotARefusal(t *testing.T) {
 
 	observed, _, err := readSurvey(sh(t, stubs(t, nil), deployLogin().survey()))
 	if err != nil {
-		t.Fatalf("a survey of a host that carries no such account = %v, want the absence a first bootstrap reads", err)
+		t.Fatalf("a survey of a host that has no such account = %v, want the absence a first bootstrap reads", err)
 	}
-	if _, stood := observed[principal().ID()]; stood {
+	if _, present := observed[principal().ID()]; present {
 		t.Errorf("the probe read %s on a host whose getent knows no such account", principal().ID())
 	}
 }
@@ -189,10 +189,10 @@ func TestAGetentThatFindsNoSuchAccountIsAnAbsenceAndNotARefusal(t *testing.T) {
 func TestOneSurveyReadsBackBothTheAccountAndThePaths(t *testing.T) {
 	t.Parallel()
 
-	held := standing()
+	existing := decidedAccount()
 	class := edge.ClassProduction
 	items := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
-	observed, _, err := readSurvey(sh(t, stubs(t, &held), survey(items, StampPath(class))))
+	observed, _, err := readSurvey(sh(t, stubs(t, &existing), survey(items, StampPath(class))))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -201,14 +201,14 @@ func TestOneSurveyReadsBackBothTheAccountAndThePaths(t *testing.T) {
 	}
 }
 
-func TestAPrincipalNothingCreatedIsNotStanding(t *testing.T) {
+func TestAPrincipalNothingCreatedIsNotPresent(t *testing.T) {
 	t.Parallel()
 
 	observed, _, err := readSurvey(sh(t, stubs(t, nil), deployLogin().survey()))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, stood := observed[principal().ID()]; stood {
+	if _, present := observed[principal().ID()]; present {
 		t.Error("the probe read an account on a host that has none")
 	}
 }
@@ -219,14 +219,14 @@ func described(t *testing.T) map[string]string {
 	for _, line := range strings.Split(strings.TrimRight(string(principal().Content), "\n"), "\n") {
 		key, value, split := strings.Cut(line, "=")
 		if !split {
-			t.Fatalf("the account description carries %q, which names no fact", line)
+			t.Fatalf("the account description contains %q, which names no fact", line)
 		}
 		facts[key] = value
 	}
 	return facts
 }
 
-func TestEveryFactTheAccountDescriptionCarriesIsOneTheWriteSets(t *testing.T) {
+func TestEveryFactTheAccountDescriptionContainsIsOneTheWriteSets(t *testing.T) {
 	t.Parallel()
 
 	facts := described(t)
@@ -257,7 +257,7 @@ func TestTheGroupTheAccountDescriptionNamesIsTheGroupBothBranchesAdd(t *testing.
 		}
 	}
 	if branches != 2 {
-		t.Errorf("the write carries %d branches that create or move the account, want the group held on both:\n%s", branches, written)
+		t.Errorf("the write has %d branches that create or move the account, want the group added on both:\n%s", branches, written)
 	}
 }
 
@@ -266,24 +266,24 @@ func TestAPasswordFieldTheHostWillNotShowSurveysTheLoginNotAtAll(t *testing.T) {
 
 	probed := func(password string) (string, bool) {
 		t.Helper()
-		held := standing()
-		held.password = password
-		observed, _, err := readSurvey(sh(t, stubs(t, &held), deployLogin().survey()))
+		existing := decidedAccount()
+		existing.password = password
+		observed, _, err := readSurvey(sh(t, stubs(t, &existing), deployLogin().survey()))
 		if err != nil {
 			t.Fatal(err)
 		}
-		digest, stood := observed[principal().ID()]
-		return digest, stood
+		digest, present := observed[principal().ID()]
+		return digest, present
 	}
 
-	if _, stood := probed(""); stood {
+	if _, present := probed(""); present {
 		t.Error("a shadow field the host will not show surveys as a login, and every reading a login without root takes would call the principal drifted forever")
 	}
-	unlocked, stood := probed("$6$salt$hash")
-	if !stood {
-		t.Fatal("the probe read no account where one stands with a password on it")
+	unlocked, present := probed("$6$salt$hash")
+	if !present {
+		t.Fatal("the probe read no account where one exists with a password on it")
 	}
 	if unlocked == principal().Digest() {
-		t.Error("a login carrying a password reads as the locked one ocel wrote, and drift would never be seen")
+		t.Error("a login with a password reads as the locked one ocel wrote, and drift would never be seen")
 	}
 }

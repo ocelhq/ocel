@@ -2,7 +2,7 @@
 set -eu
 
 port=${OCEL_FRONT_PORT:-8480}
-held=/var/lib/ocel-front/nginx
+state=/var/lib/ocel-front/nginx
 [ "$#" -gt 0 ] || {
     echo "up.sh: name the hostnames the certificate covers, wildcards allowed" >&2
     exit 2
@@ -56,5 +56,5 @@ nginx -t 2>/dev/null
 systemctl enable --now nginx >/dev/null 2>&1
 systemctl reload nginx
 
-install -d -m 0755 "$held"
-find /etc/nginx -type f | LC_ALL=C sort | xargs sha256sum > "$held/config.sum"
+install -d -m 0755 "$state"
+find /etc/nginx -type f | LC_ALL=C sort | xargs sha256sum > "$state/config.sum"

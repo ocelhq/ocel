@@ -10,15 +10,15 @@ import (
 	"github.com/ocelhq/ocel/pkg/target"
 )
 
-func TestAnUnsetComputeTakesTheBoxsStandingProcess(t *testing.T) {
+func TestAnUnsetComputeTakesTheBoxsLongRunningProcess(t *testing.T) {
 	t.Parallel()
 
-	held, err := provider.ConnectorCompute("", connectorCompute)
+	picked, err := provider.ConnectorCompute("", connectorCompute)
 	if err != nil {
 		t.Fatalf("provider.ConnectorCompute(\"\", connectorCompute) = %v, want the provider to pick for itself", err)
 	}
-	if held != provider.ComputeContainer {
-		t.Errorf("provider.ConnectorCompute(\"\", connectorCompute) = %q, want %q", held, provider.ComputeContainer)
+	if picked != provider.ComputeContainer {
+		t.Errorf("provider.ConnectorCompute(\"\", connectorCompute) = %q, want %q", picked, provider.ComputeContainer)
 	}
 }
 
@@ -37,9 +37,9 @@ func TestAComputeNoMachineHandsOutIsRefusedByTheProvider(t *testing.T) {
 func TestADestinationTheConsoleCannotDialIsRefusedBeforeAnyRowIsWritten(t *testing.T) {
 	t.Parallel()
 
-	for _, held := range []string{"", "203.0.113.10", "2001:db8::1"} {
-		if err := dialable(held); err == nil {
-			t.Errorf("dialable(%q) = nil, want the describe that ocel connector add reads first to refuse", held)
+	for _, address := range []string{"", "203.0.113.10", "2001:db8::1"} {
+		if err := dialable(address); err == nil {
+			t.Errorf("dialable(%q) = nil, want the describe that ocel connector add reads first to refuse", address)
 		}
 	}
 	if err := dialable("box.example.com"); err != nil {
@@ -47,7 +47,7 @@ func TestADestinationTheConsoleCannotDialIsRefusedBeforeAnyRowIsWritten(t *testi
 	}
 }
 
-func TestTheHostKeyDigestStandsInATarget(t *testing.T) {
+func TestTheHostKeyDigestFitsInATarget(t *testing.T) {
 	t.Parallel()
 
 	key := provider.HostKey{
@@ -60,9 +60,9 @@ func TestTheHostKeyDigestStandsInATarget(t *testing.T) {
 	}
 	fingerprint, err := target.Fingerprint("vps", digest, "ocel")
 	if err != nil {
-		t.Fatalf("target.Fingerprint(vps, %q, ocel) = %v, want a host key a target can carry", digest, err)
+		t.Fatalf("target.Fingerprint(vps, %q, ocel) = %v, want a host key a target can include", digest, err)
 	}
 	if !strings.HasPrefix(digest, "sha256:") || fingerprint != "vps/"+digest+"/ocel" {
-		t.Errorf("fingerprint = %q, want the digest to stand as one segment", fingerprint)
+		t.Errorf("fingerprint = %q, want the digest to appear as one segment", fingerprint)
 	}
 }

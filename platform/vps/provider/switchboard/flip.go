@@ -15,14 +15,14 @@ const (
 )
 
 type Drain struct {
-	Address string
-	Held    int
-	Expired bool
+	Address  string
+	InFlight int
+	Expired  bool
 }
 
 func (d Drain) String() string {
 	if d.Expired {
-		return fmt.Sprintf("%s %s %d", DrainExpired, d.Address, d.Held)
+		return fmt.Sprintf("%s %s %d", DrainExpired, d.Address, d.InFlight)
 	}
 	return Drained + " " + d.Address
 }
@@ -74,9 +74,9 @@ func (b *Board) Flip(ctx context.Context, path string, retiring []string, window
 			return ctx.Err()
 		case <-ceiling.C:
 			for _, address := range slices.Sorted(maps.Keys(pending)) {
-				held := b.ledger.inFlight(address)
+				remaining := b.ledger.inFlight(address)
 				b.cutUnrouted(address)
-				tell(Drain{Address: address, Held: held, Expired: true})
+				tell(Drain{Address: address, InFlight: remaining, Expired: true})
 			}
 			return nil
 		}

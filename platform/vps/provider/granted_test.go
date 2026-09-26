@@ -33,12 +33,12 @@ func TestABucketAnswersTheHostnamesItsOwnProjectClaims(t *testing.T) {
 		t.Fatalf("Bucket() = %v", err)
 	}
 
-	held := fedBy(t, machine, "?cors")
-	if !strings.Contains(held, "<AllowedOrigin>https://shop.example.com</AllowedOrigin>") {
-		t.Errorf("the bucket does not answer the hostname its own project claims, so a browser on it is refused:\n%s", held)
+	rules := fedBy(t, machine, "?cors")
+	if !strings.Contains(rules, "<AllowedOrigin>https://shop.example.com</AllowedOrigin>") {
+		t.Errorf("the bucket does not answer the hostname its own project claims, so a browser on it is refused:\n%s", rules)
 	}
-	if strings.Contains(held, "<AllowedOrigin>*</AllowedOrigin>") {
-		t.Errorf("the bucket answers every origin on the internet:\n%s", held)
+	if strings.Contains(rules, "<AllowedOrigin>*</AllowedOrigin>") {
+		t.Errorf("the bucket answers every origin on the internet:\n%s", rules)
 	}
 }
 
@@ -94,17 +94,17 @@ func TestAnAppsUploadSessionsLiveWhereNoOtherAppsAccountReaches(t *testing.T) {
 		t.Fatalf("both apps keep their upload sessions at %q, so either reads the other's session secrets and forges its callbacks",
 			web.Store.Sessions)
 	}
-	for _, held := range []*vars.Store{web.Store, admin.Store} {
-		if !strings.HasPrefix(held.Sessions, constants.StoreSessionsBucket()+"/") {
-			t.Errorf("upload sessions live at %q, want a prefix inside the store's own sessions bucket", held.Sessions)
+	for _, store := range []*vars.Store{web.Store, admin.Store} {
+		if !strings.HasPrefix(store.Sessions, constants.StoreSessionsBucket()+"/") {
+			t.Errorf("upload sessions live at %q, want a prefix inside the store's own sessions bucket", store.Sessions)
 		}
-		if slices.Contains(held.Granted, held.Sessions) {
-			t.Errorf("the sessions prefix %q is one of the granted buckets, so a request can name it", held.Sessions)
+		if slices.Contains(store.Granted, store.Sessions) {
+			t.Errorf("the sessions prefix %q is one of the granted buckets, so a request can name it", store.Sessions)
 		}
 	}
 }
 
-func TestAnAppsStoreAccountIsHeldToItsOwnSessions(t *testing.T) {
+func TestAnAppsStoreAccountIsLimitedToItsOwnSessions(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{kept: sealedRootKey()}
@@ -112,7 +112,7 @@ func TestAnAppsStoreAccountIsHeldToItsOwnSessions(t *testing.T) {
 
 	policy := fedBy(t, machine, "add-service-account")
 	if !strings.Contains(policy, "arn:aws:s3:::"+manifest.Store.Sessions+"/*") {
-		t.Errorf("the app's account is not held to its own sessions prefix:\n%s", policy)
+		t.Errorf("the app's account is not limited to its own sessions prefix:\n%s", policy)
 	}
 	if strings.Contains(policy, `"arn:aws:s3:::`+constants.StoreSessionsBucket()+`"`) ||
 		strings.Contains(policy, `"arn:aws:s3:::`+constants.StoreSessionsBucket()+`/*"`) {

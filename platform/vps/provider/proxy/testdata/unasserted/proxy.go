@@ -16,9 +16,8 @@ func (u *Unasserted) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (u *Unasserted) Reload(context.Context) error { return nil }
 
-func (u *Unasserted) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
+func (u *Unasserted) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
 func (u *Unasserted) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
-

@@ -49,12 +49,12 @@ func TestTheFrontProxyHandsItsListenersOnWhereverTheKernelCan(t *testing.T) {
 
 	migrating := "--sysctl " + migrateSysctl + "=1"
 	if run := ranWith(t, kernelMigrating(t, true), frontProxy()); !strings.Contains(run, migrating) {
-		t.Errorf("the front proxy on a kernel that migrates listeners ran as %q, carrying no %s: a reload then resets the connections queued on the listener it closes", run, migrating)
+		t.Errorf("the front proxy on a kernel that migrates listeners ran as %q, with no %s: a reload then resets the connections queued on the listener it closes", run, migrating)
 	}
 	if run := ranWith(t, kernelMigrating(t, false), frontProxy()); strings.Contains(run, "--sysctl") {
 		t.Errorf("the front proxy on a kernel with no %s ran as %q: the engine refuses a sysctl the kernel lacks, and the box would serve nothing", migrateSysctl, run)
 	}
-	if run := ranWith(t, kernelMigrating(t, true), switchboardStanding(nil, Front{})); strings.Contains(run, "--sysctl") {
+	if run := ranWith(t, kernelMigrating(t, true), switchboardBox(nil, Front{})); strings.Contains(run, "--sysctl") {
 		t.Errorf("the switchboard ran as %q; it never reloads, so it has no listener to hand on", run)
 	}
 }
@@ -64,19 +64,19 @@ func TestAFrontProxyIsCurrentWhenItMigratesItsListenersOrItsKernelCannot(t *test
 
 	front := frontProxy()
 	stated := front.item("").Digest()
-	for what, held := range map[string]struct {
+	for what, given := range map[string]struct {
 		can     bool
 		migrate string
 		current bool
 	}{
-		"migrating on a kernel that can":        {can: true, migrate: "held", current: true},
+		"migrating on a kernel that can":        {can: true, migrate: migrateSet, current: true},
 		"not migrating on a kernel that can":    {can: true, migrate: "unset", current: false},
 		"not migrating on a kernel that cannot": {can: false, migrate: "unset", current: true},
-		"migrating on a kernel that cannot":     {can: false, migrate: "held", current: true},
+		"migrating on a kernel that cannot":     {can: false, migrate: migrateSet, current: true},
 	} {
-		observed := probedAs(t, kernelMigrating(t, held.can), front, engineReport{facts: engineSays(front, held.migrate)})
-		if (observed == stated) != held.current {
-			t.Errorf("a front proxy %s reads as current=%v, want %v", what, observed == stated, held.current)
+		observed := probedAs(t, kernelMigrating(t, given.can), front, engineReport{facts: engineSays(front, given.migrate)})
+		if (observed == stated) != given.current {
+			t.Errorf("a front proxy %s reads as current=%v, want %v", what, observed == stated, given.current)
 		}
 	}
 }

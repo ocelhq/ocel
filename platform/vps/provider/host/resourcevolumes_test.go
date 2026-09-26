@@ -15,7 +15,7 @@ func TestAClassDestroyTakesTheVolumesItsResourcesKeptTheirDataOn(t *testing.T) {
 
 	empty := Reading{Arch: ArchAMD64, Class: edge.ClassProduction, Observed: map[string]string{}}
 	beside := Reading{Arch: ArchAMD64, Class: edge.ClassPreview, Observed: map[string]string{}}
-	taken := removing(empty, beside, appsStanding{containers: true, volumes: true})
+	taken := removing(empty, beside, appsPresent{containers: true, volumes: true})
 
 	containers, volumes := -1, -1
 	for at, removal := range taken {
@@ -51,22 +51,22 @@ func TestAClassDestroyRemovesTheVolumesItPlannedToAfterTheContainersThatMountThe
 	t.Parallel()
 
 	class := edge.ClassProduction
-	stood := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
-	stood.answer = func(command string) (session.Result, bool) {
+	box := machine(map[edge.Class][]Item{class: bootstrapped(t, class)})
+	box.answer = func(command string) (session.Result, bool) {
 		if strings.Contains(command, "echo volumes") {
 			return session.Result{Stdout: "containers\nvolumes\n"}, true
 		}
 		return session.Result{}, false
 	}
 	progress := &said{}
-	if err := NewBootstrap(stood.host(), testVendor, "shop").Remove(context.Background(), class, progress); err != nil {
+	if err := NewBootstrap(box.host(), testVendor, "shop").Remove(context.Background(), class, progress); err != nil {
 		t.Fatalf("Remove() = %v, and a class that kept a volume can never be destroyed", err)
 	}
 	if taken := "removed " + KindResourceVolumes + " " + classSelector(class); !slices.Contains(progress.lines, taken) {
 		t.Errorf("Remove() never said %q:\n%s", taken, strings.Join(progress.lines, "\n"))
 	}
-	containers := stood.at("xargs -r docker rm --force")
-	volumes := stood.at("xargs -r docker volume rm")
+	containers := box.at("xargs -r docker rm --force")
+	volumes := box.at("xargs -r docker volume rm")
 	if containers < 0 || volumes < containers {
 		t.Errorf("the containers went at %d and the volumes at %d, and the engine refuses a volume a container still mounts", containers, volumes)
 	}

@@ -117,15 +117,15 @@ func (p *Provider) reshaped(ctx context.Context, in resources.ProvisionRequest, 
 				return spec, err
 			}
 		case surfaceVolume:
-			var held volumePatch
-			if err := decodePatch(patch, &held); err != nil {
+			var decoded volumePatch
+			if err := decodePatch(patch, &decoded); err != nil {
 				return spec, unrenderable(kind, in.Resource.Name, surface, err)
 			}
-			if held.Driver != "" {
-				spec.Volume.Driver = held.Driver
+			if decoded.Driver != "" {
+				spec.Volume.Driver = decoded.Driver
 			}
-			if len(held.DriverOpts) > 0 {
-				spec.Volume.Options = held.DriverOpts
+			if len(decoded.DriverOpts) > 0 {
+				spec.Volume.Options = decoded.DriverOpts
 			}
 		default:
 			return spec, refusal.Refuse(refusal.CodeInvalid,
@@ -148,33 +148,33 @@ func (p *Provider) reshaped(ctx context.Context, in resources.ProvisionRequest, 
 }
 
 func containerPatched(kind, resource string, spec host.ResourceContainer, patch map[string]any) (host.ResourceContainer, error) {
-	var held containerPatch
-	if err := decodePatch(patch, &held); err != nil {
+	var decoded containerPatch
+	if err := decodePatch(patch, &decoded); err != nil {
 		return spec, unrenderable(kind, resource, surfaceContainer, err)
 	}
-	if held.Image != "" {
-		if !pinnedImage.MatchString(held.Image) {
+	if decoded.Image != "" {
+		if !pinnedImage.MatchString(decoded.Image) {
 			return spec, refusal.Refuse(refusal.CodeInvalid,
 				"a transform runs %s %s as unpinned image %q: pin it as <image>@sha256:<digest>",
-				kind, resource, held.Image)
+				kind, resource, decoded.Image)
 		}
-		spec.Image = held.Image
+		spec.Image = decoded.Image
 	}
-	for _, name := range slices.Sorted(maps.Keys(held.Env)) {
+	for _, name := range slices.Sorted(maps.Keys(decoded.Env)) {
 		if slices.Contains(ownEnv[kind], name) {
 			return spec, refusal.Refuse(refusal.CodeInvalid,
 				"a transform sets %s %s's %s, which ocel owns: drop it",
 				kind, resource, name)
 		}
-		spec.Env[name] = held.Env[name]
+		spec.Env[name] = decoded.Env[name]
 	}
-	if len(held.Args) > 0 {
-		spec.Args = held.Args
+	if len(decoded.Args) > 0 {
+		spec.Args = decoded.Args
 	}
 	for _, limit := range []struct {
 		patched string
 		into    *string
-	}{{held.Memory, &spec.Memory}, {held.CPUs, &spec.CPUs}, {held.ShmSize, &spec.ShmSize}} {
+	}{{decoded.Memory, &spec.Memory}, {decoded.CPUs, &spec.CPUs}, {decoded.ShmSize, &spec.ShmSize}} {
 		if limit.patched != "" {
 			*limit.into = limit.patched
 		}

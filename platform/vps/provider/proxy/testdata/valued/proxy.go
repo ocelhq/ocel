@@ -18,9 +18,8 @@ func (Valued) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (Valued) Reload(context.Context) error { return nil }
 
-func (Valued) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
+func (Valued) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
 func (Valued) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
 }
-

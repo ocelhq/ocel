@@ -74,11 +74,11 @@ func staged(path string, in io.Reader) error {
 }
 
 func synced(dir string) error {
-	held, err := os.Open(dir)
+	opened, err := os.Open(dir)
 	if err != nil {
 		return err
 	}
-	return errors.Join(held.Sync(), held.Close())
+	return errors.Join(opened.Sync(), opened.Close())
 }
 
 func unplace(argv []string, errs io.Writer) int {
@@ -115,11 +115,11 @@ func regularSum(path string) (string, error) {
 		return "", err
 	}
 	defer file.Close()
-	held, err := file.Stat()
+	info, err := file.Stat()
 	if err != nil {
 		return "", err
 	}
-	if !held.Mode().IsRegular() {
+	if !info.Mode().IsRegular() {
 		return "", nil
 	}
 	sum := sha256.New()

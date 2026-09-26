@@ -30,13 +30,13 @@ func (l loaded) GoString() string { return l.String() }
 func (l loaded) Destination() string { return l.at }
 
 func (l loaded) Has(ctx context.Context, push images.Push) (bool, error) {
-	return l.host.HoldsImage(ctx, push.ImageRef)
+	return l.host.HasImage(ctx, push.ImageRef)
 }
 
 func (l loaded) Push(ctx context.Context, push images.Push, progress edge.Progress) error {
 	if push.Built == nil {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"%s: this release carries no built image to load onto the box", push.App)
+			"%s: this release includes no built image to load onto the box", push.App)
 	}
 	return l.load(ctx, push, progress)
 }

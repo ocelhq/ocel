@@ -37,7 +37,7 @@ func (yours) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (yours) Reload(context.Context) error { return nil }
 
-func (yours) Inspect(context.Context) (proxy.Standing, error) { return nil, nil }
+func (yours) Inspect(context.Context) (proxy.Checks, error) { return nil, nil }
 
 func (yours) Certificate(context.Context, string) (proxy.Certificate, error) {
 	return proxy.Certificate{}, nil
@@ -95,17 +95,17 @@ func TestTheSwitchboardIsHandedTheDirectoryOfAFileOutsideOcelsOwnToPlaceInAndNoO
 	}
 }
 
-func TestASwitchboardStoodAgainAfterAPruneIsBoundToPlaceOnlyWhileTheDirectoryIsThere(t *testing.T) {
+func TestASwitchboardRestartedAfterAPruneIsBoundToPlaceOnlyWhileTheDirectoryIsThere(t *testing.T) {
 	t.Parallel()
 
-	board := boundToPlace(switchboardStanding(nil, routedByHand()), coolifyDynamic+"/ocel.yml")
-	if read := standingRead(board); !strings.Contains(read, "[ -d "+quoted(coolifyDynamic)+" ]") {
-		t.Errorf("a deploy standing the switchboard again reads\n%s\nand never checks %s is there, so docker creates it empty and root-owned where the proxy reads its routes", read, coolifyDynamic)
+	board := boundToPlace(switchboardBox(nil, routedByHand()), coolifyDynamic+"/ocel.yml")
+	if read := presenceRead(board); !strings.Contains(read, "[ -d "+quoted(coolifyDynamic)+" ]") {
+		t.Errorf("a deploy restarting the switchboard reads\n%s\nand never checks %s is there, so docker creates it empty and root-owned where the proxy reads its routes", read, coolifyDynamic)
 	}
-	stood := board.restoring(1)
+	restored := board.restoring(1)
 	for _, want := range []string{"'--volume' " + quoted(coolifyDynamic+":"+coolifyDynamic), "'--env' " + quoted(switchboard.PlaceEnv+"="+coolifyDynamic)} {
-		if !strings.Contains(stood, want) {
-			t.Errorf("a deploy stands the switchboard again as\n%s\nwithout %s, so the next deploy has nowhere to place the proxy's file", stood, want)
+		if !strings.Contains(restored, want) {
+			t.Errorf("a deploy restarts the switchboard as\n%s\nwithout %s, so the next deploy has nowhere to place the proxy's file", restored, want)
 		}
 	}
 }
@@ -136,49 +136,49 @@ func (a *adoptedBench) refusal() string {
 func adoptedBox(t *testing.T, state RoutingTable) *adoptedBench {
 	t.Helper()
 
-	stood := &adoptedBench{claimBench: &claimBench{bench: machine(nil), held: string(mustWrite(t, state))}}
-	stood.placed = string(mustPlace(t, state))
+	adopted := &adoptedBench{claimBench: &claimBench{bench: machine(nil), recorded: string(mustWrite(t, state))}}
+	adopted.placed = string(mustPlace(t, state))
 	absent := ""
-	proxied := servesPair(stood.bench, &stood.held, &absent)
-	stood.answer = func(command string) (session.Result, bool) {
+	proxied := servesPair(adopted.bench, &adopted.recorded, &absent)
+	adopted.answer = func(command string) (session.Result, bool) {
 		switch {
 		case sums(command):
-			stood.mu.Lock()
-			defer stood.mu.Unlock()
-			if stood.summing != nil {
-				stood.summing(stood)
-				stood.summing = nil
+			adopted.mu.Lock()
+			defer adopted.mu.Unlock()
+			if adopted.summing != nil {
+				adopted.summing(adopted)
+				adopted.summing = nil
 			}
-			if stood.gone {
+			if adopted.gone {
 				return session.Result{}, true
 			}
-			return session.Result{Stdout: digested(stood.placed) + "\n"}, true
+			return session.Result{Stdout: digested(adopted.placed) + "\n"}, true
 		case writesProxy(command):
-			stood.mu.Lock()
-			defer stood.mu.Unlock()
-			if expected := expectedDigest(command); expected != digested(stood.held) {
-				return session.Result{Code: routingMoved, Stderr: digested(stood.held)}, true
+			adopted.mu.Lock()
+			defer adopted.mu.Unlock()
+			if expected := expectedDigest(command); expected != digested(adopted.recorded) {
+				return session.Result{Code: routingMoved, Stderr: digested(adopted.recorded)}, true
 			}
-			fed := stood.fed[len(stood.fed)-1]
-			stood.held = tableOf(fed)
+			fed := adopted.fed[len(adopted.fed)-1]
+			adopted.recorded = tableOf(fed)
 			if !places(command) {
-				return session.Result{Stdout: digested(stood.held)}, true
+				return session.Result{Stdout: digested(adopted.recorded)}, true
 			}
-			if refused := stood.refusal(); refused != "" {
-				return session.Result{Code: routingPlaceFailed, Stdout: digested(stood.held), Stderr: refused}, true
+			if refused := adopted.refusal(); refused != "" {
+				return session.Result{Code: routingPlaceFailed, Stdout: digested(adopted.recorded), Stderr: refused}, true
 			}
-			stood.placed, stood.gone = configOf(fed), false
-			return session.Result{Stdout: digested(stood.held)}, true
+			adopted.placed, adopted.gone = configOf(fed), false
+			return session.Result{Stdout: digested(adopted.recorded)}, true
 		case places(command):
-			stood.mu.Lock()
-			defer stood.mu.Unlock()
-			if expected := expectedDigest(command); expected != digested(stood.held) {
-				return session.Result{Code: routingMoved, Stderr: digested(stood.held)}, true
+			adopted.mu.Lock()
+			defer adopted.mu.Unlock()
+			if expected := expectedDigest(command); expected != digested(adopted.recorded) {
+				return session.Result{Code: routingMoved, Stderr: digested(adopted.recorded)}, true
 			}
-			if refused := stood.refusal(); refused != "" {
+			if refused := adopted.refusal(); refused != "" {
 				return session.Result{Code: routingPlaceFailed, Stderr: refused}, true
 			}
-			stood.placed, stood.gone = stood.fed[len(stood.fed)-1], false
+			adopted.placed, adopted.gone = adopted.fed[len(adopted.fed)-1], false
 			return session.Result{}, true
 		case gates(command), flips(command):
 			return session.Result{}, true
@@ -188,7 +188,7 @@ func adoptedBox(t *testing.T, state RoutingTable) *adoptedBench {
 			return proxied(command)
 		}
 	}
-	return stood
+	return adopted
 }
 
 func (a *adoptedBench) host() *Host {
@@ -209,7 +209,7 @@ func mustPlace(t *testing.T, state RoutingTable) []byte {
 func placedUnderLock(t *testing.T, command string) {
 	t.Helper()
 	locked := strings.Index(command, "exec 9<"+quoted(routingLock)+"\nflock -x 9")
-	compared := strings.Index(command, `if [ "$held" != `)
+	compared := strings.Index(command, `if [ "$current" != `)
 	placing := strings.Index(command, words(switchboardFed("place", coolifyFile)))
 	if locked < 0 || compared < locked || placing < compared {
 		t.Errorf("the placement runs\n%s\nwant it through the switchboard, fed on stdin, after the table is compared under the routing lock: a deploy that wrote the table after this one can otherwise see its rendering overwritten by this one's", command)
@@ -219,11 +219,11 @@ func placedUnderLock(t *testing.T, command string) {
 func TestAClaimOnABoxWhoseProxyKeepsItsFileElsewherePlacesItsRenderingUnderTheLockItWritesTheTableUnder(t *testing.T) {
 	t.Parallel()
 
-	stood := adoptedBox(t, routed())
-	if err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
+	adopted := adoptedBox(t, routed())
+	if err := adopted.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}); err != nil {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
-	commands := stood.commands()
+	commands := adopted.commands()
 	wrote := slices.IndexFunc(commands, writesProxy)
 	if wrote < 0 {
 		t.Fatalf("the claim ran %q and never wrote the table", commands)
@@ -236,24 +236,24 @@ func TestAClaimOnABoxWhoseProxyKeepsItsFileElsewherePlacesItsRenderingUnderTheLo
 	if moved, placing := strings.Index(written, `mv "$staged" `), strings.Index(written, words(switchboardFed("place", coolifyFile))); moved < 0 || placing < moved {
 		t.Errorf("the write runs\n%s\nwant the table moved into place before the rendering is placed: the table is what every later write and rollback reads", written)
 	}
-	if placed := stood.count(places); placed != 1 {
+	if placed := adopted.count(places); placed != 1 {
 		t.Errorf("the claim placed %d times, want once, in the write that holds the lock: %q", placed, commands)
 	}
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	if want := string(mustPlace(t, state)); stood.placed != want {
-		t.Errorf("the switchboard placed %q, want the rendering of the table the claim wrote, %q", stood.placed, want)
+	if want := string(mustPlace(t, state)); adopted.placed != want {
+		t.Errorf("the switchboard placed %q, want the rendering of the table the claim wrote, %q", adopted.placed, want)
 	}
 }
 
 func TestAPlacementTheSwitchboardRefusesPutsTheTableAndThePlacedFileBackAndSaysWhy(t *testing.T) {
 	t.Parallel()
 
-	stood := adoptedBox(t, routed())
-	prior, placedBefore := stood.held, stood.placed
+	adopted := adoptedBox(t, routed())
+	prior, placedBefore := adopted.recorded, adopted.placed
 	refused := "open /data/coolify/proxy/dynamic/.ocel.123.tmp: read-only file system"
-	stood.refused = []string{refused}
-	err := stood.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
+	adopted.refused = []string{refused}
+	err := adopted.host().ClaimHosts(context.Background(), []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 	if err == nil {
 		t.Fatal("ClaimHosts() over a placement the switchboard refused = nil, want the claim refused")
 	}
@@ -263,14 +263,14 @@ func TestAPlacementTheSwitchboardRefusesPutsTheTableAndThePlacedFileBackAndSaysW
 	if strings.Contains(err.Error(), "also failed") {
 		t.Errorf("the claim refused with %q, want the table and the file restored", err)
 	}
-	if stood.held != prior {
-		t.Errorf("%s holds\n%s\nafter a placement that failed, want the table before the claim\n%s\nthe switchboard would route a hostname the proxy in front of it was never told of", live.RoutingTable, stood.held, prior)
+	if adopted.recorded != prior {
+		t.Errorf("%s contains\n%s\nafter a placement that failed, want the table before the claim\n%s\nthe switchboard would route a hostname the proxy in front of it was never told of", live.RoutingTable, adopted.recorded, prior)
 	}
-	if stood.placed != placedBefore {
-		t.Errorf("the placed file reads %q, want the rendering of the table put back, %q", stood.placed, placedBefore)
+	if adopted.placed != placedBefore {
+		t.Errorf("the placed file reads %q, want the rendering of the table put back, %q", adopted.placed, placedBefore)
 	}
-	if writes := stood.count(writesProxy); writes != 2 {
-		t.Errorf("the claim wrote the table %d times, want twice, once forward and once back: %q", writes, stood.commands())
+	if writes := adopted.count(writesProxy); writes != 2 {
+		t.Errorf("the claim wrote the table %d times, want twice, once forward and once back: %q", writes, adopted.commands())
 	}
 }
 
@@ -286,17 +286,17 @@ func TestADeployThatFindsThePlacedFileGoneOrRewrittenPlacesItsRenderingAgain(t *
 		t.Run(what, func(t *testing.T) {
 			t.Parallel()
 
-			stood := adoptedBox(t, serving)
-			drift(stood)
-			if err := stood.host().Release(context.Background(), aRelease(), nil); err != nil {
+			adopted := adoptedBox(t, serving)
+			drift(adopted)
+			if err := adopted.host().Release(context.Background(), aRelease(), nil); err != nil {
 				t.Fatalf("Release() = %v", err)
 			}
-			state, err := ReadRoutingTable([]byte(stood.held))
+			state, err := ReadRoutingTable([]byte(adopted.recorded))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if want := string(mustPlace(t, state)); stood.placed != want || stood.gone {
-				t.Errorf("a deploy onto a placed file %s leaves it %q (gone %v), want the rendering of the table it wrote, %q", what, stood.placed, stood.gone, want)
+			if want := string(mustPlace(t, state)); adopted.placed != want || adopted.gone {
+				t.Errorf("a deploy onto a placed file %s leaves it %q (gone %v), want the rendering of the table it wrote, %q", what, adopted.placed, adopted.gone, want)
 			}
 		})
 	}
@@ -307,22 +307,22 @@ func TestAPlacedFileThatDriftedUnderATableThatDidNotIsPlacedUnderTheLockWithoutR
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	stood := adoptedBox(t, state)
-	stood.gone = true
-	if err := stood.host().ClaimHosts(context.Background(), state.Claims); err != nil {
+	adopted := adoptedBox(t, state)
+	adopted.gone = true
+	if err := adopted.host().ClaimHosts(context.Background(), state.Claims); err != nil {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
-	if want := string(mustPlace(t, state)); stood.placed != want || stood.gone {
-		t.Errorf("a claim already standing over a placed file that is gone leaves it %q (gone %v), want %q", stood.placed, stood.gone, want)
+	if want := string(mustPlace(t, state)); adopted.placed != want || adopted.gone {
+		t.Errorf("a claim already recorded over a placed file that is gone leaves it %q (gone %v), want %q", adopted.placed, adopted.gone, want)
 	}
-	if stood.count(writesProxy) != 0 {
-		t.Errorf("a placed file that drifted under a table that did not rewrote the table: %v", stood.commands())
+	if adopted.count(writesProxy) != 0 {
+		t.Errorf("a placed file that drifted under a table that did not rewrote the table: %v", adopted.commands())
 	}
-	commands := stood.commands()
+	commands := adopted.commands()
 	placing := commands[slices.IndexFunc(commands, places)]
 	placedUnderLock(t, placing)
-	if expected := expectedDigest(placing); expected != digested(stood.held) {
-		t.Errorf("the placement is compared against table digest %s, want %s, the table it renders", expected, digested(stood.held))
+	if expected := expectedDigest(placing); expected != digested(adopted.recorded) {
+		t.Errorf("the placement is compared against table digest %s, want %s, the table it renders", expected, digested(adopted.recorded))
 	}
 }
 
@@ -331,16 +331,16 @@ func TestAPlacedFileThatDriftedUnderATableAnotherDeployMovesIsPlacedFromTheTable
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	stood := adoptedBox(t, state)
-	stood.gone = true
+	adopted := adoptedBox(t, state)
+	adopted.gone = true
 	other := state
 	other.Claims = append(slices.Clone(state.Claims), HostClaim{Hostname: "blog.example.com", Owner: "ocel--blog--production", Pointer: pointed})
-	stood.summing = func(a *adoptedBench) { a.held = string(mustWrite(t, other)) }
-	if err := stood.host().ClaimHosts(context.Background(), state.Claims); err != nil {
+	adopted.summing = func(a *adoptedBench) { a.recorded = string(mustWrite(t, other)) }
+	if err := adopted.host().ClaimHosts(context.Background(), state.Claims); err != nil {
 		t.Fatalf("ClaimHosts() = %v", err)
 	}
-	if want := string(mustPlace(t, other)); stood.placed != want || stood.gone {
-		t.Errorf("a placement over a table another deploy moved leaves the file %q (gone %v), want the rendering of the table that deploy left, %q: a placement skipped because the table moved is a hostname the proxy is never told of", stood.placed, stood.gone, want)
+	if want := string(mustPlace(t, other)); adopted.placed != want || adopted.gone {
+		t.Errorf("a placement over a table another deploy moved leaves the file %q (gone %v), want the rendering of the table that deploy left, %q: a placement skipped because the table moved is a hostname the proxy is never told of", adopted.placed, adopted.gone, want)
 	}
 }
 
@@ -349,31 +349,31 @@ func TestAPlacedFileThatDriftedAndTheSwitchboardRefusesToPlaceFailsTheClaimAndSa
 
 	state := routed()
 	state.Claims = []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	stood := adoptedBox(t, state)
-	stood.gone = true
+	adopted := adoptedBox(t, state)
+	adopted.gone = true
 	refused := "open /data/coolify/proxy/dynamic/.ocel.123.tmp: no space left on device"
-	stood.refused = []string{refused}
-	err := stood.host().ClaimHosts(context.Background(), state.Claims)
+	adopted.refused = []string{refused}
+	err := adopted.host().ClaimHosts(context.Background(), state.Claims)
 	if err == nil || !strings.Contains(err.Error(), refused) {
 		t.Errorf("ClaimHosts() over a placement the switchboard refused = %v, want it refused saying why", err)
 	}
-	if !stood.gone {
-		t.Errorf("the placed file reads %q after a placement that failed, want it still gone", stood.placed)
+	if !adopted.gone {
+		t.Errorf("the placed file reads %q after a placement that failed, want it still gone", adopted.placed)
 	}
 }
 
-func TestAPlacedFileThatHoldsWhatTheTableRendersIsLeftAlone(t *testing.T) {
+func TestAPlacedFileThatMatchesWhatTheTableRendersIsLeftAlone(t *testing.T) {
 	t.Parallel()
 
-	stood := adoptedBox(t, RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}}})
-	if err := stood.host().Release(context.Background(), aRelease(), nil); err != nil {
+	adopted := adoptedBox(t, RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}}})
+	if err := adopted.host().Release(context.Background(), aRelease(), nil); err != nil {
 		t.Fatalf("Release() = %v", err)
 	}
-	if stood.count(writesProxy) == 0 {
+	if adopted.count(writesProxy) == 0 {
 		t.Fatal("the release never wrote the table, so this test proves nothing about a write that leaves the rendering as it was")
 	}
-	if placed := stood.count(places); placed != 0 {
-		t.Errorf("a release onto a placed file that already holds what the table renders placed it %d times, want never: every placement is a rewrite the proxy watching the directory reloads", placed)
+	if placed := adopted.count(places); placed != 0 {
+		t.Errorf("a release onto a placed file that already contains what the table renders placed it %d times, want never: every placement is a rewrite the proxy watching the directory reloads", placed)
 	}
 }
 
@@ -439,14 +439,14 @@ func (b *placingShell) asks(t *testing.T) string {
 	if _, err := os.Stat(b.asked); errors.Is(err, os.ErrNotExist) {
 		return ""
 	}
-	return strings.TrimSpace(held(t, b.asked))
+	return strings.TrimSpace(fileContents(t, b.asked))
 }
 
 func TestTheWriteFeedsTheSwitchboardTheRenderingOnlyOnceTheTableItRendersIsInPlace(t *testing.T) {
 	t.Parallel()
 
 	box := shellPlacing(t)
-	before := held(t, box.table)
+	before := fileContents(t, box.table)
 	after := string(mustWrite(t, previewing()))
 	fed := pairFed(routingPair{table: []byte(after), config: []byte("routes shop.example.com\n")})
 	asking := strings.Join(switchboardFed("place", coolifyFile)[1:], " ")
@@ -455,9 +455,9 @@ func TestTheWriteFeedsTheSwitchboardTheRenderingOnlyOnceTheTableItRendersIsInPla
 		t.Errorf("a write over a table that moved = %d, want %d", code, routingMoved)
 	}
 	if asked := box.asks(t); asked != "" {
-		t.Errorf("a write over a table that moved still asked docker %q, leaving a rendering of a table the box no longer holds", asked)
+		t.Errorf("a write over a table that moved still asked docker %q, leaving a rendering of a table the box no longer has", asked)
 	}
-	if got := held(t, box.table); got != before {
+	if got := fileContents(t, box.table); got != before {
 		t.Errorf("a write over a table that moved left it\n%s\nwant it untouched", got)
 	}
 
@@ -465,13 +465,13 @@ func TestTheWriteFeedsTheSwitchboardTheRenderingOnlyOnceTheTableItRendersIsInPla
 	if code != 0 {
 		t.Fatalf("a write over the table it read = %d: %s", code, errs)
 	}
-	if got := held(t, box.table); got != after {
+	if got := fileContents(t, box.table); got != after {
 		t.Errorf("the table reads\n%s\nwant the one written", got)
 	}
 	if strings.TrimSpace(out) != digested(after) {
 		t.Errorf("the write said %q, want the digest of the table it wrote", out)
 	}
-	if got := held(t, box.fed); got != "routes shop.example.com\n" {
+	if got := fileContents(t, box.fed); got != "routes shop.example.com\n" {
 		t.Errorf("the switchboard was fed %q, want the rendering whole", got)
 	}
 	if asked := box.asks(t); asked != asking {
@@ -483,7 +483,7 @@ func TestAWriteWhoseRenderingTheSwitchboardRefusesSaysSoAndNamesTheTableItLeft(t
 	t.Parallel()
 
 	box := shellPlacing(t)
-	before := held(t, box.table)
+	before := fileContents(t, box.table)
 	after := string(mustWrite(t, previewing()))
 	box.refuse(t)
 
@@ -495,7 +495,7 @@ func TestAWriteWhoseRenderingTheSwitchboardRefusesSaysSoAndNamesTheTableItLeft(t
 	if !strings.Contains(errs, "no space left on device") {
 		t.Errorf("a write whose placement the switchboard refused said %q, which never says why", errs)
 	}
-	if strings.TrimSpace(out) != digested(held(t, box.table)) {
+	if strings.TrimSpace(out) != digested(fileContents(t, box.table)) {
 		t.Errorf("a write whose placement the switchboard refused said %q, want the digest of the table it left, which the revert compares against", out)
 	}
 }
@@ -504,19 +504,19 @@ func TestAPlacementAloneFeedsTheSwitchboardOnlyWhileTheTableIsTheOneItRenders(t 
 	t.Parallel()
 
 	box := shellPlacing(t)
-	standing := held(t, box.table)
+	current := fileContents(t, box.table)
 
 	if code, _, _ := box.run(t, replacement(tableDigest(digested("a table another deploy has since replaced")), coolifyFile), "routes shop.example.com\n"); code != routingMoved {
 		t.Errorf("a placement over a table that moved = %d, want %d: the deploy reads the table again and places what it renders", code, routingMoved)
 	}
 	if asked := box.asks(t); asked != "" {
-		t.Errorf("a placement over a table that moved still asked docker %q, leaving a rendering of a table the box no longer holds", asked)
+		t.Errorf("a placement over a table that moved still asked docker %q, leaving a rendering of a table the box no longer has", asked)
 	}
 
-	if code, _, errs := box.run(t, replacement(tableDigest(digested(standing)), coolifyFile), "routes shop.example.com\n"); code != 0 {
+	if code, _, errs := box.run(t, replacement(tableDigest(digested(current)), coolifyFile), "routes shop.example.com\n"); code != 0 {
 		t.Fatalf("a placement over the table it renders = %d: %s", code, errs)
 	}
-	if got := held(t, box.fed); got != "routes shop.example.com\n" {
+	if got := fileContents(t, box.fed); got != "routes shop.example.com\n" {
 		t.Errorf("the switchboard was fed %q, want the rendering whole", got)
 	}
 	if asked, want := box.asks(t), strings.Join(switchboardFed("place", coolifyFile)[1:], " "); asked != want {
@@ -524,7 +524,7 @@ func TestAPlacementAloneFeedsTheSwitchboardOnlyWhileTheTableIsTheOneItRenders(t 
 	}
 
 	box.refuse(t)
-	if code, _, errs := box.run(t, replacement(tableDigest(digested(standing)), coolifyFile), "routes shop.example.com\n"); code != routingPlaceFailed || !strings.Contains(errs, "no space left on device") {
+	if code, _, errs := box.run(t, replacement(tableDigest(digested(current)), coolifyFile), "routes shop.example.com\n"); code != routingPlaceFailed || !strings.Contains(errs, "no space left on device") {
 		t.Errorf("a placement the switchboard refused = %d, %q, want %d saying why", code, errs, routingPlaceFailed)
 	}
 }
@@ -533,9 +533,9 @@ func TestEveryRoutingFailureNamesTheFilesTheProxyActuallyKeeps(t *testing.T) {
 	t.Parallel()
 
 	claim := []HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}}
-	failing := func(stood *adoptedBench, result session.Result) {
-		proxied := stood.answer
-		stood.answer = func(command string) (session.Result, bool) {
+	failing := func(adopted *adoptedBench, result session.Result) {
+		proxied := adopted.answer
+		adopted.answer = func(command string) (session.Result, bool) {
 			if writesProxy(command) {
 				return result, true
 			}
@@ -544,29 +544,29 @@ func TestEveryRoutingFailureNamesTheFilesTheProxyActuallyKeeps(t *testing.T) {
 	}
 	for what, run := range map[string]func(t *testing.T) ([]string, []string, error){
 		"a write that fails beside a proxy routed by hand": func(t *testing.T) ([]string, []string, error) {
-			stood := adoptedBox(t, routed())
-			failing(stood, session.Result{Code: 1, Stderr: "mv: no space left on device"})
-			return []string{live.RoutingTable}, []string{ProxyConfig}, stood.fronted(routedByHand()).ClaimHosts(context.Background(), claim)
+			adopted := adoptedBox(t, routed())
+			failing(adopted, session.Result{Code: 1, Stderr: "mv: no space left on device"})
+			return []string{live.RoutingTable}, []string{ProxyConfig}, adopted.fronted(routedByHand()).ClaimHosts(context.Background(), claim)
 		},
 		"a write onto an unseeded box beside a proxy routed by hand": func(t *testing.T) ([]string, []string, error) {
-			stood := adoptedBox(t, routed())
-			failing(stood, session.Result{Code: routingUnseeded})
-			return []string{live.RoutingTable}, []string{ProxyConfig}, stood.fronted(routedByHand()).ClaimHosts(context.Background(), claim)
+			adopted := adoptedBox(t, routed())
+			failing(adopted, session.Result{Code: routingUnseeded})
+			return []string{live.RoutingTable}, []string{ProxyConfig}, adopted.fronted(routedByHand()).ClaimHosts(context.Background(), claim)
 		},
 		"a release whose write fails beside a proxy routed by hand": func(t *testing.T) ([]string, []string, error) {
-			stood := adoptedBox(t, RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}}})
-			failing(stood, session.Result{Code: 1, Stderr: "mv: no space left on device"})
-			return []string{live.RoutingTable}, []string{ProxyConfig}, stood.fronted(routedByHand()).Release(context.Background(), aRelease(), nil)
+			adopted := adoptedBox(t, RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}}})
+			failing(adopted, session.Result{Code: 1, Stderr: "mv: no space left on device"})
+			return []string{live.RoutingTable}, []string{ProxyConfig}, adopted.fronted(routedByHand()).Release(context.Background(), aRelease(), nil)
 		},
 		"a release whose write fails beside a proxy that keeps its file elsewhere": func(t *testing.T) ([]string, []string, error) {
-			stood := adoptedBox(t, RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}}})
-			failing(stood, session.Result{Code: 1, Stderr: "mv: no space left on device"})
-			return []string{live.RoutingTable, coolifyFile}, []string{ProxyConfig}, stood.host().Release(context.Background(), aRelease(), nil)
+			adopted := adoptedBox(t, RoutingTable{Grace: DrainWindow, Routes: []AppRoute{{RouteKey: keyed("web"), Upstream: retired}}})
+			failing(adopted, session.Result{Code: 1, Stderr: "mv: no space left on device"})
+			return []string{live.RoutingTable, coolifyFile}, []string{ProxyConfig}, adopted.host().Release(context.Background(), aRelease(), nil)
 		},
 		"a placement whose revert fails too": func(t *testing.T) ([]string, []string, error) {
-			stood := adoptedBox(t, routed())
-			stood.refused = []string{"no space left on device", "no space left on device"}
-			return []string{live.RoutingTable, coolifyFile}, []string{ProxyConfig}, stood.host().ClaimHosts(context.Background(), claim)
+			adopted := adoptedBox(t, routed())
+			adopted.refused = []string{"no space left on device", "no space left on device"}
+			return []string{live.RoutingTable, coolifyFile}, []string{ProxyConfig}, adopted.host().ClaimHosts(context.Background(), claim)
 		},
 	} {
 		t.Run(what, func(t *testing.T) {

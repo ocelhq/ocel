@@ -43,12 +43,12 @@ func deniedSocket(stderr string) bool {
 	return strings.Contains(strings.ToLower(stderr), "permission denied")
 }
 
-func (h *Host) HoldsImage(ctx context.Context, imageRef string) (bool, error) {
+func (h *Host) HasImage(ctx context.Context, imageRef string) (bool, error) {
 	elevation, err := h.reachDocker(ctx)
 	if err != nil {
 		return false, err
 	}
-	named, err := h.ran(ctx, "ask whether "+imageRef+" stands", "docker image ls -q "+quoted(imageRef), nil, elevation)
+	named, err := h.ran(ctx, "ask whether the engine has "+imageRef, "docker image ls -q "+quoted(imageRef), nil, elevation)
 	if err != nil {
 		return false, err
 	}
@@ -71,13 +71,13 @@ func (h *Host) PullImage(ctx context.Context, target images.Registry, imageRef, 
 	if err != nil {
 		return "", err
 	}
-	held, err := h.HoldsImage(ctx, imageRef)
+	has, err := h.HasImage(ctx, imageRef)
 	if err != nil {
 		return "", err
 	}
-	if !held {
+	if !has {
 		return "", refusal.Refuse(refusal.CodeInvalid,
-			"%s pulled from %s but holds no %s: %s",
+			"%s pulled from %s but has no %s: %s",
 			h.named(), target.Server, imageRef, strings.TrimSpace(said))
 	}
 	return strings.TrimSpace(said), nil
@@ -125,7 +125,7 @@ func waiting(ctx context.Context, attempt int) error {
 	}
 }
 
-func LoginStands(target images.Registry) error {
+func CheckLogin(target images.Registry) error {
 	if target.Password == "" || target.Username != "" {
 		return nil
 	}
@@ -140,7 +140,7 @@ func pull(target images.Registry, imageRef, digest string) (string, error) {
 	}
 	steps := []string{"set -e"}
 	if target.Password != "" {
-		if err := LoginStands(target); err != nil {
+		if err := CheckLogin(target); err != nil {
 			return "", err
 		}
 		steps = append(steps,
@@ -180,13 +180,13 @@ func (h *Host) LoadImage(ctx context.Context, imageRef string, tar io.Reader) (s
 	if err != nil {
 		return "", err
 	}
-	held, err := h.HoldsImage(ctx, imageRef)
+	has, err := h.HasImage(ctx, imageRef)
 	if err != nil {
 		return "", err
 	}
-	if !held {
+	if !has {
 		return "", refusal.Refuse(refusal.CodeInvalid,
-			"%s loaded the image but holds no %s: %s\nengine state:\n%s",
+			"%s loaded the image but has no %s: %s\nengine state:\n%s",
 			h.named(), imageRef, strings.TrimSpace(said), h.said(ctx, loadEvidenceCommand(), elevation))
 	}
 	return strings.TrimSpace(said), nil

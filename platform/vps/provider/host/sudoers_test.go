@@ -22,7 +22,7 @@ func TestEachClassIsWhitelistedOnItsOwnSudoersLineNamingItsClassAlone(t *testing
 		}
 		for _, banned := range []string{" " + other + " ", " init", SealHelper + ","} {
 			if strings.Contains(line, banned) {
-				t.Errorf("%s's line reads %q and carries %q, which lets the deploy login past the class or the verbs it needs", class, line, banned)
+				t.Errorf("%s's line reads %q and contains %q, which lets the deploy login past the class or the verbs it needs", class, line, banned)
 			}
 		}
 		for _, wanted := range []string{SealHelper + " " + string(class) + " seal *", SealHelper + " " + string(class) + " open *"} {

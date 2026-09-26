@@ -14,9 +14,9 @@ func TestWhatAnInterruptedDeployLeftIsSweptBeforeAValueIsWritten(t *testing.T) {
 	t.Parallel()
 
 	spec := valued()
-	stand := standingWith(t, spec)
-	swept := stand.at(sweepCommand())
-	wrote := stand.at("install -m 0600 /dev/stdin " + quoted(EnvFile(spec.Class, spec.Name)))
+	rig := runningWith(t, spec)
+	swept := rig.at(sweepCommand())
+	wrote := rig.at("install -m 0600 /dev/stdin " + quoted(EnvFile(spec.Class, spec.Name)))
 	if swept < 0 || wrote < 0 || swept > wrote {
 		t.Fatalf("the sweep ran at %d and the env file was written at %d: a sweep after the write is a sweep of nothing, and a SIGKILL between the write and the forget leaves plaintext nothing but the next deploy's sweep takes", swept, wrote)
 	}
@@ -33,7 +33,7 @@ func TestWhatAnInterruptedDeployLeftIsSweptBeforeAValueIsWritten(t *testing.T) {
 		}
 	}
 	if !strings.HasPrefix(EnvFile(edge.ClassProduction, "x"), stateRoot+"/") || strings.Count(strings.TrimPrefix(EnvFile(edge.ClassProduction, "x"), stateRoot+"/"), "/") != 1 {
-		t.Errorf("the env file stands at %s, which is not the depth the sweep reads", EnvFile(edge.ClassProduction, "x"))
+		t.Errorf("the env file sits at %s, which is not the depth the sweep reads", EnvFile(edge.ClassProduction, "x"))
 	}
 }
 
@@ -47,18 +47,18 @@ func TestARegistryLoginIsWrittenWhereTheSweepReadsAndSweptBeforeThePull(t *testi
 	if !strings.Contains(command, "mktemp -d "+quoted(stateRoot+"/"+registryPrefix+"XXXXXX")) {
 		t.Errorf("the pull writes its login with %q, and a config under /tmp is one a killed session leaves for nothing to sweep", command)
 	}
-	stand := machine(nil)
-	stand.answer = func(said string) (session.Result, bool) {
+	rig := machine(nil)
+	rig.answer = func(said string) (session.Result, bool) {
 		if strings.Contains(said, "docker image ls -q") {
 			return session.Result{Stdout: "abc\n"}, true
 		}
 		return session.Result{}, false
 	}
-	if _, err := stand.host().PullImage(context.Background(), images.Registry{Server: "ghcr.io"}, "ghcr.io/shop/web:one", "sha256:0000"); err != nil {
+	if _, err := rig.host().PullImage(context.Background(), images.Registry{Server: "ghcr.io"}, "ghcr.io/shop/web:one", "sha256:0000"); err != nil {
 		t.Fatalf("PullImage() = %v", err)
 	}
-	swept, pulled := stand.at(sweepCommand()), stand.at("docker pull")
+	swept, pulled := rig.at(sweepCommand()), rig.at("docker pull")
 	if swept < 0 || pulled < 0 || swept > pulled {
-		t.Errorf("the sweep ran at %d and the pull at %d, so a login a killed pull left is swept by nothing until the next deploy stands a container up", swept, pulled)
+		t.Errorf("the sweep ran at %d and the pull at %d, so a login a killed pull left is swept by nothing until the next deploy runs a container", swept, pulled)
 	}
 }

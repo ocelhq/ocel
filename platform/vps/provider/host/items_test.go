@@ -46,18 +46,18 @@ func TestTheClassTierIsRootsAndTheStateTierIsTheDeployPrincipalsAlone(t *testing
 func TestTheRoutingTableIsAloneInADirectoryOfItsOwnThatIsWrittenBeforeIt(t *testing.T) {
 	t.Parallel()
 
-	held := filepath.Dir(live.RoutingTable)
-	if held == stateRoot || held == proxyRoot {
-		t.Fatalf("the routing table sits directly in %s, and a container that reads it through a bind of its directory would read everything else there too", held)
+	tableDir := filepath.Dir(live.RoutingTable)
+	if tableDir == stateRoot || tableDir == proxyRoot {
+		t.Fatalf("the routing table sits directly in %s, and a container that reads it through a bind of its directory would read everything else there too", tableDir)
 	}
 	items := Items(edge.ClassProduction, []byte(aKey+"\n"), ArchAMD64, Front{})
-	made := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindDir && item.Name == held })
+	made := slices.IndexFunc(items, func(item Item) bool { return item.Kind == KindDir && item.Name == tableDir })
 	table := slices.IndexFunc(items, func(item Item) bool { return strings.Contains(item.command(), live.RoutingTable) })
 	if made < 0 || table < 0 || made > table {
-		t.Fatalf("%s is made at %d and the table in it first written at %d by %s: the table is written by renaming a file staged beside it, so its directory stands first", held, made, table, items[max(table, 0)].ID())
+		t.Fatalf("%s is made at %d and the table in it first written at %d by %s: the table is written by renaming a file staged beside it, so its directory must exist first", tableDir, made, table, items[max(table, 0)].ID())
 	}
 	for _, item := range items {
-		if item.Name != held && item.Name != live.RoutingTable && beneath(held, item.Name) {
+		if item.Name != tableDir && item.Name != live.RoutingTable && beneath(tableDir, item.Name) {
 			t.Errorf("%s is written beside the routing table, and whatever reads the table's directory reads it too", item.ID())
 		}
 	}
@@ -73,12 +73,12 @@ func TestThePrincipalIsWrittenBeforeAnythingItOwns(t *testing.T) {
 	}
 	for i, item := range items {
 		if item.Owner == deployUser && i < account {
-			t.Errorf("%s is written before %s exists, and install names an owner the host does not hold", item.ID(), deployUser)
+			t.Errorf("%s is written before %s exists, and install names an owner the host does not have", item.ID(), deployUser)
 		}
 	}
 }
 
-func TestTheDeployKeysAreTheOnesTheItemCarries(t *testing.T) {
+func TestTheDeployKeysAreTheOnesTheItemContains(t *testing.T) {
 	t.Parallel()
 
 	keys := []byte(aKey + "\n")
@@ -108,11 +108,11 @@ func TestKeysNamedByPathAreReadFromItAndTidied(t *testing.T) {
 		t.Fatalf("named() = %v", err)
 	}
 	if string(keys) != aKey+"\n" {
-		t.Errorf("named() = %q, want the key alone so that what stands can be compared to what would be written", keys)
+		t.Errorf("named() = %q, want the key alone so that what is installed can be compared to what would be written", keys)
 	}
 }
 
-func TestKeysNamedByAPathThatHoldsNoneAreRefused(t *testing.T) {
+func TestKeysNamedByAPathThatContainsNoneAreRefused(t *testing.T) {
 	t.Parallel()
 
 	empty := filepath.Join(t.TempDir(), "empty.pub")
@@ -129,7 +129,7 @@ func TestKeysNamedByAPathThatHoldsNoneAreRefused(t *testing.T) {
 	}
 }
 
-func TestAPrincipalNothingHasCreatedIsPlannedAndOneThatStandsIsKept(t *testing.T) {
+func TestAPrincipalNothingHasCreatedIsPlannedAndOneThatExistsIsKept(t *testing.T) {
 	t.Parallel()
 
 	class := edge.ClassProduction
@@ -139,13 +139,13 @@ func TestAPrincipalNothingHasCreatedIsPlannedAndOneThatStandsIsKept(t *testing.T
 		t.Errorf("a host with no %s plans %q, want it created", deployUser, fresh.Action)
 	}
 
-	standing := Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: digests(Items(class, keys, ArchAMD64, Front{}))}
-	if kept := planFor(planned(standing), principal().ID()); kept.Action != provider.ActionKeep {
-		t.Errorf("a host whose principal stands as ocel writes it plans %q, want it kept", kept.Action)
+	installed := Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: digests(Items(class, keys, ArchAMD64, Front{}))}
+	if kept := planFor(planned(installed), principal().ID()); kept.Action != provider.ActionKeep {
+		t.Errorf("a host whose principal is unchanged from what ocel writes plans %q, want it kept", kept.Action)
 	}
-	for _, change := range planned(standing) {
+	for _, change := range planned(installed) {
 		if change.Action.Writes() {
-			t.Errorf("%s plans %q over a host that stands as ocel wrote it", change.Name, change.Action)
+			t.Errorf("%s plans %q over a host unchanged from what ocel wrote", change.Name, change.Action)
 		}
 	}
 }
@@ -154,8 +154,8 @@ func TestKeysThatChangedRePlanTheAuthorizedKeysAndNothingBeside(t *testing.T) {
 	t.Parallel()
 
 	class := edge.ClassProduction
-	stood := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
-	moved := Reading{Arch: ArchAMD64, Class: class, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: digests(stood)}
+	installed := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
+	moved := Reading{Arch: ArchAMD64, Class: class, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: digests(installed)}
 	for _, change := range planned(moved) {
 		want := provider.ActionKeep
 		switch change.Name {
@@ -170,27 +170,27 @@ func TestKeysThatChangedRePlanTheAuthorizedKeysAndNothingBeside(t *testing.T) {
 	}
 }
 
-func TestThePrincipalGoesWithTheLastClassAndStandsWhileASiblingDoes(t *testing.T) {
+func TestThePrincipalGoesWithTheLastClassAndStaysWhileASiblingRemains(t *testing.T) {
 	t.Parallel()
 
 	production, preview := edge.ClassProduction, edge.ClassPreview
 	keys := []byte(aKey + "\n")
-	held := digests(Items(production, keys, ArchAMD64, Front{}))
+	installed := digests(Items(production, keys, ArchAMD64, Front{}))
 
-	alone := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsStanding{})
+	alone := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: installed}, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsPresent{})
 	taken := slices.IndexFunc(alone, func(r removal) bool { return r.kind == KindUser && r.path == deployUser })
 	if taken < 0 {
 		t.Fatal("destroying the last class leaves the deploy principal behind, and a login nothing uses is a login nobody revokes")
 	}
 	if state := slices.IndexFunc(alone, func(r removal) bool { return r.path == stateRoot }); state > taken {
-		t.Error("the principal is removed before its home, and userdel over a home ocel still holds is a home nothing owns")
+		t.Error("the principal is removed before its home, and userdel over a home ocel still keeps state in is a home nothing owns")
 	}
 
 	beside := digests(Items(preview, keys, ArchAMD64, Front{}))
-	shared := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: held}, Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: beside}, appsStanding{})
+	shared := removing(Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: installed}, Reading{Arch: ArchAMD64, Class: preview, Keys: keys, Observed: beside}, appsPresent{})
 	for _, r := range shared {
 		if r.kind == KindUser {
-			t.Error("destroying one class takes the deploy principal a standing sibling still deploys as")
+			t.Error("destroying one class takes the deploy principal an installed sibling still deploys as")
 		}
 	}
 }
@@ -200,27 +200,27 @@ func TestNothingIsEverTakenAfterTheStampButTheRootAboveIt(t *testing.T) {
 
 	production, preview := edge.ClassProduction, edge.ClassPreview
 	keys := []byte(aKey + "\n")
-	standing := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
+	installed := Reading{Arch: ArchAMD64, Class: production, Keys: keys, Observed: digests(Items(production, keys, ArchAMD64, Front{}))}
 
 	for name, sibling := range map[string]Reading{
 		"the last class on the host": {Class: preview, Observed: map[string]string{}},
 		"a class beside its sibling": {Class: preview, Keys: keys, Observed: digests(Items(preview, keys, ArchAMD64, Front{}))},
 	} {
-		taken := removing(standing, sibling, appsStanding{})
+		taken := removing(installed, sibling, appsPresent{})
 		stamp := index(taken, ClassDir(production))
 		if stamp < 0 {
-			t.Fatalf("destroying %s never takes %s, and the stamp stands over a host that holds nothing", name, ClassDir(production))
+			t.Fatalf("destroying %s never takes %s, and the stamp stays on a host that has nothing", name, ClassDir(production))
 		}
 		for at, r := range taken {
 			if r.action != provider.ActionDelete || at <= stamp || r.path == classRoot {
 				continue
 			}
-			t.Errorf("destroying %s takes %s after the stamp, so an interrupted destroy leaves a host that lies about what it carries", name, r.path)
+			t.Errorf("destroying %s takes %s after the stamp, so an interrupted destroy leaves a host that lies about what it has installed", name, r.path)
 		}
 	}
 }
 
-func TestDestroyOfAHalfWrittenHostNamesWhatStandsAndNothingBeside(t *testing.T) {
+func TestDestroyOfAHalfWrittenHostNamesWhatExistsAndNothingBeside(t *testing.T) {
 	t.Parallel()
 
 	production, preview := edge.ClassProduction, edge.ClassPreview
@@ -230,10 +230,10 @@ func TestDestroyOfAHalfWrittenHostNamesWhatStandsAndNothingBeside(t *testing.T) 
 	}
 	taken := removing(
 		Reading{Arch: ArchAMD64, Class: production, Observed: half},
-		Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsStanding{},
+		Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsPresent{},
 	)
 	for _, r := range taken {
-		if _, stands := half[r.kind+" "+r.path]; !stands {
+		if _, present := half[r.kind+" "+r.path]; !present {
 			t.Errorf("destroy takes %s %s off a host that never had it, and an apply that died halfway needs no mode of its own", r.kind, r.path)
 		}
 	}
@@ -242,7 +242,7 @@ func TestDestroyOfAHalfWrittenHostNamesWhatStandsAndNothingBeside(t *testing.T) 
 			classRoot, last, len(taken))
 	}
 	if index(taken, ClassDir(production)) > index(taken, classRoot) {
-		t.Error("the class directory carrying the stamp is taken after the root above it, so an interrupted destroy loses what the host says it is")
+		t.Error("the class directory containing the stamp is taken after the root above it, so an interrupted destroy loses what the host says it is")
 	}
 }
 
@@ -268,7 +268,7 @@ func planFor(changes []provider.Change, id string) provider.Change {
 	return provider.Change{}
 }
 
-func TestTheAccountFactsCarryEveryFieldTheWriteSets(t *testing.T) {
+func TestTheAccountFactsIncludeEveryFieldTheWriteSets(t *testing.T) {
 	t.Parallel()
 
 	facts := string(principal().Content)
@@ -335,15 +335,15 @@ func TestOnlyTheOwnerDrawnSurveyPassesOverAFileItCannotRead(t *testing.T) {
 	}
 	whole, _, err := readSurvey(sh(t, root, survey(items)))
 	if err != nil {
-		t.Fatalf("the survey every write is planned against = %v over a tier holding a file this login may not read", err)
+		t.Fatalf("the survey every write is planned against = %v over a tier containing a file this login may not read", err)
 	}
-	if _, held := whole[KindFile+" "+readable]; !held {
+	if _, present := whole[KindFile+" "+readable]; !present {
 		t.Fatalf("the survey read nothing at all for %s, so what it says about %s means nothing", readable, sealed)
 	}
 	if reported := whole[KindFile+" "+sealed]; reported == items[1].Digest() {
 		t.Fatalf("the survey hashed %s without reading it, so this machine is not the one this test needs", sealed)
 	}
-	if _, held := whole[KindFile+" "+sealed]; !held {
+	if _, present := whole[KindFile+" "+sealed]; !present {
 		t.Errorf("the survey every write is planned against reports nothing for %s, and absence is a lie on the reading a plan is drawn from: what it cannot read is drift it must name, not a path that is gone",
 			sealed)
 	}
@@ -351,7 +351,7 @@ func TestOnlyTheOwnerDrawnSurveyPassesOverAFileItCannotRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, held := owned[KindFile+" "+sealed]; held {
+	if _, present := owned[KindFile+" "+sealed]; present {
 		t.Errorf("the survey a heal draws reports %s, and a file the drawing login could not hash reads as one that moved: heal denies the whole set over a helper root owns and nothing else may read",
 			sealed)
 	}

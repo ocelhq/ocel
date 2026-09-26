@@ -45,7 +45,7 @@ func TestABoxIsLetPastForTheBucketsItNowServesItself(t *testing.T) {
 
 	grants := []provider.Binding{{Name: "uploads", Resource: "bucket--uploads", Type: provider.BindingBucket}}
 	if err := refusingReach(t, nil, grants); err != nil {
-		t.Fatalf("a bucket binding consumed on a box = %v, want nothing refused: a box stands a store up for it", err)
+		t.Fatalf("a bucket binding consumed on a box = %v, want nothing refused: a box provisions a store for it", err)
 	}
 }
 

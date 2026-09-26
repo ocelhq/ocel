@@ -130,7 +130,7 @@ type storeCredential struct {
 
 type liveStores struct {
 	mu       sync.Mutex
-	stood    map[string]storeCredential
+	minted   map[string]storeCredential
 	dropped  map[string]bool
 	sweeps   bool
 	spec     *host.ResourceContainer
@@ -156,10 +156,10 @@ func (s *liveStores) forgotten(stack naming.StackName, binding string) bool {
 	return s.dropped[droppedBucket(stack, binding)]
 }
 
-func (s *liveStores) expiring(standing host.BucketState) {
+func (s *liveStores) expiring(state host.BucketState) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.sweeps = s.sweeps || !standing.ExpiresUploads
+	s.sweeps = s.sweeps || !state.ExpiresUploads
 }
 
 func (s *liveStores) sweeping() bool {
@@ -190,21 +190,21 @@ func (s *liveStores) shape() *host.ResourceContainer {
 	return s.spec
 }
 
-func (s *liveStores) once(name string, stand func() (storeCredential, error)) (storeCredential, error) {
+func (s *liveStores) once(name string, mint func() (storeCredential, error)) (storeCredential, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if held, stood := s.stood[name]; stood {
-		return held, nil
+	if cached, ok := s.minted[name]; ok {
+		return cached, nil
 	}
-	held, err := stand()
+	credential, err := mint()
 	if err != nil {
 		return storeCredential{}, err
 	}
-	if s.stood == nil {
-		s.stood = map[string]storeCredential{}
+	if s.minted == nil {
+		s.minted = map[string]storeCredential{}
 	}
-	s.stood[name] = held
-	return held, nil
+	s.minted[name] = credential
+	return credential, nil
 }
 
 func storeCoordinate(ref provider.StackRef) records.SealScope {
@@ -257,34 +257,34 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRe
 		return provider.Binding{}, err
 	}
 	if progress != nil {
-		progress.Say("Standing bucket " + in.Resource.Name + " up in " + spec.Name)
+		progress.Say("Provisioning bucket " + in.Resource.Name + " in " + spec.Name)
 	}
 
 	var sessions host.BucketState
-	stood := false
-	held, err := p.stores.once(spec.Name, func() (storeCredential, error) {
-		held, err := p.storeCredential(ctx, in.Ref, spec.Name)
+	started := false
+	root, err := p.stores.once(spec.Name, func() (storeCredential, error) {
+		credential, err := p.storeCredential(ctx, in.Ref, spec.Name)
 		if err != nil {
 			return storeCredential{}, err
 		}
-		if err := p.host.StandResource(ctx, spec, held.secret); err != nil {
+		if err := p.host.RunResource(ctx, spec, credential.secret); err != nil {
 			return storeCredential{}, err
 		}
 		if err := p.host.RouteResource(ctx, storeRoute(in.Ref, spec.Name)); err != nil {
 			return storeCredential{}, err
 		}
-		standing, err := p.host.ProvisionBucket(ctx, storeBucketSpec(in.Ref, spec.Name, held.secret,
+		state, err := p.host.ProvisionBucket(ctx, storeBucketSpec(in.Ref, spec.Name, credential.secret,
 			host.BucketSpec{Bucket: constants.StoreSessionsBucket(), Internal: true}))
 		if err != nil {
 			return storeCredential{}, err
 		}
-		sessions, stood = standing, true
-		return held, nil
+		sessions, started = state, true
+		return credential, nil
 	})
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	if stood {
+	if started {
 		p.stores.expiring(sessions)
 	}
 
@@ -294,7 +294,7 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRe
 	}
 	public := declaredPublic(in.Resource.Bucket)
 	bucket := storeBucketName(in.Ref, in.Resource.Name)
-	standing, err := p.host.ProvisionBucket(ctx, storeBucketSpec(in.Ref, spec.Name, held.secret, host.BucketSpec{
+	state, err := p.host.ProvisionBucket(ctx, storeBucketSpec(in.Ref, spec.Name, root.secret, host.BucketSpec{
 		Bucket:         bucket,
 		AllowedOrigins: origins,
 		Public:         public,
@@ -302,7 +302,7 @@ func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRe
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	p.stores.expiring(standing)
+	p.stores.expiring(state)
 
 	return provider.Binding{
 		Type:     provider.BindingBucket,
@@ -328,13 +328,13 @@ func (p *Provider) storeSection(ctx context.Context, spec provider.StackSpec) (*
 		shaped := storeContainer(resources.ProvisionRequest{Ref: storeRef(spec.Ref)})
 		container = &shaped
 	}
-	held, err := p.stores.once(container.Name, func() (storeCredential, error) {
+	root, err := p.stores.once(container.Name, func() (storeCredential, error) {
 		return p.storeCredential(ctx, spec.Ref, container.Name)
 	})
 	if err != nil {
 		return nil, err
 	}
-	own, err := p.storeAccount(ctx, spec, container.Name, held)
+	own, err := p.storeAccount(ctx, spec, container.Name, root)
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +349,7 @@ func (p *Provider) storeSection(ctx context.Context, spec provider.StackSpec) (*
 		Sessions:     sessionsPrefix(spec),
 		Granted:      grantedBuckets(spec.App),
 		SweepUploads: sweptUploads(spec.App),
-		Sealed:       base64.StdEncoding.EncodeToString(own.held.sealed),
+		Sealed:       base64.StdEncoding.EncodeToString(own.credential.sealed),
 	}, nil
 }
 
@@ -359,14 +359,14 @@ func sessionsPrefix(spec provider.StackSpec) string {
 }
 
 type appAccount struct {
-	key  string
-	held storeCredential
+	key        string
+	credential storeCredential
 }
 
 func (p *Provider) storeAccount(ctx context.Context, spec provider.StackSpec, store string, root storeCredential) (appAccount, error) {
 	env := storeRef(spec.Ref).Name.String()
 	key := host.StoreAccountKey(env, appNameOf(spec.App))
-	held, err := p.stores.once(key, func() (storeCredential, error) {
+	credential, err := p.stores.once(key, func() (storeCredential, error) {
 		return p.storeCredential(ctx, spec.Ref, key)
 	})
 	if err != nil {
@@ -380,13 +380,13 @@ func (p *Provider) storeAccount(ctx context.Context, spec provider.StackSpec, st
 		RootKeyID:   storeAccessKey,
 		RootSecret:  root.secret,
 		AccessKeyID: key,
-		SecretKey:   held.secret,
+		SecretKey:   credential.secret,
 		Buckets:     boundBuckets(spec.App),
 		Sessions:    sessionsPrefix(spec),
 	}); err != nil {
 		return appAccount{}, err
 	}
-	return appAccount{key: key, held: held}, nil
+	return appAccount{key: key, credential: credential}, nil
 }
 
 func appNameOf(app *provider.AppSpec) string {
@@ -400,16 +400,16 @@ func grantedBuckets(app *provider.AppSpec) []string {
 	if app == nil {
 		return nil
 	}
-	var held []string
+	var granted []string
 	for _, binding := range append(slices.Clone(app.Values.Bindings), app.Grants...) {
 		if binding.Type != provider.BindingBucket || binding.Endpointed() {
 			continue
 		}
-		if spec := binding.Properties[provider.PropertyBucket]; spec != "" && !slices.Contains(held, spec) {
-			held = append(held, spec)
+		if spec := binding.Properties[provider.PropertyBucket]; spec != "" && !slices.Contains(granted, spec) {
+			granted = append(granted, spec)
 		}
 	}
-	return held
+	return granted
 }
 
 func sweptUploads(app *provider.AppSpec) bool {
@@ -424,14 +424,14 @@ func sweptUploads(app *provider.AppSpec) bool {
 }
 
 func boundBuckets(app *provider.AppSpec) []string {
-	var held []string
+	var bound []string
 	for _, spec := range grantedBuckets(app) {
 		bucket, _, _ := strings.Cut(spec, "/")
-		if bucket != "" && !slices.Contains(held, bucket) {
-			held = append(held, bucket)
+		if bucket != "" && !slices.Contains(bound, bucket) {
+			bound = append(bound, bucket)
 		}
 	}
-	return held
+	return bound
 }
 
 func declaredOrigins(spec *provider.BucketSpec) []string {
@@ -463,7 +463,7 @@ func corsOrigins(ref provider.StackRef, declared []string, claims []host.HostCla
 	return origins
 }
 
-func (p *Provider) holdOrigins(ctx context.Context, project string, class edge.Class) error {
+func (p *Provider) applyOrigins(ctx context.Context, project string, class edge.Class) error {
 	entries, err := stackrecords.List(ctx, p.records, class, project)
 	if err != nil {
 		return err
@@ -471,21 +471,21 @@ func (p *Provider) holdOrigins(ctx context.Context, project string, class edge.C
 	claims := sync.OnceValues(func() ([]host.HostClaim, error) { return p.host.Claims(ctx) })
 	for _, entry := range entries {
 		ref := provider.StackRef{Project: project, Class: class, Name: entry.Name}
-		if err := p.holdStackOrigins(ctx, ref, entry, claims); err != nil {
+		if err := p.applyStackOrigins(ctx, ref, entry, claims); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (p *Provider) holdStackOrigins(ctx context.Context, ref provider.StackRef, entry stackrecords.NamedStack, claims func() ([]host.HostClaim, error)) error {
+func (p *Provider) applyStackOrigins(ctx context.Context, ref provider.StackRef, entry stackrecords.NamedStack, claims func() ([]host.HostClaim, error)) error {
 	buckets := slices.DeleteFunc(slices.Clone(entry.Bindings), func(binding provider.Binding) bool {
 		return binding.Type != provider.BindingBucket || p.stores.forgotten(entry.Name, binding.Name)
 	})
 	if len(buckets) == 0 {
 		return nil
 	}
-	held, err := claims()
+	claimed, err := claims()
 	if err != nil {
 		return err
 	}
@@ -494,9 +494,9 @@ func (p *Provider) holdStackOrigins(ctx context.Context, ref provider.StackRef, 
 		return err
 	}
 	for _, binding := range buckets {
-		if err := p.host.HoldOrigins(ctx, storeBucketSpec(ref, storeName(ref), root.secret, host.BucketSpec{
+		if err := p.host.ApplyOrigins(ctx, storeBucketSpec(ref, storeName(ref), root.secret, host.BucketSpec{
 			Bucket:         binding.Properties[provider.PropertyBucket],
-			AllowedOrigins: corsOrigins(ref, recordedOrigins(binding), held),
+			AllowedOrigins: corsOrigins(ref, recordedOrigins(binding), claimed),
 		})); err != nil {
 			return err
 		}
@@ -522,11 +522,11 @@ func (p *Provider) removeBucket(ctx context.Context, ref provider.StackRef, bind
 
 func (p *Provider) dropBucket(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress edge.Progress) error {
 	store := storeName(ref)
-	held, err := p.storeRoot(ctx, ref, store)
+	root, err := p.storeRoot(ctx, ref, store)
 	if err != nil {
 		return err
 	}
-	if held.secret == "" {
+	if root.secret == "" {
 		if progress != nil {
 			progress.Say("Leaving bucket " + binding.Name + ": no credential kept for " + store)
 		}
@@ -547,7 +547,7 @@ func (p *Provider) dropBucket(ctx context.Context, ref provider.StackRef, bindin
 		Endpoint:    "http://127.0.0.1:" + storePort,
 		Region:      storeRegion,
 		AccessKeyID: storeAccessKey,
-		SecretKey:   held.secret,
+		SecretKey:   root.secret,
 	})
 }
 
@@ -568,8 +568,8 @@ func (p *Provider) lastBucket(ctx context.Context, ref provider.StackRef) (bool,
 		if entry.Name.Env != ref.Name.Env {
 			continue
 		}
-		for _, held := range entry.Bindings {
-			if held.Type != provider.BindingBucket || p.stores.forgotten(entry.Name, held.Name) {
+		for _, binding := range entry.Bindings {
+			if binding.Type != provider.BindingBucket || p.stores.forgotten(entry.Name, binding.Name) {
 				continue
 			}
 			return false, nil
@@ -630,18 +630,18 @@ func (p *Provider) removeStoreAccount(ctx context.Context, ref provider.StackRef
 	if err != nil || len(sealed) == 0 {
 		return err
 	}
-	held, err := p.storeRoot(ctx, ref, store)
+	root, err := p.storeRoot(ctx, ref, store)
 	if err != nil {
 		return err
 	}
-	if held.secret != "" {
+	if root.secret != "" {
 		if err := p.host.RevokeStoreAccount(ctx, host.StoreAccount{
 			Store:       store,
 			Class:       ref.Class,
 			Endpoint:    "http://127.0.0.1:" + storePort,
 			Region:      storeRegion,
 			RootKeyID:   storeAccessKey,
-			RootSecret:  held.secret,
+			RootSecret:  root.secret,
 			AccessKeyID: key,
 		}); err != nil {
 			return err

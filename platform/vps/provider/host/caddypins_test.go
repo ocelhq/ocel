@@ -17,20 +17,20 @@ import (
 
 const wildcard = "*.preview.example.com"
 
-func pinnedBox(t *testing.T, pins []Pin, held map[string][]byte) *Host {
+func pinnedBox(t *testing.T, pins []Pin, files map[string][]byte) *Host {
 	t.Helper()
 
-	stood := claimingBox(t, routed())
-	serves := stood.answer
-	stood.answer = func(command string) (session.Result, bool) {
-		for path, block := range held {
+	rig := claimingBox(t, routed())
+	serves := rig.answer
+	rig.answer = func(command string) (session.Result, bool) {
+		for path, block := range files {
 			if strings.Contains(command, quoted(path)) {
 				return session.Result{Stdout: string(block)}, true
 			}
 		}
 		return serves(command)
 	}
-	return New(stood.dial, Keys{}, pins, Front{})
+	return New(rig.dial, Keys{}, pins, Front{})
 }
 
 func pinning(t *testing.T) (*claimBench, *Host) {
@@ -38,20 +38,20 @@ func pinning(t *testing.T) (*claimBench, *Host) {
 
 	at := caddy.PinsDir + "/wildcard"
 	covering, _ := pinnedBlocks(t, []string{wildcard}, 90*24*time.Hour)
-	stood := claimingBox(t, routed())
-	serves := stood.answer
-	stood.answer = func(command string) (session.Result, bool) {
+	rig := claimingBox(t, routed())
+	serves := rig.answer
+	rig.answer = func(command string) (session.Result, bool) {
 		if strings.Contains(command, quoted(caddy.PinCertificate(at))) {
 			return session.Result{Stdout: string(covering)}, true
 		}
 		return serves(command)
 	}
-	return stood, New(stood.dial, Keys{}, []Pin{{Hostname: wildcard, Path: at}}, Front{})
+	return rig, New(rig.dial, Keys{}, []Pin{{Hostname: wildcard, Path: at}}, Front{})
 }
 
-func claiming(t *testing.T, pins []Pin, held map[string][]byte) error {
+func claiming(t *testing.T, pins []Pin, files map[string][]byte) error {
 	t.Helper()
-	return pinnedBox(t, pins, held).ClaimHosts(context.Background(),
+	return pinnedBox(t, pins, files).ClaimHosts(context.Background(),
 		[]HostClaim{{Hostname: claimed, Owner: surface, Pointer: pointed}})
 }
 
@@ -71,7 +71,7 @@ func TestAPinIsWrittenAtThePathTheProxyOpensAndReadBackAtThePathThisHostSpells(t
 			at, caddy.PinsMount, rendered)
 	}
 	if strings.Contains(string(rendered), caddy.PinsDir+"/wildcard") {
-		t.Errorf("the config carries a path off this host's own filesystem:\n%s", rendered)
+		t.Errorf("the config names a path off this host's own filesystem:\n%s", rendered)
 	}
 
 	read, err := ReadRoutingTable(mustWrite(t, state))
@@ -111,21 +111,21 @@ func TestAPinIsVerifiedWhereItIsBoundRatherThanWhereItIsRead(t *testing.T) {
 	elsewhere, _ := pinnedBlocks(t, []string{"*.other.example.com"}, 90*24*time.Hour)
 	expired, _ := pinnedBlocks(t, []string{wildcard}, -time.Hour)
 
-	for what, held := range map[string][]byte{
+	for what, stored := range map[string][]byte{
 		"a pair covering something else":                        elsewhere,
 		"a pair nothing on this box renews and nobody replaced": expired,
 		"a file that is no certificate at all":                  []byte("-----BEGIN EC PRIVATE KEY-----\nMHcCAQE=\n-----END EC PRIVATE KEY-----\n"),
 	} {
-		err := claiming(t, []Pin{{Hostname: wildcard, Path: at}}, map[string][]byte{caddy.PinCertificate(at): held})
+		err := claiming(t, []Pin{{Hostname: wildcard, Path: at}}, map[string][]byte{caddy.PinCertificate(at): stored})
 		var refusal refusal.Refusal
 		if !errors.As(err, &refusal) {
-			t.Errorf("a claim on a box carrying %s = %v, want ocel's own refusal naming %s: the pin reaches the proxy on every reshape, so an unverified one turns a typo into a caddy error on somebody else's deploy",
+			t.Errorf("a claim on a box storing %s = %v, want ocel's own refusal naming %s: the pin reaches the proxy on every reshape, so an unverified one turns a typo into a caddy error on somebody else's deploy",
 				what, err, at)
 		}
 	}
 
 	if err := claiming(t, []Pin{{Hostname: wildcard, Path: at}}, map[string][]byte{caddy.PinCertificate(at): covering}); err != nil {
-		t.Errorf("a claim on a box carrying a pinned pair that covers what it is pinned for = %v, want the claim taken", err)
+		t.Errorf("a claim on a box storing a pinned pair that covers what it is pinned for = %v, want the claim taken", err)
 	}
 }
 
@@ -134,17 +134,17 @@ func TestAPinIsReadOffTheBoxOnceRatherThanOnEveryReshape(t *testing.T) {
 
 	at := caddy.PinsDir + "/wildcard"
 	covering, _ := pinnedBlocks(t, []string{wildcard}, 90*24*time.Hour)
-	stood := claimingBox(t, routed())
-	serves := stood.answer
+	rig := claimingBox(t, routed())
+	serves := rig.answer
 	reads := 0
-	stood.answer = func(command string) (session.Result, bool) {
+	rig.answer = func(command string) (session.Result, bool) {
 		if strings.HasPrefix(command, "cat "+quoted(caddy.PinCertificate(at))) {
 			reads++
 			return session.Result{Stdout: string(covering)}, true
 		}
 		return serves(command)
 	}
-	h := New(stood.dial, Keys{}, []Pin{{Hostname: wildcard, Path: at}}, Front{})
+	h := New(rig.dial, Keys{}, []Pin{{Hostname: wildcard, Path: at}}, Front{})
 
 	ctx := context.Background()
 	for _, hostname := range []string{claimed, "blog.example.com", "www.example.com"} {
@@ -170,9 +170,9 @@ func TestAPinTheProxyCouldNotOpenCoversNothingRatherThanNamingAHandle(t *testing
 				what, pin.Path, at)
 		}
 	}
-	held := Pin{Hostname: wildcard, Path: caddy.PinsDir + "/wildcard"}
-	if at := Covering([]Pin{held}, "shop.preview.example.com"); at != held.Path {
-		t.Errorf("Covering() over a pair the proxy loads = %q, want %q", at, held.Path)
+	loaded := Pin{Hostname: wildcard, Path: caddy.PinsDir + "/wildcard"}
+	if at := Covering([]Pin{loaded}, "shop.preview.example.com"); at != loaded.Path {
+		t.Errorf("Covering() over a pair the proxy loads = %q, want %q", at, loaded.Path)
 	}
 }
 
@@ -214,13 +214,13 @@ func TestOneCertificateCoveringTwoHostnamesIsHandedToTheProxyOnce(t *testing.T) 
 		t.Errorf("the one entry is tagged %v, want %v: the pair's own path is what a handshake for either hostname selects it by, and a tag naming the hostnames it covers changes the proxy's config with every bind under it", files[0].Tags, want)
 	}
 
-	held, err := ReadRoutingTable(mustWrite(t, state))
+	table, err := ReadRoutingTable(mustWrite(t, state))
 	if err != nil {
 		t.Fatalf("ReadRoutingTable() = %v", err)
 	}
 	want := []Pin{{Hostname: "blog.example.com", Path: at}, {Hostname: "shop.example.com", Path: at}}
-	if !slices.Equal(held.Pins, want) {
-		t.Errorf("the pins read back are %v, want %v: a deploy renders this file whole off what it reads, and a hostname lost in the round trip is a pair the next reshape stops loading", held.Pins, want)
+	if !slices.Equal(table.Pins, want) {
+		t.Errorf("the pins read back are %v, want %v: a deploy renders this file whole off what it reads, and a hostname lost in the round trip is a pair the next reshape stops loading", table.Pins, want)
 	}
 }
 

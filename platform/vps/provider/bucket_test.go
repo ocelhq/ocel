@@ -18,11 +18,11 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
-const standingRootKey = "9a3b48264c5d6e7f8091a2b3c4d5e6f7"
+const recordedRootKey = "9a3b48264c5d6e7f8091a2b3c4d5e6f7"
 
 func sealedRootKey() string {
 	return base64.StdEncoding.EncodeToString([]byte(fakeSeal+
-		base64.StdEncoding.EncodeToString([]byte(standingRootKey)))) + "\n"
+		base64.StdEncoding.EncodeToString([]byte(recordedRootKey)))) + "\n"
 }
 
 func aBucket(t *testing.T, name string, public bool) resources.ProvisionRequest {
@@ -51,7 +51,7 @@ func TestAProviderOverABoxServesBuckets(t *testing.T) {
 	}
 }
 
-func TestADeclaredBucketStandsAStoreUpOnlyItsProjectReaches(t *testing.T) {
+func TestADeclaredBucketRunsAStoreOnlyItsProjectReaches(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
@@ -66,7 +66,7 @@ func TestADeclaredBucketStandsAStoreUpOnlyItsProjectReaches(t *testing.T) {
 		t.Errorf("the binding is %s %q, want the bucket the project declared as uploads", binding.Type, binding.Name)
 	}
 
-	stood := machine.commands()[machine.at("'docker' 'run'")]
+	runCommand := machine.commands()[machine.at("'docker' 'run'")]
 	for _, want := range []string{
 		"'--network' 'ocel-production-shop'",
 		"ocel.class=production",
@@ -74,13 +74,13 @@ func TestADeclaredBucketStandsAStoreUpOnlyItsProjectReaches(t *testing.T) {
 		"'--cap-drop' 'ALL'",
 		"@sha256:",
 	} {
-		if !strings.Contains(stood, want) {
-			t.Errorf("the store was stood up without %q:\n%s", want, stood)
+		if !strings.Contains(runCommand, want) {
+			t.Errorf("the store was started without %q:\n%s", want, runCommand)
 		}
 	}
 	for _, published := range []string{"--publish", "'-p'"} {
-		if strings.Contains(stood, published) {
-			t.Errorf("the store was stood up with %s, so the box's disk is reachable from the internet:\n%s", published, stood)
+		if strings.Contains(runCommand, published) {
+			t.Errorf("the store was started with %s, so the box's disk is reachable from the internet:\n%s", published, runCommand)
 		}
 	}
 }
@@ -91,25 +91,25 @@ func TestABindingIsKeyedByTheNameTheAppDeclaredTheResourceUnder(t *testing.T) {
 	postgres := aPostgres(t, "17")
 	postgres.Resource.Name, postgres.Resource.Declared = "db--main", "main"
 	machine := &box{}
-	holdingAPostgres(machine)
-	held, err := over(machine).ProvisionPostgres(context.Background(), postgres, nil)
+	withRecordedPostgres(machine)
+	binding, err := over(machine).ProvisionPostgres(context.Background(), postgres, nil)
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
-	if held.Resource != "main" {
+	if binding.Resource != "main" {
 		t.Errorf("the postgres binding names resource %q, so the app reads it off %s rather than off %s",
-			held.Resource, provider.ResourceEnvName(held.Type, held.Name), provider.ResourceEnvName(held.Type, "main"))
+			binding.Resource, provider.ResourceEnvName(binding.Type, binding.Name), provider.ResourceEnvName(binding.Type, "main"))
 	}
 
 	bucket := aBucket(t, "bucket--uploads", false)
 	bucket.Resource.Declared = "uploads"
-	held, err = over(&box{kept: sealedRootKey()}).ProvisionBucket(context.Background(), bucket, nil)
+	binding, err = over(&box{kept: sealedRootKey()}).ProvisionBucket(context.Background(), bucket, nil)
 	if err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
-	if held.Resource != "uploads" {
+	if binding.Resource != "uploads" {
 		t.Errorf("the bucket binding names resource %q, so the app reads it off %s rather than off %s",
-			held.Resource, provider.ResourceEnvName(held.Type, held.Name), provider.ResourceEnvName(held.Type, "uploads"))
+			binding.Resource, provider.ResourceEnvName(binding.Type, binding.Name), provider.ResourceEnvName(binding.Type, "uploads"))
 	}
 }
 
@@ -138,11 +138,11 @@ func TestOneStoreServesEveryBucketAProjectDeclares(t *testing.T) {
 		}
 	}
 	if stores != 1 {
-		t.Fatalf("two declared buckets stood %d stores up, and a box runs one per project and environment", stores)
+		t.Fatalf("two declared buckets started %d stores, and a box runs one per project and environment", stores)
 	}
 }
 
-func TestTheStoreIsHeldToACredentialTheBoxKeepsSealed(t *testing.T) {
+func TestTheStoreRunsOnACredentialTheBoxKeepsSealed(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{kept: sealedRootKey()}
@@ -154,14 +154,14 @@ func TestTheStoreIsHeldToACredentialTheBoxKeepsSealed(t *testing.T) {
 	if !strings.Contains(joined, host.KeptPath(edge.ClassProduction, "prod-infra-store-s3")) {
 		t.Fatalf("nothing about the store's credential was kept on the box:\n%s", joined)
 	}
-	for _, fed := range machine.carried() {
-		if strings.Contains(fed, standingRootKey) && !strings.Contains(fed, "RUSTFS_SECRET_KEY") {
-			t.Fatalf("the store's root credential was carried to the box outside the env file it is handed in:\n%s", fed)
+	for _, fed := range machine.feeds() {
+		if strings.Contains(fed, recordedRootKey) && !strings.Contains(fed, "RUSTFS_SECRET_KEY") {
+			t.Fatalf("the store's root credential was sent to the box outside the env file it is handed in:\n%s", fed)
 		}
 	}
 	handed := host.EnvFile(edge.ClassProduction, "prod-infra-store-s3")
 	if !strings.Contains(joined, "rm -f "+quotedPath(handed)) {
-		t.Fatalf("the file the store's credential was handed over in is left standing on the box:\n%s", joined)
+		t.Fatalf("the file the store's credential was handed over in is left on the box:\n%s", joined)
 	}
 }
 
@@ -185,7 +185,7 @@ func sealingStore(t *testing.T, declared ...string) string {
 	return ""
 }
 
-func TestTheStoreCredentialIsSealedUnderTheStoreAndNotWhicheverBucketStoodItUp(t *testing.T) {
+func TestTheStoreCredentialIsSealedUnderTheStoreAndNotWhicheverBucketProvisionedIt(t *testing.T) {
 	t.Parallel()
 
 	first := sealingStore(t, "avatars", "uploads")
@@ -203,7 +203,7 @@ func TestTheSecretAStoreAccountIsMintedWithIsOneTheStoreWillTake(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MintStoreSecret() = %v", err)
 	}
-	if err := host.StoreSecretHeld(secret); err != nil {
+	if err := host.CheckStoreSecret(secret); err != nil {
 		t.Errorf("a minted store secret is %d characters: %v", len(secret), err)
 	}
 }
@@ -228,15 +228,15 @@ func storeManifest(t *testing.T, machine *box, options vps.Options) vars.Manifes
 
 func manifestIn(t *testing.T, machine *box) vars.Manifest {
 	t.Helper()
-	return manifestFed(t, machine.carried())
+	return manifestFed(t, machine.feeds())
 }
 
 func manifestFed(t *testing.T, fed []string) vars.Manifest {
 	t.Helper()
-	for _, carried := range fed {
-		for line := range strings.SplitSeq(carried, "\n") {
-			raw, held := strings.CutPrefix(line, vars.EnvVar+"=")
-			if !held {
+	for _, sent := range fed {
+		for line := range strings.SplitSeq(sent, "\n") {
+			raw, found := strings.CutPrefix(line, vars.EnvVar+"=")
+			if !found {
 				continue
 			}
 			parsed, err := vars.Parse([]byte(raw))
@@ -246,7 +246,7 @@ func manifestFed(t *testing.T, fed []string) vars.Manifest {
 			return parsed
 		}
 	}
-	t.Fatal("nothing the deploy carried to the box held a live manifest for the app")
+	t.Fatal("nothing the deploy sent to the box contained a live manifest for the app")
 	return vars.Manifest{}
 }
 
@@ -265,10 +265,10 @@ func TestAnAppBindingABucketIsHandedItsStoreSealedAndNeverInPlaintext(t *testing
 		t.Errorf("the manifest points the runtime at %+v, want the store this project runs, addressed path-style", manifest.Store)
 	}
 	if manifest.Store.Sealed == "" {
-		t.Error("the manifest carries no sealed credential, so the runtime could reach no store")
+		t.Error("the manifest includes no sealed credential, so the runtime could reach no store")
 	}
-	if strings.Contains(manifest.Store.Sealed, standingRootKey) {
-		t.Errorf("the manifest carries the store credential in plaintext: %q", manifest.Store.Sealed)
+	if strings.Contains(manifest.Store.Sealed, recordedRootKey) {
+		t.Errorf("the manifest includes the store credential in plaintext: %q", manifest.Store.Sealed)
 	}
 	if manifest.Store.Volume == "" {
 		t.Error("the manifest names no volume, so the disk guard has nothing to measure")
@@ -288,7 +288,7 @@ func TestTheStoreKeepsItsSessionsInABucketNoAppDeclaresOrReaches(t *testing.T) {
 	}
 	joined := strings.Join(machine.commands(), "\n")
 	if !strings.Contains(joined, "/"+constants.StoreSessionsBucket()) {
-		t.Fatalf("standing a store created no bucket for its sessions:\n%s", joined)
+		t.Fatalf("provisioning a store created no bucket for its sessions:\n%s", joined)
 	}
 	for line := range strings.SplitSeq(joined, "\n") {
 		if strings.Contains(line, constants.StoreSessionsBucket()) && strings.Contains(line, "?policy") {
@@ -327,9 +327,9 @@ func TestTheCoordinateTheRuntimeOpensTheStoreAtIsTheOneTheDeploySealedAt(t *test
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
 		func(context.Context) (host.Conn, error) { return machine, nil },
 	)
-	stood := aBucket(t, "uploads", false)
-	stood.Ref = anInfraStack(t)
-	if _, err := p.ProvisionBucket(context.Background(), stood, nil); err != nil {
+	provisioned := aBucket(t, "uploads", false)
+	provisioned.Ref = anInfraStack(t)
+	if _, err := p.ProvisionBucket(context.Background(), provisioned, nil); err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
 
@@ -342,12 +342,12 @@ func TestTheCoordinateTheRuntimeOpensTheStoreAtIsTheOneTheDeploySealedAt(t *test
 	if manifest.Store == nil {
 		t.Fatal("the app binding a bucket was handed no store")
 	}
-	if held, want := manifest.StoreCoordinate(), vps.StoreCoordinate(stood.Ref); held != want {
+	if opened, want := manifest.StoreCoordinate(), vps.StoreCoordinate(provisioned.Ref); opened != want {
 		t.Errorf("the runtime would open the store's credential at %+v and the deploy sealed it at %+v:"+
-			" a resource stands on its environment's infra stack and an app runs on its own, so a coordinate"+
-			" naming the asking stack opens nothing", held, want)
+			" a resource is provisioned on its environment's infra stack and an app runs on its own, so a coordinate"+
+			" naming the asking stack opens nothing", opened, want)
 	}
-	if manifest.Store.Endpoint != "http://"+vps.StoreName(stood.Ref)+":9000" {
+	if manifest.Store.Endpoint != "http://"+vps.StoreName(provisioned.Ref)+":9000" {
 		t.Errorf("the runtime is pointed at %q, want the store this environment runs", manifest.Store.Endpoint)
 	}
 }
@@ -402,7 +402,7 @@ func TestRemovingABucketTakesItsObjectsWithIt(t *testing.T) {
 	}
 	joined := strings.Join(machine.commands(), "\n")
 	if strings.Contains(joined, "rm -rf /data/") {
-		t.Errorf("a bucket was taken off the store's disk behind its back, leaving the store's own record of it standing:\n%s", joined)
+		t.Errorf("a bucket was taken off the store's disk behind its back, leaving the store's own record of it in place:\n%s", joined)
 	}
 	for _, want := range []string{"list-type=2", "?uploads", "'DELETE'"} {
 		if !strings.Contains(joined, want) {
@@ -411,7 +411,7 @@ func TestRemovingABucketTakesItsObjectsWithIt(t *testing.T) {
 	}
 }
 
-func TestAStandingStoreIsRoutedOnTheBoxsProxyUnderALabelOfItsOwn(t *testing.T) {
+func TestAProvisionedStoreIsRoutedOnTheBoxsProxyUnderALabelOfItsOwn(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
@@ -424,7 +424,7 @@ func TestAStandingStoreIsRoutedOnTheBoxsProxyUnderALabelOfItsOwn(t *testing.T) {
 	}
 	at := slices.IndexFunc(state.Routes, func(route host.AppRoute) bool { return route.App == switchboard.StoreLabel })
 	if at < 0 {
-		t.Fatalf("standing a store left the proxy routing %v, and nothing off the box reaches it", state.Routes)
+		t.Fatalf("provisioning a store left the proxy routing %v, and nothing off the box reaches it", state.Routes)
 	}
 	route := state.Routes[at]
 	if route.Owner != vars.Surface("shop", "production") || route.Pointer != edge.DefaultPointer {

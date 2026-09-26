@@ -19,8 +19,8 @@ func (Manual) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (Manual) Reload(context.Context) error { return nil }
 
-func (m Manual) Inspect(ctx context.Context) (proxy.Standing, error) {
-	standing := proxy.Standing{m.holding(ctx)}
+func (m Manual) Inspect(ctx context.Context) (proxy.Checks, error) {
+	checks := proxy.Checks{m.portCheck(ctx)}
 	claimed, err := m.Box.Claimed(ctx)
 	if err != nil {
 		return nil, err
@@ -30,9 +30,9 @@ func (m Manual) Inspect(ctx context.Context) (proxy.Standing, error) {
 		if err != nil {
 			return nil, err
 		}
-		standing = append(standing, check)
+		checks = append(checks, check)
 	}
-	return standing, nil
+	return checks, nil
 }
 
 func (Manual) Certificate(context.Context, string) (proxy.Certificate, error) {

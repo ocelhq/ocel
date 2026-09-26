@@ -36,7 +36,7 @@ type box struct {
 	mu         sync.Mutex
 	ran        []string
 	fed        []string
-	holds      bool
+	hasImage   bool
 	unsocket   bool
 	serves     map[string]string
 	images     map[string]string
@@ -48,18 +48,18 @@ type box struct {
 }
 
 func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (session.Result, error) {
-	var carried string
+	var input string
 	if stdin != nil {
 		raw, err := io.ReadAll(stdin)
 		if err != nil {
 			return session.Result{}, err
 		}
-		carried = string(raw)
+		input = string(raw)
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.ran = append(b.ran, command)
-	b.fed = append(b.fed, carried)
+	b.fed = append(b.fed, input)
 	if b.refuses != nil {
 		if result, refused := b.refuses(command); refused {
 			return result, nil
@@ -68,18 +68,18 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 	if b.unsocket && strings.Contains(command, "docker version") {
 		return session.Result{Code: 1, Stderr: "permission denied while trying to connect to the Docker daemon socket"}, nil
 	}
-	if read, named := b.proxying(command, carried); named {
+	if read, named := b.proxying(command, input); named {
 		return read, nil
 	}
 	if read, named := b.catting(command); named {
 		return read, nil
 	}
-	if sealed, sealing := b.sealing(command, carried); sealing {
+	if sealed, sealing := b.sealing(command, input); sealing {
 		return sealed, nil
 	}
 	if strings.Contains(command, "/kept/") {
 		if strings.Contains(command, "ln ") && b.kept == "" {
-			b.kept = carried
+			b.kept = input
 		}
 		return session.Result{Stdout: b.kept}, nil
 	}
@@ -93,18 +93,18 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 		fields = fields[at:]
 		switch {
 		case fields[1] == "load":
-			b.holds = true
+			b.hasImage = true
 			b.name(loadedImageRef, loadedImageRef)
 			said = "Loaded image: " + loadedImageRef + "\n"
 		case fields[1] == "pull" && len(fields) > 2:
 			ref := unquoted(fields[2])
-			b.holds = true
+			b.hasImage = true
 			b.name(ref, b.served(ref))
 			said = "Status: Downloaded newer image\n"
 		case fields[1] == "tag" && len(fields) > 3:
 			b.name(unquoted(fields[3]), b.images[unquoted(fields[2])])
 		case fields[1] == "image" && len(fields) > 2 && fields[2] == "ls":
-			if b.holds {
+			if b.hasImage {
 				said = "sha256:abcdef\n"
 			}
 		}
@@ -112,7 +112,7 @@ func (b *box) Stream(_ context.Context, command string, stdin io.Reader) (sessio
 	return session.Result{Stdout: said}, nil
 }
 
-func (b *box) proxying(command, carried string) (session.Result, bool) {
+func (b *box) proxying(command, input string) (session.Result, bool) {
 	if !strings.Contains(command, quote(vars.RoutingTable)) {
 		return session.Result{}, false
 	}
@@ -133,10 +133,10 @@ func (b *box) proxying(command, carried string) (session.Result, bool) {
 		if err != nil {
 			return session.Result{Code: 1, Stderr: err.Error()}, true
 		}
-		held := func(read []byte) string { return "+" + base64.StdEncoding.EncodeToString(read) + "\n" }
-		return session.Result{Stdout: held([]byte(b.routingDoc)) + held(rendered)}, true
+		encoded := func(read []byte) string { return "+" + base64.StdEncoding.EncodeToString(read) + "\n" }
+		return session.Result{Stdout: encoded([]byte(b.routingDoc)) + encoded(rendered)}, true
 	case strings.Contains(command, `mv "$staged" `):
-		fed, _, _ := strings.Cut(carried, "\n")
+		fed, _, _ := strings.Cut(input, "\n")
 		written, err := base64.StdEncoding.DecodeString(fed)
 		if err != nil {
 			return session.Result{Code: 1, Stderr: err.Error()}, true
@@ -152,8 +152,8 @@ func (b *box) catting(command string) (session.Result, bool) {
 	if named, catted := strings.CutPrefix(command, "cat "); catted {
 		var said string
 		for _, path := range strings.Fields(named) {
-			read, held := b.reads[unquoted(path)]
-			if !held {
+			read, found := b.reads[unquoted(path)]
+			if !found {
 				return session.Result{Code: 1, Stderr: "cat: " + unquoted(path) + ": No such file or directory"}, true
 			}
 			said += read
@@ -171,11 +171,11 @@ func (b *box) catting(command string) (session.Result, bool) {
 
 const fakeSeal = "sealed:"
 
-func (b *box) sealing(command, carried string) (session.Result, bool) {
+func (b *box) sealing(command, input string) (session.Result, bool) {
 	if !strings.Contains(command, host.SealHelper) {
 		return session.Result{}, false
 	}
-	body, err := base64.StdEncoding.DecodeString(strings.TrimSpace(carried))
+	body, err := base64.StdEncoding.DecodeString(strings.TrimSpace(input))
 	if err != nil {
 		return session.Result{Code: 1, Stderr: "seal: not base64"}, true
 	}
@@ -241,7 +241,7 @@ func (b *box) commands() []string {
 	return append([]string(nil), b.ran...)
 }
 
-func (b *box) carried() []string {
+func (b *box) feeds() []string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return append([]string(nil), b.fed...)
@@ -258,7 +258,7 @@ func (b *box) fedTo(needle string) string {
 	return ""
 }
 
-func standing(t *testing.T, machine *box) images.Store {
+func directImagesOn(t *testing.T, machine *box) images.Store {
 	t.Helper()
 	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
@@ -271,7 +271,7 @@ func standing(t *testing.T, machine *box) images.Store {
 	return store
 }
 
-func daemonHolding(t *testing.T, tar string) *int {
+func daemonServing(t *testing.T, tar string) *int {
 	t.Helper()
 	var reads int
 	daemon := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -300,16 +300,16 @@ func aPush(t *testing.T) images.Push {
 }
 
 func TestAnImageNothingWrappedIsRefusedRatherThanReadOutOfTheLocalDaemon(t *testing.T) {
-	reads := daemonHolding(t, "tar-bytes")
+	reads := daemonServing(t, "tar-bytes")
 	machine := &box{}
-	store := standing(t, machine)
+	store := directImagesOn(t, machine)
 
 	push := aPush(t)
 	push.Built = nil
 	err := store.Push(context.Background(), push, nil)
 	var rejection refusal.Refusal
 	if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid {
-		t.Fatalf("Push() of an unwrapped image = %v, want a refusal: what the local daemon holds runs nothing in front of the app", err)
+		t.Fatalf("Push() of an unwrapped image = %v, want a refusal: what the local daemon has runs nothing in front of the app", err)
 	}
 	if *reads != 0 || len(machine.commands()) != 0 {
 		t.Errorf("an unwrapped image was read %d times and the machine ran %v", *reads, machine.commands())
@@ -317,9 +317,9 @@ func TestAnImageNothingWrappedIsRefusedRatherThanReadOutOfTheLocalDaemon(t *test
 }
 
 func TestNothingIsInstalledOnTheMachineToReceiveAnImage(t *testing.T) {
-	daemonHolding(t, "tar-bytes")
+	daemonServing(t, "tar-bytes")
 	machine := &box{}
-	store := standing(t, machine)
+	store := directImagesOn(t, machine)
 
 	if err := store.Push(context.Background(), aPush(t), nil); err != nil {
 		t.Fatalf("Push() = %v", err)
@@ -333,16 +333,16 @@ func TestNothingIsInstalledOnTheMachineToReceiveAnImage(t *testing.T) {
 	}
 }
 
-func TestAnImageTheMachineHoldsIsAnsweredWithoutReadingTheLocalDaemon(t *testing.T) {
-	reads := daemonHolding(t, "tar-bytes")
-	machine := &box{holds: true}
-	store := standing(t, machine)
+func TestAnImageTheMachineHasIsAnsweredWithoutReadingTheLocalDaemon(t *testing.T) {
+	reads := daemonServing(t, "tar-bytes")
+	machine := &box{hasImage: true}
+	store := directImagesOn(t, machine)
 
-	held, err := store.Has(context.Background(), aPush(t))
+	present, err := store.Has(context.Background(), aPush(t))
 	if err != nil {
 		t.Fatalf("Has() = %v", err)
 	}
-	if !held {
+	if !present {
 		t.Fatal("Has() says no over a machine whose daemon answers to the coordinate")
 	}
 	if *reads != 0 {
@@ -351,7 +351,7 @@ func TestAnImageTheMachineHoldsIsAnsweredWithoutReadingTheLocalDaemon(t *testing
 }
 
 func TestTheTransferNamesTheMachineRatherThanTheCoordinate(t *testing.T) {
-	store := standing(t, &box{})
+	store := directImagesOn(t, &box{})
 	if got := store.Destination(); got != "box.invalid" {
 		t.Errorf("Destination() = %q, want the machine the image lands on", got)
 	}
@@ -371,15 +371,15 @@ func wrapped(t *testing.T) v1.Image {
 }
 
 func TestAWrappedImageIsWrittenAsATarballAndLoadedIntoTheMachinesDaemonWithoutReadingTheLocalOne(t *testing.T) {
-	reads := daemonHolding(t, "tar-bytes")
+	reads := daemonServing(t, "tar-bytes")
 	machine := &box{}
-	store := standing(t, machine)
+	store := directImagesOn(t, machine)
 
 	if err := store.Push(context.Background(), aPush(t), nil); err != nil {
 		t.Fatalf("Push() of a wrapped image = %v", err)
 	}
 	if *reads != 0 {
-		t.Errorf("the local daemon was read %d times for an image providerkit already wrapped in memory: what the daemon holds is the unwrapped base", *reads)
+		t.Errorf("the local daemon was read %d times for an image providerkit already wrapped in memory: what the daemon has is the unwrapped base", *reads)
 	}
 	if commands := strings.Join(machine.commands(), "\n"); !strings.Contains(commands, "docker load") {
 		t.Errorf("the machine ran %q, want the wrapped image loaded into its own daemon", commands)
@@ -387,7 +387,7 @@ func TestAWrappedImageIsWrittenAsATarballAndLoadedIntoTheMachinesDaemonWithoutRe
 	var fed string
 	for at, command := range machine.commands() {
 		if strings.Contains(command, "docker load") {
-			fed = machine.carried()[at]
+			fed = machine.feeds()[at]
 		}
 	}
 	archive := tar.NewReader(strings.NewReader(fed))
@@ -400,7 +400,7 @@ func TestAWrappedImageIsWrittenAsATarballAndLoadedIntoTheMachinesDaemonWithoutRe
 		names = append(names, header.Name)
 	}
 	if !slices.Contains(names, "manifest.json") {
-		t.Errorf("the machine was fed an archive holding %v, and `docker load` reads a manifest.json out of it", names)
+		t.Errorf("the machine was fed an archive containing %v, and `docker load` reads a manifest.json out of it", names)
 	}
 }
 
@@ -429,6 +429,6 @@ func TestAWrappedImagePulledOntoTheMachineIsPinnedToTheDigestOfWhatWasPushed(t *
 		t.Fatalf("Push() = %v", err)
 	}
 	if commands := strings.Join(machine.commands(), "\n"); !strings.Contains(commands, "docker pull "+quote(server+"/shop/web@"+digest.String())) {
-		t.Errorf("the machine ran:\n%s\nwant a pull pinned to the digest of the wrapped image, which is what the registry now holds", commands)
+		t.Errorf("the machine ran:\n%s\nwant a pull pinned to the digest of the wrapped image, which is what the registry now has", commands)
 	}
 }

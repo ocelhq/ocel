@@ -21,7 +21,7 @@ func helperCalls(machine *box, verb string) []string {
 	return called
 }
 
-func TestAStoodUpReleaseIsRecordedAtTheHeadOfItsWindow(t *testing.T) {
+func TestAStartedReleaseIsRecordedAtTheHeadOfItsWindow(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
@@ -30,7 +30,7 @@ func TestAStoodUpReleaseIsRecordedAtTheHeadOfItsWindow(t *testing.T) {
 	}
 	called := helperCalls(machine, "promote")
 	if len(called) != 1 {
-		t.Fatalf("standing the release up ran %d promotes, want the one that names what the box most recently served", len(called))
+		t.Fatalf("starting the release ran %d promotes, want the one that names what the box most recently served", len(called))
 	}
 	for _, want := range []string{"'shop/web'", "'production'", "'" + loadedImageRef + "'"} {
 		if !strings.Contains(called[0], want) {
@@ -38,12 +38,12 @@ func TestAStoodUpReleaseIsRecordedAtTheHeadOfItsWindow(t *testing.T) {
 		}
 	}
 	joined := strings.Join(machine.commands(), "\n")
-	if stood := strings.Index(joined, "'--detach'"); stood < 0 || stood > strings.Index(joined, "'promote'") {
-		t.Error("the window head was written before the container stood up, and the head is the ref the box is actually serving")
+	if detached := strings.Index(joined, "'--detach'"); detached < 0 || detached > strings.Index(joined, "'promote'") {
+		t.Error("the window head was written before the container started, and the head is the ref the box is actually serving")
 	}
 }
 
-func TestAReleaseThatNeverStoodUpRecordsNothing(t *testing.T) {
+func TestAReleaseThatNeverStartedRecordsNothing(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{refuses: func(command string) (session.Result, bool) {
@@ -56,7 +56,7 @@ func TestAReleaseThatNeverStoodUpRecordsNothing(t *testing.T) {
 		t.Fatal("ProvisionContainers() succeeded over a box that never ran the container")
 	}
 	if called := helperCalls(machine, "promote"); len(called) != 0 {
-		t.Errorf("a release that never stood up recorded %v, and a failed release is never what the box most recently served", called)
+		t.Errorf("a release that never started recorded %v, and a failed release is never what the box most recently served", called)
 	}
 }
 
@@ -96,8 +96,8 @@ func TestAReleaseThatNeverReachedItsRecordSweepsItsOwnImageAnyway(t *testing.T) 
 
 	machine := &box{refuses: func(command string) (session.Result, bool) {
 		switch {
-		case strings.Contains(command, "echo held"):
-			return session.Result{Stdout: "held\n"}, true
+		case strings.Contains(command, "echo present"):
+			return session.Result{Stdout: "present\n"}, true
 		case strings.Contains(command, "/usr/local/lib/ocel/records"):
 			return session.Result{Code: 1, Stderr: "refused"}, true
 		}
@@ -156,7 +156,7 @@ func TestASweepListsOneRepositoryAndNeverForces(t *testing.T) {
 	joined := strings.Join(machine.commands(), "\n")
 	for _, never := range []string{"rmi -f", "image rm -f", "image prune", "--force"} {
 		if strings.Contains(joined, never) {
-			t.Errorf("the sweep ran %q: the box is the customer's and may hold images ocel did not put there", never)
+			t.Errorf("the sweep ran %q: the box is the customer's and may have images ocel did not put there", never)
 		}
 	}
 }
@@ -168,7 +168,7 @@ func TestAnAppNameOfMetacharactersReachesTheHelperAsOneWord(t *testing.T) {
 		machine := &box{}
 		ref := aStack(t, anApp()).Ref
 		_ = over(machine).ReconcileImages(context.Background(), ref, app, loadedImageRef, nil)
-		carried := 0
+		quotedCommands := 0
 		for _, command := range machine.commands() {
 			if !strings.Contains(command, app) {
 				continue
@@ -177,10 +177,10 @@ func TestAnAppNameOfMetacharactersReachesTheHelperAsOneWord(t *testing.T) {
 				t.Errorf("the name %q reached the wire as %q outside a quoted word", app, command)
 				continue
 			}
-			carried++
+			quotedCommands++
 		}
-		if carried == 0 {
-			t.Errorf("no command the sweep ran carried %q at all, so this test read nothing: a helper invocation that drops or mangles the app name passes it green", app)
+		if quotedCommands == 0 {
+			t.Errorf("no command the sweep ran included %q at all, so this test read nothing: a helper invocation that drops or mangles the app name passes it green", app)
 		}
 	}
 }
@@ -211,7 +211,7 @@ func TestADigestCoordinateNamesNoRepositoryToSweep(t *testing.T) {
 
 	pinned := "ocel/shop/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	if repository, named := host.Repository(pinned); named {
-		t.Errorf("Repository(%s) = %q, and a digest is not a tag: everything left of the last colon is the repository plus half a digest algorithm, which lists nothing and names nothing the desired set holds", pinned, repository)
+		t.Errorf("Repository(%s) = %q, and a digest is not a tag: everything left of the last colon is the repository plus half a digest algorithm, which lists nothing and names nothing the desired set contains", pinned, repository)
 	}
 }
 

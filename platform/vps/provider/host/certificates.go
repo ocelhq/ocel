@@ -64,9 +64,9 @@ const (
 func pairCommand(path string) string {
 	certificate, key := quoted(caddy.PinCertificate(path)), quoted(caddy.PinKey(path))
 	return "if ! command -v openssl >/dev/null 2>&1; then echo " + pairUnchecked + "; exit 0; fi\n" +
-		"held=$(openssl x509 -in " + certificate + " -noout -pubkey 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | sha256sum)\n" +
+		"certified=$(openssl x509 -in " + certificate + " -noout -pubkey 2>/dev/null | openssl pkey -pubin -outform DER 2>/dev/null | sha256sum)\n" +
 		"keyed=$(openssl pkey -in " + key + " -pubout -outform DER 2>/dev/null | sha256sum)\n" +
-		"if [ -n \"$held\" ] && [ \"$held\" = \"$keyed\" ]; then echo " + pairMatched + "; else echo " + pairMismatched + "; fi"
+		"if [ -n \"$certified\" ] && [ \"$certified\" = \"$keyed\" ]; then echo " + pairMatched + "; else echo " + pairMismatched + "; fi"
 }
 
 func (h *Host) paired(ctx context.Context, pin Pin) error {

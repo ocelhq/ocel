@@ -66,6 +66,6 @@ func ReadRoutingTable(document []byte) (RoutingTable, error) {
 
 func unrenderable(err error) error {
 	return refusal.Refuse(refusal.CodeInvalid,
-		"%s holds what ocel cannot render into %s: %v",
+		"%s contains what ocel cannot render into %s: %v",
 		live.RoutingTable, ProxyConfig, err)
 }
