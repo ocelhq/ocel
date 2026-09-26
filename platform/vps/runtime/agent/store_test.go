@@ -17,8 +17,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -150,7 +150,7 @@ func (b *box) set(t *testing.T, scope envvars.Scope, at envvars.Coordinate, plai
 
 func (b *box) bind(t *testing.T, scope envvars.Scope, environment, name string, binding *bindingsv1.Binding) {
 	t.Helper()
-	pair, err := providerkit.BindingPair("terraform", binding)
+	pair, err := envvarsserver.BindingPair("terraform", binding)
 	if err != nil {
 		t.Fatal(err)
 	}

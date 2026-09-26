@@ -22,7 +22,7 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 )
 
@@ -132,7 +132,7 @@ func connectorStanding(t *testing.T, at *console, grants []string) *httptest.Ser
 		},
 		Version: "test",
 		Vendor:  "fake",
-		Vars: providerkit.Vars{
+		EnvVars: envvarsserver.Backend{
 			Records: fake.NewRecords(),
 			Cipher:  fake.NewCipher(),
 		},

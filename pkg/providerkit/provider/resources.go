@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"fmt"
 	"strconv"
 
 	"google.golang.org/protobuf/types/known/structpb"
@@ -141,6 +142,25 @@ func grantMessages(grants []Grant) []*bindingsv1.Grant {
 		out = append(out, message)
 	}
 	return out
+}
+
+func BindingOf(message *bindingsv1.Binding) Binding {
+	binding := Binding{
+		Type:       BindingCustom,
+		Name:       message.GetName(),
+		Source:     message.GetSource(),
+		Properties: map[string]string{},
+		Grants:     GrantsOf(message),
+	}
+	if kind, known := BindingTypeFromWire(naming.BindingTypeOf(message)); known {
+		binding.Type = kind
+	}
+	for _, name := range naming.BindingPropertyNames(message) {
+		if value, held := naming.BindingProperty(message, name); held {
+			binding.Properties[name] = fmt.Sprint(value)
+		}
+	}
+	return binding
 }
 
 func GrantsOf(message *bindingsv1.Binding) []Grant {
