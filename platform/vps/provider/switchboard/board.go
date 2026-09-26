@@ -32,7 +32,10 @@ const (
 	connectorHost     = "connector"
 )
 
-var forwardedKept = []string{"X-Forwarded-Host", "X-Forwarded-Proto"}
+var (
+	forwardedKept    = []string{"X-Forwarded-Host", "X-Forwarded-Proto"}
+	forwardedUnheard = []string{"forwarded", "x-real-ip", "true-client-ip"}
+)
 
 const HeardHeader = "X-Ocel-Heard"
 
@@ -253,6 +256,7 @@ func (b *Board) heard(r *http.Request) string {
 }
 
 func (b *Board) forwarded(out *httputil.ProxyRequest) {
+	unvouched(out.Out.Header)
 	switch b.hears(out.In) {
 	case hearsNothing:
 		out.SetXForwarded()
@@ -269,6 +273,15 @@ func (b *Board) forwarded(out *httputil.ProxyRequest) {
 	for _, kept := range forwardedKept {
 		if said := out.In.Header.Get(kept); said != "" {
 			out.Out.Header.Set(kept, said)
+		}
+	}
+}
+
+func unvouched(header http.Header) {
+	for name := range header {
+		spoken := strings.ReplaceAll(strings.ToLower(name), "_", "-")
+		if slices.Contains(forwardedUnheard, spoken) || strings.HasPrefix(spoken, "x-forwarded-") {
+			delete(header, name)
 		}
 	}
 }

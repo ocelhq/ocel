@@ -118,7 +118,9 @@ The switchboard keeps `X-Forwarded-Proto` and `X-Forwarded-Host` from your proxy
 build their URLs from them. It hears them only from the `ocel` network, which the loopback
 port arrives on, and never from your apps' own networks. It never takes `X-Forwarded-For` from
 your proxy: every process on the machine reaches the same port, so any of them could claim to
-be any client. Apps see your proxy's address as the client.
+be any client. Apps see your proxy's address as the client. No other `X-Forwarded-*` header,
+no `Forwarded`, `X-Real-Ip` or `True-Client-Ip` header, and none of these spelled with `_` for
+`-`, reaches an app from anyone.
 
 Your proxy holds the certificates, so `certificates` and `proxy` can't be set together. One
 proxy fronts a box. Every project on it must name the same `proxy`, and a deploy that
