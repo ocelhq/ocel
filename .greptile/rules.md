@@ -158,7 +158,7 @@ table:
 | Type | the noun for the thing; a role or container word only as the framework's or domain's own term (`http.Handler`, a DynamoDB item) | `Manager`, `Handler`, `Helper`, `Util`, `Data`, `Info`, `Item`, `Base`, `Impl`, bare `State` |
 | Package | a noun for what it contains | `util`, `common`, `shared`, `misc`, `helpers`, `kit` |
 | Boolean | positive | `NotReady`, `DisableX` |
-| Number | carries its unit or a unit type | `timeout int` |
+| Number | its name or its type states the unit | `timeout int` |
 | Error | names the condition | `ErrBad` |
 | Word | the literal word, never a metaphor or a coined one | the words rule 9 bans |
 | Abbreviation | only the idioms every reader predicts: `ctx`, `err`, `id`, `req`, `res`, `resp`, `opts`, `cfg`, `fn`, `buf`, `msg`, `src`, `dst`, loop indices `i` `j` `k` `n`, test params `t` `b` `f`, a one-letter method receiver, and acronyms (`URL`, `DNS`, `HTTP`, `TLS`, `API`, `CLI`, `SDK`, `JSON`, `ID`); a PR to this file extends the list | `svc`, `mgr`, `impl` |

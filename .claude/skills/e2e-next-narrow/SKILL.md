@@ -87,7 +87,7 @@ they share a cause.
    - **Empty fragment** — the entry is stale, something already fixed it. Promote and drop
      it. No debugger, no fixer.
    - **Fragment matches the entry** — real outstanding work. Continue to step 3.
-   - **Fragment carries cases the entry does not** — a regression, or a suite that was
+   - **Fragment contains cases the entry does not** — a regression, or a suite that was
      recorded from a partial run. Never promote around it and never quietly widen the
      entry; surface it, and decide whether it joins this session's work or gets recorded
      as new baseline with the reason in the commit message.

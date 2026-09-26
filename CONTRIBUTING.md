@@ -62,7 +62,7 @@ change the code near it.
 ## Testing
 
 - Write a failing test first, then the code that makes it pass.
-- A bug fix carries a regression test that fails without the fix.
+- A bug fix adds a regression test that fails without the fix.
 - Test names follow the Test row of [Naming](.greptile/rules.md#naming).
 - CI runs every workflow in `.github/workflows/` whose paths a change touches.
   `scripts/act.sh` replays the pull request gates locally.
@@ -93,7 +93,7 @@ already change, rename it; elsewhere the ≤50-line rule applies; beyond that, f
   (`commitlint.config.mjs`).
 - The subject says what is true after the change, not what you did:
   `fix(cli): deploy reads ocel.json from the project root`.
-- The body carries the rationale. Commit messages and pull request bodies are the
+- The body gives the rationale. Commit messages and pull request bodies are the
   decision records: rationale lives there and nowhere else.
 - Every commit builds and passes its checks.
 - No agent or AI co-author or attribution lines.

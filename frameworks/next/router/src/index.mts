@@ -601,7 +601,7 @@ export async function dispatchResult(
   const tagged = new Response(response.body, response);
   applyResolvedHeaders(tagged.headers, result.resolvedHeaders);
   if (isRoutingRedirect(result) && tagged.headers.get("location") !== result.middlewareLocation) {
-    carryRequestQuery(tagged.headers, request.url);
+    forwardRequestQuery(tagged.headers, request.url);
   }
   const middlewareSkip = tagged.headers.get("x-middleware-skip");
   stripMiddlewareHeaders(tagged.headers);
@@ -614,7 +614,7 @@ export async function dispatchResult(
 
 const ABSOLUTE_URL_ORIGIN = /^[a-z][a-z\d+.-]*:\/\/[^/]*/i;
 
-function carryRequestQuery(headers: Headers, requestUrl: string): void {
+function forwardRequestQuery(headers: Headers, requestUrl: string): void {
   const location = headers.get("location");
   if (!location) return;
   if (!location.startsWith("/") && !ABSOLUTE_URL_ORIGIN.test(location)) return;

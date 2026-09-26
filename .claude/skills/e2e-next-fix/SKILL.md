@@ -51,7 +51,7 @@ a bad preflight makes every wave that follows meaningless. Two things it does no
 ## Step 1 — Work list
 
 Derive the failing suites from the **run's job logs**, not from the committed manifest —
-`report-prompt.md` steps 1–5. The manifest carries hand-edited graduations no run has
+`report-prompt.md` steps 1–5. The manifest contains hand-edited graduations no run has
 verified yet, and the notes may name more. Finish on a table: suite → failing cases →
 suspected cluster, with every disagreement between logs and manifest flagged rather than
 quietly resolved.

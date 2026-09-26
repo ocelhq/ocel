@@ -32,6 +32,10 @@ describe("hasBannedWord", () => {
       "func heldCert()",
       "isSettled := true",
       "TestURLSettlesTheEndpoint",
+      "TestURLCarriesTheEndpoint",
+      "carryRequestQuery(headers)",
+      "a bug fix carries a test",
+      "carrying the query",
     ]) {
       assert.equal(hasBannedWord(line), true, line);
     }
