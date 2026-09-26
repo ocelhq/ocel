@@ -31,7 +31,7 @@ TOKEN = "letmein"
 _UPLOADED_AT = Timestamp(seconds=1_700_000_000, nanos=0)
 
 
-class Held:
+class Stored:
     def __init__(self, data, content_type, metadata, cache_control=""):
         self.data = data
         self.content_type = content_type
@@ -45,7 +45,7 @@ class Held:
 
 class Store:
     def __init__(self):
-        self.objects: dict[str, Held] = {}
+        self.objects: dict[str, Stored] = {}
         self.uploads: dict[str, dict] = {}
         self.aborted: list[str] = []
         self.page_size = 2
@@ -55,14 +55,14 @@ class Store:
         self.authorizations: list[str | None] = []
 
     def info(self, key: str) -> ObjectInfo:
-        held = self.objects[key]
+        stored = self.objects[key]
         return ObjectInfo(
             key=key,
-            size=len(held.data),
-            etag=held.etag,
-            content_type=held.content_type,
+            size=len(stored.data),
+            etag=stored.etag,
+            content_type=stored.content_type,
             uploaded_at=_UPLOADED_AT,
-            metadata=dict(held.metadata),
+            metadata=dict(stored.metadata),
         )
 
 
@@ -101,11 +101,11 @@ class Service:
 
     def copy(self, request, ctx):
         self._seen(ctx)
-        held = self.store.objects.get(request.source_key)
-        if held is None:
+        source = self.store.objects.get(request.source_key)
+        if source is None:
             raise ConnectError(Code.NOT_FOUND, f"no object under {request.source_key}")
-        self.store.objects[request.destination_key] = Held(
-            held.data, held.content_type, held.metadata
+        self.store.objects[request.destination_key] = Stored(
+            source.data, source.content_type, source.metadata
         )
         return CopyResponse(object=self.store.info(request.destination_key))
 
@@ -171,7 +171,7 @@ class Service:
         upload = self.store.uploads.pop(request.upload_id)
         data = b"".join(upload["parts"][part.part_number] for part in request.parts)
         self._refuse_unmet(request.key, request.if_none_match, request.if_match)
-        self.store.objects[request.key] = Held(
+        self.store.objects[request.key] = Stored(
             data, upload["content_type"], upload["metadata"], upload["cache_control"]
         )
         return CompleteMultipartResponse(object=self.store.info(request.key))
@@ -195,10 +195,10 @@ class Service:
         raise ConnectError(Code.UNIMPLEMENTED, "complete_upload")
 
     def _refuse_unmet(self, key, if_none_match, if_match):
-        held = self.store.objects.get(key)
-        if if_none_match == "*" and held is not None:
-            raise ConnectError(Code.FAILED_PRECONDITION, f"{key} is already held")
-        if if_match and (held is None or held.etag != if_match):
+        current = self.store.objects.get(key)
+        if if_none_match == "*" and current is not None:
+            raise ConnectError(Code.FAILED_PRECONDITION, f"{key} already exists")
+        if if_match and (current is None or current.etag != if_match):
             raise ConnectError(Code.FAILED_PRECONDITION, f"{key} does not match {if_match}")
 
     def _seen(self, ctx):
@@ -254,11 +254,11 @@ class Bucket:
         return self._read(key, environ, start_response)
 
     def _write(self, key, environ, start_response):
-        held = self.store.objects.get(key)
-        if environ.get("HTTP_IF_NONE_MATCH") == "*" and held is not None:
+        current = self.store.objects.get(key)
+        if environ.get("HTTP_IF_NONE_MATCH") == "*" and current is not None:
             return _status("412 Precondition Failed", start_response)
         if_match = environ.get("HTTP_IF_MATCH")
-        if if_match and (held is None or held.etag != if_match):
+        if if_match and (current is None or current.etag != if_match):
             return _status("412 Precondition Failed", start_response)
         query = parse_qs(urlparse("?" + environ.get("QUERY_STRING", "")).query)
         body = _body(environ)
@@ -269,7 +269,7 @@ class Bucket:
             for name, value in environ.items()
             if name.startswith("HTTP_X_AMZ_META_")
         }
-        stored = Held(
+        stored = Stored(
             body,
             environ.get("CONTENT_TYPE", ""),
             metadata,
@@ -280,10 +280,10 @@ class Bucket:
         return [b""]
 
     def _read(self, key, environ, start_response):
-        held = self.store.objects.get(key)
-        if held is None:
+        stored = self.store.objects.get(key)
+        if stored is None:
             return _status("404 Not Found", start_response)
-        data = held.data
+        data = stored.data
         status = "200 OK"
         asked = environ.get("HTTP_RANGE", "")
         if asked.startswith("bytes="):
@@ -295,9 +295,9 @@ class Bucket:
         start_response(
             status,
             [
-                ("content-type", held.content_type or "application/octet-stream"),
+                ("content-type", stored.content_type or "application/octet-stream"),
                 ("content-length", str(len(data))),
-                ("etag", held.etag),
+                ("etag", stored.etag),
             ],
         )
         return [data]

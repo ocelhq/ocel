@@ -10,9 +10,9 @@ from ocel.gen.common.bindings.v1.bindings_pb import (
 
 class UnprovisionedResourceError(RuntimeError):
     """Raised when app code reaches for a resource this run never provisioned, which is
-    discovery: the pass that reads the declarations before anything stands. Catch it to
-    keep a boot path alive when the resource is optional there; anything else raised from
-    the same call means the resource exists and is genuinely broken."""
+    discovery: the pass that reads the declarations before anything is provisioned. Catch
+    it to keep a boot path alive when the resource is optional there; anything else raised
+    from the same call means the resource exists and is genuinely broken."""
 
 
 def unprovisioned(what: str, access: str) -> UnprovisionedResourceError:
@@ -42,7 +42,8 @@ def _properties(name: str, kind: str):
         delivered = Binding.from_json(raw, ignore_unknown_fields=True)
     except Exception:
         raise RuntimeError(
-            f"{key} does not contain a binding record, so this app cannot read it as a {kind.upper()}"
+            f"{key} does not contain a binding record, "
+            f"so this app cannot read it as a {kind.upper()}"
         ) from None
     properties = delivered.properties
     if properties is None or properties.field != kind:

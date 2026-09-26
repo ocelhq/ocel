@@ -120,9 +120,9 @@ class Secret:
 
     @property
     def value(self) -> str:
-        """The secret's current value. It raises an :class:`EnvValueError` when no value
-        stands for the key any more, the way the read of a missing variable fails, rather
-        than hand back an empty secret."""
+        """The secret's current value. It raises an :class:`EnvValueError` when the key
+        has no value any more, the way the read of a missing variable fails, rather than
+        hand back an empty secret."""
         delivered = _delivered(self._key)
         if delivered is None:
             raise _unset(self._key)
@@ -205,7 +205,7 @@ def var(
 ) -> Any:
     """Spell out what an attribute of a class of :class:`Env` declares: the key when it is
     not the attribute name upper-cased, the value to fall back on when none is set, the
-    sensitive class, and the folders the variable holds a value in."""
+    sensitive class, and the folders the variable is scoped to."""
     return _Marker(key, default, sensitive, folders, description)
 
 
@@ -321,8 +321,8 @@ def group(*, key: str | None = None, description: str = "") -> Any:
 class Group:
     """A set of variables an app takes together. An attribute of a class of :class:`Env`
     annotated with a class of this one declares the group, and ``T | None`` makes the group
-    optional: an optional group reads as ``None`` and is owed nothing until a value stands
-    for one of its members.
+    optional: an optional group reads as ``None`` and requires nothing until one of its
+    members has a value.
 
         class GitHub(ocel.Group):
             client_id: str = ocel.var(key="GITHUB_CLIENT_ID")
@@ -332,10 +332,10 @@ class Group:
             github: GitHub | None = None
             smtp: Smtp = ocel.group(description="Send mail")
 
-    A member is reached through the group and nowhere else, and carries its own optional
-    spelling: a member annotated ``T | None`` or carrying a default is not owed while the
-    group is on. A group holds variables and nothing else, so a group annotated inside one
-    is refused where it is written. The class itself declares nothing; the class of
+    A member is reached through the group and nowhere else, and keeps its own optional
+    spelling: a member annotated ``T | None`` or given a default is not required while the
+    group is on. A group contains variables and nothing else, so a group annotated inside
+    one is refused where it is written. The class itself declares nothing; the class of
     :class:`Env` that names it declares its members."""
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
@@ -361,11 +361,11 @@ class Env:
 
     The key is the attribute name upper-cased unless :func:`var` names another. An
     attribute annotated ``T | None`` is optional and reads as ``None`` when nothing is set;
-    any other attribute is required unless it carries a default. An attribute annotated
+    any other attribute is required unless it has a default. An attribute annotated
     :class:`Secret` declares the secret class: encrypted at rest, delivered live, and read
     through :attr:`Secret.value` on each use rather than once, since the value can rotate
     underneath the process. An attribute annotated with a class of :class:`Group` is the
-    set of variables that group holds, taken together.
+    set of variables that group contains, taken together.
 
     The annotation is the schema: ``str`` passes the text through, ``bool`` takes the set
     Ocel accepts in every language, and any other type is applied to the delivered text.
@@ -427,11 +427,11 @@ def _caller() -> inspect.FrameInfo:
 
 
 def _refuse_restatement(cls: type, base: type) -> None:
-    for held in cls.__mro__[1:]:
-        if held is not base and held is not object and issubclass(held, base):
+    for ancestor in cls.__mro__[1:]:
+        if ancestor is not base and ancestor is not object and issubclass(ancestor, base):
             raise EnvDefinitionError(
                 "",
-                f"{cls.__name__} extends {held.__name__}, which declares variables of "
+                f"{cls.__name__} extends {ancestor.__name__}, which declares variables of "
                 f"its own. A class declares the variables its own attributes name: "
                 f"subclass ocel.{base.__name__} directly.",
             )
@@ -468,7 +468,7 @@ def _entries(cls: type, site: _Site) -> "list[_Variable | _Group]":
                 entry: _Variable | _Group = _definition(cls, attr, annotation)
             else:
                 entry = _group(cls, attr, target, optional)
-                if any(held.key == entry.key for held in entries if isinstance(held, _Group)):
+                if any(other.key == entry.key for other in entries if isinstance(other, _Group)):
                     raise EnvDefinitionError(
                         entry.key,
                         "is declared by two attributes of the same class. A group is "
@@ -748,7 +748,7 @@ def _scope_problem(folders: Sequence[str]) -> str:
     for folder in folders:
         if folder in seen:
             return (
-                f"folder '{folder}' is named twice. A scoped variable holds one value per "
+                f"folder '{folder}' is named twice. A scoped variable has one value per "
                 f"folder it names."
             )
         seen.add(folder)
@@ -780,7 +780,7 @@ def _declare(entries: Sequence[_Variable | _Group], site: _Site) -> None:
     definitions: list[VariableDefinition] = []
     groups: list[GroupDefinition] = []
     for entry in entries:
-        held = entry.key if isinstance(entry, _Group) else ""
+        group_key = entry.key if isinstance(entry, _Group) else ""
         if isinstance(entry, _Group):
             groups.append(
                 GroupDefinition(
@@ -797,7 +797,7 @@ def _declare(entries: Sequence[_Variable | _Group], site: _Site) -> None:
                     source=source,
                     has_schema=variable.has_schema,
                     description=variable.description,
-                    group=held,
+                    group=group_key,
                 )
             )
     response = declare_env(DeclareEnvRequest(definitions=definitions, groups=groups))
@@ -817,7 +817,7 @@ def _problems(
     return problems
 
 
-def _held(variable: _Variable, cells: Sequence[VariableCell], folder: str) -> bool:
+def _has_cell(variable: _Variable, cells: Sequence[VariableCell], folder: str) -> bool:
     def at(where: str) -> bool:
         return any(cell.key == variable.key and cell.folder == where for cell in cells)
 
@@ -827,7 +827,7 @@ def _held(variable: _Variable, cells: Sequence[VariableCell], folder: str) -> bo
 
 
 def _switched_on(group: _Group, cells: Sequence[VariableCell], folder: str) -> bool:
-    return any(_held(member, cells, folder) for member in group.members)
+    return any(_has_cell(member, cells, folder) for member in group.members)
 
 
 def _faults(
