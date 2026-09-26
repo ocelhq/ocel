@@ -101,7 +101,7 @@ func TestServesNamesEveryResourceTheHooksProvision(t *testing.T) {
 	}
 }
 
-func TestReleaserFansEachResourceOutToItsPrimitive(t *testing.T) {
+func TestHookStacksFanEachResourceOutToItsPrimitive(t *testing.T) {
 	t.Parallel()
 
 	store := fake.NewRecords()
@@ -126,7 +126,7 @@ func TestReleaserFansEachResourceOutToItsPrimitive(t *testing.T) {
 	}
 }
 
-func TestReleaserRefusesAPrimitiveNothingServes(t *testing.T) {
+func TestHookStacksRefuseAPrimitiveNothingServes(t *testing.T) {
 	t.Parallel()
 
 	stacks := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), (&buckets{}).hooks())
@@ -159,7 +159,7 @@ func TestPlanRefusesAPrimitiveNothingServes(t *testing.T) {
 	}
 }
 
-func TestReleaserRefusesABindingMissingAPropertyItsTypePromises(t *testing.T) {
+func TestHookStacksRefuseABindingMissingAPropertyItsTypePromises(t *testing.T) {
 	t.Parallel()
 
 	stacks := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), halfBinding{}.hooks())
@@ -177,7 +177,7 @@ func TestReleaserRefusesABindingMissingAPropertyItsTypePromises(t *testing.T) {
 	}
 }
 
-func TestReleaserRemovesAResourceTheSpecNoLongerDeclares(t *testing.T) {
+func TestHookStacksRemoveAResourceTheSpecNoLongerDeclares(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()

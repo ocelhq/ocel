@@ -187,10 +187,10 @@ func provisionedOutputs() auto.OutputMap {
 }
 
 func conformingStacks(engine *mockedEngine) *Stacks {
-	return releaserPlacingInto(engine, &fakeArtifactStore{})
+	return stacksPlacingInto(engine, &fakeArtifactStore{})
 }
 
-func releaserPlacingInto(engine *mockedEngine, uploader *fakeArtifactStore) *Stacks {
+func stacksPlacingInto(engine *mockedEngine, uploader *fakeArtifactStore) *Stacks {
 	cfg := Config{
 		Slug:           "conformance",
 		Region:         "eu-west-1",
@@ -364,7 +364,7 @@ func TestProvisioningABucketPlacesTheUploadCompleterItDeclares(t *testing.T) {
 	uploader := &fakeArtifactStore{}
 	recorder := &lambdaCodeRecorder{}
 	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: recorder}
-	if _, err := releaserPlacingInto(engine, uploader).Provision(context.Background(), provider.StackSpec{
+	if _, err := stacksPlacingInto(engine, uploader).Provision(context.Background(), provider.StackSpec{
 		Ref:  provider.StackRef{Project: "conformance", Class: edge.ClassProduction, Name: naming.InfraStack("conformance")},
 		Kind: provider.StackInfra,
 		Resources: []provider.Resource{

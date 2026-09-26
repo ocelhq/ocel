@@ -69,7 +69,7 @@ func TestLiveCredentials(t *testing.T) {
 	}
 }
 
-func TestLiveReleaser(t *testing.T) {
+func TestLiveStacks(t *testing.T) {
 	p := live(t)
 
 	conformance.RunStacks(t, p.Facts(), p.Stacks(), p.Artifacts(), p.Records())

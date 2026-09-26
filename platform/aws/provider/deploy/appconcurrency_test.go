@@ -95,7 +95,7 @@ func siblingAppOutputs(apps ...string) auto.OutputMap {
 	return outputs
 }
 
-func TestOneReleaserProvisionsSiblingAppStacksAtOnce(t *testing.T) {
+func TestOneStacksPortProvisionsSiblingAppStacksAtOnce(t *testing.T) {
 	t.Parallel()
 
 	apps := []string{"web", "admin", "docs"}
