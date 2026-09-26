@@ -97,7 +97,7 @@ func TestALimitTheCaNamedNoResetTimeForIsSpentOffTheLineItWasSaidOn(t *testing.T
 	}
 	at := spoken(t)
 	if limit.Spent(at.Add(59 * time.Minute)) {
-		t.Error("the limit reads as spent inside the hour the CA asked for, so a refusal the box owes the user is dropped")
+		t.Error("the limit reads as spent inside the hour the CA asked for, so a refusal the box must report to the user is dropped")
 	}
 	if !limit.Spent(at.Add(61 * time.Minute)) {
 		t.Error("the limit is still unspent an hour after the CA said to retry, and `docker logs --tail 200` is re-read on every Certificate() call: one stale line would refuse every certification under this registered domain — production hostnames included — until it ages out of the tail")

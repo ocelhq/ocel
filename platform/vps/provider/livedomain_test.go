@@ -131,7 +131,7 @@ func (vm machine) heads(t *testing.T, hostname string) string {
 		" http://"+caddy.Container+"/")
 }
 
-func TestLiveDomainAddOwesAnARecordNamingTheBoxAndTheBoxThenServesTheHostname(t *testing.T) {
+func TestLiveDomainAddAsksForAnARecordNamingTheBoxAndTheBoxThenServesTheHostname(t *testing.T) {
 	vm, p, client, hostname := servingTheBox(t)
 
 	stream, err := client.AddHostname(context.Background(), &contractv1.HostnameRequest{
@@ -211,7 +211,7 @@ func TestLiveDomainStatusNamesTheManualRecordsTheCertificateHandleAndWhoRenewsIt
 			row.GetRenewalStatus(), certs.ProxyRenewal)
 	}
 	if len(row.GetCertificate().GetManualRecords()) == 0 {
-		t.Error("the status owes no record for a hostname nothing here writes DNS for, so the one thing the user still has to do goes unsaid")
+		t.Error("the status lists no manual record for a hostname nothing here writes DNS for, so the one thing the user still has to do goes unsaid")
 	}
 	if len(row.GetCertificate().GetRecordsWritten()) != 0 {
 		t.Errorf("the status reports %v as written, and ocel wrote nothing", row.GetCertificate().GetRecordsWritten())

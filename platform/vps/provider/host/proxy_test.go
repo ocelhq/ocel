@@ -934,7 +934,7 @@ func TestTheHelperIsAStaticBinaryOcelBuildsForEveryArchitectureABoxMayRun(t *tes
 			t.Fatalf("the %s switchboard is not an elf executable, and the image it runs in lends it nothing to interpret it with", arch)
 		}
 		if bytes.Contains(built, []byte("libc.so")) || bytes.Contains(built, []byte("ld-linux")) {
-			t.Errorf("the %s switchboard names a dynamic loader, and the image it runs in owes it none", arch)
+			t.Errorf("the %s switchboard names a dynamic loader, and the image it runs in provides none", arch)
 		}
 		if !bytes.Contains(built, []byte(switchboard.ControlDir)) {
 			t.Errorf("the %s switchboard names no control socket under %s, the directory its container is handed for it", arch, switchboard.ControlDir)

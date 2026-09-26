@@ -160,7 +160,7 @@ func TestAddHostnameOnAProjectThatPromotedNothingSaysNothingServesIt(t *testing.
 	}
 	recorded := readStack(t, provider, edge.ClassProduction, "shop")
 	if len(recorded.Edge.Bound) != 0 || len(recorded.Hosts) != 0 {
-		t.Errorf("the refused add left the edge binding %v and the state settling %v, want nothing changed: `ocel deploy` attaches the hostname when it promotes",
+		t.Errorf("the refused add left the edge binding %v and the recorded hostnames %v, want nothing changed: `ocel deploy` attaches the hostname when it promotes",
 			recorded.Edge.Bound, recorded.Hostnames())
 	}
 	if bound := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Bindings(); len(bound) != 0 {

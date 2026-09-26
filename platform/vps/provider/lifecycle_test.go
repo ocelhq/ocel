@@ -1102,7 +1102,7 @@ func TestLifecycleTheWholeJourneyRunsOnTheRealBinaryAndGivesTheMachineBack(t *te
 	}
 	for _, want := range []string{"proxy:" + lifecycleHostname, "no expiry reported", "the proxy renews it over http-01"} {
 		if !strings.Contains(reported, want) {
-			t.Errorf("`ocel domain status` never said %q: what serves a hostname on a box, and who renews it, is the whole of what this command owes:\n%s", want, reported)
+			t.Errorf("`ocel domain status` never said %q: what serves a hostname on a box, and who renews it, is the whole of what this command reports:\n%s", want, reported)
 		}
 	}
 	if manual := lifecycleHostname + " A " + run.vm.addr; strings.Contains(reported, manual) {
