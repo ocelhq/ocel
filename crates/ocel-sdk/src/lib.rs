@@ -58,7 +58,8 @@ pub use ocel_macros::Resources;
 pub use ocel_macros::Env;
 
 /// Declares every field of a struct as a member of the group named after the
-/// `#[ocel(group)]` field whose type it is. A struct no such field names declares nothing.
+/// `#[ocel(group)]` field whose type it is. A struct that no such field has as its type
+/// declares nothing.
 pub use ocel_macros::Group;
 
 #[doc(hidden)]

@@ -115,7 +115,7 @@ pub fn env(item: TokenStream) -> TokenStream {
 ///
 /// Fields are spelled as they are on an [`ocel::Env`](macro@Env) struct. What differs is
 /// that nothing is declared until a field of an `ocel::Env` struct has the group as its
-/// type: a struct no such field names declares no variables of its own.
+/// type: a struct that no `ocel::Env` field has as its type declares no variables of its own.
 #[proc_macro_derive(Group, attributes(ocel))]
 pub fn group(item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
