@@ -22,7 +22,7 @@ import (
 	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 
 	"github.com/ocelhq/ocel/pkg/connectorkit"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -89,7 +89,7 @@ func run(addr, region, config, keyParameter string) error {
 		Vendor:     "aws",
 		Addr:       addr,
 		ConfigPath: config,
-		Vars: providerkit.Vars{
+		EnvVars: envvarsserver.Backend{
 			Records: awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: held},
 			Cipher:  awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: held},
 		},

@@ -1,0 +1,435 @@
+package envvarsserver_test
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	connect "connectrpc.com/connect"
+	"connectrpc.com/validate"
+
+	"github.com/ocelhq/ocel/pkg/naming"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
+	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
+	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
+)
+
+const slug = "shop"
+
+func served(t *testing.T) (envvarsv1connect.EnvVarsServiceClient, *fake.Provider) {
+	t.Helper()
+
+	provider := fake.NewProvider(fake.Options{})
+	backend := envvarsserver.FixedBackend{Records: provider.Records(), Cipher: provider.Cipher(), VerifyGrants: provider.Hooks().VerifyGrants}
+	mux := http.NewServeMux()
+	mux.Handle(envvarsv1connect.NewEnvVarsServiceHandler(
+		&envvarsserver.Service{Source: backend},
+		connect.WithInterceptors(validate.NewInterceptor()),
+	))
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	return envvarsv1connect.NewEnvVarsServiceClient(server.Client(), server.URL), provider
+}
+
+func cell(key string) *envvarsv1.Coordinate {
+	return &envvarsv1.Coordinate{Slug: slug, Key: key}
+}
+
+func TestSetGetAndRevealAnswerAcrossTheWire(t *testing.T) {
+	vars, _ := served(t)
+	ctx := context.Background()
+
+	set, err := vars.SetValue(ctx, &envvarsv1.SetValueRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: cell("DATABASE_URL"),
+		Value:      "postgres://one",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if set.GetMetadata().GetVersion() != 1 || set.GetMetadata().GetCoordinate().GetSlug() != slug {
+		t.Fatalf("SetValue() = %+v, want version 1 at the coordinate asked for", set.GetMetadata())
+	}
+
+	got, err := vars.GetValue(ctx, &envvarsv1.GetValueRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: cell("DATABASE_URL"),
+	})
+	if err != nil || !got.GetFound() || got.GetValue() != "" {
+		t.Fatalf("GetValue() found=%t revealed=%t, %v, want it found and unrevealed", got.GetFound(), got.GetValue() != "", err)
+	}
+
+	got, err = vars.GetValue(ctx, &envvarsv1.GetValueRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: cell("DATABASE_URL"),
+		Reveal:     true,
+	})
+	if err != nil || got.GetValue() != "postgres://one" {
+		t.Fatalf("GetValue(reveal) = %q, %v", got.GetValue(), err)
+	}
+
+	missing, err := vars.GetValue(ctx, &envvarsv1.GetValueRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: cell("NOTHING_HERE"),
+	})
+	if err != nil || missing.GetFound() {
+		t.Fatalf("GetValue() of a key nobody set found=%t, %v, want it answered as not found", missing.GetFound(), err)
+	}
+
+	listed, err := vars.ListValues(ctx, &envvarsv1.ListValuesRequest{
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+		Slug: slug,
+	})
+	if err != nil || len(listed.GetValues()) != 1 {
+		t.Fatalf("ListValues() = %+v, %v, want the one value set", listed.GetValues(), err)
+	}
+
+	revealed, err := vars.RevealValues(ctx, &envvarsv1.RevealValuesRequest{
+		Tier:  environmentv1.Tier_TIER_PRODUCTION,
+		Slug:  slug,
+		Cells: []*envvarsv1.Coordinate{cell("DATABASE_URL"), cell("NOTHING_HERE")},
+	})
+	if err != nil || len(revealed.GetValues()) != 1 || revealed.GetValues()[0].GetValue() != "postgres://one" {
+		keys := make([]string, 0, len(revealed.GetValues()))
+		for _, value := range revealed.GetValues() {
+			keys = append(keys, value.GetMetadata().GetCoordinate().GetKey())
+		}
+		t.Fatalf("RevealValues() revealed %q, %v, want DATABASE_URL's alone and as it was set", keys, err)
+	}
+}
+
+func TestVersionsAndDeleteAnswerAcrossTheWire(t *testing.T) {
+	vars, _ := served(t)
+	ctx := context.Background()
+
+	for _, value := range []string{"one", "two"} {
+		if _, err := vars.SetValue(ctx, &envvarsv1.SetValueRequest{
+			Tier:       environmentv1.Tier_TIER_PRODUCTION,
+			Coordinate: cell("KEY"),
+			Value:      value,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	history, err := vars.ListVersions(ctx, &envvarsv1.ListVersionsRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: cell("KEY"),
+	})
+	if err != nil || len(history.GetVersions()) != 2 {
+		t.Fatalf("ListVersions() = %+v, %v, want one entry per write", history.GetVersions(), err)
+	}
+
+	stale := int64(1)
+	_, err = vars.DeleteValue(ctx, &envvarsv1.DeleteValueRequest{
+		Tier:            environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate:      cell("KEY"),
+		ExpectedVersion: &stale,
+	})
+	if got := connect.CodeOf(err); got != connect.CodeAborted {
+		t.Fatalf("DeleteValue() at a version that moved: code = %v, want %v — a caller that reads the code must tell a test-and-set conflict from a bootstrap that is not ready", got, connect.CodeAborted)
+	}
+
+	deleted, err := vars.DeleteValue(ctx, &envvarsv1.DeleteValueRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: cell("KEY"),
+	})
+	if err != nil || !deleted.GetDeleted() {
+		t.Fatalf("DeleteValue() = %+v, %v", deleted, err)
+	}
+}
+
+func TestAValueOverTheCapIsAnInvalidArgument(t *testing.T) {
+	vars, _ := served(t)
+
+	_, err := vars.SetValue(context.Background(), &envvarsv1.SetValueRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: cell("KEY"),
+		Value:      strings.Repeat("x", 4097),
+	})
+	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+		t.Fatalf("SetValue() over the cap: code = %v, want %v", got, connect.CodeInvalidArgument)
+	}
+}
+
+func TestReferencesAnswerAcrossTheWire(t *testing.T) {
+	vars, _ := served(t)
+	ctx := context.Background()
+
+	if _, err := vars.SetValue(ctx, &envvarsv1.SetValueRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: &envvarsv1.Coordinate{Slug: "platform", Key: "DATABASE_URL"},
+		Value:      "postgres://shared",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	set, err := vars.SetReference(ctx, &envvarsv1.SetReferenceRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: cell("DATABASE_URL"),
+		Target:     &envvarsv1.Coordinate{Slug: "platform", Key: "DATABASE_URL"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if set.GetMetadata().GetTarget().GetSlug() != "platform" {
+		t.Fatalf("SetReference() = %+v, want the target reported back", set.GetMetadata())
+	}
+
+	got, err := vars.GetValue(ctx, &envvarsv1.GetValueRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: cell("DATABASE_URL"),
+		Reveal:     true,
+	})
+	if err != nil || got.GetValue() != "postgres://shared" {
+		t.Fatalf("GetValue() through a reference = %q, %v", got.GetValue(), err)
+	}
+
+	found, err := vars.ListReferences(ctx, &envvarsv1.ListReferencesRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: &envvarsv1.Coordinate{Slug: "platform", Key: "DATABASE_URL"},
+	})
+	if err != nil || len(found.GetReferences()) != 1 || found.GetReferences()[0].GetSlug() != slug {
+		t.Fatalf("ListReferences() = %+v, %v", found.GetReferences(), err)
+	}
+
+	_, err = vars.SetValue(ctx, &envvarsv1.SetValueRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: cell("DATABASE_URL"),
+		Value:      "postgres://mine",
+	})
+	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+		t.Fatalf("SetValue() over a reference: code = %v, want %v", got, connect.CodeInvalidArgument)
+	}
+
+	_, err = vars.SetReference(ctx, &envvarsv1.SetReferenceRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: &envvarsv1.Coordinate{Slug: "web", Key: "DATABASE_URL"},
+		Target:     &envvarsv1.Coordinate{Slug: slug, Key: "DATABASE_URL"},
+	})
+	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+		t.Fatalf("a reference to a reference: code = %v, want %v", got, connect.CodeInvalidArgument)
+	}
+}
+
+func TestTheEnvironmentGateRefusesWhatNothingWouldRead(t *testing.T) {
+	vars, provider := served(t)
+	ctx := context.Background()
+
+	named := &envvarsv1.Coordinate{Slug: slug, Key: "KEY", Environment: "pr-7"}
+
+	_, err := vars.SetValue(ctx, &envvarsv1.SetValueRequest{
+		Tier:       environmentv1.Tier_TIER_PRODUCTION,
+		Coordinate: named,
+		Value:      "one",
+	})
+	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+		t.Fatalf("a named environment in production: code = %v, want %v", got, connect.CodeInvalidArgument)
+	}
+
+	_, err = vars.SetValue(ctx, &envvarsv1.SetValueRequest{
+		Tier:       environmentv1.Tier_TIER_PREVIEW,
+		Coordinate: named,
+		Value:      "one",
+	})
+	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
+		t.Fatalf("a preview environment nobody deployed: code = %v, want %v", got, connect.CodeFailedPrecondition)
+	}
+
+	deployPreview(t, provider, "pr-7")
+
+	if _, err := vars.SetValue(ctx, &envvarsv1.SetValueRequest{
+		Tier:       environmentv1.Tier_TIER_PREVIEW,
+		Coordinate: named,
+		Value:      "one",
+	}); err != nil {
+		t.Fatalf("SetValue() for a deployed preview environment = %v, want it written", err)
+	}
+
+	_, err = vars.SetValue(ctx, &envvarsv1.SetValueRequest{
+		Tier:       environmentv1.Tier_TIER_PREVIEW,
+		Coordinate: &envvarsv1.Coordinate{Slug: slug, Key: "KEY", Environment: "pr-9"},
+		Value:      "one",
+	})
+	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
+		t.Fatalf("an environment beside the deployed one: code = %v, want %v", got, connect.CodeFailedPrecondition)
+	}
+	if !strings.Contains(err.Error(), "pr-7") {
+		t.Fatalf("the refusal does not name the environments that do exist: %v", err)
+	}
+}
+
+func TestBindingsAnswerAcrossTheWire(t *testing.T) {
+	vars, _ := served(t)
+	ctx := context.Background()
+
+	binding := &bindingsv1.Binding{
+		Name:   "db",
+		Source: "neon",
+		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
+			Host:     "db.example",
+			Port:     5432,
+			Database: "shop",
+			Username: "shop",
+			Password: "hunter2",
+		}},
+	}
+
+	set, err := vars.SetBinding(ctx, &envvarsv1.SetBindingRequest{
+		Slug:    slug,
+		Tier:    environmentv1.Tier_TIER_PRODUCTION,
+		Binding: binding,
+		Owner:   "neon",
+	})
+	if err != nil || set.GetVersion() != 1 {
+		t.Fatalf("SetBinding() = %+v, %v", set, err)
+	}
+
+	listed, err := vars.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
+		Slug: slug,
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+	})
+	if err != nil || len(listed.GetBindings()) != 1 {
+		t.Fatalf("ListBindings() = %+v, %v", listed.GetBindings(), err)
+	}
+	summary := listed.GetBindings()[0]
+	if summary.GetName() != "db" || summary.GetOwner() != "neon" || summary.GetSource() != "neon" {
+		t.Fatalf("ListBindings() summary = %+v", summary)
+	}
+	if summary.GetType() != bindingsv1.BindingType_BINDING_TYPE_POSTGRES {
+		t.Fatalf("ListBindings() type = %v, want the postgres it published", summary.GetType())
+	}
+	if len(summary.GetProperties()) == 0 {
+		t.Fatal("ListBindings() reported no property shapes, and a consumer binds against them")
+	}
+
+	_, err = vars.SetBinding(ctx, &envvarsv1.SetBindingRequest{
+		Slug:    slug,
+		Tier:    environmentv1.Tier_TIER_PRODUCTION,
+		Binding: binding,
+		Owner:   "supabase",
+	})
+	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
+		t.Fatalf("a second publisher taking the name: code = %v, want %v", got, connect.CodeFailedPrecondition)
+	}
+
+	removed, err := vars.RemoveBinding(ctx, &envvarsv1.RemoveBindingRequest{
+		Slug: slug,
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+		Name: "db",
+	})
+	if err != nil || !removed.GetRemoved() {
+		t.Fatalf("RemoveBinding() = %+v, %v", removed, err)
+	}
+	listed, err = vars.ListBindings(ctx, &envvarsv1.ListBindingsRequest{
+		Slug: slug,
+		Tier: environmentv1.Tier_TIER_PRODUCTION,
+	})
+	if err != nil || len(listed.GetBindings()) != 0 {
+		t.Fatalf("ListBindings() after RemoveBinding() = %+v, %v", listed.GetBindings(), err)
+	}
+}
+
+func TestABindingOcelCouldNotHaveProducedIsRefused(t *testing.T) {
+	vars, _ := served(t)
+	ctx := context.Background()
+
+	for name, binding := range map[string]*bindingsv1.Binding{
+		"unsourced": {
+			Name:       "db",
+			Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "db.example"}},
+		},
+		"granting no action": {
+			Name:       "files",
+			Source:     "acme",
+			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
+			Grants:     []*bindingsv1.Grant{{Resources: []string{"arn:aws:s3:::files"}}},
+		},
+		"granting over no resource": {
+			Name:       "files",
+			Source:     "acme",
+			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
+			Grants:     []*bindingsv1.Grant{{Actions: []string{"s3:GetObject"}}},
+		},
+		"granting every action": {
+			Name:       "files",
+			Source:     "acme",
+			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
+			Grants:     []*bindingsv1.Grant{{Actions: []string{"*"}, Resources: []string{"arn:aws:s3:::files"}}},
+		},
+		"granting over every resource": {
+			Name:       "files",
+			Source:     "acme",
+			Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "files"}},
+			Grants:     []*bindingsv1.Grant{{Actions: []string{"s3:GetObject"}, Resources: []string{"*"}}},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := vars.SetBinding(ctx, &envvarsv1.SetBindingRequest{
+				Slug:    slug,
+				Tier:    environmentv1.Tier_TIER_PRODUCTION,
+				Binding: binding,
+				Owner:   "acme",
+			})
+			if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+				t.Fatalf("SetBinding(): code = %v, want %v", got, connect.CodeInvalidArgument)
+			}
+		})
+	}
+}
+
+func TestABindingNamesAnEnvironmentOnlyInPreview(t *testing.T) {
+	vars, _ := served(t)
+
+	_, err := vars.ListBindings(context.Background(), &envvarsv1.ListBindingsRequest{
+		Slug:        slug,
+		Tier:        environmentv1.Tier_TIER_PRODUCTION,
+		Environment: "pr-7",
+	})
+	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+		t.Fatalf("a named environment in production: code = %v, want %v", got, connect.CodeInvalidArgument)
+	}
+}
+
+func deployPreview(t *testing.T, provider *fake.Provider, environment string) {
+	t.Helper()
+	name := stackrecords.StackRecord(edge.ClassPreview, slug, naming.InfraStack(environment))
+	if _, err := provider.Records().Write(context.Background(), records.Record{Name: name, Bytes: []byte("{}")}); err != nil {
+		t.Fatalf("record a deployed preview environment: %v", err)
+	}
+}
+
+func TestTheRecordsInlineBindingsKeepAreWrittenByThemAlone(t *testing.T) {
+	vars, _ := served(t)
+	ctx := context.Background()
+	record := func(name string) *bindingsv1.Binding {
+		return &bindingsv1.Binding{
+			Name:       name,
+			Source:     "ocel.json",
+			Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Url: "postgres://u:p@db/shop"}},
+		}
+	}
+	inline := naming.InlineRecordName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "orders")
+
+	for name, req := range map[string]*envvarsv1.SetBindingRequest{
+		"a publisher writing a reserved name":       {Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Binding: record(inline), Owner: "terraform"},
+		"the inline owner writing an ordinary name": {Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Binding: record("orders"), Owner: naming.InlineRecordOwner},
+	} {
+		if _, err := vars.SetBinding(ctx, req); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("%s: code = %v, want %v", name, connect.CodeOf(err), connect.CodeInvalidArgument)
+		}
+	}
+
+	if _, err := vars.SetBinding(ctx, &envvarsv1.SetBindingRequest{Slug: slug, Tier: environmentv1.Tier_TIER_PRODUCTION, Binding: record(inline), Owner: naming.InlineRecordOwner}); err != nil {
+		t.Fatalf("the inline owner writing its own record: %v", err)
+	}
+}

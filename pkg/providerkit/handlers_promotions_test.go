@@ -20,8 +20,8 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
@@ -483,7 +483,7 @@ func TestRemoveEnvironmentRemovesTheRecordsOcelKeptThere(t *testing.T) {
 	store := envvars.Store{Records: provider.Records(), Cipher: provider.Cipher()}
 	scope := envvars.Scope{Project: "shop", Class: edge.ClassPreview}
 	publish := func(environment, owner string, binding *bindingsv1.Binding) {
-		pair, err := providerkit.BindingPair(owner, binding)
+		pair, err := envvarsserver.BindingPair(owner, binding)
 		if err != nil {
 			t.Fatal(err)
 		}

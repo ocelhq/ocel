@@ -12,6 +12,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -43,7 +44,7 @@ func declaredAs(kind bindingsv1.BindingType) resourcesv1.ResourceType {
 
 func publishRecord(t *testing.T, provider *fake.Provider, class edge.Class, owner string, binding *bindingsv1.Binding) {
 	t.Helper()
-	pair, err := providerkit.BindingPair(owner, binding)
+	pair, err := envvarsserver.BindingPair(owner, binding)
 	if err != nil {
 		t.Fatalf("BindingPair: %v", err)
 	}

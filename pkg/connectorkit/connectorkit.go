@@ -16,7 +16,7 @@ import (
 	"connectrpc.com/validate"
 
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
 )
 
 const (
@@ -34,7 +34,7 @@ type Spec struct {
 
 	Addr string
 
-	Vars providerkit.Vars
+	EnvVars envvarsserver.Backend
 
 	Identity Identity
 
@@ -42,11 +42,11 @@ type Spec struct {
 }
 
 func Serve(spec Spec) error {
-	if spec.Vars.Records == nil {
-		return errors.New("connectorkit: Spec.Vars.Records is required")
+	if spec.EnvVars.Records == nil {
+		return errors.New("connectorkit: Spec.EnvVars.Records is required")
 	}
-	if spec.Vars.Cipher == nil {
-		return errors.New("connectorkit: Spec.Vars.Cipher is required")
+	if spec.EnvVars.Cipher == nil {
+		return errors.New("connectorkit: Spec.EnvVars.Cipher is required")
 	}
 
 	if spec.KeyPath != "" && !spec.Identity.Held() {
@@ -154,9 +154,9 @@ func Mux(spec Spec) (*http.ServeMux, error) {
 
 	mux := http.NewServeMux()
 
-	source := providerkit.FixedVars(spec.Vars)
+	source := envvarsserver.FixedBackend(spec.EnvVars)
 	path, handler := envvarsv1connect.NewEnvVarsServiceHandler(
-		&providerkit.VarsService{Source: source},
+		&envvarsserver.Service{Source: source},
 		connect.WithInterceptors(validate.NewInterceptor(), guard.interceptor()),
 	)
 	mux.Handle(path, handler)

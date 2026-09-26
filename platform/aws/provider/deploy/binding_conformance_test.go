@@ -19,7 +19,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
 )
 
 type stubSecrets struct{ secretString string }
@@ -104,7 +104,7 @@ func assertMatchesFixture(t *testing.T, got *bindingsv1.Binding, typ bindingsv1.
 		t.Errorf("producer emitted a %s binding that differs from the checked-in record %s at %s — the consumer suite parses that fixture, so a divergence here is cross-language drift", typ, fixtureFile(typ), strings.Join(differingFields(got.ProtoReflect(), want.ProtoReflect(), ""), "; "))
 	}
 
-	payload, err := providerkit.EncodeBinding(got)
+	payload, err := envvarsserver.EncodeBinding(got)
 	if err != nil {
 		t.Fatalf("encode the produced binding as the store and the app payload do: %v", err)
 	}

@@ -22,13 +22,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
-	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
@@ -1252,10 +1252,10 @@ func (r *deployRun) publish(ctx context.Context, bindings []provider.Binding) er
 		if err != nil {
 			return err
 		}
-		if err := VerifyGrantScope(message); err != nil {
-			return bindingsError(err)
+		if err := envvarsserver.VerifyGrantScope(message); err != nil {
+			return connect.NewError(connect.CodeInvalidArgument, err)
 		}
-		pair, err := BindingPair(envvars.OwnerOcel, message)
+		pair, err := envvarsserver.BindingPair(envvars.OwnerOcel, message)
 		if err != nil {
 			return err
 		}
@@ -1368,33 +1368,14 @@ func (p *publishedBindings) Named(ctx context.Context, name string) (provider.Bi
 }
 
 func bindingPublished(name string, published envvars.StoredBinding) (provider.Binding, error) {
-	message, err := DecodeBinding(published.Value)
+	message, err := envvarsserver.DecodeBinding(published.Value)
 	if err != nil {
 		return provider.Binding{}, fmt.Errorf("read binding %s: %w", name, err)
 	}
-	binding := bindingOf(message)
+	binding := provider.BindingOf(message)
 	binding.Version = published.Version
 	binding.Wire = published.Value
 	return binding, nil
-}
-
-func bindingOf(message *bindingsv1.Binding) provider.Binding {
-	binding := provider.Binding{
-		Type:       provider.BindingCustom,
-		Name:       message.GetName(),
-		Source:     message.GetSource(),
-		Properties: map[string]string{},
-		Grants:     provider.GrantsOf(message),
-	}
-	if kind, known := provider.BindingTypeFromWire(naming.BindingTypeOf(message)); known {
-		binding.Type = kind
-	}
-	for _, name := range naming.BindingPropertyNames(message) {
-		if value, held := naming.BindingProperty(message, name); held {
-			binding.Properties[name] = fmt.Sprint(value)
-		}
-	}
-	return binding
 }
 
 func (r *deployRun) openImages(ctx context.Context, wired *contractv1.ImageRegistry) error {

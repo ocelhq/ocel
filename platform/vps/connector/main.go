@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/ocelhq/ocel/pkg/connectorkit"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
 	"github.com/ocelhq/ocel/platform/vps/connector/hostports"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -55,7 +55,7 @@ func run(listen, config string, printing, reporting bool) error {
 		Vendor:     "vps",
 		Addr:       listen,
 		ConfigPath: config,
-		Vars: providerkit.Vars{
+		EnvVars: envvarsserver.Backend{
 			Records: host.RecordsOver(hostports.Records{}),
 			Cipher:  host.CipherOver(hostports.Cipher{}),
 		},

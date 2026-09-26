@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
@@ -77,7 +78,7 @@ func newMux(spec Spec) *http.ServeMux {
 	)
 
 	held := &session{spec: spec, writer: provider.WrittenByVersion(spec.Version)}
-	kit := &handlers{session: held, VarsService: &VarsService{Source: sessionVars{session: held}}}
+	kit := &handlers{session: held, Service: &envvarsserver.Service{Source: sessionBackend{session: held}}}
 
 	path, handler := contractv1connect.NewProviderServiceHandler(kit, interceptors)
 	mux.Handle(path, handler)
@@ -92,7 +93,7 @@ func newMux(spec Spec) *http.ServeMux {
 }
 
 type handlers struct {
-	*VarsService
+	*envvarsserver.Service
 
 	session *session
 }
@@ -102,6 +103,18 @@ var (
 	_ envvarsv1connect.EnvVarsServiceHandler   = (*handlers)(nil)
 	_ costv1connect.CostServiceHandler         = (*handlers)(nil)
 )
+
+type sessionBackend struct {
+	session *session
+}
+
+func (s sessionBackend) Read() (envvarsserver.Backend, error) {
+	provider, err := s.session.use()
+	if err != nil {
+		return envvarsserver.Backend{}, err
+	}
+	return envvarsserver.Backend{Records: provider.Records(), Cipher: provider.Cipher(), VerifyGrants: provider.Hooks().VerifyGrants}, nil
+}
 
 type session struct {
 	spec   Spec

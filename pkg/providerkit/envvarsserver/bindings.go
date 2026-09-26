@@ -1,20 +1,25 @@
-package providerkit
+package envvarsserver
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 
+	connect "connectrpc.com/connect"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
+	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var (
@@ -24,6 +29,136 @@ var (
 
 	ErrUnattachedGrant = errors.New("providerkit: unattached grant")
 )
+
+func (h *Service) SetBinding(ctx context.Context, req *envvarsv1.SetBindingRequest) (*envvarsv1.SetBindingResponse, error) {
+	if err := bindingTarget(req.GetTier(), req.GetEnvironment()); err != nil {
+		return nil, err
+	}
+	binding := req.GetBinding()
+	if err := envvars.ValidateBindingName(req.GetEnvironment(), binding.GetName()); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	if err := ValidatePublisher(req.GetOwner()); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	if err := ValidateInlineClaim(req.GetOwner(), binding.GetName()); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	if err := RefuseUnsourced(req.GetOwner(), binding); err != nil {
+		return nil, bindingsError(err)
+	}
+	if err := VerifyBinding(binding); err != nil {
+		return nil, bindingsError(err)
+	}
+	if err := h.verifyGrants(ctx, binding); err != nil {
+		return nil, bindingsError(err)
+	}
+	pair, err := BindingPair(req.GetOwner(), binding)
+	if err != nil {
+		return nil, bindingsError(err)
+	}
+
+	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
+	if err != nil {
+		return nil, err
+	}
+	version, err := store.SetBinding(ctx, scope, req.GetEnvironment(), req.GetOwner(), binding.GetName(), pair)
+	if err != nil {
+		return nil, bindingsError(err)
+	}
+	return &envvarsv1.SetBindingResponse{Version: uint64(version)}, nil
+}
+
+func (h *Service) RemoveBinding(ctx context.Context, req *envvarsv1.RemoveBindingRequest) (*envvarsv1.RemoveBindingResponse, error) {
+	if err := bindingTarget(req.GetTier(), req.GetEnvironment()); err != nil {
+		return nil, err
+	}
+	if err := envvars.ValidateBindingName(req.GetEnvironment(), req.GetName()); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
+	if err != nil {
+		return nil, err
+	}
+	removed, err := store.RemoveBinding(ctx, scope, req.GetEnvironment(), req.GetName())
+	if err != nil {
+		return nil, bindingsError(err)
+	}
+	return &envvarsv1.RemoveBindingResponse{Removed: removed}, nil
+}
+
+func (h *Service) ListBindings(ctx context.Context, req *envvarsv1.ListBindingsRequest) (*envvarsv1.ListBindingsResponse, error) {
+	if err := bindingTarget(req.GetTier(), req.GetEnvironment()); err != nil {
+		return nil, err
+	}
+	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
+	if err != nil {
+		return nil, err
+	}
+	found, err := store.ListBindings(ctx, scope, req.GetEnvironment())
+	if err != nil {
+		return nil, bindingsError(err)
+	}
+	resp := &envvarsv1.ListBindingsResponse{Bindings: make([]*envvarsv1.BindingSummary, 0, len(found))}
+	for _, published := range found {
+		binding, err := DecodeBinding(published.Record)
+		if err != nil {
+			return nil, bindingsError(fmt.Errorf("read binding %s's record: %w: %w", published.Name, err, ErrUnreadableRecord))
+		}
+		shapes, err := DecodeShapes(published.Shapes)
+		if err != nil {
+			return nil, bindingsError(fmt.Errorf("read binding %s's shape: %w: %w", published.Name, err, ErrUnreadableRecord))
+		}
+		resp.Bindings = append(resp.Bindings, &envvarsv1.BindingSummary{
+			Name:       published.Name,
+			Type:       naming.BindingTypeOf(binding),
+			Source:     binding.GetSource(),
+			Owner:      published.Owner,
+			Version:    uint64(published.Version),
+			Properties: naming.PropertyShapeMessages(shapes),
+		})
+	}
+	return resp, nil
+}
+
+func bindingTarget(tier environmentv1.Tier, environment string) error {
+	if environment != "" && tier != environmentv1.Tier_TIER_PREVIEW {
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			"environment %q is named alongside class %q: an ocel coordinate is a class and, in %s, one preview environment; leave the environment off",
+			environment, edge.ClassProduction, edge.ClassPreview))
+	}
+	return nil
+}
+
+func (h *Service) verifyGrants(ctx context.Context, binding *bindingsv1.Binding) error {
+	if len(binding.GetGrants()) == 0 {
+		return nil
+	}
+	backend, err := h.Source.Read()
+	if err != nil {
+		return err
+	}
+	if backend.VerifyGrants == nil {
+		return nil
+	}
+	return backend.VerifyGrants(ctx, provider.BindingOf(binding))
+}
+
+func bindingsError(err error) error {
+	switch {
+	case errors.Is(err, envvars.ErrClaimed):
+		return connect.NewError(connect.CodeFailedPrecondition, err)
+	case errors.Is(err, envvars.ErrTornPair):
+		return connect.NewError(connect.CodeAborted, err)
+	case errors.Is(err, ErrUnsourced), errors.Is(err, ErrUnreadableRecord),
+		errors.Is(err, provider.ErrUnscopedGrant), errors.Is(err, ErrUnattachedGrant):
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	case errors.Is(err, envvars.ErrNotPublished):
+		return connect.NewError(connect.CodeNotFound, err)
+	default:
+		return valuesError(err)
+	}
+}
 
 func EncodeBinding(binding *bindingsv1.Binding) ([]byte, error) { return protojson.Marshal(binding) }
 

@@ -6,8 +6,8 @@ import (
 	"os"
 
 	"github.com/ocelhq/ocel/pkg/connectorkit"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -70,7 +70,7 @@ func run(listen, config string, reporting bool) error {
 		Vendor:     vendor,
 		Addr:       listen,
 		ConfigPath: config,
-		Vars: providerkit.Vars{
+		EnvVars: envvarsserver.Backend{
 			Records: ports.Records{Clients: bindings},
 			Cipher:  ports.Cipher{Clients: bindings},
 		},

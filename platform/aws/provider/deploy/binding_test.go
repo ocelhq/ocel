@@ -7,7 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 )
 
@@ -41,7 +41,7 @@ func TestPublishedRecordsMeetWhatTheManifestDeclares(t *testing.T) {
 		t.Fatalf("what this deploy publishes drifts from what it tells the app to expect: %v", err)
 	}
 	for _, l := range bindings {
-		binding, err := providerkit.DecodeBinding([]byte(published[l.Key]))
+		binding, err := envvarsserver.DecodeBinding([]byte(published[l.Key]))
 		if err != nil {
 			t.Fatalf("binding %s conformed to %q, which no app can parse: %v", l.Name, published[l.Key], err)
 		}
@@ -60,7 +60,7 @@ func publishedRecords(t *testing.T, bindings []live.Binding) (map[string]string,
 	}
 	out := make(map[string]string, len(records))
 	for _, r := range records {
-		encoded, err := providerkit.EncodeBinding(r)
+		encoded, err := envvarsserver.EncodeBinding(r)
 		if err != nil {
 			return nil, err
 		}

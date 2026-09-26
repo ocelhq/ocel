@@ -8,9 +8,9 @@ import (
 	"time"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvarsserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -45,7 +45,7 @@ func resolving(t *testing.T, p *vps.Provider) liveValues {
 	if _, err := store.Set(ctx, liveScope(), envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, liveSecretValue, nil); err != nil {
 		t.Fatalf("sealing a secret through the box's own helper = %v", err)
 	}
-	pair, err := providerkit.BindingPair("terraform", &bindingsv1.Binding{
+	pair, err := envvarsserver.BindingPair("terraform", &bindingsv1.Binding{
 		Name:   "main",
 		Source: "terraform",
 		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{
