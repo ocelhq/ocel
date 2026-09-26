@@ -84,11 +84,3 @@ func ClassOf(name records.Name) (edge.Class, bool) {
 	}
 	return "", false
 }
-
-type Project struct {
-	Features []string `json:"features,omitempty"`
-}
-
-type BootstrapSettings struct {
-	AutoHeal bool `json:"auto_heal,omitempty"`
-}
