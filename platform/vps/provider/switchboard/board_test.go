@@ -92,7 +92,7 @@ func backend(t *testing.T, name string) string {
 		w.Header().Set(edge.HeaderEdge, "app")
 		w.Header().Set("X-Served-Host", r.Host)
 		w.Header().Set("X-Served-Path", r.URL.Path)
-		for _, forwarded := range []string{"X-Forwarded-For", "X-Forwarded-Proto", "X-Forwarded-Host"} {
+		for _, forwarded := range []string{"X-Forwarded-For", "X-Forwarded-Proto", "X-Forwarded-Host", "X-Forwarded-Port", "X-Forwarded-Prefix", "Forwarded", "X_Forwarded_Proto", "X_Forwarded_Host", "X-Real-Ip", "True-Client-Ip"} {
 			w.Header().Set("Seen-"+forwarded, strings.Join(r.Header.Values(forwarded), ","))
 		}
 		_, _ = io.WriteString(w, name)
@@ -264,6 +264,34 @@ func TestTheLivenessProbeIsToldTheSchemeAndHostsAnAppWouldHear(t *testing.T) {
 		}
 		if other := ask(t, tc.client, tc.at, tc.host, "/", tc.forwarded...); other.header.Get(switchboard.HeardHeader) != "" {
 			t.Errorf("%s: a request off the probe path was told %q, want nothing said beyond the probe", name, other.header.Get(switchboard.HeardHeader))
+		}
+	}
+}
+
+func TestEveryForwardedHeaderBeyondTheThreeTheBoardWritesIsDroppedWhoeverSentIt(t *testing.T) {
+	t.Parallel()
+
+	web := backend(t, "web")
+	table := routing(t, map[string]string{"shop.example.com": web})
+	spoofed := []string{
+		"X-Forwarded-Port", "8443", "X-Forwarded-Prefix", "/admin", "Forwarded", "for=6.6.6.6;proto=https",
+		"X_Forwarded_Proto", "https", "X_Forwarded_Host", "bank.example.com", "X-Real-Ip", "6.6.6.6", "True-Client-Ip", "6.6.6.6",
+	}
+	_, untrusting, front := fronted(t, table)
+	_, relaying, _ := fronted(t, table, netip.MustParsePrefix("127.0.0.0/8"))
+	for name, asked := range map[string]struct {
+		client *http.Client
+		at     string
+	}{
+		"an untrusted peer": {http.DefaultClient, untrusting},
+		"a relaying peer":   {http.DefaultClient, relaying},
+		"the front proxy":   {front, "front"},
+	} {
+		said := ask(t, asked.client, asked.at, "shop.example.com", "/", spoofed...)
+		for _, header := range []string{"X-Forwarded-Port", "X-Forwarded-Prefix", "Forwarded", "X_Forwarded_Proto", "X_Forwarded_Host", "X-Real-Ip", "True-Client-Ip"} {
+			if got := said.header.Get("Seen-" + header); got != "" {
+				t.Errorf("%s had its %s reach the upstream as %q, want it dropped: the board vouches for the scheme, the host and the client, and an app that reads any other forwarded header, a CGI-style server that maps _ onto -, or a client-address header would be told what the peer chose", name, header, got)
+			}
 		}
 	}
 }
