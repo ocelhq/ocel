@@ -94,7 +94,7 @@ func unrenderable(kind, resource, surface string, why error) error {
 		transformProvider, kind, surface, resource, why)
 }
 
-func (p *Provider) reshaped(ctx context.Context, in resources.Instruction, kind string, spec host.ResourceContainer) (host.ResourceContainer, error) {
+func (p *Provider) reshaped(ctx context.Context, in resources.ProvisionRequest, kind string, spec host.ResourceContainer) (host.ResourceContainer, error) {
 	if p.transform == nil {
 		return spec, nil
 	}

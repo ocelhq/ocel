@@ -74,13 +74,13 @@ func readHeldWildcard(t *testing.T, provider *fake.Provider) stackrecords.Wildca
 func TestUsePreviewWildcardDiscardsTheCertificateItSupersedes(t *testing.T) {
 	t.Parallel()
 	client, provider := contractServed(t, "1.0.0")
-	provider.IssueCertificates(validationRecord)
+	provider.RequireValidationRecords(validationRecord)
 	if result := usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com")); !result.GetSuccess() {
 		t.Fatalf("UsePreviewWildcard() = %q, want the wildcard raised", result.GetError())
 	}
 
 	provider.RotateCertificates()
-	provider.IssueCertificates(rotatedValidationRecord)
+	provider.RequireValidationRecords(rotatedValidationRecord)
 	if result := usePreviewWildcard(t, client, "preview.acme.com", zoned("acme.com")); !result.GetSuccess() {
 		t.Fatalf("UsePreviewWildcard() = %q, want the rotation settled", result.GetError())
 	}

@@ -19,8 +19,8 @@ func TestMain(m *testing.M) { os.Exit(enginetest.Main(m)) }
 
 func aRunningStore(t *testing.T, bucket string) Store {
 	t.Helper()
-	running := enginetest.AStore(t)
-	running.Takes(t, bucket)
+	running := enginetest.SharedObjectStore(t)
+	running.ClaimBucket(t, bucket)
 	store := Store{
 		Endpoint:        running.Endpoint,
 		Region:          running.Region,

@@ -364,7 +364,7 @@ func (s *sweeper) ForgetReleases(_ context.Context, _ provider.StackRef, app str
 func (s *sweeper) hooks() resources.Hooks {
 	return resources.Hooks{
 		Containers: &resources.ContainerHooks{Provision: s.ProvisionContainers, Remove: s.RemoveContainers},
-		Retention:  &resources.RetentionHooks{Reconcile: s.ReconcileImages, Forget: s.ForgetReleases},
+		Retention:  &resources.ImageRetentionHooks{Reconcile: s.ReconcileImages, Forget: s.ForgetReleases},
 	}
 }
 

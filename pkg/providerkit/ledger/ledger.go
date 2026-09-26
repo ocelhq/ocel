@@ -22,7 +22,7 @@ const (
 	unwindWindow = 60 * time.Second
 )
 
-func sparing(ctx context.Context) (context.Context, context.CancelFunc) {
+func detachedForUnwind(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), unwindWindow)
 }
 
@@ -87,12 +87,12 @@ const displacedDepth = 16
 
 type promotionRecord struct {
 	edge.Promotion
-	Seq     int64    `json:"seq"`
-	Claimed bool     `json:"claimed,omitempty"`
-	Was     *earlier `json:"was,omitempty"`
+	Seq     int64          `json:"seq"`
+	Claimed bool           `json:"claimed,omitempty"`
+	Prior   *priorPosition `json:"was,omitempty"`
 }
 
-type earlier struct {
+type priorPosition struct {
 	Seq int64 `json:"seq"`
 	Ts  int64 `json:"ts"`
 }
@@ -217,7 +217,7 @@ func (l *Ledger) Promote(ctx context.Context, promotion edge.Promotion, pointer 
 		if err := json.Unmarshal(held.Bytes, &prior); err != nil {
 			return fmt.Errorf("decode promotion %s: %w", promotion.PromotionID, err)
 		}
-		row.Was = &earlier{Seq: prior.Seq, Ts: prior.Ts}
+		row.Prior = &priorPosition{Seq: prior.Seq, Ts: prior.Ts}
 	}
 	encoded, err := json.Marshal(row)
 	if err != nil {
@@ -253,7 +253,7 @@ func (l *Ledger) Promote(ctx context.Context, promotion edge.Promotion, pointer 
 }
 
 func (l *Ledger) Unpromote(ctx context.Context, promotionID, pointer string) error {
-	ctx, stop := sparing(ctx)
+	ctx, stop := detachedForUnwind(ctx)
 	defer stop()
 	name := pointerOr(pointer)
 	for range casAttempts {
@@ -289,7 +289,7 @@ func (l *Ledger) Unpromote(ctx context.Context, promotionID, pointer string) err
 }
 
 func (l *Ledger) retract(ctx context.Context, pointer, promotionID string) error {
-	ctx, stop := sparing(ctx)
+	ctx, stop := detachedForUnwind(ctx)
 	defer stop()
 	for range casAttempts {
 		held, err := records.ReadOrEmpty(ctx, l.records, l.promotionName(pointer, promotionID))
@@ -303,15 +303,15 @@ func (l *Ledger) retract(ctx context.Context, pointer, promotionID string) error
 		if err := json.Unmarshal(held.Bytes, &row); err != nil {
 			return fmt.Errorf("decode promotion %s: %w", promotionID, err)
 		}
-		if !row.Claimed && row.Was == nil {
+		if !row.Claimed && row.Prior == nil {
 			return nil
 		}
 		freed := ""
 		if row.Claimed {
 			freed, row.Tag, row.Claimed = row.Tag, "", false
 		}
-		if row.Was != nil {
-			row.Seq, row.Ts, row.Was = row.Was.Seq, row.Was.Ts, nil
+		if row.Prior != nil {
+			row.Seq, row.Ts, row.Prior = row.Prior.Seq, row.Prior.Ts, nil
 		}
 		if held.Bytes, err = json.Marshal(row); err != nil {
 			return fmt.Errorf("encode promotion %s: %w", promotionID, err)
@@ -465,7 +465,7 @@ func (l *Ledger) Prune(ctx context.Context, keepN int, pointer string) (edge.Pru
 	}
 	kept, removed := Retain(rows, keepN, active, func(row promotionRecord) string { return row.PromotionID })
 	held := recordKeysOf(kept)
-	if err := l.drop(ctx, name, removed, held); err != nil {
+	if err := l.deletePromotions(ctx, name, removed, held); err != nil {
 		return edge.PruneResult{}, err
 	}
 	surviving, err := l.recordKeys(ctx)
@@ -498,7 +498,7 @@ func (l *Ledger) RemovePointer(ctx context.Context, pointer string) (edge.PruneR
 	if err != nil {
 		return edge.PruneResult{}, err
 	}
-	if err := l.drop(ctx, name, rows, nil); err != nil {
+	if err := l.deletePromotions(ctx, name, rows, nil); err != nil {
 		return edge.PruneResult{}, err
 	}
 	if err := records.Forget(ctx, l.records, l.pointerName(name)); err != nil {
@@ -546,14 +546,14 @@ func (l *Ledger) Destroy(ctx context.Context) error {
 }
 
 func (l *Ledger) NoteInvalidationTarget(ctx context.Context, distribution string) error {
-	return l.retarget(ctx, distribution, true)
+	return l.setInvalidationTarget(ctx, distribution, true)
 }
 
 func (l *Ledger) ForgetInvalidationTarget(ctx context.Context, distribution string) error {
-	return l.retarget(ctx, distribution, false)
+	return l.setInvalidationTarget(ctx, distribution, false)
 }
 
-func (l *Ledger) retarget(ctx context.Context, distribution string, note bool) error {
+func (l *Ledger) setInvalidationTarget(ctx context.Context, distribution string, note bool) error {
 	if distribution == "" {
 		return fmt.Errorf("note an invalidation target for %s: it names no front to invalidate", l.scope)
 	}
@@ -593,7 +593,7 @@ func (l *Ledger) retarget(ctx context.Context, distribution string, note bool) e
 	return fmt.Errorf("record the invalidation targets for %s: they moved under %d attempts", l.scope, casAttempts)
 }
 
-func (l *Ledger) drop(ctx context.Context, pointer string, rows []promotionRecord, held []string) error {
+func (l *Ledger) deletePromotions(ctx context.Context, pointer string, rows []promotionRecord, held []string) error {
 	for _, row := range rows {
 		names := []records.Name{l.promotionName(pointer, row.PromotionID)}
 		for app, build := range row.Builds {
@@ -614,7 +614,7 @@ func (l *Ledger) drop(ctx context.Context, pointer string, rows []promotionRecor
 	return nil
 }
 
-func (l *Ledger) Holder(ctx context.Context, pointer string) (string, error) {
+func (l *Ledger) ActivePromotionID(ctx context.Context, pointer string) (string, error) {
 	return l.pointerAt(ctx, pointerOr(pointer))
 }
 

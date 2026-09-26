@@ -22,7 +22,7 @@ type buckets struct {
 	removed []provider.Binding
 }
 
-func (b *buckets) ProvisionBucket(_ context.Context, in resources.Instruction, _ edge.Progress) (provider.Binding, error) {
+func (b *buckets) ProvisionBucket(_ context.Context, in resources.ProvisionRequest, _ edge.Progress) (provider.Binding, error) {
 	return provider.Binding{
 		Type:       provider.BindingBucket,
 		Name:       in.Resource.Name,
@@ -47,7 +47,7 @@ func (n neon) hooks() resources.Hooks {
 	return hooks
 }
 
-func (neon) ProvisionPostgres(_ context.Context, in resources.Instruction, _ edge.Progress) (provider.Binding, error) {
+func (neon) ProvisionPostgres(_ context.Context, in resources.ProvisionRequest, _ edge.Progress) (provider.Binding, error) {
 	return provider.Binding{
 		Type: provider.BindingPostgres,
 		Name: in.Resource.Name,
@@ -67,7 +67,7 @@ func (h halfBinding) hooks() resources.Hooks {
 	return resources.Hooks{ProvisionPostgres: h.ProvisionPostgres}
 }
 
-func (halfBinding) ProvisionPostgres(_ context.Context, in resources.Instruction, _ edge.Progress) (provider.Binding, error) {
+func (halfBinding) ProvisionPostgres(_ context.Context, in resources.ProvisionRequest, _ edge.Progress) (provider.Binding, error) {
 	return provider.Binding{
 		Type:       provider.BindingPostgres,
 		Name:       in.Resource.Name,
@@ -86,19 +86,19 @@ func infraRef() provider.StackRef {
 func TestServesNamesEveryResourceTheHooksProvision(t *testing.T) {
 	t.Parallel()
 
-	if served := resources.Serves(resources.Hooks{}); len(served) != 0 {
-		t.Fatalf("Serves() = %v for hooks that provision nothing, want nothing", served)
+	if served := resources.ServedBindingTypes(resources.Hooks{}); len(served) != 0 {
+		t.Fatalf("ServedBindingTypes() = %v for hooks that provision nothing, want nothing", served)
 	}
-	if served := resources.Serves((&buckets{}).hooks()); !slices.Equal(served, []provider.BindingType{provider.BindingBucket}) {
-		t.Fatalf("Serves() = %v, want only the bucket the hooks provision", served)
+	if served := resources.ServedBindingTypes((&buckets{}).hooks()); !slices.Equal(served, []provider.BindingType{provider.BindingBucket}) {
+		t.Fatalf("ServedBindingTypes() = %v, want only the bucket the hooks provision", served)
 	}
-	served := resources.Serves(neon{&buckets{}}.hooks())
+	served := resources.ServedBindingTypes(neon{&buckets{}}.hooks())
 	if !slices.Equal(served, []provider.BindingType{provider.BindingPostgres, provider.BindingBucket}) {
-		t.Fatalf("Serves() = %v, want the Postgres and the bucket the hooks provision", served)
+		t.Fatalf("ServedBindingTypes() = %v, want the Postgres and the bucket the hooks provision", served)
 	}
 	removing := resources.Hooks{RemoveResource: (&buckets{}).RemoveResource}
-	if served := resources.Serves(removing); len(served) != 0 {
-		t.Fatalf("Serves() = %v for hooks that only remove, want nothing: a resource nothing can stand up is not served", served)
+	if served := resources.ServedBindingTypes(removing); len(served) != 0 {
+		t.Fatalf("ServedBindingTypes() = %v for hooks that only remove, want nothing: a resource nothing can stand up is not served", served)
 	}
 }
 
@@ -106,7 +106,7 @@ func TestReleaserFansEachResourceOutToItsPrimitive(t *testing.T) {
 	t.Parallel()
 
 	records := fake.NewRecords()
-	stacks := resources.Stacks(records, fake.NewArtifacts(), neon{&buckets{}}.hooks())
+	stacks := resources.NewHookStacks(records, fake.NewArtifacts(), neon{&buckets{}}.hooks())
 
 	result, err := stacks.Provision(context.Background(), provider.StackSpec{
 		Ref:  infraRef(),
@@ -130,7 +130,7 @@ func TestReleaserFansEachResourceOutToItsPrimitive(t *testing.T) {
 func TestReleaserRefusesAPrimitiveNothingServes(t *testing.T) {
 	t.Parallel()
 
-	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), (&buckets{}).hooks())
+	stacks := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), (&buckets{}).hooks())
 
 	_, err := stacks.Provision(context.Background(), provider.StackSpec{
 		Ref:       infraRef(),
@@ -149,7 +149,7 @@ func TestReleaserRefusesAPrimitiveNothingServes(t *testing.T) {
 func TestPlanRefusesAPrimitiveNothingServes(t *testing.T) {
 	t.Parallel()
 
-	_, err := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), (&buckets{}).hooks()).Plan(context.Background(), provider.StackSpec{
+	_, err := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), (&buckets{}).hooks()).Plan(context.Background(), provider.StackSpec{
 		Ref:       infraRef(),
 		Kind:      provider.StackInfra,
 		Resources: []provider.Resource{{Name: "orders", Type: provider.BindingPostgres}},
@@ -163,7 +163,7 @@ func TestPlanRefusesAPrimitiveNothingServes(t *testing.T) {
 func TestReleaserRefusesABindingMissingAPropertyItsTypePromises(t *testing.T) {
 	t.Parallel()
 
-	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), halfBinding{}.hooks())
+	stacks := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), halfBinding{}.hooks())
 
 	_, err := stacks.Provision(context.Background(), provider.StackSpec{
 		Ref:       infraRef(),
@@ -184,7 +184,7 @@ func TestReleaserRemovesAResourceTheSpecNoLongerDeclares(t *testing.T) {
 	ctx := context.Background()
 	records := fake.NewRecords()
 	own := &buckets{}
-	stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(records, fake.NewArtifacts(), own.hooks())
 	ref := infraRef()
 
 	if err := stackrecords.Write(ctx, records, ref.Class, ref.Project, ref.Name, stackrecords.Stack{
@@ -214,7 +214,7 @@ func TestDestroyOfAStackNothingRecordedIsANoOp(t *testing.T) {
 	t.Parallel()
 
 	own := &buckets{}
-	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 
 	if err := stacks.Destroy(context.Background(), infraRef(), nil); err != nil {
 		t.Fatalf("Destroy() of a stack nothing recorded = %v, want nil", err)
@@ -238,7 +238,7 @@ func TestDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := resources.Stacks(records, fake.NewArtifacts(), own.hooks()).Destroy(ctx, ref, nil); err != nil {
+	if err := resources.NewHookStacks(records, fake.NewArtifacts(), own.hooks()).Destroy(ctx, ref, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
 	if len(own.removed) != 1 {
@@ -259,7 +259,7 @@ func rowsOf(plan provider.Plan) map[string]provider.ChangeAction {
 func TestPlanOverAStackNothingRecordedCreatesEveryResourceItDeclares(t *testing.T) {
 	t.Parallel()
 
-	plan, err := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), neon{&buckets{}}.hooks()).Plan(context.Background(), provider.StackSpec{
+	plan, err := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), neon{&buckets{}}.hooks()).Plan(context.Background(), provider.StackSpec{
 		Ref:  infraRef(),
 		Kind: provider.StackInfra,
 		Resources: []provider.Resource{
@@ -300,7 +300,7 @@ func TestPlanKeepsWhatStandsAndDeletesWhatThePlanDropped(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	plan, err := resources.Stacks(records, fake.NewArtifacts(), (&buckets{}).hooks()).Plan(ctx, provider.StackSpec{
+	plan, err := resources.NewHookStacks(records, fake.NewArtifacts(), (&buckets{}).hooks()).Plan(ctx, provider.StackSpec{
 		Ref:  ref,
 		Kind: provider.StackInfra,
 		Resources: []provider.Resource{
@@ -342,7 +342,7 @@ func TestPlanDestroyTakesDownEveryBindingTheStackRecorded(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stacks := resources.Stacks(records, fake.NewArtifacts(), (&buckets{}).hooks())
+	stacks := resources.NewHookStacks(records, fake.NewArtifacts(), (&buckets{}).hooks())
 	plan, err := stacks.PlanDestroy(ctx, ref, nil)
 	if err != nil {
 		t.Fatalf("PlanDestroy() = %v", err)
@@ -419,7 +419,7 @@ func TestTheFanOutTakesDownTheFunctionItsPlanShowsGoing(t *testing.T) {
 	recordFunctions(t, records, ref, "api", "legacy")
 
 	own := &withFunctions{buckets: &buckets{}}
-	stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(records, fake.NewArtifacts(), own.hooks())
 	spec := provider.StackSpec{
 		Ref:  ref,
 		Kind: provider.StackApp,
@@ -455,7 +455,7 @@ func TestAReleaseDeclaringNoAppTakesDownTheFunctionsItsPlanShowsGoing(t *testing
 	recordFunctions(t, records, ref, "api")
 
 	own := &withFunctions{buckets: &buckets{}}
-	stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(records, fake.NewArtifacts(), own.hooks())
 	spec := provider.StackSpec{Ref: ref, Kind: provider.StackInfra}
 
 	shown, err := stacks.Plan(ctx, spec, nil)
@@ -528,7 +528,7 @@ func TestAContainerAppReachesTheContainerPrimitiveCarryingItsImageAndProbe(t *te
 
 	ref := appRef()
 	own := &withContainers{buckets: &buckets{}}
-	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 
 	result, err := stacks.Provision(context.Background(), provider.StackSpec{
 		Ref:  ref,
@@ -557,7 +557,7 @@ func TestAServerlessAppStillReachesFunctions(t *testing.T) {
 	t.Parallel()
 
 	own := &withFunctions{buckets: &buckets{}}
-	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 
 	result, err := stacks.Provision(context.Background(), provider.StackSpec{
 		Ref:  appRef(),
@@ -582,7 +582,7 @@ func TestAServerlessAppStillReachesFunctions(t *testing.T) {
 func TestAProviderStandingUpNoContainersRefusesAContainerAppByName(t *testing.T) {
 	t.Parallel()
 
-	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks())
+	stacks := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks())
 
 	_, err := stacks.Provision(context.Background(), provider.StackSpec{
 		Ref:  appRef(),
@@ -601,7 +601,7 @@ func TestAProviderStandingUpNoContainersRefusesAContainerAppByName(t *testing.T)
 func TestAProviderStandingUpNoFunctionsRefusesAServerlessAppByName(t *testing.T) {
 	t.Parallel()
 
-	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), (&withContainers{buckets: &buckets{}}).hooks())
+	stacks := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), (&withContainers{buckets: &buckets{}}).hooks())
 
 	_, err := stacks.Provision(context.Background(), provider.StackSpec{
 		Ref:  appRef(),
@@ -620,7 +620,7 @@ func TestAProviderStandingUpNoFunctionsRefusesAServerlessAppByName(t *testing.T)
 func TestAnAppNamingNoComputeIsRefusedRatherThanAssumedServerless(t *testing.T) {
 	t.Parallel()
 
-	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks())
+	stacks := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks())
 
 	_, err := stacks.Provision(context.Background(), provider.StackSpec{
 		Ref:  appRef(),
@@ -642,7 +642,7 @@ func TestTheFanOutTakesDownTheContainerItsPlanShowsGoing(t *testing.T) {
 	recordContainers(t, records, ref, "web", "legacy")
 
 	own := &withContainers{buckets: &buckets{}}
-	stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(records, fake.NewArtifacts(), own.hooks())
 	spec := provider.StackSpec{Ref: ref, Kind: provider.StackApp, App: containerApp("web")}
 
 	shown, err := stacks.Plan(ctx, spec, nil)
@@ -673,7 +673,7 @@ func TestAProviderStandingUpNoContainersRefusesToOrphanTheOnesItRecorded(t *test
 	ref := appRef()
 	recordContainers(t, records, ref, "legacy")
 
-	stacks := resources.Stacks(records, fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks())
+	stacks := resources.NewHookStacks(records, fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks())
 
 	_, err := stacks.Provision(ctx, provider.StackSpec{
 		Ref:  ref,
@@ -699,7 +699,7 @@ func TestDestroyTakesDownEveryContainerTheStackRecorded(t *testing.T) {
 	recordContainers(t, records, ref, "web")
 
 	own := &withContainers{buckets: &buckets{}}
-	stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(records, fake.NewArtifacts(), own.hooks())
 
 	shown, err := stacks.PlanDestroy(ctx, ref, nil)
 	if err != nil {
@@ -724,7 +724,7 @@ func TestDestroyRefusesByNameWhenNothingCanTakeTheRecordedContainerDown(t *testi
 	ref := appRef()
 	recordContainers(t, records, ref, "web")
 
-	err := resources.Stacks(records, fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks()).Destroy(ctx, ref, nil)
+	err := resources.NewHookStacks(records, fake.NewArtifacts(), (&withFunctions{buckets: &buckets{}}).hooks()).Destroy(ctx, ref, nil)
 	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) || !strings.Contains(refusal.Message, "Containers hooks") {
 		t.Fatalf("Destroy() of a recorded container nothing stands up = %v, want a refusal naming %s", err, "Containers hooks")
@@ -747,7 +747,7 @@ func TestAnAppMovingToAComputeThisProviderLacksIsRefusedBeforeItsFunctionsAreTak
 
 	own := &withFunctions{buckets: &buckets{}}
 
-	_, err := resources.Stacks(records, fake.NewArtifacts(), own.hooks()).Provision(ctx, provider.StackSpec{
+	_, err := resources.NewHookStacks(records, fake.NewArtifacts(), own.hooks()).Provision(ctx, provider.StackSpec{
 		Ref:  ref,
 		Kind: provider.StackApp,
 		App:  containerApp("web"),
@@ -771,7 +771,7 @@ func TestAnAppNamingNoComputeIsRefusedBeforeItsContainerIsTakenDown(t *testing.T
 
 	own := &withContainers{buckets: &buckets{}}
 
-	_, err := resources.Stacks(records, fake.NewArtifacts(), own.hooks()).Provision(ctx, provider.StackSpec{
+	_, err := resources.NewHookStacks(records, fake.NewArtifacts(), own.hooks()).Provision(ctx, provider.StackSpec{
 		Ref:  ref,
 		Kind: provider.StackApp,
 		App:  &provider.AppSpec{App: "web"},
@@ -805,7 +805,7 @@ func TestAContainerStandingUnderAnyNameButItsAppsIsSweptOnTheNextRelease(t *test
 	records := fake.NewRecords()
 	ref := appRef()
 	own := &withContainers{buckets: &buckets{}}
-	stacks := resources.Stacks(records, fake.NewArtifacts(), misnaming{own}.hooks())
+	stacks := resources.NewHookStacks(records, fake.NewArtifacts(), misnaming{own}.hooks())
 	spec := provider.StackSpec{Ref: ref, Kind: provider.StackApp, App: containerApp("web")}
 
 	stood, err := stacks.Provision(ctx, spec, nil)
@@ -839,7 +839,7 @@ func TestTheImageIsPushedBeforeTheContainerItIsStoodUpFrom(t *testing.T) {
 
 	own := &withContainers{buckets: &buckets{}}
 	registry := fake.NewImages()
-	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 	spec := provider.StackSpec{
 		Ref:    appRef(),
 		Kind:   provider.StackApp,
@@ -863,8 +863,8 @@ func TestAReleaseWhoseImageCannotBePushedStandsNothingUp(t *testing.T) {
 
 	own := &withContainers{buckets: &buckets{}}
 	registry := fake.NewImages()
-	registry.Refusing(errors.New("the registry refused the token"))
-	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
+	registry.FailPushes(errors.New("the registry refused the token"))
+	stacks := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 	spec := provider.StackSpec{
 		Ref:    appRef(),
 		Kind:   provider.StackApp,
@@ -887,7 +887,7 @@ type retaining struct {
 	window     map[string][]string
 	holding    map[string]bool
 	stood      func() error
-	served     func(resources.Instruction) error
+	served     func(resources.ProvisionRequest) error
 	sweeping   func() error
 	forgetting func() error
 }
@@ -907,7 +907,7 @@ func (r *retaining) hooks() resources.Hooks {
 	hooks := r.buckets.hooks()
 	hooks.ProvisionBucket = r.ProvisionBucket
 	hooks.Containers = &resources.ContainerHooks{Provision: r.ProvisionContainers, Remove: r.RemoveContainers}
-	hooks.Retention = &resources.RetentionHooks{Reconcile: r.ReconcileImages, Forget: r.ForgetReleases}
+	hooks.Retention = &resources.ImageRetentionHooks{Reconcile: r.ReconcileImages, Forget: r.ForgetReleases}
 	return hooks
 }
 
@@ -930,7 +930,7 @@ func (r *retaining) RemoveContainers(_ context.Context, _ provider.StackRef, goi
 	return nil
 }
 
-func (r *retaining) ProvisionBucket(ctx context.Context, in resources.Instruction, progress edge.Progress) (provider.Binding, error) {
+func (r *retaining) ProvisionBucket(ctx context.Context, in resources.ProvisionRequest, progress edge.Progress) (provider.Binding, error) {
 	if r.served != nil {
 		if err := r.served(in); err != nil {
 			return provider.Binding{}, err
@@ -992,7 +992,7 @@ func TestAContainerReleaseReconcilesItsImagesOnEveryPathOutOfProvision(t *testin
 			return spec
 		},
 		"a resource never provisions": func(own *retaining) provider.StackSpec {
-			own.served = func(resources.Instruction) error { return refused }
+			own.served = func(resources.ProvisionRequest) error { return refused }
 			spec := containerSpec()
 			spec.Resources = []provider.Resource{{Name: "store", Type: provider.BindingBucket}}
 			return spec
@@ -1008,7 +1008,7 @@ func TestAContainerReleaseReconcilesItsImagesOnEveryPathOutOfProvision(t *testin
 		t.Run(name, func(t *testing.T) {
 			own := &retaining{buckets: &buckets{}}
 			spec := breaking(own)
-			stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
+			stacks := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 
 			_, err := stacks.Provision(context.Background(), spec, nil)
 			if name != "the release succeeds" && err == nil {
@@ -1050,7 +1050,7 @@ func TestAContainerReleaseReconcilesEvenWhenItNeverReachedTheWork(t *testing.T) 
 
 			own := &retaining{buckets: &buckets{}}
 			records, spec := breaking()
-			stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
+			stacks := resources.NewHookStacks(records, fake.NewArtifacts(), own.hooks())
 
 			if _, err := stacks.Provision(context.Background(), spec, nil); err == nil {
 				t.Fatal("Provision() succeeded, and this case is the failure path")
@@ -1066,7 +1066,7 @@ func TestAServerlessReleaseReconcilesNoImages(t *testing.T) {
 	t.Parallel()
 
 	own := &retaining{buckets: &buckets{}}
-	stacks := resources.Stacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(fake.NewRecords(), fake.NewArtifacts(), own.hooks())
 
 	spec := containerSpec()
 	spec.App = nil
@@ -1093,7 +1093,7 @@ func TestATeardownSweepsTheImageTheContainerItTookDownWasHolding(t *testing.T) {
 
 	own := &retaining{buckets: &buckets{}}
 	own.promote("web", testImage)
-	stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
+	stacks := resources.NewHookStacks(records, fake.NewArtifacts(), own.hooks())
 	if err := stacks.Destroy(ctx, ref, nil); err != nil {
 		t.Fatalf("Destroy() = %v", err)
 	}
@@ -1128,7 +1128,7 @@ func TestATeardownThatStoppedReconcilingSaysSoWithNoProgressListening(t *testing
 
 			own := &retaining{buckets: &buckets{}}
 			breaking(own)
-			stacks := resources.Stacks(records, fake.NewArtifacts(), own.hooks())
+			stacks := resources.NewHookStacks(records, fake.NewArtifacts(), own.hooks())
 
 			err := stacks.Destroy(ctx, ref, nil)
 			if !errors.Is(err, refused) {

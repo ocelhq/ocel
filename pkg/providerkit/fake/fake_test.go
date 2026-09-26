@@ -189,7 +189,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 	t.Parallel()
 
 	p := fake.NewProvider(fake.Options{})
-	stacks := resources.Stacks(p.Records(), p.Artifacts(), p.ResourceHooks())
+	stacks := resources.NewHookStacks(p.Records(), p.Artifacts(), p.ResourceHooks())
 	ref := provider.StackRef{
 		Project: "shop",
 		Class:   edge.ClassProduction,
@@ -247,7 +247,7 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 	}, nil); err != nil {
 		t.Fatalf("Provision() of an app moving back to serverless = %v", err)
 	}
-	if taken := p.FakeStacks().TakenDown(); !slices.Contains(taken, "web") {
+	if taken := p.FakeStacks().Destroyed(); !slices.Contains(taken, "web") {
 		t.Errorf("the reference provider took down %v, want the container the app left behind: an app changing compute leaves the other primitive's work standing otherwise", taken)
 	}
 }

@@ -145,7 +145,7 @@ func standingAppOn(t *testing.T, network, named, body string) string {
 
 	name := probeName(t) + "-" + named
 	exec.Command(dockerEngine, "rm", "--force", name).Run()
-	run := append([]string{"run", "--rm", "--detach", "--name", name}, enginetest.Labelled(t)...)
+	run := append([]string{"run", "--rm", "--detach", "--name", name}, enginetest.RunLabelArgs(t)...)
 	stood, err := exec.Command(dockerEngine, append(run, "--network", network, caddy.Image,
 		"caddy", "respond", "--listen", ":"+appbuild.InjectedPortText, body)...).CombinedOutput()
 	if err != nil {

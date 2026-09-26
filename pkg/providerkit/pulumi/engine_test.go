@@ -11,30 +11,30 @@ import (
 )
 
 type recordingEngine struct {
-	up        pulumi.Setup
-	down      pulumi.Setup
+	up        pulumi.WorkspaceSpec
+	down      pulumi.WorkspaceSpec
 	outputs   auto.OutputMap
 	rows      []provider.Change
-	previewed pulumi.Op
+	previewed pulumi.Operation
 	err       error
 }
 
-func (e *recordingEngine) Preview(_ context.Context, _ pulumi.Setup, op pulumi.Op, _ edge.Progress) ([]provider.Change, error) {
+func (e *recordingEngine) Preview(_ context.Context, _ pulumi.WorkspaceSpec, op pulumi.Operation, _ edge.Progress) ([]provider.Change, error) {
 	e.previewed = op
 	return e.rows, e.err
 }
 
-func (e *recordingEngine) Up(_ context.Context, setup pulumi.Setup, _ edge.Progress) (auto.OutputMap, error) {
+func (e *recordingEngine) Up(_ context.Context, setup pulumi.WorkspaceSpec, _ edge.Progress) (auto.OutputMap, error) {
 	e.up = setup
 	return e.outputs, e.err
 }
 
-func (e *recordingEngine) Destroy(_ context.Context, setup pulumi.Setup, _ edge.Progress) error {
+func (e *recordingEngine) Destroy(_ context.Context, setup pulumi.WorkspaceSpec, _ edge.Progress) error {
 	e.down = setup
 	return e.err
 }
 
-func (e *recordingEngine) Outputs(context.Context, pulumi.Setup) (auto.OutputMap, error) {
+func (e *recordingEngine) Outputs(context.Context, pulumi.WorkspaceSpec) (auto.OutputMap, error) {
 	return e.outputs, e.err
 }
 

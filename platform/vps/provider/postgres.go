@@ -31,7 +31,7 @@ const (
 
 var postgresCapabilities = []string{"CHOWN", "DAC_OVERRIDE", "FOWNER", "SETGID", "SETUID"}
 
-func postgresContainer(in resources.Instruction) (host.ResourceContainer, error) {
+func postgresContainer(in resources.ProvisionRequest) (host.ResourceContainer, error) {
 	version := constants.DefaultPostgresVersion
 	if in.Resource.Postgres != nil && in.Resource.Postgres.Version != "" {
 		version = in.Resource.Postgres.Version
@@ -74,7 +74,7 @@ func mintPostgresSecret() (string, error) {
 	return hex.EncodeToString(raw), nil
 }
 
-func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Instruction, progress edge.Progress) (provider.Binding, error) {
+func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.ProvisionRequest, progress edge.Progress) (provider.Binding, error) {
 	spec, err := postgresContainer(in)
 	if err != nil {
 		return provider.Binding{}, err
@@ -106,11 +106,11 @@ func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Instructi
 	}, nil
 }
 
-func (p *Provider) held(ctx context.Context, in resources.Instruction, name string) (string, error) {
+func (p *Provider) held(ctx context.Context, in resources.ProvisionRequest, name string) (string, error) {
 	return p.heldSecret(ctx, in, name, postgresSecretFolder, postgresSecretName, mintPostgresSecret)
 }
 
-func (p *Provider) heldSecret(ctx context.Context, in resources.Instruction, name, folder, item string, mint func() (string, error)) (string, error) {
+func (p *Provider) heldSecret(ctx context.Context, in resources.ProvisionRequest, name, folder, item string, mint func() (string, error)) (string, error) {
 	at := records.SealScope{
 		Project: in.Ref.Project, Class: in.Ref.Class, Env: in.Ref.Name.String(),
 		Folder: folder, Binding: in.Resource.Name, Name: item,

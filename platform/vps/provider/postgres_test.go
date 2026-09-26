@@ -17,13 +17,13 @@ import (
 
 const standingPassword = "5f1c0d7e9a3b48264c5d6e7f8091a2b3c4d5e6f708192a3b"
 
-func aPostgres(t *testing.T, version string) resources.Instruction {
+func aPostgres(t *testing.T, version string) resources.ProvisionRequest {
 	t.Helper()
 	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")
 	if err != nil {
 		t.Fatal(err)
 	}
-	return resources.Instruction{
+	return resources.ProvisionRequest{
 		Ref: provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
 		Resource: provider.Resource{
 			Name: "main", Type: provider.BindingPostgres,

@@ -36,10 +36,10 @@ func failedEvent(urn, typ string, op apitype.OpType) events.EngineEvent {
 
 const testURN = "urn:pulumi:prod::proj::aws:s3/bucket:Bucket::my-bucket"
 
-func TestOpenTraceCountsResourceOperations(t *testing.T) {
+func TestTraceCollectorCountsResourceOperations(t *testing.T) {
 	t.Parallel()
 
-	b := newOpenTrace(0)
+	b := newTraceCollector(0)
 	base := time.Unix(1000, 0)
 	b.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
 	b.consume(outputsEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(time.Second))
@@ -58,10 +58,10 @@ func TestOpenTraceCountsResourceOperations(t *testing.T) {
 	}
 }
 
-func TestOpenTraceRecordsAFailureAsAStandout(t *testing.T) {
+func TestTraceCollectorRecordsAFailureAsASlowOp(t *testing.T) {
 	t.Parallel()
 
-	b := newOpenTrace(0)
+	b := newTraceCollector(0)
 	base := time.Unix(2000, 0)
 	b.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
 	b.consume(failedEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(5*time.Second))
@@ -70,63 +70,63 @@ func TestOpenTraceRecordsAFailureAsAStandout(t *testing.T) {
 	if !got.Failed {
 		t.Fatal("Failed = false, want true")
 	}
-	if len(got.Standouts) != 1 {
-		t.Fatalf("len(Standouts) = %d, want 1", len(got.Standouts))
+	if len(got.SlowOps) != 1 {
+		t.Fatalf("len(SlowOps) = %d, want 1", len(got.SlowOps))
 	}
-	s := got.Standouts[0]
+	s := got.SlowOps[0]
 	if !s.Failed {
-		t.Error("Standouts[0].Failed = false, want true")
+		t.Error("SlowOps[0].Failed = false, want true")
 	}
 	if !s.Start.Equal(base) || !s.End.Equal(base.Add(5*time.Second)) {
-		t.Errorf("Standouts[0] Start/End = %v/%v, want %v/%v", s.Start, s.End, base, base.Add(5*time.Second))
+		t.Errorf("SlowOps[0] Start/End = %v/%v, want %v/%v", s.Start, s.End, base, base.Add(5*time.Second))
 	}
 }
 
-func TestOpenTraceRecordsALatencyOutlier(t *testing.T) {
+func TestTraceCollectorRecordsALatencyOutlier(t *testing.T) {
 	t.Parallel()
 
-	b := newOpenTrace(2 * time.Second)
+	b := newTraceCollector(2 * time.Second)
 	base := time.Unix(3000, 0)
 	b.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
 	b.consume(outputsEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(10*time.Second))
 
 	got := b.result()
-	if len(got.Standouts) != 1 {
-		t.Fatalf("len(Standouts) = %d, want 1 (operation exceeded the outlier threshold)", len(got.Standouts))
+	if len(got.SlowOps) != 1 {
+		t.Fatalf("len(SlowOps) = %d, want 1 (operation exceeded the outlier threshold)", len(got.SlowOps))
 	}
-	if got.Standouts[0].Failed {
-		t.Error("Standouts[0].Failed = true, want false: a slow success is an outlier, not a failure")
+	if got.SlowOps[0].Failed {
+		t.Error("SlowOps[0].Failed = true, want false: a slow success is an outlier, not a failure")
 	}
 }
 
-func TestOpenTraceIgnoresFastOperationsUnderThreshold(t *testing.T) {
+func TestTraceCollectorIgnoresFastOperationsUnderThreshold(t *testing.T) {
 	t.Parallel()
 
-	b := newOpenTrace(2 * time.Second)
+	b := newTraceCollector(2 * time.Second)
 	base := time.Unix(4000, 0)
 	b.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
 	b.consume(outputsEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(500*time.Millisecond))
 
-	if got := b.result(); len(got.Standouts) != 0 {
-		t.Fatalf("len(Standouts) = %d, want 0", got.ResourceCount)
+	if got := b.result(); len(got.SlowOps) != 0 {
+		t.Fatalf("len(SlowOps) = %d, want 0", got.ResourceCount)
 	}
 }
 
-func TestOpenTraceNeverRetainsTheURN(t *testing.T) {
+func TestTraceCollectorNeverRetainsTheURN(t *testing.T) {
 	t.Parallel()
 
-	b := newOpenTrace(0)
+	b := newTraceCollector(0)
 	base := time.Unix(5000, 0)
 	b.consume(preEvent(testURN, "aws:s3/bucket:Bucket"), base)
 	b.consume(failedEvent(testURN, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(time.Second))
 
 	got := b.result()
-	if len(got.Standouts) != 1 {
-		t.Fatalf("len(Standouts) = %d, want 1", len(got.Standouts))
+	if len(got.SlowOps) != 1 {
+		t.Fatalf("len(SlowOps) = %d, want 1", len(got.SlowOps))
 	}
-	s := got.Standouts[0]
+	s := got.SlowOps[0]
 	if s.Op == "" || s.Type == "" || s.Name == "" {
-		t.Fatalf("standout missing Op/Type/Name: %+v", s)
+		t.Fatalf("slow op missing Op/Type/Name: %+v", s)
 	}
 	if s.Type != "aws:s3/bucket:Bucket" {
 		t.Errorf("Type = %q, want the type token", s.Type)
@@ -191,12 +191,12 @@ func TestCapIdentifierBoundsLength(t *testing.T) {
 	}
 }
 
-func TestOpenTraceCapsLatencyStandoutsKeepingTheSlowest(t *testing.T) {
+func TestTraceCollectorCapsSlowOpsKeepingTheSlowest(t *testing.T) {
 	t.Parallel()
 
-	b := newOpenTrace(time.Second)
+	b := newTraceCollector(time.Second)
 	base := time.Unix(6000, 0)
-	for i := 0; i < maxLatencyStandouts+5; i++ {
+	for i := 0; i < maxSlowOps+5; i++ {
 		urn := "urn:pulumi:prod::proj::aws:s3/bucket:Bucket::bucket-" + strings.Repeat("x", i+1)
 		dur := time.Duration(i+1) * time.Second
 		b.consume(preEvent(urn, "aws:s3/bucket:Bucket"), base)
@@ -204,40 +204,40 @@ func TestOpenTraceCapsLatencyStandoutsKeepingTheSlowest(t *testing.T) {
 	}
 
 	got := b.result()
-	if len(got.Standouts) != maxLatencyStandouts {
-		t.Fatalf("len(Standouts) = %d, want %d", len(got.Standouts), maxLatencyStandouts)
+	if len(got.SlowOps) != maxSlowOps {
+		t.Fatalf("len(SlowOps) = %d, want %d", len(got.SlowOps), maxSlowOps)
 	}
-	if got.StandoutsDropped != 5 {
-		t.Fatalf("StandoutsDropped = %d, want 5", got.StandoutsDropped)
+	if got.SlowOpsDropped != 5 {
+		t.Fatalf("SlowOpsDropped = %d, want 5", got.SlowOpsDropped)
 	}
-	for _, s := range got.Standouts {
+	for _, s := range got.SlowOps {
 		if s.End.Sub(s.Start) < 6*time.Second {
-			t.Fatalf("kept a standout shorter than the evicted ones: %v", s.End.Sub(s.Start))
+			t.Fatalf("kept a slow op shorter than the evicted ones: %v", s.End.Sub(s.Start))
 		}
 	}
 }
 
-func TestOpenTraceNeverCapsFailures(t *testing.T) {
+func TestTraceCollectorNeverCapsFailures(t *testing.T) {
 	t.Parallel()
 
-	b := newOpenTrace(time.Hour)
+	b := newTraceCollector(time.Hour)
 	base := time.Unix(7000, 0)
-	for i := 0; i < maxLatencyStandouts+5; i++ {
+	for i := 0; i < maxSlowOps+5; i++ {
 		urn := "urn:pulumi:prod::proj::aws:s3/bucket:Bucket::bucket-" + strings.Repeat("x", i+1)
 		b.consume(preEvent(urn, "aws:s3/bucket:Bucket"), base)
 		b.consume(failedEvent(urn, "aws:s3/bucket:Bucket", apitype.OpCreate), base.Add(time.Millisecond))
 	}
 
 	got := b.result()
-	if len(got.Standouts) != maxLatencyStandouts+5 {
-		t.Fatalf("len(Standouts) = %d, want %d: failures must never be dropped", len(got.Standouts), maxLatencyStandouts+5)
+	if len(got.SlowOps) != maxSlowOps+5 {
+		t.Fatalf("len(SlowOps) = %d, want %d: failures must never be dropped", len(got.SlowOps), maxSlowOps+5)
 	}
-	if got.StandoutsDropped != 0 {
-		t.Fatalf("StandoutsDropped = %d, want 0", got.StandoutsDropped)
+	if got.SlowOpsDropped != 0 {
+		t.Fatalf("SlowOpsDropped = %d, want 0", got.SlowOpsDropped)
 	}
 }
 
-func TestResourceStandoutNameIsBoundedNeverDynamic(t *testing.T) {
+func TestSlowOpNameIsBoundedNeverDynamic(t *testing.T) {
 	t.Parallel()
 
 	cases := []apitype.OpType{
@@ -246,16 +246,16 @@ func TestResourceStandoutNameIsBoundedNeverDynamic(t *testing.T) {
 	}
 	seen := map[string]bool{}
 	for _, op := range cases {
-		name := standoutName(op, false)
+		name := slowOpName(op, false)
 		if name == "" {
-			t.Errorf("standoutName(%s, false) = empty", op)
+			t.Errorf("slowOpName(%s, false) = empty", op)
 		}
 		seen[name] = true
 	}
-	if name := standoutName(apitype.OpCreate, true); name != "resource operation failed" {
-		t.Errorf("standoutName(create, true) = %q, want the fixed failure string", name)
+	if name := slowOpName(apitype.OpCreate, true); name != "resource operation failed" {
+		t.Errorf("slowOpName(create, true) = %q, want the fixed failure string", name)
 	}
 	if len(seen) > 7 {
-		t.Errorf("standoutName produced %d distinct strings across %d ops; vocabulary should stay small and fixed", len(seen), len(cases))
+		t.Errorf("slowOpName produced %d distinct strings across %d ops; vocabulary should stay small and fixed", len(seen), len(cases))
 	}
 }

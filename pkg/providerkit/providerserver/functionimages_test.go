@@ -100,7 +100,7 @@ func TestDeployShipsAFunctionAsAnImageWhereTheProviderTakesItThatWay(t *testing.
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	pushed := p.Registry().Pushed()
+	pushed := p.ImageStore().Pushed()
 	if len(pushed) != 1 {
 		t.Fatalf("the deploy pushed %v, want the one image the app's function runs", pushed)
 	}
@@ -212,7 +212,7 @@ func TestANodeFunctionsImageCarriesTheRuntimeTheProviderHandsIt(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	pushed := provider.Registry().Pushed()
+	pushed := provider.ImageStore().Pushed()
 	if len(pushed) != 1 {
 		t.Fatalf("the deploy pushed %v, want the one image the app's function runs", pushed)
 	}
@@ -306,7 +306,7 @@ func TestAFunctionImageIsWrappedInTheRuntimeWhereTheProviderCarriesOne(t *testin
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	pushed := provider.Registry().Pushed()
+	pushed := provider.ImageStore().Pushed()
 	if len(pushed) != 1 || pushed[0].Built == nil {
 		t.Fatalf("the deploy pushed %v, want the one wrapped image the app's function runs", pushed)
 	}
@@ -352,7 +352,7 @@ func TestAWrappedFunctionsCoordinateChangesWithTheRuntimeItIsWrappedIn(t *testin
 		if result == nil || !result.GetSuccess() {
 			t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 		}
-		pushed := base.Registry().Pushed()
+		pushed := base.ImageStore().Pushed()
 		if len(pushed) != 1 {
 			t.Fatalf("the deploy pushed %v, want one image", pushed)
 		}

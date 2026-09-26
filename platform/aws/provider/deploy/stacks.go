@@ -104,8 +104,8 @@ func (r *Stacks) at(ctx context.Context, ref provider.StackRef, kind edge.Kind) 
 	}
 	held := &release{Stacks: r, cfg: cfg}
 	held.automation = kitpulumi.New(kitpulumi.Config{
-		Access: kitpulumi.Access{
-			BackendURL: cfg.BackendURL,
+		Backend: kitpulumi.Backend{
+			URL:        cfg.BackendURL,
 			Passphrase: cfg.Passphrase,
 			Project:    cfg.PulumiProject,
 			Env:        map[string]string{"AWS_REGION": cfg.Region},
@@ -135,9 +135,9 @@ func skipTeardownRefresh() bool {
 	return false
 }
 
-func refreshPolicy(realized *Realized) func(provider.StackRef, kitpulumi.Op) bool {
-	return func(ref provider.StackRef, op kitpulumi.Op) bool {
-		if op != kitpulumi.OpDestroy || skipTeardownRefresh() {
+func refreshPolicy(realized *Realized) func(provider.StackRef, kitpulumi.Operation) bool {
+	return func(ref provider.StackRef, op kitpulumi.Operation) bool {
+		if op != kitpulumi.OperationDestroy || skipTeardownRefresh() {
 			return false
 		}
 		return !realized.realizedHere(naming.Sanitize(ref.Project), ref.Name)

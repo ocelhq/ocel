@@ -80,7 +80,7 @@ func NewProvider(options Options) (*Provider, error) {
 func (p *Provider) Facts() provider.Facts {
 	return provider.Facts{
 		Vendor:          Vendor,
-		Bindings:        resources.Serves(p.resourceHooks()),
+		Bindings:        resources.ServedBindingTypes(p.resourceHooks()),
 		Computes:        []provider.Compute{provider.ComputeServerless, provider.ComputeContainer},
 		Edges:           slices.Clone(supportedEdges),
 		DefaultEdge:     direct.Kind,
@@ -113,7 +113,7 @@ func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 }
 
 func (p *Provider) Stacks() provider.Stacks {
-	return resources.Stacks(p.Records(), p.Artifacts(), p.resourceHooks())
+	return resources.NewHookStacks(p.Records(), p.Artifacts(), p.resourceHooks())
 }
 
 func (p *Provider) Artifacts() provider.ArtifactStore { return artifacts{p: p} }

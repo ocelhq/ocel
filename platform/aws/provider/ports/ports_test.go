@@ -33,7 +33,7 @@ func newSealer() (awsports.Cipher, *fakeKMS) {
 
 func TestRecordsConformance(t *testing.T) {
 	records, _ := newRecords(t)
-	conformance.RunRecordStore(t, records)
+	conformance.RunStore(t, records)
 }
 
 func TestSealerConformance(t *testing.T) {

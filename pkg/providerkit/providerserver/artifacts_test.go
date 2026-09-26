@@ -368,7 +368,7 @@ func (c countedArtifacts) Put(ctx context.Context, ref provider.ArtifactRef, bod
 func TestAnUnchangedBuildIsNotUploadedTwice(t *testing.T) {
 	builtProject(t)
 	provider := &countingProvider{Provider: fake.NewProvider(fake.Options{}), puts: map[string]int{}}
-	provider.Ships(countedArtifacts{ArtifactStore: provider.Artifacts(), on: provider})
+	provider.WithArtifactStore(countedArtifacts{ArtifactStore: provider.Artifacts(), on: provider})
 	client := servedBy(t, provider)
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{
 		Tier:     environmentv1.Tier_TIER_PREVIEW,
@@ -466,7 +466,7 @@ func TestAnAppsFunctionsAreUploadedTogether(t *testing.T) {
 		Provider: base,
 		store:    &barrierArtifacts{ArtifactStore: base.Artifacts(), want: functions, ready: make(chan struct{})},
 	}
-	provider.Ships(provider.store)
+	provider.WithArtifactStore(provider.store)
 	client := servedBy(t, provider)
 
 	if result, _ := deploy(t, client, req); !result.GetSuccess() {

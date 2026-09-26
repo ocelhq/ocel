@@ -50,7 +50,7 @@ func New(_ context.Context, settings provider.Settings) (provider.Provider, erro
 		return nil, err
 	}
 	p := NewProvider(decoded)
-	return p.Hook(p.everyHook), nil
+	return p.WithHooks(p.everyHook), nil
 }
 
 func NewProvider(options Options) *Provider {
@@ -105,7 +105,7 @@ func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 	if _, err := p.edges.Open(kind); err != nil {
 		return nil, err
 	}
-	p.bootstrap.fronting(kind)
+	p.bootstrap.setDefaultEdge(kind)
 	return p.bootstrap, nil
 }
 

@@ -25,13 +25,13 @@ func sealedRootKey() string {
 		base64.StdEncoding.EncodeToString([]byte(standingRootKey)))) + "\n"
 }
 
-func aBucket(t *testing.T, name string, public bool) resources.Instruction {
+func aBucket(t *testing.T, name string, public bool) resources.ProvisionRequest {
 	t.Helper()
 	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")
 	if err != nil {
 		t.Fatal(err)
 	}
-	return resources.Instruction{
+	return resources.ProvisionRequest{
 		Ref: provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
 		Resource: provider.Resource{
 			Name: name, Type: provider.BindingBucket,

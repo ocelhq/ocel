@@ -59,7 +59,7 @@ func install(ctx context.Context, progress edge.Progress) (auto.PulumiCommand, e
 	if _, err := auto.InstallPulumiCommand(ctx, &auto.PulumiCommandOptions{Version: version, Root: staging}); err != nil {
 		return nil, fmt.Errorf("install Pulumi runtime %s: %w", PinnedVersion, err)
 	}
-	if err := settle(staging, root); err != nil {
+	if err := renameIntoPlace(staging, root); err != nil {
 		return nil, fmt.Errorf("install Pulumi runtime %s: %w", PinnedVersion, err)
 	}
 	command, err := auto.NewPulumiCommand(opts)
@@ -69,7 +69,7 @@ func install(ctx context.Context, progress edge.Progress) (auto.PulumiCommand, e
 	return command, nil
 }
 
-func settle(staging, root string) error {
+func renameIntoPlace(staging, root string) error {
 	err := os.Rename(staging, root)
 	if err == nil {
 		return nil

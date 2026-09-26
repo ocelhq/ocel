@@ -42,7 +42,7 @@ func stoodWithABucket(t *testing.T, declared ...string) (*box, *vps.Provider, ed
 	return machine, p, stack
 }
 
-func stoodWithABucketDeclared(t *testing.T, declared ...string) (*box, *vps.Provider, edge.EdgeStack, resources.Instruction) {
+func stoodWithABucketDeclared(t *testing.T, declared ...string) (*box, *vps.Provider, edge.EdgeStack, resources.ProvisionRequest) {
 	t.Helper()
 
 	ctx := context.Background()

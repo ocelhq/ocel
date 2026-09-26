@@ -40,7 +40,7 @@ func runPorts(t *testing.T, suite Suite) {
 func RunPorts(t *testing.T, p provider.Provider) {
 	t.Helper()
 
-	t.Run("RecordStore", func(t *testing.T) { RunRecordStore(t, p.Records()) })
+	t.Run("Store", func(t *testing.T) { RunStore(t, p.Records()) })
 	t.Run("Cipher", func(t *testing.T) { RunCipher(t, p.Cipher()) })
 	facts := p.Facts()
 	t.Run("ArtifactStore", func(t *testing.T) { RunArtifactStore(t, facts, p.Artifacts()) })
@@ -72,7 +72,7 @@ func in(class edge.Class, t *testing.T, rest ...string) records.Name {
 	return append(records.Name{records.RootConformance, string(class), t.Name()}, rest...)
 }
 
-func RunRecordStore(t *testing.T, store records.Store) {
+func RunStore(t *testing.T, store records.Store) {
 	t.Helper()
 
 	ctx := context.Background()

@@ -78,7 +78,7 @@ func TestADryDeployShowsTheImagePushAsARowAndPushesNothing(t *testing.T) {
 	if got := rows[0].GetAction(); got != planv1.Change_ACTION_CREATE {
 		t.Errorf("the image row says %q, want %q for a digest the registry does not hold", got, provider.ActionCreate)
 	}
-	registry := p.Registry()
+	registry := p.ImageStore()
 	if len(registry.Asked()) == 0 {
 		t.Error("the plan drew an image row without asking the registry anything, so the row is guesswork rather than a diff")
 	}
@@ -98,7 +98,7 @@ func (muteStacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ edge.P
 }
 
 func (muteStacks) Provision(_ context.Context, spec provider.StackSpec, _ edge.Progress) (provider.StackResult, error) {
-	return provider.StackResult{Containers: fake.StoodUpContainers(spec)}, nil
+	return provider.StackResult{Containers: fake.ProvisionedContainers(spec)}, nil
 }
 
 func (muteStacks) Destroy(context.Context, provider.StackRef, edge.Progress) error {
@@ -134,7 +134,7 @@ func TestADeployPushesTheImageTheBuildProducedUnderTheRegistryCoordinate(t *test
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	pushed := provider.Registry().Pushed()
+	pushed := provider.ImageStore().Pushed()
 	if len(pushed) != 1 {
 		t.Fatalf("the deploy pushed %v, want the one image its container app runs", pushed)
 	}
@@ -150,13 +150,13 @@ func TestADigestTheRegistryAlreadyHoldsIsNotPushedAgain(t *testing.T) {
 	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
-	provider.Registry().Holds(pushedCoordinate)
+	provider.ImageStore().Preload(pushedCoordinate)
 
 	result, _ := deploy(t, client, registryDeployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	if pushed := provider.Registry().Pushed(); len(pushed) != 0 {
+	if pushed := provider.ImageStore().Pushed(); len(pushed) != 0 {
 		t.Errorf("the deploy pushed %v that the registry already holds", pushed)
 	}
 }
@@ -165,7 +165,7 @@ func TestADigestTheRegistryAlreadyHoldsStandsOnThePlan(t *testing.T) {
 	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, p := deployServed(t)
-	p.Registry().Holds(pushedCoordinate)
+	p.ImageStore().Preload(pushedCoordinate)
 
 	req := registryDeployRequest()
 	req.Dry = true
@@ -203,7 +203,7 @@ func TestAContainerAppOnAProviderTakingNeitherPathFailsNamingTheGap(t *testing.T
 				"leaves the reader to guess what to type", refused, want)
 		}
 	}
-	if opened := provider.Registry().Opened(); len(opened) != 0 {
+	if opened := provider.ImageStore().Opened(); len(opened) != 0 {
 		t.Errorf("a registry was opened as %v where the deploy named none", opened)
 	}
 }
@@ -218,7 +218,7 @@ func TestAServerlessDeployNamesNoImageToPush(t *testing.T) {
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	if asked := provider.Registry().Asked(); len(asked) != 0 {
+	if asked := provider.ImageStore().Asked(); len(asked) != 0 {
 		t.Errorf("a serverless deploy asked the registry about %v, and it ships zips rather than images", asked)
 	}
 }
@@ -227,7 +227,7 @@ func TestARegistryThatCannotBeReachedStopsTheDeploy(t *testing.T) {
 	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
-	provider.Registry().Refusing(errors.New("the token is not accepted"))
+	provider.ImageStore().FailPushes(errors.New("the token is not accepted"))
 
 	result, _ := deploy(t, client, registryDeployRequest())
 	if result != nil && result.GetSuccess() {
@@ -247,7 +247,7 @@ func TestThePasswordTheDeployCarriesReachesTheRegistryAndNothingElse(t *testing.
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	opened := provider.Registry().Opened()
+	opened := provider.ImageStore().Opened()
 	if len(opened) != 1 || opened[0].Password != "hunter2" {
 		t.Fatalf("the registry was opened as %v, want the one target the deploy resolved", opened)
 	}
@@ -371,7 +371,7 @@ func TestAProviderThatTakesImagesDirectlyIsHandedTheOneTheBuildProduced(t *testi
 		t.Errorf("the transfer landed %q, want the cli-owned coordinate %q verbatim, so release, rollback and retention never learn which path carried it",
 			handed[0].ImageRef, loadedCoordinate)
 	}
-	if pushed := provider.Registry().Pushed(); len(pushed) != 0 {
+	if pushed := provider.ImageStore().Pushed(); len(pushed) != 0 {
 		t.Errorf("a deploy naming no registry pushed %v to one", pushed)
 	}
 }
@@ -380,7 +380,7 @@ func TestADigestTheBoxAlreadyHoldsIsNotSentAgain(t *testing.T) {
 	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := loadServed(t)
-	provider.direct.Holds(loadedCoordinate)
+	provider.direct.Preload(loadedCoordinate)
 
 	result, _ := deploy(t, client, containerDeployRequest("/"))
 	if result == nil || !result.GetSuccess() {
@@ -404,7 +404,7 @@ func TestANamedRegistryTakesTheImageFromAProviderThatWouldOtherwiseLoadItDirectl
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	pushed := provider.Registry().Pushed()
+	pushed := provider.ImageStore().Pushed()
 	if len(pushed) != 1 || pushed[0].ImageRef != pushedCoordinate {
 		t.Fatalf("the deploy pushed %v, want the one registry coordinate %q", pushed, pushedCoordinate)
 	}
@@ -420,7 +420,7 @@ func TestADirectTransferStandsOnThePlanLikeAPush(t *testing.T) {
 	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, p := loadServed(t)
-	p.direct.Holds(loadedCoordinate)
+	p.direct.Preload(loadedCoordinate)
 
 	req := containerDeployRequest("/")
 	req.Dry = true
@@ -719,7 +719,7 @@ func TestAWrappingProviderPushesTheImageUnderTheCoordinateTheRuntimeItCarriesNam
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	asked := provider.Registry().Asked()
+	asked := provider.ImageStore().Asked()
 	if len(asked) != 1 {
 		t.Fatalf("the deploy asked the registry about %v, want the one image its container app runs", asked)
 	}
@@ -732,7 +732,7 @@ func TestAWrappingProviderPushesTheImageUnderTheCoordinateTheRuntimeItCarriesNam
 	if asked[0].Digest != "" {
 		t.Errorf("the push pins %q before the wrap has run, and the digest it is pushed under is only known once the image is built", asked[0].Digest)
 	}
-	pushed := provider.Registry().Pushed()
+	pushed := provider.ImageStore().Pushed()
 	if len(pushed) != 1 || pushed[0].Built == nil {
 		t.Fatalf("the store was handed %v, want the wrapped image itself rather than a coordinate to copy", pushed)
 	}
@@ -770,7 +770,7 @@ func TestAnImageBuiltForAnArchitectureTheTargetDoesNotRunIsRefusedBeforeItIsPush
 			t.Errorf("Deploy() refused with %q, want it to name %s so the mismatch reads at a glance", err, named)
 		}
 	}
-	if pushed := provider.Registry().Pushed(); len(pushed) != 0 {
+	if pushed := provider.ImageStore().Pushed(); len(pushed) != 0 {
 		t.Errorf("the store was handed %v, want nothing pushed for an image the target cannot run", pushed)
 	}
 	if daemon.exports() != 0 {
@@ -823,14 +823,14 @@ func TestAWrappedCoordinateTheRegistryAlreadyHoldsIsNeitherWrappedNorPushed(t *t
 	builtProject(t)
 	daemon := daemonHoldingTheBuiltImage(t, "amd64")
 	client, provider := wrappingServed(t)
-	provider.Registry().Holds(wrappedCoordinate())
+	provider.ImageStore().Preload(wrappedCoordinate())
 
 	result, _ := deploy(t, client, registryDeployRequest())
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	if pushed := provider.Registry().Pushed(); len(pushed) != 0 {
+	if pushed := provider.ImageStore().Pushed(); len(pushed) != 0 {
 		t.Errorf("the deploy pushed %v that the registry already holds", pushed)
 	}
 	if daemon.exports() != 0 {

@@ -71,7 +71,7 @@ func storeBucketSpec(ref provider.StackRef, store, secret string, spec host.Buck
 	return spec
 }
 
-func storeContainer(in resources.Instruction) host.ResourceContainer {
+func storeContainer(in resources.ProvisionRequest) host.ResourceContainer {
 	return host.ResourceContainer{
 		Name:     storeName(in.Ref),
 		Project:  in.Ref.Project,
@@ -245,7 +245,7 @@ func (p *Provider) storeCredential(ctx context.Context, ref provider.StackRef, n
 	return storeCredential{sealed: sealed, secret: string(opened)}, nil
 }
 
-func (p *Provider) ProvisionBucket(ctx context.Context, in resources.Instruction, progress edge.Progress) (provider.Binding, error) {
+func (p *Provider) ProvisionBucket(ctx context.Context, in resources.ProvisionRequest, progress edge.Progress) (provider.Binding, error) {
 
 	spec := storeContainer(in)
 	spec, err := p.reshaped(ctx, in, transformTypeBucket, spec)
@@ -325,7 +325,7 @@ func (p *Provider) storeSection(ctx context.Context, spec provider.StackSpec) (*
 	}
 	container := p.stores.shape()
 	if container == nil {
-		shaped := storeContainer(resources.Instruction{Ref: storeRef(spec.Ref)})
+		shaped := storeContainer(resources.ProvisionRequest{Ref: storeRef(spec.Ref)})
 		container = &shaped
 	}
 	held, err := p.stores.once(container.Name, func() (storeCredential, error) {

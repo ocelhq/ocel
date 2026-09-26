@@ -36,7 +36,7 @@ func TestARunHasEndedOnlyWhenItsProcessOnThisMachineHas(t *testing.T) {
 		"a label nothing here wrote":       {"unreadable", false},
 		"a pid that names no process":      {runOf(hostname(), 0), false},
 	} {
-		if got := ended(want.of); got != want.ended {
+		if got := runProcessGone(want.of); got != want.ended {
 			t.Errorf("%s (%q): ended = %v, want %v: a live run swept loses what it stands on mid-test, and a dead one never swept leaves its containers and networks on the machine for good", what, want.of, got, want.ended)
 		}
 	}
@@ -68,7 +68,7 @@ type planted struct {
 func plant(t *testing.T, of string) planted {
 	t.Helper()
 	seen := filepath.Dir(filepath.Dir(BindSource(t)))
-	left := planted{network: named("net"), labelled: named("held"), attached: named("attached")}
+	left := planted{network: uniqueName("net"), labelled: uniqueName("held"), attached: uniqueName("attached")}
 	does := func(argv ...string) {
 		t.Helper()
 		if said, err := exec.Command(engine, argv...).CombinedOutput(); err != nil {
@@ -90,7 +90,7 @@ func plant(t *testing.T, of string) planted {
 		t.Fatal(err)
 	}
 	left.root = root
-	t.Cleanup(func() { reclaimed(root) })
+	t.Cleanup(func() { removeRunRoot(root) })
 	if err := os.WriteFile(filepath.Join(root, runFile), []byte(of), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -117,12 +117,12 @@ func (p planted) standing(t *testing.T) []string {
 }
 
 func TestWhatARunThatDiedLeftIsTakenByTheNextAndWhatALiveOneHoldsIsNot(t *testing.T) {
-	engage(t)
+	requireDocker(t)
 
 	died := plant(t, aRunThatEnded(t))
 	living := plant(t, runOf(hostname(), os.Getppid()))
 
-	if err := sweep(ended); err != nil {
+	if err := sweep(runProcessGone); err != nil {
 		t.Fatalf("sweep = %v", err)
 	}
 	if left := died.standing(t); len(left) > 0 {
@@ -134,8 +134,8 @@ func TestWhatARunThatDiedLeftIsTakenByTheNextAndWhatALiveOneHoldsIsNot(t *testin
 }
 
 func TestTheStoreIsStoodOnceForTheWholeRunAndServesFromTheHostAndWithin(t *testing.T) {
-	first := AStore(t)
-	if again := AStore(t); again.Name != first.Name {
+	first := SharedObjectStore(t)
+	if again := SharedObjectStore(t); again.Name != first.Name {
 		t.Errorf("a second test was handed store %s, want %s: a store per test is a container, a volume and a veth per test", again.Name, first.Name)
 	}
 	said, err := http.Get(first.Endpoint + "/health/ready")
@@ -180,7 +180,7 @@ func TestARootNamesItsRunUntilEverythingElseInItIsGone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { reclaimed(root) })
+	t.Cleanup(func() { removeRunRoot(root) })
 	if err := os.WriteFile(filepath.Join(root, runFile), []byte(aRunThatEnded(t)), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -195,13 +195,13 @@ func TestARootNamesItsRunUntilEverythingElseInItIsGone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := emptied(root); err == nil {
+	if err := emptyRunRoot(root); err == nil {
 		t.Fatal("a root holding what this user cannot remove was emptied all the same")
 	}
 	if _, err := os.Stat(filepath.Join(root, runFile)); err != nil {
 		t.Fatalf("the root lost the file naming its run while it still held %s: when the engine cannot take the rest either, no later sweep can tell whose it is and it stays on the machine for good", guarded)
 	}
-	if err := reclaimed(root); err != nil {
+	if err := removeRunRoot(root); err != nil {
 		t.Fatalf("reclaimed = %v", err)
 	}
 	if _, err := os.Stat(root); !os.IsNotExist(err) {
@@ -213,7 +213,7 @@ func TestARootAnotherRunAlreadySweptIsReclaimedWithoutComplaint(t *testing.T) {
 	t.Parallel()
 
 	gone := filepath.Join(t.TempDir(), rootPrefix+"swept")
-	if err := reclaimed(gone); err != nil {
+	if err := removeRunRoot(gone); err != nil {
 		t.Errorf("reclaimed(%s) = %v, want nil: two runs that sweep at once both list a root the first one then removes, and the second is left failing its whole run over a directory nobody holds any more", gone, err)
 	}
 }

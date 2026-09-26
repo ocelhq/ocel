@@ -73,7 +73,7 @@ func newProvider(options Options, dial host.Dial) *Provider {
 func (p *Provider) Facts() provider.Facts {
 	return provider.Facts{
 		Vendor:            Vendor,
-		Bindings:          resources.Serves(p.resourceHooks()),
+		Bindings:          resources.ServedBindingTypes(p.resourceHooks()),
 		Computes:          []provider.Compute{provider.ComputeContainer},
 		Edges:             []edge.Kind{box.Kind},
 		DefaultEdge:       box.Kind,
@@ -97,7 +97,7 @@ func (p *Provider) resourceHooks() resources.Hooks {
 		ProvisionBucket:   p.ProvisionBucket,
 		RemoveResource:    p.RemoveResource,
 		Containers:        &resources.ContainerHooks{Provision: p.ProvisionContainers, Remove: p.RemoveContainers},
-		Retention:         &resources.RetentionHooks{Reconcile: p.ReconcileImages, Forget: p.ForgetReleases},
+		Retention:         &resources.ImageRetentionHooks{Reconcile: p.ReconcileImages, Forget: p.ForgetReleases},
 	}
 }
 
@@ -106,7 +106,7 @@ func (p *Provider) Bootstrap(edge.Kind) (provider.Bootstrap, error) {
 }
 
 func (p *Provider) Stacks() provider.Stacks {
-	return resources.Stacks(p.records, p.Artifacts(), p.resourceHooks())
+	return resources.NewHookStacks(p.records, p.Artifacts(), p.resourceHooks())
 }
 
 func (p *Provider) Artifacts() provider.ArtifactStore { return resources.NoArtifacts{} }

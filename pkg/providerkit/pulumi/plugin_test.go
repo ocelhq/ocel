@@ -66,8 +66,8 @@ func TestAnAttachedPluginPushesOnApplyAndNeverOnPlan(t *testing.T) {
 	counter := &pushCounter{}
 	backend := "file://" + t.TempDir()
 	automation := pulumi.New(pulumi.Config{
-		Access: pulumi.Access{
-			BackendURL: backend,
+		Backend: pulumi.Backend{
+			URL:        backend,
 			Passphrase: "a-passphrase",
 			Project:    "ocel-plugin-probe",
 		},
