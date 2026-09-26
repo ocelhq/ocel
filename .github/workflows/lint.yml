@@ -49,6 +49,16 @@ jobs:
       - name: The go sdk ships the root's LICENSE and NOTICE, byte for byte
         run: cmp LICENSE sdk/LICENSE && cmp NOTICE sdk/NOTICE
 
+  words:
+    name: banned-words
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: No tracked file uses a word the naming rules ban
+        run: scripts/banned-words.sh
+
   actions:
     name: actionlint
     runs-on: ubuntu-latest

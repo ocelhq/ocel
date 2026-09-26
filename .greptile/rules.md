@@ -170,8 +170,8 @@ use, and a provider declares what it can do where the compiler checks it.
    `providerserver`; nothing re-exports another package's names.
 8. **A Plan is the diff a human consents to; a Spec is the desired state a provider is
    handed.** What a vendor keeps for itself through a run is `VendorState`.
-9. **Words that sound meaningful but say nothing are banned**: standing, substrate, held,
-   carried, settle, owed. Name the actual state — current, installed, recorded, manual.
+9. **Words that sound meaningful but say nothing are banned.** `scripts/banned-words.sh`
+   lists them, and CI runs it. Name the actual state: current, installed, recorded, manual.
 
 Fails when:
 
