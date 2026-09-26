@@ -1,4 +1,4 @@
-package values
+package envvars
 
 import (
 	"context"
@@ -51,7 +51,7 @@ func (s Store) SetReference(ctx context.Context, scope Scope, at Coordinate, tar
 			return Metadata{}, err
 		}
 	}
-	metadata, err := s.commit(ctx, scope, at, held, current, nil, cell{Target: &target})
+	metadata, err := s.commit(ctx, scope, at, held, current, nil, storedValue{Target: &target})
 	if err != nil {
 		return Metadata{}, err
 	}

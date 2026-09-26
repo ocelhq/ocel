@@ -1,4 +1,4 @@
-package values
+package envvars
 
 import (
 	"context"
@@ -6,14 +6,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 )
 
-type View struct {
+type EnvironmentReader struct {
 	Records     records.Store
 	Cipher      records.Cipher
 	Scope       Scope
 	Environment string
 }
 
-func (r View) Values(ctx context.Context, cells []Cell) (map[string]string, error) {
+func (r EnvironmentReader) Values(ctx context.Context, cells []Cell) (map[string]string, error) {
 	store := Store{Records: r.Records, Cipher: r.Cipher}
 	wanted := make([]Coordinate, 0, len(cells)*2)
 	for _, at := range cells {
@@ -44,7 +44,7 @@ func (r View) Values(ctx context.Context, cells []Cell) (map[string]string, erro
 	return out, nil
 }
 
-func (r View) Bindings(ctx context.Context, names []string) ([]Published, error) {
+func (r EnvironmentReader) Bindings(ctx context.Context, names []string) ([]StoredBinding, error) {
 	store := Store{Records: r.Records, Cipher: r.Cipher}
 	return store.ResolveBindings(ctx, r.Scope, r.Environment, names)
 }

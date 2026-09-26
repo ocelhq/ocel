@@ -9,7 +9,7 @@ import (
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -23,12 +23,12 @@ const (
 	liveBindingPassword = "opensesame-9f21"
 )
 
-func liveScope() values.Scope {
-	return values.Scope{Project: "shop", Class: edge.ClassProduction}
+func liveScope() envvars.Scope {
+	return envvars.Scope{Project: "shop", Class: edge.ClassProduction}
 }
 
-func liveStore(p *vps.Provider) values.Store {
-	return values.Store{Records: p.Records(), Cipher: p.Cipher()}
+func liveStore(p *vps.Provider) envvars.Store {
+	return envvars.Store{Records: p.Records(), Cipher: p.Cipher()}
 }
 
 type liveValues struct {
@@ -40,7 +40,7 @@ func resolving(t *testing.T, p *vps.Provider) liveValues {
 	t.Helper()
 	ctx := context.Background()
 	store := liveStore(p)
-	if _, err := store.Set(ctx, liveScope(), values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, liveSecretValue, nil); err != nil {
+	if _, err := store.Set(ctx, liveScope(), envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, liveSecretValue, nil); err != nil {
 		t.Fatalf("sealing a secret through the box's own helper = %v", err)
 	}
 	pair, err := providerkit.BindingPair("terraform", &bindingsv1.Binding{
@@ -57,7 +57,7 @@ func resolving(t *testing.T, p *vps.Provider) liveValues {
 		t.Fatalf("publishing a binding onto the box = %v", err)
 	}
 
-	reader := values.View{Records: p.Records(), Cipher: p.Cipher(), Scope: liveScope()}
+	reader := envvars.EnvironmentReader{Records: p.Records(), Cipher: p.Cipher(), Scope: liveScope()}
 	records, err := reader.Bindings(ctx, []string{"main"})
 	if err != nil {
 		t.Fatalf("resolving a binding back through the helper = %v", err)
@@ -157,7 +157,7 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 	}
 
 	rotated := liveSecretValue + "-rotated"
-	if _, err := liveStore(p).Set(context.Background(), liveScope(), values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, rotated, nil); err != nil {
+	if _, err := liveStore(p).Set(context.Background(), liveScope(), envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, rotated, nil); err != nil {
 		t.Fatalf("rotating the secret after the deploy = %v", err)
 	}
 	deadline := time.Now().Add(3 * live.StalenessBound)

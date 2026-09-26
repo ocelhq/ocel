@@ -14,10 +14,10 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -235,14 +235,14 @@ func RunRecordStore(t *testing.T, store records.Store) {
 	})
 
 	t.Run("every prefix the kit reads a whole subtree at is one this store can answer", func(t *testing.T) {
-		scope := values.Scope{Project: "conformance", Class: edge.ClassProduction}
+		scope := envvars.Scope{Project: "conformance", Class: edge.ClassProduction}
 		for _, name := range []records.Name{
 			providerkit.ProjectsRecord(edge.ClassProduction),
 			providerkit.StacksRecord(edge.ClassProduction, scope.Project),
 			providerkit.EdgeStacksRecord(edge.ClassProduction),
 			providerkit.LedgerRecord(ledger.Scope(edge.ClassProduction, scope.Project)),
-			values.Under(scope),
-			values.Refs(scope),
+			envvars.ScopedRecordName(scope),
+			envvars.ReferencesRecordName(scope),
 		} {
 			if _, err := store.List(ctx, name); err != nil {
 				t.Errorf("List(%s) = %v, want a store that partitions no deeper than the kit reads", name, err)

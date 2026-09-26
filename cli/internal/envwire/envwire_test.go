@@ -14,7 +14,7 @@ import (
 
 func TestStaleOrBroken(t *testing.T) {
 	t.Run("a version conflict is a stale value", func(t *testing.T) {
-		conflict := connect.NewError(connect.CodeAborted, errors.New("values: stale version"))
+		conflict := connect.NewError(connect.CodeAborted, errors.New("envvars: stale version"))
 		if err := staleOrBroken(conflict); !errors.Is(err, varsui.ErrStaleValue) {
 			t.Errorf("staleOrBroken = %v, want varsui.ErrStaleValue", err)
 		}

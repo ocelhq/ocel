@@ -26,9 +26,9 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -97,8 +97,8 @@ type deployRun struct {
 	configured []ConfiguredHost
 	pending    []string
 
-	values    values.Store
-	scope     values.Scope
+	values    envvars.Store
+	scope     envvars.Scope
 	published *publishedBindings
 
 	registry RegistryTarget
@@ -172,8 +172,8 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		manifest:       req.GetManifest(),
 		plan:           plan,
 		selection:      req.GetEdge(),
-		values:         values.Store{Records: provider.Records(), Cipher: provider.Cipher()},
-		scope:          values.Scope{Project: plan.Slug, Class: plan.Class},
+		values:         envvars.Store{Records: provider.Records(), Cipher: provider.Cipher()},
+		scope:          envvars.Scope{Project: plan.Slug, Class: plan.Class},
 		artifacts:      map[string]ArtifactRef{},
 		functionImages: map[string]string{},
 		functions:      map[string][]Function{},
@@ -1241,7 +1241,7 @@ func (r *deployRun) result(promotion edge.Promotion, flip edge.FlipBound) (*prog
 }
 
 func (r *deployRun) publish(ctx context.Context, bindings []Binding) error {
-	publishing := make([]values.Publishing, 0, len(bindings))
+	publishing := make([]envvars.NamedBindingWrite, 0, len(bindings))
 	for _, binding := range bindings {
 		message, err := BindingMessage(binding)
 		if err != nil {
@@ -1250,13 +1250,13 @@ func (r *deployRun) publish(ctx context.Context, bindings []Binding) error {
 		if err := VerifyGrantScope(message); err != nil {
 			return bindingsError(err)
 		}
-		pair, err := BindingPair(values.OwnerOcel, message)
+		pair, err := BindingPair(envvars.OwnerOcel, message)
 		if err != nil {
 			return err
 		}
-		publishing = append(publishing, values.Publishing{Name: binding.Name, Pair: pair})
+		publishing = append(publishing, envvars.NamedBindingWrite{Name: binding.Name, Write: pair})
 	}
-	if _, err := r.values.SetBindings(ctx, r.scope, r.plan.bindingEnvironment(), values.OwnerOcel, publishing); err != nil {
+	if _, err := r.values.SetBindings(ctx, r.scope, r.plan.bindingEnvironment(), envvars.OwnerOcel, publishing); err != nil {
 		return fmt.Errorf("publish %s's bindings: %w", r.scope.Project, err)
 	}
 	if err := r.prune(ctx, bindings); err != nil {
@@ -1274,7 +1274,7 @@ func (r *deployRun) prune(ctx context.Context, bindings []Binding) error {
 	}
 	var stale []string
 	for _, record := range held {
-		if record.Owner != values.OwnerOcel || record.Environment != environment {
+		if record.Owner != envvars.OwnerOcel || record.Environment != environment {
 			continue
 		}
 		if slices.ContainsFunc(bindings, func(binding Binding) bool { return binding.Name == record.Name }) {
@@ -1292,8 +1292,8 @@ func (r *deployRun) prune(ctx context.Context, bindings []Binding) error {
 }
 
 type publishedBindings struct {
-	store       values.Store
-	scope       values.Scope
+	store       envvars.Store
+	scope       envvars.Scope
 	environment string
 
 	mu       sync.Mutex
@@ -1362,7 +1362,7 @@ func (p *publishedBindings) Named(ctx context.Context, name string) (Binding, er
 	return bindingPublished(name, published)
 }
 
-func bindingPublished(name string, published values.Published) (Binding, error) {
+func bindingPublished(name string, published envvars.StoredBinding) (Binding, error) {
 	message, err := DecodeBinding(published.Value)
 	if err != nil {
 		return Binding{}, fmt.Errorf("read binding %s: %w", name, err)

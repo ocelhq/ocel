@@ -21,11 +21,11 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -478,20 +478,20 @@ func TestRemoveEnvironmentRemovesTheRecordsOcelKeptThere(t *testing.T) {
 	deployed(t, provider, edge.ClassPreview, "shop")
 	seedPromotions(t, provider, edge.ClassPreview, "shop", "pr-7", "p1")
 
-	store := values.Store{Records: provider.Records(), Cipher: provider.Cipher()}
-	scope := values.Scope{Project: "shop", Class: edge.ClassPreview}
+	store := envvars.Store{Records: provider.Records(), Cipher: provider.Cipher()}
+	scope := envvars.Scope{Project: "shop", Class: edge.ClassPreview}
 	publish := func(environment, owner string, binding *bindingsv1.Binding) {
 		pair, err := providerkit.BindingPair(owner, binding)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := store.SetBindings(context.Background(), scope, environment, owner, []values.Publishing{{Name: binding.GetName(), Pair: pair}}); err != nil {
+		if _, err := store.SetBindings(context.Background(), scope, environment, owner, []envvars.NamedBindingWrite{{Name: binding.GetName(), Write: pair}}); err != nil {
 			t.Fatal(err)
 		}
 	}
 	inline := naming.InlineRecordName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, "orders")
 	publish("pr-7", naming.InlineRecordOwner, postgresRecord(inline, "ocel.json"))
-	publish("pr-7", values.OwnerOcel, postgresRecord("db--cache", ""))
+	publish("pr-7", envvars.OwnerOcel, postgresRecord("db--cache", ""))
 	publish("pr-7", "terraform", postgresRecord("warehouse", "terraform"))
 	publish("pr-8", naming.InlineRecordOwner, postgresRecord(inline, "ocel.json"))
 

@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -114,7 +114,7 @@ func (r *deployRun) publishingClasses(ctx context.Context, missing []string) map
 		if class == r.plan.Class {
 			continue
 		}
-		names, err := r.values.PublishedNames(ctx, values.Scope{Project: r.plan.Slug, Class: class}, r.plan.bindingEnvironment())
+		names, err := r.values.PublishedNames(ctx, envvars.Scope{Project: r.plan.Slug, Class: class}, r.plan.bindingEnvironment())
 		if err != nil {
 			continue
 		}

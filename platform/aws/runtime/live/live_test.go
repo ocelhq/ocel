@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
 )
@@ -115,7 +115,7 @@ func TestResolveLiveValues(t *testing.T) {
 			}
 		}
 
-		resolved := merged(nil, manifest.Bindings, []values.Published{
+		resolved := merged(nil, manifest.Bindings, []envvars.StoredBinding{
 			publishedRecord(t, &bindingsv1.Binding{Name: "db--main", Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "h", Database: "d", Username: "u"}}}, 1),
 			publishedRecord(t, &bindingsv1.Binding{Name: "bucket--uploads", Properties: &bindingsv1.Binding_Bucket{Bucket: &bindingsv1.BucketProperties{Bucket: "shop-uploads"}}}, 1),
 		})
@@ -159,7 +159,7 @@ func TestResolveLiveValues(t *testing.T) {
 			Keys:        []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
 		}
 
-		want := []values.Cell{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}}
+		want := []envvars.Cell{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}}
 		if cells := manifestCells(manifest); !reflect.DeepEqual(cells, want) {
 			t.Errorf("cells = %+v, want %+v: the override is the reader's environment, not a cell of its own", cells, want)
 		}
@@ -293,7 +293,7 @@ func TestMerged(t *testing.T) {
 		Name:       "db--main",
 		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "ocel", Port: 5432}},
 	}
-	records := []values.Published{publishedRecord(t, published, 1)}
+	records := []envvars.StoredBinding{publishedRecord(t, published, 1)}
 
 	t.Run("a binding is never shadowed by a secret that shares its name", func(t *testing.T) {
 		got := merged(map[string]string{"OCEL_RESOURCE_POSTGRES_main": "postgres://mine"}, bindings, records)
@@ -313,13 +313,13 @@ func TestMerged(t *testing.T) {
 	})
 }
 
-func publishedRecord(t *testing.T, binding *bindingsv1.Binding, version int64) values.Published {
+func publishedRecord(t *testing.T, binding *bindingsv1.Binding, version int64) envvars.StoredBinding {
 	t.Helper()
 	encoded, err := protojson.Marshal(binding)
 	if err != nil {
 		t.Fatalf("render the binding: %v", err)
 	}
-	return values.Published{Name: binding.GetName(), Value: encoded, Version: version}
+	return envvars.StoredBinding{Name: binding.GetName(), Value: encoded, Version: version}
 }
 
 func TestEnv(t *testing.T) {
@@ -380,8 +380,8 @@ func TestGrantLag(t *testing.T) {
 		binding.Granted = granted
 		return binding
 	}
-	published := func(version int64) []values.Published {
-		return []values.Published{{Name: "main", Version: version}}
+	published := func(version int64) []envvars.StoredBinding {
+		return []envvars.StoredBinding{{Name: "main", Version: version}}
 	}
 
 	t.Run("names the publishes an app's grants are behind", func(t *testing.T) {

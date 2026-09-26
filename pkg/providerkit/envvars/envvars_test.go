@@ -1,4 +1,4 @@
-package values_test
+package envvars_test
 
 import (
 	"context"
@@ -7,19 +7,19 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func fixture() (values.Store, values.Scope) {
-	return values.Store{Records: fake.NewRecords(), Cipher: fake.NewCipher()},
-		values.Scope{Project: "shop", Class: edge.ClassProduction}
+func fixture() (envvars.Store, envvars.Scope) {
+	return envvars.Store{Records: fake.NewRecords(), Cipher: fake.NewCipher()},
+		envvars.Scope{Project: "shop", Class: edge.ClassProduction}
 }
 
-func at(key string) values.Coordinate {
-	return values.Coordinate{Cell: values.Cell{Key: key}}
+func at(key string) envvars.Coordinate {
+	return envvars.Coordinate{Cell: envvars.Cell{Key: key}}
 }
 
 func TestAValueIsSealedAndComesBackVersioned(t *testing.T) {
@@ -59,7 +59,7 @@ func TestAWriteAtTheVersionSeenWinsAndAStaleOneLoses(t *testing.T) {
 	if _, err := store.Set(ctx, scope, at("KEY"), "two", &seen); err != nil {
 		t.Fatalf("Set() at the version seen = %v, want it written", err)
 	}
-	if _, err := store.Set(ctx, scope, at("KEY"), "three", &seen); !errors.Is(err, values.ErrStaleVersion) {
+	if _, err := store.Set(ctx, scope, at("KEY"), "three", &seen); !errors.Is(err, envvars.ErrStaleVersion) {
 		t.Fatalf("Set() at a version that moved = %v, want ErrStaleVersion", err)
 	}
 }
@@ -77,7 +77,7 @@ func TestADeletedValueIsGoneButItsVersionsSurvive(t *testing.T) {
 	if err != nil || !deleted {
 		t.Fatalf("Delete() = %v, %v", deleted, err)
 	}
-	if _, err := store.Get(ctx, scope, at("KEY"), false); !errors.Is(err, values.ErrNotFound) {
+	if _, err := store.Get(ctx, scope, at("KEY"), false); !errors.Is(err, envvars.ErrNotFound) {
 		t.Fatalf("Get() after Delete() = %v, want ErrNotFound", err)
 	}
 	held, err := store.List(ctx, scope)
@@ -107,11 +107,11 @@ func TestAValueOverTheCapIsRefused(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	if _, err := store.Set(ctx, scope, at("KEY"), strings.Repeat("x", values.MaxValueBytes), nil); err != nil {
+	if _, err := store.Set(ctx, scope, at("KEY"), strings.Repeat("x", envvars.MaxValueBytes), nil); err != nil {
 		t.Fatalf("Set() at the cap = %v, want it written", err)
 	}
-	_, err := store.Set(ctx, scope, at("KEY"), strings.Repeat("x", values.MaxValueBytes+1), nil)
-	if !errors.Is(err, values.ErrTooLarge) {
+	_, err := store.Set(ctx, scope, at("KEY"), strings.Repeat("x", envvars.MaxValueBytes+1), nil)
+	if !errors.Is(err, envvars.ErrTooLarge) {
 		t.Fatalf("Set() over the cap = %v, want ErrTooLarge", err)
 	}
 }
@@ -123,19 +123,19 @@ func TestAnEnvironmentValueShadowsTheClassWideOne(t *testing.T) {
 	if _, err := store.Set(ctx, scope, at("KEY"), "class-wide", nil); err != nil {
 		t.Fatal(err)
 	}
-	scoped := values.Coordinate{Cell: values.Cell{Key: "KEY"}, Environment: "pr-7"}
+	scoped := envvars.Coordinate{Cell: envvars.Cell{Key: "KEY"}, Environment: "pr-7"}
 	if _, err := store.Set(ctx, scope, scoped, "pr-7 only", nil); err != nil {
 		t.Fatal(err)
 	}
 
-	reader := values.View{Records: store.Records, Cipher: store.Cipher, Scope: scope, Environment: "pr-7"}
-	seen, err := reader.Values(ctx, []values.Cell{{Key: "KEY"}})
+	reader := envvars.EnvironmentReader{Records: store.Records, Cipher: store.Cipher, Scope: scope, Environment: "pr-7"}
+	seen, err := reader.Values(ctx, []envvars.Cell{{Key: "KEY"}})
 	if err != nil || seen["KEY"] != "pr-7 only" {
 		t.Fatalf("the environment's reader saw %q, %v, want the environment's own value", seen["KEY"], err)
 	}
 
-	classWide := values.View{Records: store.Records, Cipher: store.Cipher, Scope: scope}
-	seen, err = classWide.Values(ctx, []values.Cell{{Key: "KEY"}})
+	classWide := envvars.EnvironmentReader{Records: store.Records, Cipher: store.Cipher, Scope: scope}
+	seen, err = classWide.Values(ctx, []envvars.Cell{{Key: "KEY"}})
 	if err != nil || seen["KEY"] != "class-wide" {
 		t.Fatalf("the class-wide reader saw %q, %v", seen["KEY"], err)
 	}
@@ -144,12 +144,12 @@ func TestAnEnvironmentValueShadowsTheClassWideOne(t *testing.T) {
 func TestAReferenceResolvesOneHopAndNoFurther(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := values.Scope{Project: "platform", Class: edge.ClassProduction}
+	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
 
 	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)
 	}
-	target := values.Target{Project: "platform", Cell: values.Cell{Key: "DATABASE_URL"}}
+	target := envvars.Target{Project: "platform", Cell: envvars.Cell{Key: "DATABASE_URL"}}
 	if _, err := store.SetReference(ctx, scope, at("DATABASE_URL"), target); err != nil {
 		t.Fatal(err)
 	}
@@ -162,9 +162,9 @@ func TestAReferenceResolvesOneHopAndNoFurther(t *testing.T) {
 		t.Fatalf("the reference's metadata names %v, want the target it points at", revealed.Target)
 	}
 
-	deeper := values.Scope{Project: "web", Class: edge.ClassProduction}
-	_, err = store.SetReference(ctx, deeper, at("DATABASE_URL"), values.Target{Project: "shop", Cell: values.Cell{Key: "DATABASE_URL"}})
-	if !errors.Is(err, values.ErrWouldDeepen) {
+	deeper := envvars.Scope{Project: "web", Class: edge.ClassProduction}
+	_, err = store.SetReference(ctx, deeper, at("DATABASE_URL"), envvars.Target{Project: "shop", Cell: envvars.Cell{Key: "DATABASE_URL"}})
+	if !errors.Is(err, envvars.ErrWouldDeepen) {
 		t.Fatalf("a reference to a reference = %v, want ErrWouldDeepen", err)
 	}
 }
@@ -172,21 +172,21 @@ func TestAReferenceResolvesOneHopAndNoFurther(t *testing.T) {
 func TestAReferenceRefusesToShadowAValueItsOwnConsumersRead(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := values.Scope{Project: "platform", Class: edge.ClassProduction}
-	consumer := values.Scope{Project: "web", Class: edge.ClassProduction}
+	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
+	consumer := envvars.Scope{Project: "web", Class: edge.ClassProduction}
 
 	if _, err := store.Set(ctx, scope, at("KEY"), "held here", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SetReference(ctx, consumer, at("KEY"), values.Target{Project: "shop", Cell: values.Cell{Key: "KEY"}}); err != nil {
+	if _, err := store.SetReference(ctx, consumer, at("KEY"), envvars.Target{Project: "shop", Cell: envvars.Cell{Key: "KEY"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.Set(ctx, shared, at("KEY"), "held elsewhere", nil); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := store.SetReference(ctx, scope, at("KEY"), values.Target{Project: "platform", Cell: values.Cell{Key: "KEY"}})
-	if !errors.Is(err, values.ErrWouldDeepen) {
+	_, err := store.SetReference(ctx, scope, at("KEY"), envvars.Target{Project: "platform", Cell: envvars.Cell{Key: "KEY"}})
+	if !errors.Is(err, envvars.ErrWouldDeepen) {
 		t.Fatalf("making a referenced cell a reference = %v, want ErrWouldDeepen", err)
 	}
 	if !strings.Contains(err.Error(), "web") {
@@ -197,15 +197,15 @@ func TestAReferenceRefusesToShadowAValueItsOwnConsumersRead(t *testing.T) {
 func TestSettingAValueOverAReferenceIsRefused(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := values.Scope{Project: "platform", Class: edge.ClassProduction}
+	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
 
 	if _, err := store.Set(ctx, shared, at("KEY"), "held elsewhere", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SetReference(ctx, scope, at("KEY"), values.Target{Project: "platform", Cell: values.Cell{Key: "KEY"}}); err != nil {
+	if _, err := store.SetReference(ctx, scope, at("KEY"), envvars.Target{Project: "platform", Cell: envvars.Cell{Key: "KEY"}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Set(ctx, scope, at("KEY"), "held here now", nil); !errors.Is(err, values.ErrIsReference) {
+	if _, err := store.Set(ctx, scope, at("KEY"), "held here now", nil); !errors.Is(err, envvars.ErrIsReference) {
 		t.Fatalf("Set() over a reference = %v, want ErrIsReference", err)
 	}
 }
@@ -217,9 +217,9 @@ func TestTheReverseIndexAnswersWhoReadsACell(t *testing.T) {
 	if _, err := store.Set(ctx, scope, at("KEY"), "held here", nil); err != nil {
 		t.Fatal(err)
 	}
-	target := values.Target{Project: "shop", Cell: values.Cell{Key: "KEY"}}
+	target := envvars.Target{Project: "shop", Cell: envvars.Cell{Key: "KEY"}}
 	for _, project := range []string{"web", "worker"} {
-		consumer := values.Scope{Project: project, Class: edge.ClassProduction}
+		consumer := envvars.Scope{Project: project, Class: edge.ClassProduction}
 		if _, err := store.SetReference(ctx, consumer, at("KEY"), target); err != nil {
 			t.Fatal(err)
 		}
@@ -233,7 +233,7 @@ func TestTheReverseIndexAnswersWhoReadsACell(t *testing.T) {
 		t.Fatalf("References() = %+v, want them sorted", found)
 	}
 
-	consumer := values.Scope{Project: "web", Class: edge.ClassProduction}
+	consumer := envvars.Scope{Project: "web", Class: edge.ClassProduction}
 	if _, err := store.Delete(ctx, consumer, at("KEY"), nil); err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestRevealAnswersOnlyTheCellsThatHoldValues(t *testing.T) {
 	if _, err := store.Set(ctx, scope, at("A"), "one", nil); err != nil {
 		t.Fatal(err)
 	}
-	found, err := store.Reveal(ctx, scope, []values.Coordinate{at("A"), at("B")})
+	found, err := store.Reveal(ctx, scope, []envvars.Coordinate{at("A"), at("B")})
 	if err != nil || len(found) != 1 || found[0].Plaintext != "one" {
 		t.Fatalf("Reveal() = %+v, %v, want only the cell that holds a value", found, err)
 	}
@@ -259,28 +259,28 @@ func TestRevealAnswersOnlyTheCellsThatHoldValues(t *testing.T) {
 func TestARevealOverABrokenReferenceFailsRatherThanOmittingIt(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := values.Scope{Project: "platform", Class: edge.ClassProduction}
+	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
 
 	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SetReference(ctx, scope, at("DATABASE_URL"), values.Target{Project: "platform", Cell: values.Cell{Key: "DATABASE_URL"}}); err != nil {
+	if _, err := store.SetReference(ctx, scope, at("DATABASE_URL"), envvars.Target{Project: "platform", Cell: envvars.Cell{Key: "DATABASE_URL"}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.Delete(ctx, shared, at("DATABASE_URL"), nil); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := store.Reveal(ctx, scope, []values.Coordinate{at("DATABASE_URL")})
-	if !errors.Is(err, values.ErrDangling) {
+	_, err := store.Reveal(ctx, scope, []envvars.Coordinate{at("DATABASE_URL")})
+	if !errors.Is(err, envvars.ErrDangling) {
 		t.Fatalf("Reveal() over a reference to a value that is gone = %v, want ErrDangling rather than a quietly missing variable", err)
 	}
 	if !strings.Contains(err.Error(), "platform") {
 		t.Fatalf("the failure does not name the broken reference: %v", err)
 	}
 
-	reader := values.View{Records: store.Records, Cipher: store.Cipher, Scope: scope}
-	if _, err := reader.Values(ctx, []values.Cell{{Key: "DATABASE_URL"}}); !errors.Is(err, values.ErrDangling) {
+	reader := envvars.EnvironmentReader{Records: store.Records, Cipher: store.Cipher, Scope: scope}
+	if _, err := reader.Values(ctx, []envvars.Cell{{Key: "DATABASE_URL"}}); !errors.Is(err, envvars.ErrDangling) {
 		t.Fatalf("a reader over a broken reference = %v, want it to refuse to boot the app", err)
 	}
 }
@@ -288,12 +288,12 @@ func TestARevealOverABrokenReferenceFailsRatherThanOmittingIt(t *testing.T) {
 func TestPurgeFreesTheCellsTheProjectWasReading(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	consumer := values.Scope{Project: "web", Class: edge.ClassProduction}
+	consumer := envvars.Scope{Project: "web", Class: edge.ClassProduction}
 
 	if _, err := store.Set(ctx, scope, at("KEY"), "held here", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SetReference(ctx, consumer, at("KEY"), values.Target{Project: "shop", Cell: values.Cell{Key: "KEY"}}); err != nil {
+	if _, err := store.SetReference(ctx, consumer, at("KEY"), envvars.Target{Project: "shop", Cell: envvars.Cell{Key: "KEY"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -305,11 +305,11 @@ func TestPurgeFreesTheCellsTheProjectWasReading(t *testing.T) {
 		t.Fatalf("References() after the consuming project was purged = %+v, %v, want nothing reading it", found, err)
 	}
 
-	shared := values.Scope{Project: "platform", Class: edge.ClassProduction}
+	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
 	if _, err := store.Set(ctx, shared, at("KEY"), "held elsewhere", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SetReference(ctx, scope, at("KEY"), values.Target{Project: "platform", Cell: values.Cell{Key: "KEY"}}); err != nil {
+	if _, err := store.SetReference(ctx, scope, at("KEY"), envvars.Target{Project: "platform", Cell: envvars.Cell{Key: "KEY"}}); err != nil {
 		t.Fatalf("SetReference() over a cell only a purged project read = %v, want it taken", err)
 	}
 }
@@ -321,11 +321,11 @@ func TestPurgeTakesEveryRecordAProjectHolds(t *testing.T) {
 	if _, err := store.Set(ctx, scope, at("KEY"), "one", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", values.Pair{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
+	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", envvars.BindingWrite{Record: []byte("{}"), Value: []byte("{}")}); err != nil {
 		t.Fatal(err)
 	}
-	consumer := values.Scope{Project: "web", Class: edge.ClassProduction}
-	if _, err := store.SetReference(ctx, consumer, at("KEY"), values.Target{Project: "shop", Cell: values.Cell{Key: "KEY"}}); err != nil {
+	consumer := envvars.Scope{Project: "web", Class: edge.ClassProduction}
+	if _, err := store.SetReference(ctx, consumer, at("KEY"), envvars.Target{Project: "shop", Cell: envvars.Cell{Key: "KEY"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -350,12 +350,12 @@ func TestAKeyKeepsItsShapeThroughTheRecordTree(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	awkward := []values.Coordinate{
-		{Cell: values.Cell{Key: "A/B"}},
-		{Cell: values.Cell{Key: "A%2FB"}},
-		{Cell: values.Cell{Folder: "/apps/web", Key: "KEY"}},
-		{Cell: values.Cell{Folder: "/apps/web/inner", Key: "KEY"}},
-		{Cell: values.Cell{Key: "KEY"}, Environment: "pr/7"},
+	awkward := []envvars.Coordinate{
+		{Cell: envvars.Cell{Key: "A/B"}},
+		{Cell: envvars.Cell{Key: "A%2FB"}},
+		{Cell: envvars.Cell{Folder: "/apps/web", Key: "KEY"}},
+		{Cell: envvars.Cell{Folder: "/apps/web/inner", Key: "KEY"}},
+		{Cell: envvars.Cell{Key: "KEY"}, Environment: "pr/7"},
 	}
 	for i, cell := range awkward {
 		if _, err := store.Set(ctx, scope, cell, string(rune('a'+i)), nil); err != nil {
@@ -382,13 +382,13 @@ func TestAKeyKeepsItsShapeThroughTheRecordTree(t *testing.T) {
 func TestABindingNameBelongsToOnePublisher(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	pair := values.Pair{Record: []byte("{}"), Value: []byte(`{"name":"db"}`)}
+	pair := envvars.BindingWrite{Record: []byte("{}"), Value: []byte(`{"name":"db"}`)}
 
 	if _, err := store.SetBinding(ctx, scope, "", "neon", "db", pair); err != nil {
 		t.Fatal(err)
 	}
 	_, err := store.SetBinding(ctx, scope, "", "supabase", "db", pair)
-	if !errors.Is(err, values.ErrClaimed) {
+	if !errors.Is(err, envvars.ErrClaimed) {
 		t.Fatalf("a second publisher taking the name = %v, want ErrClaimed", err)
 	}
 	if !strings.Contains(err.Error(), "neon") {
@@ -404,7 +404,7 @@ func TestABindingNameBelongsToOnePublisher(t *testing.T) {
 func TestABindingIsRemovedAndItsNameFreed(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	pair := values.Pair{Record: []byte("{}"), Value: []byte(`{"name":"db"}`)}
+	pair := envvars.BindingWrite{Record: []byte("{}"), Value: []byte(`{"name":"db"}`)}
 
 	if _, err := store.SetBinding(ctx, scope, "", "neon", "db", pair); err != nil {
 		t.Fatal(err)
@@ -425,10 +425,10 @@ func TestABindingPublishedToAnEnvironmentShadowsTheClassWidePair(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", values.Pair{Record: []byte(`{"class":true}`), Value: []byte("class-wide")}); err != nil {
+	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", envvars.BindingWrite{Record: []byte(`{"class":true}`), Value: []byte("class-wide")}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SetBinding(ctx, scope, "pr-7", "OCEL", "db", values.Pair{Record: []byte(`{"env":true}`), Value: []byte("pr-7 only")}); err != nil {
+	if _, err := store.SetBinding(ctx, scope, "pr-7", "OCEL", "db", envvars.BindingWrite{Record: []byte(`{"env":true}`), Value: []byte("pr-7 only")}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -451,16 +451,16 @@ func TestAViewResolvesTheBindingsADeploymentWasBuiltToRead(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", values.Pair{Record: []byte("{}"), Value: []byte("the sealed record")}); err != nil {
+	if _, err := store.SetBinding(ctx, scope, "", "OCEL", "db", envvars.BindingWrite{Record: []byte("{}"), Value: []byte("the sealed record")}); err != nil {
 		t.Fatal(err)
 	}
-	reader := values.View{Records: store.Records, Cipher: store.Cipher, Scope: scope}
+	reader := envvars.EnvironmentReader{Records: store.Records, Cipher: store.Cipher, Scope: scope}
 
 	found, err := reader.Bindings(ctx, []string{"db"})
 	if err != nil || len(found) != 1 || string(found[0].Value) != "the sealed record" {
 		t.Fatalf("Bindings() = %+v, %v", found, err)
 	}
-	if _, err := reader.Bindings(ctx, []string{"db", "cache"}); !errors.Is(err, values.ErrNotPublished) {
+	if _, err := reader.Bindings(ctx, []string{"db", "cache"}); !errors.Is(err, envvars.ErrNotPublished) {
 		t.Fatalf("Bindings() naming a binding nobody published = %v, want ErrNotPublished", err)
 	}
 }
@@ -468,7 +468,7 @@ func TestAViewResolvesTheBindingsADeploymentWasBuiltToRead(t *testing.T) {
 func TestReferenceOwnersNamesTheProjectsAValueIsBorrowedFrom(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := values.Scope{Project: "platform", Class: edge.ClassProduction}
+	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
 
 	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)
@@ -476,7 +476,7 @@ func TestReferenceOwnersNamesTheProjectsAValueIsBorrowedFrom(t *testing.T) {
 	if _, err := store.Set(ctx, scope, at("OWN"), "held here", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.SetReference(ctx, scope, at("DATABASE_URL"), values.Target{Project: "platform", Cell: values.Cell{Key: "DATABASE_URL"}}); err != nil {
+	if _, err := store.SetReference(ctx, scope, at("DATABASE_URL"), envvars.Target{Project: "platform", Cell: envvars.Cell{Key: "DATABASE_URL"}}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -493,7 +493,7 @@ func TestAnUnpublishedBindingIsNotFound(t *testing.T) {
 	store, scope := fixture()
 
 	_, err := store.ResolveBinding(context.Background(), scope, "", "db")
-	if !errors.Is(err, values.ErrNotPublished) {
+	if !errors.Is(err, envvars.ErrNotPublished) {
 		t.Fatalf("ResolveBinding() of a binding nobody published = %v, want ErrNotPublished", err)
 	}
 }
@@ -502,13 +502,13 @@ func TestTheClassWideEnvironmentIsReserved(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	if err := values.ValidateBindingEnvironment("*"); err == nil {
+	if err := envvars.ValidateBindingEnvironment("*"); err == nil {
 		t.Fatal("the class-wide token was accepted as an environment name")
 	}
-	if _, err := store.SetBinding(ctx, scope, "*", "neon", "db", values.Pair{}); err == nil {
+	if _, err := store.SetBinding(ctx, scope, "*", "neon", "db", envvars.BindingWrite{}); err == nil {
 		t.Fatal("SetBinding() to the class-wide token succeeded, want it refused")
 	}
-	if _, err := store.SetBinding(ctx, scope, "", "", "db", values.Pair{}); err == nil {
+	if _, err := store.SetBinding(ctx, scope, "", "", "db", envvars.BindingWrite{}); err == nil {
 		t.Fatal("SetBinding() with no publisher succeeded, want it refused")
 	}
 }
@@ -548,7 +548,7 @@ func (c *counted) Open(ctx context.Context, at records.SealScope, sealed []byte)
 func TestRevealReadsTheProjectOnceAndOpensEachCiphertextOnce(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
-	shared := values.Scope{Project: "platform", Class: edge.ClassProduction}
+	shared := envvars.Scope{Project: "platform", Class: edge.ClassProduction}
 
 	if _, err := store.Set(ctx, shared, at("DATABASE_URL"), "postgres://shared", nil); err != nil {
 		t.Fatal(err)
@@ -558,7 +558,7 @@ func TestRevealReadsTheProjectOnceAndOpensEachCiphertextOnce(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	target := values.Target{Project: "platform", Cell: values.Cell{Key: "DATABASE_URL"}}
+	target := envvars.Target{Project: "platform", Cell: envvars.Cell{Key: "DATABASE_URL"}}
 	for _, key := range []string{"PRIMARY_URL", "REPLICA_URL"} {
 		if _, err := store.SetReference(ctx, scope, at(key), target); err != nil {
 			t.Fatal(err)
@@ -567,7 +567,7 @@ func TestRevealReadsTheProjectOnceAndOpensEachCiphertextOnce(t *testing.T) {
 
 	watched := &counted{Store: store.Records, Cipher: store.Cipher}
 	store.Records, store.Cipher = watched, watched
-	found, err := store.Reveal(ctx, scope, []values.Coordinate{
+	found, err := store.Reveal(ctx, scope, []envvars.Coordinate{
 		at("A"), at("B"), at("C"), at("PRIMARY_URL"), at("REPLICA_URL"), at("NEVER_SET"),
 	})
 	if err != nil || len(found) != 5 {
@@ -588,9 +588,9 @@ func TestResolvingABatchOfBindingsReadsEachEnvironmentOnce(t *testing.T) {
 	store, scope := fixture()
 	ctx := context.Background()
 
-	publishing := make([]values.Publishing, 0, 3)
+	publishing := make([]envvars.NamedBindingWrite, 0, 3)
 	for _, name := range []string{"db", "cache", "queue"} {
-		publishing = append(publishing, values.Publishing{Name: name, Pair: values.Pair{Record: []byte("{}"), Value: []byte(`"` + name + `"`)}})
+		publishing = append(publishing, envvars.NamedBindingWrite{Name: name, Write: envvars.BindingWrite{Record: []byte("{}"), Value: []byte(`"` + name + `"`)}})
 	}
 	if _, err := store.SetBindings(ctx, scope, "", "OCEL", publishing); err != nil {
 		t.Fatal(err)
@@ -617,11 +617,11 @@ func TestResolvingOneBindingReadsThatBindingAlone(t *testing.T) {
 	ctx := context.Background()
 
 	for _, name := range []string{"db", "cache", "queue"} {
-		if _, err := store.SetBinding(ctx, scope, "", "OCEL", name, values.Pair{Record: []byte("{}"), Value: []byte(`"` + name + `"`)}); err != nil {
+		if _, err := store.SetBinding(ctx, scope, "", "OCEL", name, envvars.BindingWrite{Record: []byte("{}"), Value: []byte(`"` + name + `"`)}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if _, err := store.SetBinding(ctx, scope, "pr-7", "OCEL", "db", values.Pair{Record: []byte("{}"), Value: []byte(`"pr-7 db"`)}); err != nil {
+	if _, err := store.SetBinding(ctx, scope, "pr-7", "OCEL", "db", envvars.BindingWrite{Record: []byte("{}"), Value: []byte(`"pr-7 db"`)}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -641,7 +641,7 @@ func TestResolvingOneBindingReadsThatBindingAlone(t *testing.T) {
 
 func TestRevealUnderACancelledContextNeverReadsAsEmptyValues(t *testing.T) {
 	store, scope := fixture()
-	var wanted []values.Coordinate
+	var wanted []envvars.Coordinate
 	for _, key := range []string{"A", "B", "C", "D", "E", "F", "G", "H"} {
 		if _, err := store.Set(context.Background(), scope, at(key), "held "+key, nil); err != nil {
 			t.Fatal(err)

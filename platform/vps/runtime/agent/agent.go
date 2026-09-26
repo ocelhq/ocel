@@ -24,7 +24,7 @@ import (
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -307,15 +307,15 @@ type Store struct {
 }
 
 func (s Store) Resolve(ctx context.Context, manifest vars.Manifest) (map[string]string, error) {
-	reader := values.View{
+	reader := envvars.EnvironmentReader{
 		Records:     vars.Records{Root: s.StateRoot},
 		Cipher:      vars.Cipher{Root: s.ClassRoot},
-		Scope:       values.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},
+		Scope:       envvars.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},
 		Environment: manifest.Environment,
 	}
-	cells := make([]values.Cell, 0, len(manifest.Keys))
+	cells := make([]envvars.Cell, 0, len(manifest.Keys))
 	for _, key := range manifest.Keys {
-		cells = append(cells, values.Cell{Folder: key.Folder, Key: key.Key})
+		cells = append(cells, envvars.Cell{Folder: key.Folder, Key: key.Key})
 	}
 	resolved, err := reader.Values(ctx, cells)
 	if err != nil {
@@ -405,7 +405,7 @@ func published(answer map[string]string, bindings []live.Binding, base string) {
 	}
 }
 
-func merged(resolved map[string]string, bindings []live.Binding, records []values.Published) map[string]string {
+func merged(resolved map[string]string, bindings []live.Binding, records []envvars.StoredBinding) map[string]string {
 	out := make(map[string]string, len(resolved)+len(records))
 	maps.Copy(out, resolved)
 	for i, record := range records {

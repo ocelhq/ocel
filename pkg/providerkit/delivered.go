@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 )
 
 const (
@@ -52,7 +52,7 @@ func (r *deployRun) refuseUnsetSecret(app, key string) error {
 }
 
 func (r *deployRun) refuseContainerValues(ctx context.Context) error {
-	var stored map[values.Cell]bool
+	var stored map[envvars.Cell]bool
 	for _, entry := range r.plan.Apps {
 		if !imaged(r.provider, entry.Compute()) {
 			continue
@@ -73,7 +73,7 @@ func (r *deployRun) refuseContainerValues(ctx context.Context) error {
 			}
 		}
 		for _, secret := range held.Secrets {
-			if !stored[values.Cell{Folder: secret.Folder, Key: secret.Key}] {
+			if !stored[envvars.Cell{Folder: secret.Folder, Key: secret.Key}] {
 				return r.refuseUnsetSecret(entry.App, secret.Key)
 			}
 		}
@@ -81,13 +81,13 @@ func (r *deployRun) refuseContainerValues(ctx context.Context) error {
 	return nil
 }
 
-func (r *deployRun) storedCells(ctx context.Context) (map[values.Cell]bool, error) {
+func (r *deployRun) storedCells(ctx context.Context) (map[envvars.Cell]bool, error) {
 	held, err := r.values.List(ctx, r.scope)
 	if err != nil {
 		return nil, err
 	}
 	shadowed := map[string]bool{"": true, r.plan.bindingEnvironment(): true}
-	stored := make(map[values.Cell]bool, len(held))
+	stored := make(map[envvars.Cell]bool, len(held))
 	for _, metadata := range held {
 		if shadowed[metadata.Coordinate.Environment] {
 			stored[metadata.Coordinate.Cell] = true

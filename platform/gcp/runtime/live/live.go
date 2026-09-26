@@ -5,8 +5,8 @@ import (
 	"maps"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
@@ -14,8 +14,8 @@ import (
 )
 
 type storeSource struct {
-	reader   values.View
-	cells    []values.Cell
+	reader   envvars.EnvironmentReader
+	cells    []envvars.Cell
 	bindings []live.Binding
 }
 
@@ -39,7 +39,7 @@ func bindingNames(bindings []live.Binding) []string {
 	return names
 }
 
-func merged(resolved map[string]string, bindings []live.Binding, records []values.Published) map[string]string {
+func merged(resolved map[string]string, bindings []live.Binding, records []envvars.StoredBinding) map[string]string {
 	out := make(map[string]string, len(resolved)+len(records))
 	maps.Copy(out, resolved)
 	for i, record := range records {
@@ -67,10 +67,10 @@ func FromManifest(raw []byte) (*live.Values, error) {
 
 func Over(manifest vars.Manifest, records records.Store, sealer records.Cipher) *live.Values {
 	return live.New(&storeSource{
-		reader: values.View{
+		reader: envvars.EnvironmentReader{
 			Records:     records,
 			Cipher:      sealer,
-			Scope:       values.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},
+			Scope:       envvars.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},
 			Environment: manifest.Environment,
 		},
 		cells:    manifestCells(manifest),
@@ -78,10 +78,10 @@ func Over(manifest vars.Manifest, records records.Store, sealer records.Cipher) 
 	}, live.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil)
 }
 
-func manifestCells(m vars.Manifest) []values.Cell {
-	cells := make([]values.Cell, 0, len(m.Keys))
+func manifestCells(m vars.Manifest) []envvars.Cell {
+	cells := make([]envvars.Cell, 0, len(m.Keys))
 	for _, k := range m.Keys {
-		cells = append(cells, values.Cell{Folder: k.Folder, Key: k.Key})
+		cells = append(cells, envvars.Cell{Folder: k.Folder, Key: k.Key})
 	}
 	return cells
 }

@@ -1,4 +1,4 @@
-package values_test
+package envvars_test
 
 import (
 	"os/exec"

@@ -9,9 +9,9 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
@@ -27,24 +27,24 @@ func fakeStores() stores {
 	return stores{records: fake.NewRecords(), sealer: fake.NewCipher()}
 }
 
-func (s stores) store() values.Store {
-	return values.Store{Records: s.records, Cipher: s.sealer}
+func (s stores) store() envvars.Store {
+	return envvars.Store{Records: s.records, Cipher: s.sealer}
 }
 
-func (s stores) set(t *testing.T, scope values.Scope, at values.Coordinate, plaintext string) {
+func (s stores) set(t *testing.T, scope envvars.Scope, at envvars.Coordinate, plaintext string) {
 	t.Helper()
 	if _, err := s.store().Set(context.Background(), scope, at, plaintext, nil); err != nil {
 		t.Fatalf("Set(%s) = %v", at, err)
 	}
 }
 
-func (s stores) publish(t *testing.T, scope values.Scope, environment, name string, binding *bindingsv1.Binding) {
+func (s stores) publish(t *testing.T, scope envvars.Scope, environment, name string, binding *bindingsv1.Binding) {
 	t.Helper()
 	encoded, err := protojson.Marshal(binding)
 	if err != nil {
 		t.Fatal(err)
 	}
-	pair := values.Pair{Record: encoded, Value: encoded, Owner: "ocel"}
+	pair := envvars.BindingWrite{Record: encoded, Value: encoded, Owner: "ocel"}
 	if _, err := s.store().SetBinding(context.Background(), scope, environment, "ocel", name, pair); err != nil {
 		t.Fatalf("SetBinding(%s) = %v", name, err)
 	}
@@ -87,9 +87,9 @@ func manifestOf(keys ...string) vars.Manifest {
 func TestASecretIsOpenedFromTheProjectsOwnRecordsUnderTheClassKey(t *testing.T) {
 	t.Parallel()
 	held := fakeStores()
-	scope := values.Scope{Project: "shop", Class: edge.ClassProduction}
-	held.set(t, scope, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, "postgres://live")
-	held.set(t, scope, values.Coordinate{Cell: values.Cell{Key: "SESSION_SECRET", Folder: "/web"}}, "s3ss10n")
+	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
+	held.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://live")
+	held.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "SESSION_SECRET", Folder: "/web"}}, "s3ss10n")
 
 	manifest := manifestOf("DATABASE_URL")
 	manifest.Keys = append(manifest.Keys, live.Key{Key: "SESSION_SECRET", Folder: "/web"})
@@ -103,9 +103,9 @@ func TestASecretIsOpenedFromTheProjectsOwnRecordsUnderTheClassKey(t *testing.T) 
 func TestAPreviewReadsItsEnvironmentsValueOverTheClassWideOne(t *testing.T) {
 	t.Parallel()
 	held := fakeStores()
-	scope := values.Scope{Project: "shop", Class: edge.ClassPreview}
-	held.set(t, scope, values.Coordinate{Cell: values.Cell{Key: "MARK"}}, "class-wide")
-	held.set(t, scope, values.Coordinate{Cell: values.Cell{Key: "MARK"}, Environment: "pr-7"}, "pr-7-only")
+	scope := envvars.Scope{Project: "shop", Class: edge.ClassPreview}
+	held.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "MARK"}}, "class-wide")
+	held.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "MARK"}, Environment: "pr-7"}, "pr-7-only")
 
 	manifest := manifestOf("MARK")
 	manifest.Class, manifest.Environment = "preview", "pr-7"
@@ -130,7 +130,7 @@ func TestAnUnsetSecretIsReportedMissingRatherThanResolvedEmpty(t *testing.T) {
 func TestABindingRecordReachesTheAppUnderTheKeyTheSdkReadsItBy(t *testing.T) {
 	t.Parallel()
 	held := fakeStores()
-	scope := values.Scope{Project: "shop", Class: edge.ClassProduction}
+	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
 	held.publish(t, scope, "", "db--main", &bindingsv1.Binding{
 		Name:       "db--main",
 		Properties: &bindingsv1.Binding_Postgres{Postgres: &bindingsv1.PostgresProperties{Host: "h", Database: "d", Username: "u"}},
@@ -179,8 +179,8 @@ func TestTheManifestDrivesTheFirestoreAndKmsClientsTheRuntimeOpens(t *testing.T)
 	endpoint := servingFirestoreAndKMS(t)
 	clients := &ports.Clients{Namespace: "ocel", Project: "acme-prod", Region: "europe-west1", Endpoint: endpoint}
 	seeded := stores{records: ports.Records{Clients: clients}, sealer: ports.Cipher{Clients: clients}}
-	scope := values.Scope{Project: "shop", Class: edge.ClassProduction}
-	seeded.set(t, scope, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, "postgres://through-kms")
+	scope := envvars.Scope{Project: "shop", Class: edge.ClassProduction}
+	seeded.set(t, scope, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://through-kms")
 
 	manifest := manifestOf("DATABASE_URL")
 	manifest.Endpoint = endpoint

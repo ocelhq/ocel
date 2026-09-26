@@ -18,8 +18,8 @@ import (
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -139,16 +139,16 @@ func aBox(t *testing.T, root string) *box {
 	return b
 }
 
-func (b *box) store() values.Store { return values.Store{Records: b.records, Cipher: b.sealer} }
+func (b *box) store() envvars.Store { return envvars.Store{Records: b.records, Cipher: b.sealer} }
 
-func (b *box) set(t *testing.T, scope values.Scope, at values.Coordinate, plaintext string) {
+func (b *box) set(t *testing.T, scope envvars.Scope, at envvars.Coordinate, plaintext string) {
 	t.Helper()
 	if _, err := b.store().Set(context.Background(), scope, at, plaintext, nil); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func (b *box) bind(t *testing.T, scope values.Scope, environment, name string, binding *bindingsv1.Binding) {
+func (b *box) bind(t *testing.T, scope envvars.Scope, environment, name string, binding *bindingsv1.Binding) {
 	t.Helper()
 	pair, err := providerkit.BindingPair("terraform", binding)
 	if err != nil {
@@ -239,15 +239,15 @@ func TestAStoreNoDomainPointsAtHasNoPublicAddress(t *testing.T) {
 	}
 }
 
-var shop = values.Scope{Project: "shop", Class: edge.ClassProduction}
+var shop = envvars.Scope{Project: "shop", Class: edge.ClassProduction}
 
 func TestTheStoreResolvesEachKeyOffTheBoxUnderTheCallersOwnScopeAndEnvironment(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	b.set(t, shop, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, "postgres://class-wide")
-	b.set(t, shop, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}, Environment: "pr-7"}, "postgres://pr-7")
-	b.set(t, shop, values.Coordinate{Cell: values.Cell{Key: "SESSION", Folder: "/web"}}, "s3cret")
-	b.set(t, values.Scope{Project: "other", Class: edge.ClassProduction}, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, "postgres://other")
+	b.set(t, shop, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://class-wide")
+	b.set(t, shop, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}, Environment: "pr-7"}, "postgres://pr-7")
+	b.set(t, shop, envvars.Coordinate{Cell: envvars.Cell{Key: "SESSION", Folder: "/web"}}, "s3cret")
+	b.set(t, envvars.Scope{Project: "other", Class: edge.ClassProduction}, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://other")
 	b.dump(t)
 
 	resolved, err := b.resolver().Resolve(context.Background(), vars.Manifest{
@@ -300,7 +300,7 @@ func TestTheStoreResolvesABindingRecordUnderTheKeyTheRuntimeReadsItBy(t *testing
 func TestTheStoreOpensNothingUnderAClassWhoseKeyIsGone(t *testing.T) {
 	t.Parallel()
 	b := aBox(t, t.TempDir())
-	b.set(t, shop, values.Coordinate{Cell: values.Cell{Key: "DATABASE_URL"}}, "postgres://class-wide")
+	b.set(t, shop, envvars.Coordinate{Cell: envvars.Cell{Key: "DATABASE_URL"}}, "postgres://class-wide")
 	b.dump(t)
 	if err := os.Remove(vars.KeyPath(b.classRoot, edge.ClassProduction)); err != nil {
 		t.Fatal(err)

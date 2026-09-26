@@ -11,7 +11,7 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
@@ -176,11 +176,11 @@ func TestRenderAppBundle(t *testing.T) {
 	t.Run("references only the owners of its own live values", func(t *testing.T) {
 		t.Parallel()
 		cfg := previewOf(liveConfig(), "pr-42")
-		cfg.VarsReferenced = map[values.Coordinate]string{
-			{Cell: values.Cell{Key: "DB_PASSWORD"}}:                                          "platform",
-			{Cell: values.Cell{Folder: "/web", Key: "SESSION_SECRET"}, Environment: "pr-42"}: "identity",
-			{Cell: values.Cell{Key: "ADMIN_TOKEN"}}:                                          "ops",
-			{Cell: values.Cell{Key: "POSTHOG_ID"}}:                                           "analytics",
+		cfg.VarsReferenced = map[envvars.Coordinate]string{
+			{Cell: envvars.Cell{Key: "DB_PASSWORD"}}:                                          "platform",
+			{Cell: envvars.Cell{Folder: "/web", Key: "SESSION_SECRET"}, Environment: "pr-42"}: "identity",
+			{Cell: envvars.Cell{Key: "ADMIN_TOKEN"}}:                                          "ops",
+			{Cell: envvars.Cell{Key: "POSTHOG_ID"}}:                                           "analytics",
 		}
 
 		app := &contractv1.ManifestApp{

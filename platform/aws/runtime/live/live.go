@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
@@ -22,8 +22,8 @@ import (
 )
 
 type storeSource struct {
-	reader   values.View
-	cells    []values.Cell
+	reader   envvars.EnvironmentReader
+	cells    []envvars.Cell
 	bindings []live.Binding
 
 	mu       sync.Mutex
@@ -45,7 +45,7 @@ func (f *storeSource) Fetch(ctx context.Context) (map[string]string, error) {
 	return merged(resolved, f.bindings, records), nil
 }
 
-func (f *storeSource) unreportedGrantLag(records []values.Published) []string {
+func (f *storeSource) unreportedGrantLag(records []envvars.StoredBinding) []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.reported == nil {
@@ -69,7 +69,7 @@ type lagged struct {
 	Message string
 }
 
-func grantLag(bindings []live.Binding, records []values.Published) []lagged {
+func grantLag(bindings []live.Binding, records []envvars.StoredBinding) []lagged {
 	var out []lagged
 	for i, record := range records {
 		granted := bindings[i].Granted
@@ -100,7 +100,7 @@ func bindingNames(bindings []live.Binding) []string {
 	return names
 }
 
-func merged(resolved map[string]string, bindings []live.Binding, records []values.Published) map[string]string {
+func merged(resolved map[string]string, bindings []live.Binding, records []envvars.StoredBinding) map[string]string {
 	out := make(map[string]string, len(resolved)+len(records))
 	maps.Copy(out, resolved)
 	for i, record := range records {
@@ -134,10 +134,10 @@ func FromManifest(ctx context.Context, raw []byte) (*live.Values, error) {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
 	return live.New(&storeSource{
-		reader: values.View{
+		reader: envvars.EnvironmentReader{
 			Records:     awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: awsports.Table(manifest.Table)},
 			Cipher:      awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: awsports.Key(manifest.KeyARN)},
-			Scope:       values.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},
+			Scope:       envvars.Scope{Project: manifest.Slug, Class: edge.Class(manifest.Class)},
 			Environment: manifest.Environment,
 		},
 		cells:    manifestCells(manifest),
@@ -145,10 +145,10 @@ func FromManifest(ctx context.Context, raw []byte) (*live.Values, error) {
 	}, live.Keys(manifest.Keys, manifest.Bindings), manifest.Bindings, nil), nil
 }
 
-func manifestCells(m vars.Manifest) []values.Cell {
-	cells := make([]values.Cell, 0, len(m.Keys))
+func manifestCells(m vars.Manifest) []envvars.Cell {
+	cells := make([]envvars.Cell, 0, len(m.Keys))
 	for _, k := range m.Keys {
-		cells = append(cells, values.Cell{Folder: k.Folder, Key: k.Key})
+		cells = append(cells, envvars.Cell{Folder: k.Folder, Key: k.Key})
 	}
 	return cells
 }

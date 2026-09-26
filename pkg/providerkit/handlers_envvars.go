@@ -13,20 +13,20 @@ import (
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit/values"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (h *VarsService) values(tier environmentv1.Tier) (values.Store, edge.Class, error) {
+func (h *VarsService) values(tier environmentv1.Tier) (envvars.Store, edge.Class, error) {
 	vars, err := h.Source.Read()
 	if err != nil {
-		return values.Store{}, "", err
+		return envvars.Store{}, "", err
 	}
 	class := edge.ClassProduction
 	if tier == environmentv1.Tier_TIER_PREVIEW {
 		class = edge.ClassPreview
 	}
-	return values.Store{Records: vars.Records, Cipher: vars.Cipher}, class, nil
+	return envvars.Store{Records: vars.Records, Cipher: vars.Cipher}, class, nil
 }
 
 func (h *VarsService) verifyGrants(ctx context.Context, binding *bindingsv1.Binding) error {
@@ -43,15 +43,15 @@ func (h *VarsService) verifyGrants(ctx context.Context, binding *bindingsv1.Bind
 	return vars.VerifyGrants(ctx, bindingOf(binding))
 }
 
-func (h *VarsService) scoped(tier environmentv1.Tier, slug string) (values.Store, values.Scope, error) {
+func (h *VarsService) scoped(tier environmentv1.Tier, slug string) (envvars.Store, envvars.Scope, error) {
 	store, class, err := h.values(tier)
 	if err != nil {
-		return values.Store{}, values.Scope{}, err
+		return envvars.Store{}, envvars.Scope{}, err
 	}
-	if err := values.ValidateProject(slug); err != nil {
-		return values.Store{}, values.Scope{}, connect.NewError(connect.CodeInvalidArgument, err)
+	if err := envvars.ValidateProject(slug); err != nil {
+		return envvars.Store{}, envvars.Scope{}, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	return store, values.Scope{Project: slug, Class: class}, nil
+	return store, envvars.Scope{Project: slug, Class: class}, nil
 }
 
 func (h *VarsService) addressable(ctx context.Context, tier environmentv1.Tier, at *envvarsv1.Coordinate) error {
@@ -136,7 +136,7 @@ func (h *VarsService) GetValue(ctx context.Context, req *envvarsv1.GetValueReque
 		return nil, err
 	}
 	value, err := store.Get(ctx, scope, coordinateOf(req.GetCoordinate()), req.GetReveal())
-	if errors.Is(err, values.ErrNotFound) {
+	if errors.Is(err, envvars.ErrNotFound) {
 		return &envvarsv1.GetValueResponse{}, nil
 	}
 	if err != nil {
@@ -154,7 +154,7 @@ func (h *VarsService) RevealValues(ctx context.Context, req *envvarsv1.RevealVal
 	if err != nil {
 		return nil, err
 	}
-	cells := make([]values.Coordinate, 0, len(req.GetCells()))
+	cells := make([]envvars.Coordinate, 0, len(req.GetCells()))
 	for _, c := range req.GetCells() {
 		cells = append(cells, coordinateOf(c))
 	}
@@ -198,9 +198,9 @@ func (h *VarsService) SetReference(ctx context.Context, req *envvarsv1.SetRefere
 	if err != nil {
 		return nil, err
 	}
-	metadata, err := store.SetReference(ctx, scope, coordinateOf(req.GetCoordinate()), values.Target{
+	metadata, err := store.SetReference(ctx, scope, coordinateOf(req.GetCoordinate()), envvars.Target{
 		Project: target.GetSlug(),
-		Cell:    values.Cell{Folder: target.GetFolder(), Key: target.GetKey()},
+		Cell:    envvars.Cell{Folder: target.GetFolder(), Key: target.GetKey()},
 	})
 	if err != nil {
 		return nil, valuesError(err)
@@ -249,7 +249,7 @@ func (h *VarsService) SetBinding(ctx context.Context, req *envvarsv1.SetBindingR
 		return nil, err
 	}
 	binding := req.GetBinding()
-	if err := values.ValidateBindingName(req.GetEnvironment(), binding.GetName()); err != nil {
+	if err := envvars.ValidateBindingName(req.GetEnvironment(), binding.GetName()); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	if err := ValidatePublisher(req.GetOwner()); err != nil {
@@ -287,7 +287,7 @@ func (h *VarsService) RemoveBinding(ctx context.Context, req *envvarsv1.RemoveBi
 	if err := bindingTarget(req.GetTier(), req.GetEnvironment()); err != nil {
 		return nil, err
 	}
-	if err := values.ValidateBindingName(req.GetEnvironment(), req.GetName()); err != nil {
+	if err := envvars.ValidateBindingName(req.GetEnvironment(), req.GetName()); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	store, scope, err := h.scoped(req.GetTier(), req.GetSlug())
@@ -344,14 +344,14 @@ func bindingTarget(tier environmentv1.Tier, environment string) error {
 	return nil
 }
 
-func coordinateOf(c *envvarsv1.Coordinate) values.Coordinate {
-	return values.Coordinate{
-		Cell:        values.Cell{Folder: c.GetFolder(), Key: c.GetKey()},
+func coordinateOf(c *envvarsv1.Coordinate) envvars.Coordinate {
+	return envvars.Coordinate{
+		Cell:        envvars.Cell{Folder: c.GetFolder(), Key: c.GetKey()},
 		Environment: c.GetEnvironment(),
 	}
 }
 
-func coordinateProto(slug string, c values.Coordinate) *envvarsv1.Coordinate {
+func coordinateProto(slug string, c envvars.Coordinate) *envvarsv1.Coordinate {
 	return &envvarsv1.Coordinate{
 		Slug:        slug,
 		Folder:      c.Folder,
@@ -360,7 +360,7 @@ func coordinateProto(slug string, c values.Coordinate) *envvarsv1.Coordinate {
 	}
 }
 
-func metadataProto(scope values.Scope, m values.Metadata) *envvarsv1.ValueMetadata {
+func metadataProto(scope envvars.Scope, m envvars.Metadata) *envvarsv1.ValueMetadata {
 	out := &envvarsv1.ValueMetadata{
 		Coordinate: coordinateProto(scope.Project, m.Coordinate),
 		Version:    m.Version,
@@ -379,13 +379,13 @@ func metadataProto(scope values.Scope, m values.Metadata) *envvarsv1.ValueMetada
 
 func valuesError(err error) error {
 	switch {
-	case errors.Is(err, values.ErrStaleVersion):
+	case errors.Is(err, envvars.ErrStaleVersion):
 		return connect.NewError(connect.CodeAborted, err)
-	case errors.Is(err, values.ErrDangling):
+	case errors.Is(err, envvars.ErrDangling):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
-	case errors.Is(err, values.ErrWouldDeepen), errors.Is(err, values.ErrIsReference), errors.Is(err, values.ErrTooLarge):
+	case errors.Is(err, envvars.ErrWouldDeepen), errors.Is(err, envvars.ErrIsReference), errors.Is(err, envvars.ErrTooLarge):
 		return connect.NewError(connect.CodeInvalidArgument, err)
-	case errors.Is(err, values.ErrNotFound):
+	case errors.Is(err, envvars.ErrNotFound):
 		return connect.NewError(connect.CodeNotFound, err)
 	default:
 		return RefusalError(err)
@@ -394,14 +394,14 @@ func valuesError(err error) error {
 
 func bindingsError(err error) error {
 	switch {
-	case errors.Is(err, values.ErrClaimed):
+	case errors.Is(err, envvars.ErrClaimed):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
-	case errors.Is(err, values.ErrTornPair):
+	case errors.Is(err, envvars.ErrTornPair):
 		return connect.NewError(connect.CodeAborted, err)
 	case errors.Is(err, ErrUnsourced), errors.Is(err, ErrUnreadableRecord),
 		errors.Is(err, ErrUnscopedGrant), errors.Is(err, ErrUnattachedGrant):
 		return connect.NewError(connect.CodeInvalidArgument, err)
-	case errors.Is(err, values.ErrNotPublished):
+	case errors.Is(err, envvars.ErrNotPublished):
 		return connect.NewError(connect.CodeNotFound, err)
 	default:
 		return valuesError(err)

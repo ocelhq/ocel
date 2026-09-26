@@ -1,4 +1,4 @@
-package values
+package envvars
 
 import (
 	"fmt"
@@ -70,30 +70,30 @@ func plainFolder(folder string) string {
 	return folder
 }
 
-func Under(scope Scope, rest ...string) records.Name {
+func ScopedRecordName(scope Scope, rest ...string) records.Name {
 	return append(records.Name{records.RootValues, scope.Project, string(scope.Class)}, rest...)
 }
 
-func cellsName(scope Scope) records.Name { return Under(scope, "cells") }
+func cellsName(scope Scope) records.Name { return ScopedRecordName(scope, "cells") }
 
 func cellName(scope Scope, at Coordinate) records.Name {
 	at = at.canonical()
-	return Under(scope, "cells", records.Escape(at.Folder), records.Escape(at.Key), records.Escape(at.Environment))
+	return ScopedRecordName(scope, "cells", records.Escape(at.Folder), records.Escape(at.Key), records.Escape(at.Environment))
 }
 
 func historyName(scope Scope, at Coordinate) records.Name {
 	at = at.canonical()
-	return Under(scope, "history", records.Escape(at.Folder), records.Escape(at.Key), records.Escape(at.Environment))
+	return ScopedRecordName(scope, "history", records.Escape(at.Folder), records.Escape(at.Key), records.Escape(at.Environment))
 }
 
 func versionName(scope Scope, at Coordinate, version int64) records.Name {
 	return append(historyName(scope, at), fmt.Sprintf("%0*d", versionDigits, version))
 }
 
-func bindingsName(scope Scope) records.Name { return Under(scope, "bindings") }
+func bindingsName(scope Scope) records.Name { return ScopedRecordName(scope, "bindings") }
 
 func bindingName(scope Scope, binding string) records.Name {
-	return Under(scope, "bindings", records.Escape(binding))
+	return ScopedRecordName(scope, "bindings", records.Escape(binding))
 }
 
 func bindingRecordName(scope Scope, binding, environment string) records.Name {
@@ -104,19 +104,19 @@ func bindingValueName(scope Scope, binding, environment string) records.Name {
 	return append(bindingName(scope, binding), "values", records.Escape(canonicalEnvironment(environment)))
 }
 
-func bindingOwnersName(scope Scope) records.Name { return Under(scope, "bindingowners") }
+func bindingOwnersName(scope Scope) records.Name { return ScopedRecordName(scope, "bindingowners") }
 
 func bindingOwnerName(scope Scope, owner, environment string) records.Name {
-	return Under(scope, "bindingowners", records.Escape(owner), records.Escape(canonicalEnvironment(environment)))
+	return ScopedRecordName(scope, "bindingowners", records.Escape(owner), records.Escape(canonicalEnvironment(environment)))
 }
 
-func Refs(scope Scope) records.Name {
+func ReferencesRecordName(scope Scope) records.Name {
 	return records.Name{records.RootValueRefs, string(scope.Class), scope.Project}
 }
 
 func refsName(target Scope, at Coordinate) records.Name {
 	at = at.canonical()
-	return append(Refs(target), records.Escape(at.Folder), records.Escape(at.Key))
+	return append(ReferencesRecordName(target), records.Escape(at.Folder), records.Escape(at.Key))
 }
 
 func refName(target Scope, at Coordinate, from Scope, holds Coordinate) records.Name {
