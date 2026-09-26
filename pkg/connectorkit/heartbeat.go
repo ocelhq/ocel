@@ -73,8 +73,8 @@ func beatFor(spec Spec) (*beat, error) {
 // connector that is woken on a schedule rather than left running between
 // requests. Serve beats on its own; this is for the hosts that cannot.
 func Heartbeat(ctx context.Context, spec Spec) (int, error) {
-	if !spec.Identity.Held() {
-		return 0, errors.New("connectorkit: this connector holds no identity, so it has nothing to sign a heartbeat with")
+	if !spec.Identity.HasKey() {
+		return 0, errors.New("connectorkit: this connector has no identity, so it has nothing to sign a heartbeat with")
 	}
 	beating, err := beatFor(spec)
 	if err != nil {
@@ -136,11 +136,11 @@ func (b *beat) wipe() {
 			continue
 		}
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			fmt.Printf("connector %s: the console no longer holds this connector, and %s could not be removed: %v\n",
+			fmt.Printf("connector %s: the console no longer knows this connector, and %s could not be removed: %v\n",
 				b.connectorID, path, err)
 		}
 	}
-	fmt.Printf("connector %s: the console no longer holds this connector, so its key and config are gone\n", b.connectorID)
+	fmt.Printf("connector %s: the console no longer knows this connector, so its key and config are gone\n", b.connectorID)
 }
 
 func (b *beat) run(ctx context.Context, retired chan<- struct{}) {

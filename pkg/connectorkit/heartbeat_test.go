@@ -23,7 +23,7 @@ type sent struct {
 	Capabilities []string `json:"capabilities"`
 }
 
-func beating(t *testing.T, origin string) (held *beat, keyPath, configPath string) {
+func beating(t *testing.T, origin string) (heartbeat *beat, keyPath, configPath string) {
 	t.Helper()
 	root := t.TempDir()
 	keyPath = filepath.Join(root, "key")
@@ -63,18 +63,18 @@ func console(t *testing.T, answer func(seen int) int) (*httptest.Server, *atomic
 	return server, &count, bodies
 }
 
-func TestHeartbeatCarriesASelfSignedToken(t *testing.T) {
-	var carried string
+func TestHeartbeatSendsASelfSignedToken(t *testing.T) {
+	var authorization string
 	var path string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		carried = r.Header.Get("Authorization")
+		authorization = r.Header.Get("Authorization")
 		path = r.URL.Path
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
 
-	held, _, _ := beating(t, server.URL)
-	status, err := held.once(context.Background())
+	heartbeat, _, _ := beating(t, server.URL)
+	status, err := heartbeat.once(context.Background())
 	if err != nil {
 		t.Fatalf("once: %v", err)
 	}
@@ -85,11 +85,11 @@ func TestHeartbeatCarriesASelfSignedToken(t *testing.T) {
 		t.Fatalf("path = %q", path)
 	}
 
-	raw, bearing := strings.CutPrefix(carried, "Bearer ")
+	raw, bearing := strings.CutPrefix(authorization, "Bearer ")
 	if !bearing {
-		t.Fatalf("authorization = %q", carried)
+		t.Fatalf("authorization = %q", authorization)
 	}
-	public, err := base64.StdEncoding.DecodeString(held.identity.PublicKey())
+	public, err := base64.StdEncoding.DecodeString(heartbeat.identity.PublicKey())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +129,7 @@ func TestOneHeartbeatIsSentForAHostThatIsWokenOnASchedule(t *testing.T) {
 		t.Fatalf("status = %d after %d beats, want one 204", status, count.Load())
 	}
 	if len(*bodies) != 1 || (*bodies)[0].Version != "0.0.0-alpha" {
-		t.Fatalf("the console read %+v, want the version and grants one beat carries", *bodies)
+		t.Fatalf("the console read %+v, want the version and grants one beat sends", *bodies)
 	}
 	if _, err := Heartbeat(context.Background(), Spec{Config: spec.Config}); err == nil {
 		t.Fatal("a heartbeat with no identity was sent, and the console would refuse an unsigned one")
@@ -144,11 +144,11 @@ func TestHeartbeatWipesAfterA404ThatFollowsASuccess(t *testing.T) {
 		return http.StatusNotFound
 	})
 
-	held, keyPath, configPath := beating(t, server.URL)
+	heartbeat, keyPath, configPath := beating(t, server.URL)
 	retired := make(chan struct{})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	held.run(ctx, retired)
+	heartbeat.run(ctx, retired)
 
 	select {
 	case <-retired:
@@ -166,18 +166,18 @@ func TestHeartbeatWipesAfterA404ThatFollowsASuccess(t *testing.T) {
 	}
 	if len(*bodies) == 0 || (*bodies)[0].Version != "0.0.0-alpha" ||
 		len((*bodies)[0].Capabilities) != 1 || (*bodies)[0].Capabilities[0] != CapabilityEnvVarsRead {
-		t.Fatalf("the beat carried %+v", *bodies)
+		t.Fatalf("the beat sent %+v", *bodies)
 	}
 }
 
 func TestHeartbeatKeepsTheKeyWhenThe404ComesFirst(t *testing.T) {
 	server, count, _ := console(t, func(int) int { return http.StatusNotFound })
 
-	held, keyPath, configPath := beating(t, server.URL)
+	heartbeat, keyPath, configPath := beating(t, server.URL)
 	retired := make(chan struct{})
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
 	defer cancel()
-	held.run(ctx, retired)
+	heartbeat.run(ctx, retired)
 
 	select {
 	case <-retired:
@@ -198,11 +198,11 @@ func TestHeartbeatKeepsTheKeyWhenThe404ComesFirst(t *testing.T) {
 func TestHeartbeatKeepsGoingThroughOtherStatuses(t *testing.T) {
 	server, count, _ := console(t, func(int) int { return http.StatusInternalServerError })
 
-	held, keyPath, _ := beating(t, server.URL)
+	heartbeat, keyPath, _ := beating(t, server.URL)
 	retired := make(chan struct{})
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Millisecond)
 	defer cancel()
-	held.run(ctx, retired)
+	heartbeat.run(ctx, retired)
 
 	if count.Load() < 2 {
 		t.Fatalf("the connector stopped beating after %d", count.Load())

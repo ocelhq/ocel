@@ -98,7 +98,7 @@ func TestAuthHeader(t *testing.T) {
 		}
 	})
 
-	t.Run("rejects a header that carries no bearer token", func(t *testing.T) {
+	t.Run("rejects a header with no bearer token", func(t *testing.T) {
 		t.Parallel()
 		for _, tc := range []struct {
 			name  string

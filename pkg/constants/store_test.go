@@ -8,12 +8,12 @@ import (
 func TestTheSessionsBucketIsANameNoProjectCouldDeclare(t *testing.T) {
 	t.Parallel()
 
-	held := StoreSessionsBucket()
-	if !strings.HasPrefix(held, "ocel-") || strings.Contains(held, "--") {
-		t.Fatalf("StoreSessionsBucket() = %q, want a reserved name a declared bucket's own could never be", held)
+	bucket := StoreSessionsBucket()
+	if !strings.HasPrefix(bucket, "ocel-") || strings.Contains(bucket, "--") {
+		t.Fatalf("StoreSessionsBucket() = %q, want a reserved name a declared bucket's own could never be", bucket)
 	}
-	if len(held) < 3 || len(held) > 63 || strings.ToLower(held) != held {
-		t.Fatalf("StoreSessionsBucket() = %q, which is not a bucket name an s3 store accepts", held)
+	if len(bucket) < 3 || len(bucket) > 63 || strings.ToLower(bucket) != bucket {
+		t.Fatalf("StoreSessionsBucket() = %q, which is not a bucket name an s3 store accepts", bucket)
 	}
 }
 

@@ -23,13 +23,13 @@ func TestASocketListenerIsReachableByTheProxyAndNobodyWider(t *testing.T) {
 	if ln.Addr().Network() != "unix" || ln.Addr().String() != path {
 		t.Fatalf("listening on %s %s, want a unix socket at %s", ln.Addr().Network(), ln.Addr(), path)
 	}
-	held, err := os.Stat(path)
+	info, err := os.Stat(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if held.Mode().Perm() != socketMode {
-		t.Errorf("the socket stands at %04o, want %04o: the proxy connects over it and nothing else on the box should",
-			held.Mode().Perm(), socketMode)
+	if info.Mode().Perm() != socketMode {
+		t.Errorf("the socket's mode is %04o, want %04o: the proxy connects over it and nothing else on the box should",
+			info.Mode().Perm(), socketMode)
 	}
 }
 
@@ -95,11 +95,11 @@ func TestTheKeyIsMintedOnceAndThePublicHalfIsWhatIsPrinted(t *testing.T) {
 	if again != first {
 		t.Errorf("the connector minted a second key (%q then %q), so the console would verify a heartbeat against the wrong half", first, again)
 	}
-	held, err := os.Stat(key)
+	info, err := os.Stat(key)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if held.Mode().Perm() != 0o600 {
-		t.Errorf("the private key stands at %04o, want 0600", held.Mode().Perm())
+	if info.Mode().Perm() != 0o600 {
+		t.Errorf("the private key's mode is %04o, want 0600", info.Mode().Perm())
 	}
 }

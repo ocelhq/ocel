@@ -23,24 +23,24 @@ func (r *Reader) Read(p []byte) (int, error) { return r.body.Read(p) }
 func (r *Reader) Close() error { return r.body.Close() }
 
 // Attrs is what the bucket knew about the object when the read opened. It
-// describes the whole object, not the range this reader carries.
+// describes the whole object, not the range this reader streams.
 func (r *Reader) Attrs() *Object { return r.attrs }
 
 // NewReader opens the object under key for reading. It reports
-// [ErrObjectNotFound] when the bucket holds none.
+// [ErrObjectNotFound] when the bucket has none.
 func (b *BucketStore) NewReader(ctx context.Context, key string) (*Reader, error) {
 	return b.newReader(ctx, "NewReader", key, 0, -1)
 }
 
 // NewRangeReader opens length bytes of the object under key, starting at
 // offset. A negative length reads to the end. It reports [ErrObjectNotFound]
-// when the bucket holds no such object.
+// when the bucket has no such object.
 func (b *BucketStore) NewRangeReader(ctx context.Context, key string, offset, length int64) (*Reader, error) {
 	return b.newReader(ctx, "NewRangeReader", key, offset, length)
 }
 
 // ReadAll is every byte of the object under key. It reports
-// [ErrObjectNotFound] when the bucket holds none.
+// [ErrObjectNotFound] when the bucket has none.
 func (b *BucketStore) ReadAll(ctx context.Context, key string) ([]byte, error) {
 	reader, err := b.NewReader(ctx, key)
 	if err != nil {

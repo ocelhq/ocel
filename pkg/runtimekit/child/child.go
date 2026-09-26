@@ -64,11 +64,11 @@ func (p *Process) PID() int { return p.pid }
 func (p *Process) Exited() <-chan Exit { return p.exited }
 
 func (p *Process) Signal(sig os.Signal) error {
-	held, err := os.FindProcess(p.pid)
+	proc, err := os.FindProcess(p.pid)
 	if err != nil {
 		return err
 	}
-	return held.Signal(sig)
+	return proc.Signal(sig)
 }
 
 func (p *Process) Stop(grace time.Duration) Exit {

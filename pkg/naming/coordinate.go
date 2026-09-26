@@ -84,7 +84,7 @@ func (c Coordinate) Validate() error {
 		return fmt.Errorf("kind %q is not one of the deploy path's roles", c.Kind)
 	}
 	if c.Release.IsZero() {
-		return fmt.Errorf("coordinate %s/%s/%s carries no release", c.Project, c.Env, c.App)
+		return fmt.Errorf("coordinate %s/%s/%s has no release", c.Project, c.Env, c.App)
 	}
 	return nil
 }

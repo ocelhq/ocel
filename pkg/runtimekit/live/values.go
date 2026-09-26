@@ -179,15 +179,15 @@ func (l *Values) Project(root string) error {
 	if l == nil || len(l.keys) == 0 {
 		return nil
 	}
-	held, err := newProjection(root, l.keys)
+	proj, err := newProjection(root, l.keys)
 	if err != nil {
 		return err
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.projection = held
+	l.projection = proj
 	if l.generation > 0 {
-		return held.write(l.generation, l.shown)
+		return proj.write(l.generation, l.shown)
 	}
 	return nil
 }
@@ -305,7 +305,7 @@ func (l *Values) Missing() []string {
 	defer l.mu.Unlock()
 	var missing []string
 	for _, key := range l.keys {
-		if _, held := l.values[key]; !held {
+		if _, ok := l.values[key]; !ok {
 			missing = append(missing, key)
 		}
 	}

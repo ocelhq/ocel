@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-const shaped = "a target's parts carry lower-case letters, digits, dot, underscore, colon and dash, and nothing else"
+const shaped = "a target's parts contain lower-case letters, digits, dot, underscore, colon and dash, and nothing else"
 
 var segmentShape = regexp.MustCompile(`^[a-z0-9._:-]+$`)
 
@@ -25,7 +25,7 @@ func Fingerprint(vendor string, parts ...string) (string, error) {
 			return "", fmt.Errorf("part %d of this %s target is empty", at+1, vendor)
 		}
 		if !segmentShape.MatchString(part) {
-			return "", fmt.Errorf("%q cannot stand in a %s target: %s", part, vendor, shaped)
+			return "", fmt.Errorf("%q cannot appear in a %s target: %s", part, vendor, shaped)
 		}
 	}
 	return vendor + "/" + strings.Join(parts, "/"), nil

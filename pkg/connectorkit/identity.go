@@ -17,7 +17,7 @@ type Identity struct {
 
 func LoadOrCreateIdentity(path string) (Identity, error) {
 	if path == "" {
-		return Identity{}, errors.New("connectorkit: no key path, so this connector can hold no identity")
+		return Identity{}, errors.New("connectorkit: no key path, so this connector can have no identity")
 	}
 	read, err := os.ReadFile(path)
 	switch {
@@ -27,7 +27,7 @@ func LoadOrCreateIdentity(path string) (Identity, error) {
 			return Identity{}, fmt.Errorf("connector key %s is not base64: %w", path, decoded)
 		}
 		if len(seed) != ed25519.SeedSize {
-			return Identity{}, fmt.Errorf("connector key %s holds %d bytes, not %d", path, len(seed), ed25519.SeedSize)
+			return Identity{}, fmt.Errorf("connector key %s is %d bytes, not %d", path, len(seed), ed25519.SeedSize)
 		}
 		return Identity{private: ed25519.NewKeyFromSeed(seed)}, nil
 	case !errors.Is(err, os.ErrNotExist):
@@ -47,16 +47,16 @@ func LoadOrCreateIdentity(path string) (Identity, error) {
 	return Identity{private: ed25519.NewKeyFromSeed(seed)}, nil
 }
 
-// IdentityFromSeed holds the identity an ed25519 seed names, for a connector
+// IdentityFromSeed returns the identity an ed25519 seed names, for a connector
 // that reads its key out of a secret store rather than off a disk of its own.
 func IdentityFromSeed(seed []byte) (Identity, error) {
 	if len(seed) != ed25519.SeedSize {
-		return Identity{}, fmt.Errorf("connector key holds %d bytes, not %d", len(seed), ed25519.SeedSize)
+		return Identity{}, fmt.Errorf("connector key is %d bytes, not %d", len(seed), ed25519.SeedSize)
 	}
 	return Identity{private: ed25519.NewKeyFromSeed(seed)}, nil
 }
 
-func (i Identity) Held() bool {
+func (i Identity) HasKey() bool {
 	return i.private != nil
 }
 

@@ -38,7 +38,7 @@ func guarded(t *testing.T, token string) *httptest.Server {
 	return srv
 }
 
-func TestALoopbackRequestCarryingTheTokenReachesTheHandler(t *testing.T) {
+func TestALoopbackRequestWithTheTokenReachesTheHandler(t *testing.T) {
 	t.Parallel()
 
 	srv := guarded(t, "letmein")
@@ -65,9 +65,9 @@ func TestALoopbackRequestWithoutAValidTokenIsRefused(t *testing.T) {
 		name   string
 		header map[string]string
 	}{
-		{name: "carrying no token at all", header: nil},
-		{name: "carrying the wrong token", header: map[string]string{"Authorization": FormatAuthHeader("guessed")}},
-		{name: "carrying an unparseable authorization header", header: map[string]string{"Authorization": "letmein"}},
+		{name: "sending no token at all", header: nil},
+		{name: "sending the wrong token", header: map[string]string{"Authorization": FormatAuthHeader("guessed")}},
+		{name: "sending an unparseable authorization header", header: map[string]string{"Authorization": "letmein"}},
 		{name: "coming from a foreign origin", header: map[string]string{
 			"Authorization": FormatAuthHeader("letmein"),
 			"Origin":        "http://evil.example",

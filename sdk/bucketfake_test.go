@@ -66,37 +66,37 @@ func newFakeStore() *fakeStore {
 	}
 }
 
-func (s *fakeStore) info(key string, held *storedObject) *bucketv1.ObjectInfo {
+func (s *fakeStore) info(key string, obj *storedObject) *bucketv1.ObjectInfo {
 	return &bucketv1.ObjectInfo{
 		Key:         key,
-		Size:        int64(len(held.data)),
-		Etag:        held.etag,
-		ContentType: held.contentType,
+		Size:        int64(len(obj.data)),
+		Etag:        obj.etag,
+		ContentType: obj.contentType,
 		UploadedAt:  timestamppb.New(time.Unix(1700000000, 0).UTC()),
-		Metadata:    held.metadata,
+		Metadata:    obj.metadata,
 	}
 }
 
 func (s *fakeStore) put(key string, data []byte, contentType string, metadata map[string]string) *storedObject {
 	s.version++
-	held := &storedObject{
+	obj := &storedObject{
 		data:        slices.Clone(data),
 		contentType: contentType,
 		metadata:    metadata,
 		etag:        fmt.Sprintf("etag-%d", s.version),
 	}
-	s.objects[key] = held
-	return held
+	s.objects[key] = obj
+	return obj
 }
 
 func (s *fakeStore) Head(_ context.Context, req *bucketv1.HeadRequest) (*bucketv1.HeadResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	held, ok := s.objects[req.GetKey()]
+	obj, ok := s.objects[req.GetKey()]
 	if !ok {
 		return &bucketv1.HeadResponse{}, nil
 	}
-	return &bucketv1.HeadResponse{Object: s.info(req.GetKey(), held)}, nil
+	return &bucketv1.HeadResponse{Object: s.info(req.GetKey(), obj)}, nil
 }
 
 func (s *fakeStore) List(_ context.Context, req *bucketv1.ListRequest) (*bucketv1.ListResponse, error) {
@@ -137,11 +137,11 @@ func (s *fakeStore) Delete(_ context.Context, req *bucketv1.DeleteRequest) (*buc
 func (s *fakeStore) Copy(_ context.Context, req *bucketv1.CopyRequest) (*bucketv1.CopyResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	held, ok := s.objects[req.GetSourceKey()]
+	obj, ok := s.objects[req.GetSourceKey()]
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("no such key"))
 	}
-	copied := s.put(req.GetDestinationKey(), held.data, held.contentType, held.metadata)
+	copied := s.put(req.GetDestinationKey(), obj.data, obj.contentType, obj.metadata)
 	return &bucketv1.CopyResponse{Object: s.info(req.GetDestinationKey(), copied)}, nil
 }
 
@@ -210,12 +210,12 @@ func (s *fakeStore) CompleteMultipart(_ context.Context, req *bucketv1.CompleteM
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("no such upload"))
 	}
-	held, exists := s.objects[staged.key]
+	obj, exists := s.objects[staged.key]
 	if req.GetIfNoneMatch() == "*" && exists {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("the key is already taken"))
 	}
-	if tag := req.GetIfMatch(); tag != "" && (!exists || held.etag != tag) {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("the key does not carry that version"))
+	if tag := req.GetIfMatch(); tag != "" && (!exists || obj.etag != tag) {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("the object under the key is not at that version"))
 	}
 	numbers := make([]int32, 0, len(req.GetParts()))
 	for _, part := range req.GetParts() {
@@ -259,7 +259,7 @@ func (s *fakeStore) object(w http.ResponseWriter, r *http.Request) {
 	key := strings.TrimPrefix(r.URL.Path, "/o/")
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	held, exists := s.objects[key]
+	obj, exists := s.objects[key]
 
 	switch r.Method {
 	case http.MethodGet:
@@ -267,7 +267,7 @@ func (s *fakeStore) object(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "no such key", http.StatusNotFound)
 			return
 		}
-		data := held.data
+		data := obj.data
 		status := http.StatusOK
 		if span := r.Header.Get("Range"); span != "" {
 			from, to, ok := byteSpan(span, len(data))
@@ -278,7 +278,7 @@ func (s *fakeStore) object(w http.ResponseWriter, r *http.Request) {
 			data = data[from:to]
 			status = http.StatusPartialContent
 		}
-		w.Header().Set("Content-Type", held.contentType)
+		w.Header().Set("Content-Type", obj.contentType)
 		w.WriteHeader(status)
 		_, _ = w.Write(data)
 	case http.MethodPut:
@@ -286,8 +286,8 @@ func (s *fakeStore) object(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "the key is already taken", http.StatusPreconditionFailed)
 			return
 		}
-		if tag := r.Header.Get("If-Match"); tag != "" && (!exists || held.etag != tag) {
-			http.Error(w, "the key does not carry that version", http.StatusPreconditionFailed)
+		if tag := r.Header.Get("If-Match"); tag != "" && (!exists || obj.etag != tag) {
+			http.Error(w, "the object under the key is not at that version", http.StatusPreconditionFailed)
 			return
 		}
 		body, err := io.ReadAll(r.Body)
@@ -376,7 +376,7 @@ func serveStore(t *testing.T, store *fakeStore) *httptest.Server {
 	path, handler := bucketv1connect.NewBucketServiceHandler(store)
 	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer "+storeToken {
-			http.Error(w, "this request carries no valid session token", http.StatusForbidden)
+			http.Error(w, "this request has no valid session token", http.StatusForbidden)
 			return
 		}
 		handler.ServeHTTP(w, r)

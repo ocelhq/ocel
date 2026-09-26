@@ -71,7 +71,7 @@ func (r Rate) check() error {
 	case r.Unit == "":
 		return fmt.Errorf("rate %s names no unit", r.ID)
 	case r.Source == "" || r.Verified == "":
-		return fmt.Errorf("rate %s carries no source and verified date", r.ID)
+		return fmt.Errorf("rate %s has no source and verified date", r.ID)
 	case len(r.Steps) == 0:
 		return fmt.Errorf("rate %s has no price steps", r.ID)
 	}
@@ -145,7 +145,7 @@ func Merge(primary *Card, others ...*Card) *Card {
 	for _, card := range append([]*Card{primary}, others...) {
 		for _, rate := range card.Rates {
 			key := rateKey{rate.ID, rate.Region}
-			if _, held := merged.index[key]; held {
+			if _, ok := merged.index[key]; ok {
 				continue
 			}
 			merged.index[key] = len(merged.Rates)

@@ -66,7 +66,7 @@ func Postgres(name string, opts ...PostgresOption) *PostgresDB {
 func (p *PostgresDB) Name() string { return p.name }
 
 // ConnectionString is the postgres URL of the delivered binding: the record's url
-// verbatim when it carries one, and otherwise one built from its host, port,
+// verbatim when it has one, and otherwise one built from its host, port,
 // database and credentials, percent-encoded, with its tls mode as sslmode. It
 // fails when no binding was delivered for the name, and during discovery.
 func (p *PostgresDB) ConnectionString() (string, error) {
@@ -134,7 +134,7 @@ func trustCA(config *pgxpool.Config, ca string) error {
 	}
 	roots := x509.NewCertPool()
 	if !roots.AppendCertsFromPEM([]byte(ca)) {
-		return errors.New("ocel: the postgres binding's CA holds no PEM certificate")
+		return errors.New("ocel: the postgres binding's CA contains no PEM certificate")
 	}
 	config.ConnConfig.TLSConfig.RootCAs = roots
 	for _, fallback := range config.ConnConfig.Fallbacks {

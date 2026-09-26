@@ -10,7 +10,7 @@ import (
 )
 
 // An UnprovisionedError is returned by every accessor of a resource during
-// discovery, the pass that reads declarations before anything stands. Match it
+// discovery, the pass that reads declarations before anything is provisioned. Match it
 // with errors.As to keep a boot path alive when the resource is optional there.
 type UnprovisionedError struct {
 	// Resource is the declaration the accessor belongs to, as written in code.
@@ -30,7 +30,7 @@ func (e *UnprovisionedError) Error() string {
 
 // A MissingBindingError is returned by every accessor of a resource whose binding was
 // never delivered to the process. Match it with errors.As to tell a resource
-// this deploy does not carry from one that is misconfigured.
+// this deploy does not include from one that is misconfigured.
 type MissingBindingError struct {
 	// Key is the environment variable the binding arrives in.
 	Key string

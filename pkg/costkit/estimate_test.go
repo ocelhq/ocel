@@ -36,7 +36,7 @@ const card = `{
 
 var widgets = costkit.Table{
 	"test_widget": func(r *costkit.Subject) {
-		r.Add(costkit.Component{Name: "Standing", Unit: "hour", Rate: "widget/hours", Quantity: costkit.MonthlyHours})
+		r.Add(costkit.Component{Name: "Base", Unit: "hour", Rate: "widget/hours", Quantity: costkit.MonthlyHours})
 		r.Add(costkit.Component{Name: "Requests", Unit: "1M requests", Rate: "widget/requests", UsageBased: true,
 			Quantity: r.Usage("monthly_requests", costkit.Band{Light: 1, Moderate: 3, Heavy: 30})})
 		r.Add(costkit.Component{Name: "Storage", Unit: "GB-month", Rate: "widget/storage", UsageBased: true,
@@ -54,7 +54,7 @@ var widgets = costkit.Table{
 		if tags := r.List("tags"); len(tags) > 0 && tags[0] == "premium" {
 			rate = "gadget/hours"
 		}
-		r.Add(costkit.Component{Name: "Standing", Unit: "hour", Rate: rate, Quantity: costkit.MonthlyHours})
+		r.Add(costkit.Component{Name: "Base", Unit: "hour", Rate: rate, Quantity: costkit.MonthlyHours})
 	},
 	"test_nested": func(r *costkit.Subject) {
 		r.Add(costkit.Component{Name: "Storage", Unit: "GB-month", Rate: "widget/storage", UsageBased: true,
@@ -71,10 +71,10 @@ var widgets = costkit.Table{
 	},
 	"test_gated": func(r *costkit.Subject) {
 		if r.Bool("premium") {
-			r.Add(costkit.Component{Name: "Standing", Unit: "hour", Rate: "gadget/hours", Quantity: costkit.MonthlyHours, Needs: []string{"premium"}})
+			r.Add(costkit.Component{Name: "Base", Unit: "hour", Rate: "gadget/hours", Quantity: costkit.MonthlyHours, Needs: []string{"premium"}})
 			return
 		}
-		r.Add(costkit.Component{Name: "Standing", Unit: "hour", Rate: "widget/hours", Quantity: costkit.MonthlyHours, Needs: []string{"premium"}})
+		r.Add(costkit.Component{Name: "Base", Unit: "hour", Rate: "widget/hours", Quantity: costkit.MonthlyHours, Needs: []string{"premium"}})
 		r.Add(costkit.Component{Name: "Storage", Unit: "GB-month", Rate: "widget/storage", Quantity: decimal.NewFromInt(1), Needs: []string{"premium"}})
 	},
 }
@@ -379,7 +379,7 @@ func TestAnUnknownListIsNeverReadAsEmpty(t *testing.T) {
 	}
 }
 
-func TestARegionFallbackCarriesItsNoteOnce(t *testing.T) {
+func TestARegionFallbackAddsItsNoteOnce(t *testing.T) {
 	s := set()
 	s.Resources = []*costv1.Resource{
 		resource("a", "p/e", "test_tagged", "us-east-1", map[string]any{"tags": []any{"premium"}}),
@@ -465,7 +465,7 @@ func TestAUsageFileKeyThePricerNeverReadsIsRefused(t *testing.T) {
 	}
 }
 
-func TestATreeReportsAPropertyItCannotCarry(t *testing.T) {
+func TestATreeReportsAPropertyItCannotRepresent(t *testing.T) {
 	tree := &costkit.Tree{}
 	scope := tree.Scope("", costkit.ScopeProject, "shop")
 	tree.Add(scope, "test", "test_widget", "w", "eu-west-1", map[string]any{"bad": make(chan int)})

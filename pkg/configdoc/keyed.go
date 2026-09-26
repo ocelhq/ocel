@@ -49,23 +49,23 @@ func checkKeyed(path string, target reflect.Type, shorthands []string, value any
 		}
 	case map[string]any:
 		if len(spelled) != 1 {
-			return fmt.Errorf("%s holds exactly one of the keys %s", PathName(path), strings.Join(keys, ", "))
+			return fmt.Errorf("%s must set exactly one of the keys %s", PathName(path), strings.Join(keys, ", "))
 		}
-		for key, held := range spelled {
+		for key, value := range spelled {
 			at := slices.IndexFunc(fields, func(field jsonField) bool { return field.name == key })
 			if at < 0 {
 				return unknownKeyError(path, key, keys)
 			}
-			if held == nil {
+			if value == nil {
 				return nil
 			}
-			return checkValue(JoinPath(path, key), fields[at].kind, held)
+			return checkValue(JoinPath(path, key), fields[at].kind, value)
 		}
 	}
 	quoted := make([]string, 0, len(shorthands))
 	for _, shorthand := range shorthands {
 		quoted = append(quoted, strconv.Quote(shorthand))
 	}
-	return fmt.Errorf("%s must be one of %s, or an object holding one of the keys %s",
+	return fmt.Errorf("%s must be one of %s, or an object with one of the keys %s",
 		PathName(path), strings.Join(quoted, ", "), strings.Join(keys, ", "))
 }

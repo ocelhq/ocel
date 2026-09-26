@@ -187,18 +187,18 @@ func (s *Subject) value(path string) (any, bool) {
 func walk(root map[string]any, path string) (any, bool) {
 	var current any = root
 	for _, segment := range strings.Split(path, ".") {
-		switch held := current.(type) {
+		switch typed := current.(type) {
 		case map[string]any:
 			var ok bool
-			if current, ok = held[segment]; !ok {
+			if current, ok = typed[segment]; !ok {
 				return nil, false
 			}
 		case []any:
 			index, err := strconv.Atoi(segment)
-			if err != nil || index < 0 || index >= len(held) {
+			if err != nil || index < 0 || index >= len(typed) {
 				return nil, false
 			}
-			current = held[index]
+			current = typed[index]
 		default:
 			return nil, false
 		}
@@ -297,9 +297,9 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 			return nil, err
 		}
 		priced[resource.GetId()] = true
-		held := account.price(subject)
-		est.Resources = append(est.Resources, held.estimate)
-		switch held.estimate.Status {
+		priced := account.price(subject)
+		est.Resources = append(est.Resources, priced.estimate)
+		switch priced.estimate.Status {
 		case costv1.ResourceEstimate_STATUS_FREE:
 			est.Coverage.Free++
 		case costv1.ResourceEstimate_STATUS_NO_PRICE:
@@ -307,10 +307,10 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 		default:
 			est.Coverage.Supported++
 		}
-		fixed[resource.GetScope()] = fixed[resource.GetScope()].Add(held.fixed)
-		usage[resource.GetScope()] = usage[resource.GetScope()].Add(held.usage)
-		totalFixed = totalFixed.Add(held.fixed)
-		totalUsage = totalUsage.Add(held.usage)
+		fixed[resource.GetScope()] = fixed[resource.GetScope()].Add(priced.fixed)
+		usage[resource.GetScope()] = usage[resource.GetScope()].Add(priced.usage)
+		totalFixed = totalFixed.Add(priced.fixed)
+		totalUsage = totalUsage.Add(priced.usage)
 	}
 	if err := unpriced(req.GetUsage(), priced); err != nil {
 		return nil, err
@@ -324,8 +324,8 @@ func Estimate(card *Card, table Table, req *costv1.PriceRequest) (*costv1.Estima
 }
 
 func overridesFor(usage *costv1.Usage, id string) map[string]any {
-	if held := usage.GetResources()[id]; held != nil {
-		return held.AsMap()
+	if overrides := usage.GetResources()[id]; overrides != nil {
+		return overrides.AsMap()
 	}
 	return nil
 }

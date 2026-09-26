@@ -133,7 +133,7 @@ func TestStart(t *testing.T) {
 }
 
 func TestExited(t *testing.T) {
-	t.Run("carries the code the app died with", func(t *testing.T) {
+	t.Run("reports the code the app died with", func(t *testing.T) {
 		exit := waitExit(t, start(t, "exit:3"))
 
 		if exit.Code != 3 {
@@ -238,7 +238,7 @@ func TestWatchListening(t *testing.T) {
 			}
 			for _, want := range []string{strconv.Itoa(port), "exit status 3"} {
 				if !strings.Contains(err.Error(), want) {
-					t.Errorf("error = %v, want it to carry %q", err, want)
+					t.Errorf("error = %v, want it to contain %q", err, want)
 				}
 			}
 		case <-time.After(20 * time.Second):

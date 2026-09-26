@@ -27,7 +27,7 @@ const (
 )
 
 // ErrObjectNotFound is what every operation that cannot answer with nothing
-// reports when the bucket holds no object under the key. Match it with
+// reports when the bucket has no object under the key. Match it with
 // [errors.Is].
 var ErrObjectNotFound = errors.New("the bucket holds no object under this key")
 
@@ -36,7 +36,7 @@ var ErrObjectNotFound = errors.New("the bucket holds no object under this key")
 // [errors.Is].
 var ErrPreconditionFailed = errors.New("the object did not meet the condition this write carried")
 
-// An Object is what a bucket knows about one object it holds.
+// An Object is what a bucket knows about one object it stores.
 type Object struct {
 	// Key is the key the object is addressed by.
 	Key string
@@ -63,8 +63,8 @@ type SignedUpload struct {
 	// Headers are the headers the signature covers, which the caller must send
 	// unchanged.
 	Headers map[string]string
-	// Fields are the form fields a POST target carries, and are empty for a PUT
-	// target.
+	// Fields are the form fields the caller must send to a POST target, and are
+	// empty for a PUT target.
 	Fields map[string]string
 	// Expires is when the target stops being valid, and is the zero time when
 	// the lifetime was left to the runtime.
@@ -140,29 +140,29 @@ func Bucket(name string, opts ...BucketOption) *BucketStore {
 func (b *BucketStore) Name() string { return b.name }
 
 // Attrs is what the bucket knows about the object under key. It reports
-// [ErrObjectNotFound] when the bucket holds none.
+// [ErrObjectNotFound] when the bucket has none.
 func (b *BucketStore) Attrs(ctx context.Context, key string) (*Object, error) {
-	held, err := b.head(ctx, "Attrs", key)
+	obj, err := b.head(ctx, "Attrs", key)
 	if err != nil {
 		return nil, err
 	}
-	if held == nil {
+	if obj == nil {
 		return nil, objectNotFound(key)
 	}
-	return held, nil
+	return obj, nil
 }
 
-// Exists reports whether the bucket holds an object under key.
+// Exists reports whether the bucket has an object under key.
 func (b *BucketStore) Exists(ctx context.Context, key string) (bool, error) {
-	held, err := b.head(ctx, "Exists", key)
+	obj, err := b.head(ctx, "Exists", key)
 	if err != nil {
 		return false, err
 	}
-	return held != nil, nil
+	return obj != nil, nil
 }
 
-// Delete removes the objects under keys. A key the bucket does not hold is not
-// an error.
+// Delete removes the objects under keys. A key with no object under it is not an
+// error.
 func (b *BucketStore) Delete(ctx context.Context, keys ...string) error {
 	if len(keys) == 0 {
 		return nil
@@ -179,7 +179,7 @@ func (b *BucketStore) Delete(ctx context.Context, keys ...string) error {
 }
 
 // Copy copies the object under src to dst within the same bucket. It reports
-// [ErrObjectNotFound] when the bucket holds nothing under src.
+// [ErrObjectNotFound] when the bucket has nothing under src.
 func (b *BucketStore) Copy(ctx context.Context, dst, src string) (*Object, error) {
 	reached, err := b.runtime("Copy")
 	if err != nil {
@@ -196,7 +196,7 @@ func (b *BucketStore) Copy(ctx context.Context, dst, src string) (*Object, error
 	return objectFrom(res.GetObject()), nil
 }
 
-// List walks the objects the bucket holds, a page at a time, and yields the
+// List walks the objects in the bucket, a page at a time, and yields the
 // first error it meets before stopping.
 func (b *BucketStore) List(ctx context.Context, opts ...ListOption) iter.Seq2[*Object, error] {
 	return func(yield func(*Object, error) bool) {
@@ -221,8 +221,8 @@ func (b *BucketStore) List(ctx context.Context, opts ...ListOption) iter.Seq2[*O
 				yield(nil, err)
 				return
 			}
-			for _, held := range res.GetObjects() {
-				if !yield(objectFrom(held), nil) {
+			for _, info := range res.GetObjects() {
+				if !yield(objectFrom(info), nil) {
 					return
 				}
 			}
@@ -286,7 +286,7 @@ func (b *BucketStore) SignedUpload(ctx context.Context, key string, opts ...Sign
 }
 
 // PublicURL is the address the object under key is served at anonymously. It
-// fails on a bucket that carries no public address.
+// fails on a bucket that has no public address.
 func (b *BucketStore) PublicURL(key string) (*url.URL, error) {
 	reached, err := b.runtime("PublicURL")
 	if err != nil {
@@ -318,11 +318,11 @@ func (b *BucketStore) head(ctx context.Context, access, key string) (*Object, er
 	if err != nil {
 		return nil, refused(key, err)
 	}
-	held := res.GetObject()
-	if held == nil {
+	info := res.GetObject()
+	if info == nil {
 		return nil, nil
 	}
-	return objectFrom(held), nil
+	return objectFrom(info), nil
 }
 
 func (b *BucketStore) sign(
@@ -423,7 +423,7 @@ func bearing(token string) connect.Interceptor {
 }
 
 func objectFrom(wire *bucketv1.ObjectInfo) *Object {
-	held := &Object{
+	obj := &Object{
 		Key:         wire.GetKey(),
 		Size:        wire.GetSize(),
 		ETag:        wire.GetEtag(),
@@ -431,9 +431,9 @@ func objectFrom(wire *bucketv1.ObjectInfo) *Object {
 		Metadata:    wire.GetMetadata(),
 	}
 	if at := wire.GetUploadedAt(); at != nil {
-		held.UploadedAt = at.AsTime()
+		obj.UploadedAt = at.AsTime()
 	}
-	return held
+	return obj
 }
 
 func objectNotFound(key string) error {

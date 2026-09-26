@@ -25,7 +25,7 @@ type InlineRecord struct {
 }
 
 type Ref struct {
-	Env string `json:"$env" doc:"The ocel variable holding this value, set per class and environment with ocel env set. The app never reads it as a variable of its own."`
+	Env string `json:"$env" doc:"The ocel variable containing this value, set per class and environment with ocel env set. The app never reads it as a variable of its own."`
 }
 
 type Text struct {
@@ -76,7 +76,7 @@ type bucketShape struct {
 	Endpoint        Text  `json:"endpoint" doc:"The address of the S3-compatible store the bucket lives in, such as https://<account>.r2.cloudflarestorage.com."`
 	Region          Text  `json:"region" doc:"The region requests to the store are signed for; auto for R2."`
 	Bucket          Text  `json:"bucket" doc:"The bucket's name in that store."`
-	Prefix          *Text `json:"prefix,omitempty" doc:"The prefix every key the app writes is kept under, so one bucket can hold several resources or environments."`
+	Prefix          *Text `json:"prefix,omitempty" doc:"The prefix every key the app writes is kept under, so one bucket can store several resources or environments."`
 	PathStyle       bool  `json:"pathStyle,omitempty" doc:"Address the bucket as a path on the endpoint rather than as a subdomain of it, for stores that serve no virtual hosts."`
 	AccessKeyID     Ref   `json:"accessKeyId" doc:"The public half of the key pair the runtime reaches the store with."`
 	SecretAccessKey Ref   `json:"secretAccessKey" doc:"The secret half of that key pair."`
@@ -225,22 +225,22 @@ func (Bindings) checkShape(path string, value any) error {
 
 func checkBinding(path, kind string, value any) error {
 	form, inline := inlineForms[kind]
-	switch held := value.(type) {
+	switch typed := value.(type) {
 	case string:
 		return nil
 	case map[string]any:
 		if !inline {
 			return fmt.Errorf("%s must be \"@<name>\": a %s is bound to a record published elsewhere", PathName(path), kind)
 		}
-		keys := keysOf(held)
+		keys := keysOf(typed)
 		if !tiered(keys) {
-			return form.check(path, held)
+			return form.check(path, typed)
 		}
 		for _, tier := range keys {
 			if !slices.Contains(tiers, tier) {
 				return UnknownKeyError{Path: JoinPath(path, tier), Known: tiers}
 			}
-			record, ok := held[tier].(map[string]any)
+			record, ok := typed[tier].(map[string]any)
 			if !ok {
 				return typeError(JoinPath(path, tier), fmt.Sprintf("the %s record %s binds", kind, tier))
 			}
@@ -260,7 +260,7 @@ func checkBinding(path, kind string, value any) error {
 func checkPostgres(path string, record map[string]any) error {
 	if _, byURL := record["url"]; byURL {
 		if others := slices.DeleteFunc(keysOf(record), func(key string) bool { return key == "url" }); len(others) > 0 {
-			return fmt.Errorf("%s sets url and %s: url is the whole connection, so it stands alone — drop url, or drop %s", PathName(path), strings.Join(others, ", "), strings.Join(others, ", "))
+			return fmt.Errorf("%s sets url and %s: url is the whole connection, so nothing else goes with it — drop url, or drop %s", PathName(path), strings.Join(others, ", "), strings.Join(others, ", "))
 		}
 		return checkObject(path, reflect.TypeFor[postgresURL](), record)
 	}

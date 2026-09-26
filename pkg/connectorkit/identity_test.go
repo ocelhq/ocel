@@ -15,8 +15,8 @@ func TestLoadOrCreateIdentityKeepsTheKeyItWrote(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	if !first.Held() {
-		t.Fatal("a created identity holds no key")
+	if !first.HasKey() {
+		t.Fatal("a created identity has no key")
 	}
 
 	info, err := os.Stat(at)
@@ -36,7 +36,7 @@ func TestLoadOrCreateIdentityKeepsTheKeyItWrote(t *testing.T) {
 	}
 }
 
-func TestAnIdentityReadOutOfASecretStoreIsTheOneAFileWouldHold(t *testing.T) {
+func TestAnIdentityReadOutOfASecretStoreIsTheOneAFileWouldContain(t *testing.T) {
 	at := filepath.Join(t.TempDir(), "key")
 	filed, err := LoadOrCreateIdentity(at)
 	if err != nil {
@@ -64,11 +64,11 @@ func TestAnIdentityReadOutOfASecretStoreIsTheOneAFileWouldHold(t *testing.T) {
 }
 
 func TestPublicKeyIsThirtyTwoRawBytes(t *testing.T) {
-	held, err := LoadOrCreateIdentity(filepath.Join(t.TempDir(), "key"))
+	identity, err := LoadOrCreateIdentity(filepath.Join(t.TempDir(), "key"))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
-	raw, err := base64.StdEncoding.DecodeString(held.PublicKey())
+	raw, err := base64.StdEncoding.DecodeString(identity.PublicKey())
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}

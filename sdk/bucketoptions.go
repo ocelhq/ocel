@@ -74,7 +74,7 @@ type ifNotExistsOption struct{}
 
 func (ifNotExistsOption) applyWrite(w *writeOptions) { w.ifNoneMatch = "*" }
 
-// IfNotExists writes only when the bucket holds no object under the key, and
+// IfNotExists writes only when the bucket has no object under the key, and
 // refuses with [ErrPreconditionFailed] when it does.
 func IfNotExists() WriteOption { return ifNotExistsOption{} }
 
@@ -82,7 +82,7 @@ type ifMatchOption string
 
 func (o ifMatchOption) applyWrite(w *writeOptions) { w.ifMatch = string(o) }
 
-// IfMatch writes only when the object under the key still carries this etag,
+// IfMatch writes only when the object under the key still has this etag,
 // and refuses with [ErrPreconditionFailed] when it does not.
 func IfMatch(etag string) WriteOption { return ifMatchOption(etag) }
 
@@ -97,7 +97,7 @@ type limitOption int32
 
 func (o limitOption) applyList(l *listOptions) { l.limit = int32(o) }
 
-// Limit is how many objects one page of a listing carries, at most 1000. The
+// Limit is how many objects one page of a listing contains, at most 1000. The
 // listing itself is not bounded by it.
 func Limit(objects int) ListOption { return limitOption(objects) }
 

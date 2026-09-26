@@ -111,8 +111,8 @@ func TestNodePassEvaluate(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Evaluate: %v", err)
 		}
-		vpc, held := results[0].Patches["lambda"]["vpcConfig"].(map[string]any)
-		if !held {
+		vpc, ok := results[0].Patches["lambda"]["vpcConfig"].(map[string]any)
+		if !ok {
 			t.Fatalf("lambda patch = %v, want a vpcConfig", results[0].Patches["lambda"])
 		}
 		placeholder, named := vpc["subnetIds"].(map[string]any)
@@ -214,7 +214,7 @@ func TestNodePassEvaluate(t *testing.T) {
 		}
 	})
 
-	t.Run("tags reach the provider as the union of the rules that carried them", func(t *testing.T) {
+	t.Run("tags reach the provider as the union of the rules that set them", func(t *testing.T) {
 		t.Parallel()
 
 		results, err := evaluateWith(t, functionRequest(), map[string]string{

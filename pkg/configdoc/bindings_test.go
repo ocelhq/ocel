@@ -21,8 +21,8 @@ func bindingsSchema(t *testing.T) map[string]any {
 	if err := json.Unmarshal(generated, &schema); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	raw, held := schema.Properties["bindings"]
-	if !held {
+	raw, ok := schema.Properties["bindings"]
+	if !ok {
 		t.Fatal("the schema has no bindings property")
 	}
 	var shape map[string]any
@@ -56,7 +56,7 @@ func TestBindingsSchemaKeysAreExactlyTheBindableTypes(t *testing.T) {
 	slices.Sort(want)
 
 	if !slices.Equal(got, want) {
-		t.Errorf("bindings keys = %v, want %v — the schema must not carry a second list of bindable types", got, want)
+		t.Errorf("bindings keys = %v, want %v — the schema must not contain a second list of bindable types", got, want)
 	}
 }
 

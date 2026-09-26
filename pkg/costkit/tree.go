@@ -45,11 +45,11 @@ func (t *Tree) Add(scope, vendor, typ, name, region string, properties map[strin
 		Region:  region,
 		Unknown: unknown,
 	}
-	held, err := Struct(properties)
+	props, err := Struct(properties)
 	if err != nil && t.err == nil {
 		t.err = fmt.Errorf("%s: %w", resource.Id, err)
 	}
-	resource.Properties = held
+	resource.Properties = props
 	t.resources = append(t.resources, resource)
 	return resource
 }

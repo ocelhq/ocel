@@ -40,14 +40,14 @@ func TestABucketReadsBackWhatItWrote(t *testing.T) {
 		t.Errorf("Attrs() = %+v", attrs)
 	}
 	if attrs.Metadata["owner"] != "ada" {
-		t.Errorf("Attrs().Metadata = %v, want the metadata the write carried", attrs.Metadata)
+		t.Errorf("Attrs().Metadata = %v, want the metadata the write sent", attrs.Metadata)
 	}
 	if attrs.ETag == "" || attrs.UploadedAt.IsZero() {
 		t.Errorf("Attrs() = %+v, want an etag and an upload time", attrs)
 	}
 }
 
-func TestABodyOneRequestCarriesStartsNoMultipartUpload(t *testing.T) {
+func TestABodyOneRequestCanSendStartsNoMultipartUpload(t *testing.T) {
 	fake := newFakeStore()
 	store := bucketFixture(t, fake)
 
@@ -118,7 +118,7 @@ func TestARangeReaderReadsTheBytesItAsksFor(t *testing.T) {
 	}
 }
 
-func TestAKeyTheBucketDoesNotHoldIsAnErrObjectNotFound(t *testing.T) {
+func TestAKeyTheBucketDoesNotHaveIsAnErrObjectNotFound(t *testing.T) {
 	store := bucketFixture(t, newFakeStore())
 
 	for _, tc := range []struct {
@@ -139,12 +139,12 @@ func TestAKeyTheBucketDoesNotHoldIsAnErrObjectNotFound(t *testing.T) {
 		}
 	}
 
-	held, err := store.Exists(t.Context(), "missing")
+	exists, err := store.Exists(t.Context(), "missing")
 	if err != nil {
 		t.Fatalf("Exists() error = %v", err)
 	}
-	if held {
-		t.Error("Exists() = true, want false for a key the bucket does not hold")
+	if exists {
+		t.Error("Exists() = true, want false for a key with no object under it")
 	}
 }
 
@@ -189,11 +189,11 @@ func TestAListingWalksEveryPageItself(t *testing.T) {
 	}
 
 	var walked []string
-	for held, err := range store.List(t.Context(), ocel.Prefix("a/"), ocel.Limit(2)) {
+	for obj, err := range store.List(t.Context(), ocel.Prefix("a/"), ocel.Limit(2)) {
 		if err != nil {
 			t.Fatalf("List() error = %v", err)
 		}
-		walked = append(walked, held.Key)
+		walked = append(walked, obj.Key)
 	}
 
 	want := []string{"a/1", "a/2", "a/3", "a/4", "a/5"}
@@ -202,7 +202,7 @@ func TestAListingWalksEveryPageItself(t *testing.T) {
 	}
 }
 
-func TestDeletingAKeyTheBucketDoesNotHoldIsSilent(t *testing.T) {
+func TestDeletingAKeyTheBucketDoesNotHaveIsSilent(t *testing.T) {
 	store := bucketFixture(t, newFakeStore())
 	if err := store.WriteAll(t.Context(), "here", []byte("x")); err != nil {
 		t.Fatalf("WriteAll() error = %v", err)
@@ -215,11 +215,11 @@ func TestDeletingAKeyTheBucketDoesNotHoldIsSilent(t *testing.T) {
 		t.Fatalf("Delete() with no keys error = %v", err)
 	}
 
-	held, err := store.Exists(t.Context(), "here")
+	exists, err := store.Exists(t.Context(), "here")
 	if err != nil {
 		t.Fatalf("Exists() error = %v", err)
 	}
-	if held {
+	if exists {
 		t.Error("Exists() = true after the key was deleted")
 	}
 }
@@ -279,7 +279,7 @@ func TestABodyTooBigForOneRequestGoesUpInParts(t *testing.T) {
 		t.Errorf("multipart uploads = %v, want the body to have gone up in parts", fake.created)
 	}
 	if len(fake.aborted) != 0 {
-		t.Errorf("aborted = %v, want a settled upload to abort nothing", fake.aborted)
+		t.Errorf("aborted = %v, want a completed upload to abort nothing", fake.aborted)
 	}
 }
 
@@ -301,8 +301,8 @@ func TestAPartTheStoreRefusesThrowsTheWholeUploadAway(t *testing.T) {
 	if len(fake.aborted) != 1 {
 		t.Errorf("aborted = %v, want the upload thrown away exactly once", fake.aborted)
 	}
-	if held, _ := store.Exists(t.Context(), "big"); held {
-		t.Error("the bucket holds the object although no part settled")
+	if exists, _ := store.Exists(t.Context(), "big"); exists {
+		t.Error("the bucket has the object although the upload never completed")
 	}
 }
 
@@ -355,7 +355,7 @@ func TestASignedUrlIsSignedForSomeoneOutside(t *testing.T) {
 	}
 }
 
-func TestASignedUploadCarriesTheFormItsPolicySigned(t *testing.T) {
+func TestASignedUploadIncludesTheFormItsPolicySigned(t *testing.T) {
 	fake := newFakeStore()
 	store := bucketFixture(t, fake)
 

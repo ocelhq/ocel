@@ -98,7 +98,7 @@ func TestBindingTypeOf(t *testing.T) {
 		{nil, bindingsv1.BindingType_BINDING_TYPE_UNSPECIFIED},
 	} {
 		if got := BindingTypeOf(tc.binding); got != tc.want {
-			t.Errorf("BindingTypeOf(a binding holding %T) = %v, want %v", tc.binding.GetProperties(), got, tc.want)
+			t.Errorf("BindingTypeOf(a binding whose properties are %T) = %v, want %v", tc.binding.GetProperties(), got, tc.want)
 		}
 	}
 }
@@ -114,7 +114,7 @@ func TestBindingProperties(t *testing.T) {
 		t.Errorf("BindingProperty(port) = %v, %v", got, ok)
 	}
 	if got, ok := BindingProperty(binding, "tlsMode"); !ok || got != "POSTGRES_TLS_MODE_VERIFY_FULL" {
-		t.Errorf("BindingProperty(tlsMode) = %v, %v, want the name the record's json carries", got, ok)
+		t.Errorf("BindingProperty(tlsMode) = %v, %v, want the name the record's json uses", got, ok)
 	}
 	if got, ok := BindingProperty(binding, "host"); !ok || got != "h" {
 		t.Errorf("BindingProperty(host) = %v, %v", got, ok)
@@ -151,6 +151,6 @@ func TestCustomBindingProperties(t *testing.T) {
 		}
 	}
 	if _, ok := BindingProperty(binding, "host"); ok {
-		t.Error("BindingProperty(host) found on a record that carries no such key")
+		t.Error("BindingProperty(host) found on a record that has no such key")
 	}
 }
