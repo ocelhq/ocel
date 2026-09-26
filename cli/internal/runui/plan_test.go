@@ -231,7 +231,7 @@ func TestAGroupCalledKeptThatDeletesIsRenderedAsWhatItDoes(t *testing.T) {
 	want := `
 This will release the preview wildcard:
 
-– cloudflare/edge
+~ cloudflare/edge
     – *.preview.shop.com  Cloudflare::WorkerRoute
 
 1 to delete, 1 unchanged.
@@ -322,5 +322,34 @@ Proposed changes to the production bootstrap:
 	}
 	if got := ConfirmVerb(adopting(planv1.Change_ACTION_CREATE, dir, engine)); got != "Create these" {
 		t.Errorf("ConfirmVerb() = %q, want a plan that creates and adopts to read as one that creates", got)
+	}
+}
+
+func TestAGroupIsRolledUpByTheRuleTheProviderRollsItsOwnGroupsUpBy(t *testing.T) {
+	t.Parallel()
+
+	rows := func(actions ...planv1.Change_Action) []*planv1.Change {
+		held := make([]*planv1.Change, 0, len(actions))
+		for at, action := range actions {
+			held = append(held, &planv1.Change{Kind: "fs:dir", Name: "/etc/ocel/" + string(rune('a'+at)), Action: action})
+		}
+		return held
+	}
+	for name, tc := range map[string]struct {
+		changes []*planv1.Change
+		want    planv1.Change_Action
+	}{
+		"a create beside an adopt": {rows(planv1.Change_ACTION_CREATE, planv1.Change_ACTION_ADOPT), planv1.Change_ACTION_UPDATE},
+		"a create beside a keep":   {rows(planv1.Change_ACTION_CREATE, planv1.Change_ACTION_KEEP), planv1.Change_ACTION_UPDATE},
+		"a delete beside an adopt": {rows(planv1.Change_ACTION_DELETE, planv1.Change_ACTION_ADOPT), planv1.Change_ACTION_UPDATE},
+		"an adopt beside a keep":   {rows(planv1.Change_ACTION_ADOPT, planv1.Change_ACTION_KEEP), planv1.Change_ACTION_KEEP},
+		"creates alone":            {rows(planv1.Change_ACTION_CREATE, planv1.Change_ACTION_CREATE), planv1.Change_ACTION_CREATE},
+	} {
+		for _, sent := range []planv1.Change_Action{planv1.Change_ACTION_UNSPECIFIED, planv1.Change_ACTION_KEEP} {
+			shown, _ := readPlan(&planv1.ChangePlan{Groups: []*planv1.ChangeGroup{{Kind: "stack", Name: "core", Action: sent, Changes: tc.changes}}})
+			if len(shown) == 1 && shown[0].GetAction() != tc.want {
+				t.Errorf("%s, sent as %s, is shown as %s, want %s: the provider rolls the same rows up to %s", name, sent, shown[0].GetAction(), tc.want, tc.want)
+			}
+		}
 	}
 }

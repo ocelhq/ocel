@@ -65,19 +65,19 @@ func RollUp(changes []Change) (ChangeAction, string) {
 	if len(changes) == 0 {
 		return ActionUpdate, DetailUnavailable
 	}
-	creates, keeps, deletes := 0, 0, 0
+	creates, unwritten, deletes := 0, 0, 0
 	for _, change := range changes {
-		switch change.Action {
-		case ActionCreate:
+		switch {
+		case !change.Action.Writes():
+			unwritten++
+		case change.Action == ActionCreate:
 			creates++
-		case ActionKeep, ActionAdopt:
-			keeps++
-		case ActionDelete, ActionDisableThenDelete:
+		case change.Action == ActionDelete || change.Action == ActionDisableThenDelete:
 			deletes++
 		}
 	}
 	switch {
-	case len(changes) == keeps:
+	case len(changes) == unwritten:
 		return ActionKeep, reasonCurrent
 	case len(changes) == creates:
 		return ActionCreate, ""

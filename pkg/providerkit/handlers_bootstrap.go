@@ -228,6 +228,15 @@ func changeAction(drawn planv1.Change_Action) (ChangeAction, error) {
 
 func planAction(action ChangeAction) planv1.Change_Action { return planActions[action] }
 
+func RollUpProto(changes []*planv1.Change) planv1.Change_Action {
+	held := make([]Change, 0, len(changes))
+	for _, change := range changes {
+		held = append(held, Change{Action: changeActions[change.GetAction()]})
+	}
+	action, _ := RollUp(held)
+	return planAction(action)
+}
+
 func BootstrapStatusProto(standing BootstrapState, writing WrittenBy, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {
 	status := &contractv1.BootstrapStatus{
 		Tier:           tier,
