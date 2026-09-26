@@ -15,7 +15,7 @@ func (b *Board) admit() http.Handler {
 }
 
 func (b *Board) serveAdmit(w http.ResponseWriter, r *http.Request) {
-	if r.Context().Value(frontKey{}) == nil {
+	if arrivedOver(r) != overFront {
 		w.WriteHeader(http.StatusForbidden)
 		return
 	}

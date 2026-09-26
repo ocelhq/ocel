@@ -71,31 +71,49 @@ func New(table *Table, relayed ...netip.Prefix) *Board {
 		Handler:           board,
 		ReadHeaderTimeout: ReadHeaderTimeout,
 		IdleTimeout:       idleTimeout,
-		ConnContext:       fronted,
+		ConnContext:       arriving,
 	}
-	board.admitter = &http.Server{Handler: board.admit(), ReadHeaderTimeout: ReadHeaderTimeout, ConnContext: fronted}
+	board.admitter = &http.Server{Handler: board.admit(), ReadHeaderTimeout: ReadHeaderTimeout, ConnContext: arriving}
 	return board
 }
 
-func fronted(ctx context.Context, conn net.Conn) context.Context {
-	if _, front := conn.(frontConn); front {
-		return context.WithValue(ctx, frontKey{}, true)
+func arriving(ctx context.Context, conn net.Conn) context.Context {
+	if arrived, marked := conn.(arrivedConn); marked {
+		return context.WithValue(ctx, arrivalKey{}, arrived.over)
 	}
 	return ctx
 }
 
-type frontKey struct{}
+type arrival int
 
-type frontConn struct{ net.Conn }
+const (
+	overFront arrival = iota + 1
+	overHTTPS
+)
 
-type frontListener struct{ net.Listener }
+type arrivalKey struct{}
 
-func (l frontListener) Accept() (net.Conn, error) {
+func arrivedOver(r *http.Request) arrival {
+	over, _ := r.Context().Value(arrivalKey{}).(arrival)
+	return over
+}
+
+type arrivedConn struct {
+	net.Conn
+	over arrival
+}
+
+type markedListener struct {
+	net.Listener
+	over arrival
+}
+
+func (l markedListener) Accept() (net.Conn, error) {
 	conn, err := l.Listener.Accept()
 	if err != nil {
 		return nil, err
 	}
-	return frontConn{conn}, nil
+	return arrivedConn{conn, l.over}, nil
 }
 
 func upstreamTransport(dial func(ctx context.Context, network, address string) (net.Conn, error)) *http.Transport {
@@ -115,10 +133,16 @@ func (b *Board) Serve(listener net.Listener) error {
 	return err
 }
 
-func (b *Board) ServeFront(listener net.Listener) error { return b.Serve(frontListener{listener}) }
+func (b *Board) ServeFront(listener net.Listener) error {
+	return b.Serve(markedListener{listener, overFront})
+}
+
+func (b *Board) ServeHTTPS(listener net.Listener) error {
+	return b.Serve(markedListener{listener, overHTTPS})
+}
 
 func (b *Board) ServeAdmit(listener net.Listener) error {
-	err := b.admitter.Serve(frontListener{listener})
+	err := b.admitter.Serve(markedListener{listener, overFront})
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
@@ -229,11 +253,15 @@ const (
 	hearsNothing hearing = iota
 	hearsScheme
 	hearsClient
+	stampsHTTPS
 )
 
 func (b *Board) hears(r *http.Request) hearing {
-	if r.Context().Value(frontKey{}) != nil {
+	switch arrivedOver(r) {
+	case overFront:
 		return hearsClient
+	case overHTTPS:
+		return stampsHTTPS
 	}
 	peer, err := netip.ParseAddrPort(r.RemoteAddr)
 	if err == nil && slices.ContainsFunc(b.relayed, func(prefix netip.Prefix) bool { return prefix.Contains(peer.Addr().Unmap()) }) {
@@ -244,7 +272,10 @@ func (b *Board) hears(r *http.Request) hearing {
 
 func (b *Board) heard(r *http.Request) string {
 	proto, host := "http", r.Host
-	if b.hears(r) != hearsNothing {
+	switch b.hears(r) {
+	case stampsHTTPS:
+		proto = "https"
+	case hearsScheme, hearsClient:
 		if said := r.Header.Get("X-Forwarded-Proto"); said != "" {
 			proto = said
 		}
@@ -260,6 +291,10 @@ func (b *Board) forwarded(out *httputil.ProxyRequest) {
 	switch b.hears(out.In) {
 	case hearsNothing:
 		out.SetXForwarded()
+		return
+	case stampsHTTPS:
+		out.SetXForwarded()
+		out.Out.Header.Set("X-Forwarded-Proto", "https")
 		return
 	case hearsScheme:
 		out.SetXForwarded()

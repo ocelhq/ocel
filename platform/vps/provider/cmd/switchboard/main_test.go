@@ -438,18 +438,150 @@ func TestARelayedNetworkTheSwitchboardHoldsNoAddressOnIsRefused(t *testing.T) {
 	}
 }
 
+func TestServeStampsHTTPSOnItsHTTPSListenerWhateverThePeerSends(t *testing.T) {
+	seen := make(chan http.Header, 1)
+	upstream := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		seen <- r.Header.Clone()
+	}))
+	t.Cleanup(upstream.Close)
+	https := freeAddress(t)
+	served(t, tableFile(t, map[string]string{"shop.example.com": strings.TrimPrefix(upstream.URL, "http://")}), "--https-listen", https, "--relay", "127.0.0.1")
+
+	request, err := http.NewRequest(http.MethodGet, "http://"+https+"/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Host = "shop.example.com"
+	request.Header.Set("X-Forwarded-Proto", "http")
+	request.Header.Set("X-Forwarded-Host", "bank.example.com")
+	request.Header.Set("X-Forwarded-For", "6.6.6.6")
+	request.Header.Set("X_Forwarded_Proto", "http")
+	request.Header.Set("X_Forwarded_Host", "bank.example.com")
+	request.Header.Set("X-Real-Ip", "6.6.6.6")
+	request.Header.Set("True-Client-Ip", "6.6.6.6")
+	said, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = said.Body.Close()
+	heard := <-seen
+	for header, want := range map[string]string{
+		"X-Forwarded-Proto": "https",
+		"X-Forwarded-Host":  "shop.example.com",
+		"X-Forwarded-For":   "127.0.0.1",
+		"X_Forwarded_Proto": "",
+		"X_Forwarded_Host":  "",
+		"X-Real-Ip":         "",
+		"True-Client-Ip":    "",
+	} {
+		if got := heard.Get(header); got != want {
+			t.Errorf("the app heard %s %q over the https listener, want %q: a peer there is stamped https for the Host it asked and heard on nothing it says, even one the board relays from", header, got, want)
+		}
+	}
+}
+
+func interfaces(held ...string) func() ([]net.Addr, error) {
+	return func() ([]net.Addr, error) {
+		var addrs []net.Addr
+		for _, spelled := range held {
+			ip, network, err := net.ParseCIDR(spelled)
+			if err != nil {
+				return nil, err
+			}
+			addrs = append(addrs, &net.IPNet{IP: ip, Mask: network.Mask})
+		}
+		return addrs, nil
+	}
+}
+
+func TestTheHTTPSListenerOnANetworkBindsOnlyTheSwitchboardsAddressOnIt(t *testing.T) {
+	const relayed = "ocel"
+	held := interfaces("127.0.0.1/8", "172.19.0.2/16", "10.0.1.7/24", "fd00:c0::7/64")
+	resolve := func(_ context.Context, name string) ([]netip.Addr, error) {
+		switch name {
+		case switchboard.Name + ".coolify":
+			return []netip.Addr{netip.MustParseAddr("10.0.1.7"), netip.MustParseAddr("fd00:c0::7")}, nil
+		case switchboard.Name + "." + relayed:
+			return []netip.Addr{netip.MustParseAddr("172.19.0.2")}, nil
+		default:
+			return nil, fmt.Errorf("no such host %s", name)
+		}
+	}
+	got, err := httpsBinds(t.Context(), "coolify:8443", resolve, held)
+	if err != nil {
+		t.Fatalf("httpsBinds() = %v", err)
+	}
+	if want := []string{"10.0.1.7:8443", "[fd00:c0::7]:8443"}; !slices.Equal(got, want) {
+		t.Errorf("httpsBinds(coolify:8443) = %v, want %v: the listener that stamps https is reached from the network the user's proxy sits on and from no other the switchboard joins", got, want)
+	}
+}
+
+func TestTheHTTPSListenerAtAnAddressBindsThatAddressAsSpelled(t *testing.T) {
+	unasked := func(context.Context, string) ([]netip.Addr, error) {
+		t.Fatal("an address was resolved as a network")
+		return nil, nil
+	}
+	for _, spelled := range []string{"127.0.0.1:8443", "[::1]:8443", "10.0.1.7:8443"} {
+		got, err := httpsBinds(t.Context(), spelled, unasked, interfaces())
+		if err != nil || !slices.Equal(got, []string{spelled}) {
+			t.Errorf("httpsBinds(%s) = %v, %v; want it bound as spelled", spelled, got, err)
+		}
+	}
+}
+
+func TestTheHTTPSListenerRefusesAnAddressThatBindsEveryInterface(t *testing.T) {
+	unasked := func(context.Context, string) ([]netip.Addr, error) {
+		t.Fatal("an address was resolved as a network")
+		return nil, nil
+	}
+	for _, spelled := range []string{":8443", "0.0.0.0:8443", "[::]:8443", "[::ffff:0.0.0.0]:8443", "[::%lo]:8443"} {
+		got, err := httpsBinds(t.Context(), spelled, unasked, interfaces("127.0.0.1/8", "172.19.0.2/16", "10.0.1.7/24"))
+		if err == nil {
+			t.Errorf("httpsBinds(%s) = %v, want a refusal: every interface includes each project network the switchboard joins, and every app container there would be stamped https", spelled, got)
+			continue
+		}
+		if !strings.Contains(err.Error(), "--https-listen") {
+			t.Errorf("httpsBinds(%s) = %v, want the flag named", spelled, err)
+		}
+	}
+}
+
+func TestTheHTTPSListenerRefusesANetworkTheSwitchboardHoldsNoAddressOn(t *testing.T) {
+	held := interfaces("172.21.0.2/16")
+	for name, resolve := range map[string]func(context.Context, string) ([]netip.Addr, error){
+		"a name nothing answers for": func(context.Context, string) ([]netip.Addr, error) {
+			return nil, errors.New("no such host")
+		},
+		"a name answered with an address held elsewhere": func(context.Context, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("10.0.1.9")}, nil
+		},
+	} {
+		got, err := httpsBinds(t.Context(), "coolify:8443", resolve, held)
+		if err == nil {
+			t.Errorf("%s: httpsBinds() = %v, want a refusal: a listener bound anywhere else would stamp https for peers the user's proxy is not", name, got)
+			continue
+		}
+		if !strings.Contains(err.Error(), "--https-listen") || !strings.Contains(err.Error(), switchboard.Name+".coolify") {
+			t.Errorf("%s: httpsBinds() = %v, want the flag and the name it resolved named", name, err)
+		}
+	}
+}
+
 func TestServeRefusesATableAFrontSocketOrARelayItCannotTake(t *testing.T) {
 	controlAt(t)
 	for what, argv := range map[string][]string{
-		"a table that is not there":     {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", filepath.Join(t.TempDir(), "routing.json")},
-		"a table it cannot render":      {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", documentAt(t, []byte(`{"grace":"soon"}`))},
-		"a front socket it cannot open": {"serve", "--listen", freeAddress(t), "--front", filepath.Join(t.TempDir(), "absent", "front.sock"), "--admit", admitAt(t), "--table", tableFile(t, nil)},
-		"no front socket":               {"serve", "--listen", freeAddress(t), "--admit", admitAt(t), "--table", tableFile(t, nil)},
-		"no admit socket":               {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", tableFile(t, nil)},
-		"a relay that is no prefix":     {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--relay", "ocel-proxy"},
-		"a relayed network unnamed":     {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--relay-network", ""},
-		"no listen address":             {"serve", "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil)},
-		"no table":                      {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t)},
+		"a table that is not there":                   {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", filepath.Join(t.TempDir(), "routing.json")},
+		"a table it cannot render":                    {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", documentAt(t, []byte(`{"grace":"soon"}`))},
+		"a front socket it cannot open":               {"serve", "--listen", freeAddress(t), "--front", filepath.Join(t.TempDir(), "absent", "front.sock"), "--admit", admitAt(t), "--table", tableFile(t, nil)},
+		"no front socket":                             {"serve", "--listen", freeAddress(t), "--admit", admitAt(t), "--table", tableFile(t, nil)},
+		"no admit socket":                             {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--table", tableFile(t, nil)},
+		"a relay that is no prefix":                   {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--relay", "ocel-proxy"},
+		"a relayed network unnamed":                   {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--relay-network", ""},
+		"an https listener with no port":              {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--https-listen", "coolify"},
+		"an https listener on a network it is not on": {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--https-listen", "ocel-no-such-network.invalid:8443"},
+		"an https listener it cannot bind":            {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil), "--https-listen", "192.0.2.1:8443"},
+		"no listen address":                           {"serve", "--front", frontAt(t), "--admit", admitAt(t), "--table", tableFile(t, nil)},
+		"no table":                                    {"serve", "--listen", freeAddress(t), "--front", frontAt(t), "--admit", admitAt(t)},
 	} {
 		if code, _, errs := ran(t, argv...); code != exitRefused {
 			t.Errorf("serve with %s = %d, %q, want %d", what, code, errs, exitRefused)
