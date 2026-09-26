@@ -211,7 +211,7 @@ func TestAScanReadsNoCredentialsAndRunsNoGcloud(t *testing.T) {
 	withoutAnAmbientProject(t)
 	withGcloudNaming(t, "gcloud-config-prod")
 
-	client, pricer := configured(t, provider.Options{"project": "acme-prod", "region": "europe-west1"})
+	client, costs := configured(t, provider.Options{"project": "acme-prod", "region": "europe-west1"})
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
@@ -224,11 +224,11 @@ func TestAScanReadsNoCredentialsAndRunsNoGcloud(t *testing.T) {
 			t.Errorf("%s is named for the project gcloud's config names; a scan reads the project it was told and nothing ambient", r.GetName())
 		}
 	}
-	if _, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set}); err != nil {
+	if _, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set}); err != nil {
 		t.Fatalf("Price() = %v, want an estimate with no credentials and no gcloud consulted", err)
 	}
 
-	client, pricer = configured(t, provider.Options{"region": "europe-west1"})
+	client, costs = configured(t, provider.Options{"region": "europe-west1"})
 	_, err = client.Shape(context.Background(), &contractv1.ShapeRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
@@ -241,7 +241,7 @@ func TestAScanReadsNoCredentialsAndRunsNoGcloud(t *testing.T) {
 			t.Errorf("Shape() refused with %q, want it to name %s among the places a scan reads a project from", err, named)
 		}
 	}
-	if _, err := pricer.Price(context.Background(), &costv1.PriceRequest{Resources: set}); err != nil {
+	if _, err := costs.Price(context.Background(), &costv1.PriceRequest{Resources: set}); err != nil {
 		t.Fatalf("Price() with no project named = %v, want an estimate: a rate card needs no project", err)
 	}
 }
