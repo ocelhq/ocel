@@ -120,44 +120,44 @@ func TestRestampingTurnsOnlyOnTheStacksCurrentTags(t *testing.T) {
 	}{
 		{
 			name:     "one development build to the next",
-			current:  Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+1111111"},
-			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+2222222"},
+			current:  Stamp{Schema: provider.BootstrapSchema, Digest: digest, WrittenBy: "dev+1111111"},
+			incoming: Stamp{Schema: provider.BootstrapSchema, Digest: digest, WrittenBy: "dev+2222222"},
 		},
 		{
 			name:     "a development build gives way to a release",
-			current:  Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+1111111"},
-			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "1.4.0"},
+			current:  Stamp{Schema: provider.BootstrapSchema, Digest: digest, WrittenBy: "dev+1111111"},
+			incoming: Stamp{Schema: provider.BootstrapSchema, Digest: digest, WrittenBy: "1.4.0"},
 			writes:   true,
 		},
 		{
 			name:     "a release gives way to a development build",
-			current:  Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "1.4.0"},
-			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+1111111"},
+			current:  Stamp{Schema: provider.BootstrapSchema, Digest: digest, WrittenBy: "1.4.0"},
+			incoming: Stamp{Schema: provider.BootstrapSchema, Digest: digest, WrittenBy: "dev+1111111"},
 			writes:   true,
 		},
 		{
 			name:     "the template moved under two development builds",
-			current:  Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+1111111"},
-			incoming: Stamp{Schema: RequiredSchema, Digest: "cafe", WrittenBy: "dev+2222222"},
+			current:  Stamp{Schema: provider.BootstrapSchema, Digest: digest, WrittenBy: "dev+1111111"},
+			incoming: Stamp{Schema: provider.BootstrapSchema, Digest: "cafe", WrittenBy: "dev+2222222"},
 			writes:   true,
 		},
 		{
 			name:     "the schema moved under two development builds",
-			current:  Stamp{Schema: RequiredSchema - 1, Digest: digest, WrittenBy: "dev+1111111"},
-			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+2222222"},
+			current:  Stamp{Schema: provider.BootstrapSchema - 1, Digest: digest, WrittenBy: "dev+1111111"},
+			incoming: Stamp{Schema: provider.BootstrapSchema, Digest: digest, WrittenBy: "dev+2222222"},
 			writes:   true,
 		},
 		{
 			name:      "the stack has no writer tag at all",
-			current:   Stamp{Schema: RequiredSchema, Digest: digest},
+			current:   Stamp{Schema: provider.BootstrapSchema, Digest: digest},
 			unwritten: true,
-			incoming:  Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+2222222"},
+			incoming:  Stamp{Schema: provider.BootstrapSchema, Digest: digest, WrittenBy: "dev+2222222"},
 			writes:    true,
 		},
 		{
 			name:     "the stack was written by an unknown writer",
-			current:  Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: provider.WrittenBy("").String()},
-			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+2222222"},
+			current:  Stamp{Schema: provider.BootstrapSchema, Digest: digest, WrittenBy: provider.WrittenBy("").String()},
+			incoming: Stamp{Schema: provider.BootstrapSchema, Digest: digest, WrittenBy: "dev+2222222"},
 			writes:   true,
 		},
 	} {
@@ -182,7 +182,7 @@ func TestRestampingTurnsOnlyOnTheStacksCurrentTags(t *testing.T) {
 
 func TestChangeSetsAreDiscardedWhateverEndsTheRun(t *testing.T) {
 	staleBody := "AWSTemplateFormatVersion: '2010-09-09'\nResources: {}\nOutputs: {}\n"
-	staleTags := stampTags(defaultNamespace, Stamp{Schema: RequiredSchema, Digest: "beef", WrittenBy: "1.4.0"})
+	staleTags := stampTags(defaultNamespace, Stamp{Schema: provider.BootstrapSchema, Digest: "beef", WrittenBy: "1.4.0"})
 
 	t.Run("a caller context that is already gone still takes the change set down", func(t *testing.T) {
 		stacks, _ := installedBootstrap(t)

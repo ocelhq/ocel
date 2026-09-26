@@ -41,7 +41,7 @@ func removingBootstrapper(t *testing.T, class string) Bootstrap {
 		t.Fatalf("StackNameFor(%s): %v", class, err)
 	}
 	isrStack := defaultNamespace.FeatureStackName(bootstrap.FeatureISR, class)
-	varsKeyStack := defaultNamespace.FeatureStackName(bootstrap.FeatureVarsKey, class)
+	varsKeyStack := defaultNamespace.FeatureStackName(provider.FeatureVarsKey, class)
 	cfn := b.CFN.(*teardownCFN)
 	cfn.present[isrStack] = bootstrap.Deployed{Present: true}
 	cfn.present[varsKeyStack] = bootstrap.Deployed{Present: true}
@@ -152,7 +152,7 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 	}
 
 	front := groupNamed(plan, string(cloudflareKind)+"/edge")
-	if front == nil || front.Kind != provider.EdgeGroupKind || front.Action != provider.ActionDelete {
+	if front == nil || front.Kind != edge.EdgeGroupKind || front.Action != provider.ActionDelete {
 		t.Fatalf("plan groups = %s, want the edge under its own vendor", groupNames(plan))
 	}
 	if front.Feature != bootstrap.FeatureCloudflareEdge {
@@ -219,7 +219,7 @@ func TestPlanRemovalLeavesOutAnEdgeThatSaysNothingAboutItsOwnRemoval(t *testing.
 		t.Fatalf("PlanRemove: %v", err)
 	}
 	for _, group := range plan.Groups {
-		if group.Kind == provider.EdgeGroupKind {
+		if group.Kind == edge.EdgeGroupKind {
 			t.Errorf("plan includes %+v for an edge that says nothing about its own removal", group)
 		}
 	}
@@ -383,7 +383,7 @@ func TestPlanRemovalSaysWhatDroppingTheVarsKeyStrands(t *testing.T) {
 		t.Fatalf("PlanRemove: %v", err)
 	}
 
-	group := groupNamed(plan, "aws/"+defaultNamespace.FeatureStackName(bootstrap.FeatureVarsKey, bootstrap.ClassProduction))
+	group := groupNamed(plan, "aws/"+defaultNamespace.FeatureStackName(provider.FeatureVarsKey, bootstrap.ClassProduction))
 	if group == nil {
 		t.Fatalf("plan groups = %s, want the stack the vars key is provisioned in", groupNames(plan))
 	}

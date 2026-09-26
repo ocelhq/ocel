@@ -13,7 +13,7 @@ func EdgeGroup(kind edge.Kind, feature string, planned []edge.PlanChange) (provi
 		return provider.ChangeGroup{}, err
 	}
 	group := provider.ChangeGroup{
-		Kind:    provider.EdgeGroupKind,
+		Kind:    edge.EdgeGroupKind,
 		Name:    edge.EdgeGroupName(kind),
 		Feature: feature,
 		Changes: changes,

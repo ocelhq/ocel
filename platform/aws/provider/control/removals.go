@@ -93,7 +93,7 @@ func (b Bootstrap) removedEdgeGroup(ctx context.Context, class edge.Class, front
 		return nil, err
 	}
 	return &provider.ChangeGroup{
-		Kind:    provider.EdgeGroupKind,
+		Kind:    edge.EdgeGroupKind,
 		Name:    edge.EdgeGroupName(front.Kind()),
 		Feature: bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), front.Kind()),
 		Action:  provider.ActionDelete,

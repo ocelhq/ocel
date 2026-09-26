@@ -38,8 +38,6 @@ const funcDirSuffix = ".func"
 
 const entryFuncDirName = "index" + funcDirSuffix
 
-const configFileName = appbuild.FunctionConfigFile
-
 const buildPlanFileName = "build-plan.json"
 
 const traceStrategy = "trace"
@@ -485,21 +483,21 @@ func readFunction(outputDir, functionsDir, funcDir string) (manifestbuilder.Func
 	}
 	route := strings.TrimSuffix(filepath.ToSlash(routeRel), funcDirSuffix)
 
-	configPath := filepath.Join(funcDir, configFileName)
+	configPath := filepath.Join(funcDir, appbuild.FunctionConfigFile)
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return manifestbuilder.Function{}, fmt.Errorf("%s: missing %s", funcDir, configFileName)
+			return manifestbuilder.Function{}, fmt.Errorf("%s: missing %s", funcDir, appbuild.FunctionConfigFile)
 		}
 		return manifestbuilder.Function{}, err
 	}
 
 	var fc appbuild.FunctionConfig
 	if err := json.Unmarshal(data, &fc); err != nil {
-		return manifestbuilder.Function{}, fmt.Errorf("%s: invalid %s: %w", configPath, configFileName, err)
+		return manifestbuilder.Function{}, fmt.Errorf("%s: invalid %s: %w", configPath, appbuild.FunctionConfigFile, err)
 	}
 	if fc.Framework.Name == "" || fc.Handler == "" || fc.App == "" {
-		return manifestbuilder.Function{}, fmt.Errorf("%s: %s requires framework, handler, and app", configPath, configFileName)
+		return manifestbuilder.Function{}, fmt.Errorf("%s: %s requires framework, handler, and app", configPath, appbuild.FunctionConfigFile)
 	}
 
 	return manifestbuilder.Function{

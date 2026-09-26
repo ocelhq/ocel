@@ -254,7 +254,7 @@ func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.Boot
 func soleRaisedEdge(plan provider.Plan) string {
 	var kinds []edge.Kind
 	for _, group := range plan.Groups {
-		if group.Kind != provider.EdgeGroupKind {
+		if group.Kind != edge.EdgeGroupKind {
 			continue
 		}
 		if kind, ok := edge.EdgeGroupKindOf(group.Name); ok && !slices.Contains(kinds, kind) {

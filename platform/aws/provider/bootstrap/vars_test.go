@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -97,8 +99,8 @@ func varsKeyBootstraps() []struct {
 		class    string
 		template string
 	}{
-		{"production", ClassProduction, featureTemplate(FeatureVarsKey, ClassProduction)},
-		{"preview", ClassPreview, featureTemplate(FeatureVarsKey, ClassPreview)},
+		{"production", ClassProduction, featureTemplate(provider.FeatureVarsKey, ClassProduction)},
+		{"preview", ClassPreview, featureTemplate(provider.FeatureVarsKey, ClassPreview)},
 	}
 }
 
@@ -259,7 +261,7 @@ func TestVarsDescriptions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseVarsTemplate(t, tc.template)
 
-			key := parseVarsTemplate(t, featureTemplate(FeatureVarsKey, tc.class))
+			key := parseVarsTemplate(t, featureTemplate(provider.FeatureVarsKey, tc.class))
 			described := map[string]string{
 				"VarsKey":        key.Resources["VarsKey"].Properties.Description,
 				"VarsKeyAlias":   key.Resources["VarsKeyAlias"].Metadata.Description,
@@ -316,12 +318,12 @@ func TestRunVars(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-		req := Request{Features: []string{FeatureVarsKey}}
+		req := Request{Features: []string{provider.FeatureVarsKey}}
 		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction, req, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
 
-		tmpl := parseVarsTemplate(t, stacks.template(defaultNamespace.FeatureStackName(FeatureVarsKey, ClassProduction)))
+		tmpl := parseVarsTemplate(t, stacks.template(defaultNamespace.FeatureStackName(provider.FeatureVarsKey, ClassProduction)))
 		for _, name := range []string{"VarsKey", "VarsKeyAlias"} {
 			if _, ok := tmpl.Resources[name]; !ok {
 				t.Errorf("the vars-key stack does not declare %s", name)
@@ -340,7 +342,7 @@ func TestRunVars(t *testing.T) {
 			t.Fatalf("Run: %v", err)
 		}
 
-		stack := defaultNamespace.FeatureStackName(FeatureVarsKey, ClassProduction)
+		stack := defaultNamespace.FeatureStackName(provider.FeatureVarsKey, ClassProduction)
 		if slices.Contains(stacks.stacks(), stack) {
 			t.Errorf("%s exists after a run that never asked for it; bootstrap creates nothing that bills while idle", stack)
 		}

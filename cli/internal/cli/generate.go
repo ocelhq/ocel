@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/node"
+	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 )
 
 var generateCmd = &cobra.Command{
@@ -72,7 +73,7 @@ func runGenerate(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, std
 }
 
 func generateClientAccessors(cfg *projectconfig.Config, keys []clientenv.Key) (int, error) {
-	apps := []clientenv.App{{Dir: cfg.Dir, ClientBundle: discovery.ClientBundle(envwire.RootFramework, cfg.Dir)}}
+	apps := []clientenv.App{{Dir: cfg.Dir, ClientBundle: discovery.ClientBundle(appbuild.FrameworkNode, cfg.Dir)}}
 	if len(cfg.Apps) > 0 {
 		apps = apps[:0]
 		for _, a := range cfg.Apps {

@@ -26,8 +26,8 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 		options = append(options, bootstrap.WithVarsKey(p.options.VarsKey))
 	}
 	features := req.Features
-	if !slices.Contains(features, bootstrap.FeatureVarsKey) {
-		features = append(slices.Clone(features), bootstrap.FeatureVarsKey)
+	if !slices.Contains(features, provider.FeatureVarsKey) {
+		features = append(slices.Clone(features), provider.FeatureVarsKey)
 	}
 	bootstrapShape, err := bootstrap.Shape(p.namespace, string(req.Deploy.Class), features, options...)
 	if err != nil {

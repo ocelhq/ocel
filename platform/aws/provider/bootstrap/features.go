@@ -20,10 +20,6 @@ const (
 	FeatureCloudflareEdge    = "cloudflare-edge"
 	FeatureCloudFrontEdge    = "cloudfront-edge"
 	FeatureAPIGatewayEdge    = "apigateway-edge"
-	FeatureVarsKey           = provider.FeatureVarsKey
-
-	needsFrameworkPrefix = provider.NeedsFrameworkPrefix
-	needsEdgePrefix      = provider.NeedsEdgePrefix
 )
 
 type stackRefs struct {
@@ -95,7 +91,7 @@ func (f feature) staged(ctx context.Context, store ObjectStore, in featureInputs
 
 func (f feature) edgeKind() (edge.Kind, bool) {
 	for _, need := range f.needs {
-		if kind, ok := strings.CutPrefix(need, needsEdgePrefix); ok {
+		if kind, ok := strings.CutPrefix(need, provider.NeedsEdgePrefix); ok {
 			return edge.Kind(kind), true
 		}
 	}

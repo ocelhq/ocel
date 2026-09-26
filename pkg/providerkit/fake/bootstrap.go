@@ -208,7 +208,7 @@ func (b *Bootstrap) PlanRemove(_ context.Context, class edge.Class) (provider.Pl
 	})
 	for _, kind := range b.raisedEdges() {
 		plan.Groups = append(plan.Groups, provider.ChangeGroup{
-			Kind:   provider.EdgeGroupKind,
+			Kind:   edge.EdgeGroupKind,
 			Name:   edge.EdgeGroupName(kind),
 			Action: provider.ActionDelete,
 			Changes: []provider.Change{{

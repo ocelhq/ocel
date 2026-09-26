@@ -1,8 +1,6 @@
 package bootstrap
 
 import (
-	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
-
 	"context"
 	"maps"
 	"path"
@@ -18,6 +16,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
 type parsedTemplate struct {
@@ -415,7 +415,7 @@ func TestCheckDeployed(t *testing.T) {
 				{Name: coreStackName + "-" + FeatureCloudflareEdge, Feature: FeatureCloudflareEdge},
 				{Name: coreStackName + "-" + FeatureCloudFrontEdge, Feature: FeatureCloudFrontEdge},
 				{Name: coreStackName + "-" + FeatureAPIGatewayEdge, Feature: FeatureAPIGatewayEdge},
-				{Name: coreStackName + "-" + FeatureVarsKey, Feature: FeatureVarsKey},
+				{Name: coreStackName + "-" + provider.FeatureVarsKey, Feature: provider.FeatureVarsKey},
 			},
 		}
 		if !reflect.DeepEqual(got, want) {
@@ -437,10 +437,10 @@ func TestCheckDeployed(t *testing.T) {
 
 	t.Run("a feature stack is what says the feature is on", func(t *testing.T) {
 		api := stubStacksAPI{
-			coreStackName: outputs(map[string]string{outputInfraClass: ClassProduction}).stamped(Stamp{Schema: RequiredSchema}),
+			coreStackName: outputs(map[string]string{outputInfraClass: ClassProduction}).stamped(Stamp{Schema: provider.BootstrapSchema}),
 			coreStackName + "-" + FeatureImageOptimization: outputs(map[string]string{
 				outputImageOptimizerURL: "https://optimizer.lambda-url.test/",
-			}).stamped(Stamp{Schema: RequiredSchema}),
+			}).stamped(Stamp{Schema: provider.BootstrapSchema}),
 		}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
@@ -460,16 +460,16 @@ func TestCheckDeployed(t *testing.T) {
 
 	t.Run("the oldest stack decides the schema", func(t *testing.T) {
 		api := stubStacksAPI{
-			coreStackName:                    outputs(nil).stamped(Stamp{Schema: RequiredSchema + 1}),
-			coreStackName + "-" + FeatureISR: outputs(nil).stamped(Stamp{Schema: RequiredSchema}),
+			coreStackName:                    outputs(nil).stamped(Stamp{Schema: provider.BootstrapSchema + 1}),
+			coreStackName + "-" + FeatureISR: outputs(nil).stamped(Stamp{Schema: provider.BootstrapSchema}),
 		}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
 		if err != nil {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
-		if got.Schema != RequiredSchema {
-			t.Errorf("Schema = %d, want %d: a feature stack left behind by a half-finished bootstrap must read as out of date", got.Schema, RequiredSchema)
+		if got.Schema != provider.BootstrapSchema {
+			t.Errorf("Schema = %d, want %d: a feature stack left behind by a half-finished bootstrap must read as out of date", got.Schema, provider.BootstrapSchema)
 		}
 	})
 
@@ -487,7 +487,7 @@ func TestCheckDeployed(t *testing.T) {
 
 	t.Run("a stack whose digest moved reads as stale", func(t *testing.T) {
 		api := stubStacksAPI{coreStackName: outputs(map[string]string{outputInfraClass: ClassProduction}).
-			stamped(Stamp{Schema: RequiredSchema, Digest: "stale"})}
+			stamped(Stamp{Schema: provider.BootstrapSchema, Digest: "stale"})}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
 		if err != nil {
@@ -500,7 +500,7 @@ func TestCheckDeployed(t *testing.T) {
 
 	t.Run("a stack written from this build reads as current", func(t *testing.T) {
 		api := stubStacksAPI{coreStackName: outputs(map[string]string{outputInfraClass: ClassProduction}).
-			stamped(Stamp{Schema: RequiredSchema, Digest: cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction, ""))})}
+			stamped(Stamp{Schema: provider.BootstrapSchema, Digest: cfn.TemplateDigest(coreStackTemplate(defaultNamespace, ClassProduction, ""))})}
 
 		got, err := CheckDeployed(context.Background(), api, defaultNamespace)
 		if err != nil {

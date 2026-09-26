@@ -135,7 +135,7 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 		t.Errorf("the parameters group = %+v, want it named under the account that stores them", params)
 	}
 	edgeGroup := plan.Groups[5]
-	if edgeGroup.Kind != provider.EdgeGroupKind || edgeGroup.Name != string(cloudflareKind)+"/edge" {
+	if edgeGroup.Kind != edge.EdgeGroupKind || edgeGroup.Name != string(cloudflareKind)+"/edge" {
 		t.Errorf("the edge group = %+v, want the edge named under its own vendor", edgeGroup)
 	}
 	if edgeGroup.Feature != bootstrap.FeatureCloudflareEdge {
@@ -172,7 +172,7 @@ func TestPlanShowsTheEdgeGoingWhenTheFeatureItFrontsThroughIsDropped(t *testing.
 
 	var edgeGroup provider.ChangeGroup
 	for _, group := range plan.Groups {
-		if group.Kind == provider.EdgeGroupKind {
+		if group.Kind == edge.EdgeGroupKind {
 			edgeGroup = group
 		}
 	}
@@ -263,7 +263,7 @@ func TestPlanLeavesOutAnEdgeThatCannotPlanItsOwnBootstrap(t *testing.T) {
 		t.Fatalf("Plan: %v", err)
 	}
 	for _, group := range plan.Groups {
-		if group.Kind == provider.EdgeGroupKind {
+		if group.Kind == edge.EdgeGroupKind {
 			t.Errorf("plan includes %+v for an edge that says nothing about its own bootstrap", group)
 		}
 	}

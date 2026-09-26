@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -36,7 +37,7 @@ var edgeNotFoundContentTypes = []string{
 var apiGatewayEdgeFeature = feature{
 	name:       FeatureAPIGatewayEdge,
 	summary:    "API Gateway as the front — invoke role, 404 responder for unclaimed hosts",
-	needs:      []string{needsEdgePrefix + KindAPIGateway},
+	needs:      []string{provider.NeedsEdgePrefix + KindAPIGateway},
 	template:   apiGatewayEdgeTemplate,
 	payloads:   noPayloads,
 	placements: noPlacements,

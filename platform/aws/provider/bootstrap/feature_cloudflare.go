@@ -14,7 +14,7 @@ var cloudflareEdgeFeature = feature{
 	name:       FeatureCloudflareEdge,
 	summary:    "Cloudflare as the front — workers, credential, snapshot publisher",
 	dependsOn:  []string{FeatureISR},
-	needs:      []string{needsEdgePrefix + KindCloudflare},
+	needs:      []string{provider.NeedsEdgePrefix + KindCloudflare},
 	template:   cloudflareEdgeTemplate,
 	payloads:   cloudflareEdgePayloads,
 	placements: cloudflareEdgePlacements,

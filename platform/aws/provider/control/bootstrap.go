@@ -245,7 +245,7 @@ func (b Bootstrap) severedEdge(ctx context.Context, class edge.Class, kind edge.
 
 func installedEdgeChanges(kind edge.Kind, feature string, planned []edge.PlanChange) *provider.ChangeGroup {
 	group := provider.ChangeGroup{
-		Kind:    provider.EdgeGroupKind,
+		Kind:    edge.EdgeGroupKind,
 		Name:    edge.EdgeGroupName(kind),
 		Feature: feature,
 		Action:  provider.ActionDelete,

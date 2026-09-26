@@ -3,12 +3,14 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 var isrFeature = feature{
 	name:       FeatureISR,
 	summary:    "incremental static regeneration — queue, revalidator, invalidator",
-	needs:      []string{needsFrameworkPrefix + "next"},
+	needs:      []string{provider.NeedsFrameworkPrefix + "next"},
 	template:   isrTemplate,
 	payloads:   isrPayloads,
 	placements: isrPlacements,

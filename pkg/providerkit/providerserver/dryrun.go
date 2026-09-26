@@ -73,7 +73,7 @@ func (r *deployRun) planEdgeGroup() provider.ChangeGroup {
 		action = provider.ActionCreate
 	}
 	return provider.ChangeGroup{
-		Kind:   provider.EdgeGroupKind,
+		Kind:   edge.EdgeGroupKind,
 		Name:   edge.EdgeGroupName(r.front.Kind()),
 		Action: action,
 		Reason: reasonEdgeReconcile,
