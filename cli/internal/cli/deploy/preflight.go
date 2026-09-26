@@ -15,13 +15,13 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/preflight"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 )
 
-func preflightPreview(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config) error {
+func preflightPreview(ctx context.Context, ui *runui.Session, runner *providerclient.Runner, cfg *projectconfig.Config) error {
 	return bootstrap.Ready(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, "ocel bootstrap preview")
 }
 
@@ -32,7 +32,7 @@ type standing struct {
 	urls           map[string]string
 }
 
-func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) (standing, error) {
+func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *providerclient.Runner, cfg *projectconfig.Config, pointer string, out io.Writer, in io.Reader) (standing, error) {
 	resp, err := preflight.Run(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PREVIEW, cfg.Slug, preflight.Names(preflight.Hostnames(cfg, "preview")), preflight.Frameworks(cfg), "ocel bootstrap preview")
 	if err != nil {
 		return standing{}, err
@@ -67,7 +67,7 @@ func preflightPreviewUp(ctx context.Context, deps cmddeps.Deps, ui *runui.Sessio
 	}, nil
 }
 
-func preflightDeploy(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, out io.Writer, in io.Reader) (standing, error) {
+func preflightDeploy(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, runner *providerclient.Runner, cfg *projectconfig.Config, out io.Writer, in io.Reader) (standing, error) {
 	domains := preflight.Names(preflight.Hostnames(cfg, "production"))
 	resp, err := preflight.Run(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, slugToScopeBy(ui, domains, cfg), domains, preflight.Frameworks(cfg), "ocel bootstrap production")
 	if err != nil {
@@ -92,7 +92,7 @@ func preflightDeploy(ctx context.Context, deps cmddeps.Deps, ui *runui.Session, 
 	return standing{knownSlugs: resp.GetKnownSlugs(), compute: compute, containerArchs: resp.GetContainerArchs(), urls: appurl.Production(cfg)}, nil
 }
 
-func settleBootstrap(ctx context.Context, ui *runui.Session, runner *provider.Runner, cfg *projectconfig.Config, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {
+func settleBootstrap(ctx context.Context, ui *runui.Session, runner *providerclient.Runner, cfg *projectconfig.Config, status *contractv1.BootstrapStatus, tier environmentv1.Tier, out io.Writer, in io.Reader) error {
 	if ui.Dry() {
 		return bootstrap.PlanFor(status).Insist(tier)
 	}

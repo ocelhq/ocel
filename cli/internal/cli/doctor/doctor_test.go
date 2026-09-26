@@ -13,7 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
@@ -550,7 +550,7 @@ func waitForFrame(t *testing.T, terminal *syncBuffer) {
 
 func TestDoctorStandsTheSpinnerDownWhileTheHostTrustAsks(t *testing.T) {
 	var terminal syncBuffer
-	host := provider.Trust{Ask: terminalAsker{}, Out: &terminal}
+	host := providerclient.Trust{Ask: terminalAsker{}, Out: &terminal}
 	spinner := runui.StartSpinner(runui.Presentation{Format: runui.FormatHuman, TTY: true, Width: 80}, &terminal, "Checking your setup")
 	t.Cleanup(spinner.Stop)
 

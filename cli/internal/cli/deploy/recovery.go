@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
@@ -21,7 +21,7 @@ import (
 type gateRecovery struct {
 	deps    cmddeps.Deps
 	cfg     *projectconfig.Config
-	runner  *provider.Runner
+	runner  *providerclient.Runner
 	preview bool
 
 	newGate func() *envgate.Gate

@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 )
 
 func TestDeployE2E(t *testing.T) {
@@ -145,7 +145,7 @@ func requireRealProviderEnv(t *testing.T) string {
 		t.Skipf("packages/ocel is not built (missing %s); run `pnpm --filter ocel build` first", ocelDist)
 	}
 
-	t.Setenv(provider.ReadyTimeoutEnvVar, "10s")
+	t.Setenv(providerclient.ReadyTimeoutEnvVar, "10s")
 	t.Setenv("OCEL_PROVIDER_DEBUG", "1")
 
 	return repoRoot

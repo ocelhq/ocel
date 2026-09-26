@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/servicemap"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -203,7 +203,7 @@ func runPreviewUp(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 	spec := deps.Spec(runui.Convergent, "ocel preview up", cfg, opts.yes, stdout, stdin)
 	spec.Dry = opts.dry
 
-	return runui.Run(ctx, spec, func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+	return runui.Run(ctx, spec, func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
 		standing, err := preflightPreviewUp(ctx, deps, ui, runner, cfg, env.GetIdentity(), stdout, stdin)
 		if err != nil {
 			return err
@@ -362,7 +362,7 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 
 	persistent := env.GetLifecycle() == environmentv1.Lifecycle_LIFECYCLE_PERSISTENT
 
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview rm", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview rm", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
 		if persistent {
 			proceed, err := ui.Guard(ctx, fmt.Sprintf("Tear down the named preview %q?", env.GetIdentity()))
 			if err != nil {
@@ -386,7 +386,7 @@ func runPreviewRm(ctx context.Context, deps cmddeps.Deps, cwd string, opts previ
 			Slug:        cfg.Slug,
 			Edge:        edgewire.Selection(cfg),
 		}
-		if err := provider.Stream(ctx, runner, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment, ui.Event); err != nil {
+		if err := providerclient.Stream(ctx, runner, "RemoveEnvironment", req, contractv1connect.ProviderServiceClient.RemoveEnvironment, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Preview %s torn down", env.GetIdentity()))
@@ -400,7 +400,7 @@ func runPreviewLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout, st
 		return err
 	}
 
-	return provider.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *provider.Runner) error {
+	return providerclient.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *providerclient.Runner) error {
 		client, err := runner.Client()
 		if err != nil {
 			return err
@@ -427,7 +427,7 @@ func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pr
 		return err
 	}
 
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview prune", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel preview prune", cfg, opts.yes, stdout, stdin), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
 		if err := preflightPreview(ctx, ui, runner, cfg); err != nil {
 			return err
 		}
@@ -437,7 +437,7 @@ func runPreviewPrune(ctx context.Context, deps cmddeps.Deps, cwd string, opts pr
 			Environment: env,
 			Edge:        edgewire.Selection(cfg),
 		}
-		if err := provider.Stream(ctx, runner, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions, ui.Event); err != nil {
+		if err := providerclient.Stream(ctx, runner, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Pruned preview %q", env.GetIdentity()))

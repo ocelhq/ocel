@@ -6,7 +6,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 )
 
@@ -25,18 +25,18 @@ type Spec struct {
 	Unattended  string
 	Config      *projectconfig.Config
 	Present     Presentation
-	Trust       provider.Trust
+	Trust       providerclient.Trust
 	Interactive bool
 	Stdout      io.Writer
 	Stdin       io.Reader
 }
 
-type Body func(context.Context, *provider.Runner, *Session) error
+type Body func(context.Context, *providerclient.Runner, *Session) error
 
-type drive func(context.Context, *projectconfig.Config, io.Writer, io.Writer, provider.Trust, func(*provider.Runner) error) error
+type drive func(context.Context, *projectconfig.Config, io.Writer, io.Writer, providerclient.Trust, func(*providerclient.Runner) error) error
 
 func Run(ctx context.Context, spec Spec, body Body) error {
-	return run(ctx, spec, body, provider.Drive, provider.DriveDry)
+	return run(ctx, spec, body, providerclient.Drive, providerclient.DriveDry)
 }
 
 func run(ctx context.Context, spec Spec, body Body, driveReal, driveDry drive) error {
@@ -64,7 +64,7 @@ func run(ctx context.Context, spec Spec, body Body, driveReal, driveDry drive) e
 		driveProvider = driveDry
 	}
 	provW := ui.ProcessWriter()
-	err = driveProvider(ctx, spec.Config, provW, provW, TrustFor(spec.Trust, ui), func(runner *provider.Runner) error {
+	err = driveProvider(ctx, spec.Config, provW, provW, TrustFor(spec.Trust, ui), func(runner *providerclient.Runner) error {
 		return body(ctx, runner, ui)
 	})
 	if err != nil {
@@ -86,7 +86,7 @@ func (s Spec) gate() gate {
 	}
 }
 
-func TrustFor(trust provider.Trust, s interface{ Suspend() func() }) provider.Trust {
+func TrustFor(trust providerclient.Trust, s interface{ Suspend() func() }) providerclient.Trust {
 	trust.Suspend = s.Suspend
 	return trust
 }

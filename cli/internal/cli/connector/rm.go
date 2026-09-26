@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
@@ -75,7 +75,7 @@ func taken(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, op
 		return "", fmt.Errorf("this run names a target, so the machine behind %s was never asked", opts.target)
 	}
 	var fingerprint string
-	err := provider.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *provider.Runner) error {
+	err := providerclient.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *providerclient.Runner) error {
 		client, err := runner.Client()
 		if err != nil {
 			return err
@@ -85,7 +85,7 @@ func taken(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, op
 			return err
 		}
 		fingerprint = described.GetTargetFingerprint()
-		return provider.Stream(ctx, runner, "RemoveConnector", &contractv1.RemoveConnectorRequest{},
+		return providerclient.Stream(ctx, runner, "RemoveConnector", &contractv1.RemoveConnectorRequest{},
 			contractv1connect.ProviderServiceClient.RemoveConnector, func(ev *progressv1.OperationEvent) {
 				if said := ev.GetProgress().GetMessage(); said != "" {
 					fmt.Fprintf(stdout, "  %s\n", said)

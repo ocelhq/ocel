@@ -11,7 +11,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -20,10 +20,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/clitest"
 )
 
-func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, runner *provider.Runner, values envwire.Values) error) {
+func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, runner *providerclient.Runner, values envwire.Values) error) {
 	t.Helper()
 	ctx := context.Background()
-	err := withEnvProvider(ctx, clitest.NewDeps(), root, opts, io.Discard, func(runner *provider.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
+	err := withEnvProvider(ctx, clitest.NewDeps(), root, opts, io.Discard, func(runner *providerclient.Runner, cfg *projectconfig.Config, _ *contractv1.PreflightResponse) error {
 		return drive(ctx, cfg.Slug, runner, envwire.Values{
 			Runner: runner,
 			Slug:   cfg.Slug,
@@ -35,7 +35,7 @@ func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx
 	}
 }
 
-func storeValue(t *testing.T, ctx context.Context, runner *provider.Runner, tier environmentv1.Tier, coordinate *envvarsv1.Coordinate, value string) {
+func storeValue(t *testing.T, ctx context.Context, runner *providerclient.Runner, tier environmentv1.Tier, coordinate *envvarsv1.Coordinate, value string) {
 	t.Helper()
 	vars, err := runner.Vars()
 	if err != nil {
@@ -76,7 +76,7 @@ func TestRunnerValues(t *testing.T) {
 		t.Setenv(clitest.FakeInfraTierEnvVar, "preview")
 		preview := envOptions{preview: true}
 
-		withRunnerValues(t, root, preview, func(ctx context.Context, slug string, runner *provider.Runner, values envwire.Values) error {
+		withRunnerValues(t, root, preview, func(ctx context.Context, slug string, runner *providerclient.Runner, values envwire.Values) error {
 			storeValue(t, ctx, runner, envTier(preview), &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://root.example")
 			storeValue(t, ctx, runner, envTier(preview), &envvarsv1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_pr")
 
@@ -103,7 +103,7 @@ func TestRunnerValues(t *testing.T) {
 	t.Run("a refused reveal hands back the provider's own typed error", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 
-		withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *provider.Runner, values envwire.Values) error {
+		withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *providerclient.Runner, values envwire.Values) error {
 			vars, err := runner.Vars()
 			if err != nil {
 				t.Fatalf("reach the provider's variable store: %v", err)
@@ -137,7 +137,7 @@ func TestRunnerValues(t *testing.T) {
 	t.Run("Set against a stale version is refused as a stale value", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 
-		withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *provider.Runner, values envwire.Values) error {
+		withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *providerclient.Runner, values envwire.Values) error {
 			storeValue(t, ctx, runner, envTier(envOptions{}), &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
 			at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}}
 
@@ -163,7 +163,7 @@ func TestRunnerValues(t *testing.T) {
 	t.Run("Delete against a stale version is refused as a stale value", func(t *testing.T) {
 		root := setUpEnvFixture(t)
 
-		withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *provider.Runner, values envwire.Values) error {
+		withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *providerclient.Runner, values envwire.Values) error {
 			coordinate := &envvarsv1.Coordinate{Slug: slug, Key: "API_URL"}
 			storeValue(t, ctx, runner, envTier(envOptions{}), coordinate, "https://first.example")
 			storeValue(t, ctx, runner, envTier(envOptions{}), coordinate, "https://someone-elses.example")

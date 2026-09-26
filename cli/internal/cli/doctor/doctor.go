@@ -21,7 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -341,7 +341,7 @@ func gather(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, s
 	got := &answers{tiers: map[environmentv1.Tier]*tierAnswer{}}
 
 	spinner := runui.StartSpinner(deps.Presentation(stdout), stdout, "Checking your setup")
-	err := provider.Drive(ctx, cfg, stderr, stderr, runui.TrustFor(deps.HostTrust, spinner), func(runner *provider.Runner) error {
+	err := providerclient.Drive(ctx, cfg, stderr, stderr, runui.TrustFor(deps.HostTrust, spinner), func(runner *providerclient.Runner) error {
 		*got = answers{tiers: map[environmentv1.Tier]*tierAnswer{}}
 		got.pkg = runner.Name()
 		client, err := runner.Client()

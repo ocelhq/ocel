@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cli/cmddeps"
 	"github.com/ocelhq/ocel/cli/internal/edgewire"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
@@ -78,7 +78,7 @@ func runPromotionsLs(ctx context.Context, deps cmddeps.Deps, cwd string, stdout,
 		return err
 	}
 
-	return provider.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *provider.Runner) error {
+	return providerclient.Drive(ctx, cfg, stdout, stderr, deps.HostTrust, func(runner *providerclient.Runner) error {
 		if err := bootstrap.Ready(ctx, runui.Plain(deps.Presentation(stdout), stdout), runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
 			return err
 		}
@@ -105,7 +105,7 @@ func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keep
 		return err
 	}
 
-	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel deployments prune", cfg, yes, stdout, stdin), func(ctx context.Context, runner *provider.Runner, ui *runui.Session) error {
+	return runui.Run(ctx, deps.Spec(runui.Convergent, "ocel deployments prune", cfg, yes, stdout, stdin), func(ctx context.Context, runner *providerclient.Runner, ui *runui.Session) error {
 		if err := bootstrap.Ready(ctx, ui, runner, cfg, environmentv1.Tier_TIER_PRODUCTION, "ocel bootstrap production"); err != nil {
 			return err
 		}
@@ -115,7 +115,7 @@ func runPromotionsPrune(ctx context.Context, deps cmddeps.Deps, cwd string, keep
 			KeepN: int32(keepN),
 			Edge:  edgewire.Selection(cfg),
 		}
-		if err := provider.Stream(ctx, runner, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions, ui.Event); err != nil {
+		if err := providerclient.Stream(ctx, runner, "RemoveStalePromotions", req, contractv1connect.ProviderServiceClient.RemoveStalePromotions, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish("Pruned")

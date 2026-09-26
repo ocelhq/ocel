@@ -7,13 +7,13 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/devstack/docker"
 	"github.com/ocelhq/ocel/cli/internal/exitsig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 )
 
 const shutdownSlack = 3 * time.Second
 
-const gracefulShutdownWindow = max(provider.DefaultGracePeriod+provider.DefaultReapTimeout, appChildWaitDelay) + shutdownSlack
+const gracefulShutdownWindow = max(providerclient.DefaultGracePeriod+providerclient.DefaultReapTimeout, appChildWaitDelay) + shutdownSlack
 
 const devStackStopsWithin = docker.StopsWithin
 
@@ -28,6 +28,6 @@ func installInterruptHandler(parent context.Context, stderr io.Writer) (context.
 }
 
 func forceKillEverything() {
-	provider.KillAllLive()
+	providerclient.KillAllLive()
 	killAllLiveAppChildren()
 }

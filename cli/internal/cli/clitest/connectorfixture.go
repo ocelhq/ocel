@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
@@ -20,7 +20,7 @@ func SetUpConnectorFixture(t *testing.T, fingerprint, hostname string) string {
 		t.Skip("uses a Unix-domain-socket fake provider and POSIX symlinks")
 	}
 
-	t.Setenv(provider.ReadyTimeoutEnvVar, "5s")
+	t.Setenv(providerclient.ReadyTimeoutEnvVar, "5s")
 
 	root := t.TempDir()
 	WriteFile(t, filepath.Join(root, "ocel.vps.json"), `{

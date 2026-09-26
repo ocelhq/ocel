@@ -24,7 +24,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/version"
@@ -116,7 +116,7 @@ func SetUpDeployFixture(t *testing.T) (root, sockPath string) {
 		t.Skip("node not found on PATH")
 	}
 
-	t.Setenv(provider.ReadyTimeoutEnvVar, "5s")
+	t.Setenv(providerclient.ReadyTimeoutEnvVar, "5s")
 
 	root = t.TempDir()
 	WriteFile(t, filepath.Join(root, "ocel.config.ts"), `

@@ -31,7 +31,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envwire"
 	"github.com/ocelhq/ocel/cli/internal/inlinebinding"
 	"github.com/ocelhq/ocel/cli/internal/prompt"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	"github.com/ocelhq/ocel/cli/internal/version"
 )
@@ -125,7 +125,7 @@ func newDeps() cmddeps.Deps {
 		CurrentGitBranch:    gitBranch,
 		DiscoverPRNumber:    prNumberFromEnv,
 		RunPackageManager:   runPackageManagerCommand,
-		HostTrust:           provider.Trust{Ask: prompt.New(os.Stderr, os.Stdin), Out: os.Stderr},
+		HostTrust:           providerclient.Trust{Ask: prompt.New(os.Stderr, os.Stdin), Out: os.Stderr},
 		StdinIsTerminal:     prompt.Interactive,
 		ConfigPath:          explicitConfigPath,
 		Presentation:        presentation,

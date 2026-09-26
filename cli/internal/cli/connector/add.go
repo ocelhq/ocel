@@ -11,7 +11,7 @@ import (
 	consoleconnector "github.com/ocelhq/ocel/cli/internal/console/connector"
 	consolelink "github.com/ocelhq/ocel/cli/internal/console/link"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/internal/provider"
+	"github.com/ocelhq/ocel/cli/internal/providerclient"
 	"github.com/ocelhq/ocel/cli/internal/providers"
 	"github.com/ocelhq/ocel/cli/internal/version"
 	"github.com/ocelhq/ocel/pkg/connectorkit"
@@ -35,7 +35,7 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 		return err
 	}
 
-	return provider.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *provider.Runner) error {
+	return providerclient.Drive(ctx, cfg, stderr, stderr, deps.HostTrust, func(runner *providerclient.Runner) error {
 		client, err := runner.Client()
 		if err != nil {
 			return err
@@ -54,13 +54,13 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 			return fmt.Errorf("record this target in the console: %w", err)
 		}
 
-		binary, err := provider.Connector(ctx, cfg.Dir, vendor, providers.Platform{GOOS: "linux", GOARCH: described.GetArch()})
+		binary, err := providerclient.Connector(ctx, cfg.Dir, vendor, providers.Platform{GOOS: "linux", GOARCH: described.GetArch()})
 		if err != nil {
 			return err
 		}
-		if len(binary) > provider.MaxMessageBytes {
+		if len(binary) > providerclient.MaxMessageBytes {
 			return fmt.Errorf("the %s connector built for linux/%s is %d bytes, over the %d the provider channel carries in one message",
-				vendor, described.GetArch(), len(binary), provider.MaxMessageBytes)
+				vendor, described.GetArch(), len(binary), providerclient.MaxMessageBytes)
 		}
 		config, err := json.Marshal(connectorkit.Config{
 			Console:        opts.apiURL,
@@ -74,7 +74,7 @@ func runAdd(ctx context.Context, deps cmddeps.Deps, cfg *projectconfig.Config, l
 		}
 
 		var at *progressv1.ConnectorInstalled
-		err = provider.Stream(ctx, runner, "InstallConnector", &contractv1.InstallConnectorRequest{
+		err = providerclient.Stream(ctx, runner, "InstallConnector", &contractv1.InstallConnectorRequest{
 			Binary:     binary,
 			Version:    version.Version,
 			ConfigJson: config,
