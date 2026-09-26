@@ -79,7 +79,7 @@ func drained(t *testing.T, stream *connect.ServerStreamForClient[progressv1.Oper
 	var result *progressv1.ResultEvent
 	for stream.Receive() {
 		event := stream.Msg()
-		if dns := event.GetDnsOwed(); dns != nil {
+		if dns := event.GetDnsManualRecords(); dns != nil {
 			asked.records = append(asked.records, dns.GetRecords()...)
 			asked.notes = append(asked.notes, dns.GetNotes()...)
 		}
@@ -210,7 +210,7 @@ func TestLiveDomainStatusNamesTheRecordsOwedTheCertificateHandleAndWhoRenewsIt(t
 		t.Errorf("the renewal line reads %q, want %q: `nothing renews this one` is a thing the user must be able to read rather than infer",
 			row.GetRenewalStatus(), certs.ProxyRenewal)
 	}
-	if len(row.GetCertificate().GetRecordsOwed()) == 0 {
+	if len(row.GetCertificate().GetManualRecords()) == 0 {
 		t.Error("the status owes no record for a hostname nothing here writes DNS for, so the one thing the user still has to do goes unsaid")
 	}
 	if len(row.GetCertificate().GetRecordsWritten()) != 0 {

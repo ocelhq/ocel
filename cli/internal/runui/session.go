@@ -229,13 +229,13 @@ func (s *Session) BuildOK() {
 	s.buildStart = time.Time{}
 }
 
-func (s *Session) Waiting(owed *streamv1.VariablesOwed, url string) {
+func (s *Session) Waiting(unset *streamv1.MissingVariables, url string) {
 	s.logf("[waiting] %s", withoutFragment(url))
 	s.waiting = true
 	s.build.flush()
 	s.buildStart = time.Time{}
 	s.stream.Emit(&streamv1.RunEvent{Event: &streamv1.RunEvent_Waiting{
-		Waiting: &streamv1.WaitingEvent{Owed: owed, Url: url},
+		Waiting: &streamv1.WaitingEvent{Missing: unset, Url: url},
 	}})
 }
 
@@ -269,8 +269,8 @@ func (s *Session) logOperation(ev *progressv1.OperationEvent) {
 		s.logf("[log] %s", ev.GetLog().GetMessage())
 	case ev.GetDegraded() != nil:
 		s.logf("[degraded] %s: %s", ev.GetDegraded().GetNeed(), ev.GetDegraded().GetDetail())
-	case ev.GetDnsOwed() != nil:
-		s.logf("[dns] %s: %s", ev.GetDnsOwed().GetHeadline(), dnsLogLine(ev.GetDnsOwed().GetRecords()))
+	case ev.GetDnsManualRecords() != nil:
+		s.logf("[dns] %s: %s", ev.GetDnsManualRecords().GetHeadline(), dnsLogLine(ev.GetDnsManualRecords().GetRecords()))
 	}
 }
 
@@ -333,7 +333,7 @@ func (s *Session) Fail(err error) {
 	ev := &streamv1.RunResultEvent{Success: false, Detail: err.Error()}
 	var refusal *envgate.Refusal
 	if errors.As(err, &refusal) {
-		ev.Owed = refusal.Owed()
+		ev.Missing = refusal.Missing()
 		ev.Detail = strings.TrimLeft(strings.TrimPrefix(err.Error(), refusal.Error()), "\n")
 	}
 	s.result(ev)

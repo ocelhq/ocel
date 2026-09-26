@@ -127,7 +127,7 @@ message GetHostnameStatusResponse {
 
   repeated string records_written = 3;
 
-  repeated string records_owed = 4;
+  repeated string manual_records = 4;
 }
 
 message CertificateState {
@@ -137,7 +137,7 @@ message CertificateState {
 
   repeated string records_written = 3;
 
-  repeated string records_owed = 4;
+  repeated string manual_records = 4;
 
   int64 last_probe_at = 5;
 
@@ -310,7 +310,7 @@ message BootstrapRequest {
   // Draw the plan, emit it as a plan event and stop: the stream changes nothing.
   bool dry = 8;
 
-  // An apply carrying a consented plan emits no plan of its own and refuses
+  // An apply that sends a consented plan emits no plan of its own and refuses
   // work that plan never showed.
   common.plan.v1.ChangePlan consented = 9;
 }
@@ -422,7 +422,7 @@ message BootstrapScope {
 
   EdgeSelection edge = 2;
 
-  // A removal carrying a consented plan refuses work that plan never showed.
+  // A removal that sends a consented plan refuses work that plan never showed.
   common.plan.v1.ChangePlan consented = 3;
 }
 
@@ -441,7 +441,7 @@ message ProjectRequest {
 
   EdgeSelection edge = 3;
 
-  // A removal carrying a consented plan refuses work that plan never showed.
+  // A removal that sends a consented plan refuses work that plan never showed.
   common.plan.v1.ChangePlan consented = 4;
 }
 

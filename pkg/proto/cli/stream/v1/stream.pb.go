@@ -383,7 +383,7 @@ func (x *Party) GetLocation() string {
 type WaitingEvent struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Url           string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
-	Owed          *VariablesOwed         `protobuf:"bytes,3,opt,name=owed,proto3" json:"owed,omitempty"`
+	Missing       *MissingVariables      `protobuf:"bytes,3,opt,name=missing,proto3" json:"missing,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -425,36 +425,36 @@ func (x *WaitingEvent) GetUrl() string {
 	return ""
 }
 
-func (x *WaitingEvent) GetOwed() *VariablesOwed {
+func (x *WaitingEvent) GetMissing() *MissingVariables {
 	if x != nil {
-		return x.Owed
+		return x.Missing
 	}
 	return nil
 }
 
-type VariablesOwed struct {
+type MissingVariables struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Cells         []*OwedVariable        `protobuf:"bytes,1,rep,name=cells,proto3" json:"cells,omitempty"`
+	Cells         []*MissingVariable     `protobuf:"bytes,1,rep,name=cells,proto3" json:"cells,omitempty"`
 	Remedy        string                 `protobuf:"bytes,2,opt,name=remedy,proto3" json:"remedy,omitempty"`
-	Groups        []*OwedGroup           `protobuf:"bytes,3,rep,name=groups,proto3" json:"groups,omitempty"`
+	Groups        []*MissingGroup        `protobuf:"bytes,3,rep,name=groups,proto3" json:"groups,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *VariablesOwed) Reset() {
-	*x = VariablesOwed{}
+func (x *MissingVariables) Reset() {
+	*x = MissingVariables{}
 	mi := &file_cli_stream_v1_stream_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *VariablesOwed) String() string {
+func (x *MissingVariables) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*VariablesOwed) ProtoMessage() {}
+func (*MissingVariables) ProtoMessage() {}
 
-func (x *VariablesOwed) ProtoReflect() protoreflect.Message {
+func (x *MissingVariables) ProtoReflect() protoreflect.Message {
 	mi := &file_cli_stream_v1_stream_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -466,33 +466,33 @@ func (x *VariablesOwed) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use VariablesOwed.ProtoReflect.Descriptor instead.
-func (*VariablesOwed) Descriptor() ([]byte, []int) {
+// Deprecated: Use MissingVariables.ProtoReflect.Descriptor instead.
+func (*MissingVariables) Descriptor() ([]byte, []int) {
 	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *VariablesOwed) GetCells() []*OwedVariable {
+func (x *MissingVariables) GetCells() []*MissingVariable {
 	if x != nil {
 		return x.Cells
 	}
 	return nil
 }
 
-func (x *VariablesOwed) GetRemedy() string {
+func (x *MissingVariables) GetRemedy() string {
 	if x != nil {
 		return x.Remedy
 	}
 	return ""
 }
 
-func (x *VariablesOwed) GetGroups() []*OwedGroup {
+func (x *MissingVariables) GetGroups() []*MissingGroup {
 	if x != nil {
 		return x.Groups
 	}
 	return nil
 }
 
-type OwedVariable struct {
+type MissingVariable struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	Folder        string                 `protobuf:"bytes,2,opt,name=folder,proto3" json:"folder,omitempty"`
@@ -503,20 +503,20 @@ type OwedVariable struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *OwedVariable) Reset() {
-	*x = OwedVariable{}
+func (x *MissingVariable) Reset() {
+	*x = MissingVariable{}
 	mi := &file_cli_stream_v1_stream_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *OwedVariable) String() string {
+func (x *MissingVariable) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*OwedVariable) ProtoMessage() {}
+func (*MissingVariable) ProtoMessage() {}
 
-func (x *OwedVariable) ProtoReflect() protoreflect.Message {
+func (x *MissingVariable) ProtoReflect() protoreflect.Message {
 	mi := &file_cli_stream_v1_stream_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -528,47 +528,47 @@ func (x *OwedVariable) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use OwedVariable.ProtoReflect.Descriptor instead.
-func (*OwedVariable) Descriptor() ([]byte, []int) {
+// Deprecated: Use MissingVariable.ProtoReflect.Descriptor instead.
+func (*MissingVariable) Descriptor() ([]byte, []int) {
 	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *OwedVariable) GetKey() string {
+func (x *MissingVariable) GetKey() string {
 	if x != nil {
 		return x.Key
 	}
 	return ""
 }
 
-func (x *OwedVariable) GetFolder() string {
+func (x *MissingVariable) GetFolder() string {
 	if x != nil {
 		return x.Folder
 	}
 	return ""
 }
 
-func (x *OwedVariable) GetReason() string {
+func (x *MissingVariable) GetReason() string {
 	if x != nil {
 		return x.Reason
 	}
 	return ""
 }
 
-func (x *OwedVariable) GetDescription() string {
+func (x *MissingVariable) GetDescription() string {
 	if x != nil {
 		return x.Description
 	}
 	return ""
 }
 
-func (x *OwedVariable) GetGroup() string {
+func (x *MissingVariable) GetGroup() string {
 	if x != nil {
 		return x.Group
 	}
 	return ""
 }
 
-type OwedGroup struct {
+type MissingGroup struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
@@ -576,20 +576,20 @@ type OwedGroup struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *OwedGroup) Reset() {
-	*x = OwedGroup{}
+func (x *MissingGroup) Reset() {
+	*x = MissingGroup{}
 	mi := &file_cli_stream_v1_stream_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *OwedGroup) String() string {
+func (x *MissingGroup) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*OwedGroup) ProtoMessage() {}
+func (*MissingGroup) ProtoMessage() {}
 
-func (x *OwedGroup) ProtoReflect() protoreflect.Message {
+func (x *MissingGroup) ProtoReflect() protoreflect.Message {
 	mi := &file_cli_stream_v1_stream_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -601,19 +601,19 @@ func (x *OwedGroup) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use OwedGroup.ProtoReflect.Descriptor instead.
-func (*OwedGroup) Descriptor() ([]byte, []int) {
+// Deprecated: Use MissingGroup.ProtoReflect.Descriptor instead.
+func (*MissingGroup) Descriptor() ([]byte, []int) {
 	return file_cli_stream_v1_stream_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *OwedGroup) GetKey() string {
+func (x *MissingGroup) GetKey() string {
 	if x != nil {
 		return x.Key
 	}
 	return ""
 }
 
-func (x *OwedGroup) GetDescription() string {
+func (x *MissingGroup) GetDescription() string {
 	if x != nil {
 		return x.Description
 	}
@@ -676,8 +676,8 @@ type RunResultEvent struct {
 	FlipBound   *v11.FlipBound         `protobuf:"bytes,8,opt,name=flip_bound,json=flipBound,proto3" json:"flip_bound,omitempty"`
 	Interrupted bool                   `protobuf:"varint,9,opt,name=interrupted,proto3" json:"interrupted,omitempty"`
 	// common.progress.v1.ResultEvent.apps as the provider reported it.
-	Apps          []*v11.AppResult `protobuf:"bytes,10,rep,name=apps,proto3" json:"apps,omitempty"`
-	Owed          *VariablesOwed   `protobuf:"bytes,11,opt,name=owed,proto3" json:"owed,omitempty"`
+	Apps          []*v11.AppResult  `protobuf:"bytes,10,rep,name=apps,proto3" json:"apps,omitempty"`
+	Missing       *MissingVariables `protobuf:"bytes,11,opt,name=missing,proto3" json:"missing,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -775,9 +775,9 @@ func (x *RunResultEvent) GetApps() []*v11.AppResult {
 	return nil
 }
 
-func (x *RunResultEvent) GetOwed() *VariablesOwed {
+func (x *RunResultEvent) GetMissing() *MissingVariables {
 	if x != nil {
-		return x.Owed
+		return x.Missing
 	}
 	return nil
 }
@@ -867,25 +867,25 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"\x06vendor\x18\x01 \x01(\tR\x06vendor\x12\x18\n" +
 	"\aaccount\x18\x02 \x01(\tR\aaccount\x12\x1c\n" +
 	"\tprincipal\x18\x03 \x01(\tR\tprincipal\x12\x1a\n" +
-	"\blocation\x18\x04 \x01(\tR\blocation\"R\n" +
+	"\blocation\x18\x04 \x01(\tR\blocation\"[\n" +
 	"\fWaitingEvent\x12\x10\n" +
-	"\x03url\x18\x02 \x01(\tR\x03url\x120\n" +
-	"\x04owed\x18\x03 \x01(\v2\x1c.cli.stream.v1.VariablesOwedR\x04owed\"\x8c\x01\n" +
-	"\rVariablesOwed\x121\n" +
-	"\x05cells\x18\x01 \x03(\v2\x1b.cli.stream.v1.OwedVariableR\x05cells\x12\x16\n" +
-	"\x06remedy\x18\x02 \x01(\tR\x06remedy\x120\n" +
-	"\x06groups\x18\x03 \x03(\v2\x18.cli.stream.v1.OwedGroupR\x06groups\"\xbf\x01\n" +
-	"\fOwedVariable\x12\x10\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\x129\n" +
+	"\amissing\x18\x03 \x01(\v2\x1f.cli.stream.v1.MissingVariablesR\amissing\"\x95\x01\n" +
+	"\x10MissingVariables\x124\n" +
+	"\x05cells\x18\x01 \x03(\v2\x1e.cli.stream.v1.MissingVariableR\x05cells\x12\x16\n" +
+	"\x06remedy\x18\x02 \x01(\tR\x06remedy\x123\n" +
+	"\x06groups\x18\x03 \x03(\v2\x1b.cli.stream.v1.MissingGroupR\x06groups\"\xc2\x01\n" +
+	"\x0fMissingVariable\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x124\n" +
 	"\x06folder\x18\x02 \x01(\tB\x1c\xbaH\x19r\x172\x15^(/[^/#[:cntrl:]]+)*$R\x06folder\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12 \n" +
 	"\vdescription\x18\x04 \x01(\tR\vdescription\x12-\n" +
-	"\x05group\x18\x05 \x01(\tB\x17\xbaH\x14r\x122\x10^[^#[:cntrl:]]*$R\x05group\"Z\n" +
-	"\tOwedGroup\x12+\n" +
+	"\x05group\x18\x05 \x01(\tB\x17\xbaH\x14r\x122\x10^[^#[:cntrl:]]*$R\x05group\"]\n" +
+	"\fMissingGroup\x12+\n" +
 	"\x03key\x18\x01 \x01(\tB\x19\xbaH\x16r\x14\x10\x012\x10^[^#[:cntrl:]]*$R\x03key\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\"&\n" +
 	"\fResumedEvent\x12\x16\n" +
-	"\x06reason\x18\x01 \x01(\tR\x06reason\"\xfc\x02\n" +
+	"\x06reason\x18\x01 \x01(\tR\x06reason\"\x85\x03\n" +
 	"\x0eRunResultEvent\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
 	"\x06detail\x18\x02 \x01(\tR\x06detail\x12\x1f\n" +
@@ -898,8 +898,8 @@ const file_cli_stream_v1_stream_proto_rawDesc = "" +
 	"flip_bound\x18\b \x01(\v2\x1d.common.progress.v1.FlipBoundR\tflipBound\x12 \n" +
 	"\vinterrupted\x18\t \x01(\bR\vinterrupted\x121\n" +
 	"\x04apps\x18\n" +
-	" \x03(\v2\x1d.common.progress.v1.AppResultR\x04apps\x120\n" +
-	"\x04owed\x18\v \x01(\v2\x1c.cli.stream.v1.VariablesOwedR\x04owed\"u\n" +
+	" \x03(\v2\x1d.common.progress.v1.AppResultR\x04apps\x129\n" +
+	"\amissing\x18\v \x01(\v2\x1f.cli.stream.v1.MissingVariablesR\amissing\"u\n" +
 	"\x0fDiagnosticEvent\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x124\n" +
@@ -929,9 +929,9 @@ var file_cli_stream_v1_stream_proto_goTypes = []any{
 	(*IdentityEvent)(nil),      // 2: cli.stream.v1.IdentityEvent
 	(*Party)(nil),              // 3: cli.stream.v1.Party
 	(*WaitingEvent)(nil),       // 4: cli.stream.v1.WaitingEvent
-	(*VariablesOwed)(nil),      // 5: cli.stream.v1.VariablesOwed
-	(*OwedVariable)(nil),       // 6: cli.stream.v1.OwedVariable
-	(*OwedGroup)(nil),          // 7: cli.stream.v1.OwedGroup
+	(*MissingVariables)(nil),   // 5: cli.stream.v1.MissingVariables
+	(*MissingVariable)(nil),    // 6: cli.stream.v1.MissingVariable
+	(*MissingGroup)(nil),       // 7: cli.stream.v1.MissingGroup
 	(*ResumedEvent)(nil),       // 8: cli.stream.v1.ResumedEvent
 	(*RunResultEvent)(nil),     // 9: cli.stream.v1.RunResultEvent
 	(*DiagnosticEvent)(nil),    // 10: cli.stream.v1.DiagnosticEvent
@@ -952,12 +952,12 @@ var file_cli_stream_v1_stream_proto_depIdxs = []int32{
 	13, // 7: cli.stream.v1.IdentityEvent.tier:type_name -> common.environment.v1.Tier
 	3,  // 8: cli.stream.v1.IdentityEvent.origin:type_name -> cli.stream.v1.Party
 	3,  // 9: cli.stream.v1.IdentityEvent.edge:type_name -> cli.stream.v1.Party
-	5,  // 10: cli.stream.v1.WaitingEvent.owed:type_name -> cli.stream.v1.VariablesOwed
-	6,  // 11: cli.stream.v1.VariablesOwed.cells:type_name -> cli.stream.v1.OwedVariable
-	7,  // 12: cli.stream.v1.VariablesOwed.groups:type_name -> cli.stream.v1.OwedGroup
+	5,  // 10: cli.stream.v1.WaitingEvent.missing:type_name -> cli.stream.v1.MissingVariables
+	6,  // 11: cli.stream.v1.MissingVariables.cells:type_name -> cli.stream.v1.MissingVariable
+	7,  // 12: cli.stream.v1.MissingVariables.groups:type_name -> cli.stream.v1.MissingGroup
 	14, // 13: cli.stream.v1.RunResultEvent.flip_bound:type_name -> common.progress.v1.FlipBound
 	15, // 14: cli.stream.v1.RunResultEvent.apps:type_name -> common.progress.v1.AppResult
-	5,  // 15: cli.stream.v1.RunResultEvent.owed:type_name -> cli.stream.v1.VariablesOwed
+	5,  // 15: cli.stream.v1.RunResultEvent.missing:type_name -> cli.stream.v1.MissingVariables
 	0,  // 16: cli.stream.v1.DiagnosticEvent.level:type_name -> cli.stream.v1.DiagnosticLevel
 	17, // [17:17] is the sub-list for method output_type
 	17, // [17:17] is the sub-list for method input_type

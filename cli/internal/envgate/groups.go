@@ -4,38 +4,38 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/app/resources/v1"
 )
 
-type GroupStanding struct {
+type GroupState struct {
 	Key     string
 	Set     []string
 	Missing []string
 }
 
-func Standings(definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, held []Cell, folder string) []GroupStanding {
-	cells := make(heldCells, len(held))
-	for _, cell := range held {
+func GroupStates(definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, present []Cell, folder string) []GroupState {
+	cells := make(heldCells, len(present))
+	for _, cell := range present {
 		cells[cell] = 0
 	}
 
-	out := make([]GroupStanding, 0, len(groups))
+	out := make([]GroupState, 0, len(groups))
 	for _, group := range groups {
-		standing := GroupStanding{Key: group.GetKey()}
+		state := GroupState{Key: group.GetKey()}
 		for _, definition := range definitions {
 			if definition.GetGroup() != group.GetKey() {
 				continue
 			}
 			switch {
 			case resolves(definition, folder, cells):
-				standing.Set = append(standing.Set, definition.GetKey())
-			case owes(definition, definitions, groups, folder, cells):
-				standing.Missing = append(standing.Missing, definition.GetKey())
+				state.Set = append(state.Set, definition.GetKey())
+			case needsValue(definition, definitions, groups, folder, cells):
+				state.Missing = append(state.Missing, definition.GetKey())
 			}
 		}
-		out = append(out, standing)
+		out = append(out, state)
 	}
 	return out
 }
 
-func owes(definition *resourcesv1.VariableDefinition, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, binding string, held heldCells) bool {
+func needsValue(definition *resourcesv1.VariableDefinition, definitions []*resourcesv1.VariableDefinition, groups []*resourcesv1.GroupDefinition, binding string, held heldCells) bool {
 	if !definition.GetRequired() {
 		return false
 	}

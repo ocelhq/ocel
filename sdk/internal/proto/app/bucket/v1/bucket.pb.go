@@ -2137,10 +2137,10 @@ var File_app_bucket_v1_bucket_proto protoreflect.FileDescriptor
 
 const file_app_bucket_v1_bucket_proto_rawDesc = "" +
 	"\n" +
-	"\x1aapp/bucket/v1/bucket.proto\x12\rapp.bucket.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf4\x03\n" +
-	"\vPresignFile\x12\x9f\x03\n" +
-	"\x03key\x18\x01 \x01(\tB\x8c\x03\xbaH\x88\x03\xba\x01\xff\x02\n" +
-	"\x18buckets.presign_file.key\x12\xb9\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x03key\x12\x12\n" +
+	"\x1aapp/bucket/v1/bucket.proto\x12\rapp.bucket.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf6\x03\n" +
+	"\vPresignFile\x12\xa1\x03\n" +
+	"\x03key\x18\x01 \x01(\tB\x8e\x03\xbaH\x8a\x03\xba\x01\x81\x03\n" +
+	"\x18buckets.presign_file.key\x12\xbb\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x03key\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
 	"\x04size\x18\x03 \x01(\x03R\x04size\x12\x1b\n" +
 	"\tmime_type\x18\x04 \x01(\tR\bmimeType\"\x94\x03\n" +
@@ -2204,36 +2204,36 @@ const file_app_bucket_v1_bucket_proto_rawDesc = "" +
 	"session_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\tsessionId\"`\n" +
 	"\x16CompleteUploadResponse\x120\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x1a.app.bucket.v1.UploadStateR\x05state\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"\xc8\x03\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\xca\x03\n" +
 	"\vHeadRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x97\x03\n" +
-	"\x03key\x18\x02 \x01(\tB\x84\x03\xbaH\x80\x03\xba\x01\xf7\x02\n" +
-	"\x10buckets.head.key\x12\xb9\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x03key\"A\n" +
+	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x99\x03\n" +
+	"\x03key\x18\x02 \x01(\tB\x86\x03\xbaH\x82\x03\xba\x01\xf9\x02\n" +
+	"\x10buckets.head.key\x12\xbb\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x03key\"A\n" +
 	"\fHeadResponse\x121\n" +
-	"\x06object\x18\x01 \x01(\v2\x19.app.bucket.v1.ObjectInfoR\x06object\"\xe2\x03\n" +
+	"\x06object\x18\x01 \x01(\v2\x19.app.bucket.v1.ObjectInfoR\x06object\"\xe4\x03\n" +
 	"\vListRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\xf7\x02\n" +
-	"\x06prefix\x18\x02 \x01(\tB\xde\x02\xbaH\xda\x02\xba\x01\xd1\x02\n" +
-	"\x13buckets.list.prefix\x12\xa2\x01a prefix names where under the bucket's prefix to look: no segment may be \".\" or \"..\", it may carry no backslash and no control character, and \".ocel\" is reserved\x1a\x94\x01this.split('/').all(segment, segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel')r\x03\x18\x80\bR\x06prefix\x12\x16\n" +
+	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\xf9\x02\n" +
+	"\x06prefix\x18\x02 \x01(\tB\xe0\x02\xbaH\xdc\x02\xba\x01\xd3\x02\n" +
+	"\x13buckets.list.prefix\x12\xa4\x01a prefix names where under the bucket's prefix to look: no segment may be \".\" or \"..\", it may contain no backslash and no control character, and \".ocel\" is reserved\x1a\x94\x01this.split('/').all(segment, segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel')r\x03\x18\x80\bR\x06prefix\x12\x16\n" +
 	"\x06cursor\x18\x03 \x01(\tR\x06cursor\x12 \n" +
 	"\x05limit\x18\x04 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\x05limit\"d\n" +
 	"\fListResponse\x123\n" +
 	"\aobjects\x18\x01 \x03(\v2\x19.app.bucket.v1.ObjectInfoR\aobjects\x12\x1f\n" +
 	"\vnext_cursor\x18\x02 \x01(\tR\n" +
-	"nextCursor\"\xda\x03\n" +
+	"nextCursor\"\xdc\x03\n" +
 	"\rDeleteRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\xa7\x03\n" +
-	"\x04keys\x18\x02 \x03(\tB\x92\x03\xbaH\x8e\x03\x92\x01\x8a\x03\b\x01\x10\xe8\a\"\x82\x03\xba\x01\xf9\x02\n" +
-	"\x12buckets.delete.key\x12\xb9\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x04keys\"\x10\n" +
-	"\x0eDeleteResponse\"\x99\a\n" +
+	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\xa9\x03\n" +
+	"\x04keys\x18\x02 \x03(\tB\x94\x03\xbaH\x90\x03\x92\x01\x8c\x03\b\x01\x10\xe8\a\"\x84\x03\xba\x01\xfb\x02\n" +
+	"\x12buckets.delete.key\x12\xbb\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x04keys\"\x10\n" +
+	"\x0eDeleteResponse\"\x9d\a\n" +
 	"\vCopyRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\xab\x03\n" +
+	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\xad\x03\n" +
 	"\n" +
-	"source_key\x18\x02 \x01(\tB\x8b\x03\xbaH\x87\x03\xba\x01\xfe\x02\n" +
-	"\x17buckets.copy.source_key\x12\xb9\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\tsourceKey\x12\xba\x03\n" +
-	"\x0fdestination_key\x18\x03 \x01(\tB\x90\x03\xbaH\x8c\x03\xba\x01\x83\x03\n" +
-	"\x1cbuckets.copy.destination_key\x12\xb9\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x0edestinationKey\"A\n" +
+	"source_key\x18\x02 \x01(\tB\x8d\x03\xbaH\x89\x03\xba\x01\x80\x03\n" +
+	"\x17buckets.copy.source_key\x12\xbb\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\tsourceKey\x12\xbc\x03\n" +
+	"\x0fdestination_key\x18\x03 \x01(\tB\x92\x03\xbaH\x8e\x03\xba\x01\x85\x03\n" +
+	"\x1cbuckets.copy.destination_key\x12\xbb\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x0edestinationKey\"A\n" +
 	"\fCopyResponse\x121\n" +
 	"\x06object\x18\x01 \x01(\v2\x19.app.bucket.v1.ObjectInfoR\x06object\"\xe7\x02\n" +
 	"\x0fSignConstraints\x12!\n" +
@@ -2246,22 +2246,22 @@ const file_app_bucket_v1_bucket_proto_rawDesc = "" +
 	"\bmetadata\x18\a \x03(\v2,.app.bucket.v1.SignConstraints.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd1\x05\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd3\x05\n" +
 	"\vSignRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x97\x03\n" +
-	"\x03key\x18\x02 \x01(\tB\x84\x03\xbaH\x80\x03\xba\x01\xf7\x02\n" +
-	"\x10buckets.sign.key\x12\xb9\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x03key\x12F\n" +
+	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x99\x03\n" +
+	"\x03key\x18\x02 \x01(\tB\x86\x03\xbaH\x82\x03\xba\x01\xf9\x02\n" +
+	"\x10buckets.sign.key\x12\xbb\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x03key\x12F\n" +
 	"\toperation\x18\x03 \x01(\x0e2\x1e.app.bucket.v1.SignedOperationB\b\xbaH\x05\x82\x01\x02\x10\x01R\toperation\x12C\n" +
 	"\baudience\x18\x04 \x01(\x0e2\x1d.app.bucket.v1.SignedAudienceB\b\xbaH\x05\x82\x01\x02\x10\x01R\baudience\x128\n" +
 	"\n" +
 	"expires_in\x18\x05 \x01(\v2\x19.google.protobuf.DurationR\texpiresIn\x12@\n" +
 	"\vconstraints\x18\x06 \x01(\v2\x1e.app.bucket.v1.SignConstraintsR\vconstraints\"F\n" +
 	"\fSignResponse\x126\n" +
-	"\x06target\x18\x01 \x01(\v2\x1e.app.bucket.v1.PresignedTargetR\x06target\"\xb5\x05\n" +
+	"\x06target\x18\x01 \x01(\v2\x1e.app.bucket.v1.PresignedTargetR\x06target\"\xb7\x05\n" +
 	"\x16CreateMultipartRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\xa3\x03\n" +
-	"\x03key\x18\x02 \x01(\tB\x90\x03\xbaH\x8c\x03\xba\x01\x83\x03\n" +
-	"\x1cbuckets.create_multipart.key\x12\xb9\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x03key\x12!\n" +
+	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\xa5\x03\n" +
+	"\x03key\x18\x02 \x01(\tB\x92\x03\xbaH\x8e\x03\xba\x01\x85\x03\n" +
+	"\x1cbuckets.create_multipart.key\x12\xbb\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x03key\x12!\n" +
 	"\fcontent_type\x18\x03 \x01(\tR\vcontentType\x12O\n" +
 	"\bmetadata\x18\x04 \x03(\v23.app.bucket.v1.CreateMultipartRequest.MetadataEntryR\bmetadata\x12#\n" +
 	"\rcache_control\x18\x05 \x01(\tR\fcacheControl\x1a;\n" +
@@ -2269,11 +2269,11 @@ const file_app_bucket_v1_bucket_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"6\n" +
 	"\x17CreateMultipartResponse\x12\x1b\n" +
-	"\tupload_id\x18\x01 \x01(\tR\buploadId\"\xa8\x05\n" +
+	"\tupload_id\x18\x01 \x01(\tR\buploadId\"\xaa\x05\n" +
 	"\x10SignPartsRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x9d\x03\n" +
-	"\x03key\x18\x02 \x01(\tB\x8a\x03\xbaH\x86\x03\xba\x01\xfd\x02\n" +
-	"\x16buckets.sign_parts.key\x12\xb9\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x03key\x12$\n" +
+	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\x9f\x03\n" +
+	"\x03key\x18\x02 \x01(\tB\x8c\x03\xbaH\x88\x03\xba\x01\xff\x02\n" +
+	"\x16buckets.sign_parts.key\x12\xbb\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x03key\x12$\n" +
 	"\tupload_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\buploadId\x12.\n" +
 	"\fpart_numbers\x18\x04 \x03(\x05B\v\xbaH\b\x92\x01\x05\b\x01\x10\xe8\aR\vpartNumbers\x128\n" +
 	"\n" +
@@ -2293,21 +2293,21 @@ const file_app_bucket_v1_bucket_proto_rawDesc = "" +
 	"\rCompletedPart\x12\x1f\n" +
 	"\vpart_number\x18\x01 \x01(\x05R\n" +
 	"partNumber\x12\x12\n" +
-	"\x04etag\x18\x02 \x01(\tR\x04etag\"\x86\x05\n" +
+	"\x04etag\x18\x02 \x01(\tR\x04etag\"\x88\x05\n" +
 	"\x18CompleteMultipartRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\xa5\x03\n" +
-	"\x03key\x18\x02 \x01(\tB\x92\x03\xbaH\x8e\x03\xba\x01\x85\x03\n" +
-	"\x1ebuckets.complete_multipart.key\x12\xb9\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x03key\x12$\n" +
+	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\xa7\x03\n" +
+	"\x03key\x18\x02 \x01(\tB\x94\x03\xbaH\x90\x03\xba\x01\x87\x03\n" +
+	"\x1ebuckets.complete_multipart.key\x12\xbb\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x03key\x12$\n" +
 	"\tupload_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\buploadId\x12<\n" +
 	"\x05parts\x18\x04 \x03(\v2\x1c.app.bucket.v1.CompletedPartB\b\xbaH\x05\x92\x01\x02\b\x01R\x05parts\x12\"\n" +
 	"\rif_none_match\x18\x05 \x01(\tR\vifNoneMatch\x12\x19\n" +
 	"\bif_match\x18\x06 \x01(\tR\aifMatch\"N\n" +
 	"\x19CompleteMultipartResponse\x121\n" +
-	"\x06object\x18\x01 \x01(\v2\x19.app.bucket.v1.ObjectInfoR\x06object\"\x83\x04\n" +
+	"\x06object\x18\x01 \x01(\v2\x19.app.bucket.v1.ObjectInfoR\x06object\"\x85\x04\n" +
 	"\x15AbortMultipartRequest\x12\x1f\n" +
-	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\xa2\x03\n" +
-	"\x03key\x18\x02 \x01(\tB\x8f\x03\xbaH\x8b\x03\xba\x01\x82\x03\n" +
-	"\x1bbuckets.abort_multipart.key\x12\xb9\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x03key\x12$\n" +
+	"\x06bucket\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06bucket\x12\xa4\x03\n" +
+	"\x03key\x18\x02 \x01(\tB\x91\x03\xbaH\x8d\x03\xba\x01\x84\x03\n" +
+	"\x1bbuckets.abort_multipart.key\x12\xbb\x01a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved\x1a\xa6\x01this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')r\x03\x18\x80\bR\x03key\x12$\n" +
 	"\tupload_id\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\buploadId\"\x18\n" +
 	"\x16AbortMultipartResponse*{\n" +
 	"\vUploadState\x12\x1c\n" +

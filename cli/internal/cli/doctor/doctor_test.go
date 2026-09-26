@@ -472,10 +472,10 @@ func TestRunDoctorPrintsTheHostCheckFindingsAndTheCertificatesAndRefusesNothing(
 		}
 	}
 	if code := exitCode(t, err); code != 0 {
-		t.Errorf("exit code = %d over the output above, want 0: a host check is a report and never a gate, and an owed record is the normal state", code)
+		t.Errorf("exit code = %d over the output above, want 0: a host check is a report and never a gate, and a manual record is the normal state", code)
 	}
 	if strings.Contains(out, failGlyph) {
-		t.Errorf("doctor refused something on a bootstrapped box whose only finding is an owed record:\n%s", out)
+		t.Errorf("doctor refused something on a bootstrapped box whose only finding is a manual record:\n%s", out)
 	}
 }
 

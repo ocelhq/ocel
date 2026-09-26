@@ -38,13 +38,13 @@ func seedProductionValue(t *testing.T, key, folder, value string) {
 }
 
 func TestGroupProgressOnSet(t *testing.T) {
-	t.Run("a half-filled group names what is still owed", func(t *testing.T) {
+	t.Run("a half-filled group names what is still missing", func(t *testing.T) {
 		root := setUpGroupedFixture(t)
 
 		out := envSet(t, root, "GITHUB_CLIENT_ID", "id", envOptions{})
 		want := "github: 1 of 2 set. Set together: GITHUB_CLIENT_SECRET"
 		if !strings.Contains(out, want) {
-			t.Errorf("set stdout = %q, want %q: the count covers what is owed, not the member spelled optional", out, want)
+			t.Errorf("set stdout = %q, want %q: the count covers what is missing, not the member spelled optional", out, want)
 		}
 	})
 
@@ -136,14 +136,14 @@ func TestGroupProgressOnRm(t *testing.T) {
 		}
 	})
 
-	t.Run("emptying a required group still owes every member", func(t *testing.T) {
+	t.Run("emptying a required group still needs every member", func(t *testing.T) {
 		root := setUpGroupedFixture(t)
 		seedProductionValue(t, "STRIPE_KEY", "", "sk")
 
 		out := envRm(t, root, "STRIPE_KEY", envOptions{})
 		want := "stripe: 0 of 2 set. Set together: STRIPE_KEY, STRIPE_WEBHOOK_SECRET"
 		if !strings.Contains(out, want) {
-			t.Errorf("rm stdout = %q, want %q: a required group is owed whatever is set", out, want)
+			t.Errorf("rm stdout = %q, want %q: a required group needs every member whatever is set", out, want)
 		}
 	})
 }

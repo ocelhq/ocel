@@ -68,7 +68,7 @@ func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *env
 	}
 	defer varsSession.Close()
 
-	r.ui.Waiting(refusal.Owed(), varsSession.URL)
+	r.ui.Waiting(refusal.Missing(), varsSession.URL)
 	if err := r.deps.OpenBrowser(varsSession.URL); err != nil {
 		r.ui.Warning("Couldn't open your browser automatically — open the link above yourself.")
 	}
@@ -94,11 +94,11 @@ func (r gateRecovery) fill(ctx context.Context, gate *envgate.Gate, refusal *env
 }
 
 func (r gateRecovery) recovery(refusal *envgate.Refusal) *varsui.Recovery {
-	owed := make([]envgate.Cell, 0, len(refusal.Problems))
+	unset := make([]envgate.Cell, 0, len(refusal.Problems))
 	for _, problem := range refusal.Problems {
-		owed = append(owed, envgate.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})
+		unset = append(unset, envgate.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})
 	}
-	return &varsui.Recovery{Deploy: r.command, Owed: owed}
+	return &varsui.Recovery{Deploy: r.command, Missing: unset}
 }
 
 func endAttemptSpan(span trace.Span, err error) {

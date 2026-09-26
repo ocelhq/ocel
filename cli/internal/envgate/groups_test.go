@@ -31,7 +31,7 @@ func declareGrouped(t *testing.T, g *envgate.Gate, groups []*resourcesv1.GroupDe
 	return err
 }
 
-func owed(t *testing.T, g *envgate.Gate, appName string) []string {
+func missingKeys(t *testing.T, g *envgate.Gate, appName string) []string {
 	t.Helper()
 	var keys []string
 	for _, cell := range app(t, g.Matrix(nil), appName).Missing {
@@ -116,10 +116,10 @@ func TestDeclareEnvRefusesOneGroupKeyClaimedTwice(t *testing.T) {
 	}
 }
 
-func TestGroupPresenceGatesWhatIsOwed(t *testing.T) {
+func TestGroupPresenceGatesWhatIsMissing(t *testing.T) {
 	t.Parallel()
 
-	t.Run("an optional group nothing has delivered owes nothing", func(t *testing.T) {
+	t.Run("an optional group nothing has delivered needs nothing", func(t *testing.T) {
 		t.Parallel()
 		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
 		if err := declareGrouped(t, g, []*resourcesv1.GroupDefinition{groupOf("github", false, "")},
@@ -128,8 +128,8 @@ func TestGroupPresenceGatesWhatIsOwed(t *testing.T) {
 		); err != nil {
 			t.Fatalf("DeclareEnv: %v", err)
 		}
-		if got := owed(t, g, "web"); len(got) != 0 {
-			t.Errorf("owed = %v, want nothing: an optional group with no member set is off", got)
+		if got := missingKeys(t, g, "web"); len(got) != 0 {
+			t.Errorf("missing = %v, want nothing: an optional group with no member set is off", got)
 		}
 	})
 
@@ -144,12 +144,12 @@ func TestGroupPresenceGatesWhatIsOwed(t *testing.T) {
 		); err != nil {
 			t.Fatalf("DeclareEnv: %v", err)
 		}
-		if got := owed(t, g, "web"); !reflect.DeepEqual(got, []string{"GITHUB_CLIENT_SECRET"}) {
-			t.Errorf("owed = %v, want [GITHUB_CLIENT_SECRET]", got)
+		if got := missingKeys(t, g, "web"); !reflect.DeepEqual(got, []string{"GITHUB_CLIENT_SECRET"}) {
+			t.Errorf("missing = %v, want [GITHUB_CLIENT_SECRET]", got)
 		}
 	})
 
-	t.Run("a required group owes its required members with nothing set", func(t *testing.T) {
+	t.Run("a required group needs its required members with nothing set", func(t *testing.T) {
 		t.Parallel()
 		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
 		if err := declareGrouped(t, g, []*resourcesv1.GroupDefinition{groupOf("github", true, "")},
@@ -158,12 +158,12 @@ func TestGroupPresenceGatesWhatIsOwed(t *testing.T) {
 		); err != nil {
 			t.Fatalf("DeclareEnv: %v", err)
 		}
-		if got := owed(t, g, "web"); !reflect.DeepEqual(got, []string{"GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"}) {
-			t.Errorf("owed = %v, want both members", got)
+		if got := missingKeys(t, g, "web"); !reflect.DeepEqual(got, []string{"GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET"}) {
+			t.Errorf("missing = %v, want both members", got)
 		}
 	})
 
-	t.Run("a member spelled optional is never owed, however the group stands", func(t *testing.T) {
+	t.Run("a member spelled optional is never missing, however the group is filled", func(t *testing.T) {
 		t.Parallel()
 		g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
 		if err := declareGrouped(t, g, []*resourcesv1.GroupDefinition{groupOf("github", true, "")},
@@ -172,12 +172,12 @@ func TestGroupPresenceGatesWhatIsOwed(t *testing.T) {
 		); err != nil {
 			t.Fatalf("DeclareEnv: %v", err)
 		}
-		if got := owed(t, g, "web"); !reflect.DeepEqual(got, []string{"GITHUB_CLIENT_ID"}) {
-			t.Errorf("owed = %v, want the optional member left out", got)
+		if got := missingKeys(t, g, "web"); !reflect.DeepEqual(got, []string{"GITHUB_CLIENT_ID"}) {
+			t.Errorf("missing = %v, want the optional member left out", got)
 		}
 	})
 
-	t.Run("a group that is on owes only the members spelled required", func(t *testing.T) {
+	t.Run("a group that is on needs only the members spelled required", func(t *testing.T) {
 		t.Parallel()
 		values := newFakeValues()
 		values.set("GITHUB_ENABLED", "", "1")
@@ -189,8 +189,8 @@ func TestGroupPresenceGatesWhatIsOwed(t *testing.T) {
 		); err != nil {
 			t.Fatalf("DeclareEnv: %v", err)
 		}
-		if got := owed(t, g, "web"); !reflect.DeepEqual(got, []string{"GITHUB_CLIENT_ID"}) {
-			t.Errorf("owed = %v, want [GITHUB_CLIENT_ID]", got)
+		if got := missingKeys(t, g, "web"); !reflect.DeepEqual(got, []string{"GITHUB_CLIENT_ID"}) {
+			t.Errorf("missing = %v, want [GITHUB_CLIENT_ID]", got)
 		}
 	})
 
@@ -203,8 +203,8 @@ func TestGroupPresenceGatesWhatIsOwed(t *testing.T) {
 		); err != nil {
 			t.Fatalf("DeclareEnv: %v", err)
 		}
-		if got := owed(t, g, "web"); len(got) != 0 {
-			t.Errorf("owed = %v, want nothing", got)
+		if got := missingKeys(t, g, "web"); len(got) != 0 {
+			t.Errorf("missing = %v, want nothing", got)
 		}
 	})
 }
@@ -222,12 +222,12 @@ func TestGroupPresenceFollowsFolderInheritance(t *testing.T) {
 		t.Fatalf("DeclareEnv: %v", err)
 	}
 
-	if got := owed(t, g, "web"); !reflect.DeepEqual(got, []string{"GITHUB_CLIENT_SECRET"}) {
-		t.Errorf("owed = %v, want the root value to turn the group on for /web and only the unset member owed", got)
+	if got := missingKeys(t, g, "web"); !reflect.DeepEqual(got, []string{"GITHUB_CLIENT_SECRET"}) {
+		t.Errorf("missing = %v, want the root value to turn the group on for /web and only the unset member missing", got)
 	}
 }
 
-func TestStandings(t *testing.T) {
+func TestGroupStates(t *testing.T) {
 	t.Parallel()
 
 	groups := []*resourcesv1.GroupDefinition{groupOf("github", false, "Sign in with GitHub"), groupOf("stripe", true, "")}
@@ -240,49 +240,49 @@ func TestStandings(t *testing.T) {
 
 	t.Run("the groups come back in declaration order", func(t *testing.T) {
 		t.Parallel()
-		standings := envgate.Standings(definitions, groups, nil, "")
-		if len(standings) != 2 {
-			t.Fatalf("standings = %+v, want one per group", standings)
+		states := envgate.GroupStates(definitions, groups, nil, "")
+		if len(states) != 2 {
+			t.Fatalf("states = %+v, want one per group", states)
 		}
-		if standings[0].Key != "github" || standings[1].Key != "stripe" {
-			t.Errorf("standings = %+v, want declaration order", standings)
+		if states[0].Key != "github" || states[1].Key != "stripe" {
+			t.Errorf("states = %+v, want declaration order", states)
 		}
 	})
 
-	t.Run("nothing set leaves an optional group owing nothing and a required one owing", func(t *testing.T) {
+	t.Run("nothing set leaves an optional group needing nothing and a required one needing", func(t *testing.T) {
 		t.Parallel()
-		standings := envgate.Standings(definitions, groups, nil, "")
-		if len(standings[0].Set) != 0 || len(standings[0].Missing) != 0 {
-			t.Errorf("github = %+v, want an off group owing nothing", standings[0])
+		states := envgate.GroupStates(definitions, groups, nil, "")
+		if len(states[0].Set) != 0 || len(states[0].Missing) != 0 {
+			t.Errorf("github = %+v, want an off group needing nothing", states[0])
 		}
-		if !reflect.DeepEqual(standings[1].Missing, []string{"STRIPE_KEY"}) {
-			t.Errorf("stripe missing = %v, want [STRIPE_KEY]: a required group owes its members whatever is set", standings[1].Missing)
+		if !reflect.DeepEqual(states[1].Missing, []string{"STRIPE_KEY"}) {
+			t.Errorf("stripe missing = %v, want [STRIPE_KEY]: a required group needs its members whatever is set", states[1].Missing)
 		}
 	})
 
-	t.Run("one member set leaves the rest owed, in declaration order", func(t *testing.T) {
+	t.Run("one member set leaves the rest missing, in declaration order", func(t *testing.T) {
 		t.Parallel()
-		standings := envgate.Standings(definitions, groups, []envgate.Cell{{Key: "GITHUB_CLIENT_ID"}}, "")
-		if !reflect.DeepEqual(standings[0].Set, []string{"GITHUB_CLIENT_ID"}) || !reflect.DeepEqual(standings[0].Missing, []string{"GITHUB_CLIENT_SECRET"}) {
-			t.Errorf("github = %+v, want the set and the owed named", standings[0])
+		states := envgate.GroupStates(definitions, groups, []envgate.Cell{{Key: "GITHUB_CLIENT_ID"}}, "")
+		if !reflect.DeepEqual(states[0].Set, []string{"GITHUB_CLIENT_ID"}) || !reflect.DeepEqual(states[0].Missing, []string{"GITHUB_CLIENT_SECRET"}) {
+			t.Errorf("github = %+v, want the set and the missing named", states[0])
 		}
 	})
 
-	t.Run("a member spelled optional is neither set nor owed until it has a value", func(t *testing.T) {
+	t.Run("a member spelled optional is neither set nor missing until it has a value", func(t *testing.T) {
 		t.Parallel()
 		optional := append(slices.Clone(definitions), member("GITHUB_SCOPES", "github", false))
-		standings := envgate.Standings(optional, groups, []envgate.Cell{{Key: "GITHUB_CLIENT_ID"}}, "")
-		if len(standings[0].Set)+len(standings[0].Missing) != 2 {
-			t.Errorf("github = %+v, want the optional member out of the count: it is never owed", standings[0])
+		states := envgate.GroupStates(optional, groups, []envgate.Cell{{Key: "GITHUB_CLIENT_ID"}}, "")
+		if len(states[0].Set)+len(states[0].Missing) != 2 {
+			t.Errorf("github = %+v, want the optional member out of the count: it is never missing", states[0])
 		}
 	})
 
 	t.Run("a value at the root completes a group read from a folder", func(t *testing.T) {
 		t.Parallel()
 		held := []envgate.Cell{{Key: "GITHUB_CLIENT_ID"}, {Key: "GITHUB_CLIENT_SECRET", Folder: "/web"}}
-		standings := envgate.Standings(definitions, groups, held, "/web")
-		if len(standings[0].Missing) != 0 {
-			t.Errorf("github = %+v, want nothing owed: /web inherits the root value", standings[0])
+		states := envgate.GroupStates(definitions, groups, held, "/web")
+		if len(states[0].Missing) != 0 {
+			t.Errorf("github = %+v, want nothing missing: /web inherits the root value", states[0])
 		}
 	})
 }

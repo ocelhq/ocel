@@ -115,18 +115,18 @@ const FakeDegradedEnvVar = "OCEL_TEST_FAKE_DEGRADED"
 const FakeDomainOwnerEnvVar = "OCEL_TEST_FAKE_DOMAIN_OWNER"
 
 const (
-	FakeGlobalDomainEnvVar          = "OCEL_TEST_FAKE_GLOBAL_DOMAIN"
-	FakeGlobalDomainEdgeScopeEnvVar = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_EDGE_SCOPE"
-	fakeGlobalDomainRouteEnvVar     = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_ROUTE"
-	fakeGlobalDomainGrammarEnvVar   = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_GRAMMAR"
-	FakeGlobalDomainProjectsEnvVar  = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROJECTS"
-	FakeGlobalDomainCertEnvVar      = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_CERT"
-	FakeGlobalDomainRenewalEnvVar   = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_RENEWAL"
-	FakeGlobalDomainExpiresEnvVar   = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_EXPIRES"
-	FakeHostChecksEnvVar            = "OCEL_TEST_FAKE_HOST_CHECKS"
-	FakeGlobalDomainRecordsEnvVar   = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_RECORDS"
-	FakeGlobalDomainOwedEnvVar      = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_OWED"
-	FakeGlobalDomainProbeEnvVar     = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROBE"
+	FakeGlobalDomainEnvVar              = "OCEL_TEST_FAKE_GLOBAL_DOMAIN"
+	FakeGlobalDomainEdgeScopeEnvVar     = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_EDGE_SCOPE"
+	fakeGlobalDomainRouteEnvVar         = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_ROUTE"
+	fakeGlobalDomainGrammarEnvVar       = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_GRAMMAR"
+	FakeGlobalDomainProjectsEnvVar      = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROJECTS"
+	FakeGlobalDomainCertEnvVar          = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_CERT"
+	FakeGlobalDomainRenewalEnvVar       = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_RENEWAL"
+	FakeGlobalDomainExpiresEnvVar       = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_EXPIRES"
+	FakeHostChecksEnvVar                = "OCEL_TEST_FAKE_HOST_CHECKS"
+	FakeGlobalDomainRecordsEnvVar       = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_RECORDS"
+	FakeGlobalDomainManualRecordsEnvVar = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_MANUAL_RECORDS"
+	FakeGlobalDomainProbeEnvVar         = "OCEL_TEST_FAKE_GLOBAL_DOMAIN_PROBE"
 )
 
 const (
@@ -1049,7 +1049,7 @@ func fakeGlobalDomain() *contractv1.PreviewWildcard {
 			CertificateId:     certID,
 			CertificateStatus: status,
 			RecordsWritten:    splitList(os.Getenv(FakeGlobalDomainRecordsEnvVar)),
-			RecordsOwed:       splitList(os.Getenv(FakeGlobalDomainOwedEnvVar)),
+			ManualRecords:     splitList(os.Getenv(FakeGlobalDomainManualRecordsEnvVar)),
 			LastProbeAt:       probeAt,
 			LastProbeEdge:     probeEdge,
 			LastProbeOk:       probeOK,
@@ -1305,7 +1305,7 @@ func (s *deployFakeProviderServer) GetHostnameStatus(ctx context.Context, req *c
 				CertificateId:     certID,
 				CertificateStatus: status,
 				RecordsWritten:    []string{host + " AAAA 100::"},
-				RecordsOwed:       splitList(os.Getenv(FakeGlobalDomainOwedEnvVar)),
+				ManualRecords:     splitList(os.Getenv(FakeGlobalDomainManualRecordsEnvVar)),
 				LastProbeAt:       1755500000,
 				LastProbeOk:       ready,
 				LastProbeEdge:     "cloudflare",

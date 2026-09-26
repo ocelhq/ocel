@@ -191,7 +191,7 @@ func dnsManualRecordsEvent(headline string, records []edge.Record, notes ...stri
 		})
 	}
 	return &progressv1.OperationEvent{
-		Event: &progressv1.OperationEvent_DnsOwed{DnsOwed: &progressv1.DnsOwedEvent{
+		Event: &progressv1.OperationEvent_DnsManualRecords{DnsManualRecords: &progressv1.DnsManualRecordsEvent{
 			Headline: headline,
 			Records:  manual,
 			Notes:    notes,

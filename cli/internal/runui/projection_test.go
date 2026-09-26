@@ -100,7 +100,7 @@ func TestTheSuccessResultCarriesTheNoteBesideTheURLsItPrinted(t *testing.T) {
 	t.Parallel()
 
 	notes := []string{
-		"www.shop.example is not served yet: its record is owed",
+		"www.shop.example is not served yet: its DNS record is not written yet",
 		"api.shop.example is not served yet: it does not answer",
 	}
 	p := newProjector(Presentation{Format: FormatHuman, Width: defaultWidth})
@@ -112,7 +112,7 @@ func TestTheSuccessResultCarriesTheNoteBesideTheURLsItPrinted(t *testing.T) {
 	}}})
 
 	if !slices.Contains(got, blockIndent+"https://shop.example") ||
-		!slices.Contains(got, blockIndent+"www.shop.example is not served yet: its record is owed") ||
+		!slices.Contains(got, blockIndent+"www.shop.example is not served yet: its DNS record is not written yet") ||
 		!slices.Contains(got, blockIndent+"api.shop.example is not served yet: it does not answer") {
 		t.Errorf("projection =\n%q\nwant both the url that serves and the note on the hostname that does not yet", got)
 	}

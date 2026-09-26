@@ -405,7 +405,7 @@ func printGroupProgress(ctx context.Context, vars envvarsv1connect.EnvVarsServic
 		return err
 	}
 	held := heldCells(listed.GetValues(), opts.environment)
-	for _, standing := range envgate.Standings(definitions, groups, held, opts.folder) {
+	for _, standing := range envgate.GroupStates(definitions, groups, held, opts.folder) {
 		if !touched[standing.Key] || len(standing.Missing) == 0 {
 			continue
 		}

@@ -60,7 +60,7 @@ message PresignFile {
     (buf.validate.field).string.max_len = 1024,
     (buf.validate.field).cel = {
       id: "buckets.presign_file.key"
-      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
       expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
     }
   ];
@@ -156,7 +156,7 @@ message HeadRequest {
     (buf.validate.field).string.max_len = 1024,
     (buf.validate.field).cel = {
       id: "buckets.head.key"
-      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
       expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
     }
   ];
@@ -172,7 +172,7 @@ message ListRequest {
     (buf.validate.field).string.max_len = 1024,
     (buf.validate.field).cel = {
       id: "buckets.list.prefix"
-      message: "a prefix names where under the bucket's prefix to look: no segment may be \".\" or \"..\", it may carry no backslash and no control character, and \".ocel\" is reserved"
+      message: "a prefix names where under the bucket's prefix to look: no segment may be \".\" or \"..\", it may contain no backslash and no control character, and \".ocel\" is reserved"
       expression: "this.split('/').all(segment, segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel')"
     }
   ];
@@ -197,7 +197,7 @@ message DeleteRequest {
       string: {max_len: 1024}
       cel: {
         id: "buckets.delete.key"
-        message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+        message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
         expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
       }
     }
@@ -212,7 +212,7 @@ message CopyRequest {
     (buf.validate.field).string.max_len = 1024,
     (buf.validate.field).cel = {
       id: "buckets.copy.source_key"
-      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
       expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
     }
   ];
@@ -220,7 +220,7 @@ message CopyRequest {
     (buf.validate.field).string.max_len = 1024,
     (buf.validate.field).cel = {
       id: "buckets.copy.destination_key"
-      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
       expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
     }
   ];
@@ -246,7 +246,7 @@ message SignRequest {
     (buf.validate.field).string.max_len = 1024,
     (buf.validate.field).cel = {
       id: "buckets.sign.key"
-      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
       expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
     }
   ];
@@ -266,7 +266,7 @@ message CreateMultipartRequest {
     (buf.validate.field).string.max_len = 1024,
     (buf.validate.field).cel = {
       id: "buckets.create_multipart.key"
-      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
       expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
     }
   ];
@@ -285,7 +285,7 @@ message SignPartsRequest {
     (buf.validate.field).string.max_len = 1024,
     (buf.validate.field).cel = {
       id: "buckets.sign_parts.key"
-      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
       expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
     }
   ];
@@ -319,7 +319,7 @@ message CompleteMultipartRequest {
     (buf.validate.field).string.max_len = 1024,
     (buf.validate.field).cel = {
       id: "buckets.complete_multipart.key"
-      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
       expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
     }
   ];
@@ -339,7 +339,7 @@ message AbortMultipartRequest {
     (buf.validate.field).string.max_len = 1024,
     (buf.validate.field).cel = {
       id: "buckets.abort_multipart.key"
-      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may carry no backslash and no control character, and \".ocel/\" is reserved"
+      message: "a key names a file under the bucket's prefix: every segment must be non-empty and neither \".\" nor \"..\", the key may contain no backslash and no control character, and \".ocel/\" is reserved"
       expression: "this.split('/').all(segment, segment != '' && segment != '.' && segment != '..') && !this.contains('\\\\') && !this.matches('[[:cntrl:]]') && !this.startsWith('.ocel/')"
     }
   ];

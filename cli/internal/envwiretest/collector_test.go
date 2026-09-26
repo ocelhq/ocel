@@ -104,7 +104,7 @@ func TestDefineEnv(t *testing.T) {
 			}
 		})
 
-		t.Run("the verdict is exactly the cells the two halves owe, in declaration order", func(t *testing.T) {
+		t.Run("the verdict is exactly the cells the two halves need, in declaration order", func(t *testing.T) {
 			refusal := refuse(t, gate)
 			got := describeProblems(refusal.Problems)
 			want := []string{

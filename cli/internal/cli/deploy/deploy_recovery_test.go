@@ -333,7 +333,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		}
 	})
 
-	t.Run("closing the UI still names the keys that are owed", func(t *testing.T) {
+	t.Run("closing the UI still names the keys that are missing", func(t *testing.T) {
 		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problemsFile(t, missingStripeKey)
 		deps := clitest.NewDeps()
@@ -428,7 +428,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		}
 	})
 
-	t.Run("returning with a cell still owed is refused, and abandoning fails the deploy once", func(t *testing.T) {
+	t.Run("returning with a cell still missing is refused, and abandoning fails the deploy once", func(t *testing.T) {
 		root := clitest.SetUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true},{"key":"DATABASE_URL","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
 		problemsFile(t, `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"},{"key":"DATABASE_URL","folder":"","kind":"KIND_MISSING"}]`)
 		deps := clitest.NewDeps()
@@ -464,10 +464,10 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		refusal, _ := io.ReadAll(res.Body)
 		res.Body.Close()
 		if res.StatusCode != http.StatusConflict || !strings.Contains(string(refusal), "DATABASE_URL") {
-			t.Fatalf("done with a cell owed = %d %q, want %d naming DATABASE_URL", res.StatusCode, refusal, http.StatusConflict)
+			t.Fatalf("done with a cell missing = %d %q, want %d naming DATABASE_URL", res.StatusCode, refusal, http.StatusConflict)
 		}
 		if strings.Contains(string(refusal), "STRIPE_API_KEY") {
-			t.Errorf("refusal = %q, want a cell the developer already filled not shown as owed", refusal)
+			t.Errorf("refusal = %q, want a cell the developer already filled not shown as missing", refusal)
 		}
 
 		before := out.String()
@@ -493,7 +493,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 		}
 		tail := strings.TrimPrefix(out.String(), before) + stderr.String()
 		if !strings.Contains(tail, "DATABASE_URL") || !strings.Contains(tail, "closed before the matrix was complete") {
-			t.Errorf("output after abandoning = %q, want the owed cell and the abandonment named", tail)
+			t.Errorf("output after abandoning = %q, want the missing cell and the abandonment named", tail)
 		}
 		if urls := varsUIURL.FindAllString(out.String(), -1); len(urls) != 1 {
 			t.Errorf("the UI was offered %d times, want once per deploy", len(urls))
@@ -543,7 +543,7 @@ func TestGateRecoveryOnDeploy(t *testing.T) {
 				}
 				for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY"} {
 					if !strings.Contains(stdout.String(), want) {
-						t.Errorf("stdout = %q, want the refusal to list the owed variable (%q)", stdout.String(), want)
+						t.Errorf("stdout = %q, want the refusal to list the missing variable (%q)", stdout.String(), want)
 					}
 				}
 				if varsUIURL.MatchString(stdout.String()) {
@@ -668,7 +668,7 @@ func TestAbandonedRefusal(t *testing.T) {
 			t.Error("errors.As(err, *envgate.Refusal) did not recover the original refusal")
 		}
 		if !strings.Contains(err.Error(), "STRIPE_API_KEY") {
-			t.Errorf("err = %q, want the keys that are owed named", err)
+			t.Errorf("err = %q, want the keys that are missing named", err)
 		}
 	})
 }
