@@ -71,7 +71,7 @@ const coolifyDynamic = "/data/coolify/proxy/dynamic"
 func TestTheSwitchboardIsHandedTheDirectoryOfAFileOutsideOcelsOwnToPlaceInAndNoOther(t *testing.T) {
 	t.Parallel()
 
-	board := placing(switchboardOf(t, routedByHand()), coolifyDynamic+"/ocel.yml")
+	board := boundToPlace(switchboardOf(t, routedByHand()), coolifyDynamic+"/ocel.yml")
 	running := board.run()
 	if at := slices.Index(running, coolifyDynamic+":"+coolifyDynamic); at < 1 || running[at-1] != "--volume" {
 		t.Errorf("the switchboard runs as %q, want %s bound into it read-write: ocel-deploy cannot write there, and the switchboard places what it renders", running, coolifyDynamic)
