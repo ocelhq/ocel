@@ -327,7 +327,7 @@ export type VpsTraefik =
       entrypoints?: VpsEntrypoints;
       /** A docker network ocel's switchboard joins, so Traefik reaches it by name. Not with port. */
       network?: string;
-      /** The loopback port ocel's switchboard is published on for Traefik to reach; 8480 when left out. Not with network. */
+      /** The loopback port ocel's switchboard is published on for Traefik to reach, in place of the network a preset fills; 8480 when left out. Not with network. */
       port?: number;
       /** The host tool whose Traefik this is. It fills in every other field, and a field written beside it overrides. */
       preset: "coolify" | "dokploy";
@@ -343,7 +343,7 @@ export type VpsTraefik =
       entrypoints?: VpsEntrypoints;
       /** A docker network ocel's switchboard joins, so Traefik reaches it by name. Not with port. */
       network?: string;
-      /** The loopback port ocel's switchboard is published on for Traefik to reach; 8480 when left out. Not with network. */
+      /** The loopback port ocel's switchboard is published on for Traefik to reach, in place of the network a preset fills; 8480 when left out. Not with network. */
       port?: number;
       preset?: never;
       /** A resolver that can issue the preview base's wildcard over DNS-01. Set, previews share one wildcard certificate; left out, each preview hostname gets its own from resolver. */
@@ -371,7 +371,7 @@ export type VpsCaddy =
       directory?: string;
       /** A docker network ocel's switchboard joins, so Caddy reaches it by name. Not with port. */
       network?: string;
-      /** The loopback port ocel's switchboard is published on for Caddy to reach; 8480 when left out. Not with network. */
+      /** The loopback port ocel's switchboard is published on for Caddy to reach, in place of the network a preset fills; 8480 when left out. Not with network. */
       port?: number;
       /** The host tool whose Caddy this is. It fills in every other field, and a field written beside it overrides. */
       preset: "coolify";
@@ -385,7 +385,7 @@ export type VpsCaddy =
       directory: string;
       /** A docker network ocel's switchboard joins, so Caddy reaches it by name. Not with port. */
       network?: string;
-      /** The loopback port ocel's switchboard is published on for Caddy to reach; 8480 when left out. Not with network. */
+      /** The loopback port ocel's switchboard is published on for Caddy to reach, in place of the network a preset fills; 8480 when left out. Not with network. */
       port?: number;
       preset?: never;
     };

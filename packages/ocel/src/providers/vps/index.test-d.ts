@@ -50,6 +50,8 @@ describe("the vps provider's proxy", () => {
     vpsProvider({ ssh: "prod", proxy: { traefik: { preset: "dokploy" } } });
     vpsProvider({ ssh: "prod", proxy: { traefik: { preset: "coolify", resolver: "le-dns" } } });
     vpsProvider({ ssh: "prod", proxy: { caddy: { preset: "coolify" } } });
+    vpsProvider({ ssh: "prod", proxy: { traefik: { preset: "coolify", port: 9000 } } });
+    vpsProvider({ ssh: "prod", proxy: { caddy: { preset: "coolify", port: 9000 } } });
   });
 
   it("names no proxy it does not know", () => {

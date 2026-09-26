@@ -76,11 +76,7 @@ func (t TraefikFront) Filled() TraefikFront {
 	filled.PreviewResolver = cmp.Or(t.PreviewResolver, filled.PreviewResolver)
 	filled.Entrypoints.HTTP = cmp.Or(t.Entrypoints.HTTP, filled.Entrypoints.HTTP, traefikHTTP)
 	filled.Entrypoints.HTTPS = cmp.Or(t.Entrypoints.HTTPS, filled.Entrypoints.HTTPS, traefikHTTPS)
-	filled.Network = cmp.Or(t.Network, filled.Network)
-	filled.Port = cmp.Or(t.Port, filled.Port)
-	if filled.Network == "" {
-		filled.Port = cmp.Or(filled.Port, manual.DefaultPort)
-	}
+	filled.Network, filled.Port = reached(t.Network, t.Port, filled.Network)
 	return filled
 }
 
@@ -93,10 +89,19 @@ func (c CaddyFront) Filled() CaddyFront {
 	filled.Directory = cmp.Or(c.Directory, filled.Directory)
 	filled.Container = cmp.Or(c.Container, filled.Container)
 	filled.Config = cmp.Or(c.Config, filled.Config, caddyConfig)
-	filled.Network = cmp.Or(c.Network, filled.Network)
-	filled.Port = cmp.Or(c.Port, filled.Port)
-	if filled.Network == "" {
-		filled.Port = cmp.Or(filled.Port, manual.DefaultPort)
-	}
+	filled.Network, filled.Port = reached(c.Network, c.Port, filled.Network)
 	return filled
+}
+
+func reached(writtenNetwork string, writtenPort int, presetNetwork string) (network string, port int) {
+	switch {
+	case writtenNetwork != "":
+		return writtenNetwork, writtenPort
+	case writtenPort != 0:
+		return "", writtenPort
+	case presetNetwork != "":
+		return presetNetwork, 0
+	default:
+		return "", manual.DefaultPort
+	}
 }

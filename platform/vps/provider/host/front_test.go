@@ -277,6 +277,11 @@ func TestADeployOntoABoxRecordedForAnotherProxyIsRefusedNamingWhoSetIt(t *testin
 			ours:   coolifysTraefik(),
 			wanted: []string{"Coolify's Traefik", "add `\"proxy\": { \"traefik\": { \"preset\": \"coolify\", \"resolver\": \"le-dns\" } }`"},
 		},
+		"the box runs Coolify's Traefik reached on a port": {
+			recorded: onAPort(coolifysTraefik()),
+			ours:     coolifysTraefik(),
+			wanted:   []string{"Coolify's Traefik", "add `\"proxy\": { \"traefik\": { \"preset\": \"coolify\", \"port\": 9000 } }`"},
+		},
 		"the box runs a Traefik spelled out": {
 			recorded: Front{Traefik: &TraefikFront{
 				Directory: "/etc/traefik/dynamic", Resolver: "letsencrypt", PreviewResolver: "cloudflare",
@@ -348,6 +353,10 @@ func TestAPresetAndTheSameProxySpelledOutAreOneProxy(t *testing.T) {
 	for name, tc := range map[string]struct{ recorded, ours Front }{
 		"recorded as the preset, deployed spelled out": {recorded: coolifysTraefik(), ours: spelled},
 		"recorded spelled out, deployed as the preset": {recorded: spelled, ours: coolifysTraefik()},
+		"recorded as the preset on a port, deployed spelled out on it": {
+			recorded: onAPort(coolifysTraefik()),
+			ours:     onAPort(Front{Traefik: spelled.Traefik}),
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -359,6 +368,12 @@ func TestAPresetAndTheSameProxySpelledOutAreOneProxy(t *testing.T) {
 			}
 		})
 	}
+}
+
+func onAPort(front Front) Front {
+	moved := *front.Traefik
+	moved.Network, moved.Port = "", 9000
+	return Front{Traefik: &moved}
 }
 
 func TestADeployOntoABoxThatRecordsNoProxyIsSentToBootstrap(t *testing.T) {
