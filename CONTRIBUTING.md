@@ -13,6 +13,33 @@ A maintainer closes a pull request without review when it:
 - changes a [contract path](#contract-paths) from a fork whose author is not a maintainer;
 - argues with a review gate instead of fixing the finding.
 
+## Setup
+
+`mise install` installs the versions `mise.toml` pins: Go, Node, Bun, golangci-lint, buf,
+changie and act. pnpm installs the version `package.json` pins. The Python packages need
+[uv](https://docs.astral.sh/uv/) and the Rust crates need cargo.
+
+Build what the Go tests embed:
+
+```sh
+pnpm install
+pnpm turbo run build --filter=ocel
+for dir in cli platform/aws/provider platform/gcp/provider platform/vps/provider pkg/transform; do
+  go generate -C "$dir" ./...
+done
+```
+
+Check a change before you push it:
+
+```sh
+pnpm exec biome ci
+node scripts/banned-words.mjs
+pnpm test
+for dir in $(go list -m -f '{{.Dir}}'); do go test -C "$dir" -race -count=1 ./...; done
+(cd python && uv sync --all-extras && uv run pytest -q)
+(cd crates && cargo test --all-features)
+```
+
 ## Contract paths
 
 The contract is the set of paths [`scripts/contract-paths.mjs`](scripts/contract-paths.mjs)
@@ -63,7 +90,9 @@ or extend a comment Signal does not allow, and delete it when you change the cod
 - A bug fix adds a regression test that fails without the fix.
 - Test names follow the Test row of [Naming](.greptile/rules.md#naming).
 - CI runs every workflow in `.github/workflows/` whose paths a change touches.
-  `scripts/act.sh` replays the pull request gates locally.
+  `scripts/act.sh` replays `go.yml` and the dev and aws lanes of `journey.yml` through act,
+  and runs `provider-vps.yml` and the journey's vps lane on the host, which needs KVM and
+  incus. No other workflow has a local replay.
 - Suites that need cloud credentials (the `journey:real` label, the nightly run) are run by
   maintainers.
 
@@ -88,7 +117,7 @@ already change, rename it; elsewhere the ≤50-line rule applies; beyond that, f
 ## Commits
 
 - [Conventional Commits](https://www.conventionalcommits.org), checked by commitlint
-  (`commitlint.config.mjs`).
+  (`commitlint.config.mjs`). The header is at most 120 characters.
 - The subject says what is true after the change, not what you did:
   `fix(cli): deploy reads ocel.json from the project root`.
 - The body gives the rationale. Commit messages and pull request bodies are the
