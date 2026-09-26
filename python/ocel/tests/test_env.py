@@ -998,7 +998,7 @@ def test_a_group_nesting_a_group_is_refused():
         _ = Outer
 
     assert str(raised.value) == (
-        "Outer.inner holds a group of its own. A group holds variables, and groups nest "
+        "Outer.inner is itself a group. A group contains variables, and groups nest "
         "one level only."
     )
 

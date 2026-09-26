@@ -4,7 +4,7 @@ export class ObjectNotFoundError extends Error {
   readonly key: string;
 
   constructor(key: string) {
-    super(`the bucket holds no object under "${key}"`);
+    super(`the bucket has no object under "${key}"`);
     this.name = "ObjectNotFoundError";
     this.key = key;
   }
@@ -16,7 +16,7 @@ export class PreconditionFailedError extends Error {
   readonly key: string;
 
   constructor(key: string) {
-    super(`the object under "${key}" did not meet the condition this write carried`);
+    super(`the object under "${key}" did not meet the condition this write set`);
     this.name = "PreconditionFailedError";
     this.key = key;
   }

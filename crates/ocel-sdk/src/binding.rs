@@ -8,7 +8,7 @@ pub(crate) fn postgres(name: &str) -> Result<PostgresProperties, Error> {
         (Some(Properties::Postgres(properties)), _) => Ok(*properties),
         (other, key) => Err(Error::WrongBindingType {
             key,
-            carried: carried(&other),
+            found: kind_of(&other),
             expected: "POSTGRES".to_string(),
         }),
     }
@@ -19,7 +19,7 @@ pub(crate) fn bucket(name: &str) -> Result<BucketProperties, Error> {
         (Some(Properties::Bucket(properties)), _) => Ok(*properties),
         (other, key) => Err(Error::WrongBindingType {
             key,
-            carried: carried(&other),
+            found: kind_of(&other),
             expected: "BUCKET".to_string(),
         }),
     }
@@ -37,7 +37,7 @@ fn read(key: &str, expected: &str) -> Result<(Option<Properties>, String), Error
     Ok((delivered.properties, key))
 }
 
-fn carried(properties: &Option<Properties>) -> String {
+fn kind_of(properties: &Option<Properties>) -> String {
     match properties {
         Some(Properties::Postgres(_)) => "POSTGRES",
         Some(Properties::Bucket(_)) => "BUCKET",

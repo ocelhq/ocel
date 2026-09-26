@@ -122,7 +122,7 @@ def test_deleting_a_key_the_bucket_does_not_hold_is_not_an_error(uploads):
 def test_copying_an_object_the_bucket_does_not_hold_names_what_was_missing(uploads):
     with pytest.raises(ObjectNotFound) as raised:
         bucket("uploads").copy("gone.txt", "kept.txt")
-    assert str(raised.value) == 'the bucket holds no object under "gone.txt"'
+    assert str(raised.value) == 'the bucket has no object under "gone.txt"'
     assert isinstance(raised.value, FileNotFoundError)
 
 
@@ -199,7 +199,7 @@ def test_a_write_that_must_not_replace_refuses_a_key_the_bucket_holds(uploads):
     with pytest.raises(PreconditionFailed) as raised:
         bucket("uploads").put("a.txt", b"second", if_not_exists=True)
     assert str(raised.value) == (
-        'the object under "a.txt" did not meet the condition this write carried'
+        'the object under "a.txt" did not meet the condition this write set'
     )
     assert uploads.store.objects["a.txt"].data == b"first"
 
@@ -222,7 +222,7 @@ def test_a_write_conditioned_on_the_version_it_holds_goes_through(uploads):
 def test_reading_a_key_the_bucket_does_not_hold_names_what_was_missing(uploads):
     with pytest.raises(ObjectNotFound) as raised:
         bucket("uploads").get("gone.txt")
-    assert str(raised.value) == 'the bucket holds no object under "gone.txt"'
+    assert str(raised.value) == 'the bucket has no object under "gone.txt"'
 
 
 def test_a_range_reads_the_bytes_it_names(uploads):
@@ -374,7 +374,7 @@ def test_a_bucket_with_no_public_address_says_what_would_give_it_one(uploads, mo
     with pytest.raises(RuntimeError) as raised:
         bucket("uploads").public_url("a.txt")
     assert str(raised.value) == (
-        'this bucket carries no public address, so "a.txt" has no public url: declare the '
+        'this bucket has no public address, so "a.txt" has no public url: declare the '
         "bucket with public=True and give the project a domain to serve it from"
     )
 

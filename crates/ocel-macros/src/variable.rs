@@ -207,7 +207,7 @@ fn scope_problem(folders: &[String]) -> Option<String> {
     let mut seen: Vec<&String> = Vec::new();
     for folder in folders {
         if seen.contains(&folder) {
-            return Some(format!("folder '{folder}' is named twice. A scoped variable holds one value per folder it names."));
+            return Some(format!("folder '{folder}' is named twice. A scoped variable has one value per folder it names."));
         }
         seen.push(folder);
         if let Some(problem) = folder_problem(folder) {
@@ -460,7 +460,7 @@ mod tests {
             ),
             (
                 r#"#[ocel(folders = ["/apps/web", "/apps/web"])] pub k: bool"#,
-                "'K' has an unusable folder scope: folder '/apps/web' is named twice. A scoped variable holds one value per folder it names.",
+                "'K' has an unusable folder scope: folder '/apps/web' is named twice. A scoped variable has one value per folder it names.",
             ),
         ] {
             assert_eq!(err(source), want, "in {source}");

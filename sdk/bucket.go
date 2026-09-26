@@ -29,12 +29,12 @@ const (
 // ErrObjectNotFound is what every operation that cannot answer with nothing
 // reports when the bucket has no object under the key. Match it with
 // [errors.Is].
-var ErrObjectNotFound = errors.New("the bucket holds no object under this key")
+var ErrObjectNotFound = errors.New("the bucket has no object under this key")
 
 // ErrPreconditionFailed is what a write conditioned with [IfNotExists] or
 // [IfMatch] reports when the object did not meet the condition. Match it with
 // [errors.Is].
-var ErrPreconditionFailed = errors.New("the object did not meet the condition this write carried")
+var ErrPreconditionFailed = errors.New("the object did not meet the condition this write set")
 
 // An Object is what a bucket knows about one object it stores.
 type Object struct {
@@ -294,7 +294,7 @@ func (b *BucketStore) PublicURL(key string) (*url.URL, error) {
 	}
 	if reached.publicBaseURL == "" {
 		return nil, fmt.Errorf(
-			"this bucket carries no public address, so %q has no public url: "+
+			"this bucket has no public address, so %q has no public url: "+
 				"declare the bucket with ocel.BucketPublic() and give the project a domain to serve it from",
 			key,
 		)

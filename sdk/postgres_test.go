@@ -202,7 +202,7 @@ func TestABindingOfAnotherTypeIsRefused(t *testing.T) {
 
 	_, err := ocel.Postgres("main").ConnectionString()
 
-	want := "OCEL_RESOURCE_POSTGRES_main carries a BUCKET binding, and this app reads it as a POSTGRES"
+	want := "OCEL_RESOURCE_POSTGRES_main contains a BUCKET binding, and this app reads it as a POSTGRES"
 	if err == nil || err.Error() != want {
 		t.Errorf("ConnectionString() error = %v, want %q", err, want)
 	}

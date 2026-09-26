@@ -158,7 +158,7 @@ function validateGroup(key: string, definition: GroupDefinition): void {
   }
   if (Object.keys(definition.definitions).length === 0) {
     throw new EnvDefinitionError(
-      `'${key}' declares no variables. A group holds the variables an app takes together, so it holds at least one.`,
+      `'${key}' declares no variables. A group contains the variables an app takes together, so it has at least one.`,
     );
   }
   const problem = descriptionProblem(definition.description);

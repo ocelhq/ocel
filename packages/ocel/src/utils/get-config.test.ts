@@ -94,7 +94,7 @@ describe("getConfig", () => {
     setEnv("OCEL_RESOURCE_POSTGRES_main", bucketRecord);
 
     expect(() => getConfig("main", "postgres")).toThrow(
-      "OCEL_RESOURCE_POSTGRES_main carries a BUCKET binding, and this app reads it as a POSTGRES",
+      "OCEL_RESOURCE_POSTGRES_main contains a BUCKET binding, and this app reads it as a POSTGRES",
     );
   });
 
@@ -102,7 +102,7 @@ describe("getConfig", () => {
     setEnv("OCEL_RESOURCE_BUCKET_storage", JSON.stringify({ name: "storage" }));
 
     expect(() => getConfig("storage", "bucket")).toThrow(
-      "carries a UNSPECIFIED binding, and this app reads it as a BUCKET",
+      "contains a UNSPECIFIED binding, and this app reads it as a BUCKET",
     );
   });
 
@@ -110,7 +110,7 @@ describe("getConfig", () => {
     setEnv("OCEL_RESOURCE_BUCKET_storage", "shop-storage");
 
     expect(() => getConfig("storage", "bucket")).toThrow(
-      "OCEL_RESOURCE_BUCKET_storage does not carry a binding record",
+      "OCEL_RESOURCE_BUCKET_storage does not contain a binding record",
     );
   });
 

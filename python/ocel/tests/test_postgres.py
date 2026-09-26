@@ -108,7 +108,7 @@ def test_a_binding_of_another_type_is_refused_for_the_type_it_carries(monkeypatc
     with pytest.raises(RuntimeError) as raised:
         _ = postgres("main").connection_string
     assert str(raised.value) == (
-        "OCEL_RESOURCE_POSTGRES_main carries a BUCKET binding, and this app reads it as a POSTGRES"
+        "OCEL_RESOURCE_POSTGRES_main contains a BUCKET binding, and this app reads it as a POSTGRES"
     )
 
 
@@ -119,7 +119,7 @@ def test_a_binding_carrying_nothing_at_all_is_refused_for_the_type_it_carries(mo
     with pytest.raises(RuntimeError) as raised:
         _ = postgres("main").connection_string
     assert str(raised.value) == (
-        "OCEL_RESOURCE_POSTGRES_main carries a UNSPECIFIED binding, "
+        "OCEL_RESOURCE_POSTGRES_main contains a UNSPECIFIED binding, "
         "and this app reads it as a POSTGRES"
     )
 
@@ -132,7 +132,7 @@ def test_a_value_that_is_not_a_binding_record_is_reported_without_quoting_what_i
         _ = postgres("main").connection_string
     assert "s3cret" not in str(raised.value)
     assert str(raised.value) == (
-        "OCEL_RESOURCE_POSTGRES_main does not carry a binding record, "
+        "OCEL_RESOURCE_POSTGRES_main does not contain a binding record, "
         "so this app cannot read it as a POSTGRES"
     )
 

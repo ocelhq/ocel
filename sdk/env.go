@@ -342,7 +342,7 @@ func groupVariables(t reflect.Type, prefix []int, key string) ([]variable, error
 		vars = append(vars, v)
 	}
 	if len(vars) == 0 {
-		return nil, &EnvDefinitionError{Detail: fmt.Sprintf("group %s declares no variables. A group holds the variables an app takes together, so it holds at least one.", key)}
+		return nil, &EnvDefinitionError{Detail: fmt.Sprintf("group %s declares no variables. A group contains the variables an app takes together, so it has at least one.", key)}
 	}
 	return vars, nil
 }
@@ -461,7 +461,7 @@ func scopeProblem(folders []string) string {
 	seen := map[string]bool{}
 	for _, folder := range folders {
 		if seen[folder] {
-			return fmt.Sprintf("folder '%s' is named twice. A scoped variable holds one value per folder it names.", folder)
+			return fmt.Sprintf("folder '%s' is named twice. A scoped variable has one value per folder it names.", folder)
 		}
 		seen[folder] = true
 		if problem := folderProblem(folder); problem != "" {

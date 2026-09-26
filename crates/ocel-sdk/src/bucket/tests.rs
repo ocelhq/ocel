@@ -99,7 +99,7 @@ async fn a_read_of_a_key_the_bucket_does_not_hold_names_the_key() {
     };
     assert_eq!(
         err.to_string(),
-        "the bucket holds no object under 'absent.txt'"
+        "the bucket has no object under 'absent.txt'"
     );
     assert!(matches!(err, Error::NotFound { .. }));
 }
@@ -138,7 +138,7 @@ async fn a_write_conditioned_on_the_key_being_free_is_refused_when_it_is_not() {
         .expect_err("the key is taken");
     assert_eq!(
         err.to_string(),
-        "the object under 'once.txt' did not meet the condition this write carried"
+        "the object under 'once.txt' did not meet the condition this write set"
     );
     assert!(matches!(err, Error::PreconditionFailed { .. }));
 
