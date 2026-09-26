@@ -108,6 +108,7 @@ class Emitter {
   }
 
   type(node, indent = "") {
+    if (node === false) return "never";
     if (node.const !== undefined) return JSON.stringify(node.const);
     if (node.enum) return node.enum.map((value) => JSON.stringify(value)).join(" | ");
     if (node.oneOf) return this.union(node, indent);

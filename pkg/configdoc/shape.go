@@ -188,6 +188,7 @@ type jsonField struct {
 	enum     []string
 	pattern  string
 	secret   string
+	unless   string
 	optional bool
 	kind     reflect.Type
 }
@@ -210,6 +211,7 @@ func jsonFields(target reflect.Type) []jsonField {
 			enum:     enum,
 			pattern:  field.Tag.Get("pattern"),
 			secret:   field.Tag.Get("secret"),
+			unless:   field.Tag.Get("unless"),
 			optional: strings.Contains(options, "omitempty"),
 			kind:     field.Type,
 		})
