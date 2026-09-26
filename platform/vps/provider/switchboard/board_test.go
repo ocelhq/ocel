@@ -86,6 +86,22 @@ func fronted(t *testing.T, document []byte, relayed ...netip.Prefix) (*switchboa
 	}}
 }
 
+func hearingHTTPS(t *testing.T, document []byte, relayed ...netip.Prefix) string {
+	t.Helper()
+	table, err := switchboard.Read(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	board := switchboard.New(table, relayed...)
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() { _ = board.ServeHTTPS(listener) }()
+	t.Cleanup(func() { _ = board.Close() })
+	return listener.Addr().String()
+}
+
 func backend(t *testing.T, name string) string {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -264,6 +280,46 @@ func TestTheLivenessProbeIsToldTheSchemeAndHostsAnAppWouldHear(t *testing.T) {
 		}
 		if other := ask(t, tc.client, tc.at, tc.host, "/", tc.forwarded...); other.header.Get(switchboard.HeardHeader) != "" {
 			t.Errorf("%s: a request off the probe path was told %q, want nothing said beyond the probe", name, other.header.Get(switchboard.HeardHeader))
+		}
+	}
+}
+
+func TestAPeerOnTheHTTPSListenerIsHeardAsHTTPSForTheHostItAskedAndOnNothingItSaid(t *testing.T) {
+	t.Parallel()
+
+	web := backend(t, "web")
+	table := routing(t, map[string]string{"shop.example.com": web})
+	spoofed := []string{
+		"X-Forwarded-For", "6.6.6.6", "X-Forwarded-Proto", "http", "X-Forwarded-Host", "bank.example.com",
+		"X-Forwarded-Port", "8443", "X-Forwarded-Prefix", "/admin", "Forwarded", "for=6.6.6.6;proto=http",
+		"X_Forwarded_Proto", "http", "X_Forwarded_Host", "bank.example.com", "X-Real-Ip", "6.6.6.6", "True-Client-Ip", "6.6.6.6",
+	}
+	for name, at := range map[string]string{
+		"a peer nothing relays from":   hearingHTTPS(t, table),
+		"a peer the board relays from": hearingHTTPS(t, table, netip.MustParsePrefix("127.0.0.0/8")),
+	} {
+		said := ask(t, http.DefaultClient, at, "shop.example.com", "/", spoofed...)
+		if said.status != http.StatusOK || said.body != "web" {
+			t.Fatalf("%s: shop.example.com answered %d %q over the https listener, want the upstream's 200", name, said.status, said.body)
+		}
+		for header, want := range map[string]string{
+			"X-Forwarded-For":    "127.0.0.1",
+			"X-Forwarded-Proto":  "https",
+			"X-Forwarded-Host":   "shop.example.com",
+			"X-Forwarded-Port":   "",
+			"X-Forwarded-Prefix": "",
+			"Forwarded":          "",
+			"X_Forwarded_Proto":  "",
+			"X_Forwarded_Host":   "",
+			"X-Real-Ip":          "",
+			"True-Client-Ip":     "",
+		} {
+			if got := said.header.Get("Seen-" + header); got != want {
+				t.Errorf("%s: %s reached the upstream as %q, want %q: only a proxy ocel writes https routes into reaches this listener, and every tenant on its network can too, so the scheme is stamped and nothing the peer says is heard", name, header, got, want)
+			}
+		}
+		if heard := ask(t, http.DefaultClient, at, "shop.example.com", edge.LivenessProbePath, spoofed...).header.Get(switchboard.HeardHeader); heard != "https shop.example.com shop.example.com" {
+			t.Errorf("%s: the probe was told %q, want https for the Host it asked", name, heard)
 		}
 	}
 }

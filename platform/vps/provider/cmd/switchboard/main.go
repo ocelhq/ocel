@@ -95,7 +95,7 @@ func run(ctx context.Context, argv []string, out, errs io.Writer) int {
 }
 
 func usage(errs io.Writer) int {
-	fmt.Fprintln(errs, "usage: "+switchboard.Name+" serve --listen <host:port> --front <socket> --admit <socket> --table <path> [--relay <addr|cidr>]... [--relay-network <docker network>]... |")
+	fmt.Fprintln(errs, "usage: "+switchboard.Name+" serve --listen <host:port> --front <socket> --admit <socket> --table <path> [--relay <addr|cidr>]... [--relay-network <docker network>]... [--https-listen <host:port|docker network:port>] |")
 	fmt.Fprintln(errs, "       load <table> |")
 	fmt.Fprintln(errs, "       gate --deploy-timeout <seconds> <host:port/path>... |")
 	fmt.Fprintln(errs, "       flip [--drain-timeout <seconds> --retire <host:port>...] <table> |")
@@ -129,6 +129,7 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	fronting := flags.String("front", "", "")
 	admit := flags.String("admit", "", "")
 	path := flags.String("table", "", "")
+	https := flags.String("https-listen", "", "")
 	var relaying, networks repeated
 	flags.Var(&relaying, "relay", "")
 	flags.Var(&networks, "relay-network", "")
@@ -138,6 +139,12 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 	relayed, err := relayOf(ctx, relaying, networks)
 	if err != nil {
 		return refuse(errs, err)
+	}
+	var stamping []string
+	if *https != "" {
+		if stamping, err = httpsBinds(ctx, *https, systemResolve, net.InterfaceAddrs); err != nil {
+			return refuse(errs, err)
+		}
 	}
 	document, err := os.ReadFile(*path)
 	if err != nil {
@@ -153,26 +160,39 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 		return refuse(errs, err)
 	}
 	defer lock.Close()
+	opened := []net.Listener{controlling}
+	unwind := func(err error) int {
+		for _, listener := range opened {
+			_ = listener.Close()
+		}
+		return refuse(errs, err)
+	}
 	front, err := socketListener(*fronting)
 	if err != nil {
-		_ = controlling.Close()
-		return refuse(errs, err)
+		return unwind(err)
 	}
+	opened = append(opened, front)
 	data, err := net.Listen("tcp", *listen)
 	if err != nil {
-		_ = controlling.Close()
-		_ = front.Close()
-		return refuse(errs, err)
+		return unwind(err)
 	}
+	opened = append(opened, data)
 	admitting, err := socketListener(*admit)
 	if err != nil {
-		_ = controlling.Close()
-		_ = front.Close()
-		_ = data.Close()
-		return refuse(errs, err)
+		return unwind(err)
+	}
+	opened = append(opened, admitting)
+	var stamped []net.Listener
+	for _, address := range stamping {
+		listener, err := net.Listen("tcp", address)
+		if err != nil {
+			return unwind(err)
+		}
+		opened = append(opened, listener)
+		stamped = append(stamped, listener)
 	}
 	controller := &http.Server{Handler: board.Control(), ReadHeaderTimeout: switchboard.ReadHeaderTimeout}
-	failed := make(chan error, 4)
+	failed := make(chan error, len(opened))
 	go func() {
 		if err := board.ServeAdmit(admitting); err != nil {
 			failed <- err
@@ -188,6 +208,13 @@ func serve(ctx context.Context, control string, argv []string, errs io.Writer) i
 			failed <- err
 		}
 	}()
+	for _, listener := range stamped {
+		go func() {
+			if err := board.ServeHTTPS(listener); err != nil {
+				failed <- err
+			}
+		}()
+	}
 	go func() {
 		if err := controller.Serve(controlling); !errors.Is(err, http.ErrServerClosed) {
 			failed <- err

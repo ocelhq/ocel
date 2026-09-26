@@ -15,6 +15,10 @@ const networkLookup = 10 * time.Second
 
 type resolving func(ctx context.Context, name string) ([]netip.Addr, error)
 
+func systemResolve(ctx context.Context, name string) ([]netip.Addr, error) {
+	return net.DefaultResolver.LookupNetIP(ctx, "ip", name)
+}
+
 func relayOf(ctx context.Context, relaying, networks []string) ([]netip.Prefix, error) {
 	var relayed []netip.Prefix
 	for _, spelled := range relaying {
@@ -30,9 +34,7 @@ func relayOf(ctx context.Context, relaying, networks []string) ([]netip.Prefix, 
 	}
 	for _, network := range networks {
 		asking, stop := context.WithTimeout(ctx, networkLookup)
-		held, err := networkHeld(asking, network, func(ctx context.Context, name string) ([]netip.Addr, error) {
-			return net.DefaultResolver.LookupNetIP(ctx, "ip", name)
-		}, net.InterfaceAddrs)
+		held, err := networkHeld(asking, network, systemResolve, net.InterfaceAddrs)
 		stop()
 		if err != nil {
 			return nil, err
@@ -43,20 +45,31 @@ func relayOf(ctx context.Context, relaying, networks []string) ([]netip.Prefix, 
 }
 
 func networkHeld(ctx context.Context, network string, resolve resolving, addresses func() ([]net.Addr, error)) ([]netip.Prefix, error) {
+	held, err := heldOn(ctx, network, resolve, addresses)
+	if err != nil {
+		return nil, fmt.Errorf("--relay-network %w", err)
+	}
+	for i, prefix := range held {
+		held[i] = prefix.Masked()
+	}
+	return held, nil
+}
+
+func heldOn(ctx context.Context, network string, resolve resolving, addresses func() ([]net.Addr, error)) ([]netip.Prefix, error) {
 	if network == "" {
-		return nil, fmt.Errorf("--relay-network names no network")
+		return nil, fmt.Errorf("names no network")
 	}
 	named := switchboard.Name + "." + network
 	resolved, err := resolve(ctx, named)
 	if err != nil {
-		return nil, fmt.Errorf("--relay-network %s: %s resolves to nothing: %w", network, named, err)
+		return nil, fmt.Errorf("%s: %s resolves to nothing: %w", network, named, err)
 	}
 	for i, addr := range resolved {
 		resolved[i] = addr.Unmap()
 	}
 	held, err := addresses()
 	if err != nil {
-		return nil, fmt.Errorf("--relay-network %s: %w", network, err)
+		return nil, fmt.Errorf("%s: %w", network, err)
 	}
 	var prefixes []netip.Prefix
 	for _, addr := range held {
@@ -69,10 +82,10 @@ func networkHeld(ctx context.Context, network string, resolve resolving, address
 			continue
 		}
 		bits, _ := interfaced.Mask.Size()
-		prefixes = append(prefixes, netip.PrefixFrom(ip.Unmap(), bits).Masked())
+		prefixes = append(prefixes, netip.PrefixFrom(ip.Unmap(), bits))
 	}
 	if len(prefixes) == 0 {
-		return nil, fmt.Errorf("--relay-network %s: %s resolves to %v, which no interface of this switchboard holds", network, named, resolved)
+		return nil, fmt.Errorf("%s: %s resolves to %v, which no interface of this switchboard holds", network, named, resolved)
 	}
 	return prefixes, nil
 }
