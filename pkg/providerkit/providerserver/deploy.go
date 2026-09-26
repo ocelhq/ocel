@@ -1378,21 +1378,6 @@ func bindingPublished(name string, published envvars.StoredBinding) (provider.Bi
 	return binding, nil
 }
 
-func (r *deployRun) openImages(ctx context.Context, wired *contractv1.ImageRegistry) error {
-	r.registry = images.Registry{
-		Server:    wired.GetServer(),
-		Namespace: wired.GetNamespace(),
-		Username:  wired.GetUsername(),
-		Password:  wired.GetPassword(),
-	}
-	store, err := imageStoreFor(ctx, r.provider, r.registry)
-	if err != nil {
-		return err
-	}
-	r.images = store
-	return nil
-}
-
 func revisionsOf(result provider.StackResult, app string, logical []string) map[string]string {
 	revisions := make(map[string]string, len(logical)+1)
 	for _, container := range result.Containers {
@@ -1436,27 +1421,18 @@ func runs(images provider.ImagePushes, entry provider.AppEntry) string {
 	return entry.Image
 }
 
-func (r *deployRun) containerPush(ctx context.Context, entry provider.AppEntry) (images.Push, error) {
-	return r.wrappedPush(ctx, entry)
+func unseen(hosts []string, seen map[string]bool) []string {
+	var out []string
+	for _, host := range hosts {
+		if seen[host] {
+			continue
+		}
+		seen[host] = true
+		out = append(out, host)
+	}
+	return out
 }
 
-func (r *deployRun) imagePlan(ctx context.Context, entry provider.AppEntry, functions []images.Push) (provider.ImagePushes, error) {
-	if len(functions) > 0 {
-		return provider.ImagePushes{Store: r.images, Pushes: functions}, nil
-	}
-	if entry.Compute() != provider.ComputeContainer || entry.Image == "" {
-		return provider.ImagePushes{}, nil
-	}
-	if r.images == nil {
-		return provider.ImagePushes{}, refusal.Refuse(refusal.CodeInvalid,
-			"%s runs as a container, and this provider is served by pulling its image from a registry rather than being handed one: "+
-				"nothing names a registry, so the image has nowhere to go and the machine has nowhere to pull it from.\n"+
-				"    → name a `registry` in the project config, with `password` set to the name of the environment variable holding the token",
-			entry.App)
-	}
-	push, err := r.containerPush(ctx, entry)
-	if err != nil {
-		return provider.ImagePushes{}, err
-	}
-	return provider.ImagePushes{Store: r.images, Pushes: []images.Push{push}}, nil
+func frameworkOf(fn *contractv1.ManifestFunction) appbuild.Framework {
+	return appbuild.Framework{Name: fn.GetFramework().GetName(), Arch: fn.GetFramework().GetArch()}
 }

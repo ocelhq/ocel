@@ -69,7 +69,7 @@ func TestGoCodeNamesSharedPathsThroughConstants(t *testing.T) {
 		"pkg/naming/stack.go": {
 			constants.DefaultDiscoveryDirName: true,
 		},
-		"pkg/providerkit/providerserver/events_test.go": {
+		"pkg/providerkit/providerserver/eventstream_test.go": {
 			constants.DefaultDiscoveryDirName: true,
 		},
 		"pkg/providerkit/provider/stacks.go": {

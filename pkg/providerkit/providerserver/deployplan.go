@@ -2,7 +2,6 @@ package providerserver
 
 import (
 	"slices"
-	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
@@ -204,98 +203,6 @@ func infraTags(p provider.DeployPlan) map[string]string {
 		"ocel:stack":      p.Infra.String(),
 	}
 	return tags
-}
-
-type ReclaimTarget struct {
-	App      string
-	Build    provider.Build
-	Stack    naming.StackName
-	Prefixes []string
-}
-
-func ReclaimTargets(slug, env string, removed, surviving, servingHere []string) ([]ReclaimTarget, error) {
-	if len(removed) == 0 {
-		return nil, nil
-	}
-	elsewhere := releasesOf(surviving)
-	here := releasesOf(servingHere)
-
-	targets := make([]ReclaimTarget, 0, len(removed))
-	for _, key := range removed {
-		app, identity, ok := splitRecordKey(key)
-		if !ok {
-			if containerRelease(key) {
-				continue
-			}
-			return nil, refusal.Refuse(refusal.CodeInvalid, "malformed removed record key %q, want %q", key, recordKeyPrefix+"app/identity")
-		}
-		release := identity.Release()
-		targets = append(targets, ReclaimTarget{
-			App:      app,
-			Build:    identity,
-			Stack:    naming.AppStack(env, app, release),
-			Prefixes: reclaimedPrefixes(slug, env, app, release, elsewhere, here),
-		})
-	}
-	return targets, nil
-}
-
-func reclaimedPrefixes(slug, env, app string, release naming.Release, elsewhere, here map[appRelease]bool) []string {
-	coordinate := naming.Coordinate{Project: naming.Sanitize(slug), Env: env, App: app, Release: release}
-	released := appRelease{app: app, release: release.String()}
-	switch {
-	case !elsewhere[released]:
-		return []string{coordinate.StoragePrefix()}
-	case !here[released]:
-		return []string{coordinate.ISRPrefix()}
-	}
-	return nil
-}
-
-const recordKeyPrefix = "record:"
-
-type appRelease struct {
-	app     string
-	release string
-}
-
-func containerRelease(key string) bool {
-	app, identity, split := strings.Cut(strings.TrimPrefix(key, recordKeyPrefix), "/")
-	if !split || app == "" {
-		return false
-	}
-	repository, digest, pinned := strings.Cut(identity, "@")
-	if !pinned || repository == "" {
-		return false
-	}
-	hex, sha256 := strings.CutPrefix(digest, "sha256:")
-	return sha256 && len(hex) == 64 && strings.IndexFunc(hex, notHex) < 0
-}
-
-func notHex(r rune) bool { return !strings.ContainsRune("0123456789abcdef", r) }
-
-func splitRecordKey(key string) (string, provider.Build, bool) {
-	app, rendered, split := strings.Cut(strings.TrimPrefix(key, recordKeyPrefix), "/")
-	if !split || app == "" {
-		return "", provider.Build{}, false
-	}
-	identity, err := provider.ParseBuild(rendered)
-	if err != nil {
-		return "", provider.Build{}, false
-	}
-	return app, identity, true
-}
-
-func releasesOf(keys []string) map[appRelease]bool {
-	served := make(map[appRelease]bool, len(keys))
-	for _, key := range keys {
-		app, identity, ok := splitRecordKey(key)
-		if !ok {
-			continue
-		}
-		served[appRelease{app: app, release: identity.Release().String()}] = true
-	}
-	return served
 }
 
 func classifyStacks(entries []stackrecords.NamedStack, class edge.Class) (infra, apps []naming.StackName, pointers []string) {
