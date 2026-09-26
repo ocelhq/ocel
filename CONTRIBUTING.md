@@ -24,7 +24,8 @@ Build what the Go tests embed:
 ```sh
 pnpm install
 pnpm turbo run build --filter=ocel
-for dir in cli platform/aws/provider platform/gcp/provider platform/vps/provider pkg/transform; do
+for dir in cli platform/aws/provider platform/gcp/provider platform/vps/provider \
+  pkg/provider/transform; do
   go generate -C "$dir" ./...
 done
 ```
