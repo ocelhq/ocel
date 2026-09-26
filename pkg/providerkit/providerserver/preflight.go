@@ -51,7 +51,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		return nil, provider.RefusalError(err)
 	}
 
-	standing, err := gate.State(ctx, class)
+	standing, err := gate.Status(ctx, class)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -82,7 +82,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		return resp, nil
 	}
 
-	sibling, err := gate.State(ctx, siblingOf(class))
+	sibling, err := gate.Status(ctx, siblingOf(class))
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}

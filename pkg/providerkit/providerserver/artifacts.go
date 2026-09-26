@@ -24,19 +24,19 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (r *deployRun) pack(ctx context.Context, entry provider.AppEntry, values provider.AppValues, progress edge.Progress) (provider.AppPack, error) {
+func (r *deployRun) pack(ctx context.Context, entry provider.AppEntry, values provider.AppValues, progress edge.Progress) (provider.PackAppResult, error) {
 	packApp := r.provider.Hooks().PackApp
 	if packApp == nil {
-		return provider.AppPack{}, nil
+		return provider.PackAppResult{}, nil
 	}
-	pack, err := packApp(ctx, provider.AppPacking{
+	pack, err := packApp(ctx, provider.PackAppRequest{
 		Ref:    r.ref(entry.Stack),
 		Edge:   r.front.Kind(),
 		App:    entry.App,
 		Values: values,
 	}, progress)
 	if err != nil {
-		return provider.AppPack{}, fmt.Errorf("pack %s's function package: %w", entry.App, err)
+		return provider.PackAppResult{}, fmt.Errorf("pack %s's function package: %w", entry.App, err)
 	}
 	return pack, nil
 }
@@ -44,7 +44,7 @@ func (r *deployRun) pack(ctx context.Context, entry provider.AppEntry, values pr
 func (r *deployRun) stageFunctions(
 	ctx context.Context,
 	entry provider.AppEntry,
-	pack provider.AppPack,
+	pack provider.PackAppResult,
 	routing *provider.RoutingSpec,
 ) ([]provider.Upload, []images.Push, error) {
 	if hooks := r.provider.Hooks(); hooks.FunctionImages != nil {
@@ -55,7 +55,7 @@ func (r *deployRun) stageFunctions(
 	return staged, nil, err
 }
 
-func (r *deployRun) stageApp(entry provider.AppEntry, pack provider.AppPack, routing *provider.RoutingSpec) ([]provider.Upload, error) {
+func (r *deployRun) stageApp(entry provider.AppEntry, pack provider.PackAppResult, routing *provider.RoutingSpec) ([]provider.Upload, error) {
 	root := appbuild.ArtifactRoot()
 	var shipping []*contractv1.ManifestFunction
 	for _, fn := range r.manifest.GetFunctions() {

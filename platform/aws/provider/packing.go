@@ -7,6 +7,6 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (p *Provider) PackApp(ctx context.Context, packing provider.AppPacking, progress edge.Progress) (provider.AppPack, error) {
-	return p.stacks.PackApp(ctx, packing, progress)
+func (p *Provider) PackApp(ctx context.Context, req provider.PackAppRequest, progress edge.Progress) (provider.PackAppResult, error) {
+	return p.stacks.PackApp(ctx, req, progress)
 }

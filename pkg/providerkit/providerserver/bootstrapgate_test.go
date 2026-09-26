@@ -74,24 +74,24 @@ func TestStateReadsWhatTheVendorDescribes(t *testing.T) {
 	gate, p := gated(t, "2.0.0")
 	bootstrapped(t, p, edge.ClassProduction, fake.FeatureCache)
 
-	state, err := gate.State(context.Background(), edge.ClassProduction)
+	status, err := gate.Status(context.Background(), edge.ClassProduction)
 	if err != nil {
-		t.Fatalf("State() error = %v", err)
+		t.Fatalf("Status() error = %v", err)
 	}
-	if !state.Present {
-		t.Fatal("State() reports no bootstrap where one was applied")
+	if !status.Present {
+		t.Fatal("Status() reports no bootstrap where one was applied")
 	}
-	if want := []string{fake.FeatureCache}; !slices.Equal(state.Features, want) {
-		t.Errorf("State().Features = %v, want %v", state.Features, want)
+	if want := []string{fake.FeatureCache}; !slices.Equal(status.Features, want) {
+		t.Errorf("Status().Features = %v, want %v", status.Features, want)
 	}
-	if state.Schema != provider.BootstrapSchema {
-		t.Errorf("State().Schema = %d, want %d", state.Schema, provider.BootstrapSchema)
+	if status.Schema != provider.BootstrapSchema {
+		t.Errorf("Status().Schema = %d, want %d", status.Schema, provider.BootstrapSchema)
 	}
-	if state.WrittenBy != "1.0.0" {
-		t.Errorf("State().WrittenBy = %q, want the writer the core stack carries", state.WrittenBy)
+	if status.WrittenBy != "1.0.0" {
+		t.Errorf("Status().WrittenBy = %q, want the writer the core stack carries", status.WrittenBy)
 	}
-	if state.AutoHeal {
-		t.Error("State().AutoHeal is on with no bootstrap record written")
+	if status.AutoHeal {
+		t.Error("Status().AutoHeal is on with no bootstrap record written")
 	}
 }
 
@@ -105,12 +105,12 @@ func TestStateReadsAutoHealFromTheRecord(t *testing.T) {
 	if err := gate.RecordBootstrap(ctx, edge.ClassProduction, stackrecords.BootstrapSettings{AutoHeal: true}); err != nil {
 		t.Fatalf("RecordBootstrap() error = %v", err)
 	}
-	state, err := gate.State(ctx, edge.ClassProduction)
+	status, err := gate.Status(ctx, edge.ClassProduction)
 	if err != nil {
-		t.Fatalf("State() error = %v", err)
+		t.Fatalf("Status() error = %v", err)
 	}
-	if !state.AutoHeal {
-		t.Error("State().AutoHeal is off after the record said it is on")
+	if !status.AutoHeal {
+		t.Error("Status().AutoHeal is off after the record said it is on")
 	}
 
 	held, err := provider.Records().Read(ctx, stackrecords.BootstrapRecord(edge.ClassProduction))
@@ -189,11 +189,11 @@ func TestAdmitHealsAStaleBootstrapUnattended(t *testing.T) {
 	bootstrap.Behind(fake.FeatureCache)
 
 	progress := &recorder{}
-	state, err := gate.Admit(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress)
+	status, err := gate.Admit(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress)
 	if err != nil {
 		t.Fatalf("Admit() error = %v", err)
 	}
-	if stale := state.Stale([]string{fake.FeatureCache}); len(stale) != 0 {
+	if stale := status.Stale([]string{fake.FeatureCache}); len(stale) != 0 {
 		t.Errorf("Admit() left %v behind, want the heal to have refreshed them", stale)
 	}
 
@@ -241,14 +241,14 @@ func TestAdmitAsksForNoHealingAndGetsNone(t *testing.T) {
 	bootstrap.Behind(fake.FeatureCache)
 
 	progress := &recorder{}
-	state, err := gate.Admit(ctx, edge.ClassProduction, []string{fake.FeatureCache}, false, progress)
+	status, err := gate.Admit(ctx, edge.ClassProduction, []string{fake.FeatureCache}, false, progress)
 	if err != nil {
 		t.Fatalf("Admit() error = %v", err)
 	}
 	if got := len(bootstrap.Applied()); got != 1 {
 		t.Errorf("Apply() ran %d times, want a caller that asked for no healing to get none though the account opted in", got)
 	}
-	if stale := state.Stale([]string{fake.FeatureCache}); len(stale) != 1 {
+	if stale := status.Stale([]string{fake.FeatureCache}); len(stale) != 1 {
 		t.Errorf("Admit() reports %v behind, want the drift it was told to leave state", stale)
 	}
 	if !strings.Contains(progress.told(), "its content is behind") {
@@ -352,15 +352,15 @@ func TestAnApplyThatNeverFinishedReachesTheCLIAsOneAndReadsAsDrifted(t *testing.
 	bootstrapped(t, provider, class, fake.FeatureCache)
 	provider.FakeBootstrap().Halfway()
 
-	state, err := gate.State(ctx, class)
+	status, err := gate.Status(ctx, class)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !state.Unfinished {
-		t.Fatal("State() reads a half-applied bootstrap as one that finished, so nothing downstream can banner it")
+	if !status.Unfinished {
+		t.Fatal("Status() reads a half-applied bootstrap as one that finished, so nothing downstream can banner it")
 	}
-	status := providerserver.BootstrapStatusProto(state, "2.0.0", environmentv1.Tier_TIER_PRODUCTION, state.Features)
-	if !status.GetUnfinished() {
+	handed := providerserver.BootstrapStatusProto(status, "2.0.0", environmentv1.Tier_TIER_PRODUCTION, status.Features)
+	if !handed.GetUnfinished() {
 		t.Error("the status the CLI is handed says nothing about the apply that never finished")
 	}
 }
@@ -372,14 +372,14 @@ func TestDowngradeIsAWriterOlderThanTheOneThatWrote(t *testing.T) {
 	bootstrapped(t, provider, edge.ClassProduction)
 	provider.FakeBootstrap().WrittenBy("2.0.0")
 
-	state, err := gate.State(context.Background(), edge.ClassProduction)
+	status, err := gate.Status(context.Background(), edge.ClassProduction)
 	if err != nil {
-		t.Fatalf("State() error = %v", err)
+		t.Fatalf("Status() error = %v", err)
 	}
-	if !state.Downgrade("1.0.0") {
+	if !status.Downgrade("1.0.0") {
 		t.Error("Downgrade() = false where a newer build wrote the bootstrap this one is about to write")
 	}
-	if state.Downgrade("3.0.0") {
+	if status.Downgrade("3.0.0") {
 		t.Error("Downgrade() = true where the build about to write is the newer one")
 	}
 }

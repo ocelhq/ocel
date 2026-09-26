@@ -33,7 +33,7 @@ func (r *deployRun) imageFunctions(
 	ctx context.Context,
 	hooks provider.Hooks,
 	entry provider.AppEntry,
-	pack provider.AppPack,
+	pack provider.PackAppResult,
 	routing *provider.RoutingSpec,
 ) ([]images.Push, error) {
 	if r.images == nil {

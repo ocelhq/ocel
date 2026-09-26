@@ -796,7 +796,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					AssetPrefix:     facts.AssetPrefix,
 					PreviewLabel:    r.previewLabel(slot),
 					Guard:           facts.Guard,
-					Packed:          pack.Packed,
+					VendorState:     pack.VendorState,
 					Proxied:         anyProxied(proxied, grants),
 				},
 			}

@@ -180,10 +180,10 @@ func (r *Stacks) ensureSubstrate(ctx context.Context, ref provider.StackRef, pro
 		tags:     substrateTags(class),
 	}
 	spec := provider.StackSpec{
-		Ref:  substrateRef(class),
-		Kind: provider.StackInfra,
-		Tags: substrateTags(class),
-		Work: work,
+		Ref:         substrateRef(class),
+		Kind:        provider.StackInfra,
+		Tags:        substrateTags(class),
+		VendorState: work,
 	}
 	if err := stackrecords.Write(ctx, owner.cfg.Records, class, SubstrateSlug, substrateRef(class).Name, stackrecords.Stack{
 		Kind:      provider.StackInfra,

@@ -38,15 +38,15 @@ type Upload struct {
 
 const UploadKind = "artifact"
 
-type AppPacking struct {
+type PackAppRequest struct {
 	Ref    StackRef
 	Edge   edge.Kind
 	App    string
 	Values AppValues
 }
 
-type AppPack struct {
+type PackAppResult struct {
 	Overlay map[string][]byte
 
-	Packed any
+	VendorState any
 }

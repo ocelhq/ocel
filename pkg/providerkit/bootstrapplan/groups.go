@@ -7,7 +7,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func WithDefaultStackNames(described provider.BootstrapReading, catalogue []provider.Feature, name func(feature string) string) provider.BootstrapReading {
+func WithDefaultStackNames(described provider.BootstrapDescription, catalogue []provider.Feature, name func(feature string) string) provider.BootstrapDescription {
 	held := make(map[string]bool, len(described.Stacks))
 	for _, stack := range described.Stacks {
 		held[stack.Feature] = true
@@ -23,7 +23,7 @@ func WithDefaultStackNames(described provider.BootstrapReading, catalogue []prov
 	return named
 }
 
-func ChangeGroups(described provider.BootstrapReading, catalogue []provider.Feature, req provider.BootstrapRequest) []provider.ChangeGroup {
+func ChangeGroups(described provider.BootstrapDescription, catalogue []provider.Feature, req provider.BootstrapRequest) []provider.ChangeGroup {
 	standing := make(map[string]provider.BootstrapStack, len(described.Stacks))
 	for _, stack := range described.Stacks {
 		standing[stack.Feature] = stack
@@ -47,7 +47,7 @@ func ChangeGroups(described provider.BootstrapReading, catalogue []provider.Feat
 	return groups
 }
 
-func baselineGroup(described provider.BootstrapReading, stack provider.BootstrapStack, class edge.Class) provider.ChangeGroup {
+func baselineGroup(described provider.BootstrapDescription, stack provider.BootstrapStack, class edge.Class) provider.ChangeGroup {
 	group := provider.ChangeGroup{Kind: provider.StackGroupKind, Name: stackName(stack, string(class)+" bootstrap")}
 	group.Action, group.Reason = bootstrapStackAction(stack, described.Present)
 	return group

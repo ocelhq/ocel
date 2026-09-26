@@ -67,7 +67,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 			return nil, err
 		}
 		if req.GetConsented() == nil {
-			standing, err := gate.State(ctx, class)
+			standing, err := gate.Status(ctx, class)
 			if err != nil {
 				return nil, provider.RefusalError(err)
 			}
@@ -109,7 +109,7 @@ func (h *handlers) DescribeBootstrap(ctx context.Context, req *contractv1.Descri
 	if err != nil {
 		return nil, err
 	}
-	standing, err := gate.State(ctx, class)
+	standing, err := gate.Status(ctx, class)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
@@ -239,7 +239,7 @@ func RollUpProto(changes []*planv1.Change) planv1.Change_Action {
 	return planAction(action)
 }
 
-func BootstrapStatusProto(standing BootstrapState, writing provider.WrittenBy, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {
+func BootstrapStatusProto(standing BootstrapStatus, writing provider.WrittenBy, tier environmentv1.Tier, required []string) *contractv1.BootstrapStatus {
 	status := &contractv1.BootstrapStatus{
 		Tier:           tier,
 		Present:        standing.Present,

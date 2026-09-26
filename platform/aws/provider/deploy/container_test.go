@@ -329,7 +329,7 @@ func TestAContainerStackDecodesIntoTheContainerItStoodUp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("containerWork() = %v", err)
 	}
-	spec.Work = work
+	spec.VendorState = work
 	outputs := auto.OutputMap{"web": auto.OutputValue{Value: map[string]any{
 		outputKeyContainerURL:      "http://" + fixtureOrigin,
 		outputKeyContainerPhysical: "shop-prod-web-container-r3f8a1c90",

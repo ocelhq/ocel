@@ -160,7 +160,7 @@ func (r *release) Run(pctx *sdk.Context, spec provider.StackSpec) error {
 	if err != nil {
 		return err
 	}
-	switch work := spec.Work.(type) {
+	switch work := spec.VendorState.(type) {
 	case *stackWork:
 		return work.program(pctx)
 	case *appWork:
@@ -235,7 +235,7 @@ func provisionsBucket(spec provider.StackSpec) bool {
 
 func (r *release) Configure(_ context.Context, spec provider.StackSpec) (auto.ConfigMap, error) {
 	tags := spec.Tags
-	if work, held := spec.Work.(*stackWork); held {
+	if work, held := spec.VendorState.(*stackWork); held {
 		tags = work.tags
 	}
 	if len(tags) == 0 {
@@ -249,15 +249,15 @@ func (r *release) Configure(_ context.Context, spec provider.StackSpec) (auto.Co
 }
 
 func (r *release) Decode(ctx context.Context, spec provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error) {
-	if work, held := spec.Work.(*stackWork); held {
+	if work, held := spec.VendorState.(*stackWork); held {
 		work.outputs = outputs
 		return provider.StackResult{}, nil
 	}
-	if work, held := spec.Work.(*substrateWork); held {
+	if work, held := spec.VendorState.(*substrateWork); held {
 		work.outputs = outputs
 		return provider.StackResult{}, nil
 	}
-	if work, held := spec.Work.(*containerWork); held {
+	if work, held := spec.VendorState.(*containerWork); held {
 		return r.decodeContainer(work, outputs)
 	}
 	if spec.App != nil {
@@ -344,16 +344,16 @@ func (r *release) refuseHandover(ctx context.Context, spec provider.StackSpec) e
 	return &HandoverError{Bindings: handed, Stack: spec.Ref.Name.String()}
 }
 
-func (r *Stacks) PackApp(ctx context.Context, packing provider.AppPacking, _ edge.Progress) (provider.AppPack, error) {
-	held, err := r.at(ctx, packing.Ref, packing.Edge)
+func (r *Stacks) PackApp(ctx context.Context, req provider.PackAppRequest, _ edge.Progress) (provider.PackAppResult, error) {
+	held, err := r.at(ctx, req.Ref, req.Edge)
 	if err != nil {
-		return provider.AppPack{}, err
+		return provider.PackAppResult{}, err
 	}
-	bundle, err := held.sealApp(packing.Ref.Project, packing.App, packing.Values)
+	bundle, err := held.sealApp(req.Ref.Project, req.App, req.Values)
 	if err != nil {
-		return provider.AppPack{}, err
+		return provider.PackAppResult{}, err
 	}
-	return provider.AppPack{Overlay: bundle.overlay(), Packed: bundle}, nil
+	return provider.PackAppResult{Overlay: bundle.overlay(), VendorState: bundle}, nil
 }
 
 func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.Plan, error) {
@@ -425,7 +425,7 @@ func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress ed
 }
 
 func transformedIn(spec provider.StackSpec) *transformPatches {
-	switch work := spec.Work.(type) {
+	switch work := spec.VendorState.(type) {
 	case *appWork:
 		return work.transformed
 	case *infraWork:
@@ -435,7 +435,7 @@ func transformedIn(spec provider.StackSpec) *transformPatches {
 }
 
 func (r *release) prepare(ctx context.Context, spec provider.StackSpec) (provider.StackSpec, *appWork, error) {
-	if spec.Work != nil {
+	if spec.VendorState != nil {
 		return spec, nil, nil
 	}
 	if len(spec.Images.Pushes) > 0 {
@@ -456,14 +456,14 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec) (provide
 				return provider.StackSpec{}, nil, err
 			}
 		}
-		spec.Work = work
+		spec.VendorState = work
 		return spec, nil, nil
 	}
 	work, err := r.appWork(spec, transformed)
 	if err != nil {
 		return provider.StackSpec{}, nil, err
 	}
-	spec.Work = work
+	spec.VendorState = work
 	return spec, work, nil
 }
 

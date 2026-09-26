@@ -15,7 +15,7 @@ type Hooks struct {
 	PreflightDeploy     func(ctx context.Context, pre DeployPreflight) error
 	VerifyGrants        func(ctx context.Context, binding Binding) error
 	InspectStack        func(ctx context.Context, ref StackRef) (StackState, error)
-	PackApp             func(ctx context.Context, packing AppPacking, progress edge.Progress) (AppPack, error)
+	PackApp             func(ctx context.Context, req PackAppRequest, progress edge.Progress) (PackAppResult, error)
 	EmbedCode           func(ctx context.Context, function string, artifact ArtifactRef, progress edge.Progress) error
 	WarmFunctions       func(ctx context.Context, targets []string, progress edge.Progress) error
 	ProgramEdge         func(ctx context.Context, req EdgeProgramRequest) (EdgeProgram, error)

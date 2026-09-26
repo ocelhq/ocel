@@ -289,7 +289,7 @@ func (r *release) bytecodeCache(spec provider.StackSpec) *bytecodeConfig {
 }
 
 func (r *release) appBundle(spec provider.StackSpec) (appBundle, error) {
-	if sealed, carried := spec.App.Packed.(appBundle); carried {
+	if sealed, carried := spec.App.VendorState.(appBundle); carried {
 		return sealed, nil
 	}
 	return r.sealApp(spec.Ref.Project, spec.App.App, spec.App.Values)
@@ -386,7 +386,7 @@ func grantMessages(grants []provider.Grant) []*bindingsv1.Grant {
 }
 
 func (r *release) decodeApp(spec provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error) {
-	work, held := spec.Work.(*appWork)
+	work, held := spec.VendorState.(*appWork)
 	if !held {
 		return provider.StackResult{}, fmt.Errorf("this stack was not planned as an app stack")
 	}

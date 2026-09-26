@@ -40,7 +40,7 @@ func TestFeatureNeedingEdgeFindsTheFeatureTheEdgeParticipatesThrough(t *testing.
 func TestChangeGroupsNamesTheStacksTheVendorDescribed(t *testing.T) {
 	t.Parallel()
 
-	described := provider.BootstrapReading{
+	described := provider.BootstrapDescription{
 		Class:   edge.ClassPreview,
 		Present: true,
 		Stacks: []provider.BootstrapStack{
