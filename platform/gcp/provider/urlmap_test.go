@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/api/compute/v1"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 const classRoutes = "ocel-alb-production-routes"

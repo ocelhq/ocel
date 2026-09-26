@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"path"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/arch"
 )
 
 //go:generate pnpm --dir ../../../.. exec turbo run generate --filter=@platform/aws-payloads

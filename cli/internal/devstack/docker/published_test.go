@@ -3,7 +3,7 @@ package docker
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/images"
 )
 
 func TestAContainerIsReachedWhereItsDaemonIs(t *testing.T) {

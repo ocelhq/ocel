@@ -12,7 +12,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 
 	"github.com/ocelhq/ocel/cli/internal/cargo"
-	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/arch"
 )
 
 const cargoManifestFile = "Cargo.toml"

@@ -4,7 +4,7 @@ import (
 	"context"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/arch"
 )
 
 const RuntimeBinary = "the fake container runtime"

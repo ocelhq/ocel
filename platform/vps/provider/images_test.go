@@ -21,9 +21,9 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -380,7 +380,7 @@ func TestAWrappedImageIsWrittenAsATarballAndLoadedIntoTheMachinesDaemonWithoutRe
 		t.Fatalf("Push() of a wrapped image = %v", err)
 	}
 	if *reads != 0 {
-		t.Errorf("the local daemon was read %d times for an image providerkit already wrapped in memory: what the daemon has is the unwrapped base", *reads)
+		t.Errorf("the local daemon was read %d times for an image pkg/images already wrapped in memory: what the daemon has is the unwrapped base", *reads)
 	}
 	if commands := strings.Join(machine.commands(), "\n"); !strings.Contains(commands, "docker load") {
 		t.Errorf("the machine ran %q, want the wrapped image loaded into its own daemon", commands)

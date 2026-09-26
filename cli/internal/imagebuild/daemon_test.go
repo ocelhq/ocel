@@ -13,7 +13,7 @@ import (
 	types "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/images"
 	"google.golang.org/grpc"
 )
 

@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/appbuild"
 )
 
 const listenPollInterval = 20 * time.Millisecond

@@ -12,7 +12,7 @@ import (
 	run "google.golang.org/api/run/v2"
 	"google.golang.org/api/secretmanager/v1"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 

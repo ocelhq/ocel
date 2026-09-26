@@ -12,7 +12,7 @@ import (
 	railpack "github.com/railwayapp/railpack/buildkit"
 	"github.com/tonistiigi/fsutil"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/images"
 )
 
 const (

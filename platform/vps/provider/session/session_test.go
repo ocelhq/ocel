@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 )
 
 func TestAMasterThatHasAlreadyIdledOutIsClosedWithoutComplaint(t *testing.T) {

@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/appbuild"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 

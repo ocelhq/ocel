@@ -8,12 +8,19 @@ import (
 
 var providerkitBuildsOn = []string{
 	"github.com/ocelhq/ocel/pkg/providerkit",
+	"github.com/ocelhq/ocel/pkg/appbuild",
+	"github.com/ocelhq/ocel/pkg/arch",
 	"github.com/ocelhq/ocel/pkg/channel",
 	"github.com/ocelhq/ocel/pkg/configdoc",
 	"github.com/ocelhq/ocel/pkg/constants",
 	"github.com/ocelhq/ocel/pkg/costkit",
+	"github.com/ocelhq/ocel/pkg/envvars",
+	"github.com/ocelhq/ocel/pkg/envvarsserver",
+	"github.com/ocelhq/ocel/pkg/images",
 	"github.com/ocelhq/ocel/pkg/naming",
 	"github.com/ocelhq/ocel/pkg/proto",
+	"github.com/ocelhq/ocel/pkg/records",
+	"github.com/ocelhq/ocel/pkg/refusal",
 	"github.com/ocelhq/ocel/platform/edge/contract",
 }
 

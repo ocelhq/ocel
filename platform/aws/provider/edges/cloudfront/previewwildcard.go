@@ -14,7 +14,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	kitledger "github.com/ocelhq/ocel/pkg/providerkit/ledger"
-	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
