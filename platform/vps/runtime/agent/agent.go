@@ -23,8 +23,8 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -224,12 +224,12 @@ func (s *Server) containerOf(pid int) (string, error) {
 }
 
 type Docker struct {
-	host      providerkit.DockerHost
+	host      images.DockerHost
 	transport *http.Transport
 }
 
 func NewDocker() (*Docker, error) {
-	host, err := providerkit.DockerHostFromEnv()
+	host, err := images.DockerHostFromEnv()
 	if err != nil {
 		return nil, err
 	}

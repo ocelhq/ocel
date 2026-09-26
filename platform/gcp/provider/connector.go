@@ -22,6 +22,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/connectorkit"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/target"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -233,14 +234,14 @@ func (p *Provider) pushedConnector(ctx context.Context, binary []byte, progress 
 	if err != nil {
 		return "", err
 	}
-	store := providerkit.RegistryImages(at)
+	store := images.RegistryImages(at)
 	names, err := p.Names(ctx)
 	if err != nil {
 		return "", err
 	}
 	ref := names.RepositoryPath(p.options.Region, edge.ClassProduction) +
 		"/" + connectorImageName + ":" + naming.DigestTag(digest.String())
-	push := providerkit.ImagePush{App: connectorImageName, ImageRef: ref, Digest: digest.String(), Built: built}
+	push := images.ImagePush{App: connectorImageName, ImageRef: ref, Digest: digest.String(), Built: built}
 
 	held, err := store.Has(ctx, push)
 	if err != nil {

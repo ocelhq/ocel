@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -77,7 +78,7 @@ func (vm machine) hashed(t *testing.T, password string) string {
 	return line
 }
 
-func (vm machine) registry(t *testing.T) providerkit.RegistryTarget {
+func (vm machine) registry(t *testing.T) images.RegistryTarget {
 	t.Helper()
 	port := freePort(t)
 	password := secretOf(t)
@@ -102,7 +103,7 @@ func (vm machine) registry(t *testing.T) providerkit.RegistryTarget {
 	vm.forwarding(t, port)
 	server := fmt.Sprintf("127.0.0.1:%d", port)
 	answering(t, server)
-	return providerkit.RegistryTarget{
+	return images.RegistryTarget{
 		Server:    server,
 		Namespace: pullNamespace,
 		Username:  liveRegistryLogin,
@@ -148,15 +149,15 @@ func answering(t *testing.T, server string) {
 	t.Fatalf("the registry on the machine never answered at %s: %s", server, said)
 }
 
-func liveDigest(t *testing.T, target providerkit.RegistryTarget, coordinate string) string {
+func liveDigest(t *testing.T, target images.RegistryTarget, coordinate string) string {
 	t.Helper()
-	seed := providerkit.ImagePush{
+	seed := images.ImagePush{
 		App:      pullRepository,
 		Source:   transferBase(),
 		ImageRef: coordinate,
 		Digest:   transferDigest,
 	}
-	if err := providerkit.RegistryImages(target).Push(context.Background(), seed, nil); err != nil {
+	if err := images.RegistryImages(target).Push(context.Background(), seed, nil); err != nil {
 		t.Fatalf("push %s into the registry the machine pulls from = %v", coordinate, err)
 	}
 	req, err := http.NewRequest(http.MethodHead,
@@ -191,7 +192,7 @@ func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 	target := vm.registry(t)
 	coordinate := target.ImageRef(pullRepository, transferTag)
 	digest := liveDigest(t, target, coordinate)
-	push := providerkit.ImagePush{
+	push := images.ImagePush{
 		App:      pullRepository,
 		Source:   transferBase(),
 		ImageRef: coordinate,
@@ -206,7 +207,7 @@ func TestLiveTheMachinePullsTheImageAndIsLeftHoldingNoCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Images() = %v", err)
 	}
-	plan := providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{push}}
+	plan := providerkit.ImagePlan{Store: store, Pushes: []images.ImagePush{push}}
 
 	rows, err := plan.Rows(ctx)
 	if err != nil {

@@ -13,7 +13,7 @@ import (
 	types "github.com/moby/buildkit/api/types"
 	"github.com/moby/buildkit/solver/pb"
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"google.golang.org/grpc"
 )
 
@@ -53,7 +53,7 @@ func standIn(t *testing.T, answer func(http.ResponseWriter, *http.Request)) *ask
 	})}
 	go func() { _ = server.Serve(listener) }()
 	t.Cleanup(func() { _ = server.Close() })
-	t.Setenv(providerkit.DockerHostEnv, "unix://"+socket)
+	t.Setenv(images.DockerHostEnv, "unix://"+socket)
 	return seen
 }
 
@@ -235,25 +235,25 @@ func TestADaemonThatServesNoBuilderIsRefusedWithTheAnswerItGave(t *testing.T) {
 }
 
 func TestNoDaemonAtAllNamesTheVariableThatPointsAtOne(t *testing.T) {
-	t.Setenv(providerkit.DockerHostEnv, "unix://"+filepath.Join(t.TempDir(), "absent.sock"))
+	t.Setenv(images.DockerHostEnv, "unix://"+filepath.Join(t.TempDir(), "absent.sock"))
 
 	err := imagebuild.Reachable(context.Background())
 	if err == nil {
 		t.Fatal("Reachable() with no daemon behind the socket succeeded")
 	}
-	if !strings.Contains(err.Error(), providerkit.DockerHostEnv) {
+	if !strings.Contains(err.Error(), images.DockerHostEnv) {
 		t.Errorf("Reachable() = %v, and the reader is never told which variable points ocel at a daemon", err)
 	}
 }
 
 func TestASchemeOcelCannotDialIsRefusedBeforeAnythingIsDialled(t *testing.T) {
-	t.Setenv(providerkit.DockerHostEnv, "ssh://ubuntu@build-box")
+	t.Setenv(images.DockerHostEnv, "ssh://ubuntu@build-box")
 
 	err := imagebuild.Reachable(context.Background())
 	if err == nil {
 		t.Fatal("Reachable() over a scheme ocel cannot dial succeeded")
 	}
-	if !strings.Contains(err.Error(), providerkit.DockerHostEnv) || !strings.Contains(err.Error(), "ssh://ubuntu@build-box") {
+	if !strings.Contains(err.Error(), images.DockerHostEnv) || !strings.Contains(err.Error(), "ssh://ubuntu@build-box") {
 		t.Errorf("Reachable() = %v, want the variable and the value it was given", err)
 	}
 }

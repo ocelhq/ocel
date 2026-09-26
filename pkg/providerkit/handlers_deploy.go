@@ -28,6 +28,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -102,8 +103,8 @@ type deployRun struct {
 	scope     envvars.Scope
 	published *publishedBindings
 
-	registry RegistryTarget
-	images   ImageStore
+	registry images.RegistryTarget
+	images   images.ImageStore
 
 	dry           bool
 	draft         draft
@@ -1394,7 +1395,7 @@ func bindingOf(message *bindingsv1.Binding) Binding {
 }
 
 func (r *deployRun) openImages(ctx context.Context, wired *contractv1.ImageRegistry) error {
-	r.registry = RegistryTarget{
+	r.registry = images.RegistryTarget{
 		Server:    wired.GetServer(),
 		Namespace: wired.GetNamespace(),
 		Username:  wired.GetUsername(),
@@ -1451,11 +1452,11 @@ func runs(images ImagePlan, entry AppEntry) string {
 	return entry.Image
 }
 
-func (r *deployRun) containerPush(ctx context.Context, entry AppEntry) (ImagePush, error) {
+func (r *deployRun) containerPush(ctx context.Context, entry AppEntry) (images.ImagePush, error) {
 	return r.wrappedPush(ctx, entry)
 }
 
-func (r *deployRun) imagePlan(ctx context.Context, entry AppEntry, functions []ImagePush) (ImagePlan, error) {
+func (r *deployRun) imagePlan(ctx context.Context, entry AppEntry, functions []images.ImagePush) (ImagePlan, error) {
 	if len(functions) > 0 {
 		return ImagePlan{Store: r.images, Pushes: functions}, nil
 	}
@@ -1473,5 +1474,5 @@ func (r *deployRun) imagePlan(ctx context.Context, entry AppEntry, functions []I
 	if err != nil {
 		return ImagePlan{}, err
 	}
-	return ImagePlan{Store: r.images, Pushes: []ImagePush{push}}, nil
+	return ImagePlan{Store: r.images, Pushes: []images.ImagePush{push}}, nil
 }

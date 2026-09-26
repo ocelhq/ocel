@@ -1,4 +1,4 @@
-package providerkit_test
+package images_test
 
 import (
 	"context"
@@ -12,16 +12,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 )
 
-func registryServing(t *testing.T, handler http.HandlerFunc) (providerkit.ImageStore, providerkit.ImagePush) {
+func registryServing(t *testing.T, handler http.HandlerFunc) (images.ImageStore, images.ImagePush) {
 	t.Helper()
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
 	host := strings.TrimPrefix(server.URL, "http://")
-	target := providerkit.RegistryTarget{Server: host, Namespace: "acme", Username: "acme-bot", Password: "hunter2"}
-	return providerkit.RegistryImages(target), providerkit.ImagePush{
+	target := images.RegistryTarget{Server: host, Namespace: "acme", Username: "acme-bot", Password: "hunter2"}
+	return images.RegistryImages(target), images.ImagePush{
 		App:      "web",
 		Source:   "ocel/web@sha256:abc",
 		ImageRef: target.ImageRef("web", "sha256-abc"),
@@ -196,19 +196,19 @@ func TestARealmOnAnotherHostIsNotHandedTheRegistryPassword(t *testing.T) {
 }
 
 func TestAPlainHTTPRealmIsHandedTheRegistryPasswordOnlyOnLoopback(t *testing.T) {
-	if err := providerkit.CredentialsTravelTo("http://ghcr.io/token", "ghcr.io"); err == nil {
+	if err := images.CredentialsTravelTo("http://ghcr.io/token", "ghcr.io"); err == nil {
 		t.Error("a plain-http realm on an https registry was accepted, so the deploy's password would cross the wire in clear")
 	}
-	if err := providerkit.CredentialsTravelTo("http://elsewhere.invalid/token", "ghcr.io"); err == nil {
+	if err := images.CredentialsTravelTo("http://elsewhere.invalid/token", "ghcr.io"); err == nil {
 		t.Error("a plain-http realm on another host was accepted")
 	}
-	if err := providerkit.CredentialsTravelTo("token", "ghcr.io"); err == nil {
+	if err := images.CredentialsTravelTo("token", "ghcr.io"); err == nil {
 		t.Error("a realm naming no scheme was accepted")
 	}
-	if err := providerkit.CredentialsTravelTo("https://auth.docker.io/token", "registry-1.docker.io"); err != nil {
+	if err := images.CredentialsTravelTo("https://auth.docker.io/token", "registry-1.docker.io"); err != nil {
 		t.Errorf("the https realm a registry delegates to was refused: %v", err)
 	}
-	if err := providerkit.CredentialsTravelTo("http://127.0.0.1:5000/token", "127.0.0.1:5000"); err != nil {
+	if err := images.CredentialsTravelTo("http://127.0.0.1:5000/token", "127.0.0.1:5000"); err != nil {
 		t.Errorf("a loopback registry's own plain-http realm was refused: %v", err)
 	}
 }
@@ -240,14 +240,14 @@ func daemonServing(t *testing.T, handler http.HandlerFunc) *httptest.Server {
 	t.Helper()
 	daemon := httptest.NewServer(handler)
 	t.Cleanup(daemon.Close)
-	t.Setenv(providerkit.DockerTLSVerifyEnv, "")
-	t.Setenv(providerkit.DockerCertPathEnv, "")
-	t.Setenv(providerkit.DockerHostEnv, "tcp://"+strings.TrimPrefix(daemon.URL, "http://"))
+	t.Setenv(images.DockerTLSVerifyEnv, "")
+	t.Setenv(images.DockerCertPathEnv, "")
+	t.Setenv(images.DockerHostEnv, "tcp://"+strings.TrimPrefix(daemon.URL, "http://"))
 	return daemon
 }
 
-func pushTo(target providerkit.RegistryTarget) (providerkit.ImageStore, providerkit.ImagePush) {
-	return providerkit.RegistryImages(target), providerkit.ImagePush{
+func pushTo(target images.RegistryTarget) (images.ImageStore, images.ImagePush) {
+	return images.RegistryImages(target), images.ImagePush{
 		App:      "web",
 		Source:   "ocel/web@sha256:abc",
 		ImageRef: target.ImageRef("web", "sha256-abc"),
@@ -272,7 +272,7 @@ func TestThePushNamesTheImageRemotelyAndHandsTheDaemonTheDeploysCredentials(t *t
 			http.Error(w, "unexpected "+r.Method+" "+r.URL.Path, http.StatusNotFound)
 		}
 	})
-	store, push := pushTo(providerkit.RegistryTarget{Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "hunter2"})
+	store, push := pushTo(images.RegistryTarget{Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "hunter2"})
 
 	if err := store.Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("Push() = %v", err)
@@ -310,7 +310,7 @@ func TestAnAnonymousTargetHandsTheDaemonNoCredentialsAtAll(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusCreated)
 	})
-	store, push := pushTo(providerkit.RegistryTarget{Server: "127.0.0.1:5000"})
+	store, push := pushTo(images.RegistryTarget{Server: "127.0.0.1:5000"})
 
 	if err := store.Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("Push() = %v", err)
@@ -330,7 +330,7 @@ func TestARegistryThatRefusesThePushStopsTheRelease(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusCreated)
 	})
-	store, push := pushTo(providerkit.RegistryTarget{Server: "ghcr.io", Username: "acme-bot", Password: "hunter2"})
+	store, push := pushTo(images.RegistryTarget{Server: "ghcr.io", Username: "acme-bot", Password: "hunter2"})
 
 	err := store.Push(context.Background(), push, nil)
 	if err == nil {
@@ -358,7 +358,7 @@ func TestAThrottledPushIsWaitedOutRatherThanFailingTheDeploy(t *testing.T) {
 		}
 		w.WriteHeader(http.StatusCreated)
 	})
-	store, push := pushTo(providerkit.RegistryTarget{Server: "ghcr.io", Username: "acme-bot", Password: "hunter2"})
+	store, push := pushTo(images.RegistryTarget{Server: "ghcr.io", Username: "acme-bot", Password: "hunter2"})
 
 	if err := store.Push(context.Background(), push, nil); err != nil {
 		t.Fatalf("Push() = %v, and a throttle is an answer to wait out, not a failed deploy", err)
@@ -372,9 +372,9 @@ func TestARegistryThatNeverAnswersStopsTheDeployRatherThanHangingIt(t *testing.T
 	store, push := registryServing(t, func(w http.ResponseWriter, r *http.Request) {
 		<-r.Context().Done()
 	})
-	held := *providerkit.RegistryTimeout
-	*providerkit.RegistryTimeout = 50 * time.Millisecond
-	t.Cleanup(func() { *providerkit.RegistryTimeout = held })
+	held := *images.RegistryTimeout
+	*images.RegistryTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { *images.RegistryTimeout = held })
 
 	done := make(chan error, 1)
 	go func() {
@@ -392,10 +392,10 @@ func TestARegistryThatNeverAnswersStopsTheDeployRatherThanHangingIt(t *testing.T
 }
 
 func TestAHostnameThatResolvesToNothingIsReportedRatherThanRetried(t *testing.T) {
-	if providerkit.Addressable(&net.DNSError{Err: "no such host", IsNotFound: true}) {
+	if images.Addressable(&net.DNSError{Err: "no such host", IsNotFound: true}) {
 		t.Error("a hostname that resolves to nothing is retried five times, so a typo takes seconds to report")
 	}
-	if !providerkit.Addressable(errors.New("connection reset by peer")) {
+	if !images.Addressable(errors.New("connection reset by peer")) {
 		t.Error("a transport error the next attempt might survive is not retried")
 	}
 }

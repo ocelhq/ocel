@@ -9,6 +9,7 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/liveness"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
@@ -150,6 +151,6 @@ func (p *Provider) Certificates() providerkit.Certificates { return certificates
 
 func (p *Provider) Connector() providerkit.Connector { return connector{p} }
 
-func (p *Provider) Runtime() providerkit.Runtime { return containerRuntime{p} }
+func (p *Provider) Runtime() images.Runtime { return containerRuntime{p} }
 
 func (p *Provider) Liveness() providerkit.Liveness { return &p.Net }

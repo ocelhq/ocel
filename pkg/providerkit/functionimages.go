@@ -12,6 +12,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -33,13 +34,13 @@ func (r *deployRun) imageFunctions(
 	entry AppEntry,
 	pack AppPack,
 	routing *RoutingPlan,
-) ([]ImagePush, error) {
+) ([]images.ImagePush, error) {
 	if r.images == nil {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s's functions are run from images, and nothing this deploy carries names a registry to push them to", entry.App)
 	}
 	root := appbuild.ArtifactRoot()
-	var pushes []ImagePush
+	var pushes []images.ImagePush
 	for _, fn := range r.manifest.GetFunctions() {
 		if fn.GetApp() != entry.App {
 			continue
@@ -61,36 +62,36 @@ func (r *deployRun) imageFunction(
 	entry AppEntry,
 	fn *contractv1.ManifestFunction,
 	overlay map[string][]byte,
-) (ImagePush, error) {
+) (images.ImagePush, error) {
 	name := fn.GetLogicalName()
 	dir, err := stagedDir(root, fn)
 	if err != nil {
-		return ImagePush{}, err
+		return images.ImagePush{}, err
 	}
 	framework := frameworkOf(fn)
 	base, err := hooks.FunctionImages.ResolveBase(ctx, framework)
 	if err != nil {
-		return ImagePush{}, fmt.Errorf("read the base image %s's %s function is built on: %w", name, framework.Name, err)
+		return images.ImagePush{}, fmt.Errorf("read the base image %s's %s function is built on: %w", name, framework.Name, err)
 	}
 	carried, err := runtimeOverlay(ctx, hooks, framework, name, overlay)
 	if err != nil {
-		return ImagePush{}, err
+		return images.ImagePush{}, err
 	}
-	image, err := FunctionImage(base, framework, dir, carried)
+	image, err := images.FunctionImage(base, framework, dir, carried)
 	if err != nil {
-		return ImagePush{}, fmt.Errorf("build %s's image: %w", name, err)
+		return images.ImagePush{}, fmt.Errorf("build %s's image: %w", name, err)
 	}
 	image, err = r.wrapFunction(ctx, name, framework, image)
 	if err != nil {
-		return ImagePush{}, err
+		return images.ImagePush{}, err
 	}
 	digest, err := image.Digest()
 	if err != nil {
-		return ImagePush{}, fmt.Errorf("build %s's image: %w", name, err)
+		return images.ImagePush{}, fmt.Errorf("build %s's image: %w", name, err)
 	}
 	repository := functionRepository(entry.App, name)
-	target := imageRef(repository, naming.DigestTag(digest.String()), r.registry)
-	return ImagePush{
+	target := images.ImageRef(repository, naming.DigestTag(digest.String()), r.registry)
+	return images.ImagePush{
 		App:      name,
 		Source:   pinnedImageRef(target, digest.String()),
 		ImageRef: target,
@@ -115,7 +116,7 @@ func (r *deployRun) wrapFunction(ctx context.Context, name string, framework app
 		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"this provider carries no container runtime built for %s, and %s is built for it", goarch, name)
 	}
-	wrapped, err := WrapContainer(image, body)
+	wrapped, err := images.WrapContainer(image, body)
 	if err != nil {
 		return nil, fmt.Errorf("wrap %s's image in the runtime: %w", name, err)
 	}
@@ -129,7 +130,7 @@ func runtimeOverlay(
 	name string,
 	overlay map[string][]byte,
 ) (map[string][]byte, error) {
-	if !BootsThroughRuntime(framework) {
+	if !images.BootsThroughRuntime(framework) {
 		return overlay, nil
 	}
 	body, err := hooks.FunctionImages.ReadRuntime(ctx, framework)
@@ -142,20 +143,15 @@ func runtimeOverlay(
 	}
 	carried := make(map[string][]byte, len(overlay)+1)
 	maps.Copy(carried, overlay)
-	carried[NodeRuntimePath] = body
+	carried[images.NodeRuntimePath] = body
 	return carried, nil
-}
-
-func FunctionRoute(app, function string) string {
-	lead := naming.Join(naming.FieldSeparator, string(naming.KindFunction), app) + naming.FieldSeparator
-	return naming.Sanitize(strings.TrimPrefix(function, lead))
 }
 
 func functionRepository(app, function string) string {
 	if function == app {
 		return app
 	}
-	return app + "-" + FunctionRoute(app, function)
+	return app + "-" + images.FunctionRoute(app, function)
 }
 
 func pinnedImageRef(target, digest string) string {

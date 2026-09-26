@@ -1,6 +1,6 @@
 //go:build !windows
 
-package providerkit
+package images
 
 import (
 	"context"

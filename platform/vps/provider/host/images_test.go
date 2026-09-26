@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
@@ -166,7 +166,7 @@ const (
 func pulled(t *testing.T, stood *bench, server, hex string) error {
 	t.Helper()
 	_, err := stood.host().PullImage(context.Background(),
-		providerkit.RegistryTarget{Server: server, Namespace: "acme"},
+		images.RegistryTarget{Server: server, Namespace: "acme"},
 		server+"/acme/web:sha256-"+hex, "sha256:"+hex)
 	return err
 }

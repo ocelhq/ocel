@@ -1,4 +1,4 @@
-package providerkit_test
+package images_test
 
 import (
 	"archive/tar"
@@ -17,8 +17,8 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/empty"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 )
 
 var (
@@ -94,7 +94,7 @@ func TestFunctionImageCarriesTheStagedTreeUnderTheRootTheRuntimeRunsFrom(t *test
 		"config.json":  functionConfig(t, nil),
 	})
 
-	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir, nil)
+	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, nil)
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -109,7 +109,7 @@ func TestFunctionImageCarriesTheStagedTreeUnderTheRootTheRuntimeRunsFrom(t *test
 	held := tarNames(t, layers[0])
 	want := []string{"ocel/app/config.json", "ocel/app/index.mjs", "ocel/app/lib/deep.mjs"}
 	if !slices.Equal(held, want) {
-		t.Errorf("the layer holds %v, want the staged tree under %s: %v", held, providerkit.FunctionImageRoot, want)
+		t.Errorf("the layer holds %v, want the staged tree under %s: %v", held, images.FunctionImageRoot, want)
 	}
 }
 
@@ -119,13 +119,13 @@ func TestFunctionImageBootsANodeFunctionThroughTheRuntime(t *testing.T) {
 		"config.json": functionConfig(t, nil),
 	})
 
-	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir, nil)
+	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, nil)
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
 
 	config := configOf(t, image)
-	if !slices.Contains(config.Cmd, providerkit.NodeRuntimePath) {
+	if !slices.Contains(config.Cmd, images.NodeRuntimePath) {
 		t.Errorf("the image runs %v, want the runtime a node function's handler is served through", config.Cmd)
 	}
 }
@@ -136,7 +136,7 @@ func TestFunctionImageRefusesAFunctionThatNamesNoCommandAndBootsThroughNoRuntime
 		"config.json": frameworkConfig(t, appbuild.FrameworkGo, nil),
 	})
 
-	_, err := providerkit.FunctionImage(empty.Image, goRuntime, dir, nil)
+	_, err := images.FunctionImage(empty.Image, goRuntime, dir, nil)
 	if err == nil {
 		t.Fatal("FunctionImage() built an image for a go function with no command, want it refused: the image would boot node over a binary that is never run")
 	}
@@ -151,7 +151,7 @@ func TestFunctionImageRunsWhatTheRuntimeItIsBuiltAgainstNames(t *testing.T) {
 		"config.json": frameworkConfig(t, appbuild.FrameworkNode, nil),
 	})
 
-	_, err := providerkit.FunctionImage(empty.Image, goRuntime, dir, nil)
+	_, err := images.FunctionImage(empty.Image, goRuntime, dir, nil)
 	if err == nil {
 		t.Fatal("FunctionImage() built a go image booting the node runtime because the staged config said node, want the runtime the base was chosen for to decide")
 	}
@@ -170,7 +170,7 @@ func TestFunctionImageTellsTheFunctionWhichPortToBind(t *testing.T) {
 		"config.json": functionConfig(t, nil),
 	})
 
-	image, err := providerkit.FunctionImage(base, nodeRuntime, dir, nil)
+	image, err := images.FunctionImage(base, nodeRuntime, dir, nil)
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -190,7 +190,7 @@ func TestFunctionImageTellsTheFunctionWhichPortToBind(t *testing.T) {
 
 func builtDigest(t *testing.T, files map[string]string) string {
 	t.Helper()
-	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, stagedFunc(t, files), nil)
+	image, err := images.FunctionImage(empty.Image, nodeRuntime, stagedFunc(t, files), nil)
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -236,7 +236,7 @@ func TestFunctionImageRunsTheCommandTheFunctionsConfigNames(t *testing.T) {
 		"config.json": functionConfig(t, []string{"./server"}),
 	})
 
-	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir, nil)
+	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, nil)
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -245,8 +245,8 @@ func TestFunctionImageRunsTheCommandTheFunctionsConfigNames(t *testing.T) {
 	if !slices.Equal(config.Cmd, []string{"./server"}) {
 		t.Errorf("the image runs %v, want the command the function's config names", config.Cmd)
 	}
-	if config.WorkingDir != providerkit.FunctionImageRoot {
-		t.Errorf("the image runs from %q, want %q, where the command's relative path resolves", config.WorkingDir, providerkit.FunctionImageRoot)
+	if config.WorkingDir != images.FunctionImageRoot {
+		t.Errorf("the image runs from %q, want %q, where the command's relative path resolves", config.WorkingDir, images.FunctionImageRoot)
 	}
 }
 
@@ -257,8 +257,8 @@ func TestFunctionImageCarriesTheRuntimeAtThePathItBootsFrom(t *testing.T) {
 	})
 	runtime := []byte("export const runtime = 1")
 
-	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir,
-		map[string][]byte{providerkit.NodeRuntimePath: runtime})
+	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
+		map[string][]byte{images.NodeRuntimePath: runtime})
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
@@ -268,12 +268,12 @@ func TestFunctionImageCarriesTheRuntimeAtThePathItBootsFrom(t *testing.T) {
 		t.Fatal(err)
 	}
 	held := tarNames(t, layers[0])
-	want := strings.TrimPrefix(providerkit.NodeRuntimePath, "/")
+	want := strings.TrimPrefix(images.NodeRuntimePath, "/")
 	if !slices.Contains(held, want) {
-		t.Fatalf("the layer holds %v and nothing at %s, so the image runs a runtime it does not carry", held, providerkit.NodeRuntimePath)
+		t.Fatalf("the layer holds %v and nothing at %s, so the image runs a runtime it does not carry", held, images.NodeRuntimePath)
 	}
 	if body := tarBody(t, layers[0], want); !bytes.Equal(body, runtime) {
-		t.Errorf("the image carries %q at %s, want the runtime it was handed", body, providerkit.NodeRuntimePath)
+		t.Errorf("the image carries %q at %s, want the runtime it was handed", body, images.NodeRuntimePath)
 	}
 }
 
@@ -283,13 +283,13 @@ func TestFunctionImageTellsTheRuntimeWhichHandlerToServe(t *testing.T) {
 		"config.json": functionConfig(t, nil),
 	})
 
-	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir, nil)
+	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir, nil)
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v", err)
 	}
 
 	config := configOf(t, image)
-	want := "OCEL_HANDLER=" + providerkit.FunctionImageRoot + "/index.mjs"
+	want := "OCEL_HANDLER=" + images.FunctionImageRoot + "/index.mjs"
 	if !slices.Contains(config.Env, want) {
 		t.Errorf("the image carries env %v and never %s, so the runtime has no handler to serve", config.Env, want)
 	}
@@ -302,7 +302,7 @@ func TestFunctionImageRefusesAnOverlayThatWritesOutsideTheFunctionAndItsRuntime(
 	})
 
 	for _, rel := range []string{"/etc/passwd", "../../../etc/passwd", "/ocel/runtimes/entrypoint.mjs"} {
-		_, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir,
+		_, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
 			map[string][]byte{rel: []byte("root::0:0::/:/bin/sh")})
 		if err == nil {
 			t.Fatalf("FunctionImage() carried an overlay at %s, want it refused: a function's image may not write over the base image it is built on", rel)
@@ -318,9 +318,9 @@ func TestFunctionImageCarriesAnOverlayAlongsideTheRuntimeItBootsFrom(t *testing.
 		"index.mjs":   "export default () => {}",
 		"config.json": functionConfig(t, nil),
 	})
-	beside := path.Join(path.Dir(providerkit.NodeRuntimePath), "lib/shim.mjs")
+	beside := path.Join(path.Dir(images.NodeRuntimePath), "lib/shim.mjs")
 
-	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir,
+	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
 		map[string][]byte{beside: []byte("export const shim = 1")})
 	if err != nil {
 		t.Fatalf("FunctionImage() error = %v, want the runtime's own directory carried: it is the one place outside the function's tree the image is built to hold", err)
@@ -339,7 +339,7 @@ func TestTheContainerRuntimeLandsOutsideBothTreesAFunctionImageHolds(t *testing.
 	t.Parallel()
 
 	landed := appbuild.ContainerRuntimePath
-	for _, root := range []string{providerkit.FunctionImageRoot, providerkit.NodeRuntimeRoot} {
+	for _, root := range []string{images.FunctionImageRoot, images.NodeRuntimeRoot} {
 		if landed == root || strings.HasPrefix(landed, root+"/") {
 			t.Errorf("the container runtime lands at %s, inside %s: a node function's image holds a directory there, and a file appended over a directory cannot be loaded", appbuild.ContainerRuntimePath, root)
 		}
@@ -349,22 +349,22 @@ func TestTheContainerRuntimeLandsOutsideBothTreesAFunctionImageHolds(t *testing.
 		"index.mjs":   "export default () => {}",
 		"config.json": functionConfig(t, nil),
 	})
-	if _, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir,
+	if _, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
 		map[string][]byte{appbuild.ContainerRuntimePath: []byte("theirs")}); err == nil {
 		t.Errorf("FunctionImage() carried an overlay at %s, want it refused: a function's overlay may not write over the runtime its image is later wrapped in", appbuild.ContainerRuntimePath)
 	}
 
-	image, err := providerkit.FunctionImage(empty.Image, nodeRuntime, dir,
-		map[string][]byte{providerkit.NodeRuntimePath: []byte("export const runtime = 1")})
+	image, err := images.FunctionImage(empty.Image, nodeRuntime, dir,
+		map[string][]byte{images.NodeRuntimePath: []byte("export const runtime = 1")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	wrapped, err := providerkit.WrapContainer(image, []byte("a runtime binary"))
+	wrapped, err := images.WrapContainer(image, []byte("a runtime binary"))
 	if err != nil {
 		t.Fatalf("WrapContainer() = %v, want a node function's image wrapped like any container", err)
 	}
 	config := configOf(t, wrapped)
-	if !slices.Equal(config.Entrypoint, []string{appbuild.ContainerRuntimePath}) || !slices.Equal(config.Cmd, []string{"node", providerkit.NodeRuntimePath}) {
+	if !slices.Equal(config.Entrypoint, []string{appbuild.ContainerRuntimePath}) || !slices.Equal(config.Cmd, []string{"node", images.NodeRuntimePath}) {
 		t.Errorf("the wrapped function enters at %v and runs %v, want the container runtime running the node one", config.Entrypoint, config.Cmd)
 	}
 }
@@ -393,5 +393,21 @@ func tarBody(t *testing.T, layer v1.Layer, name string) []byte {
 			t.Fatal(err)
 		}
 		return held
+	}
+}
+
+func TestAFunctionsRouteIsWhatIsLeftOfItsLogicalName(t *testing.T) {
+	if got, want := images.FunctionRoute("web", "fn--web--index"), "index"; got != want {
+		t.Errorf("FunctionRoute() = %q, want %q: the app is already named beside it", got, want)
+	}
+	if got, want := images.FunctionRoute("web", "fn--web--api-users"), "api-users"; got != want {
+		t.Errorf("FunctionRoute() = %q, want %q", got, want)
+	}
+	if got, want := images.FunctionRoute("web", "web"), "web"; got != want {
+		t.Errorf("FunctionRoute() = %q, want %q: a name that is no coordinate is left alone", got, want)
+	}
+	if got, want := images.FunctionRoute("web", "fn--web--API/Users_[id]"), "api-users-id"; got != want {
+		t.Errorf("FunctionRoute() = %q, want %q: every caller names a resource with it, and no registry, "+
+			"bucket or service takes what a route may hold", got, want)
 	}
 }

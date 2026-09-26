@@ -1,4 +1,4 @@
-package providerkit
+package images
 
 import (
 	"archive/tar"
@@ -13,6 +13,7 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
+	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
@@ -20,7 +21,7 @@ import (
 const FunctionImageRoot = "/ocel/app"
 
 func FunctionImage(base v1.Image, framework appbuild.Framework, dir string, overlay map[string][]byte) (v1.Image, error) {
-	rels, err := artifactFiles(dir)
+	rels, err := ArtifactFiles(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +119,7 @@ func functionLayer(dir string, rels []string, overlay map[string][]byte) ([]byte
 			return nil, err
 		}
 	}
-	for _, rel := range overlayFiles(overlay) {
+	for _, rel := range OverlayFiles(overlay) {
 		if err := refuseStrayOverlay(rel); err != nil {
 			return nil, err
 		}
@@ -189,4 +190,9 @@ func imagePath(rel string) string {
 		return strings.TrimPrefix(path.Clean(rel), "/")
 	}
 	return strings.TrimPrefix(path.Join(FunctionImageRoot, rel), "/")
+}
+
+func FunctionRoute(app, function string) string {
+	lead := naming.Join(naming.FieldSeparator, string(naming.KindFunction), app) + naming.FieldSeparator
+	return naming.Sanitize(strings.TrimPrefix(function, lead))
 }

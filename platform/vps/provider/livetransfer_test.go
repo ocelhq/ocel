@@ -17,6 +17,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -30,7 +31,7 @@ var transferRepository = "ocel/live-transfer-" + strconv.Itoa(os.Getpid())
 
 func transferBase() string { return transferRepository + ":" + transferTag }
 
-func transferRuntime(t *testing.T, daemon providerkit.DockerHost, client *http.Client) []byte {
+func transferRuntime(t *testing.T, daemon images.DockerHost, client *http.Client) []byte {
 	t.Helper()
 	arch, err := daemon.Architecture(context.Background(), client, transferBase())
 	if err != nil {
@@ -44,7 +45,7 @@ func transferRuntime(t *testing.T, daemon providerkit.DockerHost, client *http.C
 }
 
 func transferCoordinate(runtime []byte) string {
-	return transferRepository + ":" + providerkit.RuntimeTag(transferDigest, runtime)
+	return transferRepository + ":" + images.RuntimeTag(transferDigest, runtime)
 }
 
 func rootfs(t *testing.T) []byte {
@@ -64,9 +65,9 @@ func rootfs(t *testing.T) []byte {
 	return raw.Bytes()
 }
 
-func localDaemon(t *testing.T) (providerkit.DockerHost, *http.Client) {
+func localDaemon(t *testing.T) (images.DockerHost, *http.Client) {
 	t.Helper()
-	daemon, err := providerkit.DockerHostFromEnv()
+	daemon, err := images.DockerHostFromEnv()
 	if err != nil {
 		t.Fatalf("no docker daemon this machine can name, and the image a transfer carries is read out of one: %v", err)
 	}
@@ -75,7 +76,7 @@ func localDaemon(t *testing.T) (providerkit.DockerHost, *http.Client) {
 	return daemon, &http.Client{Transport: transport}
 }
 
-func keepsImagesInContainerd(t *testing.T, daemon providerkit.DockerHost, client *http.Client) {
+func keepsImagesInContainerd(t *testing.T, daemon images.DockerHost, client *http.Client) {
 	t.Helper()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://docker/info", nil)
 	if err != nil {
@@ -103,10 +104,10 @@ func keepsImagesInContainerd(t *testing.T, daemon providerkit.DockerHost, client
 		"exporting from a classic store here carries an archive production never carries, and the load onto the machine's own classic store "+
 		"would prove a transition that never happens: turn the containerd image store on (\"features\": {\"containerd-snapshotter\": true} "+
 		"in /etc/docker/daemon.json) or point %s at a daemon that has it",
-		daemon.Address, info.Driver, providerkit.DockerHostEnv)
+		daemon.Address, info.Driver, images.DockerHostEnv)
 }
 
-func imported(t *testing.T) (providerkit.DockerHost, *http.Client) {
+func imported(t *testing.T) (images.DockerHost, *http.Client) {
 	t.Helper()
 	daemon, client := localDaemon(t)
 
@@ -146,8 +147,8 @@ func forget(client *http.Client) {
 	_ = resp.Body.Close()
 }
 
-func transferPush(daemon providerkit.DockerHost, client *http.Client, runtime []byte) providerkit.ImagePush {
-	return providerkit.ImagePush{
+func transferPush(daemon images.DockerHost, client *http.Client, runtime []byte) images.ImagePush {
+	return images.ImagePush{
 		App:      "live-transfer",
 		Source:   transferRepository + "@" + transferDigest,
 		ImageRef: transferCoordinate(runtime),
@@ -158,7 +159,7 @@ func transferPush(daemon providerkit.DockerHost, client *http.Client, runtime []
 	}
 }
 
-func wrappedAsADeployDoes(ctx context.Context, daemon providerkit.DockerHost, client *http.Client, runtime []byte) (v1.Image, func(), error) {
+func wrappedAsADeployDoes(ctx context.Context, daemon images.DockerHost, client *http.Client, runtime []byte) (v1.Image, func(), error) {
 	stream, err := daemon.Export(ctx, client, transferBase())
 	if err != nil {
 		return nil, nil, err
@@ -182,7 +183,7 @@ func wrappedAsADeployDoes(ctx context.Context, daemon providerkit.DockerHost, cl
 		discard()
 		return nil, nil, err
 	}
-	wrapped, err := providerkit.WrapContainer(base, runtime)
+	wrapped, err := images.WrapContainer(base, runtime)
 	if err != nil {
 		discard()
 		return nil, nil, err
@@ -216,7 +217,7 @@ func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *tes
 		t.Fatalf("the machine claims %s before anything carried it, so the transfer cannot be proven here", coordinate)
 	}
 
-	plan := providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{push}}
+	plan := providerkit.ImagePlan{Store: store, Pushes: []images.ImagePush{push}}
 	if err := plan.Ship(ctx, nil); err != nil {
 		t.Fatalf("Ship() onto a machine with no registry account = %v", err)
 	}
@@ -247,7 +248,7 @@ func TestLiveARedeployOfAnUnchangedAppCarriesTheImageNoSecondTime(t *testing.T) 
 	if err != nil {
 		t.Fatalf("OpenDirectImages() = %v", err)
 	}
-	plan := providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{transferPush(daemon, client, runtime)}}
+	plan := providerkit.ImagePlan{Store: store, Pushes: []images.ImagePush{transferPush(daemon, client, runtime)}}
 	if err := plan.Ship(ctx, nil); err != nil {
 		t.Fatalf("Ship() = %v", err)
 	}

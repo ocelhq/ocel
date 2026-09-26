@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/liveness"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -125,6 +126,6 @@ func (p *Provider) Certificates() providerkit.Certificates { return certificates
 
 func (p *Provider) Connector() providerkit.Connector { return connector{p} }
 
-func (p *Provider) Runtime() providerkit.Runtime { return containerRuntime{p} }
+func (p *Provider) Runtime() images.Runtime { return containerRuntime{p} }
 
 func (p *Provider) Liveness() providerkit.Liveness { return &p.Net }

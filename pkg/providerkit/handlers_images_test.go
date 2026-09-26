@@ -16,11 +16,12 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-var pushedCoordinate = "ghcr.io/acme/web:" + providerkit.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary))
+var pushedCoordinate = "ghcr.io/acme/web:" + images.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary))
 
 func registryDeployRequest() *contractv1.DeployRequest {
 	return namingARegistry(containerDeployRequest("/"))
@@ -271,8 +272,8 @@ func TestAnImageRowRidesInsideTheAppsOwnStackGroup(t *testing.T) {
 
 func TestTheImageStoreIsOpenedFromTheTargetTheDeployCarries(t *testing.T) {
 	store := fake.NewImages()
-	push := providerkit.ImagePush{App: "web", Source: containerTestImage, ImageRef: pushedCoordinate}
-	plan := providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{push}}
+	push := images.ImagePush{App: "web", Source: containerTestImage, ImageRef: pushedCoordinate}
+	plan := providerkit.ImagePlan{Store: store, Pushes: []images.ImagePush{push}}
 
 	if err := plan.Ship(context.Background(), nil); err != nil {
 		t.Fatalf("Ship() = %v", err)
@@ -289,17 +290,17 @@ type refusingStore struct{ where string }
 
 func (s refusingStore) Destination() string { return s.where }
 
-func (s refusingStore) Has(context.Context, providerkit.ImagePush) (bool, error) {
+func (s refusingStore) Has(context.Context, images.ImagePush) (bool, error) {
 	return false, nil
 }
 
-func (s refusingStore) Push(context.Context, providerkit.ImagePush, edge.Progress) error {
+func (s refusingStore) Push(context.Context, images.ImagePush, edge.Progress) error {
 	return errors.New("the stream stopped short")
 }
 
 func TestATransferThatFailsNamesWhereItWasSendingRatherThanTheCoordinate(t *testing.T) {
 	store := refusingStore{where: "box.invalid"}
-	plan := providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{{
+	plan := providerkit.ImagePlan{Store: store, Pushes: []images.ImagePush{{
 		App: "web", Source: containerTestImage, ImageRef: loadedCoordinate,
 	}}}
 
@@ -315,7 +316,7 @@ func TestATransferThatFailsNamesWhereItWasSendingRatherThanTheCoordinate(t *test
 	}
 }
 
-var loadedCoordinate = "ocel/shop/web:" + providerkit.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary))
+var loadedCoordinate = "ocel/shop/web:" + images.RuntimeTag("sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", []byte(fake.RuntimeBinary))
 
 type loadingProvider struct {
 	*fake.Provider
@@ -328,7 +329,7 @@ func (p loadingProvider) Hooks() providerkit.Hooks {
 	return hooks
 }
 
-func (p loadingProvider) OpenDirectImages(context.Context) (providerkit.ImageStore, error) {
+func (p loadingProvider) OpenDirectImages(context.Context) (images.ImageStore, error) {
 	return p.direct, nil
 }
 
@@ -441,7 +442,7 @@ func (p addressingProvider) Hooks() providerkit.Hooks {
 	return hooks
 }
 
-func (p addressingProvider) OpenDirectImages(context.Context) (providerkit.ImageStore, error) {
+func (p addressingProvider) OpenDirectImages(context.Context) (images.ImageStore, error) {
 	return p.direct, nil
 }
 

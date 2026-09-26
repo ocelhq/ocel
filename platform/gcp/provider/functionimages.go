@@ -11,9 +11,9 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/google"
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
@@ -115,7 +115,7 @@ func runsX8664(architecture, what string) error {
 }
 
 func (p *Provider) ReadFunctionRuntime(_ context.Context, framework appbuild.Framework) ([]byte, error) {
-	if !providerkit.BootsThroughRuntime(framework) {
+	if !images.BootsThroughRuntime(framework) {
 		return nil, nil
 	}
 	return payloads.NodeRuntime(), nil

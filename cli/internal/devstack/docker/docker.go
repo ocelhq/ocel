@@ -21,7 +21,7 @@ import (
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 )
 
 const (
@@ -87,7 +87,7 @@ func (u *Unreachable) Error() string {
 	if needed == "" {
 		needed = "a declared resource"
 	}
-	return fmt.Sprintf("no docker daemon answers at %s, and %s runs in a container on this machine: start docker, or set %s to a daemon that is running\n    %v", u.Address, needed, providerkit.DockerHostEnv, u.Err)
+	return fmt.Sprintf("no docker daemon answers at %s, and %s runs in a container on this machine: start docker, or set %s to a daemon that is running\n    %v", u.Address, needed, images.DockerHostEnv, u.Err)
 }
 
 func (u *Unreachable) Unwrap() error { return u.Err }
@@ -109,9 +109,9 @@ type daemon struct {
 }
 
 func Open(ctx context.Context) (Engine, error) {
-	host, err := providerkit.DockerHostFromEnv()
+	host, err := images.DockerHostFromEnv()
 	if err != nil {
-		return nil, &Unreachable{Address: cmp.Or(os.Getenv(providerkit.DockerHostEnv), "its default address"), Err: err}
+		return nil, &Unreachable{Address: cmp.Or(os.Getenv(images.DockerHostEnv), "its default address"), Err: err}
 	}
 	api, err := client.New(
 		client.WithHost("tcp://docker"),
@@ -130,7 +130,7 @@ func Open(ctx context.Context) (Engine, error) {
 	return &daemon{api: api, publishOn: publishOn, reachedAt: reachedAt}, nil
 }
 
-func published(host providerkit.DockerHost) (netip.Addr, string) {
+func published(host images.DockerHost) (netip.Addr, string) {
 	loopback := netip.AddrFrom4([4]byte{127, 0, 0, 1})
 	if host.Network != "tcp" {
 		return loopback, loopback.String()

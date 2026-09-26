@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,12 +14,14 @@ import (
 	"github.com/google/go-containerregistry/pkg/name"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/empty"
+	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -87,7 +90,7 @@ func wrappingServedOn(t *testing.T, arch string) (contractv1connect.ProviderServ
 
 func wrappedCoordinate() string {
 	_, digest, _ := strings.Cut(containerTestImage, "@")
-	return "ghcr.io/acme/web:" + providerkit.RuntimeTag(digest, containerRuntimeBytes)
+	return "ghcr.io/acme/web:" + images.RuntimeTag(digest, containerRuntimeBytes)
 }
 
 func TestAWrappingProviderPushesTheImageUnderTheCoordinateTheRuntimeItCarriesNames(t *testing.T) {
@@ -221,16 +224,16 @@ func TestAWrappedCoordinateTheRegistryAlreadyHoldsIsNeitherWrappedNorPushed(t *t
 
 type stubStore struct {
 	held   bool
-	pushed []providerkit.ImagePush
+	pushed []images.ImagePush
 }
 
-func (s *stubStore) Has(context.Context, providerkit.ImagePush) (bool, error) {
+func (s *stubStore) Has(context.Context, images.ImagePush) (bool, error) {
 	return s.held, nil
 }
 
 func (s *stubStore) Destination() string { return "the stub registry" }
 
-func (s *stubStore) Push(_ context.Context, push providerkit.ImagePush, _ edge.Progress) error {
+func (s *stubStore) Push(_ context.Context, push images.ImagePush, _ edge.Progress) error {
 	s.pushed = append(s.pushed, push)
 	return nil
 }
@@ -240,7 +243,7 @@ func TestShipHandsTheStoreTheWrappedImageAndClearsUpAfterIt(t *testing.T) {
 
 	store := &stubStore{}
 	cleaned := false
-	plan := providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{{
+	plan := providerkit.ImagePlan{Store: store, Pushes: []images.ImagePush{{
 		App:      "web",
 		ImageRef: "ghcr.io/acme/web:sha256-abc-ocel-0123456789ab",
 		Wrap: func(context.Context) (v1.Image, func(), error) {
@@ -263,7 +266,7 @@ func TestShipRunsNoWrapForACoordinateTheStoreAlreadyHolds(t *testing.T) {
 	t.Parallel()
 
 	store := &stubStore{held: true}
-	plan := providerkit.ImagePlan{Store: store, Pushes: []providerkit.ImagePush{{
+	plan := providerkit.ImagePlan{Store: store, Pushes: []images.ImagePush{{
 		App:      "web",
 		ImageRef: "ghcr.io/acme/web:sha256-abc-ocel-0123456789ab",
 		Wrap: func(context.Context) (v1.Image, func(), error) {
@@ -277,4 +280,23 @@ func TestShipRunsNoWrapForACoordinateTheStoreAlreadyHolds(t *testing.T) {
 	if len(store.pushed) != 0 {
 		t.Errorf("the store was handed %v for a coordinate it already holds", store.pushed)
 	}
+}
+
+func baseContainer(t *testing.T, config v1.Config) v1.Image {
+	t.Helper()
+	base, err := mutate.Config(empty.Image, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return base
+}
+
+func daemonServing(t *testing.T, handler http.HandlerFunc) *httptest.Server {
+	t.Helper()
+	daemon := httptest.NewServer(handler)
+	t.Cleanup(daemon.Close)
+	t.Setenv(images.DockerTLSVerifyEnv, "")
+	t.Setenv(images.DockerCertPathEnv, "")
+	t.Setenv(images.DockerHostEnv, "tcp://"+strings.TrimPrefix(daemon.URL, "http://"))
+	return daemon
 }

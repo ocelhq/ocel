@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 )
 
 type Machine struct {
@@ -121,7 +121,7 @@ func (vm Machine) Forward(t *testing.T) {
 		_ = tunnel.Wait()
 	})
 
-	t.Setenv(providerkit.DockerHostEnv, "unix://"+socket)
+	t.Setenv(images.DockerHostEnv, "unix://"+socket)
 	deadline := time.Now().Add(30 * time.Second)
 	for {
 		err := imagebuild.Reachable(context.Background())

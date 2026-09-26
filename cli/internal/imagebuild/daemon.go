@@ -14,7 +14,7 @@ import (
 	"github.com/moby/buildkit/client"
 	_ "github.com/moby/buildkit/util/grpcutil/encoding/proto"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 )
 
 const (
@@ -29,11 +29,11 @@ const (
 )
 
 type daemon struct {
-	providerkit.DockerHost
+	images.DockerHost
 }
 
 func openDaemon() (daemon, error) {
-	host, err := providerkit.DockerHostFromEnv()
+	host, err := images.DockerHostFromEnv()
 	if err != nil {
 		return daemon{}, err
 	}
@@ -143,9 +143,9 @@ func (d daemon) buildsFor(workers []*client.WorkerInfo, arch string) error {
 		}
 	}
 	slices.Sort(runs)
-	target := providerkit.ContainerPlatform(arch)
+	target := images.ContainerPlatform(arch)
 	return fmt.Errorf("the target runs %s, and the docker daemon at %s builds for %s alone: give it an emulator for %s (docker run --privileged --rm tonistiigi/binfmt --install %s, then restart docker), or set %s to a daemon running on a %s machine",
-		target, d.Address, builtFor(runs), target, arch, providerkit.DockerHostEnv, target)
+		target, d.Address, builtFor(runs), target, arch, images.DockerHostEnv, target)
 }
 
 func builtFor(runs []string) string {
@@ -165,7 +165,7 @@ func (d daemon) addressable(workers []*client.WorkerInfo) ([]*client.WorkerInfo,
 	if len(exporting) > 0 {
 		return exporting, nil
 	}
-	return nil, fmt.Errorf("the docker daemon at %s keeps images in its classic store, where an image is not addressable by the digest it is built under, and where buildkit additionally refuses the merge operations a railpack plan is assembled from: turn the containerd image store on and restart docker (Docker Desktop: Settings → General → Use containerd; docker engine: \"features\": {\"containerd-snapshotter\": true} in /etc/docker/daemon.json), or set %s to a daemon that already has it", d.Address, providerkit.DockerHostEnv)
+	return nil, fmt.Errorf("the docker daemon at %s keeps images in its classic store, where an image is not addressable by the digest it is built under, and where buildkit additionally refuses the merge operations a railpack plan is assembled from: turn the containerd image store on and restart docker (Docker Desktop: Settings → General → Use containerd; docker engine: \"features\": {\"containerd-snapshotter\": true} in /etc/docker/daemon.json), or set %s to a daemon that already has it", d.Address, images.DockerHostEnv)
 }
 
 func (d daemon) tag(ctx context.Context, image Image) error {
@@ -175,11 +175,11 @@ func (d daemon) tag(ctx context.Context, image Image) error {
 }
 
 func (d daemon) unreachable(err error) error {
-	return fmt.Errorf("no docker daemon answers at %s, and a container app's image is built by the one on this machine: start docker, or set %s to a daemon that is running\n    %w", d.Address, providerkit.DockerHostEnv, err)
+	return fmt.Errorf("no docker daemon answers at %s, and a container app's image is built by the one on this machine: start docker, or set %s to a daemon that is running\n    %w", d.Address, images.DockerHostEnv, err)
 }
 
 func (d daemon) noBuilder(err error) error {
-	return fmt.Errorf("the daemon at %s never named a builder to run the build on: start docker, or set %s to a daemon that is running\n    %w", d.Address, providerkit.DockerHostEnv, err)
+	return fmt.Errorf("the daemon at %s never named a builder to run the build on: start docker, or set %s to a daemon that is running\n    %w", d.Address, images.DockerHostEnv, err)
 }
 
 func Reachable(ctx context.Context, arches ...string) error {

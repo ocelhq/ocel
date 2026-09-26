@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -125,9 +126,9 @@ func standingDaemon(t *testing.T) *daemonLog {
 		}
 	}))
 	t.Cleanup(daemon.Close)
-	t.Setenv(providerkit.DockerTLSVerifyEnv, "")
-	t.Setenv(providerkit.DockerCertPathEnv, "")
-	t.Setenv(providerkit.DockerHostEnv, "tcp://"+strings.TrimPrefix(daemon.URL, "http://"))
+	t.Setenv(images.DockerTLSVerifyEnv, "")
+	t.Setenv(images.DockerCertPathEnv, "")
+	t.Setenv(images.DockerHostEnv, "tcp://"+strings.TrimPrefix(daemon.URL, "http://"))
 	return log
 }
 
@@ -139,7 +140,7 @@ func provisioning(t *testing.T, machine *box) *vps.Provider {
 	)
 }
 
-func pulling(t *testing.T, machine *box, target providerkit.RegistryTarget) providerkit.ImageStore {
+func pulling(t *testing.T, machine *box, target images.RegistryTarget) images.ImageStore {
 	t.Helper()
 	store, err := provisioning(t, machine).OpenRegistryImages(context.Background(), target)
 	if err != nil {
@@ -148,8 +149,8 @@ func pulling(t *testing.T, machine *box, target providerkit.RegistryTarget) prov
 	return store
 }
 
-func aTarget(server string) providerkit.RegistryTarget {
-	return providerkit.RegistryTarget{
+func aTarget(server string) images.RegistryTarget {
+	return images.RegistryTarget{
 		Server:    server,
 		Namespace: "acme",
 		Username:  pullUsername,
@@ -157,8 +158,8 @@ func aTarget(server string) providerkit.RegistryTarget {
 	}
 }
 
-func aPull(target providerkit.RegistryTarget) providerkit.ImagePush {
-	return providerkit.ImagePush{
+func aPull(target images.RegistryTarget) images.ImagePush {
+	return images.ImagePush{
 		App:      "web",
 		Source:   "ocel/shop/web@" + pullDigest,
 		ImageRef: target.ImageRef("web", pullTag),
@@ -341,7 +342,7 @@ func TestADigestTheMachineAlreadyHoldsIsNeitherPushedNorPulledAgain(t *testing.T
 	target := aTarget(server)
 	plan := providerkit.ImagePlan{
 		Store:  pulling(t, machine, target),
-		Pushes: []providerkit.ImagePush{aPull(target)},
+		Pushes: []images.ImagePush{aPull(target)},
 	}
 
 	if err := plan.Ship(context.Background(), nil); err != nil {
