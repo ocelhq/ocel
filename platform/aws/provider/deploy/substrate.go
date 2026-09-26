@@ -179,7 +179,7 @@ func (r *Stacks) ensureSubstrate(ctx context.Context, ref provider.StackRef, pro
 		boundary: owner.cfg.AppBoundaryARN,
 		tags:     substrateTags(class),
 	}
-	plan := provider.StackPlan{
+	spec := provider.StackSpec{
 		Ref:  substrateRef(class),
 		Kind: provider.StackInfra,
 		Tags: substrateTags(class),
@@ -191,7 +191,7 @@ func (r *Stacks) ensureSubstrate(ctx context.Context, ref provider.StackRef, pro
 	}); err != nil {
 		return substrate{}, err
 	}
-	if _, err := owner.automation.Run(ctx, plan, progress); err != nil {
+	if _, err := owner.automation.Run(ctx, spec, progress); err != nil {
 		return substrate{}, fmt.Errorf("stand up the container substrate for the %s class: %w", class, err)
 	}
 	decoded, err := decodeSubstrate(work.outputs)

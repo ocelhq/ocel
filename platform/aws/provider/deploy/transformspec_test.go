@@ -50,8 +50,8 @@ func (r *publishedReader) Named(_ context.Context, binding string) (provider.Bin
 	return provider.Binding{}, refusal.Refuse(refusal.CodeInvalid, "nothing published %s", binding)
 }
 
-func planUnderTransform() provider.StackPlan {
-	return provider.StackPlan{
+func specUnderTransform() provider.StackSpec {
+	return provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "shop",
 			Class:   edge.ClassProduction,
@@ -62,7 +62,7 @@ func planUnderTransform() provider.StackPlan {
 			{Name: "db", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}},
 			{Name: "uploads", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
 		},
-		App: &provider.AppPlan{
+		App: &provider.AppSpec{
 			App:       "api",
 			Framework: "next",
 			Functions: []provider.FunctionSpec{{Name: "fn--api--users"}},
@@ -101,11 +101,11 @@ func filledFromBinding(kind, name, property string) patchingPass {
 	}}
 }
 
-func offered(t *testing.T, plan provider.StackPlan) (*fakePass, []string) {
+func offered(t *testing.T, spec provider.StackSpec) (*fakePass, []string) {
 	t.Helper()
 	pass := &fakePass{}
-	if _, err := transformStackPlan(context.Background(), pass, plan); err != nil {
-		t.Fatalf("transformStackPlan() = %v", err)
+	if _, err := transformStackSpec(context.Background(), pass, spec); err != nil {
+		t.Fatalf("transformStackSpec() = %v", err)
 	}
 	var seen []string
 	for _, resource := range pass.seen.Resources {
@@ -115,7 +115,7 @@ func offered(t *testing.T, plan provider.StackPlan) (*fakePass, []string) {
 }
 
 func TestAnAppStackOffersOnlyTheFunctionsItStandsUp(t *testing.T) {
-	pass, seen := offered(t, planUnderTransform())
+	pass, seen := offered(t, specUnderTransform())
 
 	want := []string{"function:fn--api--users"}
 	if strings.Join(seen, ",") != strings.Join(want, ",") {
@@ -125,17 +125,17 @@ func TestAnAppStackOffersOnlyTheFunctionsItStandsUp(t *testing.T) {
 		t.Errorf("the transform was told provider %q, want %q", pass.seen.Provider, transformProvider)
 	}
 	if pass.seen.Env != "production" || pass.seen.EnvClass != string(edge.ClassProduction) {
-		t.Errorf("the transform was told env %q class %q, want the plan's own coordinate", pass.seen.Env, pass.seen.EnvClass)
+		t.Errorf("the transform was told env %q class %q, want the spec's own coordinate", pass.seen.Env, pass.seen.EnvClass)
 	}
 }
 
-func TestAPlanWithNoTransformIsLeftExactlyAsItWasPlanned(t *testing.T) {
-	transformed, err := transformStackPlan(context.Background(), nil, planUnderTransform())
+func TestASpecWithNoTransformIsLeftExactlyAsItWasGiven(t *testing.T) {
+	transformed, err := transformStackSpec(context.Background(), nil, specUnderTransform())
 	if err != nil {
-		t.Fatalf("transformStackPlan() with no pass = %v", err)
+		t.Fatalf("transformStackSpec() with no pass = %v", err)
 	}
 	if transformed != nil {
-		t.Errorf("transformStackPlan() = %+v with no pass, want the planned arguments left alone", transformed)
+		t.Errorf("transformStackSpec() = %+v with no pass, want the planned arguments left alone", transformed)
 	}
 }
 
@@ -144,11 +144,11 @@ func TestAPatchLandsOnThePulumiResourceThatOcelConstructsForIt(t *testing.T) {
 		patches[len(patches)-1]["lambda"] = map[string]any{"memorySize": 2048}
 	}}
 
-	transformed, err := transformStackPlan(context.Background(), pass, planUnderTransform())
+	transformed, err := transformStackSpec(context.Background(), pass, specUnderTransform())
 	if err != nil {
-		t.Fatalf("transformStackPlan() = %v", err)
+		t.Fatalf("transformStackSpec() = %v", err)
 	}
-	names := functionResourceNames("shop", planUnderTransform().Ref.Name, "fn--api--users")
+	names := functionResourceNames("shop", specUnderTransform().Ref.Name, "fn--api--users")
 	patch, claimed := transformed.patches[names["lambda"]]
 	if !claimed {
 		t.Fatalf("nothing was claimed for %q, want the lambda patch", names["lambda"])
@@ -159,12 +159,12 @@ func TestAPatchLandsOnThePulumiResourceThatOcelConstructsForIt(t *testing.T) {
 }
 
 func TestAnInfraStackOffersTheResourcesItStandsUpAndNotTheOnesItIsHandled(t *testing.T) {
-	plan := planUnderTransform()
-	plan.App = nil
-	plan.Kind = provider.StackInfra
-	plan.Resources[0].Binding = "legacy-orders"
+	spec := specUnderTransform()
+	spec.App = nil
+	spec.Kind = provider.StackInfra
+	spec.Resources[0].Binding = "legacy-orders"
 
-	_, seen := offered(t, plan)
+	_, seen := offered(t, spec)
 
 	want := []string{"bucket:uploads"}
 	if strings.Join(seen, ",") != strings.Join(want, ",") {
@@ -173,30 +173,30 @@ func TestAnInfraStackOffersTheResourcesItStandsUpAndNotTheOnesItIsHandled(t *tes
 }
 
 func TestAPatchOnAResourceThisProviderNeverConstructsIsRefused(t *testing.T) {
-	plan := planUnderTransform()
-	plan.App = nil
-	plan.Kind = provider.StackInfra
+	spec := specUnderTransform()
+	spec.App = nil
+	spec.Kind = provider.StackInfra
 	pass := patchingPass{patch: func(patches []transformkit.Patches) {
 		patches[1]["queue"] = map[string]any{"fifo": true}
 	}}
 
-	_, err := transformStackPlan(context.Background(), pass, plan)
+	_, err := transformStackSpec(context.Background(), pass, spec)
 	if err == nil || !strings.Contains(err.Error(), "queue") {
-		t.Fatalf("transformStackPlan() = %v, want the resource this provider never constructs refused by name", err)
+		t.Fatalf("transformStackSpec() = %v, want the resource this provider never constructs refused by name", err)
 	}
 }
 
 func TestABucketWithNoDeclaredOriginsCanStillBeGivenCORSByATransform(t *testing.T) {
-	plan := planUnderTransform()
-	plan.App = nil
-	plan.Kind = provider.StackInfra
+	spec := specUnderTransform()
+	spec.App = nil
+	spec.Kind = provider.StackInfra
 	pass := patchingPass{patch: func(patches []transformkit.Patches) {
 		patches[1]["cors"] = map[string]any{"corsRules": []any{map[string]any{"allowedMethods": []any{"GET"}}}}
 	}}
 
-	transformed, err := transformStackPlan(context.Background(), pass, plan)
+	transformed, err := transformStackSpec(context.Background(), pass, spec)
 	if err != nil {
-		t.Fatalf("transformStackPlan() = %v, want a transform allowed to add CORS to a bucket that declares no origins", err)
+		t.Fatalf("transformStackSpec() = %v, want a transform allowed to add CORS to a bucket that declares no origins", err)
 	}
 	if !transformed.opensCORS("uploads") {
 		t.Fatal("the bucket was not marked as opened by the patch, so the deploy would construct nothing for it")
@@ -207,46 +207,46 @@ func TestABucketWithNoDeclaredOriginsCanStillBeGivenCORSByATransform(t *testing.
 	}
 }
 
-func TestATransformReadsABindingOutputThroughThePlansOwnBindings(t *testing.T) {
+func TestATransformReadsABindingOutputThroughTheSpecsOwnBindings(t *testing.T) {
 	bindings := &publishedReader{bindings: []provider.Binding{
 		{Type: provider.BindingPostgres, Name: "legacy", Properties: map[string]string{"runtime": "nodejs22.x"}},
 	}}
-	plan := planUnderTransform()
-	plan.Bindings = bindings
+	spec := specUnderTransform()
+	spec.Bindings = bindings
 
-	transformed, err := transformStackPlan(context.Background(), filledFromBinding(customBindingType, "legacy", "runtime"), plan)
+	transformed, err := transformStackSpec(context.Background(), filledFromBinding(customBindingType, "legacy", "runtime"), spec)
 	if err != nil {
-		t.Fatalf("transformStackPlan() = %v", err)
+		t.Fatalf("transformStackSpec() = %v", err)
 	}
-	names := functionResourceNames("shop", plan.Ref.Name, "fn--api--users")
+	names := functionResourceNames("shop", spec.Ref.Name, "fn--api--users")
 	if got := transformed.patches[names["lambda"]]["runtime"]; got != "nodejs22.x" {
 		t.Errorf("the function runs %q, want the value the published binding carries", got)
 	}
 	if len(bindings.asked) != 1 || bindings.asked[0] != "legacy" {
-		t.Fatalf("the pass asked the plan's bindings for %v, want the one output the transform named", bindings.asked)
+		t.Fatalf("the pass asked the spec's bindings for %v, want the one output the transform named", bindings.asked)
 	}
 }
 
-func TestATransformReadingABindingThisPlanProvisionsIsRefused(t *testing.T) {
-	plan := planUnderTransform()
-	plan.Bindings = &publishedReader{}
+func TestATransformReadingABindingThisSpecProvisionsIsRefused(t *testing.T) {
+	spec := specUnderTransform()
+	spec.Bindings = &publishedReader{}
 
-	_, err := transformStackPlan(context.Background(), filledFromBinding("postgres", "db", "runtime"), plan)
+	_, err := transformStackSpec(context.Background(), filledFromBinding("postgres", "db", "runtime"), spec)
 	var provisioned *ProvisionedOutputError
 	if !errors.As(err, &provisioned) {
-		t.Fatalf("transformStackPlan() = %v, want it refused: this plan stands \"db\" up itself, so its outputs are not there to read", err)
+		t.Fatalf("transformStackSpec() = %v, want it refused: this spec stands \"db\" up itself, so its outputs are not there to read", err)
 	}
 }
 
 func TestATransformReadingABindingThisProjectNeverBoundIsRefused(t *testing.T) {
-	plan := planUnderTransform()
-	plan.Resources[1].Binding = "archive"
-	plan.Bindings = &publishedReader{}
+	spec := specUnderTransform()
+	spec.Resources[1].Binding = "archive"
+	spec.Bindings = &publishedReader{}
 
-	_, err := transformStackPlan(context.Background(), filledFromBinding("postgres", "orders", "runtime"), plan)
+	_, err := transformStackSpec(context.Background(), filledFromBinding("postgres", "orders", "runtime"), spec)
 	var unbound *UnboundOutputError
 	if !errors.As(err, &unbound) {
-		t.Fatalf("transformStackPlan() = %v, want an unbound-output refusal", err)
+		t.Fatalf("transformStackSpec() = %v, want an unbound-output refusal", err)
 	}
 	if !slices.Equal(unbound.Declared, []string{"bucket.uploads"}) {
 		t.Errorf("the refusal lists %v as bound, want what the config actually binds", unbound.Declared)
@@ -254,33 +254,33 @@ func TestATransformReadingABindingThisProjectNeverBoundIsRefused(t *testing.T) {
 }
 
 func TestATransformReadingAnUnpublishedRecordNamesWhatIsPublished(t *testing.T) {
-	plan := planUnderTransform()
-	plan.Bindings = &publishedReader{bindings: []provider.Binding{
+	spec := specUnderTransform()
+	spec.Bindings = &publishedReader{bindings: []provider.Binding{
 		{Type: provider.BindingBucket, Name: "archive", Properties: map[string]string{"bucket": "held"}},
 	}}
 
-	_, err := transformStackPlan(context.Background(), filledFromBinding(customBindingType, "absent", "runtime"), plan)
+	_, err := transformStackSpec(context.Background(), filledFromBinding(customBindingType, "absent", "runtime"), spec)
 	var unpublished *UnpublishedOutputError
 	if !errors.As(err, &unpublished) {
-		t.Fatalf("transformStackPlan() = %v, want an unpublished-output refusal", err)
+		t.Fatalf("transformStackSpec() = %v, want an unpublished-output refusal", err)
 	}
 	if !slices.Equal(unpublished.Carries, []string{"archive"}) {
-		t.Errorf("the refusal lists %v as published, want what the plan's bindings actually carry", unpublished.Carries)
+		t.Errorf("the refusal lists %v as published, want what the spec's bindings actually carry", unpublished.Carries)
 	}
 }
 
 func TestATransformReadsABoundResourceUnderTheNameItIsPublishedAs(t *testing.T) {
-	plan := planUnderTransform()
-	plan.Resources[0].Binding = "legacy-orders"
-	plan.Bindings = &publishedReader{bindings: []provider.Binding{
+	spec := specUnderTransform()
+	spec.Resources[0].Binding = "legacy-orders"
+	spec.Bindings = &publishedReader{bindings: []provider.Binding{
 		{Type: provider.BindingPostgres, Name: "legacy-orders", Properties: map[string]string{"runtime": "nodejs22.x"}},
 	}}
 
-	transformed, err := transformStackPlan(context.Background(), filledFromBinding("postgres", "db", "runtime"), plan)
+	transformed, err := transformStackSpec(context.Background(), filledFromBinding("postgres", "db", "runtime"), spec)
 	if err != nil {
-		t.Fatalf("transformStackPlan() = %v, want the bound resource's own published record read", err)
+		t.Fatalf("transformStackSpec() = %v, want the bound resource's own published record read", err)
 	}
-	names := functionResourceNames("shop", plan.Ref.Name, "fn--api--users")
+	names := functionResourceNames("shop", spec.Ref.Name, "fn--api--users")
 	if got := transformed.patches[names["lambda"]]["runtime"]; got != "nodejs22.x" {
 		t.Errorf("the function runs %q, want the value the bound record carries", got)
 	}
@@ -288,15 +288,15 @@ func TestATransformReadsABoundResourceUnderTheNameItIsPublishedAs(t *testing.T) 
 
 func TestAStoreThatFailsToResolveABindingIsNotReportedAsABadProperty(t *testing.T) {
 	torn := errors.New("the record's pair is torn")
-	plan := planUnderTransform()
-	plan.Bindings = &publishedReader{
+	spec := specUnderTransform()
+	spec.Bindings = &publishedReader{
 		bindings: []provider.Binding{{Type: provider.BindingPostgres, Name: "legacy"}},
 		failure:  torn,
 	}
 
-	_, err := transformStackPlan(context.Background(), filledFromBinding(customBindingType, "legacy", "runtime"), plan)
+	_, err := transformStackSpec(context.Background(), filledFromBinding(customBindingType, "legacy", "runtime"), spec)
 	if !errors.Is(err, torn) {
-		t.Fatalf("transformStackPlan() = %v, want the store's own failure carried out", err)
+		t.Fatalf("transformStackSpec() = %v, want the store's own failure carried out", err)
 	}
 	var property *OutputPropertyError
 	if errors.As(err, &property) {
@@ -305,17 +305,17 @@ func TestAStoreThatFailsToResolveABindingIsNotReportedAsABadProperty(t *testing.
 }
 
 func TestABindingCarryingNoSuchPropertyNamesWhatItDoesCarry(t *testing.T) {
-	plan := planUnderTransform()
-	plan.Bindings = &publishedReader{bindings: []provider.Binding{{
+	spec := specUnderTransform()
+	spec.Bindings = &publishedReader{bindings: []provider.Binding{{
 		Type:       provider.BindingPostgres,
 		Name:       "legacy",
 		Properties: map[string]string{"host": "db.internal", "port": "5432"},
 	}}}
 
-	_, err := transformStackPlan(context.Background(), filledFromBinding(customBindingType, "legacy", "runtime"), plan)
+	_, err := transformStackSpec(context.Background(), filledFromBinding(customBindingType, "legacy", "runtime"), spec)
 	var property *OutputPropertyError
 	if !errors.As(err, &property) {
-		t.Fatalf("transformStackPlan() = %v, want an OutputPropertyError", err)
+		t.Fatalf("transformStackSpec() = %v, want an OutputPropertyError", err)
 	}
 	if want := []string{"host", "port"}; !slices.Equal(property.Carries, want) {
 		t.Errorf("carries = %v, want the published record's own keys %v", property.Carries, want)
@@ -326,8 +326,8 @@ func TestEveryOutputOffTheSameBindingResolvesItOnce(t *testing.T) {
 	bindings := &publishedReader{bindings: []provider.Binding{
 		{Type: provider.BindingPostgres, Name: "legacy", Properties: map[string]string{"runtime": "nodejs22.x"}},
 	}}
-	plan := planUnderTransform()
-	plan.Bindings = bindings
+	spec := specUnderTransform()
+	spec.Bindings = bindings
 
 	pass := patchingPass{patch: func(patches []transformkit.Patches) {
 		placeholder := placeholderFor(customBindingType, "legacy", "runtime")
@@ -337,8 +337,8 @@ func TestEveryOutputOffTheSameBindingResolvesItOnce(t *testing.T) {
 		}
 	}}
 
-	if _, err := transformStackPlan(context.Background(), pass, plan); err != nil {
-		t.Fatalf("transformStackPlan() = %v", err)
+	if _, err := transformStackSpec(context.Background(), pass, spec); err != nil {
+		t.Fatalf("transformStackSpec() = %v", err)
 	}
 	if len(bindings.asked) != 1 {
 		t.Errorf("the pass resolved %v, want one read for the one binding both outputs name", bindings.asked)

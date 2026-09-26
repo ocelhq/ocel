@@ -15,21 +15,21 @@ import (
 
 const deployment = "0123456789abcdef0123456789abcdef"
 
-func aStack(t *testing.T, app provider.AppPlan) provider.StackPlan {
+func aStack(t *testing.T, app provider.AppSpec) provider.StackSpec {
 	t.Helper()
 	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")
 	if err != nil {
 		t.Fatal(err)
 	}
-	return provider.StackPlan{
+	return provider.StackSpec{
 		Ref:  provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
 		Kind: provider.StackApp,
 		App:  &app,
 	}
 }
 
-func anApp() provider.AppPlan {
-	return provider.AppPlan{
+func anApp() provider.AppSpec {
+	return provider.AppSpec{
 		App:             "web",
 		Compute:         provider.ComputeContainer,
 		Deployment:      deployment,
@@ -54,7 +54,7 @@ func TestStandingAnAppUpEndsAtARunningLabelledContainerAndFlipsNothing(t *testin
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	if len(standing) != 1 {
-		t.Fatalf("ProvisionContainers() stood up %v, want the one app the plan carries", standing)
+		t.Fatalf("ProvisionContainers() stood up %v, want the one app the spec carries", standing)
 	}
 	held := standing[0]
 	if held.Name != "web" {

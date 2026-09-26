@@ -14,26 +14,26 @@ const (
 	reasonUndeclared = "this release no longer declares it"
 )
 
-func SynthesizedPlan(ctx context.Context, store provider.ArtifactStore, plan provider.StackPlan, deployed provider.StackResult) (provider.Plan, error) {
-	images, err := plan.Images.Rows(ctx)
+func SynthesizedPlan(ctx context.Context, store provider.ArtifactStore, spec provider.StackSpec, deployed provider.StackResult) (provider.Plan, error) {
+	images, err := spec.Images.Rows(ctx)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	uploads, err := UploadRows(ctx, store, plan.Uploads)
+	uploads, err := UploadRows(ctx, store, spec.Uploads)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	changes := make([]provider.Change, 0, len(plan.Resources)+len(deployed.Bindings)+len(uploads)+len(images))
+	changes := make([]provider.Change, 0, len(spec.Resources)+len(deployed.Bindings)+len(uploads)+len(images))
 	changes = append(changes, images...)
 	changes = append(changes, uploads...)
-	for _, resource := range plan.Resources {
+	for _, resource := range spec.Resources {
 		changes = append(changes, provider.Change{
 			Kind:   string(resource.Type),
 			Name:   resource.Name,
 			Action: provider.KeepOrCreate(slices.ContainsFunc(deployed.Bindings, bindingFor(resource))),
 		})
 	}
-	declared := DeclaredFunctions(plan)
+	declared := DeclaredFunctions(spec)
 	for _, function := range declared {
 		changes = append(changes, provider.Change{
 			Kind:   functionKind,
@@ -41,7 +41,7 @@ func SynthesizedPlan(ctx context.Context, store provider.ArtifactStore, plan pro
 			Action: provider.KeepOrCreate(slices.ContainsFunc(deployed.Functions, functionNamed(function))),
 		})
 	}
-	containers := DeclaredContainers(plan)
+	containers := DeclaredContainers(spec)
 	for _, container := range containers {
 		changes = append(changes, provider.Change{
 			Kind:   containerKind,
@@ -50,7 +50,7 @@ func SynthesizedPlan(ctx context.Context, store provider.ArtifactStore, plan pro
 		})
 	}
 	for _, binding := range deployed.Bindings {
-		if slices.ContainsFunc(plan.Resources, func(resource provider.Resource) bool { return bindingFor(resource)(binding) }) {
+		if slices.ContainsFunc(spec.Resources, func(resource provider.Resource) bool { return bindingFor(resource)(binding) }) {
 			continue
 		}
 		changes = append(changes, provider.Change{Kind: string(binding.Type), Name: binding.Name, Action: provider.ActionDelete, Reason: reasonUndeclared})
@@ -67,7 +67,7 @@ func SynthesizedPlan(ctx context.Context, store provider.ArtifactStore, plan pro
 		}
 		changes = append(changes, provider.Change{Kind: containerKind, Name: container.Name, Action: provider.ActionDelete, Reason: reasonUndeclared})
 	}
-	return stackPlan(plan.Ref, changes), nil
+	return stackPlan(spec.Ref, changes), nil
 }
 
 func SynthesizedRemoval(ref provider.StackRef, deployed provider.StackResult) provider.Plan {
@@ -84,22 +84,22 @@ func SynthesizedRemoval(ref provider.StackRef, deployed provider.StackResult) pr
 	return stackPlan(ref, changes)
 }
 
-func DeclaredFunctions(plan provider.StackPlan) []string {
-	if plan.App == nil {
+func DeclaredFunctions(spec provider.StackSpec) []string {
+	if spec.App == nil {
 		return nil
 	}
-	names := make([]string, 0, len(plan.App.Functions))
-	for _, function := range plan.App.Functions {
+	names := make([]string, 0, len(spec.App.Functions))
+	for _, function := range spec.App.Functions {
 		names = append(names, function.Name)
 	}
 	return names
 }
 
-func DeclaredContainers(plan provider.StackPlan) []string {
-	if plan.App == nil || plan.App.Compute != provider.ComputeContainer {
+func DeclaredContainers(spec provider.StackSpec) []string {
+	if spec.App == nil || spec.App.Compute != provider.ComputeContainer {
 		return nil
 	}
-	return []string{plan.App.App}
+	return []string{spec.App.App}
 }
 
 func bindingFor(resource provider.Resource) func(provider.Binding) bool {

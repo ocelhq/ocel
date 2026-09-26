@@ -61,14 +61,14 @@ func (r *recordingProgress) reported() []string {
 	return append(slices.Clone(r.said), r.spans...)
 }
 
-func siblingAppPlan(t *testing.T, app string) provider.StackPlan {
+func siblingAppSpec(t *testing.T, app string) provider.StackSpec {
 	t.Helper()
 	coord := storageCoordinate("prod", "shop", app, fixedRelease(t))
-	return provider.StackPlan{
+	return provider.StackSpec{
 		Ref:  provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: coord.Stack()},
 		Kind: provider.StackApp,
 		Edge: fakeEdgeOf(cloudfront.Kind),
-		App: &provider.AppPlan{
+		App: &provider.AppSpec{
 			App:        app,
 			Framework:  appbuild.FrameworkNext,
 			Entry:      "fn--" + app + "--entry",
@@ -76,9 +76,9 @@ func siblingAppPlan(t *testing.T, app string) provider.StackPlan {
 			Functions: []provider.FunctionSpec{
 				{Name: "fn--" + app + "--entry", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: app + "-entry.zip"}},
 			},
-			Routing:     &provider.RoutingPlan{Entry: "fn--" + app + "--entry", Manifest: []byte(routedManifest)},
-			ISR:         &provider.ISRPlan{Prefix: isrPrefixOf(coord), TagNamespace: "tag:shop"},
-			Bytecode:    &provider.BytecodePlan{Prefix: bytecodePrefixOf(coord)},
+			Routing:     &provider.RoutingSpec{Entry: "fn--" + app + "--entry", Manifest: []byte(routedManifest)},
+			ISR:         &provider.ISRSpec{Prefix: isrPrefixOf(coord), TagNamespace: "tag:shop"},
+			Bytecode:    &provider.BytecodeSpec{Prefix: bytecodePrefixOf(coord)},
 			AssetPrefix: coord.AssetKey(""),
 		},
 	}
@@ -126,7 +126,7 @@ func TestOneReleaserStandsUpSiblingAppStacksAtOnce(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results[slot], failures[slot] = stacks.Provision(context.Background(), siblingAppPlan(t, app), reports[slot])
+			results[slot], failures[slot] = stacks.Provision(context.Background(), siblingAppSpec(t, app), reports[slot])
 		}()
 	}
 	wg.Wait()

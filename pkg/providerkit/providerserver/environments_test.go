@@ -339,7 +339,7 @@ type sweeper struct {
 	forgotten  []string
 }
 
-func (s *sweeper) ProvisionContainers(context.Context, provider.StackPlan, edge.Progress) ([]provider.AppContainer, error) {
+func (s *sweeper) ProvisionContainers(context.Context, provider.StackSpec, edge.Progress) ([]provider.AppContainer, error) {
 	return nil, nil
 }
 

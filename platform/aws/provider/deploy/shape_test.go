@@ -37,7 +37,7 @@ func shapeRequest(t *testing.T) provider.ShapeRequest {
 	t.Helper()
 	release := fixedRelease(t)
 	return provider.ShapeRequest{
-		Plan: provider.DeployPlan{
+		Deploy: provider.DeploySpec{
 			Slug:  "shop",
 			Class: edge.ClassProduction,
 			Env:   "prod",
@@ -117,15 +117,15 @@ func TestShapeRegistersWhatTheProgramsRegister(t *testing.T) {
 			t.Fatalf("run %s: %v", name, err)
 		}
 	}
-	cfg, appPlan := plannedAppStack(t)
-	appWork, err := releasing(t, cfg).appWork(appPlan, nil)
+	cfg, appSpec := appStackSpec(t)
+	appWork, err := releasing(t, cfg).appWork(appSpec, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	run("app", func(pctx *pulumi.Context) error { return appWork.run(pctx, nil) })
 
-	containerCfg, containerPlan := plannedContainerStack(t)
-	containerWork, err := releasing(t, containerCfg).containerWork(containerPlan, fixtureSubstrate())
+	containerCfg, containerSpec := containerStackSpec(t)
+	containerWork, err := releasing(t, containerCfg).containerWork(containerSpec, fixtureSubstrate())
 	if err != nil {
 		t.Fatal(err)
 	}

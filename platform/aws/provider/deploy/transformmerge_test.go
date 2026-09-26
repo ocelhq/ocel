@@ -18,7 +18,7 @@ func TestAnOutputThatResolvedToNothingNeverLandsInAPatch(t *testing.T) {
 		t.Fatal("emptyOutput(nil) = false, and a record carrying an explicit null would land in the patch as one")
 	}
 
-	stack := planUnderTransform().Ref.Name
+	stack := specUnderTransform().Ref.Name
 	candidates := []transformCandidate{
 		{key: resourceKey{Type: transformTypeFunction, Name: "fn--api--users"}, names: functionResourceNames("shop", stack, "fn--api--users")},
 	}
@@ -26,7 +26,7 @@ func TestAnOutputThatResolvedToNothingNeverLandsInAPatch(t *testing.T) {
 		"lambda": map[string]any{"description": placeholderFor(customBindingType, "legacy", "subnetIds")},
 	}}}
 
-	err := resolvePlanOutputs(t.Context(), provider.StackPlan{
+	err := resolveSpecOutputs(t.Context(), provider.StackSpec{
 		Bindings: &publishedReader{bindings: []provider.Binding{
 			{Type: provider.BindingPostgres, Name: "legacy", Properties: map[string]string{"subnetIds": ""}},
 		}},
@@ -216,7 +216,7 @@ func TestAResourceSharingANameWithAPatchedOneIsLeftAlone(t *testing.T) {
 func TestTwoCandidatesGivingOneSharedResourceDifferentValuesIsRefused(t *testing.T) {
 	t.Parallel()
 
-	stack := planUnderTransform().Ref.Name
+	stack := specUnderTransform().Ref.Name
 	candidates := []transformCandidate{
 		{key: resourceKey{Type: transformTypeFunction, Name: "fn--api--users"}, names: functionResourceNames("shop", stack, "fn--api--users")},
 		{key: resourceKey{Type: transformTypeFunction, Name: "fn--api--orders"}, names: functionResourceNames("shop", stack, "fn--api--orders")},
@@ -242,7 +242,7 @@ func TestTwoCandidatesGivingOneSharedResourceDifferentValuesIsRefused(t *testing
 func TestAFunctionPlacedInAVPCWithHalfOfWhatALambdaNeedsIsRefused(t *testing.T) {
 	t.Parallel()
 
-	stack := planUnderTransform().Ref.Name
+	stack := specUnderTransform().Ref.Name
 	candidates := []transformCandidate{
 		{key: resourceKey{Type: transformTypeFunction, Name: "fn--api--users"}, names: functionResourceNames("shop", stack, "fn--api--users")},
 	}

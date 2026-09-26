@@ -130,7 +130,7 @@ func TestADryDeployDrawsThePlanAndChangesNothing(t *testing.T) {
 		t.Errorf("the plan shows %v with no artifact upload row, want the upload the apply would make", groupNames(plan))
 	}
 
-	if provisioned := p.FakeStacks().Plans(); len(provisioned) != 0 {
+	if provisioned := p.FakeStacks().Provisioned(); len(provisioned) != 0 {
 		t.Errorf("a dry deploy provisioned %d stacks, want a run that stands nothing up", len(provisioned))
 	}
 	if reconciled := p.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks(); len(reconciled) != 0 {

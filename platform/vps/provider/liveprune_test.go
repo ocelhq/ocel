@@ -72,7 +72,7 @@ func prunedAndStoodAgain(t *testing.T, front string) {
 		t.Fatalf("the %s network is %s after the prune, want it gone with the switchboard as a host tool's nightly cleanup leaves it", host.ProxyNetwork, held)
 	}
 
-	if err := d.PreflightDeploy(ctx, provider.DeployPreflight{Plan: provider.DeployPlan{
+	if err := d.PreflightDeploy(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
 		Slug: frontedSlug, Class: edge.ClassProduction, Apps: []provider.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
 	}}); err != nil {
 		t.Fatalf("PreflightDeploy() after the prune = %v, want the switchboard and its network stood again from what bootstrap left", err)

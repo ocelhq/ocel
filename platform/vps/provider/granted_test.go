@@ -49,7 +49,7 @@ func grantedBucket() provider.Binding {
 	}
 }
 
-func manifestFor(t *testing.T, machine *box, options vps.Options, app provider.AppPlan) vars.Manifest {
+func manifestFor(t *testing.T, machine *box, options vps.Options, app provider.AppSpec) vars.Manifest {
 	t.Helper()
 	p := vps.ProviderOver(options, func(context.Context) (host.Conn, error) { return machine, nil })
 	if _, err := p.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
@@ -58,7 +58,7 @@ func manifestFor(t *testing.T, machine *box, options vps.Options, app provider.A
 	return manifestIn(t, machine)
 }
 
-func boundApp() provider.AppPlan {
+func boundApp() provider.AppSpec {
 	app := anApp()
 	app.Values = provider.AppValues{Bindings: []provider.Binding{bindingBucket()}}
 	app.Grants = []provider.Binding{grantedBucket()}

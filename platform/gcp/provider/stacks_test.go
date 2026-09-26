@@ -16,15 +16,15 @@ import (
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
-func previewPlan(label string) provider.StackPlan {
-	return provider.StackPlan{
+func previewSpec(label string) provider.StackSpec {
+	return provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "shop",
 			Class:   edge.ClassPreview,
 			Name:    naming.StackName{Env: "pr-7", App: "web"},
 		},
 		Kind: provider.StackApp,
-		App: &provider.AppPlan{
+		App: &provider.AppSpec{
 			App:             "web",
 			Compute:         provider.ComputeContainer,
 			Image:           "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
@@ -44,7 +44,7 @@ func TestAPreviewOnTheSharedWildcardStandsUpTheServiceItsHostnameNames(t *testin
 	p := server.open(t)
 	label := edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", "")
 
-	containers, err := p.ProvisionContainers(context.Background(), previewPlan(label), nil)
+	containers, err := p.ProvisionContainers(context.Background(), previewSpec(label), nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
@@ -59,12 +59,12 @@ func TestAPreviewFunctionIsNamedApartFromThePreviewItShipsIn(t *testing.T) {
 	p := server.open(t)
 	label := edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", "")
 
-	functions, err := p.ProvisionFunctions(context.Background(), previewPlan(label), nil)
+	functions, err := p.ProvisionFunctions(context.Background(), previewSpec(label), nil)
 	if err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
 	if len(functions) != 1 {
-		t.Fatalf("ProvisionFunctions() = %+v, want the one function the plan carries", functions)
+		t.Fatalf("ProvisionFunctions() = %+v, want the one function the spec carries", functions)
 	}
 	if functions[0].Physical == label {
 		t.Errorf("the function is served by %q, which is the service the preview's own hostname resolves to", label)
@@ -88,7 +88,7 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 	p := server.open(t)
 	progress := &heard{}
 
-	if _, err := p.ProvisionContainers(context.Background(), previewPlan(""), progress); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), previewSpec(""), progress); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	if !slices.ContainsFunc(progress.said, func(said string) bool { return strings.Contains(said, "is a preview and answers anyone") }) {
@@ -96,10 +96,10 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 	}
 
 	production := &heard{}
-	plan := previewPlan("")
-	plan.Ref.Class = edge.ClassProduction
-	plan.Ref.Name = naming.StackName{Env: stackrecords.ProductionEnv, App: "web"}
-	if _, err := p.ProvisionContainers(context.Background(), plan, production); err != nil {
+	spec := previewSpec("")
+	spec.Ref.Class = edge.ClassProduction
+	spec.Ref.Name = naming.StackName{Env: stackrecords.ProductionEnv, App: "web"}
+	if _, err := p.ProvisionContainers(context.Background(), spec, production); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	if slices.ContainsFunc(production.said, func(said string) bool { return strings.Contains(said, "is a preview") }) {
@@ -111,9 +111,9 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan = previewPlan(edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", ""))
-	plan.Edge = front
-	if _, err := p.ProvisionContainers(context.Background(), plan, shielded); err != nil {
+	spec = previewSpec(edge.SharedPreview("shop", "preview.acme.com").Label("pr-7", ""))
+	spec.Edge = front
+	if _, err := p.ProvisionContainers(context.Background(), spec, shielded); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	if slices.ContainsFunc(shielded.said, func(said string) bool { return strings.Contains(said, "is a preview") }) {
@@ -124,11 +124,11 @@ func TestAPreviewOnAnEdgeThatShieldsNothingIsSaidToBeOpenToAnyoneWithItsUrl(t *t
 func TestAProductionReleaseIsNamedNoDifferentlyForCarryingNoPreviewLabel(t *testing.T) {
 	server := &runServer{}
 	p := server.open(t)
-	plan := previewPlan("")
-	plan.Ref.Class = edge.ClassProduction
-	plan.Ref.Name = naming.StackName{Env: stackrecords.ProductionEnv, App: "web"}
+	spec := previewSpec("")
+	spec.Ref.Class = edge.ClassProduction
+	spec.Ref.Name = naming.StackName{Env: stackrecords.ProductionEnv, App: "web"}
 
-	containers, err := p.ProvisionContainers(context.Background(), plan, nil)
+	containers, err := p.ProvisionContainers(context.Background(), spec, nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}

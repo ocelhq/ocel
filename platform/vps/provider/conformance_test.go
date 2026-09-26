@@ -123,7 +123,7 @@ func TestTheReleasePortRefusesTheResourcesThisProviderServesNoneOf(t *testing.T)
 
 	ctx := context.Background()
 	release := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}}).Stacks()
-	plan := provider.StackPlan{
+	spec := provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "shop",
 			Class:   edge.ClassProduction,
@@ -134,10 +134,10 @@ func TestTheReleasePortRefusesTheResourcesThisProviderServesNoneOf(t *testing.T)
 	}
 
 	var refusal refusal.Refusal
-	if _, err := release.Plan(ctx, plan, nil); !errors.As(err, &refusal) {
+	if _, err := release.Plan(ctx, spec, nil); !errors.As(err, &refusal) {
 		t.Errorf("Plan() of a resource this provider serves none of = %v, want a refusal", err)
 	}
-	if _, err := release.Provision(ctx, plan, nil); !errors.As(err, &refusal) {
+	if _, err := release.Provision(ctx, spec, nil); !errors.As(err, &refusal) {
 		t.Errorf("Provision() of a resource this provider serves none of = %v, want a refusal rather than a release that reads as done", err)
 	}
 }

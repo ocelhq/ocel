@@ -175,7 +175,7 @@ func builtRoutingApp(t *testing.T, app string, desc edge.ServeDescriptor, manife
 	}
 }
 
-func TestTheAppPlanCarriesEveryFactTheStoodUpAppServesFrom(t *testing.T) {
+func TestTheAppSpecCarriesEveryFactTheStoodUpAppServesFrom(t *testing.T) {
 	builtProject(t)
 	routing := []byte(`{"routes":[{"id":"index"}]}`)
 	builtRoutingApp(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index", BuildID: "b1"}, routing)
@@ -191,13 +191,13 @@ func TestTheAppPlanCarriesEveryFactTheStoodUpAppServesFrom(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := provider.FakeStacks().Plans()
-	app := plans[len(plans)-1].App
+	specs := provider.FakeStacks().Provisioned()
+	app := specs[len(specs)-1].App
 	if app == nil {
-		t.Fatal("the last plan the stacks port saw stands up no app")
+		t.Fatal("the last spec the stacks port saw stands up no app")
 	}
 	if app.AssetPrefix == "" {
-		t.Error("the app plan names no asset prefix, so the stood-up app serves its static files from nowhere")
+		t.Error("the app spec names no asset prefix, so the stood-up app serves its static files from nowhere")
 	}
 	if app.Bytecode == nil || app.Bytecode.Prefix == "" {
 		t.Errorf("Bytecode = %+v, want the prefix the runtime warms its compile cache under", app.Bytecode)
@@ -248,27 +248,27 @@ type recordingStacks struct {
 	provider.Stacks
 
 	mu    sync.Mutex
-	drawn []provider.StackPlan
+	drawn []provider.StackSpec
 }
 
-func (r *recordingStacks) Plan(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.Plan, error) {
+func (r *recordingStacks) Plan(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.Plan, error) {
 	r.mu.Lock()
-	r.drawn = append(r.drawn, plan)
+	r.drawn = append(r.drawn, spec)
 	r.mu.Unlock()
-	return r.Stacks.Plan(ctx, plan, progress)
+	return r.Stacks.Plan(ctx, spec, progress)
 }
 
-func (r *recordingStacks) drawnApps() []provider.StackPlan {
+func (r *recordingStacks) drawnApps() []provider.StackSpec {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return appStacks(r.drawn)
 }
 
-func appStacks(plans []provider.StackPlan) []provider.StackPlan {
-	var apps []provider.StackPlan
-	for _, plan := range plans {
-		if plan.App != nil {
-			apps = append(apps, plan)
+func appStacks(specs []provider.StackSpec) []provider.StackSpec {
+	var apps []provider.StackSpec
+	for _, spec := range specs {
+		if spec.App != nil {
+			apps = append(apps, spec)
 		}
 	}
 	return apps
@@ -305,7 +305,7 @@ func TestADryDeployDrawsTheStackTheApplyWouldProvision(t *testing.T) {
 	if result, _ := deploy(t, client, deployRequest()); result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	applied := appStacks(provider.releases.Stacks.(*fake.Stacks).Plans())
+	applied := appStacks(provider.releases.Stacks.(*fake.Stacks).Provisioned())
 	if len(applied) != 1 {
 		t.Fatalf("the apply provisioned %d app stacks, want the one the manifest declares", len(applied))
 	}

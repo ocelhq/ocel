@@ -19,8 +19,8 @@ func preflightConfig() Config {
 	}
 }
 
-func preflightPlan() provider.DeployPlan {
-	return provider.DeployPlan{
+func preflightSpec() provider.DeploySpec {
+	return provider.DeploySpec{
 		Slug:  "shop",
 		Class: edge.ClassProduction,
 		Env:   "prod",
@@ -40,7 +40,7 @@ func TestPreflightPolicyBudget(t *testing.T) {
 
 		uploads := []provider.Resource{{Name: "bucket--uploads", Declared: "uploads", Type: provider.BindingBucket}}
 		pre := provider.DeployPreflight{
-			Plan:      preflightPlan(),
+			Deploy:    preflightSpec(),
 			Resources: uploads,
 			Apps: []provider.AppUsage{
 				{App: "web", Resources: uploads},
@@ -56,8 +56,8 @@ func TestPreflightPolicyBudget(t *testing.T) {
 		t.Parallel()
 
 		pre := provider.DeployPreflight{
-			Plan: preflightPlan(),
-			Apps: []provider.AppUsage{{App: "web"}, {App: "docs"}},
+			Deploy: preflightSpec(),
+			Apps:   []provider.AppUsage{{App: "web"}, {App: "docs"}},
 		}
 		for i := range 40 {
 			name := fmt.Sprintf("bucket--%02d", i)
@@ -83,8 +83,8 @@ func TestPreflightPolicyBudget(t *testing.T) {
 		t.Parallel()
 
 		pre := provider.DeployPreflight{
-			Plan: preflightPlan(),
-			Apps: []provider.AppUsage{{App: "web"}, {App: "docs"}},
+			Deploy: preflightSpec(),
+			Apps:   []provider.AppUsage{{App: "web"}, {App: "docs"}},
 		}
 		for i := range 40 {
 			name := fmt.Sprintf("bucket--%02d", i)
@@ -111,8 +111,8 @@ func TestPreflightPolicyBudget(t *testing.T) {
 		t.Parallel()
 
 		pre := provider.DeployPreflight{
-			Plan: preflightPlan(),
-			Apps: []provider.AppUsage{{App: "web"}, {App: "docs"}},
+			Deploy: preflightSpec(),
+			Apps:   []provider.AppUsage{{App: "web"}, {App: "docs"}},
 		}
 		for i := range 40 {
 			name := fmt.Sprintf("bucket--%02d", i)

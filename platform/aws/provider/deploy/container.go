@@ -124,9 +124,9 @@ type logConfiguration struct {
 	Options map[string]string `json:"options"`
 }
 
-func (r *release) checkContainer(plan provider.StackPlan) (*containerWork, error) {
-	app := plan.App
-	project, stack := naming.Sanitize(plan.Ref.Project), plan.Ref.Name
+func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error) {
+	app := spec.App
+	project, stack := naming.Sanitize(spec.Ref.Project), spec.Ref.Name
 	if strings.TrimSpace(app.Image) == "" {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names no image, and a container on this provider runs what a registry coordinate names and nothing else", app.App)
@@ -137,17 +137,17 @@ func (r *release) checkContainer(plan provider.StackPlan) (*containerWork, error
 	}
 	if r.cfg.OriginSecret == "" {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"this class holds no origin secret, and a container answers only to an edge that presents one: re-run `%s`", provider.BootstrapCommand(plan.Ref.Class))
+			"this class holds no origin secret, and a container answers only to an edge that presents one: re-run `%s`", provider.BootstrapCommand(spec.Ref.Class))
 	}
 	if r.cfg.AppBoundaryARN == "" {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"this deploy resolved no app boundary for %s, and a task role made without one is capped by nothing: re-run `%s`", app.App, provider.BootstrapCommand(plan.Ref.Class))
+			"this deploy resolved no app boundary for %s, and a task role made without one is capped by nothing: re-run `%s`", app.App, provider.BootstrapCommand(spec.Ref.Class))
 	}
 	policies, err := planBindingPolicies(app.Grants)
 	if err != nil {
 		return nil, err
 	}
-	bundle, err := r.sealApp(plan.Ref.Project, app.App, liveOnly(app.Values))
+	bundle, err := r.sealApp(spec.Ref.Project, app.App, liveOnly(app.Values))
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (r *release) checkContainer(plan provider.StackPlan) (*containerWork, error
 		image:      app.Image,
 		healthPath: app.HealthCheckPath,
 		env:        env,
-		tags:       plan.Tags,
+		tags:       spec.Tags,
 		boundary:   r.cfg.AppBoundaryARN,
 		region:     r.cfg.Region,
 		secrets:    presentedSecrets(r.cfg.OriginSecret, r.cfg.PreviousOriginSecret),
@@ -184,8 +184,8 @@ func liveOnly(held provider.AppValues) provider.AppValues {
 	return held
 }
 
-func (r *release) containerWork(plan provider.StackPlan, held substrate) (*containerWork, error) {
-	work, err := r.checkContainer(plan)
+func (r *release) containerWork(spec provider.StackSpec, held substrate) (*containerWork, error) {
+	work, err := r.checkContainer(spec)
 	if err != nil {
 		return nil, err
 	}
@@ -511,42 +511,42 @@ func (w *containerWork) taskRole(ctx *pulumi.Context) (*iam.Role, []pulumi.Resou
 	return role, granted, nil
 }
 
-func runsContainer(plan provider.StackPlan) bool {
-	return plan.App != nil && plan.App.Compute == provider.ComputeContainer
+func runsContainer(spec provider.StackSpec) bool {
+	return spec.App != nil && spec.App.Compute == provider.ComputeContainer
 }
 
-func (r *release) provisionContainer(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.StackResult, error) {
-	work, err := r.checkContainer(plan)
+func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.StackResult, error) {
+	work, err := r.checkContainer(spec)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	if work.transformed, err = transformStackPlan(ctx, r.cfg.Transform, plan); err != nil {
+	if work.transformed, err = transformStackSpec(ctx, r.cfg.Transform, spec); err != nil {
 		return provider.StackResult{}, err
 	}
-	held, err := r.ensureSubstrate(ctx, plan.Ref, progress)
+	held, err := r.ensureSubstrate(ctx, spec.Ref, progress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
 	work.substrate = held
-	result, err := r.runContainer(ctx, plan, work, progress)
+	result, err := r.runContainer(ctx, spec, work, progress)
 	if err != nil {
-		return provider.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, progress))
+		return provider.StackResult{}, errors.Join(err, r.abandonContainer(ctx, spec.Ref, progress))
 	}
 	if err := work.transformed.refuseUnclaimed(); err != nil {
-		return provider.StackResult{}, errors.Join(err, r.abandonContainer(ctx, plan.Ref, progress))
+		return provider.StackResult{}, errors.Join(err, r.abandonContainer(ctx, spec.Ref, progress))
 	}
 	return result, nil
 }
 
-func (r *release) runContainer(ctx context.Context, plan provider.StackPlan, work *containerWork, progress edge.Progress) (provider.StackResult, error) {
+func (r *release) runContainer(ctx context.Context, spec provider.StackSpec, work *containerWork, progress edge.Progress) (provider.StackResult, error) {
 	var err error
 	for attempt := range rulePlacements {
 		if err = r.placeRule(ctx, work); err != nil {
 			return provider.StackResult{}, err
 		}
-		plan.Work = work
+		spec.Work = work
 		var result provider.StackResult
-		if result, err = r.automation.Run(ctx, plan, progress); err == nil {
+		if result, err = r.automation.Run(ctx, spec, progress); err == nil {
 			return result, nil
 		}
 		if !priorityTaken(err) {
@@ -566,8 +566,8 @@ func (r *release) abandonContainer(ctx context.Context, ref provider.StackRef, p
 	return r.releaseSubstrate(ctx, r.cfg.Records, ref, progress)
 }
 
-func (r *release) planContainer(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.Plan, error) {
-	held, present, err := r.readSubstrate(ctx, plan.Ref.Class)
+func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.Plan, error) {
+	held, present, err := r.readSubstrate(ctx, spec.Ref.Class)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -575,32 +575,32 @@ func (r *release) planContainer(ctx context.Context, plan provider.StackPlan, pr
 		return provider.Plan{Groups: []provider.ChangeGroup{
 			{
 				Kind:   provider.StackGroupKind,
-				Name:   substrateRef(plan.Ref.Class).Name.String(),
+				Name:   substrateRef(spec.Ref.Class).Name.String(),
 				Action: provider.ActionCreate,
-				Reason: "the first container deploy in the " + string(plan.Ref.Class) + " class stands up the load balancer and cluster every container app in it shares",
+				Reason: "the first container deploy in the " + string(spec.Ref.Class) + " class stands up the load balancer and cluster every container app in it shares",
 				Slow:   true,
 			},
 			{
 				Kind:   provider.StackGroupKind,
-				Name:   plan.Ref.Name.String(),
+				Name:   spec.Ref.Name.String(),
 				Action: provider.ActionCreate,
 				Reason: provider.DetailUnavailable,
 				Slow:   true,
 			},
 		}}, nil
 	}
-	work, err := r.containerWork(plan, held)
+	work, err := r.containerWork(spec, held)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	if work.transformed, err = transformStackPlan(ctx, r.cfg.Transform, plan); err != nil {
+	if work.transformed, err = transformStackSpec(ctx, r.cfg.Transform, spec); err != nil {
 		return provider.Plan{}, err
 	}
 	if err := r.placeRule(ctx, work); err != nil {
 		return provider.Plan{}, err
 	}
-	plan.Work = work
-	previewed, err := r.automation.Preview(ctx, plan, progress)
+	spec.Work = work
+	previewed, err := r.automation.Preview(ctx, spec, progress)
 	if err != nil {
 		return provider.Plan{}, err
 	}

@@ -46,25 +46,25 @@ func (w *appWork) run(pctx *sdk.Context, shipped map[string]sdk.Resource) error 
 	return stack.register(pctx)
 }
 
-func (r *release) appWork(plan provider.StackPlan, transformed *transformPatches) (*appWork, error) {
-	app := plan.App
-	project, stack := naming.Sanitize(plan.Ref.Project), plan.Ref.Name
+func (r *release) appWork(spec provider.StackSpec, transformed *transformPatches) (*appWork, error) {
+	app := spec.App
+	project, stack := naming.Sanitize(spec.Ref.Project), spec.Ref.Name
 	sessions := newSessionScope(project, stack.Env, r.cfg.StateTableARN)
 
-	bundle, err := r.appBundle(plan)
+	bundle, err := r.appBundle(spec)
 	if err != nil {
 		return nil, err
 	}
-	router, err := r.routerHost(plan)
+	router, err := r.routerHost(spec)
 	if err != nil {
 		return nil, err
 	}
-	guard, err := r.originGuard(plan)
+	guard, err := r.originGuard(spec)
 	if err != nil {
 		return nil, err
 	}
-	cache := r.isrCache(plan)
-	bytecode := r.bytecodeCache(plan)
+	cache := r.isrCache(spec)
+	bytecode := r.bytecodeCache(spec)
 	policies, err := planBindingPolicies(app.Grants)
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func (r *release) appWork(plan provider.StackPlan, transformed *transformPatches
 		logical = append(logical, spec.Name)
 	}
 
-	env := r.appEnv(plan, bundle, sessions)
+	env := r.appEnv(spec, bundle, sessions)
 	for i, fn := range functions {
 		declared := env
 		if router.hosts(fn) {
@@ -135,7 +135,7 @@ func (r *release) appWork(plan provider.StackPlan, transformed *transformPatches
 
 	r.served.plan(r, app.App, logical, bytecode)
 
-	sets, delivery, err := r.assetSets(plan, app.App, app.Framework, bundle, cache)
+	sets, delivery, err := r.assetSets(spec, app.App, app.Framework, bundle, cache)
 	if err != nil {
 		return nil, err
 	}
@@ -208,12 +208,12 @@ func (r *release) runtimeLayers(args map[string]functionArgs) (map[string]string
 	return held, nil
 }
 
-func (r *release) routerHost(plan provider.StackPlan) (*routerHost, error) {
-	routing := plan.App.Routing
+func (r *release) routerHost(spec provider.StackSpec) (*routerHost, error) {
+	routing := spec.App.Routing
 	if routing == nil {
 		return nil, nil
 	}
-	prefix := plan.App.AssetPrefix
+	prefix := spec.App.AssetPrefix
 	host := &routerHost{
 		Entry:             routing.Entry,
 		AssetBucket:       r.cfg.AssetBucket,
@@ -223,8 +223,8 @@ func (r *release) routerHost(plan provider.StackPlan) (*routerHost, error) {
 			routingManifestEnv: routingManifestInTask,
 			assetPrefixEnv:     prefix,
 			slugEnv:            r.cfg.Slug,
-			appNameEnv:         plan.App.App,
-			deploymentIDEnv:    plan.App.Deployment,
+			appNameEnv:         spec.App.App,
+			deploymentIDEnv:    spec.App.Deployment,
 		},
 	}
 	if r.cfg.AssetBucket != "" {
@@ -236,26 +236,26 @@ func (r *release) routerHost(plan provider.StackPlan) (*routerHost, error) {
 	return host, nil
 }
 
-func (r *release) originGuard(plan provider.StackPlan) (*originGuard, error) {
-	guard := plan.App.Guard
+func (r *release) originGuard(spec provider.StackSpec) (*originGuard, error) {
+	guard := spec.App.Guard
 	if guard == nil {
 		return nil, nil
 	}
 	if r.cfg.OriginSecret == "" {
 		return nil, fmt.Errorf(
 			"the edge reaches %s over a Function URL no signature guards, and this bootstrap holds no secret for the entry function to demand of it; re-run `%s`",
-			plan.App.App, provider.BootstrapCommand(r.cfg.Class))
+			spec.App.App, provider.BootstrapCommand(r.cfg.Class))
 	}
 	return &originGuard{Entry: guard.Entry, Secret: r.cfg.OriginSecret, Previous: r.cfg.PreviousOriginSecret}, nil
 }
 
-func (r *release) isrCache(plan provider.StackPlan) *isrConfig {
-	held := plan.App.ISR
+func (r *release) isrCache(spec provider.StackSpec) *isrConfig {
+	held := spec.App.ISR
 	if held == nil {
 		return nil
 	}
 	cache := &isrConfig{
-		Coord:     appCoordinate(plan),
+		Coord:     appCoordinate(spec),
 		Namespace: held.TagNamespace,
 		Bucket:    r.cfg.AssetBucket,
 		Prefix:    held.Prefix,
@@ -270,29 +270,29 @@ func (r *release) isrCache(plan provider.StackPlan) *isrConfig {
 	return cache
 }
 
-func appCoordinate(plan provider.StackPlan) naming.Coordinate {
-	stack := plan.Ref.Name
+func appCoordinate(spec provider.StackSpec) naming.Coordinate {
+	stack := spec.Ref.Name
 	return naming.Coordinate{
-		Project: naming.Sanitize(plan.Ref.Project),
+		Project: naming.Sanitize(spec.Ref.Project),
 		Env:     stack.Env,
 		App:     stack.App,
 		Release: stack.Release,
 	}
 }
 
-func (r *release) bytecodeCache(plan provider.StackPlan) *bytecodeConfig {
-	held := plan.App.Bytecode
+func (r *release) bytecodeCache(spec provider.StackSpec) *bytecodeConfig {
+	held := spec.App.Bytecode
 	if held == nil {
 		return nil
 	}
 	return &bytecodeConfig{Bucket: r.cfg.AssetBucket, Prefix: held.Prefix}
 }
 
-func (r *release) appBundle(plan provider.StackPlan) (appBundle, error) {
-	if sealed, carried := plan.App.Packed.(appBundle); carried {
+func (r *release) appBundle(spec provider.StackSpec) (appBundle, error) {
+	if sealed, carried := spec.App.Packed.(appBundle); carried {
 		return sealed, nil
 	}
-	return r.sealApp(plan.Ref.Project, plan.App.App, plan.App.Values)
+	return r.sealApp(spec.Ref.Project, spec.App.App, spec.App.Values)
 }
 
 func (r *release) sealApp(project, app string, held provider.AppValues) (appBundle, error) {
@@ -320,12 +320,12 @@ func bindingResource(binding provider.Binding) string {
 	return binding.Name
 }
 
-func (r *release) appEnv(plan provider.StackPlan, bundle appBundle, sessions sessionScope) map[string]string {
-	app := plan.App
+func (r *release) appEnv(spec provider.StackSpec, bundle appBundle, sessions sessionScope) map[string]string {
+	app := spec.App
 	env := map[string]string{}
-	if plan.Edge != nil {
-		env[edgeKindEnv] = string(plan.Edge.Kind())
-		facts := plan.Edge.Facts()
+	if spec.Edge != nil {
+		env[edgeKindEnv] = string(spec.Edge.Kind())
+		facts := spec.Edge.Facts()
 		if !facts.RunsCode {
 			env[edge.OriginRouterVar] = "1"
 			env[edge.OriginSignedVar] = "1"
@@ -385,8 +385,8 @@ func grantMessages(grants []provider.Grant) []*bindingsv1.Grant {
 	return out
 }
 
-func (r *release) decodeApp(plan provider.StackPlan, outputs auto.OutputMap) (provider.StackResult, error) {
-	work, held := plan.Work.(*appWork)
+func (r *release) decodeApp(spec provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error) {
+	work, held := spec.Work.(*appWork)
 	if !held {
 		return provider.StackResult{}, fmt.Errorf("this stack was not planned as an app stack")
 	}

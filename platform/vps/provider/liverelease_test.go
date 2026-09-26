@@ -51,17 +51,17 @@ func onABoxServingContainers(t *testing.T) (machine, *vps.Provider) {
 	return vm, p
 }
 
-func livePlan(t *testing.T, tag string) provider.StackPlan {
+func liveSpec(t *testing.T, tag string) provider.StackSpec {
 	t.Helper()
 	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")
 	if err != nil {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256([]byte(tag))
-	return provider.StackPlan{
+	return provider.StackSpec{
 		Ref:  provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
 		Kind: provider.StackApp,
-		App: &provider.AppPlan{
+		App: &provider.AppSpec{
 			App:             liveApp,
 			Compute:         provider.ComputeContainer,
 			Deployment:      hex.EncodeToString(sum[:])[:32],
@@ -73,7 +73,7 @@ func livePlan(t *testing.T, tag string) provider.StackPlan {
 
 func standsUp(t *testing.T, p *vps.Provider, tag string) release {
 	t.Helper()
-	standing, err := p.ProvisionContainers(context.Background(), livePlan(t, tag), nil)
+	standing, err := p.ProvisionContainers(context.Background(), liveSpec(t, tag), nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers(%s) = %v", tag, err)
 	}

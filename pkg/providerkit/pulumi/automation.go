@@ -63,11 +63,11 @@ type Engine interface {
 type Config struct {
 	Access Access
 
-	Program func(ctx *pulumi.Context, plan provider.StackPlan) error
+	Program func(ctx *pulumi.Context, spec provider.StackSpec) error
 
-	Configure func(ctx context.Context, plan provider.StackPlan) (auto.ConfigMap, error)
+	Configure func(ctx context.Context, spec provider.StackSpec) (auto.ConfigMap, error)
 
-	Decode func(ctx context.Context, plan provider.StackPlan, outputs auto.OutputMap) (provider.StackResult, error)
+	Decode func(ctx context.Context, spec provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error)
 
 	Parallel int
 
@@ -118,26 +118,26 @@ type Setup struct {
 	Refresh bool
 }
 
-func (a *Automation) Workspace(plan provider.StackPlan) (Setup, error) {
-	return a.workspace(plan, OpProvision)
+func (a *Automation) Workspace(spec provider.StackSpec) (Setup, error) {
+	return a.workspace(spec, OpProvision)
 }
 
-func (a *Automation) workspace(plan provider.StackPlan, op Op) (Setup, error) {
+func (a *Automation) workspace(spec provider.StackSpec, op Op) (Setup, error) {
 	access := a.config.Access
 	switch {
 	case access.BackendURL == "":
 		return Setup{}, refusal.Refuse(refusal.CodeNotReady,
-			"this provider names no state backend, and an engine run has nowhere to keep %s's state", plan.Ref.Name)
+			"this provider names no state backend, and an engine run has nowhere to keep %s's state", spec.Ref.Name)
 	case access.Passphrase == "":
 		return Setup{}, refusal.Refuse(refusal.CodeNotReady,
-			"this provider names no state passphrase, and %s's state would be written unsealed", plan.Ref.Name)
+			"this provider names no state passphrase, and %s's state would be written unsealed", spec.Ref.Name)
 	case a.config.Program == nil:
 		return Setup{}, refusal.Refuse(refusal.CodeNotReady,
-			"this automation carries no program, so there is nothing for the engine to run over %s", plan.Ref.Name)
+			"this automation carries no program, so there is nothing for the engine to run over %s", spec.Ref.Name)
 	}
 
 	project := workspace.Project{
-		Name:    tokens.PackageName(a.ProjectName(plan.Ref)),
+		Name:    tokens.PackageName(a.ProjectName(spec.Ref)),
 		Runtime: workspace.NewProjectRuntimeInfo("go", nil),
 		Backend: &workspace.ProjectBackend{URL: access.BackendURL},
 	}
@@ -145,16 +145,16 @@ func (a *Automation) workspace(plan provider.StackPlan, op Op) (Setup, error) {
 	if err != nil {
 		return Setup{}, err
 	}
-	program := func(ctx *pulumi.Context) error { return a.config.Program(ctx, plan) }
+	program := func(ctx *pulumi.Context) error { return a.config.Program(ctx, spec) }
 
 	return Setup{
-		Ref:      plan.Ref,
-		Stack:    a.StackName(plan.Ref),
+		Ref:      spec.Ref,
+		Stack:    a.StackName(spec.Ref),
 		Project:  project,
 		Program:  program,
 		EnvVars:  env,
 		Parallel: a.parallel(),
-		Refresh:  a.refreshes(plan.Ref, op),
+		Refresh:  a.refreshes(spec.Ref, op),
 		Options: []auto.LocalWorkspaceOption{
 			auto.Project(project),
 			auto.EnvVars(env),
@@ -195,22 +195,22 @@ func (a *Automation) env() (map[string]string, error) {
 	return env, nil
 }
 
-func (a *Automation) Stack(ctx context.Context, plan provider.StackPlan) (auto.ConfigMap, error) {
-	if _, err := a.Workspace(plan); err != nil {
+func (a *Automation) Stack(ctx context.Context, spec provider.StackSpec) (auto.ConfigMap, error) {
+	if _, err := a.Workspace(spec); err != nil {
 		return nil, err
 	}
 	if a.config.Configure == nil {
 		return auto.ConfigMap{}, nil
 	}
-	return a.config.Configure(ctx, plan)
+	return a.config.Configure(ctx, spec)
 }
 
-func (a *Automation) setup(ctx context.Context, plan provider.StackPlan, op Op, progress edge.Progress) (Setup, error) {
-	setup, err := a.workspace(plan, op)
+func (a *Automation) setup(ctx context.Context, spec provider.StackSpec, op Op, progress edge.Progress) (Setup, error) {
+	setup, err := a.workspace(spec, op)
 	if err != nil {
 		return Setup{}, err
 	}
-	if setup.Config, err = a.Stack(ctx, plan); err != nil {
+	if setup.Config, err = a.Stack(ctx, spec); err != nil {
 		return Setup{}, err
 	}
 	if a.config.Engine == nil {
@@ -230,16 +230,16 @@ func (a *Automation) engine() Engine {
 	return autoEngine{}
 }
 
-func (a *Automation) Preview(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.Plan, error) {
-	return a.preview(ctx, plan, OpProvision, progress)
+func (a *Automation) Preview(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.Plan, error) {
+	return a.preview(ctx, spec, OpProvision, progress)
 }
 
 func (a *Automation) PreviewDestroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) (provider.Plan, error) {
-	return a.preview(ctx, provider.StackPlan{Ref: ref}, OpDestroy, progress)
+	return a.preview(ctx, provider.StackSpec{Ref: ref}, OpDestroy, progress)
 }
 
-func (a *Automation) preview(ctx context.Context, plan provider.StackPlan, op Op, progress edge.Progress) (provider.Plan, error) {
-	setup, err := a.setup(ctx, plan, op, progress)
+func (a *Automation) preview(ctx context.Context, spec provider.StackSpec, op Op, progress edge.Progress) (provider.Plan, error) {
+	setup, err := a.setup(ctx, spec, op, progress)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -309,8 +309,8 @@ func plannedAction(op apitype.OpType) (provider.ChangeAction, bool) {
 	}
 }
 
-func (a *Automation) Run(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.StackResult, error) {
-	setup, err := a.setup(ctx, plan, OpProvision, progress)
+func (a *Automation) Run(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.StackResult, error) {
+	setup, err := a.setup(ctx, spec, OpProvision, progress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
@@ -321,11 +321,11 @@ func (a *Automation) Run(ctx context.Context, plan provider.StackPlan, progress 
 	if a.config.Decode == nil {
 		return provider.StackResult{}, nil
 	}
-	return a.config.Decode(ctx, plan, outputs)
+	return a.config.Decode(ctx, spec, outputs)
 }
 
 func (a *Automation) Destroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) error {
-	setup, err := a.setup(ctx, provider.StackPlan{Ref: ref}, OpDestroy, progress)
+	setup, err := a.setup(ctx, provider.StackSpec{Ref: ref}, OpDestroy, progress)
 	if err != nil {
 		return err
 	}
@@ -336,7 +336,7 @@ func (a *Automation) Destroy(ctx context.Context, ref provider.StackRef, progres
 }
 
 func (a *Automation) Outputs(ctx context.Context, ref provider.StackRef, progress edge.Progress) (auto.OutputMap, error) {
-	setup, err := a.setup(ctx, provider.StackPlan{Ref: ref}, OpProvision, progress)
+	setup, err := a.setup(ctx, provider.StackSpec{Ref: ref}, OpProvision, progress)
 	if err != nil {
 		return nil, err
 	}

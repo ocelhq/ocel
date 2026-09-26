@@ -107,7 +107,7 @@ func TestDecodeSubstrateReadsEveryOutputAndRefusesAnEmptyOne(t *testing.T) {
 func TestTheFirstContainerDeployStandsUpTheSubstrateAndTheLastTakesItDown(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedContainerStack(t)
+	cfg, spec := containerStackSpec(t)
 	cfg.Records = fake.NewRecords()
 	cfg.BackendURL = "s3://ocel-state/conformance"
 	cfg.PulumiProject = "ocel-conformance"
@@ -121,7 +121,7 @@ func TestTheFirstContainerDeployStandsUpTheSubstrateAndTheLastTakesItDown(t *tes
 	stacks := standingUp(cfg, engine)
 	ctx := context.Background()
 
-	shop := plan
+	shop := spec
 	if _, err := stacks.Provision(ctx, shop, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
@@ -137,7 +137,7 @@ func TestTheFirstContainerDeployStandsUpTheSubstrateAndTheLastTakesItDown(t *tes
 		t.Errorf("front = %+v, want the substrate's VPC origin and host", front)
 	}
 
-	blog := plan
+	blog := spec
 	blog.Ref = provider.StackRef{Project: "blog", Class: edge.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
 	if _, err := stacks.Provision(ctx, blog, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Provision(blog) = %v", err)
@@ -170,7 +170,7 @@ func TestTheFirstContainerDeployStandsUpTheSubstrateAndTheLastTakesItDown(t *tes
 func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedContainerStack(t)
+	cfg, spec := containerStackSpec(t)
 	cfg.Records = fake.NewRecords()
 	cfg.BackendURL = "s3://ocel-state/conformance"
 	cfg.PulumiProject = "ocel-conformance"
@@ -179,7 +179,7 @@ func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
 	stacks := standingUp(cfg, engine)
 	ctx := context.Background()
 
-	if _, err := stacks.Provision(ctx, plan, edge.DiscardProgress()); err == nil {
+	if _, err := stacks.Provision(ctx, spec, edge.DiscardProgress()); err == nil {
 		t.Fatal("Provision succeeded with no container output, so a deploy would record a container with no origin")
 	}
 	remaining, err := cfg.Records.List(ctx, consumersRecord(edge.ClassProduction))
@@ -189,12 +189,12 @@ func TestAContainerDeployThatFailsLeavesNoConsumerBehind(t *testing.T) {
 	if len(remaining) != 0 {
 		t.Errorf("a failed deploy left %d consumer records, so the substrate could never be taken down", len(remaining))
 	}
-	if torn := engine.torn(); len(torn) != 2 || torn[0] != plan.Ref.Name.String() || torn[1] != substrateRef(edge.ClassProduction).Name.String() {
+	if torn := engine.torn(); len(torn) != 2 || torn[0] != spec.Ref.Name.String() || torn[1] != substrateRef(edge.ClassProduction).Name.String() {
 		t.Errorf("after the only consumer failed the engine tore down %v, want the half-built app stack first and then the substrate it had just stood up: a cluster with a service inside refuses to go, and nothing idle-billing outlives a failed first deploy", torn)
 	}
 
-	plan.App.HealthCheckPath = "not a path"
-	if _, err := stacks.Provision(ctx, plan, edge.DiscardProgress()); err == nil {
+	spec.App.HealthCheckPath = "not a path"
+	if _, err := stacks.Provision(ctx, spec, edge.DiscardProgress()); err == nil {
 		t.Fatal("Provision accepted a health check path a load balancer cannot probe")
 	}
 	if ran := engine.stacks(); len(ran) != 2 {

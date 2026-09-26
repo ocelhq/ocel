@@ -114,13 +114,13 @@ func TestDeployShipsAFunctionAsAnImageWhereTheProviderTakesItThatWay(t *testing.
 		}
 	}
 
-	plans := p.FakeStacks().Plans()
-	app := plans[len(plans)-1]
+	specs := p.FakeStacks().Provisioned()
+	app := specs[len(specs)-1]
 	if len(app.Uploads) != 0 {
-		t.Errorf("the app plan carries %d uploads, want none: the function travels as an image", len(app.Uploads))
+		t.Errorf("the app spec carries %d uploads, want none: the function travels as an image", len(app.Uploads))
 	}
 	if len(app.App.Functions) != 1 {
-		t.Fatalf("the app plan carries %d functions, want the one the manifest declares", len(app.App.Functions))
+		t.Fatalf("the app spec carries %d functions, want the one the manifest declares", len(app.App.Functions))
 	}
 	spec := app.App.Functions[0]
 	if spec.Image == "" {
@@ -146,10 +146,10 @@ func TestAFunctionsImageIsNeverMistakenForTheAppsOwn(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := provider.FakeStacks().Plans()
-	app := plans[len(plans)-1]
+	specs := provider.FakeStacks().Provisioned()
+	app := specs[len(specs)-1]
 	if app.App.Image != "" {
-		t.Errorf("the app plan runs the image %q, want none: the app is serverless and only its functions travel as images", app.App.Image)
+		t.Errorf("the app spec runs the image %q, want none: the app is serverless and only its functions travel as images", app.App.Image)
 	}
 	spec := app.App.Functions[0]
 	if !strings.Contains(spec.Image, "@sha256:") {
@@ -336,8 +336,8 @@ func TestAFunctionImageIsWrappedInTheRuntimeWhereTheProviderCarriesOne(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	plans := provider.FakeStacks().Plans()
-	if spec := plans[len(plans)-1].App.Functions[0]; !strings.HasSuffix(spec.Image, "@"+digest.String()) {
+	specs := provider.FakeStacks().Provisioned()
+	if spec := specs[len(specs)-1].App.Functions[0]; !strings.HasSuffix(spec.Image, "@"+digest.String()) {
 		t.Errorf("the function spec runs %q, want it pinned to the wrapped image's digest %s", spec.Image, digest)
 	}
 }
@@ -378,8 +378,8 @@ func TestAWrappedFunctionIsHandedItsPlainAndSensitiveValuesAndNoSecretOrRecord(t
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := base.FakeStacks().Plans()
-	delivered := plans[len(plans)-1].App.Values.Delivered
+	specs := base.FakeStacks().Provisioned()
+	delivered := specs[len(specs)-1].App.Values.Delivered
 	for key, want := range map[string]string{"REGION": "eu-west-1", "API_TOKEN": "sensitive-token"} {
 		if delivered[key] != want {
 			t.Errorf("the function is handed %s=%q, want %q: the runtime reads a declared value off the environment it boots in", key, delivered[key], want)

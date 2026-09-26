@@ -48,7 +48,7 @@ type shapedPatches struct {
 }
 
 func Shape(ctx context.Context, pass transformkit.Pass, region string, req provider.ShapeRequest, tree *costkit.Tree, scopes ShapeScopes) error {
-	project := naming.Sanitize(req.Plan.Slug)
+	project := naming.Sanitize(req.Deploy.Slug)
 	patched, err := shapeTransforms(ctx, pass, project, req)
 	if err != nil {
 		return err
@@ -60,13 +60,13 @@ func Shape(ctx context.Context, pass transformkit.Pass, region string, req provi
 		}
 		switch resource.Type {
 		case provider.BindingPostgres:
-			shape.postgres(scopes.Environment, project, req.Plan.Env, resource)
+			shape.postgres(scopes.Environment, project, req.Deploy.Env, resource)
 		case provider.BindingBucket:
-			shape.bucket(scopes.Environment, project, req.Plan.Env, resource)
+			shape.bucket(scopes.Environment, project, req.Deploy.Env, resource)
 		}
 	}
 	substrate := false
-	for _, app := range req.Plan.Apps {
+	for _, app := range req.Deploy.Apps {
 		scope := tree.Scope(scopes.Environment, costkit.ScopeApp, app.App)
 		if app.Compute() == provider.ComputeContainer {
 			shape.container(scope, app)
@@ -78,7 +78,7 @@ func Shape(ctx context.Context, pass transformkit.Pass, region string, req provi
 		}
 	}
 	if substrate {
-		shape.substrate(scopes.Shared, req.Plan.Class)
+		shape.substrate(scopes.Shared, req.Deploy.Class)
 	}
 	return nil
 }
@@ -201,7 +201,7 @@ func shapeTransforms(ctx context.Context, pass transformkit.Pass, project string
 	if pass == nil {
 		return held, nil
 	}
-	request := transformkit.Request{Provider: transformProvider, EnvClass: string(req.Plan.Class), Env: req.Plan.Env}
+	request := transformkit.Request{Provider: transformProvider, EnvClass: string(req.Deploy.Class), Env: req.Deploy.Env}
 	var candidates []transformCandidate
 	for _, resource := range req.Resources {
 		if resource.Binding != "" {
@@ -210,13 +210,13 @@ func shapeTransforms(ctx context.Context, pass transformkit.Pass, project string
 		switch resource.Type {
 		case provider.BindingPostgres:
 			request.Resources = append(request.Resources, transformkit.Resource{Type: transformTypePostgres, Name: resource.Name})
-			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypePostgres, Name: resource.Name}, names: postgresResourceNames(project, req.Plan.Env, resource.Name)})
+			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypePostgres, Name: resource.Name}, names: postgresResourceNames(project, req.Deploy.Env, resource.Name)})
 		case provider.BindingBucket:
 			request.Resources = append(request.Resources, transformkit.Resource{Type: transformTypeBucket, Name: resource.Name})
-			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypeBucket, Name: resource.Name}, names: bucketResourceNames(project, req.Plan.Env, resource.Name)})
+			candidates = append(candidates, transformCandidate{key: resourceKey{Type: transformTypeBucket, Name: resource.Name}, names: bucketResourceNames(project, req.Deploy.Env, resource.Name)})
 		}
 	}
-	for _, app := range req.Plan.Apps {
+	for _, app := range req.Deploy.Apps {
 		if app.Compute() == provider.ComputeContainer {
 			continue
 		}

@@ -29,11 +29,11 @@ type ServingQuery struct {
 
 type ServingFacts struct {
 	Entry       string
-	Routing     *provider.RoutingPlan
-	EdgeRouting *provider.RoutingPlan
+	Routing     *provider.RoutingSpec
+	EdgeRouting *provider.RoutingSpec
 	Guard       *provider.OriginGuard
-	ISR         *provider.ISRPlan
-	Bytecode    *provider.BytecodePlan
+	ISR         *provider.ISRSpec
+	Bytecode    *provider.BytecodeSpec
 	AssetPrefix string
 }
 
@@ -44,13 +44,13 @@ func ServingFactsFor(q ServingQuery) (ServingFacts, error) {
 	}
 	facts := ServingFacts{
 		AssetPrefix: q.Coordinate.AssetKey(""),
-		Bytecode:    &provider.BytecodePlan{Prefix: withoutSlash(q.Coordinate.BytecodePrefix())},
+		Bytecode:    &provider.BytecodeSpec{Prefix: withoutSlash(q.Coordinate.BytecodePrefix())},
 	}
 	if present {
 		facts.Entry = desc.Entry
 	}
 	if q.Framework == appbuild.FrameworkNext {
-		facts.ISR = &provider.ISRPlan{
+		facts.ISR = &provider.ISRSpec{
 			Prefix:       withoutSlash(q.Coordinate.ISRPrefix()),
 			TagNamespace: naming.ISRTagPrefix(q.Project, q.Stack),
 		}
@@ -79,7 +79,7 @@ func anyProxied(proxied func(provider.BindingType) bool, grants []provider.Bindi
 	return slices.ContainsFunc(grants, func(binding provider.Binding) bool { return proxied(binding.Type) })
 }
 
-func routingFor(q ServingQuery, desc edge.ServeDescriptor, present bool) (*provider.RoutingPlan, error) {
+func routingFor(q ServingQuery, desc edge.ServeDescriptor, present bool) (*provider.RoutingSpec, error) {
 	if !present || !desc.EdgeRouting {
 		return nil, nil
 	}
@@ -95,7 +95,7 @@ func routingFor(q ServingQuery, desc edge.ServeDescriptor, present bool) (*provi
 	if err != nil {
 		return nil, fmt.Errorf("read the routing manifest %s routes by: %w", q.App, err)
 	}
-	return &provider.RoutingPlan{Entry: desc.Entry, Manifest: raw}, nil
+	return &provider.RoutingSpec{Entry: desc.Entry, Manifest: raw}, nil
 }
 
 func withoutSlash(prefix string) string {

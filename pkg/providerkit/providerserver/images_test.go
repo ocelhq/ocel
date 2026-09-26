@@ -89,7 +89,7 @@ func TestADryDeployShowsTheImagePushAsARowAndPushesNothing(t *testing.T) {
 
 type muteStacks struct{}
 
-func (muteStacks) Plan(context.Context, provider.StackPlan, edge.Progress) (provider.Plan, error) {
+func (muteStacks) Plan(context.Context, provider.StackSpec, edge.Progress) (provider.Plan, error) {
 	return provider.Plan{}, nil
 }
 
@@ -97,8 +97,8 @@ func (muteStacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ edge.P
 	return provider.Plan{}, nil
 }
 
-func (muteStacks) Provision(_ context.Context, plan provider.StackPlan, _ edge.Progress) (provider.StackResult, error) {
-	return provider.StackResult{Containers: fake.StoodUpContainers(plan)}, nil
+func (muteStacks) Provision(_ context.Context, spec provider.StackSpec, _ edge.Progress) (provider.StackResult, error) {
+	return provider.StackResult{Containers: fake.StoodUpContainers(spec)}, nil
 }
 
 func (muteStacks) Destroy(context.Context, provider.StackRef, edge.Progress) error {
@@ -509,7 +509,7 @@ func staging(t *testing.T, provider *fake.Provider) *stagingLedger {
 	return held
 }
 
-func TestAnAppPlanNamesTheCoordinateTheProviderWillHoldRatherThanTheOneTheBuildLeft(t *testing.T) {
+func TestAnAppSpecNamesTheCoordinateTheProviderWillHoldRatherThanTheOneTheBuildLeft(t *testing.T) {
 	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := deployServed(t)
@@ -519,17 +519,17 @@ func TestAnAppPlanNamesTheCoordinateTheProviderWillHoldRatherThanTheOneTheBuildL
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := provider.FakeStacks().Plans()
-	app := plans[len(plans)-1].App
+	specs := provider.FakeStacks().Provisioned()
+	app := specs[len(specs)-1].App
 	if app == nil {
-		t.Fatal("the last plan the stacks port saw stands up no app")
+		t.Fatal("the last spec the stacks port saw stands up no app")
 	}
 	if app.Image != pushedCoordinate {
 		t.Errorf("Image = %q, want %q: what stands the app up is the coordinate the push wrote, and the local digest ref names nothing the runtime can reach", app.Image, pushedCoordinate)
 	}
 }
 
-func TestAnAppPlanNamesTheTaggedCoordinateADirectTransferLanded(t *testing.T) {
+func TestAnAppSpecNamesTheTaggedCoordinateADirectTransferLanded(t *testing.T) {
 	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	client, provider := loadServed(t)
@@ -539,10 +539,10 @@ func TestAnAppPlanNamesTheTaggedCoordinateADirectTransferLanded(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := provider.FakeStacks().Plans()
-	app := plans[len(plans)-1].App
+	specs := provider.FakeStacks().Provisioned()
+	app := specs[len(specs)-1].App
 	if app == nil {
-		t.Fatal("the last plan the stacks port saw stands up no app")
+		t.Fatal("the last spec the stacks port saw stands up no app")
 	}
 	if app.Image != loadedCoordinate {
 		t.Errorf("Image = %q, want %q: a box takes the image under the tag the transfer landed, and the digest ref the build left names nothing the box can list, run or hold in a window", app.Image, loadedCoordinate)
@@ -806,16 +806,16 @@ func TestAWrappedContainerRunsTheCoordinateItWasPushedUnder(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := provider.FakeStacks().Plans()
+	specs := provider.FakeStacks().Provisioned()
 	var image string
-	for i := len(plans) - 1; i >= 0; i-- {
-		if plans[i].App != nil {
-			image = plans[i].App.Image
+	for i := len(specs) - 1; i >= 0; i-- {
+		if specs[i].App != nil {
+			image = specs[i].App.Image
 			break
 		}
 	}
 	if image != wrappedCoordinate() {
-		t.Errorf("the app plan runs %q, want %q: the box pulls the wrapped image rather than the one the build produced", image, wrappedCoordinate())
+		t.Errorf("the app spec runs %q, want %q: the box pulls the wrapped image rather than the one the build produced", image, wrappedCoordinate())
 	}
 }
 

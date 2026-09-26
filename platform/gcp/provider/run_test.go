@@ -208,7 +208,7 @@ func TestAReleaseReportsTheRevisionItPinnedSoALaterPromoteCanReachIt(t *testing.
 	}
 }
 
-func TestAFunctionThePlanGivesNoURLOfItsOwnIsLeftPrivate(t *testing.T) {
+func TestAFunctionTheSpecGivesNoURLOfItsOwnIsLeftPrivate(t *testing.T) {
 	server := &runServer{}
 
 	released(t, server, serving{service: "ocel-shop-prod-fn", compute: provider.ComputeServerless})
@@ -219,7 +219,7 @@ func TestAFunctionThePlanGivesNoURLOfItsOwnIsLeftPrivate(t *testing.T) {
 	}
 }
 
-func TestAFunctionThePlanGivesAURLIsReachedWithoutAnAllUsersGrant(t *testing.T) {
+func TestAFunctionTheSpecGivesAURLIsReachedWithoutAnAllUsersGrant(t *testing.T) {
 	server := &runServer{}
 
 	released(t, server, serving{service: "ocel-shop-prod-fn", compute: provider.ComputeServerless, public: true})

@@ -14,9 +14,9 @@ import (
 )
 
 type Stacks interface {
-	Plan(ctx context.Context, plan StackPlan, progress edge.Progress) (Plan, error)
+	Plan(ctx context.Context, spec StackSpec, progress edge.Progress) (Plan, error)
 
-	Provision(ctx context.Context, plan StackPlan, progress edge.Progress) (StackResult, error)
+	Provision(ctx context.Context, spec StackSpec, progress edge.Progress) (StackResult, error)
 
 	PlanDestroy(ctx context.Context, ref StackRef, progress edge.Progress) (Plan, error)
 
@@ -36,7 +36,7 @@ const (
 	StackApp   StackKind = "app"
 )
 
-type StackPlan struct {
+type StackSpec struct {
 	Ref  StackRef
 	Kind StackKind
 
@@ -52,7 +52,7 @@ type StackPlan struct {
 
 	Bindings Bindings
 
-	App *AppPlan
+	App *AppSpec
 
 	Work any
 }
@@ -65,7 +65,7 @@ type Bindings interface {
 	Named(ctx context.Context, binding string) (Binding, error)
 }
 
-type AppPlan struct {
+type AppSpec struct {
 	App        string
 	Framework  string
 	Entry      string
@@ -81,10 +81,10 @@ type AppPlan struct {
 
 	Grants []Binding
 
-	Routing  *RoutingPlan
+	Routing  *RoutingSpec
 	Guard    *OriginGuard
-	ISR      *ISRPlan
-	Bytecode *BytecodePlan
+	ISR      *ISRSpec
+	Bytecode *BytecodeSpec
 
 	AssetPrefix string
 
@@ -95,7 +95,7 @@ type AppPlan struct {
 	Proxied bool
 }
 
-type RoutingPlan struct {
+type RoutingSpec struct {
 	Entry    string
 	Manifest []byte
 }
@@ -104,12 +104,12 @@ type OriginGuard struct {
 	Entry string
 }
 
-type ISRPlan struct {
+type ISRSpec struct {
 	Prefix       string
 	TagNamespace string
 }
 
-type BytecodePlan struct {
+type BytecodeSpec struct {
 	Prefix string
 }
 

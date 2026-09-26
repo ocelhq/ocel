@@ -163,10 +163,10 @@ func TestTheStagedRecordNamesTheISRPrefixTheFunctionWritesUnder(t *testing.T) {
 	if len(staged) != 1 {
 		t.Fatalf("the deploy staged %d records, want the one app it released", len(staged))
 	}
-	plans := provider.FakeStacks().Plans()
-	app := plans[len(plans)-1].App
+	specs := provider.FakeStacks().Provisioned()
+	app := specs[len(specs)-1].App
 	if app == nil || app.ISR == nil {
-		t.Fatal("the last plan the stacks port saw carries no ISR plan")
+		t.Fatal("the last spec the stacks port saw carries no ISR spec")
 	}
 	if staged[0].IsrPrefix != app.ISR.Prefix {
 		t.Errorf("isrPrefix = %q, want %q: the edge reads entries at <isrPrefix>/cache/<route>.cache.json, so a prefix that differs from the one the function writes under misses every prerender",

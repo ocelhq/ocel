@@ -51,11 +51,11 @@ func (e *UnsupportedNeedError) Error() string {
 }
 
 type EdgeEntitlementError struct {
-	App  string
-	Need edge.Need
-	Edge edge.Kind
-	Plan string
-	Err  error
+	App         string
+	Need        edge.Need
+	Edge        edge.Kind
+	BillingPlan string
+	Err         error
 }
 
 func (e *EdgeEntitlementError) Error() string {
@@ -66,8 +66,8 @@ func (e *EdgeEntitlementError) Error() string {
 		)
 	}
 	plan := "the plan it is on"
-	if e.Plan != "" {
-		plan = "the " + e.Plan + " plan"
+	if e.BillingPlan != "" {
+		plan = "the " + e.BillingPlan + " plan"
 	}
 	return fmt.Sprintf(
 		"app %s needs %s, which runs your code at the %s edge, and %s does not run code at the edge. "+
@@ -158,7 +158,7 @@ func (c NeedCheck) forApp(
 			case waived:
 				serves = false
 			default:
-				return NeedRecord{}, &EdgeEntitlementError{App: name, Need: need, Edge: c.Edge.Kind(), Plan: granted.Plan}
+				return NeedRecord{}, &EdgeEntitlementError{App: name, Need: need, Edge: c.Edge.Kind(), BillingPlan: granted.Plan}
 			}
 		}
 

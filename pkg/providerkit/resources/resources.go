@@ -31,12 +31,12 @@ type Hooks struct {
 }
 
 type FunctionHooks struct {
-	Provision func(ctx context.Context, plan provider.StackPlan, progress edge.Progress) ([]provider.Function, error)
+	Provision func(ctx context.Context, spec provider.StackSpec, progress edge.Progress) ([]provider.Function, error)
 	Remove    func(ctx context.Context, ref provider.StackRef, functions []provider.Function, progress edge.Progress) error
 }
 
 type ContainerHooks struct {
-	Provision func(ctx context.Context, plan provider.StackPlan, progress edge.Progress) ([]provider.AppContainer, error)
+	Provision func(ctx context.Context, spec provider.StackSpec, progress edge.Progress) ([]provider.AppContainer, error)
 	Remove    func(ctx context.Context, ref provider.StackRef, containers []provider.AppContainer, progress edge.Progress) error
 }
 
@@ -77,15 +77,15 @@ type fanout struct {
 	hooks     Hooks
 }
 
-func (f *fanout) Plan(ctx context.Context, plan provider.StackPlan, _ edge.Progress) (provider.Plan, error) {
-	if err := f.serves(plan); err != nil {
+func (f *fanout) Plan(ctx context.Context, spec provider.StackSpec, _ edge.Progress) (provider.Plan, error) {
+	if err := f.serves(spec); err != nil {
 		return provider.Plan{}, err
 	}
-	recorded, err := f.recorded(ctx, plan.Ref)
+	recorded, err := f.recorded(ctx, spec.Ref)
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return SynthesizedPlan(ctx, f.artifacts, plan, standing(recorded))
+	return SynthesizedPlan(ctx, f.artifacts, spec, standing(recorded))
 }
 
 func (f *fanout) PlanDestroy(ctx context.Context, ref provider.StackRef, _ edge.Progress) (provider.Plan, error) {
@@ -100,34 +100,34 @@ func standing(recorded stackrecords.Stack) provider.StackResult {
 	return provider.StackResult{Bindings: recorded.Bindings, Functions: recorded.Functions, Containers: recorded.Containers}
 }
 
-func (f *fanout) Provision(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.StackResult, error) {
-	if plan.App != nil {
-		defer func() { _ = f.reconcile(ctx, plan.Ref, plan.App.App, plan.App.Image, progress) }()
+func (f *fanout) Provision(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.StackResult, error) {
+	if spec.App != nil {
+		defer func() { _ = f.reconcile(ctx, spec.Ref, spec.App.App, spec.App.Image, progress) }()
 	}
-	if err := f.serves(plan); err != nil {
+	if err := f.serves(spec); err != nil {
 		return provider.StackResult{}, err
 	}
-	standUp, err := f.standingUp(plan)
+	standUp, err := f.standingUp(spec)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	recorded, err := f.recorded(ctx, plan.Ref)
+	recorded, err := f.recorded(ctx, spec.Ref)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	if err := f.removeOrphans(ctx, plan, recorded, progress); err != nil {
+	if err := f.removeOrphans(ctx, spec, recorded, progress); err != nil {
 		return provider.StackResult{}, err
 	}
-	if err := plan.Images.PushMissing(ctx, progress); err != nil {
+	if err := spec.Images.PushMissing(ctx, progress); err != nil {
 		return provider.StackResult{}, err
 	}
-	if err := ShipUploads(ctx, f.artifacts, plan.Uploads, progress); err != nil {
+	if err := ShipUploads(ctx, f.artifacts, spec.Uploads, progress); err != nil {
 		return provider.StackResult{}, err
 	}
 
 	var result provider.StackResult
-	for _, resource := range plan.Resources {
-		binding, err := f.provision(ctx, plan, resource, progress)
+	for _, resource := range spec.Resources {
+		binding, err := f.provision(ctx, spec, resource, progress)
 		if err != nil {
 			return provider.StackResult{}, err
 		}
@@ -149,51 +149,51 @@ func (f *fanout) Provision(ctx context.Context, plan provider.StackPlan, progres
 
 type standingUp func(context.Context, edge.Progress) (provider.StackResult, error)
 
-func (f *fanout) standingUp(plan provider.StackPlan) (standingUp, error) {
-	if plan.App == nil {
+func (f *fanout) standingUp(spec provider.StackSpec) (standingUp, error) {
+	if spec.App == nil {
 		return nil, nil
 	}
-	switch plan.App.Compute {
+	switch spec.App.Compute {
 	case provider.ComputeServerless:
 		if f.hooks.Functions == nil {
-			return nil, lacking(plan.App, "Functions")
+			return nil, lacking(spec.App, "Functions")
 		}
 		return func(ctx context.Context, progress edge.Progress) (provider.StackResult, error) {
-			standing, err := f.hooks.Functions.Provision(ctx, plan, progress)
+			standing, err := f.hooks.Functions.Provision(ctx, spec, progress)
 			return provider.StackResult{Functions: standing}, err
 		}, nil
 	case provider.ComputeContainer:
 		if f.hooks.Containers == nil {
-			return nil, lacking(plan.App, "Containers")
+			return nil, lacking(spec.App, "Containers")
 		}
 		return func(ctx context.Context, progress edge.Progress) (provider.StackResult, error) {
-			standing, err := f.hooks.Containers.Provision(ctx, plan, progress)
+			standing, err := f.hooks.Containers.Provision(ctx, spec, progress)
 			return provider.StackResult{Containers: standing}, err
 		}, nil
 	default:
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s names the compute %q, and a stack is stood up by the primitive its compute names; the computes are %v",
-			plan.App.App, plan.App.Compute, provider.ComputeNames(provider.Computes()))
+			spec.App.App, spec.App.Compute, provider.ComputeNames(provider.Computes()))
 	}
 }
 
-func lacking(app *provider.AppPlan, hook string) error {
+func lacking(app *provider.AppSpec, hook string) error {
 	return refusal.Refuse(refusal.CodeInvalid,
 		"app %s runs on %s compute and this provider sets no %s hooks, so nothing here can stand it up",
 		app.App, app.Compute, hook)
 }
 
-func (f *fanout) provision(ctx context.Context, plan provider.StackPlan, resource provider.Resource, progress edge.Progress) (provider.Binding, error) {
+func (f *fanout) provision(ctx context.Context, spec provider.StackSpec, resource provider.Resource, progress edge.Progress) (provider.Binding, error) {
 	provision, err := f.serving(resource)
 	if err != nil {
 		return provider.Binding{}, err
 	}
-	in := Instruction{Ref: plan.Ref, Tags: plan.Tags, Bindings: plan.Bindings, Resource: resource}
+	in := Instruction{Ref: spec.Ref, Tags: spec.Tags, Bindings: spec.Bindings, Resource: resource}
 	return provision(ctx, in, progress)
 }
 
-func (f *fanout) serves(plan provider.StackPlan) error {
-	for _, resource := range plan.Resources {
+func (f *fanout) serves(spec provider.StackSpec) error {
+	for _, resource := range spec.Resources {
 		if _, err := f.serving(resource); err != nil {
 			return err
 		}
@@ -299,28 +299,28 @@ func unownable(ref provider.StackRef, going int, noun, because, hook string) err
 		ref.Name, going, noun, because, hook)
 }
 
-func (f *fanout) removeOrphans(ctx context.Context, plan provider.StackPlan, recorded stackrecords.Stack, progress edge.Progress) error {
+func (f *fanout) removeOrphans(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, progress edge.Progress) error {
 	for _, binding := range recorded.Bindings {
-		if slices.ContainsFunc(plan.Resources, func(resource provider.Resource) bool {
+		if slices.ContainsFunc(spec.Resources, func(resource provider.Resource) bool {
 			return resource.Name == binding.Name && resource.Type == binding.Type
 		}) {
 			continue
 		}
 		if progress != nil {
-			progress.Detail(fmt.Sprintf("Removing %s: this plan no longer declares it", binding.Name))
+			progress.Detail(fmt.Sprintf("Removing %s: this release no longer declares it", binding.Name))
 		}
-		if err := f.remove(ctx, plan.Ref, binding, progress); err != nil {
+		if err := f.remove(ctx, spec.Ref, binding, progress); err != nil {
 			return err
 		}
 	}
-	if err := f.removeOrphanFunctions(ctx, plan, recorded, progress); err != nil {
+	if err := f.removeOrphanFunctions(ctx, spec, recorded, progress); err != nil {
 		return err
 	}
-	return f.removeOrphanContainers(ctx, plan, recorded, progress)
+	return f.removeOrphanContainers(ctx, spec, recorded, progress)
 }
 
-func (f *fanout) removeOrphanFunctions(ctx context.Context, plan provider.StackPlan, recorded stackrecords.Stack, progress edge.Progress) error {
-	declared := DeclaredFunctions(plan)
+func (f *fanout) removeOrphanFunctions(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, progress edge.Progress) error {
+	declared := DeclaredFunctions(spec)
 	var orphans []provider.Function
 	for _, held := range recorded.Functions {
 		if slices.Contains(declared, held.Name) {
@@ -329,11 +329,11 @@ func (f *fanout) removeOrphanFunctions(ctx context.Context, plan provider.StackP
 		reportUndeclared(progress, held.Name)
 		orphans = append(orphans, held)
 	}
-	return f.removeFunctions(ctx, plan.Ref, orphans, undeclared, progress)
+	return f.removeFunctions(ctx, spec.Ref, orphans, undeclared, progress)
 }
 
-func (f *fanout) removeOrphanContainers(ctx context.Context, plan provider.StackPlan, recorded stackrecords.Stack, progress edge.Progress) error {
-	declared := DeclaredContainers(plan)
+func (f *fanout) removeOrphanContainers(ctx context.Context, spec provider.StackSpec, recorded stackrecords.Stack, progress edge.Progress) error {
+	declared := DeclaredContainers(spec)
 	var orphans []provider.AppContainer
 	for _, held := range recorded.Containers {
 		if slices.Contains(declared, held.Name) {
@@ -342,14 +342,14 @@ func (f *fanout) removeOrphanContainers(ctx context.Context, plan provider.Stack
 		reportUndeclared(progress, held.Name)
 		orphans = append(orphans, held)
 	}
-	return f.removeContainers(ctx, plan.Ref, orphans, undeclared, progress)
+	return f.removeContainers(ctx, spec.Ref, orphans, undeclared, progress)
 }
 
 func reportUndeclared(progress edge.Progress, name string) {
 	if progress == nil {
 		return
 	}
-	progress.Detail(fmt.Sprintf("Removing %s: this plan no longer declares it", name))
+	progress.Detail(fmt.Sprintf("Removing %s: this release no longer declares it", name))
 }
 
 func (f *fanout) remove(ctx context.Context, ref provider.StackRef, binding provider.Binding, progress edge.Progress) error {

@@ -19,7 +19,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func plannedAppStack(t *testing.T) (Config, provider.StackPlan) {
+func appStackSpec(t *testing.T) (Config, provider.StackSpec) {
 	t.Helper()
 	cfg := routedConfig(t, cloudfront.Kind)
 	cfg.Env = "prod"
@@ -29,11 +29,11 @@ func plannedAppStack(t *testing.T) (Config, provider.StackPlan) {
 
 	coord := routedCoordinate(t)
 	stack := coord.Stack()
-	plan := provider.StackPlan{
+	spec := provider.StackSpec{
 		Ref:  provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
 		Kind: provider.StackApp,
 		Edge: fakeEdgeOf(cloudfront.Kind),
-		App: &provider.AppPlan{
+		App: &provider.AppSpec{
 			App:        "web",
 			Framework:  appbuild.FrameworkNext,
 			Entry:      "fn--web--entry",
@@ -42,27 +42,27 @@ func plannedAppStack(t *testing.T) (Config, provider.StackPlan) {
 				{Name: "fn--web--entry", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "entry.zip"}},
 				{Name: "fn--web--admin", Route: "/admin", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "admin.zip"}},
 			},
-			Routing:     &provider.RoutingPlan{Entry: "fn--web--entry", Manifest: []byte(routedManifest)},
-			ISR:         &provider.ISRPlan{Prefix: "shop/prod/web/r1/isr", TagNamespace: "tag:shop"},
-			Bytecode:    &provider.BytecodePlan{Prefix: "shop/prod/web/r1/bytecode"},
+			Routing:     &provider.RoutingSpec{Entry: "fn--web--entry", Manifest: []byte(routedManifest)},
+			ISR:         &provider.ISRSpec{Prefix: "shop/prod/web/r1/isr", TagNamespace: "tag:shop"},
+			Bytecode:    &provider.BytecodeSpec{Prefix: "shop/prod/web/r1/bytecode"},
 			AssetPrefix: coord.AssetKey(""),
 		},
 	}
-	return cfg, plan
+	return cfg, spec
 }
 
-func TestAnAppStackStandsUpFromThePlanAlone(t *testing.T) {
+func TestAnAppStackStandsUpFromTheSpecAlone(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedAppStack(t)
+	cfg, spec := appStackSpec(t)
 	release := releasing(t, cfg)
-	work, err := release.appWork(plan, nil)
+	work, err := release.appWork(spec, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
 
 	rec := &inputRecorder{}
-	stack := plan.Ref.Name
+	stack := spec.Ref.Name
 	program := func(pctx *pulumi.Context) error { return work.run(pctx, nil) }
 	if err := pulumi.RunErr(program, pulumi.WithMocks("shop", stack.String(), rec)); err != nil {
 		t.Fatalf("run the app program: %v", err)
@@ -73,32 +73,32 @@ func TestAnAppStackStandsUpFromThePlanAlone(t *testing.T) {
 		t.Errorf("%s = %q, want the edge kind the deploy chose", edgeKindEnv, entry[edgeKindEnv])
 	}
 	if entry[routingManifestEnv] != routingManifestInTask {
-		t.Errorf("%s = %q, want the routing manifest the plan carried", routingManifestEnv, entry[routingManifestEnv])
+		t.Errorf("%s = %q, want the routing manifest the spec carried", routingManifestEnv, entry[routingManifestEnv])
 	}
 	if entry[deploymentIDEnv] != "d1" {
-		t.Errorf("%s = %q, want the deployment the plan named", deploymentIDEnv, entry[deploymentIDEnv])
+		t.Errorf("%s = %q, want the deployment the spec named", deploymentIDEnv, entry[deploymentIDEnv])
 	}
-	if entry["OCEL_ISR_PREFIX"] != plan.App.ISR.Prefix {
-		t.Errorf("OCEL_ISR_PREFIX = %q, want the ledger prefix the plan carried", entry["OCEL_ISR_PREFIX"])
+	if entry["OCEL_ISR_PREFIX"] != spec.App.ISR.Prefix {
+		t.Errorf("OCEL_ISR_PREFIX = %q, want the ledger prefix the spec carried", entry["OCEL_ISR_PREFIX"])
 	}
-	if entry["OCEL_ISR_TAG_NAMESPACE"] != plan.App.ISR.TagNamespace {
-		t.Errorf("OCEL_ISR_TAG_NAMESPACE = %q, want the namespace the plan carried", entry["OCEL_ISR_TAG_NAMESPACE"])
+	if entry["OCEL_ISR_TAG_NAMESPACE"] != spec.App.ISR.TagNamespace {
+		t.Errorf("OCEL_ISR_TAG_NAMESPACE = %q, want the namespace the spec carried", entry["OCEL_ISR_TAG_NAMESPACE"])
 	}
 	var siblings map[string]string
 	if err := json.Unmarshal([]byte(entry[functionURLsEnv]), &siblings); err != nil {
 		t.Fatalf("%s = %q, want a routeId-to-URL object: %v", functionURLsEnv, entry[functionURLsEnv], err)
 	}
 	if len(siblings) != 1 || siblings["/admin"] == "" {
-		t.Errorf("sibling urls = %v, want the sibling the plan's routes name", siblings)
+		t.Errorf("sibling urls = %v, want the sibling the spec's routes name", siblings)
 	}
 }
 
 func TestThePlannedAppBootsThroughTheRuntimeItWasHandedAndNoOther(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedAppStack(t)
+	cfg, spec := appStackSpec(t)
 	release := releasing(t, cfg)
-	work, err := release.appWork(plan, nil)
+	work, err := release.appWork(spec, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -113,10 +113,10 @@ func TestThePlannedAppBootsThroughTheRuntimeItWasHandedAndNoOther(t *testing.T) 
 func TestAnAppIsRefusedRatherThanDeployedAgainstARuntimeTheAccountDoesNotHold(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedAppStack(t)
+	cfg, spec := appStackSpec(t)
 	cfg.RuntimeLayers = nil
 	release := releasing(t, cfg)
-	_, err := release.appWork(plan, nil)
+	_, err := release.appWork(spec, nil)
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("appWork() = %v, want a %s refusal naming the bootstrap to re-run", err, refusal.CodeNotReady)
@@ -129,10 +129,10 @@ func TestAnAppIsRefusedRatherThanDeployedAgainstARuntimeTheAccountDoesNotHold(t 
 func TestAPlannedAppWithNoISRAsksForNoRevalidationLedger(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedAppStack(t)
-	plan.App.ISR = nil
+	cfg, spec := appStackSpec(t)
+	spec.App.ISR = nil
 	release := releasing(t, cfg)
-	work, err := release.appWork(plan, nil)
+	work, err := release.appWork(spec, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -144,29 +144,29 @@ func TestAPlannedAppWithNoISRAsksForNoRevalidationLedger(t *testing.T) {
 func TestAPlannedAppGuardsItsOriginOnlyWithASecretToDemand(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedAppStack(t)
-	plan.App.Guard = &provider.OriginGuard{Entry: "fn--web--entry"}
+	cfg, spec := appStackSpec(t)
+	spec.App.Guard = &provider.OriginGuard{Entry: "fn--web--entry"}
 	release := releasing(t, cfg)
 
-	if _, err := release.appWork(plan, nil); err == nil || !strings.Contains(err.Error(), "ocel bootstrap") {
+	if _, err := release.appWork(spec, nil); err == nil || !strings.Contains(err.Error(), "ocel bootstrap") {
 		t.Fatalf("appWork() = %v, want it to say the bootstrap holds no origin secret", err)
 	}
 
 	cfg.OriginSecret = "s3cret"
-	work, err := releasing(t, cfg).appWork(plan, nil)
+	work, err := releasing(t, cfg).appWork(spec, nil)
 	if err != nil {
 		t.Fatalf("appWork() with a secret = %v", err)
 	}
 	if work.functions.Guard == nil || work.functions.Guard.Entry != "fn--web--entry" {
-		t.Errorf("Guard = %+v, want the entry route the plan named", work.functions.Guard)
+		t.Errorf("Guard = %+v, want the entry route the spec named", work.functions.Guard)
 	}
 }
 
 func TestAPlannedAppTakesItsGrantsFromTheBindingsItWasGranted(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedAppStack(t)
-	plan.App.Grants = []provider.Binding{{
+	cfg, spec := appStackSpec(t)
+	spec.App.Grants = []provider.Binding{{
 		Type: provider.BindingBucket,
 		Name: "bucket--uploads",
 		Grants: []provider.Grant{{
@@ -175,7 +175,7 @@ func TestAPlannedAppTakesItsGrantsFromTheBindingsItWasGranted(t *testing.T) {
 			Resources: []string{"arn:aws:s3:::uploads/*"},
 		}},
 	}}
-	work, err := releasing(t, cfg).appWork(plan, nil)
+	work, err := releasing(t, cfg).appWork(spec, nil)
 	if err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
@@ -187,40 +187,40 @@ func TestAPlannedAppTakesItsGrantsFromTheBindingsItWasGranted(t *testing.T) {
 	}
 }
 
-func TestAnAppStackWhosePlanCarriesNoAppIsRefusedRatherThanStoodUpEmpty(t *testing.T) {
+func TestAnAppStackWhoseSpecCarriesNoAppIsRefusedRatherThanStoodUpEmpty(t *testing.T) {
 	t.Parallel()
 
 	release := releasing(t, Config{})
-	plan := provider.StackPlan{
+	spec := provider.StackSpec{
 		Ref:  provider.StackRef{Project: "shop", Name: naming.AppStack("prod", "web", naming.NewRelease("d1", ""))},
 		Kind: provider.StackApp,
 	}
-	err := pulumi.RunErr(func(pctx *pulumi.Context) error { return release.Run(pctx, plan) },
-		pulumi.WithMocks("shop", plan.Ref.Name.String(), &inputRecorder{}))
+	err := pulumi.RunErr(func(pctx *pulumi.Context) error { return release.Run(pctx, spec) },
+		pulumi.WithMocks("shop", spec.Ref.Name.String(), &inputRecorder{}))
 	if err == nil || !strings.Contains(err.Error(), "carries none") {
 		t.Fatalf("Run() = %v, want it refused: an app stack with no app stands nothing up", err)
 	}
 }
 
-func TestTheWarmerAndTheEmbedderReachTheFunctionsThePlanStoodUp(t *testing.T) {
+func TestTheWarmerAndTheEmbedderReachTheFunctionsTheStackStoodUp(t *testing.T) {
 	t.Parallel()
 
-	cfg, plan := plannedAppStack(t)
+	cfg, spec := appStackSpec(t)
 	release := releasing(t, cfg)
-	if _, err := release.appWork(plan, nil); err != nil {
+	if _, err := release.appWork(spec, nil); err != nil {
 		t.Fatalf("appWork() = %v", err)
 	}
 	release.served.realized("fn--web--entry", "shop-prod-web-entry")
 
 	held, known := release.served.byPhysicalName("shop-prod-web-entry")
 	if !known {
-		t.Fatal("the warmer cannot reach a function the plan stood up")
+		t.Fatal("the warmer cannot reach a function the spec stood up")
 	}
 	if held.App != "web" || held.Logical != "fn--web--entry" {
-		t.Errorf("realized %+v, want the app and logical name the plan named", held)
+		t.Errorf("realized %+v, want the app and logical name the spec named", held)
 	}
-	if held.Bytecode == nil || held.Bytecode.Prefix != plan.App.Bytecode.Prefix {
-		t.Errorf("bytecode = %+v, want the cache prefix the plan carried", held.Bytecode)
+	if held.Bytecode == nil || held.Bytecode.Prefix != spec.App.Bytecode.Prefix {
+		t.Errorf("bytecode = %+v, want the cache prefix the spec carried", held.Bytecode)
 	}
 	if err := release.Warm(context.Background(), []string{"shop-prod-web-entry"}, nil); err != nil {
 		t.Errorf("Warm() with no invoker configured = %v, want it to pass over", err)
@@ -233,10 +233,10 @@ func TestAnAppIsRefusedBeforeItsRoleIsBuilt(t *testing.T) {
 	t.Run("a plain name the Lambda runtime owns", func(t *testing.T) {
 		t.Parallel()
 
-		cfg, plan := plannedAppStack(t)
-		plan.App.Values.Plain = map[string]string{"AWS_REGION": "us-west-2"}
+		cfg, spec := appStackSpec(t)
+		spec.App.Values.Plain = map[string]string{"AWS_REGION": "us-west-2"}
 
-		_, err := releasing(t, cfg).appWork(plan, nil)
+		_, err := releasing(t, cfg).appWork(spec, nil)
 		if err == nil || !strings.Contains(err.Error(), "AWS_REGION") {
 			t.Fatalf("appWork() = %v, want the deploy refused before the role is built", err)
 		}
@@ -244,9 +244,9 @@ func TestAnAppIsRefusedBeforeItsRoleIsBuilt(t *testing.T) {
 }
 
 func TestAReleaseThatProvisionsNamesNoPhase(t *testing.T) {
-	plan := provider.StackPlan{Kind: provider.StackApp, App: &provider.AppPlan{App: "web"}}
+	spec := provider.StackSpec{Kind: provider.StackApp, App: &provider.AppSpec{App: "web"}}
 
-	env := releasing(t, Config{}).appEnv(plan, appBundle{}, sessionScope{})
+	env := releasing(t, Config{}).appEnv(spec, appBundle{}, sessionScope{})
 
 	if got, held := env[constants.PhaseEnvName]; held {
 		t.Errorf("%s = %q, want a release that provisions to name no phase at all", constants.PhaseEnvName, got)

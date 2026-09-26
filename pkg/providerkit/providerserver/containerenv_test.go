@@ -47,10 +47,10 @@ func deliveredBy(t *testing.T, req *contractv1.DeployRequest, publish func(*fake
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	plans := provider.FakeStacks().Plans()
-	for i := len(plans) - 1; i >= 0; i-- {
-		if plans[i].App != nil {
-			return plans[i].App.Values.Delivered
+	specs := provider.FakeStacks().Provisioned()
+	for i := len(specs) - 1; i >= 0; i-- {
+		if specs[i].App != nil {
+			return specs[i].App.Values.Delivered
 		}
 	}
 	t.Fatal("no plan the stacks port saw stands up an app")
@@ -111,10 +111,10 @@ func deliveredByWrapping(t *testing.T, req *contractv1.DeployRequest, publish fu
 	if result == nil || !result.GetSuccess() {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
-	plans := provider.FakeStacks().Plans()
-	for i := len(plans) - 1; i >= 0; i-- {
-		if plans[i].App != nil {
-			return plans[i].App.Values.Delivered
+	specs := provider.FakeStacks().Provisioned()
+	for i := len(specs) - 1; i >= 0; i-- {
+		if specs[i].App != nil {
+			return specs[i].App.Values.Delivered
 		}
 	}
 	t.Fatal("no plan the stacks port saw stands up an app")

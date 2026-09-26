@@ -55,21 +55,21 @@ func functionURLAuthOf(t *testing.T, rec *inputRecorder, logicalName string, sta
 	return value.StringValue()
 }
 
-func registerGuarded(t *testing.T, cfg Config, plan provider.StackPlan, functions []*contractv1.ManifestFunction, stack naming.StackName) *inputRecorder {
+func registerGuarded(t *testing.T, cfg Config, spec provider.StackSpec, functions []*contractv1.ManifestFunction, stack naming.StackName) *inputRecorder {
 	t.Helper()
 	held := releasing(t, cfg)
-	host, err := held.routerHost(plan)
+	host, err := held.routerHost(spec)
 	if err != nil {
 		t.Fatalf("routerHost: %v", err)
 	}
-	guard, err := held.originGuard(plan)
+	guard, err := held.originGuard(spec)
 	if err != nil {
 		t.Fatalf("originGuard: %v", err)
 	}
 
 	rec := &inputRecorder{}
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: plan.App.App, Boundary: testBoundaryARN, Router: host})
+		role, err := newFunctionRole(pctx, roleCoordinate("shop", stack), executionRole{App: spec.App.App, Boundary: testBoundaryARN, Router: host})
 		if err != nil {
 			return err
 		}
@@ -80,7 +80,7 @@ func registerGuarded(t *testing.T, cfg Config, plan provider.StackPlan, function
 			Args:      argsFor(functions),
 			Artifacts: map[string]artifactRef{},
 			Layers:    testRuntimeLayers(),
-			Env:       held.appEnv(plan, appBundle{}, sessionScope{}),
+			Env:       held.appEnv(spec, appBundle{}, sessionScope{}),
 			Router:    host,
 			Guard:     guard,
 			RoleArn:   role.Arn,
@@ -96,7 +96,7 @@ func registerGuarded(t *testing.T, cfg Config, plan provider.StackPlan, function
 func registerRoutedGuarded(t *testing.T, kind edge.Kind, stack naming.StackName) *inputRecorder {
 	t.Helper()
 	cfg := guardedConfig(t, kind)
-	return registerGuarded(t, cfg, routedPlan(t, cfg), routedFunctions(), stack)
+	return registerGuarded(t, cfg, routedSpec(t, cfg), routedFunctions(), stack)
 }
 
 func TestTheEntryFunctionAnswersWithoutSigV4AndDemandsTheSecret(t *testing.T) {
@@ -201,13 +201,13 @@ func TestAnAppThatRoutesNothingStillGuardsItsEntry(t *testing.T) {
 		"apps/api/serve.json": `{"framework":"node","buildId":"API1","entry":"/"}`,
 	})
 	coord := storageCoordinate("prod", "shop", "api", fixedRelease(t))
-	plan := servingPlan(t, cfg, "api", "express", coord)
+	spec := servingSpec(t, cfg, "api", "express", coord)
 	functions := []*contractv1.ManifestFunction{
 		{LogicalName: "fn--api--entry", App: "api", RouteId: "/"},
 	}
 
 	stack := testStack(t, "prod", "api")
-	rec := registerGuarded(t, cfg, plan, functions, stack)
+	rec := registerGuarded(t, cfg, spec, functions, stack)
 
 	name := naming.ResourceID(naming.KindFunction, functionCoordinate("shop", stack, "fn--api--entry").Name, "url")
 	value := rec.inputs(functionURLToken, name)["authorizationType"]

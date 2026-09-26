@@ -85,7 +85,7 @@ func (r *deployRun) containerPush(ctx context.Context, entry provider.AppEntry) 
 	return r.wrappedPush(ctx, entry)
 }
 
-func (r *deployRun) imagePlan(ctx context.Context, entry provider.AppEntry, functions []images.Push) (provider.ImagePushes, error) {
+func (r *deployRun) imagePushes(ctx context.Context, entry provider.AppEntry, functions []images.Push) (provider.ImagePushes, error) {
 	if len(functions) > 0 {
 		return provider.ImagePushes{Store: r.images, Pushes: functions}, nil
 	}

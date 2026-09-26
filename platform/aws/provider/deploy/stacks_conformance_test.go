@@ -305,7 +305,7 @@ func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *test
 	t.Parallel()
 
 	engine := &mockedEngine{outputs: provisionedOutputs()}
-	result, err := conformingStacks(engine).Provision(context.Background(), provider.StackPlan{
+	result, err := conformingStacks(engine).Provision(context.Background(), provider.StackSpec{
 		Ref:  provider.StackRef{Project: "conformance", Class: edge.ClassProduction, Name: naming.InfraStack("conformance")},
 		Kind: provider.StackInfra,
 		Resources: []provider.Resource{
@@ -364,7 +364,7 @@ func TestProvisioningABucketPlacesTheUploadCompleterItDeclares(t *testing.T) {
 	uploader := &fakeArtifactStore{}
 	recorder := &lambdaCodeRecorder{}
 	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: recorder}
-	if _, err := releaserPlacingInto(engine, uploader).Provision(context.Background(), provider.StackPlan{
+	if _, err := releaserPlacingInto(engine, uploader).Provision(context.Background(), provider.StackSpec{
 		Ref:  provider.StackRef{Project: "conformance", Class: edge.ClassProduction, Name: naming.InfraStack("conformance")},
 		Kind: provider.StackInfra,
 		Resources: []provider.Resource{

@@ -34,11 +34,11 @@ func scopeOf(ref provider.StackRef, kind edge.Kind) Scope {
 	return Scope{Class: ref.Class, Slug: ref.Project, Env: ref.Name.Env, Edge: kind}
 }
 
-func edgeKindOf(plan provider.StackPlan) edge.Kind {
-	if plan.Edge == nil {
+func edgeKindOf(spec provider.StackSpec) edge.Kind {
+	if spec.Edge == nil {
 		return ""
 	}
-	return plan.Edge.Kind()
+	return spec.Edge.Kind()
 }
 
 type ReleaseConfig func(ctx context.Context, scope Scope) (Config, error)
@@ -155,12 +155,12 @@ type infraWork struct {
 	completer   payloads.Placement
 }
 
-func (r *release) Run(pctx *sdk.Context, plan provider.StackPlan) error {
-	shipped, err := r.shipArtifacts(pctx, plan.Uploads)
+func (r *release) Run(pctx *sdk.Context, spec provider.StackSpec) error {
+	shipped, err := r.shipArtifacts(pctx, spec.Uploads)
 	if err != nil {
 		return err
 	}
-	switch work := plan.Work.(type) {
+	switch work := spec.Work.(type) {
 	case *stackWork:
 		return work.program(pctx)
 	case *appWork:
@@ -176,16 +176,16 @@ func (r *release) Run(pctx *sdk.Context, plan provider.StackPlan) error {
 		if err := work.transformed.install(pctx); err != nil {
 			return err
 		}
-		return r.infra(pctx, plan, work)
+		return r.infra(pctx, spec, work)
 	}
-	if plan.Kind != provider.StackInfra {
+	if spec.Kind != provider.StackInfra {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"%s stands up an app and this plan carries none", plan.Ref.Name)
+			"%s stands up an app and this spec carries none", spec.Ref.Name)
 	}
-	return r.infra(pctx, plan, &infraWork{})
+	return r.infra(pctx, spec, &infraWork{})
 }
 
-func (r *release) infra(pctx *sdk.Context, plan provider.StackPlan, work *infraWork) error {
+func (r *release) infra(pctx *sdk.Context, spec provider.StackSpec, work *infraWork) error {
 	vpc, err := ec2.LookupVpc(pctx, &ec2.LookupVpcArgs{Default: sdk.BoolRef(true)})
 	if err != nil {
 		return fmt.Errorf("look up default VPC: %w", err)
@@ -197,11 +197,11 @@ func (r *release) infra(pctx *sdk.Context, plan provider.StackPlan, work *infraW
 		return fmt.Errorf("look up default VPC subnets: %w", err)
 	}
 
-	project, env := naming.Sanitize(plan.Ref.Project), plan.Ref.Name.Env
+	project, env := naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env
 	transformed := work.transformed
 	sessions := newSessionScope(project, env, r.cfg.StateTableARN)
 
-	for _, resource := range plan.Resources {
+	for _, resource := range spec.Resources {
 		if resource.Binding != "" {
 			continue
 		}
@@ -227,15 +227,15 @@ func (r *release) infra(pctx *sdk.Context, plan provider.StackPlan, work *infraW
 	return nil
 }
 
-func provisionsBucket(plan provider.StackPlan) bool {
-	return slices.ContainsFunc(plan.Resources, func(resource provider.Resource) bool {
+func provisionsBucket(spec provider.StackSpec) bool {
+	return slices.ContainsFunc(spec.Resources, func(resource provider.Resource) bool {
 		return resource.Type == provider.BindingBucket && resource.Binding == ""
 	})
 }
 
-func (r *release) Configure(_ context.Context, plan provider.StackPlan) (auto.ConfigMap, error) {
-	tags := plan.Tags
-	if work, held := plan.Work.(*stackWork); held {
+func (r *release) Configure(_ context.Context, spec provider.StackSpec) (auto.ConfigMap, error) {
+	tags := spec.Tags
+	if work, held := spec.Work.(*stackWork); held {
 		tags = work.tags
 	}
 	if len(tags) == 0 {
@@ -248,24 +248,24 @@ func (r *release) Configure(_ context.Context, plan provider.StackPlan) (auto.Co
 	return auto.ConfigMap{"aws:defaultTags": auto.ConfigValue{Value: string(encoded)}}, nil
 }
 
-func (r *release) Decode(ctx context.Context, plan provider.StackPlan, outputs auto.OutputMap) (provider.StackResult, error) {
-	if work, held := plan.Work.(*stackWork); held {
+func (r *release) Decode(ctx context.Context, spec provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error) {
+	if work, held := spec.Work.(*stackWork); held {
 		work.outputs = outputs
 		return provider.StackResult{}, nil
 	}
-	if work, held := plan.Work.(*substrateWork); held {
+	if work, held := spec.Work.(*substrateWork); held {
 		work.outputs = outputs
 		return provider.StackResult{}, nil
 	}
-	if work, held := plan.Work.(*containerWork); held {
+	if work, held := spec.Work.(*containerWork); held {
 		return r.decodeContainer(work, outputs)
 	}
-	if plan.App != nil {
-		return r.decodeApp(plan, outputs)
+	if spec.App != nil {
+		return r.decodeApp(spec, outputs)
 	}
-	sessions := newSessionScope(naming.Sanitize(plan.Ref.Project), plan.Ref.Name.Env, r.cfg.StateTableARN)
+	sessions := newSessionScope(naming.Sanitize(spec.Ref.Project), spec.Ref.Name.Env, r.cfg.StateTableARN)
 	result := provider.StackResult{}
-	for _, resource := range plan.Resources {
+	for _, resource := range spec.Resources {
 		if resource.Binding != "" {
 			continue
 		}
@@ -318,9 +318,9 @@ func bindingOf(kind provider.BindingType, binding *bindingsv1.Binding) provider.
 	}
 }
 
-func (r *release) refuseHandover(ctx context.Context, plan provider.StackPlan) error {
+func (r *release) refuseHandover(ctx context.Context, spec provider.StackSpec) error {
 	var bound []provider.Resource
-	for _, resource := range plan.Resources {
+	for _, resource := range spec.Resources {
 		if resource.Binding != "" {
 			bound = append(bound, resource)
 		}
@@ -328,7 +328,7 @@ func (r *release) refuseHandover(ctx context.Context, plan provider.StackPlan) e
 	if len(bound) == 0 {
 		return nil
 	}
-	outputs, err := r.automation.Outputs(ctx, plan.Ref, nil)
+	outputs, err := r.automation.Outputs(ctx, spec.Ref, nil)
 	if err != nil {
 		return err
 	}
@@ -341,7 +341,7 @@ func (r *release) refuseHandover(ctx context.Context, plan provider.StackPlan) e
 	if len(handed) == 0 {
 		return nil
 	}
-	return &HandoverError{Bindings: handed, Stack: plan.Ref.Name.String()}
+	return &HandoverError{Bindings: handed, Stack: spec.Ref.Name.String()}
 }
 
 func (r *Stacks) PackApp(ctx context.Context, packing provider.AppPacking, _ edge.Progress) (provider.AppPack, error) {
@@ -356,12 +356,12 @@ func (r *Stacks) PackApp(ctx context.Context, packing provider.AppPacking, _ edg
 	return provider.AppPack{Overlay: bundle.overlay(), Packed: bundle}, nil
 }
 
-func (r *Stacks) Plan(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.Plan, error) {
-	held, err := r.at(ctx, plan.Ref, edgeKindOf(plan))
+func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.Plan, error) {
+	held, err := r.at(ctx, spec.Ref, edgeKindOf(spec))
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return held.plan(ctx, plan, progress)
+	return held.plan(ctx, spec, progress)
 }
 
 func (r *Stacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) (provider.Plan, error) {
@@ -372,20 +372,20 @@ func (r *Stacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progres
 	return held.automation.PreviewDestroy(ctx, ref, progress)
 }
 
-func (r *Stacks) Provision(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.StackResult, error) {
-	held, err := r.at(ctx, plan.Ref, edgeKindOf(plan))
+func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.StackResult, error) {
+	held, err := r.at(ctx, spec.Ref, edgeKindOf(spec))
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	return held.provision(ctx, plan, progress)
+	return held.provision(ctx, spec, progress)
 }
 
-func (r *release) provision(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.StackResult, error) {
-	r.realized.mark(naming.Sanitize(plan.Ref.Project), plan.Ref.Name)
-	if runsContainer(plan) {
-		return r.provisionContainer(ctx, plan, progress)
+func (r *release) provision(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.StackResult, error) {
+	r.realized.mark(naming.Sanitize(spec.Ref.Project), spec.Ref.Name)
+	if runsContainer(spec) {
+		return r.provisionContainer(ctx, spec, progress)
 	}
-	prepared, work, err := r.prepare(ctx, plan)
+	prepared, work, err := r.prepare(ctx, spec)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
@@ -400,17 +400,17 @@ func (r *release) provision(ctx context.Context, plan provider.StackPlan, progre
 	if err := transformedIn(prepared).refuseUnclaimed(); err != nil {
 		return provider.StackResult{}, err
 	}
-	if err := writeOriginRecord(ctx, r.cfg, plan.Ref.Name.App, work, result); err != nil {
+	if err := writeOriginRecord(ctx, r.cfg, spec.Ref.Name.App, work, result); err != nil {
 		return provider.StackResult{}, err
 	}
 	return result, nil
 }
 
-func (r *release) plan(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.Plan, error) {
-	if runsContainer(plan) {
-		return r.planContainer(ctx, plan, progress)
+func (r *release) plan(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.Plan, error) {
+	if runsContainer(spec) {
+		return r.planContainer(ctx, spec, progress)
 	}
-	prepared, _, err := r.prepare(ctx, plan)
+	prepared, _, err := r.prepare(ctx, spec)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -424,8 +424,8 @@ func (r *release) plan(ctx context.Context, plan provider.StackPlan, progress ed
 	return previewed, nil
 }
 
-func transformedIn(plan provider.StackPlan) *transformPatches {
-	switch work := plan.Work.(type) {
+func transformedIn(spec provider.StackSpec) *transformPatches {
+	switch work := spec.Work.(type) {
 	case *appWork:
 		return work.transformed
 	case *infraWork:
@@ -434,37 +434,37 @@ func transformedIn(plan provider.StackPlan) *transformPatches {
 	return nil
 }
 
-func (r *release) prepare(ctx context.Context, plan provider.StackPlan) (provider.StackPlan, *appWork, error) {
-	if plan.Work != nil {
-		return plan, nil, nil
+func (r *release) prepare(ctx context.Context, spec provider.StackSpec) (provider.StackSpec, *appWork, error) {
+	if spec.Work != nil {
+		return spec, nil, nil
 	}
-	if len(plan.Images.Pushes) > 0 {
-		return provider.StackPlan{}, nil, refusal.Refuse(refusal.CodeInvalid,
-			"%s runs on serverless compute, which runs functions rather than an image, and this release pushes %d", plan.Ref.Name, len(plan.Images.Pushes))
+	if len(spec.Images.Pushes) > 0 {
+		return provider.StackSpec{}, nil, refusal.Refuse(refusal.CodeInvalid,
+			"%s runs on serverless compute, which runs functions rather than an image, and this release pushes %d", spec.Ref.Name, len(spec.Images.Pushes))
 	}
-	transformed, err := transformStackPlan(ctx, r.cfg.Transform, plan)
+	transformed, err := transformStackSpec(ctx, r.cfg.Transform, spec)
 	if err != nil {
-		return provider.StackPlan{}, nil, err
+		return provider.StackSpec{}, nil, err
 	}
-	if plan.App == nil {
-		if err := r.refuseHandover(ctx, plan); err != nil {
-			return provider.StackPlan{}, nil, err
+	if spec.App == nil {
+		if err := r.refuseHandover(ctx, spec); err != nil {
+			return provider.StackSpec{}, nil, err
 		}
 		work := &infraWork{transformed: transformed}
-		if provisionsBucket(plan) {
+		if provisionsBucket(spec) {
 			if work.completer, err = placeUploadCompleter(ctx, r.cfg); err != nil {
-				return provider.StackPlan{}, nil, err
+				return provider.StackSpec{}, nil, err
 			}
 		}
-		plan.Work = work
-		return plan, nil, nil
+		spec.Work = work
+		return spec, nil, nil
 	}
-	work, err := r.appWork(plan, transformed)
+	work, err := r.appWork(spec, transformed)
 	if err != nil {
-		return provider.StackPlan{}, nil, err
+		return provider.StackSpec{}, nil, err
 	}
-	plan.Work = work
-	return plan, work, nil
+	spec.Work = work
+	return spec, work, nil
 }
 
 func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) error {

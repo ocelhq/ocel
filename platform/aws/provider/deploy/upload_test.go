@@ -58,8 +58,8 @@ func shipping(t *testing.T) provider.Upload {
 	}
 }
 
-func shippingPlan(upload provider.Upload) provider.StackPlan {
-	return provider.StackPlan{
+func shippingSpec(upload provider.Upload) provider.StackSpec {
+	return provider.StackSpec{
 		Ref:     provider.StackRef{Project: "conformance", Class: edge.ClassProduction, Name: naming.InfraStack("conformance")},
 		Kind:    provider.StackInfra,
 		Uploads: []provider.Upload{upload},
@@ -71,7 +71,7 @@ func TestAnArtifactTheReleaseShipsIsAnEngineResourceInThePlan(t *testing.T) {
 
 	upload := shipping(t)
 	engine := &mockedEngine{outputs: auto.OutputMap{}}
-	planned, err := conformingStacks(engine).Plan(context.Background(), shippingPlan(upload), nil)
+	planned, err := conformingStacks(engine).Plan(context.Background(), shippingSpec(upload), nil)
 	if err != nil {
 		t.Fatalf("Plan() of a release shipping an artifact = %v", err)
 	}
@@ -93,7 +93,7 @@ func TestAnArtifactTheReleaseShipsIsAnEngineResourceInTheApply(t *testing.T) {
 	upload := shipping(t)
 	watcher := &declaring{inner: standInCloud{}}
 	engine := &mockedEngine{outputs: auto.OutputMap{}, mocks: watcher}
-	if _, err := conformingStacks(engine).Provision(context.Background(), shippingPlan(upload), nil); err != nil {
+	if _, err := conformingStacks(engine).Provision(context.Background(), shippingSpec(upload), nil); err != nil {
 		t.Fatalf("Provision() of a release shipping an artifact = %v", err)
 	}
 

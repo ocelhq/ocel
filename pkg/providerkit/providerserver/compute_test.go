@@ -78,7 +78,7 @@ func TestTheWireRefusesAnAppNamingAComputeOutsideTheVocabulary(t *testing.T) {
 	}
 }
 
-func TestTheAppPlanCarriesTheImageAndProbeAContainerAppIsStoodUpFrom(t *testing.T) {
+func TestTheAppSpecCarriesTheImageAndProbeAContainerAppIsStoodUpFrom(t *testing.T) {
 	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
 	p := fake.NewProvider(fake.Options{})
@@ -89,8 +89,8 @@ func TestTheAppPlanCarriesTheImageAndProbeAContainerAppIsStoodUpFrom(t *testing.
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := p.FakeStacks().Plans()
-	app := plans[len(plans)-1].App
+	specs := p.FakeStacks().Provisioned()
+	app := specs[len(specs)-1].App
 	if app == nil {
 		t.Fatal("the last plan the stacks port saw stands up no app")
 	}
@@ -105,7 +105,7 @@ func TestTheAppPlanCarriesTheImageAndProbeAContainerAppIsStoodUpFrom(t *testing.
 	}
 }
 
-func TestAServerlessAppPlanNamesItsComputeAndCarriesNoImage(t *testing.T) {
+func TestAServerlessAppSpecNamesItsComputeAndCarriesNoImage(t *testing.T) {
 	builtProject(t)
 	p := fake.NewProvider(fake.Options{})
 	client := servedBy(t, p)
@@ -115,8 +115,8 @@ func TestAServerlessAppPlanNamesItsComputeAndCarriesNoImage(t *testing.T) {
 		t.Fatalf("Deploy() = %q, want it to succeed", result.GetError())
 	}
 
-	plans := p.FakeStacks().Plans()
-	app := plans[len(plans)-1].App
+	specs := p.FakeStacks().Provisioned()
+	app := specs[len(specs)-1].App
 	if app.Compute != provider.ComputeServerless {
 		t.Errorf("Compute = %q, want %q", app.Compute, provider.ComputeServerless)
 	}

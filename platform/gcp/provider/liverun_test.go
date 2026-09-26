@@ -258,19 +258,19 @@ func serverImage(t *testing.T, p *gcp.Provider, repository, mark string) string 
 	return held(t, repository, image)
 }
 
-func serverlessPlan(app, image string, values map[string]string) provider.StackPlan {
-	return serverlessPlanOn(app, image, nodeRuntime, values)
+func serverlessSpec(app, image string, values map[string]string) provider.StackSpec {
+	return serverlessSpecOn(app, image, nodeRuntime, values)
 }
 
-func serverlessPlanOn(app, image string, framework appbuild.Framework, values map[string]string) provider.StackPlan {
-	return provider.StackPlan{
+func serverlessSpecOn(app, image string, framework appbuild.Framework, values map[string]string) provider.StackSpec {
+	return provider.StackSpec{
 		Ref: provider.StackRef{
 			Project: "live",
 			Class:   edge.ClassPreview,
 			Name:    naming.AppStack(stackrecords.ProductionEnv, app, liveRelease),
 		},
 		Kind: provider.StackApp,
-		App: &provider.AppPlan{
+		App: &provider.AppSpec{
 			App:     app,
 			Compute: provider.ComputeServerless,
 			Values:  provider.AppValues{Delivered: values},
@@ -281,13 +281,13 @@ func serverlessPlanOn(app, image string, framework appbuild.Framework, values ma
 	}
 }
 
-func containerPlan(app, image string, values map[string]string) provider.StackPlan {
-	plan := serverlessPlan(app, image, values)
-	plan.App.Compute = provider.ComputeContainer
-	plan.App.Functions = nil
-	plan.App.Image = image
-	plan.App.HealthCheckPath = "/"
-	return plan
+func containerSpec(app, image string, values map[string]string) provider.StackSpec {
+	spec := serverlessSpec(app, image, values)
+	spec.App.Compute = provider.ComputeContainer
+	spec.App.Functions = nil
+	spec.App.Image = image
+	spec.App.HealthCheckPath = "/"
+	return spec
 }
 
 func TestLiveAFunctionImageBecomesAServiceThatAnswers(t *testing.T) {
@@ -295,10 +295,10 @@ func TestLiveAFunctionImageBecomesAServiceThatAnswers(t *testing.T) {
 	p := runnable(t)
 	image := functionImage(t, p, "ocel-live/fn", nodeRuntime,
 		stagedNode(t, "export default { fetch: () => new Response(process.env.MARK) };"))
-	plan := serverlessPlan("fn", image, map[string]string{"MARK": "runtime-one"})
-	t.Cleanup(func() { _ = p.RemoveFunctions(ctx, plan.Ref, runningAs(t, p, plan), nil) })
+	spec := serverlessSpec("fn", image, map[string]string{"MARK": "runtime-one"})
+	t.Cleanup(func() { _ = p.RemoveFunctions(ctx, spec.Ref, runningAs(t, p, spec), nil) })
 
-	functions, err := p.ProvisionFunctions(ctx, plan, nil)
+	functions, err := p.ProvisionFunctions(ctx, spec, nil)
 	if err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}
@@ -318,27 +318,27 @@ func TestLiveAFunctionImageBecomesAServiceThatAnswers(t *testing.T) {
 	}
 }
 
-func runningAs(t *testing.T, p *gcp.Provider, plan provider.StackPlan) []provider.Function {
+func runningAs(t *testing.T, p *gcp.Provider, spec provider.StackSpec) []provider.Function {
 	t.Helper()
-	service, err := names(t, p).Service(plan.Ref.Project, plan.Ref.Name.Env, plan.App.App, plan.App.App)
+	service, err := names(t, p).Service(spec.Ref.Project, spec.Ref.Name.Env, spec.App.App, spec.App.App)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return []provider.Function{{Name: plan.App.App, Physical: service}}
+	return []provider.Function{{Name: spec.App.App, Physical: service}}
 }
 
 func TestLiveAContainerAppIsStoodUpAndReleasedAgainOntoANewRevision(t *testing.T) {
 	ctx := context.Background()
 	p := runnable(t)
 	first := serverImage(t, p, "ocel-live/app", "served-one")
-	plan := containerPlan("app", first, nil)
+	spec := containerSpec("app", first, nil)
 	t.Cleanup(func() {
-		_ = p.RemoveContainers(ctx, plan.Ref, []provider.AppContainer{
-			{Name: "app", Physical: runningAs(t, p, plan)[0].Physical},
+		_ = p.RemoveContainers(ctx, spec.Ref, []provider.AppContainer{
+			{Name: "app", Physical: runningAs(t, p, spec)[0].Physical},
 		}, nil)
 	})
 
-	containers, err := p.ProvisionContainers(ctx, plan, nil)
+	containers, err := p.ProvisionContainers(ctx, spec, nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
@@ -354,7 +354,7 @@ func TestLiveAContainerAppIsStoodUpAndReleasedAgainOntoANewRevision(t *testing.T
 	if second == first {
 		t.Fatal("both releases carry one image, so nothing would prove a new revision serves")
 	}
-	released, err := p.ProvisionContainers(ctx, containerPlan("app", second, nil), nil)
+	released, err := p.ProvisionContainers(ctx, containerSpec("app", second, nil), nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() a second time = %v", err)
 	}
@@ -370,9 +370,9 @@ func TestLiveAServiceTakenDownAnswersNothingAndIsTakenDownOnlyOnce(t *testing.T)
 	ctx := context.Background()
 	p := runnable(t)
 	image := serverImage(t, p, "ocel-live/gone", "still-here")
-	plan := containerPlan("gone", image, nil)
+	spec := containerSpec("gone", image, nil)
 
-	containers, err := p.ProvisionContainers(ctx, plan, nil)
+	containers, err := p.ProvisionContainers(ctx, spec, nil)
 	if err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
@@ -381,13 +381,13 @@ func TestLiveAServiceTakenDownAnswersNothingAndIsTakenDownOnlyOnce(t *testing.T)
 		t.Fatalf("GET %s = %d %q, want it up before it is taken down", at, status, said)
 	}
 
-	if err := p.RemoveContainers(ctx, plan.Ref, containers, nil); err != nil {
+	if err := p.RemoveContainers(ctx, spec.Ref, containers, nil); err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}
 	if status, said := gone(t, at); status == http.StatusOK {
 		t.Errorf("GET %s = %d %q after the service was taken down, want nothing answering there", at, status, said)
 	}
-	if err := p.RemoveContainers(ctx, plan.Ref, containers, nil); err != nil {
+	if err := p.RemoveContainers(ctx, spec.Ref, containers, nil); err != nil {
 		t.Errorf("RemoveContainers() a second time = %v, want a teardown that is safe to re-run", err)
 	}
 }
@@ -397,10 +397,10 @@ func servesItsOwn(t *testing.T, app string, framework appbuild.Framework, stage 
 	ctx := context.Background()
 	p := runnable(t)
 	image := functionImage(t, p, "ocel-live/"+app, framework, stage(t))
-	plan := serverlessPlanOn(app, image, framework, map[string]string{"MARK": mark})
-	t.Cleanup(func() { _ = p.RemoveFunctions(ctx, plan.Ref, runningAs(t, p, plan), nil) })
+	spec := serverlessSpecOn(app, image, framework, map[string]string{"MARK": mark})
+	t.Cleanup(func() { _ = p.RemoveFunctions(ctx, spec.Ref, runningAs(t, p, spec), nil) })
 
-	functions, err := p.ProvisionFunctions(ctx, plan, nil)
+	functions, err := p.ProvisionFunctions(ctx, spec, nil)
 	if err != nil {
 		t.Fatalf("ProvisionFunctions() = %v", err)
 	}

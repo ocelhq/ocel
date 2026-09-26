@@ -43,11 +43,11 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	}
 	tree := &costkit.Tree{}
 	region := p.options.Region
-	project := tree.Scope("", costkit.ScopeProject, req.Plan.Slug)
-	shared := tree.Scope(project, costkit.ScopeShared, string(req.Plan.Class))
-	environment := tree.Scope(project, costkit.ScopeEnvironment, req.Plan.Env)
+	project := tree.Scope("", costkit.ScopeProject, req.Deploy.Slug)
+	shared := tree.Scope(project, costkit.ScopeShared, string(req.Deploy.Class))
+	environment := tree.Scope(project, costkit.ScopeEnvironment, req.Deploy.Env)
 
-	for _, item := range bootstrapItems(names, req.Plan.Class, false) {
+	for _, item := range bootstrapItems(names, req.Deploy.Class, false) {
 		typ, priced := itemTypes[item.Kind]
 		if !priced {
 			return nil, refusal.Refuse(refusal.CodeInvalid, "bootstrap item %s has no shape", item.ID())
@@ -60,8 +60,8 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 		return nil, err
 	}
 	ingress := ingressFor(factsOf(front))
-	site := costkit.EdgeSite{Slug: req.Plan.Slug, Class: req.Plan.Class, Region: region}
-	for _, app := range req.Plan.Apps {
+	site := costkit.EdgeSite{Slug: req.Deploy.Slug, Class: req.Deploy.Class, Region: region}
+	for _, app := range req.Deploy.Apps {
 		site.Apps = append(site.Apps, costkit.EdgeApp{Name: app.App, Hostnames: provider.ProductionHostnames(app)})
 	}
 	shape, err := edgeShape(front.Kind(), site)
@@ -71,10 +71,10 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 	tree.AddShaped(shared, shape.Vendor, shape.Region, shape.Shared)
 	tree.AddShaped(environment, shape.Vendor, shape.Region, shape.Environment)
 
-	for _, app := range req.Plan.Apps {
+	for _, app := range req.Deploy.Apps {
 		scope := tree.Scope(environment, costkit.ScopeApp, app.App)
 		if app.Compute() == provider.ComputeContainer {
-			service, err := names.Service(req.Plan.Slug, req.Plan.Env, app.App, app.App)
+			service, err := names.Service(req.Deploy.Slug, req.Deploy.Env, app.App, app.App)
 			if err != nil {
 				return nil, err
 			}
@@ -85,7 +85,7 @@ func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*cos
 				specs = []provider.FunctionSpec{{Name: app.App}}
 			}
 			for _, spec := range specs {
-				service, err := names.Service(req.Plan.Slug, req.Plan.Env, app.App, spec.Name)
+				service, err := names.Service(req.Deploy.Slug, req.Deploy.Env, app.App, spec.Name)
 				if err != nil {
 					return nil, err
 				}

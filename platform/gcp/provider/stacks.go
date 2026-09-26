@@ -17,29 +17,29 @@ import (
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
-func serviceFor(names Names, plan provider.StackPlan, app *provider.AppPlan, function string) (string, error) {
+func serviceFor(names Names, spec provider.StackSpec, app *provider.AppSpec, function string) (string, error) {
 	if app.PreviewLabel != "" {
 		return names.PreviewService(app.PreviewLabel, app.App, function)
 	}
-	return names.Service(plan.Ref.Project, plan.Ref.Name.Env, app.App, function)
+	return names.Service(spec.Ref.Project, spec.Ref.Name.Env, app.App, function)
 }
 
 const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: the %q edge shields nothing, " +
 	"and Cloud Run's invoker check would shut browsers out too. Front previews with an edge that shields the origin, or keep their urls to yourselves"
 
-func warnPreviewOpen(plan provider.StackPlan, service string, progress edge.Progress) {
-	if plan.Ref.Class != edge.ClassPreview || factsOf(plan.Edge).ShieldsOrigin {
+func warnPreviewOpen(spec provider.StackSpec, service string, progress edge.Progress) {
+	if spec.Ref.Class != edge.ClassPreview || factsOf(spec.Edge).ShieldsOrigin {
 		return
 	}
 	kind := direct.Kind
-	if plan.Edge != nil {
-		kind = plan.Edge.Kind()
+	if spec.Edge != nil {
+		kind = spec.Edge.Kind()
 	}
 	say(progress, service+" "+fmt.Sprintf(previewOpenWarning, kind))
 }
 
-func (p *Provider) ProvisionFunctions(ctx context.Context, plan provider.StackPlan, progress edge.Progress) ([]provider.Function, error) {
-	app := plan.App
+func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSpec, progress edge.Progress) ([]provider.Function, error) {
+	app := spec.App
 	if app == nil {
 		return nil, nil
 	}
@@ -47,48 +47,48 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan provider.StackPl
 	if err != nil {
 		return nil, err
 	}
-	account := names.WorkloadAccountEmail(plan.Ref.Class)
-	own, err := p.runtimeEnv(names, plan)
+	account := names.WorkloadAccountEmail(spec.Ref.Class)
+	own, err := p.runtimeEnv(names, spec)
 	if err != nil {
 		return nil, err
 	}
 	standing := make([]provider.Function, 0, len(app.Functions))
-	for _, spec := range app.Functions {
-		if err := runsX8664(spec.Framework.Arch, "function "+spec.Name); err != nil {
+	for _, fn := range app.Functions {
+		if err := runsX8664(fn.Framework.Arch, "function "+fn.Name); err != nil {
 			return nil, err
 		}
-		if strings.TrimSpace(spec.Image) == "" {
+		if strings.TrimSpace(fn.Image) == "" {
 			return nil, refusal.Refuse(refusal.CodeInvalid,
-				"function %s carries no image, and a function on Cloud Run is the container a registry coordinate names", spec.Name)
+				"function %s carries no image, and a function on Cloud Run is the container a registry coordinate names", fn.Name)
 		}
-		service, err := serviceFor(names, plan, app, spec.Name)
+		service, err := serviceFor(names, spec, app, fn.Name)
 		if err != nil {
 			return nil, err
 		}
-		values, err := carried(spec.Name, app.Values.Delivered, spec.Env)
+		values, err := carried(fn.Name, app.Values.Delivered, fn.Env)
 		if err != nil {
 			return nil, err
 		}
-		if values, err = carried(spec.Name, values, own); err != nil {
+		if values, err = carried(fn.Name, values, own); err != nil {
 			return nil, err
 		}
 		ran, err := p.stand(ctx, serving{
 			service: service,
-			image:   spec.Image,
+			image:   fn.Image,
 			env:     values,
 			account: account,
 			compute: provider.ComputeServerless,
 			public:  true,
-			ingress: ingressFor(factsOf(plan.Edge)),
-			memory:  spec.Memory,
-			timeout: spec.Timeout,
+			ingress: ingressFor(factsOf(spec.Edge)),
+			memory:  fn.Memory,
+			timeout: fn.Timeout,
 		}, progress)
 		if err != nil {
 			return nil, err
 		}
-		warnPreviewOpen(plan, service, progress)
+		warnPreviewOpen(spec, service, progress)
 		standing = append(standing, provider.Function{
-			Name: spec.Name, Physical: service, URL: ran.url, Revision: ran.revision,
+			Name: fn.Name, Physical: service, URL: ran.url, Revision: ran.revision,
 		})
 	}
 	return standing, nil
@@ -106,8 +106,8 @@ func (p *Provider) RemoveFunctions(ctx context.Context, _ provider.StackRef, fun
 	return nil
 }
 
-func (p *Provider) ProvisionContainers(ctx context.Context, plan provider.StackPlan, progress edge.Progress) ([]provider.AppContainer, error) {
-	app := plan.App
+func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackSpec, progress edge.Progress) ([]provider.AppContainer, error) {
+	app := spec.App
 	if app == nil {
 		return nil, nil
 	}
@@ -123,11 +123,11 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan provider.StackP
 	if err != nil {
 		return nil, err
 	}
-	service, err := serviceFor(names, plan, app, app.App)
+	service, err := serviceFor(names, spec, app, app.App)
 	if err != nil {
 		return nil, err
 	}
-	own, err := p.runtimeEnv(names, plan)
+	own, err := p.runtimeEnv(names, spec)
 	if err != nil {
 		return nil, err
 	}
@@ -139,16 +139,16 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan provider.StackP
 		service: service,
 		image:   app.Image,
 		env:     values,
-		account: names.WorkloadAccountEmail(plan.Ref.Class),
+		account: names.WorkloadAccountEmail(spec.Ref.Class),
 		compute: provider.ComputeContainer,
 		health:  app.HealthCheckPath,
 		public:  true,
-		ingress: ingressFor(factsOf(plan.Edge)),
+		ingress: ingressFor(factsOf(spec.Edge)),
 	}, progress)
 	if err != nil {
 		return nil, err
 	}
-	warnPreviewOpen(plan, service, progress)
+	warnPreviewOpen(spec, service, progress)
 	return []provider.AppContainer{{
 		Name: app.App, Physical: service, URL: ran.url, Image: app.Image, Revision: ran.revision,
 	}}, nil
@@ -166,8 +166,8 @@ func (p *Provider) RemoveContainers(ctx context.Context, _ provider.StackRef, co
 	return nil
 }
 
-func (p *Provider) runtimeEnv(names Names, plan provider.StackPlan) (map[string]string, error) {
-	app := plan.App
+func (p *Provider) runtimeEnv(names Names, spec provider.StackSpec) (map[string]string, error) {
+	app := spec.App
 	env := map[string]string{}
 	if app.HealthCheckPath != "" {
 		env[originguard.HealthPathVar] = app.HealthCheckPath
@@ -176,9 +176,9 @@ func (p *Provider) runtimeEnv(names Names, plan provider.StackPlan) (map[string]
 		Project:     names.project,
 		Region:      p.options.Region,
 		Namespace:   string(names.namespace),
-		Slug:        plan.Ref.Project,
-		Class:       string(plan.Ref.Class),
-		Environment: liveEnvironment(plan.Ref),
+		Slug:        spec.Ref.Project,
+		Class:       string(spec.Ref.Class),
+		Environment: liveEnvironment(spec.Ref),
 		Endpoint:    p.endpoint,
 		Keys:        liveKeys(app.Values),
 		Bindings:    liveBindings(app.Values),

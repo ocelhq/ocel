@@ -67,7 +67,7 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 			t.Error("a writer with no adopted cache store must fail the deploy")
 		}
 
-		pre := provider.DeployPreflight{Plan: provider.DeployPlan{Slug: "shop", Class: edge.ClassProduction, Env: "prod"}}
+		pre := provider.DeployPreflight{Deploy: provider.DeploySpec{Slug: "shop", Class: edge.ClassProduction, Env: "prod"}}
 		if err := newStacks(fixed(storeOnly), &Realized{}, nil).Preflight(context.Background(), pre); err == nil {
 			t.Error("a bootstrap that disagrees with itself must fail preflight, before a byte of this deploy is uploaded")
 		}
@@ -87,9 +87,9 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 		}
 		held := releasing(t, cfg)
 
-		web := held.isrCache(isrPlan("web", "prod/proj/web/r1/isr"))
-		admin := held.isrCache(isrPlan("admin", "prod/proj/admin/r1/isr"))
-		again := releasing(t, cfg).isrCache(isrPlan("web", "prod/proj/web/r1/isr"))
+		web := held.isrCache(isrSpec("web", "prod/proj/web/r1/isr"))
+		admin := held.isrCache(isrSpec("admin", "prod/proj/admin/r1/isr"))
+		again := releasing(t, cfg).isrCache(isrSpec("web", "prod/proj/web/r1/isr"))
 
 		if want := "https://writer.example/prod/proj/web/r1/isr/entry"; web.WriterURL != want {
 			t.Errorf("web WriterURL = %q, want %q", web.WriterURL, want)
@@ -106,21 +106,21 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 		t.Parallel()
 		cfg := Config{AssetBucket: "assets", StateTable: "state", Env: "prod"}
 
-		cache := releasing(t, cfg).isrCache(isrPlan("web", "prod/proj/web/r1/isr"))
+		cache := releasing(t, cfg).isrCache(isrSpec("web", "prod/proj/web/r1/isr"))
 		if cache.WriterURL != "" || cache.WriterSecret != "" {
 			t.Errorf("writer coordinates = %+v, want unset", cache)
 		}
 	})
 }
 
-func isrPlan(app, prefix string) provider.StackPlan {
-	return provider.StackPlan{
+func isrSpec(app, prefix string) provider.StackSpec {
+	return provider.StackSpec{
 		Ref:  provider.StackRef{Project: "proj", Class: edge.ClassProduction, Name: naming.AppStack("prod", app, releaseOf(deployedAs(testDeploymentID)))},
 		Kind: provider.StackApp,
-		App: &provider.AppPlan{
+		App: &provider.AppSpec{
 			App:       app,
 			Framework: appbuild.FrameworkNext,
-			ISR:       &provider.ISRPlan{Prefix: prefix, TagNamespace: "tag:proj"},
+			ISR:       &provider.ISRSpec{Prefix: prefix, TagNamespace: "tag:proj"},
 		},
 	}
 }

@@ -39,17 +39,17 @@ func onABoxSweeping(t *testing.T, tags ...string) (machine, *vps.Provider) {
 	return vm, p
 }
 
-func sweepPlan(t *testing.T, tag string) provider.StackPlan {
+func sweepSpec(t *testing.T, tag string) provider.StackSpec {
 	t.Helper()
 	stack, err := naming.ParseStackName("prod--sweeper--r0a1b2c3d")
 	if err != nil {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256([]byte(tag))
-	return provider.StackPlan{
+	return provider.StackSpec{
 		Ref:  provider.StackRef{Project: sweepProject, Class: edge.ClassProduction, Name: stack},
 		Kind: provider.StackApp,
-		App: &provider.AppPlan{
+		App: &provider.AppSpec{
 			App:             sweepApp,
 			Compute:         provider.ComputeContainer,
 			Deployment:      hex.EncodeToString(sum[:])[:32],
@@ -61,7 +61,7 @@ func sweepPlan(t *testing.T, tag string) provider.StackPlan {
 
 func sweepsUp(t *testing.T, p *vps.Provider, tag string) {
 	t.Helper()
-	if _, err := p.ProvisionContainers(context.Background(), sweepPlan(t, tag), nil); err != nil {
+	if _, err := p.ProvisionContainers(context.Background(), sweepSpec(t, tag), nil); err != nil {
 		t.Fatalf("ProvisionContainers(%s) = %v", tag, err)
 	}
 }
@@ -84,7 +84,7 @@ func sweepImages(t *testing.T, vm machine) string {
 
 func sweeping(t *testing.T, p *vps.Provider, tag string) {
 	t.Helper()
-	if err := p.ReconcileImages(context.Background(), sweepPlan(t, tag).Ref, sweepApp, sweepAt(tag), nil); err != nil {
+	if err := p.ReconcileImages(context.Background(), sweepSpec(t, tag).Ref, sweepApp, sweepAt(tag), nil); err != nil {
 		t.Fatalf("ReconcileImages() = %v", err)
 	}
 }
@@ -151,10 +151,10 @@ func TestLiveAFailedReleaseSweepsItsOwnImage(t *testing.T) {
 
 	sweepsUp(t, p, "r1")
 
-	plan := sweepPlan(t, "leak")
-	plan.App.HealthCheckPath = ""
+	spec := sweepSpec(t, "leak")
+	spec.App.HealthCheckPath = ""
 	stacks := p.Stacks()
-	_, err := stacks.Provision(context.Background(), plan, nil)
+	_, err := stacks.Provision(context.Background(), spec, nil)
 	if err == nil {
 		t.Fatal("Provision() of an app carrying no health path succeeded, and this test needs the failure path")
 	}

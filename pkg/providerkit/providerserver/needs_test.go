@@ -223,7 +223,7 @@ func TestNeedCheckRefusesACodeNeedThePlanWithholdsAndAsksOnce(t *testing.T) {
 
 	var refused *providerserver.EdgeEntitlementError
 	_, err = providerserver.NeedCheck{Edge: withheld, Root: root}.Run(context.Background(), oneApp())
-	if !errors.As(err, &refused) || refused.Plan != "Workers Free" {
+	if !errors.As(err, &refused) || refused.BillingPlan != "Workers Free" {
 		t.Errorf("Run() with nothing waived = %v, want the plan named in an entitlement refusal", err)
 	}
 }

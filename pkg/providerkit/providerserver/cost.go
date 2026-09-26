@@ -24,7 +24,7 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 	if cost == nil {
 		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("this provider does not describe the resources a deploy would create"))
 	}
-	plan, err := buildDeployPlan(&contractv1.DeployRequest{
+	spec, err := buildDeploySpec(&contractv1.DeployRequest{
 		Manifest:    unshipped(req.GetManifest()),
 		Environment: req.GetEnvironment(),
 		Edge:        req.GetEdge(),
@@ -41,7 +41,7 @@ func (h *handlers) Shape(ctx context.Context, req *contractv1.ShapeRequest) (*co
 		return nil, provider.RefusalError(err)
 	}
 	set, err := cost.Shape(ctx, provider.ShapeRequest{
-		Plan:       plan,
+		Deploy:     spec,
 		Edge:       gate.Edge,
 		Features:   features,
 		Resources:  resources,

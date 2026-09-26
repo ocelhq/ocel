@@ -250,7 +250,7 @@ func servesBehind(t *testing.T, front string, meanwhile func(vm machine)) machin
 
 	fixtures(t, vm)
 	d := vm.deployingBehind(t, proxy)
-	if err := d.PreflightDeploy(ctx, provider.DeployPreflight{Plan: provider.DeployPlan{
+	if err := d.PreflightDeploy(ctx, provider.DeployPreflight{Deploy: provider.DeploySpec{
 		Slug: frontedSlug, Class: edge.ClassProduction, Apps: []provider.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
 	}}); err != nil {
 		t.Fatalf("PreflightDeploy() behind %s = %v", front, err)
