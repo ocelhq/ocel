@@ -7,9 +7,9 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -49,11 +49,11 @@ func (r *Stacks) Plans() []provider.StackPlan {
 }
 
 func (r *Stacks) Plan(ctx context.Context, plan provider.StackPlan, _ edge.Progress) (provider.Plan, error) {
-	return providerkit.SynthesizedPlan(ctx, r.artifacts, plan, r.State(plan.Ref).Result)
+	return resources.SynthesizedPlan(ctx, r.artifacts, plan, r.State(plan.Ref).Result)
 }
 
 func (r *Stacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ edge.Progress) (provider.Plan, error) {
-	return providerkit.SynthesizedRemoval(ref, r.State(ref).Result), nil
+	return resources.SynthesizedRemoval(ref, r.State(ref).Result), nil
 }
 
 func (r *Stacks) Provision(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.StackResult, error) {
@@ -71,7 +71,7 @@ func (r *Stacks) Provision(ctx context.Context, plan provider.StackPlan, progres
 	if err := plan.Images.PushMissing(ctx, progress); err != nil {
 		return provider.StackResult{}, err
 	}
-	if err := providerkit.ShipUploads(ctx, r.artifacts, plan.Uploads, progress); err != nil {
+	if err := resources.ShipUploads(ctx, r.artifacts, plan.Uploads, progress); err != nil {
 		return provider.StackResult{}, err
 	}
 	result := provider.StackResult{}

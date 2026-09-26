@@ -1,4 +1,4 @@
-package providerkit
+package resources
 
 import (
 	"context"
@@ -30,7 +30,7 @@ func SynthesizedPlan(ctx context.Context, store provider.ArtifactStore, plan pro
 		changes = append(changes, provider.Change{
 			Kind:   string(resource.Type),
 			Name:   resource.Name,
-			Action: provider.KeepOrCreate(slices.ContainsFunc(deployed.Bindings, provisioning(resource))),
+			Action: provider.KeepOrCreate(slices.ContainsFunc(deployed.Bindings, bindingFor(resource))),
 		})
 	}
 	declared := DeclaredFunctions(plan)
@@ -38,7 +38,7 @@ func SynthesizedPlan(ctx context.Context, store provider.ArtifactStore, plan pro
 		changes = append(changes, provider.Change{
 			Kind:   functionKind,
 			Name:   function,
-			Action: provider.KeepOrCreate(slices.ContainsFunc(deployed.Functions, calling(function))),
+			Action: provider.KeepOrCreate(slices.ContainsFunc(deployed.Functions, functionNamed(function))),
 		})
 	}
 	containers := DeclaredContainers(plan)
@@ -46,11 +46,11 @@ func SynthesizedPlan(ctx context.Context, store provider.ArtifactStore, plan pro
 		changes = append(changes, provider.Change{
 			Kind:   containerKind,
 			Name:   container,
-			Action: provider.KeepOrCreate(slices.ContainsFunc(deployed.Containers, holding(container))),
+			Action: provider.KeepOrCreate(slices.ContainsFunc(deployed.Containers, containerNamed(container))),
 		})
 	}
 	for _, binding := range deployed.Bindings {
-		if slices.ContainsFunc(plan.Resources, func(resource provider.Resource) bool { return provisioning(resource)(binding) }) {
+		if slices.ContainsFunc(plan.Resources, func(resource provider.Resource) bool { return bindingFor(resource)(binding) }) {
 			continue
 		}
 		changes = append(changes, provider.Change{Kind: string(binding.Type), Name: binding.Name, Action: provider.ActionDelete, Reason: reasonUndeclared})
@@ -102,17 +102,17 @@ func DeclaredContainers(plan provider.StackPlan) []string {
 	return []string{plan.App.App}
 }
 
-func provisioning(resource provider.Resource) func(provider.Binding) bool {
+func bindingFor(resource provider.Resource) func(provider.Binding) bool {
 	return func(binding provider.Binding) bool {
 		return binding.Name == resource.Name && binding.Type == resource.Type
 	}
 }
 
-func calling(function string) func(provider.Function) bool {
+func functionNamed(function string) func(provider.Function) bool {
 	return func(held provider.Function) bool { return held.Name == function }
 }
 
-func holding(container string) func(provider.AppContainer) bool {
+func containerNamed(container string) func(provider.AppContainer) bool {
 	return func(held provider.AppContainer) bool { return held.Name == container }
 }
 

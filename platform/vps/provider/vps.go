@@ -5,7 +5,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/liveness"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
@@ -110,7 +109,7 @@ func (p *Provider) Stacks() provider.Stacks {
 	return resources.Stacks(p.records, p.Artifacts(), p.resourceHooks())
 }
 
-func (p *Provider) Artifacts() provider.ArtifactStore { return providerkit.NoArtifacts{} }
+func (p *Provider) Artifacts() provider.ArtifactStore { return resources.NoArtifacts{} }
 
 func (p *Provider) Records() records.Store { return p.records }
 

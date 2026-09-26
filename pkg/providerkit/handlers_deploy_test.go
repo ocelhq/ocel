@@ -29,6 +29,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -380,11 +381,11 @@ func (r refusingStacks) Stacks() provider.Stacks { return r.stacks }
 type halfBindingStacks struct{}
 
 func (halfBindingStacks) Plan(ctx context.Context, plan provider.StackPlan, _ edge.Progress) (provider.Plan, error) {
-	return providerkit.SynthesizedPlan(ctx, fake.NewArtifacts(), plan, provider.StackResult{})
+	return resources.SynthesizedPlan(ctx, fake.NewArtifacts(), plan, provider.StackResult{})
 }
 
 func (halfBindingStacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ edge.Progress) (provider.Plan, error) {
-	return providerkit.SynthesizedRemoval(ref, provider.StackResult{}), nil
+	return resources.SynthesizedRemoval(ref, provider.StackResult{}), nil
 }
 
 func (halfBindingStacks) Provision(_ context.Context, plan provider.StackPlan, _ edge.Progress) (provider.StackResult, error) {

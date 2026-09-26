@@ -57,7 +57,7 @@ func (r *deployRun) drawValues(ctx context.Context) (provider.ChangeGroup, error
 		changes = append(changes, provider.Change{
 			Kind:   string(resource.Type),
 			Name:   resource.Name,
-			Action: provider.KeepOrCreate(slices.ContainsFunc(published, provisioning(resource))),
+			Action: provider.KeepOrCreate(slices.ContainsFunc(published, bindingFor(resource))),
 		})
 	}
 	group := provider.ChangeGroup{Kind: provider.ParameterGroupKind, Name: valuesGroupName, Changes: changes}
@@ -100,4 +100,10 @@ func (r *deployRun) drawPromotion() provider.ChangeGroup {
 
 func (r *deployRun) drawn() *planv1.ChangePlan {
 	return ChangePlanProto(r.draft.plan(), r.plan.Slug, string(r.front.Kind()))
+}
+
+func bindingFor(resource provider.Resource) func(provider.Binding) bool {
+	return func(binding provider.Binding) bool {
+		return binding.Name == resource.Name && binding.Type == resource.Type
+	}
 }

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
@@ -86,7 +85,7 @@ func (f *fanout) Plan(ctx context.Context, plan provider.StackPlan, _ edge.Progr
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return providerkit.SynthesizedPlan(ctx, f.artifacts, plan, standing(recorded))
+	return SynthesizedPlan(ctx, f.artifacts, plan, standing(recorded))
 }
 
 func (f *fanout) PlanDestroy(ctx context.Context, ref provider.StackRef, _ edge.Progress) (provider.Plan, error) {
@@ -94,7 +93,7 @@ func (f *fanout) PlanDestroy(ctx context.Context, ref provider.StackRef, _ edge.
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return providerkit.SynthesizedRemoval(ref, standing(recorded)), nil
+	return SynthesizedRemoval(ref, standing(recorded)), nil
 }
 
 func standing(recorded stackrecords.Stack) provider.StackResult {
@@ -122,7 +121,7 @@ func (f *fanout) Provision(ctx context.Context, plan provider.StackPlan, progres
 	if err := plan.Images.PushMissing(ctx, progress); err != nil {
 		return provider.StackResult{}, err
 	}
-	if err := providerkit.ShipUploads(ctx, f.artifacts, plan.Uploads, progress); err != nil {
+	if err := ShipUploads(ctx, f.artifacts, plan.Uploads, progress); err != nil {
 		return provider.StackResult{}, err
 	}
 
@@ -321,7 +320,7 @@ func (f *fanout) removeOrphans(ctx context.Context, plan provider.StackPlan, rec
 }
 
 func (f *fanout) removeOrphanFunctions(ctx context.Context, plan provider.StackPlan, recorded stackrecords.Stack, progress edge.Progress) error {
-	declared := providerkit.DeclaredFunctions(plan)
+	declared := DeclaredFunctions(plan)
 	var orphans []provider.Function
 	for _, held := range recorded.Functions {
 		if slices.Contains(declared, held.Name) {
@@ -334,7 +333,7 @@ func (f *fanout) removeOrphanFunctions(ctx context.Context, plan provider.StackP
 }
 
 func (f *fanout) removeOrphanContainers(ctx context.Context, plan provider.StackPlan, recorded stackrecords.Stack, progress edge.Progress) error {
-	declared := providerkit.DeclaredContainers(plan)
+	declared := DeclaredContainers(plan)
 	var orphans []provider.AppContainer
 	for _, held := range recorded.Containers {
 		if slices.Contains(declared, held.Name) {
