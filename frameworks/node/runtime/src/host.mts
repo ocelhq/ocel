@@ -193,11 +193,13 @@ function originGuard(env: NodeJS.ProcessEnv): OriginGuard | undefined {
   delete env[originSecretPreviousVar];
   if (!routerMode(env) || env[originSignedVar]) return undefined;
   if (!secret) return () => false;
-  const expected = [secret, previous].filter((held): held is string => Boolean(held)).map(digest);
+  const expected = [secret, previous]
+    .filter((value): value is string => Boolean(value))
+    .map(digest);
   return (headers) => {
     const presented = digest(presentedSecret(headers));
     let matched = 0;
-    for (const held of expected) matched |= timingSafeEqual(presented, held) ? 1 : 0;
+    for (const accepted of expected) matched |= timingSafeEqual(presented, accepted) ? 1 : 0;
     return matched === 1;
   };
 }

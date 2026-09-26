@@ -34,7 +34,7 @@ function get(path: string, headers: Record<string, string>): Promise<any> {
   });
 }
 
-test("request.url carries the public origin, not the loopback one", async () => {
+test("request.url has the public origin, not the loopback one", async () => {
   const body = await get("/x?a=1", {
     host: "app.ocel.site",
     "x-forwarded-proto": "https",

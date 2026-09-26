@@ -13,7 +13,7 @@ const fixture: TagSnapshot = JSON.parse(
 );
 
 describe("the deploy's genesis snapshot", () => {
-  it("carries exactly the fields the publisher reads", () => {
+  it("has exactly the fields the publisher reads", () => {
     expect(Object.keys(fixture).sort()).toEqual([
       "deployedAt",
       "generatedAt",
@@ -24,12 +24,12 @@ describe("the deploy's genesis snapshot", () => {
     expect(fixture.records).toEqual({});
   });
 
-  it("carries no expiry for a reader to second-guess the publisher with", () => {
+  it("has no expiry for a reader to second-guess the publisher with", () => {
     expect(fixture).not.toHaveProperty("validUntil");
     expect(mergeSnapshot(fixture, new Map(), 1)).not.toHaveProperty("validUntil");
   });
 
-  it("anchors pruning, and the publisher carries that anchor forward", () => {
+  it("anchors pruning, and the publisher keeps that anchor", () => {
     expect(fixture.deployedAt).toBeGreaterThan(0);
     expect(mergeSnapshot(fixture, new Map(), fixture.generatedAt + 1).deployedAt).toBe(
       fixture.deployedAt,

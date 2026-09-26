@@ -133,7 +133,7 @@ describe("node middleware matchers", () => {
 });
 
 describe("node middleware forwarding", () => {
-  it("carries x-ocel-entry: /_middleware and reaches the bundle named by middleware.id", async () => {
+  it("sends x-ocel-entry: /_middleware and reaches the bundle named by middleware.id", async () => {
     const origin = fakeOrigin(() => mwResponse({ "x-middleware-next": "1" }));
     await serve(
       new Request("https://app.example/static.txt"),
@@ -344,7 +344,7 @@ describe("x-nextjs-data on the middleware invocation", () => {
     expect(origin.requests[0]!.headers.has("x-nextjs-data")).toBe(false);
   });
 
-  it("carries a data-request redirect through as x-nextjs-redirect with no Location", async () => {
+  it("passes a data-request redirect through as x-nextjs-redirect with no Location", async () => {
     const origin = fakeOrigin((req) =>
       req.headers.get("x-nextjs-data") === "1"
         ? mwResponse({ "x-nextjs-redirect": "/somewhere" }, { status: 307 })

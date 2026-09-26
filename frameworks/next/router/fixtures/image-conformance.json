@@ -371,7 +371,7 @@
         },
         {
           "name": "url-absolute-allowed-with-port",
-          "note": "matching is against url.hostname — url.host would carry :8443 and fail the pattern",
+          "note": "matching is against url.hostname — url.host would include :8443 and fail the pattern",
           "request": {
             "search": "url=https%3A%2F%2Fcdn.allowed.example%3A8443%2Fimg%2Fa.png&w=640&q=75",
             "accept": null
@@ -1291,7 +1291,7 @@
         },
         {
           "name": "url-absolute-allowed-with-port",
-          "note": "matching is against url.hostname — url.host would carry :8443 and fail the pattern",
+          "note": "matching is against url.hostname — url.host would include :8443 and fail the pattern",
           "request": {
             "search": "url=https%3A%2F%2Fcdn.allowed.example%3A8443%2Fimg%2Fa.png&w=640&q=75",
             "accept": null

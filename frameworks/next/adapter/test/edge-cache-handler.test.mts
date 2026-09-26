@@ -46,7 +46,7 @@ test("delegates to FileSystemCache off the edge, so the build keeps its cache", 
   expect(Handler.name).toBe("FileSystemCache");
 });
 
-test("holds no require in the edge branch", () => {
+test("has no require in the edge branch", () => {
   const source = readFileSync(handlerPath, "utf8");
   const [edgeBranch] = source.split("\n} else {");
 

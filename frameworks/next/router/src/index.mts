@@ -632,12 +632,12 @@ function carryRequestQuery(headers: Headers, requestUrl: string): void {
   const query = queryIndex === -1 ? "" : addressed.slice(queryIndex + 1);
 
   const declared = new Set(new URLSearchParams(query).keys());
-  const carried = requestQuery
+  const forwarded = requestQuery
     .split("&")
     .filter((pair) => pair !== "" && !declared.has(queryKey(pair)));
-  if (carried.length === 0) return;
+  if (forwarded.length === 0) return;
 
-  const merged = query ? [query, ...carried] : carried;
+  const merged = query ? [query, ...forwarded] : forwarded;
   headers.set("location", `${path}?${merged.join("&")}${hash}`);
 }
 

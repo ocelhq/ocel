@@ -340,7 +340,7 @@ export function refreshOutcome(response: Response): RefreshOutcome {
 
 export const refreshBackoffSeconds = 30;
 
-async function settleSentinel(
+async function recordRefreshOutcome(
   cache: Cache,
   sentinel: Request,
   outcome: RefreshOutcome,
@@ -379,7 +379,7 @@ export function admitRefresh(
     try {
       outcome = (await askBelow(deps, refreshing)) ? "landed" : await run();
     } finally {
-      await settleSentinel(deps.cache, sentinel, outcome);
+      await recordRefreshOutcome(deps.cache, sentinel, outcome);
     }
   });
 }

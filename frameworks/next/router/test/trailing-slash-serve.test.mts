@@ -41,7 +41,7 @@ describe("trailingSlash: true", () => {
     expect(res.headers.get("location")).toBe(to);
   });
 
-  it("carries the query string through the 308", async () => {
+  it("keeps the query string through the 308", async () => {
     const res = await serve(get("/a?q=1"), deps(scenario));
     expect(res.status).toBe(308);
     expect(res.headers.get("location")).toBe("/a/?q=1");
@@ -68,7 +68,7 @@ describe("trailingSlash: true", () => {
     expect(res.headers.get("x-matched-path")).toBe("/_next/data/t/a.json");
   });
 
-  it("does not redirect a data request that already carries a trailing slash", async () => {
+  it("does not redirect a data request that already has a trailing slash", async () => {
     const res = await serve(get("/_next/data/t/a.json/"), deps(scenario));
     expect(res.status).toBe(200);
     expect(res.headers.get("x-matched-path")).toBe("/_next/data/t/a.json");
@@ -423,7 +423,7 @@ describe("next.config headers() on the trailing-slash 308", () => {
     },
   ];
 
-  it("carries them on the strip redirect", async () => {
+  it("keeps them on the strip redirect", async () => {
     const res = await serve(
       get("/a/?q=1"),
       deps({ pages: ["/a"], files: { "/a.html": "a" }, headerRoutes }),
@@ -435,7 +435,7 @@ describe("next.config headers() on the trailing-slash 308", () => {
     expect(res.headers.getSetCookie()).toEqual(["banner=1"]);
   });
 
-  it("carries them on the add-slash redirect", async () => {
+  it("keeps them on the add-slash redirect", async () => {
     const res = await serve(
       get("/a"),
       deps({

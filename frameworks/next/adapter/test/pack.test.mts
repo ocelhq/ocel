@@ -52,7 +52,7 @@ test("a normal app packs into exactly one bundle", () => {
   expect(keys(bundles[0]!)).toEqual(["a", "b", "c"]);
 });
 
-test("a bundle carries the union of its members' assets", () => {
+test("a bundle contains the union of its members' assets", () => {
   const { bundles } = pack([
     { key: "a", assets: { "shared.js": "/abs/shared", "a.js": "/abs/a" } },
     { key: "b", assets: { "shared.js": "/abs/shared", "b.js": "/abs/b" } },
@@ -331,7 +331,7 @@ test("the default budget is Lambda's unzipped ceiling", () => {
   expect(defaultBudgetBytes).toBe(200 * 1024 * 1024);
 });
 
-test("each member carries its own traced bytes", () => {
+test("each member counts its own traced bytes", () => {
   const sizes = { "/abs/forest": mb(150), "/abs/a": mb(1), "/abs/b": mb(3) };
   const forest = { "node_modules/forest": "/abs/forest" };
 

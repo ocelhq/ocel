@@ -64,7 +64,7 @@ test("runs the compiled middleware entry in plain Node, with no edge sandbox", a
   expect(response.headers.get("x-mw-build")).toBe("test-build");
 });
 
-test("dispatches a waived edge route to the bundle that carries its compiled entry", async () => {
+test("dispatches a waived edge route to the bundle that contains its compiled entry", async () => {
   const app = await buildOriginEdgeApp({
     allowDegraded: "edge-middleware,edge-runtime",
   });
@@ -169,7 +169,7 @@ test("a waived edge middleware proxying an encoded upstream emits a body its hea
   expect(response.headers.get("x-ocel-middleware-headers")).toBe("content-type");
 });
 
-test("a waived edge route reads an edge asset the bundle carries", async () => {
+test("a waived edge route reads an edge asset the bundle contains", async () => {
   const app = await buildOriginEdgeApp({
     allowDegraded: "edge-middleware,edge-runtime",
     edgeAssets: { "greeting.txt": "hello from the asset" },

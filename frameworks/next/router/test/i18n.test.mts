@@ -432,11 +432,11 @@ describe("resolveLocale", () => {
     expect(at("/").pathname).toBe("/en");
   });
 
-  it("prefixes a _next/data page URL that carries no locale", () => {
+  it("prefixes a _next/data page URL that has no locale", () => {
     expect(at("/_next/data/b1/about.json").pathname).toBe("/_next/data/b1/en/about.json");
   });
 
-  it("prefixes a _next/data index URL that carries no locale", () => {
+  it("prefixes a _next/data index URL that has no locale", () => {
     expect(at("/_next/data/b1/index.json").pathname).toBe("/_next/data/b1/en.json");
   });
 

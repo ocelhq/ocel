@@ -444,7 +444,7 @@ test("declares every entry in the launcher with a POSIX relative specifier", asy
   expect(source).toContain("process.env.NODE_ENV ||= 'production'");
 });
 
-test("the launcher carries the pathname every route is served at", async () => {
+test("the launcher includes the pathname every route is served at", async () => {
   const { projectDir, args } = await synthDedupProject();
   const adapter = await loadAdapterIn(projectDir);
 
@@ -608,7 +608,7 @@ test("fails the build when a prerender's parent renders nowhere", async () => {
   await expect(adapter.onBuildComplete(args as never)).rejects.toThrow(/\/ghost/);
 });
 
-test("carries an empty-string entry key instead of dropping it", async () => {
+test("keeps an empty-string entry key instead of dropping it", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   args.outputs.appPages[1]!.id = "";
   for (const p of args.outputs.prerenders) p.parentOutputId = "";
@@ -834,7 +834,7 @@ async function withStaticPage(
   await addStaticOutput(args, pathname, filePath, contents);
 }
 
-test("carries the compiled image config and its hash into the manifest", async () => {
+test("writes the compiled image config and its hash into the manifest", async () => {
   const { projectDir, args } = await synthProject();
   args.config.images = {
     ...defaultImages,
@@ -1061,7 +1061,7 @@ test("omits the x-vercel-cache opt-in from an ordinary build", async () => {
   expect(await readManifest(projectDir)).not.toHaveProperty("vercelCacheAlias");
 });
 
-test("carries the app's trailing-slash config into the routing manifest", async () => {
+test("passes the app's trailing-slash config into the routing manifest", async () => {
   const { projectDir, args } = await synthProject();
   args.config = {
     ...args.config,
@@ -1364,7 +1364,7 @@ test("regroups a route's prerender outputs into one cache entry", async () => {
   expect(typeof entry.lastModified).toBe("number");
 });
 
-test("carries a pages route's data twin onto its cache entry", async () => {
+test("copies a pages route's data twin onto its cache entry", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const pagesDir = join(projectDir, ".next/server/pages");
   await mkdir(pagesDir, { recursive: true });
@@ -1491,7 +1491,7 @@ test("leaves an API route that parents no prerender out of the pages dispatch", 
   expect(manifest.dispatch["/api/hello"]).not.toHaveProperty("page");
 });
 
-test("carries the html variant's headers and status onto an APP_PAGE entry", async () => {
+test("copies the html variant's headers and status onto an APP_PAGE entry", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   args.outputs.prerenders[0].fallback.initialHeaders = {
     "content-type": "text/html; charset=utf-8",
@@ -2734,7 +2734,7 @@ test("leaves a relative symlink asset resolving inside the bundle", async () => 
   expect(await readFile(join(dest, "index.js"), "utf8")).toBe("module.exports = 1");
 });
 
-test("copies a symlink asset whose in-repo target the trace never carried", async () => {
+test("copies a symlink asset whose in-repo target the trace never included", async () => {
   const { projectDir, args } = await synthProject();
   await withNodeModules(projectDir);
   const pkgDir = await withVendorPackage(projectDir);
