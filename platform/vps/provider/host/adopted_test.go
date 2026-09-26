@@ -95,6 +95,21 @@ func TestTheSwitchboardIsHandedTheDirectoryOfAFileOutsideOcelsOwnToPlaceInAndNoO
 	}
 }
 
+func TestASwitchboardStoodAgainAfterAPruneIsBoundToPlaceOnlyWhileTheDirectoryIsThere(t *testing.T) {
+	t.Parallel()
+
+	board := boundToPlace(switchboardStanding(nil, routedByHand()), coolifyDynamic+"/ocel.yml")
+	if read := standingRead(board); !strings.Contains(read, "[ -d "+quoted(coolifyDynamic)+" ]") {
+		t.Errorf("a deploy standing the switchboard again reads\n%s\nand never checks %s is there, so docker creates it empty and root-owned where the proxy reads its routes", read, coolifyDynamic)
+	}
+	stood := board.restoring(1)
+	for _, want := range []string{"'--volume' " + quoted(coolifyDynamic+":"+coolifyDynamic), "'--env' " + quoted(switchboard.PlaceEnv+"="+coolifyDynamic)} {
+		if !strings.Contains(stood, want) {
+			t.Errorf("a deploy stands the switchboard again as\n%s\nwithout %s, so the next deploy has nowhere to place the proxy's file", stood, want)
+		}
+	}
+}
+
 const coolifyFile = coolifyDynamic + "/ocel.yml"
 
 func places(command string) bool { return strings.Contains(command, quoted("place")+" ") }
