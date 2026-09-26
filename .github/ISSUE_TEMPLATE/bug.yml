@@ -1,0 +1,50 @@
+name: Bug
+description: Ocel did something wrong.
+type: Bug
+labels: [needs-triage]
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [cli, sdk, provider, vps, aws, gcp, edge, console, frameworks, docs]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ocel --version
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options: [aws, gcp, vps, cloudflare, none]
+    validations:
+      required: true
+  - type: textarea
+    id: ran
+    attributes:
+      label: What you ran
+      description: The command, and the config or code it read.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Redact secrets, tokens and account IDs before you paste.
+      render: text
