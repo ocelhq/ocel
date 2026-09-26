@@ -28,7 +28,7 @@ func TestTheCoreIsTheSameWhicheverEdgeFrontsIt(t *testing.T) {
 					t.Fatalf("bootstrapping behind the %s edge: %v", kind, err)
 				}
 				if got := cfn.TemplateDigest(stacks.template(core)); got != want {
-					t.Errorf("the %s edge wrote a core whose digest is %q, want %q: the core is what every edge stands beside, not part of one", kind, got, want)
+					t.Errorf("the %s edge wrote a core whose digest is %q, want %q: the core is what every edge is installed beside, not part of one", kind, got, want)
 				}
 				if got := stacks.stampOf(core).Digest; got != want {
 					t.Errorf("the %s edge stamped the core %q, want %q", kind, got, want)
@@ -38,7 +38,7 @@ func TestTheCoreIsTheSameWhicheverEdgeFrontsIt(t *testing.T) {
 	}
 }
 
-func TestReadingABootstrapSeesEveryEdgeThatStands(t *testing.T) {
+func TestReadingABootstrapSeesEveryInstalledEdge(t *testing.T) {
 	stamp := Stamp{Schema: RequiredSchema}
 	api := stubStacksAPI{
 		coreStackName: outputs(map[string]string{
@@ -61,7 +61,7 @@ func TestReadingABootstrapSeesEveryEdgeThatStands(t *testing.T) {
 	}
 	want := []string{FeatureISR, FeatureCloudflareEdge, FeatureCloudFrontEdge}
 	if !slices.Equal(got.Features.Names(), want) {
-		t.Errorf("Features = %v, want %v: an account may hold a stack for more than one edge at a time", got.Features.Names(), want)
+		t.Errorf("Features = %v, want %v: an account may have a stack for more than one edge at a time", got.Features.Names(), want)
 	}
 	for key, value := range map[string]string{
 		outputAssetBucket:        "assets-1",
@@ -70,7 +70,7 @@ func TestReadingABootstrapSeesEveryEdgeThatStands(t *testing.T) {
 		OutputEdgeCachePolicy:    "cache-1",
 	} {
 		if got.Outputs[key] != value {
-			t.Errorf("Outputs[%s] = %q, want %q: a deploy reads the core and every standing feature stack as one", key, got.Outputs[key], value)
+			t.Errorf("Outputs[%s] = %q, want %q: a deploy reads the core and every installed feature stack as one", key, got.Outputs[key], value)
 		}
 	}
 }
@@ -85,8 +85,8 @@ func TestBootstrappingOneEdgeLeavesAnotherEdgesStackAlone(t *testing.T) {
 		t.Fatalf("bootstrapping behind the cloudflare edge: %v", err)
 	}
 
-	standing := defaultNamespace.FeatureStackName(FeatureCloudflareEdge, ClassProduction)
-	settled := len(stacks.events)
+	existing := defaultNamespace.FeatureStackName(FeatureCloudflareEdge, ClassProduction)
+	eventsBefore := len(stacks.events)
 	restamps := stacks.restamps
 
 	cloudfront := apisFronting(stacks, ssmc, iamc, store, &fakeEdge{kind: KindCloudFront})
@@ -98,20 +98,20 @@ func TestBootstrappingOneEdgeLeavesAnotherEdgesStackAlone(t *testing.T) {
 	if !slices.Contains(stacks.stacks(), written) {
 		t.Fatalf("stacks = %v, want the cloudfront edge among them", stacks.stacks())
 	}
-	for _, event := range stacks.events[settled:] {
-		if strings.HasSuffix(event, standing) {
-			t.Errorf("the run %s the edge it was not asked for; switching the front an account is bootstrapped behind takes nothing away from the one it stood behind", event)
+	for _, event := range stacks.events[eventsBefore:] {
+		if strings.HasSuffix(event, existing) {
+			t.Errorf("the run %s the edge it was not asked for; switching the front an account is bootstrapped behind takes nothing away from the one it was bootstrapped behind before", event)
 		}
 	}
 	if stacks.restamps != restamps {
 		t.Errorf("the run restamped %d stacks, want none of them the edge it was not asked for", stacks.restamps-restamps)
 	}
-	if !slices.Contains(stacks.stacks(), standing) {
-		t.Errorf("stacks = %v, want the cloudflare edge still standing", stacks.stacks())
+	if !slices.Contains(stacks.stacks(), existing) {
+		t.Errorf("stacks = %v, want the cloudflare edge still installed", stacks.stacks())
 	}
 }
 
-func TestAnEdgeFeatureStandsItsOwnEdgeUpWhateverFrontsTheRun(t *testing.T) {
+func TestAnEdgeFeatureInstallsItsOwnEdgeWhateverFrontsTheRun(t *testing.T) {
 	ctx := context.Background()
 	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	registry := newFakeEdges(&fakeEdge{kind: KindCloudflare, out: edge.BootstrapOutput{
@@ -156,11 +156,11 @@ func TestRemovingAnEdgeFeatureTearsItsEdgeDownBeforeSeveringWhatReachesIt(t *tes
 	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	store := preloadedStore()
 	registry := newFakeEdges(&fakeEdge{kind: KindCloudflare})
-	stood := Request{Features: []string{FeatureISR, FeatureCloudflareEdge, FeatureCloudFrontEdge}}
+	install := Request{Features: []string{FeatureISR, FeatureCloudflareEdge, FeatureCloudFrontEdge}}
 	apis := apisAcross(stacks, ssmc, iamc, store, &fakeEdge{kind: KindCloudFront}, registry)
 
-	if err := Run(ctx, apis, defaultNamespace, ClassProduction, stood, nil, nil); err != nil {
-		t.Fatalf("standing the cloudflare edge up behind the cloudfront front: %v", err)
+	if err := Run(ctx, apis, defaultNamespace, ClassProduction, install, nil, nil); err != nil {
+		t.Fatalf("installing the cloudflare edge behind the cloudfront front: %v", err)
 	}
 
 	names, err := edgeNamesFor(defaultNamespace, ClassProduction, KindCloudflare)
@@ -168,11 +168,11 @@ func TestRemovingAnEdgeFeatureTearsItsEdgeDownBeforeSeveringWhatReachesIt(t *tes
 		t.Fatalf("edgeNamesFor: %v", err)
 	}
 	front := registry.at(KindCloudflare)
-	var heldWhileTearing []string
+	var presentWhileTearing []string
 	front.onTeardown = func() {
 		for _, param := range names.edgeParams() {
-			if _, held := ssmc.params[param]; held {
-				heldWhileTearing = append(heldWhileTearing, param)
+			if _, present := ssmc.params[param]; present {
+				presentWhileTearing = append(presentWhileTearing, param)
 			}
 		}
 	}
@@ -184,12 +184,12 @@ func TestRemovingAnEdgeFeatureTearsItsEdgeDownBeforeSeveringWhatReachesIt(t *tes
 	if front.teardowns != 1 {
 		t.Fatalf("the cloudflare edge was torn down %d times, want once: dropping its feature takes its externals with it", front.teardowns)
 	}
-	if len(heldWhileTearing) == 0 {
+	if len(presentWhileTearing) == 0 {
 		t.Error("the teardown ran with nothing left at SSM, so it had no credentials to reach the edge with")
 	}
 	for _, param := range names.edgeParams() {
-		if _, held := ssmc.params[param]; held {
-			t.Errorf("%s outlived the drop, so a later destroy still believes the edge stands", param)
+		if _, present := ssmc.params[param]; present {
+			t.Errorf("%s outlived the drop, so a later destroy still believes the edge is installed", param)
 		}
 	}
 }
@@ -227,9 +227,9 @@ func TestEachEdgeKeepsItsOwnParameters(t *testing.T) {
 		}
 		for _, param := range []string{names.valuesParam, names.cacheStoreParam, names.isrWriterParam, names.isrWriterSeedParam} {
 			if !strings.HasPrefix(param, prefix+"/") {
-				t.Errorf("%s stands outside the %s edge's namespace %s", param, kind, prefix)
+				t.Errorf("%s lies outside the %s edge's namespace %s", param, kind, prefix)
 			}
-			if _, held := ssmc.params[param]; !held {
+			if _, present := ssmc.params[param]; !present {
 				t.Errorf("the %s edge stored nothing at %s", kind, param)
 			}
 		}

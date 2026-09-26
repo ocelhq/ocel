@@ -77,7 +77,7 @@ func namesOf(t *testing.T, n Namespace) map[string]string {
 	}
 }
 
-func TestDefaultNamespaceKeepsEveryNameAsItStands(t *testing.T) {
+func TestDefaultNamespaceKeepsEveryNameUnchanged(t *testing.T) {
 	want := map[string]string{
 		"core stack":            "ocel-bootstrap",
 		"preview core stack":    "ocel-bootstrap-preview",
@@ -116,13 +116,13 @@ func TestDefaultNamespaceKeepsEveryNameAsItStands(t *testing.T) {
 	}
 }
 
-func TestEveryNameCarriesTheNamespace(t *testing.T) {
+func TestEveryNameContainsTheNamespace(t *testing.T) {
 	for what, got := range namesOf(t, Namespace("j-abc-cache")) {
 		if strings.Contains(got, "ocel") {
 			t.Errorf("the %s is %q, which still names ocel rather than the namespace it was derived from", what, got)
 		}
 		if !strings.Contains(got, "j-abc-cache") {
-			t.Errorf("the %s is %q and does not carry the namespace it was derived from", what, got)
+			t.Errorf("the %s is %q and does not contain the namespace it was derived from", what, got)
 		}
 	}
 }

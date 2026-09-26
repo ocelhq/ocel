@@ -19,9 +19,9 @@ type originRecord struct {
 	FunctionURLs map[string]string `json:"functionUrls"`
 }
 
-func routeURLs(functions []appFunction, stood []provider.Function) map[string]string {
-	byLogical := make(map[string]string, len(stood))
-	for _, fn := range stood {
+func routeURLs(functions []appFunction, deployed []provider.Function) map[string]string {
+	byLogical := make(map[string]string, len(deployed))
+	for _, fn := range deployed {
 		byLogical[fn.Name] = fn.URL
 	}
 	urls := make(map[string]string, len(functions))

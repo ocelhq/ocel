@@ -80,7 +80,7 @@ func parsePolicy(t *testing.T, document string) parsedPolicy {
 		t.Fatalf("policy Version = %q, want 2012-10-17", policy.Version)
 	}
 	if len(policy.Statement) == 0 {
-		t.Fatal("policy carries no statement")
+		t.Fatal("policy has no statement")
 	}
 	return policy
 }
@@ -245,7 +245,7 @@ func TestNoTierMintsARoleThatCanOutgrowItsBoundary(t *testing.T) {
 func TestNoTierRepointsTheTrustPolicyOfAnAppRole(t *testing.T) {
 	deployActions := actionsOf(t, mustRender(t, DeployCredentialPermissions))
 	if deployActions["iam:UpdateAssumeRolePolicy"] {
-		t.Error("the deploy tier grants iam:UpdateAssumeRolePolicy, which hands an app role's trust policy to whoever holds the credential")
+		t.Error("the deploy tier grants iam:UpdateAssumeRolePolicy, which hands an app role's trust policy to whoever has the credential")
 	}
 }
 
@@ -284,7 +284,7 @@ func TestDeployTierWithholdsWhatDefinesTheBootstrapTier(t *testing.T) {
 			t.Errorf("the deploy tier grants %s, which is what a bootstrap credential is for", action)
 		}
 		if !bootstrapActions[action] {
-			t.Errorf("the bootstrap tier no longer grants %s, so nothing holds the line at %s", action, action)
+			t.Errorf("the bootstrap tier no longer grants %s, so no Ocel credential may call %s at all", action, action)
 		}
 	}
 }
@@ -399,7 +399,7 @@ func conditionJSON(t *testing.T, condition map[string]any) string {
 	return string(encoded)
 }
 
-func TestOnlyTheEdgeUserIsMintedAndItCarriesNoManagedPolicy(t *testing.T) {
+func TestOnlyTheEdgeUserIsMintedAndItHasNoManagedPolicy(t *testing.T) {
 	for tier, document := range bothTiers(t) {
 		for g := range grantsOf(t, document) {
 			if g.action == "iam:AttachUserPolicy" {
@@ -437,13 +437,13 @@ func TestCredentialTiersNameActionsRatherThanGlobbingThem(t *testing.T) {
 				continue
 			}
 			if verb == "" || strings.HasPrefix(verb, "*") {
-				t.Errorf("the %s tier grants %q, whose leading wildcard stands for verbs nobody enumerated", tier, g.action)
+				t.Errorf("the %s tier grants %q, whose leading wildcard matches verbs nobody enumerated", tier, g.action)
 			}
 		}
 	}
 }
 
-func TestEveryMutatingGrantCarriesAnOcelScope(t *testing.T) {
+func TestEveryMutatingGrantHasAnOcelScope(t *testing.T) {
 	for tier, document := range bothTiers(t) {
 		for _, statement := range parsePolicy(t, document).Statement {
 			actions := stringsOf(t, statement.Action, "Action")
@@ -459,7 +459,7 @@ func TestEveryMutatingGrantCarriesAnOcelScope(t *testing.T) {
 			for _, resource := range stringsOf(t, statement.Resource, "Resource") {
 				if !namesSomething(resource) {
 					t.Errorf(
-						"the %s tier grants %s on %q, which names nothing Ocel owns and carries no scoping condition",
+						"the %s tier grants %s on %q, which names nothing Ocel owns and has no scoping condition",
 						tier, strings.Join(mutating, ", "), resource,
 					)
 				}

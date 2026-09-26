@@ -30,7 +30,7 @@ func TestRetryer(t *testing.T) {
 }
 
 func TestLoad(t *testing.T) {
-	t.Run("configs carry their retryer", func(t *testing.T) {
+	t.Run("configs include their retryer", func(t *testing.T) {
 		t.Setenv("AWS_REGION", "us-east-1")
 
 		control, err := Control(context.Background(), "eu-west-1")
@@ -41,7 +41,7 @@ func TestLoad(t *testing.T) {
 			t.Fatalf("Region = %q, want eu-west-1", control.Region)
 		}
 		if control.Retryer == nil {
-			t.Fatal("Control config carries no retryer")
+			t.Fatal("Control config has no retryer")
 		}
 		if got := control.Retryer().MaxAttempts(); got != controlMaxAttempts {
 			t.Fatalf("control MaxAttempts() = %d, want %d", got, controlMaxAttempts)
@@ -52,7 +52,7 @@ func TestLoad(t *testing.T) {
 			t.Fatalf("Runtime: %v", err)
 		}
 		if runtime.Retryer == nil {
-			t.Fatal("Runtime config carries no retryer")
+			t.Fatal("Runtime config has no retryer")
 		}
 		if got := runtime.Retryer().MaxAttempts(); got != runtimeMaxAttempts {
 			t.Fatalf("runtime MaxAttempts() = %d, want %d", got, runtimeMaxAttempts)

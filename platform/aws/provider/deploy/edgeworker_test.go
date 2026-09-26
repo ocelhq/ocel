@@ -122,10 +122,10 @@ func TestProjectWorkerStems(t *testing.T) {
 		theirs := workerScriptName(other, "shop", "prod", "web")
 
 		if mine == theirs {
-			t.Fatalf("both namespaces deploy over one another as %q, and a Cloudflare account holds one script of that name", mine)
+			t.Fatalf("both namespaces deploy over one another as %q, and a Cloudflare account has only one script of that name", mine)
 		}
 		if len(theirs) > maxWorkerNameLen {
-			t.Errorf("%q is %d characters, over the %d Cloudflare holds", theirs, len(theirs), maxWorkerNameLen)
+			t.Errorf("%q is %d characters, over the %d Cloudflare allows", theirs, len(theirs), maxWorkerNameLen)
 		}
 		if ProjectOwnsWorker(defaultNamespace, "shop", theirs) {
 			t.Errorf("%q reads as this namespace's, so a prune here would delete the worker %s deploys", theirs, other)

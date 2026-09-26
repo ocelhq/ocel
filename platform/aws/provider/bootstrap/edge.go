@@ -100,15 +100,15 @@ func edgeNamesFor(ns Namespace, class string, kind edge.Kind) (edgeNames, error)
 	}, nil
 }
 
-func EdgeStanding(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind) (bool, error) {
+func EdgeInstalled(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind) (bool, error) {
 	names, err := edgeNamesFor(ns, class, kind)
 	if err != nil {
 		return false, err
 	}
 	for _, name := range names.edgeParams() {
-		held, err := paramHeld(ctx, ssmClient, name)
-		if err != nil || held {
-			return held, err
+		present, err := paramPresent(ctx, ssmClient, name)
+		if err != nil || present {
+			return present, err
 		}
 	}
 	return false, nil
@@ -299,7 +299,7 @@ func mintEdgeKey(ctx context.Context, iamClient IAMAPI, ssmClient SSMAPI, paramN
 	return nil
 }
 
-func recordedEdgeKey(ctx context.Context, ssmClient SSMAPI, paramName string) (creds EdgeCredentials, held bool, err error) {
+func recordedEdgeKey(ctx context.Context, ssmClient SSMAPI, paramName string) (creds EdgeCredentials, present bool, err error) {
 	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
 		Name:           aws.String(paramName),
 		WithDecryption: aws.Bool(true),
@@ -373,7 +373,7 @@ func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, 
 	}
 	if store.BootstrapCred == "" {
 		if store.BootstrapCred = stored.BootstrapCred; store.BootstrapCred == "" {
-			return standingCredMissing(kind, "deployments store", store.ScriptName, paramName)
+			return edgeCredUnrecorded(kind, "deployments store", store.ScriptName, paramName)
 		}
 	}
 	if store == stored {
@@ -395,11 +395,11 @@ func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, 
 	return nil
 }
 
-func standingCredMissing(kind edge.Kind, surface, scriptName, paramName string) error {
+func edgeCredUnrecorded(kind edge.Kind, surface, scriptName, paramName string) error {
 	return fmt.Errorf(
-		"the %s edge reoffered its %s %q without a bootstrap credential, meaning the one it holds still stands, "+
-			"but %s holds none: a prior bootstrap set that credential and failed before storing it. It cannot be read "+
-			"back, so delete the bootstrap credential %q holds at the %s edge and re-run bootstrap to mint a fresh one",
+		"the %s edge reoffered its %s %q without a bootstrap credential, meaning it still has the one it was given, "+
+			"but %s stores none: a prior bootstrap set that credential and failed before storing it. It cannot be read "+
+			"back, so delete the bootstrap credential set on %q at the %s edge and re-run bootstrap to mint a fresh one",
 		kind, surface, scriptName, paramName, scriptName, kind)
 }
 
@@ -448,7 +448,7 @@ func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, ns Namespace, class s
 	}
 	if writer.BootstrapCred == "" {
 		if writer.BootstrapCred = stored.BootstrapCred; writer.BootstrapCred == "" {
-			return standingCredMissing(kind, "ISR writer", writer.ScriptName, paramName)
+			return edgeCredUnrecorded(kind, "ISR writer", writer.ScriptName, paramName)
 		}
 	}
 	if writer == stored {
@@ -548,7 +548,7 @@ func adoptCacheStore(ctx context.Context, ssmClient SSMAPI, ns Namespace, class 
 	if store.SecretAccessKey == "" {
 		if stored.AccessKeyID != store.AccessKeyID || stored.SecretAccessKey == "" {
 			return fmt.Errorf(
-				"the %s edge reoffered cache-store credential %q without a secret, but %s holds no secret for it: "+
+				"the %s edge reoffered cache-store credential %q without a secret, but %s stores no secret for it: "+
 					"a prior bootstrap minted that credential and failed before storing it. Its secret cannot be read "+
 					"back, so delete credential %q for bucket %q at the %s edge and re-run bootstrap to mint a fresh one",
 				kind, store.AccessKeyID, names.cacheStoreParam, store.AccessKeyID, store.Bucket, kind,

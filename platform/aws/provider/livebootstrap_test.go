@@ -11,7 +11,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) {
+func TestLiveBootstrapProvisionsTheAccountAndASecondRunPlansNothing(t *testing.T) {
 	a := live(t)
 	class := edge.ClassProduction
 	boot := a.emptied(t, class)
@@ -57,16 +57,16 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 		t.Fatalf("Apply() = %v", err)
 	}
 
-	standing, err := boot.Describe(ctx, class)
+	installed, err := boot.Describe(ctx, class)
 	if err != nil {
 		t.Fatalf("Describe() after Apply() = %v", err)
 	}
-	if !standing.Present {
+	if !installed.Present {
 		t.Fatal("Describe() after Apply() shows no bootstrap")
 	}
-	stack := stackNamed(t, standing, coreStackName)
+	stack := stackNamed(t, installed, coreStackName)
 	if !stack.Present || !stack.DigestCurrent {
-		t.Errorf("Describe() after Apply() = %+v, want the core stack standing at the digest applied", stack)
+		t.Errorf("Describe() after Apply() = %+v, want the core stack present at the digest applied", stack)
 	}
 	if stack.WrittenBy != string(liveWriter) {
 		t.Errorf("the core stack records writer %q, want the writer that applied it", stack.WrittenBy)
@@ -76,41 +76,41 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 	}
 
 	if status := a.stackStatus(t, coreStackName); status != "CREATE_COMPLETE" {
-		t.Errorf("%s stands at %q in CloudFormation, want CREATE_COMPLETE", coreStackName, status)
+		t.Errorf("%s is in state %q in CloudFormation, want CREATE_COMPLETE", coreStackName, status)
 	}
-	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, string(class))
+	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, string(class))
 	if err != nil {
 		t.Fatalf("reading back what the bootstrap deployed = %v", err)
 	}
-	for _, bucket := range []string{held.StateBucket, held.ArtifactBucket, held.AssetBucket} {
+	for _, bucket := range []string{deployed.StateBucket, deployed.ArtifactBucket, deployed.AssetBucket} {
 		if bucket == "" {
-			t.Fatalf("the stack names no bucket for one of its outputs: %+v", held)
+			t.Fatalf("the stack names no bucket for one of its outputs: %+v", deployed)
 		}
-		if !a.bucketStands(t, bucket) {
+		if !a.bucketExists(t, bucket) {
 			t.Errorf("%s is named by the stack but no bucket answers for it", bucket)
 		}
 	}
-	for _, table := range []string{held.StateTable, held.VarsTable} {
+	for _, table := range []string{deployed.StateTable, deployed.VarsTable} {
 		if table == "" {
-			t.Fatalf("the stack names no table for one of its outputs: %+v", held)
+			t.Fatalf("the stack names no table for one of its outputs: %+v", deployed)
 		}
-		if !a.tableStands(t, table) {
+		if !a.tableExists(t, table) {
 			t.Errorf("%s is named by the stack but no table answers for it", table)
 		}
 	}
-	if held.AppBoundaryARN == "" {
-		t.Errorf("the bootstrap stands without an app boundary: %+v", held)
+	if deployed.AppBoundaryARN == "" {
+		t.Errorf("the bootstrap is installed without an app boundary: %+v", deployed)
 	}
-	if held.VarsKeyARN != "" {
-		t.Errorf("a run that never asked for %s made a key anyway: %+v", bootstrap.FeatureVarsKey, held)
+	if deployed.VarsKeyARN != "" {
+		t.Errorf("a run that never asked for %s made a key anyway: %+v", bootstrap.FeatureVarsKey, deployed)
 	}
 	for _, param := range []string{origin, passphraseParam} {
-		if !a.paramStands(t, param) {
-			t.Errorf("%s was planned and applied but SSM holds no such parameter", param)
+		if !a.paramExists(t, param) {
+			t.Errorf("%s was planned and applied but SSM has no such parameter", param)
 		}
 	}
 
-	again, err := boot.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: liveWriter, VendorState: standing.VendorState})
+	again, err := boot.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: liveWriter, VendorState: installed.VendorState})
 	if err != nil {
 		t.Fatalf("a second Plan() = %v", err)
 	}
@@ -126,7 +126,7 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 	}
 }
 
-func TestLiveApplyingTheImageOptimizerStandsItsOwnStackBesideTheCore(t *testing.T) {
+func TestLiveApplyingTheImageOptimizerDeploysItsOwnStackBesideTheCore(t *testing.T) {
 	a := live(t)
 	class := edge.ClassProduction
 	boot := a.emptied(t, class)
@@ -140,33 +140,33 @@ func TestLiveApplyingTheImageOptimizerStandsItsOwnStackBesideTheCore(t *testing.
 
 	name := defaultNamespace.FeatureStackName(feature, string(class))
 	if status := a.stackStatus(t, name); status != "CREATE_COMPLETE" {
-		t.Errorf("%s stands at %q in CloudFormation, want CREATE_COMPLETE", name, status)
+		t.Errorf("%s is in state %q in CloudFormation, want CREATE_COMPLETE", name, status)
 	}
-	standing, err := boot.Describe(ctx, class)
+	installed, err := boot.Describe(ctx, class)
 	if err != nil {
 		t.Fatalf("Describe() after Apply(%s) = %v", feature, err)
 	}
-	stack := stackNamed(t, standing, name)
+	stack := stackNamed(t, installed, name)
 	if !stack.Present || !stack.DigestCurrent {
-		t.Errorf("Describe() = %+v, want the feature stack standing at the digest applied", stack)
+		t.Errorf("Describe() = %+v, want the feature stack present at the digest applied", stack)
 	}
-	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, string(class))
+	deployed, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, string(class))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if held.ImageOptimizerURL == "" {
-		t.Error("the optimizer stands without the URL every front calls it on")
+	if deployed.ImageOptimizerURL == "" {
+		t.Error("the optimizer is installed without the URL every front calls it on")
 	}
-	if !held.Features.Has(feature) {
-		t.Errorf("the account reads back features %v, want %s among them", held.Features.Names(), feature)
+	if !deployed.Features.Has(feature) {
+		t.Errorf("the account reads back features %v, want %s among them", deployed.Features.Names(), feature)
 	}
 
-	again, err := boot.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: liveWriter, Features: []string{feature}, VendorState: standing.VendorState})
+	again, err := boot.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: liveWriter, Features: []string{feature}, VendorState: installed.VendorState})
 	if err != nil {
 		t.Fatalf("a second Plan(%s) = %v", feature, err)
 	}
 	if group := groupNamed(t, again, "aws/"+name); group.Action != provider.ActionKeep {
-		t.Errorf("a second Plan() over a standing %s plans %q, want %q", feature, group.Action, provider.ActionKeep)
+		t.Errorf("a second Plan() over an installed %s plans %q, want %q", feature, group.Action, provider.ActionKeep)
 	}
 }
 
@@ -177,6 +177,6 @@ func stackNamed(t *testing.T, described provider.BootstrapDescription, name stri
 			return stack
 		}
 	}
-	t.Fatalf("Describe() carries no stack named %q", name)
+	t.Fatalf("Describe() has no stack named %q", name)
 	return provider.BootstrapStack{}
 }

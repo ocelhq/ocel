@@ -28,7 +28,7 @@ func testStack(t *testing.T, env, app string) naming.StackName {
 func TestFunctionCoordinate(t *testing.T) {
 	t.Parallel()
 
-	t.Run("the physical name carries project, env, app, route and release", func(t *testing.T) {
+	t.Run("the physical name includes project, env, app, route and release", func(t *testing.T) {
 		t.Parallel()
 
 		coord := functionCoordinate("shop", testStack(t, "prod", "web"), "fn--web--api-users")
@@ -179,14 +179,14 @@ func TestResourceTags(t *testing.T) {
 		})
 
 		if got := tags[tagComponent]; got != pulumi.String(naming.KindFunction.Component()) {
-			t.Errorf("%s = %v, want ocel's own value to stand", tagComponent, got)
+			t.Errorf("%s = %v, want ocel's own value kept", tagComponent, got)
 		}
 		if got := tags[tagRoute]; got != pulumi.String("/api/users") {
-			t.Errorf("%s = %v, want ocel's own value to stand", tagRoute, got)
+			t.Errorf("%s = %v, want ocel's own value kept", tagRoute, got)
 		}
 	})
 
-	t.Run("a role carries no route", func(t *testing.T) {
+	t.Run("a role has no route", func(t *testing.T) {
 		t.Parallel()
 
 		tags := resourceTags(naming.KindRole, "", nil)
@@ -243,7 +243,7 @@ func TestFunctionEnv(t *testing.T) {
 		}
 	})
 
-	t.Run("carries no bytecode cache with the gate off", func(t *testing.T) {
+	t.Run("has no bytecode cache with the gate off", func(t *testing.T) {
 		t.Setenv(bytecodeCacheEnv, "")
 
 		env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, nil, &bytecodeConfig{Bucket: "assets-xyz", Prefix: "prod/proj/api/API1/bytecode"})

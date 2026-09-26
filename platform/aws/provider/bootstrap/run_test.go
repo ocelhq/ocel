@@ -24,53 +24,53 @@ import (
 )
 
 type fakeCFN struct {
-	mu         sync.Mutex
-	templates  map[string]string
-	params     map[string][]cfntypes.Parameter
-	statuses   map[string]cfntypes.StackStatus
-	outputs    map[string]map[string]string
-	tags       map[string][]cfntypes.Tag
-	reasons    map[string]string
-	holding    map[string]int
-	settling   map[string]int
-	writing    map[string]string
-	claiming   map[string]string
-	planned    map[string][]cfntypes.ResourceChange
-	changeSets map[string]*fakeChangeSet
-	users      *fakeIAM
-	applied    []string
-	deleted    []string
-	events     []string
-	planning   []string
-	executed   []string
-	discarded  []string
-	creates    int
-	updates    int
-	restamps   int
-	noops      int
+	mu           sync.Mutex
+	templates    map[string]string
+	params       map[string][]cfntypes.Parameter
+	statuses     map[string]cfntypes.StackStatus
+	outputs      map[string]map[string]string
+	tags         map[string][]cfntypes.Tag
+	reasons      map[string]string
+	blockedNames map[string]int
+	busyLooks    map[string]int
+	writing      map[string]string
+	claiming     map[string]string
+	planned      map[string][]cfntypes.ResourceChange
+	changeSets   map[string]*fakeChangeSet
+	users        *fakeIAM
+	applied      []string
+	deleted      []string
+	events       []string
+	planning     []string
+	executed     []string
+	discarded    []string
+	creates      int
+	updates      int
+	restamps     int
+	noops        int
 }
 
 func newFakeCFN() *fakeCFN {
 	return &fakeCFN{
-		templates:  map[string]string{},
-		params:     map[string][]cfntypes.Parameter{},
-		statuses:   map[string]cfntypes.StackStatus{},
-		outputs:    map[string]map[string]string{},
-		tags:       map[string][]cfntypes.Tag{},
-		reasons:    map[string]string{},
-		holding:    map[string]int{},
-		settling:   map[string]int{},
-		writing:    map[string]string{},
-		claiming:   map[string]string{},
-		planned:    map[string][]cfntypes.ResourceChange{},
-		changeSets: map[string]*fakeChangeSet{},
+		templates:    map[string]string{},
+		params:       map[string][]cfntypes.Parameter{},
+		statuses:     map[string]cfntypes.StackStatus{},
+		outputs:      map[string]map[string]string{},
+		tags:         map[string][]cfntypes.Tag{},
+		reasons:      map[string]string{},
+		blockedNames: map[string]int{},
+		busyLooks:    map[string]int{},
+		writing:      map[string]string{},
+		claiming:     map[string]string{},
+		planned:      map[string][]cfntypes.ResourceChange{},
+		changeSets:   map[string]*fakeChangeSet{},
 	}
 }
 
-func (f *fakeCFN) holdName(stackName string, creates int) {
+func (f *fakeCFN) blockName(stackName string, creates int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.holding[stackName] = creates
+	f.blockedNames[stackName] = creates
 }
 
 func (f *fakeCFN) reason(stackName, why string) {
@@ -107,8 +107,8 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	if _, ok := f.templates[name]; !ok {
 		return nil, validationError{msg: "Stack with id " + name + " does not exist"}
 	}
-	if looks := f.settling[name]; looks > 0 {
-		if f.settling[name] = looks - 1; f.settling[name] == 0 {
+	if looks := f.busyLooks[name]; looks > 0 {
+		if f.busyLooks[name] = looks - 1; f.busyLooks[name] == 0 {
 			f.statuses[name] = cfntypes.StackStatusUpdateComplete
 			if body, written := f.writing[name]; written {
 				delete(f.writing, name)
@@ -140,11 +140,11 @@ func (f *fakeCFN) CreateStack(_ context.Context, in *cloudformation.CreateStackI
 		return nil, alreadyExistsError{msg: "Stack [" + name + "] already exists"}
 	}
 	f.record(name, aws.ToString(in.TemplateBody), in.Parameters, in.Tags)
-	if f.holding[name] > 0 {
-		f.holding[name]--
+	if f.blockedNames[name] > 0 {
+		f.blockedNames[name]--
 		f.statuses[name] = cfntypes.StackStatusRollbackComplete
 		if _, ok := f.reasons[name]; !ok {
-			f.reasons[name] = "The following resource(s) failed to create: [RevalidateQueue]. " + cfn.HeldQueueName
+			f.reasons[name] = "The following resource(s) failed to create: [RevalidateQueue]. " + cfn.QueueDeletedRecently
 		}
 		f.outputs[name] = map[string]string{}
 		return &cloudformation.CreateStackOutput{}, nil
@@ -222,7 +222,7 @@ func (f *fakeCFN) busy(stackName string, looks int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.statuses[stackName] = cfntypes.StackStatusUpdateInProgress
-	f.settling[stackName] = looks
+	f.busyLooks[stackName] = looks
 }
 
 func (f *fakeCFN) busyWriting(stackName string, looks int, body string) {
@@ -251,7 +251,7 @@ func (f *fakeCFN) CreateChangeSet(_ context.Context, in *cloudformation.CreateCh
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	name, body := aws.ToString(in.StackName), aws.ToString(in.TemplateBody)
-	if stackSettling(f.statuses[name]) {
+	if stackBusy(f.statuses[name]) {
 		return nil, validationError{msg: "Stack:" + name + " is in " + string(f.statuses[name]) + " state and can not be updated."}
 	}
 	id := fmt.Sprintf("%s/%s", name, aws.ToString(in.ChangeSetName))
@@ -339,7 +339,7 @@ func (f *fakeCFN) DeleteStack(_ context.Context, in *cloudformation.DeleteStackI
 	defer f.mu.Unlock()
 	name := aws.ToString(in.StackName)
 	if user, ok := declaredUser(f.templates[name]); ok && f.users != nil && len(f.users.keys) > 0 {
-		return nil, validationError{msg: "Stack " + name + " is DELETE_FAILED: cannot delete IAM user " + user + " while it holds an access key created outside CloudFormation"}
+		return nil, validationError{msg: "Stack " + name + " is DELETE_FAILED: cannot delete IAM user " + user + " while it has an access key created outside CloudFormation"}
 	}
 	f.deleted = append(f.deleted, name)
 	f.events = append(f.events, "removed "+name)
@@ -619,13 +619,13 @@ func (f *fakeEdge) ProjectOwner(slug string, class edge.Class) string {
 	return slug + "-" + string(class)
 }
 
-var standingEdge = func() edge.Edge { return &fakeEdge{kind: "default"} }
+var currentEdge = func() edge.Edge { return &fakeEdge{kind: "default"} }
 
 func frontedBy(t *testing.T, ed edge.Edge) {
 	t.Helper()
-	previous := standingEdge
-	standingEdge = func() edge.Edge { return ed }
-	t.Cleanup(func() { standingEdge = previous })
+	previous := currentEdge
+	currentEdge = func() edge.Edge { return ed }
+	t.Cleanup(func() { currentEdge = previous })
 }
 
 func hasEdgeUser(t *testing.T, template string) bool {
@@ -667,21 +667,21 @@ func assertMintedOriginSecret(t *testing.T, ssmc *fakeSSM, name string) {
 		t.Errorf("bootstrap left %s empty; every deploy that reads it refuses", name)
 		return
 	}
-	held, err := OriginSecretOf(value)
+	minted, err := OriginSecretOf(value)
 	if err != nil {
 		t.Errorf("%s = %q, want the origin secret record: %v", name, value, err)
 		return
 	}
-	if _, err := hex.DecodeString(held.Current); err != nil || len(held.Current) != 64 {
-		t.Errorf("%s holds %q, want 32 random bytes", name, held.Current)
+	if _, err := hex.DecodeString(minted.Current); err != nil || len(minted.Current) != 64 {
+		t.Errorf("%s stores %q, want 32 random bytes", name, minted.Current)
 	}
-	if held.CreatedAt.IsZero() {
+	if minted.CreatedAt.IsZero() {
 		t.Errorf("%s records no mint time, so nothing can age it into a rotation", name)
 	}
 }
 
 func apisOf(stacks *fakeCFN, ssmc *fakeSSM, iamc *fakeIAM, store ObjectStore) APIs {
-	return apisFronting(stacks, ssmc, iamc, store, standingEdge())
+	return apisFronting(stacks, ssmc, iamc, store, currentEdge())
 }
 
 func apisFronting(stacks *fakeCFN, ssmc *fakeSSM, iamc *fakeIAM, store ObjectStore, front edge.Edge) APIs {
@@ -712,7 +712,7 @@ func optStack(class string) string {
 }
 
 func TestRun(t *testing.T) {
-	t.Run("core alone stands up no feature stack", func(t *testing.T) {
+	t.Run("core alone provisions no feature stack", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		ed := &fakeEdge{}
 		frontedBy(t, ed)
@@ -733,7 +733,7 @@ func TestRun(t *testing.T) {
 		}
 	})
 
-	t.Run("asking for the cloudflare edge pulls in what it stands on", func(t *testing.T) {
+	t.Run("asking for the cloudflare edge pulls in what it depends on", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
@@ -1063,7 +1063,7 @@ func TestRun(t *testing.T) {
 		}
 		want := []string{edgeStack(ClassProduction), isrStack(ClassProduction)}
 		if !slices.Equal(stacks.deleted, want) {
-			t.Errorf("deleted %v, want %v: a dependent goes before what it stands on", stacks.deleted, want)
+			t.Errorf("deleted %v, want %v: a dependent goes before what it depends on", stacks.deleted, want)
 		}
 		if !slices.Contains(stacks.stacks(), optStack(ClassProduction)) {
 			t.Errorf("stacks left = %v, want the feature that stayed in the set", stacks.stacks())
@@ -1158,7 +1158,7 @@ func TestRunDefaultEdge(t *testing.T) {
 			t.Fatalf("Run: %v", err)
 		}
 		if front.bootstraps != 1 {
-			t.Errorf("the default edge was bootstrapped %d times, want 1: nothing else stands its shared resources up", front.bootstraps)
+			t.Errorf("the default edge was bootstrapped %d times, want 1: nothing else provisions its shared resources", front.bootstraps)
 		}
 		if front.class != edge.ClassProduction {
 			t.Errorf("the default edge was bootstrapped for class %q, want %q", front.class, edge.ClassProduction)
@@ -1255,7 +1255,7 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 					t.Fatalf("dropping the cloudflare edge: %v", err)
 				}
 				if len(iamc.keys) != 0 {
-					t.Errorf("edge reader %s still holds %v after its stack was dropped", names.user, iamc.keys)
+					t.Errorf("edge reader %s still has %v after its stack was dropped", names.user, iamc.keys)
 				}
 				for _, param := range names.edgeParams() {
 					if _, ok := ssmc.params[param]; ok {
@@ -1272,7 +1272,7 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 		}
 	})
 
-	t.Run("dropping isr takes the edge that stands on it down first", func(t *testing.T) {
+	t.Run("dropping isr takes the edge that depends on it down first", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 		apis := apisOf(stacks, ssmc, iamc, preloadedStore())
@@ -1288,7 +1288,7 @@ func TestRunDropsCloudflareEdge(t *testing.T) {
 			t.Fatalf("dropping isr: %v", err)
 		}
 		if len(iamc.keys) != 0 {
-			t.Errorf("the edge reader still holds %v after the closure took its stack", iamc.keys)
+			t.Errorf("the edge reader still has %v after the closure took its stack", iamc.keys)
 		}
 	})
 }
@@ -1314,8 +1314,8 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 
-		stacks.holdName(isrStack(ClassProduction), 1)
-		holdNothing(t)
+		stacks.blockName(isrStack(ClassProduction), 1)
+		recordWaits(t)
 		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction,
 			Request{Features: []string{FeatureISR}}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
@@ -1327,7 +1327,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
 		if deployed.Features.Has(FeatureISR) {
-			t.Error("a stack that rolled back and holds nothing reads as an enabled feature; every deploy that needs it is waved through")
+			t.Error("a stack that rolled back and contains nothing reads as an enabled feature; every deploy that needs it is waved through")
 		}
 	})
 
@@ -1335,7 +1335,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 		apis := apisOf(stacks, ssmc, iamc, preloadedStore())
-		holdNothing(t)
+		recordWaits(t)
 
 		req := Request{Features: []string{FeatureISR}}
 		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, req, nil, nil); err != nil {
@@ -1362,7 +1362,7 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
 		apis := apisOf(stacks, ssmc, iamc, preloadedStore())
-		holdNothing(t)
+		recordWaits(t)
 
 		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, Request{Features: []string{FeatureISR}}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
@@ -1377,22 +1377,22 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 		}
 	})
 
-	t.Run("a queue name still held is waited out, not surfaced", func(t *testing.T) {
+	t.Run("a queue name still blocked is waited out, not surfaced", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
-		held := holdNothing(t)
-		stacks.holdName(isrStack(ClassProduction), 2)
+		waits := recordWaits(t)
+		stacks.blockName(isrStack(ClassProduction), 2)
 
 		if err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction,
 			Request{Features: []string{FeatureISR}}, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
-		if len(*held) != 2 {
-			t.Errorf("held off %d times, want one wait per re-create of the held name", len(*held))
+		if len(*waits) != 2 {
+			t.Errorf("waited %d times, want one wait per re-create of the blocked name", len(*waits))
 		}
-		for i := 1; i < len(*held); i++ {
-			if (*held)[i] <= (*held)[i-1] {
-				t.Errorf("waits %v do not grow; a fixed name held for a minute needs backoff", *held)
+		for i := 1; i < len(*waits); i++ {
+			if (*waits)[i] <= (*waits)[i-1] {
+				t.Errorf("waits %v do not grow; a fixed name blocked for a minute needs backoff", *waits)
 			}
 		}
 	})
@@ -1400,8 +1400,8 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 	t.Run("a stack that fails for any other reason is not retried", func(t *testing.T) {
 		stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 		frontedBy(t, &fakeEdge{kind: "cloudflare"})
-		holdNothing(t)
-		stacks.holdName(isrStack(ClassProduction), 1)
+		recordWaits(t)
+		stacks.blockName(isrStack(ClassProduction), 1)
 		stacks.reason(isrStack(ClassProduction), "Resource handler returned message: Access denied")
 
 		err := Run(context.Background(), apisOf(stacks, ssmc, iamc, preloadedStore()), defaultNamespace, ClassProduction,
@@ -1412,17 +1412,17 @@ func TestUpsertRecoversFailedStacks(t *testing.T) {
 	})
 }
 
-func holdNothing(t *testing.T) *[]time.Duration {
+func recordWaits(t *testing.T) *[]time.Duration {
 	t.Helper()
 	var waits []time.Duration
 	var mu sync.Mutex
-	previous := cfn.HoldBefore
-	cfn.HoldBefore = func(context.Context, time.Duration) error {
+	previous := cfn.WaitBefore
+	cfn.WaitBefore = func(context.Context, time.Duration) error {
 		mu.Lock()
 		defer mu.Unlock()
-		waits = append(waits, cfn.NameHeldDelay(len(waits)))
+		waits = append(waits, cfn.NameBlockedDelay(len(waits)))
 		return nil
 	}
-	t.Cleanup(func() { cfn.HoldBefore = previous })
+	t.Cleanup(func() { cfn.WaitBefore = previous })
 	return &waits
 }

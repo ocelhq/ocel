@@ -85,10 +85,10 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 			ISRWriterBootstrapCred: "cred-1",
 			ISRWriterSeed:          "seed-1",
 		}
-		held := releasing(t, cfg)
+		release := releasing(t, cfg)
 
-		web := held.isrCache(isrSpec("web", "prod/proj/web/r1/isr"))
-		admin := held.isrCache(isrSpec("admin", "prod/proj/admin/r1/isr"))
+		web := release.isrCache(isrSpec("web", "prod/proj/web/r1/isr"))
+		admin := release.isrCache(isrSpec("admin", "prod/proj/admin/r1/isr"))
 		again := releasing(t, cfg).isrCache(isrSpec("web", "prod/proj/web/r1/isr"))
 
 		if want := "https://writer.example/prod/proj/web/r1/isr/entry"; web.WriterURL != want {

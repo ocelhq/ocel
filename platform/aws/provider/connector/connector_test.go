@@ -63,7 +63,7 @@ func TestTheConnectorsKeyIsASecureStringOnlyTheFunctionReadsAndItsPublicHalfIsWh
 	}
 	seed, err := base64.StdEncoding.DecodeString(aws.ToString(written.Value))
 	if err != nil || len(seed) != ed25519.SeedSize {
-		t.Fatalf("the parameter holds %q, want a base64 ed25519 seed", aws.ToString(written.Value))
+		t.Fatalf("the parameter stores %q, want a base64 ed25519 seed", aws.ToString(written.Value))
 	}
 	if public != PublicKeyOf(seed) {
 		t.Errorf("the install registers %s while the seed it wrote signs as %s", public, PublicKeyOf(seed))
@@ -164,7 +164,7 @@ func TestAnInstallNamingNoPublicKeyIsRefused(t *testing.T) {
 	}
 }
 
-func TestTheStackStandsApartFromEveryBootstrapStack(t *testing.T) {
+func TestTheStackIsSeparateFromEveryBootstrapStack(t *testing.T) {
 	t.Parallel()
 
 	named := StackName(defaultNamespace)
@@ -176,9 +176,9 @@ func TestTheStackStandsApartFromEveryBootstrapStack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, held := range []string{production, preview, defaultNamespace.CoreStackName()} {
-		if named == held || strings.HasPrefix(named, held) {
-			t.Errorf("the connector stack is named %q, which a bootstrap stack named %q would be read as part of", named, held)
+	for _, bootstrapStack := range []string{production, preview, defaultNamespace.CoreStackName()} {
+		if named == bootstrapStack || strings.HasPrefix(named, bootstrapStack) {
+			t.Errorf("the connector stack is named %q, which a bootstrap stack named %q would be read as part of", named, bootstrapStack)
 		}
 	}
 }
@@ -186,10 +186,10 @@ func TestTheStackStandsApartFromEveryBootstrapStack(t *testing.T) {
 func TestTheTierGrantsNothingADeployWouldNeed(t *testing.T) {
 	t.Parallel()
 
-	held := map[string]bool{}
+	granted := map[string]bool{}
 	for _, statement := range tier(defaultNamespace, sealingKeys) {
 		for _, action := range statement.Actions {
-			held[action] = true
+			granted[action] = true
 		}
 	}
 	for _, action := range []string{
@@ -204,7 +204,7 @@ func TestTheTierGrantsNothingADeployWouldNeed(t *testing.T) {
 		"kms:CreateKey",
 		"dynamodb:CreateTable",
 	} {
-		if held[action] {
+		if granted[action] {
 			t.Errorf("the connector tier grants %s, and a connector reads and writes variables rather than deploying", action)
 		}
 	}
@@ -217,13 +217,13 @@ func TestTheTierGrantsNothingADeployWouldNeed(t *testing.T) {
 		"cloudformation:DescribeStacks",
 		"sts:GetCallerIdentity",
 	} {
-		if !held[action] {
+		if !granted[action] {
 			t.Errorf("the connector tier withholds %s, which the ports the connector serves call", action)
 		}
 	}
 }
 
-func TestTheTemplateCarriesTheCodeTheBucketStagesAndTheConfigItRuns(t *testing.T) {
+func TestTheTemplateIncludesTheCodeTheBucketStagesAndTheConfigItRuns(t *testing.T) {
 	t.Parallel()
 
 	at := payloads.At("staged-bucket", codePrefix, payloads.Of([]byte("connector")))
@@ -246,12 +246,12 @@ func TestTheTemplateCarriesTheCodeTheBucketStagesAndTheConfigItRuns(t *testing.T
 	}
 
 	for _, want := range []string{"CodeBucket", "ConnectorRole", "ConnectorFunction", "ConnectorUrl", "ConnectorUrlReachable"} {
-		if _, held := read.Resources[want]; !held {
-			t.Errorf("the connector template carries no %s", want)
+		if _, present := read.Resources[want]; !present {
+			t.Errorf("the connector template has no %s", want)
 		}
 	}
-	if held := read.Resources["CodeBucket"].Type; held != "AWS::S3::Bucket" {
-		t.Errorf("the connector stages its code in a %s, want a bucket of its own rather than the bootstrap's", held)
+	if kind := read.Resources["CodeBucket"].Type; kind != "AWS::S3::Bucket" {
+		t.Errorf("the connector stages its code in a %s, want a bucket of its own rather than the bootstrap's", kind)
 	}
 
 	function := read.Resources["ConnectorFunction"].Properties
@@ -267,7 +267,7 @@ func TestTheTemplateCarriesTheCodeTheBucketStagesAndTheConfigItRuns(t *testing.T
 	}
 	env, _ := function["Environment"].(map[string]any)["Variables"].(map[string]any)
 	if env["OCEL_CONNECTOR_CONFIG_JSON"] != `{"console":"https://console.example.com"}` {
-		t.Errorf("the function carries %v as its config, and a function has no filesystem to read one off", env["OCEL_CONNECTOR_CONFIG_JSON"])
+		t.Errorf("the function has %v as its config, and a function has no filesystem to read one off", env["OCEL_CONNECTOR_CONFIG_JSON"])
 	}
 
 	if got, _ := function["ReservedConcurrentExecutions"].(float64); int(got) != reservedConcurrency || reservedConcurrency <= 0 {
@@ -279,7 +279,7 @@ func TestTheTemplateCarriesTheCodeTheBucketStagesAndTheConfigItRuns(t *testing.T
 		t.Errorf("the function url authenticates with %v, and the console's own token is what the connector checks", url["AuthType"])
 	}
 	if read.Outputs[outputVersion].Value != "0.9.9" {
-		t.Errorf("the stack reports version %v, want the release this install carried", read.Outputs[outputVersion].Value)
+		t.Errorf("the stack reports version %v, want the release this install deployed", read.Outputs[outputVersion].Value)
 	}
 }
 
@@ -309,7 +309,7 @@ func TestTheKeyGrantNamesTheKeysThisNamespaceSealedUnderAndNoOther(t *testing.T)
 			t.Errorf("the key grant reaches %v, want %v alone", statement.Resources, sealingKeys)
 		}
 		if statement.Condition == nil {
-			t.Error("the key grant carries no tag condition, and the tag is what keeps a renamed key out")
+			t.Error("the key grant has no tag condition, and the tag is what keeps a renamed key out")
 		}
 	}
 }
@@ -373,7 +373,7 @@ func TestTheSameConnectorBytesStageUnderTheSameKey(t *testing.T) {
 		named = append(named, entry.Name)
 	}
 	if !slices.Equal(named, []string{handler}) {
-		t.Errorf("the archive holds %v, and provided.al2023 runs the entry named %s", named, handler)
+		t.Errorf("the archive contains %v, and provided.al2023 runs the entry named %s", named, handler)
 	}
 }
 
@@ -392,9 +392,9 @@ func TestTheCodeTemplateOpensNothingButTheBucket(t *testing.T) {
 	}
 }
 
-func mapKeys[V any](held map[string]V) func(func(string) bool) {
+func mapKeys[V any](entries map[string]V) func(func(string) bool) {
 	return func(yield func(string) bool) {
-		for key := range held {
+		for key := range entries {
 			if !yield(key) {
 				return
 			}

@@ -66,7 +66,7 @@ func TestAwaitReady(t *testing.T) {
 			t.Fatal("awaitReady() error = nil, want an error")
 		}
 		if !strings.Contains(r.err.Error(), "exit status 1") {
-			t.Errorf("error = %q, want it to carry the child's exit status", r.err)
+			t.Errorf("error = %q, want it to include the child's exit status", r.err)
 		}
 		if elapsed := time.Since(start); elapsed > 5*time.Second {
 			t.Errorf("took %s, want an immediate abort rather than waiting out the budget", elapsed)
@@ -88,7 +88,7 @@ func TestAwaitReady(t *testing.T) {
 			t.Fatal("awaitReady() error = nil, want the child's exit reported")
 		}
 		if !strings.Contains(r.err.Error(), "exit status 1") {
-			t.Errorf("error = %q, want it to carry the real child's exit status", r.err)
+			t.Errorf("error = %q, want it to include the real child's exit status", r.err)
 		}
 		if elapsed := time.Since(start); elapsed > 5*time.Second {
 			t.Errorf("took %s, want the reaper to abort as soon as the child died", elapsed)
@@ -109,7 +109,7 @@ func TestAwaitReady(t *testing.T) {
 		}
 	})
 
-	t.Run("carries the last log into the error", func(t *testing.T) {
+	t.Run("includes the last log in the error", func(t *testing.T) {
 		ln, dial := controlPair(t)
 		exited := make(chan error, 1)
 		go func() {
@@ -124,7 +124,7 @@ func TestAwaitReady(t *testing.T) {
 			t.Fatal("awaitReady() error = nil, want an error")
 		}
 		if !strings.Contains(r.err.Error(), "SyntaxError: unexpected token") {
-			t.Errorf("error = %q, want it to carry the last log node reported", r.err)
+			t.Errorf("error = %q, want it to include the last log node reported", r.err)
 		}
 	})
 }
@@ -162,7 +162,7 @@ func TestEntrypointPath(t *testing.T) {
 }
 
 func TestBoundReadiness(t *testing.T) {
-	t.Run("an invocation that carries no deadline still bounds the wait", func(t *testing.T) {
+	t.Run("an invocation that has no deadline still bounds the wait", func(t *testing.T) {
 		ctx, cancel := boundReadiness(t.Context())
 		defer cancel()
 
@@ -261,7 +261,7 @@ func TestServeWhenReady(t *testing.T) {
 
 		rt, captured := fakeRuntimeWithDeadline(t, []byte(getEvent), time.Now().Add(400*time.Millisecond))
 		if err := handleInvocation(t.Context(), rt, m); err != nil {
-			t.Fatalf("handleInvocation = %v, want the loop to carry on to the next invocation", err)
+			t.Fatalf("handleInvocation = %v, want the loop to move on to the next invocation", err)
 		}
 		if p, _ := splitPrelude(t, captured.body); p.StatusCode != http.StatusServiceUnavailable {
 			t.Errorf("status = %d, want %d", p.StatusCode, http.StatusServiceUnavailable)

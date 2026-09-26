@@ -24,11 +24,11 @@ func (p certificates) Issue(ctx context.Context, req provider.CertificateRequest
 	if pinned == "" {
 		return issue(ctx, certificates.ACM, req)
 	}
-	held, err := certificates.ACM.Pinned(ctx, req.Hostname, pinned)
+	pinnedCert, err := certificates.ACM.Pinned(ctx, req.Hostname, pinned)
 	if err != nil {
 		return provider.Certificate{}, refusal.Refuse(refusal.CodeInvalid, "%s", err)
 	}
-	return provider.Certificate{ID: held.ARN}, nil
+	return provider.Certificate{ID: pinnedCert.ARN}, nil
 }
 
 func issue(ctx context.Context, acm certs.ACM, req provider.CertificateRequest) (provider.Certificate, error) {
@@ -51,19 +51,19 @@ func issue(ctx context.Context, acm certs.ACM, req provider.CertificateRequest) 
 		}
 	}
 
-	settled := provider.Certificate{ID: cert.ARN, Requested: true}
+	requested := provider.Certificate{ID: cert.ARN, Requested: true}
 	if len(cert.Validation) == 0 {
 		if cert, err = acm.AwaitValidation(ctx, cert, say); err != nil {
-			return settled, waiting(err)
+			return requested, waiting(err)
 		}
 	}
-	if settled, err = req.Prove(ctx, settled, cert.Validation); err != nil {
-		return settled, err
+	if requested, err = req.Prove(ctx, requested, cert.Validation); err != nil {
+		return requested, err
 	}
 	if _, err := acm.AwaitIssued(ctx, cert, say); err != nil {
-		return settled, waiting(err)
+		return requested, waiting(err)
 	}
-	return settled, nil
+	return requested, nil
 }
 
 func recalled(ctx context.Context, acm certs.ACM, recorded provider.Certificate, cover []string, say func(string)) (certs.Certificate, error) {
@@ -80,7 +80,7 @@ func recalled(ctx context.Context, acm certs.ACM, recorded provider.Certificate,
 		live.Adopted = adopted
 		return live, nil
 	}
-	say(fmt.Sprintf("Certificate %s no longer answers for %s in %s; settling one that does",
+	say(fmt.Sprintf("Certificate %s no longer answers for %s in %s; finding or requesting one that does",
 		recorded.ID, strings.Join(cover, ", "), acm.Region))
 	return certs.Certificate{}, nil
 }
@@ -143,8 +143,8 @@ func (p certificates) Discard(ctx context.Context, cert provider.Certificate, pr
 	if !cert.Requested || cert.ID == "" {
 		return nil
 	}
-	held := certs.Certificate{ARN: cert.ID, Region: certs.RegionOfARN(cert.ID)}
-	return certs.DiscardACMFor(held, certs.Deps{AWS: p.aws}).Discard(ctx, held, progress.Say)
+	discarded := certs.Certificate{ARN: cert.ID, Region: certs.RegionOfARN(cert.ID)}
+	return certs.DiscardACMFor(discarded, certs.Deps{AWS: p.aws}).Discard(ctx, discarded, progress.Say)
 }
 
 func (p *Provider) certificatesFor(kind edge.Kind, hostname string, progress edge.Progress) (certs.Certificates, error) {

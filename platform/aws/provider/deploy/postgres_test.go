@@ -116,7 +116,7 @@ func TestRDSIdentifierPrefix(t *testing.T) {
 
 	at := resourceCoordinate("shop", "prod", "db--main", naming.KindDatabase)
 
-	t.Run("carries the app scope, project, env, resource and role", func(t *testing.T) {
+	t.Run("names the app scope, project, env, resource and role", func(t *testing.T) {
 		t.Parallel()
 
 		cases := map[string]string{

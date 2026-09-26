@@ -300,7 +300,7 @@ func TestAnAppThatShipsItsOwnBinaryRunsOnTheProvidedRuntime(t *testing.T) {
 		appbuild.FrameworkPython: pythonFunctionRuntime,
 	} {
 		if got := managedRuntime(name); got != want {
-			t.Errorf("a %q function runs on %q, want %q — a language this provider carries no interpreter for runs the binary the app ships", name, got, want)
+			t.Errorf("a %q function runs on %q, want %q — a language this provider ships no interpreter for runs the binary the app ships", name, got, want)
 		}
 	}
 }
@@ -319,7 +319,7 @@ func TestAFunctionRunsOnTheManagedRuntimeItsLanguageNeedsAnInterpreterFrom(t *te
 			t.Fatalf("translateFunctionSpec(%q): %v", name, err)
 		}
 		if args.Runtime != want {
-			t.Errorf("a %q function runs on %q, want %q — the runtime execs the app's command, and the sandbox has to carry what that command is", name, args.Runtime, want)
+			t.Errorf("a %q function runs on %q, want %q — the runtime execs the app's command, and the sandbox has to contain what that command is", name, args.Runtime, want)
 		}
 	}
 }
@@ -333,7 +333,7 @@ func TestAFunctionIsToldTheFileItBootsFrom(t *testing.T) {
 		handler string
 		want    string
 	}{
-		{"an exec artifact takes the bootstrap the layer carries", appbuild.FrameworkGo, "web", providedHandler},
+		{"an exec artifact takes the bootstrap the layer ships", appbuild.FrameworkGo, "web", providedHandler},
 		{"a bundled node artifact takes its bundle", appbuild.FrameworkNode, "index.mjs", "index.mjs"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -455,7 +455,7 @@ func TestTheReleaseBootsThroughTheAccountsRuntimeAndPublishesNoneOfItsOwn(t *tes
 	}
 
 	if published := rec.registered("aws:lambda/layerVersion:LayerVersion"); len(published) != 0 {
-		t.Errorf("the release stack publishes %v, want the layers the account's bootstrap already holds", published)
+		t.Errorf("the release stack publishes %v, want the layers the account's bootstrap already published", published)
 	}
 	layers := stringsAt(rec.inputs("aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90"), "layers")
 	if want := testRuntimeLayerARN(arch.X8664); len(layers) != 1 || layers[0] != want {
@@ -507,7 +507,7 @@ func TestISREnv(t *testing.T) {
 		env := cfg.env()
 		for _, key := range []string{"OCEL_BYTECODE_PREFIX", "OCEL_BYTECODE_BUCKET"} {
 			if _, ok := env[key]; ok {
-				t.Errorf("%s = %q, want the bytecode cache carried on its own config", key, env[key])
+				t.Errorf("%s = %q, want the bytecode cache passed on its own config", key, env[key])
 			}
 		}
 	})
@@ -718,7 +718,7 @@ func isrTagKey(c isrConfig, tag string) string {
 func admits(t *testing.T, pattern, key string) bool {
 	t.Helper()
 	if strings.ContainsAny(pattern+key, "?[]/\\") {
-		t.Fatalf("pattern %q or key %q carries a character path.Match reads differently from IAM StringLike", pattern, key)
+		t.Fatalf("pattern %q or key %q contains a character path.Match reads differently from IAM StringLike", pattern, key)
 	}
 	ok, err := path.Match(pattern, key)
 	if err != nil {
@@ -859,18 +859,18 @@ func TestISRCacheStore(t *testing.T) {
 		}
 	})
 
-	t.Run("leaves no standing credential on the function", func(t *testing.T) {
+	t.Run("leaves no long-lived credential on the function", func(t *testing.T) {
 		cfg := isrCacheFor(t, "prod", "proj123", "marketing", "build456")
 		cfg.CacheStoreBucket = "ocel-edge-cache"
 
 		env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, &cfg, nil)
 		for name, value := range env {
 			if strings.Contains(name, "ACCESS_KEY") || strings.Contains(name, "SECRET_ACCESS") {
-				t.Errorf("env carries %s = %q", name, value)
+				t.Errorf("env contains %s = %q", name, value)
 			}
 		}
 		if _, ok := env["OCEL_CACHE_STORE_PARAM"]; ok {
-			t.Error("OCEL_CACHE_STORE_PARAM is set; the parameter it named carried the R2 keys")
+			t.Error("OCEL_CACHE_STORE_PARAM is set; the parameter it named stored the R2 keys")
 		}
 
 		raw, err := isrPolicy(cfg)
@@ -967,14 +967,14 @@ func TestAFunctionsEnvironmentIsSealedUnderTheClassVarsKey(t *testing.T) {
 			}
 
 			fn := rec.inputs("aws:lambda/function:Function", "shop-prod-api-users-r3f8a1c90")
-			got, held := fn["kmsKeyArn"]
+			got, set := fn["kmsKeyArn"]
 			if tc.key == "" {
-				if held {
+				if set {
 					t.Errorf("kmsKeyArn = %v, want none where the account names no key", got)
 				}
 				return
 			}
-			if !held || !got.IsString() || got.StringValue() != tc.key {
+			if !set || !got.IsString() || got.StringValue() != tc.key {
 				t.Errorf("kmsKeyArn = %v, want %q: the data key in OCEL_VARS_ENVELOPE is otherwise readable by anyone in the account with lambda:GetFunctionConfiguration", got, tc.key)
 			}
 		})

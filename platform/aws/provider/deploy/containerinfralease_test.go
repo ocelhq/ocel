@@ -21,11 +21,11 @@ type interceptedRecords struct {
 }
 
 func (r *interceptedRecords) List(ctx context.Context, under records.Name) ([]records.Record, error) {
-	held, err := r.Store.List(ctx, under)
+	listed, err := r.Store.List(ctx, under)
 	if r.afterList != nil {
 		r.afterList(under)
 	}
-	return held, err
+	return listed, err
 }
 
 func containerStacks(t *testing.T, records records.Store) (*Stacks, *mockedEngine, provider.StackSpec) {
@@ -35,16 +35,16 @@ func containerStacks(t *testing.T, records records.Store) (*Stacks, *mockedEngin
 	cfg.BackendURL = "s3://ocel-state/conformance"
 	cfg.PulumiProject = "ocel-conformance"
 	cfg.Passphrase = "a-passphrase"
-	outputs := substrateOutputs()
+	outputs := containerInfraOutputs()
 	outputs["web"] = auto.OutputValue{Value: map[string]any{
 		outputKeyContainerURL:      "http://" + fixtureOrigin,
 		outputKeyContainerPhysical: containerPhysical,
 	}}
 	engine := &mockedEngine{outputs: outputs}
-	return standingUp(cfg, engine), engine, spec
+	return stacksWith(cfg, engine), engine, spec
 }
 
-func TestTheLastContainerLeavingKeepsTheSubstrateWhenAnotherDeployClaimsItMeanwhile(t *testing.T) {
+func TestTheLastContainerLeavingKeepsTheContainerInfraWhenAnotherDeployClaimsItMeanwhile(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -75,8 +75,8 @@ func TestTheLastContainerLeavingKeepsTheSubstrateWhenAnotherDeployClaimsItMeanwh
 		t.Fatal("the concurrent claim never ran, so this test proved nothing")
 	}
 	for _, torn := range engine.torn() {
-		if torn == substrateRef(edge.ClassProduction).Name.String() {
-			t.Fatal("the substrate was torn down under blog, which claimed it between shop's listing and its lease")
+		if torn == containerInfraRef(edge.ClassProduction).Name.String() {
+			t.Fatal("the shared container infrastructure was torn down under blog, which claimed it between shop's listing and its lease")
 		}
 	}
 	remaining, err := shared.List(ctx, consumersRecord(edge.ClassProduction))
@@ -88,7 +88,7 @@ func TestTheLastContainerLeavingKeepsTheSubstrateWhenAnotherDeployClaimsItMeanwh
 	}
 }
 
-func TestAContainerDeployIsRefusedWhileTheSubstrateIsGoingDown(t *testing.T) {
+func TestAContainerDeployIsRefusedWhileTheContainerInfraIsGoingDown(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -97,11 +97,11 @@ func TestAContainerDeployIsRefusedWhileTheSubstrateIsGoingDown(t *testing.T) {
 	if _, err := stacks.Provision(ctx, shop, edge.DiscardProgress()); err != nil {
 		t.Fatalf("Provision(shop) = %v", err)
 	}
-	held, err := records.ReadOrEmpty(ctx, shared, leaseRecord(edge.ClassProduction))
+	leased, err := records.ReadOrEmpty(ctx, shared, leaseRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := writeLease(ctx, shared, held, lease{Destroying: true}); err != nil {
+	if err := writeLease(ctx, shared, leased, lease{Destroying: true}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -110,16 +110,16 @@ func TestAContainerDeployIsRefusedWhileTheSubstrateIsGoingDown(t *testing.T) {
 	_, err = other.Provision(ctx, blog, edge.DiscardProgress())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
-		t.Fatalf("Provision(blog) = %v, want the busy refusal a substrate on its way down earns", err)
+		t.Fatalf("Provision(blog) = %v, want the busy refusal shared container infrastructure on its way down earns", err)
 	}
 	remaining, err := shared.List(ctx, consumersRecord(edge.ClassProduction))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(remaining) != 1 {
-		t.Errorf("%d consumers remain, want shop alone: a refused claim must not leave a record that would keep the substrate up", len(remaining))
+		t.Errorf("%d consumers remain, want shop alone: a refused claim must not leave a record that would keep the shared container infrastructure up", len(remaining))
 	}
 	if ran := engine.stacks(); len(ran) != 2 {
-		t.Errorf("the engine ran %v, want nothing more than shop's substrate and stack", ran)
+		t.Errorf("the engine ran %v, want nothing more than shop's container infrastructure stack and app stack", ran)
 	}
 }

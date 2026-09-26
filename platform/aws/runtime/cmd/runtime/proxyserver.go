@@ -36,7 +36,7 @@ func proxyWanted(bindings []live.Binding) bool {
 
 func grantedBuckets(values s3store.Records) func() []string {
 	return func() []string {
-		var held []string
+		var buckets []string
 		for _, l := range values.Bindings() {
 			if l.Type != bindingsv1.BindingType_BINDING_TYPE_BUCKET {
 				continue
@@ -48,11 +48,11 @@ func grantedBuckets(values s3store.Records) func() []string {
 			if s3store.Endpointed(record.GetBucket()) {
 				continue
 			}
-			if name := record.GetBucket().GetBucket(); name != "" && !slices.Contains(held, name) {
-				held = append(held, name)
+			if name := record.GetBucket().GetBucket(); name != "" && !slices.Contains(buckets, name) {
+				buckets = append(buckets, name)
 			}
 		}
-		return held
+		return buckets
 	}
 }
 

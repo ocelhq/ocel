@@ -7,17 +7,17 @@ import (
 )
 
 func (p *Provider) Table(ctx context.Context, class edge.Class) (string, error) {
-	held, err := p.bootstrapped(ctx, class)
+	deployed, err := p.bootstrapped(ctx, class)
 	if err != nil {
 		return "", err
 	}
-	return held.StateTable, nil
+	return deployed.StateTable, nil
 }
 
 func (p *Provider) ValuesTable(ctx context.Context, class edge.Class) (string, error) {
-	held, err := p.bootstrapped(ctx, class)
+	deployed, err := p.bootstrapped(ctx, class)
 	if err != nil {
 		return "", err
 	}
-	return held.VarsTable, nil
+	return deployed.VarsTable, nil
 }

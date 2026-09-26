@@ -103,7 +103,7 @@ func takeKey(ctx context.Context, store KeyStore, ns bootstrap.Namespace) error 
 	return nil
 }
 
-type Standing struct {
+type Installation struct {
 	Present   bool
 	Version   string
 	URL       string
@@ -117,16 +117,16 @@ type Release struct {
 	PublicKey string
 }
 
-func Read(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) (Standing, error) {
+func Read(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) (Installation, error) {
 	stack, err := cfn.DescribeStack(ctx, api, StackName(ns))
 	if err != nil || stack == nil {
-		return Standing{}, err
+		return Installation{}, err
 	}
 	if cfn.Unusable(stack.StackStatus) {
-		return Standing{}, nil
+		return Installation{}, nil
 	}
 	outputs := cfn.OutputsOf(stack)
-	return Standing{
+	return Installation{
 		Present:   outputs[outputURL] != "",
 		Version:   outputs[outputVersion],
 		URL:       outputs[outputURL],
@@ -135,7 +135,7 @@ func Read(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) (Stand
 }
 
 func varsKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) ([]string, error) {
-	held := make([]string, 0, 2)
+	keys := make([]string, 0, 2)
 	for _, class := range []string{bootstrap.ClassProduction, bootstrap.ClassPreview} {
 		deployed, err := bootstrap.CheckDeployedFor(ctx, api, ns, class)
 		if err != nil {
@@ -144,64 +144,64 @@ func varsKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) ([
 		if !deployed.Present || deployed.VarsKeyARN == "" {
 			continue
 		}
-		if !slices.Contains(held, deployed.VarsKeyARN) {
-			held = append(held, deployed.VarsKeyARN)
+		if !slices.Contains(keys, deployed.VarsKeyARN) {
+			keys = append(keys, deployed.VarsKeyARN)
 		}
 	}
-	if len(held) == 0 {
+	if len(keys) == 0 {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"neither the %s nor the %s class of %s is bootstrapped with a key variables are sealed under, so the connector would read nothing: bootstrap this account and run ocel connector add again",
 			bootstrap.ClassProduction, bootstrap.ClassPreview, ns)
 	}
-	return held, nil
+	return keys, nil
 }
 
 func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Release,
-	writer provider.WrittenBy, progress func(string)) (Standing, error) {
+	writer provider.WrittenBy, progress func(string)) (Installation, error) {
 	keys, err := varsKeys(ctx, apis.CFN, ns)
 	if err != nil {
-		return Standing{}, err
+		return Installation{}, err
 	}
 
 	bucket, err := codeBucket(ctx, apis, ns, writer, progress)
 	if err != nil {
-		return Standing{}, err
+		return Installation{}, err
 	}
 
 	archived, err := zipped(release.Binary)
 	if err != nil {
-		return Standing{}, err
+		return Installation{}, err
 	}
 	at, err := payloads.Place(ctx, apis.Objects, bucket, codePrefix, "connector", archived)
 	if err != nil {
-		return Standing{}, err
+		return Installation{}, err
 	}
 	say(progress, "connector "+release.Version+" staged at "+at.Key)
 
 	if release.PublicKey, err = mintKey(ctx, apis.SSM, ns); err != nil {
-		return Standing{}, err
+		return Installation{}, err
 	}
 	say(progress, "the connector's key is at "+KeyParameter(ns))
 
 	template, err := templateFor(ns, at, release, keys)
 	if err != nil {
-		return Standing{}, err
+		return Installation{}, err
 	}
 	if err := cfn.Upsert(ctx, apis.CFN, ns.ChangeSetNameFor, StackName(ns), template, nil,
 		[]cfntypes.Capability{cfntypes.CapabilityCapabilityIam}, tagsFor(ns, template, writer),
 		reviewing(ns, progress)); err != nil {
-		return Standing{}, err
+		return Installation{}, err
 	}
 
-	standing, err := Read(ctx, apis.CFN, ns)
+	installed, err := Read(ctx, apis.CFN, ns)
 	if err != nil {
-		return Standing{}, err
+		return Installation{}, err
 	}
-	if standing.URL == "" {
-		return Standing{}, refusal.Refuse(refusal.CodeNotReady,
-			"%s stands and published no function url, so the console has nothing to dial", StackName(ns))
+	if installed.URL == "" {
+		return Installation{}, refusal.Refuse(refusal.CodeNotReady,
+			"%s is deployed and published no function url, so the console has nothing to dial", StackName(ns))
 	}
-	return standing, nil
+	return installed, nil
 }
 
 func Remove(ctx context.Context, apis APIs, ns bootstrap.Namespace, progress func(string)) error {
@@ -210,7 +210,7 @@ func Remove(ctx context.Context, apis APIs, ns bootstrap.Namespace, progress fun
 		return err
 	}
 	if stack == nil {
-		say(progress, StackName(ns)+" does not stand")
+		say(progress, StackName(ns)+" does not exist")
 		return nil
 	}
 	if bucket := cfn.OutputsOf(stack)[outputBucket]; bucket != "" {
@@ -251,7 +251,7 @@ func codeBucket(ctx context.Context, apis APIs, ns bootstrap.Namespace,
 		bucket := cfn.OutputsOf(stack)[outputBucket]
 		if bucket == "" {
 			return "", refusal.Refuse(refusal.CodeInvalid,
-				"%s stands and names no bucket to stage the connector's code in: delete that stack and run this again",
+				"%s exists and names no bucket to stage the connector's code in: delete that stack and run this again",
 				StackName(ns))
 		}
 		return bucket, nil
@@ -285,10 +285,10 @@ func tagsFor(ns bootstrap.Namespace, template string, writer provider.WrittenBy)
 func zipped(binary []byte) (payloads.Payload, error) {
 	if len(binary) == 0 {
 		return payloads.Payload{}, refusal.Refuse(refusal.CodeInvalid,
-			"this install carries no connector binary to put on a function")
+			"this install ships no connector binary to put on a function")
 	}
-	var held bytes.Buffer
-	archive := zip.NewWriter(&held)
+	var body bytes.Buffer
+	archive := zip.NewWriter(&body)
 	entry, err := archive.CreateHeader(&zip.FileHeader{Name: handler, Method: zip.Deflate})
 	if err != nil {
 		return payloads.Payload{}, fmt.Errorf("open the connector archive: %w", err)
@@ -299,7 +299,7 @@ func zipped(binary []byte) (payloads.Payload, error) {
 	if err := archive.Close(); err != nil {
 		return payloads.Payload{}, fmt.Errorf("close the connector archive: %w", err)
 	}
-	return payloads.Of(held.Bytes()), nil
+	return payloads.Of(body.Bytes()), nil
 }
 
 func codeTemplate() string {
@@ -323,7 +323,7 @@ func codeTemplate() string {
 func templateFor(ns bootstrap.Namespace, at payloads.Placement, release Release, keys []string) (string, error) {
 	if len(release.Config) == 0 {
 		return "", refusal.Refuse(refusal.CodeInvalid,
-			"this install carries no connector config, so nothing would name the console the function trusts")
+			"this install ships no connector config, so nothing would name the console the function trusts")
 	}
 	if len(keys) == 0 {
 		return "", refusal.Refuse(refusal.CodeInvalid,
@@ -339,7 +339,7 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, release Release,
 	}
 	rendered, err := json.MarshalIndent(map[string]any{
 		"AWSTemplateFormatVersion": "2010-09-09",
-		"Description":              "Ocel connector - the function the console reads this account's variables through, the role it runs under and the url it answers on. It stands apart from every bootstrap stack and carries no deploy rights.",
+		"Description":              "Ocel connector - the function the console reads this account's variables through, the role it runs under and the url it answers on. It is separate from every bootstrap stack and has no deploy rights.",
 		"Resources": map[string]any{
 			"CodeBucket": codeBucketResource(),
 			"ConnectorRole": map[string]any{
@@ -439,7 +439,7 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, release Release,
 				"Value":       map[string]any{"Fn::GetAtt": []string{"ConnectorUrl", "FunctionUrl"}},
 			},
 			outputVersion: map[string]any{
-				"Description": "The connector release this stack carries.",
+				"Description": "The connector release this stack deploys.",
 				"Value":       release.Version,
 			},
 			outputPublicKey: map[string]any{
@@ -458,7 +458,7 @@ func codeBucketResource() map[string]any {
 	return map[string]any{
 		"Type": "AWS::S3::Bucket",
 		"Metadata": map[string]any{
-			"Description": "Holds the connector's own code archive, keyed by its digest. Emptying it leaves the standing function running and the next install re-uploads.",
+			"Description": "Stores the connector's own code archive, keyed by its digest. Emptying it leaves the deployed function running and the next install re-uploads.",
 		},
 		"Properties": map[string]any{
 			"BucketEncryption": map[string]any{

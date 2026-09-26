@@ -189,7 +189,7 @@ func TestStackTemplate(t *testing.T) {
 	t.Run("no version output", func(t *testing.T) {
 		tmpl := parseTemplate(t)
 		if _, ok := tmpl.Outputs["BootstrapVersion"]; ok {
-			t.Error("the bootstrap's shape is carried by the ocel:schema tag; no stack Output restates it")
+			t.Error("the bootstrap's shape is recorded in the ocel:schema tag; no stack Output restates it")
 		}
 	})
 }
@@ -494,7 +494,7 @@ func TestCheckDeployed(t *testing.T) {
 			t.Fatalf("CheckDeployed: %v", err)
 		}
 		if stale := got.Stale(nil); len(stale) != 1 || stale[0].Name != coreStackName {
-			t.Errorf("Stale() = %+v, want the core stack alone: a feature that was never stood up is not stale", stale)
+			t.Errorf("Stale() = %+v, want the core stack alone: a feature that was never installed is not stale", stale)
 		}
 	})
 
@@ -585,7 +585,7 @@ func TestEdgeTagKeys(t *testing.T) {
 func stringLike(t *testing.T, pattern, value string) bool {
 	t.Helper()
 	if strings.ContainsAny(pattern+value, "?[]/\\") {
-		t.Fatalf("pattern %q or value %q carries a character path.Match reads differently from IAM StringLike", pattern, value)
+		t.Fatalf("pattern %q or value %q contains a character path.Match reads differently from IAM StringLike", pattern, value)
 	}
 	ok, err := path.Match(pattern, value)
 	if err != nil {
@@ -605,9 +605,9 @@ func TestAssetBucketGrantsCloudFrontRead(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
 
-			policy, held := tmpl.Resources["AssetBucketPolicy"]
-			if !held {
-				t.Fatalf("the template holds %v, want a bucket policy: nothing else lets a CloudFront distribution read a static asset out of the bucket", slices.Sorted(maps.Keys(tmpl.Resources)))
+			policy, ok := tmpl.Resources["AssetBucketPolicy"]
+			if !ok {
+				t.Fatalf("the template contains %v, want a bucket policy: nothing else lets a CloudFront distribution read a static asset out of the bucket", slices.Sorted(maps.Keys(tmpl.Resources)))
 			}
 			if policy.Type != "AWS::S3::BucketPolicy" {
 				t.Errorf("AssetBucketPolicy type = %q, want AWS::S3::BucketPolicy", policy.Type)
@@ -617,7 +617,7 @@ func TestAssetBucketGrantsCloudFrontRead(t *testing.T) {
 			}
 			statements := policy.Properties.PolicyDocument.Statement
 			if len(statements) != 1 {
-				t.Fatalf("the policy holds %d statements, want exactly one: it is written once by the bootstrap and never rewritten per deploy", len(statements))
+				t.Fatalf("the policy has %d statements, want exactly one: it is written once by the bootstrap and never rewritten per deploy", len(statements))
 			}
 			grant := statements[0]
 			if grant.Effect != "Allow" || !slices.Equal(yamlStrings(grant.Action), []string{"s3:GetObject"}) {
@@ -651,7 +651,7 @@ func TestStackWaitersPollFarSoonerThanTheSDKDefault(t *testing.T) {
 	}
 	for name, got := range cadences {
 		if got[0] != 5*time.Second {
-			t.Errorf("the %s waiter stands by %s between looks, want 5s: a stack that is already done should not idle", name, got[0])
+			t.Errorf("the %s waiter waits %s between looks, want 5s: a stack that is already done should not idle", name, got[0])
 		}
 		if got[1] != 20*time.Second {
 			t.Errorf("the %s waiter backs off to %s, want 20s", name, got[1])

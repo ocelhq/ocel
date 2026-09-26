@@ -194,7 +194,7 @@ test("a PPR resume runs under minimal mode", async () => {
 test.each([
   ["a document GET", undefined],
   ["a POST that is not a resume", { method: "POST", body: "x" }],
-  ["a GET carrying the resume header", { headers: { "next-resume": "1" } }],
+  ["a GET with the resume header", { headers: { "next-resume": "1" } }],
 ])("%s does not", async (_name, init) => {
   const meta = await requestMeta(init);
 

@@ -43,11 +43,11 @@ func varsReadPolicy(r executionRole) (string, error) {
 			if owner == r.Slug {
 				continue
 			}
-			held, err := valuePartition(owner, r.VarsClass)
+			partition, err := valuePartition(owner, r.VarsClass)
 			if err != nil {
 				return "", err
 			}
-			partitions = append(partitions, held)
+			partitions = append(partitions, partition)
 		}
 		statements = append(statements, map[string]any{
 			"Effect":   "Allow",
@@ -306,6 +306,6 @@ func checkEdgeEnvBudget(app string, env map[string]string, ciphertext []byte) er
 	if len(ciphertext) > 0 {
 		fmt.Fprintf(&b, "\n  %s  %d bytes", edgeSealedFile, len(ciphertext))
 	}
-	b.WriteString("\n\nDrop a variable or shorten a value: the edge carries plaintext and `sensitive` variables under one budget.")
+	b.WriteString("\n\nDrop a variable or shorten a value: the edge fits plaintext and `sensitive` variables into one budget.")
 	return fmt.Errorf("%s", b.String())
 }

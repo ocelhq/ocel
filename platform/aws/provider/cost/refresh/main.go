@@ -75,11 +75,11 @@ func run(path, cache string) error {
 		if rate.Query[queryIndex] == globalIndex {
 			region = ""
 		}
-		held, err := load(offers, cache, rate.Query[queryService], region)
+		serviceOffer, err := load(offers, cache, rate.Query[queryService], region)
 		if err != nil {
 			return fmt.Errorf("%s: %w", rate.ID, err)
 		}
-		steps, unit, source, err := held.steps(rate.Query, rate.Query[queryService], region)
+		steps, unit, source, err := serviceOffer.steps(rate.Query, rate.Query[queryService], region)
 		if err != nil {
 			return fmt.Errorf("%s: %w", rate.ID, err)
 		}
@@ -100,8 +100,8 @@ func run(path, cache string) error {
 
 func load(offers map[string]*offer, cache, service, region string) (*offer, error) {
 	key := service + "/" + region
-	if held, ok := offers[key]; ok {
-		return held, nil
+	if cached, ok := offers[key]; ok {
+		return cached, nil
 	}
 	path := "/offers/v1.0/aws/" + service + "/current/index.json"
 	if region != "" {
@@ -124,12 +124,12 @@ func load(offers map[string]*offer, cache, service, region string) (*offer, erro
 			return nil, err
 		}
 	}
-	held := &offer{}
-	if err := json.Unmarshal(raw, held); err != nil {
+	decoded := &offer{}
+	if err := json.Unmarshal(raw, decoded); err != nil {
 		return nil, fmt.Errorf("decode %s: %w", path, err)
 	}
-	offers[key] = held
-	return held, nil
+	offers[key] = decoded
+	return decoded, nil
 }
 
 func orGlobal(region string) string {
@@ -171,7 +171,7 @@ func (o *offer) steps(query map[string]string, service, region string) ([]costki
 		}
 	}
 	if len(steps) == 0 {
-		return nil, "", "", fmt.Errorf("sku %s carries no on-demand term", sku)
+		return nil, "", "", fmt.Errorf("sku %s has no on-demand term", sku)
 	}
 	sort.Slice(steps, func(i, j int) bool { return steps[i].Start.LessThan(steps[j].Start) })
 	source := host + "/offers/v1.0/aws/" + service + "/" + o.Version + "/" + orGlobal(region) + "/index.json#" + sku

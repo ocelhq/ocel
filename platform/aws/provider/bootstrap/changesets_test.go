@@ -19,7 +19,7 @@ import (
 func TestCoreRefusesReplacementWhateverTheCallerAccepts(t *testing.T) {
 	for _, accept := range []bool{false, true} {
 		t.Run(fmt.Sprintf("acceptReplacements=%t", accept), func(t *testing.T) {
-			stacks, apis := standingBootstrap(t)
+			stacks, apis := installedBootstrap(t)
 			stacks.fallBehind(coreStackName)
 			stacks.plan(coreStackName, change(cfntypes.ChangeActionModify, "StateTable", "AWS::DynamoDB::Table", cfntypes.ReplacementTrue))
 			before := stacks.updates
@@ -37,7 +37,7 @@ func TestCoreRefusesReplacementWhateverTheCallerAccepts(t *testing.T) {
 				t.Errorf("refusal = %q, want no flag offered: the core is never replaced", err)
 			}
 			if stacks.updates != before {
-				t.Error("the core was written even though the plan replaced what holds every app's state")
+				t.Error("the core was written even though the plan replaced what stores every app's state")
 			}
 			if left := stacks.leftBehind(); len(left) != 0 {
 				t.Errorf("change sets %v were neither applied nor deleted", left)
@@ -48,7 +48,7 @@ func TestCoreRefusesReplacementWhateverTheCallerAccepts(t *testing.T) {
 
 func TestTagOnlyDeltaIsStillWritten(t *testing.T) {
 	t.Run("a new writer writes the tag through a bootstrap that has not otherwise moved", func(t *testing.T) {
-		stacks, apis := standingBootstrap(t)
+		stacks, apis := installedBootstrap(t)
 		before := stacks.updates
 
 		req := everything()
@@ -57,7 +57,7 @@ func TestTagOnlyDeltaIsStillWritten(t *testing.T) {
 			t.Fatalf("Run: %v", err)
 		}
 		if got := stacks.stampOf(coreStackName).WrittenBy; got != "9.9.9" {
-			t.Errorf("written by %q, want the writer this run carries", got)
+			t.Errorf("written by %q, want the writer this run names", got)
 		}
 		if stacks.updates != before {
 			t.Errorf("a tag-only delta went through %d change sets; CloudFormation reports one as empty", stacks.updates-before)
@@ -67,8 +67,8 @@ func TestTagOnlyDeltaIsStillWritten(t *testing.T) {
 		}
 	})
 
-	t.Run("a bootstrap whose tags already stand is left alone", func(t *testing.T) {
-		stacks, apis := standingBootstrap(t)
+	t.Run("a bootstrap whose tags are already current is left alone", func(t *testing.T) {
+		stacks, apis := installedBootstrap(t)
 		before := stacks.restamps
 
 		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil, nil); err != nil {
@@ -81,7 +81,7 @@ func TestTagOnlyDeltaIsStillWritten(t *testing.T) {
 }
 
 func TestADevRebuildLeavesAStackItDidNotChangeAlone(t *testing.T) {
-	stacks, apis := standingBootstrap(t)
+	stacks, apis := installedBootstrap(t)
 	built := everything()
 	built.Writer = "1.4.0"
 	if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, built, nil, nil); err != nil {
@@ -109,61 +109,61 @@ func TestADevRebuildLeavesAStackItDidNotChangeAlone(t *testing.T) {
 	}
 }
 
-func TestRestampingTurnsOnlyOnWhatTheStackHolds(t *testing.T) {
+func TestRestampingTurnsOnlyOnTheStacksCurrentTags(t *testing.T) {
 	const digest = "beef"
 	for _, tc := range []struct {
 		name      string
-		standing  Stamp
+		current   Stamp
 		unwritten bool
 		incoming  Stamp
 		writes    bool
 	}{
 		{
 			name:     "one development build to the next",
-			standing: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+1111111"},
+			current:  Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+1111111"},
 			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+2222222"},
 		},
 		{
 			name:     "a development build gives way to a release",
-			standing: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+1111111"},
+			current:  Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+1111111"},
 			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "1.4.0"},
 			writes:   true,
 		},
 		{
 			name:     "a release gives way to a development build",
-			standing: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "1.4.0"},
+			current:  Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "1.4.0"},
 			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+1111111"},
 			writes:   true,
 		},
 		{
 			name:     "the template moved under two development builds",
-			standing: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+1111111"},
+			current:  Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+1111111"},
 			incoming: Stamp{Schema: RequiredSchema, Digest: "cafe", WrittenBy: "dev+2222222"},
 			writes:   true,
 		},
 		{
 			name:     "the schema moved under two development builds",
-			standing: Stamp{Schema: RequiredSchema - 1, Digest: digest, WrittenBy: "dev+1111111"},
+			current:  Stamp{Schema: RequiredSchema - 1, Digest: digest, WrittenBy: "dev+1111111"},
 			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+2222222"},
 			writes:   true,
 		},
 		{
-			name:      "the stack carries no writer tag at all",
-			standing:  Stamp{Schema: RequiredSchema, Digest: digest},
+			name:      "the stack has no writer tag at all",
+			current:   Stamp{Schema: RequiredSchema, Digest: digest},
 			unwritten: true,
 			incoming:  Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+2222222"},
 			writes:    true,
 		},
 		{
 			name:     "the stack was written by an unknown writer",
-			standing: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: provider.WrittenBy("").String()},
+			current:  Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: provider.WrittenBy("").String()},
 			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+2222222"},
 			writes:   true,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			stacks, _ := standingBootstrap(t)
-			tags := stampTags(defaultNamespace, tc.standing)
+			stacks, _ := installedBootstrap(t)
+			tags := stampTags(defaultNamespace, tc.current)
 			if tc.unwritten {
 				tags = cfn.WithoutTag(tags, cfn.TagBootstrappedBy)
 			}
@@ -185,7 +185,7 @@ func TestChangeSetsAreDiscardedWhateverEndsTheRun(t *testing.T) {
 	staleTags := stampTags(defaultNamespace, Stamp{Schema: RequiredSchema, Digest: "beef", WrittenBy: "1.4.0"})
 
 	t.Run("a caller context that is already gone still takes the change set down", func(t *testing.T) {
-		stacks, _ := standingBootstrap(t)
+		stacks, _ := installedBootstrap(t)
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -203,7 +203,7 @@ func TestChangeSetsAreDiscardedWhateverEndsTheRun(t *testing.T) {
 	})
 
 	t.Run("a panic between planning and executing still takes the change set down", func(t *testing.T) {
-		stacks, _ := standingBootstrap(t)
+		stacks, _ := installedBootstrap(t)
 
 		func() {
 			defer func() { _ = recover() }()
@@ -223,7 +223,7 @@ func (deletedChangeSets) DescribeChangeSet(context.Context, *cloudformation.Desc
 }
 
 func TestAChangeSetSomethingElseDeletedStopsAtOnce(t *testing.T) {
-	waits := holdNothing(t)
+	waits := recordWaits(t)
 
 	_, _, err := cfn.AwaitChangeSet(context.Background(), deletedChangeSets{newFakeCFN()}, "ocel-1")
 	if err == nil {
@@ -244,7 +244,7 @@ func (deniedChangeSets) CreateChangeSet(context.Context, *cloudformation.CreateC
 }
 
 func TestHealRefusedByTheseCredentialsSaysSoOnce(t *testing.T) {
-	stacks, apis := standingBootstrap(t)
+	stacks, apis := installedBootstrap(t)
 	stacks.fallBehind(isrStack(ClassProduction))
 	apis.CFN = deniedChangeSets{stacks}
 	var log healLog
@@ -261,27 +261,27 @@ func TestHealRefusedByTheseCredentialsSaysSoOnce(t *testing.T) {
 	}
 }
 
-func TestSettlingIsBoundedAndReported(t *testing.T) {
-	waits := holdNothing(t)
-	stacks, apis := standingBootstrap(t)
+func TestWaitingOnABusyStackIsBoundedAndReported(t *testing.T) {
+	waits := recordWaits(t)
+	stacks, apis := installedBootstrap(t)
 	stack := isrStack(ClassProduction)
 	stacks.fallBehind(stack)
-	stacks.busy(stack, settleAttempts*4)
+	stacks.busy(stack, idleAttempts*4)
 	var log healLog
 
 	if _, err := Heal(context.Background(), apis, defaultNamespace, ClassProduction, HealRequest{Features: featureNames(), Writer: "1.4.0"}, log.write); err != nil {
 		t.Fatalf("Heal: %v", err)
 	}
 	if len(*waits) >= cfn.ChangeSetAttempts {
-		t.Errorf("waited %d times on a stack another run holds; that budget belongs to building a change set, not to standing by", len(*waits))
+		t.Errorf("waited %d times on a stack another run is writing; that budget belongs to building a change set, not to waiting on a busy stack", len(*waits))
 	}
 	if !log.says("before this deploy stops waiting") {
-		t.Errorf("heal said %v, want it to report progress while it stood by", log.lines)
+		t.Errorf("heal said %v, want it to report progress while it waited", log.lines)
 	}
 }
 
 func TestAStackTagPropagatedOntoAPrincipalDoesNotBlockAHeal(t *testing.T) {
-	stacks, apis := standingBootstrap(t)
+	stacks, apis := installedBootstrap(t)
 	stack := edgeStack(ClassProduction)
 	stacks.fallBehind(stack)
 	stacks.plan(stack,
@@ -308,7 +308,7 @@ func TestAStackTagPropagatedOntoAPrincipalDoesNotBlockAHeal(t *testing.T) {
 }
 
 func TestAPrincipalWhoseShapeChangesStillStopsAHeal(t *testing.T) {
-	stacks, apis := standingBootstrap(t)
+	stacks, apis := installedBootstrap(t)
 	stack := edgeStack(ClassProduction)
 	stacks.fallBehind(stack)
 	stacks.plan(stack, cfntypes.ResourceChange{
@@ -329,7 +329,7 @@ func TestAPrincipalWhoseShapeChangesStillStopsAHeal(t *testing.T) {
 }
 
 func TestAChangeSetIsNamedAfterTheStackItPlansAgainst(t *testing.T) {
-	stacks, apis := standingBootstrap(t)
+	stacks, apis := installedBootstrap(t)
 	stacks.fallBehind(isrStack(ClassProduction))
 	stacks.fallBehind(runtimeStack(ClassProduction))
 

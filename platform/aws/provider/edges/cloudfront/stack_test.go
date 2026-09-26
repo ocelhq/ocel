@@ -127,15 +127,15 @@ func TestASecondReconcileRereadsNothingImmutable(t *testing.T) {
 			t.Errorf("%s calls = %d, want %d: the stack already names an id CloudFront never changes", call, got, before[call])
 		}
 	}
-	held, want := ownState(t, second), ownState(t, first)
-	if held.CachePolicy != want.CachePolicy || held.HeadersPolicy != want.HeadersPolicy || held.OriginAccessControl != want.OriginAccessControl {
-		t.Errorf("state = %+v, want the ids the first reconcile recorded (%+v)", held, want)
+	got, want := ownState(t, second), ownState(t, first)
+	if got.CachePolicy != want.CachePolicy || got.HeadersPolicy != want.HeadersPolicy || got.OriginAccessControl != want.OriginAccessControl {
+		t.Errorf("state = %+v, want the ids the first reconcile recorded (%+v)", got, want)
 	}
 }
 
-func keysOfCount(held map[string]int) func(func(string) bool) {
+func keysOfCount(counts map[string]int) func(func(string) bool) {
 	return func(yield func(string) bool) {
-		for key := range held {
+		for key := range counts {
 			if !yield(key) {
 				return
 			}
@@ -159,16 +159,16 @@ func TestDestroyWaitsOutAThrottledRolloutCheck(t *testing.T) {
 	}
 }
 
-func TestDestroyHoldsBeforeItFirstAsksHowTheRolloutIsGoing(t *testing.T) {
+func TestDestroyWaitsBeforeItFirstAsksHowTheRolloutIsGoing(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
 	e := &cloudFront{
 		ns:   defaultNamespace,
 		open: func(context.Context) (Clients, error) { return w.clients(), nil },
-		settle: Rollout{
+		pacing: Rollout{
 			Wait: func(context.Context, time.Duration) error {
-				w.trail.record("hold")
+				w.trail.record("wait")
 				return nil
 			},
 			Attempts: 5,
@@ -192,9 +192,9 @@ func TestDestroyHoldsBeforeItFirstAsksHowTheRolloutIsGoing(t *testing.T) {
 	steps := w.trail.taken()
 	disabled := indexOf(t, steps, "UpdateDistribution "+id)
 	polled := indexOf(t, steps, "GetDistribution "+id)
-	held := slices.Index(steps[disabled:], "hold")
-	if held < 0 || disabled+held > polled {
-		t.Errorf("the calls were %v, want a hold between disabling the distribution and asking whether it settled", steps)
+	waited := slices.Index(steps[disabled:], "wait")
+	if waited < 0 || disabled+waited > polled {
+		t.Errorf("the calls were %v, want a wait between disabling the distribution and asking whether it reached Deployed", steps)
 	}
 }
 
@@ -217,10 +217,10 @@ func TestADistributionOfAProjectWithALongSlugIsFoundByTheNameItWasMintedUnder(t 
 	if err != nil {
 		t.Fatalf("createDistribution: %v", err)
 	}
-	held := w.front.distributions[raised.id]
+	dist := w.front.distributions[raised.id]
 	for field, value := range map[string]string{
-		"comment":          aws.ToString(held.config.Comment),
-		"caller reference": aws.ToString(held.config.CallerReference),
+		"comment":          aws.ToString(dist.config.Comment),
+		"caller reference": aws.ToString(dist.config.CallerReference),
 	} {
 		if value != name {
 			t.Errorf("%s is %q, want the name the project was minted under, %q", field, value, name)
@@ -244,16 +244,16 @@ func TestBindDomainRecordsTheFrontOfADistributionFoundByName(t *testing.T) {
 
 	w := newWorld()
 	e := bootstrapped(t, w)
-	settled, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
+	original, err := e.Reconcile(context.Background(), testSpec(), edge.StackState{})
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	held := w.front.named(productionDistributionName())
-	if held == nil {
-		t.Fatalf("no distribution for the stack; CloudFront holds %v", w.front.mutations())
+	dist := w.front.named(productionDistributionName())
+	if dist == nil {
+		t.Fatalf("no distribution for the stack; CloudFront has %v", w.front.mutations())
 	}
 
-	forgotten := settled.State()
+	forgotten := original.State()
 	forgotten.Front = ""
 	forgotten.Private = edge.Own(private{})
 	opened, err := e.Open(forgotten)
@@ -265,15 +265,15 @@ func TestBindDomainRecordsTheFrontOfADistributionFoundByName(t *testing.T) {
 		t.Fatalf("BindDomain: %v", err)
 	}
 
-	if got := stack.own.Distribution; got != held.id {
-		t.Errorf("state records distribution %q, want the one already serving the stack (%q)", got, held.id)
+	if got := stack.own.Distribution; got != dist.id {
+		t.Errorf("state records distribution %q, want the one already serving the stack (%q)", got, dist.id)
 	}
-	if got := stack.State().Front; got != held.domain {
-		t.Errorf("state records front %q, want %q: a binding onto a distribution found by name still has to say where DNS points", got, held.domain)
+	if got := stack.State().Front; got != dist.domain {
+		t.Errorf("state records front %q, want %q: a binding onto a distribution found by name still has to say where DNS points", got, dist.domain)
 	}
 }
 
-func TestEveryConfigCarriesLoggingSoAnUpdateIsLegal(t *testing.T) {
+func TestEveryConfigIncludesLoggingSoAnUpdateIsLegal(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
@@ -302,7 +302,7 @@ func TestEveryConfigCarriesLoggingSoAnUpdateIsLegal(t *testing.T) {
 func assertLogging(t *testing.T, what string, config *cftypes.DistributionConfig) {
 	t.Helper()
 	if config.Logging == nil {
-		t.Fatalf("%s carries no Logging block, and CloudFront rejects every UpdateDistribution without one", what)
+		t.Fatalf("%s has no Logging block, and CloudFront rejects every UpdateDistribution without one", what)
 	}
 	if aws.ToBool(config.Logging.Enabled) {
 		t.Errorf("%s enables access logging, want it off with an empty bucket and prefix", what)
@@ -351,7 +351,7 @@ func assertComplete(t *testing.T, what string, config *cftypes.DistributionConfi
 	}
 	behavior := config.DefaultCacheBehavior
 	if behavior == nil {
-		t.Fatalf("%s carries no DefaultCacheBehavior", what)
+		t.Fatalf("%s has no DefaultCacheBehavior", what)
 	}
 	if behavior.TrustedSigners == nil || aws.ToBool(behavior.TrustedSigners.Enabled) {
 		t.Errorf("%s does not spell out TrustedSigners as disabled", what)
@@ -365,28 +365,28 @@ func TestCompleteFromFillsOnlyWhatThePlanLeftOut(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name string
-		want *cftypes.DistributionConfig
-		held *cftypes.DistributionConfig
-		acl  string
+		name    string
+		want    *cftypes.DistributionConfig
+		current *cftypes.DistributionConfig
+		acl     string
 	}{
 		{
-			name: "the held config supplies a field the plan never mentions",
-			want: &cftypes.DistributionConfig{},
-			held: &cftypes.DistributionConfig{WebACLId: aws.String("held-acl")},
-			acl:  "held-acl",
+			name:    "the current config supplies a field the plan never mentions",
+			want:    &cftypes.DistributionConfig{},
+			current: &cftypes.DistributionConfig{WebACLId: aws.String("current-acl")},
+			acl:     "current-acl",
 		},
 		{
-			name: "the plan wins over a held config that differs",
-			want: &cftypes.DistributionConfig{WebACLId: aws.String("")},
-			held: &cftypes.DistributionConfig{WebACLId: aws.String("held-acl")},
-			acl:  "",
+			name:    "the plan wins over a current config that differs",
+			want:    &cftypes.DistributionConfig{WebACLId: aws.String("")},
+			current: &cftypes.DistributionConfig{WebACLId: aws.String("current-acl")},
+			acl:     "",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			merged := completeFrom(tc.want, tc.held)
+			merged := completeFrom(tc.want, tc.current)
 
 			if merged.WebACLId == nil {
 				t.Fatalf("WebACLId is nil, want %q", tc.acl)
@@ -398,7 +398,7 @@ func TestCompleteFromFillsOnlyWhatThePlanLeftOut(t *testing.T) {
 	}
 }
 
-func TestEveryCertificateAConfigCarriesIsOneAnUpdateAccepts(t *testing.T) {
+func TestEveryCertificateAConfigNamesIsOneAnUpdateAccepts(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -455,45 +455,45 @@ func TestEveryCertificateAConfigCarriesIsOneAnUpdateAccepts(t *testing.T) {
 
 func assertViewerCertificate(t *testing.T, what string, config *cftypes.DistributionConfig) {
 	t.Helper()
-	held := config.ViewerCertificate
-	if held == nil {
-		t.Fatalf("%s carries no ViewerCertificate, and CloudFront rejects an update without one", what)
+	viewer := config.ViewerCertificate
+	if viewer == nil {
+		t.Fatalf("%s has no ViewerCertificate, and CloudFront rejects an update without one", what)
 	}
-	if aws.ToBool(held.CloudFrontDefaultCertificate) {
-		if held.MinimumProtocolVersion != cftypes.MinimumProtocolVersionTLSv1 {
-			t.Errorf("%s takes the default certificate with MinimumProtocolVersion %q, want %q: it is the only one CloudFront accepts there", what, held.MinimumProtocolVersion, cftypes.MinimumProtocolVersionTLSv1)
+	if aws.ToBool(viewer.CloudFrontDefaultCertificate) {
+		if viewer.MinimumProtocolVersion != cftypes.MinimumProtocolVersionTLSv1 {
+			t.Errorf("%s takes the default certificate with MinimumProtocolVersion %q, want %q: it is the only one CloudFront accepts there", what, viewer.MinimumProtocolVersion, cftypes.MinimumProtocolVersionTLSv1)
 		}
-		if held.SSLSupportMethod != "" {
-			t.Errorf("%s takes the default certificate and still names SSLSupportMethod %q, want none", what, held.SSLSupportMethod)
+		if viewer.SSLSupportMethod != "" {
+			t.Errorf("%s takes the default certificate and still names SSLSupportMethod %q, want none", what, viewer.SSLSupportMethod)
 		}
-		if aws.ToString(held.ACMCertificateArn) != "" {
-			t.Errorf("%s takes the default certificate and still names ACMCertificateArn %q, want none", what, aws.ToString(held.ACMCertificateArn))
+		if aws.ToString(viewer.ACMCertificateArn) != "" {
+			t.Errorf("%s takes the default certificate and still names ACMCertificateArn %q, want none", what, aws.ToString(viewer.ACMCertificateArn))
 		}
 		return
 	}
-	if aws.ToString(held.ACMCertificateArn) == "" {
+	if aws.ToString(viewer.ACMCertificateArn) == "" {
 		t.Errorf("%s takes neither the default certificate nor an ACM one", what)
 	}
-	if held.SSLSupportMethod != cftypes.SSLSupportMethodSniOnly {
-		t.Errorf("%s names SSLSupportMethod %q, want %q", what, held.SSLSupportMethod, cftypes.SSLSupportMethodSniOnly)
+	if viewer.SSLSupportMethod != cftypes.SSLSupportMethodSniOnly {
+		t.Errorf("%s names SSLSupportMethod %q, want %q", what, viewer.SSLSupportMethod, cftypes.SSLSupportMethodSniOnly)
 	}
-	if held.MinimumProtocolVersion == "" {
+	if viewer.MinimumProtocolVersion == "" {
 		t.Errorf("%s names an ACM certificate and no MinimumProtocolVersion, and CloudFront insists on one", what)
 	}
 }
 
 func storeless(t *testing.T, e *cloudFront, stack edge.EdgeStack) edge.EdgeStack {
 	t.Helper()
-	held := stack.State()
-	held.Private = edge.Private{}
-	reopened, err := e.Open(held)
+	state := stack.State()
+	state.Private = edge.Private{}
+	reopened, err := e.Open(state)
 	if err != nil {
 		t.Fatalf("Open a state that names no store: %v", err)
 	}
 	return reopened
 }
 
-func TestUnbindDomainOnAStateThatNamesNoStoreTakesTheRouteFromTheStandingBootstrap(t *testing.T) {
+func TestUnbindDomainOnAStateThatNamesNoStoreTakesTheRouteFromTheInstalledBootstrap(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
@@ -513,8 +513,8 @@ func TestUnbindDomainOnAStateThatNamesNoStoreTakesTheRouteFromTheStandingBootstr
 		t.Fatalf("UnbindDomain on a state that names no store: %v", err)
 	}
 
-	if _, held := w.store.held(arn)[boundHost]; held {
-		t.Errorf("%q still answers on the edge, want its route withdrawn: the store the bootstrap stands up is the one to reach for when the record names none", boundHost)
+	if _, present := w.store.itemsOf(arn)[boundHost]; present {
+		t.Errorf("%q still answers on the edge, want its route withdrawn: the store the bootstrap provisions is the one to reach for when the record names none", boundHost)
 	}
 }
 
@@ -532,17 +532,17 @@ func TestARemovalRunsThroughWhenTheBootstrapItWasFrontedByIsGone(t *testing.T) {
 	w.cfn.absent = true
 
 	if err := orphaned.UnbindDomain(context.Background(), boundHost); err != nil {
-		t.Errorf("UnbindDomain with no bootstrap standing = %v, want the hostname let go: there is no store left to withdraw it from", err)
+		t.Errorf("UnbindDomain with no bootstrap installed = %v, want the hostname let go: there is no store left to withdraw it from", err)
 	}
 	if _, err := orphaned.RemovePointer(context.Background(), "", edge.DiscardProgress()); err != nil {
-		t.Errorf("RemovePointer with no bootstrap standing = %v, want no complaint: there is no ledger left to read", err)
+		t.Errorf("RemovePointer with no bootstrap installed = %v, want no complaint: there is no ledger left to read", err)
 	}
 	if err := orphaned.Destroy(context.Background()); err != nil {
-		t.Errorf("Destroy with no bootstrap standing = %v, want the stack given up: nothing it owned outlives the bootstrap", err)
+		t.Errorf("Destroy with no bootstrap installed = %v, want the stack given up: nothing it owned outlives the bootstrap", err)
 	}
 }
 
-func TestARemovalSaysSoWhenTheStandingBootstrapFrontsNoEdge(t *testing.T) {
+func TestARemovalSaysSoWhenTheInstalledBootstrapFrontsNoEdge(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
@@ -556,7 +556,7 @@ func TestARemovalSaysSoWhenTheStandingBootstrapFrontsNoEdge(t *testing.T) {
 	w.cfn.otherEdge = true
 
 	if err := orphaned.UnbindDomain(context.Background(), boundHost); err == nil {
-		t.Error("UnbindDomain against a bootstrap that fronts no edge = nil, want the refusal said out loud: a bootstrap standing without the edge feature is not an account with none")
+		t.Error("UnbindDomain against a bootstrap that fronts no edge = nil, want the refusal said out loud: a bootstrap installed without the edge feature is not an account with none")
 	}
 }
 
@@ -586,7 +586,7 @@ func TestBindDomainBeforeAnyPromotionPublishesNoRoute(t *testing.T) {
 
 	bound(t, stack)
 
-	if held := w.store.held(ownState(t, stack).KeyValueStore); len(held) != 0 {
-		t.Errorf("the key value store holds %v, want nothing: no release is promoted for the hostname to answer with", held)
+	if items := w.store.itemsOf(ownState(t, stack).KeyValueStore); len(items) != 0 {
+		t.Errorf("the key value store contains %v, want nothing: no release is promoted for the hostname to answer with", items)
 	}
 }

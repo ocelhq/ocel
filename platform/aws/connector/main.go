@@ -41,7 +41,7 @@ func main() {
 	addr := flag.String("addr", "127.0.0.1:7777", "address to serve on")
 	region := flag.String("region", os.Getenv(edge.AWSRegionVar), "AWS region the target is bootstrapped in")
 	config := flag.String("config", os.Getenv("OCEL_CONNECTOR_CONFIG"), "path to the connector config naming the console, this connector and its grants")
-	keyParameter := flag.String("key-parameter", os.Getenv(awsconnector.KeyParameterEnvVar), "name of the SecureString parameter holding the key this connector signs heartbeats with")
+	keyParameter := flag.String("key-parameter", os.Getenv(awsconnector.KeyParameterEnvVar), "name of the SecureString parameter storing the key this connector signs heartbeats with")
 	flag.Parse()
 
 	if err := run(*addr, *region, *config, *keyParameter); err != nil {
@@ -76,7 +76,7 @@ func run(addr, region, config, keyParameter string) error {
 		return err
 	}
 
-	held := &deployments{
+	bootstraps := &deployments{
 		namespace: bootstrap.Namespace(ns),
 		stacks:    cloudformation.NewFromConfig(cfg),
 		now:       time.Now,
@@ -90,8 +90,8 @@ func run(addr, region, config, keyParameter string) error {
 		Addr:       addr,
 		ConfigPath: config,
 		EnvVars: envvarsserver.Backend{
-			Records: awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: held},
-			Cipher:  awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: held},
+			Records: awsports.Records{Dynamo: dynamodb.NewFromConfig(cfg), Tables: bootstraps},
+			Cipher:  awsports.Cipher{KMS: kms.NewFromConfig(cfg), Keys: bootstraps},
 		},
 	}
 	if keyParameter != "" {
@@ -119,11 +119,11 @@ type keyReader interface {
 }
 
 func keyed(ctx context.Context, store keyReader, name string) (connectorkit.Identity, error) {
-	held, err := store.GetParameter(ctx, &ssm.GetParameterInput{Name: aws.String(name), WithDecryption: aws.Bool(true)})
+	stored, err := store.GetParameter(ctx, &ssm.GetParameterInput{Name: aws.String(name), WithDecryption: aws.Bool(true)})
 	if err != nil {
 		return connectorkit.Identity{}, fmt.Errorf("read the connector's key from %s: %w", name, err)
 	}
-	return identityOf(aws.ToString(held.Parameter.Value))
+	return identityOf(aws.ToString(stored.Parameter.Value))
 }
 
 func identityOf(value string) (connectorkit.Identity, error) {
@@ -171,8 +171,8 @@ type deployments struct {
 }
 
 type readDeployment struct {
-	held bootstrap.Deployed
-	at   time.Time
+	deployed bootstrap.Deployed
+	at       time.Time
 }
 
 func (d *deployments) resolve(ctx context.Context, class edge.Class) (bootstrap.Deployed, error) {
@@ -180,29 +180,29 @@ func (d *deployments) resolve(ctx context.Context, class edge.Class) (bootstrap.
 	memo, known := d.read[class]
 	d.mu.Unlock()
 	if known && d.now().Sub(memo.at) < deploymentsTTL {
-		return memo.held, nil
+		return memo.deployed, nil
 	}
-	held, err := bootstrap.CheckDeployedFor(ctx, d.stacks, d.namespace, string(class))
+	deployed, err := bootstrap.CheckDeployedFor(ctx, d.stacks, d.namespace, string(class))
 	if err != nil {
 		return bootstrap.Deployed{}, err
 	}
 	d.mu.Lock()
-	d.read[class] = readDeployment{held: held, at: d.now()}
+	d.read[class] = readDeployment{deployed: deployed, at: d.now()}
 	d.mu.Unlock()
-	return held, nil
+	return deployed, nil
 }
 
 func (d *deployments) Table(ctx context.Context, class edge.Class) (string, error) {
-	held, err := d.resolve(ctx, class)
-	return held.StateTable, err
+	deployed, err := d.resolve(ctx, class)
+	return deployed.StateTable, err
 }
 
 func (d *deployments) ValuesTable(ctx context.Context, class edge.Class) (string, error) {
-	held, err := d.resolve(ctx, class)
-	return held.VarsTable, err
+	deployed, err := d.resolve(ctx, class)
+	return deployed.VarsTable, err
 }
 
 func (d *deployments) Key(ctx context.Context, class edge.Class) (string, error) {
-	held, err := d.resolve(ctx, class)
-	return held.VarsKeyARN, err
+	deployed, err := d.resolve(ctx, class)
+	return deployed.VarsKeyARN, err
 }

@@ -157,7 +157,7 @@ func TestBucketResourceIDs(t *testing.T) {
 func TestBucketPhysicalPrefix(t *testing.T) {
 	t.Parallel()
 
-	t.Run("carries the app scope, project, env and resource", func(t *testing.T) {
+	t.Run("includes the app scope, project, env and resource", func(t *testing.T) {
 		t.Parallel()
 
 		at := resourceCoordinate("shop", "prod", "bucket--uploads", naming.KindBucket)
@@ -259,7 +259,7 @@ func TestTranslateBucket(t *testing.T) {
 		got := translateBucket(&provider.BucketSpec{AllowedOrigins: origins})
 
 		if !reflect.DeepEqual(got.AllowedOrigins, origins) {
-			t.Errorf("AllowedOrigins = %v, want %v (carried through for the upload completer allowlist)", got.AllowedOrigins, origins)
+			t.Errorf("AllowedOrigins = %v, want %v (passed through for the upload completer allowlist)", got.AllowedOrigins, origins)
 		}
 		if !reflect.DeepEqual(got.CORS.AllowedOrigins, origins) {
 			t.Errorf("CORS.AllowedOrigins = %v, want the app's declared origins %v", got.CORS.AllowedOrigins, origins)
@@ -349,7 +349,7 @@ func TestSessionStatement(t *testing.T) {
 		}
 	})
 
-	t.Run("an unconditioned statement carries no condition", func(t *testing.T) {
+	t.Run("an unconditioned statement has no condition", func(t *testing.T) {
 		t.Parallel()
 
 		doc, err := inlinePolicy([]string{"s3:PutObject"}, []string{"arn:aws:s3:::b/*"}, nil)

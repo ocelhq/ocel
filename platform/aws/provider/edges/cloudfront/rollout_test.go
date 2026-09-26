@@ -8,36 +8,36 @@ import (
 	"time"
 )
 
-func TestSettler(t *testing.T) {
+func TestRolloutAwaitDeployed(t *testing.T) {
 	t.Parallel()
 
 	t.Run("it polls until the distribution reports Deployed", func(t *testing.T) {
 		t.Parallel()
 
-		held := 0
+		waits := 0
 		s := Rollout{
-			Wait:     func(context.Context, time.Duration) error { held++; return nil },
+			Wait:     func(context.Context, time.Duration) error { waits++; return nil },
 			Attempts: 5,
 			Every:    time.Second,
 			Jitter:   func() float64 { return 0.5 },
 		}
 		polls := 0
 
-		if err := s.settled(context.Background(), kindDistribution, "E1", disableRollingOut, func(context.Context) (string, error) {
+		if err := s.awaitDeployed(context.Background(), kindDistribution, "E1", disableRollingOut, func(context.Context) (string, error) {
 			polls++
 			if polls < 3 {
 				return "InProgress", nil
 			}
 			return deployedStatus, nil
 		}); err != nil {
-			t.Fatalf("settled: %v", err)
+			t.Fatalf("awaitDeployed: %v", err)
 		}
 
 		if polls != 3 {
 			t.Errorf("polls = %d, want 3", polls)
 		}
-		if held != 2 {
-			t.Errorf("holds = %d, want 2: one between each pair of polls", held)
+		if waits != 2 {
+			t.Errorf("waits = %d, want 2: one between each pair of polls", waits)
 		}
 	})
 
@@ -51,12 +51,12 @@ func TestSettler(t *testing.T) {
 			Jitter:   func() float64 { return 0.5 },
 		}
 
-		err := s.settled(context.Background(), kindDistribution, "E1", disableRollingOut, func(context.Context) (string, error) {
+		err := s.awaitDeployed(context.Background(), kindDistribution, "E1", disableRollingOut, func(context.Context) (string, error) {
 			return "InProgress", nil
 		})
 
 		if err == nil {
-			t.Fatal("settled error = nil, want it to give up")
+			t.Fatal("awaitDeployed error = nil, want it to give up")
 		}
 		for _, want := range []string{"• distribution E1", "about " + s.window().String(), "re-run the same command"} {
 			if !strings.Contains(err.Error(), want) {
@@ -75,12 +75,12 @@ func TestSettler(t *testing.T) {
 			Jitter:   func() float64 { return 0.5 },
 		}
 
-		err := s.settled(context.Background(), kindDistribution, "E1", disableRollingOut, func(context.Context) (string, error) {
+		err := s.awaitDeployed(context.Background(), kindDistribution, "E1", disableRollingOut, func(context.Context) (string, error) {
 			return "InProgress", nil
 		})
 
 		if !errors.Is(err, context.Canceled) {
-			t.Errorf("settled err = %v, want the cancellation", err)
+			t.Errorf("awaitDeployed err = %v, want the cancellation", err)
 		}
 	})
 
@@ -95,14 +95,14 @@ func TestSettler(t *testing.T) {
 		}
 		polls := 0
 
-		if err := s.settled(context.Background(), kindDistribution, "E1", disableRollingOut, func(context.Context) (string, error) {
+		if err := s.awaitDeployed(context.Background(), kindDistribution, "E1", disableRollingOut, func(context.Context) (string, error) {
 			polls++
 			if polls < 4 {
 				return "", throttlingError()
 			}
 			return deployedStatus, nil
 		}); err != nil {
-			t.Fatalf("settled: %v", err)
+			t.Fatalf("awaitDeployed: %v", err)
 		}
 		if polls != 4 {
 			t.Errorf("polls = %d, want 4: a throttle says nothing about the rollout", polls)

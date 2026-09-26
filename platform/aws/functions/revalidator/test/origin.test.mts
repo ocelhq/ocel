@@ -48,7 +48,7 @@ it("cannot be spelled from a literal, or from a copy of a real one", async () =>
   const resolution = await resolve(deps, message());
   if (!resolution.ok) throw new Error(resolution.reason);
 
-  // @ts-expect-error a literal carries no resolution
+  // @ts-expect-error
   const fabricated: Target = { url: "https://attacker.example.com/", region: "us-east-1" };
   // @ts-expect-error and copying a real one drops what made it one
   const copied: Target = { ...resolution.target, url: "https://attacker.example.com/" };
@@ -176,7 +176,7 @@ it("resolves nothing, and reads nothing, when no asset bucket is configured", as
   expect(requests).toEqual([]);
 });
 
-it("reads one record per isrPrefix, however many routes of it a batch carries", async () => {
+it("reads one record per isrPrefix, however many routes of it a batch contains", async () => {
   const { deps, requests } = harness(record());
 
   await resolve(deps, message({ routePath: "/a" }));

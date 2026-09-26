@@ -41,17 +41,17 @@ var (
 func RuntimeLayer(architecture string) (Payload, error) {
 	goarch, builds := arch.GoArch(architecture)
 	if !builds {
-		return Payload{}, fmt.Errorf("this provider carries no runtime built for %q", architecture)
+		return Payload{}, fmt.Errorf("this provider ships no runtime built for %q", architecture)
 	}
 	return runtimeLayers[goarch], nil
 }
 
 func ContainerRuntime(arch string) (Payload, error) {
-	held, builds := containerRuntimes[arch]
+	payload, builds := containerRuntimes[arch]
 	if !builds {
-		return Payload{}, fmt.Errorf("this provider carries no container runtime built for %q", arch)
+		return Payload{}, fmt.Errorf("this provider ships no container runtime built for %q", arch)
 	}
-	return held, nil
+	return payload, nil
 }
 
 func UploadCompleter() Payload { return uploadCompleter }

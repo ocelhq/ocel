@@ -113,10 +113,10 @@ func TestShapeDescribesAProductionDeployBehindCloudFront(t *testing.T) {
 
 	counts := typeCounts(set)
 	if counts["aws_cloudfront_distribution"] != 1 || counts["aws_lb"] != 1 || counts["aws_rds_cluster"] != 1 || counts["aws_kms_key"] != 1 || counts["aws_data_transfer"] != 0 {
-		t.Errorf("counts = %v, want the distribution, the substrate, the cluster, the vars key and no origin egress behind CloudFront", counts)
+		t.Errorf("counts = %v, want the distribution, the container infrastructure's load balancer, the cluster, the vars key and no origin egress behind CloudFront", counts)
 	}
 	if counts["aws_lambda_function"] != 1+1+3 {
-		t.Errorf("lambdas = %d, want the app's, the upload completer's and the three the next runtime's features stand up", counts["aws_lambda_function"])
+		t.Errorf("lambdas = %d, want the app's, the upload completer's and the three the next runtime's features provision", counts["aws_lambda_function"])
 	}
 	for _, r := range set.GetResources() {
 		if r.GetVendor() != "aws" || r.GetRegion() != "us-east-1" {
@@ -125,7 +125,7 @@ func TestShapeDescribesAProductionDeployBehindCloudFront(t *testing.T) {
 	}
 }
 
-func TestShapeOfAPreviewCarriesItsOwnClassAndWildcard(t *testing.T) {
+func TestShapeOfAPreviewHasItsOwnClassAndWildcard(t *testing.T) {
 	client, _ := costServed(t)
 
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
@@ -149,7 +149,7 @@ func TestShapeOfAPreviewCarriesItsOwnClassAndWildcard(t *testing.T) {
 	}
 }
 
-func TestShapeBehindAPIGatewayStandsUpARestAPIPerDeploy(t *testing.T) {
+func TestShapeBehindAPIGatewayProvisionsARestAPIPerDeploy(t *testing.T) {
 	client, _ := costServed(t)
 
 	manifest := shopManifest()
@@ -167,11 +167,11 @@ func TestShapeBehindAPIGatewayStandsUpARestAPIPerDeploy(t *testing.T) {
 
 	counts := typeCounts(set)
 	if counts["aws_api_gateway_rest_api"] != 2 || counts["aws_cloudfront_distribution"] != 0 || counts["aws_lb"] != 0 || counts["aws_data_transfer"] != 1 {
-		t.Errorf("counts = %v, want the shared 404 responder and the project's own REST API, the app's egress, no CloudFront and no substrate", counts)
+		t.Errorf("counts = %v, want the shared 404 responder and the project's own REST API, the app's egress, no CloudFront and no container load balancer", counts)
 	}
 }
 
-func TestShapeWithABroughtVarsKeyStandsUpNoKey(t *testing.T) {
+func TestShapeWithABroughtVarsKeyProvisionsNoKey(t *testing.T) {
 	p := aws.NewProvider(aws.Options{Region: "us-east-1", VarsKey: "arn:aws:kms:us-east-1:1:key/k"}, nil, awssdk.Config{Region: "us-east-1"}, defaultNamespace)
 	config := providerserver.Config{
 		Version: "test",

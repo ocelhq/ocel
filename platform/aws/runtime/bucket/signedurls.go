@@ -22,14 +22,14 @@ func ttlOf(d interface{ AsDuration() time.Duration }) time.Duration {
 	if d == nil {
 		return presignTTL
 	}
-	held := d.AsDuration()
+	requested := d.AsDuration()
 	switch {
-	case held <= 0:
+	case requested <= 0:
 		return presignTTL
-	case held > maxPresignTTL:
+	case requested > maxPresignTTL:
 		return maxPresignTTL
 	default:
-		return held
+		return requested
 	}
 }
 
@@ -48,16 +48,16 @@ func vendorHeaders(signed map[string][]string) map[string]string {
 const metadataCap = 2048
 
 func withinMetadataCap(metadata map[string]string) error {
-	held := 0
+	size := 0
 	for name, value := range metadata {
-		held += len(name) + len(value)
+		size += len(name) + len(value)
 	}
-	if held <= metadataCap {
+	if size <= metadataCap {
 		return nil
 	}
 	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-		"this object's metadata is %d bytes across its names and values and a store holds at most %d, so it is refused before anything is signed",
-		held, metadataCap))
+		"this object's metadata is %d bytes across its names and values and a store accepts at most %d, so it is refused before anything is signed",
+		size, metadataCap))
 }
 
 func (s *Service) Sign(ctx context.Context, req *bucketv1.SignRequest) (*bucketv1.SignResponse, error) {

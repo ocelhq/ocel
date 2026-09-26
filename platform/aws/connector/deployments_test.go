@@ -35,7 +35,7 @@ func TestTheConnectorRereadsTheBootstrapOnceItsMemoAges(t *testing.T) {
 
 	stacks := &countingStacks{}
 	clock := time.Unix(1_000_000, 0)
-	held := &deployments{
+	bootstraps := &deployments{
 		namespace: bootstrap.Namespace("ocel"),
 		stacks:    stacks,
 		now:       func() time.Time { return clock },
@@ -43,10 +43,10 @@ func TestTheConnectorRereadsTheBootstrapOnceItsMemoAges(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	if _, err := held.Table(ctx, edge.ClassProduction); err != nil {
+	if _, err := bootstraps.Table(ctx, edge.ClassProduction); err != nil {
 		t.Fatalf("Table: %v", err)
 	}
-	if _, err := held.Table(ctx, edge.ClassProduction); err != nil {
+	if _, err := bootstraps.Table(ctx, edge.ClassProduction); err != nil {
 		t.Fatalf("Table again: %v", err)
 	}
 	if stacks.describes != 1 {
@@ -55,7 +55,7 @@ func TestTheConnectorRereadsTheBootstrapOnceItsMemoAges(t *testing.T) {
 
 	stacks.table = "ocel-state"
 	clock = clock.Add(deploymentsTTL)
-	table, err := held.Table(ctx, edge.ClassProduction)
+	table, err := bootstraps.Table(ctx, edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("Table after the memo aged: %v", err)
 	}

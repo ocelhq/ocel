@@ -43,7 +43,7 @@ func Open(key, sealed []byte) (map[string]string, error) {
 		return nil, err
 	}
 	if len(sealed) < NonceBytes {
-		return nil, fmt.Errorf("baked variables are %d bytes, too short to hold a nonce", len(sealed))
+		return nil, fmt.Errorf("baked variables are %d bytes, too short to contain a nonce", len(sealed))
 	}
 	payload, err := gcm.Open(nil, sealed[:NonceBytes], sealed[NonceBytes:], nil)
 	if err != nil {

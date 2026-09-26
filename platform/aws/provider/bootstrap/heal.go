@@ -94,7 +94,7 @@ func AdmitReplacements(ns Namespace, accept bool, log func(string)) cfn.ChangeRe
 		}
 		if isCoreStack(ns, stackName) {
 			return fmt.Errorf(
-				"writing %s would replace %s rather than update it in place, and every Pulumi state this account holds lives in it: every app deployed from this bootstrap would be orphaned.\nNo flag writes it anyway. Upgrade to a CLI whose core is an in-place update of this one",
+				"writing %s would replace %s rather than update it in place, and every Pulumi state this account stores lives in it: every app deployed from this bootstrap would be orphaned.\nNo flag writes it anyway. Upgrade to a CLI whose core is an in-place update of this one",
 				stackName, strings.Join(replaced, ", "),
 			)
 		}
@@ -102,7 +102,7 @@ func AdmitReplacements(ns Namespace, accept bool, log func(string)) cfn.ChangeRe
 			return nil
 		}
 		return fmt.Errorf(
-			"writing %s would replace %s rather than update it in place, and what it holds does not survive that.\nRe-run with --yes to write it anyway",
+			"writing %s would replace %s rather than update it in place, and what it contains does not survive that.\nRe-run with --yes to write it anyway",
 			stackName, strings.Join(replaced, ", "),
 		)
 	}
@@ -171,7 +171,7 @@ func heal(ctx context.Context, apis APIs, target spec, req HealRequest, log func
 				if RefusedWrite(err) {
 					return healed, ErrHealNotPermitted
 				}
-				log(fmt.Sprintf("could not refresh %s, and this deploy runs against it as it stands: %v", stale[i].Name, err))
+				log(fmt.Sprintf("could not refresh %s, and this deploy runs against it unchanged: %v", stale[i].Name, err))
 				continue
 			}
 			healed = healed || done
@@ -190,7 +190,7 @@ func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale
 	if err != nil || current == nil {
 		return false, err
 	}
-	if stackSettling(current.StackStatus) {
+	if stackBusy(current.StackStatus) {
 		return false, waitOutRun(ctx, apis.CFN, stale, log)
 	}
 
@@ -215,12 +215,12 @@ func healStack(ctx context.Context, apis APIs, ns Namespace, class string, stale
 }
 
 func waitOutRun(ctx context.Context, stacks cfn.API, stale StackStamp, log func(string)) error {
-	settled, err := settleStack(ctx, stacks, stale.Name, log)
+	idle, err := awaitStackIdle(ctx, stacks, stale.Name, log)
 	if err != nil {
 		return err
 	}
-	if !settled {
-		log(fmt.Sprintf("%s is still being written by another run, and this deploy runs against it as it stands", stale.Name))
+	if !idle {
+		log(fmt.Sprintf("%s is still being written by another run, and this deploy runs against it unchanged", stale.Name))
 		return nil
 	}
 	stack, err := cfn.DescribeStack(ctx, stacks, stale.Name)
@@ -230,31 +230,31 @@ func waitOutRun(ctx context.Context, stacks cfn.API, stale StackStamp, log func(
 	if stack != nil && readStamp(stack.Tags).Digest == stale.Intended {
 		return nil
 	}
-	log(fmt.Sprintf("%s was written by another run and is still behind what this build carries, so this deploy leaves it to whoever is writing it", stale.Name))
+	log(fmt.Sprintf("%s was written by another run and is still behind the template this build renders, so this deploy leaves it to whoever is writing it", stale.Name))
 	return nil
 }
 
-const settleAttempts = 6
+const idleAttempts = 6
 
-func settleStack(ctx context.Context, stacks cfn.API, stackName string, log func(string)) (bool, error) {
+func awaitStackIdle(ctx context.Context, stacks cfn.API, stackName string, log func(string)) (bool, error) {
 	for attempt := 0; ; attempt++ {
 		stack, err := cfn.DescribeStack(ctx, stacks, stackName)
 		if err != nil {
 			return false, err
 		}
-		if stack == nil || !stackSettling(stack.StackStatus) {
+		if stack == nil || !stackBusy(stack.StackStatus) {
 			return true, nil
 		}
-		if attempt+1 >= settleAttempts {
+		if attempt+1 >= idleAttempts {
 			return false, nil
 		}
-		log(fmt.Sprintf("%s is %s under another run; look %d of %d before this deploy stops waiting on it", stackName, stack.StackStatus, attempt+1, settleAttempts))
-		if err := cfn.HoldBefore(ctx, cfn.ChangeSetDelay(attempt)); err != nil {
+		log(fmt.Sprintf("%s is %s under another run; look %d of %d before this deploy stops waiting on it", stackName, stack.StackStatus, attempt+1, idleAttempts))
+		if err := cfn.WaitBefore(ctx, cfn.ChangeSetDelay(attempt)); err != nil {
 			return false, err
 		}
 	}
 }
 
-func stackSettling(status cfntypes.StackStatus) bool {
+func stackBusy(status cfntypes.StackStatus) bool {
 	return strings.HasSuffix(string(status), "_IN_PROGRESS")
 }

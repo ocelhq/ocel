@@ -36,19 +36,19 @@ func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error)
 	if err != nil {
 		return provider.ConnectorTarget{}, err
 	}
-	standing, err := awsconnector.Read(ctx, cloudformation.NewFromConfig(p.aws), p.namespace)
+	installation, err := awsconnector.Read(ctx, cloudformation.NewFromConfig(p.aws), p.namespace)
 	if err != nil {
 		return provider.ConnectorTarget{}, err
 	}
 	described := provider.ConnectorTarget{
 		Fingerprint: fingerprint,
-		Hostname:    hostOf(standing.URL),
+		Hostname:    hostOf(installation.URL),
 		Arch:        awsconnector.Arch,
 	}
-	if standing.Present {
+	if installation.Present {
 		described.Installed = &provider.ConnectorRelease{
-			Version:   standing.Version,
-			PublicKey: standing.PublicKey,
+			Version:   installation.Version,
+			PublicKey: installation.PublicKey,
 			Compute:   connectorCompute,
 		}
 	}
@@ -61,7 +61,7 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	if err != nil {
 		return provider.ConnectorAddress{}, err
 	}
-	standing, err := awsconnector.Install(ctx, p.connectorAPIs(), p.namespace, awsconnector.Release{
+	installation, err := awsconnector.Install(ctx, p.connectorAPIs(), p.namespace, awsconnector.Release{
 		Binary:  install.Binary,
 		Version: install.Version,
 		Config:  install.Config,
@@ -69,18 +69,18 @@ func (p connector) Install(ctx context.Context, install provider.ConnectorInstal
 	if err != nil {
 		return provider.ConnectorAddress{}, err
 	}
-	return provider.ConnectorAddress{URL: standing.URL, PublicKey: standing.PublicKey, Compute: compute}, nil
+	return provider.ConnectorAddress{URL: installation.URL, PublicKey: installation.PublicKey, Compute: compute}, nil
 }
 
 func (p connector) Remove(ctx context.Context, progress edge.Progress) error {
 	return awsconnector.Remove(ctx, p.connectorAPIs(), p.namespace, saying(progress))
 }
 
-func hostOf(held string) string {
-	if held == "" {
+func hostOf(rawURL string) string {
+	if rawURL == "" {
 		return ""
 	}
-	parsed, err := url.Parse(held)
+	parsed, err := url.Parse(rawURL)
 	if err != nil {
 		return ""
 	}

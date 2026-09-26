@@ -35,7 +35,7 @@ func summary(id, kind string) cfntypes.StackResourceSummary {
 func removingBootstrapper(t *testing.T, class string) Bootstrap {
 	t.Helper()
 
-	b := standingBootstrapper(t, class)
+	b := installedBootstrapper(t, class)
 	stackName, err := defaultNamespace.StackNameFor(class)
 	if err != nil {
 		t.Fatalf("StackNameFor(%s): %v", class, err)
@@ -105,10 +105,10 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 	isr := groupNamed(plan, "aws/"+defaultNamespace.FeatureStackName(bootstrap.FeatureISR, bootstrap.ClassProduction))
 	core := groupNamed(plan, "aws/"+coreStackName)
 	if isr == nil || core == nil {
-		t.Fatalf("plan groups = %s, want the isr stack and the core it stands on", groupNames(plan))
+		t.Fatalf("plan groups = %s, want the isr stack and the core it depends on", groupNames(plan))
 	}
 	if isr.Feature != bootstrap.FeatureISR {
-		t.Errorf("the isr group's feature = %q, want it tagged with the feature it carries", isr.Feature)
+		t.Errorf("the isr group's feature = %q, want it tagged with the feature it provisions", isr.Feature)
 	}
 	if plan.Groups[0].Name != isr.Name {
 		t.Errorf("the plan opens with %q, want the feature stacks ahead of the core they depend on", plan.Groups[0].Name)
@@ -131,12 +131,12 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 		t.Errorf("the state bucket row = %+v, want the note that its contents are stranded, and the pace of emptying it", bucket)
 	}
 	if row := changeNamed(core, "StateTable"); row != nil && row.Reason != "" {
-		t.Errorf("the state table row carries %q; a row says nothing unless it carries a decision", row.Reason)
+		t.Errorf("the state table row reads %q; a row says nothing unless it records a decision", row.Reason)
 	}
 
 	params := groupNamed(plan, "aws/"+bootstrap.ParamGroupName)
 	if params == nil || params.Action != provider.ActionDelete {
-		t.Fatalf("plan groups = %s, want the parameters this bootstrap holds", groupNames(plan))
+		t.Fatalf("plan groups = %s, want the parameters this bootstrap stores", groupNames(plan))
 	}
 	credentials := changeNamed(params, edgeParam(t, bootstrap.ClassProduction, "/credentials"))
 	if credentials == nil || credentials.Kind != "AWS::SSM::Parameter" {
@@ -148,7 +148,7 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 	}
 	passphrase := changeNamed(params, passphraseParam)
 	if passphrase == nil || passphrase.Action != provider.ActionDelete || passphrase.Reason == "" {
-		t.Errorf("the passphrase row = %+v, want it deleted when no sibling bootstrap holds it, with the reason the typed confirmation names", passphrase)
+		t.Errorf("the passphrase row = %+v, want it deleted when no sibling bootstrap shares it, with the reason the typed confirmation names", passphrase)
 	}
 
 	front := groupNamed(plan, string(cloudflareKind)+"/edge")
@@ -159,14 +159,14 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 		t.Errorf("the edge group's feature = %q, want the one it fronts through", front.Feature)
 	}
 	if len(front.Changes) != 2 {
-		t.Fatalf("the edge group carries %+v, want a row per thing the edge stood up", front.Changes)
+		t.Fatalf("the edge group has %+v, want a row per thing the edge provisioned", front.Changes)
 	}
 	if cache := changeNamed(front, "ocel-edge-cache"); cache == nil || !cache.Slow {
 		t.Errorf("the R2 bucket row = %+v, want the pace of emptying it kept", cache)
 	}
 }
 
-func TestPlanRemovalKeepsThePassphraseABootstrappedSiblingHolds(t *testing.T) {
+func TestPlanRemovalKeepsThePassphraseABootstrappedSiblingShares(t *testing.T) {
 	t.Parallel()
 
 	b := removingBootstrapper(t, bootstrap.ClassPreview)
@@ -182,7 +182,7 @@ func TestPlanRemovalKeepsThePassphraseABootstrappedSiblingHolds(t *testing.T) {
 		t.Fatalf("the passphrase row = %+v, want it kept", kept)
 	}
 	if !strings.Contains(kept.Reason, bootstrap.ClassProduction) {
-		t.Errorf("reason = %q, want it to name the bootstrap still holding it", kept.Reason)
+		t.Errorf("reason = %q, want it to name the bootstrap still sharing it", kept.Reason)
 	}
 	if params.Action != provider.ActionDelete {
 		t.Errorf("the parameters group = %q, want it still a deletion: only the passphrase stays", params.Action)
@@ -200,7 +200,7 @@ func TestPlanRemovalOfAnAbsentBootstrapStillPlansWhatItLeftBehind(t *testing.T) 
 		t.Fatalf("PlanRemove: %v", err)
 	}
 	if groupNamed(plan, "aws/"+coreStackName) != nil {
-		t.Errorf("plan groups = %s, want no stack planned where none stands", groupNames(plan))
+		t.Errorf("plan groups = %s, want no stack planned where none exists", groupNames(plan))
 	}
 	params := groupNamed(plan, "aws/"+bootstrap.ParamGroupName)
 	if changeNamed(params, edgeParam(t, bootstrap.ClassProduction, "/credentials")) == nil {
@@ -220,7 +220,7 @@ func TestPlanRemovalLeavesOutAnEdgeThatSaysNothingAboutItsOwnRemoval(t *testing.
 	}
 	for _, group := range plan.Groups {
 		if group.Kind == provider.EdgeGroupKind {
-			t.Errorf("plan carries %+v for an edge that says nothing about its own removal", group)
+			t.Errorf("plan includes %+v for an edge that says nothing about its own removal", group)
 		}
 	}
 }
@@ -229,7 +229,7 @@ func frontedBootstrapper(t *testing.T, class string) (Bootstrap, *planningEdge, 
 	t.Helper()
 
 	b := removingBootstrapper(t, class)
-	standing := b.Edge.(*planningEdge)
+	installed := b.Edge.(*planningEdge)
 	selected := &planningEdge{
 		teardownEdge: teardownEdge{kind: cloudfrontKind},
 		removals: []edge.PlanChange{
@@ -237,12 +237,12 @@ func frontedBootstrapper(t *testing.T, class string) (Bootstrap, *planningEdge, 
 		},
 	}
 	b.Edge = selected
-	b.Edges = registryOf(selected, standing)
-	b.Kinds = kindsOf(selected, standing)
-	return b, selected, standing
+	b.Edges = registryOf(selected, installed)
+	b.Kinds = kindsOf(selected, installed)
+	return b, selected, installed
 }
 
-func TestPlanRemovalNamesEveryStandingEdgeByItsOwnKind(t *testing.T) {
+func TestPlanRemovalNamesEveryInstalledEdgeByItsOwnKind(t *testing.T) {
 	t.Parallel()
 
 	b, _, _ := frontedBootstrapper(t, bootstrap.ClassProduction)
@@ -257,42 +257,42 @@ func TestPlanRemovalNamesEveryStandingEdgeByItsOwnKind(t *testing.T) {
 		t.Fatalf("plan groups = %s, want the selected edge under its own kind and feature", groupNames(plan))
 	}
 	if changeNamed(front, "ocel-routes") == nil {
-		t.Errorf("the %s group carries %+v, want the rows that edge planned", front.Name, front.Changes)
+		t.Errorf("the %s group has %+v, want the rows that edge planned", front.Name, front.Changes)
 	}
 
 	other := groupNamed(plan, string(cloudflareKind)+"/edge")
 	if other == nil || other.Feature != bootstrap.FeatureCloudflareEdge {
-		t.Fatalf("plan groups = %s, want the standing edge too, under its own kind and feature", groupNames(plan))
+		t.Fatalf("plan groups = %s, want the installed edge too, under its own kind and feature", groupNames(plan))
 	}
 	if changeNamed(other, "ocel-edge-cache") == nil {
-		t.Errorf("the %s group carries %+v, want the rows that edge planned", other.Name, other.Changes)
+		t.Errorf("the %s group has %+v, want the rows that edge planned", other.Name, other.Changes)
 	}
 	for _, group := range []*provider.ChangeGroup{front, other} {
 		for _, change := range group.Changes {
 			if strings.HasPrefix(change.Kind, "Cloudflare::") != (group.Name == string(cloudflareKind)+"/edge") {
-				t.Errorf("group %q carries %+v, want only the rows of the edge it names", group.Name, change)
+				t.Errorf("group %q has %+v, want only the rows of the edge it names", group.Name, change)
 			}
 		}
 	}
 }
 
-func TestPlanRemovalLeavesOutAnEdgeThisAccountHoldsNothingFor(t *testing.T) {
+func TestPlanRemovalLeavesOutAnEdgeThisAccountStoresNothingFor(t *testing.T) {
 	t.Parallel()
 
-	b, selected, standing := frontedBootstrapper(t, bootstrap.ClassProduction)
+	b, selected, installed := frontedBootstrapper(t, bootstrap.ClassProduction)
 	unused := &planningEdge{
 		teardownEdge: teardownEdge{kind: "relay"},
 		removals:     []edge.PlanChange{{Kind: "Relay::Worker", Name: "ocel-relay", Action: edge.PlanDelete}},
 	}
-	b.Edges = registryOf(selected, standing, unused)
-	b.Kinds = kindsOf(selected, standing, unused)
+	b.Edges = registryOf(selected, installed, unused)
+	b.Kinds = kindsOf(selected, installed, unused)
 
 	plan, err := b.PlanRemove(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("PlanRemove: %v", err)
 	}
 	if group := groupNamed(plan, "relay/edge"); group != nil {
-		t.Errorf("plan carries %+v for an edge this account holds no parameters for", group)
+		t.Errorf("plan includes %+v for an edge this account stores no parameters for", group)
 	}
 }
 
@@ -307,21 +307,21 @@ func TestPlanRemovalStillSeesAnEdgeWhoseParametersAreAlreadyGone(t *testing.T) {
 		t.Fatalf("PlanRemove: %v", err)
 	}
 	if groupNamed(plan, string(cloudflareKind)+"/edge") == nil {
-		t.Errorf("plan groups = %s, want the edge whose feature stack still stands: its externals are live and nothing else would take them", groupNames(plan))
+		t.Errorf("plan groups = %s, want the edge whose feature stack is still provisioned: its externals are live and nothing else would take them", groupNames(plan))
 	}
 }
 
 func TestRemoveTearsDownAnEdgeWhoseParametersAreAlreadyGone(t *testing.T) {
 	t.Parallel()
 
-	b, _, standing := frontedBootstrapper(t, bootstrap.ClassProduction)
+	b, _, installed := frontedBootstrapper(t, bootstrap.ClassProduction)
 	severed(t, b, bootstrap.ClassProduction)
 
 	if err := b.Remove(context.Background(), edge.ClassProduction, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
-	if len(standing.torndown) == 0 {
-		t.Error("the cloudflare edge was left standing, so a run that severed its parameters and stopped orphans them for good")
+	if len(installed.torndown) == 0 {
+		t.Error("the cloudflare edge was left installed, so a run that severed its parameters and stopped orphans them for good")
 	}
 }
 
@@ -334,10 +334,10 @@ func severed(t *testing.T, b Bootstrap, class string) {
 	if err != nil {
 		t.Fatalf("EdgeParamPrefix(%s): %v", class, err)
 	}
-	held := b.SSM.(*teardownSSM).params
-	for name := range held {
+	params := b.SSM.(*teardownSSM).params
+	for name := range params {
 		if strings.HasPrefix(name, prefix+"/") {
-			delete(held, name)
+			delete(params, name)
 		}
 	}
 }
@@ -345,31 +345,31 @@ func severed(t *testing.T, b Bootstrap, class string) {
 func TestRemoveTearsDownEveryEdgeThePlanShowed(t *testing.T) {
 	t.Parallel()
 
-	b, selected, standing := frontedBootstrapper(t, bootstrap.ClassProduction)
+	b, selected, installed := frontedBootstrapper(t, bootstrap.ClassProduction)
 
 	if err := b.Remove(context.Background(), edge.ClassProduction, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
-	for _, front := range []*planningEdge{selected, standing} {
+	for _, front := range []*planningEdge{selected, installed} {
 		if !slices.Equal(front.torndown, []edge.Class{edge.ClassProduction}) {
 			t.Errorf("the %s edge saw teardowns %v, want the class the plan showed it under", front.Kind(), front.torndown)
 		}
 	}
 }
 
-func TestRemoveLeavesAloneAnEdgeThisAccountHoldsNothingFor(t *testing.T) {
+func TestRemoveLeavesAloneAnEdgeThisAccountStoresNothingFor(t *testing.T) {
 	t.Parallel()
 
-	b, selected, standing := frontedBootstrapper(t, bootstrap.ClassProduction)
+	b, selected, installed := frontedBootstrapper(t, bootstrap.ClassProduction)
 	unused := &planningEdge{teardownEdge: teardownEdge{kind: "relay"}}
-	b.Edges = registryOf(selected, standing, unused)
-	b.Kinds = kindsOf(selected, standing, unused)
+	b.Edges = registryOf(selected, installed, unused)
+	b.Kinds = kindsOf(selected, installed, unused)
 
 	if err := b.Remove(context.Background(), edge.ClassProduction, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
 	if len(unused.torndown) != 0 {
-		t.Errorf("the relay edge saw teardowns %v, want none: this account holds nothing for it", unused.torndown)
+		t.Errorf("the relay edge saw teardowns %v, want none: this account stores nothing for it", unused.torndown)
 	}
 }
 
@@ -385,7 +385,7 @@ func TestPlanRemovalSaysWhatDroppingTheVarsKeyStrands(t *testing.T) {
 
 	group := groupNamed(plan, "aws/"+defaultNamespace.FeatureStackName(bootstrap.FeatureVarsKey, bootstrap.ClassProduction))
 	if group == nil {
-		t.Fatalf("plan groups = %s, want the stack the vars key stands in", groupNames(plan))
+		t.Fatalf("plan groups = %s, want the stack the vars key is provisioned in", groupNames(plan))
 	}
 	key := changeNamed(group, "VarsKey")
 	if key == nil || key.Reason == "" {

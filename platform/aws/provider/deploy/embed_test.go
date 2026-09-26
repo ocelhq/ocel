@@ -174,7 +174,7 @@ func TestMergeEmbeddedTar(t *testing.T) {
 		before := readTestZip(t, srcZip)
 		after := readTestZip(t, dst)
 		if len(after) != len(before)+1 {
-			t.Fatalf("merged zip holds %d entries, want %d", len(after), len(before)+1)
+			t.Fatalf("merged zip has %d entries, want %d", len(after), len(before)+1)
 		}
 		for name, got := range before {
 			merged, ok := after[name]
@@ -223,7 +223,7 @@ func TestMergeEmbeddedTar(t *testing.T) {
 			t.Fatalf("mergeEmbeddedTar: %v", err)
 		}
 		if got := len(readTestZip(t, dst)); got != len(original)+1 {
-			t.Fatalf("merged zip holds %d entries, want %d", got, len(original)+1)
+			t.Fatalf("merged zip has %d entries, want %d", got, len(original)+1)
 		}
 	})
 }
@@ -351,9 +351,9 @@ func embedTestPass(t *testing.T, putter *fakePutter, code *fakeFunctionCode, inv
 			CacheKey:     embedTestCacheKey,
 			TreeBytes:    1 << 20,
 		}},
-		budget: time.Minute,
-		settle: embedUpdateSettle,
-		log:    log,
+		budget:     time.Minute,
+		updateWait: embedUpdateWait,
+		log:        log,
 	}, out
 }
 
@@ -393,7 +393,7 @@ func TestEmbedPass(t *testing.T) {
 				names = append(names, f.Name)
 			}
 			if len(names) != 2 {
-				t.Errorf("uploaded package holds %v, want the original entry plus the tar", names)
+				t.Errorf("uploaded package contains %v, want the original entry plus the tar", names)
 			}
 		}
 		for _, key := range code.updated {
@@ -426,7 +426,7 @@ func TestEmbedPass(t *testing.T) {
 				want:    "left on its original package",
 			},
 			{
-				name:    "the code update settles as failed",
+				name:    "the code update finishes as failed",
 				putter:  &fakePutter{},
 				code:    &fakeFunctionCode{status: lambdatypes.LastUpdateStatusFailed},
 				invoker: embeddedReply(),
@@ -492,33 +492,33 @@ func TestEmbedPass(t *testing.T) {
 		putter, code := &fakePutter{}, &fakeFunctionCode{}
 		pass, out := embedTestPass(t, putter, code, embeddedReply())
 		pass.budget = 250 * time.Millisecond
-		pass.settle = time.Minute
+		pass.updateWait = time.Minute
 		pass.run(context.Background())
 
 		if len(code.updated) != 0 {
 			t.Errorf("the pass issued a code update it could not wait out: %v", code.updated)
 		}
 		log := out()
-		for _, want := range []string{"too little to settle", "left on its original package", "embedded 0/1"} {
+		for _, want := range []string{"too little to finish", "left on its original package", "embedded 0/1"} {
 			if !strings.Contains(log, want) {
 				t.Errorf("embed log missing %q:\n%s", want, log)
 			}
 		}
 	})
 
-	t.Run("unsettled update is never reported as untouched", func(t *testing.T) {
+	t.Run("unfinished update is never reported as untouched", func(t *testing.T) {
 		putter := &fakePutter{}
 		code := &fakeFunctionCode{status: lambdatypes.LastUpdateStatusInProgress}
 		invoker := embeddedReply()
 		pass, out := embedTestPass(t, putter, code, invoker)
-		pass.settle = 10 * time.Millisecond
+		pass.updateWait = 10 * time.Millisecond
 		pass.run(context.Background())
 
 		log := out()
 		if strings.Contains(log, "left on its original package") {
 			t.Errorf("the pass reported an in-flight update as untouched:\n%s", log)
 		}
-		for _, want := range []string{"did not settle in time", "moving onto", "embedded 0/1"} {
+		for _, want := range []string{"did not finish in time", "moving onto", "embedded 0/1"} {
 			if !strings.Contains(log, want) {
 				t.Errorf("embed log missing %q:\n%s", want, log)
 			}

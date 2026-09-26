@@ -47,10 +47,10 @@ type cloudFrontEdgeShape struct {
 	} `yaml:"Outputs"`
 }
 
-func TestCloudFrontEdgeStandsUpWhatEveryDistributionInTheAccountShares(t *testing.T) {
+func TestCloudFrontEdgeProvisionsWhatEveryDistributionInTheAccountShares(t *testing.T) {
 	for _, class := range []string{ClassProduction, ClassPreview} {
 		t.Run(class, func(t *testing.T) {
-			held := edge.Class(class)
+			edgeClass := edge.Class(class)
 			var tmpl cloudFrontEdgeShape
 			if err := yaml.Unmarshal([]byte(featureTemplate(FeatureCloudFrontEdge, class)), &tmpl); err != nil {
 				t.Fatalf("template is not valid YAML: %v", err)
@@ -58,58 +58,58 @@ func TestCloudFrontEdgeStandsUpWhatEveryDistributionInTheAccountShares(t *testin
 
 			routes, ok := tmpl.Resources["EdgeRoutes"]
 			if !ok {
-				t.Fatal("template stands up no key value store; the resolver has nothing to read a hostname's release out of")
+				t.Fatal("template provisions no key value store; the resolver has nothing to read a hostname's release out of")
 			}
 			if routes.Type != "AWS::CloudFront::KeyValueStore" {
 				t.Errorf("EdgeRoutes Type = %q, want AWS::CloudFront::KeyValueStore", routes.Type)
 			}
-			if got, want := routes.Properties.Name, defaultNamespace.EdgeRoutesStoreName(held); got != want {
+			if got, want := routes.Properties.Name, defaultNamespace.EdgeRoutesStoreName(edgeClass); got != want {
 				t.Errorf("key value store name = %q, want %q", got, want)
 			}
 
 			fn, ok := tmpl.Resources["EdgeResolver"]
 			if !ok {
-				t.Fatal("template stands up no resolver function; nothing points a request at the release that answers on its hostname")
+				t.Fatal("template provisions no resolver function; nothing points a request at the release that answers on its hostname")
 			}
 			if fn.Type != "AWS::CloudFront::Function" {
 				t.Errorf("EdgeResolver Type = %q, want AWS::CloudFront::Function", fn.Type)
 			}
-			if got, want := fn.Properties.Name, defaultNamespace.EdgeResolverName(held); got != want {
+			if got, want := fn.Properties.Name, defaultNamespace.EdgeResolverName(edgeClass); got != want {
 				t.Errorf("resolver name = %q, want %q", got, want)
 			}
 			if !fn.Properties.AutoPublish {
 				t.Error("AutoPublish = false; an unpublished resolver runs on no distribution")
 			}
 			if got, want := strings.TrimRight(fn.Properties.FunctionCode, "\n"), strings.TrimRight(string(resolver.Code()), "\n"); got != want {
-				t.Error("the function carries something other than the resolver this build embeds")
+				t.Error("the function contains something other than the resolver this build embeds")
 			}
 			if got := fn.Properties.FunctionConfig.Runtime; got != "cloudfront-js-2.0" {
 				t.Errorf("resolver runtime = %q, want cloudfront-js-2.0: no earlier runtime reads a key value store", got)
 			}
 			assoc := fn.Properties.FunctionConfig.KeyValueStoreAssociations
 			if len(assoc) != 1 || assoc[0].KeyValueStoreARN != "EdgeRoutes.Arn" {
-				t.Errorf("key value store associations = %+v, want the store this same stack stands up", assoc)
+				t.Errorf("key value store associations = %+v, want the store this same stack provisions", assoc)
 			}
 
 			cache, ok := tmpl.Resources["EdgeCachePolicy"]
 			if !ok {
-				t.Fatal("template stands up no cache policy; every distribution would have to carry one of its own")
+				t.Fatal("template provisions no cache policy; every distribution would have to bring one of its own")
 			}
 			if cache.Type != "AWS::CloudFront::CachePolicy" {
 				t.Errorf("EdgeCachePolicy Type = %q, want AWS::CloudFront::CachePolicy", cache.Type)
 			}
-			if got, want := cache.Properties.CachePolicyConfig.Name, defaultNamespace.edgeCachePolicyName(held); got != want {
+			if got, want := cache.Properties.CachePolicyConfig.Name, defaultNamespace.edgeCachePolicyName(edgeClass); got != want {
 				t.Errorf("cache policy name = %q, want %q", got, want)
 			}
 
 			headers, ok := tmpl.Resources["EdgeHeadersPolicy"]
 			if !ok {
-				t.Fatal("template stands up no response-headers policy; no probe can tell which front answered")
+				t.Fatal("template provisions no response-headers policy; no probe can tell which front answered")
 			}
 			if headers.Type != "AWS::CloudFront::ResponseHeadersPolicy" {
 				t.Errorf("EdgeHeadersPolicy Type = %q, want AWS::CloudFront::ResponseHeadersPolicy", headers.Type)
 			}
-			if got, want := headers.Properties.ResponseHeadersPolicyConfig.Name, defaultNamespace.edgeHeadersPolicyName(held); got != want {
+			if got, want := headers.Properties.ResponseHeadersPolicyConfig.Name, defaultNamespace.edgeHeadersPolicyName(edgeClass); got != want {
 				t.Errorf("response headers policy name = %q, want %q", got, want)
 			}
 			removed := []string{}
@@ -124,19 +124,19 @@ func TestCloudFrontEdgeStandsUpWhatEveryDistributionInTheAccountShares(t *testin
 
 			dropper, ok := tmpl.Resources["EdgeEmptyBody"]
 			if !ok {
-				t.Fatal("template stands up no empty-body function; the origin's sentinel byte would reach every browser")
+				t.Fatal("template provisions no empty-body function; the origin's sentinel byte would reach every browser")
 			}
 			if dropper.Type != "AWS::CloudFront::Function" {
 				t.Errorf("EdgeEmptyBody Type = %q, want AWS::CloudFront::Function", dropper.Type)
 			}
-			if got, want := dropper.Properties.Name, defaultNamespace.EdgeEmptyBodyName(held); got != want {
+			if got, want := dropper.Properties.Name, defaultNamespace.EdgeEmptyBodyName(edgeClass); got != want {
 				t.Errorf("empty-body function name = %q, want %q", got, want)
 			}
 			if !dropper.Properties.AutoPublish {
 				t.Error("AutoPublish = false; an unpublished function runs on no distribution")
 			}
 			if got, want := strings.TrimRight(dropper.Properties.FunctionCode, "\n"), strings.TrimRight(string(resolver.EmptyBodyCode()), "\n"); got != want {
-				t.Error("the function carries something other than the empty-body dropper this build embeds")
+				t.Error("the function contains something other than the empty-body dropper this build embeds")
 			}
 			if got := dropper.Properties.FunctionConfig.Runtime; got != "cloudfront-js-2.0" {
 				t.Errorf("empty-body runtime = %q, want cloudfront-js-2.0", got)
@@ -147,12 +147,12 @@ func TestCloudFrontEdgeStandsUpWhatEveryDistributionInTheAccountShares(t *testin
 
 			access, ok := tmpl.Resources["EdgeAssetAccess"]
 			if !ok {
-				t.Fatal("template stands up no origin access control; no distribution can read the asset bucket the core keeps closed")
+				t.Fatal("template provisions no origin access control; no distribution can read the asset bucket the core keeps closed")
 			}
 			if access.Type != "AWS::CloudFront::OriginAccessControl" {
 				t.Errorf("EdgeAssetAccess Type = %q, want AWS::CloudFront::OriginAccessControl", access.Type)
 			}
-			if got, want := access.Properties.OriginAccessControlConfig.Name, defaultNamespace.edgeAssetAccessName(held); got != want {
+			if got, want := access.Properties.OriginAccessControlConfig.Name, defaultNamespace.edgeAssetAccessName(edgeClass); got != want {
 				t.Errorf("origin access control name = %q, want %q", got, want)
 			}
 			if got := access.Properties.OriginAccessControlConfig.OriginAccessControlOriginType; got != "s3" {
@@ -178,13 +178,13 @@ func TestCloudFrontEdgeStandsUpWhatEveryDistributionInTheAccountShares(t *testin
 	}
 }
 
-func TestTheCoreCarriesNothingACloudFrontFrontNeeds(t *testing.T) {
+func TestTheCoreContainsNothingACloudFrontFrontNeeds(t *testing.T) {
 	for _, class := range []string{ClassProduction, ClassPreview} {
 		t.Run(class, func(t *testing.T) {
 			body := coreStackTemplate(defaultNamespace, class, "")
 			for _, resource := range templateResources(body) {
 				if strings.HasPrefix(resource.kind, "AWS::CloudFront::") {
-					t.Errorf("the core holds %s (%s); an edge stands in a feature stack of its own", resource.id, resource.kind)
+					t.Errorf("the core contains %s (%s); an edge is installed in a feature stack of its own", resource.id, resource.kind)
 				}
 			}
 			var tmpl cloudFrontEdgeShape

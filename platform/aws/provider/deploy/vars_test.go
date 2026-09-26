@@ -64,7 +64,7 @@ func TestVarsDecryptPolicy(t *testing.T) {
 func TestAppExecutionRole(t *testing.T) {
 	t.Parallel()
 
-	t.Run("carries the bootstrap's vars key", func(t *testing.T) {
+	t.Run("is granted the bootstrap's vars key", func(t *testing.T) {
 		t.Parallel()
 
 		caches := map[string]*isrConfig{"web": {Prefix: "prod/proj/web/WEB1"}}
@@ -343,7 +343,7 @@ func TestRenderBakedBundle(t *testing.T) {
 			t.Fatalf("renderAppBundle: %v", err)
 		}
 		if bytes.Contains(bundle.Ciphertext, []byte("sk-live")) {
-			t.Error("the bundle carries a sensitive value in the clear")
+			t.Error("the bundle contains a sensitive value in the clear")
 		}
 		env := bundle.env()
 		if len(env) != 1 || env[baked.EnvelopeVar] == "" {
@@ -360,11 +360,11 @@ func TestRenderBakedBundle(t *testing.T) {
 			t.Fatalf("envelope is not base64: %v", err)
 		}
 		if len(key) != baked.KeyBytes {
-			t.Fatalf("envelope holds %d bytes, want the %d-byte data key itself", len(key), baked.KeyBytes)
+			t.Fatalf("envelope decodes to %d bytes, want the %d-byte data key itself", len(key), baked.KeyBytes)
 		}
 		values, err := baked.Open(key, bundle.Ciphertext)
 		if err != nil {
-			t.Fatalf("the bundle does not open under the key its envelope carries: %v", err)
+			t.Fatalf("the bundle does not open under the key its envelope contains: %v", err)
 		}
 		if got, want := values["STRIPE_API_KEY"], "sk-live"; got != want {
 			t.Errorf("STRIPE_API_KEY = %q, want %q", got, want)
@@ -374,7 +374,7 @@ func TestRenderBakedBundle(t *testing.T) {
 		}
 	})
 
-	t.Run("an account with no vars key cannot carry a sensitive variable", func(t *testing.T) {
+	t.Run("an account with no vars key cannot seal a sensitive variable", func(t *testing.T) {
 		t.Parallel()
 
 		app := &contractv1.ManifestApp{

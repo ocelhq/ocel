@@ -23,15 +23,15 @@ func TestRoutesAreKeyedByTheHostnameLowercased(t *testing.T) {
 	}, nil); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
-	if _, held := w.store.held(fakeStoreARN)["shop.example.com"]; !held {
-		t.Fatalf("the store holds %v, want the hostname lowercased: the resolver looks a host up in lower case", slices.Sorted(keysOf(w.store.held(fakeStoreARN))))
+	if _, stored := w.store.itemsOf(fakeStoreARN)["shop.example.com"]; !stored {
+		t.Fatalf("the store contains %v, want the hostname lowercased: the resolver looks a host up in lower case", slices.Sorted(keysOf(w.store.itemsOf(fakeStoreARN))))
 	}
 
 	if err := writer.apply(context.Background(), nil, []string{"SHOP.example.COM"}); err != nil {
 		t.Fatalf("apply the delete: %v", err)
 	}
-	if held := w.store.held(fakeStoreARN); len(held) != 0 {
-		t.Errorf("the store holds %v after the delete, want nothing: a route must not outlive the hostname however it was spelled", slices.Sorted(keysOf(held)))
+	if items := w.store.itemsOf(fakeStoreARN); len(items) != 0 {
+		t.Errorf("the store contains %v after the delete, want nothing: a route must not outlive the hostname however it was spelled", slices.Sorted(keysOf(items)))
 	}
 }
 

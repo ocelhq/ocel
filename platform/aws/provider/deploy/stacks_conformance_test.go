@@ -43,11 +43,11 @@ type pushingAssetSets struct {
 func (p pushingAssetSets) NewResource(args sdk.MockResourceArgs) (string, resource.PropertyMap, error) {
 	if args.TypeToken == assetSetToken && p.pending != nil {
 		id := pendingKey(args.Inputs["stack"].StringValue(), args.Inputs["set"].StringValue())
-		held, waiting := p.pending.take(id)
+		queued, waiting := p.pending.take(id)
 		if !waiting {
-			return "", nil, fmt.Errorf("the program declared %s but the run held nothing to push for it", id)
+			return "", nil, fmt.Errorf("the program declared %s but the run queued nothing to push for it", id)
 		}
-		if err := held.set.push(context.Background(), held.progress); err != nil {
+		if err := queued.set.push(context.Background(), queued.progress); err != nil {
 			return "", nil, err
 		}
 	}
@@ -58,13 +58,13 @@ func (p pushingAssetSets) Call(args sdk.MockCallArgs) (resource.PropertyMap, err
 	return p.inner.Call(args)
 }
 
-func standingUp(cfg Config, engine *mockedEngine) *Stacks {
+func stacksWith(cfg Config, engine *mockedEngine) *Stacks {
 	if engine == nil {
 		return newStacks(fixed(cfg), &Realized{}, nil)
 	}
-	held := newStacks(fixed(cfg), &Realized{}, engine)
-	engine.pending = held.pending
-	return held
+	stacks := newStacks(fixed(cfg), &Realized{}, engine)
+	engine.pending = stacks.pending
+	return stacks
 }
 
 func (e *mockedEngine) stacks() []string {
@@ -204,7 +204,7 @@ func releaserPlacingInto(engine *mockedEngine, uploader *fakeArtifactStore) *Sta
 		ArtifactBucket: conformanceArtifactBucket,
 		Objects:        uploader,
 	}
-	return standingUp(cfg, engine)
+	return stacksWith(cfg, engine)
 }
 
 const conformanceArtifactBucket = "ocel-artifacts"
@@ -266,8 +266,8 @@ func (s *shippedArtifacts) Has(_ context.Context, ref provider.ArtifactRef) (boo
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, held := s.objects[at]
-	return held, nil
+	_, present := s.objects[at]
+	return present, nil
 }
 
 func (s *shippedArtifacts) Open(_ context.Context, ref provider.ArtifactRef) (io.ReadCloser, error) {
@@ -277,8 +277,8 @@ func (s *shippedArtifacts) Open(_ context.Context, ref provider.ArtifactRef) (io
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	blob, held := s.objects[at]
-	if !held {
+	blob, present := s.objects[at]
+	if !present {
 		return nil, fmt.Errorf("no artifact at %s", at)
 	}
 	return io.NopCloser(bytes.NewReader(slices.Clone(blob))), nil
@@ -325,7 +325,7 @@ func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *test
 		}
 	}
 	if got := result.Bindings[0].Properties[provider.PropertyPassword]; got != "a-master-password" {
-		t.Errorf("the postgres binding carries password %q, want the one the managed secret holds", got)
+		t.Errorf("the postgres binding has password %q, want the one the managed secret stores", got)
 	}
 }
 
@@ -351,8 +351,8 @@ func (r *lambdaCodeRecorder) NewResource(args sdk.MockResourceArgs) (string, res
 }
 
 func stringInput(inputs resource.PropertyMap, key string) string {
-	value, held := inputs[resource.PropertyKey(key)]
-	if !held || !value.IsString() {
+	value, present := inputs[resource.PropertyKey(key)]
+	if !present || !value.IsString() {
 		return ""
 	}
 	return value.StringValue()

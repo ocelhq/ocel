@@ -278,10 +278,10 @@ func TestHandleInvocationForward(t *testing.T) {
 		p, body := splitPrelude(t, cap.body)
 		for name := range p.Headers {
 			if http.CanonicalHeaderKey(name) == "Transfer-Encoding" {
-				t.Errorf("prelude carries %q; the edge frames the body itself", name)
+				t.Errorf("prelude contains %q; the edge frames the body itself", name)
 			}
 			if strings.HasPrefix(strings.ToLower(name), "x-ocel-") {
-				t.Errorf("prelude carries %q, want nothing of ocel's own reaching the browser", name)
+				t.Errorf("prelude contains %q, want nothing of ocel's own reaching the browser", name)
 			}
 		}
 		if string(body) != "x" {

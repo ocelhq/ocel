@@ -43,7 +43,7 @@ type routeStore struct {
 	jitter  func() float64
 }
 
-func (w routeStore) hold(ctx context.Context, attempt int) error {
+func (w routeStore) backoff(ctx context.Context, attempt int) error {
 	delay := time.Duration(float64(routeRetryBase) * math.Pow(2, float64(attempt)))
 	if delay > routeRetryCeiling {
 		delay = routeRetryCeiling
@@ -94,7 +94,7 @@ func (w routeStore) apply(ctx context.Context, puts map[string]route, deletes []
 	var last error
 	for attempt := 0; attempt < routeAttempts; attempt++ {
 		if attempt > 0 {
-			if err := w.hold(ctx, attempt-1); err != nil {
+			if err := w.backoff(ctx, attempt-1); err != nil {
 				return err
 			}
 		}
@@ -145,14 +145,14 @@ func routeOwner(ctx context.Context, c Clients, ns bootstrap.Namespace, class ed
 		}
 		return "", false, fmt.Errorf("read the release %s answers on: %w", hostname, err)
 	}
-	var held route
-	if err := json.Unmarshal([]byte(aws.ToString(out.Value)), &held); err != nil {
+	var stored route
+	if err := json.Unmarshal([]byte(aws.ToString(out.Value)), &stored); err != nil {
 		return "", false, fmt.Errorf("decode the route %s answers on: it is not the JSON the resolver reads, so something other than Ocel wrote it. Remove that key from the %s key value store and promote again: %w", hostname, ns.EdgeRoutesStoreName(class), err)
 	}
-	if held.Stack == "" {
+	if stored.Stack == "" {
 		return "", false, nil
 	}
-	return held.Stack, true, nil
+	return stored.Stack, true, nil
 }
 
 func (w routeStore) etag(ctx context.Context) (string, error) {

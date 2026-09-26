@@ -65,8 +65,8 @@ func (w *world) edge() *apiGateway {
 
 func (w *world) deletion(attempts int) *Deletion {
 	return &Deletion{
-		Wait: func(_ context.Context, held time.Duration) error {
-			w.gateway.note("hold " + held.String())
+		Wait: func(_ context.Context, interval time.Duration) error {
+			w.gateway.note("wait " + interval.String())
 			return nil
 		},
 		Attempts: attempts,
@@ -180,7 +180,7 @@ func page[T any](items []T, position *string, size int) ([]T, *string, error) {
 		from = parsed
 	}
 	if from > len(items) {
-		return nil, nil, fmt.Errorf("fake gateway got the position %d, past the %d items it holds", from, len(items))
+		return nil, nil, fmt.Errorf("fake gateway got the position %d, past the %d items it has", from, len(items))
 	}
 	to := min(from+size, len(items))
 	if to == len(items) {
@@ -389,7 +389,7 @@ func (f *fakeGateway) PutMethodResponse(_ context.Context, in *apigateway.PutMet
 	}
 	f.record("PutMethodResponse " + api.resources[aws.ToString(in.ResourceId)] + " " + aws.ToString(in.StatusCode))
 	m := f.method(api, aws.ToString(in.ResourceId), aws.ToString(in.HttpMethod))
-	if _, held := m.methodResponses[aws.ToString(in.StatusCode)]; held {
+	if _, exists := m.methodResponses[aws.ToString(in.StatusCode)]; exists {
 		return nil, &agtypes.ConflictException{Message: aws.String("Method response already exists for this method")}
 	}
 	m.methodResponses[aws.ToString(in.StatusCode)] = in.ResponseParameters
@@ -409,8 +409,8 @@ func (f *fakeGateway) GetMethodResponse(_ context.Context, in *apigateway.GetMet
 	if !ok {
 		return nil, &agtypes.NotFoundException{Message: aws.String("no method")}
 	}
-	parameters, held := m.methodResponses[status]
-	if !held {
+	parameters, exists := m.methodResponses[status]
+	if !exists {
 		return nil, &agtypes.NotFoundException{Message: aws.String("no method response " + status)}
 	}
 	return &apigateway.GetMethodResponseOutput{StatusCode: in.StatusCode, ResponseParameters: parameters}, nil
@@ -429,7 +429,7 @@ func (f *fakeGateway) DeleteMethodResponse(_ context.Context, in *apigateway.Del
 	if !ok {
 		return nil, &agtypes.NotFoundException{Message: aws.String("no method")}
 	}
-	if _, held := m.methodResponses[status]; !held {
+	if _, exists := m.methodResponses[status]; !exists {
 		return nil, &agtypes.NotFoundException{Message: aws.String("no method response " + status)}
 	}
 	delete(m.methodResponses, status)
@@ -445,7 +445,7 @@ func (f *fakeGateway) PutIntegrationResponse(_ context.Context, in *apigateway.P
 	}
 	f.record("PutIntegrationResponse " + api.resources[aws.ToString(in.ResourceId)] + " " + aws.ToString(in.StatusCode))
 	m := f.method(api, aws.ToString(in.ResourceId), aws.ToString(in.HttpMethod))
-	if _, held := m.integrationResponse[aws.ToString(in.StatusCode)]; held {
+	if _, exists := m.integrationResponse[aws.ToString(in.StatusCode)]; exists {
 		return nil, &agtypes.ConflictException{Message: aws.String("Integration response already exists for this method")}
 	}
 	m.integrationResponse[aws.ToString(in.StatusCode)] = in.ResponseParameters
@@ -465,8 +465,8 @@ func (f *fakeGateway) GetIntegrationResponse(_ context.Context, in *apigateway.G
 	if !ok {
 		return nil, &agtypes.NotFoundException{Message: aws.String("no method")}
 	}
-	parameters, held := m.integrationResponse[status]
-	if !held {
+	parameters, exists := m.integrationResponse[status]
+	if !exists {
 		return nil, &agtypes.NotFoundException{Message: aws.String("no integration response " + status)}
 	}
 	return &apigateway.GetIntegrationResponseOutput{StatusCode: in.StatusCode, ResponseParameters: parameters}, nil
@@ -485,7 +485,7 @@ func (f *fakeGateway) DeleteIntegrationResponse(_ context.Context, in *apigatewa
 	if !ok {
 		return nil, &agtypes.NotFoundException{Message: aws.String("no method")}
 	}
-	if _, held := m.integrationResponse[status]; !held {
+	if _, exists := m.integrationResponse[status]; !exists {
 		return nil, &agtypes.NotFoundException{Message: aws.String("no integration response " + status)}
 	}
 	delete(m.integrationResponse, status)
@@ -656,9 +656,9 @@ func hostConditionOf(conditions []agv2types.RoutingRuleCondition) (header, host 
 		if condition.MatchHeaders == nil {
 			continue
 		}
-		for _, held := range condition.MatchHeaders.AnyOf {
-			if strings.EqualFold(aws.ToString(held.Header), "host") {
-				header, host = aws.ToString(held.Header), aws.ToString(held.ValueGlob)
+		for _, match := range condition.MatchHeaders.AnyOf {
+			if strings.EqualFold(aws.ToString(match.Header), "host") {
+				header, host = aws.ToString(match.Header), aws.ToString(match.ValueGlob)
 			}
 		}
 	}
@@ -675,9 +675,9 @@ func checkRuleInput(domain *fakeDomain, host string, priority int32, conditions 
 	if priority < 1 || priority > 1_000_000 {
 		return fmt.Errorf("fake routing got priority %d, outside the 1-1,000,000 API Gateway allows", priority)
 	}
-	for _, held := range domain.rules {
-		if held.priority == priority && held.id != self {
-			return &agv2types.ConflictException{Message: aws.String(fmt.Sprintf("priority %d is already held by %s", priority, held.id))}
+	for _, rule := range domain.rules {
+		if rule.priority == priority && rule.id != self {
+			return &agv2types.ConflictException{Message: aws.String(fmt.Sprintf("priority %d is already taken by %s", priority, rule.id))}
 		}
 	}
 	return nil
@@ -863,11 +863,11 @@ func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...
 	if f.beforePut != nil {
 		f.beforePut(key, f.items)
 	}
-	held, err := conditionHolds(in, f.items[key])
+	met, err := conditionHolds(in, f.items[key])
 	if err != nil {
 		return nil, err
 	}
-	if !held {
+	if !met {
 		return nil, &ddbtypes.ConditionalCheckFailedException{Message: aws.String("condition on " + key)}
 	}
 	f.calls = append(f.calls, "PutItem "+key)
@@ -902,18 +902,18 @@ func (f *fakeDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput,
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	key := dynamoKey(in.Key)
-	held, present := f.items[key]
+	item, present := f.items[key]
 	if aws.ToString(in.ConditionExpression) != "" {
 		want, ok := in.ExpressionAttributeValues[":rev"].(*ddbtypes.AttributeValueMemberS)
 		if !ok {
 			return nil, fmt.Errorf("fake dynamo needs the revision the condition %q compares against", aws.ToString(in.ConditionExpression))
 		}
-		got, matched := held["rev"].(*ddbtypes.AttributeValueMemberS)
+		got, matched := item["rev"].(*ddbtypes.AttributeValueMemberS)
 		if !present {
 			return nil, &ddbtypes.ConditionalCheckFailedException{Message: aws.String("no " + key)}
 		}
 		if !matched || got.Value != want.Value {
-			return nil, &ddbtypes.ConditionalCheckFailedException{Message: aws.String("condition on " + key), Item: held}
+			return nil, &ddbtypes.ConditionalCheckFailedException{Message: aws.String("condition on " + key), Item: item}
 		}
 	}
 	f.calls = append(f.calls, "DeleteItem "+key)

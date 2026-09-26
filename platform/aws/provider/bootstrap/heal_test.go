@@ -220,7 +220,7 @@ func (l *healLog) says(substr string) bool {
 	return false
 }
 
-func standingBootstrap(t *testing.T) (*fakeCFN, APIs) {
+func installedBootstrap(t *testing.T) (*fakeCFN, APIs) {
 	t.Helper()
 	stacks, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	frontedBy(t, &fakeEdge{kind: "cloudflare"})
@@ -233,7 +233,7 @@ func standingBootstrap(t *testing.T) (*fakeCFN, APIs) {
 
 func TestChangeSets(t *testing.T) {
 	t.Run("a bootstrap that has not moved plans nothing and leaves nothing behind", func(t *testing.T) {
-		stacks, apis := standingBootstrap(t)
+		stacks, apis := installedBootstrap(t)
 		before := stacks.updates
 
 		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, everything(), nil, nil); err != nil {
@@ -248,7 +248,7 @@ func TestChangeSets(t *testing.T) {
 	})
 
 	t.Run("a replacement stops a bootstrap that was not told to accept one", func(t *testing.T) {
-		stacks, apis := standingBootstrap(t)
+		stacks, apis := installedBootstrap(t)
 		stack := isrStack(ClassProduction)
 		stacks.fallBehind(stack)
 		stacks.plan(stack, change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
@@ -266,7 +266,7 @@ func TestChangeSets(t *testing.T) {
 	})
 
 	t.Run("accepting replacements writes the stack", func(t *testing.T) {
-		stacks, apis := standingBootstrap(t)
+		stacks, apis := installedBootstrap(t)
 		stack := isrStack(ClassProduction)
 		stacks.fallBehind(stack)
 		stacks.plan(stack, change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue))
@@ -286,7 +286,7 @@ func TestHeal(t *testing.T) {
 	all := HealRequest{Features: featureNames(), Writer: "1.4.0"}
 
 	t.Run("a required feature stack that has fallen behind is written back", func(t *testing.T) {
-		stacks, apis := standingBootstrap(t)
+		stacks, apis := installedBootstrap(t)
 		stack := isrStack(ClassProduction)
 		stacks.fallBehind(stack)
 		var log healLog
@@ -299,7 +299,7 @@ func TestHeal(t *testing.T) {
 			t.Fatal("a stale feature stack was left behind")
 		}
 		if stacks.template(stack) == behindTemplate {
-			t.Error("the stale template is still what the account carries")
+			t.Error("the stale template is still what the account has deployed")
 		}
 		if !log.says("refreshed " + stack) {
 			t.Errorf("heal said %v, want it to name what it refreshed", log.lines)
@@ -307,7 +307,7 @@ func TestHeal(t *testing.T) {
 	})
 
 	t.Run("core never heals", func(t *testing.T) {
-		stacks, apis := standingBootstrap(t)
+		stacks, apis := installedBootstrap(t)
 		stacks.fallBehind(coreStackName)
 		var log healLog
 
@@ -321,7 +321,7 @@ func TestHeal(t *testing.T) {
 	})
 
 	t.Run("a stack this deploy does not need is left alone", func(t *testing.T) {
-		stacks, apis := standingBootstrap(t)
+		stacks, apis := installedBootstrap(t)
 		stack := optStack(ClassProduction)
 		stacks.fallBehind(stack)
 		var log healLog
@@ -335,8 +335,8 @@ func TestHeal(t *testing.T) {
 		}
 	})
 
-	t.Run("a change the rule refuses leaves the stack as it stands", func(t *testing.T) {
-		stacks, apis := standingBootstrap(t)
+	t.Run("a change the rule refuses leaves the stack unchanged", func(t *testing.T) {
+		stacks, apis := installedBootstrap(t)
 		stack := isrStack(ClassProduction)
 		stacks.fallBehind(stack)
 		stacks.plan(stack, change(cfntypes.ChangeActionRemove, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementFalse))
@@ -358,8 +358,8 @@ func TestHeal(t *testing.T) {
 	})
 
 	t.Run("a stack another run is writing is left to that run", func(t *testing.T) {
-		holdNothing(t)
-		stacks, apis := standingBootstrap(t)
+		recordWaits(t)
+		stacks, apis := installedBootstrap(t)
 		stack := isrStack(ClassProduction)
 		stacks.fallBehind(stack)
 		stacks.busy(stack, cfn.ChangeSetAttempts*2)
@@ -377,9 +377,9 @@ func TestHeal(t *testing.T) {
 		}
 	})
 
-	t.Run("a stack that settles still behind is left to whoever wrote it", func(t *testing.T) {
-		holdNothing(t)
-		stacks, apis := standingBootstrap(t)
+	t.Run("a stack that goes idle still behind is left to whoever wrote it", func(t *testing.T) {
+		recordWaits(t)
+		stacks, apis := installedBootstrap(t)
 		stack := isrStack(ClassProduction)
 		stacks.fallBehind(stack)
 		stacks.busy(stack, 3)
@@ -393,7 +393,7 @@ func TestHeal(t *testing.T) {
 			t.Error("a stack that had just been written by another run was written over")
 		}
 		if !log.says("still behind") {
-			t.Errorf("heal said %v, want it to say the stack settled behind what this build carries", log.lines)
+			t.Errorf("heal said %v, want it to say the stack went idle behind the template this build renders", log.lines)
 		}
 	})
 }

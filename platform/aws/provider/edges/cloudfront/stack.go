@@ -41,9 +41,9 @@ type stack struct {
 var _ edge.EdgeStack = (*stack)(nil)
 
 func (s *stack) State() edge.StackState {
-	held := s.state
-	held.Private = edge.Own(s.own)
-	return held
+	state := s.state
+	state.Private = edge.Own(s.own)
+	return state
 }
 
 func (s *stack) Ledger() edge.Ledger { return &lazyLedger{s: s} }
@@ -147,7 +147,7 @@ func (l *lazyLedger) Prune(ctx context.Context, keepN int, pointer string) (edge
 
 func (s *stack) reconcileDistribution(ctx context.Context, c Clients) (front, error) {
 	plan := s.plan()
-	held, found, err := s.findDistributionFor(ctx, c, plan.name)
+	dist, found, err := s.findDistributionFor(ctx, c, plan.name)
 	if err != nil {
 		return front{}, err
 	}
@@ -156,20 +156,20 @@ func (s *stack) reconcileDistribution(ctx context.Context, c Clients) (front, er
 		if err != nil {
 			return front{}, err
 		}
-		held = created
-	} else if err := reshapeDistribution(ctx, c, plan, held.id); err != nil {
+		dist = created
+	} else if err := reshapeDistribution(ctx, c, plan, dist.id); err != nil {
 		return front{}, err
 	}
-	if err := s.ledger(c).NoteInvalidationTarget(ctx, held.id); err != nil {
+	if err := s.ledger(c).NoteInvalidationTarget(ctx, dist.id); err != nil {
 		return front{}, err
 	}
-	s.recordFront(held)
-	return held, nil
+	s.recordFront(dist)
+	return dist, nil
 }
 
 func (s *stack) ensureDistribution(ctx context.Context, c Clients) (front, error) {
 	plan := s.plan()
-	held, found, err := s.findDistributionFor(ctx, c, plan.name)
+	dist, found, err := s.findDistributionFor(ctx, c, plan.name)
 	if err != nil {
 		return front{}, err
 	}
@@ -181,15 +181,15 @@ func (s *stack) ensureDistribution(ctx context.Context, c Clients) (front, error
 		if err := s.ledger(c).NoteInvalidationTarget(ctx, created.id); err != nil {
 			return front{}, err
 		}
-		held = created
+		dist = created
 	}
-	s.recordFront(held)
-	return held, nil
+	s.recordFront(dist)
+	return dist, nil
 }
 
-func (s *stack) recordFront(held front) {
-	s.own.Distribution = held.id
-	s.state.Front = held.domainName
+func (s *stack) recordFront(served front) {
+	s.own.Distribution = served.id
+	s.state.Front = served.domainName
 }
 
 func (s *stack) findDistributionFor(ctx context.Context, c Clients, name string) (front, bool, error) {
@@ -331,7 +331,7 @@ func (s *stack) routeFor(ctx context.Context, c Clients, promotion edge.Promotio
 		return route{}, err
 	}
 	if !found {
-		return route{}, fmt.Errorf("promote %s: the deployments ledger holds no record for %s/%s, so nothing names the release the edge would point at; re-run the deploy that built it", promotion.PromotionID, app, identity)
+		return route{}, fmt.Errorf("promote %s: the deployments ledger has no record for %s/%s, so nothing names the release the edge would point at; re-run the deploy that built it", promotion.PromotionID, app, identity)
 	}
 	secret, err := s.originSecret(ctx, c)
 	if err != nil {
@@ -369,7 +369,7 @@ func (s *stack) serveContainers(ctx context.Context, c Clients, promotion edge.P
 		return awsports.ContainerFront{}, err
 	}
 	if !found {
-		return awsports.ContainerFront{}, fmt.Errorf("promote %s: %s/%s runs as a container, but the %s class records no container front for the edge to reach it through; re-run the deploy that built it so the substrate records one", promotion.PromotionID, app, identity, s.class())
+		return awsports.ContainerFront{}, fmt.Errorf("promote %s: %s/%s runs as a container, but the %s class records no container front for the edge to reach it through; re-run the deploy that built it so the shared container infrastructure records one", promotion.PromotionID, app, identity, s.class())
 	}
 	if s.onPreviewWildcard() {
 		base := s.previewBase()
@@ -377,20 +377,20 @@ func (s *stack) serveContainers(ctx context.Context, c Clients, promotion edge.P
 		if err != nil {
 			return awsports.ContainerFront{}, err
 		}
-		held, found, err := findDistribution(ctx, c, plan.name)
+		wildcard, found, err := findDistribution(ctx, c, plan.name)
 		if err != nil {
 			return awsports.ContainerFront{}, err
 		}
 		if !found {
 			return awsports.ContainerFront{}, fmt.Errorf("promote %s: the %q edge serves previews from one wildcard distribution, and this account has none for %s; run `ocel domain use --preview %s` first", promotion.PromotionID, Kind, base, base)
 		}
-		return front, s.p.declareContainerFront(ctx, c, plan, kindWildcardDistribution, held.id, front)
+		return front, s.p.declareContainerFront(ctx, c, plan, kindWildcardDistribution, wildcard.id, front)
 	}
-	held, err := s.ensureDistribution(ctx, c)
+	dist, err := s.ensureDistribution(ctx, c)
 	if err != nil {
 		return awsports.ContainerFront{}, err
 	}
-	return front, s.p.declareContainerFront(ctx, c, s.plan(), kindDistribution, held.id, front)
+	return front, s.p.declareContainerFront(ctx, c, s.plan(), kindDistribution, dist.id, front)
 }
 
 func (s *stack) originSecret(ctx context.Context, c Clients) (bootstrap.OriginSecret, error) {
@@ -408,7 +408,7 @@ func (s *stack) originSecret(ctx context.Context, c Clients) (bootstrap.OriginSe
 	}
 	secret, err := bootstrap.OriginSecretOf(aws.ToString(out.Parameter.Value))
 	if err != nil {
-		return bootstrap.OriginSecret{}, fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s holds something else. Re-run `%s` against this account to mint it: %w", name, command, err)
+		return bootstrap.OriginSecret{}, fmt.Errorf("read the secret the entry function demands of the front that reaches it: %s contains something else. Re-run `%s` against this account to mint it: %w", name, command, err)
 	}
 	return secret, nil
 }
@@ -434,11 +434,11 @@ func (s *stack) BindDomain(ctx context.Context, binding edge.DomainBinding) erro
 	if err != nil {
 		return err
 	}
-	held, err := s.ensureDistribution(ctx, c)
+	dist, err := s.ensureDistribution(ctx, c)
 	if err != nil {
 		return err
 	}
-	if err := serveAlias(ctx, c, s.plan(), held.id, binding.Hostname, binding.Certificate); err != nil {
+	if err := serveAlias(ctx, c, s.plan(), dist.id, binding.Hostname, binding.Certificate); err != nil {
 		return err
 	}
 	if err := s.serveActive(ctx, c, binding.Hostname); err != nil {
@@ -504,16 +504,16 @@ func (s *stack) Destroy(ctx context.Context) error {
 	}
 	gone := true
 	if !s.onPreviewWildcard() {
-		held, found, err := s.findDistributionFor(ctx, c, s.plan().name)
+		dist, found, err := s.findDistributionFor(ctx, c, s.plan().name)
 		switch {
 		case err != nil:
 			errs = append(errs, err)
 			gone = false
 		case found:
-			if err := s.p.deleteDistribution(ctx, c, kindDistribution, held.id); err != nil {
+			if err := s.p.deleteDistribution(ctx, c, kindDistribution, dist.id); err != nil {
 				errs = append(errs, err)
 				gone = false
-			} else if err := s.forgetInvalidationTarget(ctx, c, held.id); err != nil {
+			} else if err := s.forgetInvalidationTarget(ctx, c, dist.id); err != nil {
 				errs = append(errs, err)
 			}
 		}

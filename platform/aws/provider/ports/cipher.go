@@ -38,7 +38,7 @@ func (s Cipher) key(ctx context.Context, at records.SealScope) (string, error) {
 	}
 	if s.Keys == nil {
 		return "", refusal.Refuse(refusal.CodeNotReady,
-			"nothing in this account holds a key to seal a %s value under.\nRun `%s`, then try again",
+			"nothing in this account has a key to seal a %s value under.\nRun `%s`, then try again",
 			at.Class, provider.BootstrapVarsKeyCommand(at.Class))
 	}
 	key, err := s.Keys.Key(ctx, at.Class)
@@ -47,7 +47,7 @@ func (s Cipher) key(ctx context.Context, at records.SealScope) (string, error) {
 	}
 	if key == "" {
 		return "", refusal.Refuse(refusal.CodeNotReady,
-			"the %s bootstrap holds no key to seal a value under, and a key is the one bootstrap item with a standing cost.\nRun `%s` to add one, then try again",
+			"the %s bootstrap has no key to seal a value under, and a key is the one bootstrap item with a recurring cost.\nRun `%s` to add one, then try again",
 			at.Class, provider.BootstrapVarsKeyCommand(at.Class))
 	}
 	return key, nil

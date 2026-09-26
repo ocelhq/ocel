@@ -237,29 +237,29 @@ func TestReadClassParamsEdgeFailures(t *testing.T) {
 	})
 }
 
-func TestReadClassParamsCarriesAnUnparsableOriginSecret(t *testing.T) {
+func TestReadClassParamsDefersAnUnparsableOriginSecret(t *testing.T) {
 	params := fullProductionParams()
 	params[cloudflareNames(ClassProduction).originSecretParam] = "123f4e5d"
 
 	got, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare)
 	if err != nil {
-		t.Fatalf("ReadClassParams = %v, want the read to carry the failure: every call that only takes a bootstrap down reads these and presents no secret", err)
+		t.Fatalf("ReadClassParams = %v, want the read to pass the failure along: every call that only takes a bootstrap down reads these and presents no secret", err)
 	}
 	if got.OriginSecretErr == nil {
-		t.Fatal("OriginSecretErr = nil, want the parse failure carried to whoever demands the secret")
+		t.Fatal("OriginSecretErr = nil, want the parse failure passed to whoever demands the secret")
 	}
 	if !strings.Contains(got.OriginSecretErr.Error(), cloudflareNames(ClassProduction).originSecretParam) {
 		t.Errorf("OriginSecretErr = %v, want it to name the parameter", got.OriginSecretErr)
 	}
-	if got.OriginSecret.Held() {
-		t.Errorf("OriginSecret = %+v, want none held", got.OriginSecret)
+	if got.OriginSecret.Present() {
+		t.Errorf("OriginSecret = %+v, want none present", got.OriginSecret)
 	}
 	if got.Passphrase != "pass-1" {
 		t.Errorf("Passphrase = %q, want the rest of the batch intact", got.Passphrase)
 	}
 }
 
-func TestReadCoreParamsCarriesAnUnparsableOriginSecret(t *testing.T) {
+func TestReadCoreParamsDefersAnUnparsableOriginSecret(t *testing.T) {
 	ssmc := &fakeBatchSSM{params: map[string]string{
 		passphraseParam:   "pass-1",
 		originSecretParam: "123f4e5d",
@@ -267,10 +267,10 @@ func TestReadCoreParamsCarriesAnUnparsableOriginSecret(t *testing.T) {
 
 	got, err := ReadCoreParams(context.Background(), ssmc, defaultNamespace, ClassProduction)
 	if err != nil {
-		t.Fatalf("ReadCoreParams = %v, want the read to carry the failure rather than refuse", err)
+		t.Fatalf("ReadCoreParams = %v, want the read to pass the failure along rather than refuse", err)
 	}
 	if got.OriginSecretErr == nil {
-		t.Fatal("OriginSecretErr = nil, want the parse failure carried to whoever demands the secret")
+		t.Fatal("OriginSecretErr = nil, want the parse failure passed to whoever demands the secret")
 	}
 }
 

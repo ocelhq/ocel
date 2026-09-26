@@ -41,7 +41,7 @@ func cloudflareEdgeTemplate(in featureInputs) featureStack {
 		{paramAssetBucketARN, "ARN of that bucket, so the edge reader is granted the asset and fetch-cache prefixes and nothing else.", in.refs.assetBucketARN},
 		{paramStateTableARN, "ARN of the core bootstrap's state table, so the edge reader reaches tag items alone.", in.refs.stateTableARN},
 		{paramStateTableStreamARN, "ARN of that table's stream, the only trigger the tag publisher has.", in.refs.stateTableStreamARN},
-		{paramRevalidateQueueARN, "ARN of the revalidation queue the ISR feature stood up, the one queue the edge reader may enqueue a refresh on.", in.refs.revalidateQueueARN},
+		{paramRevalidateQueueARN, "ARN of the revalidation queue the ISR feature provisioned, the one queue the edge reader may enqueue a refresh on.", in.refs.revalidateQueueARN},
 	}
 	optimizer := in.alongside.Has(FeatureImageOptimization)
 	if optimizer {
@@ -53,7 +53,7 @@ func cloudflareEdgeTemplate(in featureInputs) featureStack {
 	return featureStack{
 		params: values,
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
-Description: "Ocel bootstrap feature (%s, %s) - what a Cloudflare front needs inside this AWS account: the IAM user it signs its calls with, scoped to this bootstrap alone, and the publisher that carries each build's tag snapshot out to the edge's ISR writer."
+Description: "Ocel bootstrap feature (%s, %s) - what a Cloudflare front needs inside this AWS account: the IAM user it signs its calls with, scoped to this bootstrap alone, and the publisher that sends each build's tag snapshot out to the edge's ISR writer."
 %sResources:
 %s%s`,
 			FeatureCloudflareEdge, in.class, params,
@@ -131,28 +131,28 @@ func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, ns Namespace, c
 	if err != nil {
 		return nil, err
 	}
-	recorded, held, err := recordedEdgeKey(ctx, apis.SSM, names.credentialsParam)
+	recorded, present, err := recordedEdgeKey(ctx, apis.SSM, names.credentialsParam)
 	if err != nil {
 		return nil, err
 	}
-	standing, err := edgeKeyStanding(ctx, apis.IAM, names.user, recorded.AccessKeyID)
+	live, err := edgeKeyLive(ctx, apis.IAM, names.user, recorded.AccessKeyID)
 	if err != nil {
 		return nil, err
 	}
-	if standing && recorded.Stale(time.Now()) {
+	if live && recorded.Stale(time.Now()) {
 		return []provider.Change{
 			{Kind: kindParameter, Name: names.credentialsParam, Action: provider.ActionUpdate, Reason: keyStale},
 			{Kind: kindAccessKey, Name: names.user, Action: provider.ActionUpdate, Reason: keyStale},
 		}, nil
 	}
-	if standing {
+	if live {
 		return []provider.Change{
 			{Kind: kindParameter, Name: names.credentialsParam, Action: provider.ActionKeep, Reason: paramCurrent},
 			{Kind: kindAccessKey, Name: names.user, Action: provider.ActionKeep, Reason: paramCurrent},
 		}, nil
 	}
 	credentials := provider.Change{Kind: kindParameter, Name: names.credentialsParam, Action: provider.ActionCreate}
-	if held {
+	if present {
 		credentials.Action, credentials.Reason = provider.ActionUpdate, keyGone
 		if recorded.AccessKeyID == "" {
 			credentials.Reason = keyUnrecorded
@@ -181,12 +181,12 @@ func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, ns Namespace, c
 			Kind: kindAccessKey, Name: names.user, Action: provider.ActionDelete, Reason: reason,
 		})
 	}
-	held, err := paramsHeld(ctx, apis.SSM, names.edgeParams())
+	present, err := paramsPresent(ctx, apis.SSM, names.edgeParams())
 	if err != nil {
 		return nil, err
 	}
 	for _, param := range names.edgeParams() {
-		if !held[param] {
+		if !present[param] {
 			continue
 		}
 		changes = append(changes, provider.Change{

@@ -49,7 +49,7 @@ func ParseIdentity(s string) (Identity, error) {
 		return Identity{}, fmt.Errorf("deployment identity %q must be a deployment id and a fingerprint joined by %q", s, identitySeparator)
 	}
 	if strings.Contains(fingerprint, identitySeparator) {
-		return Identity{}, fmt.Errorf("deployment identity %q carries more than one %q", s, identitySeparator)
+		return Identity{}, fmt.Errorf("deployment identity %q contains more than one %q", s, identitySeparator)
 	}
 	return Identity{deploymentID: deploymentID, fingerprint: fingerprint}, nil
 }

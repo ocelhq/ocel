@@ -95,7 +95,7 @@ func siblingAppOutputs(apps ...string) auto.OutputMap {
 	return outputs
 }
 
-func TestOneReleaserStandsUpSiblingAppStacksAtOnce(t *testing.T) {
+func TestOneReleaserProvisionsSiblingAppStacksAtOnce(t *testing.T) {
 	t.Parallel()
 
 	apps := []string{"web", "admin", "docs"}
@@ -115,7 +115,7 @@ func TestOneReleaserStandsUpSiblingAppStacksAtOnce(t *testing.T) {
 	cfg.CacheStoreObjects = &fakeArtifactStore{exists: map[string]bool{}}
 
 	engine := &mockedEngine{outputs: siblingAppOutputs(apps...)}
-	stacks := standingUp(cfg, engine)
+	stacks := stacksWith(cfg, engine)
 
 	var wg sync.WaitGroup
 	failures := make([]error, len(apps))
@@ -153,7 +153,7 @@ func TestOneReleaserStandsUpSiblingAppStacksAtOnce(t *testing.T) {
 			URL:      "https://" + app + ".lambda-url.us-east-1.on.aws/",
 		}
 		if got := results[slot].Functions; len(got) != 1 || got[0] != want {
-			t.Errorf("Provision(%s) returned %+v, want the one function %+v: a sibling standing up beside it may not change what it hands back", app, got, want)
+			t.Errorf("Provision(%s) returned %+v, want the one function %+v: a sibling provisioned beside it may not change what it hands back", app, got, want)
 		}
 
 		reported := reports[slot].reported()
@@ -165,7 +165,7 @@ func TestOneReleaserStandsUpSiblingAppStacksAtOnce(t *testing.T) {
 				continue
 			}
 			if slices.ContainsFunc(reported, func(line string) bool { return strings.Contains(line, sibling) }) {
-				t.Errorf("%s's reporter heard %v, want nothing of %s: siblings standing up at once may not report into each other's stage", app, reported, sibling)
+				t.Errorf("%s's reporter heard %v, want nothing of %s: siblings provisioned at once may not report into each other's stage", app, reported, sibling)
 			}
 		}
 	}

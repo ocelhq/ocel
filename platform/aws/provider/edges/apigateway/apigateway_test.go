@@ -83,8 +83,8 @@ func staged(t *testing.T, stack edge.EdgeStack, function, assets string) edge.De
 }
 
 func methodOn(api *fakeAPI, path, httpMethod string) *fakeMethod {
-	for id, held := range api.resources {
-		if held == path {
+	for id, resourcePath := range api.resources {
+		if resourcePath == path {
 			return api.methods[id+" "+httpMethod]
 		}
 	}
@@ -113,7 +113,7 @@ func TestTheEdgeKindReachesItsBootstrapFeature(t *testing.T) {
 	t.Parallel()
 
 	if got := bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), Kind); got != bootstrap.FeatureAPIGatewayEdge {
-		t.Errorf("bootstrapping with the %q edge raises the %q feature, want %q; nothing else stands the invoke role and the not-found API this edge fronts deployments with", Kind, got, bootstrap.FeatureAPIGatewayEdge)
+		t.Errorf("bootstrapping with the %q edge raises the %q feature, want %q; nothing else provisions the invoke role and the not-found API this edge fronts deployments with", Kind, got, bootstrap.FeatureAPIGatewayEdge)
 	}
 }
 
@@ -125,7 +125,7 @@ func TestReconcileShapesTheProductionAPI(t *testing.T) {
 
 	api := w.gateway.named(productionAPIName())
 	if api == nil {
-		t.Fatalf("no REST API named for the stack; gateway holds %v", w.gateway.mutations())
+		t.Fatalf("no REST API named for the stack; gateway has %v", w.gateway.mutations())
 	}
 	if ownState(t, stack).API != api.id {
 		t.Errorf("state records API %q, want the one reconcile created (%q)", ownState(t, stack).API, api.id)
@@ -173,7 +173,7 @@ func TestReconcileShapesTheProductionAPI(t *testing.T) {
 	}
 }
 
-func TestOnlyTheRoutesThatCanCarryTheEdgeHeaderDeclareIt(t *testing.T) {
+func TestOnlyTheRoutesThatCanSetTheEdgeHeaderDeclareIt(t *testing.T) {
 	t.Parallel()
 
 	w := newWorld()
@@ -559,13 +559,13 @@ func TestReconcileLeavesTheMethodsItAlreadyOpened(t *testing.T) {
 		t.Fatalf("second Reconcile: %v", err)
 	}
 	if got := w.gateway.count("PutMethod"); got != 0 {
-		t.Errorf("PutMethod calls on the second reconcile = %d, want none; API Gateway rejects a method the resource already carries", got)
+		t.Errorf("PutMethod calls on the second reconcile = %d, want none; API Gateway rejects a method the resource already has", got)
 	}
 	if got := w.gateway.count("PutMethodResponse"); got != 0 {
-		t.Errorf("PutMethodResponse calls on the second reconcile = %d, want none; API Gateway rejects a status-code response the method already carries", got)
+		t.Errorf("PutMethodResponse calls on the second reconcile = %d, want none; API Gateway rejects a status-code response the method already has", got)
 	}
 	if got := w.gateway.count("PutIntegrationResponse"); got != 0 {
-		t.Errorf("PutIntegrationResponse calls on the second reconcile = %d, want none; API Gateway rejects a status-code response the integration already carries", got)
+		t.Errorf("PutIntegrationResponse calls on the second reconcile = %d, want none; API Gateway rejects a status-code response the integration already has", got)
 	}
 	if got := w.gateway.count("PutIntegration"); got != integrated {
 		t.Errorf("PutIntegration calls on the second reconcile = %d, want the %d the first made; skipping the method must not skip what it points at", got, integrated)
@@ -618,7 +618,7 @@ func TestAPINamesCannotCollideAcrossSlugsAndPointers(t *testing.T) {
 	}
 }
 
-func TestDomainOwnerNamesTheProjectThatHoldsTheHost(t *testing.T) {
+func TestDomainOwnerNamesTheProjectThatOwnsTheHost(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -905,17 +905,17 @@ func TestReconcileRecoversTheFrontOfADomainBoundBeforeItWasRecorded(t *testing.T
 	forgotten := stack.State()
 	forgotten.PublishFront(host, "")
 
-	settled, err := e.Reconcile(ctx, testSpec(), forgotten)
+	rerun, err := e.Reconcile(ctx, testSpec(), forgotten)
 	if err != nil {
 		t.Fatalf("Reconcile again: %v", err)
 	}
 
-	records, err := edge.RecordsFor(edge.TargetFor(e, settled.State()), []string{host})
+	records, err := edge.RecordsFor(edge.TargetFor(e, rerun.State()), []string{host})
 	if err != nil {
 		t.Fatalf("RecordsFor after a reconcile of state predating the front: %v", err)
 	}
 	if want := regionalFront(host); len(records) != 1 || records[0].Value != want {
-		t.Errorf("records = %v, want a CNAME to %q read back from the domain name API Gateway already holds", records, want)
+		t.Errorf("records = %v, want a CNAME to %q read back from the domain name API Gateway already has", records, want)
 	}
 }
 
@@ -940,13 +940,13 @@ func TestReconcileForgetsABindingWhoseDomainNameIsGone(t *testing.T) {
 	spec := testSpec()
 	var warned []string
 	spec.Warn = func(m string) { warned = append(warned, m) }
-	settled, err := e.Reconcile(ctx, spec, bound)
+	rerun, err := e.Reconcile(ctx, spec, bound)
 	if err != nil {
 		t.Fatalf("Reconcile again: %v", err)
 	}
 
-	if hosts := settled.State().Bound; slices.Contains(hosts, host) {
-		t.Errorf("bound domains = %v, want %s forgotten: API Gateway holds no domain name for it any more", hosts, host)
+	if hosts := rerun.State().Bound; slices.Contains(hosts, host) {
+		t.Errorf("bound domains = %v, want %s forgotten: API Gateway has no domain name for it any more", hosts, host)
 	}
 	if len(warned) != 1 || !strings.Contains(warned[0], host) {
 		t.Errorf("warned = %v, want the vanished domain name named", warned)

@@ -94,7 +94,7 @@ func placeFixture(store ObjectStore) (Placement, error) {
 }
 
 func TestPlace(t *testing.T) {
-	t.Run("uploads a payload the account does not hold", func(t *testing.T) {
+	t.Run("uploads a payload the account does not have", func(t *testing.T) {
 		store := newFakeObjectStore()
 
 		at, err := placeFixture(store)
@@ -108,7 +108,7 @@ func TestPlace(t *testing.T) {
 			t.Errorf("key = %q, want %q — content-addressed on the embedded digest", at.Key, want)
 		}
 		if !bytes.Equal(store.objects[at.Key], fixturePayload().Bytes) {
-			t.Error("the account holds bytes other than the embedded payload")
+			t.Error("the account stores bytes other than the embedded payload")
 		}
 	})
 
@@ -171,7 +171,7 @@ func TestPlace(t *testing.T) {
 					t.Errorf("uploaded %d times, want the planted object overwritten once", store.puts)
 				}
 				if !bytes.Equal(store.objects[at.Key], fixturePayload().Bytes) {
-					t.Error("the account still holds the planted bytes")
+					t.Error("the account still stores the planted bytes")
 				}
 			})
 		}

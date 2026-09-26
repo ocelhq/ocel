@@ -106,7 +106,7 @@ func TestPriceOutsideTheCardsRegionIsSaidNotGuessed(t *testing.T) {
 	}
 }
 
-func TestPriceBehindCloudflareCarriesTheEdgesOwnBill(t *testing.T) {
+func TestPriceBehindCloudflareIncludesTheEdgesOwnBill(t *testing.T) {
 	client, pricer := costServed(t)
 
 	manifest := shopManifest()
@@ -135,13 +135,13 @@ func TestPriceBehindCloudflareCarriesTheEdgesOwnBill(t *testing.T) {
 		t.Errorf("vendors = %v, want the plan, cache, store, writer and entry beside the AWS origin", vendors)
 	}
 	if typeCounts(set)["aws_lambda_function"] != 1+1+4 {
-		t.Errorf("lambdas = %d, want the app's, the upload completer's, and the four that isr, image optimization and the cloudflare edge stand up", typeCounts(set)["aws_lambda_function"])
+		t.Errorf("lambdas = %d, want the app's, the upload completer's, and the four that isr, image optimization and the cloudflare edge provision", typeCounts(set)["aws_lambda_function"])
 	}
 	if cov := est.GetCoverage(); cov.GetUnsupported() != 0 {
 		t.Errorf("coverage = %v, want every cloudflare resource priced by the edge's own card", cov)
 	}
 	if typeCounts(set)["aws_cloudfront_distribution"] != 0 {
-		t.Error("a project fronted by cloudflare stands up no CloudFront distribution")
+		t.Error("a project fronted by cloudflare provisions no CloudFront distribution")
 	}
 	egress := componentNamed(t, est, "project:shop/environment:prod/app:web/aws_data_transfer:web", "Data transfer out to internet")
 	if egress.GetMonthlyCost() != "0.90" || egress.GetAssumption() != "moderate profile: 10 GB" {

@@ -128,7 +128,7 @@ func appBoundaryResource(ns Namespace, class, broughtKey string) string {
 	return fmt.Sprintf(`  AppBoundary:
     Type: AWS::IAM::ManagedPolicy
     Metadata:
-      Description: "The ceiling every app role of this class is made under: a deploy may only mint roles carrying it, so the widest such role reaches these actions, this class's variable key, the master secrets of clusters deploys create, and no IAM, STS or parameter call."
+      Description: "The ceiling every app role of this class is made under: a deploy may only mint roles bounded by it, so the widest such role reaches these actions, this class's variable key, the master secrets of clusters deploys create, and no IAM, STS or parameter call."
     Properties:
       ManagedPolicyName: %s
       Description: "Permissions boundary for the roles Ocel creates for apps in the %s class."
@@ -163,7 +163,7 @@ func appBoundaryResource(ns Namespace, class, broughtKey string) string {
 
 func appBoundaryOutput() string {
 	return fmt.Sprintf(`  %s:
-    Description: "Permissions boundary every role a deploy creates for an app must carry, and the only one the deploy credentials may name."
+    Description: "Permissions boundary every role a deploy creates for an app must name, and the only one the deploy credentials may name."
     Value: !Ref AppBoundary
 `, outputAppBoundaryARN)
 }

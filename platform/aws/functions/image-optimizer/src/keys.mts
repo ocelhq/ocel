@@ -8,7 +8,7 @@ const IMAGE_CONFIG = "image-config.json";
 
 export function releaseAssetPrefix(value: unknown): string {
   if (typeof value !== "string" || value === "") {
-    throw new BootstrapError("request carries no asset prefix", value);
+    throw new BootstrapError("request has no asset prefix", value);
   }
   const segments = value.split("/");
   if (segments.at(-1) !== ASSETS) {
@@ -16,7 +16,7 @@ export function releaseAssetPrefix(value: unknown): string {
   }
   for (const part of segments) {
     if (!SEGMENT.test(part) || part.includes("..")) {
-      throw new BootstrapError("asset prefix holds an unusable segment", value);
+      throw new BootstrapError("asset prefix has an unusable segment", value);
     }
   }
   return value;
@@ -47,7 +47,7 @@ export function assetPath(pathname: string): string {
     }
   }
   if (hasControlCharacter(decoded)) {
-    throw new BootstrapError("image path holds control characters", decoded);
+    throw new BootstrapError("image path contains control characters", decoded);
   }
   return decoded;
 }

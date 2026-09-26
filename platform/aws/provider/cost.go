@@ -29,11 +29,11 @@ func (p *Provider) ShapeCost(ctx context.Context, req provider.ShapeRequest) (*c
 	if !slices.Contains(features, bootstrap.FeatureVarsKey) {
 		features = append(slices.Clone(features), bootstrap.FeatureVarsKey)
 	}
-	standing, err := bootstrap.Shape(p.namespace, string(req.Deploy.Class), features, options...)
+	bootstrapShape, err := bootstrap.Shape(p.namespace, string(req.Deploy.Class), features, options...)
 	if err != nil {
 		return nil, err
 	}
-	tree.AddShaped(shared, string(Vendor), p.aws.Region, standing)
+	tree.AddShaped(shared, string(Vendor), p.aws.Region, bootstrapShape)
 
 	if err := deploy.Shape(ctx, p.transformPass(projectRoot()), p.aws.Region, req, tree, deploy.ShapeScopes{
 		Environment: environment,

@@ -109,14 +109,14 @@ func grantsBindings() []*bindingsv1.Binding {
 func plannedBindings(bindings []*bindingsv1.Binding) []provider.Binding {
 	out := make([]provider.Binding, 0, len(bindings))
 	for _, binding := range bindings {
-		held := provider.Binding{Type: provider.BindingCustom, Name: binding.GetName(), Grants: provider.GrantsOf(binding)}
+		planned := provider.Binding{Type: provider.BindingCustom, Name: binding.GetName(), Grants: provider.GrantsOf(binding)}
 		switch naming.BindingTypeOf(binding) {
 		case bindingsv1.BindingType_BINDING_TYPE_BUCKET:
-			held.Type = provider.BindingBucket
+			planned.Type = provider.BindingBucket
 		case bindingsv1.BindingType_BINDING_TYPE_POSTGRES:
-			held.Type = provider.BindingPostgres
+			planned.Type = provider.BindingPostgres
 		}
-		out = append(out, held)
+		out = append(out, planned)
 	}
 	return out
 }
@@ -124,7 +124,7 @@ func plannedBindings(bindings []*bindingsv1.Binding) []provider.Binding {
 func TestBindingPoliciesRenderOnlyForAGrantingBinding(t *testing.T) {
 	t.Parallel()
 
-	t.Run("a granting binding carries one inline policy", func(t *testing.T) {
+	t.Run("a granting binding gets one inline policy", func(t *testing.T) {
 		t.Parallel()
 
 		policies, err := planBindingPolicies(plannedBindings(grantsBindings()))
@@ -165,14 +165,14 @@ func TestBindingPoliciesRenderOnlyForAGrantingBinding(t *testing.T) {
 						continue
 					}
 					if got := s.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]; !slices.Equal(got, []string{testSessions.KeyPrefix + "*"}) {
-						t.Errorf("sessions statement condition = %v, want the app held to this deploy's own session keys", s.Condition)
+						t.Errorf("sessions statement condition = %v, want the app limited to this deploy's own session keys", s.Condition)
 					}
 				}
 			}
 		}
 	})
 
-	t.Run("a grant-free binding carries no policy", func(t *testing.T) {
+	t.Run("a grant-free binding gets no policy", func(t *testing.T) {
 		t.Parallel()
 
 		policies, err := planBindingPolicies(plannedBindings(grantsBindings()[1:]))

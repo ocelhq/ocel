@@ -162,12 +162,12 @@ export async function invalidateAll(inv: Invalidator, raises: Raises): Promise<s
     }
     const { project, release } = coordinate;
 
-    let held = targets.get(project);
-    if (held === undefined) {
-      held = targetsOf(inv.dynamo, inv.commands, inv.table, inv.bootstrapClass, project);
-      targets.set(project, held);
+    let projectTargets = targets.get(project);
+    if (projectTargets === undefined) {
+      projectTargets = targetsOf(inv.dynamo, inv.commands, inv.table, inv.bootstrapClass, project);
+      targets.set(project, projectTargets);
     }
-    await invalidateOne(inv, await held, release, raise);
+    await invalidateOne(inv, await projectTargets, release, raise);
   });
 
   return builds.flatMap(([isrPrefix, raise], i) => {

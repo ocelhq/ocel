@@ -41,7 +41,7 @@ describe("raisesOf", () => {
     expect(raises.get(PREFIX)!.records.get("home")).toEqual({ stale: 200, expired: undefined });
   });
 
-  it("remembers which records each build's raise was carried by", () => {
+  it("remembers which records each build's raise came from", () => {
     const other = tagNamespace("prod/acme/admin/rbbbbbbbb/isr")!;
     const raises = raisesOf([
       tagRecord("cart", { expired: { N: "100" } }),
@@ -56,7 +56,7 @@ describe("raisesOf", () => {
     expect(home).toBe(String(Number(cart) + 2));
   });
 
-  it("keeps the later watermark when a batch carries a tag twice", () => {
+  it("keeps the later watermark when a batch contains a tag twice", () => {
     const raises = raisesOf([
       tagRecord("cart", { expired: { N: "300" } }),
       tagRecord("cart", { expired: { N: "100" }, stale: { N: "50" } }),
@@ -95,13 +95,13 @@ describe("raisesOf", () => {
     expect(raisesOf([session]).size).toBe(0);
   });
 
-  it("drops a record carrying no watermark at all", () => {
+  it("drops a record with no watermark at all", () => {
     expect(raisesOf([tagRecord("cart", {})]).size).toBe(0);
     expect(raisesOf([tagRecord("cart", { expired: { N: "nope" } })]).size).toBe(0);
     expect(raisesOf([tagRecord("cart", { expired: { N: "-1" } })]).size).toBe(0);
   });
 
-  it("ignores a record with no new image, which a REMOVE carries", () => {
+  it("ignores a record with no new image, which a REMOVE produces", () => {
     expect(raisesOf([{ dynamodb: {} }, {}]).size).toBe(0);
   });
 });

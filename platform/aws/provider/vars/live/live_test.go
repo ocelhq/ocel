@@ -98,7 +98,7 @@ func TestRenderParse(t *testing.T) {
 		}
 	})
 
-	t.Run("bindings carry their type by name", func(t *testing.T) {
+	t.Run("bindings record their type by name", func(t *testing.T) {
 		t.Parallel()
 
 		want := postgresBinding()
@@ -153,7 +153,7 @@ func TestRenderParse(t *testing.T) {
 		}
 	})
 
-	t.Run("a preview carries the environment its overrides are addressed by", func(t *testing.T) {
+	t.Run("a preview includes the environment its overrides are addressed by", func(t *testing.T) {
 		t.Parallel()
 
 		raw, err := Render(Manifest{

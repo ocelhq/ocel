@@ -378,7 +378,7 @@ func TestUploadStaticAssets(t *testing.T) {
 					t.Fatal("uploadStaticAssets = nil, want the failed target to fail the deploy")
 				}
 				if !errors.Is(err, boom) {
-					t.Errorf("err = %v, want it to carry what the bucket said", err)
+					t.Errorf("err = %v, want it to wrap what the bucket said", err)
 				}
 			})
 		}

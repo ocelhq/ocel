@@ -67,16 +67,16 @@ func TestSurfaceConformance(t *testing.T) {
 		filled[i] = transformkit.Result{Patches: patches}
 	}
 
-	held, err := indexPatches(candidates, filled)
+	indexed, err := indexPatches(candidates, filled)
 	if err != nil {
-		t.Fatalf("index the patches every key carries: %v", err)
+		t.Fatalf("index the patches every key names: %v", err)
 	}
 	for ref := range wanted {
-		if _, registered := held.patches[ref]; !registered {
+		if _, registered := indexed.patches[ref]; !registered {
 			t.Errorf("nothing was registered for %s %s, so a patch on it would reach no resource", ref.Token, ref.Name)
 		}
 	}
-	if len(held.patches) != len(wanted) {
-		t.Errorf("indexPatches registered %d resources for %d keys", len(held.patches), len(wanted))
+	if len(indexed.patches) != len(wanted) {
+		t.Errorf("indexPatches registered %d resources for %d keys", len(indexed.patches), len(wanted))
 	}
 }

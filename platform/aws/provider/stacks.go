@@ -32,11 +32,11 @@ import (
 const artifactRootDirName = constants.ProjectStateDirName + "/output"
 
 func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Config, error) {
-	held, err := p.bootstrapped(ctx, scope.Class)
+	deployed, err := p.bootstrapped(ctx, scope.Class)
 	if err != nil {
 		return deploy.Config{}, err
 	}
-	if err := p.standing(held, scope.Class); err != nil {
+	if err := p.requireBootstrapped(deployed, scope.Class); err != nil {
 		return deploy.Config{}, err
 	}
 	params, err := p.classParams(ctx, scope.Class, scope.Edge)
@@ -56,33 +56,33 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	root := projectRoot()
 	cfg := deploy.Config{
 		Region:        p.aws.Region,
-		BackendURL:    stateBackendURL(held.StateBucket, scope.Slug),
+		BackendURL:    stateBackendURL(deployed.StateBucket, scope.Slug),
 		Passphrase:    params.Passphrase,
 		PulumiProject: naming.PulumiProject(scope.Slug),
 		Secrets:       secretsmanager.NewFromConfig(p.aws),
 
-		Tags:    &tagclock.Table{Dynamo: dynamodb.NewFromConfig(p.aws), Table: held.StateTable},
+		Tags:    &tagclock.Table{Dynamo: dynamodb.NewFromConfig(p.aws), Table: deployed.StateTable},
 		Records: p.Records(),
 		Rules:   elasticloadbalancingv2.NewFromConfig(p.aws),
 
 		Class:          scope.Class,
 		Slug:           scope.Slug,
 		Env:            scope.Env,
-		StateTable:     held.StateTable,
-		StateTableARN:  tableARN(p.aws.Region, account, held.StateTable),
-		VarsTable:      held.VarsTable,
-		VarsTableARN:   tableARN(p.aws.Region, account, held.VarsTable),
-		VarsKeyARN:     held.VarsKeyARN,
-		AppBoundaryARN: held.AppBoundaryARN,
+		StateTable:     deployed.StateTable,
+		StateTableARN:  tableARN(p.aws.Region, account, deployed.StateTable),
+		VarsTable:      deployed.VarsTable,
+		VarsTableARN:   tableARN(p.aws.Region, account, deployed.VarsTable),
+		VarsKeyARN:     deployed.VarsKeyARN,
+		AppBoundaryARN: deployed.AppBoundaryARN,
 		VarsReferenced: referenced,
 
-		RuntimeLayers: held.RuntimeLayers,
+		RuntimeLayers: deployed.RuntimeLayers,
 
 		ArtifactRoot:       filepath.Join(root, artifactRootDirName),
-		ArtifactBucket:     held.ArtifactBucket,
-		AssetBucket:        held.AssetBucket,
-		ImageOptimizerURL:  held.ImageOptimizerURL,
-		RevalidateQueueURL: held.RevalidateQueueURL,
+		ArtifactBucket:     deployed.ArtifactBucket,
+		AssetBucket:        deployed.AssetBucket,
+		ImageOptimizerURL:  deployed.ImageOptimizerURL,
+		RevalidateQueueURL: deployed.RevalidateQueueURL,
 
 		CacheStoreBucket:  params.CacheStore.Bucket,
 		CacheStoreObjects: cacheStoreObjects(params.CacheStore),
@@ -116,19 +116,19 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 	return cfg, nil
 }
 
-func (p *Provider) standing(held bootstrap.Deployed, class edge.Class) error {
+func (p *Provider) requireBootstrapped(deployed bootstrap.Deployed, class edge.Class) error {
 	command := provider.BootstrapCommand(class)
 	for _, missing := range []struct {
-		held string
-		what string
+		value string
+		what  string
 	}{
-		{held.StateBucket, "state bucket"},
-		{held.ArtifactBucket, "artifact bucket"},
-		{held.AssetBucket, "asset bucket"},
-		{held.StateTable, "state table"},
-		{held.VarsTable, "variable store"},
+		{deployed.StateBucket, "state bucket"},
+		{deployed.ArtifactBucket, "artifact bucket"},
+		{deployed.AssetBucket, "asset bucket"},
+		{deployed.StateTable, "state table"},
+		{deployed.VarsTable, "variable store"},
 	} {
-		if missing.held == "" {
+		if missing.value == "" {
 			return refusal.Refuse(refusal.CodeNotReady,
 				"account bootstrap is present but its %s is missing (a partial rollback?); re-run `%s`", missing.what, command)
 		}

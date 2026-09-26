@@ -8,7 +8,7 @@ import (
 )
 
 func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequest) (provider.EdgeProgram, error) {
-	held, err := p.bootstrapped(ctx, req.Class)
+	deployed, err := p.bootstrapped(ctx, req.Class)
 	if err != nil {
 		return provider.EdgeProgram{}, err
 	}
@@ -26,10 +26,10 @@ func (p *Provider) ProgramEdge(ctx context.Context, req provider.EdgeProgramRequ
 		Apps:              req.Apps,
 		Worker: deploy.WorkerFacts{
 			Region:             p.aws.Region,
-			StateTable:         held.StateTable,
-			AssetBucket:        held.AssetBucket,
-			ImageOptimizerURL:  held.ImageOptimizerURL,
-			RevalidateQueueURL: held.RevalidateQueueURL,
+			StateTable:         deployed.StateTable,
+			AssetBucket:        deployed.AssetBucket,
+			ImageOptimizerURL:  deployed.ImageOptimizerURL,
+			RevalidateQueueURL: deployed.RevalidateQueueURL,
 		},
 		StoreScriptName:     params.DeploymentsStore.ScriptName,
 		StoreEndpoint:       params.DeploymentsStore.Endpoint,

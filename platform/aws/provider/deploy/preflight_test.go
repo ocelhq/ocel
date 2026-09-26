@@ -52,7 +52,7 @@ func TestPreflightPolicyBudget(t *testing.T) {
 		}
 	})
 
-	t.Run("buckets this deploy has not stood up yet are billed at the widest name AWS hands out", func(t *testing.T) {
+	t.Run("buckets this deploy has not provisioned yet are billed at the widest name AWS hands out", func(t *testing.T) {
 		t.Parallel()
 
 		pre := provider.DeployPreflight{
@@ -61,10 +61,10 @@ func TestPreflightPolicyBudget(t *testing.T) {
 		}
 		for i := range 40 {
 			name := fmt.Sprintf("bucket--%02d", i)
-			held := provider.Resource{Name: name, Declared: name, Type: provider.BindingBucket}
-			pre.Resources = append(pre.Resources, held)
-			pre.Apps[0].Resources = append(pre.Apps[0].Resources, held)
-			pre.Apps[1].Resources = append(pre.Apps[1].Resources, held)
+			bucket := provider.Resource{Name: name, Declared: name, Type: provider.BindingBucket}
+			pre.Resources = append(pre.Resources, bucket)
+			pre.Apps[0].Resources = append(pre.Apps[0].Resources, bucket)
+			pre.Apps[1].Resources = append(pre.Apps[1].Resources, bucket)
 		}
 
 		var over *PolicyBudgetError
@@ -72,14 +72,14 @@ func TestPreflightPolicyBudget(t *testing.T) {
 			t.Fatalf("Preflight() = %v, want a *PolicyBudgetError", err)
 		}
 		if len(over.Apps) != 2 || over.Apps[0].App != "web" || over.Apps[1].App != "docs" {
-			t.Errorf("billed %+v, want every app whose role would carry the bill", over.Apps)
+			t.Errorf("billed %+v, want every app whose role would bear the bill", over.Apps)
 		}
 		if !strings.Contains(over.Error(), "bucket--00") {
 			t.Errorf("Error() = %q, want it to name the resources it billed", over.Error())
 		}
 	})
 
-	t.Run("a binding already published is billed from the grants it carries", func(t *testing.T) {
+	t.Run("a binding already published is billed from the grants it lists", func(t *testing.T) {
 		t.Parallel()
 
 		pre := provider.DeployPreflight{
@@ -116,9 +116,9 @@ func TestPreflightPolicyBudget(t *testing.T) {
 		}
 		for i := range 40 {
 			name := fmt.Sprintf("bucket--%02d", i)
-			held := provider.Resource{Name: name, Declared: name, Type: provider.BindingBucket}
-			pre.Resources = append(pre.Resources, held)
-			pre.Apps[0].Resources = append(pre.Apps[0].Resources, held)
+			bucket := provider.Resource{Name: name, Declared: name, Type: provider.BindingBucket}
+			pre.Resources = append(pre.Resources, bucket)
+			pre.Apps[0].Resources = append(pre.Apps[0].Resources, bucket)
 		}
 		pre.Apps[1].Resources = pre.Apps[0].Resources[:1]
 

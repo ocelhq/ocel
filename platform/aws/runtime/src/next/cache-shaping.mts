@@ -92,7 +92,7 @@ function shape(req: http.IncomingMessage, res: http.ServerResponse, shaping: Ori
     const lost = [...unstorable, ...overflowed];
     if (lost.length > 0) {
       console.warn(
-        `ocel: ${req.url} carries ${noted.length} cache tags and the front stores ${tagsPerObject} that fit its alphabet, so revalidating ${lost.join(", ")} will not reach it`,
+        `ocel: ${req.url} has ${noted.length} cache tags and the front stores ${tagsPerObject} that fit its alphabet, so revalidating ${lost.join(", ")} will not reach it`,
       );
     }
   }

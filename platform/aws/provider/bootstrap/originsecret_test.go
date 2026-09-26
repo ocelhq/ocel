@@ -18,18 +18,18 @@ func storedOriginSecret(t *testing.T, ssmc *fakeSSM, name string) OriginSecret {
 	t.Helper()
 	raw, ok := ssmc.params[name]
 	if !ok {
-		t.Fatalf("%s holds nothing", name)
+		t.Fatalf("%s stores nothing", name)
 	}
-	held, err := OriginSecretOf(raw)
+	stored, err := OriginSecretOf(raw)
 	if err != nil {
 		t.Fatalf("%s = %q: %v", name, raw, err)
 	}
-	return held
+	return stored
 }
 
-func recordOriginSecret(t *testing.T, ssmc *fakeSSM, name string, held OriginSecret) {
+func recordOriginSecret(t *testing.T, ssmc *fakeSSM, name string, secret OriginSecret) {
 	t.Helper()
-	raw, err := json.Marshal(held)
+	raw, err := json.Marshal(secret)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestEnsureOriginSecret(t *testing.T) {
 		}
 		first := storedOriginSecret(t, ssmc, originSecretParam)
 		if _, err := hex.DecodeString(first.Current); err != nil || len(first.Current) != 64 {
-			t.Fatalf("secret = %q, want 32 random bytes the front can carry as a header", first.Current)
+			t.Fatalf("secret = %q, want 32 random bytes the front can send as a header", first.Current)
 		}
 		if !first.CreatedAt.Equal(secretMintedAt) || first.Rotating() {
 			t.Errorf("stored = %+v, want the mint time recorded and no predecessor", first)
@@ -85,8 +85,8 @@ func TestEnsureOriginSecret(t *testing.T) {
 		if outcome.minted {
 			t.Error("the loser of the race reports a mint of its own")
 		}
-		if held := storedOriginSecret(t, ssmc.fakeSSM, originSecretParam); held.Current != "the-other-bootstraps-secret" {
-			t.Errorf("secret = %q, want the winner's", held.Current)
+		if stored := storedOriginSecret(t, ssmc.fakeSSM, originSecretParam); stored.Current != "the-other-bootstraps-secret" {
+			t.Errorf("secret = %q, want the winner's", stored.Current)
 		}
 	})
 
@@ -96,7 +96,7 @@ func TestEnsureOriginSecret(t *testing.T) {
 		}
 	})
 
-	t.Run("refuses a parameter holding something other than the record it writes", func(t *testing.T) {
+	t.Run("refuses a parameter storing something other than the record it writes", func(t *testing.T) {
 		ssmc := newFakeSSM()
 		ssmc.params[originSecretParam] = "5e884898da28047151d0e56f8dc6292773603d0d"
 
@@ -105,13 +105,13 @@ func TestEnsureOriginSecret(t *testing.T) {
 			t.Fatalf("err = %v, want the parameter named so the operator can delete it", err)
 		}
 		if ssmc.puts != 0 {
-			t.Error("an unreadable parameter was overwritten, which strands every release holding what it held")
+			t.Error("an unreadable parameter was overwritten, which strands every release deployed with what it stored")
 		}
 	})
 }
 
 func TestOriginSecretRotation(t *testing.T) {
-	standing := func(t *testing.T) *fakeSSM {
+	minted := func(t *testing.T) *fakeSSM {
 		t.Helper()
 		ssmc := newFakeSSM()
 		recordOriginSecret(t, ssmc, originSecretParam, OriginSecret{Current: "s1", CreatedAt: secretMintedAt})
@@ -119,7 +119,7 @@ func TestOriginSecretRotation(t *testing.T) {
 	}
 
 	t.Run("a secret younger than the maximum age is kept", func(t *testing.T) {
-		ssmc := standing(t)
+		ssmc := minted(t)
 
 		outcome, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, ClassProduction, secretMintedAt.Add(OriginSecretMaxAge-time.Second))
 		if err != nil {
@@ -130,8 +130,8 @@ func TestOriginSecretRotation(t *testing.T) {
 		}
 	})
 
-	t.Run("a secret at the maximum age is rotated: a successor is minted and the old one kept beside it for the releases still holding it", func(t *testing.T) {
-		ssmc := standing(t)
+	t.Run("a secret at the maximum age is rotated: a successor is minted and the old one kept beside it for the releases still presenting it", func(t *testing.T) {
+		ssmc := minted(t)
 		rotatedAt := secretMintedAt.Add(OriginSecretMaxAge)
 
 		outcome, err := ensureOriginSecret(context.Background(), ssmc, defaultNamespace, ClassProduction, rotatedAt)
@@ -141,12 +141,12 @@ func TestOriginSecretRotation(t *testing.T) {
 		if !outcome.rotated || !outcome.minted || outcome.retired {
 			t.Errorf("outcome = %+v, want a rotation", outcome)
 		}
-		held := storedOriginSecret(t, ssmc, originSecretParam)
-		if held.Current == "s1" || len(held.Current) != 64 {
-			t.Errorf("current = %q, want a fresh secret", held.Current)
+		stored := storedOriginSecret(t, ssmc, originSecretParam)
+		if stored.Current == "s1" || len(stored.Current) != 64 {
+			t.Errorf("current = %q, want a fresh secret", stored.Current)
 		}
-		if held.Previous != "s1" || !held.RotatedAt.Equal(rotatedAt) || !held.CreatedAt.Equal(rotatedAt) {
-			t.Errorf("stored = %+v, want s1 kept as the predecessor from %v", held, rotatedAt)
+		if stored.Previous != "s1" || !stored.RotatedAt.Equal(rotatedAt) || !stored.CreatedAt.Equal(rotatedAt) {
+			t.Errorf("stored = %+v, want s1 kept as the predecessor from %v", stored, rotatedAt)
 		}
 	})
 
@@ -162,13 +162,13 @@ func TestOriginSecretRotation(t *testing.T) {
 		if !outcome.retired || outcome.rotated || outcome.minted {
 			t.Errorf("outcome = %+v, want the predecessor retired and nothing minted", outcome)
 		}
-		held := storedOriginSecret(t, ssmc, originSecretParam)
-		if held.Current != "s2" || held.Rotating() || !held.RotatedAt.IsZero() {
-			t.Errorf("stored = %+v, want s2 alone", held)
+		stored := storedOriginSecret(t, ssmc, originSecretParam)
+		if stored.Current != "s2" || stored.Rotating() || !stored.RotatedAt.IsZero() {
+			t.Errorf("stored = %+v, want s2 alone", stored)
 		}
 	})
 
-	t.Run("a predecessor still within its grace is left standing", func(t *testing.T) {
+	t.Run("a predecessor still within its grace is left in place", func(t *testing.T) {
 		ssmc := newFakeSSM()
 		rotatedAt := secretMintedAt.Add(OriginSecretMaxAge)
 		recordOriginSecret(t, ssmc, originSecretParam, OriginSecret{Current: "s2", CreatedAt: rotatedAt, Previous: "s1", RotatedAt: rotatedAt})
@@ -206,9 +206,9 @@ func TestOriginSecretRotation(t *testing.T) {
 		if !outcome.retired || !outcome.rotated {
 			t.Errorf("outcome = %+v, want s1 retired and s2 succeeded", outcome)
 		}
-		held := storedOriginSecret(t, ssmc, originSecretParam)
-		if held.Previous != "s2" || held.Current == "s2" || ssmc.puts != 1 {
-			t.Errorf("stored = %+v after %d puts, want s2 as the predecessor of a fresh secret in one write", held, ssmc.puts)
+		stored := storedOriginSecret(t, ssmc, originSecretParam)
+		if stored.Previous != "s2" || stored.Current == "s2" || ssmc.puts != 1 {
+			t.Errorf("stored = %+v after %d puts, want s2 as the predecessor of a fresh secret in one write", stored, ssmc.puts)
 		}
 	})
 }
@@ -223,26 +223,26 @@ func TestOriginSecretPresentedToARelease(t *testing.T) {
 	if got := rotating.Presented(rotatedAt.Unix()); got != "s2" {
 		t.Errorf("a release deployed at the rotation is presented %q, want the current secret it accepts", got)
 	}
-	settled := OriginSecret{Current: "s2", CreatedAt: rotatedAt}
-	if got := settled.Presented(0); got != "s2" {
+	single := OriginSecret{Current: "s2", CreatedAt: rotatedAt}
+	if got := single.Presented(0); got != "s2" {
 		t.Errorf("after the predecessor is retired a release is presented %q, want the only secret left", got)
 	}
 }
 
 func TestStaleOriginSecretNotice(t *testing.T) {
-	held := OriginSecret{Current: "s1", CreatedAt: secretMintedAt}
+	aging := OriginSecret{Current: "s1", CreatedAt: secretMintedAt}
 
-	if notice := StaleOriginSecretNotice(held, secretMintedAt.Add(OriginSecretMaxAge-time.Second), ClassProduction); notice != "" {
+	if notice := StaleOriginSecretNotice(aging, secretMintedAt.Add(OriginSecretMaxAge-time.Second), ClassProduction); notice != "" {
 		t.Errorf("notice = %q, want none for a secret within its age", notice)
 	}
-	notice := StaleOriginSecretNotice(held, secretMintedAt.Add(OriginSecretMaxAge+24*time.Hour), ClassProduction)
+	notice := StaleOriginSecretNotice(aging, secretMintedAt.Add(OriginSecretMaxAge+24*time.Hour), ClassProduction)
 	for _, want := range []string{"91 days", "ocel bootstrap"} {
 		if !strings.Contains(notice, want) {
-			t.Errorf("notice = %q, want it to carry %q", notice, want)
+			t.Errorf("notice = %q, want it to contain %q", notice, want)
 		}
 	}
 	if strings.Contains(notice, "s1") {
-		t.Errorf("notice = %q, which carries the secret itself", notice)
+		t.Errorf("notice = %q, which contains the secret itself", notice)
 	}
 
 	rotatedAt := secretMintedAt.Add(OriginSecretMaxAge)
@@ -250,26 +250,26 @@ func TestStaleOriginSecretNotice(t *testing.T) {
 	notice = StaleOriginSecretNotice(rotating, rotatedAt.Add(2*24*time.Hour), ClassProduction)
 	for _, want := range []string{"2 days ago", rotatedAt.Add(OriginSecretGrace).Format(time.DateOnly)} {
 		if !strings.Contains(notice, want) {
-			t.Errorf("notice = %q, want it to carry %q", notice, want)
+			t.Errorf("notice = %q, want it to contain %q", notice, want)
 		}
 	}
 	for _, secret := range []string{"s1", "s2"} {
 		if strings.Contains(notice, secret) {
-			t.Errorf("notice = %q, which carries the secret itself", notice)
+			t.Errorf("notice = %q, which contains the secret itself", notice)
 		}
 	}
 	if notice := StaleOriginSecretNotice(OriginSecret{}, secretMintedAt, ClassProduction); notice != "" {
-		t.Errorf("notice = %q, want none when no secret stands", notice)
+		t.Errorf("notice = %q, want none when no secret is recorded", notice)
 	}
 }
 
 func TestPlanOriginSecret(t *testing.T) {
 	rotatedAt := secretMintedAt.Add(OriginSecretMaxAge)
 	for _, tc := range []struct {
-		name   string
-		held   *OriginSecret
-		now    time.Time
-		action provider.ChangeAction
+		name     string
+		existing *OriginSecret
+		now      time.Time
+		action   provider.ChangeAction
 	}{
 		{"absent is created", nil, secretMintedAt, provider.ActionCreate},
 		{"young is kept", &OriginSecret{Current: "s1", CreatedAt: secretMintedAt}, secretMintedAt.Add(time.Hour), provider.ActionKeep},
@@ -279,8 +279,8 @@ func TestPlanOriginSecret(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ssmc := newFakeSSM()
-			if tc.held != nil {
-				recordOriginSecret(t, ssmc, originSecretParam, *tc.held)
+			if tc.existing != nil {
+				recordOriginSecret(t, ssmc, originSecretParam, *tc.existing)
 			}
 			change, err := planOriginSecret(context.Background(), ssmc, defaultNamespace, ClassProduction, tc.now)
 			if err != nil {
@@ -296,7 +296,7 @@ func TestPlanOriginSecret(t *testing.T) {
 	}
 }
 
-func TestBootstrapParamsCarryTheOriginSecret(t *testing.T) {
+func TestBootstrapParamsIncludeTheOriginSecret(t *testing.T) {
 	params := fullProductionParams()
 	rotatedAt := secretMintedAt.Add(OriginSecretMaxAge)
 	raw, _ := json.Marshal(OriginSecret{Current: "origin-2", CreatedAt: rotatedAt, Previous: "origin-1", RotatedAt: rotatedAt})
@@ -321,10 +321,10 @@ func TestBootstrapParamsCarryTheOriginSecret(t *testing.T) {
 	params[originSecretParam] = "origin-1"
 	bare, err := ReadClassParams(context.Background(), &fakeBatchSSM{params: params}, defaultNamespace, ClassProduction, KindCloudflare)
 	if err != nil {
-		t.Fatalf("ReadClassParams over a bare value = %v, want the read itself to stand: a teardown presents no secret", err)
+		t.Fatalf("ReadClassParams over a bare value = %v, want the read itself to succeed: a teardown presents no secret", err)
 	}
 	if bare.OriginSecretErr == nil || !strings.Contains(bare.OriginSecretErr.Error(), originSecretParam) || !strings.Contains(bare.OriginSecretErr.Error(), "ocel bootstrap") {
-		t.Errorf("OriginSecretErr = %v; want the failure carried, naming the parameter and the bootstrap that replaces it, so a deploy never bakes in something the front will not present", bare.OriginSecretErr)
+		t.Errorf("OriginSecretErr = %v; want the failure kept, naming the parameter and the bootstrap that replaces it, so a deploy never bakes in something the front will not present", bare.OriginSecretErr)
 	}
 
 	delete(params, originSecretParam)
@@ -332,7 +332,7 @@ func TestBootstrapParamsCarryTheOriginSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadClassParams without the secret: %v", err)
 	}
-	if absent.OriginSecret.Held() {
+	if absent.OriginSecret.Present() {
 		t.Errorf("OriginSecret = %+v, want none when the parameter is absent", absent.OriginSecret)
 	}
 

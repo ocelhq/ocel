@@ -19,7 +19,7 @@ describe("invalidationBatches", () => {
     ]);
   });
 
-  it("splits into batches of at most the paths one request carries", () => {
+  it("splits into batches of at most the paths one request accepts", () => {
     const tags = Array.from({ length: pathsPerInvalidation * 2 + 1 }, (_, i) => `t${i}`);
     const { batches } = invalidationBatches(RELEASE, tags);
 
@@ -31,7 +31,7 @@ describe("invalidationBatches", () => {
     expect(batches.flat()).toEqual(tags.map((tag) => `#${RELEASE}|${tag}`));
   });
 
-  it("sends every raised tag rather than the fifty one object holds", () => {
+  it("sends every raised tag rather than the fifty one object stores", () => {
     const tags = Array.from({ length: 60 }, (_, i) => `t${i}`);
 
     expect(invalidationBatches(RELEASE, tags).batches.flat()).toHaveLength(60);
@@ -57,7 +57,7 @@ describe("invalidationBatches", () => {
     expect(invalidationBatches(RELEASE, ["with space"]).batches).toEqual([]);
   });
 
-  it("counts the release stamp against the tag CloudFront can hold", () => {
+  it("counts the release stamp against the tag length CloudFront can store", () => {
     const fits = "x".repeat(256 - RELEASE.length - 1);
 
     expect(invalidationBatches(RELEASE, [fits]).batches).toEqual([[`#${RELEASE}|${fits}`]]);

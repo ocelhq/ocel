@@ -244,18 +244,18 @@ func broughtVarsKey(outputs map[string]string) string {
 	return outputs[outputVarsKeyARN]
 }
 
-func standingFeatures(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (FeatureSet, error) {
-	standing := FeatureSet{}
+func installedFeatures(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (FeatureSet, error) {
+	installed := FeatureSet{}
 	for _, f := range featureRegistry {
 		stack, err := cfn.DescribeStack(ctx, api, f.stackName(ns, class))
 		if err != nil {
 			return nil, err
 		}
 		if stack != nil {
-			standing[f.name] = true
+			installed[f.name] = true
 		}
 	}
-	return standing, nil
+	return installed, nil
 }
 
 func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
@@ -293,7 +293,7 @@ func absorb(d *Deployed, refs *stackRefs, out map[string]string) error {
 		case outputInfraClass:
 			d.Class = value
 		default:
-			if arch, carried := layers[key]; carried {
+			if arch, isLayer := layers[key]; isLayer {
 				if d.RuntimeLayers == nil {
 					d.RuntimeLayers = map[string]string{}
 				}
@@ -524,7 +524,7 @@ func openEdge(apis APIs, kind edge.Kind) (edge.Edge, error) {
 		return apis.Edge, nil
 	}
 	if apis.Edges == nil {
-		return nil, fmt.Errorf("bootstrap: this run holds no edge registry, so it cannot reach the %s edge its features stand on", kind)
+		return nil, fmt.Errorf("bootstrap: this run has no edge registry, so it cannot reach the %s edge its features depend on", kind)
 	}
 	return apis.Edges.Open(kind)
 }
@@ -675,7 +675,7 @@ Description: %q
 Resources:
 %s%s%s%s%s%s%sOutputs:
   %s:
-    Description: "S3 bucket holding the Pulumi state Ocel plans every %s deploy and teardown from. One versioned object per %s stack."
+    Description: "S3 bucket storing the Pulumi state Ocel plans every %s deploy and teardown from. One versioned object per %s stack."
     Value: !Ref StateBucket
 %s%s%s%s%s  %s:
     Description: "Class this bootstrap is stamped with, checked before an action runs so a preview deploy cannot reach production."
@@ -691,7 +691,7 @@ func coreStackDescription(class string) string {
 	if class == ClassPreview {
 		apart = " It is kept apart from the production bootstrap so a per-PR preview never reaches production state, variables or caches."
 	}
-	return fmt.Sprintf("Ocel bootstrap (%s) - the account-global core every %s Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets and the variable store. Each edge this account fronts deployments with stands in a feature stack of its own beside it.%s", class, scopeOf(class), apart)
+	return fmt.Sprintf("Ocel bootstrap (%s) - the account-global core every %s Ocel deploys here is built on: the Pulumi state bucket and state table, the artifact and asset buckets and the variable store. Each edge this account fronts deployments with is installed in a feature stack of its own beside it.%s", class, scopeOf(class), apart)
 }
 
 func scopeOf(class string) string {
@@ -776,7 +776,7 @@ func stateTableResource() string {
 
 func stateTableOutputs() string {
 	return fmt.Sprintf(`  %s:
-    Description: "DynamoDB table holding account-global Ocel state: the stack index prune and teardown walk, and the ISR tag clock the edge shares."
+    Description: "DynamoDB table storing account-global Ocel state: the stack index prune and teardown walk, and the ISR tag clock the edge shares."
     Value: !Ref StateTable
   %s:
     Description: "ARN of that table, handed to every feature stack that grants an item read or write on it."
@@ -791,7 +791,7 @@ func artifactBucketResource() string {
 	return fmt.Sprintf(`  ArtifactBucket:
     Type: AWS::S3::Bucket
     Metadata:
-      Description: "Staging area for the Lambda code Ocel uploads before a stack references it. A deployed function holds its own copy, and these objects age out on a lifecycle rule."
+      Description: "Staging area for the Lambda code Ocel uploads before a stack references it. A deployed function keeps its own copy, and these objects age out on a lifecycle rule."
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
@@ -867,7 +867,7 @@ func assetBucketPolicyResource() string {
 
 func assetBucketOutputs() string {
 	return fmt.Sprintf(`  %s:
-    Description: "S3 bucket holding per-build static assets, prerender fallbacks, image-optimizer config and the edge fetch cache. Read directly by the edge."
+    Description: "S3 bucket storing per-build static assets, prerender fallbacks, image-optimizer config and the edge fetch cache. Read directly by the edge."
     Value: !Ref AssetBucket
   %s:
     Description: "ARN of that bucket, handed to every feature stack that grants a read or a write inside it."

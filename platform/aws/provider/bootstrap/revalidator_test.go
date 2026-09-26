@@ -178,7 +178,7 @@ func TestRevalidateQueue(t *testing.T) {
 				tmpl := parseRevalidatorTemplate(t, tc.template)
 				for _, name := range []string{"RevalidateQueue", "RevalidateDeadLetterQueue"} {
 					if got := tmpl.Resources[name].Properties.KmsMasterKeyId; got != "alias/aws/sqs" {
-						t.Errorf("%s KmsMasterKeyId = %q, want the SSE-KMS managed key; the messages carry bypass tokens", name, got)
+						t.Errorf("%s KmsMasterKeyId = %q, want the SSE-KMS managed key; the messages contain bypass tokens", name, got)
 					}
 				}
 			})
@@ -207,7 +207,7 @@ func TestRevalidateQueue(t *testing.T) {
 						}
 					}
 					if len(kms) != 1 {
-						t.Fatalf("%s holds %d KMS statements, want exactly one; without it every message against the SSE-KMS queue fails KMS.AccessDeniedException and the queue silently stays empty", end.who, len(kms))
+						t.Fatalf("%s has %d KMS statements, want exactly one; without it every message against the SSE-KMS queue fails KMS.AccessDeniedException and the queue silently stays empty", end.who, len(kms))
 					}
 					st := kms[0]
 					if !slices.Equal(st.actions(), end.want) {
@@ -358,7 +358,7 @@ func TestRevalidator(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				for name, res := range parseRevalidatorTemplate(t, tc.template).Resources {
 					if res.Type == "AWS::CloudWatch::Alarm" {
-						t.Errorf("%s is a billed standing alarm in a stack that must be free to leave idle", name)
+						t.Errorf("%s is an alarm billed every month in a stack that must be free to leave idle", name)
 					}
 				}
 			})
@@ -539,7 +539,7 @@ func TestEnsureRevalidatorPayload(t *testing.T) {
 			t.Errorf("key = %q, want %q", code.Key, want)
 		}
 		if !bytes.Equal(store.objects[code.Key], payloads.Revalidator().Bytes) {
-			t.Error("the account holds bytes other than the embedded revalidator")
+			t.Error("the account stores bytes other than the embedded revalidator")
 		}
 		if want := payloads.Revalidator().ChecksumSHA256; len(store.putChecksums) != 1 || store.putChecksums[0] != want {
 			t.Errorf("uploaded with checksums %v, want [%s]", store.putChecksums, want)

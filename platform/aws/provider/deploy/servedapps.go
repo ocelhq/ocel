@@ -42,29 +42,29 @@ func (s *servedApps) plan(from *release, app string, logical []string, bytecode 
 func (s *servedApps) realized(logical, physical string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	held, known := s.byLogic[logical]
+	fn, known := s.byLogic[logical]
 	if !known || physical == "" {
 		return
 	}
-	held.Physical = physical
-	s.byPhysic[physical] = held
+	fn.Physical = physical
+	s.byPhysic[physical] = fn
 }
 
 func (s *servedApps) byPhysicalName(physical string) (servedFunction, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	held, known := s.byPhysic[physical]
+	fn, known := s.byPhysic[physical]
 	if !known {
 		return servedFunction{}, false
 	}
-	return *held, true
+	return *fn, true
 }
 
 func (s *servedApps) warmed(physical string, reply warmReply) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if held, known := s.byPhysic[physical]; known {
-		held.Warmed = reply
+	if fn, known := s.byPhysic[physical]; known {
+		fn.Warmed = reply
 	}
 }
 
@@ -75,12 +75,12 @@ func (r *Stacks) Warm(ctx context.Context, targets []string, progress edge.Progr
 	say := sayTo(progress)
 	warming := map[*release][]warmTarget{}
 	for _, physical := range targets {
-		held, known := r.served.byPhysicalName(physical)
-		if !known || held.Bytecode == nil || held.from == nil || held.from.cfg.Invoker == nil {
+		fn, known := r.served.byPhysicalName(physical)
+		if !known || fn.Bytecode == nil || fn.from == nil || fn.from.cfg.Invoker == nil {
 			continue
 		}
-		warming[held.from] = append(warming[held.from],
-			warmTarget{App: held.App, LogicalName: held.Logical, FunctionName: physical})
+		warming[fn.from] = append(warming[fn.from],
+			warmTarget{App: fn.App, LogicalName: fn.Logical, FunctionName: physical})
 	}
 	for from, batch := range warming {
 		for _, result := range (warmPass{invoker: from.cfg.Invoker, targets: batch, budget: warmPassDeadline, log: say}).run(ctx) {
@@ -99,11 +99,11 @@ func (r *Stacks) EmbedCode(ctx context.Context, physical string, artifact provid
 		say("ocel: " + bytecodeEmbedEnv + "=1 has nothing to embed without " + bytecodeCacheEnv + "=1; not embedding")
 		return nil
 	}
-	held, known := r.served.byPhysicalName(physical)
-	if !known || held.Bytecode == nil || held.Warmed.Key == "" || held.from == nil {
+	fn, known := r.served.byPhysicalName(physical)
+	if !known || fn.Bytecode == nil || fn.Warmed.Key == "" || fn.from == nil {
 		return nil
 	}
-	from := held.from
+	from := fn.from
 	if missing := missingEmbedClients(from.cfg); missing != "" {
 		say("ocel: " + bytecodeEmbedEnv + "=1 but this deploy has no " + missing + "; not embedding")
 		return nil
@@ -118,17 +118,17 @@ func (r *Stacks) EmbedCode(ctx context.Context, physical string, artifact provid
 		code:    from.cfg.CodeUpdater,
 		invoke:  from.cfg.Invoker,
 		targets: []embedTarget{{
-			App:          held.App,
-			LogicalName:  held.Logical,
+			App:          fn.App,
+			LogicalName:  fn.Logical,
 			FunctionName: physical,
 			Artifact:     code,
-			CacheBucket:  held.Bytecode.Bucket,
-			CacheKey:     held.Warmed.Key,
-			TreeBytes:    held.Warmed.Bytes,
+			CacheBucket:  fn.Bytecode.Bucket,
+			CacheKey:     fn.Warmed.Key,
+			TreeBytes:    fn.Warmed.Bytes,
 		}},
-		budget: embedPassDeadline,
-		settle: embedUpdateSettle,
-		log:    say,
+		budget:     embedPassDeadline,
+		updateWait: embedUpdateWait,
+		log:        say,
 	}.run(ctx)
 	return nil
 }

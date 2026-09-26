@@ -77,7 +77,7 @@ type containerWork struct {
 	transformed *transformPatches
 	service     naming.Coordinate
 	role        naming.Coordinate
-	substrate   substrate
+	infra       containerInfra
 }
 
 var fargateCPUArchitectures = map[string]string{
@@ -137,7 +137,7 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 	}
 	if r.cfg.OriginSecret == "" {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
-			"this class holds no origin secret, and a container answers only to an edge that presents one: re-run `%s`", provider.BootstrapCommand(spec.Ref.Class))
+			"this class has no origin secret, and a container answers only to an edge that presents one: re-run `%s`", provider.BootstrapCommand(spec.Ref.Class))
 	}
 	if r.cfg.AppBoundaryARN == "" {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
@@ -179,17 +179,17 @@ func (r *release) checkContainer(spec provider.StackSpec) (*containerWork, error
 	}, nil
 }
 
-func liveOnly(held provider.AppValues) provider.AppValues {
-	held.Sensitive = nil
-	return held
+func liveOnly(values provider.AppValues) provider.AppValues {
+	values.Sensitive = nil
+	return values
 }
 
-func (r *release) containerWork(spec provider.StackSpec, held substrate) (*containerWork, error) {
+func (r *release) containerWork(spec provider.StackSpec, infra containerInfra) (*containerWork, error) {
 	work, err := r.checkContainer(spec)
 	if err != nil {
 		return nil, err
 	}
-	work.substrate = held
+	work.infra = infra
 	return work, nil
 }
 
@@ -245,13 +245,13 @@ func routesContainer(rule elbv2types.Rule, physical string) bool {
 }
 
 func (r *release) placeRule(ctx context.Context, work *containerWork) error {
-	taken, err := takenPriorities(ctx, r.cfg.Rules, work.substrate.Listener, work.physical())
+	taken, err := takenPriorities(ctx, r.cfg.Rules, work.infra.Listener, work.physical())
 	if err != nil {
 		return err
 	}
 	if work.priority = rulePriority(work.physical(), taken); work.priority == 0 {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"the container front for the %s class holds a rule at every priority a listener allows, so %s has no slot: prune the releases behind it", r.cfg.Class, work.app)
+			"the container front for the %s class has a rule at every priority a listener allows, so %s has no slot: prune the releases behind it", r.cfg.Class, work.app)
 	}
 	return nil
 }
@@ -333,7 +333,7 @@ func (w *containerWork) definition() (string, error) {
 		LogConfig: logConfiguration{
 			Driver: "awslogs",
 			Options: map[string]string{
-				"awslogs-group":         w.substrate.LogGroup,
+				"awslogs-group":         w.infra.LogGroup,
 				"awslogs-region":        w.region,
 				"awslogs-stream-prefix": w.physical(),
 			},
@@ -374,7 +374,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 		Memory:                  pulumi.String(containerMemory),
 		NetworkMode:             pulumi.String("awsvpc"),
 		RequiresCompatibilities: pulumi.StringArray{pulumi.String("FARGATE")},
-		ExecutionRoleArn:        pulumi.String(w.substrate.ExecutionRole),
+		ExecutionRoleArn:        pulumi.String(w.infra.ExecutionRole),
 		TaskRoleArn:             taskRole,
 		ContainerDefinitions:    pulumi.ToSecret(pulumi.String(definition)).(pulumi.StringOutput),
 		RuntimePlatform: &ecs.TaskDefinitionRuntimePlatformArgs{
@@ -392,7 +392,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 		Port:                pulumi.Int(containerPortNumber),
 		Protocol:            pulumi.String("HTTP"),
 		TargetType:          pulumi.String("ip"),
-		VpcId:               pulumi.String(w.substrate.VPC),
+		VpcId:               pulumi.String(w.infra.VPC),
 		DeregistrationDelay: pulumi.Int(deregistrationSeconds),
 		HealthCheck: &lb.TargetGroupHealthCheckArgs{
 			Enabled:            pulumi.Bool(true),
@@ -410,7 +410,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 		return err
 	}
 	rule, err := lb.NewListenerRule(ctx, naming.ResourceID(naming.KindService, containerLocalName, "rule"), &lb.ListenerRuleArgs{
-		ListenerArn: pulumi.String(w.substrate.Listener),
+		ListenerArn: pulumi.String(w.infra.Listener),
 		Priority:    pulumi.Int(w.priority),
 		Conditions: lb.ListenerRuleConditionArray{
 			&lb.ListenerRuleConditionArgs{HttpHeader: &lb.ListenerRuleConditionHttpHeaderArgs{
@@ -434,15 +434,15 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 
 	service, err := ecs.NewService(ctx, naming.ResourceID(naming.KindService, containerLocalName), &ecs.ServiceArgs{
 		Name:                          pulumi.String(physical),
-		Cluster:                       pulumi.String(w.substrate.Cluster),
+		Cluster:                       pulumi.String(w.infra.Cluster),
 		TaskDefinition:                task.Arn,
 		DesiredCount:                  pulumi.Int(1),
 		LaunchType:                    pulumi.String("FARGATE"),
 		HealthCheckGracePeriodSeconds: pulumi.Int(healthGraceSeconds),
 		WaitForSteadyState:            pulumi.Bool(true),
 		NetworkConfiguration: &ecs.ServiceNetworkConfigurationArgs{
-			Subnets:        pulumi.ToStringArray(w.substrate.Subnets),
-			SecurityGroups: pulumi.StringArray{pulumi.String(w.substrate.TaskSecurity)},
+			Subnets:        pulumi.ToStringArray(w.infra.Subnets),
+			SecurityGroups: pulumi.StringArray{pulumi.String(w.infra.TaskSecurity)},
 			AssignPublicIp: pulumi.Bool(true),
 		},
 		LoadBalancers: ecs.ServiceLoadBalancerArray{&ecs.ServiceLoadBalancerArgs{
@@ -456,7 +456,7 @@ func (w *containerWork) run(ctx *pulumi.Context) error {
 		return err
 	}
 	ctx.Export(w.app, pulumi.Map{
-		outputKeyContainerURL:      pulumi.String("http://" + w.substrate.OriginHost),
+		outputKeyContainerURL:      pulumi.String("http://" + w.infra.OriginHost),
 		outputKeyContainerPhysical: service.Name,
 	})
 	return nil
@@ -523,11 +523,11 @@ func (r *release) provisionContainer(ctx context.Context, spec provider.StackSpe
 	if work.transformed, err = transformStackSpec(ctx, r.cfg.Transform, spec); err != nil {
 		return provider.StackResult{}, err
 	}
-	held, err := r.ensureSubstrate(ctx, spec.Ref, progress)
+	infra, err := r.ensureContainerInfra(ctx, spec.Ref, progress)
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	work.substrate = held
+	work.infra = infra
 	result, err := r.runContainer(ctx, spec, work, progress)
 	if err != nil {
 		return provider.StackResult{}, errors.Join(err, r.abandonContainer(ctx, spec.Ref, progress))
@@ -563,11 +563,11 @@ func (r *release) abandonContainer(ctx context.Context, ref provider.StackRef, p
 	if err := r.automation.Destroy(ctx, ref, progress); err != nil {
 		return err
 	}
-	return r.releaseSubstrate(ctx, r.cfg.Records, ref, progress)
+	return r.releaseContainerInfra(ctx, r.cfg.Records, ref, progress)
 }
 
 func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.Plan, error) {
-	held, present, err := r.readSubstrate(ctx, spec.Ref.Class)
+	infra, present, err := r.readContainerInfra(ctx, spec.Ref.Class)
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -575,9 +575,9 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 		return provider.Plan{Groups: []provider.ChangeGroup{
 			{
 				Kind:   provider.StackGroupKind,
-				Name:   substrateRef(spec.Ref.Class).Name.String(),
+				Name:   containerInfraRef(spec.Ref.Class).Name.String(),
 				Action: provider.ActionCreate,
-				Reason: "the first container deploy in the " + string(spec.Ref.Class) + " class stands up the load balancer and cluster every container app in it shares",
+				Reason: "the first container deploy in the " + string(spec.Ref.Class) + " class provisions the load balancer and cluster every container app in it shares",
 				Slow:   true,
 			},
 			{
@@ -589,7 +589,7 @@ func (r *release) planContainer(ctx context.Context, spec provider.StackSpec, pr
 			},
 		}}, nil
 	}
-	work, err := r.containerWork(spec, held)
+	work, err := r.containerWork(spec, infra)
 	if err != nil {
 		return provider.Plan{}, err
 	}

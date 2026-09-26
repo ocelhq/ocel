@@ -19,7 +19,7 @@ func (p *apiGateway) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 		return "", fmt.Errorf("the %q edge serves previews on a wildcard domain name; this reconcile names no base domain", Kind)
 	}
 	if spec.Certificate == "" {
-		return "", fmt.Errorf("the %q edge terminates TLS for %s at API Gateway, so the domain name needs the wildcard certificate; this reconcile carries none", Kind, wildcard)
+		return "", fmt.Errorf("the %q edge terminates TLS for %s at API Gateway, so the domain name needs the wildcard certificate; this reconcile names none", Kind, wildcard)
 	}
 	c, err := p.clientsFor(ctx)
 	if err != nil {
@@ -31,7 +31,7 @@ func (p *apiGateway) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	}
 	notFound := outputs[bootstrap.OutputEdgeNotFoundAPIID]
 	if notFound == "" {
-		return "", fmt.Errorf("the preview bootstrap carries no %s stack, so nothing would answer a hostname on %s that no preview claims; run `ocel bootstrap preview` with this edge selected first", bootstrap.FeatureAPIGatewayEdge, wildcard)
+		return "", fmt.Errorf("the preview bootstrap has no %s stack, so nothing would answer a hostname on %s that no preview claims; run `ocel bootstrap preview` with this edge selected first", bootstrap.FeatureAPIGatewayEdge, wildcard)
 	}
 	front, err := ensurePreviewDomain(ctx, c, wildcard, spec.Certificate)
 	if err != nil {
@@ -71,11 +71,11 @@ func (p *apiGateway) DestroyPreviewWildcard(ctx context.Context, baseDomain stri
 }
 
 func ensurePreviewDomain(ctx context.Context, c Clients, wildcard, certificate string) (string, error) {
-	held, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{
+	current, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{
 		DomainName: aws.String(wildcard),
 	})
 	if err == nil {
-		return convergePreviewDomain(ctx, c, wildcard, certificate, held)
+		return convergePreviewDomain(ctx, c, wildcard, certificate, current)
 	}
 	if !isNotFound(err) {
 		return "", fmt.Errorf("read the API Gateway domain name for %s: %w", wildcard, err)
@@ -95,16 +95,16 @@ func ensurePreviewDomain(ctx context.Context, c Clients, wildcard, certificate s
 	return aws.ToString(created.RegionalDomainName), nil
 }
 
-func convergePreviewDomain(ctx context.Context, c Clients, wildcard, certificate string, held *apigateway.GetDomainNameOutput) (string, error) {
+func convergePreviewDomain(ctx context.Context, c Clients, wildcard, certificate string, current *apigateway.GetDomainNameOutput) (string, error) {
 	var patch []agtypes.PatchOperation
-	if aws.ToString(held.RegionalCertificateArn) != certificate {
+	if aws.ToString(current.RegionalCertificateArn) != certificate {
 		patch = append(patch, agtypes.PatchOperation{
 			Op:    agtypes.OpReplace,
 			Path:  aws.String("/regionalCertificateArn"),
 			Value: aws.String(certificate),
 		})
 	}
-	if held.RoutingMode != agtypes.RoutingModeRoutingRuleOnly {
+	if current.RoutingMode != agtypes.RoutingModeRoutingRuleOnly {
 		patch = append(patch, agtypes.PatchOperation{
 			Op:    agtypes.OpReplace,
 			Path:  aws.String("/routingMode"),
@@ -112,14 +112,14 @@ func convergePreviewDomain(ctx context.Context, c Clients, wildcard, certificate
 		})
 	}
 	if len(patch) == 0 {
-		return aws.ToString(held.RegionalDomainName), nil
+		return aws.ToString(current.RegionalDomainName), nil
 	}
 	updated, err := c.APIGateway.UpdateDomainName(ctx, &apigateway.UpdateDomainNameInput{
 		DomainName:      aws.String(wildcard),
 		PatchOperations: patch,
 	})
 	if err != nil {
-		return "", fmt.Errorf("move the API Gateway domain name for %s onto the certificate this bootstrap holds and the routing mode every preview rule needs: %w", wildcard, err)
+		return "", fmt.Errorf("move the API Gateway domain name for %s onto this bootstrap's certificate and the routing mode every preview rule needs: %w", wildcard, err)
 	}
 	return aws.ToString(updated.RegionalDomainName), nil
 }

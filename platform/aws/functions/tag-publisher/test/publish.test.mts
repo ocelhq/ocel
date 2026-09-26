@@ -93,7 +93,7 @@ describe("publishAll", () => {
     expect(snapshot.records.cart).toEqual({ stale: undefined, expired: 500 });
   });
 
-  it("raises to the build's own path under the secret its Lambdas hold", async () => {
+  it("raises to the build's own path under the secret its Lambdas have", async () => {
     await publishAll(publisher(new FakeS3(), ok), raises({ cart: { expired: 5 } }), 1);
 
     const [url, init] = ok.mock.calls[0]!;

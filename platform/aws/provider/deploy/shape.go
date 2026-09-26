@@ -65,20 +65,20 @@ func Shape(ctx context.Context, pass transformkit.Pass, region string, req provi
 			shape.bucket(scopes.Environment, project, req.Deploy.Env, resource)
 		}
 	}
-	substrate := false
+	hasContainers := false
 	for _, app := range req.Deploy.Apps {
 		scope := tree.Scope(scopes.Environment, costkit.ScopeApp, app.App)
 		if app.Compute() == provider.ComputeContainer {
 			shape.container(scope, app)
-			substrate = true
+			hasContainers = true
 			continue
 		}
 		if err := shape.functions(scope, project, app, req.Functions[app.App]); err != nil {
 			return err
 		}
 	}
-	if substrate {
-		shape.substrate(scopes.Shared, req.Deploy.Class)
+	if hasContainers {
+		shape.containerInfra(scopes.Shared, req.Deploy.Class)
 	}
 	return nil
 }
@@ -153,10 +153,10 @@ func (s costShape) container(scope string, app provider.AppEntry) {
 	s.plain(scope, tfECRRepository, app.App, map[string]any{"image_tag_mutability": "IMMUTABLE"})
 }
 
-func (s costShape) substrate(scope string, class edge.Class) {
-	s.plain(scope, tfECSCluster, SubstrateSlug, map[string]any{})
-	s.plain(scope, tfLoadBalancer, SubstrateSlug, map[string]any{"load_balancer_type": "application", "internal": true})
-	s.plain(scope, tfLogGroup, SubstrateSlug, map[string]any{"retention_in_days": substrateLogRetentionDays, "name": "/ocel/containers/" + string(class)})
+func (s costShape) containerInfra(scope string, class edge.Class) {
+	s.plain(scope, tfECSCluster, ContainersSlug, map[string]any{})
+	s.plain(scope, tfLoadBalancer, ContainersSlug, map[string]any{"load_balancer_type": "application", "internal": true})
+	s.plain(scope, tfLogGroup, ContainersSlug, map[string]any{"retention_in_days": containerLogRetentionDays, "name": "/ocel/containers/" + string(class)})
 }
 
 func (s costShape) postgres(scope, project, env string, resource provider.Resource) {
@@ -197,9 +197,9 @@ func (s costShape) bucket(scope, project, env string, resource provider.Resource
 }
 
 func shapeTransforms(ctx context.Context, pass transformkit.Pass, project string, req provider.ShapeRequest) (shapedPatches, error) {
-	held := shapedPatches{patches: map[resourceRef]map[string]any{}, unknown: map[resourceRef][]string{}}
+	collected := shapedPatches{patches: map[resourceRef]map[string]any{}, unknown: map[resourceRef][]string{}}
 	if pass == nil {
-		return held, nil
+		return collected, nil
 	}
 	request := transformkit.Request{Provider: transformProvider, EnvClass: string(req.Deploy.Class), Env: req.Deploy.Env}
 	var candidates []transformCandidate
@@ -230,45 +230,45 @@ func shapeTransforms(ctx context.Context, pass transformkit.Pass, project string
 		}
 	}
 	if len(candidates) == 0 {
-		return held, nil
+		return collected, nil
 	}
 	results, err := pass.Evaluate(ctx, request)
 	if err != nil {
-		return held, err
+		return collected, err
 	}
 	if results == nil {
-		return held, nil
+		return collected, nil
 	}
 	if len(results) != len(candidates) {
-		return held, refusal.Refuse(refusal.CodeInvalid, "transforms returned %d results for %d resources", len(results), len(candidates))
+		return collected, refusal.Refuse(refusal.CodeInvalid, "transforms returned %d results for %d resources", len(results), len(candidates))
 	}
 	unresolved := map[outputSite]bool{}
 	if err := walkOutputs(candidates, results, func(_ outputRef, at outputSite, authored any) (any, error) {
 		unresolved[at] = true
 		return authored, nil
 	}); err != nil {
-		return held, err
+		return collected, err
 	}
 	for i, candidate := range candidates {
 		for _, key := range slices.Sorted(maps.Keys(results[i].Patches)) {
 			ref, constructed := candidate.names[key]
 			if !constructed {
-				return held, refusal.Refuse(refusal.CodeInvalid,
+				return collected, refusal.Refuse(refusal.CodeInvalid,
 					"a transform patches %s's %s, and this deploy constructs no such resource for it", candidate.key.Name, key)
 			}
 			for field, value := range results[i].Patches[key] {
 				if unresolved[outputSite{Resource: candidate.key.Name, Surface: key, Field: field}] {
-					held.unknown[ref] = append(held.unknown[ref], snake(field))
+					collected.unknown[ref] = append(collected.unknown[ref], snake(field))
 					continue
 				}
-				if held.patches[ref] == nil {
-					held.patches[ref] = map[string]any{}
+				if collected.patches[ref] == nil {
+					collected.patches[ref] = map[string]any{}
 				}
-				held.patches[ref][field] = value
+				collected.patches[ref][field] = value
 			}
 		}
 	}
-	return held, nil
+	return collected, nil
 }
 
 func snakeValue(value any) any {

@@ -59,7 +59,7 @@ test("mirrors nothing while no manifest is registered", () => {
   expect(() => mirrorTag("posts", { expired: 5 })).not.toThrow();
 });
 
-test("carries a record into the registered manifest", () => {
+test("mirrors a record into the registered manifest", () => {
   const manifest = new Map();
   mirrorTagsInto(manifest);
 

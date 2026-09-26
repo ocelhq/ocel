@@ -20,7 +20,7 @@ function ok(headers: Record<string, string> = {}): Response {
   return new Response(null, { status: 200, headers });
 }
 
-it("sends HEAD to the resolved target carrying the message's headers and no others", async () => {
+it("sends HEAD to the resolved target sending the message's headers and no others", async () => {
   const { deps, requests } = responding(ok({ "x-nextjs-cache": "REVALIDATED" }));
   const { target, message } = await resolved();
 
@@ -30,10 +30,10 @@ it("sends HEAD to the resolved target carrying the message's headers and no othe
   const sent = requests[0]!;
   expect(sent.method).toBe("HEAD");
   expect(sent.url).toBe(`https://${host}/blog/post`);
-  const carried = [...sent.headers.keys()].filter(
+  const forwarded = [...sent.headers.keys()].filter(
     (name) => !name.startsWith("x-amz-") && name !== "authorization",
   );
-  expect(carried.sort()).toEqual(["x-forwarded-host", "x-prerender-revalidate"]);
+  expect(forwarded.sort()).toEqual(["x-forwarded-host", "x-prerender-revalidate"]);
   expect(sent.headers.get("x-prerender-revalidate")).toBe("s3cr3t-preview-mode-id");
   expect(sent.headers.get("x-forwarded-host")).toBe("example.com");
 });
@@ -88,7 +88,7 @@ it("reports an expect miss when the declared header is absent", async () => {
   });
 });
 
-it("fails on a non-ok response, carrying the status", async () => {
+it("fails on a non-ok response, reporting the status", async () => {
   const { deps } = responding(new Response(null, { status: 429 }));
   const { target, message } = await resolved();
 

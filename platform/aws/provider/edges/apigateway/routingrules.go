@@ -98,9 +98,9 @@ func putHostRule(ctx context.Context, c Clients, domain, host, api string, prior
 		if !found {
 			return missingWildcardError(domain, host, api)
 		}
-		held, taken := hostRuleAmong(rules, host)
-		if held != nil {
-			return replaceHostRule(ctx, c, domain, host, api, priority, *held)
+		existing, taken := hostRuleAmong(rules, host)
+		if existing != nil {
+			return replaceHostRule(ctx, c, domain, host, api, priority, *existing)
 		}
 		want := priority
 		if want == 0 {
@@ -123,27 +123,27 @@ func putHostRule(ctx context.Context, c Clients, domain, host, api string, prior
 
 func hostRuleAmong(rules []agv2types.RoutingRule, host string) (*agv2types.RoutingRule, map[int32]bool) {
 	taken := make(map[int32]bool, len(rules))
-	var held *agv2types.RoutingRule
+	var existing *agv2types.RoutingRule
 	for i, rule := range rules {
 		if ruleHost(rule) == host {
-			held = &rules[i]
+			existing = &rules[i]
 			continue
 		}
 		taken[aws.ToInt32(rule.Priority)] = true
 	}
-	return held, taken
+	return existing, taken
 }
 
-func replaceHostRule(ctx context.Context, c Clients, domain, host, api string, priority int32, held agv2types.RoutingRule) error {
+func replaceHostRule(ctx context.Context, c Clients, domain, host, api string, priority int32, existing agv2types.RoutingRule) error {
 	if priority == 0 {
-		priority = aws.ToInt32(held.Priority)
+		priority = aws.ToInt32(existing.Priority)
 	}
-	if ruleTarget(held) == api && aws.ToInt32(held.Priority) == priority {
+	if ruleTarget(existing) == api && aws.ToInt32(existing.Priority) == priority {
 		return nil
 	}
 	if _, err := c.Routing.PutRoutingRule(ctx, &apigatewayv2.PutRoutingRuleInput{
 		DomainName:    aws.String(domain),
-		RoutingRuleId: held.RoutingRuleId,
+		RoutingRuleId: existing.RoutingRuleId,
 		Priority:      aws.Int32(priority),
 		Conditions:    hostCondition(host),
 		Actions:       invokeAction(api),
@@ -184,12 +184,12 @@ func invokeAction(api string) []agv2types.RoutingRuleAction {
 }
 
 func deleteHostRule(ctx context.Context, c Clients, domain, host string) error {
-	return deleteRulesMatching(ctx, c, domain, func(held string) bool { return held == host })
+	return deleteRulesMatching(ctx, c, domain, func(name string) bool { return name == host })
 }
 
 func deleteLabelledRules(ctx context.Context, c Clients, domain, prefix, suffix string) error {
-	return deleteRulesMatching(ctx, c, domain, func(held string) bool {
-		label, ok := strings.CutSuffix(held, suffix)
+	return deleteRulesMatching(ctx, c, domain, func(name string) bool {
+		label, ok := strings.CutSuffix(name, suffix)
 		return ok && strings.HasPrefix(label, prefix)
 	})
 }

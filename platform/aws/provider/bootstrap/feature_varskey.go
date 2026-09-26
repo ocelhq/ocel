@@ -17,7 +17,7 @@ import (
 
 var varsKeyFeature = feature{
 	name:      FeatureVarsKey,
-	summary:   "a KMS key to encrypt variables under, the one bootstrap item with a standing cost, about $1 a month prorated hourly",
+	summary:   "a KMS key to encrypt variables under, the one bootstrap item with a recurring cost, about $1 a month prorated hourly",
 	template:  varsKeyTemplate,
 	afterPlan: validateBroughtKey,
 }
@@ -73,14 +73,14 @@ func validateBroughtKey(ctx context.Context, apis ParamAPIs, ns Namespace, class
 	if err != nil {
 		return nil, refuseBroughtKey(req.VarsKey, "it could not be described: %v", err)
 	}
-	held := described.KeyMetadata
-	named := aws.ToString(held.Arn)
+	metadata := described.KeyMetadata
+	named := aws.ToString(metadata.Arn)
 	region, err := keyRegion(named)
 	switch {
-	case held.KeySpec != kmstypes.KeySpecSymmetricDefault || held.KeyUsage != kmstypes.KeyUsageTypeEncryptDecrypt:
+	case metadata.KeySpec != kmstypes.KeySpecSymmetricDefault || metadata.KeyUsage != kmstypes.KeyUsageTypeEncryptDecrypt:
 		return nil, refuseBroughtKey(req.VarsKey,
-			"it is a %s key for %s, and a variable is sealed under a symmetric ENCRYPT_DECRYPT key", held.KeySpec, held.KeyUsage)
-	case !held.Enabled:
+			"it is a %s key for %s, and a variable is sealed under a symmetric ENCRYPT_DECRYPT key", metadata.KeySpec, metadata.KeyUsage)
+	case !metadata.Enabled:
 		return nil, refuseBroughtKey(req.VarsKey, "it is not enabled, and a key that is not enabled seals and opens nothing")
 	case err != nil:
 		return nil, refuseBroughtKey(req.VarsKey, "%v", err)
@@ -119,7 +119,7 @@ func validateBroughtKey(ctx context.Context, apis ParamAPIs, ns Namespace, class
 
 func refuseBroughtKey(named, why string, args ...any) error {
 	return refusal.Refuse(refusal.CodeInvalid,
-		"%s cannot hold this account's variables: %s.\nIts key policy must admit this principal and the app execution roles that read a value; ocel never edits a key policy it does not own",
+		"%s cannot seal this account's variables: %s.\nIts key policy must admit this principal and the app execution roles that read a value; ocel never edits a key policy it does not own",
 		named, fmt.Sprintf(why, args...))
 }
 

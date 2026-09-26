@@ -7,7 +7,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func TestEveryEdgeThisProviderFrontsWithShapesWhatItStands(t *testing.T) {
+func TestEveryEdgeThisProviderFrontsWithShapesWhatItProvisions(t *testing.T) {
 	t.Parallel()
 
 	site := costkit.EdgeSite{Slug: "shop", Class: edge.ClassProduction, Region: "us-east-1"}
@@ -17,7 +17,7 @@ func TestEveryEdgeThisProviderFrontsWithShapesWhatItStands(t *testing.T) {
 			t.Fatalf("Shape(%s) = %v", kind, err)
 		}
 		if shape.Vendor == "" || len(shape.Shared)+len(shape.Environment)+len(shape.Apps) == 0 {
-			t.Errorf("Shape(%s) = %+v, want what the edge stands for the site, billed to its vendor", kind, shape)
+			t.Errorf("Shape(%s) = %+v, want what the edge provisions for the site, billed to its vendor", kind, shape)
 		}
 	}
 }

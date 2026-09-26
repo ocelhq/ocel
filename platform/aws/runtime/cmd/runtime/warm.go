@@ -66,7 +66,7 @@ func answerWarm(ctx context.Context, c controlledChild, rw *responseWriter) erro
 		return writeWarmSummary(rw, warmSummary{
 			State:  warmStateDisabled,
 			Source: bytecode.SourceNone,
-			Error:  "this app carries no compile cache to warm",
+			Error:  "this app ships no compile cache to warm",
 		})
 	}
 	return c.answerWarmInvocation(ctx, rw)

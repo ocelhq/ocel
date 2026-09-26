@@ -24,7 +24,7 @@ func NodePass(root string, modules []string) transformkit.NodePass {
 	return transformkit.NodePass{
 		Root: root, Modules: modules,
 		External:    []string{"@pulumi/*"},
-		Uninstalled: "`@ocel/transforms` carries `@pulumi/aws` itself: install it as a devDependency and re-run.",
+		Uninstalled: "`@ocel/transforms` brings in `@pulumi/aws` itself: install it as a devDependency and re-run.",
 	}
 }
 
@@ -231,7 +231,7 @@ func readSpecOutputs(ctx context.Context, spec provider.StackSpec, placed []plac
 		if !slices.Contains(names, name) {
 			return nil, &UnpublishedOutputError{
 				Ref: p.Ref, At: p.At, Published: name,
-				Class: string(spec.Ref.Class), Environment: spec.Ref.Name.Env, Carries: names,
+				Class: string(spec.Ref.Class), Environment: spec.Ref.Name.Env, Properties: names,
 			}
 		}
 		if !slices.Contains(wanted, name) {
@@ -249,9 +249,9 @@ func readSpecOutputs(ctx context.Context, spec provider.StackSpec, placed []plac
 			continue
 		}
 		record := records[published[p.Ref]]
-		value, carries := record.Properties[p.Ref.Property]
-		if !carries {
-			return nil, &OutputPropertyError{Ref: p.Ref, At: p.At, Carries: slices.Sorted(maps.Keys(record.Properties))}
+		value, present := record.Properties[p.Ref.Property]
+		if !present {
+			return nil, &OutputPropertyError{Ref: p.Ref, At: p.At, Properties: slices.Sorted(maps.Keys(record.Properties))}
 		}
 		if emptyOutput(value) {
 			return nil, &EmptyOutputError{Ref: p.Ref, At: p.At}
@@ -262,7 +262,7 @@ func readSpecOutputs(ctx context.Context, spec provider.StackSpec, placed []plac
 }
 
 func resolveSpecBindings(ctx context.Context, bindings provider.Bindings, names []string) (map[string]provider.Binding, error) {
-	held := make([]provider.Binding, len(names))
+	resolved := make([]provider.Binding, len(names))
 	group, gctx := errgroup.WithContext(ctx)
 	for i, name := range names {
 		group.Go(func() error {
@@ -270,7 +270,7 @@ func resolveSpecBindings(ctx context.Context, bindings provider.Bindings, names 
 			if err != nil {
 				return err
 			}
-			held[i] = record
+			resolved[i] = record
 			return nil
 		})
 	}
@@ -279,7 +279,7 @@ func resolveSpecBindings(ctx context.Context, bindings provider.Bindings, names 
 	}
 	records := make(map[string]provider.Binding, len(names))
 	for i, name := range names {
-		records[name] = held[i]
+		records[name] = resolved[i]
 	}
 	return records, nil
 }

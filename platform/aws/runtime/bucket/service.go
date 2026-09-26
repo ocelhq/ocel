@@ -73,7 +73,7 @@ func New(cfg Config) *Service {
 	}
 }
 
-func (s *Service) held(bucket string) error {
+func (s *Service) checkGranted(bucket string) error {
 	if slices.Contains(s.granted(), bucket) {
 		return nil
 	}
@@ -82,7 +82,7 @@ func (s *Service) held(bucket string) error {
 }
 
 func (s *Service) reach(bucket string, keys ...string) error {
-	if err := s.held(bucket); err != nil {
+	if err := s.checkGranted(bucket); err != nil {
 		return err
 	}
 	for _, key := range keys {

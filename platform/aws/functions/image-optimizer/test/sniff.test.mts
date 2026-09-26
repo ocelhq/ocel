@@ -116,7 +116,7 @@ describe("animation", () => {
     expect(isAnimated(webp, WEBP)).toBe(true);
   });
 
-  test("a type that cannot hold an animation is never animated", () => {
+  test("a type that cannot contain an animation is never animated", () => {
     expect(isAnimated(svg(), SVG)).toBe(false);
     expect(isAnimated(ico(), ICO)).toBe(false);
   });

@@ -21,11 +21,11 @@ func releasing(t *testing.T, cfg Config) *release {
 
 func releasingOn(t *testing.T, cfg Config, engine *mockedEngine) *release {
 	t.Helper()
-	held, err := standingUp(cfg, engine).at(context.Background(), provider.StackRef{}, "")
+	opened, err := stacksWith(cfg, engine).at(context.Background(), provider.StackRef{}, "")
 	if err != nil {
 		t.Fatalf("open a release: %v", err)
 	}
-	return held
+	return opened
 }
 
 func plannedValues(app *contractv1.ManifestApp) provider.AppValues {

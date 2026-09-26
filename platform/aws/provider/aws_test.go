@@ -69,17 +69,17 @@ func (s stubBootstrap) Remove(context.Context, edge.Class, edge.Progress) error 
 	return s.err
 }
 
-func settledBy(t *testing.T, p *Provider) func() {
+func forgetOf(t *testing.T, p *Provider) func() {
 	t.Helper()
 	boot, err := p.Bootstrap(edges.DefaultKind)
 	if err != nil {
 		t.Fatal(err)
 	}
-	held, ok := boot.(settling)
+	wrapped, ok := boot.(forgetting)
 	if !ok {
-		t.Fatalf("Bootstrap() = %T, want one that settles the provider's memo", boot)
+		t.Fatalf("Bootstrap() = %T, want one that clears the provider's memo", boot)
 	}
-	return held.settled
+	return wrapped.forget
 }
 
 func primed(t *testing.T, p *Provider, table string) {
@@ -96,9 +96,9 @@ func primed(t *testing.T, p *Provider, table string) {
 	}
 }
 
-func standing(t *testing.T, p *Provider) (string, string) {
+func resolvedAfter(t *testing.T, p *Provider) (string, string) {
 	t.Helper()
-	held, err := p.deployed.resolve(edge.ClassProduction, func() (bootstrap.Deployed, error) {
+	deployed, err := p.deployed.resolve(edge.ClassProduction, func() (bootstrap.Deployed, error) {
 		return bootstrap.Deployed{StateTable: "after"}, nil
 	})
 	if err != nil {
@@ -110,21 +110,21 @@ func standing(t *testing.T, p *Provider) (string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return held.StateTable, params.Passphrase
+	return deployed.StateTable, params.Passphrase
 }
 
-func TestBootstrapApplyForgetsWhatItStoodUp(t *testing.T) {
+func TestBootstrapApplyForgetsWhatItInstalled(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	primed(t, p, "before")
 
-	if err := (settling{Bootstrap: stubBootstrap{}, settled: settledBy(t, p)}).
+	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: forgetOf(t, p)}).
 		Apply(context.Background(), provider.BootstrapRequest{Class: edge.ClassProduction}, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	table, passphrase := standing(t, p)
+	table, passphrase := resolvedAfter(t, p)
 	if table != "after" || passphrase != "after" {
-		t.Fatalf("after Apply the provider still holds %q/%q, want the account read afresh", table, passphrase)
+		t.Fatalf("after Apply the provider still remembers %q/%q, want the account read afresh", table, passphrase)
 	}
 }
 
@@ -132,14 +132,14 @@ func TestBootstrapRemoveForgetsWhatItTookDown(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	primed(t, p, "before")
 
-	if err := (settling{Bootstrap: stubBootstrap{}, settled: settledBy(t, p)}).
+	if err := (forgetting{Bootstrap: stubBootstrap{}, forget: forgetOf(t, p)}).
 		Remove(context.Background(), edge.ClassProduction, nil); err != nil {
 		t.Fatal(err)
 	}
 
-	table, passphrase := standing(t, p)
+	table, passphrase := resolvedAfter(t, p)
 	if table != "after" || passphrase != "after" {
-		t.Fatalf("after Remove the provider still holds %q/%q, want the account read afresh", table, passphrase)
+		t.Fatalf("after Remove the provider still remembers %q/%q, want the account read afresh", table, passphrase)
 	}
 }
 
@@ -148,14 +148,14 @@ func TestBootstrapKeepsWhatAFailedApplyNeverChanged(t *testing.T) {
 	primed(t, p, "before")
 
 	refused := errors.New("refused")
-	if err := (settling{Bootstrap: stubBootstrap{err: refused}, settled: settledBy(t, p)}).
+	if err := (forgetting{Bootstrap: stubBootstrap{err: refused}, forget: forgetOf(t, p)}).
 		Apply(context.Background(), provider.BootstrapRequest{Class: edge.ClassProduction}, nil); !errors.Is(err, refused) {
 		t.Fatalf("Apply() = %v, want the refusal it was given", err)
 	}
 
-	table, passphrase := standing(t, p)
+	table, passphrase := resolvedAfter(t, p)
 	if table != "before" || passphrase != "before" {
-		t.Fatalf("a failed Apply forgot %q/%q, want what the account still holds", table, passphrase)
+		t.Fatalf("a failed Apply forgot %q/%q, want what the account still has", table, passphrase)
 	}
 }
 
@@ -166,12 +166,12 @@ func TestBootstrapFrontsTheEdgeItWasAsked(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Bootstrap(%q) error = %v", kind, err)
 		}
-		held, ok := boot.(settling).Bootstrap.(control.Bootstrap)
+		awsBoot, ok := boot.(forgetting).Bootstrap.(control.Bootstrap)
 		if !ok {
 			t.Fatalf("Bootstrap(%q) = %T, want the AWS boot", kind, boot)
 		}
-		if held.Edge.Kind() != kind {
-			t.Errorf("Bootstrap(%q) fronts the %q edge, want the one it was asked for", kind, held.Edge.Kind())
+		if awsBoot.Edge.Kind() != kind {
+			t.Errorf("Bootstrap(%q) fronts the %q edge, want the one it was asked for", kind, awsBoot.Edge.Kind())
 		}
 	}
 	if _, err := p.Bootstrap("nowhere"); err == nil {
@@ -206,7 +206,7 @@ func TestClassParamsReadTheEdgeTheyAreGiven(t *testing.T) {
 
 func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	refusal := refusal.Refuse(refusal.CodeNotReady, "/ocel/origin/secret holds something other than the origin secret bootstrap writes")
+	refusal := refusal.Refuse(refusal.CodeNotReady, "/ocel/origin/secret contains something other than the origin secret bootstrap writes")
 	if _, err := p.params.resolve(classEdge{class: edge.ClassProduction, kind: cloudflare.Kind}, func() (bootstrap.ClassParams, error) {
 		return bootstrap.ClassParams{OriginSecretErr: refusal}, nil
 	}); err != nil {
@@ -222,7 +222,7 @@ func TestPreflightRefusesADeployOverAnUnreadableOriginSecret(t *testing.T) {
 	}
 }
 
-func TestBucketsSweepTheCacheStoreOfEveryStandingEdge(t *testing.T) {
+func TestBucketsSweepTheCacheStoreOfEveryInstalledEdge(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
 	if _, err := p.deployed.resolve(edge.ClassProduction, func() (bootstrap.Deployed, error) {
 		return bootstrap.Deployed{
@@ -253,28 +253,28 @@ func TestBucketsSweepTheCacheStoreOfEveryStandingEdge(t *testing.T) {
 		}
 	}
 
-	held, err := p.Buckets(context.Background(), edge.ClassProduction)
+	buckets, err := p.Buckets(context.Background(), edge.ClassProduction)
 	if err != nil {
 		t.Fatalf("Buckets error = %v", err)
 	}
 	var got []string
-	for _, cache := range held.Caches {
+	for _, cache := range buckets.Caches {
 		got = append(got, cache.Name)
 		reached := cache.S3 != nil
 		if want := cache.Name == "cache-cloudflare"; reached != want {
-			t.Errorf("cache %q carries its own client = %v, want %v: only a store off this account's endpoint needs one",
+			t.Errorf("cache %q has its own client = %v, want %v: only a store off this account's endpoint needs one",
 				cache.Name, reached, want)
 		}
 	}
 	slices.Sort(got)
 	if !slices.Equal(got, []string{"cache-cloudflare", "cache-cloudfront"}) {
-		t.Fatalf("Buckets() carries caches %v, want one for each edge standing in the account", got)
+		t.Fatalf("Buckets() returns caches %v, want one for each edge installed in the account", got)
 	}
 }
 
-func TestStandingWithoutAVarsKey(t *testing.T) {
+func TestBootstrapReadyWithoutAVarsKey(t *testing.T) {
 	p := NewProvider(Options{}, nil, aws.Config{}, defaultNamespace)
-	held := bootstrap.Deployed{
+	deployed := bootstrap.Deployed{
 		StateBucket:    "state",
 		ArtifactBucket: "artifacts",
 		AssetBucket:    "assets",
@@ -282,8 +282,8 @@ func TestStandingWithoutAVarsKey(t *testing.T) {
 		VarsTable:      "vars-table",
 	}
 
-	if err := p.standing(held, edge.ClassProduction); err != nil {
-		t.Errorf("standing = %v, want a bootstrap with no key ready: a release with no sealed value needs none", err)
+	if err := p.requireBootstrapped(deployed, edge.ClassProduction); err != nil {
+		t.Errorf("requireBootstrapped() = %v, want a bootstrap with no key ready: a release with no sealed value needs none", err)
 	}
 }
 

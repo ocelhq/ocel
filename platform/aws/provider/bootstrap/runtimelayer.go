@@ -51,16 +51,16 @@ func runtimeLayerName(ns Namespace, class, arch, digest string) string {
 func runtimeLayerArches() map[string]string {
 	arches := make(map[string]string, len(runtimeArches()))
 	for _, arch := range runtimeArches() {
-		carried, err := payloads.RuntimeLayer(arch)
+		shipped, err := payloads.RuntimeLayer(arch)
 		if err != nil {
 			continue
 		}
-		arches[runtimeLayerOutputKey(arch, carried.SHA256)] = arch
+		arches[runtimeLayerOutputKey(arch, shipped.SHA256)] = arch
 	}
 	return arches
 }
 
-func carriedRuntimeArches() []string {
+func shippedRuntimeArches() []string {
 	arches := slices.Collect(maps.Values(runtimeLayerArches()))
 	slices.Sort(arches)
 	return arches
@@ -69,11 +69,11 @@ func carriedRuntimeArches() []string {
 func runtimeLayerPlacements(bucket string) (map[string]payloads.Placement, error) {
 	placed := make(map[string]payloads.Placement, len(runtimeArches()))
 	for _, arch := range runtimeArches() {
-		carried, err := payloads.RuntimeLayer(arch)
+		shipped, err := payloads.RuntimeLayer(arch)
 		if err != nil {
 			return nil, err
 		}
-		placed[arch] = payloads.At(bucket, runtimeLayerKeyPrefix, carried)
+		placed[arch] = payloads.At(bucket, runtimeLayerKeyPrefix, shipped)
 	}
 	return placed, nil
 }
@@ -81,11 +81,11 @@ func runtimeLayerPlacements(bucket string) (map[string]payloads.Placement, error
 func placeRuntimeLayers(ctx context.Context, store ObjectStore, bucket string) (map[string]payloads.Placement, error) {
 	placed := make(map[string]payloads.Placement, len(runtimeArches()))
 	for _, arch := range runtimeArches() {
-		carried, err := payloads.RuntimeLayer(arch)
+		shipped, err := payloads.RuntimeLayer(arch)
 		if err != nil {
 			return nil, err
 		}
-		at, err := payloads.Place(ctx, store, bucket, runtimeLayerKeyPrefix, runtimeLayerLabel+" ("+arch+")", carried)
+		at, err := payloads.Place(ctx, store, bucket, runtimeLayerKeyPrefix, runtimeLayerLabel+" ("+arch+")", shipped)
 		if err != nil {
 			return nil, err
 		}
@@ -121,7 +121,7 @@ func runtimeLayerTemplate(ns Namespace, class string, code map[string]payloads.P
 			fmt.Sprintf("Ocel %s runtime (%s) - payload %s", arch, class, shortRuntimeDigest(at.SHA256)),
 			at.Bucket, at.Key, arch)
 		fmt.Fprintf(&outputs, `  %s:
-    Description: "Version ARN of the %s runtime, named after the payload it carries so a release only ever boots through the runtime the build that deploys it carries."
+    Description: "Version ARN of the %s runtime, named after the payload it contains so a release only ever boots through the runtime the build that deploys it ships."
     Value: !Ref %s
 `, runtimeLayerOutputKey(arch, at.SHA256), arch, id)
 	}
@@ -133,7 +133,7 @@ Resources:
 }
 
 func runtimeStackDescription(class string) string {
-	return fmt.Sprintf("Ocel bootstrap runtime (%s) - one Lambda layer per architecture holding the runtime every function deployed from this bootstrap boots through, published once per account rather than once per release.", class)
+	return fmt.Sprintf("Ocel bootstrap runtime (%s) - one Lambda layer per architecture containing the runtime every function deployed from this bootstrap boots through, published once per account rather than once per release.", class)
 }
 
 func applyRuntimeLayers(ctx context.Context, apis APIs, target spec, req Request, bucket string, progressf, logf func(string)) error {
@@ -162,9 +162,9 @@ func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class str
 		log = func(string) {}
 	}
 	stackName := ns.runtimeStackName(class)
-	held, err := publishedRuntimeLayers(ctx, apis.CFN, ns, class)
-	if err != nil || len(missingRuntimeLayers(held)) == 0 {
-		return held, err
+	current, err := publishedRuntimeLayers(ctx, apis.CFN, ns, class)
+	if err != nil || len(missingRuntimeLayers(current)) == 0 {
+		return current, err
 	}
 	target, err := specFor(ns, class)
 	if err != nil {
@@ -174,29 +174,29 @@ func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class str
 	silent := func(string) {}
 	published := true
 	if err := applyRuntimeLayers(ctx, apis, target, Request{Writer: req.Writer}, req.ArtifactBucket, silent, silent); err != nil {
-		if !runtimeStackHeldElsewhere(err) {
+		if !runtimeStackWrittenElsewhere(err) {
 			log(fmt.Sprintf("could not publish this build's runtime into %s: %v", stackName, err))
-			return held, nil
+			return current, nil
 		}
 		published = false
-		if _, err := settleStack(ctx, apis.CFN, stackName, log); err != nil {
+		if _, err := awaitStackIdle(ctx, apis.CFN, stackName, log); err != nil {
 			return nil, err
 		}
 	}
 
-	standing, err := publishedRuntimeLayers(ctx, apis.CFN, ns, class)
+	latest, err := publishedRuntimeLayers(ctx, apis.CFN, ns, class)
 	if err != nil {
 		return nil, err
 	}
-	if len(missingRuntimeLayers(standing)) > 0 {
-		return standing, nil
+	if len(missingRuntimeLayers(latest)) > 0 {
+		return latest, nil
 	}
 	who := "another deploy"
 	if published {
 		who = "this deploy"
 	}
-	log(fmt.Sprintf("%s published this build's runtime for %s into %s", who, strings.Join(carriedRuntimeArches(), ", "), stackName))
-	return standing, nil
+	log(fmt.Sprintf("%s published this build's runtime for %s into %s", who, strings.Join(shippedRuntimeArches(), ", "), stackName))
+	return latest, nil
 }
 
 func publishedRuntimeLayers(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (map[string]string, error) {
@@ -204,25 +204,25 @@ func publishedRuntimeLayers(ctx context.Context, api cfn.StacksAPI, ns Namespace
 	if err != nil {
 		return nil, err
 	}
-	standing := Deployed{RuntimeLayers: map[string]string{}}
+	deployed := Deployed{RuntimeLayers: map[string]string{}}
 	var refs stackRefs
-	if err := absorb(&standing, &refs, out); err != nil {
+	if err := absorb(&deployed, &refs, out); err != nil {
 		return nil, err
 	}
-	return standing.RuntimeLayers, nil
+	return deployed.RuntimeLayers, nil
 }
 
-func missingRuntimeLayers(held map[string]string) []string {
+func missingRuntimeLayers(layers map[string]string) []string {
 	var missing []string
-	for _, arch := range carriedRuntimeArches() {
-		if held[arch] == "" {
+	for _, arch := range shippedRuntimeArches() {
+		if layers[arch] == "" {
 			missing = append(missing, arch)
 		}
 	}
 	return missing
 }
 
-func runtimeStackHeldElsewhere(err error) bool {
+func runtimeStackWrittenElsewhere(err error) bool {
 	var api smithy.APIError
 	if errors.As(err, &api) && api.ErrorCode() == "AlreadyExistsException" {
 		return true

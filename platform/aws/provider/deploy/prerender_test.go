@@ -399,7 +399,7 @@ func TestUploadPrerenderAssets(t *testing.T) {
 			}
 		}
 		if seeded != 2 {
-			t.Errorf("seeded %d snapshots, want one per app into the one bucket that holds both roles", seeded)
+			t.Errorf("seeded %d snapshots, want one per app into the one bucket that serves both roles", seeded)
 		}
 	})
 

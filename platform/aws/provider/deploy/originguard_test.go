@@ -32,8 +32,8 @@ func TestAnEntryDeployedDuringARotationIsHandedTheSecretItReplacedToo(t *testing
 		t.Errorf("entry env = %v, still waved past the guard", env)
 	}
 
-	settled := &originGuard{Entry: "/", Secret: testOriginSecret}
-	if _, held := settled.entryEnv(nil)[edge.OriginSecretPreviousVar]; held {
+	unrotated := &originGuard{Entry: "/", Secret: testOriginSecret}
+	if _, present := unrotated.entryEnv(nil)[edge.OriginSecretPreviousVar]; present {
 		t.Error("a class with no rotation underway hands the entry a predecessor")
 	}
 }
@@ -50,19 +50,19 @@ func functionURLAuthOf(t *testing.T, rec *inputRecorder, logicalName string, sta
 	name := naming.ResourceID(naming.KindFunction, functionCoordinate("shop", stack, logicalName).Name, "url")
 	value, ok := rec.inputs(functionURLToken, name)["authorizationType"]
 	if !ok || !value.IsString() {
-		t.Fatalf("%s carries no Function URL", logicalName)
+		t.Fatalf("%s has no Function URL", logicalName)
 	}
 	return value.StringValue()
 }
 
 func registerGuarded(t *testing.T, cfg Config, spec provider.StackSpec, functions []*contractv1.ManifestFunction, stack naming.StackName) *inputRecorder {
 	t.Helper()
-	held := releasing(t, cfg)
-	host, err := held.routerHost(spec)
+	release := releasing(t, cfg)
+	host, err := release.routerHost(spec)
 	if err != nil {
 		t.Fatalf("routerHost: %v", err)
 	}
-	guard, err := held.originGuard(spec)
+	guard, err := release.originGuard(spec)
 	if err != nil {
 		t.Fatalf("originGuard: %v", err)
 	}
@@ -80,7 +80,7 @@ func registerGuarded(t *testing.T, cfg Config, spec provider.StackSpec, function
 			Args:      argsFor(functions),
 			Artifacts: map[string]artifactRef{},
 			Layers:    testRuntimeLayers(),
-			Env:       held.appEnv(spec, appBundle{}, sessionScope{}),
+			Env:       release.appEnv(spec, appBundle{}, sessionScope{}),
 			Router:    host,
 			Guard:     guard,
 			RoleArn:   role.Arn,
@@ -111,7 +111,7 @@ func TestTheEntryFunctionAnswersWithoutSigV4AndDemandsTheSecret(t *testing.T) {
 	name := naming.ResourceID(naming.KindFunction, functionCoordinate("shop", stack, "fn--web--entry").Name, "url", "invoke")
 	permission := rec.inputs(lambdaPermissionToken, name)
 	if len(permission) == 0 {
-		t.Fatal("the unsigned entry URL carries no invoke permission, so every request answers 403")
+		t.Fatal("the unsigned entry URL has no invoke permission, so every request answers 403")
 	}
 	if got := permission["functionUrlAuthType"]; !got.IsString() || got.StringValue() != functionURLAuthNone {
 		t.Errorf("permission functionUrlAuthType = %v, want it scoped to the unsigned URL alone", got)
@@ -119,10 +119,10 @@ func TestTheEntryFunctionAnswersWithoutSigV4AndDemandsTheSecret(t *testing.T) {
 
 	entry := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--entry").PhysicalName(maxLambdaBaseNameLen))
 	if entry[edge.OriginSecretVar] != testOriginSecret {
-		t.Errorf("%s = %q, want the secret the bootstrap holds", edge.OriginSecretVar, entry[edge.OriginSecretVar])
+		t.Errorf("%s = %q, want the secret the bootstrap stored", edge.OriginSecretVar, entry[edge.OriginSecretVar])
 	}
 	if _, signed := entry[edge.OriginSignedVar]; signed {
-		t.Errorf("the entry carries %s, which waves its runtime past a URL nothing signs", edge.OriginSignedVar)
+		t.Errorf("the entry has %s, which waves its runtime past a URL nothing signs", edge.OriginSignedVar)
 	}
 }
 
@@ -137,14 +137,14 @@ func TestASiblingKeepsItsSignedURLAndLearnsNoSecret(t *testing.T) {
 	}
 	name := naming.ResourceID(naming.KindFunction, functionCoordinate("shop", stack, "fn--web--admin").Name, "url", "invoke")
 	if len(rec.inputs(lambdaPermissionToken, name)) != 0 {
-		t.Error("a sibling carries an unsigned invoke permission, want the front door opened once")
+		t.Error("a sibling has an unsigned invoke permission, want the front door opened once")
 	}
 	sibling := functionEnvOf(t, rec, functionCoordinate("shop", stack, "fn--web--admin").PhysicalName(maxLambdaBaseNameLen))
 	if _, wired := sibling[edge.OriginSecretVar]; wired {
-		t.Errorf("a sibling carries %s, want the secret to reach the entry function alone", edge.OriginSecretVar)
+		t.Errorf("a sibling has %s, want the secret to reach the entry function alone", edge.OriginSecretVar)
 	}
 	if sibling[edge.OriginSignedVar] == "" {
-		t.Errorf("a sibling carries no %s, so its runtime refuses the entry's signed requests", edge.OriginSignedVar)
+		t.Errorf("a sibling has no %s, so its runtime refuses the entry's signed requests", edge.OriginSignedVar)
 	}
 }
 
@@ -160,11 +160,11 @@ func TestEveryFunctionURLBehindCloudflareStaysSigned(t *testing.T) {
 		}
 		name := naming.ResourceID(naming.KindFunction, functionCoordinate("shop", stack, logical).Name, "url", "invoke")
 		if len(rec.inputs(lambdaPermissionToken, name)) != 0 {
-			t.Errorf("%s carries a public invoke permission behind the Cloudflare worker", logical)
+			t.Errorf("%s has a public invoke permission behind the Cloudflare worker", logical)
 		}
 		env := functionEnvOf(t, rec, functionCoordinate("shop", stack, logical).PhysicalName(maxLambdaBaseNameLen))
 		if _, wired := env[edge.OriginSecretVar]; wired {
-			t.Errorf("%s carries %s behind an edge that signs its requests", logical, edge.OriginSecretVar)
+			t.Errorf("%s has %s behind an edge that signs its requests", logical, edge.OriginSecretVar)
 		}
 	}
 }
@@ -181,14 +181,14 @@ func TestNoneModeReachesItsEntryOverASignedURL(t *testing.T) {
 		}
 		name := naming.ResourceID(naming.KindFunction, functionCoordinate("shop", stack, logical).Name, "url", "invoke")
 		if len(rec.inputs(lambdaPermissionToken, name)) != 0 {
-			t.Errorf("%s carries a public invoke permission; none mode signs every integration", logical)
+			t.Errorf("%s has a public invoke permission; none mode signs every integration", logical)
 		}
 		env := functionEnvOf(t, rec, functionCoordinate("shop", stack, logical).PhysicalName(maxLambdaBaseNameLen))
 		if _, wired := env[edge.OriginSecretVar]; wired {
-			t.Errorf("%s carries %s, which an AWS_PROXY integration never presents", logical, edge.OriginSecretVar)
+			t.Errorf("%s has %s, which an AWS_PROXY integration never presents", logical, edge.OriginSecretVar)
 		}
 		if env[edge.OriginSignedVar] == "" {
-			t.Errorf("%s carries no %s, so its runtime refuses every signed request", logical, edge.OriginSignedVar)
+			t.Errorf("%s has no %s, so its runtime refuses every signed request", logical, edge.OriginSignedVar)
 		}
 	}
 }
@@ -219,6 +219,6 @@ func TestAnAppThatRoutesNothingStillGuardsItsEntry(t *testing.T) {
 		t.Errorf("%s = %q, want the secret on an entry nothing else guards", edge.OriginSecretVar, env[edge.OriginSecretVar])
 	}
 	if _, routed := env[functionURLsEnv]; routed {
-		t.Errorf("an app that routes nothing carries %s", functionURLsEnv)
+		t.Errorf("an app that routes nothing has %s", functionURLsEnv)
 	}
 }

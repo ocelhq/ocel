@@ -37,7 +37,7 @@ func (p *cloudFront) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 		return "", fmt.Errorf("the %q edge serves every preview from one wildcard distribution; this reconcile names no base domain", Kind)
 	}
 	if spec.Certificate == "" {
-		return "", fmt.Errorf("the %q edge terminates TLS for %s at CloudFront, so the distribution needs the wildcard certificate; this reconcile carries none", Kind, wildcard)
+		return "", fmt.Errorf("the %q edge terminates TLS for %s at CloudFront, so the distribution needs the wildcard certificate; this reconcile names none", Kind, wildcard)
 	}
 	if err := cloudFrontCertificate(wildcard, spec.Certificate); err != nil {
 		return "", err
@@ -50,18 +50,18 @@ func (p *cloudFront) ReconcilePreviewWildcard(ctx context.Context, spec edge.Pre
 	if err != nil {
 		return "", err
 	}
-	held, err := reconcileWildcardDistribution(ctx, c, plan, wildcard, spec.Certificate)
+	wildcardFront, err := reconcileWildcardDistribution(ctx, c, plan, wildcard, spec.Certificate)
 	if err != nil {
 		return "", err
 	}
-	if err := bootstrapLedger(c, edge.ClassPreview, deployed).NoteInvalidationTarget(ctx, held.id); err != nil {
+	if err := bootstrapLedger(c, edge.ClassPreview, deployed).NoteInvalidationTarget(ctx, wildcardFront.id); err != nil {
 		return "", err
 	}
-	return held.domainName, nil
+	return wildcardFront.domainName, nil
 }
 
 func reconcileWildcardDistribution(ctx context.Context, c Clients, plan distributionPlan, wildcard, certificate string) (front, error) {
-	held, found, err := findDistribution(ctx, c, plan.name)
+	existing, found, err := findDistribution(ctx, c, plan.name)
 	if err != nil {
 		return front{}, err
 	}
@@ -80,12 +80,12 @@ func reconcileWildcardDistribution(ctx context.Context, c Clients, plan distribu
 		if !racedFound {
 			return front{}, createErr
 		}
-		held = raced
+		existing = raced
 	}
-	if err := convergeWildcard(ctx, c, plan, held.id, wildcard, certificate); err != nil {
+	if err := convergeWildcard(ctx, c, plan, existing.id, wildcard, certificate); err != nil {
 		return front{}, err
 	}
-	return held, nil
+	return existing, nil
 }
 
 func bootstrapLedger(c Clients, class edge.Class, deployed bootstrap.Deployed) *kitledger.Ledger {
@@ -95,29 +95,29 @@ func bootstrapLedger(c Clients, class edge.Class, deployed bootstrap.Deployed) *
 func cloudFrontCertificate(wildcard, certificate string) error {
 	fields := strings.SplitN(certificate, ":", 6)
 	if len(fields) < 6 || fields[0] != "arn" {
-		return fmt.Errorf("the %q edge terminates TLS for %s at CloudFront, which takes an ACM certificate ARN; this reconcile carries %q, which is not one", Kind, wildcard, certificate)
+		return fmt.Errorf("the %q edge terminates TLS for %s at CloudFront, which takes an ACM certificate ARN; this reconcile names %q, which is not one", Kind, wildcard, certificate)
 	}
 	if fields[3] == certs.CloudFrontRegion {
 		return nil
 	}
-	return fmt.Errorf("the %q edge terminates TLS for %s at CloudFront, and CloudFront reads certificates only from %s; this reconcile carries one issued in %s, which CloudFront will not attach. Run `ocel domain use --preview %s` against this account to issue the wildcard certificate where CloudFront can read it", Kind, wildcard, certs.CloudFrontRegion, fields[3], strings.TrimPrefix(wildcard, "*."))
+	return fmt.Errorf("the %q edge terminates TLS for %s at CloudFront, and CloudFront reads certificates only from %s; this reconcile names one issued in %s, which CloudFront will not attach. Run `ocel domain use --preview %s` against this account to issue the wildcard certificate where CloudFront can read it", Kind, wildcard, certs.CloudFrontRegion, fields[3], strings.TrimPrefix(wildcard, "*."))
 }
 
 func convergeWildcard(ctx context.Context, c Clients, plan distributionPlan, id, wildcard, certificate string) error {
 	if err := plan.ready(); err != nil {
 		return err
 	}
-	held, etag, err := configOf(ctx, c, id)
+	current, etag, err := configOf(ctx, c, id)
 	if err != nil {
 		return err
 	}
-	carries := slices.ContainsFunc(aliasesOf(held), func(alias string) bool {
+	hasWildcard := slices.ContainsFunc(aliasesOf(current), func(alias string) bool {
 		return strings.EqualFold(alias, wildcard)
 	})
-	if carries && certificateOf(held) == certificate {
+	if hasWildcard && certificateOf(current) == certificate {
 		return nil
 	}
-	return putConfig(ctx, c, id, etag, plan.keeping(held).config([]string{wildcard}, certificate))
+	return putConfig(ctx, c, id, etag, plan.keeping(current).config([]string{wildcard}, certificate))
 }
 
 func (p *cloudFront) previewWildcardPlan(ctx context.Context, c Clients, baseDomain string) (distributionPlan, bootstrap.Deployed, error) {
@@ -126,7 +126,7 @@ func (p *cloudFront) previewWildcardPlan(ctx context.Context, c Clients, baseDom
 		return distributionPlan{}, bootstrap.Deployed{}, err
 	}
 	if !deployed.Present {
-		return distributionPlan{}, bootstrap.Deployed{}, fmt.Errorf("the preview bootstrap is not standing, so nothing would answer a hostname on %s; run `ocel bootstrap preview` first", edge.PreviewWildcard(baseDomain))
+		return distributionPlan{}, bootstrap.Deployed{}, fmt.Errorf("the preview bootstrap is not installed, so nothing would answer a hostname on %s; run `ocel bootstrap preview` first", edge.PreviewWildcard(baseDomain))
 	}
 	set, err := edgeSetOf(deployed, edge.ClassPreview)
 	if err != nil {
@@ -151,12 +151,12 @@ func (p *cloudFront) DestroyPreviewWildcard(ctx context.Context, baseDomain stri
 	if err != nil {
 		return err
 	}
-	held, found, err := findDistribution(ctx, c, previewWildcardName(baseDomain))
+	existing, found, err := findDistribution(ctx, c, previewWildcardName(baseDomain))
 	if err != nil {
 		return err
 	}
 	if found {
-		if err := p.ownsSharedPreviewEntry(ctx, c, held.id, baseDomain); err != nil {
+		if err := p.ownsSharedPreviewEntry(ctx, c, existing.id, baseDomain); err != nil {
 			return err
 		}
 	}
@@ -165,9 +165,9 @@ func (p *cloudFront) DestroyPreviewWildcard(ctx context.Context, baseDomain stri
 		errs = append(errs, err)
 	}
 	if found {
-		if err := p.deleteDistribution(ctx, c, kindWildcardDistribution, held.id); err != nil {
+		if err := p.deleteDistribution(ctx, c, kindWildcardDistribution, existing.id); err != nil {
 			errs = append(errs, err)
-		} else if err := p.forgetPreviewWildcardTarget(ctx, c, held.id); err != nil {
+		} else if err := p.forgetPreviewWildcardTarget(ctx, c, existing.id); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -186,7 +186,7 @@ func (p *cloudFront) ownsSharedPreviewEntry(ctx context.Context, c Clients, id, 
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
-		"CloudFront hands %s to one distribution for the whole account, and the one standing reads its routes through the %s namespace's preview resolver, so every preview %s serves answers on it. Releasing it here would take those down. Run `ocel domain rm '%s' --preview` under %s instead",
+		"CloudFront hands %s to one distribution for the whole account, and the existing one reads its routes through the %s namespace's preview resolver, so every preview %s serves answers on it. Releasing it here would take those down. Run `ocel domain rm '%s' --preview` under %s instead",
 		edge.PreviewWildcard(baseDomain), serving, serving, edge.PreviewWildcard(baseDomain), serving)
 }
 
@@ -194,11 +194,11 @@ func resolverNamespaceOf(config *cftypes.DistributionConfig) string {
 	if config == nil || config.DefaultCacheBehavior == nil || config.DefaultCacheBehavior.FunctionAssociations == nil {
 		return ""
 	}
-	for _, held := range config.DefaultCacheBehavior.FunctionAssociations.Items {
-		if held.EventType != cftypes.EventTypeViewerRequest {
+	for _, association := range config.DefaultCacheBehavior.FunctionAssociations.Items {
+		if association.EventType != cftypes.EventTypeViewerRequest {
 			continue
 		}
-		arn := aws.ToString(held.FunctionARN)
+		arn := aws.ToString(association.FunctionARN)
 		name := arn[strings.LastIndex(arn, "/")+1:]
 		if ns, resolver := strings.CutSuffix(name, previewResolverSuffix); resolver {
 			return ns

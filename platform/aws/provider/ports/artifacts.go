@@ -60,23 +60,23 @@ func (a Artifacts) buckets(ctx context.Context, class edge.Class) (Buckets, erro
 }
 
 func (a Artifacts) bucket(ctx context.Context, class edge.Class, store string) (string, S3API, error) {
-	held, err := a.buckets(ctx, class)
+	buckets, err := a.buckets(ctx, class)
 	if err != nil {
 		return "", nil, err
 	}
 	name, client := "", a.S3
 	switch store {
 	case provider.StoreFunctions:
-		name = held.Functions
+		name = buckets.Functions
 	case provider.StoreAssets:
-		name = held.Assets
+		name = buckets.Assets
 	case provider.StoreCache:
-		if len(held.Caches) > 1 {
+		if len(buckets.Caches) > 1 {
 			return "", nil, refusal.Refuse(refusal.CodeInvalid,
-				"this account keeps %d cache stores, one for each edge it fronts, and an artifact names no edge", len(held.Caches))
+				"this account keeps %d cache stores, one for each edge it fronts, and an artifact names no edge", len(buckets.Caches))
 		}
-		if len(held.Caches) == 1 {
-			name, client = held.Caches[0].Name, a.reach(held.Caches[0])
+		if len(buckets.Caches) == 1 {
+			name, client = buckets.Caches[0].Name, a.reach(buckets.Caches[0])
 		}
 	default:
 		return "", nil, refusal.Refuse(refusal.CodeInvalid,
@@ -174,12 +174,12 @@ func (a Artifacts) RemovePrefix(ctx context.Context, class edge.Class, prefix st
 	if prefix == "" {
 		return refusal.Refuse(refusal.CodeInvalid, "an empty prefix names every artifact this account keeps")
 	}
-	held, err := a.buckets(ctx, class)
+	buckets, err := a.buckets(ctx, class)
 	if err != nil {
 		return err
 	}
-	sweeps := []CacheBucket{{Name: held.Functions, S3: a.S3}, {Name: held.Assets, S3: a.S3}}
-	for _, cache := range held.Caches {
+	sweeps := []CacheBucket{{Name: buckets.Functions, S3: a.S3}, {Name: buckets.Assets, S3: a.S3}}
+	for _, cache := range buckets.Caches {
 		sweeps = append(sweeps, CacheBucket{Name: cache.Name, S3: a.reach(cache)})
 	}
 	var errs []error

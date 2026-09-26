@@ -118,7 +118,7 @@ func TestRelease(t *testing.T) {
 		}
 	})
 
-	t.Run("no writer names every record left standing", func(t *testing.T) {
+	t.Run("no writer names every record left in place", func(t *testing.T) {
 		t.Parallel()
 
 		var said []string

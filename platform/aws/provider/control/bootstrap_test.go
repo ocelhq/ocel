@@ -27,7 +27,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func standingBootstrapper(t *testing.T, class string) Bootstrap {
+func installedBootstrapper(t *testing.T, class string) Bootstrap {
 	t.Helper()
 
 	stackName, err := defaultNamespace.StackNameFor(class)
@@ -70,15 +70,15 @@ func standingBootstrapper(t *testing.T, class string) Bootstrap {
 }
 
 func registryOf(fronts ...edge.Edge) edgeRegistry {
-	held := make(map[edge.Kind]edge.Edge, len(fronts))
+	edges := make(map[edge.Kind]edge.Edge, len(fronts))
 	for _, front := range fronts {
-		held[front.Kind()] = front
+		edges[front.Kind()] = front
 	}
-	return edgeRegistry{held: held}
+	return edgeRegistry{edges: edges}
 }
 
 type edgeRegistry struct {
-	held map[edge.Kind]edge.Edge
+	edges map[edge.Kind]edge.Edge
 }
 
 func kindsOf(fronts ...edge.Edge) []edge.Kind {
@@ -93,7 +93,7 @@ func kindsOf(fronts ...edge.Edge) []edge.Kind {
 }
 
 func (r edgeRegistry) Open(kind edge.Kind) (edge.Edge, error) {
-	front, ok := r.held[kind]
+	front, ok := r.edges[kind]
 	if !ok {
 		return nil, fmt.Errorf("no %s edge here", kind)
 	}
@@ -121,7 +121,7 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 	}
 	for _, group := range plan.Groups[:4] {
 		if group.Kind != provider.StackGroupKind || !strings.HasPrefix(group.Name, "aws/") {
-			t.Errorf("group %+v, want a stack named under the vendor that holds it", group)
+			t.Errorf("group %+v, want a stack named under the vendor that hosts it", group)
 		}
 	}
 	if got := plan.Groups[0].Name; got != "aws/"+coreStackName {
@@ -132,7 +132,7 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 	}
 	params := plan.Groups[4]
 	if params.Kind != provider.ParameterGroupKind || params.Name != "aws/"+bootstrap.ParamGroupName {
-		t.Errorf("the parameters group = %+v, want it named under the account that holds them", params)
+		t.Errorf("the parameters group = %+v, want it named under the account that stores them", params)
 	}
 	edgeGroup := plan.Groups[5]
 	if edgeGroup.Kind != provider.EdgeGroupKind || edgeGroup.Name != string(cloudflareKind)+"/edge" {
@@ -145,7 +145,7 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 		t.Errorf("the edge group is %q, want an update where one of its resources is missing", edgeGroup.Action)
 	}
 	if len(edgeGroup.Changes) != len(front.planned) {
-		t.Errorf("the edge group carries %d changes, want the ones the edge planned", len(edgeGroup.Changes))
+		t.Errorf("the edge group has %d changes, want the ones the edge planned", len(edgeGroup.Changes))
 	}
 	if front.classes[0] != edge.ClassProduction {
 		t.Errorf("the edge was planned for %q, want the class the bootstrap is for", front.classes[0])
@@ -184,24 +184,24 @@ func TestPlanShowsTheEdgeGoingWhenTheFeatureItFrontsThroughIsDropped(t *testing.
 	}
 	for _, change := range edgeGroup.Changes {
 		if change.Action != provider.ActionDelete {
-			t.Errorf("the drop plan carries %+v, want every edge row a delete", change)
+			t.Errorf("the drop plan includes %+v, want every edge row a delete", change)
 		}
 		if change.Name == "ocel-deployments" {
-			t.Error("the drop plan names a worker that does not stand yet among what it deletes")
+			t.Error("the drop plan names a worker that does not exist yet among what it deletes")
 		}
 	}
 }
 
-func TestPlanShowsAnEdgeFeatureStandingUpBehindAnotherFront(t *testing.T) {
+func TestPlanShowsAnEdgeFeatureArrivingBehindAnotherFront(t *testing.T) {
 	t.Parallel()
 
-	standing := &planningEdge{planned: []edge.PlanChange{
+	other := &planningEdge{planned: []edge.PlanChange{
 		{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanCreate},
 	}}
 	selected := &planningEdge{teardownEdge: teardownEdge{kind: cloudfrontKind}}
 	b := planningBootstrapper(selected)
-	b.Edges = registryOf(selected, standing)
-	b.Kinds = kindsOf(selected, standing)
+	b.Edges = registryOf(selected, other)
+	b.Kinds = kindsOf(selected, other)
 
 	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
 		Class:    edge.ClassProduction,
@@ -222,13 +222,13 @@ func TestPlanShowsAnEdgeFeatureStandingUpBehindAnotherFront(t *testing.T) {
 func TestPlanShowsAnEdgeFeatureGoingBehindAnotherFront(t *testing.T) {
 	t.Parallel()
 
-	standing := &planningEdge{removals: []edge.PlanChange{
+	other := &planningEdge{removals: []edge.PlanChange{
 		{Kind: "Cloudflare::R2Bucket", Name: "ocel-edge-cache", Action: edge.PlanDelete},
 	}}
 	selected := &planningEdge{teardownEdge: teardownEdge{kind: cloudfrontKind}}
 	b := planningBootstrapper(selected)
-	b.Edges = registryOf(selected, standing)
-	b.Kinds = kindsOf(selected, standing)
+	b.Edges = registryOf(selected, other)
+	b.Kinds = kindsOf(selected, other)
 
 	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
 		Class:    edge.ClassProduction,
@@ -264,12 +264,12 @@ func TestPlanLeavesOutAnEdgeThatCannotPlanItsOwnBootstrap(t *testing.T) {
 	}
 	for _, group := range plan.Groups {
 		if group.Kind == provider.EdgeGroupKind {
-			t.Errorf("plan carries %+v for an edge that says nothing about its own bootstrap", group)
+			t.Errorf("plan includes %+v for an edge that says nothing about its own bootstrap", group)
 		}
 	}
 }
 
-func TestPlanCarriesTheEdgesRefusalOut(t *testing.T) {
+func TestPlanPassesTheEdgesRefusalOut(t *testing.T) {
 	t.Parallel()
 
 	b := planningBootstrapper(&planningEdge{err: errors.New("CLOUDFLARE_ACCOUNT_ID is not set")})
@@ -279,7 +279,7 @@ func TestPlanCarriesTheEdgesRefusalOut(t *testing.T) {
 		Features: []string{bootstrap.FeatureCloudflareEdge},
 	})
 	if err == nil || !strings.Contains(err.Error(), "CLOUDFLARE_ACCOUNT_ID") {
-		t.Fatalf("Plan error = %v, want the edge's own account error carried out whole", err)
+		t.Fatalf("Plan error = %v, want the edge's own account error passed through whole", err)
 	}
 }
 
@@ -330,7 +330,7 @@ func (e *adoptingEdge) Hooks() edge.Hooks {
 	}}
 }
 
-func TestPlanAsksTheEdgeWhatItHandsThisAccountToHold(t *testing.T) {
+func TestPlanAsksTheEdgeWhatItHandsThisAccountToStore(t *testing.T) {
 	t.Parallel()
 
 	front := &adoptingEdge{refusal: errors.New("CLOUDFLARE_API_TOKEN was rejected")}
@@ -349,7 +349,7 @@ func TestPlanAsksTheEdgeWhatItHandsThisAccountToHold(t *testing.T) {
 func TestRemoveTearsTheEdgeDownForTheClassThenTheAWSBootstrap(t *testing.T) {
 	t.Parallel()
 
-	b := standingBootstrapper(t, bootstrap.ClassProduction)
+	b := installedBootstrapper(t, bootstrap.ClassProduction)
 	cfn, buckets, iamfake := b.CFN.(*teardownCFN), b.Buckets.(*teardownBuckets), b.IAM.(*teardownIAM)
 
 	if err := b.Remove(context.Background(), edge.ClassProduction, nil); err != nil {
@@ -385,16 +385,16 @@ func TestRemoveTearsTheEdgeDownForTheClassThenTheAWSBootstrap(t *testing.T) {
 func TestRemoveKeepsThePassphraseABootstrappedSiblingStillNeeds(t *testing.T) {
 	t.Parallel()
 
-	b := standingBootstrapper(t, bootstrap.ClassPreview)
+	b := installedBootstrapper(t, bootstrap.ClassPreview)
 	b.CFN.(*teardownCFN).present[coreStackName] = bootstrap.Deployed{Present: true}
 
 	if err := b.Remove(context.Background(), edge.ClassPreview, nil); err != nil {
 		t.Fatalf("Remove: %v", err)
 	}
-	if _, held := b.SSM.(*teardownSSM).params[passphraseParam]; !held {
+	if _, kept := b.SSM.(*teardownSSM).params[passphraseParam]; !kept {
 		t.Error("the passphrase the production bootstrap still needs was deleted")
 	}
-	if _, held := b.SSM.(*teardownSSM).params[edgeParam(t, bootstrap.ClassPreview, "/credentials")]; held {
+	if _, kept := b.SSM.(*teardownSSM).params[edgeParam(t, bootstrap.ClassPreview, "/credentials")]; kept {
 		t.Error("the preview bootstrap's own parameters must go")
 	}
 }
@@ -470,12 +470,12 @@ type teardownIAM struct {
 }
 
 func (i *teardownIAM) ListAccessKeys(_ context.Context, in *iam.ListAccessKeysInput, _ ...func(*iam.Options)) (*iam.ListAccessKeysOutput, error) {
-	held, ok := i.keys[aws.ToString(in.UserName)]
+	ids, ok := i.keys[aws.ToString(in.UserName)]
 	if !ok {
 		return nil, &iamtypes.NoSuchEntityException{}
 	}
 	out := &iam.ListAccessKeysOutput{}
-	for _, id := range held {
+	for _, id := range ids {
 		out.AccessKeyMetadata = append(out.AccessKeyMetadata, iamtypes.AccessKeyMetadata{AccessKeyId: aws.String(id)})
 	}
 	return out, nil
@@ -564,22 +564,22 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 	cfn := b.CFN.(*teardownCFN)
 	gate := providerserver.Gate{Bootstrap: b, Records: fake.NewRecords(), Edge: cloudflareKind}
 
-	standing, err := gate.Status(context.Background(), edge.ClassProduction)
+	status, err := gate.Status(context.Background(), edge.ClassProduction)
 	if err != nil {
-		t.Fatalf("Standing: %v", err)
+		t.Fatalf("Status: %v", err)
 	}
 	read := cfn.describes
 	if read == 0 {
-		t.Fatal("Standing described no stack at all")
+		t.Fatal("Status described no stack at all")
 	}
 
-	if _, err := gate.PlanFrom(context.Background(), standing, providerserver.ApplyRequest{
+	if _, err := gate.PlanFrom(context.Background(), status, providerserver.ApplyRequest{
 		Features: []string{bootstrap.FeatureISR, bootstrap.FeatureCloudflareEdge},
 	}); err != nil {
 		t.Fatalf("PlanFrom: %v", err)
 	}
 	if cfn.describes != read {
-		t.Errorf("planning described %d stacks on top of the %d the standing read cost, want it to plan from the read it was handed",
+		t.Errorf("planning described %d stacks on top of the %d the status read cost, want it to plan from the read it was handed",
 			cfn.describes-read, read)
 	}
 }

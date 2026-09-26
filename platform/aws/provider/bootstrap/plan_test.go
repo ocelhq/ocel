@@ -54,7 +54,7 @@ func groupNamed(t *testing.T, groups []provider.ChangeGroup, name string) provid
 			return group
 		}
 	}
-	t.Fatalf("the plan carries no group for %s", name)
+	t.Fatalf("the plan has no group for %s", name)
 	return provider.ChangeGroup{}
 }
 
@@ -66,7 +66,7 @@ func changeNamed(t *testing.T, group provider.ChangeGroup, name string) provider
 			return change
 		}
 	}
-	t.Fatalf("%s carries no change for %s; it carries %v", group.Name, name, group.Changes)
+	t.Fatalf("%s has no change for %s; it has %v", group.Name, name, group.Changes)
 	return provider.Change{}
 }
 
@@ -81,7 +81,7 @@ func TestPlanOnAFreshAccountReadsEveryResourceOffTheTemplates(t *testing.T) {
 
 	core := groupNamed(t, groups, coreStackName)
 	if core.Action != provider.ActionCreate {
-		t.Errorf("the core group is %q, want it created where nothing stands", core.Action)
+		t.Errorf("the core group is %q, want it created where nothing is provisioned", core.Action)
 	}
 	bucket := changeNamed(t, core, "StateBucket")
 	if bucket.Kind != "AWS::S3::Bucket" || bucket.Action != provider.ActionCreate {
@@ -89,7 +89,7 @@ func TestPlanOnAFreshAccountReadsEveryResourceOffTheTemplates(t *testing.T) {
 	}
 	for _, group := range groups {
 		if len(group.Changes) == 0 {
-			t.Errorf("%s carries no resource-level detail though its template was rendered", group.Name)
+			t.Errorf("%s has no resource-level detail though its template was rendered", group.Name)
 		}
 		for _, change := range group.Changes {
 			if change.Kind == "" {
@@ -100,7 +100,7 @@ func TestPlanOnAFreshAccountReadsEveryResourceOffTheTemplates(t *testing.T) {
 }
 
 func TestPlanReadsAnUpdateOffAChangeSetItNeverExecutes(t *testing.T) {
-	stacks, _ := standingBootstrap(t)
+	stacks, _ := installedBootstrap(t)
 	stack := isrStack(ClassProduction)
 	stacks.fallBehind(stack)
 	stacks.plan(stack,
@@ -131,7 +131,7 @@ func TestPlanReadsAnUpdateOffAChangeSetItNeverExecutes(t *testing.T) {
 }
 
 func TestPlanNamesTheTargetThatForcesAReplacement(t *testing.T) {
-	stacks, _ := standingBootstrap(t)
+	stacks, _ := installedBootstrap(t)
 	stack := isrStack(ClassProduction)
 	stacks.fallBehind(stack)
 	replacing := change(cfntypes.ChangeActionModify, "RevalidateQueue", "AWS::SQS::Queue", cfntypes.ReplacementTrue)
@@ -151,7 +151,7 @@ func TestPlanNamesTheTargetThatForcesAReplacement(t *testing.T) {
 }
 
 func TestPlanStillUpdatesAStackWhoseStampAloneIsBehind(t *testing.T) {
-	stacks, _ := standingBootstrap(t)
+	stacks, _ := installedBootstrap(t)
 	stack := isrStack(ClassProduction)
 	stacks.misstamp(stack)
 
@@ -161,7 +161,7 @@ func TestPlanStillUpdatesAStackWhoseStampAloneIsBehind(t *testing.T) {
 		t.Errorf("%s is %q, want it updated where only its stamp is behind — the restamp is on the apply path", stack, group.Action)
 	}
 	if len(group.Changes) != 0 {
-		t.Errorf("%s carries %v though CloudFormation reports no resource changes", stack, group.Changes)
+		t.Errorf("%s has %v though CloudFormation reports no resource changes", stack, group.Changes)
 	}
 	if group.Reason == "" {
 		t.Errorf("%s says nothing about why it is updated with nothing under it", stack)
@@ -211,7 +211,7 @@ func (g *gatedPlans) CreateChangeSet(ctx context.Context, in *cloudformation.Cre
 }
 
 func TestPlanReadsEveryGroupAtOnceAndHandsThemBackInOrder(t *testing.T) {
-	stacks, _ := standingBootstrap(t)
+	stacks, _ := installedBootstrap(t)
 	ctx := context.Background()
 	read, err := Read(ctx, stacks, defaultNamespace, ClassProduction)
 	if err != nil {
@@ -239,7 +239,7 @@ func TestPlanReadsEveryGroupAtOnceAndHandsThemBackInOrder(t *testing.T) {
 		t.Fatalf("PlanChanges: %v", err)
 	}
 	if len(plan) != len(groups)+1 {
-		t.Fatalf("the plan carries %d groups, want %d: every stack asked for, plus the runtime", len(plan), len(groups)+1)
+		t.Fatalf("the plan has %d groups, want %d: every stack asked for, plus the runtime", len(plan), len(groups)+1)
 	}
 	if last := plan[len(plan)-1]; last.Name != runtimeStack(ClassProduction) {
 		t.Errorf("the plan's last group is %s, want the runtime stack %s", last.Name, runtimeStack(ClassProduction))
@@ -250,10 +250,10 @@ func TestPlanReadsEveryGroupAtOnceAndHandsThemBackInOrder(t *testing.T) {
 		}
 	}
 	if gate.peak < 2 {
-		t.Errorf("at most %d change set(s) stood open at once; the groups were planned one after another", gate.peak)
+		t.Errorf("at most %d change set(s) were open at once; the groups were planned one after another", gate.peak)
 	}
 	if gate.peak > planFanOut {
-		t.Errorf("%d change sets stood open at once, over the %d CloudFormation will take", gate.peak, planFanOut)
+		t.Errorf("%d change sets were open at once, over the %d CloudFormation will take", gate.peak, planFanOut)
 	}
 }
 
@@ -264,7 +264,7 @@ func (unplannable) CreateChangeSet(context.Context, *cloudformation.CreateChange
 }
 
 func TestPlanSaysSoWhenItCannotDiffAnUpdate(t *testing.T) {
-	stacks, _ := standingBootstrap(t)
+	stacks, _ := installedBootstrap(t)
 	stack := isrStack(ClassProduction)
 	stacks.fallBehind(stack)
 
@@ -273,7 +273,7 @@ func TestPlanSaysSoWhenItCannotDiffAnUpdate(t *testing.T) {
 		t.Fatalf("%s is %q, want it still updated where the diff could not be read", stack, group.Action)
 	}
 	if len(group.Changes) != 0 {
-		t.Errorf("%s carries %v though nothing could be read off CloudFormation", stack, group.Changes)
+		t.Errorf("%s has %v though nothing could be read off CloudFormation", stack, group.Changes)
 	}
 	if !strings.Contains(group.Reason, provider.DetailUnavailable) {
 		t.Errorf("%s reads %q, want it to own up to the detail it could not read", stack, group.Reason)
@@ -281,7 +281,7 @@ func TestPlanSaysSoWhenItCannotDiffAnUpdate(t *testing.T) {
 }
 
 func TestPlanListsWhatADroppedFeatureTakesWithIt(t *testing.T) {
-	stacks, _ := standingBootstrap(t)
+	stacks, _ := installedBootstrap(t)
 	stack := isrStack(ClassProduction)
 
 	groups := planned(t, stacks, ClassProduction, Request{
@@ -294,22 +294,22 @@ func TestPlanListsWhatADroppedFeatureTakesWithIt(t *testing.T) {
 	}
 	queue := changeNamed(t, group, "RevalidateQueue")
 	if queue.Action != provider.ActionDelete || queue.Kind == "" {
-		t.Errorf("RevalidateQueue = %+v, want the queue the stack holds deleted", queue)
+		t.Errorf("RevalidateQueue = %+v, want the queue the stack contains deleted", queue)
 	}
 }
 
 const leftoverTemplate = "AWSTemplateFormatVersion: '2010-09-09'\nResources:\n  LeftoverQueue:\n    Type: AWS::SQS::Queue\n"
 
-func (f *fakeCFN) holds(stackName, body string) {
+func (f *fakeCFN) setTemplate(stackName, body string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.templates[stackName] = body
 }
 
-func TestPlanListsTheResourcesTheStandingStackHoldsNotTheOnesThisBuildWouldRender(t *testing.T) {
-	stacks, _ := standingBootstrap(t)
+func TestPlanListsTheResourcesTheProvisionedStackContainsNotTheOnesThisBuildWouldRender(t *testing.T) {
+	stacks, _ := installedBootstrap(t)
 	stack := isrStack(ClassProduction)
-	stacks.holds(stack, leftoverTemplate)
+	stacks.setTemplate(stack, leftoverTemplate)
 
 	group := groupNamed(t, planned(t, stacks, ClassProduction, Request{
 		Features: []string{FeatureImageOptimization, FeatureCloudflareEdge},
@@ -317,11 +317,11 @@ func TestPlanListsTheResourcesTheStandingStackHoldsNotTheOnesThisBuildWouldRende
 	}), stack)
 	leftover := changeNamed(t, group, "LeftoverQueue")
 	if leftover.Kind != "AWS::SQS::Queue" || leftover.Action != provider.ActionDelete {
-		t.Errorf("LeftoverQueue = %+v, want what the account holds, deleted", leftover)
+		t.Errorf("LeftoverQueue = %+v, want what the account contains, deleted", leftover)
 	}
 	for _, change := range group.Changes {
 		if change.Name == "RevalidateQueue" {
-			t.Error("the plan lists RevalidateQueue, which this build's template declares and the standing stack does not hold")
+			t.Error("the plan lists RevalidateQueue, which this build's template declares and the provisioned stack does not contain")
 		}
 	}
 }
@@ -332,8 +332,8 @@ func (unlistable) ListStackResources(context.Context, *cloudformation.ListStackR
 	return nil, errors.New("this account may not list stack resources")
 }
 
-func TestPlanFallsBackToTheTemplateWhenItCannotReadTheStandingStack(t *testing.T) {
-	stacks, _ := standingBootstrap(t)
+func TestPlanFallsBackToTheTemplateWhenItCannotReadTheProvisionedStack(t *testing.T) {
+	stacks, _ := installedBootstrap(t)
 	stack := isrStack(ClassProduction)
 
 	group := groupNamed(t, planned(t, unlistable{stacks}, ClassProduction, Request{

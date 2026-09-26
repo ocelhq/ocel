@@ -39,7 +39,7 @@ var cloudFrontEdgeFeature = feature{
 }
 
 func cloudFrontEdgeTemplate(in featureInputs) featureStack {
-	held := edge.Class(in.class)
+	edgeClass := edge.Class(in.class)
 	return featureStack{
 		body: fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: "Ocel bootstrap feature (%s, %s) - what a CloudFront front needs in this account before any deployment is fronted with it: the key value store one entry per hostname is written into, the resolver function every distribution runs, the cache and response-headers policies they answer by, and the origin access control they read the asset bucket through."
@@ -47,12 +47,12 @@ Resources:
 %s%s%s%s%s%sOutputs:
 %s`,
 			FeatureCloudFrontEdge, in.class,
-			routesStoreResource(in.ns, held),
-			resolverResource(in.ns, held),
-			emptyBodyResource(in.ns, held),
-			cachePolicyResource(in.ns, held),
-			headersPolicyResource(in.ns, held),
-			assetAccessResource(in.ns, held),
+			routesStoreResource(in.ns, edgeClass),
+			resolverResource(in.ns, edgeClass),
+			emptyBodyResource(in.ns, edgeClass),
+			cachePolicyResource(in.ns, edgeClass),
+			headersPolicyResource(in.ns, edgeClass),
+			assetAccessResource(in.ns, edgeClass),
 			cloudFrontEdgeOutputs()),
 	}
 }
@@ -104,11 +104,11 @@ func cachePolicyResource(ns Namespace, class edge.Class) string {
 	return fmt.Sprintf(`  EdgeCachePolicy:
     Type: AWS::CloudFront::CachePolicy
     Metadata:
-      Description: "Keys every distribution's cache on the hostname and the resolver's variant; the origin's Cache-Control governs how long anything is held."
+      Description: "Keys every distribution's cache on the hostname and the resolver's variant; the origin's Cache-Control sets how long anything is cached."
     Properties:
       CachePolicyConfig:
         Name: %q
-        Comment: "Ocel: keys the cache on the hostname and the resolver's variant; the origin's Cache-Control governs how long anything is held."
+        Comment: "Ocel: keys the cache on the hostname and the resolver's variant; the origin's Cache-Control sets how long anything is cached."
         MinTTL: 0
         DefaultTTL: 0
         MaxTTL: %d
@@ -176,7 +176,7 @@ func cloudFrontEdgeOutputs() string {
     Description: "Published resolver function every distribution this account fronts runs on viewer request."
     Value: !GetAtt EdgeResolver.FunctionARN
   %s:
-    Description: "Published function every distribution this account fronts runs on viewer response, emptying the sentinel byte a bodiless origin answer carries."
+    Description: "Published function every distribution this account fronts runs on viewer response, emptying the sentinel byte a bodiless origin answer contains."
     Value: !GetAtt EdgeEmptyBody.FunctionARN
   %s:
     Description: "Cache policy every distribution this account fronts caches by."

@@ -88,20 +88,20 @@ func (a account) stackStatus(t *testing.T, name string) string {
 	return string(out.Stacks[0].StackStatus)
 }
 
-func (a account) bucketStands(t *testing.T, name string) bool {
+func (a account) bucketExists(t *testing.T, name string) bool {
 	t.Helper()
 	_, err := s3.NewFromConfig(a.aws).HeadBucket(context.Background(), &s3.HeadBucketInput{Bucket: awssdk.String(name)})
 	return err == nil
 }
 
-func (a account) tableStands(t *testing.T, name string) bool {
+func (a account) tableExists(t *testing.T, name string) bool {
 	t.Helper()
 	_, err := dynamodb.NewFromConfig(a.aws).DescribeTable(context.Background(),
 		&dynamodb.DescribeTableInput{TableName: awssdk.String(name)})
 	return err == nil
 }
 
-func (a account) paramStands(t *testing.T, name string) bool {
+func (a account) paramExists(t *testing.T, name string) bool {
 	t.Helper()
 	_, err := ssm.NewFromConfig(a.aws).GetParameter(context.Background(),
 		&ssm.GetParameterInput{Name: awssdk.String(name), WithDecryption: awssdk.Bool(true)})
@@ -115,7 +115,7 @@ func groupNamed(t *testing.T, plan provider.Plan, name string) provider.ChangeGr
 			return group
 		}
 	}
-	t.Fatalf("the plan carries no %q group, only %v", name, groupNames(plan))
+	t.Fatalf("the plan has no %q group, only %v", name, groupNames(plan))
 	return provider.ChangeGroup{}
 }
 

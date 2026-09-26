@@ -86,7 +86,7 @@ it("stops a group at its first failure and reports the rest of that group, unpro
   expect(requested).toEqual(["/a/1", "/b/1", "/b/2"]);
 });
 
-it("keeps a record carrying no group from stopping the records after it", async () => {
+it("keeps a record with no group from stopping the records after it", async () => {
   const { deps, requested } = bootstrap({
     "/a": new Response(null, { status: 500 }),
     "/b": revalidated,
@@ -245,7 +245,7 @@ it("says what threw when the handler itself fails, with the message's header val
     ...deps,
     origins: {
       get() {
-        throw new Error(`memo exploded holding ${bypassToken}`);
+        throw new Error(`memo exploded with ${bypassToken}`);
       },
     } as unknown as HandlerDeps["origins"],
   };

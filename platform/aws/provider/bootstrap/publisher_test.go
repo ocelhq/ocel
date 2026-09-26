@@ -184,7 +184,7 @@ func TestTagPublisher(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				for name, res := range parsePublisherTemplate(t, tc.template).Resources {
 					if res.Type == "AWS::CloudWatch::Alarm" {
-						t.Errorf("%s is a billed standing alarm in a stack that must be free to leave idle", name)
+						t.Errorf("%s is an alarm billed every month in a stack that must be free to leave idle", name)
 					}
 				}
 				if strings.Contains(tc.template, "MetricsConfig") {

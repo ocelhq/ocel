@@ -217,7 +217,7 @@ func TestRun(t *testing.T) {
 		body := r.awaitFront(t, secret)
 
 		if body.Secret != "" {
-			t.Errorf("the app was handed %s=%q; nothing the app runs or logs may carry the origin secret", originguard.OriginSecretVar, body.Secret)
+			t.Errorf("the app was handed %s=%q; nothing the app runs or logs may contain the origin secret", originguard.OriginSecretVar, body.Secret)
 		}
 		if resp := r.ask(t, "/", ""); resp.StatusCode != http.StatusForbidden {
 			t.Errorf("status without the secret = %d, want %d: a caller who came round the edge is not the app's to answer", resp.StatusCode, http.StatusForbidden)
@@ -239,7 +239,7 @@ func TestRun(t *testing.T) {
 			t.Errorf("the app was handed %s=%q, want %q: the app serves the path the platform probes", originguard.HealthPathVar, body.Health, healthPath)
 		}
 		if resp := r.ask(t, healthPath, ""); resp.StatusCode != http.StatusOK {
-			t.Errorf("probe status = %d, want %d: the platform's probe carries no secret and its failure takes the deployment down", resp.StatusCode, http.StatusOK)
+			t.Errorf("probe status = %d, want %d: the platform's probe sends no secret and its failure takes the deployment down", resp.StatusCode, http.StatusOK)
 		}
 		if code := r.quit(t, secret); code != 0 {
 			t.Errorf("run = %d, want 0", code)
@@ -255,9 +255,9 @@ func TestRun(t *testing.T) {
 	})
 
 	t.Run("a signal to the runtime reaches the app", func(t *testing.T) {
-		held := make(chan os.Signal, 1)
-		signal.Notify(held, syscall.SIGTERM)
-		t.Cleanup(func() { signal.Stop(held) })
+		sigterm := make(chan os.Signal, 1)
+		signal.Notify(sigterm, syscall.SIGTERM)
+		t.Cleanup(func() { signal.Stop(sigterm) })
 
 		r := launch(t, "serve")
 		r.awaitFront(t, "")

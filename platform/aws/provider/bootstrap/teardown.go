@@ -64,7 +64,7 @@ func ClassParamNames(ns Namespace, class string) ([]string, error) {
 	return append(params, secret), nil
 }
 
-func PassphraseHeldBySibling(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (bool, error) {
+func SiblingSharesPassphrase(ctx context.Context, api cfn.StacksAPI, ns Namespace, class string) (bool, error) {
 	sibling, err := SiblingClassOf(class)
 	if err != nil {
 		return false, err
@@ -154,9 +154,9 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 	}
 	switch {
 	case core == nil:
-		say(log, fmt.Sprintf("no %s stack in this account; whatever stands beside it is still removed", stackName))
+		say(log, fmt.Sprintf("no %s stack in this account; whatever exists beside it is still removed", stackName))
 	case !deployed.Present:
-		say(log, fmt.Sprintf("%s is %s and names none of its resources; whatever stands beside it is still removed", stackName, core.StackStatus))
+		say(log, fmt.Sprintf("%s is %s and names none of its resources; whatever exists beside it is still removed", stackName, core.StackStatus))
 	}
 
 	say(progress, fmt.Sprintf("Deleting the access key of edge reader %s", userName))
@@ -174,11 +174,11 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 		}
 	}
 
-	standing, err := standingFeatures(ctx, apis.CFN, ns, class)
+	installed, err := installedFeatures(ctx, apis.CFN, ns, class)
 	if err != nil {
 		return err
 	}
-	present := standing.Names()
+	present := installed.Names()
 	if len(present) > 0 {
 		say(progress, fmt.Sprintf("Deleting %s (CloudFormation)", strings.Join(featureStackNames(ns, present, class), ", ")))
 		if err := deleteFeatureStacks(ctx, apis.CFN, ns, class, present, func(msg string) { say(log, msg) }); err != nil {
@@ -206,12 +206,12 @@ func Teardown(ctx context.Context, apis TeardownAPIs, ns Namespace, class string
 	}
 
 	say(progress, "Deleting the bootstrap's stored parameters (SSM)")
-	shared, err := PassphraseHeldBySibling(ctx, apis.CFN, ns, class)
+	shared, err := SiblingSharesPassphrase(ctx, apis.CFN, ns, class)
 	if err != nil {
 		return err
 	}
 	if shared {
-		say(log, fmt.Sprintf("the %s bootstrap still stands and its Pulumi state is encrypted under the shared passphrase in %s; it stays", siblingName(class), ns.PassphraseParamName()))
+		say(log, fmt.Sprintf("the %s bootstrap is still installed and its Pulumi state is encrypted under the shared passphrase in %s; it stays", siblingName(class), ns.PassphraseParamName()))
 	} else {
 		params = append(params, ns.PassphraseParamName())
 	}

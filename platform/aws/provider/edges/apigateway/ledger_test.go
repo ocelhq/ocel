@@ -72,7 +72,7 @@ func TestDestroyKeepsTheLedgerWhileAHostnameIsStillBound(t *testing.T) {
 	if err := stack.Destroy(ctx); err == nil {
 		t.Fatal("Destroy = nil, want the unbind failure surfaced")
 	}
-	if !ledgerRowsHeld(w) {
+	if !ledgerRowsPresent(w) {
 		t.Error("the deployments ledger was erased while shop.example.com is still bound; a re-run would not know to unbind it")
 	}
 
@@ -80,12 +80,12 @@ func TestDestroyKeepsTheLedgerWhileAHostnameIsStillBound(t *testing.T) {
 	if err := stack.Destroy(ctx); err != nil {
 		t.Fatalf("re-run: %v", err)
 	}
-	if ledgerRowsHeld(w) {
+	if ledgerRowsPresent(w) {
 		t.Error("the ledger survived the re-run that unbound every hostname")
 	}
 }
 
-func ledgerRowsHeld(w *world) bool {
+func ledgerRowsPresent(w *world) bool {
 	w.dynamo.mu.Lock()
 	defer w.dynamo.mu.Unlock()
 	for key := range w.dynamo.items {

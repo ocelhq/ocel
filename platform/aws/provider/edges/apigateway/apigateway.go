@@ -251,13 +251,13 @@ func (p *apiGateway) Teardown(ctx context.Context, class edge.Class) error {
 	if err != nil {
 		return err
 	}
-	standing := surface.ProjectsNamed(p.ns, slices.Sorted(maps.Values(names)), class)
-	if len(standing) == 0 {
+	projects := surface.ProjectsNamed(p.ns, slices.Sorted(maps.Values(names)), class)
+	if len(projects) == 0 {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
 		"the %q edge still fronts %d project(s) of class %s with a REST API of their own: %s. Run `%s` in each of them first, then take this bootstrap down",
-		Kind, len(standing), class, strings.Join(standing, ", "), "ocel destroy "+string(class))
+		Kind, len(projects), class, strings.Join(projects, ", "), "ocel destroy "+string(class))
 }
 
 func (p *apiGateway) Reconcile(ctx context.Context, spec edge.StackSpec, prior edge.StackState) (edge.EdgeStack, error) {
@@ -266,14 +266,14 @@ func (p *apiGateway) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		return nil, err
 	}
 	if spec.Slug == "" {
-		return nil, fmt.Errorf("the %q edge fronts a project by slug; this stack carries none", Kind)
+		return nil, fmt.Errorf("the %q edge fronts a project by slug; this stack names none", Kind)
 	}
 	deployed, err := p.bootstrap(ctx, c, spec.Class)
 	if err != nil {
 		return nil, err
 	}
 	if !deployed.Present {
-		return nil, fmt.Errorf("the %s bootstrap is not standing, so the %q edge has no state table to keep %s's deployments in", spec.Class, Kind, spec.Slug)
+		return nil, fmt.Errorf("the %s bootstrap is not installed, so the %q edge has no state table to keep %s's deployments in", spec.Class, Kind, spec.Slug)
 	}
 	role, err := requireInvokeRole(p.ns, deployed, spec.Class)
 	if err != nil {
@@ -304,7 +304,7 @@ func (p *apiGateway) Reconcile(ctx context.Context, spec edge.StackSpec, prior e
 		return nil, err
 	}
 	s.own.API = id
-	if err := s.settleDomainFronts(ctx, c, spec.Warn); err != nil {
+	if err := s.publishDomainFronts(ctx, c, spec.Warn); err != nil {
 		return nil, err
 	}
 	return s, nil
@@ -327,14 +327,14 @@ func (p *apiGateway) DomainOwner(ctx context.Context, hostname string) (string, 
 	if err != nil {
 		return "", err
 	}
-	held, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{DomainName: aws.String(hostname)})
+	domain, err := c.APIGateway.GetDomainName(ctx, &apigateway.GetDomainNameInput{DomainName: aws.String(hostname)})
 	if err != nil {
 		if isNotFound(err) {
 			return "", nil
 		}
 		return "", fmt.Errorf("read the API Gateway domain name for %s: %w", hostname, err)
 	}
-	if held.RoutingMode == agtypes.RoutingModeRoutingRuleOnly {
+	if domain.RoutingMode == agtypes.RoutingModeRoutingRuleOnly {
 		return catchAllOwner(ctx, c, hostname)
 	}
 	mappings, err := basePathMappings(ctx, c, hostname)

@@ -90,14 +90,14 @@ func TestFeatureTemplates(t *testing.T) {
 					}
 					for _, ref := range referenced {
 						if !slices.Contains(known, ref) {
-							t.Errorf("template references %q, which is neither a parameter it declares nor a resource it holds", ref)
+							t.Errorf("template references %q, which is neither a parameter it declares nor a resource it defines", ref)
 						}
 					}
 				})
 
 				t.Run("no version output", func(t *testing.T) {
 					if _, ok := tmpl.Outputs["BootstrapVersion"]; ok {
-						t.Error("the bootstrap's shape is carried by the ocel:schema tag; no stack Output restates it")
+						t.Error("the bootstrap's shape is recorded in the ocel:schema tag; no stack Output restates it")
 					}
 				})
 			})

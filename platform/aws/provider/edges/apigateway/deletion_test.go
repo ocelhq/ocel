@@ -18,7 +18,7 @@ import (
 func deletionTrail(w *world) []string {
 	var taken []string
 	for _, call := range w.gateway.calls {
-		if strings.HasPrefix(call, "DeleteRestApi ") || strings.HasPrefix(call, "hold ") {
+		if strings.HasPrefix(call, "DeleteRestApi ") || strings.HasPrefix(call, "wait ") {
 			taken = append(taken, call)
 		}
 	}
@@ -38,7 +38,7 @@ func previewAPIs(t *testing.T, w *world, pointers ...string) []string {
 	return ids
 }
 
-func standingAPIs(w *world, ids []string) []string {
+func remainingAPIs(w *world, ids []string) []string {
 	var left []string
 	for _, id := range ids {
 		if w.gateway.apis[id] != nil {
@@ -67,12 +67,12 @@ func TestDestroySpacesEveryRestAPIDeletionToTheQuota(t *testing.T) {
 
 	taken := deletionTrail(w)
 	if len(taken) != 2*len(ids)-1 {
-		t.Fatalf("deletions and holds = %v, want %d deletions with one hold between each pair", taken, len(ids))
+		t.Fatalf("deletions and waits = %v, want %d deletions with one wait between each pair", taken, len(ids))
 	}
 	for at, call := range taken {
 		want := "DeleteRestApi "
 		if at%2 == 1 {
-			want = "hold " + (30 * time.Second).String()
+			want = "wait " + (30 * time.Second).String()
 		}
 		if !strings.HasPrefix(call, want) {
 			t.Errorf("call %d = %q, want %q: API Gateway allows one deletion every %s per account, and the first one waits on nothing", at, call, want, deleteEvery)
@@ -101,23 +101,23 @@ func TestRemovingPreviewsOneByOneSpacesThemAgainstEachOther(t *testing.T) {
 
 	taken := deletionTrail(w)
 	if len(taken) != 2*len(ids)-1 {
-		t.Fatalf("deletions and holds = %v, want %d deletions with one hold between each pair; the quota is per account, not per removal", taken, len(ids))
+		t.Fatalf("deletions and waits = %v, want %d deletions with one wait between each pair; the quota is per account, not per removal", taken, len(ids))
 	}
 	for at, call := range taken {
 		want := "DeleteRestApi "
 		if at%2 == 1 {
-			want = "hold " + (30 * time.Second).String()
+			want = "wait " + (30 * time.Second).String()
 		}
 		if !strings.HasPrefix(call, want) {
 			t.Errorf("call %d = %q, want %q", at, call, want)
 		}
 	}
-	if standing := standingAPIs(w, ids); len(standing) != 0 {
-		t.Errorf("REST APIs still standing = %v, want none", standing)
+	if left := remainingAPIs(w, ids); len(left) != 0 {
+		t.Errorf("REST APIs still present = %v, want none", left)
 	}
 }
 
-func TestDestroyStopsAtItsBudgetNamingTheRestAPIsStillStanding(t *testing.T) {
+func TestDestroyStopsAtItsBudgetNamingTheRestAPIsItDidNotDelete(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -140,9 +140,9 @@ func TestDestroyStopsAtItsBudgetNamingTheRestAPIsStillStanding(t *testing.T) {
 	if !errors.As(err, &outstanding) {
 		t.Fatalf("Destroy error = %v, want what is left named as outstanding", err)
 	}
-	left := standingAPIs(w, ids)
+	left := remainingAPIs(w, ids)
 	if len(left) != 1 {
-		t.Fatalf("REST APIs still standing = %v, want the one the budget did not reach", left)
+		t.Fatalf("REST APIs still present = %v, want the one the budget did not reach", left)
 	}
 	if len(outstanding.Items) != 1 || outstanding.Items[0].Kind != kindRestAPI || outstanding.Items[0].Name != left[0] {
 		t.Errorf("outstanding items = %+v, want %s %s", outstanding.Items, kindRestAPI, left[0])
@@ -155,7 +155,7 @@ func TestDestroyStopsAtItsBudgetNamingTheRestAPIsStillStanding(t *testing.T) {
 	if !slices.ContainsFunc(slices.Collect(maps.Keys(w.dynamo.items)), func(key string) bool {
 		return strings.HasPrefix(key, "ledger#")
 	}) {
-		t.Error("the deployments ledger was erased while REST APIs it names are still standing; a re-run would never find them")
+		t.Error("the deployments ledger was erased while REST APIs it names still exist; a re-run would never find them")
 	}
 
 	e.delete = w.deletion(30)
@@ -168,8 +168,8 @@ func TestDestroyStopsAtItsBudgetNamingTheRestAPIsStillStanding(t *testing.T) {
 	if !slices.Equal(taken, []string{"DeleteRestApi " + left[0]}) {
 		t.Errorf("the re-run made %v, want it to resume with only what was left and pay the quota for nothing already gone", taken)
 	}
-	if standing := standingAPIs(w, ids); len(standing) != 0 {
-		t.Errorf("REST APIs still standing after the re-run = %v, want none", standing)
+	if left := remainingAPIs(w, ids); len(left) != 0 {
+		t.Errorf("REST APIs still present after the re-run = %v, want none", left)
 	}
 }
 
@@ -224,7 +224,7 @@ func TestDeleter(t *testing.T) {
 		}
 	})
 
-	t.Run("an API that refuses to go is still named as standing", func(t *testing.T) {
+	t.Run("an API that refuses to go is still named as outstanding", func(t *testing.T) {
 		t.Parallel()
 
 		w := newWorld()
@@ -234,7 +234,7 @@ func TestDeleter(t *testing.T) {
 			t.Fatalf("Reconcile: %v", err)
 		}
 		id := ownState(t, stack).API
-		w.gateway.deleteErr = errors.New("the account holds a mapping onto it")
+		w.gateway.deleteErr = errors.New("the account has a mapping onto it")
 		w.gateway.deleteRefused = 1
 
 		err = e.deletion().drain(context.Background(), w.clients(), []string{id})
@@ -243,13 +243,13 @@ func TestDeleter(t *testing.T) {
 		}
 		var outstanding *edge.OutstandingError
 		if !errors.As(err, &outstanding) {
-			t.Fatalf("drain error = %v, want the API that refused counted as standing", err)
+			t.Fatalf("drain error = %v, want the API that refused counted as outstanding", err)
 		}
 		if len(outstanding.Items) != 1 || outstanding.Items[0].Name != id {
 			t.Errorf("outstanding items = %+v, want %s %s", outstanding.Items, kindRestAPI, id)
 		}
 		if w.gateway.apis[id] == nil {
-			t.Error("the REST API is gone, so the drain named something that is not standing")
+			t.Error("the REST API is gone, so the drain named something that no longer exists")
 		}
 	})
 
@@ -259,9 +259,9 @@ func TestDeleter(t *testing.T) {
 		d := &Deletion{Every: 30 * time.Second}
 		for _, jitter := range []float64{0, 0.5, 0.9999} {
 			d.Jitter = func() float64 { return jitter }
-			held := d.interval()
-			if held < d.every() || held > d.every()+time.Duration(float64(d.every())*deleteJitter) {
-				t.Errorf("interval() = %s at jitter %v, want it inside [%s, +%v%%]: the interval is the quota, and a shorter wait is throttled", held, jitter, d.every(), deleteJitter*100)
+			wait := d.interval()
+			if wait < d.every() || wait > d.every()+time.Duration(float64(d.every())*deleteJitter) {
+				t.Errorf("interval() = %s at jitter %v, want it inside [%s, +%v%%]: the interval is the quota, and a shorter wait is throttled", wait, jitter, d.every(), deleteJitter*100)
 			}
 		}
 	})

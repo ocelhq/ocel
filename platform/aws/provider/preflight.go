@@ -81,21 +81,21 @@ func (p *Provider) publishRuntimeLayers(ctx context.Context, pre provider.Deploy
 		return nil
 	}
 	class := pre.Deploy.Class
-	held, err := p.bootstrapped(ctx, class)
-	if err != nil || !held.Present {
+	deployed, err := p.bootstrapped(ctx, class)
+	if err != nil || !deployed.Present {
 		return err
 	}
 	published, err := bootstrap.EnsureRuntimeLayers(ctx, bootstrap.APIs{
 		CFN:   cloudformation.NewFromConfig(p.aws),
 		Store: s3.NewFromConfig(p.aws),
 	}, p.namespace, string(class), bootstrap.RuntimeLayerRequest{
-		ArtifactBucket: held.ArtifactBucket,
+		ArtifactBucket: deployed.ArtifactBucket,
 		Writer:         pre.WrittenBy,
 	}, saying(pre.Progress))
 	if err != nil {
 		return err
 	}
-	if !maps.Equal(published, held.RuntimeLayers) {
+	if !maps.Equal(published, deployed.RuntimeLayers) {
 		p.deployed.forget()
 	}
 	return nil
@@ -129,7 +129,7 @@ func refusePublicBuckets(pre provider.DeployPreflight) error {
 			continue
 		}
 		return refusal.Refuse(refusal.CodeInvalid,
-			"bucket %s asks to be public, and this provider stands its buckets up with public access blocked at the account's edge: serve the objects through your app or a signed url instead, or drop `public` from %s",
+			"bucket %s asks to be public, and this provider provisions its buckets with public access blocked at the account's edge: serve the objects through your app or a signed url instead, or drop `public` from %s",
 			resource.Name, resource.Name)
 	}
 	return nil

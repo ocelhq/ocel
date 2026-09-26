@@ -147,12 +147,12 @@ func TestTagInvalidator(t *testing.T) {
 	t.Run("renders no alarms", func(t *testing.T) {
 		for name, res := range parsePublisherTemplate(t, featureTemplate(FeatureISR, ClassProduction)).Resources {
 			if res.Type == "AWS::CloudWatch::Alarm" {
-				t.Errorf("%s is a billed standing alarm in a stack that must be free to leave idle", name)
+				t.Errorf("%s is an alarm billed every month in a stack that must be free to leave idle", name)
 			}
 		}
 	})
 
-	t.Run("every bootstrap that carries isr carries one", func(t *testing.T) {
+	t.Run("every bootstrap that includes isr includes one", func(t *testing.T) {
 		for _, tc := range []struct {
 			name      string
 			target    spec

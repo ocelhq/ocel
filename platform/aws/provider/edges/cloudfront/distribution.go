@@ -40,9 +40,9 @@ type distributionPlan struct {
 	front         awsports.ContainerFront
 }
 
-func (p distributionPlan) keeping(held *cftypes.DistributionConfig) distributionPlan {
+func (p distributionPlan) keeping(current *cftypes.DistributionConfig) distributionPlan {
 	if p.front.VPCOrigin == "" {
-		p.front = containerFrontOf(held)
+		p.front = containerFrontOf(current)
 	}
 	return p
 }
@@ -193,84 +193,84 @@ func (p distributionPlan) config(aliases []string, certificate string) *cftypes.
 	return config
 }
 
-func completeFrom(want, held *cftypes.DistributionConfig) *cftypes.DistributionConfig {
-	if want == nil || held == nil {
+func completeFrom(want, current *cftypes.DistributionConfig) *cftypes.DistributionConfig {
+	if want == nil || current == nil {
 		return want
 	}
 	if want.Aliases == nil {
-		want.Aliases = held.Aliases
+		want.Aliases = current.Aliases
 	}
 	if want.AnycastIpListId == nil {
-		want.AnycastIpListId = held.AnycastIpListId
+		want.AnycastIpListId = current.AnycastIpListId
 	}
 	if want.CacheBehaviors == nil {
-		want.CacheBehaviors = held.CacheBehaviors
+		want.CacheBehaviors = current.CacheBehaviors
 	}
 	if want.CacheTagConfig == nil {
-		want.CacheTagConfig = held.CacheTagConfig
+		want.CacheTagConfig = current.CacheTagConfig
 	}
 	if want.CallerReference == nil {
-		want.CallerReference = held.CallerReference
+		want.CallerReference = current.CallerReference
 	}
 	if want.Comment == nil {
-		want.Comment = held.Comment
+		want.Comment = current.Comment
 	}
 	if want.ConnectionFunctionAssociation == nil {
-		want.ConnectionFunctionAssociation = held.ConnectionFunctionAssociation
+		want.ConnectionFunctionAssociation = current.ConnectionFunctionAssociation
 	}
 	if want.ContinuousDeploymentPolicyId == nil {
-		want.ContinuousDeploymentPolicyId = held.ContinuousDeploymentPolicyId
+		want.ContinuousDeploymentPolicyId = current.ContinuousDeploymentPolicyId
 	}
 	if want.CustomErrorResponses == nil {
-		want.CustomErrorResponses = held.CustomErrorResponses
+		want.CustomErrorResponses = current.CustomErrorResponses
 	}
 	if want.DefaultCacheBehavior == nil {
-		want.DefaultCacheBehavior = held.DefaultCacheBehavior
+		want.DefaultCacheBehavior = current.DefaultCacheBehavior
 	}
 	if want.DefaultRootObject == nil {
-		want.DefaultRootObject = held.DefaultRootObject
+		want.DefaultRootObject = current.DefaultRootObject
 	}
 	if want.Enabled == nil {
-		want.Enabled = held.Enabled
+		want.Enabled = current.Enabled
 	}
 	if want.IsIPV6Enabled == nil {
-		want.IsIPV6Enabled = held.IsIPV6Enabled
+		want.IsIPV6Enabled = current.IsIPV6Enabled
 	}
 	if want.Logging == nil {
-		want.Logging = held.Logging
+		want.Logging = current.Logging
 	}
 	if want.OriginGroups == nil {
-		want.OriginGroups = held.OriginGroups
+		want.OriginGroups = current.OriginGroups
 	}
 	if want.Origins == nil {
-		want.Origins = held.Origins
+		want.Origins = current.Origins
 	}
 	if want.Restrictions == nil {
-		want.Restrictions = held.Restrictions
+		want.Restrictions = current.Restrictions
 	}
 	if want.Staging == nil {
-		want.Staging = held.Staging
+		want.Staging = current.Staging
 	}
 	if want.TenantConfig == nil {
-		want.TenantConfig = held.TenantConfig
+		want.TenantConfig = current.TenantConfig
 	}
 	if want.ViewerCertificate == nil {
-		want.ViewerCertificate = held.ViewerCertificate
+		want.ViewerCertificate = current.ViewerCertificate
 	}
 	if want.ViewerMtlsConfig == nil {
-		want.ViewerMtlsConfig = held.ViewerMtlsConfig
+		want.ViewerMtlsConfig = current.ViewerMtlsConfig
 	}
 	if want.WebACLId == nil {
-		want.WebACLId = held.WebACLId
+		want.WebACLId = current.WebACLId
 	}
 	if want.ConnectionMode == "" {
-		want.ConnectionMode = held.ConnectionMode
+		want.ConnectionMode = current.ConnectionMode
 	}
 	if want.HttpVersion == "" {
-		want.HttpVersion = held.HttpVersion
+		want.HttpVersion = current.HttpVersion
 	}
 	if want.PriceClass == "" {
-		want.PriceClass = held.PriceClass
+		want.PriceClass = current.PriceClass
 	}
 	return want
 }
@@ -357,30 +357,30 @@ func reshapeDistribution(ctx context.Context, c Clients, plan distributionPlan, 
 	if err := plan.ready(); err != nil {
 		return err
 	}
-	held, etag, err := configOf(ctx, c, id)
+	current, etag, err := configOf(ctx, c, id)
 	if err != nil {
 		return err
 	}
-	aliases, certificate := aliasesOf(held), certificateOf(held)
-	return putConfig(ctx, c, id, etag, completeFrom(plan.keeping(held).config(aliases, certificate), held))
+	aliases, certificate := aliasesOf(current), certificateOf(current)
+	return putConfig(ctx, c, id, etag, completeFrom(plan.keeping(current).config(aliases, certificate), current))
 }
 
 func (p *cloudFront) declareContainerFront(ctx context.Context, c Clients, plan distributionPlan, kind, id string, front awsports.ContainerFront) error {
 	if err := plan.ready(); err != nil {
 		return err
 	}
-	held, etag, err := configOf(ctx, c, id)
+	current, etag, err := configOf(ctx, c, id)
 	if err != nil {
 		return err
 	}
-	if containerFrontOf(held) == front {
+	if containerFrontOf(current) == front {
 		return nil
 	}
 	plan.front = front
-	if err := putConfig(ctx, c, id, etag, completeFrom(plan.config(aliasesOf(held), certificateOf(held)), held)); err != nil {
+	if err := putConfig(ctx, c, id, etag, completeFrom(plan.config(aliasesOf(current), certificateOf(current)), current)); err != nil {
 		return fmt.Errorf("declare the container front as an origin of %s %s: %w", kind, id, err)
 	}
-	return p.rollout().settled(ctx, kind, id, containerFrontRollingOut, distributionStatus(c, id))
+	return p.rollout().awaitDeployed(ctx, kind, id, containerFrontRollingOut, distributionStatus(c, id))
 }
 
 func distributionStatus(c Clients, id string) func(context.Context) (string, error) {
@@ -430,63 +430,63 @@ func certificateOf(config *cftypes.DistributionConfig) string {
 }
 
 func serveAlias(ctx context.Context, c Clients, plan distributionPlan, id, hostname, certificate string) error {
-	held, etag, err := configOf(ctx, c, id)
+	current, etag, err := configOf(ctx, c, id)
 	if err != nil {
 		return err
 	}
-	aliases := aliasesOf(held)
+	aliases := aliasesOf(current)
 	if slices.ContainsFunc(aliases, func(alias string) bool { return strings.EqualFold(alias, hostname) }) {
 		return nil
 	}
 	if certificate == "" {
-		certificate = certificateOf(held)
+		certificate = certificateOf(current)
 	}
 	aliases = append(aliases, hostname)
-	if err := putConfig(ctx, c, id, etag, completeFrom(plan.keeping(held).config(aliases, certificate), held)); err != nil {
+	if err := putConfig(ctx, c, id, etag, completeFrom(plan.keeping(current).config(aliases, certificate), current)); err != nil {
 		return aliasError(hostname, id, err)
 	}
 	return nil
 }
 
 func dropAlias(ctx context.Context, c Clients, plan distributionPlan, id, hostname string) error {
-	held, etag, err := configOf(ctx, c, id)
+	current, etag, err := configOf(ctx, c, id)
 	if err != nil {
 		if isNotFound(err) {
 			return nil
 		}
 		return err
 	}
-	aliases := slices.DeleteFunc(aliasesOf(held), func(alias string) bool {
+	aliases := slices.DeleteFunc(aliasesOf(current), func(alias string) bool {
 		return strings.EqualFold(alias, hostname)
 	})
-	if len(aliases) == len(aliasesOf(held)) {
+	if len(aliases) == len(aliasesOf(current)) {
 		return nil
 	}
-	certificate := certificateOf(held)
+	certificate := certificateOf(current)
 	if len(aliases) == 0 {
 		certificate = ""
 	}
-	return putConfig(ctx, c, id, etag, completeFrom(plan.keeping(held).config(aliases, certificate), held))
+	return putConfig(ctx, c, id, etag, completeFrom(plan.keeping(current).config(aliases, certificate), current))
 }
 
 func (p *cloudFront) deleteDistribution(ctx context.Context, c Clients, kind, id string) error {
-	held, etag, err := configOf(ctx, c, id)
+	current, etag, err := configOf(ctx, c, id)
 	if err != nil {
 		if isNotFound(err) {
 			return nil
 		}
 		return err
 	}
-	if aws.ToBool(held.Enabled) {
-		held.Enabled = ptr(false)
-		if err := putConfig(ctx, c, id, etag, held); err != nil {
+	if aws.ToBool(current.Enabled) {
+		current.Enabled = ptr(false)
+		if err := putConfig(ctx, c, id, etag, current); err != nil {
 			return err
 		}
-		if err := p.rollout().hold(ctx); err != nil {
+		if err := p.rollout().waitInterval(ctx); err != nil {
 			return err
 		}
 	}
-	if err := p.rollout().settled(ctx, kind, id, disableRollingOut, distributionStatus(c, id)); err != nil {
+	if err := p.rollout().awaitDeployed(ctx, kind, id, disableRollingOut, distributionStatus(c, id)); err != nil {
 		return err
 	}
 	_, etag, err = configOf(ctx, c, id)

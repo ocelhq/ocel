@@ -77,7 +77,7 @@ describe("the resolver", () => {
     expect(origins).toHaveLength(0);
   });
 
-  it("answers a request carrying no host header the same way", async () => {
+  it("answers a request with no host header the same way", async () => {
     const event = request("/blog");
     delete event.request.headers.host;
 
@@ -129,7 +129,7 @@ describe("the resolver", () => {
     expect(origins[0]).not.toHaveProperty("originPath");
   });
 
-  it("trims a stored prefix that already carries slashes", async () => {
+  it("trims a stored prefix that already has slashes", async () => {
     const { origins } = await resolve(request("/_next/static/chunks/main.js"), {
       "shop.example.com": { ...ROUTE, assetPrefix: `/${ASSET_PREFIX}/` },
     });
@@ -236,7 +236,7 @@ describe("the headers a viewer cannot forge past the resolver", () => {
     }
   });
 
-  it("carries a viewer's own x-ocel- header the origin has no meaning for through untouched", async () => {
+  it("passes a viewer's own x-ocel- header the origin has no meaning for through untouched", async () => {
     const { answered } = await resolve(request("/blog", { "x-ocel-probe": "probe-value" }));
 
     expect(answered.headers["x-ocel-probe"].value).toBe("probe-value");

@@ -88,7 +88,7 @@ func TestSealingBeforeAnyKeyIsWiredRefusesRatherThanPanics(t *testing.T) {
 
 	_, err := sealer.Seal(context.Background(), at, []byte("sk_live_secret"))
 	if err == nil {
-		t.Fatal("Seal = nil, want a refusal where nothing holds a key at all")
+		t.Fatal("Seal = nil, want a refusal where nothing has a key at all")
 	}
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {

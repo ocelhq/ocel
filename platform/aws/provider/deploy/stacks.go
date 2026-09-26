@@ -58,7 +58,7 @@ type Stacks struct {
 	mu     sync.Mutex
 	opened map[Scope]*release
 
-	substrates sync.Mutex
+	containerInfraLock sync.Mutex
 }
 
 type release struct {
@@ -91,8 +91,8 @@ func (r *Stacks) at(ctx context.Context, ref provider.StackRef, kind edge.Kind) 
 	scope := scopeOf(ref, kind)
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if held, opened := r.opened[scope]; opened {
-		return held, nil
+	if existing, opened := r.opened[scope]; opened {
+		return existing, nil
 	}
 	cfg, err := r.resolve(ctx, scope)
 	if err != nil {
@@ -102,23 +102,23 @@ func (r *Stacks) at(ctx context.Context, ref provider.StackRef, kind edge.Kind) 
 	if err != nil {
 		return nil, err
 	}
-	held := &release{Stacks: r, cfg: cfg}
-	held.automation = kitpulumi.New(kitpulumi.Config{
+	created := &release{Stacks: r, cfg: cfg}
+	created.automation = kitpulumi.New(kitpulumi.Config{
 		Backend: kitpulumi.Backend{
 			URL:        cfg.BackendURL,
 			Passphrase: cfg.Passphrase,
 			Project:    cfg.PulumiProject,
 			Env:        map[string]string{"AWS_REGION": cfg.Region},
 		},
-		Program:   held.Run,
-		Configure: held.Configure,
-		Decode:    held.Decode,
+		Program:   created.Run,
+		Configure: created.Configure,
+		Decode:    created.Decode,
 		Refresh:   refreshPolicy(r.realized),
 		Engine:    r.engine,
 		Plugins:   []kitpulumi.Plugin{plugin},
 	})
-	r.opened[scope] = held
-	return held, nil
+	r.opened[scope] = created
+	return created, nil
 }
 
 func Serves() []provider.BindingType {
@@ -170,7 +170,7 @@ func (r *release) Run(pctx *sdk.Context, spec provider.StackSpec) error {
 		return work.run(pctx, shipped)
 	case *containerWork:
 		return work.run(pctx)
-	case *substrateWork:
+	case *containerInfraWork:
 		return work.run(pctx)
 	case *infraWork:
 		if err := work.transformed.install(pctx); err != nil {
@@ -180,7 +180,7 @@ func (r *release) Run(pctx *sdk.Context, spec provider.StackSpec) error {
 	}
 	if spec.Kind != provider.StackInfra {
 		return refusal.Refuse(refusal.CodeInvalid,
-			"%s stands up an app and this spec carries none", spec.Ref.Name)
+			"%s provisions an app and this spec names none", spec.Ref.Name)
 	}
 	return r.infra(pctx, spec, &infraWork{})
 }
@@ -218,7 +218,7 @@ func (r *release) infra(pctx *sdk.Context, spec provider.StackSpec, work *infraW
 			err = registerBucket(pctx, project, env, resource.Name, args, r.cfg.StateTable, r.cfg.AppBoundaryARN, sessions, work.completer)
 		default:
 			return refusal.Refuse(refusal.CodeInvalid,
-				"this provider stands up no %s; it stands up %s and %s", resource.Type, provider.BindingPostgres, provider.BindingBucket)
+				"this provider provisions no %s; it provisions %s and %s", resource.Type, provider.BindingPostgres, provider.BindingBucket)
 		}
 		if err != nil {
 			return fmt.Errorf("declare %s: %w", resource.Name, err)
@@ -235,7 +235,7 @@ func provisionsBucket(spec provider.StackSpec) bool {
 
 func (r *release) Configure(_ context.Context, spec provider.StackSpec) (auto.ConfigMap, error) {
 	tags := spec.Tags
-	if work, held := spec.VendorState.(*stackWork); held {
+	if work, ok := spec.VendorState.(*stackWork); ok {
 		tags = work.tags
 	}
 	if len(tags) == 0 {
@@ -249,15 +249,15 @@ func (r *release) Configure(_ context.Context, spec provider.StackSpec) (auto.Co
 }
 
 func (r *release) Decode(ctx context.Context, spec provider.StackSpec, outputs auto.OutputMap) (provider.StackResult, error) {
-	if work, held := spec.VendorState.(*stackWork); held {
+	if work, ok := spec.VendorState.(*stackWork); ok {
 		work.outputs = outputs
 		return provider.StackResult{}, nil
 	}
-	if work, held := spec.VendorState.(*substrateWork); held {
+	if work, ok := spec.VendorState.(*containerInfraWork); ok {
 		work.outputs = outputs
 		return provider.StackResult{}, nil
 	}
-	if work, held := spec.VendorState.(*containerWork); held {
+	if work, ok := spec.VendorState.(*containerWork); ok {
 		return r.decodeContainer(work, outputs)
 	}
 	if spec.App != nil {
@@ -290,9 +290,9 @@ func (r *release) Decode(ctx context.Context, spec provider.StackSpec, outputs a
 		if err != nil {
 			return provider.StackResult{}, err
 		}
-		held := bindingOf(resource.Type, binding)
-		held.Resource = resource.Declared
-		result.Bindings = append(result.Bindings, held)
+		collected := bindingOf(resource.Type, binding)
+		collected.Resource = resource.Declared
+		result.Bindings = append(result.Bindings, collected)
 	}
 	return result, nil
 }
@@ -345,11 +345,11 @@ func (r *release) refuseHandover(ctx context.Context, spec provider.StackSpec) e
 }
 
 func (r *Stacks) PackApp(ctx context.Context, req provider.PackAppRequest, _ edge.Progress) (provider.PackAppResult, error) {
-	held, err := r.at(ctx, req.Ref, req.Edge)
+	opened, err := r.at(ctx, req.Ref, req.Edge)
 	if err != nil {
 		return provider.PackAppResult{}, err
 	}
-	bundle, err := held.sealApp(req.Ref.Project, req.App, req.Values)
+	bundle, err := opened.sealApp(req.Ref.Project, req.App, req.Values)
 	if err != nil {
 		return provider.PackAppResult{}, err
 	}
@@ -357,27 +357,27 @@ func (r *Stacks) PackApp(ctx context.Context, req provider.PackAppRequest, _ edg
 }
 
 func (r *Stacks) Plan(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.Plan, error) {
-	held, err := r.at(ctx, spec.Ref, edgeKindOf(spec))
+	opened, err := r.at(ctx, spec.Ref, edgeKindOf(spec))
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return held.plan(ctx, spec, progress)
+	return opened.plan(ctx, spec, progress)
 }
 
 func (r *Stacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) (provider.Plan, error) {
-	held, err := r.at(ctx, ref, "")
+	opened, err := r.at(ctx, ref, "")
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	return held.automation.PreviewDestroy(ctx, ref, progress)
+	return opened.automation.PreviewDestroy(ctx, ref, progress)
 }
 
 func (r *Stacks) Provision(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.StackResult, error) {
-	held, err := r.at(ctx, spec.Ref, edgeKindOf(spec))
+	opened, err := r.at(ctx, spec.Ref, edgeKindOf(spec))
 	if err != nil {
 		return provider.StackResult{}, err
 	}
-	return held.provision(ctx, spec, progress)
+	return opened.provision(ctx, spec, progress)
 }
 
 func (r *release) provision(ctx context.Context, spec provider.StackSpec, progress edge.Progress) (provider.StackResult, error) {
@@ -390,7 +390,7 @@ func (r *release) provision(ctx context.Context, spec provider.StackSpec, progre
 		return provider.StackResult{}, err
 	}
 	if work != nil && len(work.sets) > 0 {
-		r.pending.hold(work.stack, work.sets, progress)
+		r.pending.add(work.stack, work.sets, progress)
 		defer r.pending.drop(work.stack, work.sets)
 	}
 	result, err := r.automation.Run(ctx, prepared, progress)
@@ -468,19 +468,19 @@ func (r *release) prepare(ctx context.Context, spec provider.StackSpec) (provide
 }
 
 func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) error {
-	held, err := r.at(ctx, ref, "")
+	opened, err := r.at(ctx, ref, "")
 	if err != nil {
 		return err
 	}
-	if err := held.automation.Destroy(ctx, ref, progress); err != nil {
+	if err := opened.automation.Destroy(ctx, ref, progress); err != nil {
 		return err
 	}
-	if held.cfg.Tags != nil {
-		if err := held.cfg.Tags.Sweep(ctx, naming.Sanitize(ref.Project), ref.Name); err != nil {
+	if opened.cfg.Tags != nil {
+		if err := opened.cfg.Tags.Sweep(ctx, naming.Sanitize(ref.Project), ref.Name); err != nil {
 			return err
 		}
 	}
-	return r.releaseSubstrate(ctx, held.cfg.Records, ref, progress)
+	return r.releaseContainerInfra(ctx, opened.cfg.Records, ref, progress)
 }
 
 func (r *Stacks) Inspect(ctx context.Context, ref provider.StackRef) (provider.InspectedStack, error) {
@@ -492,11 +492,11 @@ func (r *Stacks) Inspect(ctx context.Context, ref provider.StackRef) (provider.I
 }
 
 func (r *Stacks) Outputs(ctx context.Context, ref provider.StackRef, progress edge.Progress) (auto.OutputMap, error) {
-	held, err := r.at(ctx, ref, "")
+	opened, err := r.at(ctx, ref, "")
 	if err != nil {
 		return nil, err
 	}
-	return held.automation.Outputs(ctx, ref, progress)
+	return opened.automation.Outputs(ctx, ref, progress)
 }
 
 var _ provider.Stacks = (*Stacks)(nil)

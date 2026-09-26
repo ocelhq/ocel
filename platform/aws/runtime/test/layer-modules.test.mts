@@ -37,7 +37,7 @@ async function specifiersOf(file: string): Promise<string[]> {
   return [...source.matchAll(specifierPattern)].map((match) => match[1] ?? match[2]!);
 }
 
-test("no loose layer module imports a package the layer does not carry", async () => {
+test("no loose layer module imports a package the layer does not ship", async () => {
   const offenders: Record<string, string[]> = {};
   for (const file of await looseModules()) {
     const bare = (await specifiersOf(file)).filter(
@@ -63,11 +63,11 @@ test("every relative import in the layer lands on a module the layer ships", asy
   expect(shipped.has(join(dist, "node", "entrypoint.mjs"))).toBe(true);
 });
 
-test("no layer module carries a path of the checkout it was built in", async () => {
+test("no layer module contains a path of the checkout it was built in", async () => {
   const checkout = resolve(pkgDir, "..", "..", "..");
   const entries = await readdir(dist, { recursive: true, withFileTypes: true });
   const leaking: string[] = [];
-  for (const entry of entries.filter((held) => held.isFile())) {
+  for (const entry of entries.filter((candidate) => candidate.isFile())) {
     const file = join(entry.parentPath, entry.name);
     if ((await readFile(file, "utf8")).includes(checkout)) leaking.push(relative(dist, file));
   }
