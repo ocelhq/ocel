@@ -65,7 +65,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, spec provider.StackSp
 		if err != nil {
 			return nil, err
 		}
-		values, err := carried(fn.Name, app.Values.Delivered, fn.Env)
+		values, err := carried(fn.Name, app.Values.ContainerEnv, fn.Env)
 		if err != nil {
 			return nil, err
 		}
@@ -131,7 +131,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	if err != nil {
 		return nil, err
 	}
-	values, err := carried(app.App, app.Values.Delivered, own)
+	values, err := carried(app.App, app.Values.ContainerEnv, own)
 	if err != nil {
 		return nil, err
 	}

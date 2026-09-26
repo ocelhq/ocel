@@ -22,11 +22,11 @@ import (
 )
 
 type wildcards struct {
-	provider provider.Provider
-	records  records.Store
-	held     stackrecords.Wildcard
-	sel      *contractv1.EdgeSelection
-	audience *eventStream
+	provider       provider.Provider
+	records        records.Store
+	recorded       stackrecords.Wildcard
+	sel            *contractv1.EdgeSelection
+	progressStream *eventStream
 }
 
 func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) (*wildcards, error) {
@@ -39,7 +39,7 @@ func (h *handlers) wildcard(ctx context.Context, sel *contractv1.EdgeSelection) 
 	if err != nil {
 		return nil, err
 	}
-	return &wildcards{provider: provider, records: records, held: held, sel: sel}, nil
+	return &wildcards{provider: provider, records: records, recorded: held, sel: sel}, nil
 }
 
 func (w *wildcards) dnsCutover(front edge.Edge) (dnsCutover, error) {
@@ -48,8 +48,8 @@ func (w *wildcards) dnsCutover(front edge.Edge) (dnsCutover, error) {
 		return dnsCutover{}, err
 	}
 	s := newDNSCutover(front, writer, w.sel.GetDns().GetZone(), w.provider.Liveness())
-	if w.audience != nil {
-		s.waitForManualRecords(w.audience)
+	if w.progressStream != nil {
+		s.waitForManualRecords(w.progressStream)
 	}
 	return s, nil
 }
@@ -60,7 +60,7 @@ func (w *wildcards) save(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("read %s: %w", name, err)
 	}
-	if record.Bytes, err = json.Marshal(w.held); err != nil {
+	if record.Bytes, err = json.Marshal(w.recorded); err != nil {
 		return fmt.Errorf("record %s: %w", name, err)
 	}
 	if _, err := w.records.Write(ctx, record); err != nil {
@@ -79,7 +79,7 @@ func (h *handlers) UsePreviewWildcard(ctx context.Context, req *contractv1.UsePr
 		if err != nil {
 			return err
 		}
-		w.audience = sender
+		w.progressStream = sender
 		front, err := h.edgeFor(w.provider, req.GetEdge())
 		if err != nil {
 			return err
@@ -97,13 +97,13 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 		return err
 	}
 	wildcard := edge.PreviewWildcard(base)
-	w.held = stackrecords.Wildcard{
+	w.recorded = stackrecords.Wildcard{
 		BaseDomain: base,
 		Edge:       front.Kind(),
 		Scope:      front.Facts().CredentialScope,
 		GrammarMin: edge.PreviewGrammarMin,
 		GrammarMax: edge.PreviewGrammarMax,
-		Host:       w.held.Host,
+		Host:       w.recorded.Host,
 	}
 
 	certifying := w.hostCertificates(cutover, fmt.Sprintf(
@@ -122,7 +122,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	}
 	published, err := front.ReconcilePreviewWildcard(ctx, edge.PreviewWildcardSpec{
 		BaseDomain:  base,
-		Certificate: w.held.Host.Certificate.ID,
+		Certificate: w.recorded.Host.Certificate.ID,
 		GrammarMin:  edge.PreviewGrammarMin,
 		GrammarMax:  edge.PreviewGrammarMax,
 		Warn:        progress.Detail,
@@ -147,7 +147,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	written, werr := cutover.write(ctx, records,
 		fmt.Sprintf("Point %s at the %s edge", wildcard, front.Kind()), progress.Say,
 		fmt.Sprintf("If this run gives up waiting, re-run `ocel domain use '%s' --preview`.", wildcard))
-	w.held.Host.Written, w.held.Host.Manual = written.Written, written.Manual
+	w.recorded.Host.Written, w.recorded.Host.Manual = written.Written, written.Manual
 	if err := w.save(ctx); err != nil {
 		return errors.Join(werr, err)
 	}
@@ -156,7 +156,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	}
 
 	probe, aerr := cutover.await(ctx, wildcard, progress.Say)
-	w.held.Host.Probe = probe
+	w.recorded.Host.Probe = probe
 	if err := w.save(ctx); err != nil {
 		return errors.Join(aerr, err)
 	}
@@ -171,25 +171,25 @@ func (w *wildcards) hostCertificates(cutover dnsCutover, notes ...string) hostCe
 	return hostCertificates{
 		provider:  w.provider,
 		cutover:   cutover,
-		hostState: &w.held.Host,
+		hostState: &w.recorded.Host,
 		persist:   w.save,
 		notes:     notes,
 	}
 }
 
 func (w *wildcards) claimable(front edge.Edge, base string) error {
-	if w.held.BaseDomain != "" && w.held.BaseDomain != base {
+	if w.recorded.BaseDomain != "" && w.recorded.BaseDomain != base {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"this preview bootstrap already serves previews on %q: release it with `ocel domain release --preview` first, then use %q — every project on %q loses its preview hostnames the moment the bootstrap changes domain, so that is two deliberate commands",
-			w.held.BaseDomain, base, w.held.BaseDomain)
+			w.recorded.BaseDomain, base, w.recorded.BaseDomain)
 	}
-	holder, held := w.held.OwningEdge()
+	holder, held := w.recorded.OwningEdge()
 	if !held || holder == front.Kind() {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"%s is already held by the %s edge, and this project's edge is %s: reconciling it here would raise a second wildcard at the %s edge and leave the %s one standing with nothing left to name it — release it with `ocel domain release --preview` from a project on the %s edge first, then use it again from here",
-		w.held.Hostname(), holder, front.Kind(), front.Kind(), holder, holder)
+		w.recorded.Hostname(), holder, front.Kind(), front.Kind(), holder, holder)
 }
 
 func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.GetPreviewWildcardResponse, error) {
@@ -197,19 +197,19 @@ func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.Previ
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	if w.held.BaseDomain == "" {
+	if w.recorded.BaseDomain == "" {
 		return &contractv1.GetPreviewWildcardResponse{}, nil
 	}
 	served, err := w.served(ctx)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	health, err := w.provider.Certificates().Inspect(ctx, w.held.Edge, w.held.Hostname(), w.held.Host.Certificate)
+	health, err := w.provider.Certificates().Inspect(ctx, w.recorded.Edge, w.recorded.Hostname(), w.recorded.Host.Certificate)
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	wildcard := w.proto(ctx)
-	wildcard.Certificate = certificateState(w.held.Host, w.held.Host.Probe, nil, health.Status)
+	wildcard.Certificate = certificateState(w.recorded.Host, w.recorded.Host.Probe, nil, health.Status)
 	renewalOf(wildcard, health)
 	return &contractv1.GetPreviewWildcardResponse{
 		Wildcard: wildcard,
@@ -217,7 +217,7 @@ func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.Previ
 	}, nil
 }
 
-func heldPreviewWildcard(ctx context.Context, p provider.Provider) (*contractv1.PreviewWildcard, error) {
+func recordedPreviewWildcard(ctx context.Context, p provider.Provider) (*contractv1.PreviewWildcard, error) {
 	held, err := stackrecords.ReadWildcard(ctx, p.Records())
 	if err != nil {
 		return nil, err
@@ -225,7 +225,7 @@ func heldPreviewWildcard(ctx context.Context, p provider.Provider) (*contractv1.
 	if held.BaseDomain == "" {
 		return nil, nil
 	}
-	w := &wildcards{provider: p, records: p.Records(), held: held}
+	w := &wildcards{provider: p, records: p.Records(), recorded: held}
 	wildcard := w.proto(ctx)
 	health, err := p.Certificates().Inspect(ctx, held.Edge, held.Hostname(), held.Host.Certificate)
 	if err != nil {
@@ -243,16 +243,16 @@ func renewalOf(wildcard *contractv1.PreviewWildcard, health provider.Certificate
 
 func (w *wildcards) proto(ctx context.Context) *contractv1.PreviewWildcard {
 	return &contractv1.PreviewWildcard{
-		BaseDomain:     w.held.BaseDomain,
-		EdgeScope:      w.held.Scope,
-		GrammarMin:     w.held.GrammarMin,
-		GrammarMax:     w.held.GrammarMax,
+		BaseDomain:     w.recorded.BaseDomain,
+		EdgeScope:      w.recorded.Scope,
+		GrammarMin:     w.recorded.GrammarMin,
+		GrammarMax:     w.recorded.GrammarMax,
 		RouteInstalled: w.routeInstalled(ctx),
 	}
 }
 
 func (w *wildcards) routeInstalled(ctx context.Context) bool {
-	holder, held := w.held.OwningEdge()
+	holder, held := w.recorded.OwningEdge()
 	if !held {
 		return false
 	}
@@ -260,7 +260,7 @@ func (w *wildcards) routeInstalled(ctx context.Context) bool {
 	if err != nil {
 		return false
 	}
-	owner, err := front.DomainOwner(ctx, w.held.Hostname())
+	owner, err := front.DomainOwner(ctx, w.recorded.Hostname())
 	if err != nil {
 		return false
 	}
@@ -268,10 +268,10 @@ func (w *wildcards) routeInstalled(ctx context.Context) bool {
 }
 
 func (w *wildcards) served(ctx context.Context) ([]string, error) {
-	return stackrecords.ProjectsServedOnPreview(ctx, w.records, w.held.BaseDomain)
+	return stackrecords.ProjectsServedOnPreview(ctx, w.records, w.recorded.BaseDomain)
 }
 
-func (w *wildcards) live(ctx context.Context) ([]string, error) {
+func (w *wildcards) projectsWithLivePreviews(ctx context.Context) ([]string, error) {
 	served, err := w.served(ctx)
 	if err != nil {
 		return nil, err
@@ -289,8 +289,8 @@ func (w *wildcards) live(ctx context.Context) ([]string, error) {
 	return carrying, nil
 }
 
-func (w *wildcards) releasable(ctx context.Context) error {
-	carrying, err := w.live(ctx)
+func (w *wildcards) refuseReleaseWhileLive(ctx context.Context) error {
+	carrying, err := w.projectsWithLivePreviews(ctx)
 	if err != nil {
 		return err
 	}
@@ -299,15 +299,15 @@ func (w *wildcards) releasable(ctx context.Context) error {
 	}
 	return refusal.Refuse(refusal.CodeNotReady,
 		"%s still carries live preview pointers for %d project(s): %s — nothing would serve them the moment it is released. Remove one preview with `ocel preview rm`, or a project's whole preview footprint with `ocel destroy preview`, in each of them first",
-		w.held.Hostname(), len(carrying), strings.Join(carrying, ", "))
+		w.recorded.Hostname(), len(carrying), strings.Join(carrying, ", "))
 }
 
-func (w *wildcards) holding() (edge.Edge, error) {
-	holder, held := w.held.OwningEdge()
+func (w *wildcards) owningEdge() (edge.Edge, error) {
+	holder, held := w.recorded.OwningEdge()
 	if !held {
 		return nil, refusal.Refuse(refusal.CodeNotReady,
 			"nothing in this account records which edge holds %s, and tearing it down through a guessed edge would delete its certificate, its DNS records and the record itself while leaving the real wildcard entry standing with nothing left to name it: run `ocel domain use '%s' --preview` from the project whose edge raised it — that writes the edge down and changes nothing else — then release it",
-			w.held.Hostname(), w.held.Hostname())
+			w.recorded.Hostname(), w.recorded.Hostname())
 	}
 	return w.provider.Edges().Open(holder)
 }
@@ -317,14 +317,14 @@ func (h *handlers) PlanRemovePreviewWildcard(ctx context.Context, req *contractv
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	if w.held.BaseDomain == "" {
+	if w.recorded.BaseDomain == "" {
 		return &planv1.ChangePlan{}, nil
 	}
-	front, err := w.holding()
+	front, err := w.owningEdge()
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}
-	if err := w.releasable(ctx); err != nil {
+	if err := w.refuseReleaseWhileLive(ctx); err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	groups, err := w.releaseGroups(front)
@@ -334,21 +334,21 @@ func (h *handlers) PlanRemovePreviewWildcard(ctx context.Context, req *contractv
 	return &planv1.ChangePlan{
 		EdgeKind: string(front.Kind()),
 		Groups:   groups,
-		Subject:  w.held.BaseDomain,
+		Subject:  w.recorded.BaseDomain,
 	}, nil
 }
 
 func (w *wildcards) releaseGroups(front edge.Edge) ([]*planv1.ChangeGroup, error) {
-	removed, kept := front.PreviewWildcardRemovals(w.held.Hostname())
+	removed, kept := front.PreviewWildcardRemovals(w.recorded.Hostname())
 	removedGroup, err := edgeGroupProto(removed)
 	if err != nil {
 		return nil, err
 	}
 	groups := []*planv1.ChangeGroup{removedGroup}
-	for _, cert := range w.held.Host.Certificates() {
+	for _, cert := range w.recorded.Host.Certificates() {
 		groups = append(groups, certificateGroup(cert))
 	}
-	for _, rec := range w.held.Host.WrittenRecords() {
+	for _, rec := range w.recorded.Host.WrittenRecords() {
 		groups = append(groups, &planv1.ChangeGroup{
 			Kind:   "DNS record",
 			Name:   rec.String(),
@@ -356,7 +356,7 @@ func (w *wildcards) releaseGroups(front edge.Edge) ([]*planv1.ChangeGroup, error
 			Reason: "ocel wrote it; it is removed only while its live value is still the one ocel wrote",
 		})
 	}
-	for _, rec := range w.held.Host.ManualRecords() {
+	for _, rec := range w.recorded.Host.ManualRecords() {
 		groups = append(groups, &planv1.ChangeGroup{
 			Kind:   "DNS record",
 			Name:   rec.String(),
@@ -390,29 +390,29 @@ func (h *handlers) RemovePreviewWildcard(ctx context.Context, req *contractv1.Pr
 }
 
 func (w *wildcards) release(ctx context.Context, progress edge.Progress) error {
-	if w.held.BaseDomain == "" {
+	if w.recorded.BaseDomain == "" {
 		progress.Say("This preview bootstrap has no global preview domain")
 		return nil
 	}
-	front, err := w.holding()
+	front, err := w.owningEdge()
 	if err != nil {
 		return err
 	}
-	if err := w.releasable(ctx); err != nil {
+	if err := w.refuseReleaseWhileLive(ctx); err != nil {
 		return err
 	}
 	cutover, err := w.dnsCutover(front)
 	if err != nil {
 		return err
 	}
-	progress.Say("Removing the shared preview entry on " + w.held.Hostname())
-	if err := front.DestroyPreviewWildcard(ctx, w.held.BaseDomain); err != nil {
+	progress.Say("Removing the shared preview entry on " + w.recorded.Hostname())
+	if err := front.DestroyPreviewWildcard(ctx, w.recorded.BaseDomain); err != nil {
 		return err
 	}
-	if err := cutover.release(ctx, w.held.Host.WrittenRecords(), progress.Say); err != nil {
+	if err := cutover.release(ctx, w.recorded.Host.WrittenRecords(), progress.Say); err != nil {
 		return err
 	}
-	for _, cert := range w.held.Host.Certificates() {
+	for _, cert := range w.recorded.Host.Certificates() {
 		if !cert.Requested {
 			continue
 		}

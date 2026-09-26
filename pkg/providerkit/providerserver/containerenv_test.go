@@ -50,7 +50,7 @@ func deliveredBy(t *testing.T, req *contractv1.DeployRequest, publish func(*fake
 	specs := provider.FakeStacks().Provisioned()
 	for i := len(specs) - 1; i >= 0; i-- {
 		if specs[i].App != nil {
-			return specs[i].App.Values.Delivered
+			return specs[i].App.Values.ContainerEnv
 		}
 	}
 	t.Fatal("no plan the stacks port saw stands up an app")
@@ -114,7 +114,7 @@ func deliveredByWrapping(t *testing.T, req *contractv1.DeployRequest, publish fu
 	specs := provider.FakeStacks().Provisioned()
 	for i := len(specs) - 1; i >= 0; i-- {
 		if specs[i].App != nil {
-			return specs[i].App.Values.Delivered
+			return specs[i].App.Values.ContainerEnv
 		}
 	}
 	t.Fatal("no plan the stacks port saw stands up an app")

@@ -273,7 +273,7 @@ func serverlessSpecOn(app, image string, framework appbuild.Framework, values ma
 		App: &provider.AppSpec{
 			App:     app,
 			Compute: provider.ComputeServerless,
-			Values:  provider.AppValues{Delivered: values},
+			Values:  provider.AppValues{ContainerEnv: values},
 			Functions: []provider.FunctionSpec{
 				{Name: app, Framework: framework, Image: image},
 			},

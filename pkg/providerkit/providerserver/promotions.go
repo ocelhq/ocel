@@ -134,7 +134,7 @@ func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.Re
 		if err != nil {
 			return err
 		}
-		if err := reclaim(ctx, session.provider, req.GetSlug(), class, targets, progress); err != nil {
+		if err := destroyReclaimTargets(ctx, session.provider, req.GetSlug(), class, targets, progress); err != nil {
 			return err
 		}
 		for _, line := range pruneLines(pruned) {

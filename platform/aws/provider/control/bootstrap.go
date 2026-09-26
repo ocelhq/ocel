@@ -76,7 +76,7 @@ func (b Bootstrap) request(req provider.BootstrapRequest) bootstrap.Request {
 		Features:           req.Features,
 		Remove:             req.Remove,
 		Writer:             req.WrittenBy,
-		AcceptReplacements: !req.Unattended,
+		AcceptReplacements: !req.RefuseReplacements,
 	}
 }
 

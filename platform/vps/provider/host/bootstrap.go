@@ -184,7 +184,7 @@ func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, pro
 		return err
 	}
 
-	if req.Unattended {
+	if req.RefuseReplacements {
 		if err := refuseReplacements(standing, items); err != nil {
 			return err
 		}
@@ -250,7 +250,7 @@ func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, prog
 	if err != nil {
 		return err
 	}
-	work, left, err := healing(read, req.Unattended)
+	work, left, err := healing(read, req.RefuseReplacements)
 	if err != nil {
 		return err
 	}
@@ -260,12 +260,12 @@ func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, prog
 	return b.writing(ctx, read, work, progress, b.host.Reassert)
 }
 
-func healing(read Reading, unattended bool) ([]Item, []string, error) {
+func healing(read Reading, refuse bool) ([]Item, []string, error) {
 	work, left, err := healable(read)
 	if err != nil {
 		return nil, nil, err
 	}
-	if unattended {
+	if refuse {
 		if err := refuseReplacements(read, work); err != nil {
 			return nil, nil, err
 		}

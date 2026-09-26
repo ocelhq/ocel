@@ -15,7 +15,7 @@ import (
 
 const ownedPrefix = "OCEL_"
 
-func imaged(p provider.Provider, compute provider.Compute) bool {
+func runsFromImage(p provider.Provider, compute provider.Compute) bool {
 	switch compute {
 	case provider.ComputeContainer:
 		return true
@@ -25,15 +25,15 @@ func imaged(p provider.Provider, compute provider.Compute) bool {
 	return false
 }
 
-func (r *deployRun) deliver(entry provider.AppEntry, held provider.AppValues) map[string]string {
-	if !imaged(r.provider, entry.Compute()) {
+func (r *deployRun) containerEnv(entry provider.AppEntry, held provider.AppValues) map[string]string {
+	if !runsFromImage(r.provider, entry.Compute()) {
 		return nil
 	}
-	delivered := make(map[string]string, len(held.Plain)+len(held.Sensitive)+1)
-	maps.Copy(delivered, held.Plain)
-	maps.Copy(delivered, held.Sensitive)
-	maps.Copy(delivered, held.Injected())
-	return delivered
+	env := make(map[string]string, len(held.Plain)+len(held.Sensitive)+1)
+	maps.Copy(env, held.Plain)
+	maps.Copy(env, held.Sensitive)
+	maps.Copy(env, held.PhaseEnv())
+	return env
 }
 
 func (r *deployRun) refuseUnsetSecret(app, key string) error {
@@ -45,7 +45,7 @@ func (r *deployRun) refuseUnsetSecret(app, key string) error {
 func (r *deployRun) refuseContainerValues(ctx context.Context) error {
 	var stored map[envvars.Cell]bool
 	for _, entry := range r.spec.Apps {
-		if !imaged(r.provider, entry.Compute()) {
+		if !runsFromImage(r.provider, entry.Compute()) {
 			continue
 		}
 		held, err := r.manifestValues(entry, nil)

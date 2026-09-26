@@ -110,7 +110,7 @@ type deployRun struct {
 	images   images.Store
 
 	dry           bool
-	draft         draft
+	dryRunPlan    dryRunPlan
 	allowDegraded []string
 
 	outcomes []*progressv1.AppResult
@@ -118,7 +118,7 @@ type deployRun struct {
 	mu             sync.Mutex
 	artifacts      map[string]provider.ArtifactRef
 	functionImages map[string]string
-	needs          NeedRecords
+	needs          AppNeedVerdicts
 	bindings       []provider.Binding
 	functions      map[string][]provider.Function
 }
@@ -195,7 +195,7 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	}
 	run.stages = newDeployStages(spec)
 	run.outcomes = pendingOutcomes(spec.Apps)
-	run.draft.apps = make([]provider.Plan, len(spec.Apps))
+	run.dryRunPlan.apps = make([]provider.Plan, len(spec.Apps))
 	run.tracked.declare(run.stages.Roster...)
 	sender.detailing(run.reportApps)
 	return run, nil
@@ -216,12 +216,12 @@ func (r *deployRun) reportApps(result *progressv1.ResultEvent) {
 func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, error) {
 	if err := r.tracked.unit(r.stages.Environment, func(env *unitRun) error {
 		return env.phase(progressv1.Phase_PHASE_PROVISIONING, func(progress edge.Progress) error {
-			return r.admission(ctx, progress)
+			return r.prepare(ctx, progress)
 		})
 	}); err != nil {
 		return nil, err
 	}
-	if err := r.raiseEdge(ctx); err != nil {
+	if err := r.reconcileEdgeUnit(ctx); err != nil {
 		return nil, err
 	}
 	if err := r.provision(ctx); err != nil {
@@ -233,11 +233,11 @@ func (r *deployRun) execute(ctx context.Context) (*progressv1.OperationEvent, er
 	return r.promote(ctx)
 }
 
-func (r *deployRun) admission(ctx context.Context, progress edge.Progress) error {
-	if err := r.admit(ctx, progress); err != nil {
+func (r *deployRun) prepare(ctx context.Context, progress edge.Progress) error {
+	if err := r.ensureBootstrap(ctx, progress); err != nil {
 		return err
 	}
-	if err := r.admitDomains(ctx); err != nil {
+	if err := r.resolveServingDomains(ctx); err != nil {
 		return err
 	}
 	if err := r.admitBindings(ctx, progress); err != nil {
@@ -254,12 +254,12 @@ func (r *deployRun) admission(ctx context.Context, progress edge.Progress) error
 	return r.preflight(ctx, progress)
 }
 
-func (r *deployRun) admit(ctx context.Context, progress edge.Progress) error {
-	_, err := r.gate.Admit(ctx, r.spec.Class, r.features, !r.dry, progress)
+func (r *deployRun) ensureBootstrap(ctx context.Context, progress edge.Progress) error {
+	_, err := r.gate.EnsureReady(ctx, r.spec.Class, r.features, !r.dry, progress)
 	return err
 }
 
-func (r *deployRun) admitDomains(ctx context.Context) error {
+func (r *deployRun) resolveServingDomains(ctx context.Context) error {
 	hosts := r.hostnames()
 	if r.spec.Class == edge.ClassPreview {
 		wildcard, err := stackrecords.ReadWildcard(ctx, r.provider.Records())
@@ -319,15 +319,15 @@ func (r *deployRun) rememberProject(ctx context.Context) error {
 	return nil
 }
 
-type hostingWorld int
+type hostingMode int
 
 const (
-	hostingProduction hostingWorld = iota
+	hostingProduction hostingMode = iota
 	hostingGlobalPreview
 	hostingProjectPreview
 )
 
-func (r *deployRun) world() hostingWorld {
+func (r *deployRun) hostingMode() hostingMode {
 	if r.spec.Class != edge.ClassPreview {
 		return hostingProduction
 	}
@@ -337,12 +337,12 @@ func (r *deployRun) world() hostingWorld {
 	return hostingProjectPreview
 }
 
-func (r *deployRun) raiseEdge(ctx context.Context) error {
+func (r *deployRun) reconcileEdgeUnit(ctx context.Context) error {
 	return r.tracked.unit(r.stages.Edge, func(u *unitRun) error {
 		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(progress edge.Progress) error {
 			if r.dry {
 				progress.Say(fmt.Sprintf("Reading the %s edge", r.front.Kind()))
-				r.draft.edge = r.drawEdge()
+				r.dryRunPlan.edge = r.planEdgeGroup()
 				return nil
 			}
 			progress.Say(fmt.Sprintf("Reconciling the %s edge", r.front.Kind()))
@@ -359,7 +359,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context) error {
 		PruneRoutes: true,
 	}
 	var base string
-	switch r.world() {
+	switch r.hostingMode() {
 	case hostingProduction:
 		spec.Domains = r.hostnames()
 		spec.DomainApps = r.domainApps()
@@ -393,7 +393,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context) error {
 }
 
 func (r *deployRun) attachHostnames(ctx context.Context) error {
-	if r.dry || r.world() != hostingProduction {
+	if r.dry || r.hostingMode() != hostingProduction {
 		return nil
 	}
 	return r.tracked.unit(r.stages.Hostnames, func(u *unitRun) error {
@@ -411,7 +411,7 @@ func (r *deployRun) attachHostnames(ctx context.Context) error {
 					continue
 				}
 				_, err := attaching.attachHostname(ctx, host, progress)
-				if waits, held := provider.LeftPending(err); held {
+				if waits, held := provider.ResumableMessage(err); held {
 					r.pending = append(r.pending, fmt.Sprintf("%s is not served yet: %s", host.Hostname, waits))
 					continue
 				}
@@ -455,7 +455,7 @@ func (r *deployRun) previewBase() (string, error) {
 }
 
 func (r *deployRun) globalPreview() string {
-	if r.world() != hostingGlobalPreview {
+	if r.hostingMode() != hostingGlobalPreview {
 		return ""
 	}
 	return r.wildcard.BaseDomain
@@ -511,14 +511,14 @@ func tierHostnames(declared []*contractv1.TierDomains, tier environmentv1.Tier) 
 }
 
 func (r *deployRun) previewSite() edge.PreviewSite {
-	if r.world() == hostingGlobalPreview {
+	if r.hostingMode() == hostingGlobalPreview {
 		return edge.SharedPreview(r.spec.Slug, r.previewOn)
 	}
 	return edge.ProjectPreview(r.previewOn)
 }
 
 func (r *deployRun) previewLabel(slot int) string {
-	if r.world() != hostingGlobalPreview || !r.front.Facts().RoutesPreviewsByLabel {
+	if r.hostingMode() != hostingGlobalPreview || !r.front.Facts().RoutesPreviewsByLabel {
 		return ""
 	}
 	return r.previewSite().Label(r.spec.Pointer, edge.AppAt(r.appNames(), slot))
@@ -553,7 +553,7 @@ func (r *deployRun) checkpoint(ctx context.Context) error {
 }
 
 func (r *deployRun) checkNeeds(ctx context.Context) error {
-	check := NeedCheck{
+	check := EdgeNeedCheck{
 		Edge:          r.front,
 		Root:          appbuild.ArtifactRoot(),
 		AllowDegraded: r.allowDegraded,
@@ -574,11 +574,11 @@ func (r *deployRun) preflight(ctx context.Context, progress edge.Progress) error
 	if err != nil {
 		return err
 	}
-	grants, err := r.reader().Published(ctx)
+	grants, err := r.publishedBindings().Published(ctx)
 	if err != nil {
 		return err
 	}
-	if err := RefuseUnreachableBindings(r.provider.Facts().Vendor, r.provider.Facts().Bindings, proxied, resources, grants); err != nil {
+	if err := RefuseUnservedProxiedBindings(r.provider.Facts().Vendor, r.provider.Facts().Bindings, proxied, resources, grants); err != nil {
 		return refusal.Refuse(refusal.CodeInvalid, "%s", err)
 	}
 	if err := r.refuseContainerValues(ctx); err != nil {
@@ -612,7 +612,7 @@ func (r *deployRun) preflight(ctx context.Context, progress edge.Progress) error
 func (r *deployRun) usage(resources []provider.Resource, published []provider.Binding) ([]provider.AppUsage, error) {
 	apps := make([]provider.AppUsage, 0, len(r.spec.Apps))
 	for _, entry := range r.spec.Apps {
-		used, err := r.used(entry.App)
+		used, err := r.boundNamesUsedBy(entry.App)
 		if err != nil {
 			return nil, err
 		}
@@ -699,16 +699,16 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 				Edge:      r.front,
 				Tags:      infraTags(r.spec),
 				Resources: resources,
-				Bindings:  r.reader(),
+				Bindings:  r.publishedBindings(),
 			}
 			if r.dry {
 				progress.Say("Planning the environment's infrastructure")
-				drawn, err := r.provider.Stacks().Plan(ctx, stack, progress)
+				planned, err := r.provider.Stacks().Plan(ctx, stack, progress)
 				if err != nil {
 					return err
 				}
-				r.draft.infra = drawn
-				r.draft.parameters, err = r.drawValues(ctx)
+				r.dryRunPlan.infra = planned
+				r.dryRunPlan.parameters, err = r.planValuesGroup(ctx)
 				return err
 			}
 			progress.Say("Provisioning the environment's infrastructure")
@@ -749,7 +749,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 			if err != nil {
 				return err
 			}
-			facts, err := r.serving(entry)
+			facts, err := r.appServing(entry)
 			if err != nil {
 				return err
 			}
@@ -777,7 +777,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 				Tags:     appTags(r.spec, entry),
 				Uploads:  staged,
 				Images:   images,
-				Bindings: r.reader(),
+				Bindings: r.publishedBindings(),
 				App: &provider.AppSpec{
 					App:             entry.App,
 					Framework:       entry.Manifest.GetFramework().GetName(),
@@ -785,7 +785,7 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 					Deployment:      entry.Build.DeploymentID(),
 					Compute:         entry.Compute(),
 					Functions:       r.functionSpecs(entry),
-					Image:           runs(images, entry),
+					Image:           imageToRun(images, entry),
 					HealthCheckPath: entry.HealthCheckPath,
 					Arch:            entry.Arch,
 					Values:          values,
@@ -801,11 +801,11 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 				},
 			}
 			if r.dry {
-				drawn, err := r.provider.Stacks().Plan(ctx, spec, progress)
+				planned, err := r.provider.Stacks().Plan(ctx, spec, progress)
 				if err != nil {
 					return err
 				}
-				r.draft.apps[slot] = drawn
+				r.dryRunPlan.apps[slot] = planned
 				return nil
 			}
 			result, err := r.provider.Stacks().Provision(ctx, spec, progress)
@@ -813,13 +813,13 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.A
 				return err
 			}
 			r.recordFunctions(entry.App, result.Functions)
-			if err := r.warm(ctx, result.Functions, progress); err != nil {
+			if err := r.warmFunctions(ctx, result.Functions, progress); err != nil {
 				return err
 			}
-			if err := r.embed(ctx, entry, result.Functions, progress); err != nil {
+			if err := r.embedBytecodeCaches(ctx, entry, result.Functions, progress); err != nil {
 				return err
 			}
-			if err := r.stage(ctx, entry, facts, images, values, result); err != nil {
+			if err := r.recordStagedDeployment(ctx, entry, facts, images, values, result); err != nil {
 				return err
 			}
 			return stackrecords.Write(ctx, r.provider.Records(), r.spec.Class, r.spec.Slug, entry.Stack, stackrecords.Stack{
@@ -857,8 +857,8 @@ func (r *deployRun) refuseToAdopt(ctx context.Context, stack naming.StackName) e
 		stack)
 }
 
-func (r *deployRun) serving(entry provider.AppEntry) (ServingFacts, error) {
-	return ServingFactsFor(ServingQuery{
+func (r *deployRun) appServing(entry provider.AppEntry) (AppServing, error) {
+	return AppServingFor(AppServingInput{
 		Root:              appbuild.ArtifactRoot(),
 		Project:           naming.Sanitize(r.spec.Slug),
 		App:               entry.App,
@@ -874,9 +874,9 @@ func (r *deployRun) ref(stack naming.StackName) provider.StackRef {
 	return provider.StackRef{Project: r.spec.Slug, Class: r.spec.Class, Name: stack}
 }
 
-func (r *deployRun) reader() *publishedBindings { return r.published }
+func (r *deployRun) publishedBindings() *publishedBindings { return r.published }
 
-func (r *deployRun) used(app string) (map[string]bool, error) {
+func (r *deployRun) boundNamesUsedBy(app string) (map[string]bool, error) {
 	resources, err := manifestResources(r.manifest)
 	if err != nil {
 		return nil, err
@@ -897,7 +897,7 @@ func (r *deployRun) used(app string) (map[string]bool, error) {
 }
 
 func (r *deployRun) grants(ctx context.Context, entry provider.AppEntry) ([]provider.Binding, error) {
-	used, err := r.used(entry.App)
+	used, err := r.boundNamesUsedBy(entry.App)
 	if err != nil {
 		return nil, err
 	}
@@ -907,7 +907,7 @@ func (r *deployRun) grants(ctx context.Context, entry provider.AppEntry) ([]prov
 			grants = append(grants, binding)
 		}
 	}
-	consumed, err := r.reader().Published(ctx)
+	consumed, err := r.publishedBindings().Published(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -948,7 +948,7 @@ func (r *deployRun) appValues(ctx context.Context, entry provider.AppEntry, gran
 	if err != nil {
 		return provider.AppValues{}, err
 	}
-	held.Delivered = r.deliver(entry, held)
+	held.ContainerEnv = r.containerEnv(entry, held)
 	return held, nil
 }
 
@@ -1021,7 +1021,7 @@ func entryLogicalName(manifest *contractv1.Manifest, app, entry string) string {
 	return ""
 }
 
-func (r *deployRun) embed(ctx context.Context, entry provider.AppEntry, functions []provider.Function, progress edge.Progress) error {
+func (r *deployRun) embedBytecodeCaches(ctx context.Context, entry provider.AppEntry, functions []provider.Function, progress edge.Progress) error {
 	embedCode := r.provider.Hooks().EmbedCode
 	if embedCode == nil {
 		return nil
@@ -1038,7 +1038,7 @@ func (r *deployRun) embed(ctx context.Context, entry provider.AppEntry, function
 	return nil
 }
 
-func (r *deployRun) warm(ctx context.Context, functions []provider.Function, progress edge.Progress) error {
+func (r *deployRun) warmFunctions(ctx context.Context, functions []provider.Function, progress edge.Progress) error {
 	warmFunctions := r.provider.Hooks().WarmFunctions
 	if warmFunctions == nil || len(functions) == 0 {
 		return nil
@@ -1073,7 +1073,7 @@ func declaredVariables(clientBundle bool, held provider.AppValues) []edge.Variab
 	return declared
 }
 
-func (r *deployRun) stage(ctx context.Context, entry provider.AppEntry, facts ServingFacts, images provider.ImagePushes, values provider.AppValues, result provider.StackResult) error {
+func (r *deployRun) recordStagedDeployment(ctx context.Context, entry provider.AppEntry, facts AppServing, images provider.ImagePushes, values provider.AppValues, result provider.StackResult) error {
 	urlByLogical := make(map[string]string, len(result.Functions))
 	physicalByLogical := make(map[string]string, len(result.Functions))
 	for _, fn := range result.Functions {
@@ -1178,8 +1178,8 @@ func loaderID(bundle []byte, compatDate string, compatFlags []string) string {
 
 func (r *deployRun) promote(ctx context.Context) (*progressv1.OperationEvent, error) {
 	if r.dry {
-		r.draft.promotion = r.drawPromotion()
-		r.sender.send(planEvent(r.drawn()))
+		r.dryRunPlan.promotion = r.planPromotionGroup()
+		r.sender.send(planEvent(r.dryRunPlanProto()))
 		return okResult(), nil
 	}
 	flip := r.front.Facts().FlipBound
@@ -1235,7 +1235,7 @@ func (r *deployRun) result(promotion edge.Promotion, flip edge.FlipBound) (*prog
 	}
 	for slot, hosts := range r.servedHostnames() {
 		for _, host := range hosts {
-			if r.world() == hostingProduction && !r.state.Ready(host, r.front.Kind()) {
+			if r.hostingMode() == hostingProduction && !r.state.Ready(host, r.front.Kind()) {
 				continue
 			}
 			r.outcomes[slot].Urls = append(r.outcomes[slot].Urls, "https://"+host)
@@ -1267,7 +1267,7 @@ func (r *deployRun) publish(ctx context.Context, bindings []provider.Binding) er
 	if err := r.prune(ctx, bindings); err != nil {
 		return err
 	}
-	r.reader().forget()
+	r.publishedBindings().forget()
 	return nil
 }
 
@@ -1414,7 +1414,7 @@ func originOf(containers []provider.AppContainer, app string) string {
 	return ""
 }
 
-func runs(images provider.ImagePushes, entry provider.AppEntry) string {
+func imageToRun(images provider.ImagePushes, entry provider.AppEntry) string {
 	if pushed := images.ImageRef(entry.App); pushed != "" {
 		return pushed
 	}

@@ -123,60 +123,60 @@ func TestStateReadsAutoHealFromTheRecord(t *testing.T) {
 	}
 }
 
-func TestAdmitRefusesABootstrapThatIsNotThere(t *testing.T) {
+func TestEnsureReadyRefusesABootstrapThatIsNotThere(t *testing.T) {
 	t.Parallel()
 
 	gate, _ := gated(t, "2.0.0")
 
-	_, err := gate.Admit(context.Background(), edge.ClassPreview, nil, true, &recorder{})
+	_, err := gate.EnsureReady(context.Background(), edge.ClassPreview, nil, true, &recorder{})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("Admit() = %v, want a %s refusal", err, refusal.CodeNotReady)
+		t.Fatalf("EnsureReady() = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
 	if !strings.Contains(refused.Message, "`ocel bootstrap preview`") {
-		t.Errorf("Admit() = %q, want it to name the command that creates the preview bootstrap", refused.Message)
+		t.Errorf("EnsureReady() = %q, want it to name the command that creates the preview bootstrap", refused.Message)
 	}
 }
 
-func TestAdmitRefusesASchemaThisBuildCannotRead(t *testing.T) {
+func TestEnsureReadyRefusesASchemaThisBuildCannotRead(t *testing.T) {
 	t.Parallel()
 
 	gate, p := gated(t, "2.0.0")
 	bootstrapped(t, p, edge.ClassProduction)
 	p.FakeBootstrap().AtSchema(provider.BootstrapSchema + 1)
 
-	_, err := gate.Admit(context.Background(), edge.ClassProduction, nil, true, &recorder{})
+	_, err := gate.EnsureReady(context.Background(), edge.ClassProduction, nil, true, &recorder{})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("Admit() = %v, want a %s refusal", err, refusal.CodeNotReady)
+		t.Fatalf("EnsureReady() = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
 	if !strings.Contains(refused.Message, "Upgrade the Ocel CLI") {
-		t.Errorf("Admit() = %q, want it to say the CLI is behind the account", refused.Message)
+		t.Errorf("EnsureReady() = %q, want it to say the CLI is behind the account", refused.Message)
 	}
 }
 
-func TestAdmitRefusesAMissingFeatureAndOffersTheOneCommandThatAddsIt(t *testing.T) {
+func TestEnsureReadyRefusesAMissingFeatureAndOffersTheOneCommandThatAddsIt(t *testing.T) {
 	t.Parallel()
 
 	gate, provider := gated(t, "2.0.0")
 	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache)
 
-	_, err := gate.Admit(context.Background(), edge.ClassProduction, []string{fake.FeatureImages}, true, &recorder{})
+	_, err := gate.EnsureReady(context.Background(), edge.ClassProduction, []string{fake.FeatureImages}, true, &recorder{})
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
-		t.Fatalf("Admit() = %v, want a %s refusal", err, refusal.CodeNotReady)
+		t.Fatalf("EnsureReady() = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
 	for _, want := range []string{
 		"lacks the features this project needs: " + fake.FeatureImages,
 		"`ocel bootstrap production --features " + fake.FeatureImages + "`",
 	} {
 		if !strings.Contains(refused.Message, want) {
-			t.Errorf("Admit() = %q, want it to contain %q", refused.Message, want)
+			t.Errorf("EnsureReady() = %q, want it to contain %q", refused.Message, want)
 		}
 	}
 }
 
-func TestAdmitHealsAStaleBootstrapUnattended(t *testing.T) {
+func TestEnsureReadyHealsAStaleBootstrapWithoutAcceptingReplacements(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -189,17 +189,17 @@ func TestAdmitHealsAStaleBootstrapUnattended(t *testing.T) {
 	bootstrap.Behind(fake.FeatureCache)
 
 	progress := &recorder{}
-	status, err := gate.Admit(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress)
+	status, err := gate.EnsureReady(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress)
 	if err != nil {
-		t.Fatalf("Admit() error = %v", err)
+		t.Fatalf("EnsureReady() error = %v", err)
 	}
 	if stale := status.Stale([]string{fake.FeatureCache}); len(stale) != 0 {
-		t.Errorf("Admit() left %v behind, want the heal to have refreshed them", stale)
+		t.Errorf("EnsureReady() left %v behind, want the heal to have refreshed them", stale)
 	}
 
 	applied := bootstrap.Applied()
 	healing := applied[len(applied)-1]
-	if !healing.Unattended {
+	if !healing.RefuseReplacements {
 		t.Error("the heal reached Apply() attended, and nothing is there to accept a replacement")
 	}
 	if !slices.Equal(healing.Features, []string{fake.FeatureCache}) {
@@ -207,7 +207,7 @@ func TestAdmitHealsAStaleBootstrapUnattended(t *testing.T) {
 	}
 }
 
-func TestAdmitLeavesAStaleBootstrapAloneWhenTheAccountNeverOptedIntoHealing(t *testing.T) {
+func TestEnsureReadyLeavesAStaleBootstrapAloneWhenTheAccountNeverOptedIntoHealing(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -217,18 +217,18 @@ func TestAdmitLeavesAStaleBootstrapAloneWhenTheAccountNeverOptedIntoHealing(t *t
 	bootstrap.Behind(fake.FeatureCache)
 
 	progress := &recorder{}
-	if _, err := gate.Admit(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
-		t.Fatalf("Admit() error = %v", err)
+	if _, err := gate.EnsureReady(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
+		t.Fatalf("EnsureReady() error = %v", err)
 	}
 	if got := len(bootstrap.Applied()); got != 1 {
 		t.Errorf("Apply() ran %d times, want only the bootstrap that stood it up", got)
 	}
 	if !strings.Contains(progress.told(), "its content is behind") {
-		t.Errorf("Admit() said %q, want it to report the drift it left state", progress.told())
+		t.Errorf("EnsureReady() said %q, want it to report the drift it left state", progress.told())
 	}
 }
 
-func TestAdmitAsksForNoHealingAndGetsNone(t *testing.T) {
+func TestEnsureReadyAsksForNoHealingAndGetsNone(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -241,22 +241,22 @@ func TestAdmitAsksForNoHealingAndGetsNone(t *testing.T) {
 	bootstrap.Behind(fake.FeatureCache)
 
 	progress := &recorder{}
-	status, err := gate.Admit(ctx, edge.ClassProduction, []string{fake.FeatureCache}, false, progress)
+	status, err := gate.EnsureReady(ctx, edge.ClassProduction, []string{fake.FeatureCache}, false, progress)
 	if err != nil {
-		t.Fatalf("Admit() error = %v", err)
+		t.Fatalf("EnsureReady() error = %v", err)
 	}
 	if got := len(bootstrap.Applied()); got != 1 {
 		t.Errorf("Apply() ran %d times, want a caller that asked for no healing to get none though the account opted in", got)
 	}
 	if stale := status.Stale([]string{fake.FeatureCache}); len(stale) != 1 {
-		t.Errorf("Admit() reports %v behind, want the drift it was told to leave state", stale)
+		t.Errorf("EnsureReady() reports %v behind, want the drift it was told to leave state", stale)
 	}
 	if !strings.Contains(progress.told(), "its content is behind") {
-		t.Errorf("Admit() said %q, want it to report the drift it left state", progress.told())
+		t.Errorf("EnsureReady() said %q, want it to report the drift it left state", progress.told())
 	}
 }
 
-func TestAdmitWillNotHealFromADevelopmentBuild(t *testing.T) {
+func TestEnsureReadyWillNotHealFromADevelopmentBuild(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -269,18 +269,18 @@ func TestAdmitWillNotHealFromADevelopmentBuild(t *testing.T) {
 	bootstrap.Behind(fake.FeatureCache)
 
 	progress := &recorder{}
-	if _, err := gate.Admit(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
-		t.Fatalf("Admit() error = %v", err)
+	if _, err := gate.EnsureReady(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
+		t.Fatalf("EnsureReady() error = %v", err)
 	}
 	if got := len(bootstrap.Applied()); got != 1 {
 		t.Errorf("Apply() ran %d times, want a development build to leave the account as it stands", got)
 	}
 	if !strings.Contains(progress.told(), "development build (dev+cafebabe)") {
-		t.Errorf("Admit() said %q, want it to name the build that declined to heal", progress.told())
+		t.Errorf("EnsureReady() said %q, want it to name the build that declined to heal", progress.told())
 	}
 }
 
-func TestAdmitReportsAHealTheCredentialsCannotDo(t *testing.T) {
+func TestEnsureReadyReportsAHealTheCredentialsCannotDo(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -295,11 +295,11 @@ func TestAdmitReportsAHealTheCredentialsCannotDo(t *testing.T) {
 		"ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password"))
 
 	progress := &recorder{}
-	if _, err := gate.Admit(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
-		t.Fatalf("Admit() error = %v, want a refused heal to leave the run state", err)
+	if _, err := gate.EnsureReady(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
+		t.Fatalf("EnsureReady() error = %v, want a refused heal to leave the run state", err)
 	}
 	if !strings.Contains(progress.told(), "ocel-deploy@10.0.0.4 can neither act as root nor run sudo without a password") {
-		t.Errorf("Admit() said %q, want the provider's own account of why the heal was denied", progress.told())
+		t.Errorf("EnsureReady() said %q, want the provider's own account of why the heal was denied", progress.told())
 	}
 	kit, _, _ := strings.Cut(refusedLine(t, progress), ": ")
 	for _, vendored := range []string{"account", "stack"} {
@@ -335,8 +335,8 @@ func TestADeniedHealWithNothingToSayStillReadsAsASentence(t *testing.T) {
 	bootstrap.RefuseApply(refusal.Refuse(refusal.CodeDenied, ""))
 
 	progress := &recorder{}
-	if _, err := gate.Admit(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
-		t.Fatalf("Admit() error = %v, want a refused heal to leave the run state", err)
+	if _, err := gate.EnsureReady(ctx, edge.ClassProduction, []string{fake.FeatureCache}, true, progress); err != nil {
+		t.Fatalf("EnsureReady() error = %v, want a refused heal to leave the run state", err)
 	}
 	if line := refusedLine(t, progress); strings.Contains(line, ": ") {
 		t.Errorf("the kit wrote %q, want no colon introducing a reason the provider never gave", line)
@@ -384,17 +384,17 @@ func TestDowngradeIsAWriterOlderThanTheOneThatWrote(t *testing.T) {
 	}
 }
 
-func TestOccupancyRefusesWhileAnythingStandsOnTheBootstrap(t *testing.T) {
+func TestBootstrapUsersRefuseWhileAnythingStandsOnTheBootstrap(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	gate, provider := gated(t, "2.0.0")
 
-	occupancy, err := gate.Occupancy(ctx, edge.ClassPreview)
+	users, err := gate.BootstrapUsers(ctx, edge.ClassPreview)
 	if err != nil {
-		t.Fatalf("Occupancy() error = %v", err)
+		t.Fatalf("BootstrapUsers() error = %v", err)
 	}
-	if err := occupancy.Refuse(edge.ClassPreview); err != nil {
+	if err := users.Refuse(edge.ClassPreview); err != nil {
 		t.Fatalf("Refuse() over an empty account = %v, want nothing in the way", err)
 	}
 
@@ -414,15 +414,15 @@ func TestOccupancyRefusesWhileAnythingStandsOnTheBootstrap(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	occupancy, err = gate.Occupancy(ctx, edge.ClassPreview)
+	users, err = gate.BootstrapUsers(ctx, edge.ClassPreview)
 	if err != nil {
-		t.Fatalf("Occupancy() error = %v", err)
+		t.Fatalf("BootstrapUsers() error = %v", err)
 	}
-	if !slices.Equal(occupancy.Projects, []string{"blog", "shop"}) {
-		t.Errorf("Occupancy().Projects = %v, want both projects, sorted", occupancy.Projects)
+	if !slices.Equal(users.Projects, []string{"blog", "shop"}) {
+		t.Errorf("BootstrapUsers().Projects = %v, want both projects, sorted", users.Projects)
 	}
 	var refused refusal.Refusal
-	err = occupancy.Refuse(edge.ClassPreview)
+	err = users.Refuse(edge.ClassPreview)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("Refuse() = %v, want a %s refusal", err, refusal.CodeNotReady)
 	}
@@ -466,12 +466,12 @@ func TestAPreviewBootstrapIsRemediatedWithItsOwnCommand(t *testing.T) {
 	gate, provider := gated(t, "2.0.0")
 	bootstrapped(t, provider, edge.ClassPreview)
 
-	_, err := gate.Admit(context.Background(), edge.ClassPreview, []string{fake.FeatureImages}, true, &recorder{})
+	_, err := gate.EnsureReady(context.Background(), edge.ClassPreview, []string{fake.FeatureImages}, true, &recorder{})
 	var refusal refusal.Refusal
 	if !errors.As(err, &refusal) {
-		t.Fatalf("Admit() = %v, want a refusal", err)
+		t.Fatalf("EnsureReady() = %v, want a refusal", err)
 	}
 	if !strings.Contains(refusal.Message, "`ocel bootstrap preview --features ") {
-		t.Errorf("Admit() = %q, want the preview bootstrap's own command", refusal.Message)
+		t.Errorf("EnsureReady() = %q, want the preview bootstrap's own command", refusal.Message)
 	}
 }

@@ -46,7 +46,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 		return nil, fmt.Errorf("pin %s's live values: %w", app.App, err)
 	}
 	for _, owned := range []string{originguard.HealthPathVar, vars.EnvVar} {
-		if _, taken := app.Values.Delivered[owned]; taken {
+		if _, taken := app.Values.ContainerEnv[owned]; taken {
 			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"app %s sets %s, which ocel's runtime reserves: rename it", app.App, owned)
 		}
@@ -56,7 +56,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, spec provider.StackS
 	}
 	if err := p.host.StandUp(ctx, host.Container{
 		Name: physical, Project: spec.Ref.Project, App: app.App, Image: app.Image,
-		Class: spec.Ref.Class, Env: app.Values.Delivered, HealthPath: app.HealthCheckPath, Manifest: manifest, Resolved: true,
+		Class: spec.Ref.Class, Env: app.Values.ContainerEnv, HealthPath: app.HealthCheckPath, Manifest: manifest, Resolved: true,
 	}); err != nil {
 		return nil, err
 	}

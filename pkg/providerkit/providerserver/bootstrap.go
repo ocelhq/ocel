@@ -62,7 +62,7 @@ func (h *handlers) Bootstrap(ctx context.Context, req *contractv1.BootstrapReque
 	intent := applyRequestOf(req)
 
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
-		plan, err := PlanOf(req.GetConsented())
+		plan, err := PlanFromProto(req.GetConsented())
 		if err != nil {
 			return nil, err
 		}
@@ -165,7 +165,7 @@ func GroupProto(group provider.ChangeGroup) *planv1.ChangeGroup {
 	return rendered
 }
 
-func PlanOf(shown *planv1.ChangePlan) (provider.Plan, error) {
+func PlanFromProto(shown *planv1.ChangePlan) (provider.Plan, error) {
 	plan := provider.Plan{}
 	for _, group := range shown.GetGroups() {
 		action, err := changeAction(group.GetAction())
@@ -241,7 +241,7 @@ func (h *handlers) PlanRemoveBootstrap(ctx context.Context, req *contractv1.Boot
 	if err != nil {
 		return nil, err
 	}
-	if err := gate.Vacant(ctx, class); err != nil {
+	if err := gate.RefuseIfInUse(ctx, class); err != nil {
 		return nil, provider.RefusalError(err)
 	}
 	plan, err := gate.Bootstrap.PlanRemove(ctx, class)
@@ -278,7 +278,7 @@ func (h *handlers) RemoveBootstrap(ctx context.Context, req *contractv1.Bootstra
 	}
 
 	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress edge.Progress) error {
-		shown, err := PlanOf(req.GetConsented())
+		shown, err := PlanFromProto(req.GetConsented())
 		if err != nil {
 			return err
 		}

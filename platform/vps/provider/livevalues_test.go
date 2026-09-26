@@ -66,9 +66,9 @@ func resolving(t *testing.T, p *vps.Provider) liveValues {
 	}
 	return liveValues{
 		declared: provider.AppValues{
-			Delivered: map[string]string{"REGION": livePlainValue, "API_TOKEN": liveSensitiveValue},
-			Secrets:   []provider.SecretRef{{Key: "DATABASE_URL"}},
-			Bindings:  []provider.Binding{{Name: "main", Type: provider.BindingPostgres}},
+			ContainerEnv: map[string]string{"REGION": livePlainValue, "API_TOKEN": liveSensitiveValue},
+			Secrets:      []provider.SecretRef{{Key: "DATABASE_URL"}},
+			Bindings:     []provider.Binding{{Name: "main", Type: provider.BindingPostgres}},
 		},
 		reads: map[string]string{
 			"REGION":       livePlainValue,
@@ -112,7 +112,7 @@ func TestLiveAContainerReadsEveryValueClassOffItsOwnEnvironmentAndNothingIsLeftO
 	vm, p := onABoxServingContainers(t)
 
 	held := resolving(t, p)
-	held.declared.Delivered["RELEASE"] = "handed-by-the-deploy"
+	held.declared.ContainerEnv["RELEASE"] = "handed-by-the-deploy"
 	spoken := &said{}
 	standing, err := p.ProvisionContainers(context.Background(), liveValueSpec(t, "one", held.declared), spoken)
 	if err != nil {

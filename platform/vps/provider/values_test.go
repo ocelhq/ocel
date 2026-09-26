@@ -26,9 +26,9 @@ const (
 func valuedApp() provider.AppSpec {
 	app := anApp()
 	app.Values = provider.AppValues{
-		Delivered: map[string]string{"API_TOKEN": standingSensitive, "REGION": standingPlain},
-		Secrets:   []provider.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
-		Bindings:  []provider.Binding{{Name: "main", Type: provider.BindingPostgres, Version: 3}},
+		ContainerEnv: map[string]string{"API_TOKEN": standingSensitive, "REGION": standingPlain},
+		Secrets:      []provider.SecretRef{{Key: "DATABASE_URL"}, {Key: "SESSION_SECRET", Folder: "/web"}},
+		Bindings:     []provider.Binding{{Name: "main", Type: provider.BindingPostgres, Version: 3}},
 	}
 	return app
 }
@@ -172,7 +172,7 @@ func TestAValueDeliveredUnderANameTheRuntimeReadsItsOwnFromIsRefused(t *testing.
 
 	for _, owned := range []string{originguard.HealthPathVar, vars.EnvVar} {
 		app := anApp()
-		app.Values = provider.AppValues{Delivered: map[string]string{owned: "x"}}
+		app.Values = provider.AppValues{ContainerEnv: map[string]string{owned: "x"}}
 		_, err := over(&box{}).ProvisionContainers(context.Background(), aStack(t, app), nil)
 		var rejection refusal.Refusal
 		if !errors.As(err, &rejection) || rejection.Code != refusal.CodeInvalid || !strings.Contains(err.Error(), owned) {

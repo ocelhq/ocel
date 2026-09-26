@@ -150,7 +150,7 @@ func TestACertificateStillProvisioningWhenThePatienceRunsOutIsLeftPending(t *tes
 			return cert, nil
 		},
 	})
-	if _, pending := provider.LeftPending(err); !pending {
+	if _, pending := provider.ResumableMessage(err); !pending {
 		t.Errorf("Certificate() while Google still provisions = %v, want it marked pending: issuance finishes on Google's time, and a deploy leaves the hostname to `ocel domain add` rather than failing", err)
 	}
 }

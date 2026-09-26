@@ -83,23 +83,23 @@ func RefusedCode(err error) (refusal.Code, bool) {
 	return "", false
 }
 
-type pending struct{ cause error }
+type resumable struct{ cause error }
 
-func (p pending) Error() string { return p.cause.Error() }
+func (p resumable) Error() string { return p.cause.Error() }
 
-func (p pending) Unwrap() error { return p.cause }
+func (p resumable) Unwrap() error { return p.cause }
 
-func Pending(err error) error {
+func Resumable(err error) error {
 	if err == nil {
 		return nil
 	}
-	return pending{cause: err}
+	return resumable{cause: err}
 }
 
-func LeftPending(err error) (string, bool) {
-	var held pending
-	if errors.As(err, &held) {
-		return held.Error(), true
+func ResumableMessage(err error) (string, bool) {
+	var r resumable
+	if errors.As(err, &r) {
+		return r.Error(), true
 	}
 	return "", false
 }

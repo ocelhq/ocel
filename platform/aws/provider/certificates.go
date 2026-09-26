@@ -102,7 +102,7 @@ func waiting(err error) error {
 	if !certs.Pending(err) {
 		return err
 	}
-	return provider.Pending(refusal.Refuse(refusal.CodeNotReady, "%s", err))
+	return provider.Resumable(refusal.Refuse(refusal.CodeNotReady, "%s", err))
 }
 
 func (p certificates) Inspect(ctx context.Context, kind edge.Kind, hostname string, cert provider.Certificate) (provider.CertificateHealth, error) {

@@ -103,75 +103,75 @@ type ApplyRequest struct {
 	AcceptReplacements bool
 }
 
-type intent struct {
+type featureChange struct {
 	standing  BootstrapStatus
 	requested []string
 	removing  []string
 	ordered   []string
 }
 
-func (g Gate) intended(standing BootstrapStatus, req ApplyRequest) (intent, error) {
+func (g Gate) resolveFeatureChange(standing BootstrapStatus, req ApplyRequest) (featureChange, error) {
 	catalogue := g.Bootstrap.Catalogue()
 	class := standing.Class
 	if err := RefuseSchemaAhead(standing.Schema, standing.Present, class); err != nil {
-		return intent{}, err
+		return featureChange{}, err
 	}
 	asked, err := bootstrapplan.FeaturesWithDependencies(catalogue, req.Features)
 	if err != nil {
-		return intent{}, err
+		return featureChange{}, err
 	}
 	removing, err := bootstrapplan.FeaturesToRemove(catalogue, standing.Features, req.Remove)
 	if err != nil {
-		return intent{}, err
+		return featureChange{}, err
 	}
 	if err := bootstrapplan.RefuseEnsuringAndRemoving(asked, removing); err != nil {
-		return intent{}, err
+		return featureChange{}, err
 	}
-	if err := g.refuseUnfronting(catalogue, req.Remove, removing); err != nil {
-		return intent{}, err
+	if err := g.refuseRemovingEdgeFeature(catalogue, req.Remove, removing); err != nil {
+		return featureChange{}, err
 	}
-	requested, err := bootstrapplan.FeaturesWithDependencies(catalogue, g.ensuringEdge(catalogue, req.Features))
+	requested, err := bootstrapplan.FeaturesWithDependencies(catalogue, g.withEdgeFeature(catalogue, req.Features))
 	if err != nil {
-		return intent{}, err
+		return featureChange{}, err
 	}
 	ordered, err := bootstrapplan.DeleteOrder(catalogue, removing)
 	if err != nil {
-		return intent{}, err
+		return featureChange{}, err
 	}
-	return intent{standing: standing, requested: requested, removing: removing, ordered: ordered}, nil
+	return featureChange{standing: standing, requested: requested, removing: removing, ordered: ordered}, nil
 }
 
-func (g Gate) ensuringEdge(catalogue []provider.Feature, requested []string) []string {
-	fronting := bootstrapplan.FeatureNeedingEdge(catalogue, g.Edge)
-	if fronting == "" || slices.Contains(requested, fronting) {
+func (g Gate) withEdgeFeature(catalogue []provider.Feature, requested []string) []string {
+	edgeFeature := bootstrapplan.FeatureNeedingEdge(catalogue, g.Edge)
+	if edgeFeature == "" || slices.Contains(requested, edgeFeature) {
 		return requested
 	}
-	return append(slices.Clone(requested), fronting)
+	return append(slices.Clone(requested), edgeFeature)
 }
 
-func (g Gate) refuseUnfronting(catalogue []provider.Feature, named, removing []string) error {
-	fronting := bootstrapplan.FeatureNeedingEdge(catalogue, g.Edge)
-	if fronting == "" || !slices.Contains(removing, fronting) {
+func (g Gate) refuseRemovingEdgeFeature(catalogue []provider.Feature, named, removing []string) error {
+	edgeFeature := bootstrapplan.FeatureNeedingEdge(catalogue, g.Edge)
+	if edgeFeature == "" || !slices.Contains(removing, edgeFeature) {
 		return nil
 	}
-	if slices.Contains(named, fronting) {
+	if slices.Contains(named, edgeFeature) {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s fronts this project's deploys, so this run will not remove it: point the project at another edge first",
-			fronting)
+			edgeFeature)
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
 		"removing %s takes %s down with it, and %s fronts this project's deploys: point the project at another edge first",
-		strings.Join(named, ", "), fronting, fronting)
+		strings.Join(named, ", "), edgeFeature, edgeFeature)
 }
 
-func (i intent) request(class edge.Class, req ApplyRequest, writer provider.WrittenBy) provider.BootstrapRequest {
+func (c featureChange) request(class edge.Class, req ApplyRequest, writer provider.WrittenBy) provider.BootstrapRequest {
 	return provider.BootstrapRequest{
-		Class:       class,
-		Features:    i.requested,
-		Remove:      i.ordered,
-		Unattended:  !req.AcceptReplacements,
-		WrittenBy:   writer,
-		VendorState: i.standing.VendorState,
+		Class:              class,
+		Features:           c.requested,
+		Remove:             c.ordered,
+		RefuseReplacements: !req.AcceptReplacements,
+		WrittenBy:          writer,
+		VendorState:        c.standing.VendorState,
 	}
 }
 
@@ -184,12 +184,12 @@ func (g Gate) Plan(ctx context.Context, class edge.Class, req ApplyRequest) (pro
 }
 
 func (g Gate) PlanFrom(ctx context.Context, standing BootstrapStatus, req ApplyRequest) (provider.Plan, error) {
-	intended, err := g.intended(standing, req)
+	change, err := g.resolveFeatureChange(standing, req)
 	if err != nil {
 		return provider.Plan{}, err
 	}
 	class := standing.Class
-	plan, err := g.Bootstrap.Plan(ctx, intended.request(class, req, g.WrittenBy))
+	plan, err := g.Bootstrap.Plan(ctx, change.request(class, req, g.WrittenBy))
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -228,14 +228,14 @@ func (g Gate) Apply(ctx context.Context, shown provider.Plan, class edge.Class, 
 	if err != nil {
 		return err
 	}
-	intended, err := g.intended(standing, req)
+	change, err := g.resolveFeatureChange(standing, req)
 	if err != nil {
 		return err
 	}
-	if err := g.admitRemovals(ctx, class, intended.removing, req.Force); err != nil {
+	if err := g.admitRemovals(ctx, class, change.removing, req.Force); err != nil {
 		return err
 	}
-	drawn, err := g.Bootstrap.Plan(ctx, intended.request(class, req, g.WrittenBy))
+	drawn, err := g.Bootstrap.Plan(ctx, change.request(class, req, g.WrittenBy))
 	if err != nil {
 		return err
 	}
@@ -243,11 +243,11 @@ func (g Gate) Apply(ctx context.Context, shown provider.Plan, class edge.Class, 
 		return err
 	}
 
-	autoHeal := intended.standing.AutoHeal
+	autoHeal := change.standing.AutoHeal
 	if req.AutoHeal != nil {
 		autoHeal = *req.AutoHeal
 	}
-	if err := g.Bootstrap.Apply(ctx, intended.request(class, req, g.WrittenBy), progress); err != nil {
+	if err := g.Bootstrap.Apply(ctx, change.request(class, req, g.WrittenBy), progress); err != nil {
 		return err
 	}
 	if err := g.RecordBootstrap(ctx, class, stackrecords.BootstrapSettings{AutoHeal: autoHeal}); err != nil {
@@ -257,7 +257,7 @@ func (g Gate) Apply(ctx context.Context, shown provider.Plan, class edge.Class, 
 }
 
 func (g Gate) Remove(ctx context.Context, shown provider.Plan, class edge.Class, progress edge.Progress) error {
-	if err := g.Vacant(ctx, class); err != nil {
+	if err := g.RefuseIfInUse(ctx, class); err != nil {
 		return err
 	}
 	if len(shown.Groups) > 0 {
@@ -275,12 +275,12 @@ func (g Gate) Remove(ctx context.Context, shown provider.Plan, class edge.Class,
 	return records.Forget(ctx, g.Records, stackrecords.BootstrapRecord(class))
 }
 
-func (g Gate) Vacant(ctx context.Context, class edge.Class) error {
-	occupancy, err := g.Occupancy(ctx, class)
+func (g Gate) RefuseIfInUse(ctx context.Context, class edge.Class) error {
+	users, err := g.BootstrapUsers(ctx, class)
 	if err != nil {
 		return err
 	}
-	return occupancy.Refuse(class)
+	return users.Refuse(class)
 }
 
 func (g Gate) admitRemovals(ctx context.Context, class edge.Class, removing []string, force bool) error {
@@ -334,7 +334,7 @@ func ProjectsDependingOn(recorded map[string][]string, dropped []string) []strin
 	return out
 }
 
-func (g Gate) Admit(ctx context.Context, class edge.Class, required []string, heal bool, progress edge.Progress) (BootstrapStatus, error) {
+func (g Gate) EnsureReady(ctx context.Context, class edge.Class, required []string, heal bool, progress edge.Progress) (BootstrapStatus, error) {
 	standing, err := g.Status(ctx, class)
 	if err != nil {
 		return BootstrapStatus{}, err
@@ -384,11 +384,11 @@ func (g Gate) heal(ctx context.Context, standing BootstrapStatus, required []str
 		return false
 	}
 	err := g.Bootstrap.Apply(ctx, provider.BootstrapRequest{
-		Class:      standing.Class,
-		Features:   standing.Features,
-		Unattended: true,
-		Heal:       true,
-		WrittenBy:  g.WrittenBy,
+		Class:              standing.Class,
+		Features:           standing.Features,
+		RefuseReplacements: true,
+		Heal:               true,
+		WrittenBy:          g.WrittenBy,
 	}, progress)
 	var refused refusal.Refusal
 	if errors.As(err, &refused) && refused.Code == refusal.CodeDenied {
@@ -440,15 +440,15 @@ func (g Gate) RecordBootstrap(ctx context.Context, class edge.Class, state stack
 	return nil
 }
 
-type Occupancy struct {
+type BootstrapUsers struct {
 	Projects []string
 	Wildcard string
 }
 
-func (g Gate) Occupancy(ctx context.Context, class edge.Class) (Occupancy, error) {
+func (g Gate) BootstrapUsers(ctx context.Context, class edge.Class) (BootstrapUsers, error) {
 	held, err := g.Records.List(ctx, stackrecords.ProjectsRecord(class))
 	if err != nil {
-		return Occupancy{}, fmt.Errorf("read the projects deployed here: %w", err)
+		return BootstrapUsers{}, fmt.Errorf("read the projects deployed here: %w", err)
 	}
 	var projects []string
 	for _, record := range held {
@@ -459,36 +459,36 @@ func (g Gate) Occupancy(ctx context.Context, class edge.Class) (Occupancy, error
 		projects = append(projects, rest[0])
 	}
 	slices.Sort(projects)
-	occupancy := Occupancy{Projects: slices.Compact(projects)}
+	users := BootstrapUsers{Projects: slices.Compact(projects)}
 
 	wildcard, err := records.ReadOrEmpty(ctx, g.Records, stackrecords.WildcardRecord(class))
 	if err != nil {
-		return Occupancy{}, fmt.Errorf("read the %s preview wildcard: %w", class, err)
+		return BootstrapUsers{}, fmt.Errorf("read the %s preview wildcard: %w", class, err)
 	}
 	if len(wildcard.Bytes) > 0 {
 		var recorded stackrecords.Wildcard
 		if err := json.Unmarshal(wildcard.Bytes, &recorded); err != nil {
-			return Occupancy{}, fmt.Errorf("read the %s preview wildcard: %w", class, err)
+			return BootstrapUsers{}, fmt.Errorf("read the %s preview wildcard: %w", class, err)
 		}
-		occupancy.Wildcard = recorded.BaseDomain
+		users.Wildcard = recorded.BaseDomain
 	}
-	return occupancy, nil
+	return users, nil
 }
 
-func (o Occupancy) Refuse(class edge.Class) error {
-	if len(o.Projects) == 0 && o.Wildcard == "" {
+func (u BootstrapUsers) Refuse(class edge.Class) error {
+	if len(u.Projects) == 0 && u.Wildcard == "" {
 		return nil
 	}
 	var reasons []string
-	if len(o.Projects) > 0 {
+	if len(u.Projects) > 0 {
 		reasons = append(reasons, fmt.Sprintf(
 			"%d project(s) are still deployed into it: %s — run `%s` in each one first",
-			len(o.Projects), strings.Join(o.Projects, ", "), destroyCommand(class)))
+			len(u.Projects), strings.Join(u.Projects, ", "), destroyCommand(class)))
 	}
-	if o.Wildcard != "" {
+	if u.Wildcard != "" {
 		reasons = append(reasons, fmt.Sprintf(
 			"previews are still served on %s — release it with `ocel domain release --preview` first",
-			edge.PreviewWildcard(o.Wildcard)))
+			edge.PreviewWildcard(u.Wildcard)))
 	}
 	return refusal.Refuse(refusal.CodeNotReady, "the %s bootstrap is still in use, so `%s` will not remove it: %s",
 		class, bootstrapDestroyCommand(class), strings.Join(reasons, "; "))

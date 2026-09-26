@@ -61,7 +61,7 @@ type BootstrapRequest struct {
 
 	Remove []string
 
-	Unattended bool
+	RefuseReplacements bool
 
 	Heal bool
 

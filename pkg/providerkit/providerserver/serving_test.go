@@ -41,8 +41,8 @@ func servingRoot(t *testing.T, app string, desc edge.ServeDescriptor, manifest [
 	return root
 }
 
-func servingQuery(root, app, framework string) providerserver.ServingQuery {
-	return providerserver.ServingQuery{
+func servingQuery(root, app, framework string) providerserver.AppServingInput {
+	return providerserver.AppServingInput{
 		Root:       root,
 		Project:    "shop",
 		App:        app,
@@ -53,9 +53,9 @@ func servingQuery(root, app, framework string) providerserver.ServingQuery {
 }
 
 func TestEveryAppCarriesTheAssetPrefixAndBytecodeCacheItServesFrom(t *testing.T) {
-	facts, err := providerserver.ServingFactsFor(servingQuery(t.TempDir(), "web", "astro"))
+	facts, err := providerserver.AppServingFor(servingQuery(t.TempDir(), "web", "astro"))
 	if err != nil {
-		t.Fatalf("ServingFactsFor() = %v", err)
+		t.Fatalf("AppServingFor() = %v", err)
 	}
 	if facts.AssetPrefix == "" {
 		t.Error("an app with no asset prefix serves its static files from nowhere")
@@ -72,16 +72,16 @@ func TestEveryAppCarriesTheAssetPrefixAndBytecodeCacheItServesFrom(t *testing.T)
 }
 
 func TestOnlyNextAsksForAnISRLedger(t *testing.T) {
-	next, err := providerserver.ServingFactsFor(servingQuery(t.TempDir(), "web", appbuild.FrameworkNext))
+	next, err := providerserver.AppServingFor(servingQuery(t.TempDir(), "web", appbuild.FrameworkNext))
 	if err != nil {
-		t.Fatalf("ServingFactsFor() = %v", err)
+		t.Fatalf("AppServingFor() = %v", err)
 	}
 	if next.ISR == nil || next.ISR.Prefix == "" || next.ISR.TagNamespace == "" {
 		t.Fatalf("ISR = %+v, want the prefix and tag namespace a revalidation writes through", next.ISR)
 	}
-	other, err := providerserver.ServingFactsFor(servingQuery(t.TempDir(), "web", "astro"))
+	other, err := providerserver.AppServingFor(servingQuery(t.TempDir(), "web", "astro"))
 	if err != nil {
-		t.Fatalf("ServingFactsFor() = %v", err)
+		t.Fatalf("AppServingFor() = %v", err)
 	}
 	if other.ISR != nil {
 		t.Errorf("ISR = %+v for a framework that revalidates nothing, want none", other.ISR)
@@ -92,9 +92,9 @@ func TestAnAppRoutingAtItsOriginCarriesTheManifestItRoutesBy(t *testing.T) {
 	manifest := []byte(`{"routes":[]}`)
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, manifest)
 
-	facts, err := providerserver.ServingFactsFor(servingQuery(root, "web", appbuild.FrameworkNext))
+	facts, err := providerserver.AppServingFor(servingQuery(root, "web", appbuild.FrameworkNext))
 	if err != nil {
-		t.Fatalf("ServingFactsFor() = %v", err)
+		t.Fatalf("AppServingFor() = %v", err)
 	}
 	if facts.Routing == nil {
 		t.Fatal("Routing = nil for an app whose build says it routes at its origin")
@@ -113,9 +113,9 @@ func TestAnEdgeThatRunsCodeTakesTheManifestTheOriginWouldHaveRoutedBy(t *testing
 	query := servingQuery(root, "web", appbuild.FrameworkNext)
 	query.EdgeRunsCode = true
 
-	facts, err := providerserver.ServingFactsFor(query)
+	facts, err := providerserver.AppServingFor(query)
 	if err != nil {
-		t.Fatalf("ServingFactsFor() = %v", err)
+		t.Fatalf("AppServingFor() = %v", err)
 	}
 	if facts.Routing != nil {
 		t.Errorf("Routing = %+v where the edge runs the code, want the origin left out of routing", facts.Routing)
@@ -128,9 +128,9 @@ func TestAnEdgeThatRunsCodeTakesTheManifestTheOriginWouldHaveRoutedBy(t *testing
 func TestAnEdgeThatRunsNoCodeHandsTheEdgeNothingToRouteBy(t *testing.T) {
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, []byte(`{}`))
 
-	facts, err := providerserver.ServingFactsFor(servingQuery(root, "web", appbuild.FrameworkNext))
+	facts, err := providerserver.AppServingFor(servingQuery(root, "web", appbuild.FrameworkNext))
 	if err != nil {
-		t.Fatalf("ServingFactsFor() = %v", err)
+		t.Fatalf("AppServingFor() = %v", err)
 	}
 	if facts.EdgeRouting != nil {
 		t.Errorf("EdgeRouting = %+v where the origin routes, want the edge left out of routing", facts.EdgeRouting)
@@ -140,18 +140,18 @@ func TestAnEdgeThatRunsNoCodeHandsTheEdgeNothingToRouteBy(t *testing.T) {
 func TestAnAppThatRoutesAtItsOriginAndWroteNoManifestIsRefused(t *testing.T) {
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true, Entry: "index"}, nil)
 
-	_, err := providerserver.ServingFactsFor(servingQuery(root, "web", appbuild.FrameworkNext))
+	_, err := providerserver.AppServingFor(servingQuery(root, "web", appbuild.FrameworkNext))
 	if err == nil || !strings.Contains(err.Error(), edge.RoutingManifestFile) {
-		t.Fatalf("ServingFactsFor() = %v, want a refusal naming %s", err, edge.RoutingManifestFile)
+		t.Fatalf("AppServingFor() = %v, want a refusal naming %s", err, edge.RoutingManifestFile)
 	}
 }
 
 func TestAnAppThatRoutesAtItsOriginAndNamesNoEntryIsRefused(t *testing.T) {
 	root := servingRoot(t, "web", edge.ServeDescriptor{EdgeRouting: true}, []byte(`{}`))
 
-	_, err := providerserver.ServingFactsFor(servingQuery(root, "web", appbuild.FrameworkNext))
+	_, err := providerserver.AppServingFor(servingQuery(root, "web", appbuild.FrameworkNext))
 	if err == nil || !strings.Contains(err.Error(), "entry route") {
-		t.Fatalf("ServingFactsFor() = %v, want a refusal naming the missing entry route", err)
+		t.Fatalf("AppServingFor() = %v, want a refusal naming the missing entry route", err)
 	}
 }
 

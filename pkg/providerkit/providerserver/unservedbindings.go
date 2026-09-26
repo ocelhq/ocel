@@ -7,13 +7,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
-type UnreachableBindingError struct {
+type UnservedProxiedBindingError struct {
 	Resource string
 	Type     provider.BindingType
 	Vendor   provider.Vendor
 }
 
-func (e *UnreachableBindingError) Error() string {
+func (e *UnservedProxiedBindingError) Error() string {
 	return fmt.Sprintf(
 		"%s is a %s, a type an app reaches through the runtime, and the %s provider serves no %s for it to reach. "+
 			"Drop the resource, or deploy it to a provider that serves it",
@@ -21,7 +21,7 @@ func (e *UnreachableBindingError) Error() string {
 	)
 }
 
-func RefuseUnreachableBindings(vendor provider.Vendor, serves []provider.BindingType, proxied func(provider.BindingType) bool, resources []provider.Resource, grants []provider.Binding) error {
+func RefuseUnservedProxiedBindings(vendor provider.Vendor, serves []provider.BindingType, proxied func(provider.BindingType) bool, resources []provider.Resource, grants []provider.Binding) error {
 	for _, resource := range resources {
 		if err := reachable(vendor, serves, proxied, resource.Declared, resource.Type); err != nil {
 			return err
@@ -39,7 +39,7 @@ func reachable(vendor provider.Vendor, serves []provider.BindingType, proxied fu
 	if !proxied(kind) || slices.Contains(serves, kind) {
 		return nil
 	}
-	return &UnreachableBindingError{Resource: resource, Type: kind, Vendor: vendor}
+	return &UnservedProxiedBindingError{Resource: resource, Type: kind, Vendor: vendor}
 }
 
 func grantedResource(binding provider.Binding) string {

@@ -49,7 +49,7 @@ func TestASpecCarryingAnAppsValuesRendersWithoutThem(t *testing.T) {
 		Plain:     map[string]string{"REGION": "eu-west-1"},
 		Sensitive: map[string]string{"API_TOKEN": "sk-live-secret"},
 		Secrets:   []provider.SecretRef{{Key: "DATABASE_URL"}},
-		Delivered: map[string]string{
+		ContainerEnv: map[string]string{
 			"REGION":                        "eu-west-1",
 			"API_TOKEN":                     "sk-live-secret",
 			"DATABASE_URL":                  "postgres://app:hunter2@db.internal/orders",

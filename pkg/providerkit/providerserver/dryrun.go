@@ -19,7 +19,7 @@ const (
 	reasonPromote       = "the release this pointer would serve"
 )
 
-type draft struct {
+type dryRunPlan struct {
 	infra      provider.Plan
 	parameters provider.ChangeGroup
 	apps       []provider.Plan
@@ -27,7 +27,7 @@ type draft struct {
 	promotion  provider.ChangeGroup
 }
 
-func (d *draft) plan() provider.Plan {
+func (d *dryRunPlan) plan() provider.Plan {
 	var held provider.Plan
 	held.Groups = append(held.Groups, d.infra.Groups...)
 	if len(d.parameters.Changes) > 0 {
@@ -40,12 +40,12 @@ func (d *draft) plan() provider.Plan {
 	return held
 }
 
-func (r *deployRun) drawValues(ctx context.Context) (provider.ChangeGroup, error) {
+func (r *deployRun) planValuesGroup(ctx context.Context) (provider.ChangeGroup, error) {
 	resources, err := manifestResources(r.manifest)
 	if err != nil {
 		return provider.ChangeGroup{}, err
 	}
-	published, err := r.reader().Published(ctx)
+	published, err := r.publishedBindings().Published(ctx)
 	if err != nil {
 		return provider.ChangeGroup{}, err
 	}
@@ -67,7 +67,7 @@ func (r *deployRun) drawValues(ctx context.Context) (provider.ChangeGroup, error
 	return group, nil
 }
 
-func (r *deployRun) drawEdge() provider.ChangeGroup {
+func (r *deployRun) planEdgeGroup() provider.ChangeGroup {
 	action := provider.ActionUpdate
 	if r.state.Edge.Empty() {
 		action = provider.ActionCreate
@@ -80,7 +80,7 @@ func (r *deployRun) drawEdge() provider.ChangeGroup {
 	}
 }
 
-func (r *deployRun) drawPromotion() provider.ChangeGroup {
+func (r *deployRun) planPromotionGroup() provider.ChangeGroup {
 	changes := make([]provider.Change, 0, len(r.spec.Apps))
 	for _, entry := range r.spec.Apps {
 		changes = append(changes, provider.Change{
@@ -98,8 +98,8 @@ func (r *deployRun) drawPromotion() provider.ChangeGroup {
 	return group
 }
 
-func (r *deployRun) drawn() *planv1.ChangePlan {
-	return ChangePlanProto(r.draft.plan(), r.spec.Slug, string(r.front.Kind()))
+func (r *deployRun) dryRunPlanProto() *planv1.ChangePlan {
+	return ChangePlanProto(r.dryRunPlan.plan(), r.spec.Slug, string(r.front.Kind()))
 }
 
 func bindingFor(resource provider.Resource) func(provider.Binding) bool {

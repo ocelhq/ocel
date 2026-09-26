@@ -279,7 +279,7 @@ func containerEnv(app string, values provider.AppValues, originSecret, previousS
 	if values.Folder != "" {
 		env[constants.AppFolderEnvName] = values.Folder
 	}
-	maps.Copy(env, values.Injected())
+	maps.Copy(env, values.PhaseEnv())
 	if _, set := env[containerPortEnv]; set {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"app %s sets %s, and a container on this provider listens on %s, which it is handed as %s: drop the value and read the port from the environment",

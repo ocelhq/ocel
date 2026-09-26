@@ -379,7 +379,7 @@ func TestAWrappedFunctionIsHandedItsPlainAndSensitiveValuesAndNoSecretOrRecord(t
 	}
 
 	specs := base.FakeStacks().Provisioned()
-	delivered := specs[len(specs)-1].App.Values.Delivered
+	delivered := specs[len(specs)-1].App.Values.ContainerEnv
 	for key, want := range map[string]string{"REGION": "eu-west-1", "API_TOKEN": "sensitive-token"} {
 		if delivered[key] != want {
 			t.Errorf("the function is handed %s=%q, want %q: the runtime reads a declared value off the environment it boots in", key, delivered[key], want)

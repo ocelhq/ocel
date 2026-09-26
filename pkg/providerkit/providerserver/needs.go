@@ -91,26 +91,26 @@ func affected(detail edge.NeedDetail) string {
 	return fmt.Sprintf("%d routes", detail.Count)
 }
 
-type NeedRecord struct {
+type AppNeedVerdict struct {
 	Needs    []edge.Need
 	InEffect []edge.Need
 	Waived   []edge.Need
 }
 
-type NeedRecords map[string]NeedRecord
+type AppNeedVerdicts map[string]AppNeedVerdict
 
-type NeedCheck struct {
+type EdgeNeedCheck struct {
 	Edge          edge.Edge
 	Root          string
 	AllowDegraded []string
 	Degraded      func(edge.Need, string)
 }
 
-func (c NeedCheck) Run(ctx context.Context, manifest *contractv1.Manifest) (NeedRecords, error) {
+func (c EdgeNeedCheck) Run(ctx context.Context, manifest *contractv1.Manifest) (AppNeedVerdicts, error) {
 	if c.Edge == nil {
 		return nil, nil
 	}
-	records := NeedRecords{}
+	records := AppNeedVerdicts{}
 	check := c.Edge.Hooks().CheckCodeEntitlement
 	entitles := check != nil
 	entitlement := onceChecked(ctx, check)
@@ -133,16 +133,16 @@ func (c NeedCheck) Run(ctx context.Context, manifest *contractv1.Manifest) (Need
 	return records, nil
 }
 
-func (c NeedCheck) forApp(
+func (c EdgeNeedCheck) forApp(
 	name string,
 	desc edge.ServeDescriptor,
 	entitles bool,
 	entitlement func() (edge.CodeEntitlement, error),
-) (NeedRecord, error) {
-	var record NeedRecord
+) (AppNeedVerdict, error) {
+	var record AppNeedVerdict
 	for _, need := range declaredNeeds(desc) {
 		if !edge.ValidNeed(need) {
-			return NeedRecord{}, &UnknownNeedError{App: name, Need: need}
+			return AppNeedVerdict{}, &UnknownNeedError{App: name, Need: need}
 		}
 		detail := desc.Needs[need]
 		waived := slices.Contains(c.AllowDegraded, string(need))
@@ -152,13 +152,13 @@ func (c NeedCheck) forApp(
 			granted, err := entitlement()
 			switch {
 			case err != nil:
-				return NeedRecord{}, &EdgeEntitlementError{App: name, Need: need, Edge: c.Edge.Kind(), Err: err}
+				return AppNeedVerdict{}, &EdgeEntitlementError{App: name, Need: need, Edge: c.Edge.Kind(), Err: err}
 			case granted.Granted == edge.EntitlementGranted,
 				granted.Granted == edge.EntitlementUnknown:
 			case waived:
 				serves = false
 			default:
-				return NeedRecord{}, &EdgeEntitlementError{App: name, Need: need, Edge: c.Edge.Kind(), BillingPlan: granted.Plan}
+				return AppNeedVerdict{}, &EdgeEntitlementError{App: name, Need: need, Edge: c.Edge.Kind(), BillingPlan: granted.Plan}
 			}
 		}
 
@@ -172,7 +172,7 @@ func (c NeedCheck) forApp(
 				c.Degraded(need, fmt.Sprintf("%s: %s. It affects %s", name, degradeOf[need], affected(detail)))
 			}
 		default:
-			return NeedRecord{}, &UnsupportedNeedError{App: name, Need: need, Edge: c.Edge.Kind(), Detail: detail}
+			return AppNeedVerdict{}, &UnsupportedNeedError{App: name, Need: need, Edge: c.Edge.Kind(), Detail: detail}
 		}
 	}
 	return record, nil

@@ -21,14 +21,14 @@ func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer stri
 	if err != nil {
 		return err
 	}
-	if err := reclaim(ctx, p, slug, edge.ClassPreview, targets, progress); err != nil {
+	if err := destroyReclaimTargets(ctx, p, slug, edge.ClassPreview, targets, progress); err != nil {
 		return err
 	}
-	return reclaimStanding(ctx, p, slug, pointer,
+	return destroyPointerStacks(ctx, p, slug, pointer,
 		removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys, progress)
 }
 
-func reclaimStanding(ctx context.Context, p provider.Provider, slug, pointer string, surviving, servingHere []string, progress edge.Progress) error {
+func destroyPointerStacks(ctx context.Context, p provider.Provider, slug, pointer string, surviving, servingHere []string, progress edge.Progress) error {
 	entries, err := stackrecords.List(ctx, p.Records(), edge.ClassPreview, slug)
 	if err != nil {
 		return err
@@ -166,7 +166,7 @@ func releasesOf(keys []string) map[appRelease]bool {
 	return served
 }
 
-func reclaim(
+func destroyReclaimTargets(
 	ctx context.Context,
 	p provider.Provider,
 	slug string,

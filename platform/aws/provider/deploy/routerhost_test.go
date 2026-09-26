@@ -56,7 +56,7 @@ func servingSpec(t *testing.T, cfg Config, app, runtime string, coord naming.Coo
 	t.Helper()
 	stack := coord.Stack()
 	facts := cfg.Edge.Facts()
-	serving, err := providerserver.ServingFactsFor(providerserver.ServingQuery{
+	serving, err := providerserver.AppServingFor(providerserver.AppServingInput{
 		Root:              cfg.ArtifactRoot,
 		Project:           "shop",
 		App:               app,

@@ -92,7 +92,7 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 		if err := ReclaimPreview(ctx, session.provider, req.GetSlug(), pointer, removed, progress); err != nil {
 			return err
 		}
-		if err := forgetKeptRecords(ctx, session.provider, req.GetSlug(), pointer); err != nil {
+		if err := removeOcelOwnedBindings(ctx, session.provider, req.GetSlug(), pointer); err != nil {
 			return err
 		}
 		if err := records.Forget(ctx, session.provider.Records(), stackrecords.EnvironmentRecord(edge.ClassPreview, req.GetSlug(), pointer)); err != nil {
@@ -105,7 +105,7 @@ func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.Remove
 	})
 }
 
-func forgetKeptRecords(ctx context.Context, p provider.Provider, slug, environment string) error {
+func removeOcelOwnedBindings(ctx context.Context, p provider.Provider, slug, environment string) error {
 	store := envvars.Store{Records: p.Records(), Cipher: p.Cipher()}
 	scope := envvars.Scope{Project: slug, Class: edge.ClassPreview}
 	held, err := store.ListBindings(ctx, scope, environment)
