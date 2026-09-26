@@ -75,6 +75,9 @@ func (b Bootstrap) Plan(ctx context.Context, req providerkit.BootstrapRequest) (
 	if err := read.runnableEngine(b.host.named()); err != nil {
 		return providerkit.Plan{}, err
 	}
+	if err := b.host.servingFree(ctx, read); err != nil {
+		return providerkit.Plan{}, err
+	}
 	groups := providerkit.DeriveGroups(described, b.Catalogue(), req)
 	groups[0].Changes = planned(read)
 	if read.rerendering && groups[0].Action == providerkit.ActionKeep {
@@ -168,6 +171,9 @@ func (b Bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, 
 		return err
 	}
 	if err := standing.runnableEngine(b.host.named()); err != nil {
+		return err
+	}
+	if err := b.host.servingFree(ctx, standing); err != nil {
 		return err
 	}
 	items := standing.Items()

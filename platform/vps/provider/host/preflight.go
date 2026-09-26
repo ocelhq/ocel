@@ -359,3 +359,111 @@ func portNumber(port string) int {
 	}
 	return number
 }
+
+const behindYourOwnProxyDocs = "https://ocel.dev/docs/providers/vps#behind-your-own-proxy"
+
+type portHolder struct {
+	name      string
+	container bool
+	ports     []string
+}
+
+func (p portHolder) holds() string {
+	ports := make([]string, 0, len(p.ports))
+	for _, port := range p.ports {
+		ports = append(ports, ":"+port)
+	}
+	if p.container {
+		return "container " + p.name + " publishes " + strings.Join(ports, " and ")
+	}
+	return p.name + " holds " + strings.Join(ports, " and ")
+}
+
+func (p portHolder) freed() string {
+	if p.container {
+		return "run `docker rm -f " + p.name + "`"
+	}
+	return "stop " + p.name
+}
+
+func holdingAlso(held []portHolder, name string, container bool, port string) []portHolder {
+	for at := range held {
+		if held[at].name == name && held[at].container == container {
+			held[at].ports = append(held[at].ports, port)
+			return held
+		}
+	}
+	return append(held, portHolder{name: name, container: container, ports: []string{port}})
+}
+
+func (h *Host) servingFree(ctx context.Context, read Reading) error {
+	if h.proxyOption.adopted() {
+		return nil
+	}
+	elevation, err := h.elevate(ctx)
+	if err != nil {
+		return err
+	}
+	var held []portHolder
+	var bound []listeners.Listener
+	listened := false
+	for _, port := range proxyServing() {
+		var named []string
+		if read.standing(KindEngine, dockerEngine) {
+			said, err := h.ran(ctx, "ask which container publishes port "+port, words(publishing(port))+" 2>/dev/null || true", nil, elevation)
+			if err != nil {
+				return err
+			}
+			named = strings.Fields(said)
+		}
+		if slices.Contains(named, caddy.Container) {
+			continue
+		}
+		if len(named) > 0 {
+			for _, name := range named {
+				held = holdingAlso(held, name, true, port)
+			}
+			continue
+		}
+		if !listened {
+			if bound, err = h.portHolders(ctx, elevation); err != nil {
+				return err
+			}
+			listened = true
+		}
+		on := listeners.On(bound, portNumber(port))
+		if len(on) == 0 {
+			continue
+		}
+		names := listeners.Holders(on)
+		if len(names) == 0 {
+			names = []string{"the process at " + strings.Join(listeners.Lines(on), ", ")}
+		}
+		for _, name := range names {
+			held = holdingAlso(held, name, false, port)
+		}
+	}
+	if len(held) == 0 {
+		return nil
+	}
+	holds, names, freed := make([]string, 0, len(held)), make([]string, 0, len(held)), []string{}
+	var stopped []string
+	for _, holder := range held {
+		holds = append(holds, holder.holds())
+		names = append(names, holder.name)
+		if holder.container {
+			freed = append(freed, holder.freed())
+			continue
+		}
+		stopped = append(stopped, holder.name)
+	}
+	if len(stopped) > 0 {
+		freed = append([]string{"stop " + strings.Join(stopped, " and ")}, freed...)
+	}
+	return providerkit.Refuse(providerkit.CodeNotReady,
+		"%s, where ocel's own proxy serves\n"+
+			"Add `\"proxy\": \"manual\"` to this project's vps options and route to ocel from %s, or %s and run `%s`\n"+
+			"See %s",
+		strings.Join(holds, " and "), strings.Join(names, " and "), strings.Join(freed, ", "),
+		providerkit.BootstrapCommand(read.Class), behindYourOwnProxyDocs)
+}
