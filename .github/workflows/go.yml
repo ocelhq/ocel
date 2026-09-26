@@ -60,8 +60,10 @@ jobs:
             dirs: platform/aws/provider platform/aws/runtime platform/aws/connector
           - name: gcp
             dirs: platform/gcp/provider platform/gcp/runtime platform/gcp/connector
-          - name: providerkit
-            dirs: platform/vps/provider platform/vps/runtime platform/vps/connector platform/s3 pkg pkg/providerkit/pulumi platform/edge/cloudflare/deploy platform/edge/contract
+          - name: vps
+            dirs: platform/vps/provider platform/vps/runtime platform/vps/connector
+          - name: pkg, s3 and edge
+            dirs: pkg pkg/providerkit/pulumi platform/s3 platform/edge/contract platform/edge/cloudflare/deploy
     env:
       DIRS: ${{ matrix.group.dirs }}
     steps:
@@ -169,8 +171,12 @@ jobs:
         run: go generate -C platform/gcp/provider ./...
 
       - name: go generate (the vps provider's embedded dist)
-        if: matrix.group.name == 'providerkit'
+        if: matrix.group.name == 'vps'
         run: go generate -C platform/vps/provider ./...
+
+      - name: go generate (the transform runner pkg embeds)
+        if: matrix.group.name == 'pkg, s3 and edge'
+        run: go generate -C pkg/transformkit ./...
 
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v9
