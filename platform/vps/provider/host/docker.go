@@ -66,8 +66,12 @@ func engineItem() Item {
 		Owner:   rootOwner,
 		Content: []byte(engineFact),
 		Slow:    true,
-		Note:    "docker " + dockerVersion,
+		Note:    "docker " + dockerVersion + ", installed once; upgrading it is yours from then on",
 	}
+}
+
+func adoptedEngine(version string) string {
+	return "docker " + version + ", not managed by ocel: upgrading it is yours"
 }
 
 func unitItem() Item {

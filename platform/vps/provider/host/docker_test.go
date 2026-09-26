@@ -1,6 +1,7 @@
 package host
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -237,19 +238,26 @@ func TestAnInstalledEngineWhoseDaemonIsIdleIsProbedAsStandingAndNotCurrent(t *te
 	}
 }
 
-func TestAnEngineThatStandsIsKeptAndAnIdleDaemonPlansTheUnitAlone(t *testing.T) {
+func TestAnEngineThatStandsIsAdoptedAndAnIdleDaemonPlansTheUnitAlone(t *testing.T) {
 	t.Parallel()
 
 	class := providerkit.ClassProduction
 	idle := digest(KindUnit, dockerUnit, 0, rootOwner, contentSum([]byte("active=inactive\nenabled=disabled\n")))
-	read := Reading{Arch: ArchAMD64, Class: class, Observed: map[string]string{
+	read := Reading{Arch: ArchAMD64, Class: class, Engine: Engine{Kind: engineStandard, Version: "28.3.1"}, Observed: map[string]string{
 		engineItem().ID(): engineItem().Digest(),
 		unitItem().ID():   idle,
 	}}
 
 	changes := planned(read)
-	if engine := planFor(changes, engineItem().ID()); engine.Action != providerkit.ActionKeep {
-		t.Errorf("a host whose engine stands plans %q for it, want it kept: an installed engine is never installed over", engine.Action)
+	engine := planFor(changes, engineItem().ID())
+	if engine.Action != providerkit.ActionAdopt {
+		t.Errorf("a host whose engine stands plans %q for it, want it adopted: an installed engine is never installed over", engine.Action)
+	}
+	if want := "docker 28.3.1, not managed by ocel: upgrading it is yours"; engine.Reason != want {
+		t.Errorf("the adopted engine is planned with the reason %q, want %q: the user is never told the engine is theirs to upgrade", engine.Reason, want)
+	}
+	if engine.Slow {
+		t.Error("an adopted engine is planned as slow work, and adopting it writes nothing at all")
 	}
 	unit := planFor(changes, unitItem().ID())
 	if unit.Action != providerkit.ActionUpdate {
@@ -309,8 +317,8 @@ func TestAHostWithNoEngineHasTheInstallPlannedLastAndNamed(t *testing.T) {
 	if engine.Action != providerkit.ActionCreate {
 		t.Fatalf("a host with no engine plans %q for it, want the install shown as a change to consent to", engine.Action)
 	}
-	if !strings.Contains(engine.Reason, dockerVersion) {
-		t.Errorf("the engine is planned with the reason %q, and a user consenting to it is never told what runs on their host", engine.Reason)
+	if want := "docker " + dockerVersion + ", installed once; upgrading it is yours from then on"; engine.Reason != want {
+		t.Errorf("the engine is planned with the reason %q, want %q: a user consenting to it is never told what runs on their host, nor who upgrades it", engine.Reason, want)
 	}
 	if !engine.Slow {
 		t.Error("the engine install is planned as quick work, and a plan that lies about its cost is one nobody waits through")
@@ -390,5 +398,27 @@ func quickest(t *testing.T, changes []providerkit.Change) {
 		if slow {
 			t.Errorf("%s is planned after slow work, and the quick changes are what a watching user sees land first", change.Name)
 		}
+	}
+}
+
+func TestAnApplyOverAnAdoptedEngineNeverInstallsDockerAndStillStartsItsUnit(t *testing.T) {
+	t.Parallel()
+
+	class := providerkit.ClassProduction
+	stood := settledOn(t, class)
+	for at, item := range stood.stands[class] {
+		if item.ID() == unitItem().ID() {
+			stood.stands[class][at].Content = []byte("active=inactive\nenabled=disabled\n")
+		}
+	}
+	if err := NewBootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
+		providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil); err != nil {
+		t.Fatalf("Apply() = %v", err)
+	}
+	if at := stood.at(dockerSource); at >= 0 {
+		t.Errorf("the apply ran the install script over an engine it adopted:\n%s", stood.commands()[at])
+	}
+	if stood.at("systemctl enable --now "+quoted(dockerUnit)) < 0 {
+		t.Errorf("the apply never started the idle %s the adopted engine runs under:\n%s", dockerUnit, strings.Join(stood.commands(), "\n"))
 	}
 }
