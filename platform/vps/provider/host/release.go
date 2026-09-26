@@ -358,12 +358,14 @@ const routingRewrites = 5
 type composed struct {
 	prior     routingPair
 	written   tableDigest
+	config    []byte
 	changed   bool
 	reloading bool
 }
 
 func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (RoutingTable, error)) (composed, error) {
 	rewrites := 0
+	placed := placedFile(h.front)
 	for {
 		held, err := h.tableHeld(ctx)
 		if err != nil {
@@ -390,14 +392,30 @@ func (h *Host) composeRouting(ctx context.Context, compose func(RoutingTable) (R
 		if err != nil {
 			return shaped, err
 		}
-		if bytes.Equal(before, after) && bytes.Equal(held.config, rendered) {
-			return shaped, nil
+		fresh := bytes.Equal(held.config, rendered)
+		if placed != "" {
+			sum, err := h.placedSum(ctx, placed)
+			if err != nil {
+				return shaped, err
+			}
+			fresh, held.config = sum == contentSum(rendered), rendered
+			shaped.prior, shaped.config = held, rendered
+		}
+		if bytes.Equal(before, after) {
+			if fresh {
+				return shaped, nil
+			}
+			if placed != "" {
+				shaped.reloading = true
+				return shaped, nil
+			}
 		}
 		admitted, err := RenderProxyConfig(h.front, next)
 		if err != nil {
 			return shaped, err
 		}
-		shaped.reloading = !bytes.Equal(held.config, admitted)
+		shaped.config = admitted
+		shaped.reloading = !bytes.Equal(held.config, admitted) || !fresh && placed != ""
 		shaped.written, err = h.writePair(ctx, held.digest(), routingPair{table: after, config: admitted})
 		shaped.changed = true
 		rewrites++
@@ -412,8 +430,12 @@ func pairFed(pair routingPair) string {
 }
 
 func (h *Host) writePair(ctx context.Context, expected tableDigest, pair routingPair) (tableDigest, error) {
+	rendering := h.front.File() == ProxyConfig
+	if !rendering {
+		pair.config = nil
+	}
 	elevation, refused := h.elevate(ctx)
-	result, err := h.stream(ctx, stagedWrite(expected, pair.config != nil), strings.NewReader(pairFed(pair)), elevation)
+	result, err := h.stream(ctx, stagedWrite(expected, rendering), strings.NewReader(pairFed(pair)), elevation)
 	if err != nil {
 		return "", err
 	}
@@ -475,6 +497,38 @@ func stagedWrite(expected tableDigest, rendering bool) string {
 		moving,
 		[]string{"trap - EXIT"},
 	), "\n")
+}
+
+func (h *Host) placedSum(ctx context.Context, file string) (string, error) {
+	elevation, err := h.reachDocker(ctx)
+	if err != nil {
+		return "", err
+	}
+	said, err := h.ran(ctx, "read "+file+" through the switchboard", words(switchboardCommand("placed", file)), nil, elevation)
+	return strings.TrimSpace(said), err
+}
+
+func placedWrite(file string, expected tableDigest) string {
+	return strings.Join([]string{
+		"set -e",
+		strings.TrimSuffix(routingLocked("-x"), "\n"),
+		`held=$(sha256sum ` + quoted(live.RoutingTable) + ` | cut -d' ' -f1)`,
+		`if [ "$held" != ` + quoted(string(expected)) + ` ]; then printf '%s' "$held" >&2; exit ` + strconv.Itoa(routingMoved) + `; fi`,
+		words(switchboardFed("place", file)),
+	}, "\n")
+}
+
+func (h *Host) place(ctx context.Context, file string, shaped composed, elevation string) error {
+	result, err := h.stream(ctx, placedWrite(file, shaped.written), bytes.NewReader(shaped.config), elevation)
+	if err != nil {
+		return err
+	}
+	switch result.Code {
+	case 0, routingMoved:
+		return nil
+	default:
+		return h.refuse("place "+file+" through the switchboard", result, elevation)
+	}
 }
 
 func moved(err error) bool {

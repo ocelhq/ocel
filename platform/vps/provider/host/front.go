@@ -28,6 +28,13 @@ func openFront(front Front, box frontBox) proxy.Proxy {
 	}
 }
 
+func placedFile(front proxy.Proxy) string {
+	if file := front.File(); file != ProxyConfig {
+		return file
+	}
+	return ""
+}
+
 func (state RoutingTable) hostnames() []string {
 	named := make([]string, 0, len(state.Claims)+2)
 	for _, claim := range state.Claims {
