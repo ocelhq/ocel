@@ -10,7 +10,7 @@ require (
 	connectrpc.com/connect v1.20.0
 	github.com/google/go-containerregistry v0.21.7
 	github.com/ocelhq/ocel/pkg v0.0.0
-	github.com/ocelhq/ocel/pkg/providerkit/pulumi v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/pkg/providerkit/pulumi v0.0.0
 	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/pulumi/pulumi-gcp/sdk/v9 v9.36.1

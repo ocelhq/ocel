@@ -15,3 +15,5 @@ require (
 )
 
 replace github.com/ocelhq/ocel/pkg => ../../pkg
+
+replace github.com/ocelhq/ocel/platform/edge/contract => ../../platform/edge/contract

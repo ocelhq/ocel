@@ -2,8 +2,6 @@ module github.com/ocelhq/ocel/platform/vps/runtime
 
 go 1.27.0
 
-replace github.com/ocelhq/ocel/pkg/providerkit/pulumi => ../../../pkg/providerkit/pulumi
-
 replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 
 replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/cloudflare/deploy
@@ -16,7 +14,7 @@ require (
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
 	github.com/ocelhq/ocel/platform/s3 v0.0.0
-	github.com/ocelhq/ocel/platform/vps/provider v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/platform/vps/provider v0.0.0
 	golang.org/x/sys v0.48.0
 	google.golang.org/protobuf v1.36.12
 )

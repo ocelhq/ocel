@@ -6,12 +6,10 @@ replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 
 replace github.com/ocelhq/ocel/platform/vps/provider => ../provider
 
-replace github.com/ocelhq/ocel/pkg/providerkit/pulumi => ../../../pkg/providerkit/pulumi
-
 require (
 	github.com/ocelhq/ocel/pkg v0.0.0
 	github.com/ocelhq/ocel/platform/edge/contract v0.0.0
-	github.com/ocelhq/ocel/platform/vps/provider v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/platform/vps/provider v0.0.0
 )
 
 require (
@@ -70,3 +68,5 @@ require (
 )
 
 replace github.com/ocelhq/ocel/pkg => ../../../pkg
+
+replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/cloudflare/deploy
