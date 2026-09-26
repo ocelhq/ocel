@@ -9,6 +9,7 @@ on:
       - "pkg/arch/**"
       - "pkg/channel/**"
       - "pkg/configdoc/**"
+      - "pkg/connectorserver/**"
       - "pkg/constants/**"
       - "pkg/envvars/**"
       - "pkg/envvarsserver/**"
