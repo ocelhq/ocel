@@ -58,7 +58,7 @@ function main() {
         readFileSync(join(cwd, "package.json"), "utf8"),
       );
       if (stamped !== version) {
-        throw new Error(`${name} carries ${stamped}, not ${version}`);
+        throw new Error(`${name} is stamped ${stamped}, not ${version}`);
       }
       if (published(name, version)) {
         console.error(`${name}@${version} is already on npm`);
