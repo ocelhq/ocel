@@ -13,35 +13,36 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type connectorHost struct {
 	*fake.Provider
 
-	install providerkit.ConnectorInstall
+	install provider.ConnectorInstall
 	removed bool
 }
 
-func (h *connectorHost) Connector() providerkit.Connector { return h }
+func (h *connectorHost) Connector() provider.Connector { return h }
 
-func (h *connectorHost) Target(context.Context) (providerkit.ConnectorTarget, error) {
-	return providerkit.ConnectorTarget{
+func (h *connectorHost) Target(context.Context) (provider.ConnectorTarget, error) {
+	return provider.ConnectorTarget{
 		Fingerprint: "vps/SHA256:AAAA/ocel",
 		Hostname:    "box.example.com",
 		Arch:        "arm64",
-		Installed:   &providerkit.ConnectorRelease{Version: "0.4.1", PublicKey: "ZmFrZQ==", Compute: providerkit.ComputeContainer},
+		Installed:   &provider.ConnectorRelease{Version: "0.4.1", PublicKey: "ZmFrZQ==", Compute: provider.ComputeContainer},
 	}, nil
 }
 
-func (h *connectorHost) Install(_ context.Context, install providerkit.ConnectorInstall, progress edge.Progress) (providerkit.ConnectorAddress, error) {
+func (h *connectorHost) Install(_ context.Context, install provider.ConnectorInstall, progress edge.Progress) (provider.ConnectorAddress, error) {
 	h.install = install
 	progress.Say("wrote the connector")
 	compute := install.Compute
 	if compute == "" {
-		compute = providerkit.ComputeContainer
+		compute = provider.ComputeContainer
 	}
-	return providerkit.ConnectorAddress{
+	return provider.ConnectorAddress{
 		URL:       "https://box.example.com/" + constants.ProjectStateDirName + "/connector",
 		PublicKey: "ZmFrZQ==",
 		Compute:   compute,
@@ -53,12 +54,12 @@ func (h *connectorHost) Remove(context.Context, edge.Progress) error {
 	return nil
 }
 
-func connectorServing(t *testing.T, provider providerkit.Provider) contractv1connect.ProviderServiceClient {
+func connectorServing(t *testing.T, p provider.Provider) contractv1connect.ProviderServiceClient {
 	t.Helper()
 
 	server := httptest.NewServer(providerkit.ConformanceMux(providerkit.Spec{
 		Version: "test",
-		New:     func(context.Context, providerkit.Settings) (providerkit.Provider, error) { return provider, nil },
+		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return p, nil },
 	}))
 	t.Cleanup(server.Close)
 
@@ -196,13 +197,13 @@ func TestTheComputeTheCallerAsksForReachesTheProviderAndItsChoiceComesBack(t *te
 
 	stream, err := client.InstallConnector(context.Background(), &contractv1.InstallConnectorRequest{
 		Binary: []byte("#!/bin/sh\n"), Version: "0.4.1", ConfigJson: []byte(`{"console":"https://ocel.app"}`),
-		Compute: string(providerkit.ComputeServerless),
+		Compute: string(provider.ComputeServerless),
 	})
 	result := finalResult(t, stream, err)
-	if held.install.Compute != providerkit.ComputeServerless {
+	if held.install.Compute != provider.ComputeServerless {
 		t.Errorf("the provider was asked for %q, want the compute the caller named", held.install.Compute)
 	}
-	if result.GetConnector().GetCompute() != string(providerkit.ComputeServerless) {
+	if result.GetConnector().GetCompute() != string(provider.ComputeServerless) {
 		t.Errorf("compute = %q, want what the provider settled on so the console records it", result.GetConnector().GetCompute())
 	}
 }
@@ -218,7 +219,7 @@ func TestAnUnsetComputeLeavesTheChoiceToTheProvider(t *testing.T) {
 	if held.install.Compute != "" {
 		t.Errorf("the provider was asked for %q, want nothing named so it picks its own default", held.install.Compute)
 	}
-	if result.GetConnector().GetCompute() != string(providerkit.ComputeContainer) {
+	if result.GetConnector().GetCompute() != string(provider.ComputeContainer) {
 		t.Errorf("compute = %q, want the provider's own default carried back", result.GetConnector().GetCompute())
 	}
 }

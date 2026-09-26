@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -46,7 +46,7 @@ func (w *appWork) run(pctx *sdk.Context, shipped map[string]sdk.Resource) error 
 	return stack.register(pctx)
 }
 
-func (r *release) appWork(plan providerkit.StackPlan, transformed *transformPatches) (*appWork, error) {
+func (r *release) appWork(plan provider.StackPlan, transformed *transformPatches) (*appWork, error) {
 	app := plan.App
 	project, stack := naming.Sanitize(plan.Ref.Project), plan.Ref.Name
 	sessions := newSessionScope(project, stack.Env, r.cfg.StateTableARN)
@@ -167,7 +167,7 @@ func (r *release) appWork(plan providerkit.StackPlan, transformed *transformPatc
 	}, nil
 }
 
-func (r *release) artifactAt(ref providerkit.ArtifactRef) (artifactRef, error) {
+func (r *release) artifactAt(ref provider.ArtifactRef) (artifactRef, error) {
 	bucket, err := r.store(ref.Bucket)
 	if err != nil {
 		return artifactRef{}, err
@@ -180,11 +180,11 @@ func (r *release) artifactAt(ref providerkit.ArtifactRef) (artifactRef, error) {
 
 func (r *release) store(name string) (string, error) {
 	switch name {
-	case providerkit.StoreFunctions:
+	case provider.StoreFunctions:
 		return r.cfg.ArtifactBucket, nil
-	case providerkit.StoreAssets:
+	case provider.StoreAssets:
 		return r.cfg.AssetBucket, nil
-	case providerkit.StoreCache:
+	case provider.StoreCache:
 		return r.cfg.CacheStoreBucket, nil
 	}
 	return "", fmt.Errorf("this provider keeps no %q store", name)
@@ -201,14 +201,14 @@ func (r *release) runtimeLayers(args map[string]functionArgs) (map[string]string
 		if arn == "" {
 			return nil, refusal.Refuse(refusal.CodeNotReady,
 				"this account's bootstrap publishes no %s runtime for this build's functions to boot through; re-run `%s`",
-				arch, providerkit.BootstrapCommand(r.cfg.Class))
+				arch, provider.BootstrapCommand(r.cfg.Class))
 		}
 		held[arch] = arn
 	}
 	return held, nil
 }
 
-func (r *release) routerHost(plan providerkit.StackPlan) (*routerHost, error) {
+func (r *release) routerHost(plan provider.StackPlan) (*routerHost, error) {
 	routing := plan.App.Routing
 	if routing == nil {
 		return nil, nil
@@ -236,7 +236,7 @@ func (r *release) routerHost(plan providerkit.StackPlan) (*routerHost, error) {
 	return host, nil
 }
 
-func (r *release) originGuard(plan providerkit.StackPlan) (*originGuard, error) {
+func (r *release) originGuard(plan provider.StackPlan) (*originGuard, error) {
 	guard := plan.App.Guard
 	if guard == nil {
 		return nil, nil
@@ -244,12 +244,12 @@ func (r *release) originGuard(plan providerkit.StackPlan) (*originGuard, error) 
 	if r.cfg.OriginSecret == "" {
 		return nil, fmt.Errorf(
 			"the edge reaches %s over a Function URL no signature guards, and this bootstrap holds no secret for the entry function to demand of it; re-run `%s`",
-			plan.App.App, providerkit.BootstrapCommand(r.cfg.Class))
+			plan.App.App, provider.BootstrapCommand(r.cfg.Class))
 	}
 	return &originGuard{Entry: guard.Entry, Secret: r.cfg.OriginSecret, Previous: r.cfg.PreviousOriginSecret}, nil
 }
 
-func (r *release) isrCache(plan providerkit.StackPlan) *isrConfig {
+func (r *release) isrCache(plan provider.StackPlan) *isrConfig {
 	held := plan.App.ISR
 	if held == nil {
 		return nil
@@ -270,7 +270,7 @@ func (r *release) isrCache(plan providerkit.StackPlan) *isrConfig {
 	return cache
 }
 
-func appCoordinate(plan providerkit.StackPlan) naming.Coordinate {
+func appCoordinate(plan provider.StackPlan) naming.Coordinate {
 	stack := plan.Ref.Name
 	return naming.Coordinate{
 		Project: naming.Sanitize(plan.Ref.Project),
@@ -280,7 +280,7 @@ func appCoordinate(plan providerkit.StackPlan) naming.Coordinate {
 	}
 }
 
-func (r *release) bytecodeCache(plan providerkit.StackPlan) *bytecodeConfig {
+func (r *release) bytecodeCache(plan provider.StackPlan) *bytecodeConfig {
 	held := plan.App.Bytecode
 	if held == nil {
 		return nil
@@ -288,17 +288,17 @@ func (r *release) bytecodeCache(plan providerkit.StackPlan) *bytecodeConfig {
 	return &bytecodeConfig{Bucket: r.cfg.AssetBucket, Prefix: held.Prefix}
 }
 
-func (r *release) appBundle(plan providerkit.StackPlan) (appBundle, error) {
+func (r *release) appBundle(plan provider.StackPlan) (appBundle, error) {
 	if sealed, carried := plan.App.Packed.(appBundle); carried {
 		return sealed, nil
 	}
 	return r.sealApp(plan.Ref.Project, plan.App.App, plan.App.Values)
 }
 
-func (r *release) sealApp(project, app string, held providerkit.AppValues) (appBundle, error) {
+func (r *release) sealApp(project, app string, held provider.AppValues) (appBundle, error) {
 	bindings := make([]live.Binding, 0, len(held.Bindings))
 	for _, binding := range held.Bindings {
-		kind := providerkit.WireBindingType(binding.Type)
+		kind := provider.WireBindingType(binding.Type)
 		bindings = append(bindings, live.Binding{
 			Name:    binding.Name,
 			Key:     naming.ResourceEnvName(kind, bindingResource(binding)),
@@ -313,14 +313,14 @@ func (r *release) sealApp(project, app string, held providerkit.AppValues) (appB
 	return sealAppBundle(r.cfg, project, app, held.Sensitive, keys, bindings)
 }
 
-func bindingResource(binding providerkit.Binding) string {
+func bindingResource(binding provider.Binding) string {
 	if binding.Resource != "" {
 		return binding.Resource
 	}
 	return binding.Name
 }
 
-func (r *release) appEnv(plan providerkit.StackPlan, bundle appBundle, sessions sessionScope) map[string]string {
+func (r *release) appEnv(plan provider.StackPlan, bundle appBundle, sessions sessionScope) map[string]string {
 	app := plan.App
 	env := map[string]string{}
 	if plan.Edge != nil {
@@ -351,7 +351,7 @@ func (r *release) appEnv(plan providerkit.StackPlan, bundle appBundle, sessions 
 	return env
 }
 
-func planBindingPolicies(grants []providerkit.Binding) ([]bindingPolicy, error) {
+func planBindingPolicies(grants []provider.Binding) ([]bindingPolicy, error) {
 	out := make([]bindingPolicy, 0, len(grants))
 	for _, binding := range grants {
 		policy, err := bindingPolicyDocument(binding.Name, grantMessages(binding.Grants))
@@ -366,7 +366,7 @@ func planBindingPolicies(grants []providerkit.Binding) ([]bindingPolicy, error) 
 	return out, nil
 }
 
-func grantMessages(grants []providerkit.Grant) []*bindingsv1.Grant {
+func grantMessages(grants []provider.Grant) []*bindingsv1.Grant {
 	if len(grants) == 0 {
 		return nil
 	}
@@ -385,12 +385,12 @@ func grantMessages(grants []providerkit.Grant) []*bindingsv1.Grant {
 	return out
 }
 
-func (r *release) decodeApp(plan providerkit.StackPlan, outputs auto.OutputMap) (providerkit.StackResult, error) {
+func (r *release) decodeApp(plan provider.StackPlan, outputs auto.OutputMap) (provider.StackResult, error) {
 	work, held := plan.Work.(*appWork)
 	if !held {
-		return providerkit.StackResult{}, fmt.Errorf("this stack was not planned as an app stack")
+		return provider.StackResult{}, fmt.Errorf("this stack was not planned as an app stack")
 	}
-	result := providerkit.StackResult{
+	result := provider.StackResult{
 		EdgeBundleKey: work.delivery.BundleKey,
 		Envelope:      work.delivery.Envelope,
 	}
@@ -400,17 +400,17 @@ func (r *release) decodeApp(plan providerkit.StackPlan, outputs auto.OutputMap) 
 	for _, logical := range work.logical {
 		raw, produced := outputs[logical]
 		if !produced {
-			return providerkit.StackResult{}, fmt.Errorf("stack produced no output for %s", logical)
+			return provider.StackResult{}, fmt.Errorf("stack produced no output for %s", logical)
 		}
 		fields, mapped := raw.Value.(map[string]any)
 		if !mapped {
-			return providerkit.StackResult{}, fmt.Errorf("output for %s is not a map", logical)
+			return provider.StackResult{}, fmt.Errorf("output for %s is not a map", logical)
 		}
 		url, err := requireStringField(fields, logical, outputKeyFunctionURL)
 		if err != nil {
-			return providerkit.StackResult{}, err
+			return provider.StackResult{}, err
 		}
-		fn := providerkit.Function{Name: logical, URL: url}
+		fn := provider.Function{Name: logical, URL: url}
 		if physical, named := fields[outputKeyFunctionName].(string); named {
 			fn.Physical = physical
 			r.served.realized(logical, physical)

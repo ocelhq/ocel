@@ -18,6 +18,7 @@ import (
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const costImageDigest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
@@ -30,17 +31,17 @@ func runCost(t *testing.T, suite Suite) {
 	server := httptest.NewServer(providerkit.ConformanceMux(suite.Spec))
 	t.Cleanup(server.Close)
 
-	provider := client(server.Client(), server.URL)
-	if _, err := provider.Configure(context.Background(), configureWith(t, suite.Options)); err != nil {
+	providerClient := client(server.Client(), server.URL)
+	if _, err := providerClient.Configure(context.Background(), configureWith(t, suite.Options)); err != nil {
 		t.Fatalf("Configure() error = %v, want the session configured", err)
 	}
 	vendor := ""
 	if suite.New != nil {
-		if held, err := suite.New(context.Background(), providerkit.Settings{Options: suite.Options}); err == nil {
+		if held, err := suite.New(context.Background(), provider.Settings{Options: suite.Options}); err == nil {
 			vendor = string(held.Facts().Vendor)
 		}
 	}
-	RunCost(t, provider, costv1connect.NewCostServiceClient(server.Client(), server.URL), vendor)
+	RunCost(t, providerClient, costv1connect.NewCostServiceClient(server.Client(), server.URL), vendor)
 }
 
 func CostManifest() *contractv1.Manifest {
@@ -109,8 +110,8 @@ func RunCost(t *testing.T, provider contractv1connect.ProviderServiceClient, rat
 
 func shapeHoldsTogether(t *testing.T, set *costv1.ResourceSet, vendor string) {
 	t.Helper()
-	if set.GetSource() != providerkit.CostSource {
-		t.Errorf("source = %q, want %q", set.GetSource(), providerkit.CostSource)
+	if set.GetSource() != provider.CostSource {
+		t.Errorf("source = %q, want %q", set.GetSource(), provider.CostSource)
 	}
 	scopes := map[string]*costv1.Scope{}
 	for _, scope := range set.GetScopes() {

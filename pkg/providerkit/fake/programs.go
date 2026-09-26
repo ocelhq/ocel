@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -17,7 +17,7 @@ const (
 	ProgramPreviewAppsVar = "OCEL_PREVIEW_APPS"
 )
 
-func (p *Provider) ProgramEdge(_ context.Context, req providerkit.EdgeProgramRequest) (providerkit.EdgeProgram, error) {
+func (p *Provider) ProgramEdge(_ context.Context, req provider.EdgeProgramRequest) (provider.EdgeProgram, error) {
 	vars := map[string]string{ProgramEdgeVar: string(req.Kind)}
 	if req.PreviewBaseDomain != "" {
 		vars[ProgramPreviewVar] = req.PreviewBaseDomain
@@ -25,7 +25,7 @@ func (p *Provider) ProgramEdge(_ context.Context, req providerkit.EdgeProgramReq
 	if len(req.Apps) > 0 {
 		vars[ProgramPreviewAppsVar] = strings.Join(req.Apps, ",")
 	}
-	return providerkit.EdgeProgram{
+	return provider.EdgeProgram{
 		Spec: &edge.ProgramSpec{
 			Name: ProgramName(req.Slug, req.Class),
 			Worker: edge.Worker{

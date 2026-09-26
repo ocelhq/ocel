@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -99,7 +99,7 @@ func keptEngine() removal {
 	return removal{
 		kind:   KindEngine,
 		path:   dockerEngine,
-		action: providerkit.ActionKeep,
+		action: provider.ActionKeep,
 		reason: "docker and its containers stay",
 	}
 }
@@ -224,7 +224,7 @@ const (
 var engineFloor = strconv.Itoa(engineFloorMajor) + "." + strconv.Itoa(engineFloorMinor)
 
 func (r Reading) runnableEngine(named string) error {
-	command := providerkit.BootstrapCommand(r.Class)
+	command := provider.BootstrapCommand(r.Class)
 	held := r.Engine
 	switch held.Kind {
 	case "":

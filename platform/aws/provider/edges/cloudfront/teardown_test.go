@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudfront"
 	cftypes "github.com/aws/aws-sdk-go-v2/service/cloudfront/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/surface"
@@ -20,7 +20,7 @@ import (
 func TestADistributionNameFitsTheCommentWithoutLosingTheFieldsTheGateReads(t *testing.T) {
 	t.Parallel()
 
-	ns := bootstrap.Namespace(strings.Repeat("a", providerkit.MaxNamespaceLength))
+	ns := bootstrap.Namespace(strings.Repeat("a", provider.MaxNamespaceLength))
 	slug := strings.Repeat("s", 120)
 
 	name := distributionName(ns, slug, edge.ClassProduction)
@@ -38,7 +38,7 @@ func TestADistributionNameFitsTheCommentWithoutLosingTheFieldsTheGateReads(t *te
 func TestTheCommentADistributionCarriesIsTheOwnerAProjectClaims(t *testing.T) {
 	t.Parallel()
 
-	ns := bootstrap.Namespace(strings.Repeat("a", providerkit.MaxNamespaceLength))
+	ns := bootstrap.Namespace(strings.Repeat("a", provider.MaxNamespaceLength))
 	slug := strings.Repeat("s", 120)
 	p := &cloudFront{ns: ns}
 

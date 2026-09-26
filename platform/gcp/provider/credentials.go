@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/oauth2/google"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -66,36 +66,36 @@ type Credentials struct {
 
 const emulatorPrincipal = "emulator"
 
-func (c Credentials) Whoami(ctx context.Context) (providerkit.Identity, error) {
+func (c Credentials) Whoami(ctx context.Context) (provider.Identity, error) {
 	project, err := c.Project.Project(ctx)
 	if err != nil {
-		return providerkit.Identity{}, err
+		return provider.Identity{}, err
 	}
-	identity := providerkit.Identity{
+	identity := provider.Identity{
 		Vendor:    Vendor,
 		Account:   project,
 		Principal: emulatorPrincipal,
 		Location:  c.Region,
 	}
 	if c.Endpoint != "" {
-		identity.Details = []providerkit.Detail{{Label: "emulator", Value: c.Endpoint}}
+		identity.Details = []provider.Detail{{Label: "emulator", Value: c.Endpoint}}
 	} else {
 		token, err := c.Tokens.Token(ctx)
 		if err != nil {
-			return providerkit.Identity{}, unauthenticated()
+			return provider.Identity{}, unauthenticated()
 		}
 		principal, err := c.principal(ctx, token)
 		if err != nil {
-			return providerkit.Identity{}, err
+			return provider.Identity{}, err
 		}
 		identity.Principal = principal
 	}
 	if c.Projects == nil {
-		return providerkit.Identity{}, refusal.Refuse(refusal.CodeDenied,
+		return provider.Identity{}, refusal.Refuse(refusal.CodeDenied,
 			"nothing here can ask whether this credential reaches project %s, and a credential nothing vouched for deploys nothing", project)
 	}
 	if err := c.Projects.Reaches(ctx, project); err != nil {
-		return providerkit.Identity{}, err
+		return provider.Identity{}, err
 	}
 	return identity, nil
 }
@@ -149,9 +149,9 @@ func askTokenInfo(ctx context.Context, endpoint, token string) (string, int, err
 	return said.Email, resp.StatusCode, nil
 }
 
-func (c Credentials) Permissions(tier providerkit.CredentialTier) (edge.CredentialDocument, error) {
+func (c Credentials) Permissions(tier provider.CredentialTier) (edge.CredentialDocument, error) {
 	switch tier {
-	case providerkit.TierBootstrap, providerkit.TierDeploy:
+	case provider.TierBootstrap, provider.TierDeploy:
 		project, err := c.Project.Project(context.Background())
 		if err != nil {
 			return edge.CredentialDocument{}, err
@@ -166,4 +166,4 @@ func (c Credentials) Permissions(tier providerkit.CredentialTier) (edge.Credenti
 	}
 }
 
-var _ providerkit.Credentials = Credentials{}
+var _ provider.Credentials = Credentials{}

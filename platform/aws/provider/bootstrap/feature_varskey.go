@@ -11,7 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -65,7 +65,7 @@ type KeyAPI interface {
 
 const varsKeyProbeBytes = 16
 
-func validateBroughtKey(ctx context.Context, apis ParamAPIs, ns Namespace, class string, req Request) ([]providerkit.Change, error) {
+func validateBroughtKey(ctx context.Context, apis ParamAPIs, ns Namespace, class string, req Request) ([]provider.Change, error) {
 	if req.VarsKey == "" {
 		return nil, nil
 	}

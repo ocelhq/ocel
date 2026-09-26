@@ -1,4 +1,4 @@
-package providerkit_test
+package provider_test
 
 import (
 	"context"
@@ -7,23 +7,23 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestAStackPlanCarryingARegistryRendersWithoutItsPassword(t *testing.T) {
 	target := images.Registry{Server: "ghcr.io", Namespace: "acme", Username: "acme-bot", Password: "ghp_livesecret"}
-	plan := providerkit.StackPlan{
-		Kind: providerkit.StackApp,
-		Images: providerkit.ImagePushes{
+	plan := provider.StackPlan{
+		Kind: provider.StackApp,
+		Images: provider.ImagePushes{
 			Store:  images.RegistryStore(target),
 			Pushes: []images.Push{{App: "web", Source: "ocel/web@sha256:abc", ImageRef: target.ImageRef("web", "sha256-abc"), Digest: "sha256:abc"}},
 		},
 	}
-	unrendered := providerkit.StackPlan{
-		Kind:   providerkit.StackApp,
-		Images: providerkit.ImagePushes{Store: keptSecret{password: "ghp_livesecret"}, Pushes: plan.Images.Pushes},
+	unrendered := provider.StackPlan{
+		Kind:   provider.StackApp,
+		Images: provider.ImagePushes{Store: keptSecret{password: "ghp_livesecret"}, Pushes: plan.Images.Pushes},
 	}
 
 	for _, rendered := range []string{
@@ -45,10 +45,10 @@ func TestAStackPlanCarryingARegistryRendersWithoutItsPassword(t *testing.T) {
 }
 
 func TestAPlanCarryingAnAppsValuesRendersWithoutThem(t *testing.T) {
-	values := providerkit.AppValues{
+	values := provider.AppValues{
 		Plain:     map[string]string{"REGION": "eu-west-1"},
 		Sensitive: map[string]string{"API_TOKEN": "sk-live-secret"},
-		Secrets:   []providerkit.SecretRef{{Key: "DATABASE_URL"}},
+		Secrets:   []provider.SecretRef{{Key: "DATABASE_URL"}},
 		Delivered: map[string]string{
 			"REGION":                        "eu-west-1",
 			"API_TOKEN":                     "sk-live-secret",
@@ -56,8 +56,8 @@ func TestAPlanCarryingAnAppsValuesRendersWithoutThem(t *testing.T) {
 			"OCEL_RESOURCE_POSTGRES_orders": `{"postgres":{"password":"hunter2"}}`,
 		},
 	}
-	app := providerkit.AppPlan{App: "web", Values: values}
-	plan := providerkit.StackPlan{Kind: providerkit.StackApp, App: &app}
+	app := provider.AppPlan{App: "web", Values: values}
+	plan := provider.StackPlan{Kind: provider.StackApp, App: &app}
 
 	for _, rendered := range []string{
 		fmt.Sprintf("%v", values),

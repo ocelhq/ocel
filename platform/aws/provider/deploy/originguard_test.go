@@ -7,7 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -55,7 +55,7 @@ func functionURLAuthOf(t *testing.T, rec *inputRecorder, logicalName string, sta
 	return value.StringValue()
 }
 
-func registerGuarded(t *testing.T, cfg Config, plan providerkit.StackPlan, functions []*contractv1.ManifestFunction, stack naming.StackName) *inputRecorder {
+func registerGuarded(t *testing.T, cfg Config, plan provider.StackPlan, functions []*contractv1.ManifestFunction, stack naming.StackName) *inputRecorder {
 	t.Helper()
 	held := releasing(t, cfg)
 	host, err := held.routerHost(plan)

@@ -21,6 +21,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -108,7 +109,7 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 	}}
 	b := planningBootstrapper(front)
 
-	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
+	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
 		Class:    edge.ClassProduction,
 		Features: []string{bootstrap.FeatureISR, bootstrap.FeatureCloudflareEdge},
 	})
@@ -119,7 +120,7 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 		t.Fatalf("plan = %v, want the core stack, the isr and edge stacks, the runtime, the parameters and the edge", plan.Groups)
 	}
 	for _, group := range plan.Groups[:4] {
-		if group.Kind != providerkit.StackGroupKind || !strings.HasPrefix(group.Name, "aws/") {
+		if group.Kind != provider.StackGroupKind || !strings.HasPrefix(group.Name, "aws/") {
 			t.Errorf("group %+v, want a stack named under the vendor that holds it", group)
 		}
 	}
@@ -130,17 +131,17 @@ func TestPlanNamesEveryStackUnderAWSAndTheEdgeUnderItsOwnVendor(t *testing.T) {
 		t.Errorf("the runtime group is %q, want %q", got, want)
 	}
 	params := plan.Groups[4]
-	if params.Kind != providerkit.ParameterGroupKind || params.Name != "aws/"+bootstrap.ParamGroupName {
+	if params.Kind != provider.ParameterGroupKind || params.Name != "aws/"+bootstrap.ParamGroupName {
 		t.Errorf("the parameters group = %+v, want it named under the account that holds them", params)
 	}
 	edgeGroup := plan.Groups[5]
-	if edgeGroup.Kind != providerkit.EdgeGroupKind || edgeGroup.Name != string(cloudflareKind)+"/edge" {
+	if edgeGroup.Kind != provider.EdgeGroupKind || edgeGroup.Name != string(cloudflareKind)+"/edge" {
 		t.Errorf("the edge group = %+v, want the edge named under its own vendor", edgeGroup)
 	}
 	if edgeGroup.Feature != bootstrap.FeatureCloudflareEdge {
 		t.Errorf("the edge group's feature = %q, want the one the edge participates through", edgeGroup.Feature)
 	}
-	if edgeGroup.Action != providerkit.ActionUpdate {
+	if edgeGroup.Action != provider.ActionUpdate {
 		t.Errorf("the edge group is %q, want an update where one of its resources is missing", edgeGroup.Action)
 	}
 	if len(edgeGroup.Changes) != len(front.planned) {
@@ -161,7 +162,7 @@ func TestPlanShowsTheEdgeGoingWhenTheFeatureItFrontsThroughIsDropped(t *testing.
 	}}
 	b := planningBootstrapper(front)
 
-	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
+	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
 		Class:  edge.ClassProduction,
 		Remove: []string{bootstrap.FeatureCloudflareEdge},
 	})
@@ -169,20 +170,20 @@ func TestPlanShowsTheEdgeGoingWhenTheFeatureItFrontsThroughIsDropped(t *testing.
 		t.Fatalf("Plan: %v", err)
 	}
 
-	var edgeGroup providerkit.ChangeGroup
+	var edgeGroup provider.ChangeGroup
 	for _, group := range plan.Groups {
-		if group.Kind == providerkit.EdgeGroupKind {
+		if group.Kind == provider.EdgeGroupKind {
 			edgeGroup = group
 		}
 	}
 	if edgeGroup.Name == "" {
 		t.Fatal("the plan says nothing about the edge it is dropping")
 	}
-	if edgeGroup.Action != providerkit.ActionDelete {
+	if edgeGroup.Action != provider.ActionDelete {
 		t.Errorf("the edge group is %q, want it deleted: the feature it fronts through is being dropped", edgeGroup.Action)
 	}
 	for _, change := range edgeGroup.Changes {
-		if change.Action != providerkit.ActionDelete {
+		if change.Action != provider.ActionDelete {
 			t.Errorf("the drop plan carries %+v, want every edge row a delete", change)
 		}
 		if change.Name == "ocel-deployments" {
@@ -202,7 +203,7 @@ func TestPlanShowsAnEdgeFeatureStandingUpBehindAnotherFront(t *testing.T) {
 	b.Edges = registryOf(selected, standing)
 	b.Kinds = kindsOf(selected, standing)
 
-	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
+	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
 		Class:    edge.ClassProduction,
 		Features: []string{bootstrap.FeatureCloudFrontEdge, bootstrap.FeatureCloudflareEdge},
 	})
@@ -213,7 +214,7 @@ func TestPlanShowsAnEdgeFeatureStandingUpBehindAnotherFront(t *testing.T) {
 	if group == nil {
 		t.Fatalf("plan groups = %s, want the edge the feature set names, whichever edge fronts this run", groupNames(plan))
 	}
-	if group.Action != providerkit.ActionCreate || changeNamed(group, "ocel-edge-cache") == nil {
+	if group.Action != provider.ActionCreate || changeNamed(group, "ocel-edge-cache") == nil {
 		t.Errorf("the %s group = %+v, want the rows that edge planned", group.Name, group)
 	}
 }
@@ -229,7 +230,7 @@ func TestPlanShowsAnEdgeFeatureGoingBehindAnotherFront(t *testing.T) {
 	b.Edges = registryOf(selected, standing)
 	b.Kinds = kindsOf(selected, standing)
 
-	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
+	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
 		Class:    edge.ClassProduction,
 		Features: []string{bootstrap.FeatureCloudFrontEdge},
 		Remove:   []string{bootstrap.FeatureCloudflareEdge},
@@ -241,7 +242,7 @@ func TestPlanShowsAnEdgeFeatureGoingBehindAnotherFront(t *testing.T) {
 	if group == nil {
 		t.Fatalf("plan groups = %s, want the edge being dropped, whichever edge fronts this run", groupNames(plan))
 	}
-	if group.Action != providerkit.ActionDelete || changeNamed(group, "ocel-edge-cache") == nil {
+	if group.Action != provider.ActionDelete || changeNamed(group, "ocel-edge-cache") == nil {
 		t.Errorf("the %s group = %+v, want the rows dropping the feature takes with it", group.Name, group)
 	}
 	if group.Reason == "" {
@@ -254,7 +255,7 @@ func TestPlanLeavesOutAnEdgeThatCannotPlanItsOwnBootstrap(t *testing.T) {
 
 	b := planningBootstrapper(&teardownEdge{})
 
-	plan, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
+	plan, err := b.Plan(context.Background(), provider.BootstrapRequest{
 		Class:    edge.ClassProduction,
 		Features: []string{bootstrap.FeatureCloudflareEdge},
 	})
@@ -262,7 +263,7 @@ func TestPlanLeavesOutAnEdgeThatCannotPlanItsOwnBootstrap(t *testing.T) {
 		t.Fatalf("Plan: %v", err)
 	}
 	for _, group := range plan.Groups {
-		if group.Kind == providerkit.EdgeGroupKind {
+		if group.Kind == provider.EdgeGroupKind {
 			t.Errorf("plan carries %+v for an edge that says nothing about its own bootstrap", group)
 		}
 	}
@@ -273,7 +274,7 @@ func TestPlanCarriesTheEdgesRefusalOut(t *testing.T) {
 
 	b := planningBootstrapper(&planningEdge{err: errors.New("CLOUDFLARE_ACCOUNT_ID is not set")})
 
-	_, err := b.Plan(context.Background(), providerkit.BootstrapRequest{
+	_, err := b.Plan(context.Background(), provider.BootstrapRequest{
 		Class:    edge.ClassProduction,
 		Features: []string{bootstrap.FeatureCloudflareEdge},
 	})
@@ -333,7 +334,7 @@ func TestPlanAsksTheEdgeWhatItHandsThisAccountToHold(t *testing.T) {
 	t.Parallel()
 
 	front := &adoptingEdge{refusal: errors.New("CLOUDFLARE_API_TOKEN was rejected")}
-	_, err := planningBootstrapper(front).Plan(context.Background(), providerkit.BootstrapRequest{
+	_, err := planningBootstrapper(front).Plan(context.Background(), provider.BootstrapRequest{
 		Class:    edge.ClassProduction,
 		Features: []string{bootstrap.FeatureCloudflareEdge},
 	})

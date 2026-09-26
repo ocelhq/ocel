@@ -4,11 +4,12 @@ import (
 	"context"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func (h *handlers) Configure(ctx context.Context, req *contractv1.ConfigureRequest) (*contractv1.ConfigureResponse, error) {
-	settings := Settings{
-		Options:    Options(req.GetConfig().GetOptions().AsMap()),
+	settings := provider.Settings{
+		Options:    provider.Options(req.GetConfig().GetOptions().AsMap()),
 		Transforms: req.GetConfig().GetTransforms(),
 		Slug:       req.GetConfig().GetSlug(),
 	}

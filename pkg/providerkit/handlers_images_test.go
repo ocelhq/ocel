@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -40,7 +41,7 @@ func imageRows(plan *planv1.ChangePlan) []*planv1.Change {
 	var rows []*planv1.Change
 	for _, group := range plan.GetGroups() {
 		for _, change := range group.GetChanges() {
-			if change.GetKind() == providerkit.ImageKind {
+			if change.GetKind() == provider.ImageKind {
 				rows = append(rows, change)
 			}
 		}
@@ -51,7 +52,7 @@ func imageRows(plan *planv1.ChangePlan) []*planv1.Change {
 func TestADryDeployShowsTheImagePushAsARowAndPushesNothing(t *testing.T) {
 	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := deployServed(t)
+	client, p := deployServed(t)
 
 	req := registryDeployRequest()
 	req.Dry = true
@@ -65,9 +66,9 @@ func TestADryDeployShowsTheImagePushAsARowAndPushesNothing(t *testing.T) {
 		t.Fatalf("the plan shows %d image rows, want the one push this deploy makes", len(rows))
 	}
 	if got := rows[0].GetAction(); got != planv1.Change_ACTION_CREATE {
-		t.Errorf("the image row says %q, want %q for a digest the registry does not hold", got, providerkit.ActionCreate)
+		t.Errorf("the image row says %q, want %q for a digest the registry does not hold", got, provider.ActionCreate)
 	}
-	registry := provider.Registry()
+	registry := p.Registry()
 	if len(registry.Asked()) == 0 {
 		t.Error("the plan drew an image row without asking the registry anything, so the row is guesswork rather than a diff")
 	}
@@ -78,19 +79,19 @@ func TestADryDeployShowsTheImagePushAsARowAndPushesNothing(t *testing.T) {
 
 type muteStacks struct{}
 
-func (muteStacks) Plan(context.Context, providerkit.StackPlan, edge.Progress) (providerkit.Plan, error) {
-	return providerkit.Plan{}, nil
+func (muteStacks) Plan(context.Context, provider.StackPlan, edge.Progress) (provider.Plan, error) {
+	return provider.Plan{}, nil
 }
 
-func (muteStacks) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ edge.Progress) (providerkit.Plan, error) {
-	return providerkit.Plan{}, nil
+func (muteStacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ edge.Progress) (provider.Plan, error) {
+	return provider.Plan{}, nil
 }
 
-func (muteStacks) Provision(_ context.Context, plan providerkit.StackPlan, _ edge.Progress) (providerkit.StackResult, error) {
-	return providerkit.StackResult{Containers: fake.StoodUpContainers(plan)}, nil
+func (muteStacks) Provision(_ context.Context, plan provider.StackPlan, _ edge.Progress) (provider.StackResult, error) {
+	return provider.StackResult{Containers: fake.StoodUpContainers(plan)}, nil
 }
 
-func (muteStacks) Destroy(context.Context, providerkit.StackRef, edge.Progress) error {
+func (muteStacks) Destroy(context.Context, provider.StackRef, edge.Progress) error {
 	return nil
 }
 
@@ -153,8 +154,8 @@ func TestADigestTheRegistryAlreadyHoldsIsNotPushedAgain(t *testing.T) {
 func TestADigestTheRegistryAlreadyHoldsStandsOnThePlan(t *testing.T) {
 	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := deployServed(t)
-	provider.Registry().Holds(pushedCoordinate)
+	client, p := deployServed(t)
+	p.Registry().Holds(pushedCoordinate)
 
 	req := registryDeployRequest()
 	req.Dry = true
@@ -162,7 +163,7 @@ func TestADigestTheRegistryAlreadyHoldsStandsOnThePlan(t *testing.T) {
 
 	rows := imageRows(lastPlan(events))
 	if len(rows) != 1 || rows[0].GetAction() != planv1.Change_ACTION_KEEP {
-		t.Errorf("the plan shows %v for an image the registry already holds, want one %q row", rows, providerkit.ActionKeep)
+		t.Errorf("the plan shows %v for an image the registry already holds, want one %q row", rows, provider.ActionKeep)
 	}
 }
 
@@ -258,10 +259,10 @@ func TestAnImageRowRidesInsideTheAppsOwnStackGroup(t *testing.T) {
 
 	for _, group := range lastPlan(events).GetGroups() {
 		names := changeNames(group)
-		if !slices.Contains(names, providerkit.ImageKind+":web") {
+		if !slices.Contains(names, provider.ImageKind+":web") {
 			continue
 		}
-		if group.GetKind() != providerkit.StackGroupKind || !strings.Contains(group.GetName(), "web") {
+		if group.GetKind() != provider.StackGroupKind || !strings.Contains(group.GetName(), "web") {
 			t.Fatalf("the image row sits in the %s group %q, want the app's own stack, so an apply of that stack is what pushes it",
 				group.GetKind(), group.GetName())
 		}
@@ -273,7 +274,7 @@ func TestAnImageRowRidesInsideTheAppsOwnStackGroup(t *testing.T) {
 func TestTheImageStoreIsOpenedFromTheTargetTheDeployCarries(t *testing.T) {
 	store := fake.NewImages()
 	push := images.Push{App: "web", Source: containerTestImage, ImageRef: pushedCoordinate}
-	plan := providerkit.ImagePushes{Store: store, Pushes: []images.Push{push}}
+	plan := provider.ImagePushes{Store: store, Pushes: []images.Push{push}}
 
 	if err := plan.PushMissing(context.Background(), nil); err != nil {
 		t.Fatalf("PushMissing() = %v", err)
@@ -300,7 +301,7 @@ func (s refusingStore) Push(context.Context, images.Push, edge.Progress) error {
 
 func TestATransferThatFailsNamesWhereItWasSendingRatherThanTheCoordinate(t *testing.T) {
 	store := refusingStore{where: "box.invalid"}
-	plan := providerkit.ImagePushes{Store: store, Pushes: []images.Push{{
+	plan := provider.ImagePushes{Store: store, Pushes: []images.Push{{
 		App: "web", Source: containerTestImage, ImageRef: loadedCoordinate,
 	}}}
 
@@ -323,7 +324,7 @@ type loadingProvider struct {
 	direct *fake.Images
 }
 
-func (p loadingProvider) Hooks() providerkit.Hooks {
+func (p loadingProvider) Hooks() provider.Hooks {
 	hooks := p.Provider.Hooks()
 	hooks.OpenDirectImages = p.OpenDirectImages
 	return hooks
@@ -408,8 +409,8 @@ func TestANamedRegistryTakesTheImageFromAProviderThatWouldOtherwiseLoadItDirectl
 func TestADirectTransferStandsOnThePlanLikeAPush(t *testing.T) {
 	daemonHoldingTheBuiltImage(t, "amd64")
 	builtProject(t)
-	client, provider := loadServed(t)
-	provider.direct.Holds(loadedCoordinate)
+	client, p := loadServed(t)
+	p.direct.Holds(loadedCoordinate)
 
 	req := containerDeployRequest("/")
 	req.Dry = true
@@ -417,9 +418,9 @@ func TestADirectTransferStandsOnThePlanLikeAPush(t *testing.T) {
 
 	rows := imageRows(lastPlan(events))
 	if len(rows) != 1 || rows[0].GetAction() != planv1.Change_ACTION_KEEP {
-		t.Errorf("the plan shows %v for an image the box already holds, want one %q row", rows, providerkit.ActionKeep)
+		t.Errorf("the plan shows %v for an image the box already holds, want one %q row", rows, provider.ActionKeep)
 	}
-	if handed := provider.direct.Pushed(); len(handed) != 0 {
+	if handed := p.direct.Pushed(); len(handed) != 0 {
 		t.Errorf("a dry deploy carried %v onto the box", handed)
 	}
 }
@@ -436,7 +437,7 @@ type addressingProvider struct {
 	direct addressedImages
 }
 
-func (p addressingProvider) Hooks() providerkit.Hooks {
+func (p addressingProvider) Hooks() provider.Hooks {
 	hooks := p.Provider.Hooks()
 	hooks.OpenDirectImages = p.OpenDirectImages
 	return hooks

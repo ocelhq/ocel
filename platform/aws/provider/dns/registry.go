@@ -7,7 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/route53"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -35,17 +35,17 @@ type Registry struct {
 	Deps Deps
 }
 
-var _ providerkit.DNS = Registry{}
+var _ provider.DNS = Registry{}
 
-func Kinds() []providerkit.DNSKind {
-	kinds := make([]providerkit.DNSKind, 0, len(constructors))
+func Kinds() []provider.DNSKind {
+	kinds := make([]provider.DNSKind, 0, len(constructors))
 	for _, kind := range SupportedKinds() {
-		kinds = append(kinds, providerkit.DNSKind(kind))
+		kinds = append(kinds, provider.DNSKind(kind))
 	}
 	return kinds
 }
 
-func (r Registry) Open(kind providerkit.DNSKind, zone string, front edge.Kind) (edge.DNSRecords, error) {
+func (r Registry) Open(kind provider.DNSKind, zone string, front edge.Kind) (edge.DNSRecords, error) {
 	if kind == KindRoute53 && front == cloudflare.Kind {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"route53 cannot write the records a Cloudflare edge answers on — pair a cloudflare edge with cloudflare dns, or drop the edge")
@@ -71,5 +71,5 @@ func RecordsFor(kind, zone string, deps Deps) (edge.DNSRecords, error) {
 	if kind == "" {
 		return nil, nil
 	}
-	return Registry{Deps: deps}.Open(providerkit.DNSKind(kind), zone, "")
+	return Registry{Deps: deps}.Open(provider.DNSKind(kind), zone, "")
 }

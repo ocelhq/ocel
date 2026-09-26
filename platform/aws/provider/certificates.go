@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
@@ -15,10 +15,10 @@ import (
 
 type certificates struct{ *Provider }
 
-func (p certificates) Issue(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
+func (p certificates) Issue(ctx context.Context, req provider.CertificateRequest) (provider.Certificate, error) {
 	certificates, err := p.certificatesFor(req.Kind, req.Hostname, req.Progress)
 	if err != nil || !certificates.Issues() {
-		return providerkit.Certificate{}, err
+		return provider.Certificate{}, err
 	}
 	pinned := certificates.PinFor(req.Hostname)
 	if pinned == "" {
@@ -26,12 +26,12 @@ func (p certificates) Issue(ctx context.Context, req providerkit.CertificateRequ
 	}
 	held, err := certificates.ACM.Pinned(ctx, req.Hostname, pinned)
 	if err != nil {
-		return providerkit.Certificate{}, refusal.Refuse(refusal.CodeInvalid, "%s", err)
+		return provider.Certificate{}, refusal.Refuse(refusal.CodeInvalid, "%s", err)
 	}
-	return providerkit.Certificate{ID: held.ARN}, nil
+	return provider.Certificate{ID: held.ARN}, nil
 }
 
-func issue(ctx context.Context, acm certs.ACM, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
+func issue(ctx context.Context, acm certs.ACM, req provider.CertificateRequest) (provider.Certificate, error) {
 	cover := []string{req.Hostname}
 	say := req.Progress.Say
 
@@ -44,14 +44,14 @@ func issue(ctx context.Context, acm certs.ACM, req providerkit.CertificateReques
 	}
 	if cert.ARN == "" {
 		if cert, err = adoptOrRequest(ctx, acm, cover, say); err != nil {
-			return providerkit.Certificate{}, err
+			return provider.Certificate{}, err
 		}
 		if cert.Adopted {
-			return providerkit.Certificate{ID: cert.ARN}, nil
+			return provider.Certificate{ID: cert.ARN}, nil
 		}
 	}
 
-	settled := providerkit.Certificate{ID: cert.ARN, Requested: true}
+	settled := provider.Certificate{ID: cert.ARN, Requested: true}
 	if len(cert.Validation) == 0 {
 		if cert, err = acm.AwaitValidation(ctx, cert, say); err != nil {
 			return settled, waiting(err)
@@ -66,7 +66,7 @@ func issue(ctx context.Context, acm certs.ACM, req providerkit.CertificateReques
 	return settled, nil
 }
 
-func recalled(ctx context.Context, acm certs.ACM, recorded providerkit.Certificate, cover []string, say func(string)) (certs.Certificate, error) {
+func recalled(ctx context.Context, acm certs.ACM, recorded provider.Certificate, cover []string, say func(string)) (certs.Certificate, error) {
 	region := certs.RegionOfARN(recorded.ID)
 	if recorded.ID == "" || (region != "" && region != acm.Region) {
 		return certs.Certificate{}, nil
@@ -102,20 +102,20 @@ func waiting(err error) error {
 	if !certs.Pending(err) {
 		return err
 	}
-	return providerkit.Pending(refusal.Refuse(refusal.CodeNotReady, "%s", err))
+	return provider.Pending(refusal.Refuse(refusal.CodeNotReady, "%s", err))
 }
 
-func (p certificates) Inspect(ctx context.Context, kind edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {
+func (p certificates) Inspect(ctx context.Context, kind edge.Kind, hostname string, cert provider.Certificate) (provider.CertificateHealth, error) {
 	registry := p.edges()
 	front, err := registry.Open(kind)
 	if err != nil {
-		return providerkit.CertificateHealth{}, err
+		return provider.CertificateHealth{}, err
 	}
 	certificates := registry.Certificates(front, certs.Deps{AWS: p.aws})
 	if !certificates.Issues() {
-		return providerkit.CertificateHealth{}, nil
+		return provider.CertificateHealth{}, nil
 	}
-	health := providerkit.CertificateHealth{Terminates: true}
+	health := provider.CertificateHealth{Terminates: true}
 	arn := certificates.Wants(certs.Certificate{ARN: cert.ID}, hostname)
 	if arn == "" {
 		return health, nil
@@ -139,7 +139,7 @@ func (p certificates) Inspect(ctx context.Context, kind edge.Kind, hostname stri
 	return health, nil
 }
 
-func (p certificates) Discard(ctx context.Context, cert providerkit.Certificate, progress edge.Progress) error {
+func (p certificates) Discard(ctx context.Context, cert provider.Certificate, progress edge.Progress) error {
 	if !cert.Requested || cert.ID == "" {
 		return nil
 	}

@@ -16,7 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/prompt"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 type scriptedAsker struct {
@@ -156,7 +156,7 @@ func TestUnknownHostKeyRefusedAtThePromptRecordsNothing(t *testing.T) {
 	if err == nil {
 		t.Fatal("driveTrusting() error = nil, want the refusal to stand")
 	}
-	if trust, ok := providerkit.HostTrustOf(err); !ok || trust.Reason != providerkit.UnknownHostKey {
+	if trust, ok := provider.HostTrustOf(err); !ok || trust.Reason != provider.UnknownHostKey {
 		t.Errorf("err = %v, want it to still carry the unknown-host-key refusal", err)
 	}
 	if got := fake.recorded(t); got != "" {
@@ -368,8 +368,8 @@ func TestARedriveThatRefusesAgainNeverAsksTwice(t *testing.T) {
 	asker := &scriptedAsker{attended: true, answer: true}
 
 	drives := 0
-	refusal := providerkit.RefuseHostTrust(providerkit.HostTrust{
-		Reason:     providerkit.UnknownHostKey,
+	refusal := provider.RefuseHostTrust(provider.HostTrust{
+		Reason:     provider.UnknownHostKey,
 		Host:       fakeHostName,
 		Address:    fakeHostAddress,
 		Port:       fakeHostPort,
@@ -396,11 +396,11 @@ func TestAKeyThatDoesNotHashToItsFingerprintIsNeverOffered(t *testing.T) {
 	ctx := context.Background()
 	store := filepath.Join(t.TempDir(), "known_hosts")
 	asker := &scriptedAsker{attended: true, answer: true}
-	refusal := providerkit.RefuseHostTrust(providerkit.HostTrust{
-		Reason:     providerkit.UnknownHostKey,
+	refusal := provider.RefuseHostTrust(provider.HostTrust{
+		Reason:     provider.UnknownHostKey,
 		Address:    fakeHostAddress,
 		Port:       fakeHostPort,
-		Got:        providerkit.HostKey{Type: fakeHostKeyType, Key: fakeHostKey, Fingerprint: "SHA256:not-the-hash-of-that-key"},
+		Got:        provider.HostKey{Type: fakeHostKeyType, Key: fakeHostKey, Fingerprint: "SHA256:not-the-hash-of-that-key"},
 		KnownHosts: []string{store},
 	})
 
@@ -422,27 +422,27 @@ func TestAProviderThatSpeaksInControlCharactersIsNeverOffered(t *testing.T) {
 	ctx := context.Background()
 	for _, tc := range []struct {
 		name  string
-		trust providerkit.HostTrust
+		trust provider.HostTrust
 	}{
-		{"a redressed key type", providerkit.HostTrust{Address: fakeHostAddress, Got: providerkit.HostKey{Type: "ssh-ed25519\n\033[2K  trusted", Key: fakeHostKey}}},
-		{"a key blob carrying a second entry", providerkit.HostTrust{Address: fakeHostAddress, Got: providerkit.HostKey{Type: fakeHostKeyType, Key: fakeHostKey + "\nevil.example.com ssh-ed25519 " + fakeOtherHostKey}}},
-		{"an address carrying a second entry", providerkit.HostTrust{Address: fakeHostAddress + "\nevil.example.com", Got: fakeKey(fakeHostKey)}},
+		{"a redressed key type", provider.HostTrust{Address: fakeHostAddress, Got: provider.HostKey{Type: "ssh-ed25519\n\033[2K  trusted", Key: fakeHostKey}}},
+		{"a key blob carrying a second entry", provider.HostTrust{Address: fakeHostAddress, Got: provider.HostKey{Type: fakeHostKeyType, Key: fakeHostKey + "\nevil.example.com ssh-ed25519 " + fakeOtherHostKey}}},
+		{"an address carrying a second entry", provider.HostTrust{Address: fakeHostAddress + "\nevil.example.com", Got: fakeKey(fakeHostKey)}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			store := filepath.Join(t.TempDir(), "known_hosts")
-			tc.trust.Reason = providerkit.UnknownHostKey
+			tc.trust.Reason = provider.UnknownHostKey
 			tc.trust.KnownHosts = []string{store}
 			asker := &scriptedAsker{attended: true, answer: true}
 			var out bytes.Buffer
 
-			refusal := providerkit.RefuseHostTrust(tc.trust)
+			refusal := provider.RefuseHostTrust(tc.trust)
 			err := driveTrusting(ctx, trustAsking(asker, &out), func() error { return refusal })
 			if err == nil {
 				t.Fatal("driveTrusting() error = nil, want the offer refused")
 			}
-			if _, ok := providerkit.HostTrustOf(err); !ok {
+			if _, ok := provider.HostTrustOf(err); !ok {
 				t.Errorf("err = %v, want the original refusal kept", err)
 			}
 			if len(asker.asked) != 0 {
@@ -465,7 +465,7 @@ func TestKnownHostsStoreRefusesAStoreThatSwallowsWhatItIsGiven(t *testing.T) {
 		t.Skipf("no %s to test against: %v", os.DevNull, err)
 	}
 
-	_, err := knownHostsStore(providerkit.HostTrust{KnownHosts: []string{os.DevNull}})
+	_, err := knownHostsStore(provider.HostTrust{KnownHosts: []string{os.DevNull}})
 	if err == nil {
 		t.Fatalf("knownHostsStore() error = nil, want %s refused as a store", os.DevNull)
 	}
@@ -478,7 +478,7 @@ func TestKnownHostsStoreFallsBackToTheUsersOwnFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
-	got, err := knownHostsStore(providerkit.HostTrust{})
+	got, err := knownHostsStore(provider.HostTrust{})
 	if err != nil {
 		t.Fatalf("knownHostsStore() error = %v", err)
 	}

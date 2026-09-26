@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -43,7 +43,7 @@ func live(t *testing.T) harness {
 	return harness{target: Target{Alias: alias, Config: config}, knownHosts: knownHosts, addr: addr}
 }
 
-func (h harness) trust(t *testing.T) providerkit.HostKey {
+func (h harness) trust(t *testing.T) provider.HostKey {
 	t.Helper()
 	scanned, err := exec.Command("ssh-keyscan", "-T", "10", h.addr).Output()
 	if err != nil {
@@ -63,12 +63,12 @@ func TestLiveAnUnknownHostIsRefusedWithEverythingTheUserNeeds(t *testing.T) {
 	h := live(t)
 
 	_, err := Open(context.Background(), h.target)
-	trust, ok := providerkit.HostTrustOf(err)
+	trust, ok := provider.HostTrustOf(err)
 	if !ok {
 		t.Fatalf("Open() = %v, want an unknown-host-key refusal against an empty known_hosts", err)
 	}
-	if trust.Reason != providerkit.UnknownHostKey || trust.Terminal() {
-		t.Errorf("Open() refused with %s, want a recoverable %s", trust.Reason, providerkit.UnknownHostKey)
+	if trust.Reason != provider.UnknownHostKey || trust.Terminal() {
+		t.Errorf("Open() refused with %s, want a recoverable %s", trust.Reason, provider.UnknownHostKey)
 	}
 	if trust.Host != alias || trust.Address != h.addr || trust.Port != 22 {
 		t.Errorf("Open() refused over %+v, want the alias as written and the resolved address", trust)
@@ -138,12 +138,12 @@ func TestLiveAChangedHostKeyIsTerminal(t *testing.T) {
 	}
 
 	_, err := Open(context.Background(), h.target)
-	trust, ok := providerkit.HostTrustOf(err)
+	trust, ok := provider.HostTrustOf(err)
 	if !ok {
 		t.Fatalf("Open() = %v, want a host-key-mismatch refusal", err)
 	}
-	if trust.Reason != providerkit.HostKeyMismatch || !trust.Terminal() {
-		t.Errorf("Open() refused with %s, want a terminal %s", trust.Reason, providerkit.HostKeyMismatch)
+	if trust.Reason != provider.HostKeyMismatch || !trust.Terminal() {
+		t.Errorf("Open() refused with %s, want a terminal %s", trust.Reason, provider.HostKeyMismatch)
 	}
 	if trust.Got.Fingerprint != offered.Fingerprint || trust.Want.Fingerprint != other.Fingerprint {
 		t.Errorf("Open() refused with got %s want %s, want %s and %s", trust.Got.Fingerprint, trust.Want.Fingerprint, offered.Fingerprint, other.Fingerprint)

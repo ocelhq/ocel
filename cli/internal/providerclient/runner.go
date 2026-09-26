@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -289,7 +289,7 @@ func (r *Runner) configure(ctx context.Context) error {
 	if _, err := client.Configure(ctx, &contractv1.ConfigureRequest{Config: r.providerConfig}); err != nil {
 		var rejected *connect.Error
 		if errors.As(err, &rejected) && rejected.Code() == connect.CodeInvalidArgument {
-			if code, named := providerkit.RefusedCode(err); named && code == refusal.CodeUnknownOption {
+			if code, named := provider.RefusedCode(err); named && code == refusal.CodeUnknownOption {
 				return fmt.Errorf("the config configures provider %q with options it does not accept: %s", r.providerName, rejected.Message())
 			}
 			return fmt.Errorf("provider %q refuses the config it was given: %s", r.providerName, rejected.Message())

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	vars "github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -42,26 +42,26 @@ func TestABucketAnswersTheHostnamesItsOwnProjectClaims(t *testing.T) {
 	}
 }
 
-func grantedBucket() providerkit.Binding {
-	return providerkit.Binding{
-		Type: providerkit.BindingBucket, Name: "shared", Resource: "shared",
-		Properties: map[string]string{providerkit.PropertyBucket: "prod-other-r9z8y7x6w-shared"},
+func grantedBucket() provider.Binding {
+	return provider.Binding{
+		Type: provider.BindingBucket, Name: "shared", Resource: "shared",
+		Properties: map[string]string{provider.PropertyBucket: "prod-other-r9z8y7x6w-shared"},
 	}
 }
 
-func manifestFor(t *testing.T, machine *box, options vps.Options, app providerkit.AppPlan) vars.Manifest {
+func manifestFor(t *testing.T, machine *box, options vps.Options, app provider.AppPlan) vars.Manifest {
 	t.Helper()
-	provider := vps.ProviderOver(options, func(context.Context) (host.Conn, error) { return machine, nil })
-	if _, err := provider.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
+	p := vps.ProviderOver(options, func(context.Context) (host.Conn, error) { return machine, nil })
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	return manifestIn(t, machine)
 }
 
-func boundApp() providerkit.AppPlan {
+func boundApp() provider.AppPlan {
 	app := anApp()
-	app.Values = providerkit.AppValues{Bindings: []providerkit.Binding{bindingBucket()}}
-	app.Grants = []providerkit.Binding{grantedBucket()}
+	app.Values = provider.AppValues{Bindings: []provider.Binding{bindingBucket()}}
+	app.Grants = []provider.Binding{grantedBucket()}
 	return app
 }
 

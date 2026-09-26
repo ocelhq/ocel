@@ -4,14 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-func rendered(t *testing.T, tier providerkit.CredentialTier) edge.CredentialDocument {
+func rendered(t *testing.T, tier provider.CredentialTier) edge.CredentialDocument {
 	t.Helper()
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10", User: "deployer"}})
 	document, err := p.Credentials().Permissions(tier)
@@ -27,7 +27,7 @@ func rendered(t *testing.T, tier providerkit.CredentialTier) edge.CredentialDocu
 func TestBothDocumentsAreBareStringsAShellCanPipe(t *testing.T) {
 	t.Parallel()
 
-	for _, tier := range []providerkit.CredentialTier{providerkit.TierBootstrap, providerkit.TierDeploy} {
+	for _, tier := range []provider.CredentialTier{provider.TierBootstrap, provider.TierDeploy} {
 		if heading := rendered(t, tier).Heading; heading != "" {
 			t.Errorf("the %s document is headed %q, and a host holds one credential set, not several", tier, heading)
 		}
@@ -37,7 +37,7 @@ func TestBothDocumentsAreBareStringsAShellCanPipe(t *testing.T) {
 func TestTheBootstrapDocumentNamesEveryRequirementPreflightChecks(t *testing.T) {
 	t.Parallel()
 
-	document := rendered(t, providerkit.TierBootstrap).Document
+	document := rendered(t, provider.TierBootstrap).Document
 	for _, need := range session.Requirements() {
 		for _, want := range []string{need.Name, need.Detail} {
 			if !strings.Contains(document, want) {
@@ -50,7 +50,7 @@ func TestTheBootstrapDocumentNamesEveryRequirementPreflightChecks(t *testing.T) 
 func TestTheBootstrapDocumentCarriesTheSudoersFragmentTheLoginNeeds(t *testing.T) {
 	t.Parallel()
 
-	document := rendered(t, providerkit.TierBootstrap).Document
+	document := rendered(t, provider.TierBootstrap).Document
 	for _, want := range []string{"/etc/sudoers.d/", "NOPASSWD:", "deployer ALL="} {
 		if !strings.Contains(document, want) {
 			t.Errorf("the bootstrap document does not carry %q, and it is what a human is meant to paste:\n%s", want, document)
@@ -62,7 +62,7 @@ func TestTheBootstrapDocumentNamesTheLoginItCannotResolve(t *testing.T) {
 	t.Parallel()
 
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Alias: "prod-box"}})
-	document, err := p.Credentials().Permissions(providerkit.TierBootstrap)
+	document, err := p.Credentials().Permissions(provider.TierBootstrap)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +74,7 @@ func TestTheBootstrapDocumentNamesTheLoginItCannotResolve(t *testing.T) {
 func TestTheDeployDocumentNamesEveryGrantTheApplyMakes(t *testing.T) {
 	t.Parallel()
 
-	document := rendered(t, providerkit.TierDeploy).Document
+	document := rendered(t, provider.TierDeploy).Document
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		for _, grant := range host.Grants(class) {
 			for _, want := range []string{grant.Name, grant.Detail} {
@@ -89,7 +89,7 @@ func TestTheDeployDocumentNamesEveryGrantTheApplyMakes(t *testing.T) {
 func TestEveryPathTheDeployLoginOwnsIsInTheDeployDocument(t *testing.T) {
 	t.Parallel()
 
-	document := rendered(t, providerkit.TierDeploy).Document
+	document := rendered(t, provider.TierDeploy).Document
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		for _, item := range host.Items(class, nil, host.ArchAMD64, host.Front{}) {
 			if item.Owner != "ocel-deploy" || item.Kind == "linux:user" {
@@ -140,7 +140,7 @@ func TestTheDeployDocumentSaysWhatTheDockerGroupIs(t *testing.T) {
 	if !strings.Contains(claim.Detail, "become root") {
 		t.Errorf("the document describes membership of %s as:\n%s\nand never says the group is root on the machine under another name", group, claim.Detail)
 	}
-	if document := rendered(t, providerkit.TierDeploy).Document; !strings.Contains(document, claim.Detail) {
+	if document := rendered(t, provider.TierDeploy).Document; !strings.Contains(document, claim.Detail) {
 		t.Errorf("the document does not carry the %s grant word for word:\n%s", group, document)
 	}
 }
@@ -148,7 +148,7 @@ func TestTheDeployDocumentSaysWhatTheDockerGroupIs(t *testing.T) {
 func TestTheDeployDocumentCarriesTheOneSudoersLineTheSealHelperNeeds(t *testing.T) {
 	t.Parallel()
 
-	document := rendered(t, providerkit.TierDeploy).Document
+	document := rendered(t, provider.TierDeploy).Document
 	for _, item := range host.Items(edge.ClassProduction, nil, host.ArchAMD64, host.Front{}) {
 		if !strings.HasPrefix(item.Name, "/etc/sudoers.d/") {
 			continue
@@ -164,7 +164,7 @@ func TestTheDeployDocumentCarriesTheOneSudoersLineTheSealHelperNeeds(t *testing.
 func TestTheDeployDocumentSaysTheSealKeyIsNotTheDeployLoginsToRead(t *testing.T) {
 	t.Parallel()
 
-	document := rendered(t, providerkit.TierDeploy).Document
+	document := rendered(t, provider.TierDeploy).Document
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
 		if !strings.Contains(document, host.SealKeyPath(class)) {
 			t.Errorf("the document says nothing about %s, and a login that opens values should know what it never holds:\n%s",
@@ -176,7 +176,7 @@ func TestTheDeployDocumentSaysTheSealKeyIsNotTheDeployLoginsToRead(t *testing.T)
 func TestTheDeployDocumentSaysTheKeyIsNeverRotated(t *testing.T) {
 	t.Parallel()
 
-	document := rendered(t, providerkit.TierDeploy).Document
+	document := rendered(t, provider.TierDeploy).Document
 	if !strings.Contains(document, "rotat") {
 		t.Errorf("the document never says whether a seal key can be rotated, and a key nothing rotates is a fact a user needs before they seal to it:\n%s", document)
 	}

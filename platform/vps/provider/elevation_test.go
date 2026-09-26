@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -16,25 +16,25 @@ type reached struct {
 	removed int
 }
 
-func (r *reached) Catalogue() []providerkit.Feature { return nil }
+func (r *reached) Catalogue() []provider.Feature { return nil }
 
-func (r *reached) Describe(context.Context, edge.Class) (providerkit.BootstrapReading, error) {
-	return providerkit.BootstrapReading{}, nil
+func (r *reached) Describe(context.Context, edge.Class) (provider.BootstrapReading, error) {
+	return provider.BootstrapReading{}, nil
 }
 
-func (r *reached) Plan(context.Context, providerkit.BootstrapRequest) (providerkit.Plan, error) {
+func (r *reached) Plan(context.Context, provider.BootstrapRequest) (provider.Plan, error) {
 	r.planned++
-	return providerkit.Plan{}, nil
+	return provider.Plan{}, nil
 }
 
-func (r *reached) Apply(context.Context, providerkit.BootstrapRequest, edge.Progress) error {
+func (r *reached) Apply(context.Context, provider.BootstrapRequest, edge.Progress) error {
 	r.applied++
 	return nil
 }
 
-func (r *reached) PlanRemove(context.Context, edge.Class) (providerkit.Plan, error) {
+func (r *reached) PlanRemove(context.Context, edge.Class) (provider.Plan, error) {
 	r.planned++
-	return providerkit.Plan{}, nil
+	return provider.Plan{}, nil
 }
 
 func (r *reached) Remove(context.Context, edge.Class, edge.Progress) error {
@@ -53,7 +53,7 @@ func TestNothingWritesAsRootWithoutTheGrantToDoIt(t *testing.T) {
 	inner := &reached{}
 	ctx := context.Background()
 	gated := vps.Elevating(inner, unelevated)
-	req := providerkit.BootstrapRequest{Class: edge.ClassProduction}
+	req := provider.BootstrapRequest{Class: edge.ClassProduction}
 
 	if err := gated.Apply(ctx, req, nil); err == nil {
 		t.Error("Apply() = nil, want a bootstrap refused rather than failing partway through the first sudo it runs")
@@ -73,7 +73,7 @@ func TestAskingWhatABootstrapWouldDoIsNotAskingToRunIt(t *testing.T) {
 	ctx := context.Background()
 	gated := vps.Elevating(inner, unelevated)
 
-	if _, err := gated.Plan(ctx, providerkit.BootstrapRequest{Class: edge.ClassProduction}); err != nil {
+	if _, err := gated.Plan(ctx, provider.BootstrapRequest{Class: edge.ClassProduction}); err != nil {
 		t.Fatalf("Plan() = %v, want the plan drawn: reporting what a bootstrap would write is a read, and the same read backs the preflight that answers a deploy's domain claims, bootstrap standing and known slugs",
 			err)
 	}
@@ -91,7 +91,7 @@ func TestAHealIsNotHeldToWhatABootstrapNeeds(t *testing.T) {
 	inner := &reached{}
 	ctx := context.Background()
 	gated := vps.Elevating(inner, unelevated)
-	healing := providerkit.BootstrapRequest{Class: edge.ClassProduction, Heal: true}
+	healing := provider.BootstrapRequest{Class: edge.ClassProduction, Heal: true}
 
 	if _, err := gated.Plan(ctx, healing); err != nil {
 		t.Fatalf("Plan(heal) = %v, want it planned: heal reasserts only what the deploy login already owns, and that login holds no passwordless sudo by design", err)

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -36,7 +36,7 @@ func prunedAndStoodAgain(t *testing.T, front string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: edge.ClassProduction, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: edge.ClassProduction, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply(%s) behind %s = %v", edge.ClassProduction, front, err)
 	}
 	t.Cleanup(func() {
@@ -72,8 +72,8 @@ func prunedAndStoodAgain(t *testing.T, front string) {
 		t.Fatalf("the %s network is %s after the prune, want it gone with the switchboard as a host tool's nightly cleanup leaves it", host.ProxyNetwork, held)
 	}
 
-	if err := d.PreflightDeploy(ctx, providerkit.DeployPreflight{Plan: providerkit.DeployPlan{
-		Slug: frontedSlug, Class: edge.ClassProduction, Apps: []providerkit.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
+	if err := d.PreflightDeploy(ctx, provider.DeployPreflight{Plan: provider.DeployPlan{
+		Slug: frontedSlug, Class: edge.ClassProduction, Apps: []provider.AppEntry{{App: liveApp, Image: fixtureAt("one")}},
 	}}); err != nil {
 		t.Fatalf("PreflightDeploy() after the prune = %v, want the switchboard and its network stood again from what bootstrap left", err)
 	}
@@ -89,14 +89,14 @@ func prunedAndStoodAgain(t *testing.T, front string) {
 		t.Errorf("%s answered %q for %s after a deploy onto the restored switchboard, want two", front, served, frontedHostname)
 	}
 
-	checks, err := d.CheckHost(ctx, providerkit.HostCheckRequest{Class: edge.ClassProduction})
+	checks, err := d.CheckHost(ctx, provider.HostCheckRequest{Class: edge.ClassProduction})
 	if err != nil {
 		t.Fatalf("CheckHost() = %v", err)
 	}
 	reported := false
 	for _, check := range checks {
 		if check.Subject == host.SwitchboardContainer {
-			reported = check.Verdict == providerkit.HostPass && strings.Contains(check.Finding, "a deploy stood it again")
+			reported = check.Verdict == provider.HostPass && strings.Contains(check.Finding, "a deploy stood it again")
 			if !reported {
 				t.Errorf("the doctor says %v %q of %s, want it passed and the restoration named", check.Verdict, check.Finding, host.SwitchboardContainer)
 			}

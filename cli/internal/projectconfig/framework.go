@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const (
@@ -105,7 +105,7 @@ func frameworkOf(app string, dir string, named string, compute string) (string, 
 		}
 		return named, nil
 	}
-	if compute == string(providerkit.ComputeContainer) || !directory(dir) {
+	if compute == string(provider.ComputeContainer) || !directory(dir) {
 		return "", nil
 	}
 	framework, err := detectFramework(dir)

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
@@ -15,29 +15,29 @@ import (
 
 type certificates struct{ *Provider }
 
-func (p certificates) Issue(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
+func (p certificates) Issue(ctx context.Context, req provider.CertificateRequest) (provider.Certificate, error) {
 	path := p.host.PinFor(req.Hostname)
 	if path == "" {
 		if strings.HasPrefix(req.Hostname, "*.") {
-			return providerkit.Certificate{}, nil
+			return provider.Certificate{}, nil
 		}
 		held, err := p.host.FrontProxy().Certificate(ctx, req.Hostname)
 		if held.Trouble != nil && refused(held.Trouble) {
-			return providerkit.Certificate{}, held.Trouble
+			return provider.Certificate{}, held.Trouble
 		}
 		if err != nil && req.Progress != nil {
 			req.Progress.Say("could not read what the proxy holds for " + req.Hostname + ": " + err.Error())
 		}
-		return providerkit.Certificate{ID: certs.ProxyHandle(req.Hostname)}, nil
+		return provider.Certificate{ID: certs.ProxyHandle(req.Hostname)}, nil
 	}
 	leaf, err := p.pinnedLeaf(ctx, path)
 	if err != nil {
-		return providerkit.Certificate{}, err
+		return provider.Certificate{}, err
 	}
 	if err := certs.Verify(path, req.Hostname, leaf, time.Now()); err != nil {
-		return providerkit.Certificate{}, err
+		return provider.Certificate{}, err
 	}
-	return providerkit.Certificate{ID: certs.PinHandle(path)}, nil
+	return provider.Certificate{ID: certs.PinHandle(path)}, nil
 }
 
 func refused(err error) bool {
@@ -45,8 +45,8 @@ func refused(err error) bool {
 	return errors.As(err, &rejection) && rejection.Code == refusal.CodeBusy
 }
 
-func (p certificates) Inspect(ctx context.Context, _ edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {
-	health := providerkit.CertificateHealth{Terminates: true}
+func (p certificates) Inspect(ctx context.Context, _ edge.Kind, hostname string, cert provider.Certificate) (provider.CertificateHealth, error) {
+	health := provider.CertificateHealth{Terminates: true}
 	if !cert.Issued() {
 		return health, nil
 	}
@@ -59,14 +59,14 @@ func (p certificates) Inspect(ctx context.Context, _ edge.Kind, hostname string,
 	}
 	served, ok := certs.Serving(cert.ID)
 	if !ok {
-		return providerkit.CertificateHealth{}, refusal.Refuse(refusal.CodeInvalid,
+		return provider.CertificateHealth{}, refusal.Refuse(refusal.CodeInvalid,
 			"%s is bound to %q, which is neither %s<hostname> nor %s<path>",
 			hostname, cert.ID, certs.ProxyScheme, certs.PinScheme)
 	}
 	return p.servedHealth(ctx, served, hostname, health)
 }
 
-func (p certificates) Discard(context.Context, providerkit.Certificate, edge.Progress) error {
+func (p certificates) Discard(context.Context, provider.Certificate, edge.Progress) error {
 	return nil
 }
 
@@ -78,7 +78,7 @@ func (p *Provider) pinnedLeaf(ctx context.Context, path string) (certs.Leaf, err
 	return certs.Parse(caddy.PinCertificate(path), block)
 }
 
-func (p *Provider) pinnedHealth(ctx context.Context, path, hostname string, health providerkit.CertificateHealth) (providerkit.CertificateHealth, error) {
+func (p *Provider) pinnedHealth(ctx context.Context, path, hostname string, health provider.CertificateHealth) (provider.CertificateHealth, error) {
 	leaf, err := p.pinnedLeaf(ctx, path)
 	if err != nil {
 		return health, err
@@ -104,7 +104,7 @@ func pinnedStatus(leaf certs.Leaf, hostname string, now time.Time) string {
 	}
 }
 
-func (p *Provider) servedHealth(ctx context.Context, served, hostname string, health providerkit.CertificateHealth) (providerkit.CertificateHealth, error) {
+func (p *Provider) servedHealth(ctx context.Context, served, hostname string, health provider.CertificateHealth) (provider.CertificateHealth, error) {
 	block, err := p.host.ServedCertificate(ctx, served)
 	if err != nil {
 		return health, err

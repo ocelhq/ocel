@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
@@ -157,7 +157,7 @@ func TestAProxyThatIsGoneIsPlannedBackAndAStandingOneIsLeftAlone(t *testing.T) {
 	keys := []byte(aKey + "\n")
 	whole := Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: digests(Items(class, keys, ArchAMD64, Front{}))}
 	for _, change := range planned(whole) {
-		if change.Kind == KindContainer && change.Action != providerkit.ActionKeep {
+		if change.Kind == KindContainer && change.Action != provider.ActionKeep {
 			t.Errorf("a re-run over a host whose proxy serves plans %q for it, and a bootstrap that reinstalls what stands is one nobody dares re-run", change.Action)
 		}
 	}
@@ -165,7 +165,7 @@ func TestAProxyThatIsGoneIsPlannedBackAndAStandingOneIsLeftAlone(t *testing.T) {
 	torn := digests(Items(class, keys, ArchAMD64, Front{}))
 	delete(torn, frontItem().ID())
 	gone := planFor(planned(Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: torn}), frontItem().ID())
-	if gone.Action != providerkit.ActionCreate {
+	if gone.Action != provider.ActionCreate {
 		t.Errorf("a host whose proxy container was removed plans %q for it, want it written back: the proxy is state this host holds rather than a deploy's side effect", gone.Action)
 	}
 	if !gone.Slow {
@@ -179,7 +179,7 @@ func TestAProxyThatIsGoneIsPlannedBackAndAStandingOneIsLeftAlone(t *testing.T) {
 	if idle.current(frontItem()) {
 		t.Fatal("a proxy container that has exited reads as serving, and nothing would ever start it")
 	}
-	if woken := planFor(planned(idle), frontItem().ID()); woken.Action != providerkit.ActionUpdate {
+	if woken := planFor(planned(idle), frontItem().ID()); woken.Action != provider.ActionUpdate {
 		t.Errorf("a host whose proxy has exited plans %q for it, want it brought back to serving", woken.Action)
 	}
 }
@@ -449,7 +449,7 @@ func TestWhatTheDeployLoopWritesOverTheRoutingTableAndTheProxysConfigIsNeverCall
 		if !read.current(routed) {
 			t.Fatalf("a box whose deploys have written routes into %s reads as drifted, and the item is keyed on content the deploy loop is built to replace", seeded.Name)
 		}
-		if planned := planFor(planned(read), seeded.ID()); planned.Action != providerkit.ActionKeep {
+		if planned := planFor(planned(read), seeded.ID()); planned.Action != provider.ActionKeep {
 			t.Errorf("a re-run over a box carrying deployed routes plans %q for %s, and a bootstrap that reseeds it takes every app on the box down", planned.Action, seeded.Name)
 		}
 		if sum := seeded.sum(); sum != "" {
@@ -748,7 +748,7 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 	proxied := []string{caddy.Container, SwitchboardContainer, ProxyData, ProxyNetwork, proxyRoot, SwitchboardBinary, SwitchboardDir, switchboard.ControlDir, switchboard.FrontDir, ProxyConfig, live.RoutingTable, live.RoutingDir}
 
 	for _, taken := range removing(standing, beside, appsStanding{}) {
-		if slices.Contains(proxied, taken.path) && taken.action == providerkit.ActionDelete {
+		if slices.Contains(proxied, taken.path) && taken.action == provider.ActionDelete {
 			t.Errorf("destroying one class takes %s, and the sibling class still standing on this host deploys through it", taken.path)
 		}
 	}
@@ -756,7 +756,7 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 	last := removing(standing, Reading{Arch: ArchAMD64, Class: preview, Observed: map[string]string{}}, appsStanding{})
 	for _, path := range proxied {
 		gone := removalOf(last, path)
-		if gone.action != providerkit.ActionDelete {
+		if gone.action != provider.ActionDelete {
 			t.Errorf("destroying the last class plans %s as %q, want it taken: what ocel wrote is what ocel takes back", path, gone.action)
 		}
 	}
@@ -777,7 +777,7 @@ func TestDestroyTakesOcelsProxyAndLeavesEveryContainerTheHostRuns(t *testing.T) 
 			}
 		}
 	}
-	if kept := removalOf(last, dockerEngine); kept.action != providerkit.ActionKeep {
+	if kept := removalOf(last, dockerEngine); kept.action != provider.ActionKeep {
 		t.Errorf("destroying the last class plans the engine as %q, want it kept with every container it runs", kept.action)
 	}
 }
@@ -852,7 +852,7 @@ func TestThePinRootIsPlannedAsReclaimedOnlyIfEmptyRatherThanAsABareDelete(t *tes
 	t.Parallel()
 
 	pins := removalOf(proxyRemovals(), caddy.PinsDir)
-	if pins.action != providerkit.ActionDelete {
+	if pins.action != provider.ActionDelete {
 		t.Fatalf("the pin root is planned as %q, and this test states nothing about the row a destroy prints for it", pins.action)
 	}
 	if pins.reason == "" {
@@ -896,7 +896,7 @@ func TestNothingButWhatOcelWroteIsEverOcelsToTake(t *testing.T) {
 
 	stood := machine(map[edge.Class][]Item{edge.ClassProduction: bootstrapped(t, edge.ClassProduction)})
 	for _, kind := range []string{KindEngine, KindUnit} {
-		_, err := stood.host().remove(context.Background(), removal{kind: kind, path: dockerEngine, action: providerkit.ActionDelete})
+		_, err := stood.host().remove(context.Background(), removal{kind: kind, path: dockerEngine, action: provider.ActionDelete})
 		if err == nil {
 			t.Fatalf("removing %s landed, and what this host runs stays when ocel goes", kind)
 		}
@@ -1126,7 +1126,7 @@ func TestTheProxyIsWrittenAgainstTheBoxTheEngineWriteLeftBehind(t *testing.T) {
 
 	progress := &said{}
 	if err := NewBootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
-		providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, progress); err != nil {
+		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, progress); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	if at := progress.at("wrote " + KindContainer + " " + caddy.Container); at < 0 {
@@ -1202,12 +1202,12 @@ func TestAProxyStandingAsWrittenButNotRunningIsPlannedBackAndNeverCalledSettled(
 			Class: class, Present: true, Keys: keys, Arch: ArchAMD64, Observed: observed,
 			Seal: Seal{Fingerprint: contentSum(minted)},
 			Stamp: Stamp{
-				Schema: providerkit.BootstrapSchema, State: StateComplete,
+				Schema: provider.BootstrapSchema, State: StateComplete,
 				Seal: Seal{Fingerprint: contentSum(minted)}, Digests: digests(items),
 			},
 		}
 
-		if back := planFor(planned(read), frontItem().ID()); back.Action != providerkit.ActionUpdate {
+		if back := planFor(planned(read), frontItem().ID()); back.Action != provider.ActionUpdate {
 			t.Errorf("a proxy whose every configuration fact is as ocel wrote it and whose state is %q plans %q, want it written back: a proxy nothing notices is one nothing repairs",
 				between, back.Action)
 		}
@@ -1309,7 +1309,7 @@ func TestAnUpgradedOcelRendersTheConfigAnOlderOneRenderedAgainRatherThanRefusing
 	table, config := string(mustWrite(t, routed())), olderRendering(t, routed())
 	stood := settledHolding(t, class, &table, &config)
 	boot := NewBootstrap(stood.host(), testVendor, "shop")
-	request := providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}
+	request := provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}
 
 	if _, err := boot.Describe(context.Background(), class); err != nil {
 		t.Fatalf("Describe() over a box an older ocel rendered = %v: an upgrade that changes the rendering is not a hand edit, and refusing it locks every existing box out of `ocel doctor`", err)
@@ -1318,10 +1318,10 @@ func TestAnUpgradedOcelRendersTheConfigAnOlderOneRenderedAgainRatherThanRefusing
 	if err != nil {
 		t.Fatalf("Plan() over a box an older ocel rendered = %v, and the bootstrap is what would render it again", err)
 	}
-	if group := plan.Groups[0]; group.Action == providerkit.ActionKeep {
+	if group := plan.Groups[0]; group.Action == provider.ActionKeep {
 		t.Errorf("the plan over a box an older ocel rendered keeps %s whole, and the apply it would skip is what renders the config again", group.Name)
 	}
-	if rendering := planFor(plan.Groups[0].Changes, proxyConfigItem().ID()); rendering.Action != providerkit.ActionUpdate || !strings.Contains(rendering.Reason, live.RoutingTable) {
+	if rendering := planFor(plan.Groups[0].Changes, proxyConfigItem().ID()); rendering.Action != provider.ActionUpdate || !strings.Contains(rendering.Reason, live.RoutingTable) {
 		t.Errorf("the plan over a box an older ocel rendered shows %s as %q (%q), want the update the apply makes: rendering it again from %s", ProxyConfig, rendering.Action, rendering.Reason, live.RoutingTable)
 	}
 	if err := boot.Apply(context.Background(), request, nil); err != nil {

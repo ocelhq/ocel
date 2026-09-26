@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -440,10 +440,10 @@ func (s *Stack) Destroy(ctx context.Context) error {
 }
 
 var (
-	_ providerkit.Edges = (*Edges)(nil)
-	_ providerkit.DNS   = (*DNS)(nil)
-	_ edge.Edge         = (*Edge)(nil)
-	_ edge.EdgeStack    = (*Stack)(nil)
-	_ edge.DNSRecords   = (*DNSRecords)(nil)
-	_ Ledger            = (*ledger.Ledger)(nil)
+	_ provider.Edges  = (*Edges)(nil)
+	_ provider.DNS    = (*DNS)(nil)
+	_ edge.Edge       = (*Edge)(nil)
+	_ edge.EdgeStack  = (*Stack)(nil)
+	_ edge.DNSRecords = (*DNSRecords)(nil)
+	_ Ledger          = (*ledger.Ledger)(nil)
 )

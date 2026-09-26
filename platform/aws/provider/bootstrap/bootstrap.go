@@ -18,7 +18,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	"github.com/ocelhq/ocel/platform/aws/provider/tagclock"
@@ -82,14 +82,14 @@ type APIs struct {
 	IAM   IAMAPI
 	Store ObjectStore
 	Edge  edge.Edge
-	Edges providerkit.Edges
+	Edges provider.Edges
 }
 
 type Request struct {
 	VarsKey            string
 	Features           []string
 	Remove             []string
-	Writer             providerkit.WrittenBy
+	Writer             provider.WrittenBy
 	AcceptReplacements bool
 }
 

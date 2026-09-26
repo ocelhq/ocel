@@ -8,15 +8,16 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func (h *handlers) connector() (Connector, error) {
-	provider, err := h.session.use()
+func (h *handlers) connector() (provider.Connector, error) {
+	p, err := h.session.use()
 	if err != nil {
 		return nil, err
 	}
-	return provider.Connector(), nil
+	return p.Connector(), nil
 }
 
 func (h *handlers) DescribeConnectorTarget(ctx context.Context, _ *contractv1.DescribeConnectorTargetRequest) (*contractv1.DescribeConnectorTargetResponse, error) {
@@ -26,7 +27,7 @@ func (h *handlers) DescribeConnectorTarget(ctx context.Context, _ *contractv1.De
 	}
 	described, err := connector.Target(ctx)
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	resp := &contractv1.DescribeConnectorTargetResponse{
 		TargetFingerprint: described.Fingerprint,
@@ -50,13 +51,13 @@ func (h *handlers) InstallConnector(ctx context.Context, req *contractv1.Install
 	}
 	return streamResult(ctx, stream, func(sender *eventStream) (*progressv1.OperationEvent, error) {
 		sender.refusing(connect.CodeUnimplemented)
-		var at ConnectorAddress
+		var at provider.ConnectorAddress
 		err := inUnit(sender, naming.UnitConnector, connectorUnitTitle, progressv1.Phase_PHASE_PROVISIONING, func(_ *eventStream, progress edge.Progress) error {
-			at, err = connector.Install(ctx, ConnectorInstall{
+			at, err = connector.Install(ctx, provider.ConnectorInstall{
 				Binary:  req.GetBinary(),
 				Version: req.GetVersion(),
 				Config:  req.GetConfigJson(),
-				Compute: Compute(req.GetCompute()),
+				Compute: provider.Compute(req.GetCompute()),
 			}, progress)
 			return err
 		})
@@ -78,7 +79,7 @@ func (h *handlers) RemoveConnector(ctx context.Context, _ *contractv1.RemoveConn
 	})
 }
 
-func connectorResult(at ConnectorAddress) *progressv1.OperationEvent {
+func connectorResult(at provider.ConnectorAddress) *progressv1.OperationEvent {
 	return &progressv1.OperationEvent{
 		Event: &progressv1.OperationEvent_Result{Result: &progressv1.ResultEvent{
 			Success: true,

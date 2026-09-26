@@ -3,7 +3,7 @@ package proxy
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 type Proxy interface {
@@ -45,7 +45,7 @@ type Pin struct {
 	Path     string
 }
 
-type Standing []providerkit.HostCheck
+type Standing []provider.HostCheck
 
 type Certificate struct {
 	Renewal string

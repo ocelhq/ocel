@@ -1,4 +1,4 @@
-package providerkit
+package provider
 
 import (
 	"crypto/sha256"
@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	connect "connectrpc.com/connect"
+
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )

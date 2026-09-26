@@ -8,20 +8,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
-func requested(t *testing.T, server *certServer, hostname string) (providerkit.Certificate, []edge.Record) {
+func requested(t *testing.T, server *certServer, hostname string) (provider.Certificate, []edge.Record) {
 	t.Helper()
 	var proved []edge.Record
-	cert, err := server.open(t).Certificates().Issue(context.Background(), providerkit.CertificateRequest{
+	cert, err := server.open(t).Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind:     alb.Kind,
 		Hostname: hostname,
 		Progress: edge.DiscardProgress(),
-		Prove: func(_ context.Context, cert providerkit.Certificate, records []edge.Record) (providerkit.Certificate, error) {
+		Prove: func(_ context.Context, cert provider.Certificate, records []edge.Record) (provider.Certificate, error) {
 			proved = records
 			cert.Written = records
 			return cert, nil
@@ -118,11 +118,11 @@ func TestACertificateManagerRefusedToIssueIsReportedRatherThanWaitedOutForever(t
 	server.failure = "the authorization record does not resolve"
 
 	var refusal refusal.Refusal
-	_, err := server.open(t).Certificates().Issue(context.Background(), providerkit.CertificateRequest{
+	_, err := server.open(t).Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind:     alb.Kind,
 		Hostname: "shop.example.com",
 		Progress: edge.DiscardProgress(),
-		Prove: func(_ context.Context, cert providerkit.Certificate, _ []edge.Record) (providerkit.Certificate, error) {
+		Prove: func(_ context.Context, cert provider.Certificate, _ []edge.Record) (provider.Certificate, error) {
 			return cert, nil
 		},
 	})
@@ -142,15 +142,15 @@ func TestACertificateStillProvisioningWhenThePatienceRunsOutIsLeftPending(t *tes
 	server := newCertServer()
 	server.provisioning = 5
 
-	_, err := server.open(t).Certificates().Issue(context.Background(), providerkit.CertificateRequest{
+	_, err := server.open(t).Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind:     alb.Kind,
 		Hostname: "shop.example.com",
 		Progress: edge.DiscardProgress(),
-		Prove: func(_ context.Context, cert providerkit.Certificate, _ []edge.Record) (providerkit.Certificate, error) {
+		Prove: func(_ context.Context, cert provider.Certificate, _ []edge.Record) (provider.Certificate, error) {
 			return cert, nil
 		},
 	})
-	if _, pending := providerkit.LeftPending(err); !pending {
+	if _, pending := provider.LeftPending(err); !pending {
 		t.Errorf("Certificate() while Google still provisions = %v, want it marked pending: issuance finishes on Google's time, and a deploy leaves the hostname to `ocel domain add` rather than failing", err)
 	}
 }
@@ -223,7 +223,7 @@ func TestACertificateNothingRequestedIsNotThisProvidersToDelete(t *testing.T) {
 	t.Parallel()
 
 	server := newCertServer()
-	if err := server.open(t).Certificates().Discard(context.Background(), providerkit.Certificate{}, edge.DiscardProgress()); err != nil {
+	if err := server.open(t).Certificates().Discard(context.Background(), provider.Certificate{}, edge.DiscardProgress()); err != nil {
 		t.Errorf("DiscardCertificate() of a binding naming no certificate = %v, want it tolerated", err)
 	}
 	if got := server.dropped(); len(got) != 0 {

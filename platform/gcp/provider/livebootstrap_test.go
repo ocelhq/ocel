@@ -16,8 +16,8 @@ import (
 	"google.golang.org/api/secretmanager/v1"
 	"google.golang.org/api/serviceusage/v1"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
@@ -45,7 +45,7 @@ func servicesEnabled(t *testing.T) {
 	}
 }
 
-func bootstrapOf(t *testing.T, p *gcp.Provider) providerkit.Bootstrap {
+func bootstrapOf(t *testing.T, p *gcp.Provider) provider.Bootstrap {
 	t.Helper()
 	bootstrap, err := p.Bootstrap(p.Facts().DefaultEdge)
 	if err != nil {
@@ -54,13 +54,13 @@ func bootstrapOf(t *testing.T, p *gcp.Provider) providerkit.Bootstrap {
 	return bootstrap
 }
 
-func bootstrapped(t *testing.T, p *gcp.Provider, class edge.Class) providerkit.Bootstrap {
+func bootstrapped(t *testing.T, p *gcp.Provider, class edge.Class) provider.Bootstrap {
 	t.Helper()
 
 	servicesEnabled(t)
 	ctx := context.Background()
 	bootstrap := bootstrapOf(t, p)
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v, want the resources every port beneath it reads and writes", class, err)
 	}
 	t.Cleanup(func() {
@@ -109,18 +109,18 @@ func TestLiveAPlanDrawnAfterAnApplyKeepsEverythingItStoodUp(t *testing.T) {
 	class := edge.ClassPreview
 	bootstrap := bootstrapped(t, p, class)
 
-	plan, err := bootstrap.Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
+	plan, err := bootstrap.Plan(context.Background(), provider.BootstrapRequest{Class: class})
 	if err != nil {
 		t.Fatalf("Plan() after Apply() = %v", err)
 	}
 	rows := 0
 	for _, group := range plan.Groups {
-		if group.Action != providerkit.ActionKeep {
+		if group.Action != provider.ActionKeep {
 			t.Errorf("Plan() shows %s as %q after an apply, want it kept: a second apply must be a no-op", group.Name, group.Action)
 		}
 		for _, change := range group.Changes {
 			rows++
-			if change.Action != providerkit.ActionKeep {
+			if change.Action != provider.ActionKeep {
 				t.Errorf("Plan() shows %s %s as %q after an apply, want it kept", change.Kind, change.Name, change.Action)
 			}
 		}
@@ -135,7 +135,7 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 	servicesEnabled(t)
 	class := edge.ClassProduction
 
-	plan, err := bootstrapOf(t, p).Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
+	plan, err := bootstrapOf(t, p).Plan(context.Background(), provider.BootstrapRequest{Class: class})
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
@@ -152,16 +152,16 @@ func TestLiveAPlanNamesEveryResourceTheStackIsMadeOf(t *testing.T) {
 		}
 	}
 	rows := map[string]string{
-		"firestore:database/" + liveNames(t).Database():                providerkit.StackGroupKind,
-		"iam:serviceaccount/" + liveNames(t).WorkloadAccount(class):    providerkit.StackGroupKind,
-		"storage:bucket/" + liveNames(t).Bucket(class):                 providerkit.StackGroupKind,
-		"storage:bucket/" + liveNames(t).StateBucket(class):            providerkit.StackGroupKind,
-		"kms:keyring/" + liveNames(t).KeyRing():                        providerkit.StackGroupKind,
-		"kms:key/" + string(class):                                     providerkit.StackGroupKind,
-		"secretmanager:secret/" + liveNames(t).PassphraseSecret(class): providerkit.ParameterGroupKind,
+		"firestore:database/" + liveNames(t).Database():                provider.StackGroupKind,
+		"iam:serviceaccount/" + liveNames(t).WorkloadAccount(class):    provider.StackGroupKind,
+		"storage:bucket/" + liveNames(t).Bucket(class):                 provider.StackGroupKind,
+		"storage:bucket/" + liveNames(t).StateBucket(class):            provider.StackGroupKind,
+		"kms:keyring/" + liveNames(t).KeyRing():                        provider.StackGroupKind,
+		"kms:key/" + string(class):                                     provider.StackGroupKind,
+		"secretmanager:secret/" + liveNames(t).PassphraseSecret(class): provider.ParameterGroupKind,
 	}
 	if !emulated() {
-		rows["artifactregistry:repository/"+liveNames(t).Repository(class)] = providerkit.StackGroupKind
+		rows["artifactregistry:repository/"+liveNames(t).Repository(class)] = provider.StackGroupKind
 	}
 	for row, group := range rows {
 		if _, shown := kinds[row]; !shown {
@@ -182,7 +182,7 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 	class := edge.ClassProduction
 	here := bootstrapped(t, p, class)
 
-	t.Setenv(providerkit.NamespaceEnvVar, names(t, p).Namespace().String()+"-beside")
+	t.Setenv(provider.NamespaceEnvVar, names(t, p).Namespace().String()+"-beside")
 	beside := newProvider(t, gcp.Options{Project: liveProject(), Region: liveRegion()})
 	if names(t, beside).Bucket(class) == names(t, p).Bucket(class) {
 		t.Fatalf("both namespaces name the bucket %s, and this test turns on them naming different ones", names(t, beside).Bucket(class))
@@ -198,7 +198,7 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 		t.Errorf("Describe() under namespace %s reads the bootstrap standing under %s as its own", names(t, beside).Namespace(), names(t, p).Namespace())
 	}
 
-	plan, err := elsewhere.Plan(ctx, providerkit.BootstrapRequest{Class: class})
+	plan, err := elsewhere.Plan(ctx, provider.BootstrapRequest{Class: class})
 	if err != nil {
 		t.Fatalf("Plan() under a second namespace = %v", err)
 	}
@@ -209,7 +209,7 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 			if change.Kind == string(gcp.KindDatabase) && emulated() {
 				continue
 			}
-			if change.Action != providerkit.ActionCreate {
+			if change.Action != provider.ActionCreate {
 				t.Errorf("Plan() under namespace %s shows %s %s as %q, want a create: nothing of it stands yet",
 					names(t, beside).Namespace(), change.Kind, change.Name, change.Action)
 			}
@@ -220,7 +220,7 @@ func TestLiveABootstrapUnderOneNamespaceIsNoBootstrapUnderAnother(t *testing.T) 
 	}
 
 	bootstrapped(t, beside, class)
-	for what, bootstrap := range map[string]providerkit.Bootstrap{
+	for what, bootstrap := range map[string]provider.Bootstrap{
 		names(t, p).Namespace().String():      here,
 		names(t, beside).Namespace().String(): elsewhere,
 	} {
@@ -239,7 +239,7 @@ func TestLiveAPlanIsRefusedWhileAnApiTheStackNeedsIsOff(t *testing.T) {
 	servicesDisabled(t, "cloudkms.googleapis.com")
 
 	var refused refusal.Refusal
-	_, err := bootstrapOf(t, p).Plan(context.Background(), providerkit.BootstrapRequest{Class: edge.ClassProduction})
+	_, err := bootstrapOf(t, p).Plan(context.Background(), provider.BootstrapRequest{Class: edge.ClassProduction})
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("Plan() with an API off = %v, want a %s refusal: enabling it is a precondition, not a row in the stack", err, refusal.CodeNotReady)
 	}
@@ -277,7 +277,7 @@ func TestLiveAnApplyThatNeverFinishedReadsAsUnfinishedAndAReApplyFinishesIt(t *t
 	bootstrap := bootstrapOf(t, p)
 
 	ctx := context.Background()
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	t.Cleanup(func() {
@@ -296,7 +296,7 @@ func TestLiveAnApplyThatNeverFinishedReadsAsUnfinishedAndAReApplyFinishesIt(t *t
 		t.Fatal("Describe() reads an apply that stopped half way as finished, and nothing would ever go back to finish it")
 	}
 
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() over an unfinished bootstrap = %v, want it finished", err)
 	}
 	healed, err := bootstrap.Describe(ctx, class)
@@ -371,18 +371,18 @@ func TestLiveASharedResourceStaysWhileTheSiblingClassStands(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
 	}
-	kept := map[string]providerkit.Change{}
+	kept := map[string]provider.Change{}
 	for _, group := range removal.Groups {
 		for _, change := range group.Changes {
 			kept[change.Kind+"/"+change.Name] = change
 		}
 	}
 	ring := kept["kms:keyring/"+liveNames(t).KeyRing()]
-	if ring.Action != providerkit.ActionKeep || ring.Reason == "" {
+	if ring.Action != provider.ActionKeep || ring.Reason == "" {
 		t.Errorf("PlanRemove() shows the key ring as %q (%q), want it kept with a reason: Google never deletes a key ring", ring.Action, ring.Reason)
 	}
 	database := kept["firestore:database/"+liveNames(t).Database()]
-	if database.Action != providerkit.ActionKeep || !strings.Contains(database.Reason, string(edge.ClassProduction)) {
+	if database.Action != provider.ActionKeep || !strings.Contains(database.Reason, string(edge.ClassProduction)) {
 		t.Errorf("PlanRemove() shows the database as %q (%q), want it kept with a reason naming the sibling class still standing",
 			database.Action, database.Reason)
 	}
@@ -398,7 +398,7 @@ func TestLiveThePassphraseIsMintedOnceAndNotWrittenOverAgain(t *testing.T) {
 	if len(minted) == 0 {
 		t.Fatal("the bootstrap minted an empty passphrase, and every Pulumi stack in this project is encrypted under it")
 	}
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() a second time = %v", err)
 	}
 	if again := passphraseHeld(t, class); !bytes.Equal(minted, again) {
@@ -463,7 +463,7 @@ func TestProjectARegionFirestoreDoesNotServeIsRefusedNamingTheOnesItDoes(t *test
 	elsewhere := newProvider(t, gcp.Options{Project: liveProject(), Region: "no-such-region1"})
 	var refused refusal.Refusal
 	_, err := bootstrapOf(t, elsewhere).Plan(context.Background(),
-		providerkit.BootstrapRequest{Class: edge.ClassProduction})
+		provider.BootstrapRequest{Class: edge.ClassProduction})
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Plan() in a region Firestore does not serve = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
@@ -503,15 +503,15 @@ func TestLiveAStackMissingOneOfItsResourcesIsNotReportedAsCurrent(t *testing.T) 
 		t.Errorf("Describe().Stacks = %+v with a bucket gone, want the stack read as behind", described.Stacks)
 	}
 
-	plan, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class})
+	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class})
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
 	for _, group := range plan.Groups {
-		if group.Kind != providerkit.StackGroupKind {
+		if group.Kind != provider.StackGroupKind {
 			continue
 		}
-		if group.Action == providerkit.ActionKeep {
+		if group.Action == provider.ActionKeep {
 			t.Errorf("Plan() shows %s as %q with a bucket gone while its rows create it, and the group is what the operator consents to",
 				group.Name, group.Action)
 		}
@@ -525,7 +525,7 @@ func TestLiveARemovalUnderWayReadsAsUnfinishedRatherThanDone(t *testing.T) {
 	bootstrap := bootstrapOf(t, p)
 
 	ctx := context.Background()
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 
@@ -569,7 +569,7 @@ func TestLiveAnApplyRefusesRatherThanWriteOverAnotherRunsStamp(t *testing.T) {
 	}}
 
 	var refused refusal.Refusal
-	err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, watch)
+	err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, watch)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {
 		t.Fatalf("Apply() over a stamp another run wrote = %v, want a %s refusal", err, refusal.CodeBusy)
 	}
@@ -618,7 +618,7 @@ func TestLiveASecretWithNoVersionInItIsNotStandingAndAReApplyMintsOne(t *testing
 		t.Fatalf("put the secret back with nothing in it: %v", err)
 	}
 
-	plan, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class})
+	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class})
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
@@ -627,13 +627,13 @@ func TestLiveASecretWithNoVersionInItIsNotStandingAndAReApplyMintsOne(t *testing
 			if change.Kind != "secretmanager:secret" {
 				continue
 			}
-			if change.Action != providerkit.ActionCreate {
+			if change.Action != provider.ActionCreate {
 				t.Errorf("Plan() shows the passphrase secret as %q while it holds no version at all, and nothing would ever put one in it", change.Action)
 			}
 		}
 	}
 
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() over a secret with no version = %v", err)
 	}
 	if len(passphraseHeld(t, class)) == 0 {
@@ -677,11 +677,11 @@ func TestProjectADatabaseLeftUnprotectedIsAnUpdateRowAnApplyMends(t *testing.T) 
 	ctx := context.Background()
 	protectionLifted(t)
 
-	plan, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class})
+	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class})
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
-	shown := providerkit.Change{}
+	shown := provider.Change{}
 	for _, group := range plan.Groups {
 		for _, change := range group.Changes {
 			if change.Kind == "firestore:database" {
@@ -689,12 +689,12 @@ func TestProjectADatabaseLeftUnprotectedIsAnUpdateRowAnApplyMends(t *testing.T) 
 			}
 		}
 	}
-	if shown.Action != providerkit.ActionUpdate || shown.Reason == "" {
+	if shown.Action != provider.ActionUpdate || shown.Reason == "" {
 		t.Errorf("Plan() shows the database as %q (%q) with delete protection off, want an update row saying why",
 			shown.Action, shown.Reason)
 	}
 
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() over an unprotected database = %v", err)
 	}
 	service, err := firestoreadmin.NewService(ctx)
@@ -726,7 +726,7 @@ func TestProjectADatabaseStandingInAnotherRegionIsRefusedRatherThanUsed(t *testi
 	elsewhere := newProvider(t, gcp.Options{Project: liveProject(), Region: elsewhereRegion()})
 	var refused refusal.Refusal
 	err := bootstrapOf(t, elsewhere).Apply(context.Background(),
-		providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil)
+		provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil)
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Apply() against a database Firestore holds in another region = %v, want an %s refusal: the conflict is not a success",
 			err, refusal.CodeInvalid)
@@ -736,9 +736,9 @@ func TestProjectADatabaseStandingInAnotherRegionIsRefusedRatherThanUsed(t *testi
 	}
 }
 
-func rowsOf(t *testing.T, plan providerkit.Plan) map[string]providerkit.Change {
+func rowsOf(t *testing.T, plan provider.Plan) map[string]provider.Change {
 	t.Helper()
-	rows := map[string]providerkit.Change{}
+	rows := map[string]provider.Change{}
 	for _, group := range plan.Groups {
 		for _, change := range group.Changes {
 			rows[change.Kind+"/"+change.Name] = change
@@ -758,7 +758,7 @@ func TestLiveTheArtifactBucketIsRemovedSlowlyBecauseItIsEmptiedFirst(t *testing.
 	}
 	rows := rowsOf(t, plan)
 	artifacts := rows["storage:bucket/"+liveNames(t).Bucket(class)]
-	if artifacts.Action != providerkit.ActionDelete || !artifacts.Slow {
+	if artifacts.Action != provider.ActionDelete || !artifacts.Slow {
 		t.Errorf("PlanRemove() shows the artifact bucket as %q (slow %v), want a delete marked slow: every artifact in it is deleted one by one first",
 			artifacts.Action, artifacts.Slow)
 	}
@@ -775,12 +775,12 @@ func TestLiveASharedRowNamesTheSiblingClassInEveryPlanItAppearsIn(t *testing.T) 
 	bootstrap := bootstrapped(t, p, class)
 
 	ctx := context.Background()
-	plan, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class})
+	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class})
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
 	database := rowsOf(t, plan)["firestore:database/"+liveNames(t).Database()]
-	if database.Action != providerkit.ActionKeep || !strings.Contains(database.Reason, string(edge.ClassProduction)) {
+	if database.Action != provider.ActionKeep || !strings.Contains(database.Reason, string(edge.ClassProduction)) {
 		t.Errorf("Plan() shows the database as %q (%q), want it kept for a reason naming the sibling class that shares it, as the removal plan does",
 			database.Action, database.Reason)
 	}
@@ -830,7 +830,7 @@ func TestLiveRemovingABootstrapTakesTheRuntimeAccountWithIt(t *testing.T) {
 
 	ctx := context.Background()
 	bootstrap := bootstrapOf(t, p)
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v", class, err)
 	}
 	if err := bootstrap.Remove(ctx, class, nil); err != nil {

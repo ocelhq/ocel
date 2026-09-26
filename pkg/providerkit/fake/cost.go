@@ -7,7 +7,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/costkit"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const (
@@ -17,12 +17,12 @@ const (
 	TypeBucket    = "fake_bucket"
 )
 
-var declaredTypes = map[providerkit.BindingType]string{
-	providerkit.BindingPostgres: TypePostgres,
-	providerkit.BindingBucket:   TypeBucket,
+var declaredTypes = map[provider.BindingType]string{
+	provider.BindingPostgres: TypePostgres,
+	provider.BindingBucket:   TypeBucket,
 }
 
-func (p *Provider) ShapeCost(_ context.Context, req providerkit.ShapeRequest) (*costv1.ResourceSet, error) {
+func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
 	project := "project:" + req.Plan.Slug
 	environment := "environment:" + req.Plan.Env
 	set := &costv1.ResourceSet{
@@ -39,13 +39,13 @@ func (p *Provider) ShapeCost(_ context.Context, req providerkit.ShapeRequest) (*
 	for _, app := range req.Plan.Apps {
 		scope := environment + "/app:" + app.App
 		set.Scopes = append(set.Scopes, &costv1.Scope{Id: scope, Parent: environment, Kind: "app", Name: app.App})
-		if app.Compute() == providerkit.ComputeContainer {
+		if app.Compute() == provider.ComputeContainer {
 			set.Resources = append(set.Resources, p.shaped(scope, TypeContainer, app.App))
 			continue
 		}
 		functions := req.Functions[app.App]
 		if len(functions) == 0 {
-			functions = []providerkit.FunctionSpec{{Name: app.App}}
+			functions = []provider.FunctionSpec{{Name: app.App}}
 		}
 		for _, fn := range functions {
 			set.Resources = append(set.Resources, p.shaped(scope, TypeFunction, fn.Name))

@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/imagebuild"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/workspace"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func Build(ctx context.Context, cfg *projectconfig.Config, archs map[string]string, progress io.Writer) (map[string]string, error) {
@@ -51,7 +51,7 @@ func Describe(cfg *projectconfig.Config, app projectconfig.App) (imagebuild.App,
 func Apps(cfg *projectconfig.Config) []projectconfig.App {
 	var containers []projectconfig.App
 	for _, app := range cfg.Apps {
-		if app.Compute == string(providerkit.ComputeContainer) {
+		if app.Compute == string(provider.ComputeContainer) {
 			containers = append(containers, app)
 		}
 	}

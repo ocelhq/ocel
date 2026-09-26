@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -15,23 +15,23 @@ import (
 
 const deployment = "0123456789abcdef0123456789abcdef"
 
-func aStack(t *testing.T, app providerkit.AppPlan) providerkit.StackPlan {
+func aStack(t *testing.T, app provider.AppPlan) provider.StackPlan {
 	t.Helper()
 	stack, err := naming.ParseStackName("prod--web--r0a1b2c3d")
 	if err != nil {
 		t.Fatal(err)
 	}
-	return providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
-		Kind: providerkit.StackApp,
+	return provider.StackPlan{
+		Ref:  provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
+		Kind: provider.StackApp,
 		App:  &app,
 	}
 }
 
-func anApp() providerkit.AppPlan {
-	return providerkit.AppPlan{
+func anApp() provider.AppPlan {
+	return provider.AppPlan{
 		App:             "web",
-		Compute:         providerkit.ComputeContainer,
+		Compute:         provider.ComputeContainer,
 		Deployment:      deployment,
 		Image:           loadedImageRef,
 		HealthCheckPath: "/healthz",
@@ -105,8 +105,8 @@ func TestARemovedStackTakesItsContainersWithIt(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	err := over(machine).RemoveContainers(context.Background(), providerkit.StackRef{},
-		[]providerkit.AppContainer{{Name: "web", Physical: "shop-prod-web-01234567"}}, nil)
+	err := over(machine).RemoveContainers(context.Background(), provider.StackRef{},
+		[]provider.AppContainer{{Name: "web", Physical: "shop-prod-web-01234567"}}, nil)
 	if err != nil {
 		t.Fatalf("RemoveContainers() = %v", err)
 	}

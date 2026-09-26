@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const (
@@ -72,9 +72,9 @@ func (e *UnscopedGrantError) Error() string {
 	)
 }
 
-func (e *UnscopedGrantError) Unwrap() error { return providerkit.ErrUnscopedGrant }
+func (e *UnscopedGrantError) Unwrap() error { return provider.ErrUnscopedGrant }
 
-func VerifyGrants(binding providerkit.Binding) error {
+func VerifyGrants(binding provider.Binding) error {
 	for _, grant := range binding.Grants {
 		if err := scoped(binding.Name, grant.Label, grant.Actions, grant.Resources); err != nil {
 			return err
@@ -160,7 +160,7 @@ func grantCondition(grant *bindingsv1.Grant) map[string]any {
 
 type PolicyBillItem struct {
 	Binding string
-	Type    providerkit.BindingType
+	Type    provider.BindingType
 	Chars   int
 }
 
@@ -194,7 +194,7 @@ func (e *PolicyBudgetError) Error() string {
 	return b.String()
 }
 
-func checkInlinePolicyBudget(apps []providerkit.AppUsage, sessions sessionScope) error {
+func checkInlinePolicyBudget(apps []provider.AppUsage, sessions sessionScope) error {
 	var over []PolicyBudgetApp
 	for _, app := range apps {
 		items, err := billedPolicies(app.Resources, app.Grants, sessions)
@@ -222,7 +222,7 @@ func checkInlinePolicyBudget(apps []providerkit.AppUsage, sessions sessionScope)
 	return &PolicyBudgetError{Apps: over}
 }
 
-func billedPolicies(resources []providerkit.Resource, grants []providerkit.Binding, sessions sessionScope) ([]PolicyBillItem, error) {
+func billedPolicies(resources []provider.Resource, grants []provider.Binding, sessions sessionScope) ([]PolicyBillItem, error) {
 	billed := map[string]PolicyBillItem{}
 	for _, binding := range grants {
 		policy, err := bindingPolicyDocument(binding.Name, grantMessages(binding.Grants))
@@ -235,7 +235,7 @@ func billedPolicies(resources []providerkit.Resource, grants []providerkit.Bindi
 		billed[binding.Name] = PolicyBillItem{Binding: binding.Name, Type: binding.Type, Chars: len(policy)}
 	}
 	for _, resource := range resources {
-		if resource.Binding != "" || resource.Type != providerkit.BindingBucket {
+		if resource.Binding != "" || resource.Type != provider.BindingBucket {
 			continue
 		}
 		policy, err := bindingPolicyDocument(resource.Name, bucketGrants(strings.Repeat("b", maxS3BucketNameLen), sessions))

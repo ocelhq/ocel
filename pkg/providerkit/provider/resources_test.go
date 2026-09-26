@@ -1,20 +1,20 @@
-package providerkit_test
+package provider_test
 
 import (
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func TestABucketBindingCarriesThePublicAddressItWasPublishedUnder(t *testing.T) {
 	t.Parallel()
 
-	message, err := providerkit.BindingMessage(providerkit.Binding{
-		Type: providerkit.BindingBucket,
+	message, err := provider.BindingMessage(provider.Binding{
+		Type: provider.BindingBucket,
 		Name: "uploads",
 		Properties: map[string]string{
-			providerkit.PropertyBucket:        "shop-prod-uploads",
-			providerkit.PropertyPublicBaseURL: "https://storage.example.com/shop-prod-uploads",
+			provider.PropertyBucket:        "shop-prod-uploads",
+			provider.PropertyPublicBaseURL: "https://storage.example.com/shop-prod-uploads",
 		},
 	})
 	if err != nil {

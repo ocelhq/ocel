@@ -10,8 +10,8 @@ import (
 
 	smithy "github.com/aws/smithy-go"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
@@ -154,7 +154,7 @@ func applyRuntimeLayers(ctx context.Context, apis APIs, target spec, req Request
 
 type RuntimeLayerRequest struct {
 	ArtifactBucket string
-	Writer         providerkit.WrittenBy
+	Writer         provider.WrittenBy
 }
 
 func EnsureRuntimeLayers(ctx context.Context, apis APIs, ns Namespace, class string, req RuntimeLayerRequest, log func(string)) (map[string]string, error) {
@@ -230,32 +230,32 @@ func runtimeStackHeldElsewhere(err error) bool {
 	return cfn.IsValidationErrorContaining(err, "state and can not be updated")
 }
 
-func planRuntimeLayers(ctx context.Context, stacks cfn.API, read Reading, req Request) providerkit.ChangeGroup {
+func planRuntimeLayers(ctx context.Context, stacks cfn.API, read Reading, req Request) provider.ChangeGroup {
 	stamp := read.Deployed.RuntimeStack
-	group := providerkit.ChangeGroup{Kind: providerkit.StackGroupKind, Name: read.ns.runtimeStackName(read.class)}
+	group := provider.ChangeGroup{Kind: provider.StackGroupKind, Name: read.ns.runtimeStackName(read.class)}
 	body, err := runtimeLayerTemplateAt(read.ns, read.class, read.Deployed.ArtifactBucket)
 	if err != nil {
-		group.Action, group.Reason = providerkit.ActionKeep, err.Error()
+		group.Action, group.Reason = provider.ActionKeep, err.Error()
 		return group
 	}
 	switch {
 	case !stamp.Present:
-		group.Action = providerkit.ActionCreate
-		group.Changes = templateChanges(body, providerkit.ActionCreate)
+		group.Action = provider.ActionCreate
+		group.Changes = templateChanges(body, provider.ActionCreate)
 	case stamp.Current():
-		group.Action, group.Reason = providerkit.ActionKeep, "already current"
+		group.Action, group.Reason = provider.ActionKeep, "already current"
 	default:
-		group.Action = providerkit.ActionUpdate
+		group.Action = provider.ActionUpdate
 		group = planUpdate(ctx, stacks, read.ns, group, featureStack{body: body}, req.Writer)
 	}
 	return group
 }
 
-func removeRuntimeLayers(ctx context.Context, stacks cfn.API, read Reading) providerkit.ChangeGroup {
-	group := providerkit.ChangeGroup{
-		Kind:   providerkit.StackGroupKind,
+func removeRuntimeLayers(ctx context.Context, stacks cfn.API, read Reading) provider.ChangeGroup {
+	group := provider.ChangeGroup{
+		Kind:   provider.StackGroupKind,
 		Name:   read.ns.runtimeStackName(read.class),
-		Action: providerkit.ActionDelete,
+		Action: provider.ActionDelete,
 	}
 	body, err := runtimeLayerTemplateAt(read.ns, read.class, read.Deployed.ArtifactBucket)
 	if err != nil {

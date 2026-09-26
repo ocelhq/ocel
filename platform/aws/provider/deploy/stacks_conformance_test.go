@@ -17,8 +17,8 @@ import (
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -31,7 +31,7 @@ type mockedEngine struct {
 	mu        sync.Mutex
 	ran       []string
 	torndown  []string
-	previewed []providerkit.Change
+	previewed []provider.Change
 	upErr     func(stack string) error
 }
 
@@ -95,11 +95,11 @@ func (e *mockedEngine) Up(_ context.Context, setup kitpulumi.Setup, _ edge.Progr
 	return e.outputs, nil
 }
 
-func (e *mockedEngine) Preview(_ context.Context, setup kitpulumi.Setup, op kitpulumi.Op, _ edge.Progress) ([]providerkit.Change, error) {
+func (e *mockedEngine) Preview(_ context.Context, setup kitpulumi.Setup, op kitpulumi.Op, _ edge.Progress) ([]provider.Change, error) {
 	if op == kitpulumi.OpDestroy {
-		rows := make([]providerkit.Change, 0, len(e.previewed))
+		rows := make([]provider.Change, 0, len(e.previewed))
 		for _, row := range e.previewed {
-			row.Action = providerkit.ActionDelete
+			row.Action = provider.ActionDelete
 			rows = append(rows, row)
 		}
 		return rows, nil
@@ -118,15 +118,15 @@ func (e *mockedEngine) Preview(_ context.Context, setup kitpulumi.Setup, op kitp
 type previewing struct {
 	inner sdk.MockResourceMonitor
 	mu    sync.Mutex
-	rows  []providerkit.Change
+	rows  []provider.Change
 }
 
 func (p *previewing) NewResource(args sdk.MockResourceArgs) (string, resource.PropertyMap, error) {
 	p.mu.Lock()
-	p.rows = append(p.rows, providerkit.Change{
+	p.rows = append(p.rows, provider.Change{
 		Kind:   args.TypeToken,
 		Name:   args.Name,
-		Action: providerkit.ActionCreate,
+		Action: provider.ActionCreate,
 	})
 	p.mu.Unlock()
 	return p.inner.NewResource(args)
@@ -239,14 +239,14 @@ func (s *shippedArtifacts) write(at string, blob []byte) {
 	s.objects[at] = blob
 }
 
-func (s *shippedArtifacts) at(ref providerkit.ArtifactRef) (string, error) {
-	if ref.Bucket != providerkit.StoreFunctions {
+func (s *shippedArtifacts) at(ref provider.ArtifactRef) (string, error) {
+	if ref.Bucket != provider.StoreFunctions {
 		return "", fmt.Errorf("this run keeps no %q store", ref.Bucket)
 	}
 	return conformanceArtifactBucket + "/" + ref.Key, nil
 }
 
-func (s *shippedArtifacts) Put(_ context.Context, ref providerkit.ArtifactRef, body io.Reader) error {
+func (s *shippedArtifacts) Put(_ context.Context, ref provider.ArtifactRef, body io.Reader) error {
 	at, err := s.at(ref)
 	if err != nil {
 		return err
@@ -259,7 +259,7 @@ func (s *shippedArtifacts) Put(_ context.Context, ref providerkit.ArtifactRef, b
 	return nil
 }
 
-func (s *shippedArtifacts) Has(_ context.Context, ref providerkit.ArtifactRef) (bool, error) {
+func (s *shippedArtifacts) Has(_ context.Context, ref provider.ArtifactRef) (bool, error) {
 	at, err := s.at(ref)
 	if err != nil {
 		return false, err
@@ -270,7 +270,7 @@ func (s *shippedArtifacts) Has(_ context.Context, ref providerkit.ArtifactRef) (
 	return held, nil
 }
 
-func (s *shippedArtifacts) Open(_ context.Context, ref providerkit.ArtifactRef) (io.ReadCloser, error) {
+func (s *shippedArtifacts) Open(_ context.Context, ref provider.ArtifactRef) (io.ReadCloser, error) {
 	at, err := s.at(ref)
 	if err != nil {
 		return nil, err
@@ -298,19 +298,19 @@ func (s *shippedArtifacts) RemovePrefix(_ context.Context, _ edge.Class, prefix 
 func TestReleaserRunsTheKitsPortTier(t *testing.T) {
 	store := newShippedArtifacts()
 	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: store}
-	conformance.RunStacks(t, providerkit.Facts{Bindings: Serves(), StoresArtifacts: true}, conformingStacks(engine), store, nil)
+	conformance.RunStacks(t, provider.Facts{Bindings: Serves(), StoresArtifacts: true}, conformingStacks(engine), store, nil)
 }
 
 func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *testing.T) {
 	t.Parallel()
 
 	engine := &mockedEngine{outputs: provisionedOutputs()}
-	result, err := conformingStacks(engine).Provision(context.Background(), providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "conformance", Class: edge.ClassProduction, Name: naming.InfraStack("conformance")},
-		Kind: providerkit.StackInfra,
-		Resources: []providerkit.Resource{
-			{Name: "c-postgres", Type: providerkit.BindingPostgres, Postgres: &providerkit.PostgresSpec{}},
-			{Name: "c-bucket", Type: providerkit.BindingBucket, Bucket: &providerkit.BucketSpec{}},
+	result, err := conformingStacks(engine).Provision(context.Background(), provider.StackPlan{
+		Ref:  provider.StackRef{Project: "conformance", Class: edge.ClassProduction, Name: naming.InfraStack("conformance")},
+		Kind: provider.StackInfra,
+		Resources: []provider.Resource{
+			{Name: "c-postgres", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}},
+			{Name: "c-bucket", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
 		},
 	}, nil)
 	if err != nil {
@@ -320,11 +320,11 @@ func TestProvisioningAnInfraStackRunsTheAWSProgramAndDecodesEveryBinding(t *test
 		t.Fatalf("the engine ran %d stacks, want the one the plan named", len(engine.ran))
 	}
 	for _, binding := range result.Bindings {
-		if err := providerkit.VerifyProperties(binding); err != nil {
+		if err := provider.VerifyProperties(binding); err != nil {
 			t.Errorf("Provision() returned a binding the kit refuses to record: %v", err)
 		}
 	}
-	if got := result.Bindings[0].Properties[providerkit.PropertyPassword]; got != "a-master-password" {
+	if got := result.Bindings[0].Properties[provider.PropertyPassword]; got != "a-master-password" {
 		t.Errorf("the postgres binding carries password %q, want the one the managed secret holds", got)
 	}
 }
@@ -364,11 +364,11 @@ func TestProvisioningABucketPlacesTheUploadCompleterItDeclares(t *testing.T) {
 	uploader := &fakeArtifactStore{}
 	recorder := &lambdaCodeRecorder{}
 	engine := &mockedEngine{outputs: provisionedOutputs(), mocks: recorder}
-	if _, err := releaserPlacingInto(engine, uploader).Provision(context.Background(), providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "conformance", Class: edge.ClassProduction, Name: naming.InfraStack("conformance")},
-		Kind: providerkit.StackInfra,
-		Resources: []providerkit.Resource{
-			{Name: "c-bucket", Type: providerkit.BindingBucket, Bucket: &providerkit.BucketSpec{}},
+	if _, err := releaserPlacingInto(engine, uploader).Provision(context.Background(), provider.StackPlan{
+		Ref:  provider.StackRef{Project: "conformance", Class: edge.ClassProduction, Name: naming.InfraStack("conformance")},
+		Kind: provider.StackInfra,
+		Resources: []provider.Resource{
+			{Name: "c-bucket", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
 		},
 	}, nil); err != nil {
 		t.Fatalf("Provision() = %v", err)

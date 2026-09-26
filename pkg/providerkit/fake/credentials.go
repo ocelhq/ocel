@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -29,21 +29,21 @@ func (c *Credentials) Admit() {
 	c.refusal = nil
 }
 
-func (c *Credentials) Whoami(context.Context) (providerkit.Identity, error) {
+func (c *Credentials) Whoami(context.Context) (provider.Identity, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.refusal != nil {
-		return providerkit.Identity{}, c.refusal
+		return provider.Identity{}, c.refusal
 	}
-	return providerkit.Identity{
+	return provider.Identity{
 		Vendor:    Vendor,
 		Account:   "000000000000",
 		Principal: "fake/reference",
-		Details:   []providerkit.Detail{{Label: "region", Value: c.region}},
+		Details:   []provider.Detail{{Label: "region", Value: c.region}},
 	}, nil
 }
 
-func (c *Credentials) Permissions(tier providerkit.CredentialTier) (edge.CredentialDocument, error) {
+func (c *Credentials) Permissions(tier provider.CredentialTier) (edge.CredentialDocument, error) {
 	return edge.CredentialDocument{
 		Heading:  "fake credentials",
 		Document: "fake permissions for " + string(tier),

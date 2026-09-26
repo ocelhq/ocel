@@ -17,21 +17,22 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
-type uncosted struct{ providerkit.Provider }
+type uncosted struct{ provider.Provider }
 
-func (u uncosted) Hooks() providerkit.Hooks {
+func (u uncosted) Hooks() provider.Hooks {
 	hooks := u.Provider.Hooks()
 	hooks.Cost = nil
 	return hooks
 }
 
-func costServed(t *testing.T, provider providerkit.Provider) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
+func costServed(t *testing.T, p provider.Provider) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
 	t.Helper()
 	spec := providerkit.Spec{
 		Version: "1.0.0",
-		New:     func(context.Context, providerkit.Settings) (providerkit.Provider, error) { return provider, nil },
+		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return p, nil },
 	}
 	server := httptest.NewServer(providerkit.ConformanceMux(spec))
 	t.Cleanup(server.Close)

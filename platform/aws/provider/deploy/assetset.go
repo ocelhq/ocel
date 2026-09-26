@@ -12,7 +12,7 @@ import (
 	"github.com/pulumi/pulumi-go-provider/infer"
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -131,7 +131,7 @@ func (r *assetSetResource) Create(ctx context.Context, req infer.CreateRequest[a
 	}, nil
 }
 
-func (r *release) assetSets(plan providerkit.StackPlan, app, framework string, bundle appBundle, cache *isrConfig) ([]assetSet, edgeDelivery, error) {
+func (r *release) assetSets(plan provider.StackPlan, app, framework string, bundle appBundle, cache *isrConfig) ([]assetSet, edgeDelivery, error) {
 	coord := appCoordinate(plan)
 	var sets []assetSet
 	for _, planned := range []func() (*assetSet, error){

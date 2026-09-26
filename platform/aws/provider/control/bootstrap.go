@@ -13,13 +13,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const groupVendor providerkit.Vendor = "aws"
+const groupVendor provider.Vendor = "aws"
 
 type SSMAPI interface {
 	bootstrap.SSMAPI
@@ -39,7 +40,7 @@ type Bootstrap struct {
 	Store   bootstrap.ObjectStore
 	Buckets cfn.BucketEmptierAPI
 	Edge    edge.Edge
-	Edges   providerkit.Edges
+	Edges   provider.Edges
 	Kinds   []edge.Kind
 	Region  string
 	VarsKey string
@@ -47,7 +48,7 @@ type Bootstrap struct {
 	Namespace bootstrap.Namespace
 }
 
-func BootstrapFor(cfg aws.Config, front edge.Edge, registry providerkit.Edges, kinds []edge.Kind, varsKey string, ns bootstrap.Namespace) Bootstrap {
+func BootstrapFor(cfg aws.Config, front edge.Edge, registry provider.Edges, kinds []edge.Kind, varsKey string, ns bootstrap.Namespace) Bootstrap {
 	return Bootstrap{
 		CFN:     cloudformation.NewFromConfig(cfg),
 		SSM:     ssm.NewFromConfig(cfg),
@@ -69,7 +70,7 @@ func (b Bootstrap) paramAPIs() bootstrap.ParamAPIs {
 	return bootstrap.ParamAPIs{SSM: b.SSM, IAM: b.IAM, KMS: b.KMS, Region: b.Region}
 }
 
-func (b Bootstrap) request(req providerkit.BootstrapRequest) bootstrap.Request {
+func (b Bootstrap) request(req provider.BootstrapRequest) bootstrap.Request {
 	return bootstrap.Request{
 		VarsKey:            b.VarsKey,
 		Features:           req.Features,
@@ -79,22 +80,22 @@ func (b Bootstrap) request(req providerkit.BootstrapRequest) bootstrap.Request {
 	}
 }
 
-func (b Bootstrap) Catalogue() []providerkit.Feature { return bootstrap.Catalogue() }
+func (b Bootstrap) Catalogue() []provider.Feature { return bootstrap.Catalogue() }
 
-func (b Bootstrap) Describe(ctx context.Context, class edge.Class) (providerkit.BootstrapReading, error) {
+func (b Bootstrap) Describe(ctx context.Context, class edge.Class) (provider.BootstrapReading, error) {
 	read, err := bootstrap.Read(ctx, b.CFN, b.Namespace, string(class))
 	if err != nil {
-		return providerkit.BootstrapReading{}, err
+		return provider.BootstrapReading{}, err
 	}
 	held := described(class, read.Deployed)
 	held.Reading = read
 	return held, nil
 }
 
-func described(class edge.Class, deployed bootstrap.Deployed) providerkit.BootstrapReading {
-	described := providerkit.BootstrapReading{Class: class, Present: deployed.Present}
+func described(class edge.Class, deployed bootstrap.Deployed) provider.BootstrapReading {
+	described := provider.BootstrapReading{Class: class, Present: deployed.Present}
 	for _, stack := range deployed.Stacks {
-		described.Stacks = append(described.Stacks, providerkit.BootstrapStack{
+		described.Stacks = append(described.Stacks, provider.BootstrapStack{
 			Name:          stack.Name,
 			Feature:       stack.Feature,
 			Present:       stack.Present,
@@ -106,34 +107,34 @@ func described(class edge.Class, deployed bootstrap.Deployed) providerkit.Bootst
 	return described
 }
 
-func (b Bootstrap) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
+func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
 	read, err := b.reading(ctx, req)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	groups, err := bootstrap.PlanChanges(ctx, b.CFN, read, b.request(req),
 		providerkit.DeriveGroups(bootstrap.NameStacks(b.Namespace, described(req.Class, read.Deployed)), bootstrap.Catalogue(), req))
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	adoptions, err := b.adoptions(ctx, req)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	params, err := bootstrap.PlanParameters(ctx, b.paramAPIs(), b.Namespace, string(req.Class), adoptions, b.request(req))
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
-	plan := providerkit.Plan{Groups: providerkit.Vendored(groupVendor, append(groups, params))}
+	plan := provider.Plan{Groups: providerkit.Vendored(groupVendor, append(groups, params))}
 	fronts, err := b.edgeGroups(ctx, req)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	plan.Groups = append(plan.Groups, fronts...)
 	return plan, nil
 }
 
-func (b Bootstrap) reading(ctx context.Context, req providerkit.BootstrapRequest) (bootstrap.Reading, error) {
+func (b Bootstrap) reading(ctx context.Context, req provider.BootstrapRequest) (bootstrap.Reading, error) {
 	if held, carried := req.Reading.(bootstrap.Reading); carried && held.Class() == string(req.Class) {
 		return held, nil
 	}
@@ -147,7 +148,7 @@ func (b Bootstrap) open(kind edge.Kind) (edge.Edge, error) {
 	return b.Edges.Open(kind)
 }
 
-func (b Bootstrap) adoptions(ctx context.Context, req providerkit.BootstrapRequest) ([]bootstrap.EdgeAdoption, error) {
+func (b Bootstrap) adoptions(ctx context.Context, req provider.BootstrapRequest) ([]bootstrap.EdgeAdoption, error) {
 	var out []bootstrap.EdgeAdoption
 	for _, kind := range bootstrap.EdgeKindsFor(req.Features) {
 		front, err := b.open(kind)
@@ -167,8 +168,8 @@ func (b Bootstrap) adoptions(ctx context.Context, req providerkit.BootstrapReque
 	return out, nil
 }
 
-func (b Bootstrap) edgeGroups(ctx context.Context, req providerkit.BootstrapRequest) ([]providerkit.ChangeGroup, error) {
-	var groups []providerkit.ChangeGroup
+func (b Bootstrap) edgeGroups(ctx context.Context, req provider.BootstrapRequest) ([]provider.ChangeGroup, error) {
+	var groups []provider.ChangeGroup
 	for _, kind := range bootstrap.EdgeKindsFor(req.Features) {
 		group, err := b.standingEdgeGroup(ctx, req.Class, kind)
 		if err != nil {
@@ -190,7 +191,7 @@ func (b Bootstrap) edgeGroups(ctx context.Context, req providerkit.BootstrapRequ
 	return groups, nil
 }
 
-func (b Bootstrap) standingEdgeGroup(ctx context.Context, class edge.Class, kind edge.Kind) (*providerkit.ChangeGroup, error) {
+func (b Bootstrap) standingEdgeGroup(ctx context.Context, class edge.Class, kind edge.Kind) (*provider.ChangeGroup, error) {
 	front, err := b.open(kind)
 	if err != nil {
 		return nil, err
@@ -218,7 +219,7 @@ func plannedBootstrap(ctx context.Context, front edge.Edge, class edge.Class) ([
 	return planned, nil
 }
 
-func (b Bootstrap) severedEdge(ctx context.Context, class edge.Class, kind edge.Kind) (*providerkit.ChangeGroup, error) {
+func (b Bootstrap) severedEdge(ctx context.Context, class edge.Class, kind edge.Kind) (*provider.ChangeGroup, error) {
 	front, err := b.open(kind)
 	if err != nil {
 		return nil, err
@@ -242,21 +243,21 @@ func (b Bootstrap) severedEdge(ctx context.Context, class edge.Class, kind edge.
 	return group, nil
 }
 
-func standingEdgeChanges(kind edge.Kind, feature string, planned []edge.PlanChange) *providerkit.ChangeGroup {
-	group := providerkit.ChangeGroup{
-		Kind:    providerkit.EdgeGroupKind,
+func standingEdgeChanges(kind edge.Kind, feature string, planned []edge.PlanChange) *provider.ChangeGroup {
+	group := provider.ChangeGroup{
+		Kind:    provider.EdgeGroupKind,
 		Name:    edge.EdgeGroupName(kind),
 		Feature: feature,
-		Action:  providerkit.ActionDelete,
+		Action:  provider.ActionDelete,
 	}
 	for _, change := range planned {
 		if change.Action == edge.PlanCreate {
 			continue
 		}
-		group.Changes = append(group.Changes, providerkit.Change{
+		group.Changes = append(group.Changes, provider.Change{
 			Kind:   change.Kind,
 			Name:   change.Name,
-			Action: providerkit.ActionDelete,
+			Action: provider.ActionDelete,
 		})
 	}
 	if len(group.Changes) == 0 {
@@ -265,7 +266,7 @@ func standingEdgeChanges(kind edge.Kind, feature string, planned []edge.PlanChan
 	return &group
 }
 
-func (b Bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress edge.Progress) error {
+func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
 	if req.Heal {
 		return b.heal(ctx, req, progress)
 	}
@@ -276,7 +277,7 @@ func (b Bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, 
 	return err
 }
 
-func (b Bootstrap) heal(ctx context.Context, req providerkit.BootstrapRequest, progress edge.Progress) error {
+func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
 	_, err := bootstrap.Heal(ctx, b.apis(), b.Namespace, string(req.Class), bootstrap.HealRequest{
 		Features: req.Features,
 		Writer:   req.WrittenBy,
@@ -329,4 +330,4 @@ func detail(progress edge.Progress) func(string) {
 	return progress.Detail
 }
 
-var _ providerkit.Bootstrap = Bootstrap{}
+var _ provider.Bootstrap = Bootstrap{}

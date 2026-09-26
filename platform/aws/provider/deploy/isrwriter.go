@@ -11,7 +11,7 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -30,9 +30,9 @@ func checkISRWriterAgrees(class edge.Class, stores ObjectStores, w ISRWriterAcce
 	adopted, writer := isrEntriesAdopted(stores), isrWriterConfigured(w)
 	switch {
 	case adopted && !writer:
-		return fmt.Errorf("this bootstrap adopted an edge cache store but no ISR writer to write into it, so this build could not revalidate anything it cached; re-run `%s`", providerkit.BootstrapCommand(class))
+		return fmt.Errorf("this bootstrap adopted an edge cache store but no ISR writer to write into it, so this build could not revalidate anything it cached; re-run `%s`", provider.BootstrapCommand(class))
 	case !adopted && writer:
-		return fmt.Errorf("this bootstrap adopted an ISR writer but no edge cache store, so entries would be written where nothing reads them; re-run `%s`", providerkit.BootstrapCommand(class))
+		return fmt.Errorf("this bootstrap adopted an ISR writer but no edge cache store, so entries would be written where nothing reads them; re-run `%s`", provider.BootstrapCommand(class))
 	}
 	return nil
 }

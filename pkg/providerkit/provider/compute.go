@@ -1,6 +1,8 @@
-package providerkit
+package provider
 
-import "slices"
+import (
+	"slices"
+)
 
 type Compute string
 

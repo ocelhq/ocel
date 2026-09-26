@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -24,10 +24,10 @@ func aPostgres(t *testing.T, version string) resources.Instruction {
 		t.Fatal(err)
 	}
 	return resources.Instruction{
-		Ref: providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
-		Resource: providerkit.Resource{
-			Name: "main", Type: providerkit.BindingPostgres,
-			Postgres: &providerkit.PostgresSpec{Version: version},
+		Ref: provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
+		Resource: provider.Resource{
+			Name: "main", Type: provider.BindingPostgres,
+			Postgres: &provider.PostgresSpec{Version: version},
 		},
 	}
 }
@@ -40,7 +40,7 @@ func holdingAPostgres(machine *box) {
 func TestAProviderOverABoxServesPostgres(t *testing.T) {
 	t.Parallel()
 
-	if served := over(&box{}).Facts().Bindings; !slices.Contains(served, providerkit.BindingPostgres) {
+	if served := over(&box{}).Facts().Bindings; !slices.Contains(served, provider.BindingPostgres) {
 		t.Errorf("Serves() = %v, and a project declaring a postgres is refused at deploy on a box", served)
 	}
 }
@@ -53,16 +53,16 @@ func TestADeclaredPostgresStandsUpAsOneContainerOnlyItsProjectReaches(t *testing
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
-	if err := providerkit.VerifyProperties(binding); err != nil {
+	if err := provider.VerifyProperties(binding); err != nil {
 		t.Fatalf("the binding that came back is one no app can bind a client to: %v", err)
 	}
-	if binding.Name != "main" || binding.Type != providerkit.BindingPostgres {
+	if binding.Name != "main" || binding.Type != provider.BindingPostgres {
 		t.Errorf("the binding is %s %q, want the postgres the project declared as main", binding.Type, binding.Name)
 	}
-	if got := binding.Properties[providerkit.PropertyDatabase]; got != "main" {
+	if got := binding.Properties[provider.PropertyDatabase]; got != "main" {
 		t.Errorf("the binding names the database %q, want the resource's own name", got)
 	}
-	if got := binding.Properties[providerkit.PropertyPort]; got != "5432" {
+	if got := binding.Properties[provider.PropertyPort]; got != "5432" {
 		t.Errorf("the binding names port %q, want the one postgres listens on inside its network", got)
 	}
 
@@ -80,7 +80,7 @@ func TestADeclaredPostgresStandsUpAsOneContainerOnlyItsProjectReaches(t *testing
 		"'--cap-drop' 'ALL'",
 		"/var/lib/postgresql/data",
 		"@sha256:",
-		binding.Properties[providerkit.PropertyHost],
+		binding.Properties[provider.PropertyHost],
 	} {
 		if !strings.Contains(stood, want) {
 			t.Errorf("the container was stood up without %q:\n%s", want, stood)
@@ -101,7 +101,7 @@ func TestAPostgresPasswordNeverRidesACommandLine(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
-	password := binding.Properties[providerkit.PropertyPassword]
+	password := binding.Properties[provider.PropertyPassword]
 	if len(password) < 32 {
 		t.Fatalf("the password is %d characters, and it is the one thing between the project network and the data", len(password))
 	}
@@ -123,7 +123,7 @@ func TestWhatABoxKeepsOfAPostgresPasswordIsSealedToThatResource(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
-	password := binding.Properties[providerkit.PropertyPassword]
+	password := binding.Properties[provider.PropertyPassword]
 	keeping := machine.at("/kept/")
 	if keeping < 0 {
 		t.Fatalf("nothing was kept on the box, so the next deploy mints a password the standing server was never handed:\n%s",
@@ -177,7 +177,7 @@ func TestASecondDeployBindsToThePasswordTheStandingPostgresWasHanded(t *testing.
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
-	if got := binding.Properties[providerkit.PropertyPassword]; got != standingPassword {
+	if got := binding.Properties[provider.PropertyPassword]; got != standingPassword {
 		t.Errorf("the binding carries a password the standing server was never handed, and every app bound to it is locked out")
 	}
 }
@@ -197,7 +197,7 @@ func TestADeployThatLosesTheNameToAnotherSharesTheWinnersPostgres(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Postgres() = %v, and two deploys standing one postgres up at once end up sharing it", err)
 	}
-	if got := binding.Properties[providerkit.PropertyPassword]; got != standingPassword {
+	if got := binding.Properties[provider.PropertyPassword]; got != standingPassword {
 		t.Error("the deploy that lost the name bound to a password the server that won was never handed")
 	}
 	if strings.Contains(strings.Join(machine.commands(), "\n"), "docker rm") {
@@ -209,15 +209,15 @@ func TestARemovedPostgresTakesItsVolumeWithIt(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	provider := over(machine)
+	p := over(machine)
 	in := aPostgres(t, "17")
-	binding, err := provider.ProvisionPostgres(context.Background(), in, nil)
+	binding, err := p.ProvisionPostgres(context.Background(), in, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	name := binding.Properties[providerkit.PropertyHost]
+	name := binding.Properties[provider.PropertyHost]
 	before := len(machine.commands())
-	if err := provider.RemoveResource(context.Background(), in.Ref, binding, nil); err != nil {
+	if err := p.RemoveResource(context.Background(), in.Ref, binding, nil); err != nil {
 		t.Fatalf("RemoveResource() = %v", err)
 	}
 	joined := strings.Join(machine.commands()[before:], "\n")
@@ -243,9 +243,9 @@ func TestARemovalReachesOnlyTheServerItsOwnStackStoodUp(t *testing.T) {
 
 	machine := &box{}
 	in := aPostgres(t, "17")
-	foreign := providerkit.Binding{
-		Type: providerkit.BindingPostgres, Name: "main",
-		Properties: map[string]string{providerkit.PropertyHost: "someone-elses-container"},
+	foreign := provider.Binding{
+		Type: provider.BindingPostgres, Name: "main",
+		Properties: map[string]string{provider.PropertyHost: "someone-elses-container"},
 	}
 	if err := over(machine).RemoveResource(context.Background(), in.Ref, foreign, nil); err != nil {
 		t.Fatalf("RemoveResource() = %v", err)
@@ -285,7 +285,7 @@ func TestAPostgresDeclaredUnderANewerMajorIsDumpedThenSwappedWithAWayBack(t *tes
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
-	if got := binding.Properties[providerkit.PropertyPassword]; got != standingPassword {
+	if got := binding.Properties[provider.PropertyPassword]; got != standingPassword {
 		t.Error("the upgraded server is bound under another password, and every app bound to the old one is locked out")
 	}
 	dumped := machine.at("'dump'")
@@ -380,7 +380,7 @@ func TestALoginThatDoesNotOwnTheStateDirectoryKeepsThePasswordThroughSudo(t *tes
 	if err != nil {
 		t.Fatalf("Postgres() as a login with sudo that does not own the state directory = %v, and a bootstrap login deploys as readily as the deploy login does", err)
 	}
-	if binding.Properties[providerkit.PropertyPassword] == "" {
+	if binding.Properties[provider.PropertyPassword] == "" {
 		t.Error("the binding carries no password")
 	}
 	kept := machine.commands()[len(machine.commands())-1]

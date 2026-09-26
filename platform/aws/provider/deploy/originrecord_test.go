@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func TestTheReleasePublishesTheOriginRecordTheRevalidatorResolvesBy(t *testing.T) {
@@ -19,7 +19,7 @@ func TestTheReleasePublishesTheOriginRecordTheRevalidatorResolvesBy(t *testing.T
 			{Logical: "fn--web--api", RouteID: "api"},
 		}},
 	}
-	result := providerkit.StackResult{Functions: []providerkit.Function{
+	result := provider.StackResult{Functions: []provider.Function{
 		{Name: "fn--web--bundle-0", URL: "https://web1.lambda-url.eu-west-1.on.aws/"},
 		{Name: "fn--web--api", URL: "https://api1.lambda-url.eu-west-1.on.aws/"},
 	}}
@@ -58,7 +58,7 @@ func TestAReleaseWithNoISRCachePublishesNoOriginRecord(t *testing.T) {
 	up := &fakeArtifactStore{}
 	cfg := Config{AssetBucket: "assets-xyz", Objects: up}
 
-	if err := writeOriginRecord(context.Background(), cfg, "static", &appWork{}, providerkit.StackResult{}); err != nil {
+	if err := writeOriginRecord(context.Background(), cfg, "static", &appWork{}, provider.StackResult{}); err != nil {
 		t.Fatalf("writeOriginRecord: %v", err)
 	}
 	if len(up.puts) != 0 {

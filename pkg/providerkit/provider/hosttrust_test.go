@@ -1,4 +1,4 @@
-package providerkit_test
+package provider_test
 
 import (
 	"errors"
@@ -8,26 +8,26 @@ import (
 	"testing"
 
 	connect "connectrpc.com/connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
-func unknownHostKey() providerkit.HostTrust {
-	return providerkit.HostTrust{
-		Reason:     providerkit.UnknownHostKey,
+func unknownHostKey() provider.HostTrust {
+	return provider.HostTrust{
+		Reason:     provider.UnknownHostKey,
 		Host:       "web-1",
 		Address:    "203.0.113.10",
 		Port:       2222,
-		Got:        providerkit.HostKey{Type: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAIGot", Fingerprint: "SHA256:got"},
+		Got:        provider.HostKey{Type: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAIGot", Fingerprint: "SHA256:got"},
 		KnownHosts: []string{"/home/ada/.ssh/known_hosts"},
 		Remedy:     "ssh-keyscan -t ssh-ed25519 -p 2222 203.0.113.10 >> /home/ada/.ssh/known_hosts",
 	}
 }
 
-func changedHostKey() providerkit.HostTrust {
+func changedHostKey() provider.HostTrust {
 	trust := unknownHostKey()
-	trust.Reason = providerkit.HostKeyMismatch
-	trust.Want = providerkit.HostKey{Type: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAIWant", Fingerprint: "SHA256:want"}
+	trust.Reason = provider.HostKeyMismatch
+	trust.Want = provider.HostKey{Type: "ssh-ed25519", Key: "AAAAC3NzaC1lZDI1NTE5AAAAIWant", Fingerprint: "SHA256:want"}
 	trust.Remedy = "ssh-keygen -R '[203.0.113.10]:2222' -f /home/ada/.ssh/known_hosts"
 	return trust
 }
@@ -71,14 +71,14 @@ func TestAChangedHostKeyIsTerminalAndCarriesTheKeygenRemedy(t *testing.T) {
 func TestATrustRefusalIsDeniedAndReadsBackWhole(t *testing.T) {
 	t.Parallel()
 
-	for _, trust := range []providerkit.HostTrust{unknownHostKey(), changedHostKey()} {
+	for _, trust := range []provider.HostTrust{unknownHostKey(), changedHostKey()} {
 		t.Run(string(trust.Reason), func(t *testing.T) {
-			err := providerkit.RefuseHostTrust(trust)
+			err := provider.RefuseHostTrust(trust)
 			var refused refusal.Refusal
 			if !errors.As(err, &refused) || refused.Code != refusal.CodeDenied {
 				t.Fatalf("RefuseHostTrust() = %v, want a %s refusal", err, refusal.CodeDenied)
 			}
-			read, ok := providerkit.HostTrustOf(err)
+			read, ok := provider.HostTrustOf(err)
 			if !ok {
 				t.Fatal("HostTrustOf() found no trust decision in a trust refusal")
 			}
@@ -92,13 +92,13 @@ func TestATrustRefusalIsDeniedAndReadsBackWhole(t *testing.T) {
 func TestATrustRefusalSurvivesTheWire(t *testing.T) {
 	t.Parallel()
 
-	for _, trust := range []providerkit.HostTrust{unknownHostKey(), changedHostKey()} {
+	for _, trust := range []provider.HostTrust{unknownHostKey(), changedHostKey()} {
 		t.Run(string(trust.Reason), func(t *testing.T) {
-			wire := providerkit.RefusalError(providerkit.RefuseHostTrust(trust))
+			wire := provider.RefusalError(provider.RefuseHostTrust(trust))
 			if connect.CodeOf(wire) != connect.CodePermissionDenied {
 				t.Errorf("RefusalError() carried %s, want %s", connect.CodeOf(wire), connect.CodePermissionDenied)
 			}
-			read, ok := providerkit.HostTrustOf(wire)
+			read, ok := provider.HostTrustOf(wire)
 			if !ok {
 				t.Fatal("HostTrustOf() found no trust decision on the far side of the wire")
 			}
@@ -114,10 +114,10 @@ func TestAnOrdinaryRefusalCarriesNoTrustDecision(t *testing.T) {
 
 	for _, err := range []error{
 		refusal.Refuse(refusal.CodeDenied, "no"),
-		providerkit.RefusalError(refusal.Refuse(refusal.CodeDenied, "no")),
+		provider.RefusalError(refusal.Refuse(refusal.CodeDenied, "no")),
 		fmt.Errorf("wrapped: %w", errors.New("no")),
 	} {
-		if _, ok := providerkit.HostTrustOf(err); ok {
+		if _, ok := provider.HostTrustOf(err); ok {
 			t.Errorf("HostTrustOf(%v) read a trust decision out of an error that holds none", err)
 		}
 	}
@@ -128,15 +128,15 @@ func TestTheKnownHostsEntryIsTheNameSshKeysOn(t *testing.T) {
 
 	for _, tc := range []struct {
 		name  string
-		trust providerkit.HostTrust
+		trust provider.HostTrust
 		want  string
 	}{
-		{"the default port stays bare", providerkit.HostTrust{Address: "203.0.113.10", Port: 22}, "203.0.113.10"},
-		{"an unstated port stays bare", providerkit.HostTrust{Address: "203.0.113.10"}, "203.0.113.10"},
-		{"another port is bracketed", providerkit.HostTrust{Address: "203.0.113.10", Port: 2222}, "[203.0.113.10]:2222"},
-		{"the written host stands in for a missing address", providerkit.HostTrust{Host: "web-1", Port: 22}, "web-1"},
-		{"a key alias wins over the address", providerkit.HostTrust{Address: "203.0.113.10", Port: 2222, KeyAlias: "ocel-vps"}, "ocel-vps"},
-		{"nothing named keys on nothing", providerkit.HostTrust{Port: 2222}, ""},
+		{"the default port stays bare", provider.HostTrust{Address: "203.0.113.10", Port: 22}, "203.0.113.10"},
+		{"an unstated port stays bare", provider.HostTrust{Address: "203.0.113.10"}, "203.0.113.10"},
+		{"another port is bracketed", provider.HostTrust{Address: "203.0.113.10", Port: 2222}, "[203.0.113.10]:2222"},
+		{"the written host stands in for a missing address", provider.HostTrust{Host: "web-1", Port: 22}, "web-1"},
+		{"a key alias wins over the address", provider.HostTrust{Address: "203.0.113.10", Port: 2222, KeyAlias: "ocel-vps"}, "ocel-vps"},
+		{"nothing named keys on nothing", provider.HostTrust{Port: 2222}, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -152,12 +152,12 @@ func TestOnlyAConservativeNameCanKeyAKnownHostsEntry(t *testing.T) {
 	t.Parallel()
 
 	for _, entry := range []string{"203.0.113.10", "[203.0.113.10]:2222", "web-1.example.com", "2001:db8::1"} {
-		if !providerkit.ValidKnownHostsEntry(entry) {
+		if !provider.ValidKnownHostsEntry(entry) {
 			t.Errorf("ValidKnownHostsEntry(%q) = false, want a name ssh itself writes accepted", entry)
 		}
 	}
 	for _, entry := range []string{"", "host name", "host\nevil.example.com", "host\rx", "host\033[2K", "host;rm -rf /"} {
-		if providerkit.ValidKnownHostsEntry(entry) {
+		if provider.ValidKnownHostsEntry(entry) {
 			t.Errorf("ValidKnownHostsEntry(%q) = true, want it refused", entry)
 		}
 	}
@@ -168,7 +168,7 @@ func TestAKeyIsFingerprintedOnlyWhenItIsShapedLikeOne(t *testing.T) {
 
 	const blob = "AAAAC3NzaC1lZDI1NTE5AAAAIGjxLv2WrJFcWFzVC/ui/P691jGR92crO0DsjeqiPi54"
 
-	key, err := (providerkit.HostKey{Type: "ssh-ed25519", Key: blob}).Fingerprinted()
+	key, err := (provider.HostKey{Type: "ssh-ed25519", Key: blob}).Fingerprinted()
 	if err != nil {
 		t.Fatalf("Fingerprinted() error = %v", err)
 	}
@@ -178,15 +178,15 @@ func TestAKeyIsFingerprintedOnlyWhenItIsShapedLikeOne(t *testing.T) {
 
 	for _, tc := range []struct {
 		name string
-		key  providerkit.HostKey
+		key  provider.HostKey
 	}{
-		{"an unnamed type", providerkit.HostKey{Key: blob}},
-		{"a type carrying an escape", providerkit.HostKey{Type: "ssh-ed25519\033[2K", Key: blob}},
-		{"a type carrying a newline", providerkit.HostKey{Type: "ssh-ed25519\nx", Key: blob}},
-		{"a blob carrying a newline", providerkit.HostKey{Type: "ssh-ed25519", Key: blob + "\n" + blob}},
-		{"a blob carrying a space", providerkit.HostKey{Type: "ssh-ed25519", Key: blob + " x"}},
-		{"an empty blob", providerkit.HostKey{Type: "ssh-ed25519"}},
-		{"a fingerprint the blob does not hash to", providerkit.HostKey{Type: "ssh-ed25519", Key: blob, Fingerprint: "SHA256:nope"}},
+		{"an unnamed type", provider.HostKey{Key: blob}},
+		{"a type carrying an escape", provider.HostKey{Type: "ssh-ed25519\033[2K", Key: blob}},
+		{"a type carrying a newline", provider.HostKey{Type: "ssh-ed25519\nx", Key: blob}},
+		{"a blob carrying a newline", provider.HostKey{Type: "ssh-ed25519", Key: blob + "\n" + blob}},
+		{"a blob carrying a space", provider.HostKey{Type: "ssh-ed25519", Key: blob + " x"}},
+		{"an empty blob", provider.HostKey{Type: "ssh-ed25519"}},
+		{"a fingerprint the blob does not hash to", provider.HostKey{Type: "ssh-ed25519", Key: blob, Fingerprint: "SHA256:nope"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

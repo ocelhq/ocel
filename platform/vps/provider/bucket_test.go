@@ -9,7 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -32,10 +32,10 @@ func aBucket(t *testing.T, name string, public bool) resources.Instruction {
 		t.Fatal(err)
 	}
 	return resources.Instruction{
-		Ref: providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
-		Resource: providerkit.Resource{
-			Name: name, Type: providerkit.BindingBucket,
-			Bucket: &providerkit.BucketSpec{
+		Ref: provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
+		Resource: provider.Resource{
+			Name: name, Type: provider.BindingBucket,
+			Bucket: &provider.BucketSpec{
 				Public:         public,
 				AllowedOrigins: []string{"https://app.example.com"},
 			},
@@ -46,7 +46,7 @@ func aBucket(t *testing.T, name string, public bool) resources.Instruction {
 func TestAProviderOverABoxServesBuckets(t *testing.T) {
 	t.Parallel()
 
-	if served := over(&box{}).Facts().Bindings; !slices.Contains(served, providerkit.BindingBucket) {
+	if served := over(&box{}).Facts().Bindings; !slices.Contains(served, provider.BindingBucket) {
 		t.Errorf("Serves() = %v, and a project declaring a bucket is refused at deploy on a box", served)
 	}
 }
@@ -59,10 +59,10 @@ func TestADeclaredBucketStandsAStoreUpOnlyItsProjectReaches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
-	if err := providerkit.VerifyProperties(binding); err != nil {
+	if err := provider.VerifyProperties(binding); err != nil {
 		t.Fatalf("the binding that came back is one no app can bind a client to: %v", err)
 	}
-	if binding.Name != "uploads" || binding.Type != providerkit.BindingBucket {
+	if binding.Name != "uploads" || binding.Type != provider.BindingBucket {
 		t.Errorf("the binding is %s %q, want the bucket the project declared as uploads", binding.Type, binding.Name)
 	}
 
@@ -98,7 +98,7 @@ func TestABindingIsKeyedByTheNameTheAppDeclaredTheResourceUnder(t *testing.T) {
 	}
 	if held.Resource != "main" {
 		t.Errorf("the postgres binding names resource %q, so the app reads it off %s rather than off %s",
-			held.Resource, providerkit.ResourceEnvName(held.Type, held.Name), providerkit.ResourceEnvName(held.Type, "main"))
+			held.Resource, provider.ResourceEnvName(held.Type, held.Name), provider.ResourceEnvName(held.Type, "main"))
 	}
 
 	bucket := aBucket(t, "bucket--uploads", false)
@@ -109,7 +109,7 @@ func TestABindingIsKeyedByTheNameTheAppDeclaredTheResourceUnder(t *testing.T) {
 	}
 	if held.Resource != "uploads" {
 		t.Errorf("the bucket binding names resource %q, so the app reads it off %s rather than off %s",
-			held.Resource, providerkit.ResourceEnvName(held.Type, held.Name), providerkit.ResourceEnvName(held.Type, "uploads"))
+			held.Resource, provider.ResourceEnvName(held.Type, held.Name), provider.ResourceEnvName(held.Type, "uploads"))
 	}
 }
 
@@ -117,19 +117,19 @@ func TestOneStoreServesEveryBucketAProjectDeclares(t *testing.T) {
 	t.Parallel()
 
 	machine := &box{}
-	provider := over(machine)
-	first, err := provider.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil)
+	p := over(machine)
+	first, err := p.ProvisionBucket(context.Background(), aBucket(t, "uploads", false), nil)
 	if err != nil {
 		t.Fatalf("Bucket(uploads) = %v", err)
 	}
-	second, err := provider.ProvisionBucket(context.Background(), aBucket(t, "avatars", false), nil)
+	second, err := p.ProvisionBucket(context.Background(), aBucket(t, "avatars", false), nil)
 	if err != nil {
 		t.Fatalf("Bucket(avatars) = %v", err)
 	}
 
-	if first.Properties[providerkit.PropertyBucket] == second.Properties[providerkit.PropertyBucket] {
+	if first.Properties[provider.PropertyBucket] == second.Properties[provider.PropertyBucket] {
 		t.Fatalf("both buckets bind to %q, and two declared buckets are two stores of objects",
-			first.Properties[providerkit.PropertyBucket])
+			first.Properties[provider.PropertyBucket])
 	}
 	stores := 0
 	for _, command := range machine.commands() {
@@ -208,19 +208,19 @@ func TestTheSecretAStoreAccountIsMintedWithIsOneTheStoreWillTake(t *testing.T) {
 	}
 }
 
-func bindingBucket() providerkit.Binding {
-	return providerkit.Binding{
-		Type: providerkit.BindingBucket, Name: "uploads", Resource: "uploads",
-		Properties: map[string]string{providerkit.PropertyBucket: "prod-web-r0a1b2c3d-uploads"},
+func bindingBucket() provider.Binding {
+	return provider.Binding{
+		Type: provider.BindingBucket, Name: "uploads", Resource: "uploads",
+		Properties: map[string]string{provider.PropertyBucket: "prod-web-r0a1b2c3d-uploads"},
 	}
 }
 
 func storeManifest(t *testing.T, machine *box, options vps.Options) vars.Manifest {
 	t.Helper()
 	app := anApp()
-	app.Values = providerkit.AppValues{Bindings: []providerkit.Binding{bindingBucket()}}
-	provider := vps.ProviderOver(options, func(context.Context) (host.Conn, error) { return machine, nil })
-	if _, err := provider.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
+	app.Values = provider.AppValues{Bindings: []provider.Binding{bindingBucket()}}
+	p := vps.ProviderOver(options, func(context.Context) (host.Conn, error) { return machine, nil })
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	return manifestIn(t, machine)
@@ -302,7 +302,7 @@ func TestDroppingADeclaredBucketLeavesTheStoresSessionsWhereTheyAre(t *testing.T
 
 	machine := &box{kept: sealedRootKey()}
 	err := over(machine).RemoveResource(context.Background(),
-		providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: aStackName(t)},
+		provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: aStackName(t)},
 		bindingBucket(), nil)
 	if err != nil {
 		t.Fatalf("RemoveResource(bucket) = %v", err)
@@ -312,9 +312,9 @@ func TestDroppingADeclaredBucketLeavesTheStoresSessionsWhereTheyAre(t *testing.T
 	}
 }
 
-func anInfraStack(t *testing.T) providerkit.StackRef {
+func anInfraStack(t *testing.T) provider.StackRef {
 	t.Helper()
-	return providerkit.StackRef{
+	return provider.StackRef{
 		Project: "shop", Class: edge.ClassProduction, Name: naming.InfraStack("prod"),
 	}
 }
@@ -323,19 +323,19 @@ func TestTheCoordinateTheRuntimeOpensTheStoreAtIsTheOneTheDeploySealedAt(t *test
 	t.Parallel()
 
 	machine := &box{kept: sealedRootKey()}
-	provider := vps.ProviderOver(
+	p := vps.ProviderOver(
 		vps.Options{SSH: vps.Target{Host: "box.invalid", User: "ada"}},
 		func(context.Context) (host.Conn, error) { return machine, nil },
 	)
 	stood := aBucket(t, "uploads", false)
 	stood.Ref = anInfraStack(t)
-	if _, err := provider.ProvisionBucket(context.Background(), stood, nil); err != nil {
+	if _, err := p.ProvisionBucket(context.Background(), stood, nil); err != nil {
 		t.Fatalf("Bucket() = %v", err)
 	}
 
 	app := anApp()
-	app.Values = providerkit.AppValues{Bindings: []providerkit.Binding{bindingBucket()}}
-	if _, err := provider.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
+	app.Values = provider.AppValues{Bindings: []provider.Binding{bindingBucket()}}
+	if _, err := p.ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
 	manifest := manifestIn(t, machine)
@@ -357,7 +357,7 @@ func TestAnAppBindingNoBucketIsHandedNoStore(t *testing.T) {
 
 	machine := &box{}
 	app := anApp()
-	app.Values = providerkit.AppValues{Secrets: []providerkit.SecretRef{{Key: "DATABASE_URL"}}}
+	app.Values = provider.AppValues{Secrets: []provider.SecretRef{{Key: "DATABASE_URL"}}}
 	if _, err := over(machine).ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
 		t.Fatalf("ProvisionContainers() = %v", err)
 	}
@@ -373,11 +373,11 @@ func TestAnAppWhoseBucketIsBoundToAStoreIsHandedNoStoreOfTheBoxs(t *testing.T) {
 
 	machine := &box{}
 	app := anApp()
-	app.Values = providerkit.AppValues{Bindings: []providerkit.Binding{{
-		Type: providerkit.BindingBucket, Name: "ocel:bucket.uploads", Source: "ocel.json",
+	app.Values = provider.AppValues{Bindings: []provider.Binding{{
+		Type: provider.BindingBucket, Name: "ocel:bucket.uploads", Source: "ocel.json",
 		Properties: map[string]string{
-			providerkit.PropertyBucket:   "acme",
-			providerkit.PropertyEndpoint: "https://abc.r2.cloudflarestorage.com",
+			provider.PropertyBucket:   "acme",
+			provider.PropertyEndpoint: "https://abc.r2.cloudflarestorage.com",
 		},
 	}}}
 	if _, err := over(machine).ProvisionContainers(context.Background(), aStack(t, app), nil); err != nil {
@@ -395,7 +395,7 @@ func TestRemovingABucketTakesItsObjectsWithIt(t *testing.T) {
 
 	machine := &box{kept: sealedRootKey()}
 	err := over(machine).RemoveResource(context.Background(),
-		providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: aStackName(t)},
+		provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: aStackName(t)},
 		bindingBucket(), nil)
 	if err != nil {
 		t.Fatalf("RemoveResource(bucket) = %v", err)

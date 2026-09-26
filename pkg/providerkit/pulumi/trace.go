@@ -8,7 +8,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -175,19 +175,19 @@ func reportTrace(progress edge.Progress, trace engineTrace, runErr error) {
 	if batchErr == nil && trace.Failed {
 		batchErr = errResourceOperationFailed
 	}
-	progress.Span(engineBatchSpanName, trace.Start, trace.End, batchErr, providerkit.AttrResourceCount(trace.ResourceCount))
+	progress.Span(engineBatchSpanName, trace.Start, trace.End, batchErr, provider.AttrResourceCount(trace.ResourceCount))
 
 	for _, s := range trace.Standouts {
 		var standoutErr error
 		if s.Failed {
 			standoutErr = errResourceOperationFailed
 		}
-		attrs := []edge.Attr{providerkit.AttrDurationMS(s.End.Sub(s.Start))}
+		attrs := []edge.Attr{provider.AttrDurationMS(s.End.Sub(s.Start))}
 		if s.Type != "" {
-			attrs = append(attrs, providerkit.AttrResourceType(s.Type))
+			attrs = append(attrs, provider.AttrResourceType(s.Type))
 		}
 		if s.Name != "" {
-			attrs = append(attrs, providerkit.AttrResourceName(s.Name))
+			attrs = append(attrs, provider.AttrResourceName(s.Name))
 		}
 		progress.Span(standoutName(s.Op, s.Failed), s.Start, s.End, standoutErr, attrs...)
 	}

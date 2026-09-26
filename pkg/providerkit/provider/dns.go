@@ -1,4 +1,4 @@
-package providerkit
+package provider
 
 import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"

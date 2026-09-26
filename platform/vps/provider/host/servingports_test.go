@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
@@ -80,8 +80,8 @@ func refusedBeforeWriting(t *testing.T, stood *bench, front Front, want string) 
 
 	class := edge.ClassProduction
 	boot := NewBootstrap(stood.fronted(front), testVendor, "shop")
-	_, planned := boot.Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
-	applied := boot.Apply(context.Background(), providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil)
+	_, planned := boot.Plan(context.Background(), provider.BootstrapRequest{Class: class})
+	applied := boot.Apply(context.Background(), provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil)
 	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
 		if refused := refusalOf(t, err, refusal.CodeNotReady); refused.Message != want {
 			t.Errorf("%s refused with\n%s\nwant\n%s", step, refused.Message, want)
@@ -147,7 +147,7 @@ func TestABootstrapWhoseServingPortsAreFreeOrOcelsOwnGoesAhead(t *testing.T) {
 		"a box ocel's own proxy fronts": settledOn(t, class),
 	} {
 		portsHeldOn(stood, map[string]string{caddy.HTTPPort: caddy.Container + "\n", "443": caddy.Container + "\n"})
-		if _, err := NewBootstrap(stood.host(), testVendor, "shop").Plan(context.Background(), providerkit.BootstrapRequest{Class: class}); err != nil {
+		if _, err := NewBootstrap(stood.host(), testVendor, "shop").Plan(context.Background(), provider.BootstrapRequest{Class: class}); err != nil {
 			t.Errorf("%s: Plan() = %v, want the bootstrap let through", name, err)
 		}
 	}
@@ -159,7 +159,7 @@ func TestABootstrapBehindYourOwnProxyLeavesWhatHoldsTheServingPortsAlone(t *test
 	stood := freshBox()
 	portsHeldOn(stood, nil, socketHeld{80, "nginx"}, socketHeld{443, "nginx"})
 	if _, err := NewBootstrap(stood.fronted(routedByHand()), testVendor, "shop").Plan(context.Background(),
-		providerkit.BootstrapRequest{Class: edge.ClassProduction}); err != nil {
+		provider.BootstrapRequest{Class: edge.ClassProduction}); err != nil {
 		t.Fatalf("Plan() = %v, want a box routed by hand free to keep its own proxy on 80 and 443", err)
 	}
 	if slices.ContainsFunc(stood.commands(), func(command string) bool { return strings.HasPrefix(command, holdersCommand) }) {

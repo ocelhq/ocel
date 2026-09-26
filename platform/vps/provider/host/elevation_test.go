@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -109,7 +109,7 @@ func stampedBy(t *testing.T, conn *sudoless, change func(map[string]string)) {
 	written := digests(append(Items(edge.ClassProduction, keys, ArchAMD64, Front{}), record))
 	change(written)
 	stamp, err := json.Marshal(Stamp{
-		Schema:  providerkit.BootstrapSchema,
+		Schema:  provider.BootstrapSchema,
 		State:   StateComplete,
 		Seal:    Seal{Fingerprint: "abc"},
 		Digests: written,

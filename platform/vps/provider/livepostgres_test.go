@@ -5,19 +5,19 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
 
-func (vm machine) queries(t *testing.T, binding providerkit.Binding, statement string) string {
+func (vm machine) queries(t *testing.T, binding provider.Binding, statement string) string {
 	t.Helper()
 	held := binding.Properties
-	image := strings.TrimSpace(vm.ssh(t, "sudo docker inspect -f '{{.Config.Image}}' "+quote(held[providerkit.PropertyHost])))
+	image := strings.TrimSpace(vm.ssh(t, "sudo docker inspect -f '{{.Config.Image}}' "+quote(held[provider.PropertyHost])))
 	return strings.TrimSpace(vm.ssh(t, "sudo docker run --rm --network "+quote(host.AppNetwork(edge.ClassProduction, "shop"))+
-		" --env "+quote("PGPASSWORD="+held[providerkit.PropertyPassword])+" "+quote(image)+
-		" psql -h "+quote(held[providerkit.PropertyHost])+" -p "+quote(held[providerkit.PropertyPort])+
-		" -U "+quote(held[providerkit.PropertyUsername])+" -d "+quote(held[providerkit.PropertyDatabase])+
+		" --env "+quote("PGPASSWORD="+held[provider.PropertyPassword])+" "+quote(image)+
+		" psql -h "+quote(held[provider.PropertyHost])+" -p "+quote(held[provider.PropertyPort])+
+		" -U "+quote(held[provider.PropertyUsername])+" -d "+quote(held[provider.PropertyDatabase])+
 		" -tA -v ON_ERROR_STOP=1 -c "+quote(statement)+" 2>&1 || true"))
 }
 
@@ -36,7 +36,7 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 	if err != nil {
 		t.Fatalf("Postgres() = %v", err)
 	}
-	name := binding.Properties[providerkit.PropertyHost]
+	name := binding.Properties[provider.PropertyHost]
 	if said := vm.queries(t, binding, "CREATE TABLE kept (id int); INSERT INTO kept VALUES (7); SELECT id FROM kept"); !strings.HasSuffix(said, "7") {
 		t.Fatalf("a client on the project's network bound to what came back and was answered %q", said)
 	}
@@ -44,7 +44,7 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 		t.Errorf("the server publishes %q on the box, and a database the machine's own address reaches is one the internet does", published)
 	}
 	kept := strings.TrimSpace(vm.ssh(t, "sudo cat "+quote(host.KeptPath(edge.ClassProduction, name))))
-	if kept == "" || strings.Contains(kept, binding.Properties[providerkit.PropertyPassword]) {
+	if kept == "" || strings.Contains(kept, binding.Properties[provider.PropertyPassword]) {
 		t.Errorf("the box keeps %d bytes for %s, and what it keeps is the password itself or nothing", len(kept), name)
 	}
 
@@ -53,7 +53,7 @@ func TestLiveADeclaredPostgresAnswersItsProjectAndNothingElseAndLeavesNothingBeh
 	if err != nil {
 		t.Fatalf("a second Postgres() = %v", err)
 	}
-	if again.Properties[providerkit.PropertyPassword] != binding.Properties[providerkit.PropertyPassword] {
+	if again.Properties[provider.PropertyPassword] != binding.Properties[provider.PropertyPassword] {
 		t.Error("a second deploy bound to another password, and every app the first one bound is locked out")
 	}
 	if now := vm.ssh(t, "sudo docker inspect -f '{{.Id}} {{.State.StartedAt}}' "+quote(name)); now != started {

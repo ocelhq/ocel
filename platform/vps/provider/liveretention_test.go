@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -39,19 +39,19 @@ func onABoxSweeping(t *testing.T, tags ...string) (machine, *vps.Provider) {
 	return vm, p
 }
 
-func sweepPlan(t *testing.T, tag string) providerkit.StackPlan {
+func sweepPlan(t *testing.T, tag string) provider.StackPlan {
 	t.Helper()
 	stack, err := naming.ParseStackName("prod--sweeper--r0a1b2c3d")
 	if err != nil {
 		t.Fatal(err)
 	}
 	sum := sha256.Sum256([]byte(tag))
-	return providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: sweepProject, Class: edge.ClassProduction, Name: stack},
-		Kind: providerkit.StackApp,
-		App: &providerkit.AppPlan{
+	return provider.StackPlan{
+		Ref:  provider.StackRef{Project: sweepProject, Class: edge.ClassProduction, Name: stack},
+		Kind: provider.StackApp,
+		App: &provider.AppPlan{
 			App:             sweepApp,
-			Compute:         providerkit.ComputeContainer,
+			Compute:         provider.ComputeContainer,
 			Deployment:      hex.EncodeToString(sum[:])[:32],
 			Image:           sweepAt(tag),
 			HealthCheckPath: healthPath,

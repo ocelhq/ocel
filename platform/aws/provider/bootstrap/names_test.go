@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -160,7 +160,7 @@ func TestTheLengthBoundIsTheTightestAWSAllows(t *testing.T) {
 		"cache policy name":     128,
 	}
 
-	longest := Namespace(strings.Repeat("a", providerkit.MaxNamespaceLength))
+	longest := Namespace(strings.Repeat("a", provider.MaxNamespaceLength))
 	tight := false
 	for what, got := range namesOf(t, longest) {
 		limit, known := limits[what]
@@ -175,6 +175,6 @@ func TestTheLengthBoundIsTheTightestAWSAllows(t *testing.T) {
 		}
 	}
 	if !tight {
-		t.Errorf("no name reaches its AWS limit at a namespace of %d characters, so the bound is shorter than it needs to be", providerkit.MaxNamespaceLength)
+		t.Errorf("no name reaches its AWS limit at a namespace of %d characters, so the bound is shorter than it needs to be", provider.MaxNamespaceLength)
 	}
 }

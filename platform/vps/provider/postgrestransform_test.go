@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	"github.com/ocelhq/ocel/pkg/transformkit/transformtest"
 )
@@ -23,12 +23,12 @@ func (a *patching) Evaluate(_ context.Context, req transformkit.Request) ([]tran
 	return []transformkit.Result{{Patches: a.patches, Tags: a.tags}}, nil
 }
 
-func patched(t *testing.T, pass *patching) (*box, providerkit.Binding, error) {
+func patched(t *testing.T, pass *patching) (*box, provider.Binding, error) {
 	t.Helper()
 	machine := &box{}
-	provider := over(machine)
-	provider.Transforming(pass)
-	binding, err := provider.ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
+	p := over(machine)
+	p.Transforming(pass)
+	binding, err := p.ProvisionPostgres(context.Background(), aPostgres(t, "17"), nil)
 	return machine, binding, err
 }
 

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -24,7 +25,7 @@ type settlement struct {
 	unbound  bool
 	dns      edge.DNSRecords
 	zone     string
-	liveness Liveness
+	liveness provider.Liveness
 	budget   time.Duration
 	window   time.Duration
 	wait     time.Duration
@@ -55,7 +56,7 @@ func unattended(sender *eventStream) owedPolicy {
 	return policy
 }
 
-func newSettlement(front edge.Edge, dns edge.DNSRecords, zone string, liveness Liveness) settlement {
+func newSettlement(front edge.Edge, dns edge.DNSRecords, zone string, liveness provider.Liveness) settlement {
 	return settlement{
 		kind:     front.Kind(),
 		unbound:  front.Facts().ServesUnbound,
@@ -141,7 +142,7 @@ func (s settlement) waiting(headline string, owed []edge.Record) error {
 	if !s.owed.unattended || len(owed) == 0 {
 		return nil
 	}
-	return Pending(owedRecords{headline: headline, records: owed})
+	return provider.Pending(owedRecords{headline: headline, records: owed})
 }
 
 func (s settlement) release(ctx context.Context, written []edge.Record, say func(string)) error {
@@ -206,11 +207,11 @@ func (s settlement) unresolved(hostname string, serving edge.Kind, began time.Ti
 		if outlasted != "" {
 			cause += ", and " + outlasted
 		}
-		return Pending(refusal.Refuse(refusal.CodeNotReady,
+		return provider.Pending(refusal.Refuse(refusal.CodeNotReady,
 			"%s does not answer as the %s edge yet%s — this run gave up after about %s, and `ocel domain add` picks up where it stopped",
 			hostname, s.kind, cause, waited))
 	}
-	return Pending(refusal.Refuse(refusal.CodeNotReady,
+	return provider.Pending(refusal.Refuse(refusal.CodeNotReady,
 		"%s answers as the %s edge, not the %s one this project deploys to — this run gave up after about %s",
 		hostname, serving, s.kind, waited))
 }

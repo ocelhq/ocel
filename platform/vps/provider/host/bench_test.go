@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -250,7 +250,7 @@ func surveyed(items []Item) string {
 
 func bootstrapped(t *testing.T, class edge.Class) []Item {
 	t.Helper()
-	stamp, err := Stamp{Schema: providerkit.BootstrapSchema, State: StateComplete}.item(class)
+	stamp, err := Stamp{Schema: provider.BootstrapSchema, State: StateComplete}.item(class)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -299,7 +299,7 @@ func settledHolding(t *testing.T, class edge.Class, table, config *string) *benc
 		t.Fatal(err)
 	}
 	stamp, err := Stamp{
-		Schema:  providerkit.BootstrapSchema,
+		Schema:  provider.BootstrapSchema,
 		State:   StateComplete,
 		Writer:  "the-suite",
 		Seal:    Seal{Fingerprint: contentSum(minted), Algorithm: SealAlgorithm, CreatedAt: "2026-01-01T00:00:00Z"},

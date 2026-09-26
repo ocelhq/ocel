@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const (
@@ -75,24 +75,24 @@ const (
 	originSecretRetired = "the secret it replaced %d days ago is retired; a release not re-deployed since stops answering its front"
 )
 
-func planOriginSecret(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, now time.Time) (providerkit.Change, error) {
+func planOriginSecret(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, now time.Time) (provider.Change, error) {
 	name, err := ns.OriginSecretParamFor(class)
 	if err != nil {
-		return providerkit.Change{}, err
+		return provider.Change{}, err
 	}
 	held, found, err := readOriginSecret(ctx, ssmClient, name)
 	if err != nil {
-		return providerkit.Change{}, err
+		return provider.Change{}, err
 	}
-	change := providerkit.Change{Kind: kindParameter, Name: name, Action: providerkit.ActionCreate}
+	change := provider.Change{Kind: kindParameter, Name: name, Action: provider.ActionCreate}
 	switch {
 	case !found:
 	case held.GraceOver(now):
-		change.Action, change.Reason = providerkit.ActionUpdate, fmt.Sprintf(originSecretRetired, int(now.Sub(held.RotatedAt).Hours()/24))
+		change.Action, change.Reason = provider.ActionUpdate, fmt.Sprintf(originSecretRetired, int(now.Sub(held.RotatedAt).Hours()/24))
 	case held.Stale(now) && !held.Rotating():
-		change.Action, change.Reason = providerkit.ActionUpdate, fmt.Sprintf(originSecretStale, int(OriginSecretMaxAge.Hours()/24), int(OriginSecretGrace.Hours()/24))
+		change.Action, change.Reason = provider.ActionUpdate, fmt.Sprintf(originSecretStale, int(OriginSecretMaxAge.Hours()/24), int(OriginSecretGrace.Hours()/24))
 	default:
-		change.Action, change.Reason = providerkit.ActionKeep, paramCurrent
+		change.Action, change.Reason = provider.ActionKeep, paramCurrent
 	}
 	return change, nil
 }

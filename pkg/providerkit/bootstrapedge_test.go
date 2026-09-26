@@ -10,15 +10,16 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func fronting(t *testing.T, kind edge.Kind) (providerkit.Gate, *fake.Provider) {
 	t.Helper()
 
-	gate, provider := gated(t, providerkit.WrittenBy("1.0.0"))
+	gate, p := gated(t, provider.WrittenBy("1.0.0"))
 	gate.Edge = kind
-	return gate, provider
+	return gate, p
 }
 
 func planFeatures(t *testing.T, gate providerkit.Gate, req providerkit.ApplyRequest) []string {
@@ -30,7 +31,7 @@ func planFeatures(t *testing.T, gate providerkit.Gate, req providerkit.ApplyRequ
 	}
 	var featured []string
 	for _, group := range plan.Groups {
-		if group.Feature != "" && group.Action != providerkit.ActionDelete {
+		if group.Feature != "" && group.Action != provider.ActionDelete {
 			featured = append(featured, group.Feature)
 		}
 	}
@@ -62,15 +63,15 @@ func TestABootstrapBehindAnotherEdgeEnsuresNothing(t *testing.T) {
 func TestAStandingEdgeFeatureLeftOutIsKept(t *testing.T) {
 	t.Parallel()
 
-	gate, provider := fronting(t, fake.KindRelay)
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	gate, p := fronting(t, fake.KindRelay)
+	bootstrapped(t, p, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
 	plan, err := gate.Plan(context.Background(), edge.ClassProduction, providerkit.ApplyRequest{})
 	if err != nil {
 		t.Fatalf("Plan(): %v", err)
 	}
 	for _, group := range plan.Groups {
-		if group.Action == providerkit.ActionDelete {
+		if group.Action == provider.ActionDelete {
 			t.Fatalf("plan deletes %s, want a run that named no removal to take nothing down", group.Feature)
 		}
 	}
@@ -79,8 +80,8 @@ func TestAStandingEdgeFeatureLeftOutIsKept(t *testing.T) {
 func TestAnEdgeFeatureGoesOnlyWhenTheRunNamesIt(t *testing.T) {
 	t.Parallel()
 
-	gate, provider := fronting(t, fake.KindDirect)
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	gate, p := fronting(t, fake.KindDirect)
+	bootstrapped(t, p, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
 	plan, err := gate.Plan(context.Background(), edge.ClassProduction, providerkit.ApplyRequest{
 		Remove: []string{fake.FeatureImages},
@@ -90,7 +91,7 @@ func TestAnEdgeFeatureGoesOnlyWhenTheRunNamesIt(t *testing.T) {
 	}
 	var removed []string
 	for _, group := range plan.Groups {
-		if group.Action == providerkit.ActionDelete {
+		if group.Action == provider.ActionDelete {
 			removed = append(removed, group.Feature)
 		}
 	}
@@ -102,8 +103,8 @@ func TestAnEdgeFeatureGoesOnlyWhenTheRunNamesIt(t *testing.T) {
 func TestAnUnrequestedStandingEdgeFeatureIsKept(t *testing.T) {
 	t.Parallel()
 
-	gate, provider := fronting(t, fake.KindDirect)
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	gate, p := fronting(t, fake.KindDirect)
+	bootstrapped(t, p, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
 
 	plan, err := gate.Plan(context.Background(), edge.ClassProduction, providerkit.ApplyRequest{
 		Features: []string{fake.FeatureCache, fake.FeatureImages},
@@ -112,7 +113,7 @@ func TestAnUnrequestedStandingEdgeFeatureIsKept(t *testing.T) {
 		t.Fatalf("Plan(): %v", err)
 	}
 	for _, group := range plan.Groups {
-		if group.Feature == fake.FeatureImages && group.Action == providerkit.ActionDelete {
+		if group.Feature == fake.FeatureImages && group.Action == provider.ActionDelete {
 			t.Fatalf("bootstrapping behind %s deletes %s, want another edge's standing feature untouched", fake.KindDirect, fake.FeatureImages)
 		}
 	}
@@ -121,9 +122,9 @@ func TestAnUnrequestedStandingEdgeFeatureIsKept(t *testing.T) {
 func TestRemovingAnEdgeFeatureNamesTheProjectsBehindIt(t *testing.T) {
 	t.Parallel()
 
-	gate, provider := fronting(t, fake.KindDirect)
-	bootstrapped(t, provider, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
-	recordProject(t, provider, "shop", fake.FeatureImages)
+	gate, p := fronting(t, fake.KindDirect)
+	bootstrapped(t, p, edge.ClassProduction, fake.FeatureCache, fake.FeatureImages)
+	recordProject(t, p, "shop", fake.FeatureImages)
 
 	req := providerkit.ApplyRequest{Remove: []string{fake.FeatureImages}}
 	plan, err := gate.Plan(context.Background(), edge.ClassProduction, req)
@@ -132,7 +133,7 @@ func TestRemovingAnEdgeFeatureNamesTheProjectsBehindIt(t *testing.T) {
 	}
 	var reason string
 	for _, group := range plan.Groups {
-		if group.Feature == fake.FeatureImages && group.Action == providerkit.ActionDelete {
+		if group.Feature == fake.FeatureImages && group.Action == provider.ActionDelete {
 			reason = group.Reason
 		}
 	}

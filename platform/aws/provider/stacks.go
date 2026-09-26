@@ -17,8 +17,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -117,7 +117,7 @@ func (p *Provider) release(ctx context.Context, scope deploy.Scope) (deploy.Conf
 }
 
 func (p *Provider) standing(held bootstrap.Deployed, class edge.Class) error {
-	command := providerkit.BootstrapCommand(class)
+	command := provider.BootstrapCommand(class)
 	for _, missing := range []struct {
 		held string
 		what string

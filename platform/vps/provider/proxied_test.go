@@ -7,13 +7,14 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 )
 
-func refusingReach(t *testing.T, resources []providerkit.Resource, grants []providerkit.Binding) error {
+func refusingReach(t *testing.T, resources []provider.Resource, grants []provider.Binding) error {
 	t.Helper()
-	proxied := func(kind providerkit.BindingType) bool {
-		return naming.Proxied(providerkit.WireBindingType(kind)) || kind == providerkit.BindingType("queue")
+	proxied := func(kind provider.BindingType) bool {
+		return naming.Proxied(provider.WireBindingType(kind)) || kind == provider.BindingType("queue")
 	}
 	p := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "box.example", User: "ocel-deploy"}})
 	return providerkit.RefuseUnreachableBindings(p.Facts().Vendor, p.Facts().Bindings, proxied, resources, grants)
@@ -22,7 +23,7 @@ func refusingReach(t *testing.T, resources []providerkit.Resource, grants []prov
 func TestABoxRefusesAProxiedBindingItServesNothingFor(t *testing.T) {
 	t.Parallel()
 
-	grants := []providerkit.Binding{{Name: "queue", Resource: "queue--jobs", Type: providerkit.BindingType("queue")}}
+	grants := []provider.Binding{{Name: "queue", Resource: "queue--jobs", Type: provider.BindingType("queue")}}
 	err := refusingReach(t, nil, grants)
 
 	var unreachable *providerkit.UnreachableBindingError
@@ -42,7 +43,7 @@ func TestABoxRefusesAProxiedBindingItServesNothingFor(t *testing.T) {
 func TestABoxIsLetPastForTheBucketsItNowServesItself(t *testing.T) {
 	t.Parallel()
 
-	grants := []providerkit.Binding{{Name: "uploads", Resource: "bucket--uploads", Type: providerkit.BindingBucket}}
+	grants := []provider.Binding{{Name: "uploads", Resource: "bucket--uploads", Type: provider.BindingBucket}}
 	if err := refusingReach(t, nil, grants); err != nil {
 		t.Fatalf("a bucket binding consumed on a box = %v, want nothing refused: a box stands a store up for it", err)
 	}
@@ -51,7 +52,7 @@ func TestABoxIsLetPastForTheBucketsItNowServesItself(t *testing.T) {
 func TestABoxIsLetPastForABindingTypeThatReachesItsProviderDirectly(t *testing.T) {
 	t.Parallel()
 
-	resources := []providerkit.Resource{{Name: "database--main", Declared: "database--main", Type: providerkit.BindingPostgres}}
+	resources := []provider.Resource{{Name: "database--main", Declared: "database--main", Type: provider.BindingPostgres}}
 	if err := refusingReach(t, resources, nil); err != nil {
 		t.Fatalf("a postgres record on a box = %v, want nothing refused: postgres reaches its provider without a runtime", err)
 	}

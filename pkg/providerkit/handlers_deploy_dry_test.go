@@ -7,8 +7,8 @@ import (
 
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -85,8 +85,8 @@ func TestADryDeployOrdersItsGroupsTheSameWayEveryRun(t *testing.T) {
 
 func TestADryDeployDrawsThePlanAndChangesNothing(t *testing.T) {
 	builtProject(t)
-	client, provider := deployServed(t)
-	records := provider.Records().(*fake.Records)
+	client, p := deployServed(t)
+	records := p.Records().(*fake.Records)
 	before := records.Snapshot()
 
 	req := deployRequest()
@@ -108,21 +108,21 @@ func TestADryDeployDrawsThePlanAndChangesNothing(t *testing.T) {
 	}
 	stacks := 0
 	for _, group := range plan.GetGroups() {
-		if group.GetKind() == providerkit.StackGroupKind {
+		if group.GetKind() == provider.StackGroupKind {
 			stacks++
 		}
 	}
 	if stacks != 2 {
 		t.Errorf("the plan shows %d stack groups, want the infra stack and the one app stack", stacks)
 	}
-	if group := groupOfKind(plan, providerkit.StackGroupKind); group != nil {
+	if group := groupOfKind(plan, provider.StackGroupKind); group != nil {
 		if !slices.Contains(changeNames(group), "postgres:orders") {
 			t.Errorf("the infra group shows %v, want the resource the manifest declares", changeNames(group))
 		}
 	}
 	uploads := false
 	for _, group := range plan.GetGroups() {
-		if slices.Contains(changeNames(group), providerkit.UploadKind+":server") {
+		if slices.Contains(changeNames(group), provider.UploadKind+":server") {
 			uploads = true
 		}
 	}
@@ -130,10 +130,10 @@ func TestADryDeployDrawsThePlanAndChangesNothing(t *testing.T) {
 		t.Errorf("the plan shows %v with no artifact upload row, want the upload the apply would make", groupNames(plan))
 	}
 
-	if provisioned := provider.FakeStacks().Plans(); len(provisioned) != 0 {
+	if provisioned := p.FakeStacks().Plans(); len(provisioned) != 0 {
 		t.Errorf("a dry deploy provisioned %d stacks, want a run that stands nothing up", len(provisioned))
 	}
-	if reconciled := provider.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks(); len(reconciled) != 0 {
+	if reconciled := p.Edges().(*fake.Edges).Edge(fake.KindRelay).Stacks(); len(reconciled) != 0 {
 		t.Errorf("a dry deploy reconciled the edge %d times, want it left alone", len(reconciled))
 	}
 	if after := records.Snapshot(); !maps.Equal(before, after) {

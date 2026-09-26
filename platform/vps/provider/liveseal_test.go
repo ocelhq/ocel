@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -44,7 +44,7 @@ func bootstrapped(t *testing.T, vm machine, class edge.Class) *vps.Provider {
 	if standing.Present && !standing.Unfinished && standing.Stacks[0].DigestCurrent {
 		return p
 	}
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v", class, err)
 	}
 	return p
@@ -147,7 +147,7 @@ func TestLiveASealKeyThatWasReplacedIsDriftInStatus(t *testing.T) {
 		t.Errorf("the stamp says nothing about how a value is sealed, and %q is what the record claims", host.SealAlgorithm)
 	}
 
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err == nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err == nil {
 		t.Error("an apply over a replaced key finished, and the stamp now records a key that opens nothing this class ever sealed")
 	}
 }

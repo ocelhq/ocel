@@ -11,6 +11,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func TestEventTraceDeclareStagesSendsAStagePlanEvent(t *testing.T) {
@@ -108,7 +109,7 @@ func TestEventTraceSpanUsesTheStageIDAsTheSpanID(t *testing.T) {
 	child := NewStage(root, "web")
 	start := time.Unix(1000, 0)
 	end := time.Unix(1005, 0)
-	tracer.Span(child.ID, child.ParentID, child.Title, start, end, nil, AttrApp("web"), AttrResourceCount(3))
+	tracer.Span(child.ID, child.ParentID, child.Title, start, end, nil, provider.AttrApp("web"), provider.AttrResourceCount(3))
 
 	if err := sender.close(); err != nil {
 		t.Fatalf("close() error = %v", err)
@@ -162,27 +163,8 @@ func TestEventTraceSpanRecordsAFailureAsAnErrorKindNeverRawText(t *testing.T) {
 	if strings.Contains(got, "hunter2") {
 		t.Fatal("ERROR_KIND attribute carried the raw error text")
 	}
-	if got != ErrorKindFailed {
+	if got != provider.ErrorKindFailed {
 		t.Errorf("ERROR_KIND = %q, want a bounded classification", got)
-	}
-}
-
-func TestClassifyError(t *testing.T) {
-	t.Parallel()
-
-	for _, tc := range []struct {
-		name string
-		err  error
-		want string
-	}{
-		{"nil", nil, ""},
-		{"canceled", context.Canceled, ErrorKindCanceled},
-		{"timeout", context.DeadlineExceeded, ErrorKindTimeout},
-		{"anything else", errors.New("boom"), ErrorKindFailed},
-	} {
-		if got := ClassifyError(tc.err); got != tc.want {
-			t.Errorf("ClassifyError(%v) = %q, want %q", tc.name, got, tc.want)
-		}
 	}
 }
 

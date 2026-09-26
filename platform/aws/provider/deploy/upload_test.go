@@ -13,7 +13,7 @@ import (
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -43,26 +43,26 @@ func (d *declaring) names() []string {
 	return slices.Clone(d.declared)
 }
 
-func shipping(t *testing.T) providerkit.Upload {
+func shipping(t *testing.T) provider.Upload {
 	t.Helper()
 
 	path := filepath.Join(t.TempDir(), "entry.zip")
 	if err := os.WriteFile(path, []byte("a built function"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return providerkit.Upload{
+	return provider.Upload{
 		Name:   "server",
-		Ref:    providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: "functions/shop/web/server-abc123.zip"},
+		Ref:    provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "functions/shop/web/server-abc123.zip"},
 		Path:   path,
 		Digest: "abc123",
 	}
 }
 
-func shippingPlan(upload providerkit.Upload) providerkit.StackPlan {
-	return providerkit.StackPlan{
-		Ref:     providerkit.StackRef{Project: "conformance", Class: edge.ClassProduction, Name: naming.InfraStack("conformance")},
-		Kind:    providerkit.StackInfra,
-		Uploads: []providerkit.Upload{upload},
+func shippingPlan(upload provider.Upload) provider.StackPlan {
+	return provider.StackPlan{
+		Ref:     provider.StackRef{Project: "conformance", Class: edge.ClassProduction, Name: naming.InfraStack("conformance")},
+		Kind:    provider.StackInfra,
+		Uploads: []provider.Upload{upload},
 	}
 }
 
@@ -76,7 +76,7 @@ func TestAnArtifactTheReleaseShipsIsAnEngineResourceInThePlan(t *testing.T) {
 		t.Fatalf("Plan() of a release shipping an artifact = %v", err)
 	}
 
-	want := naming.ResourceID(providerkit.UploadKind, upload.Name)
+	want := naming.ResourceID(provider.UploadKind, upload.Name)
 	for _, group := range planned.Groups {
 		for _, change := range group.Changes {
 			if change.Kind == bucketObjectType && change.Name == want {
@@ -97,7 +97,7 @@ func TestAnArtifactTheReleaseShipsIsAnEngineResourceInTheApply(t *testing.T) {
 		t.Fatalf("Provision() of a release shipping an artifact = %v", err)
 	}
 
-	want := bucketObjectType + "::" + naming.ResourceID(providerkit.UploadKind, upload.Name)
+	want := bucketObjectType + "::" + naming.ResourceID(provider.UploadKind, upload.Name)
 	if !slices.Contains(watcher.names(), want) {
 		t.Errorf("the apply declared %v, want %q: the engine ships the artifact, never the deploy behind its back", watcher.names(), want)
 	}

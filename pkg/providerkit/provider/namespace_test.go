@@ -1,4 +1,4 @@
-package providerkit_test
+package provider_test
 
 import (
 	"errors"
@@ -6,31 +6,31 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 func TestParseNamespaceDefaultsToOcel(t *testing.T) {
-	ns, err := providerkit.ParseNamespace("")
+	ns, err := provider.ParseNamespace("")
 	if err != nil {
 		t.Fatalf("an empty namespace: %v", err)
 	}
-	if ns != providerkit.DefaultNamespace {
-		t.Errorf("ParseNamespace(%q) = %q, want %q", "", ns, providerkit.DefaultNamespace)
+	if ns != provider.DefaultNamespace {
+		t.Errorf("ParseNamespace(%q) = %q, want %q", "", ns, provider.DefaultNamespace)
 	}
 }
 
 func TestParseNamespaceAccepts(t *testing.T) {
-	for _, given := range []string{"ocel", "j-a1b2c3-cache", "a", strings.Repeat("a", providerkit.MaxNamespaceLength)} {
-		if _, err := providerkit.ParseNamespace(given); err != nil {
+	for _, given := range []string{"ocel", "j-a1b2c3-cache", "a", strings.Repeat("a", provider.MaxNamespaceLength)} {
+		if _, err := provider.ParseNamespace(given); err != nil {
 			t.Errorf("ParseNamespace(%q): %v", given, err)
 		}
 	}
 }
 
 func TestParseNamespaceRefuses(t *testing.T) {
-	for _, given := range []string{"Ocel", "ocel_one", "1ocel", "-ocel", "ocel bootstrap", "ocel/one", strings.Repeat("a", providerkit.MaxNamespaceLength+1)} {
-		if _, err := providerkit.ParseNamespace(given); err == nil {
+	for _, given := range []string{"Ocel", "ocel_one", "1ocel", "-ocel", "ocel bootstrap", "ocel/one", strings.Repeat("a", provider.MaxNamespaceLength+1)} {
+		if _, err := provider.ParseNamespace(given); err == nil {
 			t.Errorf("ParseNamespace(%q) was accepted, want a refusal", given)
 		}
 	}
@@ -38,7 +38,7 @@ func TestParseNamespaceRefuses(t *testing.T) {
 
 func TestParseNamespaceRefusesASpellingNamingWouldNotMint(t *testing.T) {
 	for _, given := range []string{"a--b", "abc-", "a---b", "ocel--two"} {
-		ns, err := providerkit.ParseNamespace(given)
+		ns, err := provider.ParseNamespace(given)
 		if err == nil {
 			t.Errorf("ParseNamespace(%q) = %q, want a refusal: it is not the spelling a name minted from it would carry", given, ns)
 		}
@@ -47,7 +47,7 @@ func TestParseNamespaceRefusesASpellingNamingWouldNotMint(t *testing.T) {
 
 func TestEveryAcceptedNamespaceIsTheFieldANameMintsFromIt(t *testing.T) {
 	for _, given := range []string{"ocel", "j-a1b2c3-cache", "a", "a1"} {
-		ns, err := providerkit.ParseNamespace(given)
+		ns, err := provider.ParseNamespace(given)
 		if err != nil {
 			t.Fatalf("ParseNamespace(%q): %v", given, err)
 		}
@@ -58,9 +58,9 @@ func TestEveryAcceptedNamespaceIsTheFieldANameMintsFromIt(t *testing.T) {
 }
 
 func TestNamespaceFromEnvReadsTheVariableEveryProviderShares(t *testing.T) {
-	t.Setenv(providerkit.NamespaceEnvVar, "j-a1b2c3")
+	t.Setenv(provider.NamespaceEnvVar, "j-a1b2c3")
 
-	ns, err := providerkit.NamespaceFromEnv()
+	ns, err := provider.NamespaceFromEnv()
 	if err != nil {
 		t.Fatalf("NamespaceFromEnv() = %v", err)
 	}
@@ -70,14 +70,14 @@ func TestNamespaceFromEnvReadsTheVariableEveryProviderShares(t *testing.T) {
 }
 
 func TestNamespaceFromEnvRefusesNamingTheVariable(t *testing.T) {
-	t.Setenv(providerkit.NamespaceEnvVar, "Not A Namespace")
+	t.Setenv(provider.NamespaceEnvVar, "Not A Namespace")
 
 	var refused refusal.Refusal
-	_, err := providerkit.NamespaceFromEnv()
+	_, err := provider.NamespaceFromEnv()
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("NamespaceFromEnv() = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}
-	if !strings.Contains(refused.Message, providerkit.NamespaceEnvVar) {
-		t.Errorf("NamespaceFromEnv() refused with %q, want it to name %s", refused.Message, providerkit.NamespaceEnvVar)
+	if !strings.Contains(refused.Message, provider.NamespaceEnvVar) {
+		t.Errorf("NamespaceFromEnv() refused with %q, want it to name %s", refused.Message, provider.NamespaceEnvVar)
 	}
 }

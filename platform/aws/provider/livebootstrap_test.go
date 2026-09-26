@@ -6,7 +6,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -25,17 +25,17 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 		t.Fatal("Describe() claims a bootstrap on an account nothing has written to")
 	}
 
-	req := providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter, Reading: fresh.Reading}
+	req := provider.BootstrapRequest{Class: class, WrittenBy: liveWriter, Reading: fresh.Reading}
 	plan, err := boot.Plan(ctx, req)
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
 	core := groupNamed(t, plan, "aws/"+coreStackName)
-	if core.Action != providerkit.ActionCreate {
-		t.Errorf("Plan() against a fresh account plans %s as %q, want %q", core.Name, core.Action, providerkit.ActionCreate)
+	if core.Action != provider.ActionCreate {
+		t.Errorf("Plan() against a fresh account plans %s as %q, want %q", core.Name, core.Action, provider.ActionCreate)
 	}
 	for _, want := range []string{"StateBucket", "StateTable", "ArtifactBucket", "AssetBucket", "VarsTable", "AppBoundary"} {
-		if planned := changeFor(core, want); planned.Action != providerkit.ActionCreate {
+		if planned := changeFor(core, want); planned.Action != provider.ActionCreate {
 			t.Errorf("Plan() shows %s as %q, want it created", want, planned.Action)
 		}
 	}
@@ -44,11 +44,11 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 		t.Fatal(err)
 	}
 	params := groupNamed(t, plan, "aws/"+bootstrap.ParamGroupName)
-	if params.Action != providerkit.ActionCreate {
-		t.Errorf("Plan() against a fresh account plans %s as %q, want %q", params.Name, params.Action, providerkit.ActionCreate)
+	if params.Action != provider.ActionCreate {
+		t.Errorf("Plan() against a fresh account plans %s as %q, want %q", params.Name, params.Action, provider.ActionCreate)
 	}
 	for _, want := range []string{origin, passphraseParam} {
-		if planned := changeFor(params, want); planned.Action != providerkit.ActionCreate {
+		if planned := changeFor(params, want); planned.Action != provider.ActionCreate {
 			t.Errorf("Plan() shows %s as %q, want it created", want, planned.Action)
 		}
 	}
@@ -110,16 +110,16 @@ func TestLiveBootstrapStandsTheAccountUpAndASecondRunPlansNothing(t *testing.T) 
 		}
 	}
 
-	again, err := boot.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter, Reading: standing.Reading})
+	again, err := boot.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: liveWriter, Reading: standing.Reading})
 	if err != nil {
 		t.Fatalf("a second Plan() = %v", err)
 	}
 	for _, group := range again.Groups {
-		if group.Action != providerkit.ActionKeep {
-			t.Errorf("a second Plan() over a bootstrapped account plans %s as %q, want %q", group.Name, group.Action, providerkit.ActionKeep)
+		if group.Action != provider.ActionKeep {
+			t.Errorf("a second Plan() over a bootstrapped account plans %s as %q, want %q", group.Name, group.Action, provider.ActionKeep)
 		}
 		for _, change := range group.Changes {
-			if change.Action != providerkit.ActionKeep {
+			if change.Action != provider.ActionKeep {
 				t.Errorf("a second Plan() shows %s as %q, want it kept", change.Name, change.Action)
 			}
 		}
@@ -133,7 +133,7 @@ func TestLiveApplyingTheImageOptimizerStandsItsOwnStackBesideTheCore(t *testing.
 	ctx := context.Background()
 
 	feature := bootstrap.FeatureImageOptimization
-	req := providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter, Features: []string{feature}}
+	req := provider.BootstrapRequest{Class: class, WrittenBy: liveWriter, Features: []string{feature}}
 	if err := boot.Apply(ctx, req, nil); err != nil {
 		t.Fatalf("Apply(%s) = %v", feature, err)
 	}
@@ -161,16 +161,16 @@ func TestLiveApplyingTheImageOptimizerStandsItsOwnStackBesideTheCore(t *testing.
 		t.Errorf("the account reads back features %v, want %s among them", held.Features.Names(), feature)
 	}
 
-	again, err := boot.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter, Features: []string{feature}, Reading: standing.Reading})
+	again, err := boot.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: liveWriter, Features: []string{feature}, Reading: standing.Reading})
 	if err != nil {
 		t.Fatalf("a second Plan(%s) = %v", feature, err)
 	}
-	if group := groupNamed(t, again, "aws/"+name); group.Action != providerkit.ActionKeep {
-		t.Errorf("a second Plan() over a standing %s plans %q, want %q", feature, group.Action, providerkit.ActionKeep)
+	if group := groupNamed(t, again, "aws/"+name); group.Action != provider.ActionKeep {
+		t.Errorf("a second Plan() over a standing %s plans %q, want %q", feature, group.Action, provider.ActionKeep)
 	}
 }
 
-func stackNamed(t *testing.T, described providerkit.BootstrapReading, name string) providerkit.BootstrapStack {
+func stackNamed(t *testing.T, described provider.BootstrapReading, name string) provider.BootstrapStack {
 	t.Helper()
 	for _, stack := range described.Stacks {
 		if stack.Name == name {
@@ -178,5 +178,5 @@ func stackNamed(t *testing.T, described providerkit.BootstrapReading, name strin
 		}
 	}
 	t.Fatalf("Describe() carries no stack named %q", name)
-	return providerkit.BootstrapStack{}
+	return provider.BootstrapStack{}
 }

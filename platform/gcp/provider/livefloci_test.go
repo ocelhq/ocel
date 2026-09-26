@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -154,7 +154,7 @@ func TestLiveArtifactsWhereNoBucketStandsSayWhatToRun(t *testing.T) {
 	live(t)
 
 	nowhere := newProvider(t, gcp.Options{Project: "floci-nowhere", Region: liveRegion()})
-	ref := providerkit.ArtifactRef{Class: edge.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "conformance/bundle.zip"}
+	ref := provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreFunctions, Key: "conformance/bundle.zip"}
 
 	var refused refusal.Refusal
 	err := nowhere.Artifacts().Put(context.Background(), ref, bytes.NewReader([]byte("a build artifact")))
@@ -167,17 +167,17 @@ func TestLiveArtifactsWhereNoBucketStandsSayWhatToRun(t *testing.T) {
 }
 
 func TestLiveRemovingAPrefixLeavesEveryStoreItDoesNotName(t *testing.T) {
-	provider := live(t)
-	bucketsStanding(t, provider)
+	p := live(t)
+	bucketsStanding(t, p)
 
 	ctx := context.Background()
-	artifacts := provider.Artifacts()
+	artifacts := p.Artifacts()
 	class := edge.ClassProduction
 	swept, kept := "conformance/"+t.Name()+"/", "conformance/"+t.Name()+"-beside/"
 
-	for _, store := range []string{providerkit.StoreFunctions, providerkit.StoreAssets, providerkit.StoreCache} {
+	for _, store := range []string{provider.StoreFunctions, provider.StoreAssets, provider.StoreCache} {
 		for _, prefix := range []string{swept, kept} {
-			ref := providerkit.ArtifactRef{Class: class, Bucket: store, Key: prefix + "bundle.zip"}
+			ref := provider.ArtifactRef{Class: class, Bucket: store, Key: prefix + "bundle.zip"}
 			if err := artifacts.Put(ctx, ref, bytes.NewReader([]byte(store))); err != nil {
 				t.Fatalf("Put(%s/%s) = %v", store, prefix, err)
 			}
@@ -188,12 +188,12 @@ func TestLiveRemovingAPrefixLeavesEveryStoreItDoesNotName(t *testing.T) {
 		t.Fatalf("RemovePrefix(%s) = %v", swept, err)
 	}
 
-	for _, store := range []string{providerkit.StoreFunctions, providerkit.StoreAssets, providerkit.StoreCache} {
-		gone, err := artifacts.Has(ctx, providerkit.ArtifactRef{Class: class, Bucket: store, Key: swept + "bundle.zip"})
+	for _, store := range []string{provider.StoreFunctions, provider.StoreAssets, provider.StoreCache} {
+		gone, err := artifacts.Has(ctx, provider.ArtifactRef{Class: class, Bucket: store, Key: swept + "bundle.zip"})
 		if err != nil || gone {
 			t.Errorf("Has(%s/%s) = %v, %v, want it swept: one prefix names the same run in every store", store, swept, gone, err)
 		}
-		held, err := artifacts.Has(ctx, providerkit.ArtifactRef{Class: class, Bucket: store, Key: kept + "bundle.zip"})
+		held, err := artifacts.Has(ctx, provider.ArtifactRef{Class: class, Bucket: store, Key: kept + "bundle.zip"})
 		if err != nil || !held {
 			t.Errorf("Has(%s/%s) = %v, %v, want it left alone", store, kept, held, err)
 		}
@@ -206,7 +206,7 @@ func TestLiveRemovingNoPrefixIsRefusedRatherThanSweepingTheBucket(t *testing.T) 
 
 	ctx := context.Background()
 	artifacts := held.Artifacts()
-	ref := providerkit.ArtifactRef{Class: edge.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
+	ref := provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreFunctions, Key: "conformance/" + t.Name() + "/bundle.zip"}
 	if err := artifacts.Put(ctx, ref, bytes.NewReader([]byte("a build artifact"))); err != nil {
 		t.Fatal(err)
 	}

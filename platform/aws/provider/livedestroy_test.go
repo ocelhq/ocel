@@ -7,7 +7,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -18,7 +18,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingStanding(t *testing.T) {
 	boot := a.emptied(t, class)
 	ctx := context.Background()
 
-	if err := boot.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter}, nil); err != nil {
+	if err := boot.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: liveWriter}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	held, err := bootstrap.CheckDeployedFor(ctx, cloudformation.NewFromConfig(a.aws), defaultNamespace, string(class))
@@ -31,8 +31,8 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingStanding(t *testing.T) {
 		t.Fatalf("PlanRemove() = %v", err)
 	}
 	leaving := groupNamed(t, removal, "aws/"+coreStackName)
-	if leaving.Action != providerkit.ActionDelete {
-		t.Errorf("PlanRemove() plans %s as %q, want %q", leaving.Name, leaving.Action, providerkit.ActionDelete)
+	if leaving.Action != provider.ActionDelete {
+		t.Errorf("PlanRemove() plans %s as %q, want %q", leaving.Name, leaving.Action, provider.ActionDelete)
 	}
 	for _, unrecoverable := range []string{"StateBucket", "ArtifactBucket", "AssetBucket", "VarsTable"} {
 		if reason := changeFor(leaving, unrecoverable).Reason; reason == "" {
@@ -44,7 +44,7 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingStanding(t *testing.T) {
 	}
 	dropping := groupNamed(t, removal, "aws/"+bootstrap.ParamGroupName)
 	passphrase := changeFor(dropping, passphraseParam)
-	if passphrase.Action != providerkit.ActionDelete {
+	if passphrase.Action != provider.ActionDelete {
 		t.Errorf("PlanRemove() plans the passphrase as %q, want the last class on this account to take it", passphrase.Action)
 	}
 	if passphrase.Reason == "" {
@@ -89,12 +89,12 @@ func TestLiveDestroyNamesWhatIsStrandedAndLeavesNothingStanding(t *testing.T) {
 		t.Errorf("a second Remove() = %v, want an already-forgotten account to be a no-op", err)
 	}
 
-	again, err := boot.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter})
+	again, err := boot.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: liveWriter})
 	if err != nil {
 		t.Fatalf("Plan() after Remove() = %v", err)
 	}
-	if group := groupNamed(t, again, "aws/"+coreStackName); group.Action != providerkit.ActionCreate {
-		t.Errorf("Plan() over a destroyed account plans %q, want %q", group.Action, providerkit.ActionCreate)
+	if group := groupNamed(t, again, "aws/"+coreStackName); group.Action != provider.ActionCreate {
+		t.Errorf("Plan() over a destroyed account plans %q, want %q", group.Action, provider.ActionCreate)
 	}
 }
 
@@ -105,7 +105,7 @@ func TestLiveDestroyingOneClassLeavesTheSiblingAndThePassphraseItSharesStanding(
 	ctx := context.Background()
 
 	for _, class := range []edge.Class{production, preview} {
-		if err := boot.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: liveWriter}, nil); err != nil {
+		if err := boot.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: liveWriter}, nil); err != nil {
 			t.Fatalf("Apply(%s) = %v", class, err)
 		}
 	}
@@ -115,7 +115,7 @@ func TestLiveDestroyingOneClassLeavesTheSiblingAndThePassphraseItSharesStanding(
 		t.Fatalf("PlanRemove(%s) = %v", production, err)
 	}
 	shared := changeFor(groupNamed(t, beside, "aws/"+bootstrap.ParamGroupName), passphraseParam)
-	if shared.Action != providerkit.ActionKeep {
+	if shared.Action != provider.ActionKeep {
 		t.Errorf("destroying %s plans the passphrase as %q while %s still stands on this account", production, shared.Action, preview)
 	}
 	if !strings.Contains(shared.Reason, string(preview)) {
@@ -151,7 +151,7 @@ func TestLiveDestroyingOneClassLeavesTheSiblingAndThePassphraseItSharesStanding(
 		t.Fatalf("PlanRemove(%s) = %v", preview, err)
 	}
 	alone := changeFor(groupNamed(t, last, "aws/"+bootstrap.ParamGroupName), passphraseParam)
-	if alone.Action != providerkit.ActionDelete {
+	if alone.Action != provider.ActionDelete {
 		t.Errorf("destroying the last class plans the passphrase as %q, and a secret nothing decrypts with is one nobody rotates", alone.Action)
 	}
 	if err := boot.Remove(ctx, preview, nil); err != nil {

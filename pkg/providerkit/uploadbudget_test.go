@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -21,9 +22,9 @@ type countingStore struct {
 	hold   chan struct{}
 }
 
-func (s *countingStore) Put(context.Context, ArtifactRef, io.Reader) error { return nil }
+func (s *countingStore) Put(context.Context, provider.ArtifactRef, io.Reader) error { return nil }
 
-func (s *countingStore) Has(context.Context, ArtifactRef) (bool, error) {
+func (s *countingStore) Has(context.Context, provider.ArtifactRef) (bool, error) {
 	s.mu.Lock()
 	s.live++
 	if s.live > s.peak {
@@ -40,7 +41,7 @@ func (s *countingStore) Has(context.Context, ArtifactRef) (bool, error) {
 	return true, nil
 }
 
-func (s *countingStore) Open(context.Context, ArtifactRef) (io.ReadCloser, error) {
+func (s *countingStore) Open(context.Context, provider.ArtifactRef) (io.ReadCloser, error) {
 	return nil, os.ErrNotExist
 }
 
@@ -48,17 +49,17 @@ func (s *countingStore) RemovePrefix(context.Context, edge.Class, string, edge.P
 	return nil
 }
 
-func uploadsOf(t *testing.T, count int) []Upload {
+func uploadsOf(t *testing.T, count int) []provider.Upload {
 	t.Helper()
 	dir := t.TempDir()
-	uploads := make([]Upload, 0, count)
+	uploads := make([]provider.Upload, 0, count)
 	for slot := range count {
 		name := strconv.Itoa(slot)
 		path := filepath.Join(dir, name)
 		if err := os.WriteFile(path, []byte(name), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		uploads = append(uploads, Upload{Name: name, Path: path, Ref: ArtifactRef{Key: name}})
+		uploads = append(uploads, provider.Upload{Name: name, Path: path, Ref: provider.ArtifactRef{Key: name}})
 	}
 	return uploads
 }

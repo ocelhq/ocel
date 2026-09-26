@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
@@ -63,12 +63,12 @@ func TestAReleaseThatNeverStoodUpRecordsNothing(t *testing.T) {
 func TestTheWindowIsWrittenUnderNoElevationAtAll(t *testing.T) {
 	t.Parallel()
 
-	for name, run := range map[string]func(*vps.Provider, providerkit.StackRef) error{
-		"promote": func(p *vps.Provider, ref providerkit.StackRef) error {
+	for name, run := range map[string]func(*vps.Provider, provider.StackRef) error{
+		"promote": func(p *vps.Provider, ref provider.StackRef) error {
 			_, err := p.ProvisionContainers(context.Background(), aStack(t, anApp()), nil)
 			return err
 		},
-		"forget": func(p *vps.Provider, ref providerkit.StackRef) error {
+		"forget": func(p *vps.Provider, ref provider.StackRef) error {
 			return p.ForgetReleases(context.Background(), ref, "web", nil)
 		},
 	} {

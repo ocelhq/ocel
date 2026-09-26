@@ -8,8 +8,8 @@ import (
 
 	run "google.golang.org/api/run/v2"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -27,7 +27,7 @@ func TestAServerlessRevisionScalesToNothingAndIsBilledPerRequest(t *testing.T) {
 		service: "ocel-shop-prod-web",
 		image:   "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
 		account: "ocel-production@acme.iam.gserviceaccount.com",
-		compute: providerkit.ComputeServerless,
+		compute: provider.ComputeServerless,
 	})
 
 	template := desired.Template
@@ -57,7 +57,7 @@ func TestAContainerRevisionKeepsAnInstanceUpAndIsProbedOnItsOwnPath(t *testing.T
 	desired := desiredOf(t, serving{
 		service: "ocel-shop-prod-api",
 		image:   "europe-west1-docker.pkg.dev/acme/ocel/api@sha256:abc",
-		compute: providerkit.ComputeContainer,
+		compute: provider.ComputeContainer,
 		health:  "/healthz",
 	})
 
@@ -81,7 +81,7 @@ func TestARevisionCarriesEveryValueTheDeployResolvedInOneOrder(t *testing.T) {
 	desired := desiredOf(t, serving{
 		service: "ocel-shop-prod-web",
 		image:   "web@sha256:abc",
-		compute: providerkit.ComputeServerless,
+		compute: provider.ComputeServerless,
 		env:     map[string]string{"DATABASE_URL": "postgres://", "API_KEY": "k"},
 	})
 
@@ -98,7 +98,7 @@ func TestAFunctionAsksForTheMemoryAndTheTimeoutItsSpecNamed(t *testing.T) {
 	desired := desiredOf(t, serving{
 		service: "ocel-shop-prod-fn",
 		image:   "fn@sha256:abc",
-		compute: providerkit.ComputeServerless,
+		compute: provider.ComputeServerless,
 		memory:  1024,
 		timeout: 90 * time.Second,
 	})
@@ -115,7 +115,7 @@ func TestAFunctionThatNamesNoMemoryOrTimeoutKeepsTheProfileTheClassRunsOn(t *tes
 	desired := desiredOf(t, serving{
 		service: "ocel-shop-prod-fn",
 		image:   "fn@sha256:abc",
-		compute: providerkit.ComputeServerless,
+		compute: provider.ComputeServerless,
 	})
 
 	if got := desired.Template.Containers[0].Resources.Limits["memory"]; got != revisionMemory {
@@ -130,14 +130,14 @@ func TestATimeoutLongerThanARequestMayRunIsRefused(t *testing.T) {
 	_, err := serviceOf(serving{
 		service: "ocel-shop-prod-fn",
 		image:   "fn@sha256:abc",
-		compute: providerkit.ComputeServerless,
+		compute: provider.ComputeServerless,
 		timeout: maxRequestTimeout + time.Second,
 	})
 
 	if err == nil {
 		t.Fatal("serviceOf() asked for a timeout longer than Cloud Run allows, and Cloud Run would refuse the release with its own words")
 	}
-	if code, refused := providerkit.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 		t.Errorf("serviceOf() code = %v, want %v", code, refusal.CodeInvalid)
 	}
 	if !strings.Contains(err.Error(), "ocel-shop-prod-fn") {
@@ -211,7 +211,7 @@ func TestAReleaseReportsTheRevisionItPinnedSoALaterPromoteCanReachIt(t *testing.
 func TestAFunctionThePlanGivesNoURLOfItsOwnIsLeftPrivate(t *testing.T) {
 	server := &runServer{}
 
-	released(t, server, serving{service: "ocel-shop-prod-fn", compute: providerkit.ComputeServerless})
+	released(t, server, serving{service: "ocel-shop-prod-fn", compute: provider.ComputeServerless})
 
 	if desired := server.standing(); desired.InvokerIamDisabled {
 		t.Error("a function the plan says has no url may be invoked without an invoker check, " +
@@ -222,7 +222,7 @@ func TestAFunctionThePlanGivesNoURLOfItsOwnIsLeftPrivate(t *testing.T) {
 func TestAFunctionThePlanGivesAURLIsReachedWithoutAnAllUsersGrant(t *testing.T) {
 	server := &runServer{}
 
-	released(t, server, serving{service: "ocel-shop-prod-fn", compute: providerkit.ComputeServerless, public: true})
+	released(t, server, serving{service: "ocel-shop-prod-fn", compute: provider.ComputeServerless, public: true})
 
 	if desired := server.standing(); !desired.InvokerIamDisabled {
 		t.Error("a function the plan gives a url of its own still checks its invoker, and a service nobody may invoke answers nothing")
@@ -236,7 +236,7 @@ func TestAFunctionThePlanGivesAURLIsReachedWithoutAnAllUsersGrant(t *testing.T) 
 func TestAContainerAppIsAlwaysOpenedToThePublic(t *testing.T) {
 	server := &runServer{}
 
-	released(t, server, serving{service: "ocel-shop-prod-app", compute: providerkit.ComputeContainer, health: "/", public: true})
+	released(t, server, serving{service: "ocel-shop-prod-app", compute: provider.ComputeContainer, health: "/", public: true})
 
 	if desired := server.standing(); !desired.InvokerIamDisabled {
 		t.Error("the app's own front still checks its invoker, and nothing else stands between the internet and it")
@@ -248,7 +248,7 @@ func TestAReleaseOntoAStandingServiceNeverHandsTrafficBackToTheLatestRevision(t 
 	first := serving{
 		service: "ocel-shop-prod-app",
 		image:   "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:one",
-		compute: providerkit.ComputeContainer,
+		compute: provider.ComputeContainer,
 		health:  "/",
 		public:  true,
 	}
@@ -277,7 +277,7 @@ func serves(service string) serving {
 	return serving{
 		service: service,
 		image:   "europe-west1-docker.pkg.dev/acme/ocel/app@sha256:one",
-		compute: providerkit.ComputeContainer,
+		compute: provider.ComputeContainer,
 		health:  "/",
 		public:  true,
 	}

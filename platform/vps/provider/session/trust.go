@@ -8,12 +8,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 var preference = []string{"ssh-ed25519", "ecdsa-sha2-nistp256", "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521", "rsa-sha2-512", "rsa-sha2-256", "ssh-rsa"}
 
-func offered(ctx context.Context, dest Destination) ([]providerkit.HostKey, error) {
+func offered(ctx context.Context, dest Destination) ([]provider.HostKey, error) {
 	rendered, err := output(ctx, "ssh-keyscan", "-T", strconv.Itoa(int(reach.Seconds())), "-p", strconv.Itoa(dest.Port), dest.Address)
 	if err != nil {
 		return nil, err
@@ -22,7 +22,7 @@ func offered(ctx context.Context, dest Destination) ([]providerkit.HostKey, erro
 }
 
 type known struct {
-	keys      []providerkit.HostKey
+	keys      []provider.HostKey
 	delegated bool
 }
 
@@ -39,15 +39,15 @@ func recorded(ctx context.Context, dest Destination) known {
 	return held
 }
 
-func keysIn(rendered string) []providerkit.HostKey {
-	var keys []providerkit.HostKey
+func keysIn(rendered string) []provider.HostKey {
+	var keys []provider.HostKey
 	scanner := bufio.NewScanner(strings.NewReader(rendered))
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
 		if len(fields) < 3 || strings.HasPrefix(fields[0], "#") || strings.HasPrefix(fields[0], "@") {
 			continue
 		}
-		if key, err := (providerkit.HostKey{Type: fields[1], Key: fields[2]}).Fingerprinted(); err == nil {
+		if key, err := (provider.HostKey{Type: fields[1], Key: fields[2]}).Fingerprinted(); err == nil {
 			keys = append(keys, key)
 		}
 	}
@@ -66,20 +66,20 @@ func markedIn(rendered string) bool {
 	return false
 }
 
-func classify(dest Destination, offered []providerkit.HostKey, held known) (providerkit.HostKey, *providerkit.HostTrust) {
+func classify(dest Destination, offered []provider.HostKey, held known) (provider.HostKey, *provider.HostTrust) {
 	if len(offered) == 0 {
-		return providerkit.HostKey{}, nil
+		return provider.HostKey{}, nil
 	}
 	ordered := preferred(offered)
 	for _, key := range ordered {
-		if slices.ContainsFunc(held.keys, func(k providerkit.HostKey) bool { return k.Key == key.Key }) {
+		if slices.ContainsFunc(held.keys, func(k provider.HostKey) bool { return k.Key == key.Key }) {
 			return key, nil
 		}
 	}
 	if held.delegated {
 		return ordered[0], nil
 	}
-	trust := providerkit.HostTrust{
+	trust := provider.HostTrust{
 		Host:       dest.Written,
 		Address:    dest.Address,
 		Port:       dest.Port,
@@ -88,24 +88,24 @@ func classify(dest Destination, offered []providerkit.HostKey, held known) (prov
 		Got:        ordered[0],
 	}
 	if len(held.keys) == 0 {
-		trust.Reason = providerkit.UnknownHostKey
+		trust.Reason = provider.UnknownHostKey
 		trust.Remedy = remedy(trust)
-		return providerkit.HostKey{}, &trust
+		return provider.HostKey{}, &trust
 	}
-	trust.Reason = providerkit.HostKeyMismatch
+	trust.Reason = provider.HostKeyMismatch
 	trust.Want = preferred(held.keys)[0]
 	for _, key := range ordered {
-		if paired := slices.IndexFunc(held.keys, func(k providerkit.HostKey) bool { return k.Type == key.Type }); paired >= 0 {
+		if paired := slices.IndexFunc(held.keys, func(k provider.HostKey) bool { return k.Type == key.Type }); paired >= 0 {
 			trust.Got, trust.Want = key, held.keys[paired]
 			break
 		}
 	}
 	trust.Remedy = remedy(trust)
-	return providerkit.HostKey{}, &trust
+	return provider.HostKey{}, &trust
 }
 
-func remedy(trust providerkit.HostTrust) string {
-	if trust.Reason == providerkit.HostKeyMismatch {
+func remedy(trust provider.HostTrust) string {
+	if trust.Reason == provider.HostKeyMismatch {
 		return forgetting(trust.KnownHostsEntry(), trust.KnownHosts)
 	}
 	return fmt.Sprintf("ssh-keyscan -t %s -p %d %s >> %s", trust.Got.Type, trust.Port, trust.Address, store(trust.KnownHosts))
@@ -143,9 +143,9 @@ func plainly(word string) bool {
 	}) < 0
 }
 
-func preferred(keys []providerkit.HostKey) []providerkit.HostKey {
+func preferred(keys []provider.HostKey) []provider.HostKey {
 	ordered := slices.Clone(keys)
-	slices.SortStableFunc(ordered, func(a, b providerkit.HostKey) int {
+	slices.SortStableFunc(ordered, func(a, b provider.HostKey) int {
 		return rank(a.Type) - rank(b.Type)
 	})
 	return ordered

@@ -14,7 +14,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -27,9 +27,9 @@ const (
 	credentialHint = "authenticate with Google Cloud: run `gcloud auth application-default login`"
 )
 
-func Database(namespace providerkit.Namespace) string { return string(namespace) }
+func Database(namespace provider.Namespace) string { return string(namespace) }
 
-func KeyRing(namespace providerkit.Namespace) string { return string(namespace) }
+func KeyRing(namespace provider.Namespace) string { return string(namespace) }
 
 type memo[T any] struct {
 	once  sync.Once
@@ -43,7 +43,7 @@ func (m *memo[T]) held(open func() (T, error)) (T, error) {
 }
 
 type Clients struct {
-	Namespace providerkit.Namespace
+	Namespace provider.Namespace
 	Project   string
 	Region    string
 	Endpoint  string

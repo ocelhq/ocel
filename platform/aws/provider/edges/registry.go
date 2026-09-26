@@ -8,7 +8,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
@@ -38,7 +38,7 @@ type Registry struct {
 	Deps Deps
 }
 
-var _ providerkit.Edges = Registry{}
+var _ provider.Edges = Registry{}
 
 func (r Registry) Open(kind edge.Kind) (edge.Edge, error) {
 	construct, ok := constructors[kind]

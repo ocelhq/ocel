@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
@@ -16,7 +17,7 @@ func TestTheLoadBalancerIsAFeatureOnlyTheEdgeThatNeedsItPullsIn(t *testing.T) {
 	t.Parallel()
 
 	catalogue := bootstrap{}.Catalogue()
-	at := slices.IndexFunc(catalogue, func(f providerkit.Feature) bool { return f.Name == albFeature })
+	at := slices.IndexFunc(catalogue, func(f provider.Feature) bool { return f.Name == albFeature })
 	if at < 0 {
 		t.Fatalf("Catalogue() = %v, want the %q feature: a standing cost is consented to by being planned", catalogue, albFeature)
 	}
@@ -113,15 +114,15 @@ func TestThePlanNamesTheLoadBalancerGroupOnlyForTheEdgeThatStandsItUp(t *testing
 		t.Fatalf("described = %v", err)
 	}
 
-	fronted := providerkit.DeriveGroups(read, catalogue, providerkit.BootstrapRequest{
+	fronted := providerkit.DeriveGroups(read, catalogue, provider.BootstrapRequest{
 		Class: edge.ClassProduction, Features: []string{albFeature},
 	})
-	if !slices.ContainsFunc(fronted, func(g providerkit.ChangeGroup) bool { return g.Feature == albFeature }) {
+	if !slices.ContainsFunc(fronted, func(g provider.ChangeGroup) bool { return g.Feature == albFeature }) {
 		t.Errorf("an %q plan holds %v, want a group for %q so the reader sees what it costs before it stands", alb.Kind, fronted, albFeature)
 	}
 
-	plain := providerkit.DeriveGroups(read, catalogue, providerkit.BootstrapRequest{Class: edge.ClassProduction})
-	if slices.ContainsFunc(plain, func(g providerkit.ChangeGroup) bool { return g.Feature == albFeature }) {
+	plain := providerkit.DeriveGroups(read, catalogue, provider.BootstrapRequest{Class: edge.ClassProduction})
+	if slices.ContainsFunc(plain, func(g provider.ChangeGroup) bool { return g.Feature == albFeature }) {
 		t.Errorf("a plan that asked for no edge holds %v, and a load balancer nothing named would stand and bill", plain)
 	}
 }

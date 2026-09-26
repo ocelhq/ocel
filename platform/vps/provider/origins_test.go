@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -58,7 +59,7 @@ func stoodWithABucketDeclared(t *testing.T, declared ...string) (*box, *vps.Prov
 	}
 	if err := providerkit.WriteStack(ctx, records, edge.ClassProduction, "shop",
 		naming.InfraStack(bucket.Ref.Name.Env), providerkit.RecordedStack{
-			Kind: providerkit.StackInfra, Bindings: []providerkit.Binding{binding},
+			Kind: provider.StackInfra, Bindings: []provider.Binding{binding},
 		}); err != nil {
 		t.Fatal(err)
 	}

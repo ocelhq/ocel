@@ -3,11 +3,12 @@ package providerkit
 import (
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
-func RefuseGrowth(shown, fresh Plan) error {
-	rows := map[string]ChangeAction{}
+func RefuseGrowth(shown, fresh provider.Plan) error {
+	rows := map[string]provider.ChangeAction{}
 	for _, group := range shown.Groups {
 		rows[group.Name] = group.Action
 		for _, change := range group.Changes {
@@ -34,11 +35,11 @@ func RefuseGrowth(shown, fresh Plan) error {
 		strings.Join(grown, ", "))
 }
 
-func rowKey(group ChangeGroup, change Change) string {
+func rowKey(group provider.ChangeGroup, change provider.Change) string {
 	return group.Name + "/" + change.Kind + "/" + change.Name
 }
 
-func appendGrown(grown []string, name string, shown, standing ChangeAction) []string {
+func appendGrown(grown []string, name string, shown, standing provider.ChangeAction) []string {
 	if !standing.Writes() || (shown != "" && shown.Writes()) {
 		return grown
 	}

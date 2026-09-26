@@ -10,7 +10,7 @@ import (
 	sdk "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -18,11 +18,11 @@ import (
 
 type program struct{ config auto.ConfigMap }
 
-func (program) Run(*sdk.Context, providerkit.StackPlan) error { return nil }
+func (program) Run(*sdk.Context, provider.StackPlan) error { return nil }
 
 type configuring struct{ program }
 
-func (c configuring) Configure(context.Context, providerkit.StackPlan) (auto.ConfigMap, error) {
+func (c configuring) Configure(context.Context, provider.StackPlan) (auto.ConfigMap, error) {
 	return c.config, nil
 }
 
@@ -34,30 +34,30 @@ func access() pulumi.Access {
 	}
 }
 
-func plan() providerkit.StackPlan {
-	return providerkit.StackPlan{
-		Ref: providerkit.StackRef{
+func plan() provider.StackPlan {
+	return provider.StackPlan{
+		Ref: provider.StackRef{
 			Project: "shop",
 			Class:   edge.ClassProduction,
 			Name:    naming.InfraStack("prod"),
 		},
-		Kind: providerkit.StackInfra,
+		Kind: provider.StackInfra,
 	}
 }
 
-func row(action providerkit.ChangeAction, kind, name string) providerkit.Change {
-	return providerkit.Change{Kind: kind, Name: name, Action: action}
+func row(action provider.ChangeAction, kind, name string) provider.Change {
+	return provider.Change{Kind: kind, Name: name, Action: action}
 }
 
 func TestPreviewGathersWhatTheEngineWouldDoIntoOneGroup(t *testing.T) {
 	t.Parallel()
 
-	engine := &recordingEngine{rows: []providerkit.Change{
-		row(providerkit.ActionCreate, "Cluster", "orders"),
-		row(providerkit.ActionUpdate, "Bucket", "uploads"),
-		row(providerkit.ActionDelete, "Bucket", "exports"),
-		row(providerkit.ActionKeep, "Role", "app"),
-		row(providerkit.ActionReplace, "Instance", "reporting"),
+	engine := &recordingEngine{rows: []provider.Change{
+		row(provider.ActionCreate, "Cluster", "orders"),
+		row(provider.ActionUpdate, "Bucket", "uploads"),
+		row(provider.ActionDelete, "Bucket", "exports"),
+		row(provider.ActionKeep, "Role", "app"),
+		row(provider.ActionReplace, "Instance", "reporting"),
 	}}
 
 	produced, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}.Run, Engine: engine}).
@@ -71,16 +71,16 @@ func TestPreviewGathersWhatTheEngineWouldDoIntoOneGroup(t *testing.T) {
 	if len(produced.Groups) != 1 {
 		t.Fatalf("Preview() returned %d groups, want the one stack it previews", len(produced.Groups))
 	}
-	rows := map[string]providerkit.ChangeAction{}
+	rows := map[string]provider.ChangeAction{}
 	for _, change := range produced.Groups[0].Changes {
 		rows[change.Name] = change.Action
 	}
-	want := map[string]providerkit.ChangeAction{
-		"orders":    providerkit.ActionCreate,
-		"uploads":   providerkit.ActionUpdate,
-		"exports":   providerkit.ActionDelete,
-		"app":       providerkit.ActionKeep,
-		"reporting": providerkit.ActionReplace,
+	want := map[string]provider.ChangeAction{
+		"orders":    provider.ActionCreate,
+		"uploads":   provider.ActionUpdate,
+		"exports":   provider.ActionDelete,
+		"app":       provider.ActionKeep,
+		"reporting": provider.ActionReplace,
 	}
 	for name, action := range want {
 		if rows[name] != action {
@@ -95,7 +95,7 @@ func TestPreviewGathersWhatTheEngineWouldDoIntoOneGroup(t *testing.T) {
 func TestPreviewDestroyShowsWhatTheTeardownWouldTakeDown(t *testing.T) {
 	t.Parallel()
 
-	engine := &recordingEngine{rows: []providerkit.Change{row(providerkit.ActionDelete, "Bucket", "uploads")}}
+	engine := &recordingEngine{rows: []provider.Change{row(provider.ActionDelete, "Bucket", "uploads")}}
 
 	produced, err := pulumi.New(pulumi.Config{Access: access(), Program: program{}.Run, Engine: engine}).
 		PreviewDestroy(context.Background(), plan().Ref, nil)
@@ -105,7 +105,7 @@ func TestPreviewDestroyShowsWhatTheTeardownWouldTakeDown(t *testing.T) {
 	if engine.previewed != pulumi.OpDestroy {
 		t.Errorf("the engine was asked to preview %q, want the destroy it mirrors", engine.previewed)
 	}
-	if len(produced.Groups) != 1 || produced.Groups[0].Action != providerkit.ActionDelete {
+	if len(produced.Groups) != 1 || produced.Groups[0].Action != provider.ActionDelete {
 		t.Fatalf("PreviewDestroy() = %+v, want the stack shown as going", produced.Groups)
 	}
 }
@@ -263,7 +263,7 @@ func TestRunRefreshesOnlyTheStacksTheProviderSaysToRefresh(t *testing.T) {
 		Access:  access(),
 		Program: program{}.Run,
 		Engine:  engine,
-		Refresh: func(ref providerkit.StackRef, _ pulumi.Op) bool { return ref.Name.Env == "prod" },
+		Refresh: func(ref provider.StackRef, _ pulumi.Op) bool { return ref.Name.Env == "prod" },
 	})
 	if _, err := automation.Run(context.Background(), plan(), nil); err != nil {
 		t.Fatalf("Run() = %v", err)

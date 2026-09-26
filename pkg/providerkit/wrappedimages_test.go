@@ -18,10 +18,10 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -243,7 +243,7 @@ func TestShipHandsTheStoreTheWrappedImageAndClearsUpAfterIt(t *testing.T) {
 
 	store := &stubStore{}
 	cleaned := false
-	plan := providerkit.ImagePushes{Store: store, Pushes: []images.Push{{
+	plan := provider.ImagePushes{Store: store, Pushes: []images.Push{{
 		App:      "web",
 		ImageRef: "ghcr.io/acme/web:sha256-abc-ocel-0123456789ab",
 		Wrap: func(context.Context) (v1.Image, func(), error) {
@@ -266,7 +266,7 @@ func TestShipRunsNoWrapForACoordinateTheStoreAlreadyHolds(t *testing.T) {
 	t.Parallel()
 
 	store := &stubStore{held: true}
-	plan := providerkit.ImagePushes{Store: store, Pushes: []images.Push{{
+	plan := provider.ImagePushes{Store: store, Pushes: []images.Push{{
 		App:      "web",
 		ImageRef: "ghcr.io/acme/web:sha256-abc-ocel-0123456789ab",
 		Wrap: func(context.Context) (v1.Image, func(), error) {

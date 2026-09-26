@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -155,36 +156,36 @@ func TestDeployRefusesABindingTheRecordCannotSatisfy(t *testing.T) {
 
 func TestReadableAs(t *testing.T) {
 	t.Run("refuses a custom record bound as a binding", func(t *testing.T) {
-		err := providerkit.ReadableAs(providerkit.Binding{Name: "flags", Type: providerkit.BindingCustom}, "settings", providerkit.BindingPostgres, proxied)
+		err := providerkit.ReadableAs(provider.Binding{Name: "flags", Type: provider.BindingCustom}, "settings", provider.BindingPostgres, proxied)
 		if err == nil || !strings.Contains(err.Error(), "`bindings.custom.flags.<property>`") {
 			t.Errorf("ReadableAs = %v, want a custom record sent to transforms by the key a transform reads it under", err)
 		}
 	})
 
 	t.Run("admits a record of the declared type ocel provisioned", func(t *testing.T) {
-		if err := providerkit.ReadableAs(providerkit.Binding{Name: "uploads", Type: providerkit.BindingBucket}, "uploads", providerkit.BindingBucket, proxied); err != nil {
+		if err := providerkit.ReadableAs(provider.Binding{Name: "uploads", Type: provider.BindingBucket}, "uploads", provider.BindingBucket, proxied); err != nil {
 			t.Errorf("ReadableAs = %v, want a record ocel published bound", err)
 		}
 	})
 
 	t.Run("refuses a published bucket the runtime has no store to reach it in", func(t *testing.T) {
-		published := providerkit.Binding{Name: "uploads", Type: providerkit.BindingBucket, Source: "terraform", Properties: map[string]string{providerkit.PropertyBucket: "acme"}}
-		if err := providerkit.ReadableAs(published, "uploads", providerkit.BindingBucket, proxied); err == nil {
+		published := provider.Binding{Name: "uploads", Type: provider.BindingBucket, Source: "terraform", Properties: map[string]string{provider.PropertyBucket: "acme"}}
+		if err := providerkit.ReadableAs(published, "uploads", provider.BindingBucket, proxied); err == nil {
 			t.Error("ReadableAs = nil, want a bucket ocel's backend cannot reach refused")
 		}
 	})
 
 	t.Run("admits a bucket record that names the store it lives in", func(t *testing.T) {
-		bound := providerkit.Binding{Name: "ocel:bucket.uploads", Type: providerkit.BindingBucket, Source: "ocel.json", Properties: map[string]string{
-			providerkit.PropertyBucket: "acme", providerkit.PropertyEndpoint: "https://abc.r2.cloudflarestorage.com",
+		bound := provider.Binding{Name: "ocel:bucket.uploads", Type: provider.BindingBucket, Source: "ocel.json", Properties: map[string]string{
+			provider.PropertyBucket: "acme", provider.PropertyEndpoint: "https://abc.r2.cloudflarestorage.com",
 		}}
-		if err := providerkit.ReadableAs(bound, "uploads", providerkit.BindingBucket, proxied); err != nil {
+		if err := providerkit.ReadableAs(bound, "uploads", provider.BindingBucket, proxied); err != nil {
 			t.Errorf("ReadableAs = %v, want a bucket the runtime serves from its record admitted", err)
 		}
 	})
 
 	t.Run("a shape mismatch names the declared name and the external name apart", func(t *testing.T) {
-		err := providerkit.ReadableAs(providerkit.Binding{Name: "sst-pg-orders", Type: providerkit.BindingBucket}, "orders", providerkit.BindingPostgres, proxied)
+		err := providerkit.ReadableAs(provider.Binding{Name: "sst-pg-orders", Type: provider.BindingBucket}, "orders", provider.BindingPostgres, proxied)
 		if err == nil {
 			t.Fatal("ReadableAs = nil, want a bucket refused where a postgres was declared")
 		}

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
@@ -167,7 +167,7 @@ func TestLiveTheMachineAnswersEveryPortTheConformanceSuiteAsks(t *testing.T) {
 	}
 	ctx := context.Background()
 	for _, class := range []edge.Class{edge.ClassProduction, edge.ClassPreview} {
-		if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+		if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 			t.Fatalf("Apply(%s) = %v, want the record tier every port beneath it writes into", class, err)
 		}
 		defer func() {
@@ -207,7 +207,7 @@ func TestLiveWhoamiAnswersFromTheMachineItself(t *testing.T) {
 	}
 }
 
-func named(details []providerkit.Detail) map[string]bool {
+func named(details []provider.Detail) map[string]bool {
 	labels := map[string]bool{}
 	for _, detail := range details {
 		labels[detail.Label] = detail.Value != ""

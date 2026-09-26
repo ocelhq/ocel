@@ -6,23 +6,23 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/runui"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
-func ResolveComputes(cfg *projectconfig.Config, computes []string, provider string) (string, error) {
+func ResolveComputes(cfg *projectconfig.Config, computes []string, vendor string) (string, error) {
 	if len(computes) == 0 {
 		return "", fmt.Errorf(
 			"%s names no compute it runs, so there is nothing for this project's apps to run on: a provider must name at least one in its preflight answer, and ocel will not guess one for it",
-			provider,
+			vendor,
 		)
 	}
 	for _, compute := range computes {
-		if providerkit.KnownCompute(compute) {
+		if provider.KnownCompute(compute) {
 			continue
 		}
 		return "", fmt.Errorf(
 			"%s names %q among the computes it runs, and ocel knows no such compute — it knows %s: upgrade ocel if %q is newer than this build, or pin a provider version this ocel understands",
-			provider, compute, runui.Quoted(providerkit.ComputeNames(providerkit.Computes())), compute,
+			vendor, compute, runui.Quoted(provider.ComputeNames(provider.Computes())), compute,
 		)
 	}
 
@@ -36,7 +36,7 @@ func ResolveComputes(cfg *projectconfig.Config, computes []string, provider stri
 		if !slices.Contains(computes, app.Compute) {
 			return "", fmt.Errorf(
 				"app %q asks for compute %q, which %s does not run — it runs %s: give %q a compute from that list, or deploy it to a provider that runs %q",
-				app.Name, app.Compute, provider, runui.Quoted(computes), app.Name, app.Compute,
+				app.Name, app.Compute, vendor, runui.Quoted(computes), app.Name, app.Compute,
 			)
 		}
 		resolved[i] = app.Compute
@@ -53,7 +53,7 @@ func ResolveComputes(cfg *projectconfig.Config, computes []string, provider stri
 }
 
 func containerOnly(app projectconfig.App, compute string) error {
-	if compute == string(providerkit.ComputeContainer) {
+	if compute == string(provider.ComputeContainer) {
 		if app.Framework.Name != "" {
 			return fmt.Errorf(
 				"app %q declares framework %q, and it runs on %q compute, which runs the image it is given: a framework names what a serverless app's functions are built with and nothing else — give %q `compute: \"serverless\"`, or remove its `framework`",

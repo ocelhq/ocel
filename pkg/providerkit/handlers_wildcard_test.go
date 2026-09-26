@@ -17,6 +17,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -332,15 +333,15 @@ func TestRemovePreviewWildcardRefusesWhenNothingRecordsItsHolder(t *testing.T) {
 
 func TestThePreviewWildcardCarriesWhoRenewsItAndWhenItExpires(t *testing.T) {
 	t.Parallel()
-	client, provider := contractServed(t, "1.0.0")
+	client, p := contractServed(t, "1.0.0")
 	bootstrapOK(t, client, &contractv1.BootstrapRequest{Tier: environmentv1.Tier_TIER_PREVIEW})
-	seedWildcard(t, provider, providerkit.Wildcard{
+	seedWildcard(t, p, providerkit.Wildcard{
 		BaseDomain: "preview.acme.com",
 		Edge:       fake.KindRelay,
-		Settled:    providerkit.Settled{Certificate: providerkit.Certificate{ID: "pem:/etc/ocel/preview/certs/wildcard"}},
+		Settled:    providerkit.Settled{Certificate: provider.Certificate{ID: "pem:/etc/ocel/preview/certs/wildcard"}},
 	})
 	expiry := time.Now().Add(9 * 24 * time.Hour).Unix()
-	provider.ReportCertificate(providerkit.CertificateHealth{
+	p.ReportCertificate(provider.CertificateHealth{
 		Terminates:   true,
 		Status:       "PINNED",
 		Renewal:      "you placed it on this box and you renew it",

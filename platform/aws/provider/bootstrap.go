@@ -3,7 +3,7 @@ package aws
 import (
 	"context"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -13,11 +13,11 @@ func (p *Provider) forget() {
 }
 
 type settling struct {
-	providerkit.Bootstrap
+	provider.Bootstrap
 	settled func()
 }
 
-func (s settling) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress edge.Progress) error {
+func (s settling) Apply(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
 	if err := s.Bootstrap.Apply(ctx, req, progress); err != nil {
 		return err
 	}

@@ -16,7 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
@@ -30,11 +30,11 @@ type Scope struct {
 	Edge  edge.Kind
 }
 
-func scopeOf(ref providerkit.StackRef, kind edge.Kind) Scope {
+func scopeOf(ref provider.StackRef, kind edge.Kind) Scope {
 	return Scope{Class: ref.Class, Slug: ref.Project, Env: ref.Name.Env, Edge: kind}
 }
 
-func edgeKindOf(plan providerkit.StackPlan) edge.Kind {
+func edgeKindOf(plan provider.StackPlan) edge.Kind {
 	if plan.Edge == nil {
 		return ""
 	}
@@ -87,7 +87,7 @@ func (r *Stacks) assetSetPlugin() (kitpulumi.Plugin, error) {
 	return r.plugin, r.pluginErr
 }
 
-func (r *Stacks) at(ctx context.Context, ref providerkit.StackRef, kind edge.Kind) (*release, error) {
+func (r *Stacks) at(ctx context.Context, ref provider.StackRef, kind edge.Kind) (*release, error) {
 	scope := scopeOf(ref, kind)
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -121,8 +121,8 @@ func (r *Stacks) at(ctx context.Context, ref providerkit.StackRef, kind edge.Kin
 	return held, nil
 }
 
-func Serves() []providerkit.BindingType {
-	return []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket}
+func Serves() []provider.BindingType {
+	return []provider.BindingType{provider.BindingPostgres, provider.BindingBucket}
 }
 
 const skipTeardownRefreshEnv = "OCEL_SKIP_TEARDOWN_REFRESH"
@@ -135,8 +135,8 @@ func skipTeardownRefresh() bool {
 	return false
 }
 
-func refreshPolicy(realized *Realized) func(providerkit.StackRef, kitpulumi.Op) bool {
-	return func(ref providerkit.StackRef, op kitpulumi.Op) bool {
+func refreshPolicy(realized *Realized) func(provider.StackRef, kitpulumi.Op) bool {
+	return func(ref provider.StackRef, op kitpulumi.Op) bool {
 		if op != kitpulumi.OpDestroy || skipTeardownRefresh() {
 			return false
 		}
@@ -155,7 +155,7 @@ type infraWork struct {
 	completer   payloads.Placement
 }
 
-func (r *release) Run(pctx *sdk.Context, plan providerkit.StackPlan) error {
+func (r *release) Run(pctx *sdk.Context, plan provider.StackPlan) error {
 	shipped, err := r.shipArtifacts(pctx, plan.Uploads)
 	if err != nil {
 		return err
@@ -178,14 +178,14 @@ func (r *release) Run(pctx *sdk.Context, plan providerkit.StackPlan) error {
 		}
 		return r.infra(pctx, plan, work)
 	}
-	if plan.Kind != providerkit.StackInfra {
+	if plan.Kind != provider.StackInfra {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"%s stands up an app and this plan carries none", plan.Ref.Name)
 	}
 	return r.infra(pctx, plan, &infraWork{})
 }
 
-func (r *release) infra(pctx *sdk.Context, plan providerkit.StackPlan, work *infraWork) error {
+func (r *release) infra(pctx *sdk.Context, plan provider.StackPlan, work *infraWork) error {
 	vpc, err := ec2.LookupVpc(pctx, &ec2.LookupVpcArgs{Default: sdk.BoolRef(true)})
 	if err != nil {
 		return fmt.Errorf("look up default VPC: %w", err)
@@ -207,18 +207,18 @@ func (r *release) infra(pctx *sdk.Context, plan providerkit.StackPlan, work *inf
 		}
 		var err error
 		switch resource.Type {
-		case providerkit.BindingPostgres:
+		case provider.BindingPostgres:
 			args := translatePostgres(resource.Postgres)
 			args.Tags = transformed.tagsFor(transformTypePostgres, resource.Name)
 			err = registerPostgres(pctx, project, env, resource.Name, args, vpc.Id, vpc.CidrBlock, subnets.Ids)
-		case providerkit.BindingBucket:
+		case provider.BindingBucket:
 			args := translateBucket(resource.Bucket)
 			args.Tags = transformed.tagsFor(transformTypeBucket, resource.Name)
 			args.PatchedCORS = transformed.opensCORS(resource.Name)
 			err = registerBucket(pctx, project, env, resource.Name, args, r.cfg.StateTable, r.cfg.AppBoundaryARN, sessions, work.completer)
 		default:
 			return refusal.Refuse(refusal.CodeInvalid,
-				"this provider stands up no %s; it stands up %s and %s", resource.Type, providerkit.BindingPostgres, providerkit.BindingBucket)
+				"this provider stands up no %s; it stands up %s and %s", resource.Type, provider.BindingPostgres, provider.BindingBucket)
 		}
 		if err != nil {
 			return fmt.Errorf("declare %s: %w", resource.Name, err)
@@ -227,13 +227,13 @@ func (r *release) infra(pctx *sdk.Context, plan providerkit.StackPlan, work *inf
 	return nil
 }
 
-func provisionsBucket(plan providerkit.StackPlan) bool {
-	return slices.ContainsFunc(plan.Resources, func(resource providerkit.Resource) bool {
-		return resource.Type == providerkit.BindingBucket && resource.Binding == ""
+func provisionsBucket(plan provider.StackPlan) bool {
+	return slices.ContainsFunc(plan.Resources, func(resource provider.Resource) bool {
+		return resource.Type == provider.BindingBucket && resource.Binding == ""
 	})
 }
 
-func (r *release) Configure(_ context.Context, plan providerkit.StackPlan) (auto.ConfigMap, error) {
+func (r *release) Configure(_ context.Context, plan provider.StackPlan) (auto.ConfigMap, error) {
 	tags := plan.Tags
 	if work, held := plan.Work.(*stackWork); held {
 		tags = work.tags
@@ -248,14 +248,14 @@ func (r *release) Configure(_ context.Context, plan providerkit.StackPlan) (auto
 	return auto.ConfigMap{"aws:defaultTags": auto.ConfigValue{Value: string(encoded)}}, nil
 }
 
-func (r *release) Decode(ctx context.Context, plan providerkit.StackPlan, outputs auto.OutputMap) (providerkit.StackResult, error) {
+func (r *release) Decode(ctx context.Context, plan provider.StackPlan, outputs auto.OutputMap) (provider.StackResult, error) {
 	if work, held := plan.Work.(*stackWork); held {
 		work.outputs = outputs
-		return providerkit.StackResult{}, nil
+		return provider.StackResult{}, nil
 	}
 	if work, held := plan.Work.(*substrateWork); held {
 		work.outputs = outputs
-		return providerkit.StackResult{}, nil
+		return provider.StackResult{}, nil
 	}
 	if work, held := plan.Work.(*containerWork); held {
 		return r.decodeContainer(work, outputs)
@@ -264,31 +264,31 @@ func (r *release) Decode(ctx context.Context, plan providerkit.StackPlan, output
 		return r.decodeApp(plan, outputs)
 	}
 	sessions := newSessionScope(naming.Sanitize(plan.Ref.Project), plan.Ref.Name.Env, r.cfg.StateTableARN)
-	result := providerkit.StackResult{}
+	result := provider.StackResult{}
 	for _, resource := range plan.Resources {
 		if resource.Binding != "" {
 			continue
 		}
 		raw, produced := outputs[resource.Name]
 		if !produced {
-			return providerkit.StackResult{}, fmt.Errorf("stack produced no output for %s", resource.Name)
+			return provider.StackResult{}, fmt.Errorf("stack produced no output for %s", resource.Name)
 		}
 		fields, mapped := raw.Value.(map[string]any)
 		if !mapped {
-			return providerkit.StackResult{}, fmt.Errorf("output for %s is not a map", resource.Name)
+			return provider.StackResult{}, fmt.Errorf("output for %s is not a map", resource.Name)
 		}
 		var (
 			binding *bindingsv1.Binding
 			err     error
 		)
 		switch resource.Type {
-		case providerkit.BindingPostgres:
+		case provider.BindingPostgres:
 			binding, err = collectPostgresBinding(ctx, r.cfg.Secrets, resource.Name, fields)
-		case providerkit.BindingBucket:
+		case provider.BindingBucket:
 			binding, err = collectBucketBinding(resource.Name, sessions, fields)
 		}
 		if err != nil {
-			return providerkit.StackResult{}, err
+			return provider.StackResult{}, err
 		}
 		held := bindingOf(resource.Type, binding)
 		held.Resource = resource.Declared
@@ -297,29 +297,29 @@ func (r *release) Decode(ctx context.Context, plan providerkit.StackPlan, output
 	return result, nil
 }
 
-func bindingOf(kind providerkit.BindingType, binding *bindingsv1.Binding) providerkit.Binding {
+func bindingOf(kind provider.BindingType, binding *bindingsv1.Binding) provider.Binding {
 	properties := map[string]string{}
 	switch kind {
-	case providerkit.BindingPostgres:
+	case provider.BindingPostgres:
 		p := binding.GetPostgres()
-		properties[providerkit.PropertyHost] = p.GetHost()
-		properties[providerkit.PropertyPort] = strconv.Itoa(int(p.GetPort()))
-		properties[providerkit.PropertyDatabase] = p.GetDatabase()
-		properties[providerkit.PropertyUsername] = p.GetUsername()
-		properties[providerkit.PropertyPassword] = p.GetPassword()
-	case providerkit.BindingBucket:
-		properties[providerkit.PropertyBucket] = binding.GetBucket().GetBucket()
+		properties[provider.PropertyHost] = p.GetHost()
+		properties[provider.PropertyPort] = strconv.Itoa(int(p.GetPort()))
+		properties[provider.PropertyDatabase] = p.GetDatabase()
+		properties[provider.PropertyUsername] = p.GetUsername()
+		properties[provider.PropertyPassword] = p.GetPassword()
+	case provider.BindingBucket:
+		properties[provider.PropertyBucket] = binding.GetBucket().GetBucket()
 	}
-	return providerkit.Binding{
+	return provider.Binding{
 		Type:       kind,
 		Name:       binding.GetName(),
 		Properties: properties,
-		Grants:     providerkit.GrantsOf(binding),
+		Grants:     provider.GrantsOf(binding),
 	}
 }
 
-func (r *release) refuseHandover(ctx context.Context, plan providerkit.StackPlan) error {
-	var bound []providerkit.Resource
+func (r *release) refuseHandover(ctx context.Context, plan provider.StackPlan) error {
+	var bound []provider.Resource
 	for _, resource := range plan.Resources {
 		if resource.Binding != "" {
 			bound = append(bound, resource)
@@ -344,50 +344,50 @@ func (r *release) refuseHandover(ctx context.Context, plan providerkit.StackPlan
 	return &HandoverError{Bindings: handed, Stack: plan.Ref.Name.String()}
 }
 
-func (r *Stacks) PackApp(ctx context.Context, packing providerkit.AppPacking, _ edge.Progress) (providerkit.AppPack, error) {
+func (r *Stacks) PackApp(ctx context.Context, packing provider.AppPacking, _ edge.Progress) (provider.AppPack, error) {
 	held, err := r.at(ctx, packing.Ref, packing.Edge)
 	if err != nil {
-		return providerkit.AppPack{}, err
+		return provider.AppPack{}, err
 	}
 	bundle, err := held.sealApp(packing.Ref.Project, packing.App, packing.Values)
 	if err != nil {
-		return providerkit.AppPack{}, err
+		return provider.AppPack{}, err
 	}
-	return providerkit.AppPack{Overlay: bundle.overlay(), Packed: bundle}, nil
+	return provider.AppPack{Overlay: bundle.overlay(), Packed: bundle}, nil
 }
 
-func (r *Stacks) Plan(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.Plan, error) {
+func (r *Stacks) Plan(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.Plan, error) {
 	held, err := r.at(ctx, plan.Ref, edgeKindOf(plan))
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	return held.plan(ctx, plan, progress)
 }
 
-func (r *Stacks) PlanDestroy(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) (providerkit.Plan, error) {
+func (r *Stacks) PlanDestroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) (provider.Plan, error) {
 	held, err := r.at(ctx, ref, "")
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	return held.automation.PreviewDestroy(ctx, ref, progress)
 }
 
-func (r *Stacks) Provision(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.StackResult, error) {
+func (r *Stacks) Provision(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.StackResult, error) {
 	held, err := r.at(ctx, plan.Ref, edgeKindOf(plan))
 	if err != nil {
-		return providerkit.StackResult{}, err
+		return provider.StackResult{}, err
 	}
 	return held.provision(ctx, plan, progress)
 }
 
-func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.StackResult, error) {
+func (r *release) provision(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.StackResult, error) {
 	r.realized.mark(naming.Sanitize(plan.Ref.Project), plan.Ref.Name)
 	if runsContainer(plan) {
 		return r.provisionContainer(ctx, plan, progress)
 	}
 	prepared, work, err := r.prepare(ctx, plan)
 	if err != nil {
-		return providerkit.StackResult{}, err
+		return provider.StackResult{}, err
 	}
 	if work != nil && len(work.sets) > 0 {
 		r.pending.hold(work.stack, work.sets, progress)
@@ -395,36 +395,36 @@ func (r *release) provision(ctx context.Context, plan providerkit.StackPlan, pro
 	}
 	result, err := r.automation.Run(ctx, prepared, progress)
 	if err != nil {
-		return providerkit.StackResult{}, err
+		return provider.StackResult{}, err
 	}
 	if err := transformedIn(prepared).refuseUnclaimed(); err != nil {
-		return providerkit.StackResult{}, err
+		return provider.StackResult{}, err
 	}
 	if err := writeOriginRecord(ctx, r.cfg, plan.Ref.Name.App, work, result); err != nil {
-		return providerkit.StackResult{}, err
+		return provider.StackResult{}, err
 	}
 	return result, nil
 }
 
-func (r *release) plan(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.Plan, error) {
+func (r *release) plan(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.Plan, error) {
 	if runsContainer(plan) {
 		return r.planContainer(ctx, plan, progress)
 	}
 	prepared, _, err := r.prepare(ctx, plan)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	previewed, err := r.automation.Preview(ctx, prepared, progress)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	if err := transformedIn(prepared).refuseUnclaimed(); err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	return previewed, nil
 }
 
-func transformedIn(plan providerkit.StackPlan) *transformPatches {
+func transformedIn(plan provider.StackPlan) *transformPatches {
 	switch work := plan.Work.(type) {
 	case *appWork:
 		return work.transformed
@@ -434,26 +434,26 @@ func transformedIn(plan providerkit.StackPlan) *transformPatches {
 	return nil
 }
 
-func (r *release) prepare(ctx context.Context, plan providerkit.StackPlan) (providerkit.StackPlan, *appWork, error) {
+func (r *release) prepare(ctx context.Context, plan provider.StackPlan) (provider.StackPlan, *appWork, error) {
 	if plan.Work != nil {
 		return plan, nil, nil
 	}
 	if len(plan.Images.Pushes) > 0 {
-		return providerkit.StackPlan{}, nil, refusal.Refuse(refusal.CodeInvalid,
+		return provider.StackPlan{}, nil, refusal.Refuse(refusal.CodeInvalid,
 			"%s runs on serverless compute, which runs functions rather than an image, and this release pushes %d", plan.Ref.Name, len(plan.Images.Pushes))
 	}
 	transformed, err := transformStackPlan(ctx, r.cfg.Transform, plan)
 	if err != nil {
-		return providerkit.StackPlan{}, nil, err
+		return provider.StackPlan{}, nil, err
 	}
 	if plan.App == nil {
 		if err := r.refuseHandover(ctx, plan); err != nil {
-			return providerkit.StackPlan{}, nil, err
+			return provider.StackPlan{}, nil, err
 		}
 		work := &infraWork{transformed: transformed}
 		if provisionsBucket(plan) {
 			if work.completer, err = placeUploadCompleter(ctx, r.cfg); err != nil {
-				return providerkit.StackPlan{}, nil, err
+				return provider.StackPlan{}, nil, err
 			}
 		}
 		plan.Work = work
@@ -461,13 +461,13 @@ func (r *release) prepare(ctx context.Context, plan providerkit.StackPlan) (prov
 	}
 	work, err := r.appWork(plan, transformed)
 	if err != nil {
-		return providerkit.StackPlan{}, nil, err
+		return provider.StackPlan{}, nil, err
 	}
 	plan.Work = work
 	return plan, work, nil
 }
 
-func (r *Stacks) Destroy(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) error {
+func (r *Stacks) Destroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) error {
 	held, err := r.at(ctx, ref, "")
 	if err != nil {
 		return err
@@ -483,15 +483,15 @@ func (r *Stacks) Destroy(ctx context.Context, ref providerkit.StackRef, progress
 	return r.releaseSubstrate(ctx, held.cfg.Records, ref, progress)
 }
 
-func (r *Stacks) Inspect(ctx context.Context, ref providerkit.StackRef) (providerkit.StackState, error) {
+func (r *Stacks) Inspect(ctx context.Context, ref provider.StackRef) (provider.StackState, error) {
 	outputs, err := r.Outputs(ctx, ref, nil)
 	if err != nil {
-		return providerkit.StackState{}, err
+		return provider.StackState{}, err
 	}
-	return providerkit.StackState{Present: len(outputs) > 0}, nil
+	return provider.StackState{Present: len(outputs) > 0}, nil
 }
 
-func (r *Stacks) Outputs(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) (auto.OutputMap, error) {
+func (r *Stacks) Outputs(ctx context.Context, ref provider.StackRef, progress edge.Progress) (auto.OutputMap, error) {
 	held, err := r.at(ctx, ref, "")
 	if err != nil {
 		return nil, err
@@ -499,4 +499,4 @@ func (r *Stacks) Outputs(ctx context.Context, ref providerkit.StackRef, progress
 	return held.automation.Outputs(ctx, ref, progress)
 }
 
-var _ providerkit.Stacks = (*Stacks)(nil)
+var _ provider.Stacks = (*Stacks)(nil)

@@ -8,7 +8,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/events"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/apitype"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func step(op apitype.OpType, kind, name string) apitype.StepEventMetadata {
@@ -27,7 +27,7 @@ func settled(op apitype.OpType, kind, name string) events.EngineEvent {
 	return events.EngineEvent{ResOutputsEvent: &apitype.ResOutputsEvent{Metadata: step(op, kind, name)}}
 }
 
-func rowsOf(t *testing.T, stream ...events.EngineEvent) []providerkit.Change {
+func rowsOf(t *testing.T, stream ...events.EngineEvent) []provider.Change {
 	t.Helper()
 
 	engineEvents := make(chan events.EngineEvent, len(stream))
@@ -46,7 +46,7 @@ func rowsOf(t *testing.T, stream ...events.EngineEvent) []providerkit.Change {
 func TestEveryStepTheEngineShowsBecomesAPlanRow(t *testing.T) {
 	t.Parallel()
 
-	rows := map[string]providerkit.ChangeAction{}
+	rows := map[string]provider.ChangeAction{}
 	for _, change := range rowsOf(t,
 		mutating(apitype.OpCreate, "aws:rds/cluster:Cluster", "orders"),
 		mutating(apitype.OpUpdate, "aws:s3/bucket:Bucket", "uploads"),
@@ -58,12 +58,12 @@ func TestEveryStepTheEngineShowsBecomesAPlanRow(t *testing.T) {
 		rows[change.Name] = change.Action
 	}
 
-	for name, action := range map[string]providerkit.ChangeAction{
-		"orders":    providerkit.ActionCreate,
-		"uploads":   providerkit.ActionUpdate,
-		"exports":   providerkit.ActionDelete,
-		"app":       providerkit.ActionKeep,
-		"reporting": providerkit.ActionReplace,
+	for name, action := range map[string]provider.ChangeAction{
+		"orders":    provider.ActionCreate,
+		"uploads":   provider.ActionUpdate,
+		"exports":   provider.ActionDelete,
+		"app":       provider.ActionKeep,
+		"reporting": provider.ActionReplace,
 	} {
 		if rows[name] != action {
 			t.Errorf("%s reads %q, want %q", name, rows[name], action)
@@ -78,7 +78,7 @@ func TestAKeepRowComesFromTheEngineOutputsEventAndNowhereElse(t *testing.T) {
 	t.Parallel()
 
 	rows := rowsOf(t, settled(apitype.OpSame, "aws:iam/role:Role", "app"))
-	if len(rows) != 1 || rows[0].Action != providerkit.ActionKeep || rows[0].Name != "app" {
+	if len(rows) != 1 || rows[0].Action != provider.ActionKeep || rows[0].Name != "app" {
 		t.Fatalf("a stream carrying only an outputs event for a standing resource read as %+v, want one keep row for app", rows)
 	}
 
@@ -127,7 +127,7 @@ func TestRowsReadInOneOrderWhateverOrderTheEngineSendsThem(t *testing.T) {
 func TestStepsThatNeverDrainRefuseRatherThanReadAsNoChange(t *testing.T) {
 	t.Parallel()
 
-	rows, err := awaitRows(make(chan []providerkit.Change), 20*time.Millisecond)
+	rows, err := awaitRows(make(chan []provider.Change), 20*time.Millisecond)
 	if err == nil {
 		t.Fatalf("awaitRows() over a stream that never drained = %v, want an error: a plan drawn from nothing reads as nothing would change", rows)
 	}

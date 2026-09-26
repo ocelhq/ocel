@@ -5,7 +5,7 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -56,22 +56,22 @@ func (p *Provider) Discarded() []string {
 
 type certificates struct{ *Provider }
 
-func (p certificates) Issue(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
+func (p certificates) Issue(ctx context.Context, req provider.CertificateRequest) (provider.Certificate, error) {
 	p.mu.Lock()
 	refusal, pinned, validation := p.certRefusal, p.pins[req.Hostname], slices.Clone(p.issue)
 	rotation, pending := p.rotation, p.pending
 	p.mu.Unlock()
 
 	if refusal != nil {
-		return providerkit.Certificate{}, refusal
+		return provider.Certificate{}, refusal
 	}
 	if pinned != "" {
-		return providerkit.Certificate{ID: pinned}, nil
+		return provider.Certificate{ID: pinned}, nil
 	}
 	if validation == nil {
-		return providerkit.Certificate{}, nil
+		return provider.Certificate{}, nil
 	}
-	cert := providerkit.Certificate{ID: issuedFor(req.Hostname, rotation), Requested: true}
+	cert := provider.Certificate{ID: issuedFor(req.Hostname, rotation), Requested: true}
 	if req.Current.Requested && req.Current.ID == cert.ID {
 		return req.Current, nil
 	}
@@ -90,22 +90,22 @@ func issuedFor(hostname string, rotation int) string {
 	return id + "-" + strconv.Itoa(rotation)
 }
 
-func (p *Provider) ReportCertificate(health providerkit.CertificateHealth) {
+func (p *Provider) ReportCertificate(health provider.CertificateHealth) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.health = &health
 }
 
-func (p certificates) Inspect(_ context.Context, _ edge.Kind, hostname string, cert providerkit.Certificate) (providerkit.CertificateHealth, error) {
+func (p certificates) Inspect(_ context.Context, _ edge.Kind, hostname string, cert provider.Certificate) (provider.CertificateHealth, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.health != nil {
 		return *p.health, nil
 	}
 	if p.pins == nil && p.issue == nil {
-		return providerkit.CertificateHealth{}, nil
+		return provider.CertificateHealth{}, nil
 	}
-	health := providerkit.CertificateHealth{Terminates: true}
+	health := provider.CertificateHealth{Terminates: true}
 	if cert.ID == "" {
 		return health, nil
 	}
@@ -114,7 +114,7 @@ func (p certificates) Inspect(_ context.Context, _ edge.Kind, hostname string, c
 	return health, nil
 }
 
-func (p certificates) Discard(_ context.Context, cert providerkit.Certificate, _ edge.Progress) error {
+func (p certificates) Discard(_ context.Context, cert provider.Certificate, _ edge.Progress) error {
 	p.mu.Lock()
 	refusal := p.discardHeld
 	p.mu.Unlock()

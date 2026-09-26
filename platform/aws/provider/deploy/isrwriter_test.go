@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -67,7 +67,7 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 			t.Error("a writer with no adopted cache store must fail the deploy")
 		}
 
-		pre := providerkit.DeployPreflight{Plan: providerkit.DeployPlan{Slug: "shop", Class: edge.ClassProduction, Env: "prod"}}
+		pre := provider.DeployPreflight{Plan: provider.DeployPlan{Slug: "shop", Class: edge.ClassProduction, Env: "prod"}}
 		if err := newStacks(fixed(storeOnly), &Realized{}, nil).Preflight(context.Background(), pre); err == nil {
 			t.Error("a bootstrap that disagrees with itself must fail preflight, before a byte of this deploy is uploaded")
 		}
@@ -113,14 +113,14 @@ func TestResolveAppBuildsISRWriter(t *testing.T) {
 	})
 }
 
-func isrPlan(app, prefix string) providerkit.StackPlan {
-	return providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "proj", Class: edge.ClassProduction, Name: naming.AppStack("prod", app, releaseOf(deployedAs(testDeploymentID)))},
-		Kind: providerkit.StackApp,
-		App: &providerkit.AppPlan{
+func isrPlan(app, prefix string) provider.StackPlan {
+	return provider.StackPlan{
+		Ref:  provider.StackRef{Project: "proj", Class: edge.ClassProduction, Name: naming.AppStack("prod", app, releaseOf(deployedAs(testDeploymentID)))},
+		Kind: provider.StackApp,
+		App: &provider.AppPlan{
 			App:       app,
 			Framework: appbuild.FrameworkNext,
-			ISR:       &providerkit.ISRPlan{Prefix: prefix, TagNamespace: "tag:proj"},
+			ISR:       &provider.ISRPlan{Prefix: prefix, TagNamespace: "tag:proj"},
 		},
 	}
 }

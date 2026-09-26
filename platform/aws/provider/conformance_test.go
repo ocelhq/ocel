@@ -11,6 +11,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	aws "github.com/ocelhq/ocel/platform/aws/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges"
 )
@@ -18,7 +19,7 @@ import (
 func TestAWSProvider(t *testing.T) {
 	conformance.Run(t, conformance.Suite{
 		Spec:    providerkit.Spec{Version: "test", New: aws.New},
-		Options: providerkit.Options{"region": "us-east-1"},
+		Options: provider.Options{"region": "us-east-1"},
 		Binary:  buildProvider(t),
 		Certificates: &conformance.CertificateChecks{
 			Kind: edges.DefaultKind,
@@ -34,7 +35,7 @@ func TestTheProviderCarriesTheVendorAndSetsEveryHookItImplements(t *testing.T) {
 	if p.Facts().Vendor != aws.Vendor {
 		t.Errorf("Facts().Vendor = %q, want %q", p.Facts().Vendor, aws.Vendor)
 	}
-	for _, want := range []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket} {
+	for _, want := range []provider.BindingType{provider.BindingPostgres, provider.BindingBucket} {
 		if !slices.Contains(p.Facts().Bindings, want) {
 			t.Errorf("Facts().Bindings = %v, want it to carry %s", p.Facts().Bindings, want)
 		}

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -15,7 +15,7 @@ func (t handedToken) Token(context.Context) (string, error) { return string(t), 
 
 func pushing(t *testing.T, endpoint string) *Provider {
 	t.Helper()
-	names := Names{namespace: providerkit.Namespace("ocel"), project: "acme-prod"}
+	names := Names{namespace: provider.Namespace("ocel"), project: "acme-prod"}
 	return &Provider{
 		options:   Options{Project: names.project, Region: "europe-west1"},
 		tokens:    handedToken("ya29.stub"),

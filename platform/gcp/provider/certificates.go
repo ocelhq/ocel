@@ -11,7 +11,7 @@ import (
 	"google.golang.org/api/googleapi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -44,17 +44,17 @@ func authorizedDomain(hostname string) string { return strings.TrimPrefix(hostna
 
 type certificates struct{ *Provider }
 
-func (p certificates) Issue(ctx context.Context, req providerkit.CertificateRequest) (providerkit.Certificate, error) {
+func (p certificates) Issue(ctx context.Context, req provider.CertificateRequest) (provider.Certificate, error) {
 	clients, err := p.stood(ctx)
 	if err != nil {
-		return providerkit.Certificate{}, err
+		return provider.Certificate{}, err
 	}
 	name := clients.certificatesGlobal() + "/certificates/" + certificateName(req.Hostname)
-	held := providerkit.Certificate{ID: name, Requested: true, Written: req.Current.Written, Owed: req.Current.Owed}
+	held := provider.Certificate{ID: name, Requested: true, Written: req.Current.Written, Owed: req.Current.Owed}
 
 	authorization, err := p.authorized(ctx, clients, req)
 	if err != nil {
-		return providerkit.Certificate{}, err
+		return provider.Certificate{}, err
 	}
 	held, err = req.Prove(ctx, held, []edge.Record{{
 		Name:  strings.TrimSuffix(authorization.DnsResourceRecord.Name, "."),
@@ -73,7 +73,7 @@ func (p certificates) Issue(ctx context.Context, req providerkit.CertificateRequ
 func (p *Provider) authorized(
 	ctx context.Context,
 	clients *clients,
-	req providerkit.CertificateRequest,
+	req provider.CertificateRequest,
 ) (*certmanager.DnsAuthorization, error) {
 	certificates, err := clients.Certificates()
 	if err != nil {
@@ -131,7 +131,7 @@ func (p *Provider) certificates(ctx context.Context) (*clients, *certmanager.Ser
 func (p *Provider) certified(
 	ctx context.Context,
 	clients *clients,
-	req providerkit.CertificateRequest,
+	req provider.CertificateRequest,
 	name, authorization string,
 ) error {
 	certificates, err := clients.Certificates()
@@ -170,7 +170,7 @@ func (p *Provider) certified(
 func (p *Provider) issued(
 	ctx context.Context,
 	certificates *certmanager.Service,
-	req providerkit.CertificateRequest,
+	req provider.CertificateRequest,
 	name string,
 ) error {
 	settled, err := waiting(ctx, issuance, "Certificate Manager to issue a certificate for "+req.Hostname,
@@ -182,8 +182,8 @@ func (p *Provider) issued(
 		func(held *certmanager.Certificate) bool {
 			return held != nil && held.Managed != nil && held.Managed.State != certificateProvisioning
 		})
-	if code, _ := providerkit.RefusedCode(err); code == refusal.CodeNotReady {
-		return providerkit.Pending(err)
+	if code, _ := provider.RefusedCode(err); code == refusal.CodeNotReady {
+		return provider.Pending(err)
 	}
 	if err != nil {
 		return err
@@ -211,25 +211,25 @@ func (p certificates) Inspect(
 	ctx context.Context,
 	_ edge.Kind,
 	hostname string,
-	cert providerkit.Certificate,
-) (providerkit.CertificateHealth, error) {
+	cert provider.Certificate,
+) (provider.CertificateHealth, error) {
 	if !cert.Issued() {
-		return providerkit.CertificateHealth{}, nil
+		return provider.CertificateHealth{}, nil
 	}
 	_, certificates, err := p.certificates(ctx)
 	if err != nil {
-		return providerkit.CertificateHealth{}, err
+		return provider.CertificateHealth{}, err
 	}
 	held, err := attempted(ctx, func(call ...googleapi.CallOption) (*certmanager.Certificate, error) {
 		return certificates.Projects.Locations.Certificates.Get(cert.ID).Context(ctx).Do(call...)
 	})
 	if absent(err) {
-		return providerkit.CertificateHealth{Terminates: true, Status: "gone", Renewal: certificateRenewal}, nil
+		return provider.CertificateHealth{Terminates: true, Status: "gone", Renewal: certificateRenewal}, nil
 	}
 	if err != nil {
-		return providerkit.CertificateHealth{}, fmt.Errorf("read the certificate %s: %w", cert.ID, err)
+		return provider.CertificateHealth{}, fmt.Errorf("read the certificate %s: %w", cert.ID, err)
 	}
-	health := providerkit.CertificateHealth{
+	health := provider.CertificateHealth{
 		Terminates: true,
 		Renewal:    certificateRenewal,
 		Domains:    covered(held),
@@ -288,7 +288,7 @@ func (p *Provider) Entered(ctx context.Context, certificateMap string) ([]string
 	return bound, nil
 }
 
-func (p certificates) Discard(ctx context.Context, cert providerkit.Certificate, progress edge.Progress) error {
+func (p certificates) Discard(ctx context.Context, cert provider.Certificate, progress edge.Progress) error {
 	if !cert.Issued() {
 		return nil
 	}

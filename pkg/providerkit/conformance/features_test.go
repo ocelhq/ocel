@@ -4,16 +4,16 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestTheSuiteAppliesOnlyWhatTheEdgeItOpenedTheBootstrapperForRequires(t *testing.T) {
 	t.Parallel()
 
-	catalogue := []providerkit.Feature{
+	catalogue := []provider.Feature{
 		{Name: "state", Summary: "stands under every edge"},
-		{Name: "other-front", Summary: "the front the other edge is served from", Needs: []string{providerkit.NeedsEdgePrefix + "other"}},
+		{Name: "other-front", Summary: "the front the other edge is served from", Needs: []string{provider.NeedsEdgePrefix + "other"}},
 	}
 
 	for kind, want := range map[edge.Kind][]string{
@@ -36,9 +36,9 @@ func TestTheSuiteAppliesOnlyWhatTheEdgeItOpenedTheBootstrapperForRequires(t *tes
 func TestAFeatureAnotherFeatureDependsOnComesWithIt(t *testing.T) {
 	t.Parallel()
 
-	catalogue := []providerkit.Feature{
+	catalogue := []provider.Feature{
 		{Name: "state", Summary: "what the front keeps its state in"},
-		{Name: "front", Summary: "the front", DependsOn: []string{"state"}, Needs: []string{providerkit.NeedsEdgePrefix + "other"}},
+		{Name: "front", Summary: "the front", DependsOn: []string{"state"}, Needs: []string{provider.NeedsEdgePrefix + "other"}},
 	}
 
 	got, err := applicable(catalogue, "other")

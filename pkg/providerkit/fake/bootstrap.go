@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -21,7 +22,7 @@ type Bootstrap struct {
 	writer   string
 	schema   uint32
 	refusal  error
-	requests []providerkit.BootstrapRequest
+	requests []provider.BootstrapRequest
 	front    edge.Kind
 	standing []edge.Kind
 	halfway  bool
@@ -32,7 +33,7 @@ func NewBootstrap() *Bootstrap {
 		applied: map[edge.Class][]string{},
 		behind:  map[string]bool{},
 		writer:  "1.0.0",
-		schema:  providerkit.BootstrapSchema,
+		schema:  provider.BootstrapSchema,
 	}
 }
 
@@ -54,18 +55,18 @@ func (b *Bootstrap) Fronting() edge.Kind {
 	return b.front
 }
 
-func (b *Bootstrap) Catalogue() []providerkit.Feature {
-	return []providerkit.Feature{
+func (b *Bootstrap) Catalogue() []provider.Feature {
+	return []provider.Feature{
 		{
 			Name:    FeatureCache,
 			Summary: "the reference provider's response cache",
-			Needs:   []string{providerkit.NeedsFrameworkPrefix + "next"},
+			Needs:   []string{provider.NeedsFrameworkPrefix + "next"},
 		},
 		{
 			Name:      FeatureImages,
 			Summary:   "the reference provider's image optimizer",
 			DependsOn: []string{FeatureCache},
-			Needs:     []string{providerkit.NeedsFrameworkPrefix + "next", providerkit.NeedsEdgePrefix + "relay"},
+			Needs:     []string{provider.NeedsFrameworkPrefix + "next", provider.NeedsEdgePrefix + "relay"},
 		},
 	}
 }
@@ -102,17 +103,17 @@ func (b *Bootstrap) RefuseApply(err error) {
 	b.refusal = err
 }
 
-func (b *Bootstrap) Applied() []providerkit.BootstrapRequest {
+func (b *Bootstrap) Applied() []provider.BootstrapRequest {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return slices.Clone(b.requests)
 }
 
-func (b *Bootstrap) Describe(_ context.Context, class edge.Class) (providerkit.BootstrapReading, error) {
+func (b *Bootstrap) Describe(_ context.Context, class edge.Class) (provider.BootstrapReading, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	features, present := b.applied[class]
-	described := providerkit.BootstrapReading{Class: class, Present: present, Unfinished: present && b.halfway}
+	described := provider.BootstrapReading{Class: class, Present: present, Unfinished: present && b.halfway}
 	if !present {
 		return described, nil
 	}
@@ -131,8 +132,8 @@ func stackNameOf(class edge.Class, feature string) string {
 	return name
 }
 
-func (b *Bootstrap) stack(class edge.Class, feature string) providerkit.BootstrapStack {
-	return providerkit.BootstrapStack{
+func (b *Bootstrap) stack(class edge.Class, feature string) provider.BootstrapStack {
+	return provider.BootstrapStack{
 		Name:          stackNameOf(class, feature),
 		Feature:       feature,
 		Present:       true,
@@ -142,32 +143,32 @@ func (b *Bootstrap) stack(class edge.Class, feature string) providerkit.Bootstra
 	}
 }
 
-func (b *Bootstrap) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
+func (b *Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
 	described, err := b.Describe(ctx, req.Class)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	groups := providerkit.DeriveGroups(b.named(described), b.Catalogue(), req)
 	for i, group := range groups {
-		if group.Action == providerkit.ActionKeep {
+		if group.Action == provider.ActionKeep {
 			continue
 		}
-		groups[i].Changes = []providerkit.Change{{
+		groups[i].Changes = []provider.Change{{
 			Kind:   "Fake::Stack::Resource",
 			Name:   group.Name + "-resource",
 			Action: group.Action,
 		}}
 	}
-	return providerkit.Plan{Groups: groups}, nil
+	return provider.Plan{Groups: groups}, nil
 }
 
-func (b *Bootstrap) named(described providerkit.BootstrapReading) providerkit.BootstrapReading {
+func (b *Bootstrap) named(described provider.BootstrapReading) provider.BootstrapReading {
 	return providerkit.NameStacks(described, b.Catalogue(), func(feature string) string {
 		return stackNameOf(described.Class, feature)
 	})
 }
 
-func (b *Bootstrap) Apply(_ context.Context, req providerkit.BootstrapRequest, progress edge.Progress) error {
+func (b *Bootstrap) Apply(_ context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.refusal != nil {
@@ -182,38 +183,38 @@ func (b *Bootstrap) Apply(_ context.Context, req providerkit.BootstrapRequest, p
 	return nil
 }
 
-func (b *Bootstrap) PlanRemove(_ context.Context, class edge.Class) (providerkit.Plan, error) {
+func (b *Bootstrap) PlanRemove(_ context.Context, class edge.Class) (provider.Plan, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	features, present := b.applied[class]
 	if !present {
-		return providerkit.Plan{}, nil
+		return provider.Plan{}, nil
 	}
-	plan := providerkit.Plan{Groups: make([]providerkit.ChangeGroup, 0, len(features)+1)}
+	plan := provider.Plan{Groups: make([]provider.ChangeGroup, 0, len(features)+1)}
 	for _, feature := range features {
-		plan.Groups = append(plan.Groups, providerkit.ChangeGroup{
-			Kind:    providerkit.StackGroupKind,
+		plan.Groups = append(plan.Groups, provider.ChangeGroup{
+			Kind:    provider.StackGroupKind,
 			Name:    b.stack(class, feature).Name,
 			Feature: feature,
-			Action:  providerkit.ActionDelete,
+			Action:  provider.ActionDelete,
 		})
 	}
-	plan.Groups = append(plan.Groups, providerkit.ChangeGroup{
-		Kind:   providerkit.StackGroupKind,
+	plan.Groups = append(plan.Groups, provider.ChangeGroup{
+		Kind:   provider.StackGroupKind,
 		Name:   b.stack(class, "").Name,
-		Action: providerkit.ActionDelete,
+		Action: provider.ActionDelete,
 		Reason: "the core every feature above was built on",
 		Slow:   true,
 	})
 	for _, kind := range b.standingEdges() {
-		plan.Groups = append(plan.Groups, providerkit.ChangeGroup{
-			Kind:   providerkit.EdgeGroupKind,
+		plan.Groups = append(plan.Groups, provider.ChangeGroup{
+			Kind:   provider.EdgeGroupKind,
 			Name:   edge.EdgeGroupName(kind),
-			Action: providerkit.ActionDelete,
-			Changes: []providerkit.Change{{
+			Action: provider.ActionDelete,
+			Changes: []provider.Change{{
 				Kind:   "Fake::Edge::Front",
 				Name:   string(kind) + "-front",
-				Action: providerkit.ActionDelete,
+				Action: provider.ActionDelete,
 			}},
 		})
 	}

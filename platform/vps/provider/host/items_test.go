@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -135,12 +135,12 @@ func TestAPrincipalNothingHasCreatedIsPlannedAndOneThatStandsIsKept(t *testing.T
 	class := edge.ClassProduction
 	keys := []byte(aKey + "\n")
 	fresh := planFor(planned(Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: map[string]string{}}), principal().ID())
-	if fresh.Action != providerkit.ActionCreate {
+	if fresh.Action != provider.ActionCreate {
 		t.Errorf("a host with no %s plans %q, want it created", deployUser, fresh.Action)
 	}
 
 	standing := Reading{Arch: ArchAMD64, Class: class, Keys: keys, Observed: digests(Items(class, keys, ArchAMD64, Front{}))}
-	if kept := planFor(planned(standing), principal().ID()); kept.Action != providerkit.ActionKeep {
+	if kept := planFor(planned(standing), principal().ID()); kept.Action != provider.ActionKeep {
 		t.Errorf("a host whose principal stands as ocel writes it plans %q, want it kept", kept.Action)
 	}
 	for _, change := range planned(standing) {
@@ -157,12 +157,12 @@ func TestKeysThatChangedRePlanTheAuthorizedKeysAndNothingBeside(t *testing.T) {
 	stood := Items(class, []byte(aKey+"\n"), ArchAMD64, Front{})
 	moved := Reading{Arch: ArchAMD64, Class: class, Keys: []byte("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOther other@laptop\n"), Observed: digests(stood)}
 	for _, change := range planned(moved) {
-		want := providerkit.ActionKeep
+		want := provider.ActionKeep
 		switch change.Name {
 		case authorizedKeys:
-			want = providerkit.ActionUpdate
+			want = provider.ActionUpdate
 		case dockerEngine:
-			want = providerkit.ActionAdopt
+			want = provider.ActionAdopt
 		}
 		if change.Action != want {
 			t.Errorf("%s plans %q after the deploy key moved, want %q", change.Name, change.Action, want)
@@ -212,7 +212,7 @@ func TestNothingIsEverTakenAfterTheStampButTheRootAboveIt(t *testing.T) {
 			t.Fatalf("destroying %s never takes %s, and the stamp stands over a host that holds nothing", name, ClassDir(production))
 		}
 		for at, r := range taken {
-			if r.action != providerkit.ActionDelete || at <= stamp || r.path == classRoot {
+			if r.action != provider.ActionDelete || at <= stamp || r.path == classRoot {
 				continue
 			}
 			t.Errorf("destroying %s takes %s after the stamp, so an interrupted destroy leaves a host that lies about what it carries", name, r.path)
@@ -259,13 +259,13 @@ func TestDestroyLeavesTheTrustStoreAloneAndSpellsTheLineThatEditsIt(t *testing.T
 	}
 }
 
-func planFor(changes []providerkit.Change, id string) providerkit.Change {
+func planFor(changes []provider.Change, id string) provider.Change {
 	for _, change := range changes {
 		if change.Kind+" "+change.Name == id {
 			return change
 		}
 	}
-	return providerkit.Change{}
+	return provider.Change{}
 }
 
 func TestTheAccountFactsCarryEveryFieldTheWriteSets(t *testing.T) {

@@ -5,30 +5,11 @@ import (
 	"fmt"
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type HostVerdict int
-
-const (
-	HostPass HostVerdict = iota
-	HostOwed
-	HostFail
-)
-
-type HostCheck struct {
-	Subject string
-	Verdict HostVerdict
-	Finding string
-	Fix     string
-}
-
-type HostCheckRequest struct {
-	Class     edge.Class
-	Hostnames []string
-}
-
-func HostChecksProto(checks []HostCheck) []*contractv1.HostCheck {
+func HostChecksProto(checks []provider.HostCheck) []*contractv1.HostCheck {
 	if len(checks) == 0 {
 		return nil
 	}
@@ -44,26 +25,26 @@ func HostChecksProto(checks []HostCheck) []*contractv1.HostCheck {
 	return wired
 }
 
-func verdictProto(verdict HostVerdict) contractv1.HostCheck_Verdict {
+func verdictProto(verdict provider.HostVerdict) contractv1.HostCheck_Verdict {
 	switch verdict {
-	case HostOwed:
+	case provider.HostOwed:
 		return contractv1.HostCheck_VERDICT_OWED
-	case HostFail:
+	case provider.HostFail:
 		return contractv1.HostCheck_VERDICT_FAIL
 	default:
 		return contractv1.HostCheck_VERDICT_PASS
 	}
 }
 
-func (h *handlers) hostChecks(ctx context.Context, provider Provider, class edge.Class, hostnames []string) []*contractv1.HostCheck {
-	checkHost := provider.Hooks().CheckHost
+func (h *handlers) hostChecks(ctx context.Context, p provider.Provider, class edge.Class, hostnames []string) []*contractv1.HostCheck {
+	checkHost := p.Hooks().CheckHost
 	if checkHost == nil {
 		return nil
 	}
-	checks, err := checkHost(ctx, HostCheckRequest{Class: class, Hostnames: hostnames})
+	checks, err := checkHost(ctx, provider.HostCheckRequest{Class: class, Hostnames: hostnames})
 	if err != nil {
-		return HostChecksProto([]HostCheck{{
-			Verdict: HostFail,
+		return HostChecksProto([]provider.HostCheck{{
+			Verdict: provider.HostFail,
 			Finding: fmt.Sprintf("what stands on this box for the life of it could not be read, so none of it was judged: %v", err),
 			Fix:     "run `ocel doctor` once the machine answers again",
 		}})

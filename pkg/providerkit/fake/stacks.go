@@ -9,25 +9,26 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type Stacks struct {
-	Grants []providerkit.Grant
+	Grants []provider.Grant
 
-	artifacts providerkit.ArtifactStore
+	artifacts provider.ArtifactStore
 	journal   *Journal
 	refusal   error
 
 	mu      sync.Mutex
-	stacks  map[string]providerkit.StackResult
-	plans   []providerkit.StackPlan
+	stacks  map[string]provider.StackResult
+	plans   []provider.StackPlan
 	taken   []string
-	entered func(providerkit.StackPlan) error
+	entered func(provider.StackPlan) error
 }
 
-func NewStacks(artifacts providerkit.ArtifactStore) *Stacks {
-	return &Stacks{artifacts: artifacts, stacks: map[string]providerkit.StackResult{}}
+func NewStacks(artifacts provider.ArtifactStore) *Stacks {
+	return &Stacks{artifacts: artifacts, stacks: map[string]provider.StackResult{}}
 }
 
 func (r *Stacks) journalling(journal *Journal) *Stacks {
@@ -35,50 +36,50 @@ func (r *Stacks) journalling(journal *Journal) *Stacks {
 	return r
 }
 
-func (r *Stacks) Entering(hook func(providerkit.StackPlan) error) {
+func (r *Stacks) Entering(hook func(provider.StackPlan) error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.entered = hook
 }
 
-func (r *Stacks) Plans() []providerkit.StackPlan {
+func (r *Stacks) Plans() []provider.StackPlan {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return slices.Clone(r.plans)
 }
 
-func (r *Stacks) Plan(ctx context.Context, plan providerkit.StackPlan, _ edge.Progress) (providerkit.Plan, error) {
+func (r *Stacks) Plan(ctx context.Context, plan provider.StackPlan, _ edge.Progress) (provider.Plan, error) {
 	return providerkit.SynthesizedPlan(ctx, r.artifacts, plan, r.State(plan.Ref).Result)
 }
 
-func (r *Stacks) PlanDestroy(_ context.Context, ref providerkit.StackRef, _ edge.Progress) (providerkit.Plan, error) {
+func (r *Stacks) PlanDestroy(_ context.Context, ref provider.StackRef, _ edge.Progress) (provider.Plan, error) {
 	return providerkit.SynthesizedRemoval(ref, r.State(ref).Result), nil
 }
 
-func (r *Stacks) Provision(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.StackResult, error) {
+func (r *Stacks) Provision(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.StackResult, error) {
 	if err := ctx.Err(); err != nil {
-		return providerkit.StackResult{}, err
+		return provider.StackResult{}, err
 	}
 	r.mu.Lock()
 	entered := r.entered
 	r.mu.Unlock()
 	if entered != nil {
 		if err := entered(plan); err != nil {
-			return providerkit.StackResult{}, err
+			return provider.StackResult{}, err
 		}
 	}
 	if err := plan.Images.PushMissing(ctx, progress); err != nil {
-		return providerkit.StackResult{}, err
+		return provider.StackResult{}, err
 	}
 	if err := providerkit.ShipUploads(ctx, r.artifacts, plan.Uploads, progress); err != nil {
-		return providerkit.StackResult{}, err
+		return provider.StackResult{}, err
 	}
-	result := providerkit.StackResult{}
+	result := provider.StackResult{}
 	for _, resource := range plan.Resources {
 		if resource.Binding != "" {
 			continue
 		}
-		result.Bindings = append(result.Bindings, providerkit.Binding{
+		result.Bindings = append(result.Bindings, provider.Binding{
 			Type:       resource.Type,
 			Name:       resource.Name,
 			Properties: propertiesFor(resource.Type, resource.Name),
@@ -109,7 +110,7 @@ func (r *Stacks) RefuseNextDestroy(err error) {
 	r.refusal = err
 }
 
-func (r *Stacks) Destroy(_ context.Context, ref providerkit.StackRef, progress edge.Progress) error {
+func (r *Stacks) Destroy(_ context.Context, ref provider.StackRef, progress edge.Progress) error {
 	r.journal.note("destroy " + ref.Name.String())
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -125,14 +126,14 @@ func (r *Stacks) Destroy(_ context.Context, ref providerkit.StackRef, progress e
 	return nil
 }
 
-func (r *Stacks) State(ref providerkit.StackRef) providerkit.StackState {
+func (r *Stacks) State(ref provider.StackRef) provider.StackState {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	result, present := r.stacks[stackKey(ref)]
-	return providerkit.StackState{Present: present, Result: result}
+	return provider.StackState{Present: present, Result: result}
 }
 
-func deliveredEdgeBundle(plan providerkit.StackPlan) string {
+func deliveredEdgeBundle(plan provider.StackPlan) string {
 	root := appbuild.AppArtifactRoot(appbuild.ArtifactRoot(), plan.App.App)
 	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(edge.AppBundleFile))); err != nil {
 		return ""
@@ -140,14 +141,14 @@ func deliveredEdgeBundle(plan providerkit.StackPlan) string {
 	return plan.Ref.Name.String() + "/edge/bundle.json"
 }
 
-func StoodUpFunctions(plan providerkit.StackPlan) []providerkit.Function {
+func StoodUpFunctions(plan provider.StackPlan) []provider.Function {
 	if plan.App == nil {
 		return nil
 	}
-	standing := make([]providerkit.Function, 0, len(plan.App.Functions))
+	standing := make([]provider.Function, 0, len(plan.App.Functions))
 	for _, function := range plan.App.Functions {
 		physical := plan.Ref.Name.String() + "-" + function.Name
-		standing = append(standing, providerkit.Function{
+		standing = append(standing, provider.Function{
 			Name:     function.Name,
 			Physical: physical,
 			URL:      "https://" + physical + ".fn.fake.invalid",
@@ -159,12 +160,12 @@ func StoodUpFunctions(plan providerkit.StackPlan) []providerkit.Function {
 	return standing
 }
 
-func StoodUpContainers(plan providerkit.StackPlan) []providerkit.AppContainer {
-	if plan.App == nil || plan.App.Compute != providerkit.ComputeContainer {
+func StoodUpContainers(plan provider.StackPlan) []provider.AppContainer {
+	if plan.App == nil || plan.App.Compute != provider.ComputeContainer {
 		return nil
 	}
 	physical := plan.Ref.Name.String() + "-" + plan.App.App
-	return []providerkit.AppContainer{{
+	return []provider.AppContainer{{
 		Name:     plan.App.App,
 		Physical: physical,
 		URL:      "https://" + physical + ".ctr.fake.invalid",
@@ -184,17 +185,17 @@ func (r *Stacks) TakenDown() []string {
 	return slices.Clone(r.taken)
 }
 
-func stackKey(ref providerkit.StackRef) string {
+func stackKey(ref provider.StackRef) string {
 	return ref.Project + "/" + string(ref.Class) + "/" + ref.Name.String()
 }
 
-func propertiesFor(t providerkit.BindingType, name string) map[string]string {
+func propertiesFor(t provider.BindingType, name string) map[string]string {
 	properties := map[string]string{}
-	for _, property := range providerkit.RequiredProperties(t) {
+	for _, property := range provider.RequiredProperties(t) {
 		switch property {
-		case providerkit.PropertyPort:
+		case provider.PropertyPort:
 			properties[property] = "5432"
-		case providerkit.PropertyBucket:
+		case provider.PropertyBucket:
 			properties[property] = name + "-fake"
 		default:
 			properties[property] = "fake-" + property
@@ -203,22 +204,22 @@ func propertiesFor(t providerkit.BindingType, name string) map[string]string {
 	return properties
 }
 
-func (*Provider) ProvisionFunctions(_ context.Context, plan providerkit.StackPlan, _ edge.Progress) ([]providerkit.Function, error) {
+func (*Provider) ProvisionFunctions(_ context.Context, plan provider.StackPlan, _ edge.Progress) ([]provider.Function, error) {
 	return StoodUpFunctions(plan), nil
 }
 
-func (p *Provider) RemoveFunctions(_ context.Context, _ providerkit.StackRef, functions []providerkit.Function, _ edge.Progress) error {
+func (p *Provider) RemoveFunctions(_ context.Context, _ provider.StackRef, functions []provider.Function, _ edge.Progress) error {
 	for _, function := range functions {
 		p.stacks.tookDown(function.Name)
 	}
 	return nil
 }
 
-func (*Provider) ProvisionContainers(_ context.Context, plan providerkit.StackPlan, _ edge.Progress) ([]providerkit.AppContainer, error) {
+func (*Provider) ProvisionContainers(_ context.Context, plan provider.StackPlan, _ edge.Progress) ([]provider.AppContainer, error) {
 	return StoodUpContainers(plan), nil
 }
 
-func (p *Provider) RemoveContainers(_ context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, _ edge.Progress) error {
+func (p *Provider) RemoveContainers(_ context.Context, _ provider.StackRef, containers []provider.AppContainer, _ edge.Progress) error {
 	for _, container := range containers {
 		p.stacks.tookDown(container.Name)
 	}

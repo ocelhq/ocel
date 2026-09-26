@@ -15,6 +15,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -32,7 +33,7 @@ func overTheContract(t *testing.T, p *vps.Provider) contractv1connect.ProviderSe
 
 	server := httptest.NewServer(providerkit.ConformanceMux(providerkit.Spec{
 		Version: "live-suite",
-		New: func(context.Context, providerkit.Settings) (providerkit.Provider, error) {
+		New: func(context.Context, provider.Settings) (provider.Provider, error) {
 			return p, nil
 		},
 	}))
@@ -288,7 +289,7 @@ func TestLiveTheCertificateBehindAnUnboundHostnameStaysOnTheBox(t *testing.T) {
 		t.Fatalf("RemoveHostname() = %v, want the hostname given back", result.GetError())
 	}
 
-	held := providerkit.Certificate{ID: certs.ProxyHandle(hostname)}
+	held := provider.Certificate{ID: certs.ProxyHandle(hostname)}
 	if err := p.Certificates().Discard(context.Background(), held, edge.DiscardProgress()); err != nil {
 		t.Errorf("DiscardCertificate(%s) = %v, want nil: ocel places no key material on a box so it holds authority to remove none, and the retained certificate is what makes a re-bind free against the CA's per-week ceiling",
 			held.ID, err)

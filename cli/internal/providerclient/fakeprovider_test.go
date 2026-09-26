@@ -23,7 +23,7 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -165,11 +165,11 @@ type fakeOptions struct {
 func (s *fakeProviderServer) Configure(_ context.Context, req *contractv1.ConfigureRequest) (*contractv1.ConfigureResponse, error) {
 	switch s.mode {
 	case "reject-config":
-		if _, err := providerkit.Decode[fakeOptions](providerkit.Vendor(os.Getenv(fakeProviderVendorEnvVar)), providerkit.Options(req.GetConfig().GetOptions().AsMap())); err != nil {
-			return nil, providerkit.RefusalError(err)
+		if _, err := provider.Decode[fakeOptions](provider.Vendor(os.Getenv(fakeProviderVendorEnvVar)), provider.Options(req.GetConfig().GetOptions().AsMap())); err != nil {
+			return nil, provider.RefusalError(err)
 		}
 	case "refuse-config":
-		return nil, providerkit.RefusalError(refusal.Refuse(refusal.CodeInvalid, "this account is not bootstrapped for previews"))
+		return nil, provider.RefusalError(refusal.Refuse(refusal.CodeInvalid, "this account is not bootstrapped for previews"))
 	}
 	return &contractv1.ConfigureResponse{}, nil
 }
@@ -268,7 +268,7 @@ func refusalFor(mode string) error {
 	}
 
 	store := os.Getenv(fakeProviderKnownHostsEnvVar)
-	trust := providerkit.HostTrust{
+	trust := provider.HostTrust{
 		Host:       fakeHostName,
 		Address:    fakeHostAddress,
 		Port:       fakeHostPort,
@@ -278,29 +278,29 @@ func refusalFor(mode string) error {
 	entry := trust.KnownHostsEntry()
 
 	if mode == "host-key-mismatch" {
-		trust.Reason = providerkit.HostKeyMismatch
+		trust.Reason = provider.HostKeyMismatch
 		trust.Want = fakeKey(fakeOtherHostKey)
 		trust.Remedy = fmt.Sprintf("ssh-keygen -R '%s' -f %s", entry, store)
-		return providerkit.RefusalError(providerkit.RefuseHostTrust(trust))
+		return provider.RefusalError(provider.RefuseHostTrust(trust))
 	}
 
 	if alreadyRecorded(store, entry, trust.Got) {
 		return nil
 	}
-	trust.Reason = providerkit.UnknownHostKey
+	trust.Reason = provider.UnknownHostKey
 	trust.Remedy = fmt.Sprintf("ssh-keyscan -t %s -p %d %s >> %s", trust.Got.Type, fakeHostPort, fakeHostAddress, store)
-	return providerkit.RefusalError(providerkit.RefuseHostTrust(trust))
+	return provider.RefusalError(provider.RefuseHostTrust(trust))
 }
 
-func fakeKey(encoded string) providerkit.HostKey {
-	key, err := (providerkit.HostKey{Type: fakeHostKeyType, Key: encoded}).Fingerprinted()
+func fakeKey(encoded string) provider.HostKey {
+	key, err := (provider.HostKey{Type: fakeHostKeyType, Key: encoded}).Fingerprinted()
 	if err != nil {
 		panic(err)
 	}
 	return key
 }
 
-func alreadyRecorded(store, entry string, key providerkit.HostKey) bool {
+func alreadyRecorded(store, entry string, key provider.HostKey) bool {
 	content, err := os.ReadFile(store)
 	if err != nil {
 		return false

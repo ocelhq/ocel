@@ -12,7 +12,7 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	smithy "github.com/aws/smithy-go"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
@@ -89,7 +89,7 @@ func TestADevRebuildLeavesAStackItDidNotChangeAlone(t *testing.T) {
 	}
 	for _, sha := range []string{"dev+1111111", "dev+2222222"} {
 		rebuilt := everything()
-		rebuilt.Writer = providerkit.WrittenBy(sha)
+		rebuilt.Writer = provider.WrittenBy(sha)
 		if err := Run(context.Background(), apis, defaultNamespace, ClassProduction, rebuilt, nil, nil); err != nil {
 			t.Fatalf("Run: %v", err)
 		}
@@ -156,7 +156,7 @@ func TestRestampingTurnsOnlyOnWhatTheStackHolds(t *testing.T) {
 		},
 		{
 			name:     "the stack was written by an unknown writer",
-			standing: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: providerkit.WrittenBy("").String()},
+			standing: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: provider.WrittenBy("").String()},
 			incoming: Stamp{Schema: RequiredSchema, Digest: digest, WrittenBy: "dev+2222222"},
 			writes:   true,
 		},

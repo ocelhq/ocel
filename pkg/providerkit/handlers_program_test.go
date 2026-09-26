@@ -12,12 +12,13 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type unprogrammed struct{ providerkit.Provider }
+type unprogrammed struct{ provider.Provider }
 
-func (u unprogrammed) Hooks() providerkit.Hooks {
+func (u unprogrammed) Hooks() provider.Hooks {
 	hooks := u.Provider.Hooks()
 	hooks.ProgramEdge = nil
 	return hooks

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
@@ -18,8 +18,8 @@ type surveyed struct {
 
 func (s surveyed) Facts(context.Context) (session.Facts, error) { return s.facts, s.err }
 
-func (s surveyed) HostKey() providerkit.HostKey {
-	return providerkit.HostKey{Type: "ssh-ed25519", Fingerprint: "SHA256:whoami"}
+func (s surveyed) HostKey() provider.HostKey {
+	return provider.HostKey{Type: "ssh-ed25519", Fingerprint: "SHA256:whoami"}
 }
 
 func (s surveyed) Destination() session.Destination {
@@ -73,7 +73,7 @@ func TestWhoamiCarriesUpTheHostThatWouldNotAnswer(t *testing.T) {
 	}
 }
 
-func detail(identity providerkit.Identity, label string) string {
+func detail(identity provider.Identity, label string) string {
 	for _, held := range identity.Details {
 		if held.Label == label {
 			return held.Value

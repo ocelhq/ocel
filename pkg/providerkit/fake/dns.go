@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -17,11 +17,11 @@ type DNS struct {
 	fronts  []edge.Kind
 }
 
-const KindZone providerkit.DNSKind = "zone"
+const KindZone provider.DNSKind = "zone"
 
 func NewDNS() *DNS { return &DNS{writers: map[string]*DNSRecords{}} }
 
-func (d *DNS) Open(kind providerkit.DNSKind, zone string, front edge.Kind) (edge.DNSRecords, error) {
+func (d *DNS) Open(kind provider.DNSKind, zone string, front edge.Kind) (edge.DNSRecords, error) {
 	if kind != KindZone {
 		return nil, refusal.Refuse(refusal.CodeInvalid,
 			"the reference provider writes no dns %q; it writes %s", kind, KindZone)

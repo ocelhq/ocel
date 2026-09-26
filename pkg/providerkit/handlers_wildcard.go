@@ -14,13 +14,14 @@ import (
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type wildcards struct {
-	provider Provider
+	provider provider.Provider
 	records  records.Store
 	held     Wildcard
 	sel      *contractv1.EdgeSelection
@@ -127,7 +128,7 @@ func (w *wildcards) use(ctx context.Context, front edge.Edge, base string, progr
 	}
 
 	progress.Say("Reconciling the shared preview entry on " + wildcard)
-	program, err := edgeProgramFor(ctx, w.provider, front, EdgeProgramRequest{
+	program, err := edgeProgramFor(ctx, w.provider, front, provider.EdgeProgramRequest{
 		Class:             edge.ClassPreview,
 		PreviewBaseDomain: base,
 	})
@@ -209,18 +210,18 @@ func (w *wildcards) claimable(front edge.Edge, base string) error {
 func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*contractv1.GetPreviewWildcardResponse, error) {
 	w, err := h.wildcard(ctx, req.GetEdge())
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	if w.held.BaseDomain == "" {
 		return &contractv1.GetPreviewWildcardResponse{}, nil
 	}
 	served, err := w.served(ctx)
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	health, err := w.provider.Certificates().Inspect(ctx, w.held.Edge, w.held.Hostname(), w.held.Settled.Certificate)
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	wildcard := w.proto(ctx)
 	wildcard.Certificate = certificateState(w.held.Settled, w.held.Settled.Probe, nil, health.Status)
@@ -231,17 +232,17 @@ func (h *handlers) GetPreviewWildcard(ctx context.Context, req *contractv1.Previ
 	}, nil
 }
 
-func heldPreviewWildcard(ctx context.Context, provider Provider) (*contractv1.PreviewWildcard, error) {
-	held, err := readWildcard(ctx, provider.Records())
+func heldPreviewWildcard(ctx context.Context, p provider.Provider) (*contractv1.PreviewWildcard, error) {
+	held, err := readWildcard(ctx, p.Records())
 	if err != nil {
 		return nil, err
 	}
 	if held.BaseDomain == "" {
 		return nil, nil
 	}
-	w := &wildcards{provider: provider, records: provider.Records(), held: held}
+	w := &wildcards{provider: p, records: p.Records(), held: held}
 	wildcard := w.proto(ctx)
-	health, err := provider.Certificates().Inspect(ctx, held.Edge, held.Hostname(), held.Settled.Certificate)
+	health, err := p.Certificates().Inspect(ctx, held.Edge, held.Hostname(), held.Settled.Certificate)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +250,7 @@ func heldPreviewWildcard(ctx context.Context, provider Provider) (*contractv1.Pr
 	return wildcard, nil
 }
 
-func renewalOf(wildcard *contractv1.PreviewWildcard, health CertificateHealth) {
+func renewalOf(wildcard *contractv1.PreviewWildcard, health provider.CertificateHealth) {
 	wildcard.RenewalStatus = health.Renewal
 	wildcard.ExpiresAt = health.ExpiresAt
 	wildcard.ExpiringSoon = health.ExpiringSoon
@@ -356,21 +357,21 @@ func (w *wildcards) holding() (edge.Edge, error) {
 func (h *handlers) PlanRemovePreviewWildcard(ctx context.Context, req *contractv1.PreviewWildcardRequest) (*planv1.ChangePlan, error) {
 	w, err := h.wildcard(ctx, req.GetEdge())
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	if w.held.BaseDomain == "" {
 		return &planv1.ChangePlan{}, nil
 	}
 	front, err := w.holding()
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	if err := w.releasable(ctx); err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	groups, err := w.releaseGroups(front)
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	return &planv1.ChangePlan{
 		EdgeKind: string(front.Kind()),

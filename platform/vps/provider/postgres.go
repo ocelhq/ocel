@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
@@ -74,34 +74,34 @@ func mintPostgresSecret() (string, error) {
 	return hex.EncodeToString(raw), nil
 }
 
-func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Instruction, progress edge.Progress) (providerkit.Binding, error) {
+func (p *Provider) ProvisionPostgres(ctx context.Context, in resources.Instruction, progress edge.Progress) (provider.Binding, error) {
 	spec, err := postgresContainer(in)
 	if err != nil {
-		return providerkit.Binding{}, err
+		return provider.Binding{}, err
 	}
 	if spec, err = p.reshaped(ctx, in, transformTypePostgres, spec); err != nil {
-		return providerkit.Binding{}, err
+		return provider.Binding{}, err
 	}
 	if progress != nil {
 		progress.Say("Standing postgres " + in.Resource.Name + " up as " + spec.Name)
 	}
 	secret, err := p.held(ctx, in, spec.Name)
 	if err != nil {
-		return providerkit.Binding{}, err
+		return provider.Binding{}, err
 	}
 	if err := p.host.StandResource(ctx, spec, secret); err != nil {
-		return providerkit.Binding{}, err
+		return provider.Binding{}, err
 	}
-	return providerkit.Binding{
-		Type:     providerkit.BindingPostgres,
+	return provider.Binding{
+		Type:     provider.BindingPostgres,
 		Name:     in.Resource.Name,
 		Resource: in.Resource.Declared,
 		Properties: map[string]string{
-			providerkit.PropertyHost:     spec.Name,
-			providerkit.PropertyPort:     postgresPort,
-			providerkit.PropertyDatabase: in.Resource.Name,
-			providerkit.PropertyUsername: postgresSuperuser,
-			providerkit.PropertyPassword: secret,
+			provider.PropertyHost:     spec.Name,
+			provider.PropertyPort:     postgresPort,
+			provider.PropertyDatabase: in.Resource.Name,
+			provider.PropertyUsername: postgresSuperuser,
+			provider.PropertyPassword: secret,
 		},
 	}, nil
 }

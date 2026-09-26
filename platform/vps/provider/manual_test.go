@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
 	boxedge "github.com/ocelhq/ocel/platform/vps/provider/box"
@@ -69,14 +69,14 @@ func TestTheStandingOfABoxYourProxyFrontsAsksNothingOfPort80(t *testing.T) {
 		reached = append(reached, address)
 		return nil
 	})
-	checks, err := p.CheckHost(context.Background(), providerkit.HostCheckRequest{Class: edge.ClassProduction})
+	checks, err := p.CheckHost(context.Background(), provider.HostCheckRequest{Class: edge.ClassProduction})
 	if err != nil {
 		t.Fatalf("CheckHost() = %v", err)
 	}
 	if len(reached) != 0 {
 		t.Errorf("CheckHost() dialled %v, want nothing: port 80 matters to ocel's own proxy renewing over http-01, and yours renews as it chooses", reached)
 	}
-	if !slices.ContainsFunc(checks, func(check providerkit.HostCheck) bool { return check.Subject == "tcp 443" }) {
+	if !slices.ContainsFunc(checks, func(check provider.HostCheck) bool { return check.Subject == "tcp 443" }) {
 		t.Errorf("CheckHost() = %+v, want your proxy's hold on 443 checked", checks)
 	}
 }

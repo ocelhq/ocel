@@ -14,6 +14,7 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -253,7 +254,7 @@ func (r Records) writeFailed(name records.Name, class edge.Class, err error) err
 func (r Records) unbootstrapped(class edge.Class) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"this project keeps no %q Firestore database, so there is nowhere to hold a record.\nRun `%s` to create it, then try again",
-		r.Clients.Database(), providerkit.BootstrapCommand(class))
+		r.Clients.Database(), provider.BootstrapCommand(class))
 }
 
 func recordOf(name records.Name, snapshot *firestore.DocumentSnapshot) records.Record {

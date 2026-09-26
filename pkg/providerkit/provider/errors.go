@@ -1,4 +1,4 @@
-package providerkit
+package provider
 
 import (
 	"errors"
@@ -8,6 +8,8 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
+
+var ErrUnscopedGrant = errors.New("providerkit: unscoped grant")
 
 var refusalCodes = map[refusal.Code]connect.Code{
 	refusal.CodeInvalid:  connect.CodeInvalidArgument,

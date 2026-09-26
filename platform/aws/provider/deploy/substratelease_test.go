@@ -8,8 +8,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -28,7 +28,7 @@ func (r *interceptedRecords) List(ctx context.Context, under records.Name) ([]re
 	return held, err
 }
 
-func containerStacks(t *testing.T, records records.Store) (*Stacks, *mockedEngine, providerkit.StackPlan) {
+func containerStacks(t *testing.T, records records.Store) (*Stacks, *mockedEngine, provider.StackPlan) {
 	t.Helper()
 	cfg, plan := plannedContainerStack(t)
 	cfg.Records = records
@@ -56,7 +56,7 @@ func TestTheLastContainerLeavingKeepsTheSubstrateWhenAnotherDeployClaimsItMeanwh
 	}
 
 	other, _, blog := containerStacks(t, shared)
-	blog.Ref = providerkit.StackRef{Project: "blog", Class: edge.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
+	blog.Ref = provider.StackRef{Project: "blog", Class: edge.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
 	claimed := false
 	store.afterList = func(under records.Name) {
 		if claimed || under.String() != consumersRecord(edge.ClassProduction).String() {
@@ -106,7 +106,7 @@ func TestAContainerDeployIsRefusedWhileTheSubstrateIsGoingDown(t *testing.T) {
 	}
 
 	other, _, blog := containerStacks(t, shared)
-	blog.Ref = providerkit.StackRef{Project: "blog", Class: edge.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
+	blog.Ref = provider.StackRef{Project: "blog", Class: edge.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
 	_, err = other.Provision(ctx, blog, edge.DiscardProgress())
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeBusy {

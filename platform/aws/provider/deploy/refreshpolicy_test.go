@@ -4,14 +4,14 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestOnlyADestroyOfAStackThisProcessDidNotRealizeRefreshes(t *testing.T) {
 	realized := &Realized{}
-	ref := providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
+	ref := provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
 	policy := refreshPolicy(realized)
 
 	for _, op := range []kitpulumi.Op{kitpulumi.OpProvision} {
@@ -29,7 +29,7 @@ func TestOnlyADestroyOfAStackThisProcessDidNotRealizeRefreshes(t *testing.T) {
 	}
 
 	t.Setenv(skipTeardownRefreshEnv, "1")
-	other := providerkit.StackRef{Project: "blog", Class: edge.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
+	other := provider.StackRef{Project: "blog", Class: edge.ClassProduction, Name: naming.AppStack("prod", "web", fixedRelease(t))}
 	if policy(other, kitpulumi.OpDestroy) {
 		t.Errorf("refresh before a destroy with %s set = true, want false: the harness sets it to trade the drift check for speed", skipTeardownRefreshEnv)
 	}

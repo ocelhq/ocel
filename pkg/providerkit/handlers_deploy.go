@@ -29,6 +29,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -56,7 +57,7 @@ type deployStages struct {
 	Roster      []Stage
 }
 
-func newDeployStages(plan DeployPlan) deployStages {
+func newDeployStages(plan provider.DeployPlan) deployStages {
 	s := deployStages{
 		Environment: UnitStage(naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_PROVISIONING),
 		Infra:       UnitStage(plan.Infra.String(), infraUnitTitle, progressv1.Phase_PHASE_PROVISIONING),
@@ -90,7 +91,7 @@ type deployRun struct {
 	sender     *eventStream
 	tracked    *stageScope
 	manifest   *contractv1.Manifest
-	plan       DeployPlan
+	plan       provider.DeployPlan
 	stages     deployStages
 
 	wildcard   Wildcard
@@ -113,34 +114,34 @@ type deployRun struct {
 	outcomes []*progressv1.AppResult
 
 	mu             sync.Mutex
-	artifacts      map[string]ArtifactRef
+	artifacts      map[string]provider.ArtifactRef
 	functionImages map[string]string
 	needs          NeedRecords
-	bindings       []Binding
-	functions      map[string][]Function
+	bindings       []provider.Binding
+	functions      map[string][]provider.Function
 }
 
-func (r *deployRun) recordArtifact(logical string, ref ArtifactRef) {
+func (r *deployRun) recordArtifact(logical string, ref provider.ArtifactRef) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.artifacts[logical] = ref
 }
 
-func (r *deployRun) artifact(logical string) (ArtifactRef, bool) {
+func (r *deployRun) artifact(logical string) (provider.ArtifactRef, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	ref, held := r.artifacts[logical]
 	return ref, held
 }
 
-func (r *deployRun) recordFunctions(app string, functions []Function) {
+func (r *deployRun) recordFunctions(app string, functions []provider.Function) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.functions[app] = functions
 }
 
 func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest, sender *eventStream) (*deployRun, error) {
-	provider, gate, err := h.gate(req.GetEdge().GetKind())
+	p, gate, err := h.gate(req.GetEdge().GetKind())
 	if err != nil {
 		return nil, err
 	}
@@ -152,19 +153,19 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if err != nil {
 		return nil, err
 	}
-	front, err := h.edgeFor(provider, req.GetEdge())
+	front, err := h.edgeFor(p, req.GetEdge())
 	if err != nil {
 		return nil, err
 	}
 	features, err := RequiredFeatures(gate.Bootstrap.Catalogue(), frameworksOf(req.GetManifest()), string(gate.Edge))
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	run := &deployRun{
 		stackSession: &stackSession{
-			provider: provider,
+			provider: p,
 			front:    front,
-			store:    stackStore{records: provider.Records(), name: EdgeStackRecord(plan.Class, plan.Slug)},
+			store:    stackStore{records: p.Records(), name: EdgeStackRecord(plan.Class, plan.Slug)},
 		},
 		gate:           gate,
 		features:       features,
@@ -174,11 +175,11 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 		manifest:       req.GetManifest(),
 		plan:           plan,
 		selection:      req.GetEdge(),
-		values:         envvars.Store{Records: provider.Records(), Cipher: provider.Cipher()},
+		values:         envvars.Store{Records: p.Records(), Cipher: p.Cipher()},
 		scope:          envvars.Scope{Project: plan.Slug, Class: plan.Class},
-		artifacts:      map[string]ArtifactRef{},
+		artifacts:      map[string]provider.ArtifactRef{},
 		functionImages: map[string]string{},
-		functions:      map[string][]Function{},
+		functions:      map[string][]provider.Function{},
 
 		dry:           req.GetDry(),
 		allowDegraded: req.GetEdge().GetAllowDegraded(),
@@ -186,19 +187,19 @@ func (h *handlers) openDeploy(ctx context.Context, req *contractv1.DeployRequest
 	if err := run.openImages(ctx, req.GetImageRegistry()); err != nil {
 		return nil, err
 	}
-	run.published = &publishedBindings{store: run.values, scope: run.scope, environment: plan.bindingEnvironment()}
+	run.published = &publishedBindings{store: run.values, scope: run.scope, environment: bindingEnvironment(plan)}
 	if run.state, err = run.store.read(ctx); err != nil {
 		return nil, err
 	}
 	run.stages = newDeployStages(plan)
 	run.outcomes = pendingOutcomes(plan.Apps)
-	run.draft.apps = make([]Plan, len(plan.Apps))
+	run.draft.apps = make([]provider.Plan, len(plan.Apps))
 	run.tracked.declare(run.stages.Roster...)
 	sender.detailing(run.reportApps)
 	return run, nil
 }
 
-func pendingOutcomes(apps []AppEntry) []*progressv1.AppResult {
+func pendingOutcomes(apps []provider.AppEntry) []*progressv1.AppResult {
 	outcomes := make([]*progressv1.AppResult, len(apps))
 	for slot, entry := range apps {
 		outcomes[slot] = &progressv1.AppResult{App: entry.App, Outcome: progressv1.AppOutcome_APP_OUTCOME_NOT_RUN}
@@ -370,7 +371,7 @@ func (r *deployRun) reconcileEdge(ctx context.Context) error {
 		base = r.previewOn
 		spec.Domains = []string{edge.PreviewWildcard(base)}
 	}
-	program, err := edgeProgramFor(ctx, r.provider, r.front, EdgeProgramRequest{
+	program, err := edgeProgramFor(ctx, r.provider, r.front, provider.EdgeProgramRequest{
 		Class:             r.plan.Class,
 		Slug:              r.plan.Slug,
 		Env:               r.plan.Env,
@@ -408,7 +409,7 @@ func (r *deployRun) settleHostnames(ctx context.Context) error {
 					continue
 				}
 				_, err := settling.settleHost(ctx, host, progress)
-				if waits, held := LeftPending(err); held {
+				if waits, held := provider.LeftPending(err); held {
 					r.pending = append(r.pending, fmt.Sprintf("%s is not served yet: %s", host.Hostname, waits))
 					continue
 				}
@@ -582,7 +583,7 @@ func (r *deployRun) preflight(ctx context.Context, progress edge.Progress) error
 		return err
 	}
 	if facts := r.provider.Facts(); !facts.RendersTransforms {
-		if err := RefuseTransforms(facts.Vendor, r.transforms); err != nil {
+		if err := provider.RefuseTransforms(facts.Vendor, r.transforms); err != nil {
 			return err
 		}
 	}
@@ -594,7 +595,7 @@ func (r *deployRun) preflight(ctx context.Context, progress edge.Progress) error
 	if err != nil {
 		return err
 	}
-	return preflightDeploy(ctx, DeployPreflight{
+	return preflightDeploy(ctx, provider.DeployPreflight{
 		Plan:      r.plan,
 		Edge:      r.front.Kind(),
 		Resources: resources,
@@ -606,14 +607,14 @@ func (r *deployRun) preflight(ctx context.Context, progress edge.Progress) error
 	})
 }
 
-func (r *deployRun) usage(resources []Resource, published []Binding) ([]AppUsage, error) {
-	apps := make([]AppUsage, 0, len(r.plan.Apps))
+func (r *deployRun) usage(resources []provider.Resource, published []provider.Binding) ([]provider.AppUsage, error) {
+	apps := make([]provider.AppUsage, 0, len(r.plan.Apps))
 	for _, entry := range r.plan.Apps {
 		used, err := r.used(entry.App)
 		if err != nil {
 			return nil, err
 		}
-		usage := AppUsage{App: entry.App}
+		usage := provider.AppUsage{App: entry.App}
 		for _, resource := range resources {
 			if used[boundName(resource)] {
 				usage.Resources = append(usage.Resources, resource)
@@ -629,7 +630,7 @@ func (r *deployRun) usage(resources []Resource, published []Binding) ([]AppUsage
 	return apps, nil
 }
 
-func boundName(resource Resource) string {
+func boundName(resource provider.Resource) string {
 	if resource.Binding != "" {
 		return resource.Binding
 	}
@@ -690,11 +691,11 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 			if err := r.refuseToAdopt(ctx, r.plan.Infra); err != nil {
 				return err
 			}
-			stack := StackPlan{
+			stack := provider.StackPlan{
 				Ref:       r.ref(r.plan.Infra),
-				Kind:      StackInfra,
+				Kind:      provider.StackInfra,
 				Edge:      r.front,
-				Tags:      r.plan.infraTags(),
+				Tags:      infraTags(r.plan),
 				Resources: resources,
 				Bindings:  r.reader(),
 			}
@@ -714,7 +715,7 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 				return err
 			}
 			for _, binding := range result.Bindings {
-				if err := VerifyProperties(binding); err != nil {
+				if err := provider.VerifyProperties(binding); err != nil {
 					return err
 				}
 			}
@@ -723,15 +724,15 @@ func (r *deployRun) provisionInfra(ctx context.Context) error {
 			}
 			r.bindings = result.Bindings
 			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, r.plan.Infra, RecordedStack{
-				Kind:      StackInfra,
+				Kind:      provider.StackInfra,
 				Bindings:  result.Bindings,
-				WrittenBy: WrittenByVersion(""),
+				WrittenBy: provider.WrittenByVersion(""),
 			})
 		})
 	})
 }
 
-func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) error {
+func (r *deployRun) provisionApp(ctx context.Context, slot int, entry provider.AppEntry) error {
 	return r.tracked.unit(r.stages.Apps[entry.App], func(u *unitRun) error {
 		return u.phase(progressv1.Phase_PHASE_PROVISIONING, func(progress edge.Progress) error {
 			if err := r.refuseToAdopt(ctx, entry.Stack); err != nil {
@@ -767,15 +768,15 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 			if err != nil {
 				return err
 			}
-			plan := StackPlan{
+			plan := provider.StackPlan{
 				Ref:      r.ref(entry.Stack),
-				Kind:     StackApp,
+				Kind:     provider.StackApp,
 				Edge:     r.front,
-				Tags:     r.plan.tags(entry),
+				Tags:     appTags(r.plan, entry),
 				Uploads:  staged,
 				Images:   images,
 				Bindings: r.reader(),
-				App: &AppPlan{
+				App: &provider.AppPlan{
 					App:             entry.App,
 					Framework:       entry.Manifest.GetFramework().GetName(),
 					Entry:           entryLogicalName(r.manifest, entry.App, facts.Entry),
@@ -820,13 +821,13 @@ func (r *deployRun) provisionApp(ctx context.Context, slot int, entry AppEntry) 
 				return err
 			}
 			return WriteStack(ctx, r.provider.Records(), r.plan.Class, r.plan.Slug, entry.Stack, RecordedStack{
-				Kind:       StackApp,
+				Kind:       provider.StackApp,
 				App:        entry.App,
 				Release:    entry.Build.Release().String(),
 				Identity:   entry.Build.String(),
 				Functions:  result.Functions,
 				Containers: result.Containers,
-				WrittenBy:  WrittenByVersion(""),
+				WrittenBy:  provider.WrittenByVersion(""),
 			})
 		})
 	})
@@ -854,21 +855,21 @@ func (r *deployRun) refuseToAdopt(ctx context.Context, stack naming.StackName) e
 		stack)
 }
 
-func (r *deployRun) serving(entry AppEntry) (ServingFacts, error) {
+func (r *deployRun) serving(entry provider.AppEntry) (ServingFacts, error) {
 	return ServingFactsFor(ServingQuery{
 		Root:              appbuild.ArtifactRoot(),
 		Project:           naming.Sanitize(r.plan.Slug),
 		App:               entry.App,
 		Framework:         entry.Manifest.GetFramework().GetName(),
 		Stack:             entry.Stack,
-		Coordinate:        r.plan.coordinate(entry.App, entry.Build.Release()),
+		Coordinate:        appCoordinate(r.plan, entry.App, entry.Build.Release()),
 		EdgeRunsCode:      r.front.Facts().RunsCode,
 		EdgeSignsForwards: r.front.Facts().SignsOriginForwards,
 	})
 }
 
-func (r *deployRun) ref(stack naming.StackName) StackRef {
-	return StackRef{Project: r.plan.Slug, Class: r.plan.Class, Name: stack}
+func (r *deployRun) ref(stack naming.StackName) provider.StackRef {
+	return provider.StackRef{Project: r.plan.Slug, Class: r.plan.Class, Name: stack}
 }
 
 func (r *deployRun) reader() *publishedBindings { return r.published }
@@ -893,12 +894,12 @@ func (r *deployRun) used(app string) (map[string]bool, error) {
 	return names, nil
 }
 
-func (r *deployRun) grants(ctx context.Context, entry AppEntry) ([]Binding, error) {
+func (r *deployRun) grants(ctx context.Context, entry provider.AppEntry) ([]provider.Binding, error) {
 	used, err := r.used(entry.App)
 	if err != nil {
 		return nil, err
 	}
-	var grants []Binding
+	var grants []provider.Binding
 	for _, binding := range r.bindings {
 		if used[binding.Name] {
 			grants = append(grants, binding)
@@ -912,7 +913,7 @@ func (r *deployRun) grants(ctx context.Context, entry AppEntry) ([]Binding, erro
 		if !used[binding.Name] {
 			continue
 		}
-		at := slices.IndexFunc(grants, func(held Binding) bool { return held.Name == binding.Name })
+		at := slices.IndexFunc(grants, func(held provider.Binding) bool { return held.Name == binding.Name })
 		if at < 0 {
 			grants = append(grants, binding)
 			continue
@@ -921,7 +922,7 @@ func (r *deployRun) grants(ctx context.Context, entry AppEntry) ([]Binding, erro
 			grants[at].Wire = binding.Wire
 		}
 	}
-	slices.SortFunc(grants, func(a, b Binding) int {
+	slices.SortFunc(grants, func(a, b provider.Binding) int {
 		if a.Name < b.Name {
 			return -1
 		}
@@ -940,17 +941,17 @@ func (r *deployRun) grants(ctx context.Context, entry AppEntry) ([]Binding, erro
 	return grants, nil
 }
 
-func (r *deployRun) appValues(ctx context.Context, entry AppEntry, grants []Binding) (AppValues, error) {
+func (r *deployRun) appValues(ctx context.Context, entry provider.AppEntry, grants []provider.Binding) (provider.AppValues, error) {
 	held, err := r.manifestValues(entry, grants)
 	if err != nil {
-		return AppValues{}, err
+		return provider.AppValues{}, err
 	}
 	held.Delivered = r.deliver(entry, held)
 	return held, nil
 }
 
-func (r *deployRun) manifestValues(entry AppEntry, grants []Binding) (AppValues, error) {
-	held := AppValues{
+func (r *deployRun) manifestValues(entry provider.AppEntry, grants []provider.Binding) (provider.AppValues, error) {
+	held := provider.AppValues{
 		Plain:     map[string]string{},
 		Sensitive: map[string]string{},
 		Owners:    map[string]string{},
@@ -961,13 +962,13 @@ func (r *deployRun) manifestValues(entry AppEntry, grants []Binding) (AppValues,
 	for _, variable := range entry.Manifest.GetVariables() {
 		switch variable.GetClass() {
 		case resourcesv1.VariableClass_VARIABLE_CLASS_SECRET:
-			held.Secrets = append(held.Secrets, SecretRef{Key: variable.GetKey(), Folder: variable.GetFolder()})
+			held.Secrets = append(held.Secrets, provider.SecretRef{Key: variable.GetKey(), Folder: variable.GetFolder()})
 		case resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE:
 			held.Sensitive[variable.GetKey()] = variable.GetValue()
 		case resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:
 			held.Plain[variable.GetKey()] = variable.GetValue()
 		default:
-			return AppValues{}, refusal.Refuse(refusal.CodeInvalid,
+			return provider.AppValues{}, refusal.Refuse(refusal.CodeInvalid,
 				"%s declares %s with class %s, which this deploy cannot deliver to a function; declare it as `plain`, `sensitive` or `secret`",
 				entry.App, variable.GetKey(), variable.GetClass())
 		}
@@ -976,14 +977,14 @@ func (r *deployRun) manifestValues(entry AppEntry, grants []Binding) (AppValues,
 	return held, nil
 }
 
-func (r *deployRun) functionSpecs(entry AppEntry) []FunctionSpec {
-	var specs []FunctionSpec
+func (r *deployRun) functionSpecs(entry provider.AppEntry) []provider.FunctionSpec {
+	var specs []provider.FunctionSpec
 	for _, fn := range r.manifest.GetFunctions() {
 		if fn.GetApp() != entry.App {
 			continue
 		}
 		artifact, _ := r.artifact(fn.GetLogicalName())
-		specs = append(specs, FunctionSpec{
+		specs = append(specs, provider.FunctionSpec{
 			Name:      fn.GetLogicalName(),
 			Route:     fn.GetRouteId(),
 			Handler:   fn.GetHandler(),
@@ -1018,7 +1019,7 @@ func entryLogicalName(manifest *contractv1.Manifest, app, entry string) string {
 	return ""
 }
 
-func (r *deployRun) embed(ctx context.Context, entry AppEntry, functions []Function, progress edge.Progress) error {
+func (r *deployRun) embed(ctx context.Context, entry provider.AppEntry, functions []provider.Function, progress edge.Progress) error {
 	embedCode := r.provider.Hooks().EmbedCode
 	if embedCode == nil {
 		return nil
@@ -1035,7 +1036,7 @@ func (r *deployRun) embed(ctx context.Context, entry AppEntry, functions []Funct
 	return nil
 }
 
-func (r *deployRun) warm(ctx context.Context, functions []Function, progress edge.Progress) error {
+func (r *deployRun) warm(ctx context.Context, functions []provider.Function, progress edge.Progress) error {
 	warmFunctions := r.provider.Hooks().WarmFunctions
 	if warmFunctions == nil || len(functions) == 0 {
 		return nil
@@ -1049,7 +1050,7 @@ func (r *deployRun) warm(ctx context.Context, functions []Function, progress edg
 	return warmFunctions(ctx, targets, progress)
 }
 
-func declaredVariables(clientBundle bool, held AppValues) []edge.VariableRecord {
+func declaredVariables(clientBundle bool, held provider.AppValues) []edge.VariableRecord {
 	names := make([]string, 0, len(held.Plain)+len(held.Sensitive)+len(held.Secrets))
 	for _, key := range slices.Sorted(maps.Keys(held.Plain)) {
 		if !appbuild.IsOcelInjectedEnv(clientBundle, key) {
@@ -1070,7 +1071,7 @@ func declaredVariables(clientBundle bool, held AppValues) []edge.VariableRecord 
 	return declared
 }
 
-func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFacts, images ImagePushes, values AppValues, result StackResult) error {
+func (r *deployRun) stage(ctx context.Context, entry provider.AppEntry, facts ServingFacts, images provider.ImagePushes, values provider.AppValues, result provider.StackResult) error {
 	urlByLogical := make(map[string]string, len(result.Functions))
 	physicalByLogical := make(map[string]string, len(result.Functions))
 	for _, fn := range result.Functions {
@@ -1088,7 +1089,7 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFact
 			urls[routeOf(fn)] = url
 		}
 	}
-	coordinate := r.plan.coordinate(entry.App, entry.Build.Release())
+	coordinate := appCoordinate(r.plan, entry.App, entry.Build.Release())
 	var routing any
 	if facts.EdgeRouting != nil {
 		routing = json.RawMessage(facts.EdgeRouting.Manifest)
@@ -1131,7 +1132,7 @@ func (r *deployRun) stage(ctx context.Context, entry AppEntry, facts ServingFact
 	return r.stack.Ledger().PutStaged(ctx, record)
 }
 
-func (r *deployRun) edgeCode(entry AppEntry, result StackResult) (*edge.Code, error) {
+func (r *deployRun) edgeCode(entry provider.AppEntry, result provider.StackResult) (*edge.Code, error) {
 	if result.EdgeBundleKey == "" {
 		return nil, nil
 	}
@@ -1156,7 +1157,7 @@ func (r *deployRun) edgeCode(entry AppEntry, result StackResult) (*edge.Code, er
 	}, nil
 }
 
-func variableEnv(values AppValues) map[string]string {
+func variableEnv(values provider.AppValues) map[string]string {
 	env := make(map[string]string, len(values.Plain)+1)
 	maps.Copy(env, values.Plain)
 	if values.Folder != "" {
@@ -1216,7 +1217,7 @@ func (r *deployRun) result(promotion edge.Promotion, flip edge.FlipBound) (*prog
 	}
 	r.reportApps(result)
 	for _, binding := range r.bindings {
-		message, err := BindingMessage(binding)
+		message, err := provider.BindingMessage(binding)
 		if err != nil {
 			return nil, err
 		}
@@ -1242,10 +1243,10 @@ func (r *deployRun) result(promotion edge.Promotion, flip edge.FlipBound) (*prog
 	return &progressv1.OperationEvent{Event: &progressv1.OperationEvent_Result{Result: result}}, nil
 }
 
-func (r *deployRun) publish(ctx context.Context, bindings []Binding) error {
+func (r *deployRun) publish(ctx context.Context, bindings []provider.Binding) error {
 	publishing := make([]envvars.NamedBindingWrite, 0, len(bindings))
 	for _, binding := range bindings {
-		message, err := BindingMessage(binding)
+		message, err := provider.BindingMessage(binding)
 		if err != nil {
 			return err
 		}
@@ -1258,7 +1259,7 @@ func (r *deployRun) publish(ctx context.Context, bindings []Binding) error {
 		}
 		publishing = append(publishing, envvars.NamedBindingWrite{Name: binding.Name, Write: pair})
 	}
-	if _, err := r.values.SetBindings(ctx, r.scope, r.plan.bindingEnvironment(), envvars.OwnerOcel, publishing); err != nil {
+	if _, err := r.values.SetBindings(ctx, r.scope, bindingEnvironment(r.plan), envvars.OwnerOcel, publishing); err != nil {
 		return fmt.Errorf("publish %s's bindings: %w", r.scope.Project, err)
 	}
 	if err := r.prune(ctx, bindings); err != nil {
@@ -1268,8 +1269,8 @@ func (r *deployRun) publish(ctx context.Context, bindings []Binding) error {
 	return nil
 }
 
-func (r *deployRun) prune(ctx context.Context, bindings []Binding) error {
-	environment := r.plan.bindingEnvironment()
+func (r *deployRun) prune(ctx context.Context, bindings []provider.Binding) error {
+	environment := bindingEnvironment(r.plan)
 	held, err := r.values.ListBindings(ctx, r.scope, environment)
 	if err != nil {
 		return fmt.Errorf("read %s's published bindings: %w", r.scope.Project, err)
@@ -1279,7 +1280,7 @@ func (r *deployRun) prune(ctx context.Context, bindings []Binding) error {
 		if record.Owner != envvars.OwnerOcel || record.Environment != environment {
 			continue
 		}
-		if slices.ContainsFunc(bindings, func(binding Binding) bool { return binding.Name == record.Name }) {
+		if slices.ContainsFunc(bindings, func(binding provider.Binding) bool { return binding.Name == record.Name }) {
 			continue
 		}
 		stale = append(stale, record.Name)
@@ -1299,7 +1300,7 @@ type publishedBindings struct {
 	environment string
 
 	mu       sync.Mutex
-	resolved []Binding
+	resolved []provider.Binding
 	held     bool
 }
 
@@ -1309,7 +1310,7 @@ func (p *publishedBindings) forget() {
 	p.resolved, p.held = nil, false
 }
 
-func (p *publishedBindings) Published(ctx context.Context) ([]Binding, error) {
+func (p *publishedBindings) Published(ctx context.Context) ([]provider.Binding, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.held {
@@ -1323,7 +1324,7 @@ func (p *publishedBindings) Published(ctx context.Context) ([]Binding, error) {
 	if err != nil {
 		return nil, err
 	}
-	bindings := make([]Binding, 0, len(resolved))
+	bindings := make([]provider.Binding, 0, len(resolved))
 	for i, published := range resolved {
 		binding, err := bindingPublished(names[i], published)
 		if err != nil {
@@ -1347,10 +1348,10 @@ func (p *publishedBindings) Names(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
-func (p *publishedBindings) Named(ctx context.Context, name string) (Binding, error) {
+func (p *publishedBindings) Named(ctx context.Context, name string) (provider.Binding, error) {
 	bindings, err := p.Published(ctx)
 	if err != nil {
-		return Binding{}, err
+		return provider.Binding{}, err
 	}
 	for _, binding := range bindings {
 		if binding.Name == name {
@@ -1359,15 +1360,15 @@ func (p *publishedBindings) Named(ctx context.Context, name string) (Binding, er
 	}
 	published, err := p.store.ResolveBinding(ctx, p.scope, p.environment, name)
 	if err != nil {
-		return Binding{}, err
+		return provider.Binding{}, err
 	}
 	return bindingPublished(name, published)
 }
 
-func bindingPublished(name string, published envvars.StoredBinding) (Binding, error) {
+func bindingPublished(name string, published envvars.StoredBinding) (provider.Binding, error) {
 	message, err := DecodeBinding(published.Value)
 	if err != nil {
-		return Binding{}, fmt.Errorf("read binding %s: %w", name, err)
+		return provider.Binding{}, fmt.Errorf("read binding %s: %w", name, err)
 	}
 	binding := bindingOf(message)
 	binding.Version = published.Version
@@ -1375,15 +1376,15 @@ func bindingPublished(name string, published envvars.StoredBinding) (Binding, er
 	return binding, nil
 }
 
-func bindingOf(message *bindingsv1.Binding) Binding {
-	binding := Binding{
-		Type:       BindingCustom,
+func bindingOf(message *bindingsv1.Binding) provider.Binding {
+	binding := provider.Binding{
+		Type:       provider.BindingCustom,
 		Name:       message.GetName(),
 		Source:     message.GetSource(),
 		Properties: map[string]string{},
-		Grants:     GrantsOf(message),
+		Grants:     provider.GrantsOf(message),
 	}
-	if kind, known := bindingTypes[naming.BindingTypeOf(message)]; known {
+	if kind, known := provider.BindingTypeFromWire(naming.BindingTypeOf(message)); known {
 		binding.Type = kind
 	}
 	for _, name := range naming.BindingPropertyNames(message) {
@@ -1409,7 +1410,7 @@ func (r *deployRun) openImages(ctx context.Context, wired *contractv1.ImageRegis
 	return nil
 }
 
-func revisionsOf(result StackResult, app string, logical []string) map[string]string {
+func revisionsOf(result provider.StackResult, app string, logical []string) map[string]string {
 	revisions := make(map[string]string, len(logical)+1)
 	for _, container := range result.Containers {
 		if container.Name == app && container.Physical != "" && container.Revision != "" {
@@ -1427,7 +1428,7 @@ func revisionsOf(result StackResult, app string, logical []string) map[string]st
 	return revisions
 }
 
-func physicalOf(containers []AppContainer, app string) string {
+func physicalOf(containers []provider.AppContainer, app string) string {
 	for _, container := range containers {
 		if container.Name == app {
 			return container.Physical
@@ -1436,7 +1437,7 @@ func physicalOf(containers []AppContainer, app string) string {
 	return ""
 }
 
-func originOf(containers []AppContainer, app string) string {
+func originOf(containers []provider.AppContainer, app string) string {
 	for _, container := range containers {
 		if container.Name == app {
 			return container.URL
@@ -1445,26 +1446,26 @@ func originOf(containers []AppContainer, app string) string {
 	return ""
 }
 
-func runs(images ImagePushes, entry AppEntry) string {
+func runs(images provider.ImagePushes, entry provider.AppEntry) string {
 	if pushed := images.ImageRef(entry.App); pushed != "" {
 		return pushed
 	}
 	return entry.Image
 }
 
-func (r *deployRun) containerPush(ctx context.Context, entry AppEntry) (images.Push, error) {
+func (r *deployRun) containerPush(ctx context.Context, entry provider.AppEntry) (images.Push, error) {
 	return r.wrappedPush(ctx, entry)
 }
 
-func (r *deployRun) imagePlan(ctx context.Context, entry AppEntry, functions []images.Push) (ImagePushes, error) {
+func (r *deployRun) imagePlan(ctx context.Context, entry provider.AppEntry, functions []images.Push) (provider.ImagePushes, error) {
 	if len(functions) > 0 {
-		return ImagePushes{Store: r.images, Pushes: functions}, nil
+		return provider.ImagePushes{Store: r.images, Pushes: functions}, nil
 	}
-	if entry.Compute() != ComputeContainer || entry.Image == "" {
-		return ImagePushes{}, nil
+	if entry.Compute() != provider.ComputeContainer || entry.Image == "" {
+		return provider.ImagePushes{}, nil
 	}
 	if r.images == nil {
-		return ImagePushes{}, refusal.Refuse(refusal.CodeInvalid,
+		return provider.ImagePushes{}, refusal.Refuse(refusal.CodeInvalid,
 			"%s runs as a container, and this provider is served by pulling its image from a registry rather than being handed one: "+
 				"nothing names a registry, so the image has nowhere to go and the machine has nowhere to pull it from.\n"+
 				"    → name a `registry` in the project config, with `password` set to the name of the environment variable holding the token",
@@ -1472,7 +1473,7 @@ func (r *deployRun) imagePlan(ctx context.Context, entry AppEntry, functions []i
 	}
 	push, err := r.containerPush(ctx, entry)
 	if err != nil {
-		return ImagePushes{}, err
+		return provider.ImagePushes{}, err
 	}
-	return ImagePushes{Store: r.images, Pushes: []images.Push{push}}, nil
+	return provider.ImagePushes{Store: r.images, Pushes: []images.Push{push}}, nil
 }

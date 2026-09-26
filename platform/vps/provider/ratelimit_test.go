@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -46,7 +46,7 @@ func certifying(machine *box) *vps.Provider {
 func certificateRefusal(t *testing.T, p *vps.Provider, hostname string) error {
 	t.Helper()
 
-	_, err := p.Certificates().Issue(context.Background(), providerkit.CertificateRequest{
+	_, err := p.Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind: boxedge.Kind, Hostname: hostname, Progress: edge.DiscardProgress(),
 	})
 	return err
@@ -104,7 +104,7 @@ func TestAProxyWithNothingToSayCertifiesAsItAlwaysDid(t *testing.T) {
 	t.Parallel()
 
 	machine := boxWhoseProxyWasRefused(`{"level":"info","msg":"certificate obtained successfully"}`)
-	cert, err := certifying(machine).Certificates().Issue(context.Background(), providerkit.CertificateRequest{
+	cert, err := certifying(machine).Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind: boxedge.Kind, Hostname: "pr-9.preview.acme.com", Progress: edge.DiscardProgress(),
 	})
 	if err != nil {
@@ -126,7 +126,7 @@ func TestABoxWhoseEngineCannotBeReachedSaysSoInTheEnginesOwnWordsAndStillMintsTh
 		return session.Result{}, false
 	}
 	spoken := &saying{Progress: edge.DiscardProgress()}
-	cert, err := certifying(machine).Certificates().Issue(context.Background(), providerkit.CertificateRequest{
+	cert, err := certifying(machine).Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind: boxedge.Kind, Hostname: "pr-9.preview.acme.com", Progress: spoken,
 	})
 	if err != nil {

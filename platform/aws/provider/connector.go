@@ -8,13 +8,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/target"
 	awsconnector "github.com/ocelhq/ocel/platform/aws/provider/connector"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const connectorCompute = providerkit.ComputeServerless
+const connectorCompute = provider.ComputeServerless
 
 func (p *Provider) connectorAPIs() awsconnector.APIs {
 	return awsconnector.APIs{
@@ -27,26 +27,26 @@ func (p *Provider) connectorAPIs() awsconnector.APIs {
 
 type connector struct{ *Provider }
 
-func (p connector) Target(ctx context.Context) (providerkit.ConnectorTarget, error) {
+func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error) {
 	account, err := p.accountID(ctx)
 	if err != nil {
-		return providerkit.ConnectorTarget{}, err
+		return provider.ConnectorTarget{}, err
 	}
 	fingerprint, err := target.Fingerprint("aws", account, p.aws.Region, string(p.namespace))
 	if err != nil {
-		return providerkit.ConnectorTarget{}, err
+		return provider.ConnectorTarget{}, err
 	}
 	standing, err := awsconnector.Read(ctx, cloudformation.NewFromConfig(p.aws), p.namespace)
 	if err != nil {
-		return providerkit.ConnectorTarget{}, err
+		return provider.ConnectorTarget{}, err
 	}
-	described := providerkit.ConnectorTarget{
+	described := provider.ConnectorTarget{
 		Fingerprint: fingerprint,
 		Hostname:    hostOf(standing.URL),
 		Arch:        awsconnector.Arch,
 	}
 	if standing.Present {
-		described.Installed = &providerkit.ConnectorRelease{
+		described.Installed = &provider.ConnectorRelease{
 			Version:   standing.Version,
 			PublicKey: standing.PublicKey,
 			Compute:   connectorCompute,
@@ -55,21 +55,21 @@ func (p connector) Target(ctx context.Context) (providerkit.ConnectorTarget, err
 	return described, nil
 }
 
-func (p connector) Install(ctx context.Context, install providerkit.ConnectorInstall,
-	progress edge.Progress) (providerkit.ConnectorAddress, error) {
-	compute, err := providerkit.ConnectorCompute(install.Compute, connectorCompute)
+func (p connector) Install(ctx context.Context, install provider.ConnectorInstall,
+	progress edge.Progress) (provider.ConnectorAddress, error) {
+	compute, err := provider.ConnectorCompute(install.Compute, connectorCompute)
 	if err != nil {
-		return providerkit.ConnectorAddress{}, err
+		return provider.ConnectorAddress{}, err
 	}
 	standing, err := awsconnector.Install(ctx, p.connectorAPIs(), p.namespace, awsconnector.Release{
 		Binary:  install.Binary,
 		Version: install.Version,
 		Config:  install.Config,
-	}, providerkit.WrittenByVersion(install.Version), saying(progress))
+	}, provider.WrittenByVersion(install.Version), saying(progress))
 	if err != nil {
-		return providerkit.ConnectorAddress{}, err
+		return provider.ConnectorAddress{}, err
 	}
-	return providerkit.ConnectorAddress{URL: standing.URL, PublicKey: standing.PublicKey, Compute: compute}, nil
+	return provider.ConnectorAddress{URL: standing.URL, PublicKey: standing.PublicKey, Compute: compute}, nil
 }
 
 func (p connector) Remove(ctx context.Context, progress edge.Progress) error {

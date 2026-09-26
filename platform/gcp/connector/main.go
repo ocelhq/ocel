@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/connectorkit"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/target"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
@@ -48,7 +49,7 @@ func run(listen, config string, reporting bool) error {
 	if err != nil {
 		return err
 	}
-	ns, err := providerkit.NamespaceFromEnv()
+	ns, err := provider.NamespaceFromEnv()
 	if err != nil {
 		return err
 	}

@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	"github.com/ocelhq/ocel/pkg/transformkit/transformtest"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -33,32 +33,32 @@ var pulumiTokens = map[string]string{
 	"aws:lb/loadBalancer:LoadBalancer":        "aws_lb",
 }
 
-func shapeRequest(t *testing.T) providerkit.ShapeRequest {
+func shapeRequest(t *testing.T) provider.ShapeRequest {
 	t.Helper()
 	release := fixedRelease(t)
-	return providerkit.ShapeRequest{
-		Plan: providerkit.DeployPlan{
+	return provider.ShapeRequest{
+		Plan: provider.DeployPlan{
 			Slug:  "shop",
 			Class: edge.ClassProduction,
 			Env:   "prod",
 			Infra: naming.InfraStack("prod"),
-			Apps: []providerkit.AppEntry{
+			Apps: []provider.AppEntry{
 				{App: "web", Stack: naming.AppStack("prod", "web", release), Manifest: &contractv1.ManifestApp{Name: "web", Framework: &contractv1.Framework{Name: "next"}, Compute: "serverless"}},
 				{App: "api", Stack: naming.AppStack("prod", "api", release), Manifest: &contractv1.ManifestApp{Name: "api", Framework: &contractv1.Framework{Name: "go"}, Compute: "container"}},
 			},
 		},
-		Resources: []providerkit.Resource{
-			{Name: "main", Type: providerkit.BindingPostgres, Postgres: &providerkit.PostgresSpec{}},
-			{Name: "uploads", Type: providerkit.BindingBucket, Bucket: &providerkit.BucketSpec{}},
-			{Name: "shared", Type: providerkit.BindingBucket, Binding: "elsewhere"},
+		Resources: []provider.Resource{
+			{Name: "main", Type: provider.BindingPostgres, Postgres: &provider.PostgresSpec{}},
+			{Name: "uploads", Type: provider.BindingBucket, Bucket: &provider.BucketSpec{}},
+			{Name: "shared", Type: provider.BindingBucket, Binding: "elsewhere"},
 		},
-		Functions: map[string][]providerkit.FunctionSpec{
+		Functions: map[string][]provider.FunctionSpec{
 			"web": {{Name: "fn--web--entry"}, {Name: "fn--web--admin", Route: "/admin"}},
 		},
 	}
 }
 
-func shaped(t *testing.T, pass transformkit.Pass, req providerkit.ShapeRequest) *costv1.ResourceSet {
+func shaped(t *testing.T, pass transformkit.Pass, req provider.ShapeRequest) *costv1.ResourceSet {
 	t.Helper()
 	tree := &costkit.Tree{}
 	project := tree.Scope("", "project", "shop")

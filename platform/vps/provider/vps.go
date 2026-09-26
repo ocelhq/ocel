@@ -8,6 +8,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/liveness"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
@@ -18,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
 )
 
-const Vendor providerkit.Vendor = "vps"
+const Vendor provider.Vendor = "vps"
 
 type Provider struct {
 	options Options
@@ -39,8 +40,8 @@ type Provider struct {
 	liveness.Net
 }
 
-func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
-	decoded, err := providerkit.Decode[Options](Vendor, settings.Options)
+func New(_ context.Context, settings provider.Settings) (provider.Provider, error) {
+	decoded, err := provider.Decode[Options](Vendor, settings.Options)
 	if err != nil {
 		return nil, err
 	}
@@ -70,20 +71,20 @@ func newProvider(options Options, dial host.Dial) *Provider {
 	return (&Provider{options: options}).wire(dial)
 }
 
-func (p *Provider) Facts() providerkit.Facts {
-	return providerkit.Facts{
+func (p *Provider) Facts() provider.Facts {
+	return provider.Facts{
 		Vendor:            Vendor,
 		Bindings:          resources.Serves(p.resourceHooks()),
-		Computes:          []providerkit.Compute{providerkit.ComputeContainer},
+		Computes:          []provider.Compute{provider.ComputeContainer},
 		Edges:             []edge.Kind{box.Kind},
 		DefaultEdge:       box.Kind,
-		DNSKinds:          []providerkit.DNSKind{dnsCloudflare},
+		DNSKinds:          []provider.DNSKind{dnsCloudflare},
 		RendersTransforms: true,
 	}
 }
 
-func (p *Provider) Hooks() providerkit.Hooks {
-	return providerkit.Hooks{
+func (p *Provider) Hooks() provider.Hooks {
+	return provider.Hooks{
 		PreflightDeploy:    p.PreflightDeploy,
 		OpenRegistryImages: p.OpenRegistryImages,
 		OpenDirectImages:   p.OpenDirectImages,
@@ -101,30 +102,30 @@ func (p *Provider) resourceHooks() resources.Hooks {
 	}
 }
 
-func (p *Provider) Bootstrap(edge.Kind) (providerkit.Bootstrap, error) {
+func (p *Provider) Bootstrap(edge.Kind) (provider.Bootstrap, error) {
 	return elevating{Bootstrap: host.NewBootstrap(p.host, Vendor, p.project), elevated: p.elevated}, nil
 }
 
-func (p *Provider) Stacks() providerkit.Stacks {
+func (p *Provider) Stacks() provider.Stacks {
 	return resources.Stacks(p.records, p.Artifacts(), p.resourceHooks())
 }
 
-func (p *Provider) Artifacts() providerkit.ArtifactStore { return providerkit.NoArtifacts{} }
+func (p *Provider) Artifacts() provider.ArtifactStore { return providerkit.NoArtifacts{} }
 
 func (p *Provider) Records() records.Store { return p.records }
 
 func (p *Provider) Cipher() records.Cipher { return p.cipher }
 
-func (p *Provider) Credentials() providerkit.Credentials { return credentials{p} }
+func (p *Provider) Credentials() provider.Credentials { return credentials{p} }
 
-func (p *Provider) Edges() providerkit.Edges { return edges{p} }
+func (p *Provider) Edges() provider.Edges { return edges{p} }
 
-func (p *Provider) DNS() providerkit.DNS { return dns{} }
+func (p *Provider) DNS() provider.DNS { return dns{} }
 
-func (p *Provider) Certificates() providerkit.Certificates { return certificates{p} }
+func (p *Provider) Certificates() provider.Certificates { return certificates{p} }
 
-func (p *Provider) Connector() providerkit.Connector { return connector{p} }
+func (p *Provider) Connector() provider.Connector { return connector{p} }
 
 func (p *Provider) Runtime() images.Runtime { return containerRuntime{p} }
 
-func (p *Provider) Liveness() providerkit.Liveness { return &p.Net }
+func (p *Provider) Liveness() provider.Liveness { return &p.Net }

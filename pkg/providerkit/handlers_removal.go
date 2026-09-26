@@ -13,13 +13,14 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type projectRemoval struct {
-	provider Provider
+	provider provider.Provider
 	front    edge.Edge
 	stack    edge.EdgeStack
 	store    stackStore
@@ -89,11 +90,11 @@ func (h *handlers) openRemoval(ctx context.Context, req *contractv1.ProjectReque
 func (h *handlers) PlanRemoveProject(ctx context.Context, req *contractv1.ProjectRequest) (*planv1.ChangePlan, error) {
 	removal, err := h.openRemoval(ctx, req)
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	plan, err := removal.plan()
 	if err != nil {
-		return nil, RefusalError(err)
+		return nil, provider.RefusalError(err)
 	}
 	return plan, nil
 }
@@ -103,7 +104,7 @@ func (r *projectRemoval) plan() (*planv1.ChangePlan, error) {
 	vendor := string(r.provider.Facts().Vendor)
 	for _, stack := range r.apps {
 		plan.Groups = append(plan.Groups, &planv1.ChangeGroup{
-			Kind:    StackGroupKind,
+			Kind:    provider.StackGroupKind,
 			Name:    vendor + "/" + stack.String(),
 			Feature: stack.App,
 			Action:  planv1.Change_ACTION_DELETE,
@@ -112,7 +113,7 @@ func (r *projectRemoval) plan() (*planv1.ChangePlan, error) {
 	}
 	for _, stack := range r.infra {
 		plan.Groups = append(plan.Groups, &planv1.ChangeGroup{
-			Kind:    StackGroupKind,
+			Kind:    provider.StackGroupKind,
 			Name:    vendor + "/" + stack.String(),
 			Feature: stack.Env,
 			Action:  planv1.Change_ACTION_DELETE,
@@ -173,7 +174,7 @@ func (r *projectRemoval) recordGroups() []*planv1.ChangeGroup {
 	return groups
 }
 
-func certificateGroup(cert Certificate) *planv1.ChangeGroup {
+func certificateGroup(cert provider.Certificate) *planv1.ChangeGroup {
 	if !cert.Requested {
 		return &planv1.ChangeGroup{
 			Kind:   "certificate",
@@ -286,7 +287,7 @@ func (r *projectRemoval) pointers() []string {
 
 func (r *projectRemoval) destroy(ctx context.Context, stack naming.StackName, progress edge.Progress) error {
 	progress.Say("Destroying " + stack.String())
-	ref := StackRef{Project: r.slug, Class: r.class, Name: stack}
+	ref := provider.StackRef{Project: r.slug, Class: r.class, Name: stack}
 	if err := r.provider.Stacks().Destroy(ctx, ref, progress); err != nil {
 		return fmt.Errorf("destroy %s: %w", stack, err)
 	}
@@ -312,10 +313,10 @@ func (r *projectRemoval) releaseRecords(ctx context.Context, written []edge.Reco
 	return nil
 }
 
-func (r *projectRemoval) discardCertificates(ctx context.Context, held []Certificate, progress edge.Progress) error {
+func (r *projectRemoval) discardCertificates(ctx context.Context, held []provider.Certificate, progress edge.Progress) error {
 	var errs []error
 	for _, cert := range held {
-		if err := retireCertificate(ctx, r.provider, r.settle, cert, Certificate{}, progress); err != nil {
+		if err := retireCertificate(ctx, r.provider, r.settle, cert, provider.Certificate{}, progress); err != nil {
 			errs = append(errs, fmt.Errorf("discard the certificate ocel requested for this project: %w", err))
 		}
 	}
@@ -371,7 +372,7 @@ func (r *projectRemoval) forget(ctx context.Context, progress edge.Progress) err
 
 func reclaim(
 	ctx context.Context,
-	provider Provider,
+	p provider.Provider,
 	slug string,
 	class edge.Class,
 	targets []ReclaimTarget,
@@ -380,16 +381,16 @@ func reclaim(
 	var errs []error
 	for _, target := range targets {
 		progress.Say("Reclaiming " + target.App + " " + target.Build.String())
-		ref := StackRef{Project: slug, Class: class, Name: target.Stack}
-		if err := provider.Stacks().Destroy(ctx, ref, progress); err != nil {
+		ref := provider.StackRef{Project: slug, Class: class, Name: target.Stack}
+		if err := p.Stacks().Destroy(ctx, ref, progress); err != nil {
 			errs = append(errs, fmt.Errorf("destroy %s: %w", target.Stack, err))
 			continue
 		}
-		if err := ForgetStack(ctx, provider.Records(), class, slug, target.Stack); err != nil {
+		if err := ForgetStack(ctx, p.Records(), class, slug, target.Stack); err != nil {
 			errs = append(errs, err)
 		}
 		for _, prefix := range target.Prefixes {
-			if err := provider.Artifacts().RemovePrefix(ctx, class, prefix, progress); err != nil {
+			if err := p.Artifacts().RemovePrefix(ctx, class, prefix, progress); err != nil {
 				errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
 			}
 		}

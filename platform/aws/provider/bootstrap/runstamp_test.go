@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
 
@@ -51,7 +51,7 @@ func TestRunStamps(t *testing.T) {
 		if stamp.WrittenBy != "dev+cafebabe" {
 			t.Errorf("written by %q, want dev+cafebabe", stamp.WrittenBy)
 		}
-		if providerkit.WrittenBy(stamp.WrittenBy).Release() {
+		if provider.WrittenBy(stamp.WrittenBy).Release() {
 			t.Errorf("%q must never read as a release", stamp.WrittenBy)
 		}
 	})

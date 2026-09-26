@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -153,10 +154,10 @@ func TestArtifactsRemovePrefixLeavesTheRest(t *testing.T) {
 
 	ctx := context.Background()
 	artifacts := fake.NewArtifacts()
-	kept := providerkit.ArtifactRef{Class: edge.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "other/app.zip"}
-	removed := providerkit.ArtifactRef{Class: edge.ClassProduction, Bucket: providerkit.StoreAssets, Key: "releases/r1/app.zip"}
+	kept := provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreFunctions, Key: "other/app.zip"}
+	removed := provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreAssets, Key: "releases/r1/app.zip"}
 
-	for _, ref := range []providerkit.ArtifactRef{kept, removed} {
+	for _, ref := range []provider.ArtifactRef{kept, removed} {
 		if err := artifacts.Put(ctx, ref, bytes.NewReader([]byte("body"))); err != nil {
 			t.Fatalf("Put() error = %v", err)
 		}
@@ -176,10 +177,10 @@ func TestArtifactsRemovePrefixLeavesTheRest(t *testing.T) {
 func TestNewRefusesOptionsTheReferenceProviderDoesNotAccept(t *testing.T) {
 	t.Parallel()
 
-	if _, err := fake.New(context.Background(), providerkit.Settings{Options: providerkit.Options{"regoin": "typo"}}); err == nil {
+	if _, err := fake.New(context.Background(), provider.Settings{Options: provider.Options{"regoin": "typo"}}); err == nil {
 		t.Fatal("New() accepted an option it does not know")
 	}
-	if _, err := fake.New(context.Background(), providerkit.Settings{Options: providerkit.Options{"region": "nowhere"}}); err != nil {
+	if _, err := fake.New(context.Background(), provider.Settings{Options: provider.Options{"region": "nowhere"}}); err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
 }
@@ -187,21 +188,21 @@ func TestNewRefusesOptionsTheReferenceProviderDoesNotAccept(t *testing.T) {
 func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *testing.T) {
 	t.Parallel()
 
-	provider := fake.NewProvider(fake.Options{})
-	stacks := resources.Stacks(provider.Records(), provider.Artifacts(), provider.ResourceHooks())
-	ref := providerkit.StackRef{
+	p := fake.NewProvider(fake.Options{})
+	stacks := resources.Stacks(p.Records(), p.Artifacts(), p.ResourceHooks())
+	ref := provider.StackRef{
 		Project: "shop",
 		Class:   edge.ClassProduction,
 		Name:    naming.AppStack("prod", "web", naming.NewRelease("d1", "f1")),
 	}
 
-	served, err := stacks.Provision(context.Background(), providerkit.StackPlan{
+	served, err := stacks.Provision(context.Background(), provider.StackPlan{
 		Ref:  ref,
-		Kind: providerkit.StackApp,
-		App: &providerkit.AppPlan{
+		Kind: provider.StackApp,
+		App: &provider.AppPlan{
 			App:       "web",
-			Compute:   providerkit.ComputeServerless,
-			Functions: []providerkit.FunctionSpec{{Name: "api"}},
+			Compute:   provider.ComputeServerless,
+			Functions: []provider.FunctionSpec{{Name: "api"}},
 		},
 	}, nil)
 	if err != nil {
@@ -211,12 +212,12 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 		t.Fatalf("Provision() of a serverless app = %+v, want it to reach Functions alone", served)
 	}
 
-	contained, err := stacks.Provision(context.Background(), providerkit.StackPlan{
+	contained, err := stacks.Provision(context.Background(), provider.StackPlan{
 		Ref:  ref,
-		Kind: providerkit.StackApp,
-		App: &providerkit.AppPlan{
+		Kind: provider.StackApp,
+		App: &provider.AppPlan{
 			App:             "web",
-			Compute:         providerkit.ComputeContainer,
+			Compute:         provider.ComputeContainer,
 			Image:           "ocel/web@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 			HealthCheckPath: "/",
 		},
@@ -228,25 +229,25 @@ func TestTheReferenceProviderIsReachedThroughThePrimitiveItsAppsComputeNames(t *
 		t.Fatalf("Provision() of a container app = %+v, want it to reach the Containers hooks alone", contained)
 	}
 
-	if err := providerkit.WriteStack(context.Background(), provider.Records(), ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
-		Kind:       providerkit.StackApp,
+	if err := providerkit.WriteStack(context.Background(), p.Records(), ref.Class, ref.Project, ref.Name, providerkit.RecordedStack{
+		Kind:       provider.StackApp,
 		Containers: contained.Containers,
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := stacks.Provision(context.Background(), providerkit.StackPlan{
+	if _, err := stacks.Provision(context.Background(), provider.StackPlan{
 		Ref:  ref,
-		Kind: providerkit.StackApp,
-		App: &providerkit.AppPlan{
+		Kind: provider.StackApp,
+		App: &provider.AppPlan{
 			App:       "web",
-			Compute:   providerkit.ComputeServerless,
-			Functions: []providerkit.FunctionSpec{{Name: "api"}},
+			Compute:   provider.ComputeServerless,
+			Functions: []provider.FunctionSpec{{Name: "api"}},
 		},
 	}, nil); err != nil {
 		t.Fatalf("Provision() of an app moving back to serverless = %v", err)
 	}
-	if taken := provider.FakeStacks().TakenDown(); !slices.Contains(taken, "web") {
+	if taken := p.FakeStacks().TakenDown(); !slices.Contains(taken, "web") {
 		t.Errorf("the reference provider took down %v, want the container the app left behind: an app changing compute leaves the other primitive's work standing otherwise", taken)
 	}
 }

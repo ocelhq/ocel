@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 type Confirmer interface {
@@ -35,8 +35,8 @@ func (t Trust) suspend() func() {
 func driveTrusting(ctx context.Context, trust Trust, drive func() error) error {
 	err := drive()
 
-	refusal, ok := providerkit.HostTrustOf(err)
-	if !ok || refusal.Terminal() || refusal.Reason != providerkit.UnknownHostKey || !trust.attended() {
+	refusal, ok := provider.HostTrustOf(err)
+	if !ok || refusal.Terminal() || refusal.Reason != provider.UnknownHostKey || !trust.attended() {
 		return err
 	}
 
@@ -45,7 +45,7 @@ func driveTrusting(ctx context.Context, trust Trust, drive func() error) error {
 		return errors.Join(err, keyErr)
 	}
 	entry := refusal.KnownHostsEntry()
-	if !providerkit.ValidKnownHostsEntry(entry) {
+	if !provider.ValidKnownHostsEntry(entry) {
 		return errors.Join(err, fmt.Errorf("the provider named %q, which is not a name a known_hosts entry can be keyed on", entry))
 	}
 	store, storeErr := knownHostsStore(refusal)
@@ -71,7 +71,7 @@ func driveTrusting(ctx context.Context, trust Trust, drive func() error) error {
 	return drive()
 }
 
-func ask(ctx context.Context, trust Trust, refusal providerkit.HostTrust, entry, store string) (bool, error) {
+func ask(ctx context.Context, trust Trust, refusal provider.HostTrust, entry, store string) (bool, error) {
 	resume := trust.suspend()
 	defer resume()
 
@@ -79,7 +79,7 @@ func ask(ctx context.Context, trust Trust, refusal providerkit.HostTrust, entry,
 	return trust.Ask.Confirm(ctx, fmt.Sprintf("Trust that key and record %s in %s?", entry, store))
 }
 
-func knownHostsStore(trust providerkit.HostTrust) (string, error) {
+func knownHostsStore(trust provider.HostTrust) (string, error) {
 	if len(trust.KnownHosts) > 0 && trust.KnownHosts[0] != "" {
 		return writable(trust.KnownHosts[0])
 	}

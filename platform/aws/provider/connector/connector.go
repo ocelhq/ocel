@@ -17,7 +17,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
@@ -157,7 +157,7 @@ func varsKeys(ctx context.Context, api cfn.StacksAPI, ns bootstrap.Namespace) ([
 }
 
 func Install(ctx context.Context, apis APIs, ns bootstrap.Namespace, release Release,
-	writer providerkit.WrittenBy, progress func(string)) (Standing, error) {
+	writer provider.WrittenBy, progress func(string)) (Standing, error) {
 	keys, err := varsKeys(ctx, apis.CFN, ns)
 	if err != nil {
 		return Standing{}, err
@@ -231,7 +231,7 @@ func Remove(ctx context.Context, apis APIs, ns bootstrap.Namespace, progress fun
 }
 
 func codeBucket(ctx context.Context, apis APIs, ns bootstrap.Namespace,
-	writer providerkit.WrittenBy, progress func(string)) (string, error) {
+	writer provider.WrittenBy, progress func(string)) (string, error) {
 	stack, err := cfn.DescribeStack(ctx, apis.CFN, StackName(ns))
 	if err != nil {
 		return "", err
@@ -274,7 +274,7 @@ func codeBucket(ctx context.Context, apis APIs, ns bootstrap.Namespace,
 	return opened[outputBucket], nil
 }
 
-func tagsFor(ns bootstrap.Namespace, template string, writer providerkit.WrittenBy) []cfntypes.Tag {
+func tagsFor(ns bootstrap.Namespace, template string, writer provider.WrittenBy) []cfntypes.Tag {
 	return []cfntypes.Tag{
 		{Key: aws.String(cfn.TagNamespace), Value: aws.String(string(ns))},
 		{Key: aws.String(cfn.TagDigest), Value: aws.String(cfn.TemplateDigest(template))},
@@ -372,10 +372,10 @@ func templateFor(ns bootstrap.Namespace, at payloads.Placement, release Release,
 					"Architectures": []string{Arch},
 					"Code":          map[string]any{"S3Bucket": map[string]any{"Ref": "CodeBucket"}, "S3Key": at.Key},
 					"Environment": map[string]any{"Variables": map[string]any{
-						providerkit.NamespaceEnvVar:       string(ns),
-						edge.AWSRegionVar:                 map[string]any{"Ref": "AWS::Region"},
-						providerkit.ConnectorConfigEnvVar: string(release.Config),
-						KeyParameterEnvVar:                KeyParameter(ns),
+						provider.NamespaceEnvVar:       string(ns),
+						edge.AWSRegionVar:              map[string]any{"Ref": "AWS::Region"},
+						provider.ConnectorConfigEnvVar: string(release.Config),
+						KeyParameterEnvVar:             KeyParameter(ns),
 					}},
 					"Handler":                      handler,
 					"MemorySize":                   memory,

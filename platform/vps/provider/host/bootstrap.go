@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -18,43 +19,43 @@ const (
 
 type Bootstrap struct {
 	host    *Host
-	vendor  providerkit.Vendor
+	vendor  provider.Vendor
 	project string
 }
 
-func NewBootstrap(h *Host, vendor providerkit.Vendor, project string) Bootstrap {
+func NewBootstrap(h *Host, vendor provider.Vendor, project string) Bootstrap {
 	return Bootstrap{host: h, vendor: vendor, project: project}
 }
 
-func (b Bootstrap) Catalogue() []providerkit.Feature { return nil }
+func (b Bootstrap) Catalogue() []provider.Feature { return nil }
 
-func (b Bootstrap) Describe(ctx context.Context, class edge.Class) (providerkit.BootstrapReading, error) {
+func (b Bootstrap) Describe(ctx context.Context, class edge.Class) (provider.BootstrapReading, error) {
 	read, err := b.host.Observe(ctx, class)
 	if err != nil {
-		return providerkit.BootstrapReading{}, err
+		return provider.BootstrapReading{}, err
 	}
 	return b.described(ctx, read)
 }
 
-func (b Bootstrap) described(ctx context.Context, read Reading) (providerkit.BootstrapReading, error) {
+func (b Bootstrap) described(ctx context.Context, read Reading) (provider.BootstrapReading, error) {
 	principal, err := b.host.Principal(ctx)
 	if err != nil {
-		return providerkit.BootstrapReading{}, err
+		return provider.BootstrapReading{}, err
 	}
 	if read, err = b.recorded(ctx, read); err != nil {
-		return providerkit.BootstrapReading{}, err
+		return provider.BootstrapReading{}, err
 	}
 	if read.standing(KindRoutingTable, live.RoutingTable) || read.standing(KindProxyConfig, ProxyConfig) {
 		if read.rerendering, err = b.host.proxyInspected(ctx, read.Class); err != nil {
-			return providerkit.BootstrapReading{}, err
+			return provider.BootstrapReading{}, err
 		}
 	}
-	return providerkit.BootstrapReading{
+	return provider.BootstrapReading{
 		Class:      read.Class,
 		Present:    read.Present,
 		Unfinished: read.unfinished(),
 		Reading:    read,
-		Stacks: []providerkit.BootstrapStack{{
+		Stacks: []provider.BootstrapStack{{
 			Name:          principal,
 			Present:       read.Present,
 			Schema:        uint32(read.Stamp.Schema),
@@ -64,53 +65,53 @@ func (b Bootstrap) described(ctx context.Context, read Reading) (providerkit.Boo
 	}, nil
 }
 
-func (b Bootstrap) Plan(ctx context.Context, req providerkit.BootstrapRequest) (providerkit.Plan, error) {
+func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (provider.Plan, error) {
 	read, err := b.reading(ctx, req)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	described, err := b.described(ctx, read)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	read = described.Reading.(Reading)
 	if err := read.runnableEngine(b.host.named()); err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	if err := b.host.servingFree(ctx, read); err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	groups := providerkit.DeriveGroups(described, b.Catalogue(), req)
 	groups[0].Changes = planned(read)
-	if read.rerendering && groups[0].Action == providerkit.ActionKeep {
-		groups[0].Action, groups[0].Reason = providerkit.ActionUpdate, ""
+	if read.rerendering && groups[0].Action == provider.ActionKeep {
+		groups[0].Action, groups[0].Reason = provider.ActionUpdate, ""
 	}
 	if groups[0].Reason == "" {
 		groups[0].Reason = bootstrapDocs
 	}
-	return providerkit.Plan{Groups: providerkit.Vendored(b.vendor, groups)}, nil
+	return provider.Plan{Groups: providerkit.Vendored(b.vendor, groups)}, nil
 }
 
-func planned(read Reading) []providerkit.Change {
+func planned(read Reading) []provider.Change {
 	items := read.Items()
-	changes := make([]providerkit.Change, 0, len(items))
+	changes := make([]provider.Change, 0, len(items))
 	for _, item := range items {
-		change := providerkit.Change{
+		change := provider.Change{
 			Kind:   item.Kind,
 			Name:   item.Name,
-			Action: providerkit.ActionCreate,
+			Action: provider.ActionCreate,
 			Reason: item.Note,
 			Slow:   item.Slow,
 		}
 		switch {
 		case read.rerendering && item.Kind == KindProxyConfig:
-			change.Action, change.Reason = providerkit.ActionUpdate, "rendered again from "+live.RoutingTable
+			change.Action, change.Reason = provider.ActionUpdate, "rendered again from "+live.RoutingTable
 		case item.Kind == KindEngine && read.current(item):
-			change.Action, change.Reason, change.Slow = providerkit.ActionAdopt, adoptedEngine(read.Engine.Version), false
+			change.Action, change.Reason, change.Slow = provider.ActionAdopt, adoptedEngine(read.Engine.Version), false
 		case read.current(item):
-			change.Action, change.Reason = providerkit.ActionKeep, reasonStanding
+			change.Action, change.Reason = provider.ActionKeep, reasonStanding
 		case read.standing(item.Kind, item.Name):
-			change.Action = providerkit.ActionUpdate
+			change.Action = provider.ActionUpdate
 			if change.Reason == "" {
 				change.Reason = "drifted"
 			}
@@ -120,16 +121,16 @@ func planned(read Reading) []providerkit.Change {
 	return slowLast(changes)
 }
 
-func itemPlan(read Reading) providerkit.Plan {
-	return providerkit.Plan{Groups: []providerkit.ChangeGroup{{
-		Kind:    providerkit.StackGroupKind,
+func itemPlan(read Reading) provider.Plan {
+	return provider.Plan{Groups: []provider.ChangeGroup{{
+		Kind:    provider.StackGroupKind,
 		Name:    string(read.Class),
 		Changes: planned(read),
 	}}}
 }
 
-func slowLast(changes []providerkit.Change) []providerkit.Change {
-	slices.SortStableFunc(changes, func(a, b providerkit.Change) int {
+func slowLast(changes []provider.Change) []provider.Change {
+	slices.SortStableFunc(changes, func(a, b provider.Change) int {
 		switch {
 		case a.Slow == b.Slow:
 			return 0
@@ -142,7 +143,7 @@ func slowLast(changes []providerkit.Change) []providerkit.Change {
 	return changes
 }
 
-func (b Bootstrap) reading(ctx context.Context, req providerkit.BootstrapRequest) (Reading, error) {
+func (b Bootstrap) reading(ctx context.Context, req provider.BootstrapRequest) (Reading, error) {
 	if held, carried := req.Reading.(Reading); carried && held.Class == req.Class {
 		return held, nil
 	}
@@ -157,7 +158,7 @@ func (b Bootstrap) read(ctx context.Context, class edge.Class) (Reading, error) 
 	return b.recorded(ctx, read)
 }
 
-func (b Bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, progress edge.Progress) error {
+func (b Bootstrap) Apply(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
 	if req.Heal {
 		return b.heal(ctx, req, progress)
 	}
@@ -190,7 +191,7 @@ func (b Bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, 
 	}
 
 	stamp := Stamp{
-		Schema:  providerkit.BootstrapSchema,
+		Schema:  provider.BootstrapSchema,
 		State:   StateApplying,
 		Writer:  req.WrittenBy.String(),
 		Digests: digests(items),
@@ -244,7 +245,7 @@ func (b Bootstrap) Apply(ctx context.Context, req providerkit.BootstrapRequest, 
 	return b.host.Stamp(ctx, req.Class, stamp)
 }
 
-func (b Bootstrap) heal(ctx context.Context, req providerkit.BootstrapRequest, progress edge.Progress) error {
+func (b Bootstrap) heal(ctx context.Context, req provider.BootstrapRequest, progress edge.Progress) error {
 	read, err := b.host.Own(ctx, req.Class)
 	if err != nil {
 		return err
@@ -273,7 +274,7 @@ func healing(read Reading, unattended bool) ([]Item, []string, error) {
 }
 
 func healable(read Reading) ([]Item, []string, error) {
-	command := providerkit.BootstrapCommand(read.Class)
+	command := provider.BootstrapCommand(read.Class)
 	if !read.Present {
 		return nil, nil, refusal.Refuse(refusal.CodeDenied,
 			"the %s class is not bootstrapped on this host\nRun `%s`",
@@ -409,31 +410,31 @@ func say(progress edge.Progress, message string) {
 	}
 }
 
-func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (providerkit.Plan, error) {
+func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.Plan, error) {
 	removals, err := b.removals(ctx, class)
 	if err != nil || len(removals) == 0 {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	principal, err := b.host.Principal(ctx)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
-	changes := make([]providerkit.Change, 0, len(removals))
+	changes := make([]provider.Change, 0, len(removals))
 	for _, removal := range removals {
-		changes = append(changes, providerkit.Change{
+		changes = append(changes, provider.Change{
 			Kind:   removal.kind,
 			Name:   removal.path,
 			Action: removal.action,
 			Reason: removal.reason,
 		})
 	}
-	group := providerkit.ChangeGroup{
-		Kind:    providerkit.StackGroupKind,
+	group := provider.ChangeGroup{
+		Kind:    provider.StackGroupKind,
 		Name:    principal,
-		Action:  providerkit.ActionDelete,
+		Action:  provider.ActionDelete,
 		Changes: changes,
 	}
-	return providerkit.Plan{Groups: providerkit.Vendored(b.vendor, []providerkit.ChangeGroup{group})}, nil
+	return provider.Plan{Groups: providerkit.Vendored(b.vendor, []provider.ChangeGroup{group})}, nil
 }
 
 func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.Progress) error {
@@ -447,7 +448,7 @@ func (b Bootstrap) Remove(ctx context.Context, class edge.Class, progress edge.P
 		return err
 	}
 	for _, removal := range removals {
-		if removal.action != providerkit.ActionDelete {
+		if removal.action != provider.ActionDelete {
 			say(progress, "kept "+removal.kind+" "+removal.path)
 			continue
 		}
@@ -475,16 +476,16 @@ type removal struct {
 	kind   string
 	path   string
 	reason string
-	action providerkit.ChangeAction
+	action provider.ChangeAction
 	shared bool
 }
 
 func taking(kind, path, reason string) removal {
-	return removal{kind: kind, path: path, reason: reason, action: providerkit.ActionDelete}
+	return removal{kind: kind, path: path, reason: reason, action: provider.ActionDelete}
 }
 
 func sharing(path, reason string) removal {
-	return removal{kind: KindDir, path: path, reason: reason, action: providerkit.ActionDelete, shared: true}
+	return removal{kind: KindDir, path: path, reason: reason, action: provider.ActionDelete, shared: true}
 }
 
 func (r removal) command() string {

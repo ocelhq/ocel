@@ -16,8 +16,8 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	envvarsv1 "github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const RootApp = "this project's app"
@@ -274,7 +274,7 @@ func staleOrBroken(err error) error {
 	if err == nil || connect.CodeOf(err) != connect.CodeAborted {
 		return err
 	}
-	if _, refused := providerkit.RefusedCode(err); refused {
+	if _, refused := provider.RefusedCode(err); refused {
 		return err
 	}
 	return varsui.ErrStaleValue

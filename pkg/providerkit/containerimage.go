@@ -8,10 +8,11 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
-func (r *deployRun) wrappedPush(ctx context.Context, entry AppEntry) (images.Push, error) {
+func (r *deployRun) wrappedPush(ctx context.Context, entry provider.AppEntry) (images.Push, error) {
 	runtimePort := r.provider.Runtime()
 	app, ref := entry.App, entry.Image
 	repository, digest, pinned := strings.Cut(ref, "@")

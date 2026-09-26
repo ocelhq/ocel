@@ -1,4 +1,4 @@
-package providerkit
+package provider
 
 import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"

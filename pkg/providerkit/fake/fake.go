@@ -4,13 +4,13 @@ import (
 	"context"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const Vendor providerkit.Vendor = "fake"
+const Vendor provider.Vendor = "fake"
 
 type Provider struct {
 	mu          sync.Mutex
@@ -21,36 +21,36 @@ type Provider struct {
 	discardHeld error
 	rotation    int
 	pending     error
-	health      *providerkit.CertificateHealth
+	health      *provider.CertificateHealth
 
 	preflightRefusal error
-	preflighted      []providerkit.DeployPreflight
+	preflighted      []provider.DeployPreflight
 	wrappedFor       []string
 	runtimeArch      string
 	runtimeBinary    []byte
-	hooks            providerkit.Hooks
+	hooks            provider.Hooks
 
 	journal        *Journal
 	options        Options
 	records        *Records
-	artifacts      providerkit.ArtifactStore
+	artifacts      provider.ArtifactStore
 	images         *Images
 	cipher         *Cipher
 	bootstrap      *Bootstrap
 	stacks         *Stacks
-	resourceStacks providerkit.Stacks
+	resourceStacks provider.Stacks
 	creds          *Credentials
 	edges          *Edges
 	dns            *DNS
 }
 
-func New(_ context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
-	decoded, err := providerkit.Decode[Options](Vendor, settings.Options)
+func New(_ context.Context, settings provider.Settings) (provider.Provider, error) {
+	decoded, err := provider.Decode[Options](Vendor, settings.Options)
 	if err != nil {
 		return nil, err
 	}
-	provider := NewProvider(decoded)
-	return provider.Hook(provider.everyHook), nil
+	p := NewProvider(decoded)
+	return p.Hook(p.everyHook), nil
 }
 
 func NewProvider(options Options) *Provider {
@@ -75,33 +75,33 @@ func NewProvider(options Options) *Provider {
 		runtimeArch:   "amd64",
 		runtimeBinary: []byte(RuntimeBinary),
 	}
-	p.hooks = providerkit.Hooks{
+	p.hooks = provider.Hooks{
 		ProgramEdge:        p.ProgramEdge,
 		OpenRegistryImages: p.OpenRegistryImages,
-		Cost:               &providerkit.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
+		Cost:               &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
 	}
 	return p
 }
 
-func (p *Provider) Hooks() providerkit.Hooks {
+func (p *Provider) Hooks() provider.Hooks {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.hooks
 }
 
-func (p *Provider) Facts() providerkit.Facts {
-	return providerkit.Facts{
+func (p *Provider) Facts() provider.Facts {
+	return provider.Facts{
 		Vendor:          Vendor,
-		Bindings:        []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket},
-		Computes:        []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer},
+		Bindings:        []provider.BindingType{provider.BindingPostgres, provider.BindingBucket},
+		Computes:        []provider.Compute{provider.ComputeServerless, provider.ComputeContainer},
 		Edges:           p.edges.kinds(),
 		DefaultEdge:     KindRelay,
-		DNSKinds:        []providerkit.DNSKind{KindZone},
+		DNSKinds:        []provider.DNSKind{KindZone},
 		StoresArtifacts: true,
 	}
 }
 
-func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrap, error) {
+func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 	if _, err := p.edges.Open(kind); err != nil {
 		return nil, err
 	}
@@ -109,29 +109,29 @@ func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrap, error) {
 	return p.bootstrap, nil
 }
 
-func (p *Provider) Stacks() providerkit.Stacks {
+func (p *Provider) Stacks() provider.Stacks {
 	if p.resourceStacks != nil {
 		return p.resourceStacks
 	}
 	return p.stacks
 }
 
-func (p *Provider) Artifacts() providerkit.ArtifactStore { return p.artifacts }
+func (p *Provider) Artifacts() provider.ArtifactStore { return p.artifacts }
 
 func (p *Provider) Records() records.Store { return p.records }
 
 func (p *Provider) Cipher() records.Cipher { return p.cipher }
 
-func (p *Provider) Credentials() providerkit.Credentials { return p.creds }
+func (p *Provider) Credentials() provider.Credentials { return p.creds }
 
-func (p *Provider) Edges() providerkit.Edges { return p.edges }
+func (p *Provider) Edges() provider.Edges { return p.edges }
 
-func (p *Provider) DNS() providerkit.DNS { return p.dns }
+func (p *Provider) DNS() provider.DNS { return p.dns }
 
-func (p *Provider) Certificates() providerkit.Certificates { return certificates{p} }
+func (p *Provider) Certificates() provider.Certificates { return certificates{p} }
 
-func (p *Provider) Connector() providerkit.Connector { return connector{} }
+func (p *Provider) Connector() provider.Connector { return connector{} }
 
 func (p *Provider) Runtime() images.Runtime { return containerRuntime{p} }
 
-func (p *Provider) Liveness() providerkit.Liveness { return liveness{p} }
+func (p *Provider) Liveness() provider.Liveness { return liveness{p} }

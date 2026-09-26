@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/surface"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -13,7 +13,7 @@ import (
 
 const commentLimit = 128
 
-var longest = bootstrap.Namespace(strings.Repeat("a", providerkit.MaxNamespaceLength))
+var longest = bootstrap.Namespace(strings.Repeat("a", provider.MaxNamespaceLength))
 
 func TestNameCarriesTheNamespaceTheSlugAndTheClass(t *testing.T) {
 	if got, want := surface.Name("ocel", "shop", edge.ClassProduction), "ocel--shop--production"; got != want {

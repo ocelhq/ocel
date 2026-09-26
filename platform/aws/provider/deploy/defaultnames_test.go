@@ -1,5 +1,7 @@
 package deploy
 
-import "github.com/ocelhq/ocel/pkg/providerkit"
+import (
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+)
 
-const defaultNamespace = string(providerkit.DefaultNamespace)
+const defaultNamespace = string(provider.DefaultNamespace)

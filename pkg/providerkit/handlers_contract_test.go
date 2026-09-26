@@ -10,13 +10,14 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func TestConfigureHandsTheProviderTheTransformModulesTheProjectLists(t *testing.T) {
-	var seen providerkit.Settings
+	var seen provider.Settings
 	spec := providerkit.Spec{
 		Version: "test",
-		New: func(_ context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
+		New: func(_ context.Context, settings provider.Settings) (provider.Provider, error) {
 			seen = settings
 			return fake.NewProvider(fake.Options{}), nil
 		},
@@ -38,10 +39,10 @@ func TestConfigureHandsTheProviderTheTransformModulesTheProjectLists(t *testing.
 }
 
 func TestConfigureHandsTheProviderTheProjectItServes(t *testing.T) {
-	var seen providerkit.Settings
+	var seen provider.Settings
 	spec := providerkit.Spec{
 		Version: "test",
-		New: func(_ context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
+		New: func(_ context.Context, settings provider.Settings) (provider.Provider, error) {
 			seen = settings
 			return fake.NewProvider(fake.Options{}), nil
 		},

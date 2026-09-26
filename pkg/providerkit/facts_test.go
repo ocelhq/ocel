@@ -10,21 +10,22 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 type renderingTransforms struct{ *fake.Provider }
 
-func (r renderingTransforms) Facts() providerkit.Facts {
+func (r renderingTransforms) Facts() provider.Facts {
 	facts := r.Provider.Facts()
 	facts.RendersTransforms = true
 	return facts
 }
 
-func servedListingTransforms(t *testing.T, provider providerkit.Provider) contractv1connect.ProviderServiceClient {
+func servedListingTransforms(t *testing.T, p provider.Provider) contractv1connect.ProviderServiceClient {
 	t.Helper()
 	spec := providerkit.Spec{
 		Version: "1.0.0",
-		New:     func(context.Context, providerkit.Settings) (providerkit.Provider, error) { return provider, nil },
+		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return p, nil },
 	}
 	server := httptest.NewServer(providerkit.ConformanceMux(spec))
 	t.Cleanup(server.Close)

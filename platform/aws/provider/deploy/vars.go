@@ -13,8 +13,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
@@ -242,14 +242,14 @@ func checkEdgeOwnedNames(app string, plain map[string]string) error {
 	)
 }
 
-func checkEdgeVariables(app string, values providerkit.AppValues, ciphertext []byte) error {
+func checkEdgeVariables(app string, values provider.AppValues, ciphertext []byte) error {
 	if err := checkEdgeOwnedNames(app, values.Plain); err != nil {
 		return err
 	}
 	return checkEdgeEnvBudget(app, plainEnv(values), ciphertext)
 }
 
-func plainEnv(values providerkit.AppValues) map[string]string {
+func plainEnv(values provider.AppValues) map[string]string {
 	env := make(map[string]string, len(values.Plain)+1)
 	maps.Copy(env, values.Plain)
 	if values.Folder != "" {

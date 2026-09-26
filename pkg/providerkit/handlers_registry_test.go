@@ -12,9 +12,9 @@ import (
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -29,7 +29,7 @@ type hosting struct {
 	refusal error
 }
 
-func (h *hosting) Hooks() providerkit.Hooks {
+func (h *hosting) Hooks() provider.Hooks {
 	hooks := h.Provider.Hooks()
 	hooks.EnsureImageRegistry = h.EnsureImageRegistry
 	return hooks
@@ -55,9 +55,9 @@ func (h *hosting) repositories() [][]string {
 	return h.asked
 }
 
-func registryServed(t *testing.T, provider providerkit.Provider) contractv1connect.ProviderServiceClient {
+func registryServed(t *testing.T, p provider.Provider) contractv1connect.ProviderServiceClient {
 	t.Helper()
-	return servedProvider(t, "1.0.0", provider)
+	return servedProvider(t, "1.0.0", p)
 }
 
 func TestAProviderWithNoRegistryOfItsOwnLeavesTheResolveUnimplemented(t *testing.T) {

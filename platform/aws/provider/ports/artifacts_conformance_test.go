@@ -14,8 +14,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/ports"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -102,20 +102,20 @@ func (b classBuckets) Buckets(_ context.Context, class edge.Class) (ports.Bucket
 	return held, nil
 }
 
-func providerkitCacheRef() providerkit.ArtifactRef {
-	return providerkit.ArtifactRef{Class: edge.ClassProduction, Bucket: providerkit.StoreCache, Key: "shop/prod/web/cache.json"}
+func providerkitCacheRef() provider.ArtifactRef {
+	return provider.ArtifactRef{Class: edge.ClassProduction, Bucket: provider.StoreCache, Key: "shop/prod/web/cache.json"}
 }
 
-func everyStoreRef() []providerkit.ArtifactRef {
-	return []providerkit.ArtifactRef{
-		{Class: edge.ClassProduction, Bucket: providerkit.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
-		{Class: edge.ClassProduction, Bucket: providerkit.StoreAssets, Key: "shop/prod/web/static/app.js"},
+func everyStoreRef() []provider.ArtifactRef {
+	return []provider.ArtifactRef{
+		{Class: edge.ClassProduction, Bucket: provider.StoreFunctions, Key: "shop/prod/web/bundle.zip"},
+		{Class: edge.ClassProduction, Bucket: provider.StoreAssets, Key: "shop/prod/web/static/app.js"},
 		providerkitCacheRef(),
 	}
 }
 
 func TestArtifactsRunTheKitsPortTier(t *testing.T) {
-	conformance.RunArtifactStore(t, providerkit.Facts{StoresArtifacts: true}, artifacts())
+	conformance.RunArtifactStore(t, provider.Facts{StoresArtifacts: true}, artifacts())
 }
 
 func TestAStoreThisAccountHasNoBucketForRefusesRatherThanWritingNowhere(t *testing.T) {

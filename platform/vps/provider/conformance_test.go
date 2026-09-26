@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -27,7 +28,7 @@ func TestTheDNSRegistryOpensACloudflareWriter(t *testing.T) {
 	registry := p.DNS()
 
 	conformance.RunDNS(t, p.Facts(), registry)
-	if got := p.Facts().DNSKinds; !slices.Equal(got, []providerkit.DNSKind{"cloudflare"}) {
+	if got := p.Facts().DNSKinds; !slices.Equal(got, []provider.DNSKind{"cloudflare"}) {
 		t.Errorf("Facts().DNSKinds = %v, want cloudflare alone", got)
 	}
 	writer, err := registry.Open("cloudflare", "app.com", "")
@@ -75,7 +76,7 @@ func TestVPSProvider(t *testing.T) {
 
 	conformance.Run(t, conformance.Suite{
 		Spec:    providerkit.Spec{Version: "test", New: vps.New},
-		Options: providerkit.Options{"ssh": map[string]any{"host": "203.0.113.10"}},
+		Options: provider.Options{"ssh": map[string]any{"host": "203.0.113.10"}},
 		Binary:  buildProvider(t),
 		Certificates: &conformance.CertificateChecks{
 			Kind:      boxedge.Kind,
@@ -93,7 +94,7 @@ func TestTheProviderCarriesTheVendorAndSetsTheHooksABoxImplements(t *testing.T) 
 	if p.Facts().Vendor != vps.Vendor {
 		t.Errorf("Facts().Vendor = %q, want %q", p.Facts().Vendor, vps.Vendor)
 	}
-	if got := p.Facts().Bindings; !slices.Equal(got, []providerkit.BindingType{providerkit.BindingPostgres, providerkit.BindingBucket}) {
+	if got := p.Facts().Bindings; !slices.Equal(got, []provider.BindingType{provider.BindingPostgres, provider.BindingBucket}) {
 		t.Errorf("Facts().Bindings = %v, want the binding types a box provisions for itself", got)
 	}
 
@@ -122,14 +123,14 @@ func TestTheReleasePortRefusesTheResourcesThisProviderServesNoneOf(t *testing.T)
 
 	ctx := context.Background()
 	release := vps.NewProvider(vps.Options{SSH: vps.Target{Host: "203.0.113.10"}}).Stacks()
-	plan := providerkit.StackPlan{
-		Ref: providerkit.StackRef{
+	plan := provider.StackPlan{
+		Ref: provider.StackRef{
 			Project: "shop",
 			Class:   edge.ClassProduction,
 			Name:    naming.InfraStack("prod"),
 		},
-		Kind:      providerkit.StackInfra,
-		Resources: []providerkit.Resource{{Name: "orders", Type: providerkit.BindingPostgres}},
+		Kind:      provider.StackInfra,
+		Resources: []provider.Resource{{Name: "orders", Type: provider.BindingPostgres}},
 	}
 
 	var refusal refusal.Refusal

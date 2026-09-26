@@ -9,7 +9,7 @@ import (
 	"google.golang.org/api/cloudresourcemanager/v1"
 	firestoreadmin "google.golang.org/api/firestore/v1"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -75,8 +75,8 @@ var deployRoles = []string{
 	"roles/run.admin",
 }
 
-func rolesFor(tier providerkit.CredentialTier) []string {
-	if tier != providerkit.TierBootstrap {
+func rolesFor(tier provider.CredentialTier) []string {
+	if tier != provider.TierBootstrap {
 		return deployRoles
 	}
 	granted := slices.Clone(deployRoles)

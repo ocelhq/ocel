@@ -11,8 +11,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -61,24 +61,24 @@ func (r *recordingProgress) reported() []string {
 	return append(slices.Clone(r.said), r.spans...)
 }
 
-func siblingAppPlan(t *testing.T, app string) providerkit.StackPlan {
+func siblingAppPlan(t *testing.T, app string) provider.StackPlan {
 	t.Helper()
 	coord := storageCoordinate("prod", "shop", app, fixedRelease(t))
-	return providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: coord.Stack()},
-		Kind: providerkit.StackApp,
+	return provider.StackPlan{
+		Ref:  provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: coord.Stack()},
+		Kind: provider.StackApp,
 		Edge: fakeEdgeOf(cloudfront.Kind),
-		App: &providerkit.AppPlan{
+		App: &provider.AppPlan{
 			App:        app,
 			Framework:  appbuild.FrameworkNext,
 			Entry:      "fn--" + app + "--entry",
 			Deployment: "d1",
-			Functions: []providerkit.FunctionSpec{
-				{Name: "fn--" + app + "--entry", Artifact: providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: app + "-entry.zip"}},
+			Functions: []provider.FunctionSpec{
+				{Name: "fn--" + app + "--entry", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: app + "-entry.zip"}},
 			},
-			Routing:     &providerkit.RoutingPlan{Entry: "fn--" + app + "--entry", Manifest: []byte(routedManifest)},
-			ISR:         &providerkit.ISRPlan{Prefix: isrPrefixOf(coord), TagNamespace: "tag:shop"},
-			Bytecode:    &providerkit.BytecodePlan{Prefix: bytecodePrefixOf(coord)},
+			Routing:     &provider.RoutingPlan{Entry: "fn--" + app + "--entry", Manifest: []byte(routedManifest)},
+			ISR:         &provider.ISRPlan{Prefix: isrPrefixOf(coord), TagNamespace: "tag:shop"},
+			Bytecode:    &provider.BytecodePlan{Prefix: bytecodePrefixOf(coord)},
 			AssetPrefix: coord.AssetKey(""),
 		},
 	}
@@ -119,7 +119,7 @@ func TestOneReleaserStandsUpSiblingAppStacksAtOnce(t *testing.T) {
 
 	var wg sync.WaitGroup
 	failures := make([]error, len(apps))
-	results := make([]providerkit.StackResult, len(apps))
+	results := make([]provider.StackResult, len(apps))
 	reports := make([]*recordingProgress, len(apps))
 	for slot, app := range apps {
 		reports[slot] = &recordingProgress{}
@@ -147,7 +147,7 @@ func TestOneReleaserStandsUpSiblingAppStacksAtOnce(t *testing.T) {
 			t.Errorf("the engine never ran %s: %v", stack, ran)
 		}
 
-		want := providerkit.Function{
+		want := provider.Function{
 			Name:     "fn--" + app + "--entry",
 			Physical: "shop-prod-" + app + "-entry",
 			URL:      "https://" + app + ".lambda-url.us-east-1.on.aws/",

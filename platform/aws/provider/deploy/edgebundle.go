@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -96,7 +96,7 @@ func putEdgeBundle(ctx context.Context, cfg Config, app string, coord naming.Coo
 	return tracedPut(ctx, cfg.CacheStoreObjects, cfg.CacheStoreBucket, appEdgeSealedKey(coord), objectHeaders{contentType: "application/octet-stream"}, sealed.Ciphertext, stats)
 }
 
-func checkAppEdgeVariables(cfg Config, app string, values providerkit.AppValues, bundle appBundle) error {
+func checkAppEdgeVariables(cfg Config, app string, values provider.AppValues, bundle appBundle) error {
 	_, ok, err := readEdgeBundle(cfg, app)
 	if err != nil || !ok {
 		return err

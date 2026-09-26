@@ -11,13 +11,13 @@ import (
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
 )
 
-var artifactStores = []string{providerkit.StoreFunctions, providerkit.StoreAssets, providerkit.StoreCache}
+var artifactStores = []string{provider.StoreFunctions, provider.StoreAssets, provider.StoreCache}
 
 type artifacts struct {
 	p *Provider
@@ -38,7 +38,7 @@ func (a artifacts) bucket(ctx context.Context, class edge.Class) (*storage.Bucke
 	return client.Bucket(clients.Bucket(class)), nil
 }
 
-func objectName(ref providerkit.ArtifactRef) (string, error) {
+func objectName(ref provider.ArtifactRef) (string, error) {
 	for _, store := range artifactStores {
 		if ref.Bucket == store {
 			return store + "/" + ref.Key, nil
@@ -46,10 +46,10 @@ func objectName(ref providerkit.ArtifactRef) (string, error) {
 	}
 	return "", refusal.Refuse(refusal.CodeInvalid,
 		"this provider keeps no %q store; it keeps %q, %q and %q",
-		ref.Bucket, providerkit.StoreFunctions, providerkit.StoreAssets, providerkit.StoreCache)
+		ref.Bucket, provider.StoreFunctions, provider.StoreAssets, provider.StoreCache)
 }
 
-func (a artifacts) object(ctx context.Context, ref providerkit.ArtifactRef) (*storage.ObjectHandle, error) {
+func (a artifacts) object(ctx context.Context, ref provider.ArtifactRef) (*storage.ObjectHandle, error) {
 	name, err := objectName(ref)
 	if err != nil {
 		return nil, err
@@ -61,7 +61,7 @@ func (a artifacts) object(ctx context.Context, ref providerkit.ArtifactRef) (*st
 	return bucket.Object(name), nil
 }
 
-func (a artifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io.Reader) error {
+func (a artifacts) Put(ctx context.Context, ref provider.ArtifactRef, body io.Reader) error {
 	object, err := a.object(ctx, ref)
 	if err != nil {
 		return err
@@ -77,7 +77,7 @@ func (a artifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io
 	return nil
 }
 
-func (a artifacts) Has(ctx context.Context, ref providerkit.ArtifactRef) (bool, error) {
+func (a artifacts) Has(ctx context.Context, ref provider.ArtifactRef) (bool, error) {
 	object, err := a.object(ctx, ref)
 	if err != nil {
 		return false, err
@@ -91,7 +91,7 @@ func (a artifacts) Has(ctx context.Context, ref providerkit.ArtifactRef) (bool, 
 	return true, nil
 }
 
-func (a artifacts) Open(ctx context.Context, ref providerkit.ArtifactRef) (io.ReadCloser, error) {
+func (a artifacts) Open(ctx context.Context, ref provider.ArtifactRef) (io.ReadCloser, error) {
 	object, err := a.object(ctx, ref)
 	if err != nil {
 		return nil, err
@@ -160,7 +160,7 @@ func (a artifacts) storeless(ctx context.Context, class edge.Class, err error) e
 	if named == nil && (errors.Is(err, storage.ErrBucketNotExist) || absent(err)) {
 		return refusal.Refuse(refusal.CodeNotReady,
 			"this project has no %s bucket, so it has no %s artifact store yet.\nRun `%s` to create it, then try again",
-			names.Bucket(class), class, providerkit.BootstrapCommand(class))
+			names.Bucket(class), class, provider.BootstrapCommand(class))
 	}
 	return err
 }

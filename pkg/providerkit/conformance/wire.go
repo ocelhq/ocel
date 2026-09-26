@@ -24,6 +24,7 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const unknownOption = "an-option-no-provider-accepts"
@@ -112,32 +113,32 @@ func (s *spawned) refusesAnUnpairedClient(t *testing.T) {
 	}
 }
 
-func holdsTheSessionRules(t *testing.T, provider contractv1connect.ProviderServiceClient, options providerkit.Options) {
+func holdsTheSessionRules(t *testing.T, providerClient contractv1connect.ProviderServiceClient, options provider.Options) {
 	t.Helper()
 	ctx := context.Background()
 
-	_, err := provider.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{Slug: "conformance"})
+	_, err := providerClient.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{Slug: "conformance"})
 	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
 		t.Errorf("an RPC before Configure: code = %v, want %v", got, connect.CodeFailedPrecondition)
 	}
 
-	refused := providerkit.Options{unknownOption: true}
-	_, err = provider.Configure(ctx, configureWith(t, refused))
+	refused := provider.Options{unknownOption: true}
+	_, err = providerClient.Configure(ctx, configureWith(t, refused))
 	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
 		t.Errorf("Configure() with an unknown option: code = %v, want %v", got, connect.CodeInvalidArgument)
 	}
 
-	if _, err := provider.Configure(ctx, configureWith(t, options)); err != nil {
+	if _, err := providerClient.Configure(ctx, configureWith(t, options)); err != nil {
 		t.Fatalf("Configure() error = %v, want the session configured", err)
 	}
 
-	_, err = provider.Configure(ctx, configureWith(t, options))
+	_, err = providerClient.Configure(ctx, configureWith(t, options))
 	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
 		t.Errorf("a second Configure: code = %v, want %v", got, connect.CodeFailedPrecondition)
 	}
 
-	_, err = provider.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{Slug: "conformance"})
-	if _, refused := providerkit.RefusedCode(err); connect.CodeOf(err) == connect.CodeFailedPrecondition && !refused {
+	_, err = providerClient.ListEnvironments(ctx, &contractv1.ListEnvironmentsRequest{Slug: "conformance"})
+	if _, refused := provider.RefusedCode(err); connect.CodeOf(err) == connect.CodeFailedPrecondition && !refused {
 		t.Errorf("an RPC after Configure: %v, want the session to be past its precondition", err)
 	}
 }
@@ -214,7 +215,7 @@ func bootstrapStream(t *testing.T, provider contractv1connect.ProviderServiceCli
 	return seen
 }
 
-func configureWith(t *testing.T, options providerkit.Options) *contractv1.ConfigureRequest {
+func configureWith(t *testing.T, options provider.Options) *contractv1.ConfigureRequest {
 	t.Helper()
 	if options == nil {
 		return &contractv1.ConfigureRequest{Config: &contractv1.ProviderConfig{}}

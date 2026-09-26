@@ -18,49 +18,19 @@ import (
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-type ArtifactStore interface {
-	Put(ctx context.Context, ref ArtifactRef, body io.Reader) error
-
-	Has(ctx context.Context, ref ArtifactRef) (bool, error)
-
-	Open(ctx context.Context, ref ArtifactRef) (io.ReadCloser, error)
-
-	RemovePrefix(ctx context.Context, class edge.Class, prefix string, progress edge.Progress) error
-}
-
-type ArtifactRef struct {
-	Class  edge.Class `json:"class,omitempty"`
-	Bucket string     `json:"bucket,omitempty"`
-	Key    string     `json:"key,omitempty"`
-}
-
-const (
-	StoreFunctions = "functions"
-	StoreAssets    = "assets"
-	StoreCache     = "cache"
-)
-
-type Upload struct {
-	Name   string
-	Ref    ArtifactRef
-	Path   string
-	Digest string
-}
-
-const UploadKind = "artifact"
-
-func UploadRows(ctx context.Context, store ArtifactStore, uploads []Upload) ([]Change, error) {
-	rows := make([]Change, 0, len(uploads))
+func UploadRows(ctx context.Context, store provider.ArtifactStore, uploads []provider.Upload) ([]provider.Change, error) {
+	rows := make([]provider.Change, 0, len(uploads))
 	for _, upload := range uploads {
 		held, err := store.Has(ctx, upload.Ref)
 		if err != nil {
 			return nil, fmt.Errorf("look for %s's artifact: %w", upload.Name, err)
 		}
-		rows = append(rows, Change{Kind: UploadKind, Name: upload.Name, Action: standsOrCreates(held)})
+		rows = append(rows, provider.Change{Kind: provider.UploadKind, Name: upload.Name, Action: provider.KeepOrCreate(held)})
 	}
 	return rows, nil
 }
@@ -74,7 +44,7 @@ func takeUploadSlot() func() {
 	return func() { <-uploadSlots }
 }
 
-func ShipUploads(ctx context.Context, store ArtifactStore, uploads []Upload, progress edge.Progress) error {
+func ShipUploads(ctx context.Context, store provider.ArtifactStore, uploads []provider.Upload, progress edge.Progress) error {
 	group, ctx := errgroup.WithContext(ctx)
 	group.SetLimit(uploadConcurrency)
 	for _, upload := range uploads {
@@ -86,7 +56,7 @@ func ShipUploads(ctx context.Context, store ArtifactStore, uploads []Upload, pro
 	return group.Wait()
 }
 
-func ship(ctx context.Context, store ArtifactStore, upload Upload, progress edge.Progress) error {
+func ship(ctx context.Context, store provider.ArtifactStore, upload provider.Upload, progress edge.Progress) error {
 	held, err := store.Has(ctx, upload.Ref)
 	if err != nil {
 		return fmt.Errorf("look for %s's artifact: %w", upload.Name, err)
@@ -108,42 +78,29 @@ func ship(ctx context.Context, store ArtifactStore, upload Upload, progress edge
 	return nil
 }
 
-type AppPacking struct {
-	Ref    StackRef
-	Edge   edge.Kind
-	App    string
-	Values AppValues
-}
-
-type AppPack struct {
-	Overlay map[string][]byte
-
-	Packed any
-}
-
-func (r *deployRun) pack(ctx context.Context, entry AppEntry, values AppValues, progress edge.Progress) (AppPack, error) {
+func (r *deployRun) pack(ctx context.Context, entry provider.AppEntry, values provider.AppValues, progress edge.Progress) (provider.AppPack, error) {
 	packApp := r.provider.Hooks().PackApp
 	if packApp == nil {
-		return AppPack{}, nil
+		return provider.AppPack{}, nil
 	}
-	pack, err := packApp(ctx, AppPacking{
+	pack, err := packApp(ctx, provider.AppPacking{
 		Ref:    r.ref(entry.Stack),
 		Edge:   r.front.Kind(),
 		App:    entry.App,
 		Values: values,
 	}, progress)
 	if err != nil {
-		return AppPack{}, fmt.Errorf("pack %s's function package: %w", entry.App, err)
+		return provider.AppPack{}, fmt.Errorf("pack %s's function package: %w", entry.App, err)
 	}
 	return pack, nil
 }
 
 func (r *deployRun) stageFunctions(
 	ctx context.Context,
-	entry AppEntry,
-	pack AppPack,
-	routing *RoutingPlan,
-) ([]Upload, []images.Push, error) {
+	entry provider.AppEntry,
+	pack provider.AppPack,
+	routing *provider.RoutingPlan,
+) ([]provider.Upload, []images.Push, error) {
 	if hooks := r.provider.Hooks(); hooks.FunctionImages != nil {
 		pushes, err := r.imageFunctions(ctx, hooks, entry, pack, routing)
 		return nil, pushes, err
@@ -152,7 +109,7 @@ func (r *deployRun) stageFunctions(
 	return staged, nil, err
 }
 
-func (r *deployRun) stageApp(entry AppEntry, pack AppPack, routing *RoutingPlan) ([]Upload, error) {
+func (r *deployRun) stageApp(entry provider.AppEntry, pack provider.AppPack, routing *provider.RoutingPlan) ([]provider.Upload, error) {
 	root := appbuild.ArtifactRoot()
 	var shipping []*contractv1.ManifestFunction
 	for _, fn := range r.manifest.GetFunctions() {
@@ -160,7 +117,7 @@ func (r *deployRun) stageApp(entry AppEntry, pack AppPack, routing *RoutingPlan)
 			shipping = append(shipping, fn)
 		}
 	}
-	staged := make([]Upload, len(shipping))
+	staged := make([]provider.Upload, len(shipping))
 	var group errgroup.Group
 	group.SetLimit(uploadConcurrency)
 	for slot, fn := range shipping {
@@ -181,7 +138,7 @@ func (r *deployRun) stageApp(entry AppEntry, pack AppPack, routing *RoutingPlan)
 	return staged, nil
 }
 
-func discardStaged(staged []Upload) {
+func discardStaged(staged []provider.Upload) {
 	for _, upload := range staged {
 		if upload.Path != "" {
 			os.Remove(upload.Path)
@@ -189,7 +146,7 @@ func discardStaged(staged []Upload) {
 	}
 }
 
-func overlayFor(base map[string][]byte, fn *contractv1.ManifestFunction, routing *RoutingPlan) map[string][]byte {
+func overlayFor(base map[string][]byte, fn *contractv1.ManifestFunction, routing *provider.RoutingPlan) map[string][]byte {
 	if routing == nil || routeOf(fn) != routing.Entry {
 		return base
 	}
@@ -216,34 +173,34 @@ func stagedDir(root string, fn *contractv1.ManifestFunction) (string, error) {
 
 func (r *deployRun) stageArtifact(
 	root string,
-	entry AppEntry,
+	entry provider.AppEntry,
 	fn *contractv1.ManifestFunction,
 	overlay map[string][]byte,
-) (Upload, error) {
+) (provider.Upload, error) {
 	name := fn.GetLogicalName()
 	dir, err := stagedDir(root, fn)
 	if err != nil {
-		return Upload{}, err
+		return provider.Upload{}, err
 	}
 	rels, err := images.ArtifactFiles(dir)
 	if err != nil {
-		return Upload{}, fmt.Errorf("read %s's artifact: %w", name, err)
+		return provider.Upload{}, fmt.Errorf("read %s's artifact: %w", name, err)
 	}
 	sum, err := digestArtifact(dir, rels, overlay)
 	if err != nil {
-		return Upload{}, fmt.Errorf("read %s's artifact: %w", name, err)
+		return provider.Upload{}, fmt.Errorf("read %s's artifact: %w", name, err)
 	}
-	coordinate := r.plan.coordinate(entry.App, entry.Build.Release())
+	coordinate := appCoordinate(r.plan, entry.App, entry.Build.Release())
 	coordinate.Name = name
 
 	path, err := packArtifact(dir, rels, overlay)
 	if err != nil {
-		return Upload{}, fmt.Errorf("pack %s's artifact: %w", name, err)
+		return provider.Upload{}, fmt.Errorf("pack %s's artifact: %w", name, err)
 	}
 
-	return Upload{
+	return provider.Upload{
 		Name:   name,
-		Ref:    ArtifactRef{Class: r.plan.Class, Bucket: StoreFunctions, Key: coordinate.FunctionArtifactKey(sum)},
+		Ref:    provider.ArtifactRef{Class: r.plan.Class, Bucket: provider.StoreFunctions, Key: coordinate.FunctionArtifactKey(sum)},
 		Path:   path,
 		Digest: sum,
 	}, nil

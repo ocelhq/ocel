@@ -16,9 +16,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -28,34 +28,34 @@ type packingProvider struct {
 	*fake.Provider
 
 	mu     sync.Mutex
-	packed []providerkit.AppPacking
+	packed []provider.AppPacking
 }
 
-func (p *packingProvider) Hooks() providerkit.Hooks {
+func (p *packingProvider) Hooks() provider.Hooks {
 	hooks := p.Provider.Hooks()
 	hooks.PackApp = p.PackApp
 	return hooks
 }
 
-func (p *packingProvider) PackApp(_ context.Context, packing providerkit.AppPacking, _ edge.Progress) (providerkit.AppPack, error) {
+func (p *packingProvider) PackApp(_ context.Context, packing provider.AppPacking, _ edge.Progress) (provider.AppPack, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.packed = append(p.packed, packing)
-	return providerkit.AppPack{
+	return provider.AppPack{
 		Overlay: map[string][]byte{sealedFile: []byte("sealed for " + packing.App)},
 		Packed:  "bundle for " + packing.App,
 	}, nil
 }
 
-func (p *packingProvider) packings() []providerkit.AppPacking {
+func (p *packingProvider) packings() []provider.AppPacking {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return append([]providerkit.AppPacking(nil), p.packed...)
+	return append([]provider.AppPacking(nil), p.packed...)
 }
 
-func packagedFiles(t *testing.T, provider providerkit.Provider, ref providerkit.ArtifactRef) map[string]string {
+func packagedFiles(t *testing.T, p provider.Provider, ref provider.ArtifactRef) map[string]string {
 	t.Helper()
-	opened, err := provider.Artifacts().Open(context.Background(), ref)
+	opened, err := p.Artifacts().Open(context.Background(), ref)
 	if err != nil {
 		t.Fatalf("Open(%+v) = %v, want the uploaded package", ref, err)
 	}
@@ -178,11 +178,11 @@ func (p *countingProvider) uploads() map[string]int {
 }
 
 type countedArtifacts struct {
-	providerkit.ArtifactStore
+	provider.ArtifactStore
 	on *countingProvider
 }
 
-func (c countedArtifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io.Reader) error {
+func (c countedArtifacts) Put(ctx context.Context, ref provider.ArtifactRef, body io.Reader) error {
 	c.on.mu.Lock()
 	c.on.puts[ref.Key]++
 	c.on.mu.Unlock()
@@ -222,7 +222,7 @@ type barrierProvider struct {
 }
 
 type barrierArtifacts struct {
-	providerkit.ArtifactStore
+	provider.ArtifactStore
 
 	want  int
 	ready chan struct{}
@@ -232,7 +232,7 @@ type barrierArtifacts struct {
 	peak  int
 }
 
-func (b *barrierArtifacts) Put(ctx context.Context, ref providerkit.ArtifactRef, body io.Reader) error {
+func (b *barrierArtifacts) Put(ctx context.Context, ref provider.ArtifactRef, body io.Reader) error {
 	b.mu.Lock()
 	b.going++
 	b.peak = max(b.peak, b.going)

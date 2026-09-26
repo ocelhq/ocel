@@ -16,8 +16,8 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 	"github.com/google/go-containerregistry/pkg/v1/tarball"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/host"
 )
@@ -217,7 +217,7 @@ func TestLiveAnImageIsCarriedOntoTheMachineUnderTheCoordinateItWasBuiltAs(t *tes
 		t.Fatalf("the machine claims %s before anything carried it, so the transfer cannot be proven here", coordinate)
 	}
 
-	plan := providerkit.ImagePushes{Store: store, Pushes: []images.Push{push}}
+	plan := provider.ImagePushes{Store: store, Pushes: []images.Push{push}}
 	if err := plan.PushMissing(ctx, nil); err != nil {
 		t.Fatalf("PushMissing() onto a machine with no registry account = %v", err)
 	}
@@ -248,7 +248,7 @@ func TestLiveARedeployOfAnUnchangedAppCarriesTheImageNoSecondTime(t *testing.T) 
 	if err != nil {
 		t.Fatalf("OpenDirectImages() = %v", err)
 	}
-	plan := providerkit.ImagePushes{Store: store, Pushes: []images.Push{transferPush(daemon, client, runtime)}}
+	plan := provider.ImagePushes{Store: store, Pushes: []images.Push{transferPush(daemon, client, runtime)}}
 	if err := plan.PushMissing(ctx, nil); err != nil {
 		t.Fatalf("PushMissing() = %v", err)
 	}
@@ -259,8 +259,8 @@ func TestLiveARedeployOfAnUnchangedAppCarriesTheImageNoSecondTime(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Rows() = %v", err)
 	}
-	if len(rows) != 1 || rows[0].Action != providerkit.ActionKeep {
-		t.Errorf("the plan shows %v for an image the machine already holds, want one %q row", rows, providerkit.ActionKeep)
+	if len(rows) != 1 || rows[0].Action != provider.ActionKeep {
+		t.Errorf("the plan shows %v for an image the machine already holds, want one %q row", rows, provider.ActionKeep)
 	}
 	if err := plan.PushMissing(ctx, nil); err != nil {
 		t.Fatalf("a second Ship over a machine that already holds the digest = %v: the image is gone from this machine's daemon, so the transfer was attempted rather than skipped", err)

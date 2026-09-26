@@ -6,30 +6,26 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
 const ownedPrefix = "OCEL_"
 
-func ResourceEnvName(kind BindingType, resource string) string {
-	return naming.ResourceEnvName(WireBindingType(kind), resource)
-}
-
-func imaged(provider Provider, compute Compute) bool {
+func imaged(p provider.Provider, compute provider.Compute) bool {
 	switch compute {
-	case ComputeContainer:
+	case provider.ComputeContainer:
 		return true
-	case ComputeServerless:
-		return provider.Hooks().FunctionImages != nil
+	case provider.ComputeServerless:
+		return p.Hooks().FunctionImages != nil
 	}
 	return false
 }
 
-func (r *deployRun) deliver(entry AppEntry, held AppValues) map[string]string {
+func (r *deployRun) deliver(entry provider.AppEntry, held provider.AppValues) map[string]string {
 	if !imaged(r.provider, entry.Compute()) {
 		return nil
 	}
@@ -43,7 +39,7 @@ func (r *deployRun) deliver(entry AppEntry, held AppValues) map[string]string {
 func (r *deployRun) refuseUnsetSecret(app, key string) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"app %s declares %s as a secret and nothing is stored for it in %s: a container is handed the value the deploy resolved, so an unset secret is refused here rather than at the app's first read. Set it with `ocel env set %s <value>`",
-		app, key, describeCoordinate(string(r.plan.Class), r.plan.bindingEnvironment()), key)
+		app, key, describeCoordinate(string(r.plan.Class), bindingEnvironment(r.plan)), key)
 }
 
 func (r *deployRun) refuseContainerValues(ctx context.Context) error {
@@ -81,7 +77,7 @@ func (r *deployRun) storedCells(ctx context.Context) (map[envvars.Cell]bool, err
 	if err != nil {
 		return nil, err
 	}
-	shadowed := map[string]bool{"": true, r.plan.bindingEnvironment(): true}
+	shadowed := map[string]bool{"": true, bindingEnvironment(r.plan): true}
 	stored := make(map[envvars.Cell]bool, len(held))
 	for _, metadata := range held {
 		if shadowed[metadata.Coordinate.Environment] {
@@ -91,7 +87,7 @@ func (r *deployRun) storedCells(ctx context.Context) (map[envvars.Cell]bool, err
 	return stored, nil
 }
 
-func refuseOwnedNames(app string, clientBundle bool, held AppValues) error {
+func refuseOwnedNames(app string, clientBundle bool, held provider.AppValues) error {
 	var injected, served, owned []string
 	for _, key := range declaredNames(clientBundle, held) {
 		switch {
@@ -121,7 +117,7 @@ func refuseOwnedNames(app string, clientBundle bool, held AppValues) error {
 	return nil
 }
 
-func declaredNames(clientBundle bool, held AppValues) []string {
+func declaredNames(clientBundle bool, held provider.AppValues) []string {
 	names := make([]string, 0, len(held.Plain)+len(held.Sensitive)+len(held.Secrets))
 	for _, named := range []map[string]string{held.Plain, held.Sensitive} {
 		for key := range named {

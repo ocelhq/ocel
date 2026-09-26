@@ -8,7 +8,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 func masterUserSecret(args pulumi.MockResourceArgs) resource.PropertyMap {
@@ -33,7 +33,7 @@ func TestPostgresRefusesAClusterWithNoManagedSecret(t *testing.T) {
 	}
 
 	err := pulumi.RunErr(func(ctx *pulumi.Context) error {
-		return registerPostgres(ctx, "shop", "prod", "db--main", translatePostgres(&providerkit.PostgresSpec{}), "vpc-1", "10.0.0.0/16", []string{"subnet-1", "subnet-2"})
+		return registerPostgres(ctx, "shop", "prod", "db--main", translatePostgres(&provider.PostgresSpec{}), "vpc-1", "10.0.0.0/16", []string{"subnet-1", "subnet-2"})
 	}, pulumi.WithMocks("shop", "prod--infra", &tagRecorder{outputs: noSecret}))
 
 	if err == nil {
@@ -46,7 +46,7 @@ func TestPostgresRefusesAClusterWithNoManagedSecret(t *testing.T) {
 
 func TestPostgresComponentTags(t *testing.T) {
 	rec := recordTags(t, func(ctx *pulumi.Context) error {
-		err := registerPostgres(ctx, "shop", "prod", "db--main", translatePostgres(&providerkit.PostgresSpec{}), "vpc-1", "10.0.0.0/16", []string{"subnet-1", "subnet-2"})
+		err := registerPostgres(ctx, "shop", "prod", "db--main", translatePostgres(&provider.PostgresSpec{}), "vpc-1", "10.0.0.0/16", []string{"subnet-1", "subnet-2"})
 		return err
 	}, masterUserSecret)
 
@@ -69,7 +69,7 @@ func TestPostgresComponentTags(t *testing.T) {
 func TestPostgresDescriptionsFitAWSLimits(t *testing.T) {
 	long := strings.Repeat("storefront-", 40)
 	rec := recordTags(t, func(ctx *pulumi.Context) error {
-		return registerPostgres(ctx, long, "prod", "db--main", translatePostgres(&providerkit.PostgresSpec{}), "vpc-1", "10.0.0.0/16", []string{"subnet-1", "subnet-2"})
+		return registerPostgres(ctx, long, "prod", "db--main", translatePostgres(&provider.PostgresSpec{}), "vpc-1", "10.0.0.0/16", []string{"subnet-1", "subnet-2"})
 	}, masterUserSecret)
 
 	sg := rec.inputsOf(t, "aws:ec2/securityGroup:SecurityGroup", "db-main-security-group")
@@ -190,7 +190,7 @@ func TestTranslatePostgres(t *testing.T) {
 	t.Run("fixed serverless v2 defaults", func(t *testing.T) {
 		t.Parallel()
 
-		got := translatePostgres(&providerkit.PostgresSpec{Version: "15"})
+		got := translatePostgres(&provider.PostgresSpec{Version: "15"})
 
 		if got.Engine != "aurora-postgresql" {
 			t.Errorf("Engine = %q, want aurora-postgresql", got.Engine)
@@ -236,7 +236,7 @@ func TestTranslatePostgres(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got := translatePostgres(&providerkit.PostgresSpec{Version: tc.version})
+			got := translatePostgres(&provider.PostgresSpec{Version: tc.version})
 			if got.EngineVersion != tc.want {
 				t.Errorf("EngineVersion = %q, want %q", got.EngineVersion, tc.want)
 			}

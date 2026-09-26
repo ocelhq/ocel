@@ -21,8 +21,8 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/connectorkit"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/target"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -44,33 +44,33 @@ const (
 	connectorAccountNote = "the identity the ocel connector answers the console as"
 )
 
-const connectorCompute = providerkit.ComputeServerless
+const connectorCompute = provider.ComputeServerless
 
 type connector struct{ *Provider }
 
-func (p connector) Target(ctx context.Context) (providerkit.ConnectorTarget, error) {
+func (p connector) Target(ctx context.Context) (provider.ConnectorTarget, error) {
 	names, err := p.Names(ctx)
 	if err != nil {
-		return providerkit.ConnectorTarget{}, err
+		return provider.ConnectorTarget{}, err
 	}
 	if err := names.connectorFits(); err != nil {
-		return providerkit.ConnectorTarget{}, err
+		return provider.ConnectorTarget{}, err
 	}
 	fingerprint, err := target.Fingerprint("gcp", names.project, p.options.Region, string(names.Namespace()))
 	if err != nil {
-		return providerkit.ConnectorTarget{}, err
+		return provider.ConnectorTarget{}, err
 	}
-	described := providerkit.ConnectorTarget{Fingerprint: fingerprint, Arch: ConnectorArch}
+	described := provider.ConnectorTarget{Fingerprint: fingerprint, Arch: ConnectorArch}
 
 	standing, err := p.connectorService(ctx)
 	if err != nil {
-		return providerkit.ConnectorTarget{}, err
+		return provider.ConnectorTarget{}, err
 	}
 	if standing == nil {
 		return described, nil
 	}
 	described.Hostname = hostOf(standing.Uri)
-	described.Installed = &providerkit.ConnectorRelease{
+	described.Installed = &provider.ConnectorRelease{
 		Version:   connectorVersionOf(standing),
 		PublicKey: connectorPublicKeyOf(standing),
 		Compute:   connectorCompute,
@@ -78,57 +78,57 @@ func (p connector) Target(ctx context.Context) (providerkit.ConnectorTarget, err
 	return described, nil
 }
 
-func (p connector) Install(ctx context.Context, install providerkit.ConnectorInstall,
-	progress edge.Progress) (providerkit.ConnectorAddress, error) {
-	compute, err := providerkit.ConnectorCompute(install.Compute, connectorCompute)
+func (p connector) Install(ctx context.Context, install provider.ConnectorInstall,
+	progress edge.Progress) (provider.ConnectorAddress, error) {
+	compute, err := provider.ConnectorCompute(install.Compute, connectorCompute)
 	if err != nil {
-		return providerkit.ConnectorAddress{}, err
+		return provider.ConnectorAddress{}, err
 	}
 	names, err := p.Names(ctx)
 	if err != nil {
-		return providerkit.ConnectorAddress{}, err
+		return provider.ConnectorAddress{}, err
 	}
 	if err := names.connectorFits(); err != nil {
-		return providerkit.ConnectorAddress{}, err
+		return provider.ConnectorAddress{}, err
 	}
 	if len(install.Config) == 0 {
-		return providerkit.ConnectorAddress{}, refusal.Refuse(refusal.CodeInvalid,
+		return provider.ConnectorAddress{}, refusal.Refuse(refusal.CodeInvalid,
 			"this install carries no connector config, so nothing would name the console the service trusts")
 	}
 	if p.emulated() {
-		return providerkit.ConnectorAddress{}, refusal.Refuse(refusal.CodeNotReady,
+		return provider.ConnectorAddress{}, refusal.Refuse(refusal.CodeNotReady,
 			"this run talks to an emulator, which stands up no Cloud Run service and hands out no url a console could dial: add the connector against the project itself")
 	}
 
 	trust, err := connectorkit.ParseConfig(install.Config, "this install")
 	if err != nil {
-		return providerkit.ConnectorAddress{}, refusal.Refuse(refusal.CodeInvalid, "%s", err)
+		return provider.ConnectorAddress{}, refusal.Refuse(refusal.CodeInvalid, "%s", err)
 	}
 
 	image, err := p.pushedConnector(ctx, install.Binary, progress)
 	if err != nil {
-		return providerkit.ConnectorAddress{}, err
+		return provider.ConnectorAddress{}, err
 	}
 	if err := p.standConnectorAccount(ctx, trust.Grants, progress); err != nil {
-		return providerkit.ConnectorAddress{}, err
+		return provider.ConnectorAddress{}, err
 	}
 	publicKey, err := p.connectorKey(ctx, progress)
 	if err != nil {
-		return providerkit.ConnectorAddress{}, err
+		return provider.ConnectorAddress{}, err
 	}
 	if err := p.bindConnectorKeySecret(ctx, true); err != nil {
-		return providerkit.ConnectorAddress{}, err
+		return provider.ConnectorAddress{}, err
 	}
 	config, err := keyPathed(install.Config, connectorKeyPath)
 	if err != nil {
-		return providerkit.ConnectorAddress{}, err
+		return provider.ConnectorAddress{}, err
 	}
 
 	released, err := p.stand(ctx, serving{
 		service: names.Connector(),
 		image:   image,
 		account: names.ConnectorAccountEmail(),
-		compute: providerkit.ComputeServerless,
+		compute: provider.ComputeServerless,
 		public:  true,
 		memory:  connectorMemory,
 		timeout: connectorTimeout,
@@ -136,22 +136,22 @@ func (p connector) Install(ctx context.Context, install providerkit.ConnectorIns
 		most:    connectorInstances,
 		mounts:  []secretMount{connectorKeyMount(names.ConnectorKeySecret())},
 		env: map[string]string{
-			providerkit.NamespaceEnvVar:       string(names.Namespace()),
-			ports.ProjectEnvVar:               names.project,
-			ports.RegionEnvVar:                p.options.Region,
-			connectorVersionEnv:               install.Version,
-			connectorPublicKeyEnv:             publicKey,
-			providerkit.ConnectorConfigEnvVar: string(config),
+			provider.NamespaceEnvVar:       string(names.Namespace()),
+			ports.ProjectEnvVar:            names.project,
+			ports.RegionEnvVar:             p.options.Region,
+			connectorVersionEnv:            install.Version,
+			connectorPublicKeyEnv:          publicKey,
+			provider.ConnectorConfigEnvVar: string(config),
 		},
 	}, progress)
 	if err != nil {
-		return providerkit.ConnectorAddress{}, err
+		return provider.ConnectorAddress{}, err
 	}
 	if released.url == "" {
-		return providerkit.ConnectorAddress{}, refusal.Refuse(refusal.CodeNotReady,
+		return provider.ConnectorAddress{}, refusal.Refuse(refusal.CodeNotReady,
 			"%s stands and published no url, so the console has nothing to dial", names.Connector())
 	}
-	return providerkit.ConnectorAddress{URL: released.url, PublicKey: publicKey, Compute: compute}, nil
+	return provider.ConnectorAddress{URL: released.url, PublicKey: publicKey, Compute: compute}, nil
 }
 
 func (p connector) Remove(ctx context.Context, progress edge.Progress) error {

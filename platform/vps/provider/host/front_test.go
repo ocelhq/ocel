@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
@@ -212,7 +212,7 @@ func TestABootstrapRecordsWhichProxyFrontsTheBoxAndWhoSetIt(t *testing.T) {
 	stood := settledOn(t, class)
 	stood.stands[class] = unrecorded(stood, class)
 	if err := NewBootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
-		providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil); err != nil {
+		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	at := stood.at("/dev/stdin " + quoted(FrontRecordPath))
@@ -234,7 +234,7 @@ func TestABootstrapLeavesARecordThatAgreesAsItStands(t *testing.T) {
 	stood := settledOn(t, class)
 	recordOn(t, stood, class, Front{}, "blog")
 	if err := NewBootstrap(stood.host(), testVendor, "shop").Apply(context.Background(),
-		providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil); err != nil {
+		provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	if at := stood.at("/dev/stdin " + quoted(FrontRecordPath)); at >= 0 {
@@ -248,7 +248,7 @@ func TestABootstrapWhoseProxyTheBoxDoesNotRouteThroughIsRefusedWithWhatToWrite(t
 	class := edge.ClassProduction
 	stood := settledOn(t, class)
 	recordOn(t, stood, class, routedByHand(), "blog")
-	_, err := NewBootstrap(stood.host(), testVendor, "shop").Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
+	_, err := NewBootstrap(stood.host(), testVendor, "shop").Plan(context.Background(), provider.BootstrapRequest{Class: class})
 	refused := refusalOf(t, err, refusal.CodeInvalid)
 	for _, wanted := range []string{"a proxy you route yourself", "set by blog/production", "add `\"proxy\": \"manual\"`"} {
 		if !strings.Contains(refused.Message, wanted) {
@@ -410,14 +410,14 @@ func TestTheLastClassToGoTakesTheRecordWithIt(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PlanRemove() = %v", err)
 	}
-	if !slices.ContainsFunc(plan.Groups[0].Changes, func(change providerkit.Change) bool {
-		return change.Name == FrontRecordPath && change.Action == providerkit.ActionDelete
+	if !slices.ContainsFunc(plan.Groups[0].Changes, func(change provider.Change) bool {
+		return change.Name == FrontRecordPath && change.Action == provider.ActionDelete
 	}) {
 		t.Errorf("the removal plan %+v leaves %s behind, and the next bootstrap would read it as another project's", plan.Groups[0].Changes, FrontRecordPath)
 	}
 }
 
-func recordChange(t *testing.T, plan providerkit.Plan) providerkit.Change {
+func recordChange(t *testing.T, plan provider.Plan) provider.Change {
 	t.Helper()
 	for _, change := range plan.Groups[0].Changes {
 		if change.Name == FrontRecordPath {
@@ -425,7 +425,7 @@ func recordChange(t *testing.T, plan providerkit.Plan) providerkit.Change {
 		}
 	}
 	t.Fatalf("the plan %+v says nothing of %s", plan.Groups[0].Changes, FrontRecordPath)
-	return providerkit.Change{}
+	return provider.Change{}
 }
 
 func TestABootstrapUnderAProxyRoutedByHandOntoABoxOcelsOwnProxyFrontsUnrecordedIsRefused(t *testing.T) {
@@ -435,8 +435,8 @@ func TestABootstrapUnderAProxyRoutedByHandOntoABoxOcelsOwnProxyFrontsUnrecordedI
 	stood := settledOn(t, class)
 	stood.stands[class] = unrecorded(stood, class)
 	boot := NewBootstrap(stood.fronted(routedByHand()), testVendor, "shop")
-	_, planned := boot.Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
-	applied := boot.Apply(context.Background(), providerkit.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil)
+	_, planned := boot.Plan(context.Background(), provider.BootstrapRequest{Class: class})
+	applied := boot.Apply(context.Background(), provider.BootstrapRequest{Class: class, WrittenBy: "the-suite"}, nil)
 	for step, err := range map[string]error{"Plan": planned, "Apply": applied} {
 		refused := refusalOf(t, err, refusal.CodeInvalid)
 		for _, wanted := range []string{"ocel's own proxy", "remove `\"proxy\"`"} {
@@ -468,14 +468,14 @@ func TestABootstrapOverADeletedRecordPlansItAsDriftAndWritesItBack(t *testing.T)
 	if described.Stacks[0].DigestCurrent {
 		t.Error("Describe() calls a box whose record was deleted current, so no bootstrap would ever write it back and every deploy refuses")
 	}
-	plan, err := boot.Plan(context.Background(), providerkit.BootstrapRequest{Class: class})
+	plan, err := boot.Plan(context.Background(), provider.BootstrapRequest{Class: class})
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
 	}
-	if plan.Groups[0].Action != providerkit.ActionUpdate {
-		t.Errorf("the plan acts %q on a box missing its record, want %q", plan.Groups[0].Action, providerkit.ActionUpdate)
+	if plan.Groups[0].Action != provider.ActionUpdate {
+		t.Errorf("the plan acts %q on a box missing its record, want %q", plan.Groups[0].Action, provider.ActionUpdate)
 	}
-	if change := recordChange(t, plan); change.Action != providerkit.ActionCreate {
+	if change := recordChange(t, plan); change.Action != provider.ActionCreate {
 		t.Errorf("the plan %s %s, want it created", change.Action, FrontRecordPath)
 	}
 }
@@ -488,11 +488,11 @@ func TestABootstrapOfAFreshBoxUnderAProxyRoutedByHandPlansItsRecord(t *testing.T
 		return session.Result{Stdout: aKey + "\n"}, command == "cat ~/.ssh/authorized_keys 2>/dev/null"
 	}
 	plan, err := NewBootstrap(fresh.fronted(routedByHand()), testVendor, "shop").Plan(context.Background(),
-		providerkit.BootstrapRequest{Class: edge.ClassProduction})
+		provider.BootstrapRequest{Class: edge.ClassProduction})
 	if err != nil {
 		t.Fatalf("Plan() = %v, want a fresh box, where nothing of ocel's stands, free to take a proxy routed by hand", err)
 	}
-	if change := recordChange(t, plan); change.Action != providerkit.ActionCreate {
+	if change := recordChange(t, plan); change.Action != provider.ActionCreate {
 		t.Errorf("the plan %s %s on a fresh box, want it created", change.Action, FrontRecordPath)
 	}
 }

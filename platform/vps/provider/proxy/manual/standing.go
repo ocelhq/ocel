@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
@@ -50,8 +50,8 @@ func PortHeld(ctx context.Context, box Box, port string) (Holding, error) {
 	}, nil
 }
 
-func (m Manual) holding(ctx context.Context) providerkit.HostCheck {
-	check := providerkit.HostCheck{Subject: "tcp " + proxy.HTTPSPort, Verdict: providerkit.HostFail}
+func (m Manual) holding(ctx context.Context) provider.HostCheck {
+	check := provider.HostCheck{Subject: "tcp " + proxy.HTTPSPort, Verdict: provider.HostFail}
 	held, err := PortHeld(ctx, m.Box, proxy.HTTPSPort)
 	switch {
 	case err != nil:
@@ -59,13 +59,13 @@ func (m Manual) holding(ctx context.Context) providerkit.HostCheck {
 	case held.Trouble != "":
 		check.Finding, check.Fix = held.Trouble, held.Fix+", routing to "+ForwardTo(m.Port)
 	default:
-		check.Verdict, check.Finding = providerkit.HostPass, held.Held
+		check.Verdict, check.Finding = provider.HostPass, held.Held
 	}
 	return check
 }
 
-func (m Manual) routing(ctx context.Context, hostname string) (providerkit.HostCheck, error) {
-	check := providerkit.HostCheck{Subject: hostname, Verdict: providerkit.HostFail, Fix: Route(hostname, m.Port)}
+func (m Manual) routing(ctx context.Context, hostname string) (provider.HostCheck, error) {
+	check := provider.HostCheck{Subject: hostname, Verdict: provider.HostFail, Fix: Route(hostname, m.Port)}
 	answered, unreached, err := m.Box.Probe(ctx, hostname)
 	switch {
 	case err != nil:
@@ -75,7 +75,7 @@ func (m Manual) routing(ctx context.Context, hostname string) (providerkit.HostC
 	case answered != switchboard.EdgeName:
 		check.Finding = fmt.Sprintf("%s answers on this box's 443 as %q, not through ocel's switchboard", hostname, answered)
 	default:
-		check.Verdict, check.Fix = providerkit.HostPass, ""
+		check.Verdict, check.Fix = provider.HostPass, ""
 		check.Finding = fmt.Sprintf("your proxy routes %s to ocel's switchboard", hostname)
 	}
 	return check, nil

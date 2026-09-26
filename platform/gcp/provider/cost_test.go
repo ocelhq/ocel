@@ -20,6 +20,7 @@ import (
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
@@ -31,7 +32,7 @@ func costServed(t *testing.T) (contractv1connect.ProviderServiceClient, costv1co
 	p := newProvider(t, gcp.Options{Project: "acme-prod", Region: "europe-west1"})
 	spec := providerkit.Spec{
 		Version: "test",
-		New:     func(context.Context, providerkit.Settings) (providerkit.Provider, error) { return p, nil },
+		New:     func(context.Context, provider.Settings) (provider.Provider, error) { return p, nil },
 	}
 	server := httptest.NewServer(providerkit.ConformanceMux(spec))
 	t.Cleanup(server.Close)

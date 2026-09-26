@@ -14,7 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -47,45 +47,45 @@ type EdgeAdoption struct {
 	Adoption edge.Adoption
 }
 
-func PlanParameters(ctx context.Context, apis ParamAPIs, ns Namespace, class string, adoptions []EdgeAdoption, req Request) (providerkit.ChangeGroup, error) {
-	group := providerkit.ChangeGroup{Kind: providerkit.ParameterGroupKind, Name: ParamGroupName}
+func PlanParameters(ctx context.Context, apis ParamAPIs, ns Namespace, class string, adoptions []EdgeAdoption, req Request) (provider.ChangeGroup, error) {
+	group := provider.ChangeGroup{Kind: provider.ParameterGroupKind, Name: ParamGroupName}
 
 	origin, err := planOriginSecret(ctx, apis.SSM, ns, class, time.Now())
 	if err != nil {
-		return providerkit.ChangeGroup{}, err
+		return provider.ChangeGroup{}, err
 	}
 	passphrase, err := paramPresence(ctx, apis.SSM, ns.PassphraseParamName())
 	if err != nil {
-		return providerkit.ChangeGroup{}, err
+		return provider.ChangeGroup{}, err
 	}
 	group.Changes = append(group.Changes, origin, passphrase)
 
-	var adopted []providerkit.Change
+	var adopted []provider.Change
 	for _, edging := range adoptions {
 		changes, err := adoptionChanges(ctx, apis.SSM, ns, class, edging.Kind, edging.Adoption)
 		if err != nil {
-			return providerkit.ChangeGroup{}, err
+			return provider.ChangeGroup{}, err
 		}
 		adopted = append(adopted, changes...)
 	}
 	written, err := featureParams(ctx, apis, ns, class, req, req.Features, func(f feature) paramChanges { return f.afterPlan })
 	if err != nil {
-		return providerkit.ChangeGroup{}, err
+		return provider.ChangeGroup{}, err
 	}
 	severed, err := featureParams(ctx, apis, ns, class, req, Removing(req.Features, req.Remove), func(f feature) paramChanges { return f.dropPlan })
 	if err != nil {
-		return providerkit.ChangeGroup{}, err
+		return provider.ChangeGroup{}, err
 	}
 	group.Changes = slices.Concat(group.Changes, adopted, written, severed)
 
-	group.Action, group.Reason = providerkit.RollUp(group.Changes)
+	group.Action, group.Reason = provider.RollUp(group.Changes)
 	return group, nil
 }
 
-type paramChanges func(context.Context, ParamAPIs, Namespace, string, Request) ([]providerkit.Change, error)
+type paramChanges func(context.Context, ParamAPIs, Namespace, string, Request) ([]provider.Change, error)
 
-func featureParams(ctx context.Context, apis ParamAPIs, ns Namespace, class string, req Request, named []string, hook func(feature) paramChanges) ([]providerkit.Change, error) {
-	var changes []providerkit.Change
+func featureParams(ctx context.Context, apis ParamAPIs, ns Namespace, class string, req Request, named []string, hook func(feature) paramChanges) ([]provider.Change, error) {
+	var changes []provider.Change
 	for _, f := range featureRegistry {
 		plan := hook(f)
 		if plan == nil || !slices.Contains(named, f.name) {
@@ -100,86 +100,86 @@ func featureParams(ctx context.Context, apis ParamAPIs, ns Namespace, class stri
 	return changes, nil
 }
 
-func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, class string, sharedPassphrase bool) (providerkit.ChangeGroup, error) {
-	group := providerkit.ChangeGroup{Kind: providerkit.ParameterGroupKind, Name: ParamGroupName}
+func PlanParameterRemoval(ctx context.Context, apis ParamAPIs, ns Namespace, class string, sharedPassphrase bool) (provider.ChangeGroup, error) {
+	group := provider.ChangeGroup{Kind: provider.ParameterGroupKind, Name: ParamGroupName}
 
 	names, err := ClassParamNames(ns, class)
 	if err != nil {
-		return providerkit.ChangeGroup{}, err
+		return provider.ChangeGroup{}, err
 	}
 	held, err := paramsHeld(ctx, apis.SSM, append(slices.Clone(names), ns.PassphraseParamName()))
 	if err != nil {
-		return providerkit.ChangeGroup{}, err
+		return provider.ChangeGroup{}, err
 	}
 	for _, name := range names {
 		if held[name] {
-			group.Changes = append(group.Changes, providerkit.Change{
+			group.Changes = append(group.Changes, provider.Change{
 				Kind:   kindParameter,
 				Name:   name,
-				Action: providerkit.ActionDelete,
+				Action: provider.ActionDelete,
 			})
 		}
 	}
 
 	user, err := ns.EdgeUserNameFor(class)
 	if err != nil {
-		return providerkit.ChangeGroup{}, err
+		return provider.ChangeGroup{}, err
 	}
 	keys, err := liveAccessKeys(ctx, apis.IAM, user)
 	if err != nil {
-		return providerkit.ChangeGroup{}, err
+		return provider.ChangeGroup{}, err
 	}
 	for _, id := range keys {
-		group.Changes = append(group.Changes, providerkit.Change{
+		group.Changes = append(group.Changes, provider.Change{
 			Kind:   kindAccessKey,
 			Name:   user + "/" + id,
-			Action: providerkit.ActionDelete,
+			Action: provider.ActionDelete,
 		})
 	}
 
 	passphrase, err := plannedPassphraseRemoval(held[ns.PassphraseParamName()], ns, class, sharedPassphrase)
 	if err != nil {
-		return providerkit.ChangeGroup{}, err
+		return provider.ChangeGroup{}, err
 	}
 	if passphrase.Name != "" {
 		group.Changes = append(group.Changes, passphrase)
 	}
 
-	group.Action = providerkit.ActionKeep
+	group.Action = provider.ActionKeep
 	for _, change := range group.Changes {
-		if change.Action == providerkit.ActionDelete {
-			group.Action = providerkit.ActionDelete
+		if change.Action == provider.ActionDelete {
+			group.Action = provider.ActionDelete
 			break
 		}
 	}
 	return group, nil
 }
 
-func plannedPassphraseRemoval(held bool, ns Namespace, class string, shared bool) (providerkit.Change, error) {
+func plannedPassphraseRemoval(held bool, ns Namespace, class string, shared bool) (provider.Change, error) {
 	if !held {
-		return providerkit.Change{}, nil
+		return provider.Change{}, nil
 	}
 	if !shared {
-		return providerkit.Change{
+		return provider.Change{
 			Kind:   kindParameter,
 			Name:   ns.PassphraseParamName(),
-			Action: providerkit.ActionDelete,
+			Action: provider.ActionDelete,
 			Reason: passphraseStranded,
 		}, nil
 	}
 	sibling, err := SiblingClassOf(class)
 	if err != nil {
-		return providerkit.Change{}, err
+		return provider.Change{}, err
 	}
-	return providerkit.Change{
+	return provider.Change{
 		Kind:   kindParameter,
 		Name:   ns.PassphraseParamName(),
-		Action: providerkit.ActionKeep,
+		Action: provider.ActionKeep,
 		Reason: fmt.Sprintf(passphraseShared, sibling),
 	}, nil
 }
 
-func adoptionChanges(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind, adoption edge.Adoption) ([]providerkit.Change, error) {
+func adoptionChanges(ctx context.Context, ssmClient SSMAPI, ns Namespace, class string, kind edge.Kind, adoption edge.Adoption) ([]provider.Change, error) {
 	if len(adoption.Values) == 0 && len(adoption.Offers) == 0 {
 		return nil, nil
 	}
@@ -188,20 +188,20 @@ func adoptionChanges(ctx context.Context, ssmClient SSMAPI, ns Namespace, class 
 		return nil, err
 	}
 
-	var changes []providerkit.Change
+	var changes []provider.Change
 	if len(adoption.Values) > 0 {
 		stored, err := ReadEdgeValues(ctx, ssmClient, ns, class, kind)
 		if err != nil {
 			return nil, err
 		}
-		change := providerkit.Change{Kind: kindParameter, Name: names.valuesParam}
+		change := provider.Change{Kind: kindParameter, Name: names.valuesParam}
 		switch {
 		case stored == nil:
-			change.Action = providerkit.ActionCreate
+			change.Action = provider.ActionCreate
 		case maps.Equal(stored, adoption.Values):
-			change.Action, change.Reason = providerkit.ActionKeep, paramCurrent
+			change.Action, change.Reason = provider.ActionKeep, paramCurrent
 		default:
-			change.Action, change.Reason = providerkit.ActionUpdate, valuesDrifted
+			change.Action, change.Reason = provider.ActionUpdate, valuesDrifted
 		}
 		changes = append(changes, change)
 	}
@@ -228,14 +228,14 @@ func adoptionChanges(ctx context.Context, ssmClient SSMAPI, ns Namespace, class 
 	return changes, nil
 }
 
-func paramPresence(ctx context.Context, ssmClient SSMAPI, name string) (providerkit.Change, error) {
+func paramPresence(ctx context.Context, ssmClient SSMAPI, name string) (provider.Change, error) {
 	held, err := paramHeld(ctx, ssmClient, name)
 	if err != nil {
-		return providerkit.Change{}, err
+		return provider.Change{}, err
 	}
-	change := providerkit.Change{Kind: kindParameter, Name: name, Action: providerkit.ActionCreate}
+	change := provider.Change{Kind: kindParameter, Name: name, Action: provider.ActionCreate}
 	if held {
-		change.Action, change.Reason = providerkit.ActionKeep, paramCurrent
+		change.Action, change.Reason = provider.ActionKeep, paramCurrent
 	}
 	return change, nil
 }

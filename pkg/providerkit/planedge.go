@@ -3,33 +3,34 @@ package providerkit
 import (
 	"fmt"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func EdgeGroup(kind edge.Kind, feature string, planned []edge.PlanChange) (ChangeGroup, error) {
+func EdgeGroup(kind edge.Kind, feature string, planned []edge.PlanChange) (provider.ChangeGroup, error) {
 	changes, err := EdgeChanges(kind, planned)
 	if err != nil {
-		return ChangeGroup{}, err
+		return provider.ChangeGroup{}, err
 	}
-	group := ChangeGroup{
-		Kind:    EdgeGroupKind,
+	group := provider.ChangeGroup{
+		Kind:    provider.EdgeGroupKind,
 		Name:    edge.EdgeGroupName(kind),
 		Feature: feature,
 		Changes: changes,
 	}
-	group.Action, group.Reason = RollUp(group.Changes)
+	group.Action, group.Reason = provider.RollUp(group.Changes)
 	return group, nil
 }
 
-func EdgeChanges(kind edge.Kind, planned []edge.PlanChange) ([]Change, error) {
-	changes := make([]Change, 0, len(planned))
+func EdgeChanges(kind edge.Kind, planned []edge.PlanChange) ([]provider.Change, error) {
+	changes := make([]provider.Change, 0, len(planned))
 	for _, change := range planned {
 		if !edge.ValidPlanAction(change.Action) {
 			return nil, fmt.Errorf(
 				"the %s edge plans %q on %s %q, and %q is not an action a plan can render",
 				kind, change.Action, change.Kind, change.Name, change.Action)
 		}
-		changes = append(changes, Change{
+		changes = append(changes, provider.Change{
 			Kind:   change.Kind,
 			Name:   change.Name,
 			Action: EdgeAction(change.Action),
@@ -40,18 +41,18 @@ func EdgeChanges(kind edge.Kind, planned []edge.PlanChange) ([]Change, error) {
 	return changes, nil
 }
 
-func EdgeGroupOf(group edge.PlanGroup) (ChangeGroup, error) {
+func EdgeGroupOf(group edge.PlanGroup) (provider.ChangeGroup, error) {
 	kind, _ := edge.EdgeGroupKindOf(group.Name)
 	if !edge.ValidPlanAction(group.Action) {
-		return ChangeGroup{}, fmt.Errorf(
+		return provider.ChangeGroup{}, fmt.Errorf(
 			"the %s edge plans %q on the group %q, and %q is not an action a plan can render",
 			kind, group.Action, group.Name, group.Action)
 	}
 	changes, err := EdgeChanges(kind, group.Changes)
 	if err != nil {
-		return ChangeGroup{}, err
+		return provider.ChangeGroup{}, err
 	}
-	converted := ChangeGroup{
+	converted := provider.ChangeGroup{
 		Kind:    group.Kind,
 		Name:    group.Name,
 		Feature: group.Feature,
@@ -65,19 +66,19 @@ func EdgeGroupOf(group edge.PlanGroup) (ChangeGroup, error) {
 	return converted, nil
 }
 
-func EdgeAction(action edge.PlanAction) ChangeAction {
+func EdgeAction(action edge.PlanAction) provider.ChangeAction {
 	switch action {
 	case edge.PlanCreate:
-		return ActionCreate
+		return provider.ActionCreate
 	case edge.PlanUpdate:
-		return ActionUpdate
+		return provider.ActionUpdate
 	case edge.PlanDelete:
-		return ActionDelete
+		return provider.ActionDelete
 	case edge.PlanDisableThenDelete:
-		return ActionDisableThenDelete
+		return provider.ActionDisableThenDelete
 	case edge.PlanKeep:
-		return ActionKeep
+		return provider.ActionKeep
 	default:
-		return ChangeAction(action)
+		return provider.ChangeAction(action)
 	}
 }

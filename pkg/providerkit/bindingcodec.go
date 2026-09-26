@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	bindingsv1 "github.com/ocelhq/ocel/pkg/proto/common/bindings/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -20,8 +21,6 @@ var (
 	ErrUnsourced = errors.New("providerkit: unsourced binding")
 
 	ErrUnreadableRecord = errors.New("providerkit: unreadable binding record")
-
-	ErrUnscopedGrant = errors.New("providerkit: unscoped grant")
 
 	ErrUnattachedGrant = errors.New("providerkit: unattached grant")
 )
@@ -143,19 +142,19 @@ func VerifyGrantScope(binding *bindingsv1.Binding) error {
 	for _, g := range binding.GetGrants() {
 		if len(g.GetActions()) == 0 {
 			return fmt.Errorf("binding %s carries a grant over %v naming no action: a grant names what an app may do with the resource it binds: %w",
-				binding.GetName(), g.GetResources(), ErrUnscopedGrant)
+				binding.GetName(), g.GetResources(), provider.ErrUnscopedGrant)
 		}
 		if len(g.GetResources()) == 0 {
 			return fmt.Errorf("binding %s grants %v over no resource: an app receives permissions for the resource it binds and nothing else: %w",
-				binding.GetName(), g.GetActions(), ErrUnscopedGrant)
+				binding.GetName(), g.GetActions(), provider.ErrUnscopedGrant)
 		}
 		if slices.Contains(g.GetActions(), grantWildcard) {
 			return fmt.Errorf("binding %s grants %q over %v: %q is every action any vendor has, which reaches past the resource it binds: %w",
-				binding.GetName(), grantWildcard, g.GetResources(), grantWildcard, ErrUnscopedGrant)
+				binding.GetName(), grantWildcard, g.GetResources(), grantWildcard, provider.ErrUnscopedGrant)
 		}
 		if slices.Contains(g.GetResources(), grantWildcard) {
 			return fmt.Errorf("binding %s grants %v over %q: %q is every resource in the account, and an app receives permissions for the resource it binds and nothing else: %w",
-				binding.GetName(), g.GetActions(), grantWildcard, grantWildcard, ErrUnscopedGrant)
+				binding.GetName(), g.GetActions(), grantWildcard, grantWildcard, provider.ErrUnscopedGrant)
 		}
 	}
 	return nil

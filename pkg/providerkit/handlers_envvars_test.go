@@ -18,6 +18,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/envvars/v1/envvarsv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -31,13 +32,13 @@ func served(t *testing.T) (envvarsv1connect.EnvVarsServiceClient, *fake.Provider
 	return varsServedBy(t, provider), provider
 }
 
-func varsServedBy(t *testing.T, provider providerkit.Provider) envvarsv1connect.EnvVarsServiceClient {
+func varsServedBy(t *testing.T, p provider.Provider) envvarsv1connect.EnvVarsServiceClient {
 	t.Helper()
 
 	spec := providerkit.Spec{
 		Version: "test",
-		New: func(context.Context, providerkit.Settings) (providerkit.Provider, error) {
-			return provider, nil
+		New: func(context.Context, provider.Settings) (provider.Provider, error) {
+			return p, nil
 		},
 	}
 	server := httptest.NewServer(providerkit.ConformanceMux(spec))
@@ -399,14 +400,14 @@ func TestABindingOcelCouldNotHaveProducedIsRefused(t *testing.T) {
 
 type refusingGrants struct{ *fake.Provider }
 
-func (r refusingGrants) Hooks() providerkit.Hooks {
+func (r refusingGrants) Hooks() provider.Hooks {
 	hooks := r.Provider.Hooks()
 	hooks.VerifyGrants = r.VerifyGrants
 	return hooks
 }
 
-func (refusingGrants) VerifyGrants(context.Context, providerkit.Binding) error {
-	return fmt.Errorf("s3:* names a whole service: %w", providerkit.ErrUnscopedGrant)
+func (refusingGrants) VerifyGrants(context.Context, provider.Binding) error {
+	return fmt.Errorf("s3:* names a whole service: %w", provider.ErrUnscopedGrant)
 }
 
 func TestSetBindingAsksTheProviderWhetherItWouldGrantThat(t *testing.T) {
@@ -444,7 +445,7 @@ func TestABindingNamesAnEnvironmentOnlyInPreview(t *testing.T) {
 func TestEveryValueRPCRefusesBeforeConfigure(t *testing.T) {
 	spec := providerkit.Spec{
 		Version: "test",
-		New: func(context.Context, providerkit.Settings) (providerkit.Provider, error) {
+		New: func(context.Context, provider.Settings) (provider.Provider, error) {
 			return fake.NewProvider(fake.Options{}), nil
 		},
 	}

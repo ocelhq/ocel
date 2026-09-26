@@ -3,7 +3,7 @@ package cloudfront
 import (
 	"fmt"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -33,5 +33,5 @@ func edgeSetOf(deployed bootstrap.Deployed, class edge.Class) (edgeSet, error) {
 }
 
 func unbootstrapped(class edge.Class) error {
-	return fmt.Errorf("the %s bootstrap in this account carries nothing the %q edge fronts deployments with: its resolver function, key value store and cache policies stand in the %s feature stack, and this account has none. Run `%s` with this edge selected, then deploy again", class, Kind, bootstrap.FeatureCloudFrontEdge, providerkit.BootstrapCommand(class))
+	return fmt.Errorf("the %s bootstrap in this account carries nothing the %q edge fronts deployments with: its resolver function, key value store and cache policies stand in the %s feature stack, and this account has none. Run `%s` with this edge selected, then deploy again", class, Kind, bootstrap.FeatureCloudFrontEdge, provider.BootstrapCommand(class))
 }

@@ -5,7 +5,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/costkit"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/cost"
@@ -36,7 +36,7 @@ var itemTypes = map[Kind]string{
 	KindSecret:         tfSecretManagerSecret,
 }
 
-func (p *Provider) ShapeCost(_ context.Context, req providerkit.ShapeRequest) (*costv1.ResourceSet, error) {
+func (p *Provider) ShapeCost(_ context.Context, req provider.ShapeRequest) (*costv1.ResourceSet, error) {
 	names, err := p.named()
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func (p *Provider) ShapeCost(_ context.Context, req providerkit.ShapeRequest) (*
 	ingress := ingressFor(factsOf(front))
 	site := costkit.EdgeSite{Slug: req.Plan.Slug, Class: req.Plan.Class, Region: region}
 	for _, app := range req.Plan.Apps {
-		site.Apps = append(site.Apps, costkit.EdgeApp{Name: app.App, Hostnames: providerkit.ProductionHostnames(app)})
+		site.Apps = append(site.Apps, costkit.EdgeApp{Name: app.App, Hostnames: provider.ProductionHostnames(app)})
 	}
 	shape, err := edgeShape(front.Kind(), site)
 	if err != nil {
@@ -73,28 +73,28 @@ func (p *Provider) ShapeCost(_ context.Context, req providerkit.ShapeRequest) (*
 
 	for _, app := range req.Plan.Apps {
 		scope := tree.Scope(environment, costkit.ScopeApp, app.App)
-		if app.Compute() == providerkit.ComputeContainer {
+		if app.Compute() == provider.ComputeContainer {
 			service, err := names.Service(req.Plan.Slug, req.Plan.Env, app.App, app.App)
 			if err != nil {
 				return nil, err
 			}
-			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(providerkit.ComputeContainer, ingress))
+			tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(provider.ComputeContainer, ingress))
 		} else {
 			specs := req.Functions[app.App]
 			if len(specs) == 0 {
-				specs = []providerkit.FunctionSpec{{Name: app.App}}
+				specs = []provider.FunctionSpec{{Name: app.App}}
 			}
 			for _, spec := range specs {
 				service, err := names.Service(req.Plan.Slug, req.Plan.Env, app.App, spec.Name)
 				if err != nil {
 					return nil, err
 				}
-				tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(providerkit.ComputeServerless, ingress))
+				tree.Add(scope, string(Vendor), tfCloudRunService, service, region, serviceProperties(provider.ComputeServerless, ingress))
 			}
 		}
 		tree.AddShaped(scope, shape.Vendor, shape.Region, shape.Apps[app.App])
 	}
-	return tree.Set(providerkit.CostSource)
+	return tree.Set(provider.CostSource)
 }
 
 func itemProperties(item item, region string) map[string]any {
@@ -109,9 +109,9 @@ func itemProperties(item item, region string) map[string]any {
 	return map[string]any{}
 }
 
-func serviceProperties(compute providerkit.Compute, ingress string) map[string]any {
+func serviceProperties(compute provider.Compute, ingress string) map[string]any {
 	minInstances := revisionMinInstancesServerless
-	if compute == providerkit.ComputeContainer {
+	if compute == provider.ComputeContainer {
 		minInstances = revisionMinInstancesContainer
 	}
 	return map[string]any{
@@ -120,7 +120,7 @@ func serviceProperties(compute providerkit.Compute, ingress string) map[string]a
 			"scaling": map[string]any{"min_instance_count": minInstances},
 			"containers": []any{map[string]any{
 				"resources": map[string]any{
-					"cpu_idle": compute == providerkit.ComputeServerless,
+					"cpu_idle": compute == provider.ComputeServerless,
 					"limits":   map[string]any{"cpu": revisionCPU, "memory": revisionMemory},
 				},
 			}},

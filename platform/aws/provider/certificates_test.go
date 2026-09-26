@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/acm"
 	acmtypes "github.com/aws/aws-sdk-go-v2/service/acm/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/certs"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -72,13 +72,13 @@ func issuerOver(api certs.ACMAPI) certs.ACM {
 	}
 }
 
-func requestFor(hostname string, held providerkit.Certificate, proved *[]edge.Record) providerkit.CertificateRequest {
-	return providerkit.CertificateRequest{
+func requestFor(hostname string, held provider.Certificate, proved *[]edge.Record) provider.CertificateRequest {
+	return provider.CertificateRequest{
 		Kind:     "cloudfront",
 		Hostname: hostname,
 		Current:  held,
 		Progress: silentProgress{},
-		Prove: func(_ context.Context, cert providerkit.Certificate, records []edge.Record) (providerkit.Certificate, error) {
+		Prove: func(_ context.Context, cert provider.Certificate, records []edge.Record) (provider.Certificate, error) {
 			*proved = records
 			cert.Written = records
 			return cert, nil
@@ -91,7 +91,7 @@ func TestIssueRequestsACertificateForAnUnpinnedHostname(t *testing.T) {
 	api := &stubACM{statuses: []string{certs.StatusPendingValidation, certs.StatusIssued}}
 	var proved []edge.Record
 
-	cert, err := issue(context.Background(), issuerOver(api), requestFor("app.acme.com", providerkit.Certificate{}, &proved))
+	cert, err := issue(context.Background(), issuerOver(api), requestFor("app.acme.com", provider.Certificate{}, &proved))
 	if err != nil {
 		t.Fatalf("issue() error = %v", err)
 	}
@@ -114,12 +114,12 @@ func TestIssueRefusesAsNotReadyWhileACMIsStillValidating(t *testing.T) {
 	api := &stubACM{statuses: []string{certs.StatusPendingValidation}}
 	var proved []edge.Record
 
-	cert, err := issue(context.Background(), issuerOver(api), requestFor("app.acme.com", providerkit.Certificate{}, &proved))
+	cert, err := issue(context.Background(), issuerOver(api), requestFor("app.acme.com", provider.Certificate{}, &proved))
 	var refused refusal.Refusal
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("issue() error = %v, want the run told to come back to it", err)
 	}
-	if _, pending := providerkit.LeftPending(err); !pending {
+	if _, pending := provider.LeftPending(err); !pending {
 		t.Errorf("issue() error = %v, want it marked pending: ACM issues on its own time, and a deploy leaves the hostname to `ocel domain add` rather than failing", err)
 	}
 	if cert.ID != issuedARN {
@@ -134,7 +134,7 @@ func TestIssueKeepsACertificateThatStillCoversTheHostname(t *testing.T) {
 	t.Parallel()
 	api := &stubACM{statuses: []string{certs.StatusIssued}}
 	var proved []edge.Record
-	held := providerkit.Certificate{ID: issuedARN, Requested: true}
+	held := provider.Certificate{ID: issuedARN, Requested: true}
 
 	cert, err := issue(context.Background(), issuerOver(api), requestFor("app.acme.com", held, &proved))
 	if err != nil {

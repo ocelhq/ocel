@@ -21,7 +21,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -51,7 +51,7 @@ type Access struct {
 }
 
 type Engine interface {
-	Preview(ctx context.Context, setup Setup, op Op, progress edge.Progress) ([]providerkit.Change, error)
+	Preview(ctx context.Context, setup Setup, op Op, progress edge.Progress) ([]provider.Change, error)
 
 	Up(ctx context.Context, setup Setup, progress edge.Progress) (auto.OutputMap, error)
 
@@ -63,15 +63,15 @@ type Engine interface {
 type Config struct {
 	Access Access
 
-	Program func(ctx *pulumi.Context, plan providerkit.StackPlan) error
+	Program func(ctx *pulumi.Context, plan provider.StackPlan) error
 
-	Configure func(ctx context.Context, plan providerkit.StackPlan) (auto.ConfigMap, error)
+	Configure func(ctx context.Context, plan provider.StackPlan) (auto.ConfigMap, error)
 
-	Decode func(ctx context.Context, plan providerkit.StackPlan, outputs auto.OutputMap) (providerkit.StackResult, error)
+	Decode func(ctx context.Context, plan provider.StackPlan, outputs auto.OutputMap) (provider.StackResult, error)
 
 	Parallel int
 
-	Refresh func(ref providerkit.StackRef, op Op) bool
+	Refresh func(ref provider.StackRef, op Op) bool
 
 	Engine Engine
 
@@ -89,9 +89,9 @@ func New(config Config) *Automation {
 
 func (a *Automation) Access() Access { return a.config.Access }
 
-func (a *Automation) StackName(ref providerkit.StackRef) string { return ref.Name.String() }
+func (a *Automation) StackName(ref provider.StackRef) string { return ref.Name.String() }
 
-func (a *Automation) ProjectName(ref providerkit.StackRef) string {
+func (a *Automation) ProjectName(ref provider.StackRef) string {
 	if a.config.Access.Project != "" {
 		return a.config.Access.Project
 	}
@@ -99,7 +99,7 @@ func (a *Automation) ProjectName(ref providerkit.StackRef) string {
 }
 
 type Setup struct {
-	Ref providerkit.StackRef
+	Ref provider.StackRef
 
 	Stack string
 
@@ -118,11 +118,11 @@ type Setup struct {
 	Refresh bool
 }
 
-func (a *Automation) Workspace(plan providerkit.StackPlan) (Setup, error) {
+func (a *Automation) Workspace(plan provider.StackPlan) (Setup, error) {
 	return a.workspace(plan, OpProvision)
 }
 
-func (a *Automation) workspace(plan providerkit.StackPlan, op Op) (Setup, error) {
+func (a *Automation) workspace(plan provider.StackPlan, op Op) (Setup, error) {
 	access := a.config.Access
 	switch {
 	case access.BackendURL == "":
@@ -171,7 +171,7 @@ func (a *Automation) parallel() int {
 	return DefaultParallel
 }
 
-func (a *Automation) refreshes(ref providerkit.StackRef, op Op) bool {
+func (a *Automation) refreshes(ref provider.StackRef, op Op) bool {
 	return a.config.Refresh != nil && a.config.Refresh(ref, op)
 }
 
@@ -195,7 +195,7 @@ func (a *Automation) env() (map[string]string, error) {
 	return env, nil
 }
 
-func (a *Automation) Stack(ctx context.Context, plan providerkit.StackPlan) (auto.ConfigMap, error) {
+func (a *Automation) Stack(ctx context.Context, plan provider.StackPlan) (auto.ConfigMap, error) {
 	if _, err := a.Workspace(plan); err != nil {
 		return nil, err
 	}
@@ -205,7 +205,7 @@ func (a *Automation) Stack(ctx context.Context, plan providerkit.StackPlan) (aut
 	return a.config.Configure(ctx, plan)
 }
 
-func (a *Automation) setup(ctx context.Context, plan providerkit.StackPlan, op Op, progress edge.Progress) (Setup, error) {
+func (a *Automation) setup(ctx context.Context, plan provider.StackPlan, op Op, progress edge.Progress) (Setup, error) {
 	setup, err := a.workspace(plan, op)
 	if err != nil {
 		return Setup{}, err
@@ -230,39 +230,39 @@ func (a *Automation) engine() Engine {
 	return autoEngine{}
 }
 
-func (a *Automation) Preview(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.Plan, error) {
+func (a *Automation) Preview(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.Plan, error) {
 	return a.preview(ctx, plan, OpProvision, progress)
 }
 
-func (a *Automation) PreviewDestroy(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) (providerkit.Plan, error) {
-	return a.preview(ctx, providerkit.StackPlan{Ref: ref}, OpDestroy, progress)
+func (a *Automation) PreviewDestroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) (provider.Plan, error) {
+	return a.preview(ctx, provider.StackPlan{Ref: ref}, OpDestroy, progress)
 }
 
-func (a *Automation) preview(ctx context.Context, plan providerkit.StackPlan, op Op, progress edge.Progress) (providerkit.Plan, error) {
+func (a *Automation) preview(ctx context.Context, plan provider.StackPlan, op Op, progress edge.Progress) (provider.Plan, error) {
 	setup, err := a.setup(ctx, plan, op, progress)
 	if err != nil {
-		return providerkit.Plan{}, err
+		return provider.Plan{}, err
 	}
 	changes, err := a.engine().Preview(ctx, setup, op, progress)
 	if err != nil {
-		return providerkit.Plan{}, busy(err, setup)
+		return provider.Plan{}, busy(err, setup)
 	}
 	if len(changes) == 0 {
-		return providerkit.Plan{}, nil
+		return provider.Plan{}, nil
 	}
-	group := providerkit.ChangeGroup{
-		Kind:    providerkit.StackGroupKind,
+	group := provider.ChangeGroup{
+		Kind:    provider.StackGroupKind,
 		Name:    setup.Stack,
 		Changes: changes,
 	}
-	group.Action, group.Reason = providerkit.RollUp(changes)
-	return providerkit.Plan{Groups: []providerkit.ChangeGroup{group}}, nil
+	group.Action, group.Reason = provider.RollUp(changes)
+	return provider.Plan{Groups: []provider.ChangeGroup{group}}, nil
 }
 
 const stackResourceType = "pulumi:pulumi:Stack"
 
-func planRows(mutations, standing []apitype.StepEventMetadata) []providerkit.Change {
-	rows := make(map[string]providerkit.Change, len(mutations)+len(standing))
+func planRows(mutations, standing []apitype.StepEventMetadata) []provider.Change {
+	rows := make(map[string]provider.Change, len(mutations)+len(standing))
 	for _, step := range mutations {
 		action, mutates := plannedAction(step.Op)
 		if !mutates || step.Type == stackResourceType {
@@ -277,55 +277,55 @@ func planRows(mutations, standing []apitype.StepEventMetadata) []providerkit.Cha
 		if _, mutating := rows[step.URN]; mutating {
 			continue
 		}
-		rows[step.URN] = row(step, providerkit.ActionKeep)
+		rows[step.URN] = row(step, provider.ActionKeep)
 	}
-	changes := make([]providerkit.Change, 0, len(rows))
+	changes := make([]provider.Change, 0, len(rows))
 	for _, urn := range slices.Sorted(maps.Keys(rows)) {
 		changes = append(changes, rows[urn])
 	}
 	return changes
 }
 
-func row(step apitype.StepEventMetadata, action providerkit.ChangeAction) providerkit.Change {
-	return providerkit.Change{
+func row(step apitype.StepEventMetadata, action provider.ChangeAction) provider.Change {
+	return provider.Change{
 		Kind:   capIdentifier(step.Type),
 		Name:   resourceNameFromURN(step.URN),
 		Action: action,
 	}
 }
 
-func plannedAction(op apitype.OpType) (providerkit.ChangeAction, bool) {
+func plannedAction(op apitype.OpType) (provider.ChangeAction, bool) {
 	switch op {
 	case apitype.OpCreate, apitype.OpCreateReplacement, apitype.OpImport:
-		return providerkit.ActionCreate, true
+		return provider.ActionCreate, true
 	case apitype.OpUpdate:
-		return providerkit.ActionUpdate, true
+		return provider.ActionUpdate, true
 	case apitype.OpReplace, apitype.OpImportReplacement:
-		return providerkit.ActionReplace, true
+		return provider.ActionReplace, true
 	case apitype.OpDelete, apitype.OpDeleteReplaced:
-		return providerkit.ActionDelete, true
+		return provider.ActionDelete, true
 	default:
 		return "", false
 	}
 }
 
-func (a *Automation) Run(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) (providerkit.StackResult, error) {
+func (a *Automation) Run(ctx context.Context, plan provider.StackPlan, progress edge.Progress) (provider.StackResult, error) {
 	setup, err := a.setup(ctx, plan, OpProvision, progress)
 	if err != nil {
-		return providerkit.StackResult{}, err
+		return provider.StackResult{}, err
 	}
 	outputs, err := a.engine().Up(ctx, setup, progress)
 	if err != nil {
-		return providerkit.StackResult{}, busy(err, setup)
+		return provider.StackResult{}, busy(err, setup)
 	}
 	if a.config.Decode == nil {
-		return providerkit.StackResult{}, nil
+		return provider.StackResult{}, nil
 	}
 	return a.config.Decode(ctx, plan, outputs)
 }
 
-func (a *Automation) Destroy(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) error {
-	setup, err := a.setup(ctx, providerkit.StackPlan{Ref: ref}, OpDestroy, progress)
+func (a *Automation) Destroy(ctx context.Context, ref provider.StackRef, progress edge.Progress) error {
+	setup, err := a.setup(ctx, provider.StackPlan{Ref: ref}, OpDestroy, progress)
 	if err != nil {
 		return err
 	}
@@ -335,8 +335,8 @@ func (a *Automation) Destroy(ctx context.Context, ref providerkit.StackRef, prog
 	return nil
 }
 
-func (a *Automation) Outputs(ctx context.Context, ref providerkit.StackRef, progress edge.Progress) (auto.OutputMap, error) {
-	setup, err := a.setup(ctx, providerkit.StackPlan{Ref: ref}, OpProvision, progress)
+func (a *Automation) Outputs(ctx context.Context, ref provider.StackRef, progress edge.Progress) (auto.OutputMap, error) {
+	setup, err := a.setup(ctx, provider.StackPlan{Ref: ref}, OpProvision, progress)
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +359,7 @@ func busy(err error, setup Setup) error {
 
 type autoEngine struct{}
 
-func (autoEngine) Preview(ctx context.Context, setup Setup, op Op, progress edge.Progress) ([]providerkit.Change, error) {
+func (autoEngine) Preview(ctx context.Context, setup Setup, op Op, progress edge.Progress) ([]provider.Change, error) {
 	stack, err := auto.UpsertStackInlineSource(ctx, setup.Stack, string(setup.Project.Name), setup.Program, setup.Options...)
 	if err != nil {
 		return nil, fmt.Errorf("prepare stack %s: %w", setup.Stack, err)
@@ -389,8 +389,8 @@ func (autoEngine) Preview(ctx context.Context, setup Setup, op Op, progress edge
 	return drained, nil
 }
 
-func drainRows(engineEvents <-chan events.EngineEvent) <-chan []providerkit.Change {
-	drained := make(chan []providerkit.Change, 1)
+func drainRows(engineEvents <-chan events.EngineEvent) <-chan []provider.Change {
+	drained := make(chan []provider.Change, 1)
 	go func() {
 		var mutations, standing []apitype.StepEventMetadata
 		for ev := range engineEvents {
@@ -406,7 +406,7 @@ func drainRows(engineEvents <-chan events.EngineEvent) <-chan []providerkit.Chan
 	return drained
 }
 
-func awaitRows(drained <-chan []providerkit.Change, grace time.Duration) ([]providerkit.Change, error) {
+func awaitRows(drained <-chan []provider.Change, grace time.Duration) ([]provider.Change, error) {
 	select {
 	case rows := <-drained:
 		return rows, nil

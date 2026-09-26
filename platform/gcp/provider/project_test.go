@@ -22,6 +22,7 @@ import (
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
@@ -44,9 +45,9 @@ func withGcloudNaming(t *testing.T, project string) {
 	t.Setenv("PATH", bin)
 }
 
-func targeted(t *testing.T, options providerkit.Options) string {
+func targeted(t *testing.T, options provider.Options) string {
 	t.Helper()
-	p, err := gcp.New(context.Background(), providerkit.Settings{Options: options})
+	p, err := gcp.New(context.Background(), provider.Settings{Options: options})
 	if err != nil {
 		t.Fatalf("New(%v) = %v, want a provider", options, err)
 	}
@@ -61,7 +62,7 @@ func TestAProjectNamedInTheOptionsIsTheProjectTheRunTargets(t *testing.T) {
 	withoutAnAmbientProject(t)
 	t.Setenv("GOOGLE_CLOUD_PROJECT", "ambient-elsewhere")
 
-	if got := targeted(t, providerkit.Options{"project": "acme-prod", "region": "europe-west1"}); got != "acme-prod" {
+	if got := targeted(t, provider.Options{"project": "acme-prod", "region": "europe-west1"}); got != "acme-prod" {
 		t.Errorf("the run targets %q, want the project the options named", got)
 	}
 }
@@ -70,7 +71,7 @@ func TestAProjectNobodyNamedIsTakenFromTheEnvironmentTheRunCarries(t *testing.T)
 	withoutAnAmbientProject(t)
 	t.Setenv("GOOGLE_CLOUD_PROJECT", "ambient-prod")
 
-	if got := targeted(t, providerkit.Options{"region": "europe-west1"}); got != "ambient-prod" {
+	if got := targeted(t, provider.Options{"region": "europe-west1"}); got != "ambient-prod" {
 		t.Errorf("the run targets %q, want the ambient project: switching credentials is how one project deploys production and another previews", got)
 	}
 }
@@ -79,7 +80,7 @@ func TestTheCloudSDKProjectIsReadWhenNothingBeforeItNamesOne(t *testing.T) {
 	withoutAnAmbientProject(t)
 	t.Setenv("CLOUDSDK_CORE_PROJECT", "sdk-prod")
 
-	if got := targeted(t, providerkit.Options{"region": "europe-west1"}); got != "sdk-prod" {
+	if got := targeted(t, provider.Options{"region": "europe-west1"}); got != "sdk-prod" {
 		t.Errorf("the run targets %q, want the project CLOUDSDK_CORE_PROJECT names", got)
 	}
 }
@@ -88,7 +89,7 @@ func TestTheAmbientProjectIsReadFromGcloudWhenNothingElseNamesOne(t *testing.T) 
 	withoutAnAmbientProject(t)
 	withGcloudNaming(t, "gcloud-config-prod")
 
-	if got := targeted(t, providerkit.Options{"region": "europe-west1"}); got != "gcloud-config-prod" {
+	if got := targeted(t, provider.Options{"region": "europe-west1"}); got != "gcloud-config-prod" {
 		t.Errorf("the run targets %q, want the project gcloud's config names", got)
 	}
 }
@@ -96,7 +97,7 @@ func TestTheAmbientProjectIsReadFromGcloudWhenNothingElseNamesOne(t *testing.T) 
 func TestAProjectNeitherNamedNorAmbientIsRefusedNamingWhereItIsReadWhenTheCloudIsReached(t *testing.T) {
 	withoutAnAmbientProject(t)
 
-	p, err := gcp.New(context.Background(), providerkit.Settings{Options: providerkit.Options{"region": "europe-west1"}})
+	p, err := gcp.New(context.Background(), provider.Settings{Options: provider.Options{"region": "europe-west1"}})
 	if err != nil {
 		t.Fatalf("New() with no project and nothing ambient = %v, want a provider: nothing has reached the cloud yet", err)
 	}
@@ -121,7 +122,7 @@ func TestAGcloudThatFailsIsNamedInTheRefusalRatherThanReadAsNamingNothing(t *tes
 	}
 	t.Setenv("PATH", bin)
 
-	p, err := gcp.New(context.Background(), providerkit.Settings{Options: providerkit.Options{"region": "europe-west1"}})
+	p, err := gcp.New(context.Background(), provider.Settings{Options: provider.Options{"region": "europe-west1"}})
 	if err != nil {
 		t.Fatalf("New() = %v, want a provider: nothing has reached the cloud yet", err)
 	}
@@ -165,7 +166,7 @@ func TestAProjectNamedInTheEnvironmentBeatsTheOneTheCredentialsCarry(t *testing.
 	withApplicationDefaultCredentials(t, "credential-project")
 	t.Setenv("GOOGLE_CLOUD_PROJECT", "ambient-prod")
 
-	if got := targeted(t, providerkit.Options{"region": "europe-west1"}); got != "ambient-prod" {
+	if got := targeted(t, provider.Options{"region": "europe-west1"}); got != "ambient-prod" {
 		t.Errorf("the run targets %q, want the project the environment names: on GCE the credentials always carry the metadata project, and naming one is how an operator overrides it", got)
 	}
 }
@@ -175,7 +176,7 @@ func TestTheCloudSDKProjectBeatsTheOneTheCredentialsCarry(t *testing.T) {
 	withApplicationDefaultCredentials(t, "credential-project")
 	t.Setenv("CLOUDSDK_CORE_PROJECT", "sdk-prod")
 
-	if got := targeted(t, providerkit.Options{"region": "europe-west1"}); got != "sdk-prod" {
+	if got := targeted(t, provider.Options{"region": "europe-west1"}); got != "sdk-prod" {
 		t.Errorf("the run targets %q, want the project CLOUDSDK_CORE_PROJECT names", got)
 	}
 }
@@ -184,17 +185,17 @@ func TestTheCredentialsAreReadWhenNothingAroundTheRunNamesAProject(t *testing.T)
 	withoutAnAmbientProject(t)
 	withApplicationDefaultCredentials(t, "credential-project")
 
-	if got := targeted(t, providerkit.Options{"region": "europe-west1"}); got != "credential-project" {
+	if got := targeted(t, provider.Options{"region": "europe-west1"}); got != "credential-project" {
 		t.Errorf("the run targets %q, want the project the credentials carry", got)
 	}
 }
 
-func configured(t *testing.T, options providerkit.Options) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
+func configured(t *testing.T, options provider.Options) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
 	t.Helper()
 	spec := providerkit.Spec{
 		Version: "test",
-		New: func(ctx context.Context, _ providerkit.Settings) (providerkit.Provider, error) {
-			return gcp.New(ctx, providerkit.Settings{Options: options})
+		New: func(ctx context.Context, _ provider.Settings) (provider.Provider, error) {
+			return gcp.New(ctx, provider.Settings{Options: options})
 		},
 	}
 	server := httptest.NewServer(providerkit.ConformanceMux(spec))
@@ -210,7 +211,7 @@ func TestAScanReadsNoCredentialsAndRunsNoGcloud(t *testing.T) {
 	withoutAnAmbientProject(t)
 	withGcloudNaming(t, "gcloud-config-prod")
 
-	client, pricer := configured(t, providerkit.Options{"project": "acme-prod", "region": "europe-west1"})
+	client, pricer := configured(t, provider.Options{"project": "acme-prod", "region": "europe-west1"})
 	set, err := client.Shape(context.Background(), &contractv1.ShapeRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},
@@ -227,7 +228,7 @@ func TestAScanReadsNoCredentialsAndRunsNoGcloud(t *testing.T) {
 		t.Fatalf("Price() = %v, want an estimate with no credentials and no gcloud consulted", err)
 	}
 
-	client, pricer = configured(t, providerkit.Options{"region": "europe-west1"})
+	client, pricer = configured(t, provider.Options{"region": "europe-west1"})
 	_, err = client.Shape(context.Background(), &contractv1.ShapeRequest{
 		Manifest:    shopManifest(),
 		Environment: &environmentv1.Environment{Tier: environmentv1.Tier_TIER_PRODUCTION},

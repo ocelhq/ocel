@@ -10,7 +10,7 @@ import (
 	"google.golang.org/api/secretmanager/v1"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	kitpulumi "github.com/ocelhq/ocel/pkg/providerkit/pulumi"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -26,7 +26,7 @@ type albProgram struct {
 	project string
 }
 
-func (a albProgram) Run(ctx *pulumi.Context, _ providerkit.StackPlan) error {
+func (a albProgram) Run(ctx *pulumi.Context, _ provider.StackPlan) error {
 	return a.run(ctx, a.project)
 }
 
@@ -62,7 +62,7 @@ func (s albStacks) Outputs(ctx context.Context, target alb.Target) (map[string]s
 	return outputsOf(ctx, automation, plan.Ref)
 }
 
-func outputsOf(ctx context.Context, automation *kitpulumi.Automation, ref providerkit.StackRef) (map[string]string, error) {
+func outputsOf(ctx context.Context, automation *kitpulumi.Automation, ref provider.StackRef) (map[string]string, error) {
 	outputs, err := automation.Outputs(ctx, ref, edge.DiscardProgress())
 	if err != nil {
 		return nil, err
@@ -80,14 +80,14 @@ func (s albStacks) opened(
 	ctx context.Context,
 	target alb.Target,
 	program alb.Program,
-) (*kitpulumi.Automation, providerkit.StackPlan, error) {
+) (*kitpulumi.Automation, provider.StackPlan, error) {
 	clients, err := s.p.stood(ctx)
 	if err != nil {
-		return nil, providerkit.StackPlan{}, err
+		return nil, provider.StackPlan{}, err
 	}
 	passphrase, err := s.passphrase(ctx, clients, target.Class)
 	if err != nil {
-		return nil, providerkit.StackPlan{}, err
+		return nil, provider.StackPlan{}, err
 	}
 	config, plan := s.config(clients, target, passphrase, program)
 	return kitpulumi.New(config), plan, nil
@@ -98,7 +98,7 @@ func (s albStacks) config(
 	target alb.Target,
 	passphrase string,
 	program alb.Program,
-) (kitpulumi.Config, providerkit.StackPlan) {
+) (kitpulumi.Config, provider.StackPlan) {
 	project := naming.PulumiProject(target.Prefix())
 	config := kitpulumi.Config{
 		Access: kitpulumi.Access{
@@ -117,13 +117,13 @@ func (s albStacks) config(
 	if target.Slug == "" {
 		config.Refresh = refreshesTheFront
 	}
-	return config, providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: project, Class: target.Class, Name: naming.InfraStack(target.Name())},
-		Kind: providerkit.StackInfra,
+	return config, provider.StackPlan{
+		Ref:  provider.StackRef{Project: project, Class: target.Class, Name: naming.InfraStack(target.Name())},
+		Kind: provider.StackInfra,
 	}
 }
 
-func refreshesTheFront(providerkit.StackRef, kitpulumi.Op) bool { return true }
+func refreshesTheFront(provider.StackRef, kitpulumi.Op) bool { return true }
 
 func (s albStacks) passphrase(ctx context.Context, clients *clients, class edge.Class) (string, error) {
 	secrets, err := clients.Secrets()

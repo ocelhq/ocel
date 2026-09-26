@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -64,15 +64,15 @@ func pinning(t *testing.T, machine *box, block []byte, at string) *vps.Provider 
 	return p
 }
 
-func certificateFor(t *testing.T, p *vps.Provider, hostname string) providerkit.Certificate {
+func certificateFor(t *testing.T, p *vps.Provider, hostname string) provider.Certificate {
 	t.Helper()
-	cert, err := p.Certificates().Issue(context.Background(), providerkit.CertificateRequest{
+	cert, err := p.Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind:     boxedge.Kind,
 		Hostname: hostname,
 		Progress: edge.DiscardProgress(),
-		Prove: func(context.Context, providerkit.Certificate, []edge.Record) (providerkit.Certificate, error) {
+		Prove: func(context.Context, provider.Certificate, []edge.Record) (provider.Certificate, error) {
 			t.Error("the box asked for a validation record to be proved, and ocel asks no CA on a box")
-			return providerkit.Certificate{}, nil
+			return provider.Certificate{}, nil
 		},
 	})
 	if err != nil {
@@ -144,7 +144,7 @@ func TestAPinThatDoesNotCoverTheHostnameIsRefusedAtBindWithAReasonThatNamesBoth(
 		func(context.Context) (host.Conn, error) { return machine, nil },
 	)
 
-	_, err := p.Certificates().Issue(context.Background(), providerkit.CertificateRequest{
+	_, err := p.Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.com", Progress: edge.DiscardProgress(),
 	})
 	var refusal refusal.Refusal
@@ -170,7 +170,7 @@ func TestAnExpiredPinIsRefusedRatherThanServedUnderAHandleThatReadsHealthy(t *te
 		func(context.Context) (host.Conn, error) { return machine, nil },
 	)
 
-	_, err := p.Certificates().Issue(context.Background(), providerkit.CertificateRequest{
+	_, err := p.Certificates().Issue(context.Background(), provider.CertificateRequest{
 		Kind: boxedge.Kind, Hostname: "pr-7.preview.example.com", Progress: edge.DiscardProgress(),
 	})
 	var refusal refusal.Refusal
@@ -325,7 +325,7 @@ func TestAPinHandleNamingAPathOutsideTheProxysOwnDirectoryIsRefusedBeforeItIsRea
 	)
 
 	_, err := p.Certificates().Inspect(context.Background(), boxedge.Kind, "pr-7.preview.example.com",
-		providerkit.Certificate{ID: certs.PinHandle(elsewhere)})
+		provider.Certificate{ID: certs.PinHandle(elsewhere)})
 	var refusal refusal.Refusal
 	if !asRefusal(err, &refusal) || !strings.Contains(refusal.Message, caddy.PinsDir) {
 		t.Fatalf("Inspect() over a pin outside %s = %v, want a refusal naming the one directory the proxy is handed", caddy.PinsDir, err)

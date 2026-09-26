@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 var secretMintedAt = time.Date(2026, 1, 10, 12, 0, 0, 0, time.UTC)
@@ -269,13 +269,13 @@ func TestPlanOriginSecret(t *testing.T) {
 		name   string
 		held   *OriginSecret
 		now    time.Time
-		action providerkit.ChangeAction
+		action provider.ChangeAction
 	}{
-		{"absent is created", nil, secretMintedAt, providerkit.ActionCreate},
-		{"young is kept", &OriginSecret{Current: "s1", CreatedAt: secretMintedAt}, secretMintedAt.Add(time.Hour), providerkit.ActionKeep},
-		{"old is rotated", &OriginSecret{Current: "s1", CreatedAt: secretMintedAt}, rotatedAt, providerkit.ActionUpdate},
-		{"in grace is kept", &OriginSecret{Current: "s2", CreatedAt: rotatedAt, Previous: "s1", RotatedAt: rotatedAt}, rotatedAt.Add(time.Hour), providerkit.ActionKeep},
-		{"past grace retires", &OriginSecret{Current: "s2", CreatedAt: rotatedAt, Previous: "s1", RotatedAt: rotatedAt}, rotatedAt.Add(OriginSecretGrace), providerkit.ActionUpdate},
+		{"absent is created", nil, secretMintedAt, provider.ActionCreate},
+		{"young is kept", &OriginSecret{Current: "s1", CreatedAt: secretMintedAt}, secretMintedAt.Add(time.Hour), provider.ActionKeep},
+		{"old is rotated", &OriginSecret{Current: "s1", CreatedAt: secretMintedAt}, rotatedAt, provider.ActionUpdate},
+		{"in grace is kept", &OriginSecret{Current: "s2", CreatedAt: rotatedAt, Previous: "s1", RotatedAt: rotatedAt}, rotatedAt.Add(time.Hour), provider.ActionKeep},
+		{"past grace retires", &OriginSecret{Current: "s2", CreatedAt: rotatedAt, Previous: "s1", RotatedAt: rotatedAt}, rotatedAt.Add(OriginSecretGrace), provider.ActionUpdate},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ssmc := newFakeSSM()
@@ -289,7 +289,7 @@ func TestPlanOriginSecret(t *testing.T) {
 			if change.Name != originSecretParam || change.Action != tc.action {
 				t.Errorf("change = %+v, want %s as %q", change, originSecretParam, tc.action)
 			}
-			if tc.action == providerkit.ActionUpdate && change.Reason == "" {
+			if tc.action == provider.ActionUpdate && change.Reason == "" {
 				t.Error("an update names no reason, so the plan cannot say what the rotation does")
 			}
 		})

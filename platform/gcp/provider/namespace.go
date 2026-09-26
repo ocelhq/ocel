@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/ports"
@@ -37,11 +37,11 @@ const longestClass = edge.ClassProduction
 var uuidLike = regexp.MustCompile(`[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}`)
 
 type Names struct {
-	namespace providerkit.Namespace
+	namespace provider.Namespace
 	project   string
 }
 
-func (n Names) Namespace() providerkit.Namespace { return n.namespace }
+func (n Names) Namespace() provider.Namespace { return n.namespace }
 
 func (n Names) Project() string { return n.project }
 
@@ -79,7 +79,7 @@ func (n Names) Service(project, env, app, function string) (string, error) {
 				"a service is named for the namespace, the project, the environment and the app it serves, "+
 				"and carries %d characters of a hash of the four, because every one of them may hold a dash and a name joined by dashes alone would read two ways.\n"+
 				"Name a shorter namespace in %s, a shorter project slug, or a shorter app",
-			app, service, len(service), maxServiceName, serviceHashLen, providerkit.NamespaceEnvVar)
+			app, service, len(service), maxServiceName, serviceHashLen, provider.NamespaceEnvVar)
 	}
 	return service, nil
 }
@@ -126,7 +126,7 @@ func (n Names) connectorFits() error {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the %q service account the connector runs as is %d characters and IAM takes %d.\n"+
 				"Name a shorter namespace in %s",
-			n.Connector(), held, maxAccountID, providerkit.NamespaceEnvVar)
+			n.Connector(), held, maxAccountID, provider.NamespaceEnvVar)
 	}
 	return nil
 }
@@ -147,7 +147,7 @@ func (n Names) fit() error {
 					"the %s bucket this bootstrap names is %d characters and Cloud Storage takes %d: "+
 						"namespace %q and project %q together leave nothing to cut.\n"+
 						"Name a shorter namespace in %s, or deploy into a project with a shorter id",
-					bucket, len(bucket), maxBucketName, n.namespace, n.project, providerkit.NamespaceEnvVar)
+					bucket, len(bucket), maxBucketName, n.namespace, n.project, provider.NamespaceEnvVar)
 			}
 		}
 	}
@@ -155,20 +155,20 @@ func (n Names) fit() error {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the %q Firestore database this bootstrap names is %d characters and Firestore takes at least %d.\n"+
 				"Name a longer namespace in %s",
-			n.Database(), len(n.Database()), minDatabaseID, providerkit.NamespaceEnvVar)
+			n.Database(), len(n.Database()), minDatabaseID, provider.NamespaceEnvVar)
 	}
 	if uuidLike.MatchString(n.Database()) {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the %q Firestore database this bootstrap names reads as a UUID, and a Firestore database id may not.\n"+
 				"Name a namespace in %s that does not",
-			n.Database(), providerkit.NamespaceEnvVar)
+			n.Database(), provider.NamespaceEnvVar)
 	}
 	if account := n.WorkloadAccount(longestClass); len(account) > maxAccountID {
 		return refusal.Refuse(refusal.CodeInvalid,
 			"the %s service account this bootstrap names is %d characters and Google takes %d: "+
 				"every app in the %s class runs as it, so the class is part of its name.\n"+
 				"Name a shorter namespace in %s",
-			account, len(account), maxAccountID, longestClass, providerkit.NamespaceEnvVar)
+			account, len(account), maxAccountID, longestClass, provider.NamespaceEnvVar)
 	}
 	return nil
 }

@@ -8,9 +8,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/liveness"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/control"
@@ -22,7 +22,7 @@ import (
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const Vendor providerkit.Vendor = "aws"
+const Vendor provider.Vendor = "aws"
 
 type Provider struct {
 	options    Options
@@ -39,12 +39,12 @@ type Provider struct {
 	liveness.Net
 }
 
-func New(ctx context.Context, settings providerkit.Settings) (providerkit.Provider, error) {
-	decoded, err := providerkit.Decode[Options](Vendor, settings.Options)
+func New(ctx context.Context, settings provider.Settings) (provider.Provider, error) {
+	decoded, err := provider.Decode[Options](Vendor, settings.Options)
 	if err != nil {
 		return nil, err
 	}
-	ns, err := providerkit.NamespaceFromEnv()
+	ns, err := provider.NamespaceFromEnv()
 	if err != nil {
 		return nil, err
 	}
@@ -62,11 +62,11 @@ func NewProvider(options Options, transforms []string, cfg aws.Config, ns bootst
 	return p
 }
 
-func (p *Provider) Facts() providerkit.Facts {
-	return providerkit.Facts{
+func (p *Provider) Facts() provider.Facts {
+	return provider.Facts{
 		Vendor:            Vendor,
 		Bindings:          deploy.Serves(),
-		Computes:          []providerkit.Compute{providerkit.ComputeServerless, providerkit.ComputeContainer},
+		Computes:          []provider.Compute{provider.ComputeServerless, provider.ComputeContainer},
 		Edges:             edges.SupportedEdges(),
 		DefaultEdge:       edges.DefaultKind,
 		DNSKinds:          dns.Kinds(),
@@ -75,8 +75,8 @@ func (p *Provider) Facts() providerkit.Facts {
 	}
 }
 
-func (p *Provider) Hooks() providerkit.Hooks {
-	return providerkit.Hooks{
+func (p *Provider) Hooks() provider.Hooks {
+	return provider.Hooks{
 		PreflightDeploy:     p.PreflightDeploy,
 		VerifyGrants:        p.VerifyGrants,
 		InspectStack:        p.InspectStack,
@@ -86,11 +86,11 @@ func (p *Provider) Hooks() providerkit.Hooks {
 		ProgramEdge:         p.ProgramEdge,
 		EnsureImageRegistry: p.EnsureImageRegistry,
 		OpenRegistryImages:  p.OpenRegistryImages,
-		Cost:                &providerkit.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
+		Cost:                &provider.CostHooks{Shape: p.ShapeCost, Estimate: p.EstimateCost},
 	}
 }
 
-func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrap, error) {
+func (p *Provider) Bootstrap(kind edge.Kind) (provider.Bootstrap, error) {
 	front, err := p.edges().Open(kind)
 	if err != nil {
 		return nil, err
@@ -98,9 +98,9 @@ func (p *Provider) Bootstrap(kind edge.Kind) (providerkit.Bootstrap, error) {
 	return settling{Bootstrap: control.BootstrapFor(p.aws, front, p.edges(), edges.SupportedEdges(), p.options.VarsKey, p.namespace), settled: p.forget}, nil
 }
 
-func (p *Provider) Stacks() providerkit.Stacks { return p.stacks }
+func (p *Provider) Stacks() provider.Stacks { return p.stacks }
 
-func (p *Provider) Artifacts() providerkit.ArtifactStore {
+func (p *Provider) Artifacts() provider.ArtifactStore {
 	return awsports.Artifacts{S3: s3.NewFromConfig(p.aws), Stores: p}
 }
 
@@ -112,20 +112,20 @@ func (p *Provider) Cipher() records.Cipher {
 	return awsports.Cipher{KMS: kms.NewFromConfig(p.aws), Keys: p}
 }
 
-func (p *Provider) Credentials() providerkit.Credentials {
+func (p *Provider) Credentials() provider.Credentials {
 	return control.CredentialsFor(p.aws, p.namespace)
 }
 
-func (p *Provider) Edges() providerkit.Edges { return p.edges() }
+func (p *Provider) Edges() provider.Edges { return p.edges() }
 
-func (p *Provider) DNS() providerkit.DNS {
+func (p *Provider) DNS() provider.DNS {
 	return dns.Registry{Deps: dns.Deps{AWS: p.aws}}
 }
 
-func (p *Provider) Certificates() providerkit.Certificates { return certificates{p} }
+func (p *Provider) Certificates() provider.Certificates { return certificates{p} }
 
-func (p *Provider) Connector() providerkit.Connector { return connector{p} }
+func (p *Provider) Connector() provider.Connector { return connector{p} }
 
 func (p *Provider) Runtime() images.Runtime { return containerRuntime{p} }
 
-func (p *Provider) Liveness() providerkit.Liveness { return &p.Net }
+func (p *Provider) Liveness() provider.Liveness { return &p.Net }

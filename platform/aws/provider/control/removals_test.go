@@ -9,7 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -63,7 +63,7 @@ func removingBootstrapper(t *testing.T, class string) Bootstrap {
 	return b
 }
 
-func groupNamed(plan providerkit.Plan, name string) *providerkit.ChangeGroup {
+func groupNamed(plan provider.Plan, name string) *provider.ChangeGroup {
 	for i, group := range plan.Groups {
 		if group.Name == name {
 			return &plan.Groups[i]
@@ -72,7 +72,7 @@ func groupNamed(plan providerkit.Plan, name string) *providerkit.ChangeGroup {
 	return nil
 }
 
-func changeNamed(group *providerkit.ChangeGroup, name string) *providerkit.Change {
+func changeNamed(group *provider.ChangeGroup, name string) *provider.Change {
 	if group == nil {
 		return nil
 	}
@@ -84,7 +84,7 @@ func changeNamed(group *providerkit.ChangeGroup, name string) *providerkit.Chang
 	return nil
 }
 
-func groupNames(plan providerkit.Plan) string {
+func groupNames(plan provider.Plan) string {
 	names := make([]string, 0, len(plan.Groups))
 	for _, group := range plan.Groups {
 		names = append(names, group.Name)
@@ -113,12 +113,12 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 	if plan.Groups[0].Name != isr.Name {
 		t.Errorf("the plan opens with %q, want the feature stacks ahead of the core they depend on", plan.Groups[0].Name)
 	}
-	for _, group := range []*providerkit.ChangeGroup{isr, core} {
-		if group.Kind != providerkit.StackGroupKind || group.Action != providerkit.ActionDelete {
+	for _, group := range []*provider.ChangeGroup{isr, core} {
+		if group.Kind != provider.StackGroupKind || group.Action != provider.ActionDelete {
 			t.Errorf("group %+v, want a stack planned for deletion", group)
 		}
 		for _, change := range group.Changes {
-			if change.Action != providerkit.ActionDelete || !strings.HasPrefix(change.Kind, "AWS::") {
+			if change.Action != provider.ActionDelete || !strings.HasPrefix(change.Kind, "AWS::") {
 				t.Errorf("row %+v, want a typed resource planned for deletion", change)
 			}
 		}
@@ -135,7 +135,7 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 	}
 
 	params := groupNamed(plan, "aws/"+bootstrap.ParamGroupName)
-	if params == nil || params.Action != providerkit.ActionDelete {
+	if params == nil || params.Action != provider.ActionDelete {
 		t.Fatalf("plan groups = %s, want the parameters this bootstrap holds", groupNames(plan))
 	}
 	credentials := changeNamed(params, edgeParam(t, bootstrap.ClassProduction, "/credentials"))
@@ -147,12 +147,12 @@ func TestPlanRemovalReadsAsTheApplyPlanDoes(t *testing.T) {
 		t.Errorf("the parameters group's rows = %+v, want the access key the edge signs with", params.Changes)
 	}
 	passphrase := changeNamed(params, passphraseParam)
-	if passphrase == nil || passphrase.Action != providerkit.ActionDelete || passphrase.Reason == "" {
+	if passphrase == nil || passphrase.Action != provider.ActionDelete || passphrase.Reason == "" {
 		t.Errorf("the passphrase row = %+v, want it deleted when no sibling bootstrap holds it, with the reason the typed confirmation names", passphrase)
 	}
 
 	front := groupNamed(plan, string(cloudflareKind)+"/edge")
-	if front == nil || front.Kind != providerkit.EdgeGroupKind || front.Action != providerkit.ActionDelete {
+	if front == nil || front.Kind != provider.EdgeGroupKind || front.Action != provider.ActionDelete {
 		t.Fatalf("plan groups = %s, want the edge under its own vendor", groupNames(plan))
 	}
 	if front.Feature != bootstrap.FeatureCloudflareEdge {
@@ -178,13 +178,13 @@ func TestPlanRemovalKeepsThePassphraseABootstrappedSiblingHolds(t *testing.T) {
 	}
 	params := groupNamed(plan, "aws/"+bootstrap.ParamGroupName)
 	kept := changeNamed(params, passphraseParam)
-	if kept == nil || kept.Action != providerkit.ActionKeep {
+	if kept == nil || kept.Action != provider.ActionKeep {
 		t.Fatalf("the passphrase row = %+v, want it kept", kept)
 	}
 	if !strings.Contains(kept.Reason, bootstrap.ClassProduction) {
 		t.Errorf("reason = %q, want it to name the bootstrap still holding it", kept.Reason)
 	}
-	if params.Action != providerkit.ActionDelete {
+	if params.Action != provider.ActionDelete {
 		t.Errorf("the parameters group = %q, want it still a deletion: only the passphrase stays", params.Action)
 	}
 }
@@ -219,7 +219,7 @@ func TestPlanRemovalLeavesOutAnEdgeThatSaysNothingAboutItsOwnRemoval(t *testing.
 		t.Fatalf("PlanRemove: %v", err)
 	}
 	for _, group := range plan.Groups {
-		if group.Kind == providerkit.EdgeGroupKind {
+		if group.Kind == provider.EdgeGroupKind {
 			t.Errorf("plan carries %+v for an edge that says nothing about its own removal", group)
 		}
 	}
@@ -267,7 +267,7 @@ func TestPlanRemovalNamesEveryStandingEdgeByItsOwnKind(t *testing.T) {
 	if changeNamed(other, "ocel-edge-cache") == nil {
 		t.Errorf("the %s group carries %+v, want the rows that edge planned", other.Name, other.Changes)
 	}
-	for _, group := range []*providerkit.ChangeGroup{front, other} {
+	for _, group := range []*provider.ChangeGroup{front, other} {
 		for _, change := range group.Changes {
 			if strings.HasPrefix(change.Kind, "Cloudflare::") != (group.Name == string(cloudflareKind)+"/edge") {
 				t.Errorf("group %q carries %+v, want only the rows of the edge it names", group.Name, change)

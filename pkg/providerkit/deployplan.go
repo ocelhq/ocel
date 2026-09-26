@@ -7,59 +7,31 @@ import (
 	"github.com/ocelhq/ocel/pkg/naming"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const EveryPreview = ""
 
-type DeployPlan struct {
-	Slug    string
-	Class   edge.Class
-	Env     string
-	Label   string
-	Pointer string
-
-	Infra naming.StackName
-	Apps  []AppEntry
-
-	PromotionID string
-	Tag         string
-	Builds      map[string]string
-	Phase       string
-}
-
-type AppEntry struct {
-	App      string
-	Stack    naming.StackName
-	Build    Build
-	Manifest *contractv1.ManifestApp
-
-	Image           string
-	HealthCheckPath string
-	Arch            string
-}
-
-func (e AppEntry) Compute() Compute { return Compute(e.Manifest.GetCompute()) }
-
-func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (DeployPlan, error) {
+func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (provider.DeployPlan, error) {
 	manifest := req.GetManifest()
 	env := req.GetEnvironment()
 
 	class, err := classOf(env.GetTier())
 	if err != nil {
-		return DeployPlan{}, err
+		return provider.DeployPlan{}, err
 	}
 	name, err := envName(env)
 	if err != nil {
-		return DeployPlan{}, err
+		return provider.DeployPlan{}, err
 	}
 	slug := manifest.GetSlug()
 	if slug == "" {
-		return DeployPlan{}, refusal.Refuse(refusal.CodeInvalid, "this manifest names no project, and every stack a deploy stands up belongs to one")
+		return provider.DeployPlan{}, refusal.Refuse(refusal.CodeInvalid, "this manifest names no project, and every stack a deploy stands up belongs to one")
 	}
 
-	plan := DeployPlan{
+	plan := provider.DeployPlan{
 		Slug:        slug,
 		Class:       class,
 		Env:         name,
@@ -74,12 +46,12 @@ func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (DeployP
 	}
 	containers, err := appContainers(manifest)
 	if err != nil {
-		return DeployPlan{}, err
+		return provider.DeployPlan{}, err
 	}
 	for _, app := range manifest.GetApps() {
 		entry, err := appEntry(app, name)
 		if err != nil {
-			return DeployPlan{}, err
+			return provider.DeployPlan{}, err
 		}
 		if container, ours := containers[entry.App]; ours {
 			entry.Image = container.GetImage()
@@ -92,7 +64,7 @@ func buildDeployPlan(req *contractv1.DeployRequest, promotionID string) (DeployP
 		plan.Apps = append(plan.Apps, entry)
 	}
 	if err := refuseOrphanFunctions(manifest, plan.Builds); err != nil {
-		return DeployPlan{}, err
+		return provider.DeployPlan{}, err
 	}
 	return plan, nil
 }
@@ -111,7 +83,7 @@ func appContainers(manifest *contractv1.Manifest) (map[string]*contractv1.Manife
 			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"a container names the app %q, which this manifest does not declare", app)
 		}
-		if kind != string(ComputeContainer) {
+		if kind != string(provider.ComputeContainer) {
 			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"a container names the app %q, which this manifest says runs on %q compute", app, kind)
 		}
@@ -122,7 +94,7 @@ func appContainers(manifest *contractv1.Manifest) (map[string]*contractv1.Manife
 		containers[app] = container
 	}
 	for app, kind := range compute {
-		if kind == string(ComputeContainer) && containers[app].GetImage() == "" {
+		if kind == string(provider.ComputeContainer) && containers[app].GetImage() == "" {
 			return nil, refusal.Refuse(refusal.CodeInvalid,
 				"app %q runs on container compute and this manifest carries no image for it", app)
 		}
@@ -152,23 +124,23 @@ func refuseOrphanFunctions(manifest *contractv1.Manifest, declared map[string]st
 	return nil
 }
 
-func appEntry(app *contractv1.ManifestApp, env string) (AppEntry, error) {
+func appEntry(app *contractv1.ManifestApp, env string) (provider.AppEntry, error) {
 	name := app.GetName()
 	if name == "" {
-		return AppEntry{}, refusal.Refuse(refusal.CodeInvalid, "this manifest carries an app with no name, and a stack is named after the app it serves")
+		return provider.AppEntry{}, refusal.Refuse(refusal.CodeInvalid, "this manifest carries an app with no name, and a stack is named after the app it serves")
 	}
 	if name == naming.InfraApp {
-		return AppEntry{}, refusal.Refuse(refusal.CodeInvalid,
+		return provider.AppEntry{}, refusal.Refuse(refusal.CodeInvalid,
 			"app %q uses the name reserved for the environment's infra stack; rename the app", name)
 	}
 	if err := naming.Validate("app name", name); err != nil {
-		return AppEntry{}, refusal.Refuse(refusal.CodeInvalid, "%s", err.Error())
+		return provider.AppEntry{}, refusal.Refuse(refusal.CodeInvalid, "%s", err.Error())
 	}
-	identity, err := NewBuild(app.GetDeploymentId(), env, FingerprintVariables(app.GetVariables()))
+	identity, err := provider.NewBuild(app.GetDeploymentId(), env, FingerprintVariables(app.GetVariables()))
 	if err != nil {
-		return AppEntry{}, err
+		return provider.AppEntry{}, err
 	}
-	return AppEntry{
+	return provider.AppEntry{
 		App:      name,
 		Stack:    naming.AppStack(env, name, identity.Release()),
 		Build:    identity,
@@ -195,14 +167,14 @@ func envScope(env *environmentv1.Environment) (string, error) {
 	return envName(env)
 }
 
-func (p DeployPlan) bindingEnvironment() string {
+func bindingEnvironment(p provider.DeployPlan) string {
 	if p.Class == edge.ClassProduction {
 		return ""
 	}
 	return p.Env
 }
 
-func (p DeployPlan) coordinate(app string, release naming.Release) naming.Coordinate {
+func appCoordinate(p provider.DeployPlan, app string, release naming.Release) naming.Coordinate {
 	return naming.Coordinate{
 		Project: naming.Sanitize(p.Slug),
 		Env:     p.Env,
@@ -211,8 +183,8 @@ func (p DeployPlan) coordinate(app string, release naming.Release) naming.Coordi
 	}
 }
 
-func (p DeployPlan) tags(entry AppEntry) map[string]string {
-	coordinate := p.coordinate(entry.App, entry.Build.Release())
+func appTags(p provider.DeployPlan, entry provider.AppEntry) map[string]string {
+	coordinate := appCoordinate(p, entry.App, entry.Build.Release())
 	coordinate.Kind = naming.KindFunction
 	return coordinate.Tags(naming.Facts{
 		ManagedBy:  "ocel",
@@ -222,7 +194,7 @@ func (p DeployPlan) tags(entry AppEntry) map[string]string {
 	})
 }
 
-func (p DeployPlan) infraTags() map[string]string {
+func infraTags(p provider.DeployPlan) map[string]string {
 	tags := map[string]string{
 		"ocel:managed-by": "ocel",
 		"ocel:project":    naming.Sanitize(p.Slug),
@@ -235,7 +207,7 @@ func (p DeployPlan) infraTags() map[string]string {
 
 type ReclaimTarget struct {
 	App      string
-	Build    Build
+	Build    provider.Build
 	Stack    naming.StackName
 	Prefixes []string
 }
@@ -301,14 +273,14 @@ func containerRelease(key string) bool {
 
 func notHex(r rune) bool { return !strings.ContainsRune("0123456789abcdef", r) }
 
-func splitRecordKey(key string) (string, Build, bool) {
+func splitRecordKey(key string) (string, provider.Build, bool) {
 	app, rendered, split := strings.Cut(strings.TrimPrefix(key, recordKeyPrefix), "/")
 	if !split || app == "" {
-		return "", Build{}, false
+		return "", provider.Build{}, false
 	}
-	identity, err := ParseBuild(rendered)
+	identity, err := provider.ParseBuild(rendered)
 	if err != nil {
-		return "", Build{}, false
+		return "", provider.Build{}, false
 	}
 	return app, identity, true
 }

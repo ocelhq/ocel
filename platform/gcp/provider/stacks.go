@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
@@ -17,7 +17,7 @@ import (
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
 )
 
-func serviceFor(names Names, plan providerkit.StackPlan, app *providerkit.AppPlan, function string) (string, error) {
+func serviceFor(names Names, plan provider.StackPlan, app *provider.AppPlan, function string) (string, error) {
 	if app.PreviewLabel != "" {
 		return names.PreviewService(app.PreviewLabel, app.App, function)
 	}
@@ -27,7 +27,7 @@ func serviceFor(names Names, plan providerkit.StackPlan, app *providerkit.AppPla
 const previewOpenWarning = "is a preview and answers anyone who knows its Cloud Run url: the %q edge shields nothing, " +
 	"and Cloud Run's invoker check would shut browsers out too. Front previews with an edge that shields the origin, or keep their urls to yourselves"
 
-func warnPreviewOpen(plan providerkit.StackPlan, service string, progress edge.Progress) {
+func warnPreviewOpen(plan provider.StackPlan, service string, progress edge.Progress) {
 	if plan.Ref.Class != edge.ClassPreview || factsOf(plan.Edge).ShieldsOrigin {
 		return
 	}
@@ -38,7 +38,7 @@ func warnPreviewOpen(plan providerkit.StackPlan, service string, progress edge.P
 	say(progress, service+" "+fmt.Sprintf(previewOpenWarning, kind))
 }
 
-func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) ([]providerkit.Function, error) {
+func (p *Provider) ProvisionFunctions(ctx context.Context, plan provider.StackPlan, progress edge.Progress) ([]provider.Function, error) {
 	app := plan.App
 	if app == nil {
 		return nil, nil
@@ -52,7 +52,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 	if err != nil {
 		return nil, err
 	}
-	standing := make([]providerkit.Function, 0, len(app.Functions))
+	standing := make([]provider.Function, 0, len(app.Functions))
 	for _, spec := range app.Functions {
 		if err := runsX8664(spec.Framework.Arch, "function "+spec.Name); err != nil {
 			return nil, err
@@ -77,7 +77,7 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 			image:   spec.Image,
 			env:     values,
 			account: account,
-			compute: providerkit.ComputeServerless,
+			compute: provider.ComputeServerless,
 			public:  true,
 			ingress: ingressFor(factsOf(plan.Edge)),
 			memory:  spec.Memory,
@@ -87,14 +87,14 @@ func (p *Provider) ProvisionFunctions(ctx context.Context, plan providerkit.Stac
 			return nil, err
 		}
 		warnPreviewOpen(plan, service, progress)
-		standing = append(standing, providerkit.Function{
+		standing = append(standing, provider.Function{
 			Name: spec.Name, Physical: service, URL: ran.url, Revision: ran.revision,
 		})
 	}
 	return standing, nil
 }
 
-func (p *Provider) RemoveFunctions(ctx context.Context, _ providerkit.StackRef, functions []providerkit.Function, progress edge.Progress) error {
+func (p *Provider) RemoveFunctions(ctx context.Context, _ provider.StackRef, functions []provider.Function, progress edge.Progress) error {
 	for _, function := range functions {
 		if function.Physical == "" {
 			continue
@@ -106,7 +106,7 @@ func (p *Provider) RemoveFunctions(ctx context.Context, _ providerkit.StackRef, 
 	return nil
 }
 
-func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.StackPlan, progress edge.Progress) ([]providerkit.AppContainer, error) {
+func (p *Provider) ProvisionContainers(ctx context.Context, plan provider.StackPlan, progress edge.Progress) ([]provider.AppContainer, error) {
 	app := plan.App
 	if app == nil {
 		return nil, nil
@@ -140,7 +140,7 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 		image:   app.Image,
 		env:     values,
 		account: names.WorkloadAccountEmail(plan.Ref.Class),
-		compute: providerkit.ComputeContainer,
+		compute: provider.ComputeContainer,
 		health:  app.HealthCheckPath,
 		public:  true,
 		ingress: ingressFor(factsOf(plan.Edge)),
@@ -149,12 +149,12 @@ func (p *Provider) ProvisionContainers(ctx context.Context, plan providerkit.Sta
 		return nil, err
 	}
 	warnPreviewOpen(plan, service, progress)
-	return []providerkit.AppContainer{{
+	return []provider.AppContainer{{
 		Name: app.App, Physical: service, URL: ran.url, Image: app.Image, Revision: ran.revision,
 	}}, nil
 }
 
-func (p *Provider) RemoveContainers(ctx context.Context, _ providerkit.StackRef, containers []providerkit.AppContainer, progress edge.Progress) error {
+func (p *Provider) RemoveContainers(ctx context.Context, _ provider.StackRef, containers []provider.AppContainer, progress edge.Progress) error {
 	for _, container := range containers {
 		if container.Physical == "" {
 			continue
@@ -166,7 +166,7 @@ func (p *Provider) RemoveContainers(ctx context.Context, _ providerkit.StackRef,
 	return nil
 }
 
-func (p *Provider) runtimeEnv(names Names, plan providerkit.StackPlan) (map[string]string, error) {
+func (p *Provider) runtimeEnv(names Names, plan provider.StackPlan) (map[string]string, error) {
 	app := plan.App
 	env := map[string]string{}
 	if app.HealthCheckPath != "" {
@@ -192,14 +192,14 @@ func (p *Provider) runtimeEnv(names Names, plan providerkit.StackPlan) (map[stri
 	return env, nil
 }
 
-func liveEnvironment(ref providerkit.StackRef) string {
+func liveEnvironment(ref provider.StackRef) string {
 	if ref.Class == edge.ClassProduction {
 		return ""
 	}
 	return ref.Name.Env
 }
 
-func liveKeys(held providerkit.AppValues) []live.Key {
+func liveKeys(held provider.AppValues) []live.Key {
 	keys := make([]live.Key, 0, len(held.Secrets))
 	for _, secret := range held.Secrets {
 		keys = append(keys, live.Key{Key: secret.Key, Folder: secret.Folder})
@@ -207,10 +207,10 @@ func liveKeys(held providerkit.AppValues) []live.Key {
 	return keys
 }
 
-func liveBindings(held providerkit.AppValues) []live.Binding {
+func liveBindings(held provider.AppValues) []live.Binding {
 	bindings := make([]live.Binding, 0, len(held.Bindings))
 	for _, binding := range held.Bindings {
-		kind := providerkit.WireBindingType(binding.Type)
+		kind := provider.WireBindingType(binding.Type)
 		resource := binding.Resource
 		if resource == "" {
 			resource = binding.Name

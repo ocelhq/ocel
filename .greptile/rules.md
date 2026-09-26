@@ -181,7 +181,7 @@ Fails when:
 - A method repeats its receiver's noun (`Certificates.IssueCertificate`,
   `Runtime.ContainerRuntime`).
 - A vendor's port, hook or hook group body lives in its root file or in a file named for
-  something else, or a `var _ providerkit.X = (*Provider)(nil)` assertion stands in for
+  something else, or a `var _ provider.X = (*Provider)(nil)` assertion stands in for
   the `Facts` or `Hooks` literal that already type-checks it.
 
 ## Signal

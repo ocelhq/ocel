@@ -8,29 +8,26 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-const BootstrapSchema = 1
-
-const FeatureVarsKey = "vars-key"
-
 type Gate struct {
-	Bootstrap Bootstrap
+	Bootstrap provider.Bootstrap
 	Records   records.Store
-	WrittenBy WrittenBy
+	WrittenBy provider.WrittenBy
 	Edge      edge.Kind
 }
 
 type BootstrapState struct {
 	Class      edge.Class
 	Present    bool
-	Stacks     []BootstrapStack
+	Stacks     []provider.BootstrapStack
 	Features   []string
 	Schema     int
-	WrittenBy  WrittenBy
+	WrittenBy  provider.WrittenBy
 	AutoHeal   bool
 	Unfinished bool
 	Reading    any
@@ -47,7 +44,7 @@ func (g Gate) State(ctx context.Context, class edge.Class) (BootstrapState, erro
 	for _, stack := range described.Stacks {
 		if stack.Feature == "" {
 			standing.Schema = int(stack.Schema)
-			standing.WrittenBy = WrittenBy(stack.WrittenBy)
+			standing.WrittenBy = provider.WrittenBy(stack.WrittenBy)
 			continue
 		}
 		if stack.Present {
@@ -75,7 +72,7 @@ func (s BootstrapState) Stale(required []string) []string {
 	return out
 }
 
-func (s BootstrapState) Downgrade(writing WrittenBy) bool {
+func (s BootstrapState) Downgrade(writing provider.WrittenBy) bool {
 	return s.WrittenBy.Newer(writing)
 }
 
@@ -142,7 +139,7 @@ func (g Gate) intended(standing BootstrapState, req ApplyRequest) (intent, error
 	return intent{standing: standing, requested: requested, removing: removing, ordered: ordered}, nil
 }
 
-func (g Gate) ensuringEdge(catalogue []Feature, requested []string) []string {
+func (g Gate) ensuringEdge(catalogue []provider.Feature, requested []string) []string {
 	fronting := FeatureNeedingEdge(catalogue, g.Edge)
 	if fronting == "" || slices.Contains(requested, fronting) {
 		return requested
@@ -150,7 +147,7 @@ func (g Gate) ensuringEdge(catalogue []Feature, requested []string) []string {
 	return append(slices.Clone(requested), fronting)
 }
 
-func (g Gate) refuseUnfronting(catalogue []Feature, named, removing []string) error {
+func (g Gate) refuseUnfronting(catalogue []provider.Feature, named, removing []string) error {
 	fronting := FeatureNeedingEdge(catalogue, g.Edge)
 	if fronting == "" || !slices.Contains(removing, fronting) {
 		return nil
@@ -165,8 +162,8 @@ func (g Gate) refuseUnfronting(catalogue []Feature, named, removing []string) er
 		strings.Join(named, ", "), fronting, fronting)
 }
 
-func (i intent) request(class edge.Class, req ApplyRequest, writer WrittenBy) BootstrapRequest {
-	return BootstrapRequest{
+func (i intent) request(class edge.Class, req ApplyRequest, writer provider.WrittenBy) provider.BootstrapRequest {
+	return provider.BootstrapRequest{
 		Class:      class,
 		Features:   i.requested,
 		Remove:     i.ordered,
@@ -176,31 +173,31 @@ func (i intent) request(class edge.Class, req ApplyRequest, writer WrittenBy) Bo
 	}
 }
 
-func (g Gate) Plan(ctx context.Context, class edge.Class, req ApplyRequest) (Plan, error) {
+func (g Gate) Plan(ctx context.Context, class edge.Class, req ApplyRequest) (provider.Plan, error) {
 	standing, err := g.State(ctx, class)
 	if err != nil {
-		return Plan{}, err
+		return provider.Plan{}, err
 	}
 	return g.PlanFrom(ctx, standing, req)
 }
 
-func (g Gate) PlanFrom(ctx context.Context, standing BootstrapState, req ApplyRequest) (Plan, error) {
+func (g Gate) PlanFrom(ctx context.Context, standing BootstrapState, req ApplyRequest) (provider.Plan, error) {
 	intended, err := g.intended(standing, req)
 	if err != nil {
-		return Plan{}, err
+		return provider.Plan{}, err
 	}
 	class := standing.Class
 	plan, err := g.Bootstrap.Plan(ctx, intended.request(class, req, g.WrittenBy))
 	if err != nil {
-		return Plan{}, err
+		return provider.Plan{}, err
 	}
 	return plan, g.noteDependents(ctx, class, plan.Groups)
 }
 
-func (g Gate) noteDependents(ctx context.Context, class edge.Class, groups []ChangeGroup) error {
+func (g Gate) noteDependents(ctx context.Context, class edge.Class, groups []provider.ChangeGroup) error {
 	var dropped []string
 	for _, group := range groups {
-		if group.Action == ActionDelete && group.Feature != "" {
+		if group.Action == provider.ActionDelete && group.Feature != "" {
 			dropped = append(dropped, group.Feature)
 		}
 	}
@@ -212,7 +209,7 @@ func (g Gate) noteDependents(ctx context.Context, class edge.Class, groups []Cha
 		return err
 	}
 	for i, group := range groups {
-		if group.Action != ActionDelete || group.Feature == "" {
+		if group.Action != provider.ActionDelete || group.Feature == "" {
 			continue
 		}
 		dependents := ProjectsDependingOn(recorded, []string{group.Feature})
@@ -224,7 +221,7 @@ func (g Gate) noteDependents(ctx context.Context, class edge.Class, groups []Cha
 	return nil
 }
 
-func (g Gate) Apply(ctx context.Context, shown Plan, class edge.Class, req ApplyRequest, progress edge.Progress) error {
+func (g Gate) Apply(ctx context.Context, shown provider.Plan, class edge.Class, req ApplyRequest, progress edge.Progress) error {
 	standing, err := g.State(ctx, class)
 	if err != nil {
 		return err
@@ -257,7 +254,7 @@ func (g Gate) Apply(ctx context.Context, shown Plan, class edge.Class, req Apply
 	return EnsureRecordSchema(ctx, g.Records, class)
 }
 
-func (g Gate) Remove(ctx context.Context, shown Plan, class edge.Class, progress edge.Progress) error {
+func (g Gate) Remove(ctx context.Context, shown provider.Plan, class edge.Class, progress edge.Progress) error {
 	if err := g.Vacant(ctx, class); err != nil {
 		return err
 	}
@@ -340,7 +337,7 @@ func (g Gate) Admit(ctx context.Context, class edge.Class, required []string, he
 	if err != nil {
 		return BootstrapState{}, err
 	}
-	command := BootstrapCommand(class)
+	command := provider.BootstrapCommand(class)
 	if err := CheckSchema(standing.Schema, standing.Present, class); err != nil {
 		return standing, err
 	}
@@ -384,7 +381,7 @@ func (g Gate) heal(ctx context.Context, standing BootstrapState, required []stri
 			"this account's bootstrap was written by a development build (%s), so it is refreshed only by the run that writes it next", standing.WrittenBy))
 		return false
 	}
-	err := g.Bootstrap.Apply(ctx, BootstrapRequest{
+	err := g.Bootstrap.Apply(ctx, provider.BootstrapRequest{
 		Class:      standing.Class,
 		Features:   standing.Features,
 		Unattended: true,
@@ -534,11 +531,11 @@ func (c compatibility) explain(deployed, required int, command string) error {
 }
 
 func CheckSchema(deployed int, present bool, class edge.Class) error {
-	return checkCompat(deployed, present, BootstrapSchema).explain(deployed, BootstrapSchema, BootstrapCommand(class))
+	return checkCompat(deployed, present, provider.BootstrapSchema).explain(deployed, provider.BootstrapSchema, provider.BootstrapCommand(class))
 }
 
 func RefuseSchemaAhead(deployed int, present bool, class edge.Class) error {
-	if checkCompat(deployed, present, BootstrapSchema) != needsCLIUpgrade {
+	if checkCompat(deployed, present, provider.BootstrapSchema) != needsCLIUpgrade {
 		return nil
 	}
 	return schemaAhead(deployed, class)
@@ -547,22 +544,7 @@ func RefuseSchemaAhead(deployed int, present bool, class edge.Class) error {
 func schemaAhead(deployed int, class edge.Class) error {
 	return refusal.Refuse(refusal.CodeNotReady,
 		"this account's Ocel bootstrap is newer than this provider understands: the account is at schema %d, this provider supports up to schema %d.\nUpgrade the Ocel CLI, or run `%s` and bootstrap it afresh — there is no way to write an older shape over a newer one",
-		deployed, BootstrapSchema, bootstrapDestroyCommand(class))
-}
-
-func BootstrapCommand(class edge.Class) string {
-	if class == edge.ClassPreview {
-		return "ocel bootstrap preview"
-	}
-	return "ocel bootstrap production"
-}
-
-func BootstrapFeaturesCommand(class edge.Class) string {
-	return BootstrapCommand(class) + " --features"
-}
-
-func BootstrapVarsKeyCommand(class edge.Class) string {
-	return BootstrapFeaturesCommand(class) + " " + FeatureVarsKey
+		deployed, provider.BootstrapSchema, bootstrapDestroyCommand(class))
 }
 
 func bootstrapDestroyCommand(class edge.Class) string {

@@ -10,26 +10,27 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/edges/alb"
 )
 
-func previewPlan(label string) providerkit.StackPlan {
-	return providerkit.StackPlan{
-		Ref: providerkit.StackRef{
+func previewPlan(label string) provider.StackPlan {
+	return provider.StackPlan{
+		Ref: provider.StackRef{
 			Project: "shop",
 			Class:   edge.ClassPreview,
 			Name:    naming.StackName{Env: "pr-7", App: "web"},
 		},
-		Kind: providerkit.StackApp,
-		App: &providerkit.AppPlan{
+		Kind: provider.StackApp,
+		App: &provider.AppPlan{
 			App:             "web",
-			Compute:         providerkit.ComputeContainer,
+			Compute:         provider.ComputeContainer,
 			Image:           "europe-west1-docker.pkg.dev/acme/ocel/web@sha256:abc",
 			HealthCheckPath: "/",
 			PreviewLabel:    label,
-			Functions: []providerkit.FunctionSpec{{
+			Functions: []provider.FunctionSpec{{
 				Name:      "fn--web--checkout",
 				Image:     "europe-west1-docker.pkg.dev/acme/ocel/web-checkout@sha256:abc",
 				Framework: appbuild.Framework{Name: "nodejs", Arch: string(arch.X8664)},
@@ -156,7 +157,7 @@ func TestASpecThatNamesWhatTheDeployDeliveredIsRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("carried() let the spec take the delivered value's place, and the app would read a value nothing in it declared")
 	}
-	if code, refused := providerkit.RefusedCode(err); !refused || code != refusal.CodeInvalid {
+	if code, refused := provider.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 		t.Errorf("carried() code = %v, want %v", code, refusal.CodeInvalid)
 	}
 	if !strings.Contains(err.Error(), "DATABASE_URL") {

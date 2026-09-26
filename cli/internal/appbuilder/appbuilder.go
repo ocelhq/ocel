@@ -23,8 +23,8 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runtrace"
 	"github.com/ocelhq/ocel/cli/node"
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -279,7 +279,7 @@ func discoveryRootsFor(cfg *projectconfig.Config, framework string) ([]string, e
 func packable(apps []projectconfig.App) []projectconfig.App {
 	var out []projectconfig.App
 	for _, a := range apps {
-		if a.Compute == string(providerkit.ComputeContainer) {
+		if a.Compute == string(provider.ComputeContainer) {
 			continue
 		}
 		out = append(out, a)

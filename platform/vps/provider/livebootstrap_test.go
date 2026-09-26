@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -83,7 +83,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		t.Fatal("Describe() claims a bootstrap on a machine nothing has written to")
 	}
 
-	req := providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: fresh.Reading}
+	req := provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: fresh.Reading}
 	plan, err := bootstrap.Plan(ctx, req)
 	if err != nil {
 		t.Fatalf("Plan() = %v", err)
@@ -92,8 +92,8 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	if want := "vps/" + vm.user + "@" + vm.addr; group.Name != want {
 		t.Errorf("Plan() named the group %q, want %q", group.Name, want)
 	}
-	if group.Action != providerkit.ActionCreate {
-		t.Errorf("Plan() against a fresh machine plans %q, want %q", group.Action, providerkit.ActionCreate)
+	if group.Action != provider.ActionCreate {
+		t.Errorf("Plan() against a fresh machine plans %q, want %q", group.Action, provider.ActionCreate)
 	}
 	for _, want := range []string{
 		"/etc/ocel/production",
@@ -104,7 +104,7 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		"/usr/local/lib/ocel/records",
 		deployLogin,
 	} {
-		if planned := planFor(group, want); planned.Action != providerkit.ActionCreate {
+		if planned := planFor(group, want); planned.Action != provider.ActionCreate {
 			t.Errorf("Plan() shows %s as %q, want it created", want, planned.Action)
 		}
 	}
@@ -117,8 +117,8 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 	if stamp.State != host.StateComplete {
 		t.Errorf("the stamp reads state %q after an apply that finished, want %q", stamp.State, host.StateComplete)
 	}
-	if stamp.Schema != providerkit.BootstrapSchema {
-		t.Errorf("the stamp reads schema %d, want %d", stamp.Schema, providerkit.BootstrapSchema)
+	if stamp.Schema != provider.BootstrapSchema {
+		t.Errorf("the stamp reads schema %d, want %d", stamp.Schema, provider.BootstrapSchema)
 	}
 	if stamp.Writer != "live-suite" {
 		t.Errorf("the stamp reads writer %q, want the writer that applied it", stamp.Writer)
@@ -144,13 +144,13 @@ func TestLiveBootstrapWritesTheTiersAndASecondRunPlansNothing(t *testing.T) {
 		t.Fatalf("Describe() after Apply() = %+v, want a present bootstrap standing at the digest applied, %s\n%s",
 			standing.Stacks, stillMoving(t, bootstrap, class, standing.Reading), vm.proxySaid(t))
 	}
-	again, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: standing.Reading})
+	again, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: standing.Reading})
 	if err != nil {
 		t.Fatalf("a second Plan() = %v", err)
 	}
 	repeat := onlyGroup(t, again)
-	if repeat.Action != providerkit.ActionKeep {
-		t.Errorf("a second Plan() over a bootstrapped machine plans %q, want %q", repeat.Action, providerkit.ActionKeep)
+	if repeat.Action != provider.ActionKeep {
+		t.Errorf("a second Plan() over a bootstrapped machine plans %q, want %q", repeat.Action, provider.ActionKeep)
 	}
 	for _, change := range repeat.Changes {
 		if change.Action.Writes() {
@@ -204,7 +204,7 @@ func TestLiveAnUnfinishedApplyIsReportedAsDrifted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
@@ -225,12 +225,12 @@ func TestLiveAnUnfinishedApplyIsReportedAsDrifted(t *testing.T) {
 	if described.Stacks[0].DigestCurrent {
 		t.Error("Describe() calls an unfinished apply current, so a partially applied host reads as a healthy one")
 	}
-	plan, err := bootstrap.Plan(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: described.Reading})
+	plan, err := bootstrap.Plan(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: described.Reading})
 	if err != nil {
 		t.Fatalf("Plan() over an unfinished apply = %v", err)
 	}
-	if action := onlyGroup(t, plan).Action; action != providerkit.ActionUpdate {
-		t.Errorf("Plan() over an unfinished apply plans %q, want %q", action, providerkit.ActionUpdate)
+	if action := onlyGroup(t, plan).Action; action != provider.ActionUpdate {
+		t.Errorf("Plan() over an unfinished apply plans %q, want %q", action, provider.ActionUpdate)
 	}
 }
 
@@ -245,7 +245,7 @@ func TestLiveApplyRefusesWorkTheShownPlanNeverCarried(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
+	if err := bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite"}, nil); err != nil {
 		t.Fatalf("Apply() = %v", err)
 	}
 	defer func() {
@@ -260,7 +260,7 @@ func TestLiveApplyRefusesWorkTheShownPlanNeverCarried(t *testing.T) {
 	}
 	vm.ssh(t, "sudo rm -rf /usr/local/lib/ocel")
 
-	err = bootstrap.Apply(ctx, providerkit.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: shown.Reading}, nil)
+	err = bootstrap.Apply(ctx, provider.BootstrapRequest{Class: class, WrittenBy: "live-suite", Reading: shown.Reading}, nil)
 	if err == nil {
 		t.Fatal("Apply() did work the plan the user consented to never carried")
 	}
@@ -280,7 +280,7 @@ func TestLiveForgettingARecordNothingWroteIsAlreadyForgotten(t *testing.T) {
 	}
 }
 
-func onlyGroup(t *testing.T, plan providerkit.Plan) providerkit.ChangeGroup {
+func onlyGroup(t *testing.T, plan provider.Plan) provider.ChangeGroup {
 	t.Helper()
 	if len(plan.Groups) != 1 {
 		t.Fatalf("the plan carries %d groups, want the one core group this provider stands up", len(plan.Groups))
@@ -300,13 +300,13 @@ func (vm machine) proxySaid(t *testing.T) string {
 		vm.ssh(t, "sudo docker logs --tail 15 "+caddy.Container+" 2>&1 || true")
 }
 
-func planFor(group providerkit.ChangeGroup, name string) providerkit.Change {
+func planFor(group provider.ChangeGroup, name string) provider.Change {
 	for _, change := range group.Changes {
 		if change.Name == name {
 			return change
 		}
 	}
-	return providerkit.Change{}
+	return provider.Change{}
 }
 
 func stampOn(t *testing.T, vm machine) host.Stamp {

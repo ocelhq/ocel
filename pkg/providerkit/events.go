@@ -11,6 +11,7 @@ import (
 
 	planv1 "github.com/ocelhq/ocel/pkg/proto/common/plan/v1"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -101,7 +102,7 @@ func streamResult(
 
 	result, err := do(sender)
 	if err != nil {
-		return sender.fail(RefusalError(err))
+		return sender.fail(provider.RefusalError(err))
 	}
 	sender.send(result)
 	return nil

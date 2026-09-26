@@ -11,15 +11,15 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/appbuild"
 	"github.com/ocelhq/ocel/pkg/providerkit/arch"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func plannedAppStack(t *testing.T) (Config, providerkit.StackPlan) {
+func plannedAppStack(t *testing.T) (Config, provider.StackPlan) {
 	t.Helper()
 	cfg := routedConfig(t, cloudfront.Kind)
 	cfg.Env = "prod"
@@ -29,22 +29,22 @@ func plannedAppStack(t *testing.T) (Config, providerkit.StackPlan) {
 
 	coord := routedCoordinate(t)
 	stack := coord.Stack()
-	plan := providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
-		Kind: providerkit.StackApp,
+	plan := provider.StackPlan{
+		Ref:  provider.StackRef{Project: "shop", Class: edge.ClassProduction, Name: stack},
+		Kind: provider.StackApp,
 		Edge: fakeEdgeOf(cloudfront.Kind),
-		App: &providerkit.AppPlan{
+		App: &provider.AppPlan{
 			App:        "web",
 			Framework:  appbuild.FrameworkNext,
 			Entry:      "fn--web--entry",
 			Deployment: "d1",
-			Functions: []providerkit.FunctionSpec{
-				{Name: "fn--web--entry", Artifact: providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: "entry.zip"}},
-				{Name: "fn--web--admin", Route: "/admin", Artifact: providerkit.ArtifactRef{Bucket: providerkit.StoreFunctions, Key: "admin.zip"}},
+			Functions: []provider.FunctionSpec{
+				{Name: "fn--web--entry", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "entry.zip"}},
+				{Name: "fn--web--admin", Route: "/admin", Artifact: provider.ArtifactRef{Bucket: provider.StoreFunctions, Key: "admin.zip"}},
 			},
-			Routing:     &providerkit.RoutingPlan{Entry: "fn--web--entry", Manifest: []byte(routedManifest)},
-			ISR:         &providerkit.ISRPlan{Prefix: "shop/prod/web/r1/isr", TagNamespace: "tag:shop"},
-			Bytecode:    &providerkit.BytecodePlan{Prefix: "shop/prod/web/r1/bytecode"},
+			Routing:     &provider.RoutingPlan{Entry: "fn--web--entry", Manifest: []byte(routedManifest)},
+			ISR:         &provider.ISRPlan{Prefix: "shop/prod/web/r1/isr", TagNamespace: "tag:shop"},
+			Bytecode:    &provider.BytecodePlan{Prefix: "shop/prod/web/r1/bytecode"},
 			AssetPrefix: coord.AssetKey(""),
 		},
 	}
@@ -121,8 +121,8 @@ func TestAnAppIsRefusedRatherThanDeployedAgainstARuntimeTheAccountDoesNotHold(t 
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeNotReady {
 		t.Fatalf("appWork() = %v, want a %s refusal naming the bootstrap to re-run", err, refusal.CodeNotReady)
 	}
-	if !strings.Contains(refused.Message, providerkit.BootstrapCommand(cfg.Class)) {
-		t.Errorf("the refusal reads %q, want it to name `%s`", refused.Message, providerkit.BootstrapCommand(cfg.Class))
+	if !strings.Contains(refused.Message, provider.BootstrapCommand(cfg.Class)) {
+		t.Errorf("the refusal reads %q, want it to name `%s`", refused.Message, provider.BootstrapCommand(cfg.Class))
 	}
 }
 
@@ -145,7 +145,7 @@ func TestAPlannedAppGuardsItsOriginOnlyWithASecretToDemand(t *testing.T) {
 	t.Parallel()
 
 	cfg, plan := plannedAppStack(t)
-	plan.App.Guard = &providerkit.OriginGuard{Entry: "fn--web--entry"}
+	plan.App.Guard = &provider.OriginGuard{Entry: "fn--web--entry"}
 	release := releasing(t, cfg)
 
 	if _, err := release.appWork(plan, nil); err == nil || !strings.Contains(err.Error(), "ocel bootstrap") {
@@ -166,10 +166,10 @@ func TestAPlannedAppTakesItsGrantsFromTheBindingsItWasGranted(t *testing.T) {
 	t.Parallel()
 
 	cfg, plan := plannedAppStack(t)
-	plan.App.Grants = []providerkit.Binding{{
-		Type: providerkit.BindingBucket,
+	plan.App.Grants = []provider.Binding{{
+		Type: provider.BindingBucket,
 		Name: "bucket--uploads",
-		Grants: []providerkit.Grant{{
+		Grants: []provider.Grant{{
 			Label:     "objects",
 			Actions:   []string{"s3:GetObject"},
 			Resources: []string{"arn:aws:s3:::uploads/*"},
@@ -191,9 +191,9 @@ func TestAnAppStackWhosePlanCarriesNoAppIsRefusedRatherThanStoodUpEmpty(t *testi
 	t.Parallel()
 
 	release := releasing(t, Config{})
-	plan := providerkit.StackPlan{
-		Ref:  providerkit.StackRef{Project: "shop", Name: naming.AppStack("prod", "web", naming.NewRelease("d1", ""))},
-		Kind: providerkit.StackApp,
+	plan := provider.StackPlan{
+		Ref:  provider.StackRef{Project: "shop", Name: naming.AppStack("prod", "web", naming.NewRelease("d1", ""))},
+		Kind: provider.StackApp,
 	}
 	err := pulumi.RunErr(func(pctx *pulumi.Context) error { return release.Run(pctx, plan) },
 		pulumi.WithMocks("shop", plan.Ref.Name.String(), &inputRecorder{}))
@@ -244,7 +244,7 @@ func TestAnAppIsRefusedBeforeItsRoleIsBuilt(t *testing.T) {
 }
 
 func TestAReleaseThatProvisionsNamesNoPhase(t *testing.T) {
-	plan := providerkit.StackPlan{Kind: providerkit.StackApp, App: &providerkit.AppPlan{App: "web"}}
+	plan := provider.StackPlan{Kind: provider.StackApp, App: &provider.AppPlan{App: "web"}}
 
 	env := releasing(t, Config{}).appEnv(plan, appBundle{}, sessionScope{})
 

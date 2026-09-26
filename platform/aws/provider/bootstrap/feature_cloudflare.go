@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const KindCloudflare = "cloudflare"
@@ -126,7 +126,7 @@ func edgeUserResource(ns Namespace, userName, class string, optimizer bool) stri
 		paramRevalidateQueueARN, invoke)
 }
 
-func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, ns Namespace, class string, _ Request) ([]providerkit.Change, error) {
+func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, ns Namespace, class string, _ Request) ([]provider.Change, error) {
 	names, err := edgeNamesFor(ns, class, KindCloudflare)
 	if err != nil {
 		return nil, err
@@ -140,45 +140,45 @@ func plannedEdgeCredentials(ctx context.Context, apis ParamAPIs, ns Namespace, c
 		return nil, err
 	}
 	if standing && recorded.Stale(time.Now()) {
-		return []providerkit.Change{
-			{Kind: kindParameter, Name: names.credentialsParam, Action: providerkit.ActionUpdate, Reason: keyStale},
-			{Kind: kindAccessKey, Name: names.user, Action: providerkit.ActionUpdate, Reason: keyStale},
+		return []provider.Change{
+			{Kind: kindParameter, Name: names.credentialsParam, Action: provider.ActionUpdate, Reason: keyStale},
+			{Kind: kindAccessKey, Name: names.user, Action: provider.ActionUpdate, Reason: keyStale},
 		}, nil
 	}
 	if standing {
-		return []providerkit.Change{
-			{Kind: kindParameter, Name: names.credentialsParam, Action: providerkit.ActionKeep, Reason: paramCurrent},
-			{Kind: kindAccessKey, Name: names.user, Action: providerkit.ActionKeep, Reason: paramCurrent},
+		return []provider.Change{
+			{Kind: kindParameter, Name: names.credentialsParam, Action: provider.ActionKeep, Reason: paramCurrent},
+			{Kind: kindAccessKey, Name: names.user, Action: provider.ActionKeep, Reason: paramCurrent},
 		}, nil
 	}
-	credentials := providerkit.Change{Kind: kindParameter, Name: names.credentialsParam, Action: providerkit.ActionCreate}
+	credentials := provider.Change{Kind: kindParameter, Name: names.credentialsParam, Action: provider.ActionCreate}
 	if held {
-		credentials.Action, credentials.Reason = providerkit.ActionUpdate, keyGone
+		credentials.Action, credentials.Reason = provider.ActionUpdate, keyGone
 		if recorded.AccessKeyID == "" {
 			credentials.Reason = keyUnrecorded
 		}
 	}
-	return []providerkit.Change{
+	return []provider.Change{
 		credentials,
-		{Kind: kindAccessKey, Name: names.user, Action: providerkit.ActionCreate},
+		{Kind: kindAccessKey, Name: names.user, Action: provider.ActionCreate},
 	}, nil
 }
 
-func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, ns Namespace, class string, _ Request) ([]providerkit.Change, error) {
+func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, ns Namespace, class string, _ Request) ([]provider.Change, error) {
 	names, err := edgeNamesFor(ns, class, KindCloudflare)
 	if err != nil {
 		return nil, err
 	}
 	reason := fmt.Sprintf(severedByRemove, FeatureCloudflareEdge, KindCloudflare)
 
-	var changes []providerkit.Change
+	var changes []provider.Change
 	keys, err := liveAccessKeys(ctx, apis.IAM, names.user)
 	if err != nil {
 		return nil, err
 	}
 	if len(keys) > 0 {
-		changes = append(changes, providerkit.Change{
-			Kind: kindAccessKey, Name: names.user, Action: providerkit.ActionDelete, Reason: reason,
+		changes = append(changes, provider.Change{
+			Kind: kindAccessKey, Name: names.user, Action: provider.ActionDelete, Reason: reason,
 		})
 	}
 	held, err := paramsHeld(ctx, apis.SSM, names.edgeParams())
@@ -189,8 +189,8 @@ func plannedCloudflareSever(ctx context.Context, apis ParamAPIs, ns Namespace, c
 		if !held[param] {
 			continue
 		}
-		changes = append(changes, providerkit.Change{
-			Kind: kindParameter, Name: param, Action: providerkit.ActionDelete, Reason: reason,
+		changes = append(changes, provider.Change{
+			Kind: kindParameter, Name: param, Action: provider.ActionDelete, Reason: reason,
 		})
 	}
 	return changes, nil

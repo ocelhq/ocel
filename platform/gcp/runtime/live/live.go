@@ -4,8 +4,8 @@ import (
 	"context"
 	"maps"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/runtimekit/live"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -57,7 +57,7 @@ func FromManifest(raw []byte) (*live.Values, error) {
 		return nil, nil
 	}
 	clients := &ports.Clients{
-		Namespace: providerkit.Namespace(manifest.Namespace),
+		Namespace: provider.Namespace(manifest.Namespace),
 		Project:   manifest.Project,
 		Region:    manifest.Region,
 		Endpoint:  manifest.Endpoint,

@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/ledger"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/resources"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -598,7 +599,7 @@ func inOrder(t *testing.T, journal []string, want ...string) {
 func releaseOf(t *testing.T, identity string) naming.Release {
 	t.Helper()
 
-	build, err := providerkit.ParseBuild(identity)
+	build, err := provider.ParseBuild(identity)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -611,22 +612,22 @@ type sweeper struct {
 	forgotten  []string
 }
 
-func (s *sweeper) ProvisionContainers(context.Context, providerkit.StackPlan, edge.Progress) ([]providerkit.AppContainer, error) {
+func (s *sweeper) ProvisionContainers(context.Context, provider.StackPlan, edge.Progress) ([]provider.AppContainer, error) {
 	return nil, nil
 }
 
-func (s *sweeper) RemoveContainers(context.Context, providerkit.StackRef, []providerkit.AppContainer, edge.Progress) error {
+func (s *sweeper) RemoveContainers(context.Context, provider.StackRef, []provider.AppContainer, edge.Progress) error {
 	return nil
 }
 
-func (s *sweeper) ReconcileImages(_ context.Context, _ providerkit.StackRef, app, imageRef string, _ edge.Progress) error {
+func (s *sweeper) ReconcileImages(_ context.Context, _ provider.StackRef, app, imageRef string, _ edge.Progress) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.reconciled = append(s.reconciled, app+" "+imageRef)
 	return nil
 }
 
-func (s *sweeper) ForgetReleases(_ context.Context, _ providerkit.StackRef, app string, _ edge.Progress) error {
+func (s *sweeper) ForgetReleases(_ context.Context, _ provider.StackRef, app string, _ edge.Progress) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.forgotten = append(s.forgotten, app)
@@ -646,17 +647,17 @@ func (s *sweeper) swept() []string {
 	return slices.Clone(s.reconciled)
 }
 
-func seedContainerStack(t *testing.T, provider *fake.Provider, slug, pointer, app, image string) naming.StackName {
+func seedContainerStack(t *testing.T, p *fake.Provider, slug, pointer, app, image string) naming.StackName {
 	t.Helper()
 
 	release := releaseOf(t, buildIdentity(1))
 	name := naming.AppStack(pointer, app, release)
-	if err := providerkit.WriteStack(context.Background(), provider.Records(), edge.ClassPreview, slug, name, providerkit.RecordedStack{
-		Kind:       providerkit.StackApp,
+	if err := providerkit.WriteStack(context.Background(), p.Records(), edge.ClassPreview, slug, name, providerkit.RecordedStack{
+		Kind:       provider.StackApp,
 		App:        app,
 		Release:    release.String(),
 		Identity:   buildIdentity(1),
-		Containers: []providerkit.AppContainer{{Name: app, Physical: name.String() + "-" + app, Image: image}},
+		Containers: []provider.AppContainer{{Name: app, Physical: name.String() + "-" + app, Image: image}},
 	}); err != nil {
 		t.Fatal(err)
 	}
