@@ -14,12 +14,10 @@ import (
 )
 
 const (
-	sharedStackKind = "stack"
-	parameterKind   = "parameters"
-	baselineTag     = "core"
-	planGutter      = "  "
-	planTypeGutter  = "   "
-	slowNote        = " (slow)"
+	baselineTag    = "core"
+	planGutter     = "  "
+	planTypeGutter = "   "
+	slowNote       = " (slow)"
 )
 
 func (p *projector) plan(m protoreflect.Message) []string {
@@ -198,9 +196,9 @@ const (
 )
 
 var spineKinds = map[string]int{
-	sharedStackKind:    rankSpineHead,
-	parameterKind:      rankSpineHead,
-	edge.EdgeGroupKind: rankSpineEdge,
+	provider.StackGroupKind:     rankSpineHead,
+	provider.ParameterGroupKind: rankSpineHead,
+	edge.EdgeGroupKind:          rankSpineEdge,
 }
 
 func spineRank(kind string) int {
@@ -219,7 +217,7 @@ func groupTag(group *planv1.ChangeGroup) string {
 	if feature := group.GetFeature(); feature != "" {
 		return feature
 	}
-	if group.GetKind() != sharedStackKind {
+	if group.GetKind() != provider.StackGroupKind {
 		return ""
 	}
 	return baselineTag

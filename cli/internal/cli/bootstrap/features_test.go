@@ -9,6 +9,7 @@ import (
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const (
@@ -31,9 +32,9 @@ func testCatalogue(enabled ...string) []*contractv1.Feature {
 		{Name: featureISR, Summary: "incremental static regeneration", Enabled: on(featureISR)},
 		{Name: featureImageOptimization, Summary: "on-demand image optimization", Enabled: on(featureImageOptimization)},
 		{Name: featureCloudflareEdge, Summary: "a Cloudflare front", DependsOn: []string{featureISR},
-			Needs: []string{needsEdgePrefix + "cloudflare"}, Enabled: on(featureCloudflareEdge)},
+			Needs: []string{provider.NeedsEdgePrefix + "cloudflare"}, Enabled: on(featureCloudflareEdge)},
 		{Name: featureCloudFrontEdge, Summary: "a CloudFront front",
-			Needs: []string{needsEdgePrefix + "cloudfront"}, Enabled: on(featureCloudFrontEdge)},
+			Needs: []string{provider.NeedsEdgePrefix + "cloudfront"}, Enabled: on(featureCloudFrontEdge)},
 	}
 }
 

@@ -16,13 +16,12 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/runui"
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 )
 
 const (
 	allFeatures = "all"
 	noFeatures  = "none"
-
-	needsEdgePrefix = "edge:"
 )
 
 func tint(stdout io.Writer, attrs ...color.Attribute) *color.Color {
@@ -235,7 +234,7 @@ func featureNeedingEdge(catalogue []*contractv1.Feature, kind string) string {
 		return ""
 	}
 	for _, f := range catalogue {
-		if slices.Contains(f.GetNeeds(), needsEdgePrefix+kind) {
+		if slices.Contains(f.GetNeeds(), provider.NeedsEdgePrefix+kind) {
 			return f.GetName()
 		}
 	}
