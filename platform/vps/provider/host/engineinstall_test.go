@@ -12,12 +12,17 @@ import (
 
 func installer(t *testing.T, failures int) (string, string, string) {
 	t.Helper()
+	return installerSaying(t, failures, "")
+}
+
+func installerSaying(t *testing.T, failures int, said string) (string, string, string) {
+	t.Helper()
 	dir := t.TempDir()
 	attempts := filepath.Join(dir, "attempts")
 	fetched := filepath.Join(dir, "fetched")
 	paused := filepath.Join(dir, "paused")
 
-	executable(t, fetched, "#!/bin/sh\nprintf a >>"+quoted(attempts)+"\n"+
+	executable(t, fetched, "#!/bin/sh\nprintf a >>"+quoted(attempts)+"\n"+said+"\n"+
 		"[ \"$(wc -c <"+quoted(attempts)+")\" -gt "+strconv.Itoa(failures)+" ] || exit 1\n")
 	executable(t, filepath.Join(dir, "curl"), `#!/bin/sh
 named=0
@@ -123,5 +128,80 @@ func TestTheWaitBetweenInstallAttemptsGrowsAndIsNotTheSameOnEveryHost(t *testing
 	}
 	if len(spread) < 2 {
 		t.Errorf("six hosts retrying the same refusing mirror all waited the same %v, and a fleet that backs off in lockstep arrives back at the mirror together", spread)
+	}
+}
+
+func TestAnInstallThatFailsSaysWhatItsLastTryPrintedFirst(t *testing.T) {
+	t.Parallel()
+
+	dir, _, _ := installerSaying(t, 99, `set -x
+echo 'Get:1 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble InRelease'
+sh -c 'apt-get -qq update >/dev/null' 2>/dev/null || true
+{ set +x; } 2>/dev/null
+echo 'E: Failed to fetch http://us-east-1.ec2.archive.ubuntu.com/ubuntu/dists/noble-updates/InRelease  Could not connect' >&2
+echo 'E: Some index files failed to download.' >&2`)
+	said, err := installing(t, dir)
+	if err == nil {
+		t.Fatalf("the engine step succeeded on a host whose install script never stood:\n%s", said)
+	}
+	lines := strings.Split(strings.TrimSpace(said), "\n")
+	if len(lines) > saidLines {
+		lines = lines[:saidLines]
+	}
+	shown := strings.Join(lines, "\n")
+	for _, want := range []string{dockerSource, "E: Failed to fetch", "E: Some index files failed to download."} {
+		if !strings.Contains(shown, want) {
+			t.Errorf("the first %d lines a refusal shows are\n%s\nwant %q among them: an install that fails on a bad mirror has to say so where the user reads", saidLines, shown, want)
+		}
+	}
+}
+
+func TestEveryInstallAttemptIsBoundedAndSaysSoWhenTheBoundIsHit(t *testing.T) {
+	t.Parallel()
+
+	dir, attempts, _ := installer(t, 99)
+	bounded := filepath.Join(dir, "bounded")
+	executable(t, filepath.Join(dir, "timeout"), "#!/bin/sh\nprintf '%s\\n' \"$1\" >>"+quoted(bounded)+"\nexit 124\n")
+	said, err := installing(t, dir)
+	if err == nil {
+		t.Fatalf("the engine step succeeded with every attempt timed out:\n%s", said)
+	}
+	read, err := os.ReadFile(bounded)
+	if err != nil {
+		t.Fatalf("no attempt ran under timeout, so an apt stall hangs the apply for as long as the mirror does: %v", err)
+	}
+	bounds := strings.Fields(string(read))
+	if len(bounds) != engineInstallTries {
+		t.Errorf("%d of %d attempts ran under timeout", len(bounds), engineInstallTries)
+	}
+	for _, bound := range bounds {
+		if bound != strconv.Itoa(engineAttemptSeconds) {
+			t.Errorf("an attempt was bounded at %q, want %d seconds", bound, engineAttemptSeconds)
+		}
+	}
+	if ran, _ := os.ReadFile(attempts); len(ran) != 0 {
+		t.Errorf("the install script ran %d times past a timeout that never let it start", len(ran))
+	}
+	if want := "timing out after " + strconv.Itoa(engineAttemptSeconds) + "s"; !strings.Contains(said, want) {
+		t.Errorf("the refusal reads\n%s\nwant it to say %q: a stall reads as a failure of whatever ran last", said, want)
+	}
+}
+
+func TestTheInstallBoundsHowLongAptWaitsOnAMirror(t *testing.T) {
+	t.Parallel()
+
+	configured := filepath.Join(t.TempDir(), "apt.conf")
+	dir, _, _ := installerSaying(t, 0, `cat "$APT_CONFIG" >`+quoted(configured))
+	if said, err := installing(t, dir); err != nil {
+		t.Fatalf("the engine step = %v:\n%s", err, said)
+	}
+	read, err := os.ReadFile(configured)
+	if err != nil {
+		t.Fatalf("the install script ran with no apt config it could read: %v", err)
+	}
+	for _, want := range []string{`Acquire::http::Timeout "30";`, `Acquire::https::Timeout "30";`} {
+		if !strings.Contains(string(read), want) {
+			t.Errorf("the install script ran with an apt config of\n%s\nwant %s in it: apt's own timeout is two minutes a fetch, and a mirror answering Ign stalls it for twenty", read, want)
+		}
 	}
 }

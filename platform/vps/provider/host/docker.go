@@ -93,10 +93,20 @@ func keptEngine() removal {
 	}
 }
 
+const (
+	engineAttemptSeconds = 300
+	aptWaitSeconds       = 30
+	engineTailLines      = 3
+)
+
 func engineCommand() string {
+	attempt := strconv.Itoa(engineAttemptSeconds)
+	apt := strconv.Itoa(aptWaitSeconds)
 	return `set -e
 script=$(mktemp)
-trap 'rm -f "$script"' EXIT
+log=$(mktemp)
+apt=$(mktemp)
+trap 'rm -f "$script" "$log" "$apt"' EXIT
 if command -v curl >/dev/null 2>&1; then curl -fsSL --retry 5 --retry-delay 2 ` + dockerSource + ` -o "$script"
 elif command -v wget >/dev/null 2>&1; then wget -qO "$script" ` + dockerSource + `
 else echo 'this host has neither curl nor wget' >&2; exit 1
@@ -105,12 +115,16 @@ if ! printf '%s  %s\n' ` + dockerScriptSum + ` "$script" | sha256sum -c - >/dev/
 echo '` + dockerSource + ` does not match the pinned sha256 ` + dockerScriptSum + `' >&2
 exit 1
 fi
+printf '%s\n' 'Acquire::http::Timeout "` + apt + `";' 'Acquire::https::Timeout "` + apt + `";' >"$apt"
 tries=0
 ` + engineInstallHold.start() + `while :; do
-if VERSION=` + dockerVersion + ` sh "$script"; then break; fi
+if APT_CONFIG="$apt" timeout ` + attempt + ` env VERSION=` + dockerVersion + ` sh "$script" >"$log" 2>&1; then break; else code=$?; fi
 tries=$((tries + 1))
 if [ "$tries" -ge ` + strconv.Itoa(engineInstallTries) + ` ]; then
-echo '` + dockerSource + ` failed ` + strconv.Itoa(engineInstallTries) + ` times' >&2
+ended=''
+if [ "$code" -eq 124 ]; then ended=', the last timing out after ` + attempt + `s'; fi
+echo "` + dockerSource + ` failed ` + strconv.Itoa(engineInstallTries) + ` times$ended; its last lines:" >&2
+tail -n ` + strconv.Itoa(engineTailLines) + ` "$log" >&2
 exit 1
 fi
 ` + engineInstallHold.again() + `done`
