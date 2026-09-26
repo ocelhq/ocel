@@ -14,7 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
 	"github.com/ocelhq/ocel/pkg/envvars"
-	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtime/live"
 	awsports "github.com/ocelhq/ocel/platform/aws/provider/ports"
 	"github.com/ocelhq/ocel/platform/aws/provider/sdkconfig"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"

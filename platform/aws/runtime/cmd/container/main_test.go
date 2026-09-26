@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 )
 
 const (

@@ -15,9 +15,9 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/appbuild"
-	"github.com/ocelhq/ocel/pkg/runtimekit/child"
-	"github.com/ocelhq/ocel/pkg/runtimekit/live"
-	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
+	"github.com/ocelhq/ocel/pkg/runtime/child"
+	"github.com/ocelhq/ocel/pkg/runtime/live"
+	"github.com/ocelhq/ocel/pkg/runtime/originguard"
 	vars "github.com/ocelhq/ocel/platform/gcp/provider/live"
 	source "github.com/ocelhq/ocel/platform/gcp/runtime/live"
 	s3store "github.com/ocelhq/ocel/platform/s3"

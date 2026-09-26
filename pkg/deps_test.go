@@ -1,6 +1,8 @@
 package pkg_test
 
 import (
+	"os/exec"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/internal/depstest"
@@ -40,5 +42,19 @@ func TestPkgImportsOnlyWhatTheCodebaseMapOpensToIt(t *testing.T) {
 			t.Parallel()
 			depstest.Check(t, c.pattern, c.open, closed)
 		})
+	}
+}
+
+func TestNoPackageSitsAtPkgRuntimeWhereItWouldShadowTheStandardRuntime(t *testing.T) {
+	t.Parallel()
+
+	out, err := exec.Command("go", "list", "-e", "./...").Output()
+	if err != nil {
+		t.Fatalf("go list ./...: %v", err)
+	}
+	for _, path := range strings.Fields(string(out)) {
+		if path == "github.com/ocelhq/ocel/pkg/runtime" {
+			t.Errorf("%s is a package, and every file importing it would name it runtime over the standard library's; pkg/runtime holds only packages beneath it", path)
+		}
 	}
 }

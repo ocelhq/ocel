@@ -4,8 +4,8 @@ import (
 	"slices"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/runtimekit/bindingproxy"
-	"github.com/ocelhq/ocel/pkg/runtimekit/live"
+	"github.com/ocelhq/ocel/pkg/runtime/bindingproxy"
+	"github.com/ocelhq/ocel/pkg/runtime/live"
 )
 
 func ServeBound(records Records, app string) (bindingproxy.Served, error) {
