@@ -463,7 +463,7 @@ jobs:
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-session-name: ocel-e2e-tier-policy-${{ matrix.tier }}-${{ github.run_id }}
 
-      - name: Install the document as the policies this tier's session carries
+      - name: Install the document as the policies this tier's session is bounded by
         id: tier-policy
         env:
           TIER_POLICY_PREFIX: ocel-e2e-tier-${{ matrix.tier }}-${{ github.run_id }}-
@@ -489,7 +489,7 @@ jobs:
             index=$((index + 1))
           done < "$RUNNER_TEMP/tier-policy-parts"
           if [ "$index" -eq 0 ]; then
-            echo "the ${{ matrix.tier }} tier rendered no policy, so its session would carry everything the role has" >&2
+            echo "the ${{ matrix.tier }} tier rendered no policy, so its session would be granted everything the role has" >&2
             exit 1
           fi
 
@@ -526,7 +526,7 @@ jobs:
           aws-region: ${{ vars.E2E_AWS_REGION }}
           role-session-name: ocel-e2e-tier-sweep-${{ matrix.tier }}-${{ github.run_id }}
 
-      - name: Remove the policies this tier's session carried
+      - name: Remove the policies this tier's session was bounded by
         if: ${{ always() }}
         env:
           TIER_POLICY_ARNS: ${{ steps.tier-policy.outputs.arns }}

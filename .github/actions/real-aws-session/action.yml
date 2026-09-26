@@ -41,7 +41,7 @@ inputs:
   managed-session-policies:
     description: >-
       ARNs, one per line, of the managed policies the session is bounded by on
-      top of the role's own permissions. Empty means the session carries
+      top of the role's own permissions. Empty means the session is granted
       everything the role has.
     required: false
     default: ""

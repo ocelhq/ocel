@@ -19,7 +19,7 @@ outputs:
     description: What every key the warm workflow saves starts with, for this Go.
     value: ${{ steps.paths.outputs.prefix }}
   paths:
-    description: The directories the caches hold, one per line.
+    description: The directories the caches save, one per line.
     value: ${{ steps.paths.outputs.paths }}
 
 runs:

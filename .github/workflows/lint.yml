@@ -46,7 +46,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: The go sdk carries the root's LICENSE and NOTICE, byte for byte
+      - name: The go sdk ships the root's LICENSE and NOTICE, byte for byte
         run: cmp LICENSE sdk/LICENSE && cmp NOTICE sdk/NOTICE
 
   actions:
@@ -56,7 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Every workflow parses, and every expression is allowed where it stands
+      - name: Every workflow parses, and every expression is allowed where it appears
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color -shellcheck= -pyflakes=
 
   commits:

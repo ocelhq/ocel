@@ -47,7 +47,7 @@ on:
         type: choice
         options: [every-cell, sampled]
       concern:
-        description: "Concerns each lane covers, space separated: deploy asks whether the app runs there, lifecycle whether a release can be replaced and rolled back there, sdk whether its resources do, iac whether it binds to what an SST or Pulumi stack stands up. Empty covers every one but iac, which runs only when named here, and then only with skips set to run: the gap list skips every iac cell on aws (#856, #857)."
+        description: "Concerns each lane covers, space separated: deploy asks whether the app runs there, lifecycle whether a release can be replaced and rolled back there, sdk whether its resources do, iac whether it binds to what an SST or Pulumi stack provisions. Empty covers every one but iac, which runs only when named here, and then only with skips set to run: the gap list skips every iac cell on aws (#856, #857)."
         default: ""
         type: string
       fixtures:
@@ -846,7 +846,7 @@ jobs:
           suite: journey-vps
           key: ${{ needs.binary.outputs.vps_key }}
 
-      - name: What the runner's daemon holds after the lane
+      - name: What the runner's daemon stores after the lane
         if: always()
         run: |
           df -h / || true
@@ -1052,7 +1052,7 @@ jobs:
         continue-on-error: true
         run: scripts/preview-report.sh started
 
-      - name: Stand the preview up
+      - name: Deploy the preview
         id: up
         env:
           OCEL_PR_NUMBER: ${{ github.event.pull_request.number }}
@@ -1177,7 +1177,7 @@ jobs:
     outputs:
       ids: ${{ steps.runs.outputs.ids }}
     steps:
-      - name: Name the runs this pull request stood cells up under
+      - name: Name the runs this pull request provisioned cells under
         id: runs
         env:
           GH_TOKEN: ${{ github.token }}
@@ -1188,7 +1188,7 @@ jobs:
           ids=$(gh run list --workflow journey.yml --branch "$HEAD_REF" \
             --limit 100 --json databaseId --jq '.[].databaseId' | sort -u | paste -sd' ' -)
           echo "ids=$ids" >> "$GITHUB_OUTPUT"
-          echo "${ids:-no journey run} stood cells up for this pull request"
+          echo "${ids:-no journey run} provisioned cells for this pull request"
 
   reap:
     name: reap
@@ -1257,7 +1257,7 @@ jobs:
             echo "AWS_REGION=$REGION"
           } >> "$GITHUB_ENV"
 
-      - name: Reclaim the cells and namespaces those runs left standing
+      - name: Reclaim the cells and namespaces those runs left provisioned
         env:
           IDS: ${{ needs.reapable.outputs.ids }}
         run: |
