@@ -3,8 +3,8 @@ package host
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
@@ -58,24 +58,103 @@ func (r frontRecord) item() (Item, error) {
 }
 
 func (f Front) named() string {
-	if f.adopted() {
+	switch {
+	case f.Traefik != nil:
+		return runBy(f.Traefik.Preset, "Traefik")
+	case f.Caddy != nil:
+		return runBy(f.Caddy.Preset, "Caddy")
+	case f.Manual != nil:
 		return "a proxy you route yourself"
+	default:
+		return "ocel's own proxy"
 	}
-	return "ocel's own proxy"
+}
+
+func runBy(preset, proxy string) string {
+	if tool, ok := hostTools[preset]; ok {
+		return tool.name + "'s " + proxy
+	}
+	return "your " + proxy
 }
 
 func (f Front) spelled() string {
 	switch {
+	case f.Traefik != nil:
+		return `{ "traefik": ` + f.Traefik.spelled().object() + ` }`
+	case f.Caddy != nil:
+		return `{ "caddy": ` + f.Caddy.spelled().object() + ` }`
 	case f.Manual == nil:
 		return ""
-	case f.Manual.Port == manual.DefaultPort:
+	}
+	var fields spelling
+	fields.number("port", f.Manual.Port, manual.DefaultPort)
+	fields.text("network", f.Manual.Network, "")
+	if len(fields) == 0 {
 		return `"manual"`
-	default:
-		return fmt.Sprintf(`{ "manual": { "port": %d } }`, f.Manual.Port)
+	}
+	return `{ "manual": ` + fields.object() + ` }`
+}
+
+func (t TraefikFront) spelled() spelling {
+	base := TraefikFront{Preset: t.Preset}.Filled()
+	var fields, entrypoints spelling
+	fields.text("preset", t.Preset, "")
+	fields.text("directory", t.Directory, base.Directory)
+	fields.text("resolver", t.Resolver, base.Resolver)
+	fields.text("previewResolver", t.PreviewResolver, base.PreviewResolver)
+	entrypoints.text("http", t.Entrypoints.HTTP, base.Entrypoints.HTTP)
+	entrypoints.text("https", t.Entrypoints.HTTPS, base.Entrypoints.HTTPS)
+	if len(entrypoints) > 0 {
+		fields = append(fields, strconv.Quote("entrypoints")+": "+entrypoints.object())
+	}
+	fields.text("network", t.Network, base.Network)
+	fields.number("port", t.Port, base.Port)
+	return fields
+}
+
+func (c CaddyFront) spelled() spelling {
+	base := CaddyFront{Preset: c.Preset}.Filled()
+	var fields spelling
+	fields.text("preset", c.Preset, "")
+	fields.text("directory", c.Directory, base.Directory)
+	fields.text("container", c.Container, base.Container)
+	fields.text("config", c.Config, base.Config)
+	fields.text("network", c.Network, base.Network)
+	fields.number("port", c.Port, base.Port)
+	return fields
+}
+
+type spelling []string
+
+func (s *spelling) text(key, value, base string) {
+	if value != "" && value != base {
+		*s = append(*s, strconv.Quote(key)+": "+strconv.Quote(value))
 	}
 }
 
-func (f Front) same(other Front) bool { return reflect.DeepEqual(f, other) }
+func (s *spelling) number(key string, value, base int) {
+	if value != 0 && value != base {
+		*s = append(*s, strconv.Quote(key)+": "+strconv.Itoa(value))
+	}
+}
+
+func (s spelling) object() string { return "{ " + strings.Join(s, ", ") + " }" }
+
+func (f Front) same(other Front) bool { return reflect.DeepEqual(f.unlabelled(), other.unlabelled()) }
+
+func (f Front) unlabelled() Front {
+	if f.Traefik != nil {
+		unset := *f.Traefik
+		unset.Preset = ""
+		f.Traefik = &unset
+	}
+	if f.Caddy != nil {
+		unset := *f.Caddy
+		unset.Preset = ""
+		f.Caddy = &unset
+	}
+	return f
+}
 
 func (f Front) agrees(held Front, setter string) error {
 	if f.same(held) {

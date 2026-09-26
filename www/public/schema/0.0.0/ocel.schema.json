@@ -1409,8 +1409,6 @@
                   "oneOf": [
                     {
                       "enum": [
-                        "coolify",
-                        "dokploy",
                         "manual"
                       ],
                       "type": "string"
@@ -1419,32 +1417,110 @@
                       "additionalProperties": false,
                       "properties": {
                         "traefik": {
-                          "additionalProperties": false,
                           "description": "A Traefik the machine already runs, reading ocel's routes from a directory its file provider watches.",
-                          "properties": {
-                            "directory": {
-                              "description": "The directory Traefik's file provider watches, where ocel writes its routers.",
-                              "type": "string"
+                          "oneOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "directory": {
+                                  "description": "The directory Traefik's file provider watches, where ocel writes its routers.",
+                                  "type": "string"
+                                },
+                                "entrypoints": {
+                                  "additionalProperties": false,
+                                  "description": "The entry points ocel's routers attach to.",
+                                  "properties": {
+                                    "http": {
+                                      "description": "The entry point ocel's http-to-https redirect routers attach to; web when left out.",
+                                      "type": "string"
+                                    },
+                                    "https": {
+                                      "description": "The entry point ocel's hostname routers attach to; websecure when left out.",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "title": "VpsEntrypoints",
+                                  "type": "object"
+                                },
+                                "network": {
+                                  "description": "A docker network ocel's switchboard joins, so Traefik reaches it by name. Not with port.",
+                                  "type": "string"
+                                },
+                                "port": {
+                                  "description": "The loopback port ocel's switchboard is published on for Traefik to reach; 8480 when left out. Not with network.",
+                                  "type": "integer"
+                                },
+                                "preset": {
+                                  "description": "The host tool whose Traefik this is. It fills in every other field, and a field written beside it overrides.",
+                                  "enum": [
+                                    "coolify",
+                                    "dokploy"
+                                  ],
+                                  "type": "string"
+                                },
+                                "previewResolver": {
+                                  "description": "A resolver that can issue the preview base's wildcard over DNS-01. Set, previews share one wildcard certificate; left out, each preview hostname gets its own from resolver.",
+                                  "type": "string"
+                                },
+                                "resolver": {
+                                  "description": "The certificate resolver every hostname router ocel writes names.",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "preset"
+                              ],
+                              "type": "object"
                             },
-                            "entrypoint": {
-                              "description": "The entrypoint that serves https; websecure when left out.",
-                              "type": "string"
-                            },
-                            "network": {
-                              "description": "The docker network Traefik reaches ocel's switchboard on.",
-                              "type": "string"
-                            },
-                            "resolver": {
-                              "description": "The certificate resolver ocel's routers ask for certificates.",
-                              "type": "string"
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "directory": {
+                                  "description": "The directory Traefik's file provider watches, where ocel writes its routers.",
+                                  "type": "string"
+                                },
+                                "entrypoints": {
+                                  "additionalProperties": false,
+                                  "description": "The entry points ocel's routers attach to.",
+                                  "properties": {
+                                    "http": {
+                                      "description": "The entry point ocel's http-to-https redirect routers attach to; web when left out.",
+                                      "type": "string"
+                                    },
+                                    "https": {
+                                      "description": "The entry point ocel's hostname routers attach to; websecure when left out.",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "title": "VpsEntrypoints",
+                                  "type": "object"
+                                },
+                                "network": {
+                                  "description": "A docker network ocel's switchboard joins, so Traefik reaches it by name. Not with port.",
+                                  "type": "string"
+                                },
+                                "port": {
+                                  "description": "The loopback port ocel's switchboard is published on for Traefik to reach; 8480 when left out. Not with network.",
+                                  "type": "integer"
+                                },
+                                "preset": false,
+                                "previewResolver": {
+                                  "description": "A resolver that can issue the preview base's wildcard over DNS-01. Set, previews share one wildcard certificate; left out, each preview hostname gets its own from resolver.",
+                                  "type": "string"
+                                },
+                                "resolver": {
+                                  "description": "The certificate resolver every hostname router ocel writes names.",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "directory",
+                                "resolver"
+                              ],
+                              "type": "object"
                             }
-                          },
-                          "required": [
-                            "directory",
-                            "resolver"
                           ],
-                          "title": "VpsTraefik",
-                          "type": "object"
+                          "title": "VpsTraefik"
                         }
                       },
                       "required": [
@@ -1456,23 +1532,76 @@
                       "additionalProperties": false,
                       "properties": {
                         "caddy": {
-                          "additionalProperties": false,
                           "description": "A Caddy the machine already runs, importing ocel's site blocks from a directory.",
-                          "properties": {
-                            "container": {
-                              "description": "The container Caddy runs in, when it runs in one.",
-                              "type": "string"
+                          "oneOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "config": {
+                                  "description": "The config file caddy reload names inside the container; /etc/caddy/Caddyfile when left out.",
+                                  "type": "string"
+                                },
+                                "container": {
+                                  "description": "The container Caddy runs in; left out, Caddy runs as the systemd caddy.service.",
+                                  "type": "string"
+                                },
+                                "directory": {
+                                  "description": "The directory the running Caddy imports site blocks from.",
+                                  "type": "string"
+                                },
+                                "network": {
+                                  "description": "A docker network ocel's switchboard joins, so Caddy reaches it by name. Not with port.",
+                                  "type": "string"
+                                },
+                                "port": {
+                                  "description": "The loopback port ocel's switchboard is published on for Caddy to reach; 8480 when left out. Not with network.",
+                                  "type": "integer"
+                                },
+                                "preset": {
+                                  "description": "The host tool whose Caddy this is. It fills in every other field, and a field written beside it overrides.",
+                                  "enum": [
+                                    "coolify"
+                                  ],
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "preset"
+                              ],
+                              "type": "object"
                             },
-                            "directory": {
-                              "description": "The directory the running Caddy imports site blocks from.",
-                              "type": "string"
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "config": {
+                                  "description": "The config file caddy reload names inside the container; /etc/caddy/Caddyfile when left out.",
+                                  "type": "string"
+                                },
+                                "container": {
+                                  "description": "The container Caddy runs in; left out, Caddy runs as the systemd caddy.service.",
+                                  "type": "string"
+                                },
+                                "directory": {
+                                  "description": "The directory the running Caddy imports site blocks from.",
+                                  "type": "string"
+                                },
+                                "network": {
+                                  "description": "A docker network ocel's switchboard joins, so Caddy reaches it by name. Not with port.",
+                                  "type": "string"
+                                },
+                                "port": {
+                                  "description": "The loopback port ocel's switchboard is published on for Caddy to reach; 8480 when left out. Not with network.",
+                                  "type": "integer"
+                                },
+                                "preset": false
+                              },
+                              "required": [
+                                "directory"
+                              ],
+                              "type": "object"
                             }
-                          },
-                          "required": [
-                            "directory"
                           ],
-                          "title": "VpsCaddy",
-                          "type": "object"
+                          "title": "VpsCaddy"
                         }
                       },
                       "required": [
@@ -1487,6 +1616,10 @@
                           "additionalProperties": false,
                           "description": "A proxy you route to ocel yourself; ocel writes nothing to it.",
                           "properties": {
+                            "network": {
+                              "description": "A docker network ocel's switchboard also joins, so a proxy on it reaches the switchboard by name even after it is recreated.",
+                              "type": "string"
+                            },
                             "port": {
                               "description": "The loopback port your proxy forwards to ocel's switchboard on; 8480 when left out.",
                               "type": "integer"
