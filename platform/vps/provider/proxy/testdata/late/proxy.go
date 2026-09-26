@@ -12,6 +12,8 @@ var _ proxy.Proxy = (*Late)(nil)
 
 func (l *Late) Render(proxy.Spec) ([]byte, error) { return nil, nil }
 
+func (l *Late) File() string { return "" }
+
 func (l *Late) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (l *Late) Reload(context.Context) error { return nil }

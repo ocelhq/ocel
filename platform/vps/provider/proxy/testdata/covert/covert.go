@@ -12,6 +12,8 @@ func (Covert) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
 func (Covert) Render(proxy.Spec) ([]byte, error) { return nil, nil }
 
+func (Covert) File() string { return "" }
+
 func (Covert) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (Covert) Reload(context.Context) error { return nil }

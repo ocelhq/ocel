@@ -9,6 +9,7 @@ import (
 type Proxy interface {
 	Guarantees() Guarantees
 	Render(spec Spec) ([]byte, error)
+	File() string
 	Unrendered(config []byte, permission Permission) string
 	Reload(ctx context.Context) error
 	Inspect(ctx context.Context) (Standing, error)

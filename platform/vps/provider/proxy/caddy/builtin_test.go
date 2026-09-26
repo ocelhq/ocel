@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 )
 
@@ -30,6 +31,14 @@ func (b *box) Ran(_ context.Context, _ string, argv []string) (string, error) {
 func (b *box) Said(_ context.Context, argv []string) (string, error) {
 	b.ran = append(b.ran, strings.Join(argv, " "))
 	return b.logs, b.unreached
+}
+
+func TestTheBuiltinProxyIsRenderedIntoTheFileItsContainerMounts(t *testing.T) {
+	t.Parallel()
+
+	if got := (caddy.Builtin{}).File(); got != live.ProxyConfig {
+		t.Errorf("File() = %q, want %q: it is mounted at %s, the file the proxy runs and reloads", got, live.ProxyConfig, caddy.ConfigMount)
+	}
 }
 
 func TestAReloadTakesUpTheConfigOnDiskOverTheAdminSocket(t *testing.T) {

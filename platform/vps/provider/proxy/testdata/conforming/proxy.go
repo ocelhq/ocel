@@ -12,6 +12,8 @@ func (c *Conforming) Guarantees() proxy.Guarantees { return c.guarantees }
 
 func (c *Conforming) Render(proxy.Spec) ([]byte, error) { return nil, nil }
 
+func (c *Conforming) File() string { return "" }
+
 func (c *Conforming) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (c *Conforming) Reload(context.Context) error { return nil }

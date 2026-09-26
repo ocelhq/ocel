@@ -9,6 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/certs"
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
+	"github.com/ocelhq/ocel/platform/vps/provider/live"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
 )
 
@@ -19,6 +20,8 @@ func (Builtin) Guarantees() proxy.Guarantees {
 }
 
 func (Builtin) Render(spec proxy.Spec) ([]byte, error) { return render(spec) }
+
+func (Builtin) File() string { return live.ProxyConfig }
 
 func (Builtin) Unrendered(config []byte, permission proxy.Permission) string {
 	return unrendered(config, permission)

@@ -16,6 +16,8 @@ func (*Grouped) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
 func (*Grouped) Render(proxy.Spec) ([]byte, error) { return nil, nil }
 
+func (*Grouped) File() string { return "" }
+
 func (*Grouped) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (*Grouped) Reload(context.Context) error { return nil }

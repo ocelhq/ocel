@@ -16,6 +16,8 @@ func (Ignored) Guarantees() proxy.Guarantees { return proxy.Guarantees{} }
 
 func (Ignored) Render(proxy.Spec) ([]byte, error) { return nil, nil }
 
+func (Ignored) File() string { return "" }
+
 func (Ignored) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (Ignored) Reload(context.Context) error { return nil }

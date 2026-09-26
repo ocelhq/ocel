@@ -12,6 +12,8 @@ func (Dotted) Guarantees() Guarantees { return Guarantees{} }
 
 func (Dotted) Render(Spec) ([]byte, error) { return nil, nil }
 
+func (Dotted) File() string { return "" }
+
 func (Dotted) Unrendered([]byte, proxy.Permission) string { return "" }
 
 func (Dotted) Reload(context.Context) error { return nil }

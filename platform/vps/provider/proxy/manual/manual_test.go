@@ -50,6 +50,14 @@ func on443() []listeners.Listener {
 	return []listeners.Listener{{Addr: netip.IPv4Unspecified(), Port: 443}}
 }
 
+func TestManualIsRenderedIntoNoFile(t *testing.T) {
+	t.Parallel()
+
+	if got := (manual.Manual{}).File(); got != "" {
+		t.Errorf("File() = %q, want none: ocel writes nothing to a proxy you route by hand", got)
+	}
+}
+
 func TestManualGuaranteesNothingOfWhatItsProxyDoes(t *testing.T) {
 	t.Parallel()
 
