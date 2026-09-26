@@ -86,6 +86,18 @@ func (h *Host) RouteBy(hostname string) string {
 	return manual.Route(hostname, h.proxyOption.Manual.Port)
 }
 
+type userNetwork struct {
+	name   string
+	option string
+}
+
+func (f Front) joined() []userNetwork {
+	if f.Manual == nil || f.Manual.Network == "" || f.Manual.Network == ProxyNetwork {
+		return nil
+	}
+	return []userNetwork{{name: f.Manual.Network, option: "proxy.manual.network"}}
+}
+
 func (f Front) published() []publish {
 	if f.Manual == nil {
 		return nil

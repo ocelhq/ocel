@@ -74,6 +74,59 @@ func TestAProxyRoutedByHandIsTrustedForItsSchemeAndHostButNeverTheClientItNames(
 	}
 }
 
+func routedOnANetwork() Front {
+	return Front{Manual: &ManualFront{Port: manual.DefaultPort, Network: "coolify"}}
+}
+
+func TestAProxyRoutedByHandOnItsOwnNetworkIsHeardFromItAsFromTheBoxNetwork(t *testing.T) {
+	t.Parallel()
+
+	board := switchboardOf(t, routedOnANetwork())
+	var relayed []string
+	for at, arg := range board.command {
+		if arg == "--relay-network" {
+			relayed = append(relayed, board.command[at+1])
+		}
+	}
+	if !slices.Equal(relayed, []string{ProxyNetwork, "coolify"}) {
+		t.Errorf("the switchboard serves as %q, want it relaying from %s and from coolify, the network your proxy reaches it on", board.command, ProxyNetwork)
+	}
+	if !strings.Contains(words(board.run()), words([]string{"--network", ProxyNetwork, "--network", "coolify"})) {
+		t.Errorf("the switchboard runs as %s, want it started on coolify as well as %s: it resolves the networks it relays from as it starts serving", words(board.run()), ProxyNetwork)
+	}
+	if !strings.Contains(words(board.run()), words([]string{"--publish", "127.0.0.1:8480:" + switchboardPort})) {
+		t.Errorf("the switchboard runs as %s, want it still published on the loopback port beside the network", words(board.run()))
+	}
+}
+
+func TestTheSwitchboardIsWrittenOntoYourProxysNetworkOnlyWhenItStands(t *testing.T) {
+	t.Parallel()
+
+	written := switchboardOf(t, routedOnANetwork()).writing(containerRising)
+	asked := strings.Index(written, "docker network inspect "+quoted("coolify"))
+	ran := strings.Index(written, quoted("run")+" "+quoted("--detach"))
+	if asked < 0 || ran < 0 || asked > ran {
+		t.Fatalf("the switchboard write asks after coolify at %d and runs at %d, want the network found before a run that would fail on it:\n%s", asked, ran, written)
+	}
+	if !strings.Contains(written, "proxy.manual.network") {
+		t.Errorf("the switchboard write refuses a missing network without naming the option that set it:\n%s", written)
+	}
+}
+
+func TestASwitchboardThatLeftYourProxysNetworkReadsAsDrift(t *testing.T) {
+	t.Parallel()
+
+	board := switchboardOf(t, routedOnANetwork())
+	if !strings.Contains(board.probe(), `index .NetworkSettings.Networks "coolify"`) {
+		t.Errorf("the switchboard's probe never asks whether it sits on coolify, so one taken off it is never put back:\n%s", board.probe())
+	}
+	joined := string(board.facts())
+	left := string(switchboardOf(t, routedByHand()).facts())
+	if joined == left || !strings.Contains(joined, "coolify") {
+		t.Errorf("the switchboard is stated as\n%s\non a network and as\n%s\noff it, want its membership of coolify stated", joined, left)
+	}
+}
+
 func TestAClaimOnABoxFrontedByHandWritesTheTableAloneAndReloadsNothing(t *testing.T) {
 	t.Parallel()
 

@@ -74,7 +74,7 @@ func TestNoInspectOnTheEvidencePathCanReachTheEnvironmentItWasHanded(t *testing.
 func inspectRosters() map[string][]string {
 	return map[string][]string{
 		"docker inspect":         {"probe", "restoredCommand", "restoring", "rising", "runningCommand", "servingCommand", "stateCommand"},
-		"docker network inspect": {"command", "networkCommand", "networkCreating", "networkForgetting", "networkProbe", "networkStanding"},
+		"docker network inspect": {"command", "networkCommand", "networkCreating", "networkForgetting", "networkProbe", "networkStanding", "networksStanding"},
 		"docker image inspect":   {"imageHeld"},
 	}
 }
@@ -119,6 +119,9 @@ func TestNoNetworkInspectCanNameAContainerToInspectInstead(t *testing.T) {
 		"what a deploy puts a project's network up with":      {networkStanding(valued().Class, valued().Project), project},
 		"what a resource puts a project's network up with":    {networkCreating(valued().Class, valued().Project), project},
 		"what a teardown takes a project's network down with": {networkForgetting(valued().Class, valued().Project), project},
+		"what a switchboard write finds your proxy's network with": {
+			switchboardStanding(nil, Front{Manual: &ManualFront{Port: 8480, Network: "coolify"}}).networksStanding(), "coolify",
+		},
 	}
 	if len(networking) != len(inspectRosters()["docker network inspect"]) {
 		t.Fatalf("this bench reads %d network inspects and the package renders %d, so what it does not read is held to nothing",
