@@ -90,7 +90,13 @@ func (p *Proxy) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf(`option "proxy": %w`, err)
 	}
 	*p = Proxy(decoded)
-	if _, manual := keyed[proxyManual]; manual && p.Manual == nil {
+	if _, held := keyed["traefik"]; held && p.Traefik == nil {
+		p.Traefik = &Traefik{}
+	}
+	if _, held := keyed["caddy"]; held && p.Caddy == nil {
+		p.Caddy = &Caddy{}
+	}
+	if _, held := keyed[proxyManual]; held && p.Manual == nil {
 		p.Manual = &Manual{}
 	}
 	return nil
