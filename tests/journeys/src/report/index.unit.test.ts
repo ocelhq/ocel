@@ -61,7 +61,7 @@ describe("the report a run writes from its step results", () => {
   ];
   const meta = { target: "dev", lane: "dev", runId: "local-unit" };
 
-  it("reconciles the recorded results and holds a crash as an unhandled error", () => {
+  it("reconciles the recorded results and reports a crash as an unhandled error", () => {
     const account = journeyReportOf({
       results: [result({ title: "deploy" }), result({ title: "destroy", startTime: 1_600 })],
       exit: exit({ exitCode: null, signal: "SIGKILL" }),
@@ -79,7 +79,7 @@ describe("the report a run writes from its step results", () => {
     );
   });
 
-  it("holds a failing test as the failure, with nothing unhandled beside it", () => {
+  it("reports a failing test as the failure, with nothing unhandled beside it", () => {
     const account = journeyReportOf({
       results: [
         result({ title: "deploy", outcome: "failed", error: "the console never answered" }),

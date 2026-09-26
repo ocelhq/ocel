@@ -66,7 +66,7 @@ describe("sameDirectives", () => {
     expect(sameDirectives(null, IMMUTABLE_CACHE_CONTROL)).toBe(false);
   });
 
-  it("is false when the header carries a directive the expectation does not", () => {
+  it("is false when the header has a directive the expectation does not", () => {
     expect(
       sameDirectives("public, max-age=31536000, immutable, no-transform", IMMUTABLE_CACHE_CONTROL),
     ).toBe(false);

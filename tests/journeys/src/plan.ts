@@ -150,7 +150,7 @@ function resolveGaps(
   const expectedFailures: ExpectedFailures = {};
   const skipped: SkippedCells = {};
   for (const gap of gaps) {
-    const carried = new Set<string>();
+    const recorded = new Set<string>();
     const skippedCells = new Set<string>();
     for (const scope of gap.where) {
       if (!applies(scope, lane, env)) {
@@ -162,10 +162,10 @@ function resolveGaps(
         }
         const key = cellApp(hit.cell, hit.app);
         const at = JSON.stringify([key, hit.title]);
-        if (carried.has(at)) {
+        if (recorded.has(at)) {
           continue;
         }
-        carried.add(at);
+        recorded.add(at);
         const cell = (expectedFailures[key] ??= {});
         (cell[hit.title] ??= []).push(gapRefOf(gap));
       }

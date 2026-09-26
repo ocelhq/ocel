@@ -113,7 +113,7 @@ async function bootstrapTable(
   }
   if (name === "" || name === "None") {
     throw new Error(
-      `the ${stack} stack stands but publishes no ${output} output, so ${consequence}`,
+      `the ${stack} stack exists but publishes no ${output} output, so ${consequence}`,
     );
   }
   return name;
@@ -124,7 +124,7 @@ async function stateTable(cli: Cli, stack: string): Promise<string | undefined> 
     cli,
     stack,
     STATE_TABLE_OUTPUT,
-    "nothing can be said about which projects stand",
+    "nothing can be said about which projects are deployed",
   );
 }
 
@@ -327,7 +327,7 @@ type TaggedPage = {
   PaginationToken?: string;
 };
 
-export async function namespacesStanding(cli: Cli): Promise<string[]> {
+export async function taggedNamespaces(cli: Cli): Promise<string[]> {
   const found: string[] = [];
   const seen = new Set<string>();
   let token = "";

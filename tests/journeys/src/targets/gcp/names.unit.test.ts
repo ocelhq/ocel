@@ -10,13 +10,13 @@ describe("roomForSlug", () => {
     expect(roomForSlug("ocel", ["next", "express"])).toBe(18);
   });
 
-  it("shrinks with the namespace every name carries", () => {
+  it("shrinks with the namespace every name starts with", () => {
     expect(roomForSlug("ocel-nightly", ["web"])).toBe(14);
   });
 });
 
 describe("fittedSlug", () => {
-  it("leaves a slug the room holds alone", () => {
+  it("leaves a slug that fits the room alone", () => {
     expect(fittedSlug("j-17-deploy-node", 22)).toBe("j-17-deploy-node");
   });
 

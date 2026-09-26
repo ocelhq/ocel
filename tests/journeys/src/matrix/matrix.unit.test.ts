@@ -6,7 +6,7 @@ import { fixtures } from "./fixtures";
 import { gaps } from "./gaps";
 import { type Concern, LANES, type Lane, targetOfLane } from "./types";
 
-const HELD = {
+const REGISTRY_CREDENTIALS = {
   OCEL_JOURNEY_REGISTRY_USER: "octocat",
   OCEL_JOURNEY_REGISTRY_TOKEN: "ghs_t0ken",
 };
@@ -23,14 +23,14 @@ function concernIn(concern: Concern, planned: ReturnType<typeof planOn>): string
 }
 
 describe("the journey matrix", () => {
-  it("plans on every lane without a dead gap, with the registry held and without", () => {
+  it("plans on every lane without a dead gap, with the registry credentials set and without", () => {
     for (const lane of LANES) {
       expect(() => planOn(lane)).not.toThrow();
-      expect(() => planOn(lane, HELD)).not.toThrow();
+      expect(() => planOn(lane, REGISTRY_CREDENTIALS)).not.toThrow();
     }
   });
 
-  it("files the fixtures an SST or Pulumi stack stands up under iac, and only those", () => {
+  it("files the fixtures an SST or Pulumi stack deploys under iac, and only those", () => {
     const named = (concern: Concern) => fixtures.filter((one) => one.concern === concern);
     const stacked = fixtures.filter((one) => one.stack !== undefined);
     expect(named("sdk").filter((one) => one.stack !== undefined)).toEqual([]);
@@ -97,15 +97,17 @@ describe("a pull request's run", () => {
 });
 
 describe("the registry variant", () => {
-  it("deploys through the registry on either box when the run holds its credentials", () => {
+  it("deploys through the registry on either box when the run has its credentials", () => {
     for (const lane of ["vps", "vps.incus"] as const) {
-      expect(planOn(lane, HELD).cells.map((cell) => cell.name)).toContain("deploy/node-registry");
+      expect(planOn(lane, REGISTRY_CREDENTIALS).cells.map((cell) => cell.name)).toContain(
+        "deploy/node-registry",
+      );
     }
   });
 
   it("is skipped on either box when the run lacks the user or the token it pushes with", () => {
-    const { OCEL_JOURNEY_REGISTRY_USER: _user, ...tokenOnly } = HELD;
-    const { OCEL_JOURNEY_REGISTRY_TOKEN: _token, ...userOnly } = HELD;
+    const { OCEL_JOURNEY_REGISTRY_USER: _user, ...tokenOnly } = REGISTRY_CREDENTIALS;
+    const { OCEL_JOURNEY_REGISTRY_TOKEN: _token, ...userOnly } = REGISTRY_CREDENTIALS;
     for (const lane of ["vps", "vps.incus"] as const) {
       for (const env of [{}, tokenOnly, userOnly]) {
         const planned = planOn(lane, env);

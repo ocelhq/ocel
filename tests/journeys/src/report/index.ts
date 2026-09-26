@@ -64,9 +64,9 @@ function modulesFrom(results: StepResult[]): TimelineModule[] {
   const spans = new Map<string, { from: number; to: number }>();
   for (const result of results) {
     const cell = cellOf(result.cell);
-    const held = spans.get(cell);
-    const from = Math.min(held?.from ?? result.startTime, result.startTime);
-    const to = Math.max(held?.to ?? 0, result.startTime + result.duration);
+    const known = spans.get(cell);
+    const from = Math.min(known?.from ?? result.startTime, result.startTime);
+    const to = Math.max(known?.to ?? 0, result.startTime + result.duration);
     spans.set(cell, { from, to });
   }
   return [...spans.entries()].map(([cell, span]) => ({

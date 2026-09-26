@@ -16,7 +16,7 @@ function deployment(release: string): Deployment {
   };
 }
 
-function targetFor(called: Called, standing = false): Target & ReleaseCycle {
+function targetFor(called: Called, exists = false): Target & ReleaseCycle {
   return {
     name: "aws",
     workers: 1,
@@ -24,7 +24,7 @@ function targetFor(called: Called, standing = false): Target & ReleaseCycle {
     stepTimeoutMs: 1_000,
     sweeper: {
       list: async () => [],
-      exists: async () => standing,
+      exists: async () => exists,
       sweepStale: async () => {},
       sweepRun: async () => {},
     },
@@ -86,7 +86,7 @@ function recordingEvidence(written: Called): Evidence {
 
 function runOf(
   called: Called,
-  over: { keep?: boolean; prepareFailure?: string; standing?: boolean; written?: Called } = {},
+  over: { keep?: boolean; prepareFailure?: string; exists?: boolean; written?: Called } = {},
 ) {
   const stacked = fixture("iac/with-sst", {
     apps: ["web"],
@@ -96,7 +96,7 @@ function runOf(
   });
   return new CellRun({
     cell: { name: stacked.name, fixture: stacked, variant: defaults },
-    target: targetFor(called, over.standing),
+    target: targetFor(called, over.exists),
     runId: "1",
     keep: over.keep ?? false,
     evidence: recordingEvidence(over.written ?? []),
@@ -207,12 +207,12 @@ describe("a cell run", () => {
     expect(called).toEqual([]);
   });
 
-  it("fails a destroy that leaves the cell standing", async () => {
-    const run = runOf([], { standing: true });
+  it("fails a destroy that leaves the cell deployed", async () => {
+    const run = runOf([], { exists: true });
     await expect(run.destroy()).rejects.toThrow(/j-1-iac-with-sst still exists on aws/);
   });
 
-  it("destroys the stack once, and never for a cell kept standing", async () => {
+  it("destroys the stack once, and never for a cell kept deployed", async () => {
     const called: Called = [];
     const run = runOf(called);
     await run.destroyStack();
@@ -223,7 +223,7 @@ describe("a cell run", () => {
     expect(kept).toEqual([]);
   });
 
-  it("tears a cell down when it finishes, and records where a kept one stands instead", async () => {
+  it("tears a cell down when it finishes, and records where a kept one is deployed instead", async () => {
     const called: Called = [];
     await runOf(called).finish(["deploy", "verify", "destroy"]);
     expect(called).toEqual(["destroy"]);

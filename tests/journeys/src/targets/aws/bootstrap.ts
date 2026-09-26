@@ -53,7 +53,7 @@ export class AwsBootstrap {
   constructor(private readonly world: AwsWorld) {}
 
   async prepareLane(): Promise<PrepareFailures> {
-    const where = await this.world.settle();
+    const where = await this.world.detect();
     if (where.world === "real") {
       return {};
     }

@@ -16,7 +16,7 @@ describe("run identity", () => {
 });
 
 describe("project slug", () => {
-  it("carries the run id behind the sweep prefix", () => {
+  it("puts the run id behind the sweep prefix", () => {
     expect(projectSlug("node", "local-ada")).toBe("j-local-ada-node");
   });
 });
@@ -28,7 +28,7 @@ describe("isStranded", () => {
     expect(slugs.filter((slug) => isStranded(slug, "42"))).not.toContain("ocelhq");
   });
 
-  it("leaves this run's own projects standing", () => {
+  it("leaves this run's own projects deployed", () => {
     expect(slugs.filter((slug) => isStranded(slug, "42"))).toEqual([
       "j-local-ada-node",
       "j-4242-node",
@@ -55,7 +55,7 @@ describe("app hostname", () => {
     expect(appHostname("web", "node", undefined)).toBeUndefined();
   });
 
-  it("refuses a label a dns label cannot hold", () => {
+  it("refuses a label longer than a dns label allows", () => {
     expect(() => appHostname("web", `j-1-${"e".repeat(60)}`, "journey.test")).toThrow(/63/);
   });
 });

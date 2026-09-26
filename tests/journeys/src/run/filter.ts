@@ -53,7 +53,7 @@ function skipsLifted(env: NodeJS.ProcessEnv): boolean {
   throw new Error(`OCEL_JOURNEY_SKIPS is ${asked}, and a skipped cell is either skipped or run`);
 }
 
-function keepsStanding(env: NodeJS.ProcessEnv): boolean {
+function keepsCells(env: NodeJS.ProcessEnv): boolean {
   const asked = (env.OCEL_JOURNEY_KEEP ?? "").trim().toLowerCase();
   if (asked === "") {
     return false;
@@ -61,7 +61,7 @@ function keepsStanding(env: NodeJS.ProcessEnv): boolean {
   if (asked === "1" || asked === "true" || asked === "yes") {
     return true;
   }
-  throw new Error(`OCEL_JOURNEY_KEEP is ${asked}, and a cell is either kept standing or destroyed`);
+  throw new Error(`OCEL_JOURNEY_KEEP is ${asked}, and a cell is either kept deployed or destroyed`);
 }
 
 export function filterFrom(env: NodeJS.ProcessEnv): RunFilter {
@@ -73,6 +73,6 @@ export function filterFrom(env: NodeJS.ProcessEnv): RunFilter {
     coverage: coverageFrom(env),
     ...(draw === undefined ? {} : { draw }),
     runSkipped: skipsLifted(env),
-    keep: keepsStanding(env),
+    keep: keepsCells(env),
   };
 }

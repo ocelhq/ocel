@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { REDACTED } from "../checks/context";
-import { boxLane, recordFile, slugsOf, ssh, unsettled } from "./vps";
+import { boxLane, hostnamesWithoutUrl, recordFile, slugsOf, ssh } from "./vps";
 
 const IDENTITY = "/nonexistent/ocel-journey-identity";
 
@@ -18,23 +18,23 @@ describe("boxLane", () => {
   });
 });
 
-describe("unsettled", () => {
+describe("hostnamesWithoutUrl", () => {
   it("passes a deploy that printed a url for every hostname it declares", () => {
     const said = "Done in 1m\n\n    web  https://web-j-1-deploy-python.localhost\n";
-    expect(unsettled(said, ["web-j-1-deploy-python.localhost"])).toEqual([]);
+    expect(hostnamesWithoutUrl(said, ["web-j-1-deploy-python.localhost"])).toEqual([]);
   });
 
   it("names the hostnames the deploy left pending", () => {
     const said =
       "Done in 2m\n\n    web-j-1-deploy-python.localhost does not answer as the box edge yet — `ocel domain add` picks up where it stopped\n";
-    expect(unsettled(said, ["web-j-1-deploy-python.localhost"])).toEqual([
+    expect(hostnamesWithoutUrl(said, ["web-j-1-deploy-python.localhost"])).toEqual([
       "web-j-1-deploy-python.localhost",
     ]);
   });
 
   it("does not read one hostname's url as another's that it prefixes", () => {
     const said = "    web  https://web.localhost.example\n";
-    expect(unsettled(said, ["web.localhost"])).toEqual(["web.localhost"]);
+    expect(hostnamesWithoutUrl(said, ["web.localhost"])).toEqual(["web.localhost"]);
   });
 });
 
@@ -53,7 +53,7 @@ describe("recordFile", () => {
 });
 
 describe("slugsOf", () => {
-  it("names one project per record the box holds", () => {
+  it("names one project per record the box stores", () => {
     expect(slugsOf("/records/projects/production/j-local-ada-node.rec\n")).toEqual([
       "j-local-ada-node",
     ]);
@@ -67,7 +67,7 @@ describe("slugsOf", () => {
     expect(slugsOf("j-local-ada%2Fnode.rec")).toEqual(["j-local-ada/node"]);
   });
 
-  it("refuses to read a box with no records tier as a box holding nothing", () => {
+  it("refuses to read a box with no records tier as a box storing nothing", () => {
     expect(() => slugsOf("no-records-tier\n")).toThrow(
       /records\/projects\/production does not exist/,
     );

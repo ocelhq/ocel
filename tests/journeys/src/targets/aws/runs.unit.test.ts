@@ -32,7 +32,7 @@ describe("runIdOf", () => {
     assert.equal(runIdOf("j-1874-deploy-node"), "1874");
   });
 
-  it("reads the run id out of a namespace, which carries the same head", () => {
+  it("reads the run id out of a namespace, which starts with the same head", () => {
     assert.equal(runIdOf("j-19283746-deploy-next-a1b2c3"), "19283746");
   });
 
@@ -59,7 +59,7 @@ describe("ofRun", () => {
     );
   });
 
-  it("names a slug the run made once, however often it stands in the list", () => {
+  it("names a slug the run made once, however often it appears in the list", () => {
     assert.deepEqual(ofRun(["j-1874-deploy-node", "j-1874-deploy-node"], "1874"), [
       "j-1874-deploy-node",
     ]);
@@ -69,16 +69,16 @@ describe("ofRun", () => {
     assert.deepEqual(ofRun(["deploy-node", "j-local-vndaba-deploy-node"], "1874"), []);
   });
 
-  it("keeps a namespace, which carries the same head as the slug", () => {
+  it("keeps a namespace, which starts with the same head as the slug", () => {
     assert.deepEqual(ofRun(["j-1874-deploy-next-a1b2c3"], "1874"), ["j-1874-deploy-next-a1b2c3"]);
   });
 });
 
 describe("livelyRuns", () => {
   const verdicts: Record<string, Verdict> = {
-    "1": { standing: "live" },
-    "2": { standing: "done" },
-    "3": { standing: "unknown", reason: "github answered 500" },
+    "1": { state: "live" },
+    "2": { state: "done" },
+    "3": { state: "unknown", reason: "github answered 500" },
   };
 
   it("keeps a live run and an unreadable one, and reclaims a finished one", async () => {
@@ -101,23 +101,23 @@ describe("githubRuns", () => {
   it("reads a queued, in-progress or waiting run as live", async () => {
     for (const status of ["queued", "in_progress", "waiting", "requested", "pending"]) {
       const look = githubRuns(ENV, answering([run(status)]).fetching);
-      assert.deepEqual(await look("1874"), { standing: "live" });
+      assert.deepEqual(await look("1874"), { state: "live" });
     }
   });
 
   it("reads a completed run as done", async () => {
     const look = githubRuns(ENV, answering([run("completed")]).fetching);
-    assert.deepEqual(await look("1874"), { standing: "done" });
+    assert.deepEqual(await look("1874"), { state: "done" });
   });
 
   it("reads a run github never had as done", async () => {
     const look = githubRuns(ENV, answering([new Response(null, { status: 404 })]).fetching);
-    assert.deepEqual(await look("1874"), { standing: "done" });
+    assert.deepEqual(await look("1874"), { state: "done" });
   });
 
-  it("reads a refusal as unknown, so what the run holds is kept", async () => {
+  it("reads a refusal as unknown, so what the run provisioned is kept", async () => {
     const look = githubRuns(ENV, answering([new Response(null, { status: 401 })]).fetching);
-    assert.deepEqual(await look("1874"), { standing: "unknown", reason: "github answered 401" });
+    assert.deepEqual(await look("1874"), { state: "unknown", reason: "github answered 401" });
   });
 
   it("reads a network failure as unknown", async () => {
@@ -126,7 +126,7 @@ describe("githubRuns", () => {
       answering(() => Promise.reject(new Error("getaddrinfo ENOTFOUND"))).fetching,
     );
     const verdict = await look("1874");
-    assert.equal(verdict.standing, "unknown");
+    assert.equal(verdict.state, "unknown");
     assert.match(verdict.reason ?? "", /ENOTFOUND/);
   });
 
@@ -135,10 +135,10 @@ describe("githubRuns", () => {
       { GITHUB_REPOSITORY: "ocelhq/ocel" },
       answering([run("queued")]).fetching,
     );
-    assert.equal((await look("1874")).standing, "unknown");
+    assert.equal((await look("1874")).state, "unknown");
   });
 
-  it("asks github about a run once and holds the answer", async () => {
+  it("asks github about a run once and caches the answer", async () => {
     const { asked, fetching } = answering([run("in_progress")]);
     const look = githubRuns(ENV, fetching);
     await look("1874");

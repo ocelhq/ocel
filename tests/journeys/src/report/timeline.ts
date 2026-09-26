@@ -64,14 +64,14 @@ export function segmentsOf(tests: TimelineTest[]): Segment[] {
     ])
     .sort((a, b) => a.at - b.at || a.delta - b.delta);
 
-  const held = new Map<string, number>();
+  const running = new Map<string, number>();
   const out: Segment[] = [];
   let index = 0;
   let previous = points[0]?.at ?? 0;
   while (index < points.length) {
     const at = points[index].at;
     if (at > previous) {
-      const active = [...held.entries()].filter(([, count]) => count > 0).map(([name]) => name);
+      const active = [...running.entries()].filter(([, count]) => count > 0).map(([name]) => name);
       if (active.length > 0) {
         out.push({ from: previous, to: at, active });
       }
@@ -79,7 +79,7 @@ export function segmentsOf(tests: TimelineTest[]): Segment[] {
     }
     while (index < points.length && points[index].at === at) {
       const point = points[index];
-      held.set(point.cell, (held.get(point.cell) ?? 0) + point.delta);
+      running.set(point.cell, (running.get(point.cell) ?? 0) + point.delta);
       index += 1;
     }
   }
@@ -109,13 +109,13 @@ function timingFor(
   runStart: number,
   file: number,
 ): CellTiming {
-  const held: Record<string, number> = {};
+  const phaseMs: Record<string, number> = {};
   for (const test of tests) {
     const phase = phaseOf(test);
-    held[phase] = (held[phase] ?? 0) + test.duration;
+    phaseMs[phase] = (phaseMs[phase] ?? 0) + test.duration;
   }
   const phases = Object.fromEntries(
-    Object.entries(held).map(([phase, ms]) => [phase, seconds(ms)]),
+    Object.entries(phaseMs).map(([phase, ms]) => [phase, seconds(ms)]),
   );
   const first = Math.min(...tests.map((test) => test.startTime));
   return { cell, start: seconds(first - runStart), phases, file: seconds(file) };

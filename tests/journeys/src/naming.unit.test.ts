@@ -2,7 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { sanitize } from "./naming";
 
 describe("sanitize", () => {
-  it("holds the alphabet pkg/naming's Sanitize holds, case for case", () => {
+  it("keeps the alphabet pkg/naming's Sanitize keeps, case for case", () => {
     const cases: [string, string][] = [
       ["Web/API/Users", "web-api-users"],
       ["web_api_users", "web-api-users"],

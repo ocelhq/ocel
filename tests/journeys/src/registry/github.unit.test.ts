@@ -31,7 +31,7 @@ function github(answers: Record<string, Response | Response[]>) {
 const PACKAGE = "https://api.github.com/orgs/ocelhq/packages/container/journey-vps%2Fweb";
 const WEB: Package = { org: "ocelhq", name: "journey-vps/web", deployed: false };
 const DEPLOYED: Package = { ...WEB, deployed: true };
-const HELD = Response.json({ name: "journey-vps/web" });
+const PRESENT = Response.json({ name: "journey-vps/web" });
 const ABSENT = new Response('{"message":"Package not found."}', { status: 404 });
 
 function answered(status: number, headers: Record<string, string> = {}): Response {
@@ -42,13 +42,13 @@ const said = (asked: Asked[]) => asked.map((one) => `${one.method} ${one.url}`);
 
 describe("deletePackages", () => {
   it("deletes the whole package the slash in its name is escaped in", async () => {
-    const { io, asked } = github({ [`GET ${PACKAGE}`]: HELD });
+    const { io, asked } = github({ [`GET ${PACKAGE}`]: PRESENT });
     await deletePackages([WEB], "t0ken", io);
     expect(said(asked)).toEqual([`GET ${PACKAGE}`, `DELETE ${PACKAGE}`]);
     expect(asked.map((one) => one.authorization)).toEqual(["Bearer t0ken", "Bearer t0ken"]);
   });
 
-  it("leaves alone a package no deploy of this run pushed and ghcr does not hold", async () => {
+  it("leaves alone a package no deploy of this run pushed and ghcr does not have", async () => {
     const { io, asked } = github({ [`GET ${PACKAGE}`]: ABSENT });
     await deletePackages([WEB], "t0ken", io);
     expect(said(asked)).toEqual([`GET ${PACKAGE}`]);
@@ -62,13 +62,13 @@ describe("deletePackages", () => {
   });
 
   it("counts a package gone before its deletion answered as deleted", async () => {
-    const { io } = github({ [`GET ${PACKAGE}`]: HELD, [`DELETE ${PACKAGE}`]: ABSENT });
+    const { io } = github({ [`GET ${PACKAGE}`]: PRESENT, [`DELETE ${PACKAGE}`]: ABSENT });
     await deletePackages([DEPLOYED], "t0ken", io);
   });
 
   it("fails loudly when the package refuses a deletion", async () => {
     const { io } = github({
-      [`GET ${PACKAGE}`]: HELD,
+      [`GET ${PACKAGE}`]: PRESENT,
       [`DELETE ${PACKAGE}`]: new Response('{"message":"Must have admin rights"}', { status: 403 }),
     });
     await expect(deletePackages([WEB], "t0ken", io)).rejects.toThrow(/403/);
@@ -78,7 +78,7 @@ describe("deletePackages", () => {
 describe("a throttled or failing GitHub", () => {
   it("waits exactly as long as a Retry-After asks before asking again", async () => {
     const { io, asked, slept } = github({
-      [`GET ${PACKAGE}`]: [answered(429, { "retry-after": "7" }), HELD],
+      [`GET ${PACKAGE}`]: [answered(429, { "retry-after": "7" }), PRESENT],
     });
     await deletePackages([WEB], "t0ken", io);
     expect(slept).toEqual([7_000]);
@@ -89,16 +89,16 @@ describe("a throttled or failing GitHub", () => {
     const { io, slept } = github({
       [`GET ${PACKAGE}`]: [
         answered(503, { "retry-after": new Date(NOW + 12_000).toUTCString() }),
-        HELD,
+        PRESENT,
       ],
     });
     await deletePackages([WEB], "t0ken", io);
     expect(slept).toEqual([12_000]);
   });
 
-  it("reads a 403 that carries a Retry-After as a throttle", async () => {
+  it("reads a 403 that sends a Retry-After as a throttle", async () => {
     const { io, slept } = github({
-      [`GET ${PACKAGE}`]: [answered(403, { "retry-after": "3" }), HELD],
+      [`GET ${PACKAGE}`]: [answered(403, { "retry-after": "3" }), PRESENT],
     });
     await deletePackages([WEB], "t0ken", io);
     expect(slept).toEqual([3_000]);
@@ -111,7 +111,7 @@ describe("a throttled or failing GitHub", () => {
         answered(403, { "x-ratelimit-remaining": "0", "x-ratelimit-reset": reset }),
         new Response(null, { status: 204 }),
       ],
-      [`GET ${PACKAGE}`]: HELD,
+      [`GET ${PACKAGE}`]: PRESENT,
     });
     await deletePackages([WEB], "t0ken", io);
     expect(slept).toEqual([30_000]);

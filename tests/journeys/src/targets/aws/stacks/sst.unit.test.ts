@@ -35,7 +35,7 @@ describe("runStages", () => {
     assert.deepEqual(runStages("1900", ["j-1874", "j-1900", "j-local-ag"]), ["j-1900"]);
   });
 
-  it("removes nothing when the run never stood an SST stage up", () => {
+  it("removes nothing when the run never deployed an SST stage", () => {
     assert.deepEqual(runStages("1900", ["j-1874", "j-local-ag"]), []);
   });
 });

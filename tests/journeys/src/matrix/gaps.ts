@@ -213,7 +213,7 @@ export const gaps: Gap[] = [
   },
   {
     id: "no-cloudflare-api",
-    reason: "nothing stands in for the Cloudflare API under floci",
+    reason: "nothing emulates the Cloudflare API under floci",
     issue: 904,
     where: [
       {

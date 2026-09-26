@@ -20,8 +20,8 @@ import type { Check, CheckContext } from "./context";
 const ISR_SECONDS = 15;
 const PATH_SECONDS = 3600;
 const REVALIDATION_TIMEOUT_MS = 60_000;
-const SETTLED_READS = 3;
-const SETTLE_ATTEMPTS = 3;
+const STEADY_READS = 3;
+const STEADY_ATTEMPTS = 3;
 const IMAGE_TTL_SECONDS = 60;
 const RESUME_TAG = "résumé";
 const LOCAL_IMAGE = "/ocel.png";
@@ -35,10 +35,10 @@ function tierIs(res: Response, allowed: Tier[], what: string) {
 }
 
 function cacheControlIs(res: Response, expected: string, what: string) {
-  const carried = res.headers.get("cache-control");
+  const cacheControl = res.headers.get("cache-control");
   assert.ok(
-    sameDirectives(carried, expected),
-    `${what} carried cache-control ${carried}, not the directives of ${expected}`,
+    sameDirectives(cacheControl, expected),
+    `${what} sent cache-control ${cacheControl}, not the directives of ${expected}`,
   );
 }
 
@@ -46,8 +46,8 @@ async function cachedHalf(ctx: CheckContext, path: string, scope: string): Promi
   return marker((await page(ctx, path)).html, `${scope}:cached`);
 }
 
-async function settled(ctx: CheckContext, path: string, scope: string): Promise<string> {
-  return steady(() => cachedHalf(ctx, path, scope), path, SETTLED_READS, SETTLE_ATTEMPTS);
+async function steadyCachedHalf(ctx: CheckContext, path: string, scope: string): Promise<string> {
+  return steady(() => cachedHalf(ctx, path, scope), path, STEADY_READS, STEADY_ATTEMPTS);
 }
 
 async function movedOn(
@@ -85,7 +85,7 @@ export const nextCacheChecks: Check[] = [
         "the static page rendered a live half, so freezing it proves nothing",
       );
       const frozen = marker(html, "static:cached");
-      assert.equal(await settled(ctx, "/cache/static", "static"), frozen);
+      assert.equal(await steadyCachedHalf(ctx, "/cache/static", "static"), frozen);
 
       const asset = await ctx.fetch(`${ctx.baseUrl}${assetPath(html)}`);
       assert.equal(asset.status, 200);
@@ -99,7 +99,7 @@ export const nextCacheChecks: Check[] = [
       const { res } = await page(ctx, "/cache/isr");
       tierIs(res, CACHED, "the ISR page");
       cacheControlIs(res, cacheControlFor(ISR_SECONDS), "the ISR page");
-      const before = await settled(ctx, "/cache/isr", "isr");
+      const before = await steadyCachedHalf(ctx, "/cache/isr", "isr");
       await movedOn(ctx, "/cache/isr", "isr", before);
     },
   },
@@ -110,7 +110,7 @@ export const nextCacheChecks: Check[] = [
       tierIs(res, CACHED, "the path page");
       cacheControlIs(res, cacheControlFor(PATH_SECONDS), "the path page");
 
-      const before = await settled(ctx, "/cache/path", "path");
+      const before = await steadyCachedHalf(ctx, "/cache/path", "path");
       const untouched = await cachedHalf(ctx, "/cache/static", "static");
       await revalidate(ctx, `path=${encodeURIComponent("/cache/path")}`);
       await movedOn(ctx, "/cache/path", "path", before);
@@ -210,7 +210,7 @@ export const nextCacheChecks: Check[] = [
       assert.equal(turned.status, 307, `enabling draft mode answered ${turned.status}`);
       await turned.arrayBuffer();
       const setCookie = turned.headers.get("set-cookie") ?? "";
-      assert.match(setCookie, /__prerender_bypass=/, "the 307 carried no draft cookie");
+      assert.match(setCookie, /__prerender_bypass=/, "the 307 sent no draft cookie");
       const cookie = setCookie.split(";")[0]!;
       assert.equal(new URL(turned.headers.get("location") ?? "", ctx.baseUrl).pathname, "/draft");
 
@@ -224,15 +224,15 @@ export const nextCacheChecks: Check[] = [
 
 export const nextDataCacheChecks: Check[] = [
   {
-    title: "a non-ASCII tag holds one upstream call and releases it when the tag is revalidated",
+    title: "a non-ASCII tag caches one upstream call and releases it when the tag is revalidated",
     run: async (ctx) => {
       const { res, html } = await page(ctx, "/cache/data");
       tierIs(res, UNCACHED, "the data-cache page");
       cacheControlIs(res, DYNAMIC_CACHE_CONTROL, "the data-cache page");
 
-      const held = await settled(ctx, "/cache/data", "data");
+      const cachedCount = await steadyCachedHalf(ctx, "/cache/data", "data");
       const again = stamp((await page(ctx, "/cache/data")).html, "data");
-      assert.equal(again.cached, held, "the tag released the upstream call it was holding");
+      assert.equal(again.cached, cachedCount, "the tag released the upstream call it was caching");
       assert.notEqual(
         again.live,
         stamp(html, "data").live,
@@ -243,13 +243,16 @@ export const nextDataCacheChecks: Check[] = [
       assert.ok(counted, "the upstream never reached the state readback");
       assert.equal(
         String(counted.count),
-        held,
+        cachedCount,
         "the page and the readback disagree on how often the upstream was called",
       );
 
       await revalidate(ctx, `tag=${encodeURIComponent(RESUME_TAG)}`);
-      const after = await movedOn(ctx, "/cache/data", "data", held);
-      assert.ok(Number(after) > Number(held), `the upstream count went from ${held} to ${after}`);
+      const after = await movedOn(ctx, "/cache/data", "data", cachedCount);
+      assert.ok(
+        Number(after) > Number(cachedCount),
+        `the upstream count went from ${cachedCount} to ${after}`,
+      );
     },
   },
 ];

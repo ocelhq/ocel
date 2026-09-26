@@ -9,7 +9,7 @@ import { cellOfSlug, gcpSweepOverlay } from "./index";
 const cells = fixturesOn(fixtures, "gcp").flatMap((one) => cellsOn(one, "gcp"));
 
 describe("cellOfSlug", () => {
-  it("reads back the cell a slug was made for, so a sweep knows which apps it stands", () => {
+  it("reads back the cell a slug was made for, so a sweep knows which apps it deploys", () => {
     expect(cellOfSlug(cells, "j-1874-deploy-node").name).toBe("deploy/node");
   });
 
@@ -25,7 +25,7 @@ describe("cellOfSlug", () => {
 describe("gcpSweepOverlay", () => {
   const env = { OCEL_NAMESPACE: "ocel-nightly" } as NodeJS.ProcessEnv;
 
-  it("names the deploy the slug it was stood up under, not the one the run id spells", () => {
+  it("names the deploy the slug it was deployed under, not the one the run id spells", () => {
     for (const cell of cells) {
       const slug = projectSlug(cell.name, "18746093211");
       const overlay = gcpSweepOverlay(cell, slug, env);

@@ -27,20 +27,20 @@ function laneThatPrepares(prepared: string[]): Target {
     },
     prepareProcess: async () => {},
     deploy: async () => {
-      throw new Error("no cell of this lane ever stands up");
+      throw new Error("no cell of this lane ever deploys");
     },
     destroy: async () => {},
   };
 }
 
 describe("a lane that selects no cell", () => {
-  const held: [string, string | undefined][] = [
+  const saved: [string, string | undefined][] = [
     ["GITHUB_RUN_ID", process.env.GITHUB_RUN_ID],
     ["GITHUB_STEP_SUMMARY", process.env.GITHUB_STEP_SUMMARY],
   ];
 
   afterEach(() => {
-    for (const [name, was] of held) {
+    for (const [name, was] of saved) {
       if (was === undefined) {
         delete process.env[name];
       } else {
@@ -72,7 +72,7 @@ describe("finishing a lane", () => {
     expect(await finishLane(laneThatPrepares([]))).toBeUndefined();
   });
 
-  it("carries out what a lane's finish refused", async () => {
+  it("reports what a lane's finish refused", async () => {
     const lane: Target = {
       ...laneThatPrepares([]),
       finishLane: async () => {

@@ -42,7 +42,7 @@ export function markerOrNone(html: string, name: string): string | undefined {
 export function marker(html: string, name: string): string {
   const found = markerOrNone(html, name);
   if (found === undefined) {
-    throw new Error(`no element carried data-ocel="${name}"`);
+    throw new Error(`no element has data-ocel="${name}"`);
   }
   return found;
 }
@@ -82,7 +82,7 @@ export function form(html: string): PostedForm {
 export function firstChunkWith(chunks: string[], sentinel: string): number {
   const at = chunks.findIndex((chunk) => chunk.includes(sentinel));
   if (at === -1) {
-    throw new Error(`no chunk carried ${sentinel}`);
+    throw new Error(`no chunk contains ${sentinel}`);
   }
   return at;
 }
@@ -90,7 +90,7 @@ export function firstChunkWith(chunks: string[], sentinel: string): number {
 export async function chunksOf(res: Response): Promise<string[]> {
   const body = res.body;
   if (!body) {
-    throw new Error("the response carried no body to read chunk by chunk");
+    throw new Error("the response sent no body to read chunk by chunk");
   }
   const decoder = new TextDecoder();
   const chunks: string[] = [];

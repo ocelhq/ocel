@@ -20,7 +20,7 @@ describe("namespaceFor", () => {
     assert.equal(namespaceFor("deploy-node", "1874"), projectSlug("deploy-node", "1874"));
   });
 
-  it("carries a slash in a cell name across as a dash", () => {
+  it("turns a slash in a cell name into a dash", () => {
     assert.equal(namespaceFor("sdk-node/api-gateway", "1874"), "j-1874-sdk-node-api-gateway");
   });
 
@@ -85,7 +85,7 @@ describe("strayNamespaces", () => {
     assert.deepEqual(strayNamespaces(mine, mine), []);
   });
 
-  it("reclaims a harness namespace an earlier run left standing", () => {
+  it("reclaims a harness namespace an earlier run left deployed", () => {
     assert.deepEqual(strayNamespaces([...mine, "j-1799-deploy-node"], mine), [
       "j-1799-deploy-node",
     ]);
@@ -95,7 +95,7 @@ describe("strayNamespaces", () => {
     assert.deepEqual(strayNamespaces(["ocel", "someone-elses"], mine), []);
   });
 
-  it("names a stray once however many stacks carry it", () => {
+  it("names a stray once however many stacks are tagged with it", () => {
     assert.deepEqual(strayNamespaces(["j-1799-x", "j-1799-x", "j-1799-x"], mine), ["j-1799-x"]);
   });
 });

@@ -72,12 +72,12 @@ async function refused(method: string, url: string, answered: Response): Promise
   return new Error(`${method} ${url} answered ${answered.status}: ${await answered.text()}`);
 }
 
-async function held(io: GitHubIo, token: string, pkg: Package, url: string) {
+async function packageExists(io: GitHubIo, token: string, pkg: Package, url: string) {
   const answered = await send(io, token, "GET", url);
   if (answered.status === 404) {
     if (pkg.deployed) {
       throw new Error(
-        `a registry cell deployed through ${pkg.org}/${pkg.name}, and ghcr holds no package of that name: the journey names the package apart from the CLI, so what the CLI pushed is never deleted`,
+        `a registry cell deployed through ${pkg.org}/${pkg.name}, and ghcr has no package of that name: the journey names the package apart from the CLI, so what the CLI pushed is never deleted`,
       );
     }
     return false;
@@ -95,7 +95,7 @@ export async function deletePackages(
 ): Promise<void> {
   for (const pkg of packages) {
     const url = `${API}/orgs/${pkg.org}/packages/container/${encodeURIComponent(pkg.name)}`;
-    if (!(await held(io, token, pkg, url))) {
+    if (!(await packageExists(io, token, pkg, url))) {
       continue;
     }
     const answered = await send(io, token, "DELETE", url);

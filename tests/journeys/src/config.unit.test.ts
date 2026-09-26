@@ -48,7 +48,7 @@ describe("journeyZone", () => {
 });
 
 describe("awsSweepOverlay", () => {
-  it("destroys a cell through the edge its variant stood it up behind", () => {
+  it("destroys a cell through the edge its variant deployed it behind", () => {
     expect(awsSweepOverlay(cell(sdk.workspace, cloudflare), "j-9-sdk-workspace", {})).toEqual({
       base: DEFAULT_BASE,
       slug: "j-9-sdk-workspace",
@@ -160,7 +160,7 @@ describe("overlayFor", () => {
     });
   });
 
-  it("refuses a front the run names and no directory holds", () => {
+  it("refuses a front the run names and no directory provides", () => {
     expect(() => overlayFor(cell(deploy.node), "vps", { OCEL_VPS_FRONT: "haproxy" })).toThrow(
       /haproxy.*nginx/s,
     );
@@ -193,7 +193,7 @@ const ARCHED_JSON_BASE = `{
 `;
 
 describe("a container cell", () => {
-  it("carries no framework on any target, because a container runs the image it is given", () => {
+  it("sets no framework on any target, because a container runs the image it is given", () => {
     for (const base of [DEFAULT_BASE, GCP_BASE, VPS_BASE]) {
       expect(renderConfig({ base, slug: "j-1-deploy-node", compute: "container" })).toContain(
         "framework: undefined,",
@@ -201,7 +201,7 @@ describe("a container cell", () => {
     }
   });
 
-  it("carries no arch either, because the image names the platform it is built for", () => {
+  it("sets no arch either, because the image names the platform it is built for", () => {
     for (const base of [DEFAULT_BASE, GCP_BASE, VPS_BASE]) {
       expect(renderConfig({ base, slug: "j-1-deploy-node", compute: "container" })).toContain(
         "arch: undefined,",
@@ -337,7 +337,7 @@ const COMMENTED_JSON_BASE = `{
 `;
 
 describe("renderJsonConfig", () => {
-  it("overlays a base carrying the comments no bundler would read", () => {
+  it("overlays a base containing the comments no bundler would read", () => {
     expect(
       JSON.parse(renderJsonConfig(COMMENTED_JSON_BASE, { base: "./ocel.json", slug: "j-1-go" })),
     ).toEqual({
@@ -390,7 +390,7 @@ describe("renderJsonConfig", () => {
     ).toEqual({ server: "ghcr.io/acme/j", username: "octocat", password: "${TOKEN}" });
   });
 
-  it("keeps the options the fixture's own provider carries", () => {
+  it("keeps the options the fixture's own provider sets", () => {
     expect(
       JSON.parse(
         renderJsonConfig(`{"slug":"go","provider":{"aws":{"region":"eu-west-1"}}}`, {
