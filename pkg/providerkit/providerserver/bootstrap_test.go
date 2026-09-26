@@ -100,7 +100,7 @@ func TestBootstrapPullsInWhatAFeatureDependsOn(t *testing.T) {
 		t.Errorf("Apply() ran against %s, want %s", applied[0].Class, edge.ClassProduction)
 	}
 	if !applied[0].RefuseReplacements {
-		t.Error("Apply() ran attended where nothing accepted replacements")
+		t.Error("Apply() was allowed to replace resources where nothing accepted replacements")
 	}
 }
 
