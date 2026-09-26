@@ -433,7 +433,7 @@ func (p standingProxy) stages(t *testing.T, held []byte, state RoutingTable, con
 	t.Helper()
 
 	written := mustWrite(t, state)
-	write := exec.Command("/bin/sh", "-c", p.here(stagedWrite(tableDigest(contentSum(held)), true)))
+	write := exec.Command("/bin/sh", "-c", p.here(stagedWrite(tableDigest(contentSum(held)), ProxyConfig)))
 	write.Stdin = strings.NewReader(pairFed(routingPair{table: written, config: []byte(p.here(string(config)))}))
 	if out, err := write.CombinedOutput(); err != nil {
 		t.Fatalf("the staged write a deploy makes = %v\n%s", err, out)

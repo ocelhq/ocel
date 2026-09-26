@@ -704,7 +704,7 @@ func TestADrainThatExpiresIsWarnedAboutRatherThanFailed(t *testing.T) {
 func TestTheCompareAndSetOverTheProxyConfigIsOneCriticalSection(t *testing.T) {
 	t.Parallel()
 
-	written := stagedWrite("a-digest-this-deploy-read", true)
+	written := stagedWrite("a-digest-this-deploy-read", ProxyConfig)
 	locked := strings.Index(written, "flock -x")
 	compared := strings.Index(written, `if [ "$held" != `)
 	moved := strings.Index(written, `mv "$staged" `)
@@ -746,7 +746,7 @@ func TestAWriteThatDiesBetweenItsMovesLeavesTheTableItWroteRatherThanTheConfig(t
 
 	after := string(mustWrite(t, routed()))
 	here := strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
-	write := exec.Command("/bin/sh", "-c", here(stagedWrite(tableDigest(contentSum([]byte(before))), true)))
+	write := exec.Command("/bin/sh", "-c", here(stagedWrite(tableDigest(contentSum([]byte(before))), ProxyConfig)))
 	write.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
 	write.Stdin = strings.NewReader(pairFed(routingPair{table: []byte(after), config: mustRender(t, routed())}))
 	if err := write.Run(); err == nil {
@@ -830,7 +830,7 @@ func TestAWriteOntoABoxMissingEitherFileSaysToBootstrapIt(t *testing.T) {
 			}
 		}
 		here := strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
-		write := exec.Command("/bin/sh", "-c", here(stagedWrite(tableDigest(contentSum(written)), true)))
+		write := exec.Command("/bin/sh", "-c", here(stagedWrite(tableDigest(contentSum(written)), ProxyConfig)))
 		write.Stdin = strings.NewReader(pairFed(routingPair{table: mustWrite(t, routed()), config: mustRender(t, routed())}))
 		err := write.Run()
 		var exited *exec.ExitError
@@ -869,8 +869,8 @@ func TestTheTableAndItsConfigAreReadTogetherUnderTheLockAWriterHoldsAcrossBothMo
 		}
 	}
 	here := strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace
-	if !strings.Contains(stagedWrite("a-digest", true), "exec 9<"+quoted(routingLock)+"\nflock -x 9") {
-		t.Fatalf("the staged write is\n%s\nand does not hold %s exclusively, so a read under it serializes against nothing", stagedWrite("a-digest", true), routingLock)
+	if !strings.Contains(stagedWrite("a-digest", ProxyConfig), "exec 9<"+quoted(routingLock)+"\nflock -x 9") {
+		t.Fatalf("the staged write is\n%s\nand does not hold %s exclusively, so a read under it serializes against nothing", stagedWrite("a-digest", ProxyConfig), routingLock)
 	}
 
 	acquired := filepath.Join(t.TempDir(), "acquired")
@@ -916,7 +916,7 @@ func TestTwoWritersThatReadTheSameDigestLeaveOneOfTheirDocumentsBehind(t *testin
 	racing := make(chan error, 2)
 	for _, writer := range []string{"one", "the other"} {
 		go func() {
-			run := exec.Command("/bin/sh", "-c", strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace(stagedWrite(read, true)))
+			run := exec.Command("/bin/sh", "-c", strings.NewReplacer(live.RoutingTable, table, ProxyConfig, config, routingLock, dir).Replace(stagedWrite(read, ProxyConfig)))
 			run.Stdin = strings.NewReader(pairFed(routingPair{table: []byte("table by " + writer), config: []byte("config by " + writer)}))
 			racing <- run.Run()
 		}()
