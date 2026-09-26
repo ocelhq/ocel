@@ -3,7 +3,7 @@ package host
 import (
 	"strings"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/vps/provider/live"
 )
@@ -74,7 +74,7 @@ func ContainerArch(app, declared, runs string) (string, error) {
 	if declared == "" {
 		return runs, nil
 	}
-	if asked, _ := providerkit.GoArch(declared); asked != runs {
+	if asked, _ := arch.GoArch(declared); asked != runs {
 		return "", refusal.Refuse(refusal.CodeInvalid,
 			"app %s declares arch %q, and this host runs %s\nDrop the arch, or deploy to a %s host",
 			app, declared, runs, declared)

@@ -21,6 +21,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
@@ -28,9 +29,9 @@ import (
 var liveRelease = naming.NewRelease("live", "wp4")
 
 var (
-	nodeRuntime   = providerkit.Framework{Name: providerkit.FrameworkNode, Arch: providerkit.ArchX8664}
-	goRuntime     = providerkit.Framework{Name: providerkit.FrameworkGo, Arch: providerkit.ArchX8664}
-	pythonRuntime = providerkit.Framework{Name: providerkit.FrameworkPython, Arch: providerkit.ArchX8664}
+	nodeRuntime   = providerkit.Framework{Name: providerkit.FrameworkNode, Arch: arch.X8664}
+	goRuntime     = providerkit.Framework{Name: providerkit.FrameworkGo, Arch: arch.X8664}
+	pythonRuntime = providerkit.Framework{Name: providerkit.FrameworkPython, Arch: arch.X8664}
 )
 
 func runnable(t *testing.T) *gcp.Provider {
@@ -198,8 +199,8 @@ func functionImage(t *testing.T, p *gcp.Provider, repository string, framework p
 	if err != nil {
 		t.Fatalf("build the %s function's image: %v", framework.Name, err)
 	}
-	arch, _ := providerkit.GoArch(framework.Arch)
-	binary, err := p.Runtime().Binary(ctx, arch)
+	goarch, _ := arch.GoArch(framework.Arch)
+	binary, err := p.Runtime().Binary(ctx, goarch)
 	if err != nil {
 		t.Fatal(err)
 	}

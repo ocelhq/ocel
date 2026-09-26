@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 )
 
 const (
@@ -82,7 +82,7 @@ func (f *fakeObjectStore) PutObject(_ context.Context, in *s3.PutObjectInput, _ 
 }
 
 func fixturePayload() Payload {
-	layer, err := RuntimeLayer(providerkit.ArchX8664)
+	layer, err := RuntimeLayer(arch.X8664)
 	if err != nil {
 		panic(err)
 	}

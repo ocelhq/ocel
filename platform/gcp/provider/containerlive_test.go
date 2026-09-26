@@ -8,6 +8,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	"github.com/ocelhq/ocel/platform/gcp/provider/live"
@@ -112,7 +113,7 @@ func TestTheProviderWrapsEveryContainerInTheRuntimeItCarries(t *testing.T) {
 	t.Parallel()
 	p := pushing(t, "")
 
-	if _, err := p.Runtime().Arch(context.Background(), "web", providerkit.ArchARM64); err == nil || !strings.Contains(err.Error(), "web") {
+	if _, err := p.Runtime().Arch(context.Background(), "web", arch.ARM64); err == nil || !strings.Contains(err.Error(), "web") {
 		t.Errorf("ContainerArch(arm64) = %v, want the app refused by name before its image is built: Cloud Run runs x86_64 alone", err)
 	}
 	runs, err := p.Runtime().Arch(context.Background(), "web", "")

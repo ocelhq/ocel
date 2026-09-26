@@ -12,6 +12,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/gcp/provider/payloads"
 )
@@ -103,13 +104,13 @@ func onPath(env []string, bins []string) []string {
 	return append(kept, pathVariable+"="+held)
 }
 
-func runsX8664(arch, what string) error {
-	if providerkit.Architecture(arch) == providerkit.ArchX8664 {
+func runsX8664(architecture, what string) error {
+	if arch.Architecture(architecture) == arch.X8664 {
 		return nil
 	}
 	return refusal.Refuse(refusal.CodeInvalid,
 		"%s is built for %s, and Cloud Run runs %s alone: build it for %s, or run it somewhere that offers %s",
-		what, providerkit.Architecture(arch), providerkit.ArchX8664, providerkit.ArchX8664, providerkit.Architecture(arch))
+		what, arch.Architecture(architecture), arch.X8664, arch.X8664, arch.Architecture(architecture))
 }
 
 func (p *Provider) ReadFunctionRuntime(_ context.Context, framework providerkit.Framework) ([]byte, error) {

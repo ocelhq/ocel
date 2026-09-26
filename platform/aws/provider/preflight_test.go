@@ -7,6 +7,7 @@ import (
 
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/apigateway"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
@@ -57,7 +58,7 @@ func TestTheArchitectureContainersAreBuiltForIsOneTheProviderCarriesARuntimeFor(
 	t.Parallel()
 
 	p := &Provider{}
-	for declared, want := range map[string]string{"": "amd64", providerkit.ArchX8664: "amd64", providerkit.ArchARM64: "arm64"} {
+	for declared, want := range map[string]string{"": "amd64", arch.X8664: "amd64", arch.ARM64: "arm64"} {
 		runs, err := p.Runtime().Arch(context.Background(), "web", declared)
 		if err != nil || runs != want {
 			t.Fatalf("ContainerArch(%q) = %q, %v, want %s: the image is built for the architecture the app's task is stood up on", declared, runs, err, want)

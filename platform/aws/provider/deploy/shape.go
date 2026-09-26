@@ -10,6 +10,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/costkit"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -115,7 +116,7 @@ func (s costShape) functions(scope, project string, app providerkit.AppEntry, sp
 			spec.Framework.Name = framework
 		}
 		if spec.Framework.Arch == "" {
-			spec.Framework.Arch = providerkit.Architecture(app.Manifest.GetFramework().GetArch())
+			spec.Framework.Arch = arch.Architecture(app.Manifest.GetFramework().GetArch())
 		}
 		args, err := translateFunctionSpec(framework, spec)
 		if err != nil {
@@ -189,7 +190,7 @@ func (s costShape) bucket(scope, project, env string, resource providerkit.Resou
 		"runtime":           uploadCompleterRuntime,
 		"memory_size":       lambdaDefaultMemoryMB,
 		"timeout":           uploadCompleterTimeoutSeconds,
-		"architectures":     []any{providerkit.ArchX8664},
+		"architectures":     []any{arch.X8664},
 		"ephemeral_storage": map[string]any{"size": lambdaDefaultEphemeralMB},
 	}, names["uploadCompleter"])
 	s.add(scope, tfLogGroup, resource.Name+"-"+uploadCompleterLocalName, map[string]any{"retention_in_days": lambdaLogRetentionDays}, names["uploadCompleterLogGroup"])

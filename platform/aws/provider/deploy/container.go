@@ -23,6 +23,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
@@ -79,19 +80,19 @@ type containerWork struct {
 }
 
 var fargateCPUArchitectures = map[string]string{
-	providerkit.ArchX8664: "X86_64",
-	providerkit.ArchARM64: "ARM64",
+	arch.X8664: "X86_64",
+	arch.ARM64: "ARM64",
 }
 
 func fargateCPUArchitecture(declared string) string {
-	return fargateCPUArchitectures[providerkit.Architecture(declared)]
+	return fargateCPUArchitectures[arch.Architecture(declared)]
 }
 
 func ContainerArch(app, declared string) (string, error) {
-	runs, known := providerkit.GoArch(declared)
+	runs, known := arch.GoArch(declared)
 	if !known {
 		return "", refusal.Refuse(refusal.CodeInvalid,
-			"app %s declares arch %q, and a container runs on %s or %s alone", app, declared, providerkit.ArchX8664, providerkit.ArchARM64)
+			"app %s declares arch %q, and a container runs on %s or %s alone", app, declared, arch.X8664, arch.ARM64)
 	}
 	return runs, nil
 }

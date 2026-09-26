@@ -10,6 +10,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -156,7 +157,7 @@ func TestCompileRefusesAPythonAppsEntrypointBeforeLookingForTheDirectoryItNames(
 func TestVendoringAsksPipOnlyForWheelsTheDeclaredArchitectureCanImport(t *testing.T) {
 	t.Parallel()
 
-	for arch, platform := range map[string]string{
+	for architecture, platform := range map[string]string{
 		"x86_64": "manylinux2014_x86_64",
 		"arm64":  "manylinux2014_aarch64",
 	} {
@@ -166,12 +167,12 @@ func TestVendoringAsksPipOnlyForWheelsTheDeclaredArchitectureCanImport(t *testin
 			"-r /app/requirements.txt",
 			"--only-binary=:all:",
 			"--platform " + platform,
-			"--python-version " + providerkit.PythonVersion,
+			"--python-version " + arch.PythonVersion,
 			"--implementation cp",
 			"--no-compile",
 		} {
 			if !strings.Contains(argv, want) {
-				t.Errorf("pip is run as %q for %s, and it carries no %q: a wheel built for another machine or another python is installed silently and fails at import", argv, arch, want)
+				t.Errorf("pip is run as %q for %s, and it carries no %q: a wheel built for another machine or another python is installed silently and fails at import", argv, architecture, want)
 			}
 		}
 	}

@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 )
 
 func TestPayloads(t *testing.T) {
@@ -17,8 +17,8 @@ func TestPayloads(t *testing.T) {
 		payload func() Payload
 		entry   string
 	}{
-		{"runtime layer x86_64", runtimeLayerFor(providerkit.ArchX8664), "bootstrap"},
-		{"runtime layer arm64", runtimeLayerFor(providerkit.ArchARM64), "bootstrap"},
+		{"runtime layer x86_64", runtimeLayerFor(arch.X8664), "bootstrap"},
+		{"runtime layer arm64", runtimeLayerFor(arch.ARM64), "bootstrap"},
 		{"upload completer", UploadCompleter, "bootstrap"},
 		{"image optimizer", ImageOptimizer, "index.mjs"},
 		{"revalidator", Revalidator, "index.mjs"},
@@ -65,9 +65,9 @@ func runtimeLayerFor(arch string) func() Payload {
 }
 
 func TestTheRuntimeIsCarriedForEveryArchitectureAFunctionRunsOn(t *testing.T) {
-	for _, arch := range []string{providerkit.ArchX8664, providerkit.ArchARM64} {
-		if _, err := RuntimeLayer(arch); err != nil {
-			t.Errorf("RuntimeLayer(%q) = %v, want the runtime built for it", arch, err)
+	for _, architecture := range []string{arch.X8664, arch.ARM64} {
+		if _, err := RuntimeLayer(architecture); err != nil {
+			t.Errorf("RuntimeLayer(%q) = %v, want the runtime built for it", architecture, err)
 		}
 	}
 	if _, err := RuntimeLayer("riscv"); err == nil {
@@ -78,8 +78,8 @@ func TestTheRuntimeIsCarriedForEveryArchitectureAFunctionRunsOn(t *testing.T) {
 func TestPayloadsDiffer(t *testing.T) {
 	seen := map[string]string{}
 	for name, p := range map[string]Payload{
-		"runtime layer x86_64": runtimeLayerFor(providerkit.ArchX8664)(),
-		"runtime layer arm64":  runtimeLayerFor(providerkit.ArchARM64)(),
+		"runtime layer x86_64": runtimeLayerFor(arch.X8664)(),
+		"runtime layer arm64":  runtimeLayerFor(arch.ARM64)(),
 		"upload completer":     UploadCompleter(),
 		"image optimizer":      ImageOptimizer(),
 		"revalidator":          Revalidator(),

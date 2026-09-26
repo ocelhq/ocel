@@ -12,6 +12,7 @@ import (
 	"github.com/google/go-containerregistry/pkg/v1/mutate"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -60,7 +61,7 @@ func TestThePythonBaseRunsTheVersionTheWheelsAreVendoredFor(t *testing.T) {
 	}
 	if !strings.Contains(*asked, "debian13") {
 		t.Errorf("a python function is built on %q, and only debian 13 carries python %s, which the cli vendors wheels for",
-			*asked, providerkit.PythonVersion)
+			*asked, arch.PythonVersion)
 	}
 }
 
@@ -139,14 +140,14 @@ func TestAFunctionBuiltForArm64IsRefused(t *testing.T) {
 	p, _ := basedOn(t, v1.Config{})
 
 	_, err := p.ResolveFunctionBase(context.Background(),
-		providerkit.Framework{Name: providerkit.FrameworkNode, Arch: providerkit.ArchARM64})
+		providerkit.Framework{Name: providerkit.FrameworkNode, Arch: arch.ARM64})
 	if err == nil {
 		t.Fatal("FunctionBase() built an arm64 function, and Cloud Run runs x86_64 alone")
 	}
 	if code, refused := providerkit.RefusedCode(err); !refused || code != refusal.CodeInvalid {
 		t.Errorf("code = %v, want %v", code, refusal.CodeInvalid)
 	}
-	for _, said := range []string{providerkit.ArchARM64, providerkit.ArchX8664} {
+	for _, said := range []string{arch.ARM64, arch.X8664} {
 		if !strings.Contains(err.Error(), said) {
 			t.Errorf("FunctionBase() = %v, want %q named", err, said)
 		}

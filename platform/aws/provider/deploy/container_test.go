@@ -20,6 +20,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/runtimekit/originguard"
 	"github.com/ocelhq/ocel/pkg/transformkit"
 	vars "github.com/ocelhq/ocel/platform/aws/provider/vars/live"
@@ -525,7 +526,7 @@ func TestAContainerWhoseClassResolvedNoAppBoundaryIsRefusedBeforeARoleIsMinted(t
 func TestAContainersTaskIsStoodUpOnTheArchitectureItsAppDeclares(t *testing.T) {
 	t.Parallel()
 
-	for declared, want := range map[string]string{"": "X86_64", providerkit.ArchX8664: "X86_64", providerkit.ArchARM64: "ARM64"} {
+	for declared, want := range map[string]string{"": "X86_64", arch.X8664: "X86_64", arch.ARM64: "ARM64"} {
 		cfg, plan := plannedContainerStack(t)
 		plan.App.Arch = declared
 		release := releasing(t, cfg)

@@ -13,13 +13,14 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
-func elfAddon(arch, tag string) string {
-	machine, known := providerkit.ELFMachine(arch)
+func elfAddon(architecture, tag string) string {
+	machine, known := arch.ELFMachine(architecture)
 	if !known {
-		panic("no ELF machine for " + arch)
+		panic("no ELF machine for " + architecture)
 	}
 	header := make([]byte, 20)
 	copy(header, "\x7fELF")
@@ -183,7 +184,7 @@ func TestBundle(t *testing.T) {
 			"server.js":                                        "import native from 'native-dep';\nconsole.log(native);\n",
 			"node_modules/native-dep/package.json":             `{"name":"native-dep","main":"index.js"}`,
 			"node_modules/native-dep/index.js":                 "module.exports = require('./build/Release/addon.node');\n",
-			"node_modules/native-dep/build/Release/addon.node": elfAddon(providerkit.ArchX8664, "fake"),
+			"node_modules/native-dep/build/Release/addon.node": elfAddon(arch.X8664, "fake"),
 		})
 
 		if err := Bundle(context.Background(), l.target("server.js")); err != nil {
@@ -191,7 +192,7 @@ func TestBundle(t *testing.T) {
 		}
 
 		copied := filepath.Join(l.funcDir, "node_modules", "native-dep", "build", "Release", "addon.node")
-		if got := readFile(t, copied); got != elfAddon(providerkit.ArchX8664, "fake") {
+		if got := readFile(t, copied); got != elfAddon(arch.X8664, "fake") {
 			t.Errorf("copied addon = %q, want the original bytes", got)
 		}
 		bundle := readFile(t, filepath.Join(l.funcDir, HandlerFile))
@@ -210,7 +211,7 @@ func TestBundle(t *testing.T) {
 			name := fmt.Sprintf("native-dep-%02d", i)
 			files["node_modules/"+name+"/package.json"] = `{"name":"` + name + `","main":"index.js"}`
 			files["node_modules/"+name+"/index.js"] = "module.exports = require('./build/Release/addon.node');\n"
-			files["node_modules/"+name+"/build/Release/addon.node"] = elfAddon(providerkit.ArchX8664, name)
+			files["node_modules/"+name+"/build/Release/addon.node"] = elfAddon(arch.X8664, name)
 			fmt.Fprintf(&imports, "import n%02d from '%s';\n", i, name)
 			fmt.Fprintf(&logs, "console.log(n%02d);\n", i)
 		}
@@ -224,7 +225,7 @@ func TestBundle(t *testing.T) {
 		for i := range count {
 			name := fmt.Sprintf("native-dep-%02d", i)
 			copied := filepath.Join(l.funcDir, "node_modules", name, "build", "Release", "addon.node")
-			if got, want := readFile(t, copied), elfAddon(providerkit.ArchX8664, name); got != want {
+			if got, want := readFile(t, copied), elfAddon(arch.X8664, name); got != want {
 				t.Errorf("copied addon = %q, want %q", got, want)
 			}
 		}
@@ -493,20 +494,20 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 			addonPath:                              addon,
 		}
 	}
-	on := func(l layout, arch string) Target {
+	on := func(l layout, architecture string) Target {
 		target := l.target("server.js")
-		target.Framework.Arch = arch
+		target.Framework.Arch = architecture
 		return target
 	}
 
 	t.Run("an addon built for the declared architecture is placed", func(t *testing.T) {
 		t.Parallel()
 
-		l := newLayout(t, held(elfAddon(providerkit.ArchARM64, "aarch64")))
-		if err := Bundle(context.Background(), on(l, providerkit.ArchARM64)); err != nil {
+		l := newLayout(t, held(elfAddon(arch.ARM64, "aarch64")))
+		if err := Bundle(context.Background(), on(l, arch.ARM64)); err != nil {
 			t.Fatalf("Bundle: %v", err)
 		}
-		if got := readFile(t, filepath.Join(l.funcDir, filepath.FromSlash(addonPath))); got != elfAddon(providerkit.ArchARM64, "aarch64") {
+		if got := readFile(t, filepath.Join(l.funcDir, filepath.FromSlash(addonPath))); got != elfAddon(arch.ARM64, "aarch64") {
 			t.Errorf("copied addon = %q, want the original bytes", got)
 		}
 	})
@@ -514,12 +515,12 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 	t.Run("an addon built for another architecture fails the build", func(t *testing.T) {
 		t.Parallel()
 
-		l := newLayout(t, held(elfAddon(providerkit.ArchX8664, "amd64")))
-		err := Bundle(context.Background(), on(l, providerkit.ArchARM64))
+		l := newLayout(t, held(elfAddon(arch.X8664, "amd64")))
+		err := Bundle(context.Background(), on(l, arch.ARM64))
 		if err == nil {
 			t.Fatal("Bundle succeeded, want a refusal rather than a function that dies at its first require")
 		}
-		for _, want := range []string{"addon.node", providerkit.ArchX8664, providerkit.ArchARM64, `"compute": "container"`} {
+		for _, want := range []string{"addon.node", arch.X8664, arch.ARM64, `"compute": "container"`} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, want it to name %q", err, want)
 			}
@@ -538,30 +539,30 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 				"  : process.platform === 'darwin'\n" +
 				"    ? require('./prebuilds/darwin-arm64.node')\n" +
 				"    : require('./prebuilds/linux-x64.node');\n",
-			"node_modules/multi-dep/prebuilds/linux-x64.node":    elfAddon(providerkit.ArchX8664, "amd64"),
-			"node_modules/multi-dep/prebuilds/linux-arm64.node":  elfAddon(providerkit.ArchARM64, "aarch64"),
+			"node_modules/multi-dep/prebuilds/linux-x64.node":    elfAddon(arch.X8664, "amd64"),
+			"node_modules/multi-dep/prebuilds/linux-arm64.node":  elfAddon(arch.ARM64, "aarch64"),
 			"node_modules/multi-dep/prebuilds/darwin-arm64.node": "\xcf\xfa\xed\xfe" + strings.Repeat("\x00", 28),
 		}
 		kept := map[string]string{
-			providerkit.ArchX8664: "node_modules/multi-dep/prebuilds/linux-x64.node",
-			providerkit.ArchARM64: "node_modules/multi-dep/prebuilds/linux-arm64.node",
+			arch.X8664: "node_modules/multi-dep/prebuilds/linux-x64.node",
+			arch.ARM64: "node_modules/multi-dep/prebuilds/linux-arm64.node",
 		}
-		for _, arch := range []string{providerkit.ArchX8664, providerkit.ArchARM64} {
-			t.Run(arch, func(t *testing.T) {
+		for _, architecture := range []string{arch.X8664, arch.ARM64} {
+			t.Run(architecture, func(t *testing.T) {
 				t.Parallel()
 
 				l := newLayout(t, prebuilt)
-				if err := Bundle(context.Background(), on(l, arch)); err != nil {
+				if err := Bundle(context.Background(), on(l, architecture)); err != nil {
 					t.Fatalf("Bundle: %v", err)
 				}
 				for name, rel := range kept {
 					dest := filepath.Join(l.funcDir, filepath.FromSlash(rel))
 					_, err := os.Stat(dest)
-					if name == arch && err != nil {
+					if name == architecture && err != nil {
 						t.Errorf("%s is not in the bundle: %v", rel, err)
 					}
-					if name != arch && err == nil {
-						t.Errorf("%s is in the bundle, want only what %s loads", rel, arch)
+					if name != architecture && err == nil {
+						t.Errorf("%s is in the bundle, want only what %s loads", rel, architecture)
 					}
 				}
 				if _, err := os.Stat(filepath.Join(l.funcDir, filepath.FromSlash(
@@ -582,14 +583,14 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 			"node_modules/multi-dep/index.js": "module.exports = process.platform === 'darwin'\n" +
 				"  ? require('./prebuilds/darwin-arm64.node')\n" +
 				"  : require('./prebuilds/linux-arm64.node');\n",
-			"node_modules/multi-dep/prebuilds/linux-arm64.node":  elfAddon(providerkit.ArchARM64, "aarch64"),
+			"node_modules/multi-dep/prebuilds/linux-arm64.node":  elfAddon(arch.ARM64, "aarch64"),
 			"node_modules/multi-dep/prebuilds/darwin-arm64.node": "\xcf\xfa\xed\xfe" + strings.Repeat("\x00", 28),
 		})
-		err := Bundle(context.Background(), on(l, providerkit.ArchX8664))
+		err := Bundle(context.Background(), on(l, arch.X8664))
 		if err == nil {
 			t.Fatal("Bundle succeeded, want a refusal rather than a function that dies at its first require")
 		}
-		for _, want := range []string{"linux-arm64.node", "darwin-arm64.node", providerkit.ArchARM64, providerkit.ArchX8664, "linux ELF"} {
+		for _, want := range []string{"linux-arm64.node", "darwin-arm64.node", arch.ARM64, arch.X8664, "linux ELF"} {
 			if !strings.Contains(err.Error(), want) {
 				t.Errorf("error = %q, want it to name %q", err, want)
 			}
@@ -600,7 +601,7 @@ func TestANativeAddonMatchesTheArchitectureTheAppDeclares(t *testing.T) {
 		t.Parallel()
 
 		l := newLayout(t, held("\xcf\xfa\xed\xfe"+strings.Repeat("\x00", 28)))
-		err := Bundle(context.Background(), on(l, providerkit.ArchX8664))
+		err := Bundle(context.Background(), on(l, arch.X8664))
 		if err == nil {
 			t.Fatal("Bundle succeeded, want a mach-o addon refused as not linux")
 		}

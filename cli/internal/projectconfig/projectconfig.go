@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/configdoc"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -55,7 +56,7 @@ type Framework struct {
 	Arch string
 }
 
-func (r Framework) Architecture() string { return providerkit.Architecture(r.Arch) }
+func (r Framework) Architecture() string { return arch.Architecture(r.Arch) }
 
 type App struct {
 	Name       string

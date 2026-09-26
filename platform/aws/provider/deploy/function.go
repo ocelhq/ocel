@@ -15,13 +15,13 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/naming"
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 )
 
 const (
 	defaultFunctionRuntime = "nodejs24.x"
 
-	pythonFunctionRuntime = "python" + providerkit.PythonVersion
+	pythonFunctionRuntime = "python" + arch.PythonVersion
 
 	providedFunctionRuntime = "provided.al2023"
 

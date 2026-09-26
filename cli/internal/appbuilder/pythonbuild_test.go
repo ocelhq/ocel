@@ -10,7 +10,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/pkg/constants"
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 )
 
 func writePythonApp(t *testing.T, root, path string) {
@@ -53,7 +53,7 @@ func TestAPythonAppIsVendoredHereRatherThanHandedToTheNodeBuilder(t *testing.T) 
 	}
 	assertFunctions(t, "CollectFunctions", fns, []manifestbuilder.Function{{
 		Route:        "index",
-		Framework:    manifestbuilder.Framework{Name: "python", Arch: providerkit.ArchX8664},
+		Framework:    manifestbuilder.Framework{Name: "python", Arch: arch.X8664},
 		Handler:      "main.py",
 		ArtifactPath: "apps/api/functions/index.func",
 		RouteID:      "/",

@@ -4,7 +4,7 @@ import (
 	"context"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 )
 
 const RuntimeBinary = "the fake container runtime"
@@ -24,7 +24,7 @@ func (r containerRuntime) Arch(_ context.Context, _, declared string) (string, e
 		defer r.mu.Unlock()
 		return r.runtimeArch, nil
 	}
-	runs, _ := providerkit.GoArch(declared)
+	runs, _ := arch.GoArch(declared)
 	return runs, nil
 }
 

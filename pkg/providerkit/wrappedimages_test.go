@@ -17,6 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -165,7 +166,7 @@ func TestAnAppsOwnDeclaredArchitectureIsTheOneItsImageIsHeldTo(t *testing.T) {
 
 	req := registryDeployRequest()
 	for _, container := range req.GetManifest().GetContainers() {
-		container.Arch = providerkit.ArchARM64
+		container.Arch = arch.ARM64
 	}
 	result, _ := deploy(t, client, req)
 	if result == nil || !result.GetSuccess() {

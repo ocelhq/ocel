@@ -11,6 +11,7 @@ import (
 	smithy "github.com/aws/smithy-go"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	"github.com/ocelhq/ocel/platform/aws/provider/payloads"
 )
@@ -24,11 +25,11 @@ const (
 )
 
 var runtimeArchTokens = map[string]string{
-	providerkit.ArchX8664: "X8664",
-	providerkit.ArchARM64: "Arm64",
+	arch.X8664: "X8664",
+	arch.ARM64: "Arm64",
 }
 
-func runtimeArches() []string { return []string{providerkit.ArchX8664, providerkit.ArchARM64} }
+func runtimeArches() []string { return []string{arch.X8664, arch.ARM64} }
 
 func runtimeLayerResourceID(arch string) string { return "RuntimeLayer" + runtimeArchTokens[arch] }
 

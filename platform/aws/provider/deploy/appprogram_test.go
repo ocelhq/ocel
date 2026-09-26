@@ -12,6 +12,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/constants"
 	"github.com/ocelhq/ocel/pkg/naming"
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/edges/cloudfront"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -103,7 +104,7 @@ func TestThePlannedAppBootsThroughTheRuntimeItWasHandedAndNoOther(t *testing.T) 
 	if len(work.functions.Layers) != 1 {
 		t.Fatalf("the app boots through %v, want the one runtime its functions' architecture names", work.functions.Layers)
 	}
-	if got, want := work.functions.Layers[providerkit.ArchX8664], cfg.RuntimeLayers[providerkit.ArchX8664]; got != want {
+	if got, want := work.functions.Layers[arch.X8664], cfg.RuntimeLayers[arch.X8664]; got != want {
 		t.Errorf("runtime layer = %q, want %q: the version the account's bootstrap published", got, want)
 	}
 }

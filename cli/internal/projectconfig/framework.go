@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/arch"
 )
 
 const (
@@ -113,11 +114,11 @@ func frameworkOf(app string, dir string, named string, compute string) (string, 
 	return framework, nil
 }
 
-func architectureOf(app string, arch string) (string, error) {
-	if arch == "" || arch == providerkit.ArchX8664 || arch == providerkit.ArchARM64 {
-		return arch, nil
+func architectureOf(app string, declared string) (string, error) {
+	if declared == "" || declared == arch.X8664 || declared == arch.ARM64 {
+		return declared, nil
 	}
-	return "", fmt.Errorf("app %q declares arch %q, which names no architecture: the architectures are %q and %q", app, arch, providerkit.ArchX8664, providerkit.ArchARM64)
+	return "", fmt.Errorf("app %q declares arch %q, which names no architecture: the architectures are %q and %q", app, declared, arch.X8664, arch.ARM64)
 }
 
 func quoted(values []string) string {
