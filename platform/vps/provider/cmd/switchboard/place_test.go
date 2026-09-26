@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -194,6 +195,85 @@ func TestPlacedSaysTheSumOfThePlacedFileOrNothingWhenItIsGone(t *testing.T) {
 	sum := sha256.Sum256([]byte("the routes\n"))
 	if code, out, errs := ran(t, "placed", at); code != 0 || out != hex.EncodeToString(sum[:])+"\n" {
 		t.Errorf("placed = %d, %q, %q, want the sha256 of what the file holds", code, out, errs)
+	}
+}
+
+func TestPlacedSumsOnlyARegularFileAndCallsAnythingElseAtThePathAbsent(t *testing.T) {
+	dir := placing(t)
+	outside := t.TempDir()
+	secret := filepath.Join(outside, "shadow")
+	if err := os.WriteFile(secret, []byte("root:x:0:0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for what, planted := range map[string]func(at string) error{
+		"a link to a file outside":      func(at string) error { return os.Symlink(secret, at) },
+		"a link to a directory outside": func(at string) error { return os.Symlink(outside, at) },
+		"a dangling link":               func(at string) error { return os.Symlink(filepath.Join(outside, "gone"), at) },
+		"a directory":                   func(at string) error { return os.Mkdir(at, 0o755) },
+		"a fifo":                        func(at string) error { return syscall.Mkfifo(at, 0o644) },
+	} {
+		t.Run(what, func(t *testing.T) {
+			at := filepath.Join(dir, strings.ReplaceAll(what, " ", "-")+".yml")
+			if err := planted(at); err != nil {
+				t.Fatal(err)
+			}
+			said := make(chan [3]any, 1)
+			go func() {
+				code, out, errs := ran(t, "placed", at)
+				said <- [3]any{code, out, errs}
+			}()
+			select {
+			case got := <-said:
+				if got[0] != 0 || got[1] != "" {
+					t.Errorf("placed of %s = %v, %q, %q, want nothing said: the switchboard reads with DAC_READ_SEARCH, and a sum of whatever the path leads to is a sum of a file ocel never placed", what, got[0], got[1], got[2])
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatalf("placed of %s never returned", what)
+			}
+		})
+	}
+}
+
+func TestAPlaceOrUnplaceOverALinkReplacesOrRemovesTheLinkAndNeverWhatItLeadsTo(t *testing.T) {
+	dir := placing(t)
+	outside := t.TempDir()
+	victim := filepath.Join(outside, "victim.yml")
+	if err := os.WriteFile(victim, []byte("theirs\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	at := filepath.Join(dir, "ocel.yml")
+	if err := os.Symlink(victim, at); err != nil {
+		t.Fatal(err)
+	}
+
+	if code, _, errs := fed(t, strings.NewReader("ocel's routes\n"), "place", at); code != 0 {
+		t.Fatalf("place over a link = %d: %s", code, errs)
+	}
+	if held, err := os.Lstat(at); err != nil || !held.Mode().IsRegular() {
+		t.Errorf("%s after a place over a link is %v (%v), want a regular file in place of the link", at, held, err)
+	}
+	if got := holding(t, at); got != "ocel's routes\n" {
+		t.Errorf("%s reads %q, want what place was fed", at, got)
+	}
+	if got := holding(t, victim); got != "theirs\n" {
+		t.Errorf("%s reads %q after a place over a link to it, want it untouched", victim, got)
+	}
+
+	if err := os.Remove(at); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(victim, at); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errs := ran(t, "unplace", at); code != 0 {
+		t.Fatalf("unplace of a link = %d: %s", code, errs)
+	}
+	if _, err := os.Lstat(at); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("%s stands after unplace: %v", at, err)
+	}
+	if got := holding(t, victim); got != "theirs\n" {
+		t.Errorf("%s reads %q after unplace of a link to it, want it untouched", victim, got)
 	}
 }
 
