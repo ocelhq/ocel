@@ -438,6 +438,8 @@ func TestAnEngineOcelCannotRunOnIsRefusedWithWhatToDoAboutIt(t *testing.T) {
 			"docker on ada@ocelbox runs rootless, and ocel needs the system daemon behind docker.service\nInstall docker 28.0 or later as the system daemon and run `ocel bootstrap production`"},
 		"a binary nothing on systemd runs": {Engine{Kind: engineUnserved, Version: "28.3.1"},
 			"docker on ada@ocelbox is not run by docker.service, the system daemon ocel needs\nInstall docker 28.0 or later as the system daemon and run `ocel bootstrap production`"},
+		"a masked docker.service": {Engine{Kind: engineMasked, Version: "28.3.1"},
+			"docker.service on ada@ocelbox is masked\nRun `systemctl unmask docker.service` and run `ocel bootstrap production`"},
 		"an engine whose version cannot be read": {Engine{Kind: engineStandard},
 			"docker on ada@ocelbox reports no version ocel can read\nCheck that `docker version` answers as root and run `ocel bootstrap production`"},
 	} {
@@ -509,5 +511,24 @@ func TestABootstrapOverAnEngineOcelCannotRunOnStopsBeforeItsFirstWrite(t *testin
 		if strings.HasPrefix(command, "install ") || strings.Contains(command, dockerSource) {
 			t.Errorf("the refused bootstrap still wrote: %s", command)
 		}
+	}
+}
+
+func TestAMaskedDockerServiceStopsThePlanRatherThanWedgingItOnAnEnableThatNeverTakes(t *testing.T) {
+	t.Parallel()
+
+	for name, held := range map[string]engine{
+		"with docker installed": {installed: true, unit: true, active: "inactive", enabled: "masked", dockerd: "28.3.1"},
+		"with no docker at all": {unit: true, active: "inactive", enabled: "masked"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			read := Reading{Arch: ArchAMD64, Class: providerkit.ClassProduction, Observed: probed(t, held), Engine: engineHeld(t, held)}
+			refused := refusal(t, read.runnableEngine("ada@ocelbox"), providerkit.CodeNotReady)
+			if !strings.Contains(refused.Message, "systemctl unmask "+dockerUnit) {
+				t.Errorf("a masked %s is refused with %q, want the unmask to run named: apply would otherwise run `systemctl enable --now` against it on every run, forever", dockerUnit, refused.Message)
+			}
+		})
 	}
 }

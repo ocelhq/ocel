@@ -180,6 +180,11 @@ func (r Reading) runnableEngine(named string) error {
 	switch held.Kind {
 	case "":
 		return nil
+	case engineMasked:
+		return providerkit.Refuse(providerkit.CodeNotReady,
+			"%s on %s is masked\n"+
+				"Run `systemctl unmask %s` and run `%s`",
+			dockerUnit, named, dockerUnit, command)
 	case engineSnap:
 		return providerkit.Refuse(providerkit.CodeNotReady,
 			"docker on %s is the snap package, which ocel does not run on\n"+
