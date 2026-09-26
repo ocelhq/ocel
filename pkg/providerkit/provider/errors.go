@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
-var ErrUnscopedGrant = errors.New("providerkit: unscoped grant")
+var ErrUnscopedGrant = errors.New("unscoped grant")
 
 var refusalCodes = map[refusal.Code]connect.Code{
 	refusal.CodeInvalid:  connect.CodeInvalidArgument,

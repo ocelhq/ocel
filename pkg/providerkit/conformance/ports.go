@@ -565,7 +565,7 @@ func RunCredentials(t *testing.T, credentials provider.Credentials) {
 	})
 
 	t.Run("permissions are rendered for either tier, or said not to exist yet", func(t *testing.T) {
-		for _, tier := range []provider.CredentialTier{provider.TierBootstrap, provider.TierDeploy} {
+		for _, tier := range []edge.CredentialTier{edge.TierBootstrap, edge.TierDeploy} {
 			if err := permissionsRendered(credentials, tier); err != nil {
 				t.Errorf("Permissions(%s) = %v, want the permissions that tier needs or a %s refusal saying there are none to render yet",
 					tier, err, refusal.CodeNotReady)
@@ -574,7 +574,7 @@ func RunCredentials(t *testing.T, credentials provider.Credentials) {
 	})
 }
 
-func permissionsRendered(credentials provider.Credentials, tier provider.CredentialTier) error {
+func permissionsRendered(credentials provider.Credentials, tier edge.CredentialTier) error {
 	_, err := credentials.Permissions(tier)
 	var refused refusal.Refusal
 	if errors.As(err, &refused) && refused.Code == refusal.CodeNotReady {

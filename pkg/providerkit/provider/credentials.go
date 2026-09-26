@@ -9,15 +9,8 @@ import (
 type Credentials interface {
 	Whoami(ctx context.Context) (Principal, error)
 
-	Permissions(tier CredentialTier) (edge.CredentialDocument, error)
+	Permissions(tier edge.CredentialTier) (edge.CredentialDocument, error)
 }
-
-type CredentialTier = edge.CredentialTier
-
-const (
-	TierBootstrap = edge.TierBootstrap
-	TierDeploy    = edge.TierDeploy
-)
 
 type Principal struct {
 	Vendor    Vendor

@@ -16,7 +16,7 @@ func (permissionsPort) Whoami(context.Context) (provider.Principal, error) {
 	return provider.Principal{Vendor: "test"}, nil
 }
 
-func (s permissionsPort) Permissions(provider.CredentialTier) (edge.CredentialDocument, error) {
+func (s permissionsPort) Permissions(edge.CredentialTier) (edge.CredentialDocument, error) {
 	return edge.CredentialDocument{}, s.err
 }
 
@@ -35,7 +35,7 @@ func TestPermissionsMayBeUnwrittenSoLongAsTheProviderSaysSo(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			err := permissionsRendered(permissionsPort{err: tc.err}, provider.TierBootstrap)
+			err := permissionsRendered(permissionsPort{err: tc.err}, edge.TierBootstrap)
 			if held := err == nil; held != tc.held {
 				t.Errorf("permissionsRendered() = %v, want held = %v", err, tc.held)
 			}

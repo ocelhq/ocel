@@ -23,11 +23,11 @@ import (
 )
 
 var (
-	ErrUnsourced = errors.New("providerkit: unsourced binding")
+	ErrUnsourced = errors.New("unsourced binding")
 
-	ErrUnreadableRecord = errors.New("providerkit: unreadable binding record")
+	ErrUnreadableRecord = errors.New("unreadable binding record")
 
-	ErrUnattachedGrant = errors.New("providerkit: unattached grant")
+	ErrUnattachedGrant = errors.New("unattached grant")
 )
 
 func (h *Service) SetBinding(ctx context.Context, req *envvarsv1.SetBindingRequest) (*envvarsv1.SetBindingResponse, error) {

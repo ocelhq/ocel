@@ -326,12 +326,12 @@ func (h *handlers) GetCredentialPermissions(_ context.Context, req *contractv1.C
 	return &contractv1.CredentialPermissionsResponse{Groups: groups}, nil
 }
 
-func CredentialTierOf(tier contractv1.CredentialTier) (provider.CredentialTier, error) {
+func CredentialTierOf(tier contractv1.CredentialTier) (edge.CredentialTier, error) {
 	switch tier {
 	case contractv1.CredentialTier_CREDENTIAL_TIER_BOOTSTRAP:
-		return provider.TierBootstrap, nil
+		return edge.TierBootstrap, nil
 	case contractv1.CredentialTier_CREDENTIAL_TIER_DEPLOY:
-		return provider.TierDeploy, nil
+		return edge.TierDeploy, nil
 	default:
 		return "", connect.NewError(connect.CodeInvalidArgument, errors.New(
 			"credential permissions are rendered for the bootstrap tier or the deploy tier; this request named neither"))

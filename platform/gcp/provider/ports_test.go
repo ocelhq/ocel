@@ -217,14 +217,14 @@ func TestTheCredentialsPortNamesTheRolesEachTierIsGranted(t *testing.T) {
 	t.Parallel()
 
 	credentials := standing(t).Credentials()
-	for tier, named := range map[provider.CredentialTier][]string{
-		provider.TierDeploy: {
+	for tier, named := range map[edge.CredentialTier][]string{
+		edge.TierDeploy: {
 			"roles/run.admin",
 			"roles/storage.objectAdmin",
 			"roles/artifactregistry.writer",
 			"roles/iam.serviceAccountUser",
 		},
-		provider.TierBootstrap: {
+		edge.TierBootstrap: {
 			"roles/run.admin",
 			"roles/storage.admin",
 			"roles/artifactregistry.admin",
@@ -251,7 +251,7 @@ func TestTheCredentialsPortNamesTheRolesEachTierIsGranted(t *testing.T) {
 func TestTheRolesRenderedForADeployAreTheOnesADeployUses(t *testing.T) {
 	t.Parallel()
 
-	document, err := standing(t).Credentials().Permissions(provider.TierDeploy)
+	document, err := standing(t).Credentials().Permissions(edge.TierDeploy)
 	if err != nil {
 		t.Fatalf("Permissions(deploy) = %v", err)
 	}
@@ -269,7 +269,7 @@ func TestACredentialTierNobodyDefinedIsRefusedRatherThanRendered(t *testing.T) {
 	t.Parallel()
 
 	var refused refusal.Refusal
-	_, err := standing(t).Credentials().Permissions(provider.CredentialTier("root"))
+	_, err := standing(t).Credentials().Permissions(edge.CredentialTier("root"))
 	if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
 		t.Fatalf("Permissions(root) = %v, want an %s refusal", err, refusal.CodeInvalid)
 	}

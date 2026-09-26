@@ -43,7 +43,7 @@ func (c *Credentials) Whoami(context.Context) (provider.Principal, error) {
 	}, nil
 }
 
-func (c *Credentials) Permissions(tier provider.CredentialTier) (edge.CredentialDocument, error) {
+func (c *Credentials) Permissions(tier edge.CredentialTier) (edge.CredentialDocument, error) {
 	return edge.CredentialDocument{
 		Heading:  "fake credentials",
 		Document: "fake permissions for " + string(tier),

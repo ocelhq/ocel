@@ -149,9 +149,9 @@ func askTokenInfo(ctx context.Context, endpoint, token string) (string, int, err
 	return said.Email, resp.StatusCode, nil
 }
 
-func (c Credentials) Permissions(tier provider.CredentialTier) (edge.CredentialDocument, error) {
+func (c Credentials) Permissions(tier edge.CredentialTier) (edge.CredentialDocument, error) {
 	switch tier {
-	case provider.TierBootstrap, provider.TierDeploy:
+	case edge.TierBootstrap, edge.TierDeploy:
 		project, err := c.Project.Project(context.Background())
 		if err != nil {
 			return edge.CredentialDocument{}, err
