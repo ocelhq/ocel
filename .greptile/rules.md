@@ -89,7 +89,7 @@ Fails when:
 
 ## Naked call
 
-A provider SDK call made outside the Pulumi engine carries retry with exponential backoff
+A provider SDK call made outside the Pulumi engine has retry with exponential backoff
 and jitter, and treats throttling as an expected response.
 
 Pulumi's providers already do this. A naked call inherits none of it.
@@ -128,7 +128,7 @@ Fails when:
 - The CLI branches on which provider is configured.
 - The CLI parses a provider error string.
 - A behaviour change ships by editing the CLI rather than the proto and the provider.
-- A proto message carries one provider's concepts.
+- A proto message encodes one provider's concepts.
 
 ## Contract
 
@@ -148,9 +148,9 @@ Fails when:
 
 ## Naming
 
-The Go kits (`pkg/providerkit`, its siblings under `pkg/`, and the vendors under
-`platform/` that implement them) name things with words people already use, and a
-provider declares what it can do where the compiler checks it.
+The Go kits (the packages of `pkg/providerkit`, its siblings under `pkg/`, and the
+vendors under `platform/` that implement them) name things with words people already
+use, and a provider declares what it can do where the compiler checks it.
 
 1. **A name is a word people already use for the thing**, in this domain or in English:
    `Provider`, `Ledger`, `Cipher`, `Certificates`, `Connector`, `Stacks`. A role minted
@@ -164,8 +164,14 @@ provider declares what it can do where the compiler checks it.
 4. **One word, one meaning across the kits.**
 5. **A method never repeats its receiver's noun.**
 6. **One vendor file per port, per hook, or per hook group, named after it.** The
-   vendor's root file holds the constructor, the `Facts` literal, the `Hooks` literal and
-   the port accessors, and nothing else.
+   vendor's root file contains the constructor, the `Facts` literal, the `Hooks` literal
+   and the port accessors, and nothing else.
+7. **A package is named for what it contains.** The contract is `provider`, the RPC server
+   `providerserver`; nothing re-exports another package's names.
+8. **A Plan is the diff a human consents to; a Spec is the desired state a provider is
+   handed.** What a vendor keeps for itself through a run is `VendorState`.
+9. **Words that sound meaningful but say nothing are banned**: standing, substrate, held,
+   carried, settle, owed. Name the actual state — current, installed, recorded, manual.
 
 Fails when:
 
@@ -181,17 +187,20 @@ Fails when:
 - A method repeats its receiver's noun (`Certificates.IssueCertificate`,
   `Runtime.ContainerRuntime`).
 - A vendor's port, hook or hook group body lives in its root file or in a file named for
-  something else, or a `var _ provider.X = (*Provider)(nil)` assertion stands in for
-  the `Facts` or `Hooks` literal that already type-checks it.
+  something else, or a `var _ provider.X = (*Provider)(nil)` assertion replaces the
+  `Facts` or `Hooks` literal that already type-checks it.
+- A package re-exports or aliases another package's identifiers.
+- `Plan` names desired state, or `Spec` names a consented diff.
+- A banned word names a value, function, file, test or message.
 
 ## Signal
  
-The code carries the explanation; comments carry only what the code cannot. Zero comments
+The code is the explanation; comments say only what the code cannot. Zero comments
 is the baseline. A comment is justified only as a marker of an intentional gap — `TODO`,
 `FIXME`, `HACK`, a known breakage — never as a description of the code beneath it.
  
 Exception: published packages (`packages/`, the Go `sdk/`, the Python `python/`, the
-Rust `crates/`) carry public, user-facing doc-comments on their exported surface. Those
+Rust `crates/`) have public, user-facing doc-comments on their exported surface. Those
 document the API for a consumer, not the implementation for a maintainer. A fixture
 config is the other exception: it shows a variant that conflicts with what is live as a
 commented-out line, with one line saying when to pick it, and nothing more.
@@ -203,7 +212,7 @@ Fails when:
   ("--- helpers ---").
 - A comment explains code that should instead be renamed, split, or simplified until it
   needs no explanation.
-- A gap marker carries no actionable content — a bare `TODO` with no what or why.
+- A gap marker has no actionable content — a bare `TODO` with no what or why.
 - An exported symbol in `packages/`, `sdk/`, `python/` or `crates/` lacks a doc-comment,
   or its doc-comment describes internals rather than the contract a user consumes.
 
