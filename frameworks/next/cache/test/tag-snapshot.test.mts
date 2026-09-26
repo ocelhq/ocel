@@ -16,7 +16,7 @@ function snapshotOf(
 }
 
 describe("latest", () => {
-  it("only ever moves upward, whichever side carries the value", () => {
+  it("only ever moves upward, whichever side has the value", () => {
     expect(latest(900, 100)).toBe(900);
     expect(latest(100, 900)).toBe(900);
     expect(latest(undefined, 100)).toBe(100);
@@ -42,7 +42,7 @@ describe("mergeRecord", () => {
 });
 
 describe("mergeSnapshot", () => {
-  it("carries both sides' invalidations, whichever order they arrive in", () => {
+  it("keeps both sides' invalidations, whichever order they arrive in", () => {
     const merged = mergeSnapshot(
       snapshotOf(0, { theirs: { expired: 500 } }),
       new Map([["ours", { expired: 700 }]]),
@@ -71,7 +71,7 @@ describe("mergeSnapshot", () => {
     expect(merged.records.ancient!.expired).toBe(1);
   });
 
-  it("starts unanchored when there is no prior snapshot to carry an anchor from", () => {
+  it("starts unanchored when there is no prior snapshot to copy an anchor from", () => {
     expect(mergeSnapshot(null, new Map([["products", { expired: 1 }]]), 7)).toEqual({
       version: 1,
       deployedAt: 0,

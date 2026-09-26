@@ -338,7 +338,7 @@ test("a pathname another bundle owns fails by name, not by a local catch-all", a
   expect(loads).toEqual([]);
 });
 
-test("fails closed on a key the bundle does not carry, naming it", async () => {
+test("fails closed on a key the bundle does not contain, naming it", async () => {
   const { loads, load } = fakeLoader();
   const dispatch = createDispatch({
     nextConfig: projectedConfig(),
@@ -1128,7 +1128,7 @@ test("prefers the forwarded host and proto the runtime normalizes onto the reque
   expect(seenUrl).toBe("https://app.example.com/blog/hello?x=1");
 });
 
-test("carries a POST body as a readable web stream of the request's real bytes", async () => {
+test("passes a POST body as a readable web stream of the request's real bytes", async () => {
   const bodies: unknown[] = [];
   const load = () => ({
     default: async (args: { request: { body: ReadableStream } }) => {

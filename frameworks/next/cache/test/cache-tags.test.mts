@@ -8,7 +8,7 @@ test("keeps tags in the order they were produced", () => {
   });
 });
 
-test("percent-encodes the whitespace a header cannot carry", () => {
+test("percent-encodes the whitespace a header cannot contain", () => {
   expect(boundCacheTags(["two words\tmore"]).tags).toEqual(["two%20words%09more"]);
 });
 

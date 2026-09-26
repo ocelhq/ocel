@@ -27,7 +27,7 @@ function waitForConnection(): Promise<void> {
   });
 }
 
-async function settle(): Promise<void> {
+async function drainIo(): Promise<void> {
   for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
 }
 
@@ -54,7 +54,7 @@ afterEach(async () => {
 });
 
 describe("receiving a push", () => {
-  test("publishes the values it carried under the generation it named", async () => {
+  test("publishes the values it received under the generation it named", async () => {
     vi.stubEnv("OCEL_LIVE_KEYS", "API_TOKEN");
     const { awaitLiveValues } = await load();
 
@@ -75,7 +75,7 @@ describe("receiving a push", () => {
     push({ type: "liveValues", generation: 1, values: { API_TOKEN: "first" } });
     await ready;
     push({ type: "liveValues", generation: 4, values: { API_TOKEN: "fourth" } });
-    await settle();
+    await drainIo();
 
     expect(published()).toEqual({ generation: 4, values: { API_TOKEN: "fourth" } });
   });
@@ -92,7 +92,7 @@ describe("receiving a push", () => {
     push({ type: "liveValues", generation: 2, values: { API_TOKEN: "current" } });
     await ready;
     push({ type: "liveValues", generation, values: { API_TOKEN: "stale" } });
-    await settle();
+    await drainIo();
 
     expect(published()).toEqual({ generation: 2, values: { API_TOKEN: "current" } });
   });
@@ -111,7 +111,7 @@ describe("receiving a push", () => {
     void awaitLiveValues();
     await waitForConnection();
     push(message);
-    await settle();
+    await drainIo();
 
     expect(published()).toBeUndefined();
   });
@@ -137,7 +137,7 @@ describe("receiving a push", () => {
     await waitForConnection();
     const line = JSON.stringify({ type: "liveValues", generation: 1, values: { A: "x" } });
     connections[0]!.write(line.slice(0, 20));
-    await settle();
+    await drainIo();
     connections[0]!.write(`${line.slice(20)}\n`);
     await ready;
 
@@ -155,7 +155,7 @@ describe("a function that declares no live value", () => {
     const { awaitLiveValues } = await load();
 
     await awaitLiveValues();
-    await settle();
+    await drainIo();
 
     expect(connections).toHaveLength(0);
     expect(published()).toBeUndefined();
@@ -170,11 +170,11 @@ describe("a function that declares live values", () => {
     let resolved = false;
     void awaitLiveValues().then(() => (resolved = true));
     await waitForConnection();
-    await settle();
+    await drainIo();
     expect(resolved).toBe(false);
 
     push({ type: "liveValues", generation: 1, values: { API_TOKEN: "sk" } });
-    await settle();
+    await drainIo();
     expect(resolved).toBe(true);
   });
 

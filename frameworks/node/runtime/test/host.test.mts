@@ -189,7 +189,7 @@ describe("onListening", () => {
 });
 
 describe("invocation lifecycle", () => {
-  test("holds invocation-complete until waitUntil settles, after request-end", async () => {
+  test("delays invocation-complete until waitUntil settles, after request-end", async () => {
     const events: string[] = [];
     const invoke: Invoke = (_req, res, ocel) => {
       ocel.waitUntil(
@@ -263,7 +263,7 @@ describe("invocation lifecycle", () => {
     expect(settled).toBe(true);
   });
 
-  test("holds the invocation for work deferred through the background bridge", async () => {
+  test("keeps the invocation open for work deferred through the background bridge", async () => {
     let settled = false;
     const invoke: Invoke = (_req, res, ocel) =>
       runWithWaitUntil(ocel.waitUntil, async () => {

@@ -209,7 +209,7 @@ const adapter = {
       const name = bundleNameByEntryKey.get(entryKey);
       if (name === undefined) {
         throw new Error(
-          `ocel: route "${pathname}" resolves to entry "${entryKey}", which no emitted bundle carries — this build cannot be served`,
+          `ocel: route "${pathname}" resolves to entry "${entryKey}", which no emitted bundle contains — this build cannot be served`,
         );
       }
       return name;
@@ -608,7 +608,7 @@ function edgeEntryOf(output: EdgeOutput): {
 } {
   if (!output.edgeRuntime) {
     throw new Error(
-      `ocel: edge output "${output.pathname}" carries no edgeRuntime entry — this build cannot be served`,
+      `ocel: edge output "${output.pathname}" has no edgeRuntime entry — this build cannot be served`,
     );
   }
   return output.edgeRuntime;
@@ -785,7 +785,7 @@ async function classifyEdgeSources(
       const seen = env[key];
       if (seen !== undefined && seen !== value) {
         throw new Error(
-          `ocel: edge outputs disagree on the value of env "${key}" — the bundle holds one env for every entry`,
+          `ocel: edge outputs disagree on the value of env "${key}" — the bundle has one env for every entry`,
         );
       }
       env[key] = value;

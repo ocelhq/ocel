@@ -219,7 +219,7 @@ function outputDir(projectDir: string): string {
 
 function assetTable(shim: string): Record<string, string> {
   const match = /^const ASSETS = (.*)$/m.exec(shim);
-  if (!match) throw new Error("shim carries no ASSETS table");
+  if (!match) throw new Error("shim has no ASSETS table");
   return JSON.parse(match[1]!) as Record<string, string>;
 }
 
@@ -304,7 +304,7 @@ test("dedupes chunks by content and assigns ids in sorted-key order", async () =
   expect(bundle.entries.middleware_middleware.chunks).toEqual(["c/1.js", "c/4.js"]);
 });
 
-test("carries an entry's chunks in the order Next listed them", async () => {
+test("keeps an entry's chunks in the order Next listed them", async () => {
   const { projectDir, args } = await synthEdgeProject();
 
   const page = args.outputs.appPages[0]!;
@@ -375,7 +375,7 @@ test("falls back to extensions when the manifest is unreadable", async () => {
   ).toBe(true);
 });
 
-test("carries traced assets as base64, byte-exact", async () => {
+test("embeds traced assets as base64, byte-exact", async () => {
   const { projectDir, args, tracedAssets } = await synthEdgeProject();
 
   await adapter.onBuildComplete!(args as never);
@@ -423,7 +423,7 @@ test("keys the asset table by the build's name and decodes to reach it", async (
   expect(shim).toContain("decodeURIComponent");
 });
 
-test("carries wasm assets as base64, declared once for the whole bundle", async () => {
+test("embeds wasm assets as base64, declared once for the whole bundle", async () => {
   const { projectDir, args } = await synthEdgeProject();
 
   await adapter.onBuildComplete!(args as never);

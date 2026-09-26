@@ -127,7 +127,7 @@ describe("isServiceThrottle", () => {
     expect(isServiceThrottle(new Response(null, { status: 429 }))).toBe(false);
   });
 
-  it("is false for a non-429 that happens to carry x-amzn-errortype", () => {
+  it("is false for a non-429 that happens to have x-amzn-errortype", () => {
     expect(
       isServiceThrottle(
         new Response(null, { status: 500, headers: { "x-amzn-errortype": "InternalError" } }),

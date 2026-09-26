@@ -259,7 +259,7 @@ module.exports = function createDispatch({
         return fail(res, `no entry serves ${pathname} in this bundle`);
       }
       if (!Object.hasOwn(entries, key)) {
-        return fail(res, `bundle carries no entry ${key}`);
+        return fail(res, `bundle has no entry ${key}`);
       }
       const entry = loadEntry(key);
       if (entry.error) {

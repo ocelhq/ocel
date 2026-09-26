@@ -151,7 +151,7 @@ test("refuses to boot without the handler to serve", async () => {
   expect(failed.stderr).toContain("OCEL_HANDLER");
 });
 
-test("stops on SIGTERM where no control socket holds the other end", async () => {
+test("stops on SIGTERM with no control socket at the other end", async () => {
   const handler = await handlerFile(`export default (req, res) => res.end("ok");
 `);
   const port = await freePort();

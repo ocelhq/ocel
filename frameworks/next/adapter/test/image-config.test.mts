@@ -136,7 +136,7 @@ test("normalizes a URL remote pattern into matchable fields", () => {
   expect(matches(compiled.pathname, "/other/logo.png")).toBe(false);
 });
 
-test("a URL remote pattern carries its explicit port", () => {
+test("a URL remote pattern keeps its explicit port", () => {
   expect(remotePattern(new URL("http://localhost:3000/**"))).toMatchObject({
     protocol: "http",
     port: "3000",

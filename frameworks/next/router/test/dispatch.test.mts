@@ -36,7 +36,7 @@ describe("dispatchResult", () => {
     expect(await res.text()).toBe("<svg/>");
   });
 
-  it("varies a statically-dispatched page on the flight headers when the request carries one", async () => {
+  it("varies a statically-dispatched page on the flight headers when the request sends one", async () => {
     const deps = baseDeps({
       manifest: {
         buildId: "t",
@@ -59,7 +59,7 @@ describe("dispatchResult", () => {
     );
   });
 
-  it("does not vary a statically-dispatched page when the request carries no flight header", async () => {
+  it("does not vary a statically-dispatched page when the request sends no flight header", async () => {
     const deps = baseDeps({
       manifest: {
         buildId: "t",
@@ -80,7 +80,7 @@ describe("dispatchResult", () => {
     expect(res.headers.has("vary")).toBe(false);
   });
 
-  it("does not vary a /_next/static/* asset even when the request carries a flight header", async () => {
+  it("does not vary a /_next/static/* asset even when the request sends a flight header", async () => {
     const deps = baseDeps({
       assetStore: assetStoreServing({
         "/_next/static/chunks/app.js": "console.log(1)",
@@ -246,7 +246,7 @@ describe("dispatchResult", () => {
   });
 
   it.each([200, 307, 404, 405, 500])(
-    "restores the empty body a %i sentinel response stands for",
+    "restores the empty body a %i sentinel response represents",
     async (status) => {
       const deps = baseDeps({
         manifest: {
@@ -333,7 +333,7 @@ describe("dispatchResult", () => {
     expect(res.headers.get("x-custom")).toBe("kept");
   });
 
-  it("carries cache-tag out to a front that invalidates by it", async () => {
+  it("sends cache-tag out to a front that invalidates by it", async () => {
     const deps = baseDeps({
       keepCacheTags: true,
       manifest: {
@@ -971,7 +971,7 @@ describe("dispatchResult", () => {
     expect(res.headers.get("refresh")).toBe("0;url=/redirect-dest");
   });
 
-  it("carries the request query onto a routing redirect that declares none", async () => {
+  it("appends the request query to a routing redirect that declares none", async () => {
     const res = await dispatchResult(
       {
         status: 307,
@@ -998,7 +998,7 @@ describe("dispatchResult", () => {
     expect(res.headers.get("location")).toBe("/dest?to=fixed&keep=1&extra=2");
   });
 
-  it("carries every value of a repeated request param onto the redirect", async () => {
+  it("copies every value of a repeated request param onto the redirect", async () => {
     const res = await dispatchResult(
       {
         status: 307,
@@ -1024,7 +1024,7 @@ describe("dispatchResult", () => {
     expect(res.headers.get("location")).toBe("/dest?to=landing#section");
   });
 
-  it("leaves a routing redirect untouched when the request carries no query", async () => {
+  it("leaves a routing redirect untouched when the request has no query", async () => {
     const res = await dispatchResult(
       {
         status: 308,
@@ -1037,7 +1037,7 @@ describe("dispatchResult", () => {
     expect(res.headers.get("location")).toBe("/dest");
   });
 
-  it("carries the request query onto an external routing redirect", async () => {
+  it("appends the request query to an external routing redirect", async () => {
     const res = await dispatchResult(
       {
         status: 307,
@@ -1312,7 +1312,7 @@ describe("routing redirects that name no destination", () => {
     expect(res.headers.get("location")).toBe("/somewhere/else");
   });
 
-  it("does not truncate on a redirect rule that carries a has/missing condition", async () => {
+  it("does not truncate on a redirect rule that declares a has/missing condition", async () => {
     const res = await serve(
       new Request("https://app.example/conditional", { redirect: "manual" }),
       redirectDeps([
@@ -1387,7 +1387,7 @@ describe("the service-worker chunk", () => {
     });
   }
 
-  it("carries Service-Worker-Allowed from the manifest and a revalidated policy", async () => {
+  it("sends Service-Worker-Allowed from the manifest and a revalidated policy", async () => {
     const res = await serve(new Request(`https://app.example${swPath}`), swDeps(""));
 
     expect(res.status).toBe(200);
@@ -1396,7 +1396,7 @@ describe("the service-worker chunk", () => {
     expect(res.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
   });
 
-  it("carries both under a basePath", async () => {
+  it("sends both under a basePath", async () => {
     const res = await serve(new Request(`https://app.example/docs${swPath}`), swDeps("/docs"));
 
     expect(res.status).toBe(200);
@@ -1611,7 +1611,7 @@ describe("data-request invocation pathname", () => {
     expect(invoked().search).toBe("?a=b&foo=bar");
   });
 
-  it("falls back to the client's own search string when invocationTarget carries no query", async () => {
+  it("falls back to the client's own search string when invocationTarget has no query", async () => {
     const { deps, invoked } = lambdaDeps();
 
     await dispatchResult(
@@ -2005,7 +2005,7 @@ describe("a concrete route shadowed by a dynamic sibling", () => {
     expect(captured?.searchParams.has("nxtPid")).toBe(false);
   });
 
-  it("still carries params for a genuinely dynamic request", async () => {
+  it("still passes params for a genuinely dynamic request", async () => {
     const { deps, invoked } = apiDeps();
 
     await serve(new Request("https://app.example/api/something-else"), deps);
@@ -2724,7 +2724,7 @@ describe("nested dynamic params with a prefix-colliding name", () => {
   });
 });
 
-describe("the tier a dispatched render carries", () => {
+describe("the tier a dispatched render is stamped with", () => {
   it("stamps a lambda render a MISS and passes the origin's cache-control through", async () => {
     const deps = baseDeps({
       manifest: {

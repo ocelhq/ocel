@@ -92,7 +92,7 @@ const CASES = [
   {
     name: "url-absolute-allowed-with-port",
     query: { url: "https://cdn.allowed.example:8443/img/a.png", w: "640", q: "75" },
-    note: "matching is against url.hostname — url.host would carry :8443 and fail the pattern",
+    note: "matching is against url.hostname — url.host would include :8443 and fail the pattern",
   },
   {
     name: "url-absolute-allowed-domain",
