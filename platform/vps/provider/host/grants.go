@@ -28,7 +28,7 @@ func grants(class providerkit.Class, arch string) []Grant {
 	if held.group != "" {
 		grants = append(grants, Grant{
 			Name:   "membership of the " + held.group + " group",
-			Detail: "equivalent to root: the group can start a container that mounts /, so this login can become root. No smaller grant runs containers. The daemon is installed by bootstrap from " + dockerSource + "; destroy removes the login and leaves the engine and its containers",
+			Detail: "equivalent to root: the group can start a container that mounts /, so this login can become root. No smaller grant runs containers. Bootstrap uses a docker " + engineFloor + " or later it finds, or installs the daemon from " + dockerSource + "; destroy removes the login and leaves the engine and its containers",
 		})
 	}
 	if !under(items, sudoersRoot) {

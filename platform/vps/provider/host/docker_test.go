@@ -304,6 +304,9 @@ func TestTheDocumentSaysWhereTheDaemonTheGroupReachesCameFrom(t *testing.T) {
 	if !strings.Contains(claim.Detail, dockerSource) {
 		t.Errorf("apply installs the engine and the membership claim never says where it came from:\n%s", claim.Detail)
 	}
+	if !strings.Contains(claim.Detail, "docker "+engineFloor+" or later it finds") {
+		t.Errorf("bootstrap adopts a docker it finds and the membership claim says every daemon came from %s:\n%s", dockerSource, claim.Detail)
+	}
 	if !strings.Contains(claim.Detail, "become root") {
 		t.Errorf("the membership claim stopped saying the group is root under another name:\n%s", claim.Detail)
 	}
