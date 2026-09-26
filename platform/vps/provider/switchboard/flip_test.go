@@ -69,7 +69,7 @@ func asking(at, host, path string) {
 		return
 	}
 	request.Host = host
-	if said, err := http.DefaultClient.Do(request); err == nil {
+	if said, err := boardClient.Do(request); err == nil {
 		_, _ = io.Copy(io.Discard, said.Body)
 		_ = said.Body.Close()
 	}
@@ -151,7 +151,7 @@ func TestADrainIsAcknowledgedOnlyOnceTheLastRequestOnTheRetireeHasReturned(t *te
 	board, at := served(t, routing(t, map[string]string{"shop.example.com": blue.address}))
 
 	stalled := make(chan answered, 1)
-	go func() { stalled <- ask(t, http.DefaultClient, at, "shop.example.com", "/stall") }()
+	go func() { stalled <- ask(t, boardClient, at, "shop.example.com", "/stall") }()
 	<-blue.arrived
 
 	var told drains
@@ -229,7 +229,7 @@ func TestAFlipThatCannotReadItsTableRetiresNothingAndSwitchesNothing(t *testing.
 	if lines := told.lines(); len(lines) != 0 {
 		t.Errorf("the refused flips told %v, want nothing drained", lines)
 	}
-	if said := ask(t, http.DefaultClient, at, "shop.example.com", "/"); said.body != "blue" {
+	if said := ask(t, boardClient, at, "shop.example.com", "/"); said.body != "blue" {
 		t.Errorf("after the refused flips shop.example.com answered %q, want blue still serving", said.body)
 	}
 	if idle, err := board.Idle([]string{blue}); err != nil || len(idle) != 0 {
@@ -263,7 +263,7 @@ func TestADrainCeilingCutsEveryRequestAndStreamStillOpenOnARetireeNoLongerRouted
 	go func() {
 		request, _ := http.NewRequest(http.MethodGet, "http://"+at+"/stall", nil)
 		request.Host = "shop.example.com"
-		said, err := http.DefaultClient.Do(request)
+		said, err := boardClient.Do(request)
 		if err != nil {
 			stalled <- answered{}
 			return
@@ -277,7 +277,7 @@ func TestADrainCeilingCutsEveryRequestAndStreamStillOpenOnARetireeNoLongerRouted
 		t.Fatal(err)
 	}
 	request.Host = "shop.example.com"
-	stream, err := http.DefaultClient.Do(request)
+	stream, err := boardClient.Do(request)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -372,7 +372,7 @@ func TestARetireeKeepsNoConnectionFromTheSwitchboardOnceItHasDrained(t *testing.
 	blue, green := strings.TrimPrefix(retiree.URL, "http://"), backend(t, "green")
 	board, at := served(t, routing(t, map[string]string{"shop.example.com": blue}))
 	for range 3 {
-		if said := ask(t, http.DefaultClient, at, "shop.example.com", "/"); said.body != "blue" {
+		if said := ask(t, boardClient, at, "shop.example.com", "/"); said.body != "blue" {
 			t.Fatalf("shop.example.com answered %q before the flip, want blue", said.body)
 		}
 	}

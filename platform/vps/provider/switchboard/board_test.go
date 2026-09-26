@@ -117,6 +117,8 @@ func backend(t *testing.T, name string) string {
 	return strings.TrimPrefix(server.URL, "http://")
 }
 
+var boardClient = &http.Client{Transport: &http.Transport{}}
+
 type answered struct {
 	status int
 	body   string
@@ -149,7 +151,7 @@ func ask(t *testing.T, client *http.Client, at, host, path string, headers ...st
 func switchedTo(t *testing.T, at, host, want string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
-	for said := ask(t, http.DefaultClient, at, host, "/"); said.body != want; said = ask(t, http.DefaultClient, at, host, "/") {
+	for said := ask(t, boardClient, at, host, "/"); said.body != want; said = ask(t, boardClient, at, host, "/") {
 		if time.Now().After(deadline) {
 			t.Fatalf("%s still answered %q after five seconds, want %q", host, said.body, want)
 		}
@@ -162,7 +164,7 @@ func TestAClaimedHostnameIsServedByItsUpstreamUnderItsOwnHostAndNamesTheBox(t *t
 	web := backend(t, "web")
 	_, at := served(t, routing(t, map[string]string{"shop.example.com": web}))
 
-	said := ask(t, http.DefaultClient, at, "shop.example.com", "/cart")
+	said := ask(t, boardClient, at, "shop.example.com", "/cart")
 	if said.status != http.StatusOK || said.body != "web" {
 		t.Fatalf("shop.example.com answered %d %q, want the upstream's 200", said.status, said.body)
 	}
@@ -192,7 +194,7 @@ func TestEveryAnswerTheBoxRefusesOrCannotReachNamesTheBox(t *testing.T) {
 		"unclaimed.example.com": http.StatusNotFound,
 		"down.example.com":      http.StatusBadGateway,
 	} {
-		said := ask(t, http.DefaultClient, at, host, "/")
+		said := ask(t, boardClient, at, host, "/")
 		if said.status != status || said.header.Get(edge.HeaderEdge) != "box" {
 			t.Errorf("%s answered %d with %s %q, want %d naming box", host, said.status, edge.HeaderEdge, said.header.Get(edge.HeaderEdge), status)
 		}
@@ -209,7 +211,7 @@ func TestForwardedHeadersAClientSpoofsAreOverwrittenAndOnlyTheFrontProxysAreKept
 	spoofed := []string{"X-Forwarded-For", "6.6.6.6", "X-Forwarded-Proto", "https", "X-Forwarded-Host", "bank.example.com"}
 	_, at, front := fronted(t, routing(t, map[string]string{"shop.example.com": web}))
 
-	said := ask(t, http.DefaultClient, at, "shop.example.com", "/", spoofed...)
+	said := ask(t, boardClient, at, "shop.example.com", "/", spoofed...)
 	for header, want := range map[string]string{
 		"X-Forwarded-For":   "127.0.0.1",
 		"X-Forwarded-Proto": "http",
@@ -238,7 +240,7 @@ func TestARelayingPeerIsHeardOnTheSchemeAndHostButNeverOnTheClient(t *testing.T)
 	web := backend(t, "web")
 	spoofed := []string{"X-Forwarded-For", "6.6.6.6", "X-Forwarded-Proto", "https", "X-Forwarded-Host", "shop.example.com"}
 	_, at, _ := fronted(t, routing(t, map[string]string{"shop.example.com": web}), netip.MustParsePrefix("127.0.0.0/8"))
-	said := ask(t, http.DefaultClient, at, "shop.example.com", "/", spoofed...)
+	said := ask(t, boardClient, at, "shop.example.com", "/", spoofed...)
 	for header, want := range map[string]string{
 		"X-Forwarded-For":   "127.0.0.1",
 		"X-Forwarded-Proto": "https",
@@ -264,15 +266,15 @@ func TestTheLivenessProbeIsToldTheSchemeAndHostsAnAppWouldHear(t *testing.T) {
 		heard     string
 	}{
 		"a routed hostname from a relaying peer": {
-			http.DefaultClient, relaying, "shop.example.com", []string{"X-Forwarded-Proto", "https"}, "https shop.example.com shop.example.com"},
+			boardClient, relaying, "shop.example.com", []string{"X-Forwarded-Proto", "https"}, "https shop.example.com shop.example.com"},
 		"an unclaimed hostname from a relaying peer": {
-			http.DefaultClient, relaying, "unclaimed.example.com", []string{"X-Forwarded-Proto", "https"}, "https unclaimed.example.com unclaimed.example.com"},
+			boardClient, relaying, "unclaimed.example.com", []string{"X-Forwarded-Proto", "https"}, "https unclaimed.example.com unclaimed.example.com"},
 		"a relaying peer forwarding another host": {
-			http.DefaultClient, relaying, "shop.example.com", []string{"X-Forwarded-Proto", "https", "X-Forwarded-Host", "bank.example.com"}, "https shop.example.com bank.example.com"},
+			boardClient, relaying, "shop.example.com", []string{"X-Forwarded-Proto", "https", "X-Forwarded-Host", "bank.example.com"}, "https shop.example.com bank.example.com"},
 		"a routed hostname from the front proxy": {
 			front, "front", "shop.example.com", []string{"X-Forwarded-Proto", "https"}, "https shop.example.com shop.example.com"},
 		"a routed hostname from an untrusted peer": {
-			http.DefaultClient, untrusting, "shop.example.com", []string{"X-Forwarded-Proto", "https", "X-Forwarded-Host", "bank.example.com"}, "http shop.example.com shop.example.com"},
+			boardClient, untrusting, "shop.example.com", []string{"X-Forwarded-Proto", "https", "X-Forwarded-Host", "bank.example.com"}, "http shop.example.com shop.example.com"},
 	} {
 		said := ask(t, tc.client, tc.at, tc.host, edge.LivenessProbePath, tc.forwarded...)
 		if got := said.header.Get(switchboard.HeardHeader); got != tc.heard {
@@ -298,7 +300,7 @@ func TestAPeerOnTheHTTPSListenerIsHeardAsHTTPSForTheHostItAskedAndOnNothingItSai
 		"a peer nothing relays from":   hearingHTTPS(t, table),
 		"a peer the board relays from": hearingHTTPS(t, table, netip.MustParsePrefix("127.0.0.0/8")),
 	} {
-		said := ask(t, http.DefaultClient, at, "shop.example.com", "/", spoofed...)
+		said := ask(t, boardClient, at, "shop.example.com", "/", spoofed...)
 		if said.status != http.StatusOK || said.body != "web" {
 			t.Fatalf("%s: shop.example.com answered %d %q over the https listener, want the upstream's 200", name, said.status, said.body)
 		}
@@ -318,7 +320,7 @@ func TestAPeerOnTheHTTPSListenerIsHeardAsHTTPSForTheHostItAskedAndOnNothingItSai
 				t.Errorf("%s: %s reached the upstream as %q, want %q: only a proxy ocel writes https routes into reaches this listener, and every tenant on its network can too, so the scheme is stamped and nothing the peer says is heard", name, header, got, want)
 			}
 		}
-		if heard := ask(t, http.DefaultClient, at, "shop.example.com", edge.LivenessProbePath, spoofed...).header.Get(switchboard.HeardHeader); heard != "https shop.example.com shop.example.com" {
+		if heard := ask(t, boardClient, at, "shop.example.com", edge.LivenessProbePath, spoofed...).header.Get(switchboard.HeardHeader); heard != "https shop.example.com shop.example.com" {
 			t.Errorf("%s: the probe was told %q, want https for the Host it asked", name, heard)
 		}
 	}
@@ -339,8 +341,8 @@ func TestEveryForwardedHeaderBeyondTheThreeTheBoardWritesIsDroppedWhoeverSentIt(
 		client *http.Client
 		at     string
 	}{
-		"an untrusted peer": {http.DefaultClient, untrusting},
-		"a relaying peer":   {http.DefaultClient, relaying},
+		"an untrusted peer": {boardClient, untrusting},
+		"a relaying peer":   {boardClient, relaying},
 		"the front proxy":   {front, "front"},
 	} {
 		said := ask(t, asked.client, asked.at, "shop.example.com", "/", spoofed...)

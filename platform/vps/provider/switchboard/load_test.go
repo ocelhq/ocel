@@ -35,17 +35,17 @@ func TestATableTheSwitchboardCannotReadIsRefusedAndTheOneItServesKeepsServing(t 
 			t.Errorf("loading %s was taken, want it refused", what)
 		}
 	}
-	if said := ask(t, http.DefaultClient, at, "shop.example.com", "/"); said.status != http.StatusOK || said.body != "web" {
+	if said := ask(t, boardClient, at, "shop.example.com", "/"); said.status != http.StatusOK || said.body != "web" {
 		t.Errorf("after the refused loads shop.example.com answered %d %q, want the table that was serving to still serve", said.status, said.body)
 	}
 
 	if err := board.Load(tableAt(t, routing(t, map[string]string{"blog.example.com": web}))); err != nil {
 		t.Fatal(err)
 	}
-	if said := ask(t, http.DefaultClient, at, "shop.example.com", "/"); said.status != http.StatusNotFound {
+	if said := ask(t, boardClient, at, "shop.example.com", "/"); said.status != http.StatusNotFound {
 		t.Errorf("shop.example.com answered %d after a table that no longer claims it was loaded, want 404", said.status)
 	}
-	if said := ask(t, http.DefaultClient, at, "blog.example.com", "/"); said.body != "web" {
+	if said := ask(t, boardClient, at, "blog.example.com", "/"); said.body != "web" {
 		t.Errorf("blog.example.com answered %q after a table claiming it was loaded, want web", said.body)
 	}
 }

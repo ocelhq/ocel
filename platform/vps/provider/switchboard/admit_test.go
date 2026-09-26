@@ -154,7 +154,7 @@ func TestTheFrontProxyIsAnsweredWhetherAHostnameIsAdmittedAndNothingElseIs(t *te
 
 	elsewhere := httptest.NewServer(board.Admit())
 	t.Cleanup(elsewhere.Close)
-	if said := asked(t, http.DefaultClient, http.MethodGet, elsewhere.URL+switchboard.AdmitPath+"?domain=shop.example.com"); said != http.StatusForbidden {
+	if said := asked(t, boardClient, http.MethodGet, elsewhere.URL+switchboard.AdmitPath+"?domain=shop.example.com"); said != http.StatusForbidden {
 		t.Errorf("a peer that did not arrive over the admit socket was answered %d for a claimed hostname, want 403: only the front proxy can reach that socket", said)
 	}
 }
