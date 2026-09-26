@@ -1,4 +1,4 @@
-package providerkit
+package bootstrapplan
 
 import (
 	"errors"
@@ -16,49 +16,49 @@ var testCatalogue = []provider.Feature{
 	{Name: "cloudflare-edge", Summary: "cloudflare front", DependsOn: []string{"isr"}, Needs: []string{provider.NeedsEdgePrefix + "cloudflare"}},
 }
 
-func TestFeatureClosure(t *testing.T) {
+func TestFeaturesWithDependencies(t *testing.T) {
 	t.Parallel()
 
 	t.Run("pulls in what a feature depends on", func(t *testing.T) {
 		t.Parallel()
 
-		got, err := featureClosure(testCatalogue, []string{"cloudflare-edge"})
+		got, err := FeaturesWithDependencies(testCatalogue, []string{"cloudflare-edge"})
 		if err != nil {
-			t.Fatalf("featureClosure() = %v", err)
+			t.Fatalf("FeaturesWithDependencies() = %v", err)
 		}
 		if want := []string{"isr", "cloudflare-edge"}; !reflect.DeepEqual(got, want) {
-			t.Errorf("featureClosure() = %v, want %v", got, want)
+			t.Errorf("FeaturesWithDependencies() = %v, want %v", got, want)
 		}
 	})
 
 	t.Run("orders by the catalogue however the caller listed them", func(t *testing.T) {
 		t.Parallel()
 
-		got, err := featureClosure(testCatalogue, []string{"cloudflare-edge", "image-optimization", "isr", "isr"})
+		got, err := FeaturesWithDependencies(testCatalogue, []string{"cloudflare-edge", "image-optimization", "isr", "isr"})
 		if err != nil {
-			t.Fatalf("featureClosure() = %v", err)
+			t.Fatalf("FeaturesWithDependencies() = %v", err)
 		}
 		if want := []string{"isr", "image-optimization", "cloudflare-edge"}; !reflect.DeepEqual(got, want) {
-			t.Errorf("featureClosure() = %v, want %v", got, want)
+			t.Errorf("FeaturesWithDependencies() = %v, want %v", got, want)
 		}
 	})
 
 	t.Run("nothing requested is nothing resolved", func(t *testing.T) {
 		t.Parallel()
 
-		got, err := featureClosure(testCatalogue, nil)
+		got, err := FeaturesWithDependencies(testCatalogue, nil)
 		if err != nil || len(got) != 0 {
-			t.Fatalf("featureClosure(nil) = %v, %v, want none", got, err)
+			t.Fatalf("FeaturesWithDependencies(nil) = %v, %v, want none", got, err)
 		}
 	})
 
 	t.Run("an unknown name is refused and names what there is", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := featureClosure(testCatalogue, []string{"quantum-edge"})
+		_, err := FeaturesWithDependencies(testCatalogue, []string{"quantum-edge"})
 		var refused refusal.Refusal
 		if !errors.As(err, &refused) || refused.Code != refusal.CodeInvalid {
-			t.Fatalf("featureClosure() = %v, want a %s refusal", err, refusal.CodeInvalid)
+			t.Fatalf("FeaturesWithDependencies() = %v, want a %s refusal", err, refusal.CodeInvalid)
 		}
 		for _, want := range []string{"quantum-edge", "isr", "image-optimization", "cloudflare-edge"} {
 			if !strings.Contains(refused.Message, want) {
@@ -70,9 +70,9 @@ func TestFeatureClosure(t *testing.T) {
 	t.Run("a dependency the catalogue does not carry names the feature that wanted it", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := featureClosure([]provider.Feature{{Name: "isr", DependsOn: []string{"gone"}}}, []string{"isr"})
+		_, err := FeaturesWithDependencies([]provider.Feature{{Name: "isr", DependsOn: []string{"gone"}}}, []string{"isr"})
 		if err == nil || !strings.Contains(err.Error(), "isr depends on \"gone\"") {
-			t.Fatalf("featureClosure() = %v, want it to name the feature and the dependency", err)
+			t.Fatalf("FeaturesWithDependencies() = %v, want it to name the feature and the dependency", err)
 		}
 	})
 }
@@ -133,19 +133,19 @@ func TestFeatureLevels(t *testing.T) {
 	})
 }
 
-func TestFeatureDeleteOrder(t *testing.T) {
+func TestDeleteOrder(t *testing.T) {
 	t.Parallel()
 
-	got, err := featureDeleteOrder(testCatalogue, []string{"isr", "cloudflare-edge"})
+	got, err := DeleteOrder(testCatalogue, []string{"isr", "cloudflare-edge"})
 	if err != nil {
-		t.Fatalf("featureDeleteOrder() = %v", err)
+		t.Fatalf("DeleteOrder() = %v", err)
 	}
 	if want := []string{"cloudflare-edge", "isr"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("featureDeleteOrder() = %v, want what depends on a feature to go first", got)
+		t.Errorf("DeleteOrder() = %v, want what depends on a feature to go first", got)
 	}
 }
 
-func TestFeatureRemoval(t *testing.T) {
+func TestFeaturesToRemove(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
@@ -192,18 +192,18 @@ func TestFeatureRemoval(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, err := featureRemoval(testCatalogue, tc.standing, tc.named)
+			got, err := FeaturesToRemove(testCatalogue, tc.standing, tc.named)
 			if tc.wantErr {
 				if err == nil {
-					t.Fatalf("featureRemoval() = %v, want a refusal naming what this provider does not offer", got)
+					t.Fatalf("FeaturesToRemove() = %v, want a refusal naming what this provider does not offer", got)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("featureRemoval() = %v", err)
+				t.Fatalf("FeaturesToRemove() = %v", err)
 			}
 			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("featureRemoval() = %v, want %v", got, tc.want)
+				t.Errorf("FeaturesToRemove() = %v, want %v", got, tc.want)
 			}
 		})
 	}
@@ -257,8 +257,8 @@ func TestRequiredFeatures(t *testing.T) {
 func TestMissingFeatures(t *testing.T) {
 	t.Parallel()
 
-	got := missingFeatures([]string{"isr"}, []string{"image-optimization", "isr", "image-optimization"})
+	got := MissingFeatures([]string{"isr"}, []string{"image-optimization", "isr", "image-optimization"})
 	if want := []string{"image-optimization"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("missingFeatures() = %v, want %v", got, want)
+		t.Errorf("MissingFeatures() = %v, want %v", got, want)
 	}
 }

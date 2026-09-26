@@ -1,4 +1,4 @@
-package providerkit
+package bootstrapplan
 
 import (
 	"fmt"
@@ -34,7 +34,7 @@ func FeatureLevels(catalogue []provider.Feature, names []string) ([][]string, er
 		}
 		if len(level) == 0 {
 			return nil, fmt.Errorf("no order stands %s up: each waits on another in the set",
-				strings.Join(inCatalogueOrder(catalogue, keys(pending)), ", "))
+				strings.Join(InCatalogueOrder(catalogue, keys(pending)), ", "))
 		}
 		for _, name := range level {
 			delete(pending, name)
@@ -52,7 +52,7 @@ func RequiredFeatures(catalogue []provider.Feature, frameworks []string, edgeKin
 			needed = append(needed, f.Name)
 		}
 	}
-	return featureClosure(catalogue, needed)
+	return FeaturesWithDependencies(catalogue, needed)
 }
 
 func featureNeeded(f provider.Feature, frameworks []string, edgeKind string) bool {
@@ -67,7 +67,7 @@ func featureNeeded(f provider.Feature, frameworks []string, edgeKind string) boo
 	return false
 }
 
-func featureClosure(catalogue []provider.Feature, names []string) ([]string, error) {
+func FeaturesWithDependencies(catalogue []provider.Feature, names []string) ([]string, error) {
 	wanted := map[string]bool{}
 	var pull func(name string, from string) error
 	pull = func(name, from string) error {
@@ -91,10 +91,10 @@ func featureClosure(catalogue []provider.Feature, names []string) ([]string, err
 			return nil, err
 		}
 	}
-	return inCatalogueOrder(catalogue, keys(wanted)), nil
+	return InCatalogueOrder(catalogue, keys(wanted)), nil
 }
 
-func featureDeleteOrder(catalogue []provider.Feature, names []string) ([]string, error) {
+func DeleteOrder(catalogue []provider.Feature, names []string) ([]string, error) {
 	levels, err := FeatureLevels(catalogue, names)
 	if err != nil {
 		return nil, err
@@ -106,7 +106,7 @@ func featureDeleteOrder(catalogue []provider.Feature, names []string) ([]string,
 	return out, nil
 }
 
-func featureRemoval(catalogue []provider.Feature, standing, named []string) ([]string, error) {
+func FeaturesToRemove(catalogue []provider.Feature, standing, named []string) ([]string, error) {
 	doomed := map[string]bool{}
 	for _, name := range named {
 		if _, ok := featureNamed(catalogue, name); !ok {
@@ -129,10 +129,10 @@ func featureRemoval(catalogue []provider.Feature, standing, named []string) ([]s
 			}
 		}
 	}
-	return inCatalogueOrder(catalogue, keys(doomed)), nil
+	return InCatalogueOrder(catalogue, keys(doomed)), nil
 }
 
-func refuseBothWays(ensure, removing []string) error {
+func RefuseEnsuringAndRemoving(ensure, removing []string) error {
 	var both []string
 	for _, name := range ensure {
 		if slices.Contains(removing, name) {
@@ -147,7 +147,7 @@ func refuseBothWays(ensure, removing []string) error {
 		strings.Join(both, ", "))
 }
 
-func missingFeatures(standing, required []string) []string {
+func MissingFeatures(standing, required []string) []string {
 	var out []string
 	for _, name := range required {
 		if !slices.Contains(standing, name) && !slices.Contains(out, name) {
@@ -175,7 +175,7 @@ func featureNames(catalogue []provider.Feature) []string {
 	return out
 }
 
-func inCatalogueOrder(catalogue []provider.Feature, chosen []string) []string {
+func InCatalogueOrder(catalogue []provider.Feature, chosen []string) []string {
 	var out []string
 	for _, f := range catalogue {
 		if slices.Contains(chosen, f.Name) {

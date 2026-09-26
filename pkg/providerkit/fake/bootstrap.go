@@ -5,7 +5,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
@@ -148,7 +148,7 @@ func (b *Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pr
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	groups := providerkit.DeriveGroups(b.named(described), b.Catalogue(), req)
+	groups := bootstrapplan.ChangeGroups(b.named(described), b.Catalogue(), req)
 	for i, group := range groups {
 		if group.Action == provider.ActionKeep {
 			continue
@@ -163,7 +163,7 @@ func (b *Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pr
 }
 
 func (b *Bootstrap) named(described provider.BootstrapReading) provider.BootstrapReading {
-	return providerkit.NameStacks(described, b.Catalogue(), func(feature string) string {
+	return bootstrapplan.WithDefaultStackNames(described, b.Catalogue(), func(feature string) string {
 		return stackNameOf(described.Class, feature)
 	})
 }

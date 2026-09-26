@@ -8,6 +8,7 @@ import (
 
 	environmentv1 "github.com/ocelhq/ocel/pkg/proto/common/environment/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/images"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
@@ -45,7 +46,7 @@ func (h *handlers) Preflight(ctx context.Context, req *contractv1.PreflightReque
 		return nil, err
 	}
 
-	required, err := RequiredFeatures(gate.Bootstrap.Catalogue(), req.GetFrameworks(), string(gate.Edge))
+	required, err := bootstrapplan.RequiredFeatures(gate.Bootstrap.Catalogue(), req.GetFrameworks(), string(gate.Edge))
 	if err != nil {
 		return nil, provider.RefusalError(err)
 	}

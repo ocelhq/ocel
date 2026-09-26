@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
@@ -52,7 +53,7 @@ func (g Gate) State(ctx context.Context, class edge.Class) (BootstrapState, erro
 			carried = append(carried, stack.Feature)
 		}
 	}
-	standing.Features = inCatalogueOrder(g.Bootstrap.Catalogue(), carried)
+	standing.Features = bootstrapplan.InCatalogueOrder(g.Bootstrap.Catalogue(), carried)
 	if standing.AutoHeal, err = g.autoHeal(ctx, class); err != nil {
 		return BootstrapState{}, err
 	}
@@ -115,25 +116,25 @@ func (g Gate) intended(standing BootstrapState, req ApplyRequest) (intent, error
 	if err := RefuseSchemaAhead(standing.Schema, standing.Present, class); err != nil {
 		return intent{}, err
 	}
-	asked, err := featureClosure(catalogue, req.Features)
+	asked, err := bootstrapplan.FeaturesWithDependencies(catalogue, req.Features)
 	if err != nil {
 		return intent{}, err
 	}
-	removing, err := featureRemoval(catalogue, standing.Features, req.Remove)
+	removing, err := bootstrapplan.FeaturesToRemove(catalogue, standing.Features, req.Remove)
 	if err != nil {
 		return intent{}, err
 	}
-	if err := refuseBothWays(asked, removing); err != nil {
+	if err := bootstrapplan.RefuseEnsuringAndRemoving(asked, removing); err != nil {
 		return intent{}, err
 	}
 	if err := g.refuseUnfronting(catalogue, req.Remove, removing); err != nil {
 		return intent{}, err
 	}
-	requested, err := featureClosure(catalogue, g.ensuringEdge(catalogue, req.Features))
+	requested, err := bootstrapplan.FeaturesWithDependencies(catalogue, g.ensuringEdge(catalogue, req.Features))
 	if err != nil {
 		return intent{}, err
 	}
-	ordered, err := featureDeleteOrder(catalogue, removing)
+	ordered, err := bootstrapplan.DeleteOrder(catalogue, removing)
 	if err != nil {
 		return intent{}, err
 	}
@@ -141,7 +142,7 @@ func (g Gate) intended(standing BootstrapState, req ApplyRequest) (intent, error
 }
 
 func (g Gate) ensuringEdge(catalogue []provider.Feature, requested []string) []string {
-	fronting := FeatureNeedingEdge(catalogue, g.Edge)
+	fronting := bootstrapplan.FeatureNeedingEdge(catalogue, g.Edge)
 	if fronting == "" || slices.Contains(requested, fronting) {
 		return requested
 	}
@@ -149,7 +150,7 @@ func (g Gate) ensuringEdge(catalogue []provider.Feature, requested []string) []s
 }
 
 func (g Gate) refuseUnfronting(catalogue []provider.Feature, named, removing []string) error {
-	fronting := FeatureNeedingEdge(catalogue, g.Edge)
+	fronting := bootstrapplan.FeatureNeedingEdge(catalogue, g.Edge)
 	if fronting == "" || !slices.Contains(removing, fronting) {
 		return nil
 	}
@@ -238,7 +239,7 @@ func (g Gate) Apply(ctx context.Context, shown provider.Plan, class edge.Class, 
 	if err != nil {
 		return err
 	}
-	if err := RefuseGrowth(shown, drawn); err != nil {
+	if err := bootstrapplan.RefuseUnconsentedChanges(shown, drawn); err != nil {
 		return err
 	}
 
@@ -264,7 +265,7 @@ func (g Gate) Remove(ctx context.Context, shown provider.Plan, class edge.Class,
 		if err != nil {
 			return err
 		}
-		if err := RefuseGrowth(shown, standing); err != nil {
+		if err := bootstrapplan.RefuseUnconsentedChanges(shown, standing); err != nil {
 			return err
 		}
 	}
@@ -359,7 +360,7 @@ func (g Gate) Admit(ctx context.Context, class edge.Class, required []string, he
 }
 
 func (s BootstrapState) lacking(required []string, command string) error {
-	missing := missingFeatures(s.Features, required)
+	missing := bootstrapplan.MissingFeatures(s.Features, required)
 	if len(missing) == 0 {
 		return nil
 	}

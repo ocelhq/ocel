@@ -10,7 +10,7 @@ import (
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"gopkg.in/yaml.v3"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 )
@@ -20,7 +20,7 @@ func NameStacks(ns Namespace, described provider.BootstrapReading) provider.Boot
 	if err != nil {
 		return described
 	}
-	return providerkit.NameStacks(described, Catalogue(), func(name string) string {
+	return bootstrapplan.WithDefaultStackNames(described, Catalogue(), func(name string) string {
 		f, ok := featureNamed(name)
 		if !ok {
 			return coreStack

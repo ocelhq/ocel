@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -33,7 +33,7 @@ func (b Bootstrap) PlanRemove(ctx context.Context, class edge.Class) (provider.P
 		stacks = append(stacks, params)
 	}
 
-	plan := provider.Plan{Groups: providerkit.Vendored(groupVendor, stacks)}
+	plan := provider.Plan{Groups: bootstrapplan.PrefixWithVendor(groupVendor, stacks)}
 	fronts, err := b.standingEdges(ctx, class, read.Deployed)
 	if err != nil {
 		return provider.Plan{}, err
@@ -88,14 +88,14 @@ func (b Bootstrap) removedEdgeGroup(ctx context.Context, class edge.Class, front
 	if len(planned) == 0 {
 		return nil, nil
 	}
-	changes, err := providerkit.EdgeChanges(front.Kind(), planned)
+	changes, err := bootstrapplan.EdgeChanges(front.Kind(), planned)
 	if err != nil {
 		return nil, err
 	}
 	return &provider.ChangeGroup{
 		Kind:    provider.EdgeGroupKind,
 		Name:    edge.EdgeGroupName(front.Kind()),
-		Feature: providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), front.Kind()),
+		Feature: bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), front.Kind()),
 		Action:  provider.ActionDelete,
 		Changes: changes,
 	}, nil

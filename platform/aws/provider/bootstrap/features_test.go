@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
@@ -32,7 +32,7 @@ func TestEveryEdgeKindHasAFeatureOfItsOwn(t *testing.T) {
 		KindCloudFront: FeatureCloudFrontEdge,
 		KindAPIGateway: FeatureAPIGatewayEdge,
 	} {
-		if got := providerkit.FeatureNeedingEdge(Catalogue(), kind); got != want {
+		if got := bootstrapplan.FeatureNeedingEdge(Catalogue(), kind); got != want {
 			t.Errorf("FeatureNeedingEdge(%q) = %q, want %q: nothing else tells a run which stack the edge it fronts with stands in", kind, got, want)
 		}
 	}
@@ -85,7 +85,7 @@ func TestWhatThisCatalogueSaysAProjectNeeds(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := providerkit.RequiredFeatures(Catalogue(), tc.frameworks, tc.edge)
+			got, err := bootstrapplan.RequiredFeatures(Catalogue(), tc.frameworks, tc.edge)
 			if err != nil {
 				t.Fatalf("RequiredFeatures: %v", err)
 			}

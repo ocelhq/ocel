@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
@@ -113,7 +113,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 		return provider.Plan{}, err
 	}
 	groups, err := bootstrap.PlanChanges(ctx, b.CFN, read, b.request(req),
-		providerkit.DeriveGroups(bootstrap.NameStacks(b.Namespace, described(req.Class, read.Deployed)), bootstrap.Catalogue(), req))
+		bootstrapplan.ChangeGroups(bootstrap.NameStacks(b.Namespace, described(req.Class, read.Deployed)), bootstrap.Catalogue(), req))
 	if err != nil {
 		return provider.Plan{}, err
 	}
@@ -125,7 +125,7 @@ func (b Bootstrap) Plan(ctx context.Context, req provider.BootstrapRequest) (pro
 	if err != nil {
 		return provider.Plan{}, err
 	}
-	plan := provider.Plan{Groups: providerkit.Vendored(groupVendor, append(groups, params))}
+	plan := provider.Plan{Groups: bootstrapplan.PrefixWithVendor(groupVendor, append(groups, params))}
 	fronts, err := b.edgeGroups(ctx, req)
 	if err != nil {
 		return provider.Plan{}, err
@@ -200,7 +200,7 @@ func (b Bootstrap) standingEdgeGroup(ctx context.Context, class edge.Class, kind
 	if err != nil || len(planned) == 0 {
 		return nil, err
 	}
-	group, err := providerkit.EdgeGroup(kind, providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), kind), planned)
+	group, err := bootstrapplan.EdgeGroup(kind, bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), kind), planned)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +228,7 @@ func (b Bootstrap) severedEdge(ctx context.Context, class edge.Class, kind edge.
 	if err != nil {
 		return nil, err
 	}
-	feature := providerkit.FeatureNeedingEdge(bootstrap.Catalogue(), kind)
+	feature := bootstrapplan.FeatureNeedingEdge(bootstrap.Catalogue(), kind)
 	if group == nil {
 		planned, err := plannedBootstrap(ctx, front, class)
 		if err != nil {

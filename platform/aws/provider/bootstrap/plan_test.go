@@ -12,7 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
+	"github.com/ocelhq/ocel/pkg/providerkit/bootstrapplan"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -37,7 +37,7 @@ func planned(t *testing.T, stacks cfn.API, class string, req Request) []provider
 			DigestCurrent: stack.Current(),
 		})
 	}
-	groups, err := PlanChanges(ctx, stacks, read, req, providerkit.DeriveGroups(
+	groups, err := PlanChanges(ctx, stacks, read, req, bootstrapplan.ChangeGroups(
 		NameStacks(defaultNamespace, described), Catalogue(),
 		provider.BootstrapRequest{Class: edge.Class(class), Features: req.Features, Remove: req.Remove}))
 	if err != nil {
