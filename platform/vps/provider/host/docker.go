@@ -1,9 +1,12 @@
 package host
 
 import (
+	"context"
 	"fmt"
+	"math/rand/v2"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 )
@@ -35,9 +38,14 @@ type hold struct {
 }
 
 var (
-	engineInstallHold = hold{counter: "tries", base: 15, ceiling: 60, spread: 15}
+	engineInstallHold = hold{base: 15, ceiling: 60, spread: 15}
 	pullHold          = hold{counter: "at", base: 2, ceiling: 30, spread: 5}
 )
+
+func (h hold) after(try int) time.Duration {
+	backoff := min(h.base<<(try-1), h.ceiling)
+	return time.Duration(backoff+rand.IntN(h.spread)) * time.Second
+}
 
 func (h hold) start() string { return "backoff=" + strconv.Itoa(h.base) + "\n" }
 
@@ -121,16 +129,36 @@ echo '` + dockerSource + ` does not match the pinned sha256 ` + dockerScriptSum 
 exit 1
 fi
 printf '%s\n' 'Acquire::http::Timeout "` + apt + `";' 'Acquire::https::Timeout "` + apt + `";' 'DPkg::Lock::Timeout "` + strconv.Itoa(dpkgLockSeconds) + `";' >"$apt"
-tries=0
-` + engineInstallHold.start() + `while :; do
-if APT_CONFIG="$apt" VERSION=` + dockerVersion + ` sh "$script" >"$log" 2>&1; then break; fi
-tries=$((tries + 1))
-if [ "$tries" -ge ` + strconv.Itoa(engineInstallTries) + ` ]; then
-echo "` + dockerSource + ` failed ` + strconv.Itoa(engineInstallTries) + ` times; its last lines:" >&2
+if APT_CONFIG="$apt" VERSION=` + dockerVersion + ` sh "$script" >"$log" 2>&1; then exit 0; fi
+echo "` + dockerSource + ` failed; its last lines:" >&2
 tail -n ` + strconv.Itoa(engineTailLines) + ` "$log" >&2
-exit 1
-fi
-` + engineInstallHold.again() + `done`
+exit 1`
+}
+
+func (h *Host) installEngine(ctx context.Context, progress providerkit.Progress) error {
+	elevation, err := h.elevate(ctx)
+	if err != nil {
+		return err
+	}
+	for try := 1; ; try++ {
+		result, err := h.stream(ctx, engineCommand(), nil, elevation)
+		if err != nil || result.Code == 0 {
+			return err
+		}
+		attempt := fmt.Sprintf("try %d of %d", try, engineInstallTries)
+		if try == engineInstallTries || (elevation != "" && sudoRefused(result)) {
+			return h.refuse("install docker, "+attempt+",", result, elevation)
+		}
+		if progress != nil {
+			progress.Detail("docker's install failed, " + attempt + ", and is tried again; it said:")
+			for _, line := range strings.Split(spoken(result), "\n") {
+				progress.Detail(line)
+			}
+		}
+		if err := h.pause(ctx, engineInstallHold.after(try)); err != nil {
+			return err
+		}
+	}
 }
 
 func unitCommand(i Item) string {

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy"
@@ -56,12 +57,25 @@ type Host struct {
 	mu        sync.Mutex
 	principal string
 	tiers     map[providerkit.Class]bool
+
+	pause func(context.Context, time.Duration) error
 }
 
 func New(dial Dial, deploy Keys, pins []Pin, front Front) *Host {
-	h := &Host{dial: dial, deploy: deploy, pins: pins, proxyOption: front, tiers: map[providerkit.Class]bool{}}
+	h := &Host{dial: dial, deploy: deploy, pins: pins, proxyOption: front, tiers: map[providerkit.Class]bool{}, pause: waited}
 	h.front = openFront(front, frontBox{h})
 	return h
+}
+
+func waited(ctx context.Context, held time.Duration) error {
+	timer := time.NewTimer(held)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func (h *Host) Pins() []Pin { return slices.Clone(h.pins) }

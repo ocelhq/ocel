@@ -378,7 +378,12 @@ func (r Reading) adopting() error {
 }
 
 func (b Bootstrap) write(ctx context.Context, standing Reading, items []Item, progress providerkit.Progress) error {
-	return b.writing(ctx, standing, items, progress, b.host.Install)
+	return b.writing(ctx, standing, items, progress, func(ctx context.Context, item Item) error {
+		if item.Kind == KindEngine {
+			return b.host.installEngine(ctx, progress)
+		}
+		return b.host.Install(ctx, item)
+	})
 }
 
 func (b Bootstrap) writing(ctx context.Context, standing Reading, items []Item, progress providerkit.Progress,
