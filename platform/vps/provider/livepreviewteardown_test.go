@@ -9,8 +9,8 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/pkg/naming"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	vps "github.com/ocelhq/ocel/platform/vps/provider"
@@ -173,7 +173,7 @@ func previewRemove(t *testing.T, p *vps.Provider, stack edge.EdgeStack, pointer 
 	if err != nil {
 		t.Fatalf("RemovePointer(%s) = %v", pointer, err)
 	}
-	if err := providerkit.ReclaimPreview(ctx, p, teardownSlug, pointer, removed, spoken); err != nil {
+	if err := providerserver.ReclaimPreview(ctx, p, teardownSlug, pointer, removed, spoken); err != nil {
 		t.Fatalf("ReclaimPreview(%s) = %v", pointer, err)
 	}
 	infra := provider.StackRef{Project: teardownSlug, Class: edge.ClassPreview, Name: naming.InfraStack(pointer)}

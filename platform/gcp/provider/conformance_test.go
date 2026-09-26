@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/conformance"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 	"github.com/ocelhq/ocel/platform/gcp/provider/direct"
@@ -28,7 +28,7 @@ func TestGCPProvider(t *testing.T) {
 	t.Setenv("CLOUDFLARE_ACCOUNT_ID", "conformance")
 
 	conformance.Run(t, conformance.Suite{
-		Spec:         providerkit.Spec{Version: "test", New: gcp.New},
+		Server:       providerserver.Config{Version: "test", New: gcp.New},
 		Options:      provider.Options{"project": "conformance", "region": "europe-west1"},
 		Binary:       buildProvider(t),
 		Certificates: &conformance.CertificateChecks{Kind: alb.Kind},

@@ -23,8 +23,8 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
 )
 
 const unknownOption = "an-option-no-provider-accepts"
@@ -35,10 +35,10 @@ func runWire(t *testing.T, suite Suite) {
 	t.Helper()
 
 	t.Run("in process", func(t *testing.T) {
-		if suite.Spec.New == nil {
+		if suite.Server.New == nil {
 			t.Skip("the suite carries no Spec, so there is no mux to serve")
 		}
-		server := httptest.NewServer(providerkit.ConformanceMux(suite.Spec))
+		server := httptest.NewServer(providerserver.ConformanceMux(suite.Server))
 		t.Cleanup(server.Close)
 
 		provider := client(server.Client(), server.URL)
@@ -49,10 +49,10 @@ func runWire(t *testing.T, suite Suite) {
 	})
 
 	t.Run("a run says what it would change and then what it is doing", func(t *testing.T) {
-		if suite.Spec.New == nil || suite.New == nil {
+		if suite.Server.New == nil || suite.New == nil {
 			t.Skip("this provider stands nothing up without an account behind it, so no run reaches its stream here")
 		}
-		server := httptest.NewServer(providerkit.ConformanceMux(suite.Spec))
+		server := httptest.NewServer(providerserver.ConformanceMux(suite.Server))
 		t.Cleanup(server.Close)
 
 		provider := client(server.Client(), server.URL)

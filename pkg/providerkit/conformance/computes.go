@@ -46,10 +46,10 @@ func namesTheComputesItRuns(t *testing.T, suite Suite, providerClient contractv1
 func computesDeclared(t *testing.T, suite Suite) []provider.Compute {
 	t.Helper()
 
-	if suite.Spec.New == nil {
+	if suite.Server.New == nil {
 		t.Fatal("the suite carries no Spec.New, so nothing can read Computes() back off the provider the wire is serving")
 	}
-	p, err := suite.Spec.New(context.Background(), provider.Settings{Options: suite.Options})
+	p, err := suite.Server.New(context.Background(), provider.Settings{Options: suite.Options})
 	if err != nil {
 		t.Fatalf("New() error = %v, want a provider to read Computes() from", err)
 	}

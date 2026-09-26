@@ -21,8 +21,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 	gcp "github.com/ocelhq/ocel/platform/gcp/provider"
 )
@@ -192,13 +192,13 @@ func TestTheCredentialsAreReadWhenNothingAroundTheRunNamesAProject(t *testing.T)
 
 func configured(t *testing.T, options provider.Options) (contractv1connect.ProviderServiceClient, costv1connect.CostServiceClient) {
 	t.Helper()
-	spec := providerkit.Spec{
+	config := providerserver.Config{
 		Version: "test",
 		New: func(ctx context.Context, _ provider.Settings) (provider.Provider, error) {
 			return gcp.New(ctx, provider.Settings{Options: options})
 		},
 	}
-	server := httptest.NewServer(providerkit.ConformanceMux(spec))
+	server := httptest.NewServer(providerserver.ConformanceMux(config))
 	t.Cleanup(server.Close)
 	client := contractv1connect.NewProviderServiceClient(server.Client(), server.URL)
 	if _, err := client.Configure(context.Background(), &contractv1.ConfigureRequest{}); err != nil {

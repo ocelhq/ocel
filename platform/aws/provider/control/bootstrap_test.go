@@ -19,9 +19,9 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	smithy "github.com/aws/smithy-go"
 
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/fake"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/cfn"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -562,7 +562,7 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 	}}
 	b := planningBootstrapper(front)
 	cfn := b.CFN.(*teardownCFN)
-	gate := providerkit.Gate{Bootstrap: b, Records: fake.NewRecords(), Edge: cloudflareKind}
+	gate := providerserver.Gate{Bootstrap: b, Records: fake.NewRecords(), Edge: cloudflareKind}
 
 	standing, err := gate.State(context.Background(), edge.ClassProduction)
 	if err != nil {
@@ -573,7 +573,7 @@ func TestOnePlanReadsTheAccountOnce(t *testing.T) {
 		t.Fatal("Standing described no stack at all")
 	}
 
-	if _, err := gate.PlanFrom(context.Background(), standing, providerkit.ApplyRequest{
+	if _, err := gate.PlanFrom(context.Background(), standing, providerserver.ApplyRequest{
 		Features: []string{bootstrap.FeatureISR, bootstrap.FeatureCloudflareEdge},
 	}); err != nil {
 		t.Fatalf("PlanFrom: %v", err)

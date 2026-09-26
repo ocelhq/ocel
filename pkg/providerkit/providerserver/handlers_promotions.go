@@ -1,0 +1,333 @@
+package providerserver
+
+import (
+	"cmp"
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+	"time"
+
+	connect "connectrpc.com/connect"
+
+	"github.com/ocelhq/ocel/pkg/naming"
+	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
+	"github.com/ocelhq/ocel/pkg/providerkit/envvars"
+	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/records"
+	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
+	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
+)
+
+func (h *handlers) ListEnvironments(ctx context.Context, req *contractv1.ListEnvironmentsRequest) (*contractv1.ListEnvironmentsResponse, error) {
+	p, err := h.session.use()
+	if err != nil {
+		return nil, err
+	}
+	environments, err := stackrecords.PreviewEnvironments(ctx, p.Records(), req.GetSlug())
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	resp := &contractv1.ListEnvironmentsResponse{Environments: make([]*contractv1.PreviewEnvironment, 0, len(environments))}
+	for _, environment := range environments {
+		resp.Environments = append(resp.Environments, &contractv1.PreviewEnvironment{
+			Identity:  environment.Identity,
+			Lifecycle: lifecycleOf(environment.Persisted),
+			Label:     environment.Label,
+			CreatedAt: environment.CreatedAt,
+		})
+	}
+	return resp, nil
+}
+
+func (h *handlers) RemoveEnvironment(ctx context.Context, req *contractv1.RemoveEnvironmentRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	return streamed(ctx, stream, naming.UnitEnvironment, environmentUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress edge.Progress) error {
+		pointer, err := envName(req.GetEnvironment())
+		if err != nil {
+			return err
+		}
+		if pointer == stackrecords.ProductionEnv {
+			return refusal.Refuse(refusal.CodeInvalid,
+				"production is not an environment to remove; `ocel destroy production` removes the project's production footprint")
+		}
+		session, err := h.openStack(ctx, edge.ClassPreview, req.GetSlug(), req.GetEdge())
+		if err != nil {
+			return err
+		}
+		progress.Say(fmt.Sprintf("Removing preview pointer %q from the store", pointer))
+		removed, err := session.stack.RemovePointer(ctx, pointer, progress)
+		if err != nil {
+			return err
+		}
+		if err := session.checkpoint(ctx); err != nil {
+			return err
+		}
+		if err := ReclaimPreview(ctx, session.provider, req.GetSlug(), pointer, removed, progress); err != nil {
+			return err
+		}
+		if err := forgetKeptRecords(ctx, session.provider, req.GetSlug(), pointer); err != nil {
+			return err
+		}
+		if err := records.Forget(ctx, session.provider.Records(), stackrecords.EnvironmentRecord(edge.ClassPreview, req.GetSlug(), pointer)); err != nil {
+			return err
+		}
+		for _, line := range pruneLines(removed) {
+			progress.Say(line)
+		}
+		return nil
+	})
+}
+
+func forgetKeptRecords(ctx context.Context, p provider.Provider, slug, environment string) error {
+	store := envvars.Store{Records: p.Records(), Cipher: p.Cipher()}
+	scope := envvars.Scope{Project: slug, Class: edge.ClassPreview}
+	held, err := store.ListBindings(ctx, scope, environment)
+	if err != nil {
+		return fmt.Errorf("read the records kept for preview %s: %w", environment, err)
+	}
+	var kept []string
+	for _, record := range held {
+		if record.Environment != environment {
+			continue
+		}
+		if record.Owner == envvars.OwnerOcel || record.Owner == naming.InlineRecordOwner {
+			kept = append(kept, record.Name)
+		}
+	}
+	if len(kept) == 0 {
+		return nil
+	}
+	if _, err := store.RemoveBindings(ctx, scope, environment, kept); err != nil {
+		return fmt.Errorf("remove the records kept for preview %s: %w", environment, err)
+	}
+	return nil
+}
+
+func (h *handlers) ListPromotions(ctx context.Context, req *contractv1.ListPromotionsRequest) (*contractv1.ListPromotionsResponse, error) {
+	session, err := h.openStack(ctx, edge.ClassProduction, req.GetSlug(), req.GetEdge())
+	if undeployed(err) {
+		return &contractv1.ListPromotionsResponse{}, nil
+	}
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	history, err := session.stack.Ledger().History(ctx, "")
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	return &contractv1.ListPromotionsResponse{Promotions: promotionHistoryProto(history)}, nil
+}
+
+func (h *handlers) Rollback(ctx context.Context, req *contractv1.RollbackRequest) (*contractv1.RollbackResponse, error) {
+	session, err := h.openStack(ctx, edge.ClassProduction, req.GetSlug(), req.GetEdge())
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	history, err := session.stack.Ledger().History(ctx, "")
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	target, err := rollbackTarget(history, req.GetTo(), req.GetTag())
+	if err != nil {
+		return nil, provider.RefusalError(err)
+	}
+
+	flip := session.front.Facts().FlipBound
+	promoted := edge.Promotion{
+		PromotionID: target.PromotionID,
+		Ts:          time.Now().Unix(),
+		Builds:      target.Builds,
+		Tag:         target.Tag,
+		Flip:        &flip,
+	}
+	if err := session.stack.Promote(ctx, promoted, "", edge.DiscardProgress()); err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	if err := session.checkpoint(ctx); err != nil {
+		return nil, provider.RefusalError(err)
+	}
+	return &contractv1.RollbackResponse{Promoted: promotionProto(promoted)}, nil
+}
+
+func rollbackTarget(history []edge.HistoryEntry, to, tag string) (edge.Promotion, error) {
+	if tag != "" {
+		for _, entry := range history {
+			if entry.Tag == tag {
+				return entry.Promotion, nil
+			}
+		}
+		return edge.Promotion{}, refusal.Refuse(refusal.CodeInvalid, "no promotion tagged %q in this project's history", tag)
+	}
+	if to != "" {
+		for _, entry := range history {
+			if entry.PromotionID == to {
+				return entry.Promotion, nil
+			}
+		}
+		return edge.Promotion{}, refusal.Refuse(refusal.CodeInvalid, "no promotion %q in this project's history", to)
+	}
+	for i, entry := range history {
+		if !entry.Active {
+			continue
+		}
+		if i+1 >= len(history) {
+			return edge.Promotion{}, refusal.Refuse(refusal.CodeNotReady, "this project has no earlier promotion to roll back to")
+		}
+		return history[i+1].Promotion, nil
+	}
+	return edge.Promotion{}, refusal.Refuse(refusal.CodeNotReady, "this project has no active promotion to roll back from")
+}
+
+func (h *handlers) RemoveStalePromotions(ctx context.Context, req *contractv1.RemoveStalePromotionsRequest, stream *connect.ServerStream[progressv1.OperationEvent]) error {
+	return streamed(ctx, stream, naming.UnitPromotion, promotionUnitTitle, progressv1.Phase_PHASE_DELETING, func(_ *eventStream, progress edge.Progress) error {
+		class, err := classOf(req.GetEnvironment().GetTier())
+		if err != nil {
+			return err
+		}
+		pointer, err := envName(req.GetEnvironment())
+		if err != nil {
+			return err
+		}
+		if class == edge.ClassProduction {
+			pointer = ""
+		}
+
+		session, err := h.openStack(ctx, class, req.GetSlug(), req.GetEdge())
+		if undeployed(err) {
+			progress.Say("Nothing to prune.")
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		progress.Say("Diffing deployments to reclaim")
+		pruned, err := session.stack.Ledger().Prune(ctx, int(req.GetKeepN()), pointer)
+		if err != nil {
+			return err
+		}
+		if err := session.checkpoint(ctx); err != nil {
+			return err
+		}
+		env := pointer
+		if class == edge.ClassProduction {
+			env = stackrecords.ProductionEnv
+		}
+		targets, err := ReclaimTargets(req.GetSlug(), env,
+			pruned.RemovedRecordKeys, pruned.SurvivingRecordKeys, pruned.SurvivingPointerRecordKeys)
+		if err != nil {
+			return err
+		}
+		if err := reclaim(ctx, session.provider, req.GetSlug(), class, targets, progress); err != nil {
+			return err
+		}
+		for _, line := range pruneLines(pruned) {
+			progress.Say(line)
+		}
+		return nil
+	})
+}
+
+func undeployed(err error) bool {
+	var absent noDeploy
+	return errors.As(err, &absent)
+}
+
+func pruneLines(result edge.PruneResult) []string {
+	if len(result.RemovedPromotionIDs) == 0 {
+		return []string{"Nothing to prune."}
+	}
+	return []string{
+		fmt.Sprintf("Reclaimed %d promotion(s): %s", len(result.RemovedPromotionIDs), strings.Join(result.RemovedPromotionIDs, ", ")),
+		fmt.Sprintf("Kept %d promotion(s).", len(result.KeptPromotionIDs)),
+	}
+}
+
+func promotionHistoryProto(history []edge.HistoryEntry) []*contractv1.PromotionHistoryEntry {
+	out := make([]*contractv1.PromotionHistoryEntry, 0, len(history))
+	for _, entry := range history {
+		out = append(out, &contractv1.PromotionHistoryEntry{
+			Promotion: promotionProto(entry.Promotion),
+			Active:    entry.Active,
+		})
+	}
+	return out
+}
+
+func promotionProto(promotion edge.Promotion) *contractv1.Promotion {
+	return &contractv1.Promotion{
+		PromotionId: promotion.PromotionID,
+		Ts:          promotion.Ts,
+		Builds:      promotion.Builds,
+		Tag:         promotion.Tag,
+		FlipBound:   flipBoundProto(promotion.Flip),
+	}
+}
+
+func flipBoundProto(flip *edge.FlipBound) *progressv1.FlipBound {
+	if flip == nil {
+		return nil
+	}
+	return &progressv1.FlipBound{TypicalMs: flip.Typical.Milliseconds(), Published: flip.Published}
+}
+
+func ReclaimPreview(ctx context.Context, p provider.Provider, slug, pointer string, removed edge.PruneResult, progress edge.Progress) error {
+	targets, err := ReclaimTargets(slug, pointer,
+		removed.RemovedRecordKeys, removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys)
+	if err != nil {
+		return err
+	}
+	if err := reclaim(ctx, p, slug, edge.ClassPreview, targets, progress); err != nil {
+		return err
+	}
+	return reclaimStanding(ctx, p, slug, pointer,
+		removed.SurvivingRecordKeys, removed.SurvivingPointerRecordKeys, progress)
+}
+
+func reclaimStanding(ctx context.Context, p provider.Provider, slug, pointer string, surviving, servingHere []string, progress edge.Progress) error {
+	entries, err := stackrecords.List(ctx, p.Records(), edge.ClassPreview, slug)
+	if err != nil {
+		return err
+	}
+	standing := make([]stackrecords.NamedStack, 0, len(entries))
+	for _, entry := range entries {
+		if entry.Name.Env == pointer {
+			standing = append(standing, entry)
+		}
+	}
+	slices.SortStableFunc(standing, func(a, b stackrecords.NamedStack) int {
+		return cmp.Compare(infraLast(a.Name), infraLast(b.Name))
+	})
+	elsewhere, here := releasesOf(surviving), releasesOf(servingHere)
+
+	var errs []error
+	for _, entry := range standing {
+		progress.Say("Destroying " + entry.Name.String())
+		ref := provider.StackRef{Project: slug, Class: edge.ClassPreview, Name: entry.Name}
+		if err := p.Stacks().Destroy(ctx, ref, progress); err != nil {
+			errs = append(errs, fmt.Errorf("destroy %s: %w", entry.Name, err))
+			continue
+		}
+		if err := stackrecords.Forget(ctx, p.Records(), edge.ClassPreview, slug, entry.Name); err != nil {
+			errs = append(errs, err)
+		}
+		if entry.Name.IsInfra() {
+			continue
+		}
+		for _, prefix := range reclaimedPrefixes(slug, pointer, entry.Name.App, entry.Name.Release, elsewhere, here) {
+			if err := p.Artifacts().RemovePrefix(ctx, edge.ClassPreview, prefix, progress); err != nil {
+				errs = append(errs, fmt.Errorf("remove %s: %w", prefix, err))
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func infraLast(name naming.StackName) int {
+	if name.IsInfra() {
+		return 1
+	}
+	return 0
+}

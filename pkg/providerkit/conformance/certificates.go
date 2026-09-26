@@ -21,7 +21,7 @@ func runCertificates(t *testing.T, suite Suite) {
 
 	construct := suite.New
 	if construct == nil {
-		construct = suite.Spec.New
+		construct = suite.Server.New
 	}
 	if construct == nil {
 		if suite.Certificates == nil {

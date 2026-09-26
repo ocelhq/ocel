@@ -6,9 +6,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/pkg/naming"
+	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/providerkit/refusal"
 )
 
@@ -30,12 +33,32 @@ func NewBuild(deploymentID, environment, values string) (Build, error) {
 		return Build{}, refusal.Refuse(refusal.CodeInvalid, "deployment identity for %q requires an environment name", deploymentID)
 	}
 	h := sha256.New()
-	writeLenPrefixed(h, []byte(environment))
-	writeLenPrefixed(h, []byte(values))
+	WriteLenPrefixed(h, []byte(environment))
+	WriteLenPrefixed(h, []byte(values))
 	return Build{
 		deploymentID: deploymentID,
 		fingerprint:  hex.EncodeToString(h.Sum(nil))[:fingerprintHexLen],
 	}, nil
+}
+
+func FingerprintVariables(variables []*contractv1.ManifestVariable) string {
+	if len(variables) == 0 {
+		return ""
+	}
+	ordered := slices.Clone(variables)
+	slices.SortFunc(ordered, func(a, b *contractv1.ManifestVariable) int {
+		if a.GetFolder() != b.GetFolder() {
+			return strings.Compare(a.GetFolder(), b.GetFolder())
+		}
+		return strings.Compare(a.GetKey(), b.GetKey())
+	})
+	h := sha256.New()
+	for _, variable := range ordered {
+		WriteLenPrefixed(h, []byte(variable.GetKey()))
+		WriteLenPrefixed(h, []byte(variable.GetFolder()))
+		WriteLenPrefixed(h, []byte(strconv.FormatInt(variable.GetVersion(), 10)))
+	}
+	return hex.EncodeToString(h.Sum(nil))[:fingerprintHexLen]
 }
 
 func ParseBuild(rendered string) (Build, error) {
@@ -61,7 +84,7 @@ func (id Build) Release() naming.Release {
 	return naming.NewRelease(id.deploymentID, id.fingerprint)
 }
 
-func writeLenPrefixed(h io.Writer, b []byte) {
+func WriteLenPrefixed(h io.Writer, b []byte) {
 	var size [8]byte
 	binary.BigEndian.PutUint64(size[:], uint64(len(b)))
 	_, _ = h.Write(size[:])

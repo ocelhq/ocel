@@ -17,18 +17,18 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
 	costv1 "github.com/ocelhq/ocel/pkg/proto/provider/cost/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/cost/v1/costv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
 )
 
 const costImageDigest = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func runCost(t *testing.T, suite Suite) {
 	t.Helper()
-	if suite.Spec.New == nil {
+	if suite.Server.New == nil {
 		t.Skip("the suite carries no Spec, so there is no mux to serve")
 	}
-	server := httptest.NewServer(providerkit.ConformanceMux(suite.Spec))
+	server := httptest.NewServer(providerserver.ConformanceMux(suite.Server))
 	t.Cleanup(server.Close)
 
 	providerClient := client(server.Client(), server.URL)

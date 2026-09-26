@@ -14,8 +14,8 @@ import (
 	progressv1 "github.com/ocelhq/ocel/pkg/proto/common/progress/v1"
 	contractv1 "github.com/ocelhq/ocel/pkg/proto/provider/contract/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/contract/v1/contractv1connect"
-	"github.com/ocelhq/ocel/pkg/providerkit"
 	"github.com/ocelhq/ocel/pkg/providerkit/provider"
+	"github.com/ocelhq/ocel/pkg/providerkit/providerserver"
 	"github.com/ocelhq/ocel/pkg/providerkit/records"
 	"github.com/ocelhq/ocel/pkg/providerkit/stackrecords"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
@@ -32,7 +32,7 @@ const domainSlug = "bound"
 func overTheContract(t *testing.T, p *vps.Provider) contractv1connect.ProviderServiceClient {
 	t.Helper()
 
-	server := httptest.NewServer(providerkit.ConformanceMux(providerkit.Spec{
+	server := httptest.NewServer(providerserver.ConformanceMux(providerserver.Config{
 		Version: "live-suite",
 		New: func(context.Context, provider.Settings) (provider.Provider, error) {
 			return p, nil
