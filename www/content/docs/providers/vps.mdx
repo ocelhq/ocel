@@ -34,6 +34,8 @@ Bootstrap creates the `ocel-deploy` login every later deploy acts as.
 
 `ocel bootstrap <class>` prepares the machine once per class (`production`, `preview`).
 Running it again changes only what has drifted, and `ocel destroy` removes it all.
+If something else already holds port 80 or 443, bootstrap names it and stops before it
+changes anything: stop it, or run ocel [behind it](#behind-your-own-proxy).
 
 | What | Why |
 | --- | --- |
@@ -41,7 +43,7 @@ Running it again changes only what has drifted, and `ocel destroy` removes it al
 | `/etc/ocel/<class>/seal.key`, `/usr/local/lib/ocel/seal`, a sudoers line | Secret values are sealed to a key that never leaves the machine. `ocel-deploy` may run the seal helper as root and nothing else. Lose the key and the values can't be opened again. |
 | `/var/lib/ocel/<class>/records`, `/usr/local/lib/ocel/records` | What is deployed, per class. |
 | `/var/lib/ocel/releases`, `/usr/local/lib/ocel/releases` | The release window: which images a rollback can still reach. Older images are swept. |
-| Docker | Installed with Docker's install script, pinned by sha256. It stays after `ocel destroy`, and so do its containers. |
+| Docker | Installed once with Docker's install script, pinned by sha256. A Docker 28.0 or later that `docker.service` already runs is used as it is. Either way, upgrading it is yours. Bootstrap refuses a Docker older than 28.0, the snap package, a rootless Docker, and a masked `docker.service`, and says what to change. Docker stays after `ocel destroy`, and so do its containers. |
 | `/var/lib/ocel/proxy.json` | Which proxy fronts the box, and which project and class set it. A deploy whose `proxy` option disagrees is refused. |
 | `ocel-proxy` container, `/var/lib/ocel/proxy/caddy.json` | Caddy on ports 80 and 443. It gets a certificate for a hostname the box serves the first time a client connects to it. Left out [behind your own proxy](#behind-your-own-proxy). |
 | `ocel-switchboard` container, the `ocel` network, `/usr/local/lib/ocel/switchboard`, `/run/ocel-switchboard`, `/run/ocel-front` | Routes each hostname to the app that serves it, and tells the proxy which hostnames it may get a certificate for. Behind your own proxy it is published on `127.0.0.1:8480`. |
