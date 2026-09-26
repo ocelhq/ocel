@@ -10,7 +10,8 @@ before any change bigger than a small fix, and agree on the approach there.
 
 A maintainer closes a pull request without review when it:
 
-- changes a [contract path](#contract-paths) from a fork whose author is not a maintainer;
+- changes a [contract path](#contract-paths) from a contributor outside the maintainers,
+  with no issue a maintainer agreed to;
 - argues with a review gate instead of fixing the finding.
 
 ## Setup
@@ -42,12 +43,15 @@ for dir in $(go list -m -f '{{.Dir}}'); do go test -C "$dir" -race -count=1 ./..
 
 ## Contract paths
 
-The contract is the set of paths [`scripts/contract-paths.mjs`](scripts/contract-paths.mjs)
-lists: the provider and edge contracts, the wire format, every published package, and the
-rules in this file, `AGENTS.md` and `.greptile/rules.md`. For now only maintainers change
-them: CI fails a pull request that touches one from a fork whose author is not an owner,
-member or collaborator. A branch of this repository passes, since only people with push
-access open one.
+Discuss a change to a contract path before you open a pull request. A contributor outside
+the maintainers opens an issue and agrees the change there with a maintainer first. The
+contract paths are:
+
+- the `*.go` files directly in `pkg/provider`;
+- `platform/edge/contract/`;
+- `proto/`;
+- `packages/`, `sdk/`, `python/` and `crates/`;
+- `AGENTS.md`, `CLAUDE.md`, `.greptile/rules.md` and this file.
 
 A contract change updates every implementer in the same pull request
 ([Clean break](.greptile/rules.md#clean-break)), and the conformance suites in
