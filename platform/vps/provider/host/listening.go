@@ -70,6 +70,9 @@ func (h *Host) CheckSwitchboard(ctx context.Context, class providerkit.Class) pr
 	case result.Code == 0:
 		check.Verdict, check.Fix = providerkit.HostPass, ""
 		check.Finding = fmt.Sprintf("%s is running and answers over its control socket in %s", board.name, switchboard.ControlDir)
+		if at, restored := h.restoredAt(ctx, elevation); restored {
+			check.Finding += fmt.Sprintf("; a deploy stood it again at %s after it was removed, as a prune removes it whenever it is stopped", at)
+		}
 		return check
 	}
 	state := strings.TrimSpace(h.said(ctx, stateCommand(board.name), elevation))

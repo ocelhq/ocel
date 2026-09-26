@@ -244,7 +244,11 @@ func (h *Host) answers(ctx context.Context, asked boxContainer, elevation string
 	if result.Code == 0 {
 		return nil
 	}
-	if err := h.containerTrouble(ctx, asked.name, elevation); err != nil {
+	state := strings.TrimSpace(h.said(ctx, stateCommand(asked.name), elevation))
+	if stateField(state, "Status") == "" && asked.name == SwitchboardContainer {
+		return h.restoreSwitchboard(ctx, elevation)
+	}
+	if err := h.containerTrouble(asked.name, state); err != nil {
 		return err
 	}
 	return providerkit.Refuse(providerkit.CodeNotReady,
@@ -258,8 +262,7 @@ const (
 	proxyRestarting = "restarting"
 )
 
-func (h *Host) containerTrouble(ctx context.Context, name, elevation string) error {
-	state := strings.TrimSpace(h.said(ctx, stateCommand(name), elevation))
+func (h *Host) containerTrouble(name, state string) error {
 	status := stateField(state, "Status")
 	switch {
 	case status == "":

@@ -300,6 +300,29 @@ func TestASwitchboardRunningAndAnsweringOverItsControlSocketPasses(t *testing.T)
 	}
 }
 
+func TestASwitchboardADeployStoodAgainPassesAndSaysWhenAndWhy(t *testing.T) {
+	t.Parallel()
+
+	check := boardCheck(t, standingOver(ahead(boxSaying(nil), "ocel.restored", answer{stdout: "deploy 2026-09-26T23:51:04.18Z\n"})))
+	if check.Verdict != providerkit.HostPass {
+		t.Fatalf("verdict = %v (%q), want a pass: it runs and answers", check.Verdict, check.Finding)
+	}
+	for _, wanted := range []string{"control socket", "a deploy stood it again", "2026-09-26T23:51:04.18Z", "prune"} {
+		if !strings.Contains(check.Finding, wanted) {
+			t.Errorf("finding = %q, want %q in it: a switchboard something removed is worth knowing about even once it is back", check.Finding, wanted)
+		}
+	}
+}
+
+func TestASwitchboardBootstrapStoodSaysNothingOfBeingStoodAgain(t *testing.T) {
+	t.Parallel()
+
+	check := boardCheck(t, standingOver(ahead(boxSaying(nil), "ocel.restored", answer{stdout: " 2026-09-01T08:00:00Z\n"})))
+	if check.Verdict != providerkit.HostPass || strings.Contains(check.Finding, "again") {
+		t.Errorf("check = %v %q, want a plain pass", check.Verdict, check.Finding)
+	}
+}
+
 func TestASwitchboardThatIsGoneStoppedOrSilentFailsByWhatIsWrongWithIt(t *testing.T) {
 	t.Parallel()
 

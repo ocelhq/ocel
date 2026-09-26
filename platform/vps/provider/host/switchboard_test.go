@@ -369,3 +369,48 @@ func TestAProbeTheBoxCannotAnswerYetIsUnreachedAndItsReasonIsOneLine(t *testing.
 		t.Error("ServedEdge() over a probe that refused = nil, want the refusal")
 	}
 }
+
+func pruneAnswers(sum string) func(command string) (session.Result, bool) {
+	return func(command string) (session.Result, bool) {
+		switch {
+		case strings.Contains(command, words(switchboardStanding(nil, Front{}).readiness())) && !strings.Contains(command, "while :"):
+			return session.Result{Code: 1, Stderr: "Error: No such container: " + SwitchboardContainer}, true
+		case command == stateCommand(SwitchboardContainer):
+			return session.Result{Stdout: "Error: No such object: " + SwitchboardContainer}, true
+		case strings.Contains(command, "missing="):
+			return session.Result{Stdout: "sum=" + sum + "\n"}, true
+		}
+		return session.Result{}, false
+	}
+}
+
+func TestASwitchboardStoodAgainIsTheOneBootstrapStandsRunningTheBinaryTheBoxHolds(t *testing.T) {
+	t.Parallel()
+
+	const sum = "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0"
+	for what, front := range map[string]Front{
+		"ocel's own proxy":        {},
+		"a proxy you route to":    {Manual: &ManualFront{Port: 8480}},
+		"a proxy on another port": {Manual: &ManualFront{Port: 9000}},
+	} {
+		b := machine(nil)
+		b.answer = pruneAnswers(sum)
+		if err := b.fronted(front).CheckProxy(context.Background()); err != nil {
+			t.Fatalf("%s: CheckProxy() = %v, want the switchboard stood again", what, err)
+		}
+		var bootstrapped boxContainer
+		for _, item := range ProxyItems(ArchAMD64, front) {
+			if item.Kind == KindContainer && item.Name == SwitchboardContainer {
+				bootstrapped = *item.box
+			}
+		}
+		want := slices.Clone(bootstrapped.run())
+		labelled := slices.Index(want, configLabel+"="+bootstrapped.config)
+		want[labelled] = configLabel + "=" + sum
+		want = slices.Insert(want, labelled+1, "--label", restoredLabel+"="+restoredBy)
+		if b.at(words(want)) < 0 {
+			t.Errorf("%s: no command stood the switchboard bootstrap stands, labelled with the binary the box holds and as restored:\n%s\nran:\n%s",
+				what, words(want), strings.Join(b.commands(), "\n---\n"))
+		}
+	}
+}

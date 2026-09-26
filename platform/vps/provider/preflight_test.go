@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/platform/vps/provider/listeners"
 	"github.com/ocelhq/ocel/platform/vps/provider/proxy/caddy"
 	"github.com/ocelhq/ocel/platform/vps/provider/session"
+	"github.com/ocelhq/ocel/platform/vps/provider/switchboard"
 )
 
 type answer struct {
@@ -210,6 +211,7 @@ func proxyStates() map[string]map[string]answer {
 		"the switchboard is not there at all": {
 			"'upstreams'":    {code: 1, stderr: "Error: No such container: " + host.SwitchboardContainer},
 			"docker inspect": {code: 1, stdout: "Error: No such object: " + host.SwitchboardContainer},
+			"missing=":       {stdout: "missing=" + switchboard.FrontDir + "\nsum=" + boxBoardSum + "\n"},
 		},
 		"the switchboard exited": {
 			"'upstreams'":    {code: 1, stderr: "Error response from daemon: container is not running"},
@@ -265,7 +267,7 @@ func TestEachContainerTheBoxServesThroughIsRefusedByNameAndByWhatIsWrongWithIt(t
 		}
 	}
 	for what, wanted := range map[string][]string{
-		"the switchboard is not there at all":                                     {host.SwitchboardContainer, "bootstrap"},
+		"the switchboard is not there at all":                                     {host.SwitchboardContainer, "bootstrap", switchboard.FrontDir},
 		"the switchboard exited":                                                  {host.SwitchboardContainer, "exited"},
 		"the switchboard is restarting":                                           {host.SwitchboardContainer, "restarting"},
 		"the switchboard answers nothing over its control socket":                 {host.SwitchboardContainer, "control socket"},
@@ -326,5 +328,113 @@ func TestAServingPortNothingHoldsIsRefusedBecauseItMustBeTaken(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "nothing holds port "+caddy.HTTPPort) {
 		t.Errorf("PreflightDeploy() = %q, want the port named as one nothing holds", err)
+	}
+}
+
+const boxBoardSum = "5d1f0c9a2b7e4f6a8c3d1e0b9a7f5e3c1d2b4a6f8e0c2d4b6a8f0e2c4d6b8a0f"
+
+func ahead(machine *scripted, fragment string, said answer) *scripted {
+	asked := machine.answer
+	machine.answer = func(command string) (answer, bool) {
+		if strings.Contains(command, fragment) {
+			return said, true
+		}
+		return asked(command)
+	}
+	return machine
+}
+
+func pruned(stood map[string]answer, restored answer) *scripted {
+	return ahead(boxSaying(stood), "'docker' 'run'", restored)
+}
+
+func prunedBoard() map[string]answer {
+	return map[string]answer{
+		"'upstreams'":    {code: 1, stderr: "Error: No such container: " + host.SwitchboardContainer},
+		"docker inspect": {code: 1, stdout: "Error: No such object: " + host.SwitchboardContainer},
+		"missing=":       {stdout: "sum=" + boxBoardSum + "\n"},
+	}
+}
+
+func ranWith(machine *scripted, fragment string) string {
+	for _, command := range machine.ran {
+		if strings.Contains(command, fragment) {
+			return command
+		}
+	}
+	return ""
+}
+
+func TestASwitchboardAPruneRemovedIsStoodAgainAndTheDeployGoesOn(t *testing.T) {
+	t.Parallel()
+
+	machine := pruned(prunedBoard(), answer{})
+	if err := preflighting(machine); err != nil {
+		t.Fatalf("PreflightDeploy() = %v, want a switchboard a prune removed stood again from what bootstrap left: Dokploy prunes every stopped container nightly, and the box still holds everything the switchboard is made of", err)
+	}
+	stood := ranWith(machine, "'docker' 'run'")
+	if stood == "" {
+		t.Fatalf("the preflight stood no container:\n%s", strings.Join(machine.ran, "\n"))
+	}
+	for what, fragment := range map[string]string{
+		"the network it runs on, which the same prune takes": "docker network create 'ocel'",
+		"its name": "'--name' 'ocel-switchboard'",
+		"the label the next bootstrap reads its binary from":      "'ocel.config=" + boxBoardSum + "'",
+		"the label the doctor reads the restoration from":         "'ocel.restored=",
+		"its rejoining every project network that is still there": "docker network connect \"$net\" 'ocel-switchboard'",
+	} {
+		if !strings.Contains(stood, fragment) {
+			t.Errorf("the switchboard was stood again without %s (%s):\n%s", what, fragment, stood)
+		}
+	}
+	if strings.Contains(stood, "docker rm") {
+		t.Errorf("the switchboard was stood again by removing whatever holds its name:\n%s\nwant it stood only while no container holds the name, or two deploys that both found it gone remove each other's", stood)
+	}
+	locked := strings.Index(stood, "flock -x 9\n")
+	guarded := strings.Index(stood, "if ! docker inspect --type container --format '{{.Id}}' 'ocel-switchboard'")
+	run := strings.Index(stood, "'docker' 'run'")
+	unlocked := strings.Index(stood, "flock -u 9\n")
+	closed := strings.LastIndex(stood[:max(unlocked, 0)], "\nfi\n")
+	if locked < 0 || locked >= guarded || guarded >= run || run >= closed || closed >= unlocked {
+		t.Errorf("the switchboard was stood again outside the routing lock or outside the check that no container holds its name:\n%s\nwant the lock taken, then the name checked, then the container run inside that check, then the lock let go: two deploys that both found it gone otherwise both run one, and the second fails on the name the first took", stood)
+	}
+}
+
+func TestASwitchboardAPruneRemovedIsRefusedWhenWhatItMountsIsGoneToo(t *testing.T) {
+	t.Parallel()
+
+	for what, said := range map[string]string{
+		"its front socket directory": "missing=" + switchboard.FrontDir + "\nsum=" + boxBoardSum + "\n",
+		"its binary":                 "missing=" + host.SwitchboardBinary + "\n",
+	} {
+		script := prunedBoard()
+		script["missing="] = answer{stdout: said}
+		machine := pruned(script, answer{})
+		err := preflighting(machine)
+		if err == nil {
+			t.Fatalf("PreflightDeploy() let a deploy past a box missing its switchboard and %s", what)
+		}
+		for _, wanted := range []string{host.SwitchboardContainer, "bootstrap", strings.TrimPrefix(strings.Fields(said)[0], "missing=")} {
+			if !strings.Contains(err.Error(), wanted) {
+				t.Errorf("without %s the refusal is %q, want %q in it", what, err, wanted)
+			}
+		}
+		if stood := ranWith(machine, "'docker' 'run'"); stood != "" {
+			t.Errorf("without %s the preflight still stood a switchboard, and docker creates a bind source that is not there as an empty root directory:\n%s", what, stood)
+		}
+	}
+}
+
+func TestASwitchboardThatCouldNotBeStoodAgainIsRefusedWithWhatTheBoxSaid(t *testing.T) {
+	t.Parallel()
+
+	err := preflighting(pruned(prunedBoard(), answer{code: 1, stderr: "gcr.io/distroless/static-debian12 was not pulled in 5 attempts"}))
+	if err == nil {
+		t.Fatal("PreflightDeploy() let a deploy past a switchboard it could not stand again")
+	}
+	for _, wanted := range []string{host.SwitchboardContainer, "not pulled", "bootstrap"} {
+		if !strings.Contains(err.Error(), wanted) {
+			t.Errorf("PreflightDeploy() = %q, want %q in it", err, wanted)
+		}
 	}
 }

@@ -270,6 +270,7 @@ type boxContainer struct {
 	inodes   []string
 	joins    bool
 	migrates bool
+	restored bool
 }
 
 func frontProxy() boxContainer {
@@ -371,6 +372,9 @@ func (s boxContainer) run(sysctls ...string) []string {
 	}
 	if s.config != "" {
 		argv = append(argv, "--label", configLabel+"="+s.config)
+	}
+	if s.restored {
+		argv = append(argv, "--label", restoredLabel+"="+restoredBy)
 	}
 	for _, env := range s.env {
 		argv = append(argv, "--env", env)
